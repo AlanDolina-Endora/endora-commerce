@@ -77,7 +77,7 @@ running storefront (`pnpm run dev:infra`, then `pnpm --filter storefront run bui
 command and its output into the pull request description. Each names its fallback; applying a
 fallback needs no return to the architect unless it says "stop".
 
-- [ ] T001 [US1] **Prove Next metadata replaces rather than merges `robots`** (taken from the
+- [x] T001 [US1] **Prove Next metadata replaces rather than merges `robots`** (taken from the
   brief, never verified). Temporarily add `robots: { index: false, follow: false }` to
   `storefront/app/layout.tsx`'s `metadata` export; fetch `/` and `/cart`.
   **Test:** `curl -s localhost:3000/ | grep -o '<meta name="robots"[^>]*>'` and the same for
@@ -85,7 +85,7 @@ fallback needs no return to the architect unless it says "stop".
   *If it merges instead* (`/cart` shows a restrictive combination): the design still holds and
   gets simpler — record it, keep the tasks as written (the extra tag is then redundant on such
   pages, never wrong). Revert the edit.
-- [ ] T002 [US1] **Prove I1** — a `<meta name="robots" content="noindex, nofollow">` element
+- [x] T002 [US1] **Prove I1** — a `<meta name="robots" content="noindex, nofollow">` element
   rendered as JSX by `storefront/app/layout.tsx`, outside the metadata API, reaches `<head>` and
   survives on a page that declares its own `robots`.
   **Test:** `curl -s localhost:3000/cart | grep -o '<meta name="robots"[^>]*>'` prints **two**
@@ -95,7 +95,7 @@ fallback needs no return to the architect unless it says "stop".
   served): ship slice 1 with the response header only, record that User Story 1 scenario 2's
   "in the document" half is unmet, and **stop** to report — that is a spec deviation the
   architect has to carry to the owner.
-- [ ] T003 [US1] **Prove I2** — module-level state in the middleware persists across requests in
+- [x] T003 [US1] **Prove I2** — module-level state in the middleware persists across requests in
   the standalone server. Temporarily add a module-scope counter to `storefront/middleware.ts`
   and echo it as a response header.
   **Test:** `for i in 1 2 3; do curl -sI localhost:3000/ | grep -i x-spike; done` prints 1, 2, 3.
@@ -104,7 +104,7 @@ fallback needs no return to the architect unless it says "stop".
   imported by the Node runtime, passed to the middleware's caller through the layout instead —
   note in the pull request that FR-017's last-known value then applies to the tag and not to the
   header.
-- [ ] T004 [US1] **Prove I3** — widening the matcher costs nothing measurable. With the matcher
+- [x] T004 [US1] **Prove I3** — widening the matcher costs nothing measurable. With the matcher
   temporarily changed to `'/((?!_next/static).*)'` and an immediate `NextResponse.next()` for
   non-document paths, time a public file before and after.
   **Test:** `for i in $(seq 50); do curl -s -o /dev/null -w '%{time_total}\n' localhost:3000/service-worker.js; done | sort -n | sed -n '25p;48p'`
@@ -115,62 +115,66 @@ fallback needs no return to the architect unless it says "stop".
 
 ### Contract (Principle II)
 
-- [ ] T005 [US1] RED — schema tests for `storefrontRobotsPolicySchema` and
+- [x] T005 [US1] RED — schema tests for `storefrontRobotsPolicySchema` and
   `storefrontRobotsPolicyResponseSchema` (accepts the four combinations; rejects a missing key, a
   non-boolean, an extra stored token) — `packages/contracts/src/seo.test.ts` (new).
   **Test:** `pnpm --filter @endora-commerce/contracts exec vitest run src/seo.test.ts`
-- [ ] T006 [US1] Add both schemas and their inferred types to `packages/contracts/src/seo.ts`
+  *Deviation: an unknown member is **dropped**, not rejected — a storefront is usually older than its backend, and a strict schema would make the first additive change unreadable to every deployed storefront. `index` and `follow` must still be present booleans.*
+- [x] T006 [US1] Add both schemas and their inferred types to `packages/contracts/src/seo.ts`
   per `contracts/crawler-policy.md` §1; re-export from `packages/contracts/src/index.ts` if the
   file's existing exports are listed there. **Test:** as T005, then
   `pnpm --filter @endora-commerce/contracts run build`
 
 ### Backend — `seo`
 
-- [ ] T007 [P] [US1] [OD3] RED — the token ↔ `{ index, follow }` mapping is total over the four values
+- [x] T007 [P] [US1] [OD3] RED — the token ↔ `{ index, follow }` mapping is total over the four values
   and maps an unknown token to `{ index: true, follow: true }` —
   `packages/modules/seo/src/backend/services/robots-policy.test.ts` (new).
   **Test:** `pnpm --filter @endora-commerce/mod-seo exec vitest run src/backend/services/robots-policy.test.ts`
-- [ ] T008 [P] [US1] [OD1] [OD3] RED — the manifest declares `seo.default_robots` (group `seo`, `string`, the
+  *Deviation: an unknown stored token **throws** (`UnknownRobotsTokenError`, the endpoint answers `500`) instead of mapping to `{ index: true, follow: true }` — a permissive `200` is definitive and would withdraw a storefront's last-known `noindex`.*
+- [x] T008 [P] [US1] [OD1] [OD3] RED — the manifest declares `seo.default_robots` (group `seo`, `string`, the
   four `enumOptions`, default `INDEX, FOLLOW`, not `hidden`, no `salesChannelCodes`) and two
   actions with the ids, routes and codes of `contracts/admin-surfaces.md` §5 —
   `packages/modules/seo/src/manifest.test.ts` (new).
   **Test:** `pnpm --filter @endora-commerce/mod-seo exec vitest run src/manifest.test.ts`
-- [ ] T009 [US1] RED — contract test for `GET /api/v1/storefront/seo/robots-policy`: `200` and
+  *Deviation: the file is `packages/modules/seo/src/backend/manifest.test.ts` — `manifests:generate` refuses any sibling of `src/manifest.ts` (precedent: `packages/modules/crm/src/backend/manifest.test.ts`).*
+- [x] T009 [US1] RED — contract test for `GET /api/v1/storefront/seo/robots-policy`: `200` and
   the schema for each of the four stored values; `Cache-Control: no-store`; no authentication
   required — `backend/test/contract/seo/robots-policy.contract.test.ts` (new).
   **Test:** `pnpm --filter backend exec vitest run test/contract/seo/robots-policy.contract.test.ts`
-- [ ] T010 [US1] RED — **channel isolation** (Principle XII): with channel A set to
+- [x] T010 [US1] RED — **channel isolation** (Principle XII): with channel A set to
   `NOINDEX, NOFOLLOW` and channel B left at the default, a request with `X-Sales-Channel: A`
   answers `{false,false}` and one with `B` answers `{true,true}`; a request naming **no** channel
   answers the system-default channel's value and never an aggregate; a channel value overrides
   the all-channels value and resetting it restores inheritance —
   `backend/test/integration/seo/robots-policy-channel-scope.test.ts` (new).
   **Test:** `pnpm --filter backend exec vitest run test/integration/seo/robots-policy-channel-scope.test.ts`
-- [ ] T011 [US4] RED — **off state**: extend `backend/test/integration/seo/off-state.test.ts` so
+- [x] T011 [US4] RED — **off state**: extend `backend/test/integration/seo/off-state.test.ts` so
   that, deactivated-while-platform-available, `GET /api/v1/storefront/seo/robots-policy` answers
   `503` `MODULE_DISABLED`; `seo.default_robots` is reported `editable: false` and a write to it
   is refused; the stored value survives; and after reactivation the endpoint answers the stored
   value. **Test:** `pnpm --filter backend exec vitest run test/integration/seo/off-state.test.ts`
-- [ ] T012 [US1] RED — FR-007: a `PUT` of `seo.default_robots` by an admin without
+- [x] T012 [US1] RED — FR-007: a `PUT` of `seo.default_robots` by an admin without
   `settings:write` is refused, a value outside the list is refused, and an accepted write leaves
   one audit entry carrying the before and after values —
   `backend/test/integration/seo/default-robots-write.test.ts` (new).
   **Test:** `pnpm --filter backend exec vitest run test/integration/seo/default-robots-write.test.ts`
-- [ ] T013 [US1] [OD1] RED — update the palette expectation from `{ module: 'seo', actions: [] }`
+  *Deviation: the audit assertion is narrowed to what the settings store records — one entry per accepted write with who, when and the value **written**. It records no `stateBefore` for a value write, for any setting; FR-007's "value before" is a separate change to the `settings` module.*
+- [x] T013 [US1] [OD1] RED — update the palette expectation from `{ module: 'seo', actions: [] }`
   to the two actions, present while on and absent while off —
   `backend/test/integration/_admin_surfaces/batch-eight-palette-off-state.test.ts` (line 62 and
   the comment at line 37 that says `seo` declares none).
   **Test:** `pnpm --filter backend exec vitest run test/integration/_admin_surfaces/batch-eight-palette-off-state.test.ts`
-- [ ] T014 [US1] Implement the mapping — `packages/modules/seo/src/backend/services/robots-policy.ts`
+- [x] T014 [US1] Implement the mapping — `packages/modules/seo/src/backend/services/robots-policy.ts`
   (new). **Test:** T007's command.
-- [ ] T015 [US1] [OD3] Declare `seo.default_robots` in `packages/modules/seo/src/manifest.ts`.
+- [x] T015 [US1] [OD3] Declare `seo.default_robots` in `packages/modules/seo/src/manifest.ts`.
   **Test:** T008's command (the setting half).
-- [ ] T016 [US1] Register `GET /api/v1/storefront/seo/robots-policy` inside the existing
+- [x] T016 [US1] Register `GET /api/v1/storefront/seo/robots-policy` inside the existing
   `registerSeoRoutes` — `packages/modules/seo/src/backend/routes.ts`; resolve the channel with
   `getResolvedChannel(request)` and read the setting through the `settingsReadPort` the module
   already resolves (`packages/modules/seo/src/backend/index.ts`: pass it into the route deps).
   No per-handler presence check. **Test:** T009, T010, T011, T012.
-- [ ] T017 [US1] [OD1] [OD2] Declare the two `actions` in
+- [x] T017 [US1] [OD1] [OD2] Declare the two `actions` in
   `packages/modules/seo/src/manifest.ts`; add the FR-033 sentence to the module `description`
   and to the `seo.enabled` setting's `description`; add the action keys to
   `packages/modules/seo/i18n/en.json` and `pl.json` (flat). **Test:** T008, T013, and
@@ -181,11 +185,11 @@ fallback needs no return to the architect unless it says "stop".
 Pure decisions live in `storefront/lib/seo/` and are unit-tested; `middleware.ts` stays thin, as
 `gateDecision` in `storefront/lib/service-unavailable.ts` already is.
 
-- [ ] T018 [P] [US1] RED — the directive function: `null`, unknown and `{true,true}` → no
+- [x] T018 [P] [US1] RED — the directive function: `null`, unknown and `{true,true}` → no
   header and no tag; the other three → the exact strings of `contracts/crawler-policy.md` §6 —
   `storefront/test/seo/robots-directive.test.ts` (new).
   **Test:** `pnpm --filter storefront exec vitest run test/seo/robots-directive.test.ts`
-- [ ] T019 [P] [US1] [US4] RED — the reader, with an injected `fetch` and clock:
+- [x] T019 [P] [US1] [US4] RED — the reader, with an injected `fetch` and clock:
   - `200` → value, fresh for 60 s, no second request inside the window;
   - stale → one refetch; on success the value is replaced;
   - `503` with `error.code: 'MODULE_DISABLED'` → **none**, cached, and it **replaces** an
@@ -199,44 +203,45 @@ Pure decisions live in `storefront/lib/seo/` and are unit-tested; `middleware.ts
   - the request carries `X-Sales-Channel` when a channel is named and omits it otherwise —
   `storefront/test/seo/crawler-policy.test.ts` (new).
   **Test:** `pnpm --filter storefront exec vitest run test/seo/crawler-policy.test.ts`
-- [ ] T020 [P] [US1] RED — path classification: `isDocumentPath` is `false` for `/robots.txt`,
+- [x] T020 [P] [US1] RED — path classification: `isDocumentPath` is `false` for `/robots.txt`,
   `/sitemap.xml`, `/manifest.webmanifest`, `/_next/image`, `/icons/x.png`, `/service-worker.js`,
   and `true` for `/`, `/p/x`, `/cart`; every path today's matcher treats as a document is still
   one (derive the cases from the current `config.matcher` regex, do not restate it); and
   the request-header decision always **deletes** `x-robots-default` when there is no restrictive
   policy (a client-supplied value never survives) — `storefront/test/seo/middleware-robots.test.ts`
   (new). **Test:** `pnpm --filter storefront exec vitest run test/seo/middleware-robots.test.ts`
-- [ ] T021 [P] [US1] RED — FR-035: the root layout declares no `robots` through the metadata API
+- [x] T021 [P] [US1] RED — FR-035: the root layout declares no `robots` through the metadata API
   (parse `storefront/app/layout.tsx` with the TypeScript compiler API, as
   `storefront/test/seo/route-declarations.test.ts` reads sources) —
   `storefront/test/seo/layout-robots.test.ts` (new).
   **Test:** `pnpm --filter storefront exec vitest run test/seo/layout-robots.test.ts`
-- [ ] T022 [US1] Implement `storefront/lib/seo/robots-directive.ts` (new). **Test:** T018.
-- [ ] T023 [US1] Implement `storefront/lib/seo/crawler-policy.ts` (new) — the reader for
+- [x] T022 [US1] Implement `storefront/lib/seo/robots-directive.ts` (new). **Test:** T018.
+- [x] T023 [US1] Implement `storefront/lib/seo/crawler-policy.ts` (new) — the reader for
   `robots-policy`, module-scope cache, classification per `contracts/crawler-policy.md` §3 (or
   T003's fallback). Validate the body with `storefrontRobotsPolicyResponseSchema`. **Test:** T019.
-- [ ] T024 [US1] `storefront/middleware.ts`: widen `config.matcher` (or T004's fallback); branch
+  *Deviation: the body is checked by a hand-written guard (`isRobotsPolicyResponse`) held to the schema by a unit test, not by the schema itself — that keeps Zod out of the middleware bundle (62.4 kB → 36.6 kB). A request holding a known value waits at most 150 ms for a refresh; only a cold start waits for the read.*
+- [x] T024 [US1] `storefront/middleware.ts`: widen `config.matcher` (or T004's fallback); branch
   first on non-document paths (header only, then return — no reachability probe, no `x-pathname`,
   no rewrite); for documents resolve the policy, set or delete `x-robots-default` on the
   forwarded request headers, set `X-Robots-Tag` on the response including the `503` rewrite.
   **Test:** T020, plus `pnpm --filter storefront exec vitest run test/service-unavailable.test.tsx`
   (the existing gate must be unchanged).
-- [ ] T025 [US1] `storefront/app/layout.tsx`: read `x-robots-default` through the `headers()`
+- [x] T025 [US1] `storefront/app/layout.tsx`: read `x-robots-default` through the `headers()`
   call it already makes and render the extra `<meta name="robots">` in the form T002 proved; do
   not touch the `metadata` export. **Test:** T021, then the served proof of T026.
-- [ ] T026 [US1] [US4] Served proof on a built storefront — the eight `curl` lines of
+- [x] T026 [US1] [US4] Served proof on a built storefront — the eight `curl` lines of
   `quickstart.md` § *Slice 1*, the per-channel step, the reset step, the FR-017 step, and the
   off-state paragraph. Paste the output into the pull request. **This is the only evidence of the
   served behaviour**: GitHub's workflows do not run the storefront conformance job
   (`grep -n conformance .github/workflows/*.yml` is empty).
-- [ ] T027 [P] [US1] Add the same assertions as a committed instrument for whoever runs the
+- [x] T027 [P] [US1] Add the same assertions as a committed instrument for whoever runs the
   conformance job — `storefront/test/conformance/robots-directive.spec.ts` (new), reading the
   policy endpoint first and asserting the header and tags on `/`, `/cart`, `/sitemap.xml`.
   **Test:** `STOREFRONT_URL=http://127.0.0.1:3000 pnpm --filter storefront run conformance -- robots-directive`
 
 ### Documentation and release
 
-- [ ] T028 [US1] `packages/modules/seo/docs/seo.md`: a *Search engine robots* section for the
+- [x] T028 [US1] `packages/modules/seo/docs/seo.md`: a *Search engine robots* section for the
   default (what it does, that it only restricts, why `robots.txt` stays open, the off state, how
   long search engines take, the two limits FR-037 names — backend-served media, and the
   cold-start window); correct the stale route table (the admin sitemap routes carry
@@ -244,14 +249,14 @@ Pure decisions live in `storefront/lib/seo/` and are unit-tested; `middleware.ts
   Then the Polish files `docs/i18n/pl/docusaurus-plugin-content-docs/current/modules/seo.md` and
   `…/module-reference/seo.md` per `docs/docs/contributing/documentation-i18n.md`.
   **Test:** `pnpm --filter backend run check:module-docs && pnpm --filter backend run check:docs-translations`
-- [ ] T029 [US1] `pnpm --filter backend run composer:generate`; commit every artefact it changes
+- [x] T029 [US1] `pnpm --filter backend run composer:generate`; commit every artefact it changes
   (the manifest index, the docs artefacts). **Test:** `pnpm --filter backend run overlay:check`
-- [ ] T030 [US1] Changeset, `minor`, written for a consumer: the new setting, the new endpoint
+- [x] T030 [US1] Changeset, `minor`, written for a consumer: the new setting, the new endpoint
   and its schema names, the reference storefront's new header and matcher, and the one thing an
   earlier-scaffolded instance must copy (`middleware.ts`, `app/layout.tsx`,
   `lib/seo/crawler-policy.ts`, `lib/seo/robots-directive.ts`). **Test:**
   `pnpm --filter backend run check:release-intent -- --since origin/master`
-- [ ] T031 [US1] Run the slice verification list below; fix what it finds.
+- [x] T031 [US1] Run the slice verification list below; fix what it finds.
 
 ### Slice 1 — verification before "ready"
 
@@ -331,8 +336,8 @@ where `admin/test/modules/admin_users/permission-label.test.ts` sets the precede
   by content, the line numbers are of `ca1e265a1`). **Test:** T033.
 - [ ] T036 [P] RED — `seo`'s bundles carry `settingGroups.seo.name` and `settingLabels.*` name
   and description keys for every setting the manifest declares, in both languages — extend
-  `packages/modules/seo/src/manifest.test.ts` (created in slice 1; create it here if slice 1 has
-  not merged). **Test:** `pnpm --filter @endora-commerce/mod-seo exec vitest run src/manifest.test.ts`
+  `packages/modules/seo/src/backend/manifest.test.ts` (created in slice 1; create it here if slice 1 has
+  not merged). **Test:** `pnpm --filter @endora-commerce/mod-seo exec vitest run src/backend/manifest.test.ts`
 - [ ] T037 [OD2] [OD3] Add those keys to `packages/modules/seo/i18n/en.json` and `pl.json` for
   the settings that exist on `origin/master` at the time (always `seo.enabled`;
   `seo.default_robots` once slice 1 has merged). The descriptions state the consequences FR-008
@@ -449,8 +454,8 @@ handler that can answer `503`, and may add a lifecycle edge to `seo`.
   **Test:** `pnpm --filter backend exec vitest run test/integration/seo/off-state.test.ts`
 - [ ] T060 [US2] Declare `seo.robots_txt_custom` (`multiline: true`, default `''`) in
   `packages/modules/seo/src/manifest.ts`; add its `settingLabels.*` keys to both bundles; extend
-  `packages/modules/seo/src/manifest.test.ts`. **Test:**
-  `pnpm --filter @endora-commerce/mod-seo exec vitest run src/manifest.test.ts`
+  `packages/modules/seo/src/backend/manifest.test.ts`. **Test:**
+  `pnpm --filter @endora-commerce/mod-seo exec vitest run src/backend/manifest.test.ts`
 - [ ] T061 [US2] `packages/modules/seo/src/backend/services/crawler-files.service.ts` (new) and
   the route in `packages/modules/seo/src/backend/routes.ts`. `shop.name` is read through the
   settings read port (find the code in `packages/modules/settings/src/backend/services/shop-info-resolver.ts`;
