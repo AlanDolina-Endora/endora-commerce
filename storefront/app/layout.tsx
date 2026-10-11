@@ -41,6 +41,11 @@ import { getAnonCartCookie, getSessionCookie } from '../lib/session';
 import { headers } from 'next/headers';
 import { DEFAULT_STOREFRONT_THEME_CODE } from '../lib/theme/instance-themes';
 import { UNAVAILABLE_HEADER } from '../lib/service-unavailable';
+import {
+  ROBOTS_DEFAULT_REQUEST_HEADER,
+  robotsDirectiveFromHeader,
+  type RobotsDirective,
+} from '../lib/seo/robots-directive';
 import { outageLocale } from './service-unavailable/page';
 import './globals.css';
 
@@ -53,6 +58,26 @@ import './globals.css';
  */
 async function isUnreachableBackendRender(): Promise<boolean> {
   return (await headers()).get(UNAVAILABLE_HEADER) === '1';
+}
+
+/**
+ * The sales channel's default robots directive for this request, or `null`.
+ *
+ * `middleware.ts` resolves the channel's policy and writes it into a request
+ * header — or deletes the header — on every request, so what is read here is
+ * never a client's (`specs/144-seo-search-engine-robots/`).
+ *
+ * It is rendered below as an element of its own and **not** through the
+ * `metadata` export. Next's metadata replaces `robots` between a layout and a
+ * page rather than merging it, so a default declared there would vanish on
+ * every route that declares `robots` for itself; an element rendered here is
+ * hoisted into `<head>` beside the page's own tag and no page can remove it.
+ * A document may therefore carry two robots tags, and a search engine applies
+ * the more restrictive of them — the default only ever adds a restriction.
+ * `test/seo/layout-robots.test.ts` holds this file to that.
+ */
+async function defaultRobotsDirective(): Promise<RobotsDirective | null> {
+  return robotsDirectiveFromHeader((await headers()).get(ROBOTS_DEFAULT_REQUEST_HEADER));
 }
 
 /**
@@ -110,12 +135,14 @@ export default async function RootLayout({
   // have no data during an outage, and the footer's links point at pages that
   // are equally unreachable; chrome rendered from defaults would be chrome that
   // lies. See `app/service-unavailable/page.tsx`.
+  const robotsDefault = await defaultRobotsDirective();
   if (await isUnreachableBackendRender()) {
     return (
       <StorefrontDocument
         lang={await outageLocale()}
         theme={{ code: DEFAULT_STOREFRONT_THEME_CODE, unknownRequest: null }}
       >
+        {robotsDefault !== null ? <meta name="robots" content={robotsDefault} /> : null}
         <div className="flex min-h-screen flex-col bg-bg">
           <main id="main-content" tabIndex={-1} className="flex-1">
             {children}
@@ -182,6 +209,7 @@ export default async function RootLayout({
     // storefront does not have, and deriving that inside the component is what
     // stops a caller from forgetting it (feature 102).
     <StorefrontDocument lang={locale} theme={theme}>
+      {robotsDefault !== null ? <meta name="robots" content={robotsDefault} /> : null}
       {/* Feature 141 — every Page Builder tree below renders the installed
           modules' blocks under one presence answer: the modules the backend
           reports as not present, resolved once here. */}
