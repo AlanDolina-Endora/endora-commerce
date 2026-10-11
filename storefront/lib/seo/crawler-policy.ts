@@ -404,13 +404,27 @@ function createChannelCache<T>(deps: CrawlerPolicyReaderDeps, question: Question
             if (answer === null) {
               entry.failedAt = deps.now();
             } else {
+              // Recorded on the entry whatever happens next, so every request
+              // that waited for this read is told what the backend answered.
               entry.known = answer;
               entry.knownAt = deps.now();
               entry.failedAt = null;
-              // Most recently read goes last, so it is the last to be evicted —
-              // and an entry evicted while its read was running comes back.
-              entries.delete(key);
-              entries.set(key, entry);
+
+              // Whether the cache keeps it is a separate question, because
+              // this entry may have been evicted while its read was running —
+              // an entry that holds nothing is the first to go.
+              if (entries.get(key) === entry) {
+                // Most recently read goes last, so it is the last to be evicted.
+                entries.delete(key);
+                entries.set(key, entry);
+              }
+              // An evicted entry's answer is not kept. Eviction only happens
+              // when the cache is full, and it stays full, so there are two
+              // cases and both end here: a later read of this channel holds
+              // the place, and this answer is the older of the two; or the
+              // place went to another channel, and a late answer does not get
+              // to evict anything — putting every such entry back is how asking
+              // for many codes at once would grow the cache without limit.
             }
             entry.inFlight = null;
             return lastKnown();

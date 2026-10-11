@@ -498,6 +498,103 @@ describe('a client inventing channel codes', () => {
     },
   );
 
+  it('cannot grow the cache past its bound by asking for many codes at once', async () => {
+    // Every read below is in progress before any of them answers, so each
+    // entry is created — and, holding nothing yet, evicted to make room for
+    // the next — long before its answer arrives. An answer must not put its
+    // entry back into a cache that is already full.
+    const h = harness({ hangs: true });
+    const reads = Array.from({ length: MAX_CACHED_CHANNELS * 4 }, (_unused, i) =>
+      h.reader.robotsPolicy(`together-${i}`),
+    );
+    await h.flush();
+    expect(h.reader.cachedChannelCount()).toBeLessThanOrEqual(MAX_CACHED_CHANNELS);
+
+    await h.settle(ok(false, false));
+    // Every caller is still told what the backend answered it…
+    expect(await Promise.all(reads)).toEqual(reads.map(() => NOINDEX));
+    // …and no more of the answers are kept than the cache may hold.
+    expect(h.reader.cachedChannelCount()).toBeLessThanOrEqual(MAX_CACHED_CHANNELS);
+    expect(h.calls).toHaveLength(MAX_CACHED_CHANNELS * 4);
+  });
+
+  it('holds the same bound when the invented codes are answered "no policy"', async () => {
+    const h = harness({ hangs: true });
+    const reads = Array.from({ length: MAX_CACHED_CHANNELS * 4 }, (_unused, i) =>
+      h.reader.crawlerFiles(`together-${i}`),
+    );
+    await h.flush();
+    await h.settle({ status: 404, body: { error: { code: 'NOT_FOUND' } } });
+    expect(await Promise.all(reads)).toEqual(reads.map(() => ({ kind: 'none' })));
+    expect(h.reader.cachedCrawlerFilesCount()).toBeLessThanOrEqual(MAX_CACHED_CHANNELS);
+  });
+
+  it('does not let a read whose entry was evicted overwrite what was read since', async () => {
+    // A's first read hangs. Its entry holds nothing, so it is the first to go
+    // when other codes need room.
+    const h = harness({ hangs: true });
+    const first = h.reader.robotsPolicy('a');
+    await h.flush();
+
+    h.answerWith({ throws: new TypeError('fetch failed') });
+    for (let i = 0; i < MAX_CACHED_CHANNELS; i += 1) await h.reader.robotsPolicy(`other-${i}`);
+
+    // A is asked again — a new entry, a new read — and answered.
+    h.answerWith(ok(true, true));
+    const NEWER = { kind: 'value', value: { index: true, follow: true } } as const;
+    expect(await h.reader.robotsPolicy('a')).toEqual(NEWER);
+
+    // Now the first read answers, with what was true when it was sent. The
+    // request that waited for it is told that; the cache keeps the newer one.
+    await h.settle(ok(false, false));
+    expect(await first).toEqual(NOINDEX);
+    h.answerWith({ throws: new Error('must not be asked: the newer answer is fresh') });
+    expect(await h.reader.robotsPolicy('a')).toEqual(NEWER);
+    expect(h.reader.cachedChannelCount()).toBeLessThanOrEqual(MAX_CACHED_CHANNELS);
+  });
+
+  it('tells the caller, but does not keep, an evicted read’s answer when the cache is full', async () => {
+    const h = harness({ hangs: true });
+    const first = h.reader.robotsPolicy('a');
+    await h.flush();
+
+    // Enough other codes, each answered, to evict A's empty entry and leave
+    // the cache full of values.
+    h.answerWith(ok(true, true));
+    for (let i = 0; i < MAX_CACHED_CHANNELS; i += 1) await h.reader.robotsPolicy(`other-${i}`);
+    expect(h.reader.cachedChannelCount()).toBe(MAX_CACHED_CHANNELS);
+    const callsBefore = h.calls.length;
+
+    await h.settle(ok(false, false));
+    expect(await first).toEqual(NOINDEX);
+    expect(h.reader.cachedChannelCount()).toBe(MAX_CACHED_CHANNELS);
+
+    // Not kept: the next request for A asks again — a late answer does not
+    // get to evict a channel that was read in the meantime.
+    h.answerWith(ok(false, true));
+    expect(await h.reader.robotsPolicy('a')).toEqual({
+      kind: 'value',
+      value: { index: false, follow: true },
+    });
+    expect(h.calls).toHaveLength(callsBefore + 1);
+    expect(h.reader.cachedChannelCount()).toBeLessThanOrEqual(MAX_CACHED_CHANNELS);
+  });
+
+  it('keeps the answer of a read whose entry was not evicted', async () => {
+    // The ordinary case, stated beside the two above so that "not kept" cannot
+    // quietly become the rule: B's read is slow, nothing evicts B meanwhile.
+    const h = harness(ok(true, true));
+    await h.reader.robotsPolicy('a');
+    h.answerWith({ hangs: true });
+    const b = h.reader.robotsPolicy('b');
+    await h.flush();
+    await h.settle(ok(false, false));
+    expect(await b).toEqual(NOINDEX);
+    h.answerWith({ throws: new Error('must not be asked: B is fresh') });
+    expect(await h.reader.robotsPolicy('b')).toEqual(NOINDEX);
+    expect(h.reader.cachedChannelCount()).toBe(2);
+  });
+
   it('evicts the channel read longest ago when every entry holds a value', async () => {
     const h = harness(ok(false, false));
     await h.reader.robotsPolicy('first');
