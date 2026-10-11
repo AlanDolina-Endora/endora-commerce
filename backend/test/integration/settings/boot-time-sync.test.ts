@@ -71,8 +71,16 @@ describe('boot-time manifest sync (T019)', () => {
         ],
       });
 
+      // The fixture module's own count, not the batch total: whether the
+      // `settings` manifest's rows are already there depends on which file ran
+      // before this one — a file that booted a backend reconciles them, and
+      // this file run alone starts without — so the total was 1 in a full run
+      // and 14 alone.
+      const addedBy = (result: Awaited<ReturnType<ManifestReconciler['apply']>>, code: string) =>
+        result.perModule.find((m) => m.moduleCode === code)!.addedSettings;
+
       const r1 = await reconciler.apply([settingsManifest, catalogManifest]);
-      expect(r1.totalAddedSettings).toBe(1);
+      expect(addedBy(r1, 'catalog')).toBe(1);
 
       const r2 = await reconciler.apply([settingsManifest, catalogManifest]);
       expect(r2.totalAddedSettings).toBe(0);
