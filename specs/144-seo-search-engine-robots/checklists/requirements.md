@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,21 +31,29 @@
 
 ## Notes
 
-- Validated in one pass on 2026-10-11.
-- **Three `[NEEDS CLARIFICATION]` markers remain, deliberately**, one per question in the spec's
-  *Open questions for the owner*: Q1 (FR-024 — is the `llms.txt` base generated), Q2 (how far a
-  non-indexable default reaches beyond the storefront's own address) and Q3 (FR-002 — which
-  "other relevant variants" the dropdown offers). Each carries a recommended answer and the spec
-  is written as if it were accepted, so `/speckit.plan` is not blocked on wording — it is blocked
-  on the owner confirming or overturning three defaults. The unchecked item above stays unchecked
-  until they are answered.
+- First validated on 2026-10-11 with three `[NEEDS CLARIFICATION]` markers left for the owner
+  (Q1 — is the `llms.txt` base generated; Q2 — how far a non-indexable default reaches beyond the
+  storefront's own address; Q3 — which robots variants the dropdown offers).
+- **Re-validated the same day after the owner's rulings.** All three were answered as
+  recommended and are recorded in the spec's *Owner rulings* as R1 – R3, each with the rejected
+  alternative; no marker remains. Two further rulings changed requirements: R4 makes a preview of
+  the resulting `robots.txt` in the Admin UI mandatory (FR-038 – FR-045, overturning the original
+  assumption A9), and R5 rewrites FR-017 so that a page is never failed because the default could
+  not be read.
+- **One choice is a recommendation, not a ruling, and is not a marker**: which of the two preview
+  shapes the owner offered. The spec applies "a preview beside the field" and rejects "a field
+  pre-filled with the system rules", with the reasons in A9 and the list of requirements that
+  would change if the owner prefers the other. `/speckit.plan` can proceed on it.
 - Every other decision the feature description left open is recorded under *Assumptions* (A1 –
-  A14) with the alternative rejected, and is the owner's to overturn.
-- The spec names files in two places only — the *What the product does today* table and the
-  provenance of each fact — as the measured ground the requirements stand on, following
-  `specs/141-module-block-renderers/spec.md`. The requirements themselves name platform concepts
-  (settings, sales channels, the command palette, the audit trail, the module activation
-  control) and three public artefacts whose names are the feature (`robots.txt`, `llms.txt`, the
-  robots directive); they name no library, table, endpoint or file.
+  A16) with the alternative rejected; the owner accepted them as written on 2026-10-11 and may
+  still overturn any of them.
+- The spec names files in three places only — the *What the product does today* table, the
+  provenance of each fact, and the one citation in A9 that the rejection of the pre-filled field
+  rests on — following `specs/141-module-block-renderers/spec.md`. The requirements themselves
+  name platform concepts (settings, sales channels, the command palette, the audit trail, the
+  module activation control) and three public artefacts whose names are the feature
+  (`robots.txt`, `llms.txt`, the robots directive); they name no library, table, endpoint or
+  file.
 - `X-Robots-Tag` is deliberately not named in a requirement: FR-014 says "a response header"
-  carrying the directive, and the header's name is the plan's.
+  carrying the directive, and the header's name is the plan's. Likewise FR-041 says the preview
+  shows the storefront's own rules and leaves how the Admin UI obtains them to the plan.
