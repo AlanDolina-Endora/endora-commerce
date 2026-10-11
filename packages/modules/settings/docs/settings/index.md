@@ -182,7 +182,12 @@ Deleting any other group reassigns its settings to `general` and preserves
 their per-channel values.
 
 Every value change and group mutation lands an `audit_log_entries` row with
-the actor, action, target, and new value.
+the actor, action, target, and new value. A value write or reset also records
+the stored value it replaced or removed, so the audit log viewer shows before
+and after side by side. That is the value stored at the level being written —
+the all-channels value, or that channel's own — and not the value the channel
+resolved to: a first write records `stored: false` rather than the manifest
+default. A `secret` setting is recorded as `[redacted]` on both sides.
 
 ## For module consumers — reading values
 

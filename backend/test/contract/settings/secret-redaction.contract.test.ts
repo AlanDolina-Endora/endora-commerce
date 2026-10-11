@@ -156,6 +156,131 @@ describe('settings secret redaction (T005)', () => {
     }
   });
 
+  it('the audited BEFORE-state of a secret is redacted exactly as the after-state is', async () => {
+    // The secret currently holds 'sk-live-supersecret-123' (written above), so
+    // every write below has a real previous value to leak.
+    const em = h.em();
+    const setting = await em.findOneOrFail(Setting, { code: 'secret_test.api_key' });
+    const ciphertexts: string[] = [];
+    const rememberCiphertext = (stored: unknown): void => {
+      expect(isSecretEnvelope(stored)).toBe(true);
+      ciphertexts.push((stored as { ct: string }).ct);
+    };
+    rememberCiphertext(setting.globalValue);
+    const channel = (
+      await em
+        .getConnection()
+        .execute<{ id: string; code: string }[]>(
+          `select id, code from sales_channels order by code limit 1`,
+        )
+    )[0]!;
+
+    const put = async (payload: Record<string, unknown>): Promise<void> => {
+      const r = await h.app.inject({
+        method: 'PUT',
+        url: '/api/v1/admin/settings/secret_test.api_key/value',
+        cookies: adminCookie,
+        payload,
+      });
+      expect(r.statusCode).toBe(200);
+    };
+    const reset = async (query: string): Promise<void> => {
+      const r = await h.app.inject({
+        method: 'DELETE',
+        url: `/api/v1/admin/settings/secret_test.api_key/values${query}`,
+        cookies: adminCookie,
+      });
+      expect(r.statusCode).toBe(200);
+    };
+    const rememberChannelCiphertext = async (): Promise<void> => {
+      const fresh = h.em();
+      const row = await fresh.findOneOrFail(SettingValue, {
+        setting: { code: 'secret_test.api_key' },
+        salesChannel: channel.id,
+      });
+      rememberCiphertext(row.value);
+    };
+
+    // Overwrite globally, write and overwrite per channel, then reset both:
+    // every audited write path, each over an existing secret.
+    await put({ scope: 'all', value: 'sk-live-second-456' });
+    rememberCiphertext(
+      (await h.em().findOneOrFail(Setting, { code: 'secret_test.api_key' })).globalValue,
+    );
+    await put({ scope: 'subset', salesChannelCodes: [channel.code], value: 'sk-chan-first-789' });
+    await rememberChannelCiphertext();
+    await put({ scope: 'subset', salesChannelCodes: [channel.code], value: 'sk-chan-second-012' });
+    await rememberChannelCiphertext();
+    await reset(`?salesChannelCodes=${channel.code}`);
+    await reset('');
+
+    const rows = await h.em().find(
+      AuditLogEntry,
+      { objectType: 'setting', objectId: setting.id },
+      { orderBy: { actedAt: 'asc', id: 'asc' } },
+    );
+    const byAction = (action: string): AuditLogEntry[] => rows.filter((r) => r.action === action);
+
+    // The before-state is present on every path, and is the same token the
+    // after-state uses — never the plaintext, never the stored ciphertext.
+    const globalSets = byAction('setting.global_value_set');
+    expect(globalSets.at(-1)!.stateBefore).toEqual({
+      settingCode: 'secret_test.api_key',
+      value: '[redacted]',
+      valueType: 'secret',
+      stored: true,
+    });
+    const channelSets = byAction('setting.value_set');
+    expect(channelSets.length).toBeGreaterThanOrEqual(2);
+    // No row of its own yet: there is nothing to redact, and the row says so.
+    expect(channelSets.at(-2)!.stateBefore).toEqual({
+      settingCode: 'secret_test.api_key',
+      salesChannelId: channel.id,
+      value: null,
+      valueType: 'secret',
+      stored: false,
+    });
+    expect(channelSets.at(-1)!.stateBefore).toEqual({
+      settingCode: 'secret_test.api_key',
+      salesChannelId: channel.id,
+      value: '[redacted]',
+      valueType: 'secret',
+      stored: true,
+    });
+    expect(byAction('setting.value_reset').at(-1)!.stateBefore).toEqual({
+      settingCode: 'secret_test.api_key',
+      salesChannelId: channel.id,
+      value: '[redacted]',
+      valueType: 'secret',
+      stored: true,
+    });
+    expect(byAction('setting.global_value_reset').at(-1)!.stateBefore).toEqual({
+      settingCode: 'secret_test.api_key',
+      value: '[redacted]',
+      valueType: 'secret',
+      stored: true,
+    });
+
+    // And the whole trail of this setting, both columns, holds no plaintext
+    // and no ciphertext envelope.
+    const trail = JSON.stringify(rows.map((r) => [r.stateBefore ?? null, r.stateAfter ?? null]));
+    for (const plaintext of [
+      'sk-live-supersecret-123',
+      'sk-live-second-456',
+      'sk-chan-first-789',
+      'sk-chan-second-012',
+    ]) {
+      expect(trail).not.toContain(plaintext);
+    }
+    expect(ciphertexts).toHaveLength(4);
+    for (const ciphertext of ciphertexts) {
+      expect(trail).not.toContain(ciphertext);
+    }
+
+    // Leave the secret as the following cases expect to find it.
+    await put({ scope: 'all', value: 'sk-live-supersecret-123' });
+  });
+
   it('SettingsService.get returns the decrypted plaintext to backend callers', async () => {
     const channelId = await firstChannelId();
     const value = await h.settings.settingsService.get(

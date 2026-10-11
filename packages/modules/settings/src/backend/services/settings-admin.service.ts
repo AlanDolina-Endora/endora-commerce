@@ -29,7 +29,9 @@ import { SecretKeyMissing, SecretKeyInvalid, encryptSecretValue } from '@endora-
  *
  * Every successful mutation, in this order:
  *   - flushes;
- *   - records an `audit_log_entries` row via {@link AuditPort};
+ *   - records an `audit_log_entries` row via {@link AuditPort} — for a value
+ *     write or reset, with the stored value it replaced or removed as
+ *     `stateBefore` (a `secret` redacted on both sides);
  *   - **drops the settings cache** through {@link SettingsCacheInvalidation};
  *   - emits an EventBus event (see contract section E).
  *
@@ -432,12 +434,17 @@ export class SettingsAdminService {
 
     const affectedChannelIds: string[] = [];
     let globalValueUpdated = false;
+    // What each write replaces, captured before the assignment that replaces
+    // it — see `auditedValueBefore` for what goes into the audit row.
+    let globalValueBefore: StoredValueBefore = NOTHING_STORED;
+    const channelValueBefore = new Map<string, StoredValueBefore>();
 
     if (target.scope === 'all') {
       // Platform-wide global override: writes setting.globalValue only. Channels
       // that already carry their own per-channel `SettingValue` row keep it
       // (their override wins over global). Channels without an explicit
       // override now inherit this new global value via the resolver.
+      globalValueBefore = storedGlobalValue(setting);
       setting.globalValue = storedValue;
       globalValueUpdated = true;
     } else {
@@ -481,6 +488,10 @@ export class SettingsAdminService {
       const valuesByChannelId = new Map(existingValues.map((v) => [v.salesChannel.id, v]));
       for (const channel of targetChannels) {
         const existing = valuesByChannelId.get(channel.id);
+        channelValueBefore.set(
+          channel.id,
+          existing ? { stored: true, value: existing.value } : NOTHING_STORED,
+        );
         if (existing) {
           existing.value = storedValue;
         } else {
@@ -512,10 +523,14 @@ export class SettingsAdminService {
           action: 'setting.global_value_set',
           objectType: 'setting',
           objectId: setting.id,
+          stateBefore: {
+            settingCode: setting.code,
+            ...auditedValueBefore(setting, globalValueBefore),
+          },
           stateAfter: {
             settingCode: setting.code,
             // Secret plaintext never lands in the audit log (FR-021).
-            value: isSecret ? '[redacted]' : parsed.data,
+            value: auditedValue(setting, parsed.data),
             valueType: setting.valueType,
           },
           ...(actor.requestId !== undefined ? { requestId: actor.requestId } : {}),
@@ -527,10 +542,18 @@ export class SettingsAdminService {
           action: 'setting.value_set',
           objectType: 'setting',
           objectId: setting.id,
+          stateBefore: {
+            settingCode: setting.code,
+            salesChannelId: channelId,
+            ...auditedValueBefore(
+              setting,
+              channelValueBefore.get(channelId) ?? NOTHING_STORED,
+            ),
+          },
           stateAfter: {
             settingCode: setting.code,
             salesChannelId: channelId,
-            value: isSecret ? '[redacted]' : parsed.data,
+            value: auditedValue(setting, parsed.data),
             valueType: setting.valueType,
           },
           ...(actor.requestId !== undefined ? { requestId: actor.requestId } : {}),
@@ -650,6 +673,9 @@ export class SettingsAdminService {
 
     let resetChannelIds: string[] = [];
     let globalValueCleared = false;
+    // What the reset removes — the only record of it once the row is gone.
+    let globalValueBefore: StoredValueBefore = NOTHING_STORED;
+    const channelValueBefore = new Map<string, StoredValueBefore>();
 
     if (channelCodes && channelCodes.length > 0) {
       // Channel-scoped reset: delete only the specified channels' override rows.
@@ -671,12 +697,16 @@ export class SettingsAdminService {
         { populate: ['salesChannel'] },
       );
       resetChannelIds = values.map((v) => v.salesChannel.id);
-      for (const v of values) em.remove(v);
+      for (const v of values) {
+        channelValueBefore.set(v.salesChannel.id, { stored: true, value: v.value });
+        em.remove(v);
+      }
     } else {
       // Platform-wide reset: clear the global override only. Per-channel
       // override rows are intentionally left untouched (per the agreed
       // semantics; admins can still reset individual channels separately).
-      if (setting.globalValue !== null && setting.globalValue !== undefined) {
+      globalValueBefore = storedGlobalValue(setting);
+      if (globalValueBefore.stored) {
         setting.globalValue = null;
         globalValueCleared = true;
       }
@@ -698,6 +728,14 @@ export class SettingsAdminService {
           action: 'setting.value_reset',
           objectType: 'setting',
           objectId: setting.id,
+          stateBefore: {
+            settingCode: setting.code,
+            salesChannelId: channelId,
+            ...auditedValueBefore(
+              setting,
+              channelValueBefore.get(channelId) ?? NOTHING_STORED,
+            ),
+          },
           stateAfter: { settingCode: setting.code, salesChannelId: channelId },
           ...(actor.requestId !== undefined ? { requestId: actor.requestId } : {}),
         });
@@ -708,6 +746,10 @@ export class SettingsAdminService {
           action: 'setting.global_value_reset',
           objectType: 'setting',
           objectId: setting.id,
+          stateBefore: {
+            settingCode: setting.code,
+            ...auditedValueBefore(setting, globalValueBefore),
+          },
           stateAfter: { settingCode: setting.code },
           ...(actor.requestId !== undefined ? { requestId: actor.requestId } : {}),
         });
@@ -960,6 +1002,59 @@ export class SettingsAdminService {
       );
     }
   }
+}
+
+/**
+ * One tier's stored value at the moment a write is about to replace or remove
+ * it. `stored: false` is "this tier held nothing" — no per-channel row, or a
+ * null global override — which a `value` of `null` alone could not say: a
+ * `json` setting may legitimately store `null` in a per-channel row.
+ */
+type StoredValueBefore = { stored: false } | { stored: true; value: unknown };
+
+const NOTHING_STORED: StoredValueBefore = { stored: false };
+
+/**
+ * The platform-wide override as a write finds it. A null override is no
+ * override: that is the test `resetValues` has always used to decide whether
+ * there is anything to clear, and the resolver falls through it the same way.
+ */
+function storedGlobalValue(setting: Setting): StoredValueBefore {
+  return setting.globalValue !== null && setting.globalValue !== undefined
+    ? { stored: true, value: setting.globalValue }
+    : NOTHING_STORED;
+}
+
+/**
+ * A setting value as the audit trail may carry it. The one place the rule
+ * lives, so the before-state and the after-state cannot redact differently: a
+ * `secret` is the fixed token whatever it holds (FR-021) — never the
+ * plaintext, and never the stored ciphertext envelope either — and every
+ * other type, `credential_ref` included, is the value itself.
+ */
+function auditedValue(setting: Setting, value: unknown): unknown {
+  return setting.valueType === 'secret' ? '[redacted]' : value;
+}
+
+/**
+ * The `value` / `valueType` / `stored` triple of an audit row's `stateBefore`.
+ *
+ * It is the **stored** value of the tier being written — the global override
+ * for a platform-wide write, that channel's own row for a per-channel one —
+ * and never the resolved value: `stateAfter` records what was stored, not what
+ * a channel then resolves to, and a before-state on a different footing would
+ * make the pair read as a diff it is not. So a first write reports nothing
+ * stored rather than the manifest default or an inherited override.
+ */
+function auditedValueBefore(
+  setting: Setting,
+  before: StoredValueBefore,
+): { value: unknown; valueType: string; stored: boolean } {
+  return {
+    value: before.stored ? auditedValue(setting, before.value) : null,
+    valueType: setting.valueType,
+    stored: before.stored,
+  };
 }
 
 /**

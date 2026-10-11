@@ -173,7 +173,12 @@ przez system i platforma odmawia jej usunięcia. Usunięcie dowolnej innej grupy
 ustawienia do `general` i zachowuje wartości ustawione dla kanałów.
 
 Każda zmiana wartości i każda zmiana grupy trafia do wiersza `audit_log_entries` z wykonawcą,
-akcją, obiektem i nową wartością.
+akcją, obiektem i nową wartością. Zapis lub przywrócenie wartości zapisuje też przechowywaną
+wartość, którą zastąpiono lub usunięto, więc przeglądarka dziennika audytu pokazuje stan przed i po
+obok siebie. Jest to wartość przechowywana na poziomie, którego dotyczy zapis — wartość dla
+wszystkich kanałów albo własna wartość danego kanału — a nie wartość, którą kanał faktycznie
+otrzymywał: pierwszy zapis odnotowuje `stored: false`, a nie wartość domyślną z manifestu.
+Ustawienie typu `secret` jest zapisywane jako `[redacted]` po obu stronach.
 
 ## Dla modułów korzystających z ustawień — odczyt wartości
 
