@@ -1,15 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CRAWLER_FILES_PATH,
+  CRAWLER_TEXT_MAX_LENGTH,
   FAILURE_BACKOFF_MS,
   FRESH_FOR_MS,
+  IN_FLIGHT_ABANDONED_AFTER_MS,
   MAX_CACHED_CHANNELS,
   READ_TIMEOUT_MS,
   ROBOTS_POLICY_PATH,
   STALE_REFRESH_BUDGET_MS,
   createCrawlerPolicyReader,
+  isCrawlerFilesResponse,
   isRobotsPolicyResponse,
 } from '../../lib/seo/crawler-policy';
-import { storefrontRobotsPolicyResponseSchema } from '@endora-commerce/contracts/seo';
+import {
+  CRAWLER_TEXT_MAX_BYTES,
+  storefrontCrawlerFilesResponseSchema,
+  storefrontRobotsPolicyResponseSchema,
+} from '@endora-commerce/contracts/seo';
 
 /**
  * How the storefront reads a channel's default robots policy
@@ -699,5 +707,389 @@ describe('isRobotsPolicyResponse agrees with the contract schema', () => {
     const verdicts = FIXTURES.map((fixture) => isRobotsPolicyResponse(fixture));
     expect(verdicts.filter(Boolean)).toHaveLength(5);
     expect(verdicts.filter((verdict) => !verdict).length).toBeGreaterThan(10);
+  });
+});
+
+/**
+ * A read the process abandoned must not block the channel for ever.
+ *
+ * A read normally ends within its two-second limit, one way or the other. A
+ * process that is frozen mid-request — a paused container, a suspended
+ * serverless instance — can come back holding a read that will never settle:
+ * its timer is gone with the request. Every later request would then find a
+ * read "in progress", start none of its own, and serve what it knew at the
+ * moment of the freeze for the life of the process. So a read in progress for
+ * longer than any read can take is treated as dead, and its answer, should one
+ * ever arrive, is ignored.
+ */
+describe('a read that never settles', () => {
+  it('is replaced by a new read once it is older than any read can be', async () => {
+    const h = harness(ok(false, false));
+    expect(await h.reader.robotsPolicy('pl')).toEqual(NOINDEX);
+    h.advance(FRESH_FOR_MS);
+
+    h.answerWith({ hangs: true });
+    void h.reader.robotsPolicy('pl');
+    await h.elapse(STALE_REFRESH_BUDGET_MS);
+    expect(h.calls).toHaveLength(2);
+
+    // Still inside the time a read may take: it is in progress, not dead.
+    h.answerWith(ok(true, true));
+    h.advance(IN_FLIGHT_ABANDONED_AFTER_MS - STALE_REFRESH_BUDGET_MS - 1);
+    expect(await h.reader.robotsPolicy('pl')).toEqual(NOINDEX);
+    expect(h.calls).toHaveLength(2);
+
+    // Past it: the read is given up, and this request starts another.
+    h.advance(1);
+    expect(await h.reader.robotsPolicy('pl')).toEqual({
+      kind: 'value',
+      value: { index: true, follow: true },
+    });
+    expect(h.calls).toHaveLength(3);
+    expect(IN_FLIGHT_ABANDONED_AFTER_MS).toBeGreaterThan(READ_TIMEOUT_MS);
+    expect(IN_FLIGHT_ABANDONED_AFTER_MS).toBeLessThanOrEqual(10_000);
+  });
+
+  it('does not let the abandoned read overwrite what was read since, should it answer after all', async () => {
+    const h = harness(ok(false, false));
+    await h.reader.robotsPolicy('pl');
+    h.advance(FRESH_FOR_MS);
+    h.answerWith({ hangs: true });
+    void h.reader.robotsPolicy('pl');
+    await h.elapse(STALE_REFRESH_BUDGET_MS);
+
+    h.answerWith(ok(true, true));
+    h.advance(IN_FLIGHT_ABANDONED_AFTER_MS);
+    expect(await h.reader.robotsPolicy('pl')).toEqual({
+      kind: 'value',
+      value: { index: true, follow: true },
+    });
+
+    // The frozen read wakes up with what was true before the freeze — or with
+    // a failure. Neither is news.
+    await h.settle(ok(false, true));
+    expect(await h.reader.robotsPolicy('pl')).toEqual({
+      kind: 'value',
+      value: { index: true, follow: true },
+    });
+    expect(h.calls).toHaveLength(3);
+  });
+
+  it('does not let the abandoned read’s failure start a back-off', async () => {
+    const h = harness(ok(false, false));
+    await h.reader.robotsPolicy('pl');
+    h.advance(FRESH_FOR_MS);
+    h.answerWith({ hangs: true });
+    void h.reader.robotsPolicy('pl');
+    await h.elapse(STALE_REFRESH_BUDGET_MS);
+
+    h.answerWith(ok(true, true));
+    h.advance(IN_FLIGHT_ABANDONED_AFTER_MS);
+    await h.reader.robotsPolicy('pl');
+    await h.settle({ throws: new TypeError('fetch failed') });
+
+    // Fresh for its minute, then refreshed on time — no back-off in the way.
+    h.advance(FRESH_FOR_MS);
+    h.answerWith(ok(false, true));
+    expect(await h.reader.robotsPolicy('pl')).toEqual({
+      kind: 'value',
+      value: { index: false, follow: true },
+    });
+  });
+
+  it('is replaced for a process that knows nothing, too', async () => {
+    const h = harness({ hangs: true });
+    let first: unknown = 'pending';
+    void h.reader.robotsPolicy('pl').then((read) => {
+      first = read;
+    });
+    await h.flush();
+    h.advance(IN_FLIGHT_ABANDONED_AFTER_MS);
+    h.answerWith(ok(false, false));
+    expect(await h.reader.robotsPolicy('pl')).toEqual(NOINDEX);
+    expect(h.calls).toHaveLength(2);
+    // The request that was waiting on the dead read is not answered by it.
+    expect(first).toBe('pending');
+  });
+});
+
+/**
+ * The second thing this reader reads: what a channel's crawler files are built
+ * from (`specs/144-seo-search-engine-robots/contracts/crawler-policy.md` §2).
+ *
+ * Same cache, same three answers, same rules — the cases above are about the
+ * machinery and are not repeated per read. What is held here is that this read
+ * goes through that machinery (one case per row of the classification table),
+ * that it is a different question from the policy with its own answers, and
+ * the two things that are its own: the texts leave the reader exactly as the
+ * backend sent them, and a text longer than the backend accepts is not served.
+ *
+ * `robots.txt` treats `unknown` differently from a page — it answers `503`
+ * rather than serve a file that silently omits the operator's instructions —
+ * and that is the route's decision (`robots-txt-route.test.ts`), not the
+ * reader's: the reader says the same three things to every caller.
+ */
+describe('the crawler-files read', () => {
+  const FILES = {
+    index: false,
+    follow: true,
+    robotsTxtCustom: 'User-agent: GPTBot\r\nDisallow: /\n\n  # kept \n',
+    llmsTxtAdditional: '',
+    shop: { name: 'Endora Demo' },
+  };
+  const filesOk = (overrides: Record<string, unknown> = {}): Exclude<Answer, { hangs: true }> => ({
+    status: 200,
+    body: { data: { ...FILES, ...overrides } },
+  });
+  const VALUE = { kind: 'value', value: FILES } as const;
+
+  it('asks the crawler-files route, for the channel it was given', async () => {
+    const h = harness(filesOk());
+    expect(await h.reader.crawlerFiles('pl_retail')).toEqual(VALUE);
+    await h.reader.crawlerFiles(undefined);
+    expect(CRAWLER_FILES_PATH).toBe('/api/v1/storefront/seo/crawler-files');
+    expect(h.calls.map((call) => call.url)).toEqual([
+      `http://backend.test:3001${CRAWLER_FILES_PATH}`,
+      `http://backend.test:3001${CRAWLER_FILES_PATH}`,
+    ]);
+    expect(h.calls[0]!.headers.get('x-sales-channel')).toBe('pl_retail');
+    expect(h.calls[1]!.headers.has('x-sales-channel')).toBe(false);
+    expect(h.calls[0]!.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('hands the texts over exactly as the backend sent them', async () => {
+    const h = harness(filesOk());
+    const read = await h.reader.crawlerFiles('pl');
+    expect(read.kind === 'value' && read.value.robotsTxtCustom).toBe(FILES.robotsTxtCustom);
+  });
+
+  it('hands over the members this storefront was written for, and no others', async () => {
+    const h = harness({
+      status: 200,
+      body: {
+        data: { ...FILES, somethingNewer: true, shop: { name: 'Endora Demo', logoUrl: 'x' } },
+        meta: { a: 1 },
+      },
+    });
+    expect(await h.reader.crawlerFiles('pl')).toEqual(VALUE);
+  });
+
+  it('is fresh for a minute, then refetched once', async () => {
+    const h = harness(filesOk());
+    await h.reader.crawlerFiles('pl');
+    h.answerWith(filesOk({ robotsTxtCustom: 'Disallow: /new' }));
+    h.advance(FRESH_FOR_MS - 1);
+    expect(await h.reader.crawlerFiles('pl')).toEqual(VALUE);
+    expect(h.calls).toHaveLength(1);
+
+    h.advance(1);
+    expect(await h.reader.crawlerFiles('pl')).toEqual({
+      kind: 'value',
+      value: { ...FILES, robotsTxtCustom: 'Disallow: /new' },
+    });
+    expect(h.calls).toHaveLength(2);
+  });
+
+  it.each([
+    ['a switched-off module', MODULE_DISABLED],
+    ['a backend without the route', { status: 404, body: { error: { code: 'NOT_FOUND' } } }],
+  ] satisfies [string, Answer][])('reads %s as "none", and it replaces an earlier text', async (_label, none) => {
+    const cold = harness(none);
+    expect(await cold.reader.crawlerFiles('pl')).toEqual({ kind: 'none' });
+
+    const warm = harness(filesOk());
+    await warm.reader.crawlerFiles('pl');
+    warm.answerWith(none);
+    warm.advance(FRESH_FOR_MS);
+    expect(await warm.reader.crawlerFiles('pl')).toEqual({ kind: 'none' });
+    // …and stays withdrawn when the backend then becomes unreadable.
+    warm.answerWith({ throws: new TypeError('fetch failed') });
+    warm.advance(FRESH_FOR_MS);
+    expect(await warm.reader.crawlerFiles('pl')).toEqual({ kind: 'none' });
+  });
+
+  const UNREADABLE: [string, Answer][] = [
+    ['a timeout', { throws: new DOMException('The operation timed out.', 'TimeoutError') }],
+    ['a refused connection', { throws: new TypeError('fetch failed') }],
+    ['a 500', { status: 500, body: { error: { code: 'INTERNAL' } } }],
+    ['a 503 without the module code', { status: 503, text: '<html>Service Unavailable</html>' }],
+    ['a 400 for a channel the backend does not know', { status: 400, body: { error: { code: 'UNKNOWN_SALES_CHANNEL' } } }],
+    ['a body that is not JSON', { status: 200, text: 'User-agent: *\nDisallow: /' }],
+    ['a body with no envelope', { status: 200, body: FILES }],
+    ['a robots policy alone', { status: 200, body: { data: { index: true, follow: true } } }],
+    ['a text that is not a string', filesOk({ robotsTxtCustom: null })],
+    ['a missing text', { status: 200, body: { data: { ...FILES, robotsTxtCustom: undefined } } }],
+    ['a shop without a name', filesOk({ shop: {} })],
+    ['a text longer than the backend accepts', filesOk({ robotsTxtCustom: 'a'.repeat(CRAWLER_TEXT_MAX_BYTES + 1) })],
+  ];
+
+  it.each(UNREADABLE)('answers "unknown" for %s when nothing was ever known', async (_label, answer) => {
+    const h = harness(answer);
+    expect(await h.reader.crawlerFiles('pl')).toEqual({ kind: 'unknown' });
+  });
+
+  it.each(UNREADABLE)('answers the last-known files for %s, however old', async (_label, answer) => {
+    const h = harness(filesOk());
+    await h.reader.crawlerFiles('pl');
+    h.answerWith(answer);
+    h.advance(30 * 24 * 60 * 60 * 1000);
+    expect(await h.reader.crawlerFiles('pl')).toEqual(VALUE);
+  });
+
+  it('is retried at most once every five seconds while it keeps failing', async () => {
+    const h = harness({ throws: new TypeError('fetch failed') });
+    await h.reader.crawlerFiles('pl');
+    h.advance(FAILURE_BACKOFF_MS - 1);
+    expect(await h.reader.crawlerFiles('pl')).toEqual({ kind: 'unknown' });
+    expect(h.calls).toHaveLength(1);
+    h.advance(1);
+    await h.reader.crawlerFiles('pl');
+    expect(h.calls).toHaveLength(2);
+  });
+
+  it('never rejects', async () => {
+    for (const [, answer] of UNREADABLE) {
+      await expect(harness(answer).reader.crawlerFiles('pl')).resolves.toBeDefined();
+    }
+  });
+
+  it('never answers one channel with another channel’s text', async () => {
+    const h = harness(filesOk({ robotsTxtCustom: 'Disallow: /only-a' }));
+    await h.reader.crawlerFiles('a');
+
+    h.answerWith(filesOk({ robotsTxtCustom: '' }));
+    const b = await h.reader.crawlerFiles('b');
+    const none = await h.reader.crawlerFiles(undefined);
+    const literalDefault = await h.reader.crawlerFiles('default');
+    for (const read of [b, none, literalDefault]) {
+      expect(read.kind === 'value' && read.value.robotsTxtCustom).toBe('');
+    }
+    expect(h.calls.map((call) => call.headers.get('x-sales-channel'))).toEqual([
+      'a',
+      'b',
+      null,
+      'default',
+    ]);
+
+    // And when B's own read fails it does not fall back to A's text.
+    const failing = harness(filesOk({ robotsTxtCustom: 'Disallow: /only-a' }));
+    await failing.reader.crawlerFiles('a');
+    failing.answerWith({ throws: new TypeError('fetch failed') });
+    expect(await failing.reader.crawlerFiles('b')).toEqual({ kind: 'unknown' });
+    expect(await failing.reader.crawlerFiles(undefined)).toEqual({ kind: 'unknown' });
+  });
+
+  it('is a different question from the policy: neither answers for the other', async () => {
+    const h = harness(ok(false, false));
+    expect(await h.reader.robotsPolicy('pl')).toEqual(NOINDEX);
+
+    // The policy is fresh for `pl`; the files were never asked for.
+    h.answerWith(filesOk({ index: true, follow: true }));
+    const files = await h.reader.crawlerFiles('pl');
+    expect(files.kind === 'value' && files.value.index).toBe(true);
+    expect(h.calls.map((call) => new URL(call.url).pathname)).toEqual([
+      ROBOTS_POLICY_PATH,
+      CRAWLER_FILES_PATH,
+    ]);
+
+    // And the policy the middleware applies is still the one it read itself.
+    expect(await h.reader.robotsPolicy('pl')).toEqual(NOINDEX);
+    expect(h.calls).toHaveLength(2);
+
+    // A failed files read does not disturb the policy either, nor the reverse.
+    h.answerWith({ throws: new TypeError('fetch failed') });
+    expect(await h.reader.crawlerFiles('other')).toEqual({ kind: 'unknown' });
+    expect(await h.reader.robotsPolicy('pl')).toEqual(NOINDEX);
+  });
+
+  it('holds a bounded number of channels, and an invented code cannot evict a real one', async () => {
+    const h = harness(filesOk());
+    expect(await h.reader.crawlerFiles('real')).toEqual(VALUE);
+
+    h.answerWith({ status: 400, body: { error: { code: 'UNKNOWN_SALES_CHANNEL' } } });
+    for (let i = 0; i < MAX_CACHED_CHANNELS + 50; i += 1) await h.reader.crawlerFiles(`inv_${i}`);
+    expect(h.reader.cachedCrawlerFilesCount()).toBeLessThanOrEqual(MAX_CACHED_CHANNELS);
+    // The policy's cache is its own: nothing here grew it.
+    expect(h.reader.cachedChannelCount()).toBe(0);
+
+    h.answerWith({ throws: new TypeError('fetch failed') });
+    h.advance(FRESH_FOR_MS);
+    expect(await h.reader.crawlerFiles('real')).toEqual(VALUE);
+  });
+
+  it('serves a known file within the refresh budget when the backend hangs', async () => {
+    const h = harness(filesOk());
+    await h.reader.crawlerFiles('pl');
+    h.advance(FRESH_FOR_MS);
+    h.answerWith({ hangs: true });
+
+    let answered: unknown = 'pending';
+    void h.reader.crawlerFiles('pl').then((read) => {
+      answered = read;
+    });
+    await h.flush();
+    expect(answered).toBe('pending');
+    await h.elapse(STALE_REFRESH_BUDGET_MS);
+    expect(answered).toEqual(VALUE);
+  });
+});
+
+describe('isCrawlerFilesResponse agrees with the contract schema', () => {
+  const FILES = {
+    index: true,
+    follow: false,
+    robotsTxtCustom: 'Disallow: /x\r\n',
+    llmsTxtAdditional: '# more',
+    shop: { name: 'Shop' },
+  };
+  const AT_LIMIT = 'a'.repeat(CRAWLER_TEXT_MAX_BYTES);
+  const FIXTURES: unknown[] = [
+    { data: FILES },
+    { data: { ...FILES, robotsTxtCustom: '', llmsTxtAdditional: '', shop: { name: '' } } },
+    { data: { ...FILES, extra: 1, shop: { name: 'Shop', logoUrl: 'x' } }, meta: {} },
+    { data: { ...FILES, robotsTxtCustom: AT_LIMIT, llmsTxtAdditional: AT_LIMIT } },
+    { data: { ...FILES, robotsTxtCustom: `${AT_LIMIT}a` } },
+    { data: { ...FILES, llmsTxtAdditional: `${AT_LIMIT}a` } },
+    { data: { ...FILES, robotsTxtCustom: null } },
+    { data: { ...FILES, robotsTxtCustom: ['Disallow: /'] } },
+    { data: { ...FILES, llmsTxtAdditional: 1 } },
+    { data: { ...FILES, shop: {} } },
+    { data: { ...FILES, shop: null } },
+    { data: { ...FILES, shop: 'Shop' } },
+    { data: { ...FILES, shop: ['Shop'] } },
+    { data: { ...FILES, shop: { name: null } } },
+    { data: { ...FILES, index: 'true' } },
+    { data: { index: true, follow: true } },
+    { data: { robotsTxtCustom: '', llmsTxtAdditional: '', shop: { name: '' } } },
+    { data: null },
+    { data: [FILES] },
+    { data: 'Disallow: /' },
+    FILES,
+    {},
+    null,
+    undefined,
+    'a string',
+    [],
+  ];
+
+  it.each(FIXTURES.map((fixture, i) => [`#${i} ${(JSON.stringify(fixture) ?? 'undefined').slice(0, 80)}`, fixture]))(
+    'on %s',
+    (_label, fixture) => {
+      expect(isCrawlerFilesResponse(fixture)).toBe(
+        storefrontCrawlerFilesResponseSchema.safeParse(fixture).success,
+      );
+    },
+  );
+
+  it('accepts some fixtures and refuses others — the comparison is not vacuous', () => {
+    const verdicts = FIXTURES.map((fixture) => isCrawlerFilesResponse(fixture));
+    expect(verdicts.filter(Boolean)).toHaveLength(4);
+    expect(verdicts.filter((verdict) => !verdict).length).toBeGreaterThan(15);
+  });
+
+  it('restates the contract’s limit rather than importing it', () => {
+    // The middleware bundle carries this file, and must not carry a validation
+    // library with it; so the number is written twice and held equal here.
+    expect(CRAWLER_TEXT_MAX_LENGTH).toBe(CRAWLER_TEXT_MAX_BYTES);
   });
 });

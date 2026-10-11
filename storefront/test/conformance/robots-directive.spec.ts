@@ -98,8 +98,13 @@ test.describe('default robots directive on served responses', () => {
 
   test('robots.txt is not changed by the policy: it never closes the whole site', async () => {
     // A crawler has to fetch a page to read that it must not be indexed.
-    const body = await (await served('/robots.txt')).text();
+    //
+    // `?part=system` is the storefront's own rules, which is what this claim is
+    // about. The whole file also carries whatever the channel's operator added
+    // to it, and an operator may write any rule there — `Disallow: /` included.
+    const body = await (await served('/robots.txt?part=system')).text();
     expect(body.split('\n').map((line) => line.trim())).not.toContain('Disallow: /');
+    expect(body).toContain('Sitemap: ');
   });
 
   test('the build-generated files under /_next/static are exempt', async () => {

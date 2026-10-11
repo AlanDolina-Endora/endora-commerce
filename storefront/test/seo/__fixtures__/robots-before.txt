@@ -1,0 +1,27 @@
+User-Agent: *
+Allow: /
+Disallow: /api/
+Disallow: /account
+Disallow: /addresses
+Disallow: /orders
+Disallow: /organization
+Disallow: /preferences
+Disallow: /quick-order
+Disallow: /quote-request
+Disallow: /quote-requests
+Disallow: /returns
+Disallow: /shopping-lists
+Disallow: /newsletter
+Disallow: /compare
+Disallow: /cart
+Disallow: /checkout
+Disallow: /login
+Disallow: /register
+Disallow: /register-customer
+Disallow: /password-reset
+Disallow: /verify
+Disallow: /auth/
+Disallow: /invitations/
+Disallow: /offline
+
+Sitemap: http://localhost:3000/sitemap.xml

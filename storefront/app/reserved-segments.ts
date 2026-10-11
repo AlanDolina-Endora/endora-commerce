@@ -38,11 +38,16 @@
  * `app/`, excluding dynamic segments — `[...slug]` is the CMS catch-all itself
  * and is what a page slug *is*.
  *
- * `robots.txt` and `sitemap.xml` are not here: they are produced by `app/robots.ts`
- * and `app/sitemap.ts`, files at the app root rather than directories, so no
- * segment of the route tree names them. Nothing is lost by it — a CMS slug
- * cannot contain a `.` (`cmsSlugRe`), so neither URL is reachable by any slug an
- * operator can save.
+ * `robots.txt` is here because `app/robots.txt/route.ts` serves it, and a
+ * directory under `app/` is a segment of the route tree like any other. It was
+ * absent while the file came from `app/robots.ts`, a file at the app root.
+ *
+ * `sitemap.xml` is still not here, for that reason: it is produced by
+ * `app/sitemap.ts`, a file at the app root rather than a directory, so no
+ * segment of the route tree names it. Nothing is lost by it — a CMS slug cannot
+ * contain a `.` (`cmsSlugRe`), so that URL is reachable by no slug an operator
+ * can save, and neither is `robots.txt`, whose entry is this array being
+ * complete rather than a refusal anyone will meet.
  */
 export const RESERVED_TOP_LEVEL_SEGMENTS: readonly string[] = [
   'account',
@@ -73,6 +78,7 @@ export const RESERVED_TOP_LEVEL_SEGMENTS: readonly string[] = [
   'register',
   'register-customer',
   'returns',
+  'robots.txt',
   'search',
   'service-unavailable',
   'session-expired',

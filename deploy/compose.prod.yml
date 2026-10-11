@@ -230,8 +230,9 @@ services:
       # backend's own `STOREFRONT_BASE_URL` above is built from. Adding it to
       # this block would change nothing and would read as though it did:
       # measured on this tree, `next build` inlines the value and drops the
-      # variable's name from `.next/server` altogether, and `/robots.txt` is
-      # prerendered, so its `Sitemap:` line is a static file inside the image.
+      # variable's name from `.next/server` altogether. `/robots.txt` is
+      # rendered per request, and the origin in its `Sitemap:` line is that
+      # inlined value all the same.
       # An image built without that argument serves `http://localhost:3000` in
       # all three places — the fallback in `storefront/lib/seo/site-url.ts` —
       # and the repair is to rebuild, never to set a variable here.
