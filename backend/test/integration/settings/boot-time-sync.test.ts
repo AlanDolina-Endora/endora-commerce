@@ -203,6 +203,54 @@ describe('boot-time manifest sync (T019)', () => {
     }
   });
 
+  /**
+   * The state an upgrade passes through, or is left in when a migration was
+   * not delivered: this release's code over a `settings` table that has no
+   * `multiline` column yet. A row read from it carries no such property, and
+   * "absent" is not "different from false" — so re-applying manifests that
+   * never mention the flag must not try to write a column that is not there.
+   * A manifest that **does** declare it has asked for something this database
+   * cannot store, and that one is refused loudly rather than dropped.
+   *
+   * The column is dropped inside the test transaction and comes back with the
+   * rollback.
+   */
+  it('re-applies over a table without the multiline column, until a manifest sets the flag', async () => {
+    try {
+      const em = db.em();
+      const reconciler = new ManifestReconciler(em);
+      const manifestWith = (multiline: boolean) =>
+        defineModuleSettingsManifest({
+          moduleCode: 'catalog',
+          groups: [{ code: 'catalog', name: 'Catalog' }],
+          settings: [
+            {
+              code: 'catalog.footer_note',
+              name: 'Footer note',
+              groupCode: 'catalog',
+              valueType: 'string',
+              defaultValue: '',
+              ...(multiline ? { multiline } : {}),
+            },
+          ],
+        });
+
+      await reconciler.apply([settingsManifest, manifestWith(false)]);
+      await em.execute('alter table settings drop column multiline');
+      em.clear();
+
+      const repeat = await reconciler.apply([settingsManifest, manifestWith(false)]);
+      expect(repeat.perModule.map((m) => m.updatedSettings)).toEqual([0, 0]);
+
+      em.clear();
+      await expect(reconciler.apply([settingsManifest, manifestWith(true)])).rejects.toThrow(
+        /multiline/,
+      );
+    } finally {
+      await rollback();
+    }
+  });
+
   it('leaves every setting a shipped manifest declares single-line', async () => {
     try {
       const em = db.em();

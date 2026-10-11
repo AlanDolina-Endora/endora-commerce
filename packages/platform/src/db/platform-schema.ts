@@ -1,6 +1,6 @@
 /**
- * The platform's **own** schema — its six entity classes and its thirteen
- * migrations — as a value the platform contributes to every composition
+ * The platform's **own** schema — its entity classes and its migrations — as a
+ * value the platform contributes to every composition
  * (`specs/110-instance-repository/` T141).
  *
  * **Every count below is a derived fact written down, so re-derive before you
@@ -31,9 +31,9 @@
  * and R1.5 rules it: *"it is data about **this platform's** history, a client
  * receives it by installing the platform, and a client receives a correction to
  * it by `pnpm update`"*. The order and the migrations it orders are the same
- * datum one step apart. A client's tree listing our thirteen class names would
+ * datum one step apart. A client's tree listing our migration class names would
  * be a fact about our history held in a repository we cannot grep — exactly what
- * R1.5 refuses — and it went stale on the thirteenth, which has now landed.
+ * R1.5 refuses — and it went stale on the first migration written after it.
  *
  * ## Why merging is safe where a host **does** supply them
  *
@@ -71,6 +71,7 @@ import {
   Migration20260721T011510CoreSettingsCredentialRefValueType,
   Migration20260816T203339CoreRetireCoreActivationSettings,
   Migration20260919T101500CoreModuleRegistrationsBootConverged,
+  Migration20261011T135250CoreSettingsMultiline,
 } from '../migrations/index.js';
 import type { MigrationRegistryEntry } from './migration-order.js';
 
@@ -104,8 +105,14 @@ export const PLATFORM_ENTITIES: readonly EntityClassLike[] = [
 ];
 
 /**
- * The platform's thirteen migrations, owned by the cross-cutting `core`
- * pseudo-module.
+ * The platform's migrations, owned by the cross-cutting `core` pseudo-module.
+ *
+ * **Hand-written, and the only source an installed instance has.** An instance
+ * ships no generated registry and passes `coreEntries: []`, so a class the
+ * `../migrations` barrel exports and this list omits runs in this repository —
+ * whose registry names it — and nowhere else. How many there are is not written
+ * here (D-100): `platform-schema.test.ts` compares this list against the
+ * barrel's own exports and is red for a migration that was not added.
  *
  * `origin` is left absent, which {@link MigrationRegistryEntry} documents as
  * meaning `'core'` — these are not an external producer's, and writing the
@@ -125,6 +132,7 @@ export const PLATFORM_MIGRATION_ENTRIES: readonly MigrationRegistryEntry[] = [
   Migration20260721T011510CoreSettingsCredentialRefValueType,
   Migration20260816T203339CoreRetireCoreActivationSettings,
   Migration20260919T101500CoreModuleRegistrationsBootConverged,
+  Migration20261011T135250CoreSettingsMultiline,
 ].map((cls) => ({ moduleId: CORE_MODULE_ID, cls }));
 
 /**
@@ -135,8 +143,8 @@ export const PLATFORM_MIGRATION_ENTRIES: readonly MigrationRegistryEntry[] = [
  * two merges compare different things. An entity set holds the classes
  * themselves, so a member is its own identity. A migration registry holds
  * `{ moduleId, cls }` *wrappers*, and the host builds its own — so comparing
- * the wrappers finds no overlap at all and hands `orderMigrations` twelve
- * duplicate names. The class is the identity there, which is also what the
+ * the wrappers finds no overlap at all and hands `orderMigrations` every name
+ * twice. The class is the identity there, which is also what the
  * platform persists: `cls.name` is the string `mikro_orm_migrations` records.
  *
  * Order is `first`'s and then `second`'s, so a host that already names these

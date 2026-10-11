@@ -24,7 +24,7 @@
  * they are created in and the strategy that names their columns are what makes
  * an installed module's migration apply cleanly, and a tree that could edit any
  * of them is a tree whose next `pnpm update` is a merge. `../migrations/`
- * carries the platform's own twelve migrations for the same reason and is the
+ * carries the platform's own migrations for the same reason and is the
  * other half of this answer.
  *
  * ## Why no module may name it
