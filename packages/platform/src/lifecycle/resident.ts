@@ -21,8 +21,8 @@
  * ## Why the platform contributes it, and why the host still may not be asked
  *
  * It is the same argument `../migrations/index.ts` makes for
- * `BASELINE_MIGRATIONS` and `../db/platform-schema.ts` makes for the twelve
- * migrations and six entities beside it: a datum that arrives by installing this
+ * `BASELINE_MIGRATIONS` and `../db/platform-schema.ts` makes for the
+ * migrations and entities beside it: a datum that arrives by installing this
  * package is this package's to supply, and a client receives a correction to it
  * by `pnpm update`. The host keeps supplying **its** core registry, which is a
  * fact about its own tree (R7.4); this adds what is a fact about ours.

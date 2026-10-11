@@ -81,6 +81,10 @@ export function SettingRowEditor({
 }: Props): ReactNode {
   const t = useTranslation('settings');
   const labels = useSettingLabels();
+  const isMultiline = setting.valueType === 'string' && setting.multiline === true;
+  // The line under the field is a hint, not a second copy of the value: a
+  // multi-line text printed inline loses its line breaks and can be very long.
+  const preview = isMultiline ? formatMultilinePreview : formatPreview;
   const description = labels.settingDescription(setting);
   const isDirty = isDraftDirty(draft);
   const isSecret = setting.valueType === 'secret';
@@ -242,7 +246,14 @@ export function SettingRowEditor({
             }
           />
         ) : (
-          renderInput(setting.valueType, draft.text, setText, t, readOnly)
+          renderInput(
+            setting.valueType,
+            draft.text,
+            setText,
+            t,
+            readOnly,
+            isMultiline ? labels.settingName(setting) : null,
+          )
         )}
       </fieldset>
 
@@ -255,13 +266,13 @@ export function SettingRowEditor({
         ) : (
           <>
             <span>
-              {t('editor.defaultPrefix')} <code className="font-mono">{formatPreview(setting.defaultValue)}</code>
+              {t('editor.defaultPrefix')} <code className="font-mono">{preview(setting.defaultValue)}</code>
             </span>
             {hasGlobalOverride && (
               <>
                 <span>·</span>
                 <span>
-                  {t('editor.globalPrefix')} <code className="font-mono">{formatPreview(setting.globalValue)}</code>
+                  {t('editor.globalPrefix')} <code className="font-mono">{preview(setting.globalValue)}</code>
                 </span>
               </>
             )}
@@ -284,12 +295,28 @@ function formatPreview(value: unknown): string {
   }
 }
 
+const MULTILINE_PREVIEW_LENGTH = 60;
+
+/**
+ * One short line standing for a multi-line value: its first line that has
+ * text, without indentation, cut at {@link MULTILINE_PREVIEW_LENGTH}, with an
+ * ellipsis whenever the value holds more than what is shown.
+ */
+function formatMultilinePreview(value: unknown): string {
+  if (typeof value !== 'string' || value === '') return formatPreview(value);
+  const firstLine = value.split(/\r?\n/).find((line) => line.trim() !== '')?.trim() ?? '';
+  const shown = firstLine.slice(0, MULTILINE_PREVIEW_LENGTH);
+  return shown === value ? shown : `${shown}…`;
+}
+
 function renderInput(
   valueType: SettingDto['valueType'],
   value: string,
   setValue: (v: string) => void,
   t: (key: string, params?: Record<string, string | number>) => string,
   readOnly: boolean,
+  /** The row's shown name when the setting is a multi-line string, else `null`. */
+  multilineLabel: string | null,
 ): ReactNode {
   if (valueType === 'boolean') {
     return (
@@ -312,6 +339,21 @@ function renderInput(
         onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setValue(e.target.value)}
         disabled={readOnly}
         placeholder={t('editor.placeholder.json')}
+      />
+    );
+  }
+  // A `string` setting its manifest declares `multiline`. The text is the
+  // value: nothing here trims it or folds its lines, and a monospaced field
+  // shows it the way a served text file will read.
+  if (multilineLabel !== null) {
+    return (
+      <textarea
+        className="min-h-[160px] w-full resize-y rounded-md border bg-background px-3 py-2 font-mono text-sm"
+        value={value}
+        onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setValue(e.target.value)}
+        disabled={readOnly}
+        spellCheck={false}
+        aria-label={multilineLabel}
       />
     );
   }

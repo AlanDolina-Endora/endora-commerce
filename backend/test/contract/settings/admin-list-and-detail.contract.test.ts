@@ -1,5 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { defineModuleSettingsManifest, ERROR_CODES } from '@endora-commerce/contracts';
+import {
+  defineModuleSettingsManifest,
+  ERROR_CODES,
+  SettingDtoSchema,
+  SettingsListResponseSchema,
+} from '@endora-commerce/contracts';
 import {
   setupBackendServer,
   teardownBackendServer,
@@ -32,6 +37,14 @@ describe('admin settings list/detail (T029)', () => {
             groupCode: 'us2_list_group',
             valueType: 'string',
             defaultValue: 'default-title',
+          },
+          {
+            code: 'us2_list.notes',
+            name: 'Notes',
+            groupCode: 'us2_list_group',
+            valueType: 'string',
+            defaultValue: '',
+            multiline: true,
           },
           {
             code: 'us2_mixed.visible',
@@ -133,6 +146,64 @@ describe('admin settings list/detail (T029)', () => {
     expect(body.code).toBe('us2_list.title');
     expect(body.valueType).toBe('string');
     expect(body.defaultValue).toBe('default-title');
+  });
+
+  it('carries multiline on every setting of the list — true only where declared', async () => {
+    const r = await h.app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/settings',
+      cookies: adminCookie,
+    });
+    expect(r.statusCode).toBe(200);
+    const body = SettingsListResponseSchema.parse(r.json());
+    const all = body.groups.flatMap((g) => g.settings);
+    // Every row answers, so a consumer never has to tell "false" from "old backend".
+    expect(all.filter((s) => typeof s.multiline !== 'boolean').map((s) => s.code)).toEqual([]);
+    const group = body.groups.find((g) => g.code === 'us2_list_group')!;
+    expect(group.settings.find((s) => s.code === 'us2_list.notes')!.multiline).toBe(true);
+    // Per setting, not per group or per module: the sibling that never
+    // mentions the flag stays single-line beside the one that declares it.
+    // (Asserted on this file's own fixture, deliberately: which shipped
+    // manifests declare the flag is theirs to say and changes as they do.)
+    expect(group.settings.find((s) => s.code === 'us2_list.title')!.multiline).toBe(false);
+  });
+
+  it('carries multiline on the detail response', async () => {
+    const declared = await h.app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/settings/us2_list.notes',
+      cookies: adminCookie,
+    });
+    expect(declared.statusCode).toBe(200);
+    expect(SettingDtoSchema.parse(declared.json()).multiline).toBe(true);
+
+    const plain = await h.app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/settings/us2_list.title',
+      cookies: adminCookie,
+    });
+    expect(SettingDtoSchema.parse(plain.json()).multiline).toBe(false);
+  });
+
+  it('stores a multi-line value exactly, line breaks included', async () => {
+    const text = 'User-agent: *\nDisallow: /a\r\n\n  indented\n';
+    const put = await h.app.inject({
+      method: 'PUT',
+      url: '/api/v1/admin/settings/us2_list.notes/value',
+      cookies: adminCookie,
+      payload: { scope: 'all', value: text },
+    });
+    expect(put.statusCode).toBe(200);
+    const body = SettingDtoSchema.parse(put.json());
+    expect(body.globalValue).toBe(text);
+    expect(body.multiline).toBe(true);
+
+    const read = await h.app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/settings/us2_list.notes',
+      cookies: adminCookie,
+    });
+    expect(SettingDtoSchema.parse(read.json()).globalValue).toBe(text);
   });
 
   it('returns 404 SETTING_NOT_REGISTERED for an unknown code', async () => {

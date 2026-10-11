@@ -339,6 +339,24 @@ export class ManifestReconciler {
           existing.hidden = nextHidden;
           changed = true;
         }
+        // multiline is manifest-driven presentation — keep it in sync on every
+        // run, in both directions: a declaration that drops the flag takes the
+        // multi-line field away on the next boot.
+        //
+        // `?? false`, because a row read from a `settings` table the multiline
+        // migration has not reached carries no such property, and absent is
+        // not a difference from `false`: without it every boot over such a
+        // table writes a column that is not there, for manifests that never
+        // mention the flag. A manifest that does set it still fails there, and
+        // should — it asks for something that database cannot store. The
+        // create branch below is not softened the same way: an insert names
+        // the column because the entity owns its default, as it does for
+        // `hidden`, and a new row on an unmigrated table is refused loudly.
+        const nextMultiline = entry.multiline ?? false;
+        if (((existing.multiline as boolean | undefined) ?? false) !== nextMultiline) {
+          existing.multiline = nextMultiline;
+          changed = true;
+        }
         if (options.force) {
           if (existing.valueType !== valueType) {
             existing.valueType = valueType;
@@ -373,6 +391,7 @@ export class ManifestReconciler {
           enumOptions: entry.enumOptions ?? null,
           configurationType: entry.configurationType ?? null,
           hidden: entry.hidden ?? false,
+          multiline: entry.multiline ?? false,
         });
         if (entry.salesChannelCodes && entry.salesChannelCodes.length > 0) {
           for (const code of entry.salesChannelCodes) {

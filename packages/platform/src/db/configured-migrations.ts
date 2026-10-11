@@ -97,7 +97,7 @@ export interface ConfiguredMigrations {
 /**
  * The cross-cutting pseudo-module owning the platform's own migrations.
  *
- * Declared in `./platform-schema.ts`, beside the twelve migrations it owns, and
+ * Declared in `./platform-schema.ts`, beside the migrations it owns, and
  * re-exported here because five programs outside that file need the same
  * literal — the scaffolder, the registry round-trip, the instance-order guard
  * and the two merges below — and a second spelling of a module id is a second
@@ -311,7 +311,7 @@ export async function discoverConfiguredMigrations(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<ConfiguredMigrations> {
   return configuredMigrationsFrom({
-    // The platform's own twelve are merged in here rather than asked of the
+    // The platform's own migrations are merged in here rather than asked of the
     // host (`specs/110-instance-repository/` T141). They are this package's
     // schema, a client receives them by installing it, and an instance supplies
     // `coreEntries: []` — which used to mean it ran none of them and died on
