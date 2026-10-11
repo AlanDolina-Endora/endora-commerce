@@ -8,7 +8,7 @@ import { InMemoryNewsletterProvider } from '../../../../packages/modules/newslet
 import type { SettingsService } from '../../../src/kernel/settings/settings.service.js';
 import { SettingsService as KernelSettingsService } from '../../../src/kernel/settings/settings.service.js';
 import { BrandingService } from '../../../../packages/modules/transactional_emails/src/backend/services/branding.service.js';
-import type { AutomationStep } from '@endora-commerce/contracts';
+import { automationDetailSchema, type AutomationStep } from '@endora-commerce/contracts';
 import { NewsletterAutomationRun, NewsletterSubscriber } from '../../helpers/package-entities.js';
 
 function tree(text: string): Record<string, unknown> {
@@ -86,6 +86,40 @@ describe('newsletter automations (US4)', () => {
     await svc.activate(detail.id, detail.version);
     return detail.id;
   }
+
+  it('returns null for a reloaded automation without a sales channel (issue #247)', async () => {
+    const created = await svc.create({
+      name: 'Without a sales channel',
+      triggerType: 'all',
+      language: 'en-US',
+      reentryPolicy: 'once',
+      steps: STEPS,
+    });
+    // A later request reloads the nullable column rather than using the created entity.
+    db.em().clear();
+
+    const payload = JSON.parse(JSON.stringify(await svc.get(created.id)));
+
+    expect(payload).toHaveProperty('salesChannelId', null);
+    expect(automationDetailSchema.safeParse(payload).success).toBe(true);
+  });
+
+  it('preserves the sales channel of a reloaded automation (issue #247)', async () => {
+    const created = await svc.create({
+      name: 'With a sales channel',
+      triggerType: 'all',
+      salesChannelId: db.systemDefaultChannelId,
+      language: 'en-US',
+      reentryPolicy: 'once',
+      steps: STEPS,
+    });
+    db.em().clear();
+
+    const payload = JSON.parse(JSON.stringify(await svc.get(created.id)));
+
+    expect(payload).toHaveProperty('salesChannelId', db.systemDefaultChannelId);
+    expect(automationDetailSchema.safeParse(payload).success).toBe(true);
+  });
 
   it('rejects activation of an invalid automation', async () => {
     const bad = await svc.create({

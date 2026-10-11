@@ -352,7 +352,7 @@ export class NewsletterAutomationService {
     return {
       ...this.toSummary(a),
       triggerTagIds: a.triggerTagIds,
-      salesChannelId: a.salesChannelId,
+      salesChannelId: a.salesChannelId ?? null,
       language: a.language,
       reentryPolicy: a.reentryPolicy,
       steps: a.steps as unknown as AutomationStep[],
