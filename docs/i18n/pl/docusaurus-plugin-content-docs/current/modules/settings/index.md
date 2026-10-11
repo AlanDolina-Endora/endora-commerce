@@ -78,6 +78,47 @@ nadpisywane.
 | Ponowne zastosowanie (wpis usunięty z manifestu) | Synchronizacja przy starcie pomija usunięcie — osierocone wiersze są odnotowywane w logu, ale nie są usuwane. Ustawienia modułu usuwa tylko `module:uninstall`. |
 | Kod ustawienia koliduje z innym modułem | Uzgadnianie zostaje przerwane z czytelnym błędem. |
 
+### Tłumaczenie nazw i opisów
+
+`name` i `description` w manifeście są po angielsku i to je pokazuje ekran ustawień, chyba że
+własna paczka tłumaczeń modułu mówi inaczej. Aby pokazać ustawienie w języku administratora, dodaj
+poniższe klucze do plików `i18n/en.json` i `i18n/pl.json`, które moduł już dostarcza — płaskie
+klucze, jak każdy inny klucz w paczce:
+
+| Klucz | Zastępuje |
+|-----|----------|
+| `settingLabels.<setting code>.name` | `name` ustawienia |
+| `settingLabels.<setting code>.description` | `description` ustawienia |
+| `settingGroups.<group code>.name` | `name` grupy |
+
+Kod zapisuje się w całości, razem z kropkami. Dla manifestu powyżej:
+
+```json
+{
+  "settingGroups.your_section.name": "Twoja sekcja",
+  "settingLabels.your_module.base_url.name": "Bazowy adres URL",
+  "settingLabels.your_module.base_url.description": "Adres, pod którym usługa jest dostępna."
+}
+```
+
+Rozstrzyganie odbywa się osobno dla każdego klucza: język administratora, potem angielski, potem
+tekst zadeklarowany w manifeście. Każdy klucz jest opcjonalny, więc moduł, który nie dostarcza
+żadnego z nich, wygląda dokładnie tak jak wcześniej, a ustawienia można tłumaczyć po jednym. Ze
+sposobu wyszukiwania wynikają trzy rzeczy:
+
+- **Czytana jest wyłącznie paczka modułu będącego właścicielem** — tego, którego manifest ustawień
+  zadeklarował wiersz (`moduleCode`, który musi być równy `id` modułu, żeby jego paczka została
+  znaleziona). Klucz dla ustawienia innego modułu jest ignorowany.
+- **Teksty w manifeście pozostają wymagane i pozostają angielskie.** To je zwraca API, to je widzi
+  administrator, gdy paczka jest niedostępna, i to je — obok przetłumaczonego tekstu — dopasowuje
+  filtr na ekranie ustawień.
+- **Tekst jest pokazywany tak, jak go zapisano.** Nie ma podstawiania parametrów, więc nawiasy
+  klamrowe w etykiecie są dosłowne.
+
+Opcje ustawienia zadeklarowanego z `enumOptions` są przechowywanymi wartościami i są pokazywane bez
+tłumaczenia. Grupa utworzona przez operatora w widoku `Setting groups` nie ma modułu-właściciela i
+zachowuje nadaną jej nazwę.
+
 ## Dla administratorów platformy — edycja wartości
 
 Otwórz `Admin → Operations → Settings`. Ustawienia są pogrupowane według sekcji, do której należą.

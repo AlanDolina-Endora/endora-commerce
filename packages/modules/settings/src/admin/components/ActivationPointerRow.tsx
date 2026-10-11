@@ -4,6 +4,7 @@ import { ExternalLink } from 'lucide-react';
 import type { SettingDto } from '@endora-commerce/contracts';
 import { Badge } from '@endora-commerce/admin-kit/ui';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
+import { useSettingLabels } from './setting-label.js';
 /**
  * A module's activation setting, as the Settings screen shows it after D-36a.
  *
@@ -22,12 +23,13 @@ import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 
 export function ActivationPointerRow({ setting }: { setting: SettingDto }): ReactNode {
   const t = useTranslation('settings');
+  const labels = useSettingLabels();
   // Presence is not read here on purpose: this row states where the switch is,
   // not what position it is in. The screen that owns the switch shows that.
   return (
     <div className="space-y-2 rounded-md border border-dashed px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium">{setting.name}</span>
+        <span className="text-sm font-medium">{labels.settingName(setting)}</span>
         <Badge variant="outline" className="text-[10px] text-muted-foreground">
           {t('activation.title')}
         </Badge>

@@ -80,6 +80,49 @@ always safe; admin-chosen values are never overwritten.
 | Re-apply (entry removed from manifest) | Boot sync ignores the removal — orphan rows are logged but not deleted. Only `module:uninstall` removes a module's settings. |
 | Setting code conflicts with another module | Reconciliation aborts with a clear error. |
 
+### Translating names and descriptions
+
+`name` and `description` in the manifest are English, and they are what the
+Settings screen shows unless your module's own bundle says otherwise. To show a
+setting in the administrator's language, add these keys to the `i18n/en.json`
+and `i18n/pl.json` your module already ships — flat keys, like every other key
+in a bundle:
+
+| Key | Replaces |
+|-----|----------|
+| `settingLabels.<setting code>.name` | the setting's `name` |
+| `settingLabels.<setting code>.description` | the setting's `description` |
+| `settingGroups.<group code>.name` | the group's `name` |
+
+The code is written whole, dots included. For the manifest above:
+
+```json
+{
+  "settingGroups.your_section.name": "Twoja sekcja",
+  "settingLabels.your_module.base_url.name": "Bazowy adres URL",
+  "settingLabels.your_module.base_url.description": "Adres, pod którym usługa jest dostępna."
+}
+```
+
+Resolution is per key: the administrator's language, then English, then the
+string the manifest declared. Every key is optional, so a module that ships none
+of them renders exactly as it did before, and you can translate one setting at a
+time. Three things follow from how the lookup works:
+
+- **Only the owning module's bundle is read** — the module whose settings
+  manifest declared the row (`moduleCode`, which must equal the module's `id`
+  for its bundle to be found). A key for another module's setting is ignored.
+- **The manifest strings stay required and stay English.** They are what the
+  API returns, what an administrator sees while a bundle is unavailable, and
+  what the filter on the Settings screen also matches, next to the translated
+  text.
+- **The text is shown as written.** There is no parameter substitution, so
+  braces in a label are literal.
+
+The choices of a setting declared with `enumOptions` are stored values and are
+shown untranslated. A group an operator created under `Setting groups` has no
+owning module and keeps the name it was given.
+
 ## For platform admins — editing values
 
 Open `Admin → Operations → Settings`. Settings are grouped by their owning
