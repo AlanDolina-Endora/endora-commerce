@@ -74,6 +74,7 @@ nadpisywane.
 | Ponowne zastosowanie (bez zmian) | Nic się nie dzieje. |
 | Ponowne zastosowanie (dodany wpis) | Wstawiane są tylko nowe wpisy. |
 | Ponowne zastosowanie (zmienione `name`/`description`) | Aktualizacja w miejscu. |
+| Ponowne zastosowanie (dodane lub usunięte `multiline`) | Aktualizacja w miejscu; zapisane wartości pozostają nietknięte. |
 | Ponowne zastosowanie (zmienione `valueType` lub `defaultValue`) | Odrzucane (`BreakingChangeRejected`), żeby istniejące wartości dla kanałów pozostały poprawne. Żadna flaga CLI tego nie omija. Przyjmowane są dwie zmiany: `string` → `secret` oraz nowa `defaultValue`, gdy wpis wymienia zapisaną wartość w `previousDefaultValues`. |
 | Ponowne zastosowanie (wpis usunięty z manifestu) | Synchronizacja przy starcie pomija usunięcie — osierocone wiersze są odnotowywane w logu, ale nie są usuwane. Ustawienia modułu usuwa tylko `module:uninstall`. |
 | Kod ustawienia koliduje z innym modułem | Uzgadnianie zostaje przerwane z czytelnym błędem. |
@@ -118,6 +119,41 @@ sposobu wyszukiwania wynikają trzy rzeczy:
 Opcje ustawienia zadeklarowanego z `enumOptions` są przechowywanymi wartościami i są pokazywane bez
 tłumaczenia. Grupa utworzona przez operatora w widoku `Setting groups` nie ma modułu-właściciela i
 zachowuje nadaną jej nazwę.
+
+### Tekst wielowierszowy
+
+Ustawienie typu `string` jest edytowane w polu jednowierszowym. Zadeklaruj `multiline: true`, gdy
+wartością jest tekst, w którym podziały wierszy mają znaczenie — blok instrukcji, fragment kodu,
+notka w stopce:
+
+```ts
+{
+  code: 'your_module.footer_note',
+  name: 'Footer note',
+  groupCode: 'your_section',
+  valueType: 'string',
+  defaultValue: '',
+  multiline: true,
+},
+```
+
+Ekran ustawień edytuje wtedy wartość w polu wielowierszowym, a tekst jest zapisywany dokładnie tak,
+jak został wpisany: zachowane są podziały wierszy, puste wiersze, wcięcia i końcowy znak nowego
+wiersza. Nic poza tym się nie zmienia — wartość nadal jest typu `string`, odczytuje się ją przez
+`settingsService.get(code, channelId, z.string())` i jest rozstrzygana dla kanału sprzedaży tak jak
+każde inne ustawienie.
+
+`multiline` jest przyjmowane tylko przy `valueType: 'string'` i nie razem z `enumOptions`; każde
+inne połączenie jest odrzucane podczas parsowania manifestu. To cecha prezentacji, uzgadniana z
+manifestem przy każdym uzgadnianiu, więc późniejsze dodanie lub usunięcie flagi nie jest zmianą
+niezgodną wstecz i nie narusza zapisanych wartości. API panelu administracyjnego zwraca ją jako
+`multiline` przy każdym ustawieniu — na potrzeby modułu, który renderuje własny edytor.
+
+Dwa ograniczenia. Edytory, które ekran ustawień dobiera według konwencji, mają pierwszeństwo przed
+`multiline`: ustawienie z `enumOptions` zachowuje listę rozwijaną, a `string`, którego kod kończy
+się na `_asset_id` albo wskazuje obraz i kończy się na `_url`, zachowuje edytor zasobu lub obrazu.
+Usunięcie flagi niczego też nie przepisuje: zapisana wartość zachowuje podziały wierszy do chwili,
+gdy operator następnym razem zmieni ją w polu jednowierszowym, które ich nie pomieści.
 
 ## Dla administratorów platformy — edycja wartości
 

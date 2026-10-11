@@ -122,6 +122,7 @@ import { Migration20260717T134752CoreTenantScopeIndexes } from '@endora-commerce
 import { Migration20260721T011510CoreSettingsCredentialRefValueType } from '@endora-commerce/platform/migrations';
 import { Migration20260816T203339CoreRetireCoreActivationSettings } from '@endora-commerce/platform/migrations';
 import { Migration20260919T101500CoreModuleRegistrationsBootConverged } from '@endora-commerce/platform/migrations';
+import { Migration20261011T135250CoreSettingsMultiline } from '@endora-commerce/platform/migrations';
 
 // ── credentials ─────────────────────────────────────────────────────────────
 import { Migration20260721T011509CredentialsInit } from '@endora-commerce/mod-credentials/migrations';
@@ -426,6 +427,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('core', Migration20260721T011510CoreSettingsCredentialRefValueType),
   migration('core', Migration20260816T203339CoreRetireCoreActivationSettings),
   migration('core', Migration20260919T101500CoreModuleRegistrationsBootConverged),
+  migration('core', Migration20261011T135250CoreSettingsMultiline),
 
   // ── credentials ─────────────────────────────────────────────────────────────
   migration('credentials', Migration20260721T011509CredentialsInit),

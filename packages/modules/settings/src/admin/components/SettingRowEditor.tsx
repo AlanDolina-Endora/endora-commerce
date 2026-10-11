@@ -242,7 +242,7 @@ export function SettingRowEditor({
             }
           />
         ) : (
-          renderInput(setting.valueType, draft.text, setText, t, readOnly)
+          renderInput(setting.valueType, draft.text, setText, t, readOnly, setting.multiline === true)
         )}
       </fieldset>
 
@@ -290,6 +290,7 @@ function renderInput(
   setValue: (v: string) => void,
   t: (key: string, params?: Record<string, string | number>) => string,
   readOnly: boolean,
+  multiline: boolean,
 ): ReactNode {
   if (valueType === 'boolean') {
     return (
@@ -312,6 +313,20 @@ function renderInput(
         onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setValue(e.target.value)}
         disabled={readOnly}
         placeholder={t('editor.placeholder.json')}
+      />
+    );
+  }
+  // A `string` setting its manifest declares `multiline`. The text is the
+  // value: nothing here trims it or folds its lines, and a monospaced field
+  // shows it the way a served text file will read.
+  if (valueType === 'string' && multiline) {
+    return (
+      <textarea
+        className="min-h-[160px] w-full resize-y rounded-md border bg-background px-3 py-2 font-mono text-sm"
+        value={value}
+        onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setValue(e.target.value)}
+        disabled={readOnly}
+        spellCheck={false}
       />
     );
   }

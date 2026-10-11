@@ -76,6 +76,7 @@ always safe; admin-chosen values are never overwritten.
 | Re-apply (no changes) | No-op. |
 | Re-apply (added entry) | Only new entries are inserted. |
 | Re-apply (renamed `name`/`description`) | Updated in place. |
+| Re-apply (added or removed `multiline`) | Updated in place; stored values are not touched. |
 | Re-apply (changed `valueType` or `defaultValue`) | Rejected (`BreakingChangeRejected`) to keep existing per-channel values valid. No CLI flag overrides it. Two changes are accepted: `string` → `secret`, and a new `defaultValue` when the entry lists the stored one in `previousDefaultValues`. |
 | Re-apply (entry removed from manifest) | Boot sync ignores the removal — orphan rows are logged but not deleted. Only `module:uninstall` removes a module's settings. |
 | Setting code conflicts with another module | Reconciliation aborts with a clear error. |
@@ -122,6 +123,43 @@ time. Three things follow from how the lookup works:
 The choices of a setting declared with `enumOptions` are stored values and are
 shown untranslated. A group an operator created under `Setting groups` has no
 owning module and keeps the name it was given.
+
+### Multi-line text
+
+A `string` setting is edited in a single-line field. Declare `multiline: true`
+when the value is text with line breaks that matter — a block of instructions,
+a snippet, a footer note:
+
+```ts
+{
+  code: 'your_module.footer_note',
+  name: 'Footer note',
+  groupCode: 'your_section',
+  valueType: 'string',
+  defaultValue: '',
+  multiline: true,
+},
+```
+
+The Settings screen then edits the value in a multi-line field, and the text is
+stored exactly as typed: line breaks, blank lines, indentation and a trailing
+line break are all kept. Nothing else changes — the value is still a `string`,
+is read with `settingsService.get(code, channelId, z.string())`, and resolves
+per sales channel like any other setting.
+
+`multiline` is accepted only on `valueType: 'string'`, and not together with
+`enumOptions`; any other combination is refused when the manifest is parsed.
+It is presentation, kept in step with the manifest on every reconciliation, so
+adding or removing it later is not a breaking change and leaves stored values
+alone. The admin API reports it as `multiline` on each setting, for a module
+that renders its own editor.
+
+Two limits. The editors the Settings screen picks by convention take precedence
+over `multiline`: a setting with `enumOptions` keeps its dropdown, and a
+`string` whose code ends in `_asset_id`, or names an image and ends in `_url`,
+keeps its asset or image editor. And removing the flag does not rewrite
+anything: a stored value keeps its line breaks until an operator next edits it
+in the single-line field, which cannot hold them.
 
 ## For platform admins — editing values
 

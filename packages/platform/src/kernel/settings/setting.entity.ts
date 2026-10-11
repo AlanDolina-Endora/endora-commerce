@@ -45,7 +45,8 @@ export class Setting {
     | 'globalValue'
     | 'enumOptions'
     | 'configurationType'
-    | 'hidden';
+    | 'hidden'
+    | 'multiline';
 
   @PrimaryKey({ type: 'uuid' })
   id: string = randomUUID();
@@ -106,6 +107,15 @@ export class Setting {
    */
   @Property({ type: 'boolean', default: false })
   hidden: boolean = false;
+
+  /**
+   * When true, the generic admin Settings screen edits this `string` setting in
+   * a multi-line field that keeps line breaks. Presentation only — the stored
+   * value is an ordinary string either way. Manifest-driven config, kept in
+   * sync on every reconciliation.
+   */
+  @Property({ type: 'boolean', default: false })
+  multiline: boolean = false;
 
   /**
    * Sales-channel scope. Empty collection ⇒ "applies to all sales channels"

@@ -127,4 +127,96 @@ describe('boot-time manifest sync (T019)', () => {
       await rollback();
     }
   });
+
+  /**
+   * `multiline` is manifest-driven presentation, like `hidden` and
+   * `enumOptions`: the row carries what the manifest says **now**, in both
+   * directions, and a manifest that never mentions the flag changes nothing.
+   */
+  it('keeps settings.multiline in step with the manifest, in both directions', async () => {
+    try {
+      const em = db.em();
+      const reconciler = new ManifestReconciler(em);
+
+      const manifestWith = (multiline: boolean | undefined) =>
+        defineModuleSettingsManifest({
+          moduleCode: 'catalog',
+          groups: [{ code: 'catalog', name: 'Catalog' }],
+          settings: [
+            {
+              code: 'catalog.footer_note',
+              name: 'Footer note',
+              groupCode: 'catalog',
+              valueType: 'string',
+              defaultValue: '',
+              ...(multiline === undefined ? {} : { multiline }),
+            },
+            {
+              code: 'catalog.base_url',
+              name: 'Base URL',
+              groupCode: 'catalog',
+              valueType: 'string',
+              defaultValue: 'https://default.example',
+            },
+          ],
+        });
+
+      const updatedIn = (result: Awaited<ReturnType<ManifestReconciler['apply']>>): number =>
+        result.perModule.find((m) => m.moduleCode === 'catalog')!.updatedSettings;
+
+      const multilineOf = async (code: string): Promise<boolean> => {
+        // Read the column itself rather than the managed entity: the claim is
+        // about what a later boot, or the admin API, finds in the row.
+        const rows = await em.execute<Array<{ multiline: boolean }>>(
+          'select multiline from settings where code = ?',
+          [code],
+        );
+        expect(rows).toHaveLength(1);
+        return rows[0]!.multiline;
+      };
+
+      // Declared at creation.
+      await reconciler.apply([settingsManifest, manifestWith(true)]);
+      expect(await multilineOf('catalog.footer_note')).toBe(true);
+      // A setting whose declaration never mentions the flag.
+      expect(await multilineOf('catalog.base_url')).toBe(false);
+
+      // Removed from the declaration: the next boot takes it back.
+      em.clear();
+      const removed = await reconciler.apply([settingsManifest, manifestWith(undefined)]);
+      expect(updatedIn(removed)).toBe(1);
+      expect(await multilineOf('catalog.footer_note')).toBe(false);
+
+      // Added to a setting that already exists: the next boot sets it.
+      em.clear();
+      const added = await reconciler.apply([settingsManifest, manifestWith(true)]);
+      expect(updatedIn(added)).toBe(1);
+      expect(await multilineOf('catalog.footer_note')).toBe(true);
+
+      // And an unchanged manifest is a no-op.
+      em.clear();
+      const repeat = await reconciler.apply([settingsManifest, manifestWith(true)]);
+      expect(updatedIn(repeat)).toBe(0);
+      expect(await multilineOf('catalog.base_url')).toBe(false);
+    } finally {
+      await rollback();
+    }
+  });
+
+  it('leaves every setting a shipped manifest declares single-line', async () => {
+    try {
+      const em = db.em();
+      await new ManifestReconciler(em).apply([settingsManifest]);
+      const rows = await em.execute<Array<{ total: string; multiline: string }>>(
+        `select count(*)::text as total,
+                count(*) filter (where multiline)::text as multiline
+         from settings where owner_module = 'settings'`,
+      );
+      // Non-vacuous: the manifest's rows are there, and none asks for the field.
+      expect(Number(rows[0]!.total)).toBe(settingsManifest.settings.length);
+      expect(rows[0]!.multiline).toBe('0');
+    } finally {
+      await rollback();
+    }
+  });
 });

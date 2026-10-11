@@ -129,6 +129,14 @@ export const SettingManifestEntrySchema = z
      * not appear in the generic Settings list at all.
      */
     hidden: z.boolean().optional(),
+    /**
+     * When true, the generic admin Settings screen edits the value in a
+     * multi-line field and line breaks are stored exactly as typed. Only valid
+     * for `valueType: 'string'` without `enumOptions`: it describes free text,
+     * and a closed list is edited in a dropdown. Absent or `false` is the
+     * single-line field every `string` setting had before the flag existed.
+     */
+    multiline: z.boolean().optional(),
   })
   .refine((s) => s.valueType !== 'secret' || s.defaultValue === '', {
     message:
@@ -152,7 +160,11 @@ export const SettingManifestEntrySchema = z
       message: 'An enum setting defaultValue must be one of its enumOptions.',
       path: ['defaultValue'],
     },
-  );
+  )
+  .refine((s) => s.multiline !== true || (s.valueType === 'string' && s.enumOptions === undefined), {
+    message: "multiline is only supported for valueType 'string' without enumOptions.",
+    path: ['multiline'],
+  });
 export type SettingManifestEntry = z.infer<typeof SettingManifestEntrySchema>;
 
 export const ModuleSettingsManifestSchema = z.object({
@@ -210,6 +222,12 @@ export const SettingDtoSchema = z.object({
    * picker by this. Null/absent for every other value type.
    */
   configurationType: z.string().nullish(),
+  /**
+   * `true` for a `string` setting its manifest declares `multiline`: the admin
+   * renders a multi-line field and preserves line breaks. Absent or `false`
+   * for every other setting, and absent from a backend that predates the flag.
+   */
+  multiline: z.boolean().optional(),
   /**
    * Manifest-declared default value (immutable; surfaces in `defaultValue`).
    */

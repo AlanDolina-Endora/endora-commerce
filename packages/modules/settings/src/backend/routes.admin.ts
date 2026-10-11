@@ -94,6 +94,7 @@ export async function registerSettingsAdminRoutes(
       salesChannelCodes: setting.salesChannels.getItems().map((c) => c.code),
       enumOptions: setting.enumOptions ?? null,
       configurationType: setting.configurationType ?? null,
+      multiline: setting.multiline,
       defaultValue: isSecret ? null : setting.defaultValue,
       globalValue: isSecret ? null : setting.globalValue ?? null,
       ...(isSecret ? { globalValueIsSet: secretValueIsSet(setting.globalValue) } : {}),

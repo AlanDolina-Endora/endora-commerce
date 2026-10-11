@@ -339,6 +339,14 @@ export class ManifestReconciler {
           existing.hidden = nextHidden;
           changed = true;
         }
+        // multiline is manifest-driven presentation — keep it in sync on every
+        // run, in both directions: a declaration that drops the flag takes the
+        // multi-line field away on the next boot.
+        const nextMultiline = entry.multiline ?? false;
+        if (existing.multiline !== nextMultiline) {
+          existing.multiline = nextMultiline;
+          changed = true;
+        }
         if (options.force) {
           if (existing.valueType !== valueType) {
             existing.valueType = valueType;
@@ -373,6 +381,7 @@ export class ManifestReconciler {
           enumOptions: entry.enumOptions ?? null,
           configurationType: entry.configurationType ?? null,
           hidden: entry.hidden ?? false,
+          multiline: entry.multiline ?? false,
         });
         if (entry.salesChannelCodes && entry.salesChannelCodes.length > 0) {
           for (const code of entry.salesChannelCodes) {
