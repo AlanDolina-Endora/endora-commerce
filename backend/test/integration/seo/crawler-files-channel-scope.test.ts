@@ -180,6 +180,35 @@ describe('custom robots.txt instructions — sales-channel scope', () => {
       expect(await textFor(A)).toBe('');
     });
 
+    it('names the limit in the administrator’s language', async () => {
+      // An administrator's language is the stored preference, not a request
+      // header. The Polish sentence carries both numbers, which is what shows
+      // that the registered sentence was resolved and its placeholders filled
+      // from the refusal's own details — the English one reads the same as the
+      // raise's own message and could not show it.
+      const setLanguage = async (preferredLanguage: 'pl' | null): Promise<void> => {
+        const res = await h.app.inject({
+          method: 'PATCH',
+          url: '/api/v1/admin/me/preferred-language',
+          cookies: admin,
+          payload: { preferredLanguage },
+        });
+        expect(res.statusCode, res.body).toBe(200);
+      };
+      await setLanguage('pl');
+      try {
+        const res = await write([A], OVER_LIMIT);
+        expect(res.statusCode).toBe(400);
+        expect((res.json() as { error: { code: string; message: string } }).error).toMatchObject({
+          code: 'SEO_CRAWLER_TEXT_TOO_LARGE',
+          message: 'Rozmiar tekstu to 65537 B. Można zapisać najwyżej 65536 B (64 KiB).',
+        });
+      } finally {
+        // The preference outlives this file in a single-fork run.
+        await setLanguage(null);
+      }
+    });
+
     it('refuses an all-channels text over the limit even when every channel has a value of its own', async () => {
       // No channel would come to serve it today, which is exactly why it must
       // be refused now: the first channel reset afterwards would start serving
