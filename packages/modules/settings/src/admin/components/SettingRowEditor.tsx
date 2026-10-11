@@ -12,6 +12,7 @@ import { ImageSettingInput } from './ImageSettingInput.js';
 import { AssetIdSettingInput } from './AssetIdSettingInput.js';
 import { SellerCompanyDataInput, SELLER_COMPANY_DATA_CODE } from './SellerCompanyDataInput.js';
 import { ConfigurationReferenceInput } from './ConfigurationReferenceInput.js';
+import { useSettingLabels } from './setting-label.js';
 
 /**
  * String settings that hold an image URL get a file-upload editor (drag-and-drop
@@ -79,6 +80,8 @@ export function SettingRowEditor({
   onReset,
 }: Props): ReactNode {
   const t = useTranslation('settings');
+  const labels = useSettingLabels();
+  const description = labels.settingDescription(setting);
   const isDirty = isDraftDirty(draft);
   const isSecret = setting.valueType === 'secret';
   const overrideCount = setting.valuesByChannel.length;
@@ -108,7 +111,7 @@ export function SettingRowEditor({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium">{setting.name}</span>
+            <span className="text-sm font-medium">{labels.settingName(setting)}</span>
             <button
               type="button"
               onClick={onCopyCode}
@@ -171,8 +174,8 @@ export function SettingRowEditor({
               </Badge>
             )}
           </div>
-          {setting.description ? (
-            <p className="mt-1 text-xs text-muted-foreground">{setting.description}</p>
+          {description ? (
+            <p className="mt-1 text-xs text-muted-foreground">{description}</p>
           ) : null}
           {readOnly ? (
             <p className="mt-1 text-xs text-muted-foreground">

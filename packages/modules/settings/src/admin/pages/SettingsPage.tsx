@@ -19,6 +19,7 @@ import { settingsClient } from '../api/settings-client.js';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { ConflictBanner } from '../components/ConflictBanner.js';
 import { ActivationPointerRow } from '../components/ActivationPointerRow.js';
+import { useSettingLabels, type SettingLabels } from '../components/setting-label.js';
 import {
   SettingRowEditor,
   computeVersion,
@@ -60,6 +61,7 @@ function listSalesChannels(activeOnly: boolean, pageSize: number): Promise<Sales
  */
 export function SettingsPage(): ReactNode {
   const t = useTranslation('settings');
+  const labels = useSettingLabels();
   const [groups, setGroups] = useState<SettingGroupDto[]>([]);
   const [allChannels, setAllChannels] = useState<SalesChannelSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,8 +139,8 @@ export function SettingsPage(): ReactNode {
   }, []);
 
   const filteredGroups = useMemo(
-    () => filterGroupsForContext(groups, search, channelContext),
-    [groups, search, channelContext],
+    () => filterGroupsForContext(groups, search, channelContext, labels),
+    [groups, search, channelContext, labels],
   );
 
   // `/settings?group=<code>` scrolls to that group and expands it — module
@@ -472,7 +474,7 @@ export function SettingsPage(): ReactNode {
                       <ChevronDown className="h-4 w-4 text-muted-foreground" />
                     )}
                     <CardTitle className="flex items-center gap-2">
-                      {group.name}
+                      {labels.groupName(group)}
                       {group.isSystemProtected && (
                         <span className="rounded bg-muted px-2 py-0.5 text-xs">
                           system
@@ -634,6 +636,7 @@ function filterGroupsForContext(
   groups: SettingGroupDto[],
   search: string,
   channelContext: string | null,
+  labels: SettingLabels,
 ): SettingGroupDto[] {
   const q = normalize(search);
   const out: SettingGroupDto[] = [];
@@ -650,7 +653,10 @@ function filterGroupsForContext(
     // channel-passing setting in the group rather than requiring a per-setting
     // match.
     const groupMatches =
-      q !== '' && (normalize(g.name).includes(q) || normalize(g.code).includes(q));
+      q !== '' &&
+      (normalize(labels.groupName(g)).includes(q) ||
+        normalize(g.name).includes(q) ||
+        normalize(g.code).includes(q));
     const filtered = g.settings.filter((s) => {
       if (
         channelContext !== null &&
@@ -660,7 +666,7 @@ function filterGroupsForContext(
         return false;
       }
       if (groupMatches) return true;
-      if (q && !settingMatches(s, q)) return false;
+      if (q && !settingMatches(s, q, labels)) return false;
       return true;
     });
     if (filtered.length === 0 && (q || channelContext !== null)) continue;
@@ -669,9 +675,18 @@ function filterGroupsForContext(
   return out;
 }
 
-function settingMatches(s: SettingDto, q: string): boolean {
+/**
+ * A query matches what the row is shown under **and** what its manifest
+ * declared. The first is what an operator reads on this screen; the second is
+ * what documentation and a colleague working in English quote. Where the owner
+ * ships no translation the two are the same string.
+ */
+function settingMatches(s: SettingDto, q: string, labels: SettingLabels): boolean {
+  if (normalize(labels.settingName(s)).includes(q)) return true;
   if (normalize(s.name).includes(q)) return true;
   if (normalize(s.code).includes(q)) return true;
+  const shownDescription = labels.settingDescription(s);
+  if (shownDescription && normalize(shownDescription).includes(q)) return true;
   if (s.description && normalize(s.description).includes(q)) return true;
   return false;
 }
