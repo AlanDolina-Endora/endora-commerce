@@ -102,7 +102,7 @@ back.
 
 ## Inferred, to be proven by the first test of the slice
 
-Nothing in this plan was run against a built tree. These four are assumptions about Next.js and
+Nothing in this plan was run against a built tree. These five are assumptions about Next.js and
 React, and each has a designed fallback so that a refutation changes a file, not the design.
 
 | # | Assumption | Proved by | If refuted |
@@ -111,6 +111,13 @@ React, and each has a designed fallback so that a refutation changes a file, not
 | I2 | Module-level state in the middleware persists across requests in the standalone server (as `backend-reachability.ts` already relies on) | slice 1's middleware unit test plus a two-request conformance check | Fall back to a 60 s `fetch` cache in the middleware and keep last-known in the layout's runtime |
 | I3 | Widening the middleware matcher to public files and `/_next/image` costs no measurable latency when the function returns early | slice 1 measures `curl` timings on a public file before and after, and records how | Narrow the matcher to an explicit list of indexable extensions |
 | I4 | The admin bundle's scope for a module's own keys is the module id | slice 2a's first resolver test | Scan scopes for the key, as `permission-label.ts` does |
+| I5 | Next metadata replaces rather than merges `robots` between a layout and a page (taken from the brief, never verified) | `tasks.md` T001, a spike on a built storefront | If it merges, the design holds unchanged and the extra tag is redundant on such pages, never wrong |
+
+**Served behaviour is not gated by a pull request.** The storefront conformance job is not in
+`.github/workflows/` (`grep -n conformance .github/workflows/*.yml` is empty), so wherever this
+plan says "conformance", the evidence is the implementer's run against a built storefront, pasted
+into the pull request (`tasks.md` T026, T072, T088, T099), plus a committed spec for whoever runs
+the job.
 
 ## Requirement → test
 
@@ -250,7 +257,11 @@ packages/modules/settings/src/
 ├── backend/routes.admin.ts                    # serializeSetting: + multiline
 └── admin/components/
     ├── SettingRowEditor.tsx                   # multi-line field, label resolution, zone mount
-    └── setting-label.ts (+ .test.ts)          # the resolver, after permission-label.ts
+    └── setting-label.ts                       # the resolver, after permission-label.ts
+
+admin/test/modules/settings/                   # the settings admin tests: mod-settings has no test
+                                               # script, and permission-label's test sets the precedent
+admin/test/modules/seo/                        # the zone's one React render test (jsdom lives here)
 
 packages/modules/seo/
 ├── src/manifest.ts                            # 3 settings, 2 actions, FR-033 strings
@@ -265,7 +276,7 @@ packages/modules/seo/
 │       └── crawler-file-preview.service.ts (+ .test.ts)
 ├── src/admin/
 │   ├── index.ts                               # + zones
-│   └── zones/{RobotsTxtPreview,LlmsTxtPreview}.tsx (+ tests)
+│   └── zones/{RobotsTxtPreview,LlmsTxtPreview}.tsx, preview-model.ts (+ .test.ts — pure, no React)
 ├── i18n/{en,pl}.json
 └── docs/seo.md
 
@@ -279,10 +290,11 @@ storefront/
 ├── lib/seo/robots-system-rules.ts             # the list, moved unchanged
 ├── lib/seo/crawler-policy.ts                  # reader, freshness, last-known
 ├── lib/seo/robots-directive.ts                # policy → header / tag content
+├── lib/seo/llms-txt-base.ts                   # the generated llms.txt base
 └── test/seo/…                                 # route-declarations rewritten; new tests
 
 backend/test/
-├── contract/seo/                              # new: the three routes
+├── contract/seo/                              # exists; three new files, one per route
 ├── integration/seo/off-state.test.ts          # extended
 └── integration/_admin_surfaces/batch-eight-palette-off-state.test.ts   # seo: [] → two actions
 
@@ -305,7 +317,7 @@ dependency is added.
 
 Every storefront file in the tree above is copied into client instances at scaffold time and
 into the paid repository's demo storefront. Research R11 lists what an instance scaffolded
-earlier has to change (nine rows, one of them a deletion) and what happens if it does not: the
+earlier has to change (eleven rows, one of them a deletion) and what happens if it does not: the
 backend half works, the storefront ignores *Default robots*, and only the preview says so. The
 paid repository's copy needs the same files before `demo-pro` can use the feature; that
 repository is not touched by this plan.

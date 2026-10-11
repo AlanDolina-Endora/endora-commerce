@@ -523,10 +523,15 @@ from **[read]** (`storefront/next.config.js`: "the scaffold copies this file ver
 | `app/llms.txt/route.ts` | new |
 | `lib/seo/robots-system-rules.ts` | new — the list moved out of `app/robots.ts`; an instance that edited its list carries its edits here |
 | `lib/seo/crawler-policy.ts` | new — the reader and the last-known cache |
+| `lib/seo/robots-directive.ts` | new — the policy → header / tag decision the middleware and the layout share |
+| `lib/seo/llms-txt-base.ts` | new — the generated `llms.txt` base |
 | `middleware.ts` | policy resolution, the response header, the request header, the widened matcher |
 | `app/layout.tsx` | the additional `<meta name="robots">` |
 | `app/reserved-segments.ts` | two entries |
 | `test/seo/route-declarations.test.ts` and the new tests | follow the files they test |
+
+Two comments also go stale and travel with the copy: `storefront/.env.example` and
+`deploy/compose.prod.yml` both say `/robots.txt` is prerendered, which stops being true.
 
 An instance that takes the backend upgrade and not the storefront one keeps working: its old
 `robots.ts` serves its own rules, its pages carry only their own declarations, and the Admin UI
