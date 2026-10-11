@@ -590,6 +590,11 @@ export class SettingsAdminService {
    * (per-channel row → globalValue → manifest defaultValue); a validator that
    * re-derived it would drift from it. The extra `SalesChannel` read only
    * happens when a validator is actually registered for the code.
+   *
+   * The proposed value is handed over as well, as itself: a platform-wide write
+   * that every channel shadows with a row of its own appears in no channel's
+   * projection, and a rule about the value — rather than about how channels'
+   * values relate — has to see it all the same.
    */
   private async runWriteValidators(
     em: EntityManager,
@@ -640,6 +645,7 @@ export class SettingsAdminService {
       await validator.validate({
         code: setting.code,
         ownerModuleId: setting.ownerModule,
+        proposedValue: proposed,
         projection,
         targetedChannelIds,
       });
