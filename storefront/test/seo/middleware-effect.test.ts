@@ -118,6 +118,22 @@ describe('a document', () => {
   });
 });
 
+describe('a file, for the channel the request names', () => {
+  it('is asked about for that channel, not for the system default', async () => {
+    // Every file of every channel goes through this branch. Reading the policy
+    // without the channel here would serve one channel's directive — or its
+    // absence — on all the others' files.
+    await middleware(request('/icons/icon-192.png', { 'x-sales-channel': 'pl_retail' }));
+    await middleware(request('/sitemap.xml', { 'x-sales-channel': 'pl_b2b_vip' }));
+    await middleware(request('/service-worker.js'));
+    expect(vi.mocked(readRobotsPolicy).mock.calls).toEqual([
+      ['pl_retail'],
+      ['pl_b2b_vip'],
+      [undefined],
+    ]);
+  });
+});
+
 describe.each([
   '/icons/icon-192.png',
   '/service-worker.js',

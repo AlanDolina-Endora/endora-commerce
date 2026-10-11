@@ -55,6 +55,14 @@ describe('the response header', () => {
     expect(ROBOTS_RESPONSE_HEADER).toBe('X-Robots-Tag');
   });
 
+  it('states the directive once: a value already on the response is replaced, not added to', () => {
+    const headers = new Headers({ 'x-robots-tag': 'nofollow' });
+    stampRobotsResponse(headers, 'noindex, nofollow');
+    expect(headers.get(ROBOTS_RESPONSE_HEADER)).toBe('noindex, nofollow');
+    stampRobotsResponse(headers, 'noindex, nofollow');
+    expect(headers.get(ROBOTS_RESPONSE_HEADER)).toBe('noindex, nofollow');
+  });
+
   it('is not set, and nothing else is touched, when it does not', () => {
     const headers = new Headers({ 'cache-control': 'no-store' });
     stampRobotsResponse(headers, null);

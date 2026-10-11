@@ -2,9 +2,8 @@
    saying which channel was asked and what was expected is output, not a diagnostic. */
 import { expect, test } from '@playwright/test';
 
-import { storefrontRobotsPolicyResponseSchema } from '@endora-commerce/contracts/seo';
 import { ROBOTS_RESPONSE_HEADER, robotsDirective } from '../../lib/seo/robots-directive';
-import type { RobotsPolicyRead } from '../../lib/seo/crawler-policy';
+import { isRobotsPolicyResponse, type RobotsPolicyRead } from '../../lib/seo/crawler-policy';
 
 /**
  * The default robots directive on **served** responses
@@ -47,7 +46,8 @@ async function policyAccordingToBackend(): Promise<RobotsPolicyRead> {
     if (code === 'MODULE_DISABLED') return { kind: 'none' };
   }
   expect(response.status, 'the policy endpoint must answer 200, 404 or MODULE_DISABLED').toBe(200);
-  return { kind: 'value', value: storefrontRobotsPolicyResponseSchema.parse(body).data };
+  expect(isRobotsPolicyResponse(body), 'the policy endpoint must answer the contract').toBe(true);
+  return { kind: 'value', value: (body as { data: { index: boolean; follow: boolean } }).data };
 }
 
 function robotsMetaContents(html: string): string[] {

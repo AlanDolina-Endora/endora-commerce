@@ -57,7 +57,13 @@ export function robotsDirective(read: RobotsPolicyRead): RobotsDirective | null 
   return null;
 }
 
-/** Put the directive on a response. Sets nothing, and removes nothing, when there is none. */
+/**
+ * Put the directive on a response. Sets nothing, and removes nothing, when
+ * there is none.
+ *
+ * `set`, not `append`: the header states this channel's default once. A second
+ * value beside it would be read as a second directive.
+ */
 export function stampRobotsResponse(headers: Headers, directive: RobotsDirective | null): void {
   if (directive !== null) headers.set(ROBOTS_RESPONSE_HEADER, directive);
 }
