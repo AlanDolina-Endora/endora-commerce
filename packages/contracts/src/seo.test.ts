@@ -214,9 +214,11 @@ describe('composeCrawlerFile', () => {
     const LIMIT = 65_536;
     const BOUND_MS = 250;
     const timed = (base: string, extra: string): { out: string; ms: number } => {
-      const start = performance.now();
+      // `Date.now()` and not a finer clock: the bound is a quarter of a
+      // second, and this package's tests are typed against no runtime.
+      const start = Date.now();
       const out = composeCrawlerFile(base, extra);
-      return { out, ms: performance.now() - start };
+      return { out, ms: Date.now() - start };
     };
 
     it.each([
@@ -231,7 +233,7 @@ describe('composeCrawlerFile', () => {
     ])('%s', (_label, extra) => {
       expect(extra.length).toBeLessThanOrEqual(LIMIT);
       const { out, ms } = timed('base\n', extra);
-      expect(ms, `composing took ${ms.toFixed(1)} ms`).toBeLessThan(BOUND_MS);
+      expect(ms, `composing took ${ms} ms`).toBeLessThan(BOUND_MS);
       expect(out.startsWith('base\n\n')).toBe(true);
       expect(out.endsWith('\n')).toBe(true);
       expect(out.endsWith('\n\n')).toBe(false);
@@ -242,7 +244,7 @@ describe('composeCrawlerFile', () => {
       // The base is this storefront's own and never looks like this; the
       // function is exported, and its cost should not depend on who calls it.
       const { out, ms } = timed(`${'\n'.repeat(LIMIT)}x${'\n'.repeat(LIMIT)}`, 'extra');
-      expect(ms, `composing took ${ms.toFixed(1)} ms`).toBeLessThan(BOUND_MS);
+      expect(ms, `composing took ${ms} ms`).toBeLessThan(BOUND_MS);
       expect(out.endsWith('x\n\nextra\n')).toBe(true);
     });
 
