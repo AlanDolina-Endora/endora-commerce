@@ -16,6 +16,23 @@ import {
  * is the cache, and an intermediary holding the answer would stretch the time a
  * saved change takes to be in force without anybody seeing why), and it needs
  * no session.
+ *
+ * ## What is strict, and where
+ *
+ * The **consumer** tolerates members it does not know — the schema drops them —
+ * so that a later backend can add a field without every storefront already
+ * deployed reading the answer as unreadable. Strictness stays where it protects
+ * something:
+ *
+ *  * `index` and `follow` must be present booleans (the schema; a storefront
+ *    treats anything else as unreadable rather than guessing);
+ *  * **this** backend sends exactly those two and nothing else — held below,
+ *    because "consumers tolerate extras" is not a licence to send any, and the
+ *    stored token in particular is the module's own spelling;
+ *  * a value outside the four choices is refused when it is **written**
+ *    (`test/integration/seo/default-robots-write.test.ts`), and a stored value
+ *    the mapping does not know reads as no restriction rather than as a
+ *    directive nobody chose (`robots-policy.test.ts` in the module).
  */
 describe('GET /api/v1/storefront/seo/robots-policy', () => {
   let h: BackendServerHandle;
@@ -65,7 +82,12 @@ describe('GET /api/v1/storefront/seo/robots-policy', () => {
     expect(res.statusCode).toBe(200);
     const body = storefrontRobotsPolicyResponseSchema.parse(res.json());
     expect(body).toEqual({ data: policy });
-    // The stored spelling is the module's own and never crosses the wire.
+    // The schema would drop an unknown member, so it cannot see one. The raw
+    // body is what says this backend sends the two booleans and nothing else —
+    // the stored spelling least of all.
+    const raw = res.json() as { data: Record<string, unknown> };
+    expect(Object.keys(raw)).toEqual(['data']);
+    expect(Object.keys(raw.data).sort()).toEqual(['follow', 'index']);
     expect(res.body).not.toContain('INDEX');
   });
 

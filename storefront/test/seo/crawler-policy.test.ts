@@ -132,6 +132,21 @@ describe('a readable policy', () => {
     expect(h.calls).toHaveLength(1);
   });
 
+  it('is read from an answer carrying fields this storefront does not know', async () => {
+    // A storefront is deployed apart from its backend and is usually the older
+    // one. A backend that later adds a field must not turn this read into
+    // "unreadable": on a freshly started storefront that would serve a noindex
+    // channel with no directive at all.
+    const h = harness({
+      status: 200,
+      body: {
+        data: { index: false, follow: false, maxSnippet: 0, somethingNewer: { nested: true } },
+        meta: { generatedAt: '2026-10-11T00:00:00.000Z' },
+      },
+    });
+    expect(await h.reader.robotsPolicy('pl')).toEqual(NOINDEX);
+  });
+
   it('is asked for with a two-second budget', async () => {
     const h = harness(ok(true, true));
     await h.reader.robotsPolicy('pl');
@@ -217,6 +232,10 @@ describe('an unreadable policy', () => {
     ['a body with a key missing', { status: 200, body: { data: { index: false } } }],
     ['a body with a string for a boolean', { status: 200, body: { data: { index: 'false', follow: true } } }],
     ['a body with no envelope', { status: 200, body: { index: false, follow: false } }],
+    [
+      'a body whose unknown fields come with a known one missing',
+      { status: 200, body: { data: { follow: false, somethingNewer: true } } },
+    ],
   ];
 
   it.each(UNREADABLE)('answers "unknown" for %s when nothing was ever known', async (_label, answer) => {
