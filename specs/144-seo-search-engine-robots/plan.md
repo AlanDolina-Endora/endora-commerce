@@ -68,8 +68,9 @@ reviewer would otherwise ask about.
 
 ## Deviations from the spec, and reinterpretations
 
-Nothing below changes the spec file; each is for the owner or the orchestrator to accept or send
-back.
+Nothing below changes the requirements' text. **D2, D3 and D4 were accepted by the owner on
+2026-10-11** (`spec.md` § *Owner rulings*, R6 – R8); the others are technical reinterpretations
+for the orchestrator to accept or send back.
 
 | # | Spec text | What the plan does | Why |
 | --- | --- | --- | --- |
@@ -83,7 +84,11 @@ back.
 | **D8** | FR-022 / FR-017 "the last value it knew" | Known **per storefront process, in memory** | A shared or persisted last-known value needs Redis in the storefront or its own invalidation; the spec's residual-risk paragraph already describes the cold-start window this leaves. |
 | **D9** | FR-014 "files shipped with the storefront" | Also covers `/_next/image`; exempts only `/_next/static` | The exemption FR-014 permits, taken exactly. |
 
-## Decisions for the owner
+## Decisions for the owner — all five ruled on 2026-10-11, as recommended
+
+The owner's answer (translated from Polish): *"Do it with the recommendations."* Recorded in
+`spec.md` § *Owner rulings* as R6 – R10, in the order below. The list is kept as written, as
+provenance; none of it is pending.
 
 1. **D2** — accept that the palette entry is visible to administrators who may read settings but
    not change them. *Recommended: accept.*

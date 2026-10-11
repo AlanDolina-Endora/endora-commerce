@@ -696,6 +696,37 @@ recommendation rather than a ruling.
   search engines to drop a live shop's pages during a backend fault. `robots.txt` and `llms.txt`
   keep the fail-closed answer (FR-022), since no customer reads them.
 
+### Rulings on the plan's five decisions
+
+Given later on 2026-10-11, in the owner's words (translated from Polish): *"Do it with the
+recommendations."* — in reply to the five decisions `plan.md` left for the owner (tagged OD1 – OD5
+in `tasks.md`). Where a ruling changes how a requirement above is read, the ruling governs; the
+requirement's text is left as written, as provenance.
+
+- **R6 (OD1, plan D2) — The palette entry for this configuration is offered to every
+  administrator who may *see* settings, not only to those who may change them.** FR-009 is read
+  accordingly: such an administrator lands on a read-only view with the previews (FR-045).
+  *Rejected*: offering it only to those who may change settings — the entry's target is the
+  Settings screen, which is gated by the read permission, so a stricter palette gate would
+  disagree with the route it opens and would need a new, write-gated settings route.
+- **R7 (OD2, plan D3) — The warning that switching SEO off withdraws the default robots policy
+  is English-only on the platform modules screen**, and is in English and Polish on the
+  `seo.enabled` setting's row of the Settings screen. FR-033's "in English and in Polish" is read
+  as met there. Translatable module descriptions on the platform modules screen are to be filed
+  as a separate, platform-wide change. *Rejected for this feature*: making that screen translate
+  module descriptions as part of this work.
+- **R8 (OD3, plan D4) — The four *Default robots* choices are shown as the directive tokens
+  themselves, untranslated; their meaning is in the translated description.** FR-008's "label of
+  each choice … in English and in Polish" is read as met by language-neutral tokens. *Rejected*:
+  translated choice labels, which would make the stored values machine tokens and add a third
+  generic change to the Settings screen for one user.
+- **R9 (OD4) — The *Default robots* row also tells the operator when the channel's storefront is
+  too old to apply the setting**, in the slice that delivers the preview. *Rejected*: showing
+  that notice only beside the two text settings, which leaves an operator of an older instance
+  able to believe a shop is kept out of search when it is not.
+- **R10 (OD5) — `llms.txt` gets the same preview as `robots.txt`.** Assumption A15 is now a
+  ruling (FR-044). *Rejected*: previewing `robots.txt` alone.
+
 ## Constraints from the constitution and the conventions
 
 Recorded so the plan starts from them; none is decided here beyond what the requirements say.

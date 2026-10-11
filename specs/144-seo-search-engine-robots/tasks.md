@@ -14,8 +14,9 @@ inside every slice the failing-test task precedes the task that makes it pass.
 - **[P]** — may run in parallel with its neighbours (different files, no dependency).
 - **[US1…US4]** — the user story of `spec.md` the task serves; a task with none serves a
   requirement shared by all (FR-004, FR-008).
-- **[OD1…OD5]** — the task depends on an owner decision that is **not yet a ruling**; see
-  *Working defaults* below for what changes if the owner answers otherwise.
+- **[OD1…OD5]** — the task rests on one of five owner decisions. **All five were ruled on
+  2026-10-11, as recommended** (`spec.md` § *Owner rulings*, R6 – R10); the tags are kept so a
+  task can be traced to its ruling. See the table below.
 - **RED** marks a task whose deliverable is a failing test. Commit it failing, or at least run it
   and paste the failure into the pull request, before starting the task that turns it green.
 
@@ -31,11 +32,14 @@ Slice 2b ──► Slice 3 ──► Slice 4 ──► Slice 5
 Slices 1, 2a and 2b can be built in parallel by different implementers. Slice 3 needs 2b merged
 (a single-line field destroys line breaks) and 1 merged (it extends the reader slice 1 creates).
 
-## Working defaults for the five open owner decisions
+## The five owner decisions — ruled 2026-10-11
 
-These are the plan's recommendations, applied so work can start. **None is a ruling.**
+Owner, 2026-10-11 (translated from Polish): *"Do it with the recommendations."* Each row below is
+therefore a **ruling**, recorded in `spec.md` § *Owner rulings* as R6 (OD1), R7 (OD2), R8 (OD3),
+R9 (OD4) and R10 (OD5). The tasks are unchanged by it. The last column is kept as provenance: it
+is what would have changed under the alternative, and no longer describes pending work.
 
-| | Default applied | Tasks affected | If the owner answers otherwise |
+| | Ruling | Tasks affected | The rejected alternative would have meant |
 | --- | --- | --- | --- |
 | **OD1** (plan D2) | The palette entry for the settings is offered to `settings:read` holders | T008, T013, T017 | Requiring `settings:write` cannot be declared on `/settings` — `check:action-route-permissions` would refuse it. The alternative is a new `settings` route that is itself gated by `settings:write` (for example a per-group route); that is a new task in slice 2a and T017's `targetRoute` changes to it. |
 | **OD2** (plan D3) | The FR-033 warning is English-only on the platform modules screen; Polish only on the `seo.enabled` setting row | T017, T037 | A translatable module description on `packages/admin-shell/src/modules/platform/ModulesPage.tsx` is a platform-wide change and becomes its own feature; nothing in these tasks changes. |
