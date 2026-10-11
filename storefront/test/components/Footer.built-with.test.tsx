@@ -38,3 +38,40 @@ describe('Footer — the "built with" credit', () => {
     expect(html).toMatch(/<span aria-hidden="true">❤️<\/span>/);
   });
 });
+
+/**
+ * The credit is the footer's last line, on a row of its own: under the columns,
+ * under the copyright row and under anything a module adds through the
+ * `footer.bottom` and `footer.copyright` hooks. It carries the product mark
+ * beside the product name.
+ */
+describe('Footer — where the "built with" credit sits', () => {
+  const html = renderToString(
+    <Footer bottom={<p>hook-bottom-slot</p>} copyright={<span>hook-copyright-slot</span>} />,
+  );
+  const credit = html.indexOf('Built with');
+
+  it('comes after everything else the footer renders', () => {
+    for (const earlier of [
+      'Industria B2B Sp. z o.o.',
+      'hook-bottom-slot',
+      'hook-copyright-slot',
+      'Polityka prywatności',
+      'Cookies',
+    ]) {
+      expect(html).toContain(earlier);
+      expect(html.indexOf(earlier)).toBeLessThan(credit);
+    }
+  });
+
+  it('is the last link in the footer', () => {
+    const lastLink = html.slice(html.lastIndexOf('<a '));
+    expect(lastLink).toContain('commerce.endora.software');
+    expect(lastLink).toContain('>Endora Commerce</a>');
+  });
+
+  it('shows the product mark inside the link, hidden from assistive technology', () => {
+    const link = /<a[^>]*commerce\.endora\.software[^>]*>.*?<\/a>/s.exec(html)?.[0] ?? '';
+    expect(link).toMatch(/<svg[^>]*aria-hidden="true"/);
+  });
+});
