@@ -127,7 +127,8 @@ instrukcje — jego plik `app/robots.txt/route.ts`. Sklep utworzony z wcześniej
 działa dalej ze zaktualizowanym backendem, ale **ignoruje te ustawienia**, dopóki te pliki nie
 zostaną zaktualizowane: ekran Ustawień pokazuje wybór i tekst, a nic w takim sklepie ich nie
 stosuje — jego `robots.txt` pozostaje plikiem, z którym sklep został zbudowany. Lista plików do
-skopiowania oraz plik do usunięcia są podane w informacjach o wydaniu.
+skopiowania oraz plik do usunięcia są podane w informacjach o wydaniu: sklep, który zachowa stary
+plik `app/robots.ts` obok nowej trasy, nadal serwuje stary plik, a build tego nie zgłasza.
 
 ### Dla własnego sklepu
 

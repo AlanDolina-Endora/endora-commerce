@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { composeCrawlerFile } from '@endora-commerce/contracts/seo';
 
@@ -273,6 +273,22 @@ describe('app/robots.txt/route.ts', () => {
     expect(loaded.dynamic).toBe('force-dynamic');
     // Only what Next accepts from a route file, so the build does not refuse it.
     expect(Object.keys(loaded).sort()).toEqual(['GET', 'dynamic']);
+  });
+
+  it('has no `app/robots.ts` beside it, which would be served instead of it', () => {
+    // Measured on a build holding both: Next reports nothing, prerenders the
+    // metadata file as before and never reaches this route — the storefront
+    // goes on serving its build-time rules with no custom instructions, and
+    // nothing says so. A storefront taking this route deletes that file.
+    for (const shadow of ['robots.ts', 'robots.js']) {
+      expect(
+        existsSync(fileURLToPath(new URL(`../../app/${shadow}`, import.meta.url))),
+        `app/${shadow} must not exist`,
+      ).toBe(false);
+    }
+    expect(existsSync(fileURLToPath(new URL('../../public/robots.txt', import.meta.url)))).toBe(
+      false,
+    );
   });
 
   it('reads the backend’s crawler-files route for the request’s channel and appends its text', async () => {

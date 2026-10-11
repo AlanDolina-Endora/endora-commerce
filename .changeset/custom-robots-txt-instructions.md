@@ -72,8 +72,10 @@ setting**: its `robots.txt` stays the file it was built with, and the Settings s
 nothing serves. To take the feature, apply these changes from the reference storefront to the
 storefront project, keeping any edits of your own:
 
-- **delete** `app/robots.ts`. It must go: Next refuses to build a project that has both it and
-  `app/robots.txt/route.ts`, because both claim `/robots.txt`;
+- **delete** `app/robots.ts`. It must go, and nothing will tell you if it has not: with both it
+  and `app/robots.txt/route.ts` present, Next builds without a warning, goes on serving the old
+  build-time file and never reaches the new route. The build's route list shows which one won —
+  `○ /robots.txt` is the old file, `ƒ /robots.txt` is the new route;
 - **add** `app/robots.txt/route.ts` — the route;
 - **add** `lib/seo/robots-txt.ts` — what the route answers, and when it answers `503`;
 - **add** `lib/seo/robots-system-rules.ts` — the generated rules, moved out of `app/robots.ts`

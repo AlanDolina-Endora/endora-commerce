@@ -121,7 +121,8 @@ custom instructions by its `app/robots.txt/route.ts`. A storefront created from 
 release keeps working with an upgraded backend, but it **ignores these settings** until those
 files are updated: the Settings screen shows the choice and the text, and nothing in that
 storefront acts on them — its `robots.txt` stays the file it was built with. The release notes
-list the files to copy, and the one to delete.
+list the files to copy, and the one to delete: a storefront that keeps its old `app/robots.ts`
+beside the new route goes on serving the old file, and the build does not say so.
 
 ### For a custom storefront
 
