@@ -112,6 +112,89 @@ export const storefrontRobotsPolicyResponseSchema = z.object({
 export type StorefrontRobotsPolicyResponse = z.infer<typeof storefrontRobotsPolicyResponseSchema>;
 
 /**
+ * The most an operator may save as custom `robots.txt` instructions or as
+ * additional `llms.txt` content, per sales channel: 64 KiB of UTF-8.
+ *
+ * **Bytes, not characters** — it bounds the file a crawler downloads, and one
+ * character is up to four bytes. The `seo` module refuses a larger text when
+ * it is saved. Search engines read the first 500 KiB of a `robots.txt`; the
+ * system-generated rules are under 1 KiB, so the whole file stays well inside
+ * that.
+ */
+export const CRAWLER_TEXT_MAX_BYTES = 65_536;
+
+/**
+ * What a sales channel's crawler files are built from, as the storefront reads
+ * it from `GET /api/v1/storefront/seo/crawler-files`.
+ *
+ * The two texts are the values resolved for the channel — its own, else the
+ * all-channels value, else empty — **exactly as stored**: the backend changes
+ * no character of them, line breaks included. What a served file does with
+ * them is {@link composeCrawlerFile}'s to say.
+ *
+ * `index` and `follow` repeat the robots policy so that a file whose existence
+ * depends on it needs one read rather than two.
+ *
+ * Strict about the members it names and tolerant of any it does not, for the
+ * reason given at {@link storefrontRobotsPolicySchema}. The `max` on the texts
+ * is in characters and is deliberately the looser test: a text within the byte
+ * limit never has more characters than that, so a longer one did not come
+ * through the door that enforces the limit, and a storefront treats the answer
+ * as unreadable rather than serve it.
+ */
+export const storefrontCrawlerFilesSchema = storefrontRobotsPolicySchema.extend({
+  /** The operator's `robots.txt` instructions, or `''`. */
+  robotsTxtCustom: z.string().max(CRAWLER_TEXT_MAX_BYTES),
+  /** The operator's additional `llms.txt` content, or `''`. */
+  llmsTxtAdditional: z.string().max(CRAWLER_TEXT_MAX_BYTES),
+  shop: z.object({
+    /** The channel's configured shop name, or `''` when none is set. */
+    name: z.string(),
+  }),
+});
+export type StorefrontCrawlerFiles = z.infer<typeof storefrontCrawlerFilesSchema>;
+
+export const storefrontCrawlerFilesResponseSchema = z.object({
+  data: storefrontCrawlerFilesSchema,
+});
+export type StorefrontCrawlerFilesResponse = z.infer<typeof storefrontCrawlerFilesResponseSchema>;
+
+/**
+ * A crawler file: the part the storefront generates, then the part an operator
+ * wrote.
+ *
+ * One function, shared by the storefront that serves the file and by the Admin
+ * UI that previews it, so the two cannot come to disagree about the join.
+ *
+ *  * `extra` empty or made only of whitespace → `base`, **byte for byte**. An
+ *    instance nobody configured serves exactly what it generated.
+ *  * otherwise → `base` ending in one line break, one blank line, `extra`, one
+ *    line break.
+ *
+ * ## What happens to `extra` — the definition of "verbatim"
+ *
+ * Every character of it is kept, unchanged and in order — indentation,
+ * trailing spaces, blank lines, comments, anything that is not a line break at
+ * all. Two things are normalised, and both are about line breaks only:
+ *
+ *  * **every line break is served as a line feed**, whether it was stored as
+ *    `LF`, `CRLF` or a lone `CR`. A browser's text field sends `LF`; the
+ *    settings API stores what it is sent, so a client that sends `CRLF` stores
+ *    `CRLF`. Without this, one file would carry two conventions — the
+ *    generated part's and the operator's — and the same text would be served
+ *    as different bytes depending on which client saved it;
+ *  * **line breaks at the end of the text become exactly one**, so the file
+ *    always ends with a single line break.
+ *
+ * `base` is never altered apart from the line breaks it ends with.
+ */
+export function composeCrawlerFile(base: string, extra: string): string {
+  if (extra.trim().length === 0) return base;
+  const text = extra.replace(/\r\n?/g, '\n').replace(/\n+$/, '');
+  return `${base.replace(/\n+$/, '')}\n\n${text}\n`;
+}
+
+/**
  * Container name: `seoMetaWritePort`. Owner: `seo`.
  *
  * Narrow write surface for PIM importers (feature 089 / FR-029): upsert product
