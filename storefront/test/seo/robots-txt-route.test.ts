@@ -194,7 +194,7 @@ describe('robots.txt — when the instructions cannot be read (FR-022)', () => {
 });
 
 describe('robots.txt — `?part=system`', () => {
-  it('is the fixture, with the same headers, and never asks the backend', async () => {
+  it('is the fixture, and never asks the backend', async () => {
     for (const read of [
       { kind: 'value', value: files({ robotsTxtCustom: CUSTOM }) },
       { kind: 'none' },
@@ -202,10 +202,27 @@ describe('robots.txt — `?part=system`', () => {
     ] satisfies CrawlerFilesRead[]) {
       const { response, asked } = serve(read, { path: '/robots.txt?part=system' });
       const served = await response;
-      expectServedHeaders(served);
+      expect(served.status).toBe(200);
+      expect(served.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+      expect(served.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(served.headers.get(CRAWLER_FILES_CAPABILITY_HEADER)).toBe('1');
       expect(await served.text()).toBe(BEFORE);
       expect(asked).toEqual([]);
     }
+  });
+
+  it('may be kept by no cache', async () => {
+    // It is the file **without** the operator's instructions, at an address
+    // that differs from the real one only by a query string. A cache set up to
+    // ignore query strings would store it as `/robots.txt` and serve every
+    // crawler a file that omits what the operator wrote. Only the Admin UI's
+    // preview asks for it, and it asks each time.
+    const served = await serve({ kind: 'none' }, { path: '/robots.txt?part=system' }).response;
+    expect(served.headers.get('cache-control')).toBe('no-store');
+    // The file itself is still cacheable, for a minute.
+    expect((await serve({ kind: 'none' }).response).headers.get('cache-control')).toBe(
+      'public, max-age=60',
+    );
   });
 
   it('is not what any other query string means', async () => {
@@ -217,6 +234,61 @@ describe('robots.txt — `?part=system`', () => {
       expect(await (await response).text(), path).toBe(`${BEFORE}\n${CUSTOM}`);
       expect(asked).toHaveLength(1);
     }
+  });
+});
+
+/**
+ * The handler keeps the file it composed for a channel's configuration and
+ * hands it out again for as long as that configuration is the one the reader
+ * holds. It cannot be seen from outside except as time, so what is held here
+ * is that keeping it never serves the wrong file.
+ */
+describe('robots.txt — the composed file is kept, and never the wrong one', () => {
+  const serveValue = async (value: CrawlerFiles): Promise<string> =>
+    (await serve({ kind: 'value', value }).response).text();
+
+  it('serves the same file for the same configuration, asked for repeatedly', async () => {
+    const value = files({ robotsTxtCustom: CUSTOM });
+    const first = await serveValue(value);
+    expect(await serveValue(value)).toBe(first);
+    expect(await serveValue(value)).toBe(`${BEFORE}\n${CUSTOM}`);
+  });
+
+  it('serves the new text as soon as the reader holds a new configuration', async () => {
+    const before = files({ robotsTxtCustom: 'Disallow: /old\n' });
+    expect(await serveValue(before)).toBe(`${BEFORE}\nDisallow: /old\n`);
+    // A refresh replaces the reader's value with a new object.
+    expect(await serveValue(files({ robotsTxtCustom: 'Disallow: /new\n' }))).toBe(
+      `${BEFORE}\nDisallow: /new\n`,
+    );
+    expect(await serveValue(files())).toBe(BEFORE);
+    // And the earlier one is still its own.
+    expect(await serveValue(before)).toBe(`${BEFORE}\nDisallow: /old\n`);
+  });
+
+  it('never serves one configuration’s file for another that has the same text', async () => {
+    const a = files({ robotsTxtCustom: CUSTOM });
+    const b = files({ robotsTxtCustom: CUSTOM, index: false });
+    expect(await serveValue(a)).toBe(await serveValue(b));
+  });
+
+  it('follows the system rules when they change under a kept file', async () => {
+    const value = files({ robotsTxtCustom: CUSTOM });
+    expect(await serveValue(value)).toBe(`${BEFORE}\n${CUSTOM}`);
+    process.env['NEXT_PUBLIC_SITE_URL'] = 'https://shop.example.com';
+    expect(await serveValue(value)).toBe(
+      `${BEFORE.replace('http://localhost:3000', 'https://shop.example.com')}\n${CUSTOM}`,
+    );
+  });
+
+  it('answers a text made to be slow to trim as fast as any other', async () => {
+    // 64 KiB of line breaks before one character: seconds, with a trailing
+    // line-break pattern that backtracks. See `composeCrawlerFile`'s tests.
+    const value = files({ robotsTxtCustom: `${'\n'.repeat(65_535)}x` });
+    const start = performance.now();
+    const body = await serveValue(value);
+    expect(performance.now() - start).toBeLessThan(250);
+    expect(body.endsWith('\nx\n')).toBe(true);
   });
 });
 
@@ -280,7 +352,8 @@ describe('app/robots.txt/route.ts', () => {
     // metadata file as before and never reaches this route — the storefront
     // goes on serving its build-time rules with no custom instructions, and
     // nothing says so. A storefront taking this route deletes that file.
-    for (const shadow of ['robots.ts', 'robots.js']) {
+    // Next reads a metadata file with any of its page extensions.
+    for (const shadow of ['robots.ts', 'robots.tsx', 'robots.js', 'robots.jsx']) {
       expect(
         existsSync(fileURLToPath(new URL(`../../app/${shadow}`, import.meta.url))),
         `app/${shadow} must not exist`,
