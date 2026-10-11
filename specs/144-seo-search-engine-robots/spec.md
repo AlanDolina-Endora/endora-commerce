@@ -2,10 +2,12 @@
 
 **Feature Branch**: `spec/seo-search-engine-robots` (spec directory `specs/144-seo-search-engine-robots/`)
 **Created**: 2026-10-11
-**Status**: Draft, amended 2026-10-11 after the owner's rulings of that day (see *Owner rulings*).
-The three open questions are answered, a preview of the resulting `robots.txt` in the Admin UI is
-required, and one choice — which of the two preview shapes the owner offered — is applied as a
-recommendation the owner can still overturn (A9)
+**Status**: Accepted — amended twice on 2026-10-11 after the owner's rulings of that day (see
+*Owner rulings*, R1 – R10). The three open questions are answered (R1 – R3), a preview of the
+resulting `robots.txt` in the Admin UI is required (R4), a page is never failed because of this
+setting (R5), and the five decisions the plan raised are ruled as recommended (R6 – R10), with
+FR-008, FR-009 and FR-033 reworded to match. One choice remains a recommendation the owner can
+still overturn: which of the two preview shapes the owner offered (A9)
 **Input**: Owner's request (translated from Polish): *"Let's add this as a feature in the Admin
 UI, e.g. as a setting in the Settings module, defined by the `seo` module, where you can set
 whether it should be `noindex`, `nofollow`, or other relevant variants. You can take inspiration
@@ -336,14 +338,20 @@ repeat.
 - **FR-007**: Changing any of the three settings MUST require the same administrator permission
   as changing any other setting, MUST be refused for an administrator without it, and MUST be
   recorded in the audit trail with who changed it, when, and the value before and after.
-- **FR-008**: The name and the description of each setting, and the label of each *Default
-  robots* choice, MUST be available in English and in Polish. The descriptions MUST state the
+- **FR-008**: The name and the description of each setting MUST be available in English and in
+  Polish. The four *Default robots* choices MUST be shown as the directive tokens themselves
+  (`INDEX, FOLLOW`, `NOINDEX, FOLLOW`, `INDEX, NOFOLLOW`, `NOINDEX, NOFOLLOW`), identical in every
+  language, with their meaning explained in the translated description. *(Changed by ruling R8:
+  this requirement first asked for a translated label for each choice.)* The descriptions MUST state the
   consequence an operator needs before choosing: for *Default robots*, that it adds restrictions
   and never makes a private page indexable, and that search engines act on it only when they next
   fetch a page; for *Custom robots.txt instructions*, that the text is appended to the
   system-generated rules and that forbidding crawling does not remove pages from search results.
-- **FR-009**: The configuration MUST be reachable from the admin command palette by an
-  administrator who is allowed to change it, and MUST NOT be offered there to one who is not.
+- **FR-009**: The configuration MUST be reachable from the admin command palette by every
+  administrator who is allowed to see settings, and MUST NOT be offered there to one who is not.
+  An administrator who may see but not change them arrives at a read-only view with the previews
+  (FR-045). *(Changed by ruling R6: this requirement first offered the entry only to
+  administrators allowed to change the configuration.)*
 - **FR-010**: A saved change MUST take effect on the storefront without a rebuild, a redeploy or
   a restart, in every running storefront process, within five minutes.
 - **FR-011**: After an upgrade to a version that contains this feature, with no setting touched,
@@ -432,10 +440,14 @@ repeat.
 - **FR-032**: While `seo` is off, its three settings MUST NOT be editable, their previews
   (FR-038 – FR-045) MUST NOT be offered, and they MUST NOT be offered in the command palette; their stored values MUST be preserved and MUST be in force again, with
   no repair step, as soon as the module is switched back on.
-- **FR-033**: The description of the `seo` module's activation control MUST state, in English and
-  in Polish, that switching the module off withdraws the *Default robots* policy and the custom
-  `robots.txt` and `llms.txt` content, so that an operator relying on `NOINDEX` learns the
-  consequence before the switch rather than from a search result.
+- **FR-033**: The operator MUST be told that switching the `seo` module off withdraws the
+  *Default robots* policy and the custom `robots.txt` and `llms.txt` content, so that an operator
+  relying on `NOINDEX` learns the consequence before the switch rather than from a search result.
+  The statement MUST appear in the module's description on the platform modules screen, where the
+  switch is, in English; and in the description of the module's activation setting on the
+  Settings screen, in English and in Polish. *(Changed by ruling R7: this requirement first asked
+  for English and Polish at the switch itself, which that screen cannot show; translatable module
+  descriptions there are a separate, platform-wide change.)*
 - **FR-034**: The module's off-state verification MUST cover this feature in the
   switched-off-while-available case specifically: pages, `robots.txt`, `/llms.txt`, the response
   header, the editability of the settings and the absence of their previews while off, and their full restoration when switched
@@ -543,8 +555,9 @@ for the plan to confirm.
 - **SC-007**: With the `seo` module switched off, zero observable traces of this feature remain
   on the storefront, and after switching it back on 100% of the previously saved configuration
   is in force without re-entry.
-- **SC-008**: Every setting name, description and choice of this feature is readable in English
-  and in Polish, with no untranslated key or other-language text shown to an administrator.
+- **SC-008**: Every setting name and description of this feature is readable in English and in
+  Polish on the Settings screen, with no untranslated key or other-language text shown to an
+  administrator; the four *Default robots* choices are language-neutral directive tokens (R8).
 - **SC-009**: Both public demo instances can be configured as non-indexable using the product
   alone — no code change, no custom build and no proxy rule. (Performing that configuration is an
   operational follow-up, not part of this feature.)
@@ -629,7 +642,8 @@ invalidating the rest of the specification unless it says otherwise.
 - **A14 — The system-generated rules stay storefront-owned** (FR-031). They are derived from the
   storefront's own route families; moving them into the `seo` module would make the storefront's
   `robots.txt` disappear, or fall back to "everything allowed", whenever the module is off.
-- **A15 — `llms.txt` gets the same preview as `robots.txt`** (FR-044). The owner asked for the
+- **A15 — `llms.txt` gets the same preview as `robots.txt`** (FR-044). **No longer an
+  assumption: the owner ruled it on 2026-10-11 (R10).** As first written: the owner asked for the
   `robots.txt` preview only. The two fields sit side by side and behave identically; a preview on
   one and not the other would read as a defect. *Rejected*: previewing `robots.txt` alone — less
   work, and the cheaper choice if `llms.txt` is delivered later than the rest.
@@ -665,9 +679,10 @@ invalidating the rest of the specification unless it says otherwise.
 Given on 2026-10-11, in the owner's words (translated from Polish): *"In the admin there should
 be a preview of the resulting robots.txt. So either we make the form field pre-filled by default
 with the system instructions, which can be freely overwritten, or a preview window showing the
-mix of system instructions with our own. The rest as recommended."* The rejected alternative is
-kept beside each ruling as provenance. No question remains open; one choice inside R4 is a
-recommendation rather than a ruling.
+mix of system instructions with our own. The rest as recommended."* That answer is R1 – R5; a
+second answer the same day, on the five decisions the plan raised, is R6 – R10 and is quoted
+under its own heading below. The rejected alternative is kept beside each ruling as provenance.
+No question remains open; one choice inside R4 is a recommendation rather than a ruling.
 
 - **R1 (was Q1) — The `llms.txt` base is generated, and the operator's content follows it**
   (FR-024 – FR-026). *Rejected*: a file that is entirely the operator's and is not served while
@@ -700,24 +715,24 @@ recommendation rather than a ruling.
 
 Given later on 2026-10-11, in the owner's words (translated from Polish): *"Do it with the
 recommendations."* — in reply to the five decisions `plan.md` left for the owner (tagged OD1 – OD5
-in `tasks.md`). Where a ruling changes how a requirement above is read, the ruling governs; the
-requirement's text is left as written, as provenance.
+in `tasks.md`). Where a ruling changed a requirement — FR-008, FR-009 and FR-033 — the
+requirement has been reworded to match, and says in its own text what the ruling changed.
 
 - **R6 (OD1, plan D2) — The palette entry for this configuration is offered to every
-  administrator who may *see* settings, not only to those who may change them.** FR-009 is read
-  accordingly: such an administrator lands on a read-only view with the previews (FR-045).
+  administrator who may *see* settings, not only to those who may change them.** FR-009 now says
+  so: such an administrator lands on a read-only view with the previews (FR-045).
   *Rejected*: offering it only to those who may change settings — the entry's target is the
   Settings screen, which is gated by the read permission, so a stricter palette gate would
   disagree with the route it opens and would need a new, write-gated settings route.
 - **R7 (OD2, plan D3) — The warning that switching SEO off withdraws the default robots policy
   is English-only on the platform modules screen**, and is in English and Polish on the
-  `seo.enabled` setting's row of the Settings screen. FR-033's "in English and in Polish" is read
-  as met there. Translatable module descriptions on the platform modules screen are to be filed
+  `seo.enabled` setting's row of the Settings screen. FR-033 now states the two places and their
+  languages. Translatable module descriptions on the platform modules screen are to be filed
   as a separate, platform-wide change. *Rejected for this feature*: making that screen translate
   module descriptions as part of this work.
 - **R8 (OD3, plan D4) — The four *Default robots* choices are shown as the directive tokens
-  themselves, untranslated; their meaning is in the translated description.** FR-008's "label of
-  each choice … in English and in Polish" is read as met by language-neutral tokens. *Rejected*:
+  themselves, untranslated; their meaning is in the translated description.** FR-008 now says
+  so. *Rejected*:
   translated choice labels, which would make the stored values machine tokens and add a third
   generic change to the Settings screen for one user.
 - **R9 (OD4) — The *Default robots* row also tells the operator when the channel's storefront is

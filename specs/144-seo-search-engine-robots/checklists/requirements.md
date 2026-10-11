@@ -40,13 +40,21 @@
   the resulting `robots.txt` in the Admin UI mandatory (FR-038 – FR-045, overturning the original
   assumption A9), and R5 rewrites FR-017 so that a page is never failed because the default could
   not be read.
+- **Re-validated again the same day after the owner's second answer** ("Do it with the
+  recommendations", on the five decisions `plan.md` raised). They are R6 – R10 in the spec:
+  R6 rewords FR-009 (the palette entry is offered to administrators who may see settings), R7
+  rewords FR-033 (the switch-off warning is English at the switch and English and Polish on the
+  Settings screen), R8 rewords FR-008 and SC-008 (the dropdown's choices are untranslated
+  directive tokens), R9 puts the outdated-storefront notice on the *Default robots* row, and R10
+  turns assumption A15 (the `llms.txt` preview) into a ruling. Each reworded requirement says in
+  its own text what the ruling changed. All checklist items still pass.
 - **One choice is a recommendation, not a ruling, and is not a marker**: which of the two preview
   shapes the owner offered. The spec applies "a preview beside the field" and rejects "a field
   pre-filled with the system rules", with the reasons in A9 and the list of requirements that
   would change if the owner prefers the other. `/speckit.plan` can proceed on it.
 - Every other decision the feature description left open is recorded under *Assumptions* (A1 –
   A16) with the alternative rejected; the owner accepted them as written on 2026-10-11 and may
-  still overturn any of them.
+  still overturn any of them. A15 is the exception: it is now ruling R10.
 - The spec names files in three places only — the *What the product does today* table, the
   provenance of each fact, and the one citation in A9 that the rejection of the pre-filled field
   rests on — following `specs/141-module-block-renderers/spec.md`. The requirements themselves
