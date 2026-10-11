@@ -73,7 +73,7 @@ of the platform, not of what happens to be written.
 | [returns](./returns.md) | Returns and complaints (RMA) — submission, verification, reverse-logistics shipments and settlement over a configurable status graph | @endora-commerce/mod-returns |
 | [Sales channels](./sales_channels/index.md) | Channel registry, request resolver, bidirectional membership for every channel-scoped entity | @endora-commerce/mod-sales-channels |
 | [search](./search.md) | Meilisearch indexer + query bridge | @endora-commerce/mod-search |
-| [seo](./seo.md) | Meta-tag resolver + cached XML sitemap | @endora-commerce/mod-seo |
+| [seo](./seo.md) | Meta-tag resolver, cached XML sitemap and the default search engine robots setting | @endora-commerce/mod-seo |
 | [Settings](./settings/index.md) | Manifest-driven, per-sales-channel platform configuration with cached read API | @endora-commerce/mod-settings |
 | [shipments](./shipments.md) | The retryable Shipment record and its lifecycle — the delivery-side twin of payments | @endora-commerce/mod-shipments |
 | [shopping_lists](./shopping_lists.md) | Per-customer named bundles convertible to Cart or RFQ | @endora-commerce/mod-shopping-lists |

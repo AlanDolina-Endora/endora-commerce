@@ -29,11 +29,14 @@ import { expectModuleAbsent, withModuleOff, type OffStateAxis } from '../../help
  *  * **restoration** — asserted by the harness after both axes. Off is
  *    non-destructive: generated sitemaps and every per-entity meta override
  *    stay, and the restored probes hold the routes to it;
- *  * **non-editable configuration** has no subject, for the reason item 6
- *    itself names. The manifest declares exactly one setting, `seo.enabled`,
- *    and that is the module's activation control — the single exception — so
- *    the harness is given no `settingWrite` rather than one that would drive
- *    the switch that has to keep working.
+ *  * **non-editable configuration** — `seo.default_robots`
+ *    (`specs/144-seo-search-engine-robots/`, FR-032), in the third test below
+ *    and not through the harness's `settingWrite`: that probe sends a body the
+ *    settings API refuses for its shape whatever the module's state, so a
+ *    refusal there would not be the off state's. The third test sends a write
+ *    the API accepts while the module is on and names the code it is refused
+ *    with while off. `seo.enabled` is the module's activation control — the
+ *    single exception — and is driven by nothing here.
  *
  * The **deactivated-while-platform-available** case is the first axis the
  * harness drives, and it is the one an operator creates: withdrawing sitemap
@@ -56,6 +59,11 @@ describe('seo off-state (Constitution XVII)', () => {
     await expectModuleAbsent(h, 'seo', {
       routes: [
         { url: '/api/v1/admin/seo/sitemap', cookies: admin },
+        // The storefront's question about a channel's default robots. Refused
+        // like any other route of an absent module: the storefront reads
+        // `MODULE_DISABLED` as "this feature does not exist" and applies no
+        // policy, which is a different answer from "no restriction" at `200`.
+        { url: '/api/v1/storefront/seo/robots-policy', headers: channel },
         {
           method: 'POST',
           url: '/api/v1/admin/seo/sitemap/default/regenerate',
@@ -110,4 +118,108 @@ describe('seo off-state (Constitution XVII)', () => {
       expect(after.body.startsWith('<?xml')).toBe(true);
     },
   );
+
+  /**
+   * *Default robots* while the module is off, and after
+   * (`specs/144-seo-search-engine-robots/`, FR-030, FR-032, FR-034).
+   *
+   * The deactivated-while-platform-available case, because it is the one an
+   * operator creates. Four things are held, and the order matters: the value is
+   * stored and served first, so that every later assertion is about a module
+   * that had something to withdraw.
+   *
+   *  1. the storefront's endpoint stops answering the policy — a `503`
+   *     `MODULE_DISABLED`, not a `200` saying "no restriction";
+   *  2. the setting is reported `editable: false`, and a write and a reset are
+   *     both refused with the code that says why;
+   *  3. the stored value survives all of that untouched;
+   *  4. switching the module back on serves the stored value again, with no
+   *     write in between.
+   */
+  it('withdraws the default robots policy while off, keeps the stored value, and serves it again after', async () => {
+    const SETTING = '/api/v1/admin/settings/seo.default_robots';
+    const policy = async () =>
+      h.app.inject({ method: 'GET', url: '/api/v1/storefront/seo/robots-policy', headers: channel });
+    /** The setting as the Settings screen reads it: editability, and what is stored. */
+    const detail = async () => {
+      const body = (await h.app.inject({ method: 'GET', url: SETTING, cookies: admin })).json() as {
+        editable: boolean;
+        globalValue: unknown;
+        valuesByChannel: { salesChannelCode: string; value: unknown; updatedAt: string }[];
+      };
+      return {
+        editable: body.editable,
+        values: { global: body.globalValue, byChannel: body.valuesByChannel },
+      };
+    };
+
+    const stored = await h.app.inject({
+      method: 'PUT',
+      url: `${SETTING}/value`,
+      cookies: admin,
+      payload: { scope: 'subset', salesChannelCodes: ['default'], value: 'NOINDEX, NOFOLLOW' },
+    });
+    expect(stored.statusCode, stored.body).toBe(200);
+
+    try {
+      // Positive control.
+      const on = await policy();
+      expect(on.statusCode).toBe(200);
+      expect(on.json()).toEqual({ data: { index: false, follow: false } });
+      expect((await detail()).editable).toBe(true);
+      const valuesWhileOn = (await detail()).values;
+      expect(valuesWhileOn.global).toBeNull();
+      expect(valuesWhileOn.byChannel).toEqual([
+        expect.objectContaining({ salesChannelCode: 'default', value: 'NOINDEX, NOFOLLOW' }),
+      ]);
+
+      await withModuleOff('seo', 'deactivated', async () => {
+        const off = await policy();
+        expect(off.statusCode, 'the policy endpoint must refuse while seo is off').toBe(503);
+        expect((off.json() as { error?: { code?: string } }).error?.code).toBe('MODULE_DISABLED');
+
+        const whileOff = await detail();
+        expect(whileOff.editable, 'the setting must be read-only while seo is off').toBe(false);
+        expect(whileOff.values, 'the stored value must still be shown').toEqual(valuesWhileOn);
+
+        const write = await h.app.inject({
+          method: 'PUT',
+          url: `${SETTING}/value`,
+          cookies: admin,
+          payload: { scope: 'subset', salesChannelCodes: ['default'], value: 'INDEX, FOLLOW' },
+        });
+        expect(write.statusCode).toBe(400);
+        expect((write.json() as { error: { code: string } }).error.code).toBe(
+          'MODULE_SETTING_READ_ONLY',
+        );
+
+        const reset = await h.app.inject({
+          method: 'DELETE',
+          url: `${SETTING}/values?salesChannelCodes=default`,
+          cookies: admin,
+        });
+        expect(reset.statusCode).toBe(400);
+        expect((reset.json() as { error: { code: string } }).error.code).toBe(
+          'MODULE_SETTING_READ_ONLY',
+        );
+
+        expect((await detail()).values, 'a refused write must change nothing').toEqual(
+          valuesWhileOn,
+        );
+      });
+
+      const back = await policy();
+      expect(back.statusCode).toBe(200);
+      expect(back.json(), 'the stored value must be served again, unchanged').toEqual({
+        data: { index: false, follow: false },
+      });
+      expect((await detail()).editable).toBe(true);
+    } finally {
+      await h.app.inject({
+        method: 'DELETE',
+        url: `${SETTING}/values?salesChannelCodes=default`,
+        cookies: admin,
+      });
+    }
+  });
 });

@@ -34,13 +34,17 @@ import { withModuleOff, type OffStateAxis } from '../../helpers/off-state.js';
  * `megamenu` and `returns` already declared theirs, so what the drain adds for
  * them is the proof that it goes when the module does.
  *
- * `seo` and `taxes` declare **none**, and that is asserted rather than skipped:
- * a module with no action has nothing to advertise, so the honest test is that
- * the registry answers nothing for it in both states — which also fails if
- * somebody adds one without adding it to this table. Both are Principle XVI
- * entries the register still owes; neither is this batch's to pay, because
- * inventing a landing action for a screen is a product decision and not a file
- * move.
+ * `taxes` declares **none**, and that is asserted rather than skipped: a module
+ * with no action has nothing to advertise, so the honest test is that the
+ * registry answers nothing for it in both states — which also fails if somebody
+ * adds one without adding it to this table. It is a Principle XVI entry the
+ * register still owes and not this batch's to pay, because inventing a landing
+ * action for a screen is a product decision and not a file move.
+ *
+ * `seo` stood beside it until `specs/144-seo-search-engine-robots/` made that
+ * product decision: it now declares the landing action for its own screen and
+ * one that opens the settings its robots configuration lives in (FR-009), and
+ * both go when the module does.
  *
  * ## The axis is chosen from the manifest, not guessed
  *
@@ -59,7 +63,7 @@ interface Subject {
 }
 
 const SUBJECTS: readonly Subject[] = [
-  { module: 'seo', actions: [], axis: 'deactivated' },
+  { module: 'seo', actions: ['open-search-engine-robots', 'open-seo'], axis: 'deactivated' },
   // Locked: `activation.nonDeactivatable`, asserted below in the manifest's
   // own words rather than restated here.
   { module: 'taxes', actions: [], axis: 'platform-unavailable' },
