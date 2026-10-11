@@ -423,67 +423,77 @@ handler that can answer `503`, and may add a lifecycle edge to `seo`.
 
 ### Contract
 
-- [ ] T054 [US2] RED — `composeCrawlerFile(base, extra)`: empty and whitespace-only `extra`
+- [x] T054 [US2] RED — `composeCrawlerFile(base, extra)`: empty and whitespace-only `extra`
   return `base` byte for byte; otherwise one trailing line break on `base`, one blank line,
   `extra` untouched, one trailing line break; CRLF in `extra` is preserved; and
   `storefrontCrawlerFilesSchema` / its response schema — extend `packages/contracts/src/seo.test.ts`.
   **Test:** `pnpm --filter @endora-commerce/contracts exec vitest run src/seo.test.ts`
-- [ ] T055 [US2] Implement both in `packages/contracts/src/seo.ts` per
+  *Deviation: `CRLF` in `extra` is **not** preserved. Every line break (`LF`, `CRLF`, a lone `CR`) is served as `LF`, and trailing line breaks become exactly one — the definition of "verbatim" stated at `composeCrawlerFile` and in `contracts/crawler-policy.md` §4. A browser's text field sends `LF` and the settings API stores what it is sent, so otherwise one file could carry two conventions. The response schemas tolerate unknown members, as slice 1's do.*
+- [x] T055 [US2] Implement both in `packages/contracts/src/seo.ts` per
   `contracts/crawler-policy.md` §2 and §4. **Test:** T054, then build the package.
+  *Also exports `CRAWLER_TEXT_MAX_BYTES` (65 536) and `ERROR_CODES.SEO_CRAWLER_TEXT_TOO_LARGE`. The schema bounds each text at that many **characters** — the looser test, and one a consumer can make without encoding the text.*
 
 ### Backend — `seo`
 
-- [ ] T056 [P] [US2] RED — the validator accepts 65 536 bytes of UTF-8 and refuses 65 537
+- [x] T056 [P] [US2] RED — the validator accepts 65 536 bytes of UTF-8 and refuses 65 537
   (measure bytes, not characters: include a multi-byte case), answering `400` with
   `SEO_CRAWLER_TEXT_TOO_LARGE` and a message naming the limit; it answers for exactly
   `seo.robots_txt_custom` (and `seo.llms_txt_additional` once declared) —
   `packages/modules/seo/src/backend/services/crawler-text-validator.test.ts` (new).
   **Test:** `pnpm --filter @endora-commerce/mod-seo exec vitest run src/backend/services/crawler-text-validator.test.ts`
-- [ ] T057 [US2] RED — contract test for `GET /api/v1/storefront/seo/crawler-files`: schema,
+  *Deviation: the validator measures `proposedValue`, a member added to `SettingWriteValidationInput` in this slice (`packages/contracts/src/settings.ts`; `settings-admin.service.ts` supplies it; `backend/test/integration/settings/write-validators.test.ts` holds it). The channel projection the plan assumed is not enough: an all-channels write reaches no channel that has a row of its own, so on an instance where every channel has one — any single-channel instance whose operator once saved "for this channel" — the proposed text is in no channel's projection and a text of any size was stored unmeasured.*
+- [x] T057 [US2] RED — contract test for `GET /api/v1/storefront/seo/crawler-files`: schema,
   `no-store`, text returned exactly as stored including line breaks —
   `backend/test/contract/seo/crawler-files.contract.test.ts` (new).
   **Test:** `pnpm --filter backend exec vitest run test/contract/seo/crawler-files.contract.test.ts`
-- [ ] T058 [US2] RED — **channel isolation**: channel A's custom text is returned for A and
+  *By analogy with slice 1: a stored value that cannot be served — a robots token outside the four, a text over the limit, a text that is not a string — is a `500`, never an empty text at `200`.*
+- [x] T058 [US2] RED — **channel isolation**: channel A's custom text is returned for A and
   **never** for B or for a request naming no channel; A inherits the all-channels text when it
   has none of its own; resetting A restores inheritance; an over-limit write is refused and the
   previous value stays — `backend/test/integration/seo/crawler-files-channel-scope.test.ts` (new).
   **Test:** `pnpm --filter backend exec vitest run test/integration/seo/crawler-files-channel-scope.test.ts`
-- [ ] T059 [US4] RED — **off state**: extend `backend/test/integration/seo/off-state.test.ts`:
+  *Adds the case the T056 deviation exists for: an over-limit all-channels write while every channel has its own value.*
+- [x] T059 [US4] RED — **off state**: extend `backend/test/integration/seo/off-state.test.ts`:
   the `crawler-files` route answers `503` `MODULE_DISABLED`, `seo.robots_txt_custom` is
   `editable: false`, the stored text survives and is served again after reactivation.
   **Test:** `pnpm --filter backend exec vitest run test/integration/seo/off-state.test.ts`
-- [ ] T060 [US2] Declare `seo.robots_txt_custom` (`multiline: true`, default `''`) in
+- [x] T060 [US2] Declare `seo.robots_txt_custom` (`multiline: true`, default `''`) in
   `packages/modules/seo/src/manifest.ts`; add its `settingLabels.*` keys to both bundles; extend
   `packages/modules/seo/src/backend/manifest.test.ts`. **Test:**
   `pnpm --filter @endora-commerce/mod-seo exec vitest run src/backend/manifest.test.ts`
-- [ ] T061 [US2] `packages/modules/seo/src/backend/services/crawler-files.service.ts` (new) and
+  *The manifest also declares `errorCodes: [{ code: 'SEO_CRAWLER_TEXT_TOO_LARGE' }]` (T062).*
+- [x] T061 [US2] `packages/modules/seo/src/backend/services/crawler-files.service.ts` (new) and
   the route in `packages/modules/seo/src/backend/routes.ts`. `shop.name` is read through the
   settings read port (find the code in `packages/modules/settings/src/backend/services/shop-info-resolver.ts`;
   do not call that module's route or import its resolver). **Test:** T057, T058, T059.
-- [ ] T062 [US2] `packages/modules/seo/src/backend/services/crawler-text-validator.ts` (new);
+  *A function, `resolveCrawlerFiles(settings, salesChannelId)`, rather than a class — it holds no state. `llmsTxtAdditional` is the constant `''` until slice 5 declares its setting. `shop.name` degrades to `''`; every other unreadable value throws.*
+- [x] T062 [US2] `packages/modules/seo/src/backend/services/crawler-text-validator.ts` (new);
   register it from a **contribution** `ctx.onBoot` hook in
   `packages/modules/seo/src/backend/index.ts`, resolving `settingWriteValidatorRegistry` with
   `lazyPort`, exactly as `packages/modules/invoices/src/backend/index.ts` does (~line 443). The
   hook must **not** probe presence. Register the error code and its `en` / `pl` sentences the way
   the `settings` manifest registers `SETTING_VALUE_SHAPE_MISMATCH`. **Test:** T056, T058, and
   `pnpm --filter backend run check:error-translations`
-- [ ] T063 [US2] Run `pnpm --filter backend run check:port-dependencies` and
+  *The code is a member of `ERROR_CODES` (`check:error-translations` P3 requires it for a module in this repository) and carries a `MINTED_ERROR_CODES` entry and a roster line in `backend/test/unit/_i18n/error-code-migration-progress.test.ts`.*
+- [x] T063 [US2] Run `pnpm --filter backend run check:port-dependencies` and
   `pnpm --filter backend run check:entry-presence`. *Expected*: the first asks for `'settings'`
   in `seo`'s manifest `dependencies` (as `invoices` declares it) — add it, with a one-line reason
   comment; the second asks for a `BOOT_HOOKS_WITHOUT_PRESENCE` entry for the contribution hook —
   add it with the reason "contributes an inert validator; the registry filters by contributor".
   If either asks for anything else, stop and report. **Test:** both checks green.
+  *Premise wrong on both counts — neither check asks for anything, so **neither change was made**. `check:port-dependencies` lists `seo → settingWriteValidatorRegistry [settings]` and reports no violation: the rule is the **transitive** `dependencies` closure, and `settings` is already in `seo`'s through `auth`/`catalog`/`cms`. `check:entry-presence` does not see the hook (it awaits nothing; `invoices`' identical hook is not ledgered either), and `BOOT_HOOKS_WITHOUT_PRESENCE` is two-way, so an entry would be stale. No new lifecycle edge: what an operator can switch off is unchanged.*
 
 ### Storefront
 
-- [ ] T064 [P] [US2] RED — fixture equivalence (FR-011, FR-019): the text rendered from the
+- [x] T064 [P] [US2] RED — fixture equivalence (FR-011, FR-019): the text rendered from the
   moved rules equals, line for line, the text Next produced from `MetadataRoute.Robots` before
   this change. Capture the fixture **before** deleting anything:
   `curl -s localhost:3000/robots.txt > storefront/test/seo/__fixtures__/robots-before.txt` on a
   storefront built from `origin/master` with `NEXT_PUBLIC_SITE_URL=http://localhost:3000` —
   `storefront/test/seo/robots-system-rules.test.ts` (new).
   **Test:** `pnpm --filter storefront exec vitest run test/seo/robots-system-rules.test.ts`
-- [ ] T065 [P] [US2] RED — the handler: no custom text → the fixture, `200`, `text/plain;
+  *The fixture was captured with `curl` from a storefront built from `origin/master` (`333ac74d6`) and is byte-identical to that build's prerendered `.next/server/app/robots.txt.body`.*
+- [x] T065 [P] [US2] RED — the handler: no custom text → the fixture, `200`, `text/plain;
   charset=utf-8`, `Cache-Control: public, max-age=60`, `X-Endora-Crawler-Files: 1`; custom text →
   `composeCrawlerFile`; `?part=system` → the fixture and **no backend request**; "none" → the
   fixture; unreadable with a last-known value → that version; unreadable without → `503`,
@@ -491,15 +501,19 @@ handler that can answer `503`, and may add a lifecycle edge to `seo`.
   body (FR-015); **channel isolation** — the request's `x-sales-channel` is forwarded and the
   cache is keyed by it — `storefront/test/seo/robots-txt-route.test.ts` (new).
   **Test:** `pnpm --filter storefront exec vitest run test/seo/robots-txt-route.test.ts`
-- [ ] T066 [US2] RED — extend `storefront/test/seo/crawler-policy.test.ts` for the
+  *The decision is `storefront/lib/seo/robots-txt.ts` (`robotsTxtResponse`), tested with the read injected; the route file is tested through `fetch`. A Next route file may export only its handlers and segment options, so the testable half cannot live in it. Two headers beyond the plan: `Vary: X-Sales-Channel` and `X-Content-Type-Options: nosniff`.*
+- [x] T066 [US2] RED — extend `storefront/test/seo/crawler-policy.test.ts` for the
   `crawler-files` read (same classification table as T019).
-- [ ] T067 [US2] `storefront/lib/seo/robots-system-rules.ts` (new): the list moved **unchanged**
+  *Also closes the gap slice 1's reviewer noted: a read in progress for 5 s or more is taken for dead, and its late answer is ignored.*
+- [x] T067 [US2] `storefront/lib/seo/robots-system-rules.ts` (new): the list moved **unchanged**
   out of `storefront/app/robots.ts`, with its comment, plus the renderer. **Test:** T064.
-- [ ] T068 [US2] Extend `storefront/lib/seo/crawler-policy.ts` with the `crawler-files` read.
+- [x] T068 [US2] Extend `storefront/lib/seo/crawler-policy.ts` with the `crawler-files` read.
   **Test:** T066.
-- [ ] T069 [US2] `storefront/app/robots.txt/route.ts` (new, `dynamic = 'force-dynamic'`).
+  *Generalised rather than extended: one `createChannelCache(deps, question)` holds every rule, and the policy and the crawler files are two instances of it with separate entries. Slice 1's tests pass unedited.*
+- [x] T069 [US2] `storefront/app/robots.txt/route.ts` (new, `dynamic = 'force-dynamic'`).
   **Test:** T065.
-- [ ] T070 [US2] **Delete `storefront/app/robots.ts`.** First:
+  *Thin: it calls `robotsTxtResponse` with the process's reader.*
+- [x] T070 [US2] **Delete `storefront/app/robots.ts`.** First:
   `grep -rn "app/robots'\|app/robots\"\|robots\.ts" backend/test backend/scripts storefront packages/cli/src --include='*.ts' --include='*.tsx' --include='*.mjs'`
   and repair every importer. Known: `storefront/test/seo/route-declarations.test.ts`
   (`import robots from '../../app/robots'`) — rewrite its `robots` cases against
@@ -508,19 +522,22 @@ handler that can answer `503`, and may add a lifecycle edge to `seo`.
   `storefront/.env.example` / `deploy/compose.prod.yml`, which say the file is prerendered —
   it no longer is). **Test:** `pnpm --filter storefront exec vitest run test/seo` and
   `pnpm --filter backend exec vitest run test/unit/scripts/check-storefront-indexability.test.ts`
-- [ ] T071 [US2] `storefront/app/reserved-segments.ts`: add `robots.txt` (and correct the
+  *Also `storefront/Dockerfile`, which said the same thing as the two files named. `backend/scripts/check-storefront-indexability.ts` and `check-inventory.test.ts` name `robots.ts` only in a sentence about the tree **before** feature 098 and were left alone. `storefront/test/conformance/robots-directive.spec.ts` now reads `?part=system` for its "never closes the whole site" claim, since the whole file may carry an operator's `Disallow: /`.*
+- [x] T071 [US2] `storefront/app/reserved-segments.ts`: add `robots.txt` (and correct the
   paragraph that explains why it was absent). **Test:**
   `pnpm --filter backend exec vitest run test/contract/cms/admin-reserved-slug-segments.contract.test.ts`
   and `pnpm --filter backend run check:storefront-indexability`
-- [ ] T072 [US2] Served proof (`quickstart.md` § *Slice 3*), including a `diff` of the default
+- [x] T072 [US2] Served proof (`quickstart.md` § *Slice 3*), including a `diff` of the default
   file against the T064 fixture and the `503` case with the backend route blocked and a freshly
   started storefront. Paste into the pull request.
-- [ ] T073 [US2] Docs (`packages/modules/seo/docs/seo.md` and both Polish files): what the file
+  *Recorded in the slice's report rather than a pull request: this branch was not pushed.*
+- [x] T073 [US2] Docs (`packages/modules/seo/docs/seo.md` and both Polish files): what the file
   contains and in what order, reset, the size limit, why a `Disallow: /` defeats `noindex`.
   `composer:generate`. Changeset `minor`, naming for an earlier-scaffolded instance the files to
   copy and the one to **delete**. **Test:** `check:module-docs`, `check:docs-translations`,
   `check:release-intent -- --since origin/master`
-- [ ] T074 [US2] Slice verification: the full Slice 1 list, plus
+  *`@endora-commerce/mod-settings` is in the changeset as well, for `proposedValue` (T056).*
+- [x] T074 [US2] Slice verification: the full Slice 1 list, plus
   `pnpm --filter backend run check:entry-presence`, `pnpm --filter backend run check:port-catches`,
   `pnpm --filter backend run check:port-shape`. Because a file was deleted, `test:unit:fast`
   proves nothing here; run the trees that can import or name it:

@@ -7,6 +7,10 @@ The Zod schemas named here are written in `packages/contracts/src/seo.ts` **befo
 is implemented (Principle II); this document is their prose. Names are final unless a test in the
 owning slice refutes one.
 
+**Brought in line with what shipped on 2026-10-11** (slices 1 and 3). Where the first version of
+this document said something else, the difference is marked *(as shipped)* and the reason is
+beside it; `tasks.md` records each as a deviation on the task that made it.
+
 ## 1. `GET /api/v1/storefront/seo/robots-policy`
 
 Public, unauthenticated, channel-resolved (the request's `X-Sales-Channel`, else the system
@@ -25,7 +29,18 @@ default channel — never "no channel").
 | `NOINDEX, NOFOLLOW` | `false` | `false` |
 
 - Schema: `storefrontRobotsPolicySchema` / `storefrontRobotsPolicyResponseSchema`.
+- **The schemas are strict about the members they name and tolerant of any they do not** *(as
+  shipped)*: `index` and `follow` must be present booleans; an unknown member, in `data` or beside
+  it, is dropped rather than refused. A storefront is deployed apart from its backend and is
+  usually the older of the two, so a strict schema would turn the first additive change into an
+  unreadable answer on every storefront already in the field. Additive changes to this response
+  are therefore non-breaking; removing or retyping a named member is breaking.
 - The stored token never appears on the wire; a consumer branches on two booleans.
+- **`500` when the stored value is not one of the four tokens** *(as shipped)* — never a
+  permissive `200`. The settings API refuses such a value on write, so this takes a row written
+  around it. A `200` saying "no restriction" would be definitive and would make a storefront
+  replace a last-known `noindex`; a `500` is "unreadable" in §3 and the storefront keeps what it
+  knew.
 - `Cache-Control: no-store`. The storefront is the cache (§3); an intermediary holding this
   answer would add to FR-010's bound invisibly.
 - `503` with `error.code: "MODULE_DISABLED"` when `seo` is not effectively present — applied by
@@ -48,14 +63,41 @@ Public, unauthenticated, channel-resolved as §1.
 }
 ```
 
-- Schema: `storefrontCrawlerFilesSchema` / `storefrontCrawlerFilesResponseSchema`.
+- Schema: `storefrontCrawlerFilesSchema` / `storefrontCrawlerFilesResponseSchema`, tolerant of
+  unknown members exactly as §1. All five named members are required.
 - `robotsTxtCustom` and `llmsTxtAdditional` are the values resolved for the channel (its own,
-  else all-channels, else the empty default), each at most 65 536 bytes of UTF-8, returned
-  exactly as stored. Line endings are not normalised by the backend.
+  else all-channels, else the empty default), each at most `CRAWLER_TEXT_MAX_BYTES` = 65 536
+  bytes of UTF-8, returned exactly as stored. Line endings are not normalised by the backend;
+  §4 says what a served file does with them. An empty channel value is a value: it overrides a
+  non-empty all-channels text.
+- `llmsTxtAdditional` is `""` until slice 5 declares its setting; the member is in the contract
+  from the first release that has the endpoint, so a storefront reads one shape.
+- The schema bounds each text at 65 536 **characters**. That is deliberately the looser test —
+  a text within the byte limit never has more characters than that — and it is what a consumer
+  can check without encoding the text.
 - `index` / `follow` repeat §1 so that `llms.txt` (FR-027) needs one read.
-- `shop.name` is the channel's configured shop name, or `""`. It is read through the settings
-  read port, not by calling the `settings` module's `shop-info` route.
+- `shop.name` is the channel's configured shop name, or `""` — also when the setting is not
+  registered or does not hold a string. It is read through the settings read port, not by calling
+  the `settings` module's `shop-info` route.
 - `Cache-Control: no-store`; `503 MODULE_DISABLED` as §1.
+- **`500`, never an empty text at `200`, when a stored value cannot be served** *(as shipped, by
+  analogy with §1)*: a `seo.default_robots` outside the four tokens, a text that is not a string,
+  or a text over the byte limit. Each takes a row written around the settings API. An empty text
+  at `200` would be definitive: the storefront would serve a `robots.txt` without the operator's
+  instructions and call it current.
+
+### 2.1 The size limit, on write
+
+`seo` contributes a `SettingWriteValidator` for `seo.robots_txt_custom` (and for
+`seo.llms_txt_additional` once declared). A text over `CRAWLER_TEXT_MAX_BYTES` is refused with
+`400`, `error.code: "SEO_CRAWLER_TEXT_TOO_LARGE"`, `details: { settingCode, maxBytes,
+actualBytes }` and a sentence, in `en` and `pl`, that names both numbers. The stored value is
+unchanged.
+
+The validator measures **the value being written**, which `SettingWriteValidationInput` carries
+as `proposedValue` *(added in slice 3)*. The channel projection alone is not enough: an
+all-channels write reaches no channel that has a row of its own, so on an instance where every
+channel has one the proposed text is in no channel's projection and would be stored unmeasured.
 
 ## 3. How the storefront reads §1 and §2
 
@@ -67,7 +109,30 @@ handlers (§2).
 | `200` with a valid body | **value** | cached per channel, fresh for 60 s; becomes the last-known value |
 | `503` with `MODULE_DISABLED` | **none, definitively** | cached as "none" for 60 s; replaces any last-known value |
 | `404` | **none, definitively** (a backend without this feature, or without `seo`) | as above |
-| timeout (2 s), transport failure, any other status, a body that fails the schema | **unreadable** | the last-known value for that channel, of any age; if there is none, "unknown" |
+| timeout (2 s), transport failure, any other status (a `500`, a `400` for an unknown channel, a `503` without the module code), a body that fails the guard | **unreadable** | the last-known value for that channel, of any age; if there is none, "unknown" |
+
+*(As shipped.)* The two reads share every rule and no state: each has its own entries, keyed by
+channel, and an answer to one is never an answer to the other.
+
+- **The body is checked by a hand-written guard, not by the Zod schema.** The reader is in the
+  middleware bundle, and the schema cost it 26 kB. `isRobotsPolicyResponse` and
+  `isCrawlerFilesResponse` are held to the contract schemas by a unit test over shared fixtures;
+  the schemas stay the statement of what the answers are.
+- **A stale value is not "refetched, then served".** The request that finds it stale starts the
+  refresh and waits for it for at most **150 ms**; a backend that answers inside that — a healthy
+  one always does — is served fresh on the same request. Otherwise the known value is served and
+  the refresh finishes in the background, replacing the value when it arrives. The budget is the
+  refresh's, not each request's.
+- **Only a process that knows nothing waits for a read** — up to the 2 s timeout, once, after
+  which the back-off spares later requests.
+- **"No channel" is its own key**, distinct from every code a request can carry, a channel
+  literally coded `default` included.
+- **The cache is bounded** at 256 channels per read. What is dropped to make room: an entry that
+  holds nothing first, then one that holds "none", and only then the value read longest ago — so
+  a client inventing channel codes cannot make the process forget a real channel.
+- **A read in progress for 5 s or more is taken for dead** *(slice 3)* — longer than any read
+  can take, so it happens only to a process frozen under a request. The next request starts a
+  new read, and the abandoned one's answer, should it arrive, is ignored.
 
 "Unknown" is what the callers treat differently:
 
@@ -82,6 +147,9 @@ is refetched at most once per 5 s per channel while the backend keeps failing.
 
 ## 4. `GET /robots.txt`
 
+Served by `storefront/app/robots.txt/route.ts` (`dynamic = 'force-dynamic'`); the decision is
+`storefront/lib/seo/robots-txt.ts`. `storefront/app/robots.ts` is deleted.
+
 ```text
 <system-generated rules, exactly as storefront/lib/seo/robots-system-rules.ts renders them>
 <blank line>
@@ -90,10 +158,26 @@ is refetched at most once per 5 s per channel while the backend keeps failing.
 
 - Composition is `composeCrawlerFile(base, extra)` from `@endora-commerce/contracts`:
   - `extra` empty or whitespace-only → `base`, byte for byte (FR-019);
-  - otherwise `base` with exactly one trailing line break, one blank line, then `extra` with its
-    own line breaks untouched and exactly one trailing line break.
+  - otherwise `base` with exactly one trailing line break, one blank line, then `extra` and
+    exactly one trailing line break.
+- **"Verbatim" is defined in that function** *(as shipped; the first version of this document
+  said `extra`'s own line breaks were untouched)*: every character of `extra` is kept, unchanged
+  and in order, except that **every line break — `LF`, `CRLF` or a lone `CR` — is served as
+  `LF`**, and line breaks at the end of the text become exactly one. A browser's text field sends
+  `LF` and the settings API stores what it is sent, so without this one file could carry two
+  conventions and the same text would be served as different bytes depending on which client
+  saved it. Nothing else is trimmed, escaped, validated or reordered.
 - `Content-Type: text/plain; charset=utf-8`. `Cache-Control: public, max-age=60` on `200`.
+- `X-Content-Type-Options: nosniff` and `Vary: X-Sales-Channel` on every answer: the body is an
+  operator's text and one sales channel's.
+- The operator's text reaches the response body and nothing else — the status, every header and
+  the content type are constants.
 - `X-Endora-Crawler-Files: 1` on every answer, including `503`.
+- The `503` (§3, "unknown") carries `Retry-After: 120`, `Cache-Control: no-store` and a one-line
+  plain-text body that is not shaped like a rule.
+- The middleware still handles `/robots.txt` as a non-document path (§6): it adds `X-Robots-Tag`
+  when the channel's policy restricts something, and nothing else. The body is unaffected.
+- `robots.txt` is in `RESERVED_TOP_LEVEL_SEGMENTS` (the route is now a directory under `app/`).
 - **`?part=system`** → the system-generated rules alone, same headers. It is what the Admin UI's
   preview is built from (`admin-surfaces.md` §3) and it never calls the backend, so it answers
   while the backend is down.
