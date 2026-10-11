@@ -1,6 +1,6 @@
 ---
 title: seo
-description: Meta-tag resolver, cached XML sitemap and the default search engine robots setting
+description: Meta-tag resolver, cached XML sitemap and the search engine robots settings
 ---
 
 # `seo`
@@ -14,6 +14,7 @@ a sales channel's storefront as a whole.
 | --- | --- | --- |
 | `GET /api/v1/catalog/sitemap.xml` | crawlers | Cached XML sitemap; falls through to inline regenerate when stale |
 | `GET /api/v1/storefront/seo/robots-policy` | storefront | The request's sales channel's default robots policy, as `{ index, follow }` |
+| `GET /api/v1/storefront/seo/crawler-files` | storefront | What the request's sales channel's `robots.txt` is built from: its custom instructions, with the policy and the shop name |
 | `GET /api/v1/admin/seo/sitemap` | admin (`catalog:write`) | One row per sales channel: storefront address, last-generated timestamp, size, URL count |
 | `POST /api/v1/admin/seo/sitemap/:channelCode/regenerate` | admin (`catalog:write`) | Force a fresh build for that channel |
 | `GET /api/v1/admin/seo/sitemap/:channelCode/status` | admin (`catalog:write`) | Last-generated timestamp + size + URL count for that channel |
@@ -73,6 +74,9 @@ before the setting existed.
 `Disallow: /`. A crawler has to fetch a page to read that it must not be indexed; a page it is
 forbidden to fetch can still be listed, by its address alone, when other sites link to it.
 
+The same holds for what an operator writes into the file — see
+[*Do not use it to leave search results*](#do-not-use-it-to-leave-search-results) below.
+
 ### How long a change takes
 
 The storefront asks the backend for a channel's policy at most once a minute, so a saved change
@@ -92,6 +96,10 @@ becomes indexable again**. The setting turns read-only and keeps its stored valu
 palette entries disappear, and `GET /api/v1/storefront/seo/robots-policy` answers `503`
 `MODULE_DISABLED`. Switching the module back on applies the stored value again.
 
+The custom `robots.txt` instructions are withdrawn with it, on the same terms: `robots.txt`
+goes back to the rules the storefront generates and stays available, the setting turns read-only
+and keeps its text, and the text is served again when the module is switched back on.
+
 ### Two limits
 
 - **Files the backend serves are not covered.** Product images and other uploaded media are
@@ -108,11 +116,12 @@ palette entries disappear, and `GET /api/v1/storefront/seo/robots-policy` answer
 
 ### A storefront scaffolded before this feature
 
-The directive is applied by the storefront's own `middleware.ts` and `app/layout.tsx`. A
-storefront created from an earlier release keeps working with an upgraded backend, but it
-**ignores the setting** until those files are updated: the Settings screen shows the choice and
-nothing in that storefront acts on it. The release notes list the files to copy; they need no
-package upgrade to run.
+The directive is applied by the storefront's own `middleware.ts` and `app/layout.tsx`, and the
+custom instructions by its `app/robots.txt/route.ts`. A storefront created from an earlier
+release keeps working with an upgraded backend, but it **ignores these settings** until those
+files are updated: the Settings screen shows the choice and the text, and nothing in that
+storefront acts on them — its `robots.txt` stays the file it was built with. The release notes
+list the files to copy, and the one to delete.
 
 ### For a custom storefront
 
@@ -132,6 +141,125 @@ is no policy — apply none. Any other failure, including a `500`, means the pol
 read: keep the last one you read. The endpoint answers `500` rather than "no restriction" when
 the stored value is not one of the four choices, which takes a row written around the settings
 API.
+
+## Custom `robots.txt` instructions
+
+**Settings → SEO → Custom robots.txt instructions** is text the storefront adds to the
+`robots.txt` of a sales channel — rules for a particular crawler, an extra `Disallow`, a
+`Crawl-delay`. It is empty by default, and an empty text leaves the file exactly as it was.
+
+### What the file contains, and in what order
+
+1. **The rules the storefront generates.** They close the address families that are never
+   indexed — the cart, the checkout, the account, the sign-in pages, `/api/` — and name the
+   sitemap. They mirror the storefront's own routes; they are not a setting, and nothing on the
+   Settings screen can edit or remove them.
+2. **A blank line.**
+3. **Your text**, as you wrote it.
+
+For example, with `User-agent: GPTBot` and `Disallow: /` saved for a channel:
+
+```text
+User-Agent: *
+Allow: /
+Disallow: /api/
+Disallow: /account
+…
+Disallow: /offline
+
+Sitemap: https://shop.example.com/sitemap.xml
+
+User-agent: GPTBot
+Disallow: /
+```
+
+The text is served **as written**: every character is kept, in order — indentation, blank
+lines, comments. Two things about line breaks are made uniform: every line break is served as a
+line feed, however the text was saved, and the file always ends with exactly one. Nothing in the
+text is checked or corrected; a line a crawler does not understand is served like any other.
+
+Like any setting it takes a value for all sales channels and a value per channel, and a
+channel's own value wins — including an empty one, which gives that channel no custom
+instructions whatever the all-channels text says. One channel's text is never served in another
+channel's file. **Reset** removes the channel's own text, so the channel inherits the
+all-channels text again; resetting that as well leaves the generated rules alone. Changing the
+text takes `settings:write` and is recorded in the audit log.
+
+### The size limit
+
+A text may be at most **64 KiB** (65 536 bytes of UTF-8 — a letter outside ASCII counts as two
+bytes or more). A larger text is refused when it is saved, with a message that names the limit,
+and the text saved before stays in force. Search engines read only the first 500 KiB of a
+`robots.txt`; the limit keeps the whole file far inside that.
+
+### Do not use it to leave search results
+
+`robots.txt` controls what a crawler may **fetch**. It does not control what a search engine
+**lists**. A page that may not be fetched can still appear in results — by its address alone,
+without a description — when other sites link to it.
+
+To take a storefront out of search, set *Default robots* to `NOINDEX`. And do not add
+`Disallow: /` on top of that: a crawler that may not fetch a page never reads the `noindex` on
+it, so the rule that looks like the stronger one switches the working one off. Nothing written
+here can make a page that declares `noindex` indexable; it can only stop crawlers from seeing
+that it does.
+
+### How long a change to the file takes
+
+The storefront asks the backend for a channel's text at most once a minute and lets a crawler
+keep the file for another minute, so a saved change is served within about two minutes. Search
+engines fetch `robots.txt` on their own schedule, usually about once a day.
+
+### When the text cannot be read
+
+A storefront that has read a channel's text once goes on serving that version for as long as
+the backend cannot be reached. A storefront that has not — one started while the backend was
+down — answers `robots.txt` with `503` and `Retry-After: 120` until its first successful read,
+instead of serving the generated rules alone.
+
+That is deliberate, and it differs from what pages do. A `robots.txt` answered with `200` is a
+complete statement of what may be fetched, so a file that silently left out your `Disallow`
+lines would be permission you did not give. A search engine reads a `503` as "ask again later"
+and goes on using the copy it already has. No customer reads this file, so nothing a customer
+sees depends on it.
+
+The first read of a channel after a start is waited for, up to two seconds. While the `seo`
+module is switched off, and against a backend that does not have this feature, the storefront
+serves the generated rules alone with `200` — those are answers, not failures.
+
+### Reading the text from a custom storefront
+
+`GET /api/v1/storefront/seo/crawler-files` is public and resolves the sales channel as
+`robots-policy` does:
+
+```json
+{
+  "data": {
+    "index": true,
+    "follow": true,
+    "robotsTxtCustom": "User-agent: GPTBot\nDisallow: /\n",
+    "llmsTxtAdditional": "",
+    "shop": { "name": "Endora Demo" }
+  }
+}
+```
+
+`robotsTxtCustom` is the text resolved for the channel, exactly as stored — the backend changes
+no character of it, line breaks included. `index` and `follow` repeat the channel's policy,
+`shop.name` is its configured shop name or an empty string, and `llmsTxtAdditional` is always
+empty in this release. The schema is `storefrontCrawlerFilesResponseSchema` in
+`@endora-commerce/contracts`, which also exports `composeCrawlerFile(base, extra)` — the
+function the reference storefront joins its generated rules and the text with — and
+`CRAWLER_TEXT_MAX_BYTES`.
+
+The answer is sent with `Cache-Control: no-store`. Treat the statuses as for `robots-policy`:
+`503` `MODULE_DISABLED` and `404` mean there is no custom text; anything else, a `500` included,
+means it could not be read, and a `robots.txt` should then be the last version you served, or a
+`503` — not a file without the text. The endpoint answers `500` rather than an empty text when a
+stored value cannot be served, which takes a row written around the settings API.
+
+The reference storefront's `robots.txt` also answers `GET /robots.txt?part=system` with its
+generated rules alone, and marks every answer with an `X-Endora-Crawler-Files: 1` header.
 
 ## Meta-tag resolution
 
