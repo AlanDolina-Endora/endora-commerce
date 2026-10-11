@@ -43,14 +43,22 @@ command palette (⌘K / CTRL+K) opens the Settings screen under *Search engine r
 
 ### What the storefront does with it
 
-For a channel whose default restricts something, the storefront adds the directive to **every
-response it serves** for that channel:
+For a channel whose default restricts something, the storefront adds the directive to the
+responses it serves for that channel, in two forms:
 
-- an `X-Robots-Tag` response header — on pages, on `/sitemap.xml`, on optimised images
-  (`/_next/image`) and on the files under `public/`;
-- one extra `<meta name="robots">` element in the `<head>` of every page.
+- an `X-Robots-Tag` response header — on every page, including not-found (`404`) pages and the
+  offline page, on `/sitemap.xml`, on optimised images (`/_next/image`) and on the files under
+  `public/`;
+- one extra `<meta name="robots">` element in the `<head>` of the pages the shop renders for a
+  request.
 
-Only the build's own script and style files under `/_next/static` are left alone.
+Three kinds of response are outside it, and none of them is something a search engine indexes:
+
+- the build's own script and style files under `/_next/static` carry neither;
+- a redirect declared in the storefront's `next.config.js` (such as the old `/cms/…` addresses)
+  carries neither — it is answered before the storefront's middleware runs;
+- not-found (`404`) pages and the statically built `/offline` page carry the header but not the
+  extra element. Both already declare `noindex, nofollow` for themselves.
 
 **It only adds restrictions.** A page that declares `noindex` for itself — the cart, the
 checkout, the account pages — keeps its own tag whatever is chosen here, and such a page then
@@ -72,6 +80,10 @@ is in force on the storefront within a minute or two. Search engines apply it wh
 visit each page, which takes days or weeks; a page already in the index leaves it only after it
 has been crawled again.
 
+Reading the policy does not slow the shop down when the backend is slow. A storefront that
+already knows a channel's policy gives a refresh a fraction of a second and otherwise goes on
+serving what it knows, letting the refresh finish in the background.
+
 ### When the module is switched off
 
 Switching `seo` off on the platform modules screen withdraws the default: the storefront stops
@@ -90,14 +102,17 @@ palette entries disappear, and `GET /api/v1/storefront/seo/robots-policy` answer
   read in the memory of its own process and goes on applying it while the backend cannot be
   reached. A storefront that starts while the backend is unreachable has nothing to apply, and
   serves that channel's pages without the default directive until its first successful read.
-  No page is ever answered with an error because the policy could not be read.
+  It is also the one moment a response waits for the policy: the first read of a channel after
+  a start is waited for, up to two seconds, once. No page is ever answered with an error because
+  the policy could not be read.
 
 ### A storefront scaffolded before this feature
 
 The directive is applied by the storefront's own `middleware.ts` and `app/layout.tsx`. A
 storefront created from an earlier release keeps working with an upgraded backend, but it
 **ignores the setting** until those files are updated: the Settings screen shows the choice and
-nothing in that storefront acts on it. The release notes list the files to copy.
+nothing in that storefront acts on it. The release notes list the files to copy; they need no
+package upgrade to run.
 
 ### For a custom storefront
 
@@ -109,7 +124,14 @@ request's `X-Sales-Channel` header, or the system-default channel when there is 
 ```
 
 The answer is sent with `Cache-Control: no-store`; the consumer is expected to cache it. The
-schema is `storefrontRobotsPolicyResponseSchema` in `@endora-commerce/contracts`.
+schema is `storefrontRobotsPolicyResponseSchema` in `@endora-commerce/contracts`; a consumer
+should ignore members it does not know, so that a later release can add one.
+
+Treat the statuses differently. `503` with `error.code: "MODULE_DISABLED"` and `404` mean there
+is no policy — apply none. Any other failure, including a `500`, means the policy could not be
+read: keep the last one you read. The endpoint answers `500` rather than "no restriction" when
+the stored value is not one of the four choices, which takes a row written around the settings
+API.
 
 ## Meta-tag resolution
 

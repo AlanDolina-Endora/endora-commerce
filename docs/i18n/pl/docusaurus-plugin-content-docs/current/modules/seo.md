@@ -45,14 +45,23 @@ kiedy i jaką wartość zapisał. Paleta poleceń (⌘K / CTRL+K) otwiera ekran 
 
 ### Co robi z tym sklep
 
-Dla kanału, którego ustawienie coś ogranicza, sklep dodaje dyrektywę do **każdej odpowiedzi**
-wysyłanej dla tego kanału:
+Dla kanału, którego ustawienie coś ogranicza, sklep dodaje dyrektywę do odpowiedzi wysyłanych
+dla tego kanału, w dwóch postaciach:
 
-- nagłówek odpowiedzi `X-Robots-Tag` — na stronach, w `/sitemap.xml`, na zoptymalizowanych
-  obrazach (`/_next/image`) i na plikach z katalogu `public/`;
-- jeden dodatkowy element `<meta name="robots">` w sekcji `<head>` każdej strony.
+- nagłówek odpowiedzi `X-Robots-Tag` — na każdej stronie, także na stronach „nie znaleziono"
+  (`404`) i na stronie offline, w `/sitemap.xml`, na zoptymalizowanych obrazach (`/_next/image`)
+  i na plikach z katalogu `public/`;
+- jeden dodatkowy element `<meta name="robots">` w sekcji `<head>` stron, które sklep renderuje
+  dla żądania.
 
-Pominięte są wyłącznie pliki skryptów i stylów samego builda w `/_next/static`.
+Trzy rodzaje odpowiedzi są poza tym zakresem i żadnego z nich wyszukiwarka nie indeksuje:
+
+- pliki skryptów i stylów samego builda w `/_next/static` nie mają ani nagłówka, ani elementu;
+- przekierowanie zadeklarowane w pliku `next.config.js` sklepu (na przykład dawne adresy
+  `/cms/…`) nie ma ani jednego, ani drugiego — odpowiedź powstaje, zanim uruchomi się
+  middleware sklepu;
+- strony „nie znaleziono" (`404`) i statycznie zbudowana strona `/offline` mają nagłówek, ale
+  nie mają dodatkowego elementu. Obie same deklarują `noindex, nofollow`.
 
 **Ustawienie wyłącznie dodaje ograniczenia.** Strona, która sama deklaruje `noindex` — koszyk,
 kasa, strony konta — zachowuje własny tag niezależnie od wyboru, a wtedy ma dwa tagi robots.
@@ -75,6 +84,10 @@ w sklepie w ciągu minuty lub dwóch. Wyszukiwarki uwzględniają ją przy kolej
 stronie, co trwa dni lub tygodnie; strona, która jest już w indeksie, znika z niego dopiero po
 ponownym odwiedzeniu przez robota.
 
+Odczyt polityki nie spowalnia sklepu, gdy backend odpowiada wolno. Sklep, który zna już politykę
+kanału, daje odświeżeniu ułamek sekundy, a potem dalej serwuje to, co zna, i pozwala odświeżeniu
+dokończyć się w tle.
+
 ### Gdy moduł jest wyłączony
 
 Wyłączenie modułu `seo` na ekranie modułów platformy wycofuje ustawienie: sklep w ciągu minuty
@@ -93,15 +106,18 @@ wartości.
 - **Świeżo uruchomiony sklep jeszcze nic nie wie.** Sklep przechowuje ostatnio odczytaną
   politykę w pamięci własnego procesu i stosuje ją dalej, gdy backend jest niedostępny. Sklep
   uruchomiony w czasie, gdy backend jest niedostępny, nie ma czego zastosować i do pierwszego
-  udanego odczytu serwuje strony tego kanału bez domyślnej dyrektywy. Żadna strona nigdy nie
-  kończy się błędem dlatego, że nie udało się odczytać polityki.
+  udanego odczytu serwuje strony tego kanału bez domyślnej dyrektywy. To także jedyny moment,
+  w którym odpowiedź czeka na politykę: na pierwszy odczyt kanału po uruchomieniu sklep czeka
+  do dwóch sekund, jeden raz. Żadna strona nigdy nie kończy się błędem dlatego, że nie udało się
+  odczytać polityki.
 
 ### Sklep utworzony przed tą funkcją
 
 Dyrektywę nakładają pliki samego sklepu: `middleware.ts` i `app/layout.tsx`. Sklep utworzony
 z wcześniejszego wydania działa dalej ze zaktualizowanym backendem, ale **ignoruje to
 ustawienie**, dopóki te pliki nie zostaną zaktualizowane: ekran Ustawień pokazuje wybór, a nic
-w takim sklepie go nie stosuje. Lista plików do skopiowania jest w informacjach o wydaniu.
+w takim sklepie go nie stosuje. Lista plików do skopiowania jest w informacjach o wydaniu; do
+działania nie wymagają one aktualizacji żadnego pakietu.
 
 ### Dla własnego sklepu
 
@@ -113,7 +129,14 @@ nagłówka `X-Sales-Channel` żądania, a gdy go brak — przyjmuje domyślny ka
 ```
 
 Odpowiedź jest wysyłana z `Cache-Control: no-store`; zakłada się, że buforuje ją odbiorca.
-Schemat to `storefrontRobotsPolicyResponseSchema` w `@endora-commerce/contracts`.
+Schemat to `storefrontRobotsPolicyResponseSchema` w `@endora-commerce/contracts`; odbiorca
+powinien ignorować pola, których nie zna, aby kolejne wydanie mogło dodać nowe.
+
+Statusy należy traktować różnie. `503` z `error.code: "MODULE_DISABLED"` oraz `404` oznaczają,
+że polityki nie ma — nie należy stosować żadnej. Każdy inny błąd, także `500`, oznacza, że
+polityki nie udało się odczytać: należy zachować ostatnio odczytaną. Punkt końcowy odpowiada
+`500`, a nie „brak ograniczeń", gdy zapisana wartość nie jest jedną z czterech opcji — do czego
+trzeba wiersza zapisanego z pominięciem API ustawień.
 
 ## Wyznaczanie meta tagów
 
