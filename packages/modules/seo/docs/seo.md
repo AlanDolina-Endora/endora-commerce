@@ -176,8 +176,19 @@ Disallow: /
 
 The text is served **as written**: every character is kept, in order — indentation, blank
 lines, comments. Two things about line breaks are made uniform: every line break is served as a
-line feed, however the text was saved, and the file always ends with exactly one. Nothing in the
-text is checked or corrected; a line a crawler does not understand is served like any other.
+line feed, however the text was saved, and the file always ends with exactly one. And one
+invisible character is left out: a byte order mark at the very start of the text, which some
+editors add when a file is saved — a crawler would not recognise the line it is attached to.
+Nothing in the text is checked or corrected; a line a crawler does not understand is served like
+any other.
+
+**A group you write for one crawler replaces the generated rules for that crawler.** A crawler
+follows the group that names it and ignores the `*` group when one does, so after
+`User-agent: GPTBot` and your own rules, GPTBot no longer sees the generated `Disallow` lines.
+Repeat them in that group if you still want them to apply to it. The generated lines themselves
+cannot be changed, but an `Allow` of the same length as a generated `Disallow` wins over it.
+Whether a page can be indexed does not depend on any of this: the pages those rules close say
+`noindex` themselves.
 
 Like any setting it takes a value for all sales channels and a value per channel, and a
 channel's own value wins — including an empty one, which gives that channel no custom
@@ -205,6 +216,20 @@ it, so the rule that looks like the stronger one switches the working one off. N
 here can make a page that declares `noindex` indexable; it can only stop crawlers from seeing
 that it does.
 
+### Behind a proxy or a CDN
+
+The file is different for each sales channel, and the storefront learns the channel from the
+`X-Sales-Channel` request header. It sends the file with `Cache-Control: public, max-age=60` and
+`Vary: X-Sales-Channel`. Two things follow for what stands in front of a storefront that serves
+more than one channel:
+
+- the reverse proxy must set `X-Sales-Channel` itself, per host, and must not pass through a
+  value a visitor sent — otherwise a visitor chooses whose file they are shown;
+- a shared cache that ignores `Vary` on such a header must include the header in its cache key,
+  or not cache `/robots.txt` at all — otherwise one channel's file is served for another.
+
+A storefront that serves a single channel needs neither; its proxy can remove the header.
+
 ### How long a change to the file takes
 
 The storefront asks the backend for a channel's text at most once a minute and lets a crawler
@@ -224,9 +249,13 @@ lines would be permission you did not give. A search engine reads a `503` as "as
 and goes on using the copy it already has. No customer reads this file, so nothing a customer
 sees depends on it.
 
-The first read of a channel after a start is waited for, up to two seconds. While the `seo`
-module is switched off, and against a backend that does not have this feature, the storefront
-serves the generated rules alone with `200` — those are answers, not failures.
+The first read of a channel after a start is waited for, up to two seconds — and a request
+for `robots.txt` makes two such reads one after the other, the channel's default robots policy
+and then its text, so against a backend that accepts connections and does not answer the first
+request can take four to five seconds. The storefront then does not ask again for five seconds and
+answers at once. While the `seo` module is switched off, and against a backend that does not
+have this feature, the storefront serves the generated rules alone with `200` — those are
+answers, not failures.
 
 ### Reading the text from a custom storefront
 
@@ -260,7 +289,9 @@ means it could not be read, and a `robots.txt` should then be the last version y
 stored value cannot be served, which takes a row written around the settings API.
 
 The reference storefront's `robots.txt` also answers `GET /robots.txt?part=system` with its
-generated rules alone, and marks every answer with an `X-Endora-Crawler-Files: 1` header.
+generated rules alone — sent with `Cache-Control: no-store`, because it is the file without the
+operator's text at an address a cache could mistake for the real one — and marks every answer
+with an `X-Endora-Crawler-Files: 1` header.
 
 ## Meta-tag resolution
 

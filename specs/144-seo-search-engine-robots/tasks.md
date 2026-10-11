@@ -429,6 +429,7 @@ handler that can answer `503`, and may add a lifecycle edge to `seo`.
   `storefrontCrawlerFilesSchema` / its response schema — extend `packages/contracts/src/seo.test.ts`.
   **Test:** `pnpm --filter @endora-commerce/contracts exec vitest run src/seo.test.ts`
   *Deviation: `CRLF` in `extra` is **not** preserved. Every line break (`LF`, `CRLF`, a lone `CR`) is served as `LF`, and trailing line breaks become exactly one — the definition of "verbatim" stated at `composeCrawlerFile` and in `contracts/crawler-policy.md` §4. A browser's text field sends `LF` and the settings API stores what it is sent, so otherwise one file could carry two conventions. The response schemas tolerate unknown members, as slice 1's do.*
+  *After review: one byte order mark at the very start of `extra` is not served either (a third exception to "verbatim"), and the trailing line breaks are trimmed by a linear loop — `/\n+$/` took 4.5 s on 64 KiB of line breaks not at the end, on a function the storefront runs per request.*
 - [x] T055 [US2] Implement both in `packages/contracts/src/seo.ts` per
   `contracts/crawler-policy.md` §2 and §4. **Test:** T054, then build the package.
   *Also exports `CRAWLER_TEXT_MAX_BYTES` (65 536) and `ERROR_CODES.SEO_CRAWLER_TEXT_TOO_LARGE`. The schema bounds each text at that many **characters** — the looser test, and one a consumer can make without encoding the text.*
@@ -502,6 +503,7 @@ handler that can answer `503`, and may add a lifecycle edge to `seo`.
   cache is keyed by it — `storefront/test/seo/robots-txt-route.test.ts` (new).
   **Test:** `pnpm --filter storefront exec vitest run test/seo/robots-txt-route.test.ts`
   *The decision is `storefront/lib/seo/robots-txt.ts` (`robotsTxtResponse`), tested with the read injected; the route file is tested through `fetch`. A Next route file may export only its handlers and segment options, so the testable half cannot live in it. Two headers beyond the plan: `Vary: X-Sales-Channel` and `X-Content-Type-Options: nosniff`.*
+  *After review: `?part=system` is sent `Cache-Control: no-store`, not the file's `public, max-age=60`; and the handler keeps the composed file per configuration object.*
 - [x] T066 [US2] RED — extend `storefront/test/seo/crawler-policy.test.ts` for the
   `crawler-files` read (same classification table as T019).
   *Also closes the gap slice 1's reviewer noted: a read in progress for 5 s or more is taken for dead, and its late answer is ignored.*
@@ -510,6 +512,7 @@ handler that can answer `503`, and may add a lifecycle edge to `seo`.
 - [x] T068 [US2] Extend `storefront/lib/seo/crawler-policy.ts` with the `crawler-files` read.
   **Test:** T066.
   *Generalised rather than extended: one `createChannelCache(deps, question)` holds every rule, and the policy and the crawler files are two instances of it with separate entries. Slice 1's tests pass unedited.*
+  *After review: a completed read refreshes its entry's place in the cache only if the entry still holds it — slice 1's unconditional re-insert let many codes asked for at once grow the cache past its bound and let an evicted read's late answer replace a newer one.*
 - [x] T069 [US2] `storefront/app/robots.txt/route.ts` (new, `dynamic = 'force-dynamic'`).
   **Test:** T065.
   *Thin: it calls `robotsTxtResponse` with the process's reader.*
@@ -645,6 +648,19 @@ else.
 and withdraws it on a non-indexable channel. **Independent test**: `quickstart.md` § *Slice 5*.
 **Depends on**: slice 3; T091 – T092 need slice 4. **Second-agent review: no** — it reuses the
 reader, the handler shape and the preview already reviewed, and adds no new seam.
+
+> **To decide in this slice, before T093 — the `index`/`follow` coupling in `crawler-files`.**
+> The endpoint repeats the channel's robots policy so that `llms.txt` needs one read
+> (`contracts/crawler-policy.md` §2). As shipped in slice 3 that makes the whole answer depend on
+> `seo.default_robots` being readable: a stored token outside the four choices makes the endpoint
+> answer `500`, so a storefront that knows nothing answers that channel's **`robots.txt`** `503`
+> — although `robots.txt` reads neither member and FR-015 says the policy has no path to it. It
+> takes a row written around the settings API, and it fails closed, so slice 3 kept it. Slice 5 is
+> where the two members are first *used*; decide here between (a) keeping them and the coupling,
+> (b) answering them as `null`/absent when the token is unreadable, so that only `llms.txt` — which
+> needs them — treats the answer as unreadable, or (c) dropping them and having `llms.txt` read
+> `robots-policy` as well. (b) and (c) are additive or subtractive changes to a tolerant schema;
+> say which in the changeset.
 
 - [ ] T091 [US3] [OD5] RED — the `llms` rows of the preview state table (`not-served`; the
   "no llms.txt is served for this channel" view when `!policy.index`) — extend

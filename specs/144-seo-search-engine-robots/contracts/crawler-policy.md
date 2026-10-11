@@ -133,6 +133,11 @@ channel, and an answer to one is never an answer to the other.
 - **A read in progress for 5 s or more is taken for dead** *(slice 3)* — longer than any read
   can take, so it happens only to a process frozen under a request. The next request starts a
   new read, and the abandoned one's answer, should it arrive, is ignored.
+- **A read whose entry was evicted while it ran tells its callers and is not kept** *(slice 3,
+  after review; the defect was slice 1's)*. An entry holding nothing is the first to be evicted,
+  so many distinct codes asked for at once each lost their entry before their answer arrived —
+  and each then put it back, growing the cache past its bound and letting a late answer replace a
+  newer one. A completed read now refreshes its entry's place only if the entry still holds it.
 
 "Unknown" is what the callers treat differently:
 
@@ -166,10 +171,21 @@ Served by `storefront/app/robots.txt/route.ts` (`dynamic = 'force-dynamic'`); th
   `LF`**, and line breaks at the end of the text become exactly one. A browser's text field sends
   `LF` and the settings API stores what it is sent, so without this one file could carry two
   conventions and the same text would be served as different bytes depending on which client
-  saved it. Nothing else is trimmed, escaped, validated or reordered.
+  saved it. **And exactly one byte order mark (`U+FEFF`) at the very start of `extra` is not
+  served** *(after review)*: a crawler does not recognise `\uFEFFUser-agent: …` as the start of a
+  group, so the rules under it would attach to the generated `*` group. Nothing else is trimmed,
+  escaped, validated or reordered.
+- **"The system rules cannot be edited" is true of the bytes, not of their effect.** Under RFC
+  9309 a group that names a crawler replaces the `*` group for that crawler, and an `Allow` as
+  long as a `Disallow` wins. The setting's description and the module page say so and tell the
+  operator to repeat the generated rules in a crawler-specific group. FR-023 is unaffected:
+  whether a page is indexable never depended on this file.
 - `Content-Type: text/plain; charset=utf-8`. `Cache-Control: public, max-age=60` on `200`.
 - `X-Content-Type-Options: nosniff` and `Vary: X-Sales-Channel` on every answer: the body is an
-  operator's text and one sales channel's.
+  operator's text and one sales channel's. `Vary` is only as good as what stands in front of the
+  storefront: a proxy serving several channels must set `X-Sales-Channel` itself rather than pass
+  a client's through, and a shared cache that ignores `Vary` on a custom header must key on it or
+  not cache the file. The module page says so; `deploy/nginx.example.conf` shows the lines.
 - The operator's text reaches the response body and nothing else — the status, every header and
   the content type are constants.
 - `X-Endora-Crawler-Files: 1` on every answer, including `503`.
@@ -178,9 +194,30 @@ Served by `storefront/app/robots.txt/route.ts` (`dynamic = 'force-dynamic'`); th
 - The middleware still handles `/robots.txt` as a non-document path (§6): it adds `X-Robots-Tag`
   when the channel's policy restricts something, and nothing else. The body is unaffected.
 - `robots.txt` is in `RESERVED_TOP_LEVEL_SEGMENTS` (the route is now a directory under `app/`).
-- **`?part=system`** → the system-generated rules alone, same headers. It is what the Admin UI's
-  preview is built from (`admin-surfaces.md` §3) and it never calls the backend, so it answers
-  while the backend is down.
+- **`?part=system`** → the system-generated rules alone, with the same headers except
+  **`Cache-Control: no-store`** *(as shipped after review)*: it is the file without the operator's
+  text at an address that differs from the real one by a query string only, and a cache set up to
+  ignore query strings would store it as `/robots.txt`. It is what the Admin UI's preview is built
+  from (`admin-surfaces.md` §3).
+  - **The route handler asks the backend nothing for it**, so the handler answers while the
+    backend is down. *The request as a whole is not independent of the backend*: the middleware in
+    front of the route (§6) still reads the channel's policy for the response header, and on a
+    process that knows nothing it waits for that read — up to the 2 s timeout when the backend
+    accepts the connection and does not answer, then nothing inside the 5 s back-off.
+- **Cold-path cost, measured** *(review, 2026-10-11)*: a first `/robots.txt` on a fresh process
+  against a backend whose endpoints hang takes **4 to 5 s** (about 4 s in the review; 5.1 s as
+  the very first request of a just-started process) — the middleware's policy read, then the
+  route's crawler-files read, each to its 2 s timeout, in sequence — and the next request inside
+  the back-off 7 to 19 ms. A cold `?part=system` under the same conditions takes 2.0 s, the
+  middleware's read alone. The two reads cannot be run concurrently as built: they are made
+  by two runtimes (the middleware's and the route's), each with its own copy of the reader, and
+  the middleware has finished before the route starts. Skipping the middleware's read is not
+  acceptable, because the header is owed on this file too (FR-014). Left as it is; the cost is
+  bounded, paid once per channel per process, and only while the backend is not answering.
+- **Composition is linear in the text, and kept.** `composeCrawlerFile` does no backtracking (a
+  `/\n+$/` trim took 4.5 s on 64 KiB of line breaks that were not at the end), and the handler
+  keeps the composed file per configuration object, so a hot `/robots.txt` composes once per
+  refresh.
 - The rendered system rules are equivalent to what `MetadataRoute.Robots` produced before this
   feature: the same `User-agent`, `Allow`, `Disallow` lines in the same order and the same
   `Sitemap:` line. A fixture test holds the two to each other.

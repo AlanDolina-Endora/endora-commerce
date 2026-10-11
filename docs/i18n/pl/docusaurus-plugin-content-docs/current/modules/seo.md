@@ -183,8 +183,19 @@ Disallow: /
 Tekst jest serwowany **tak, jak został wpisany**: każdy znak zostaje zachowany, w tej samej
 kolejności — wcięcia, puste wiersze, komentarze. Ujednolicane są dwie rzeczy dotyczące końców
 wierszy: każdy koniec wiersza jest serwowany jako znak nowego wiersza (LF), niezależnie od tego,
-jak tekst został zapisany, a plik zawsze kończy się dokładnie jednym. Nic w tekście nie jest
-sprawdzane ani poprawiane; wiersz, którego robot nie rozumie, jest serwowany jak każdy inny.
+jak tekst został zapisany, a plik zawsze kończy się dokładnie jednym. Pomijany jest też jeden
+niewidoczny znak: znacznik kolejności bajtów (BOM) na samym początku tekstu, który niektóre
+edytory dodają przy zapisie pliku — robot nie rozpoznałby wiersza, do którego jest doklejony.
+Nic w tekście nie jest sprawdzane ani poprawiane; wiersz, którego robot nie rozumie, jest
+serwowany jak każdy inny.
+
+**Grupa napisana dla jednego robota zastępuje dla niego reguły generowane.** Robot stosuje się
+do grupy, która go wymienia, i pomija wtedy grupę `*`, więc po wierszu `User-agent: GPTBot`
+i Twoich regułach GPTBot nie widzi już generowanych wierszy `Disallow`. Powtórz je w tej grupie,
+jeśli nadal mają go obowiązywać. Samych wierszy generowanych nie da się zmienić, ale wpis `Allow`
+tej samej długości co generowany `Disallow` ma przed nim pierwszeństwo. To, czy stronę można
+indeksować, nie zależy od żadnej z tych rzeczy: strony zamykane przez te reguły same deklarują
+`noindex`.
 
 Jak każde ustawienie, to również ma wartość dla wszystkich kanałów sprzedaży oraz wartości dla
 poszczególnych kanałów, a własna wartość kanału ma pierwszeństwo — także pusta, która sprawia,
@@ -213,6 +224,23 @@ niej `noindex`, więc reguła, która wygląda na mocniejszą, wyłącza tę, kt
 zostanie tu wpisane, nie sprawi, że strona deklarująca `noindex` stanie się indeksowalna; może
 najwyżej sprawić, że roboty tego nie zobaczą.
 
+### Za serwerem proxy lub siecią CDN
+
+Plik jest inny dla każdego kanału sprzedaży, a sklep rozpoznaje kanał po nagłówku żądania
+`X-Sales-Channel`. Wysyła plik z nagłówkami `Cache-Control: public, max-age=60`
+i `Vary: X-Sales-Channel`. Dla tego, co stoi przed sklepem obsługującym więcej niż jeden kanał,
+wynikają z tego dwie rzeczy:
+
+- serwer proxy musi sam ustawiać `X-Sales-Channel`, osobno dla każdego hosta, i nie może
+  przepuszczać wartości przysłanej przez odwiedzającego — inaczej odwiedzający sam wybiera, czyj
+  plik zobaczy;
+- współdzielona pamięć podręczna, która pomija `Vary` dla takiego nagłówka, musi uwzględniać go
+  w kluczu pamięci podręcznej albo w ogóle nie przechowywać `/robots.txt` — inaczej plik jednego
+  kanału zostanie podany dla innego.
+
+Sklep obsługujący jeden kanał nie potrzebuje żadnej z nich; jego serwer proxy może ten nagłówek
+usuwać.
+
 ### Ile trwa wprowadzenie zmiany w pliku
 
 Sklep pyta backend o tekst kanału najwyżej raz na minutę i pozwala robotowi przechowywać plik
@@ -232,9 +260,12 @@ oświadczeniem o tym, co wolno pobierać, więc plik, w którym po cichu zabrak�
 później” i nadal korzysta z kopii, którą już ma. Żaden klient nie czyta tego pliku, więc nic, co
 widzi klient, od niego nie zależy.
 
-Na pierwszy odczyt kanału po uruchomieniu sklep czeka do dwóch sekund. Gdy moduł `seo` jest
-wyłączony oraz gdy backend nie ma tej funkcji, sklep serwuje same reguły generowane z kodem
-`200` — to są odpowiedzi, a nie błędy.
+Na pierwszy odczyt kanału po uruchomieniu sklep czeka do dwóch sekund — a żądanie pliku
+`robots.txt` wykonuje dwa takie odczyty jeden po drugim: domyślnej polityki robots kanału,
+a potem jego tekstu. Gdy backend przyjmuje połączenia, ale nie odpowiada, pierwsze żądanie może
+więc trwać od czterech do pięciu sekund. Następnie sklep przez pięć sekund nie pyta ponownie
+i odpowiada od razu. Gdy moduł `seo` jest wyłączony oraz gdy backend nie ma tej funkcji, sklep
+serwuje same reguły generowane z kodem `200` — to są odpowiedzi, a nie błędy.
 
 ### Odczyt tekstu we własnym sklepie
 
@@ -269,7 +300,9 @@ odpowiada `500`, a nie pustym tekstem, gdy zapisanej wartości nie można serwow
 trzeba wiersza zapisanego z pominięciem API ustawień.
 
 `robots.txt` referencyjnego sklepu odpowiada też na `GET /robots.txt?part=system` samymi
-regułami generowanymi i oznacza każdą odpowiedź nagłówkiem `X-Endora-Crawler-Files: 1`.
+regułami generowanymi — z nagłówkiem `Cache-Control: no-store`, ponieważ jest to plik bez tekstu
+operatora pod adresem, który pamięć podręczna mogłaby pomylić z właściwym — i oznacza każdą
+odpowiedź nagłówkiem `X-Endora-Crawler-Files: 1`.
 
 ## Wyznaczanie meta tagów
 

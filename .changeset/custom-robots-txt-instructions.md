@@ -15,7 +15,14 @@ text. A saved change is served within about two minutes.
 
 The text is served as written: every character is kept, in order. Two things about line breaks
 are made uniform — every line break is served as a line feed (`LF`), whether it was saved as `LF`,
-`CRLF` or `CR`, and the file ends with exactly one. Nothing in the text is validated.
+`CRLF` or `CR`, and the file ends with exactly one — and one byte order mark (`U+FEFF`) at the
+very start of the text is not served, because a crawler does not recognise the line it is
+attached to. Nothing in the text is validated.
+
+The generated lines cannot be changed, but their effect on one crawler can: a group written for a
+crawler by name replaces the `*` group for that crawler. Repeat the generated rules in such a
+group if they should still apply to it. Indexing does not depend on it — the pages those rules
+close declare `noindex` themselves.
 
 **`robots.txt` does not take pages out of search results.** It controls what a crawler may fetch.
 To keep a storefront out of search use *Default robots* = `NOINDEX`, and do not add `Disallow: /`
@@ -39,7 +46,19 @@ request, for the request's sales channel:
   process that has read the text once goes on serving that version for as long as the backend
   cannot be reached. A storefront started while its backend is down therefore answers
   `robots.txt` with `503` until the backend is back; pages are unaffected;
-- `GET /robots.txt?part=system` answers the generated rules alone, without asking the backend.
+- `GET /robots.txt?part=system` answers the generated rules alone, without the route asking the
+  backend, and is sent with `Cache-Control: no-store`.
+
+**If a reverse proxy or a CDN stands in front of a storefront that serves more than one sales
+channel**, check two things, because the file now differs per channel and the channel is named by
+the `X-Sales-Channel` request header: the proxy must set that header itself, per host, and not
+pass through a value a visitor sent; and a shared cache that ignores `Vary` on such a header must
+include it in its cache key or not cache `/robots.txt`. In nginx that is one line in the
+storefront's `location` block — `proxy_set_header X-Sales-Channel "<this host's channel code>";`
+for a multi-channel deployment, or `proxy_set_header X-Sales-Channel "";` to drop the header on a
+single-channel one, which is otherwise unaffected. The `nginx.example.conf` an instance was
+scaffolded with does not carry the line; this repository's `deploy/nginx.example.conf` now shows
+both, commented.
 
 The origin in the `Sitemap:` line is still `NEXT_PUBLIC_SITE_URL` as inlined at build time.
 
