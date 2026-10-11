@@ -201,6 +201,11 @@ const MIGRATED_MODULES: readonly string[] = [
   'quote_requests',
   'sales_channels',
   'search',
+  // Minted (`specs/144-seo-search-engine-robots/`): `SEO_CRAWLER_TEXT_TOO_LARGE`
+  // is this module's first code and was created after the chain was deleted, so
+  // the frozen capture holds none and `MINTED_ERROR_CODES` is what accounts for
+  // it.
+  'seo',
   'settings',
   'shopping_lists',
   'transactional_emails',

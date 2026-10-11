@@ -4,6 +4,7 @@ import type {
   CatalogProductReadPort,
   CmsPageReadPort,
   SeoMetaWritePort,
+  SettingWriteValidatorRegistryPort,
 } from '@endora-commerce/contracts';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
@@ -17,6 +18,7 @@ import {
   type SitemapSettingsPort,
 } from './services/sitemap-generator.service.js';
 import { registerSeoRoutes, type SeoRouteSettingsPort } from './routes.js';
+import { createCrawlerTextValidator } from './services/crawler-text-validator.js';
 import { SeoMetaOverride } from './entities/seo-meta-override.entity.js';
 import { SitemapCache } from './entities/sitemap-cache.entity.js';
 
@@ -119,6 +121,28 @@ export function registerModule(ctx: ModuleContext): void {
       // Resolved per call, like the sitemap's own read of the same port.
       settings: lazyPort<SeoRouteSettingsPort>(ctx, 'settingsReadPort'),
     });
+  });
+
+  /**
+   * The size limit on the crawler texts (`specs/144-seo-search-engine-robots/`,
+   * FR-006) — a **contribution** to the `settings` module's write-validator
+   * registry, and nothing else.
+   *
+   * Deliberately without a presence probe. The registry filters by contributor
+   * when a write asks it which validators answer for a code, so a validator
+   * registered while `seo` is off is simply not enumerated — and one that was
+   * *not* registered because a probe returned early would stay missing after
+   * an operator switched `seo` back on, until the next restart: the texts
+   * would be editable again with no limit on them. The hook contributes an
+   * inert descriptor and does no work, which is the shape
+   * `BOOT_HOOKS_WITHOUT_PRESENCE` records.
+   */
+  ctx.onBoot(() => {
+    const validators = lazyPort<SettingWriteValidatorRegistryPort>(
+      ctx,
+      'settingWriteValidatorRegistry',
+    );
+    validators.register(createCrawlerTextValidator());
   });
 }
 

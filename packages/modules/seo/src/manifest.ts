@@ -60,12 +60,36 @@ export const manifest = defineModuleManifest({
         enumOptions: ['INDEX, FOLLOW', 'NOINDEX, FOLLOW', 'INDEX, NOFOLLOW', 'NOINDEX, NOFOLLOW'],
         defaultValue: 'INDEX, FOLLOW',
       },
+      {
+        // `specs/144-seo-search-engine-robots/` — text the storefront appends
+        // to the `robots.txt` it generates for a sales channel. Empty by
+        // default, which is what keeps an untouched instance's file what it
+        // was. Takes an all-channels value and per-channel values like any
+        // other setting; an empty per-channel value is a value, and gives that
+        // channel no custom instructions whatever the all-channels text says.
+        //
+        // The size limit is not expressible here: it is in bytes, and it is
+        // this module's rule, so `backend/services/crawler-text-validator.ts`
+        // contributes it to the settings store's write validation.
+        code: 'seo.robots_txt_custom',
+        name: 'Custom robots.txt instructions',
+        description:
+          'Rules added to the storefront\'s robots.txt, per sales channel. The text is added after the rules the storefront generates itself, exactly as written here; those generated rules cannot be edited or removed. Leave it empty, or reset it, to serve the generated rules alone. robots.txt controls what crawlers may fetch, not what search engines list: forbidding crawling does not remove pages from search results, and a page that may not be fetched can still be listed from links elsewhere — to keep the storefront out of search results use "Default robots", and do not add "Disallow: /" on top of it, because a crawler that may not fetch a page never reads that it must not be indexed. At most 64 KiB of text. A change is in force on the storefront within a few minutes.',
+        groupCode: 'seo',
+        valueType: 'string',
+        multiline: true,
+        defaultValue: '',
+      },
     ],
   },
   // Feature 091 (Phase 4, batch 8) — this module ships a bundle now: its
   // sidebar entry's `labelKey` is module-relative (R8) and resolves in this
   // module's own namespace. Its screen's copy stays in `_i18n`'s `core`
   // scope, which is batch 4's shape and not a new one.
+  // The one refusal this module raises: a crawler text over the size limit.
+  // Its sentence is `errors.SEO_CRAWLER_TEXT_TOO_LARGE` in `i18n/{en,pl}.json`
+  // and names the limit from the raise's own `details`.
+  errorCodes: [{ code: 'SEO_CRAWLER_TEXT_TOO_LARGE' }],
   i18n: { bundlesDir: 'i18n' },
   docs: { dir: 'docs' },
   activation: { settingCode: 'seo.enabled', default: true },
