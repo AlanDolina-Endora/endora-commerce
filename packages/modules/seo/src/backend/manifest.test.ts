@@ -66,6 +66,14 @@ describe('seo manifest — custom robots.txt instructions', () => {
     expect(setting?.description).toMatch(/does not remove pages from search results/);
     // The limit is named where the text is typed, not only in the refusal.
     expect(setting?.description).toMatch(/64 KiB/);
+    // "Cannot be edited" is true of the generated lines and not of their
+    // effect: a crawler obeys the most specific group that names it, so a
+    // group written for one crawler replaces the generated one for it.
+    expect(setting?.description).toMatch(
+      /a group written for one crawler .* replaces them for that crawler/,
+    );
+    // The Settings store refuses a longer description.
+    expect(setting?.description?.length).toBeLessThanOrEqual(2000);
   });
 
   it('declares the refusal for a text over the limit', () => {
@@ -179,6 +187,7 @@ describe('seo bundles', () => {
     expect(polish).toMatch(/po regułach generowanych przez sklep/);
     expect(polish).toMatch(/nie usuwa stron z wyników wyszukiwania/);
     expect(polish).toMatch(/64 KiB/);
+    expect(polish).toMatch(/zastępuje je dla tego robota/);
   });
 
   it.each(['en', 'pl'])('names the limit in the %s refusal, from what the raise carries', (language) => {

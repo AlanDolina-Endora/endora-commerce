@@ -133,9 +133,13 @@ export function registerModule(ctx: ModuleContext): void {
    * registered while `seo` is off is simply not enumerated — and one that was
    * *not* registered because a probe returned early would stay missing after
    * an operator switched `seo` back on, until the next restart: the texts
-   * would be editable again with no limit on them. The hook contributes an
-   * inert descriptor and does no work, which is the shape
-   * `BOOT_HOOKS_WITHOUT_PRESENCE` records.
+   * would be editable again with no limit on them.
+   *
+   * It has no entry in `BOOT_HOOKS_WITHOUT_PRESENCE`, and owes none. That
+   * ledger records hooks that do **work** while their module is off and says
+   * why each is right to; this one contributes an inert descriptor, awaits
+   * nothing and touches no store, so `check:entry-presence` does not count it
+   * among the entry points that have to decide presence.
    */
   ctx.onBoot(() => {
     const validators = lazyPort<SettingWriteValidatorRegistryPort>(

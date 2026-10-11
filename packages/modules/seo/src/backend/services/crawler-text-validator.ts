@@ -38,7 +38,14 @@ export function createCrawlerTextValidator(): SettingWriteValidator {
     contributorModuleId: 'seo',
     codes: CRAWLER_TEXT_SETTING_CODES,
     validate: async ({ code, proposedValue }) => {
-      // The settings store has already refused a value of the wrong type.
+      // Not a text: nothing to measure, and not this validator's to refuse.
+      // The settings store parses the value against the setting's declared
+      // type before it runs any validator, and both settings this one answers
+      // for are declared `string` — so a value of another type has already
+      // been refused with `SETTING_VALUE_SHAPE_MISMATCH` and never arrives
+      // here. Returning rather than throwing keeps that the one place the
+      // type is judged; `crawler-text-validator.test.ts` holds each code this
+      // validator answers for to a `string` declaration.
       if (typeof proposedValue !== 'string') return;
       const actualBytes = Buffer.byteLength(proposedValue, 'utf8');
       if (actualBytes <= CRAWLER_TEXT_MAX_BYTES) return;
