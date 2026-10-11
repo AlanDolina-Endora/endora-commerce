@@ -175,7 +175,7 @@ export type StorefrontCrawlerFilesResponse = z.infer<typeof storefrontCrawlerFil
  *
  * Every character of it is kept, unchanged and in order — indentation,
  * trailing spaces, blank lines, comments, anything that is not a line break at
- * all. Two things are normalised, and both are about line breaks only:
+ * all. Two things are normalised, and both are about line breaks:
  *
  *  * **every line break is served as a line feed**, whether it was stored as
  *    `LF`, `CRLF` or a lone `CR`. A browser's text field sends `LF`; the
@@ -186,12 +186,43 @@ export type StorefrontCrawlerFilesResponse = z.infer<typeof storefrontCrawlerFil
  *  * **line breaks at the end of the text become exactly one**, so the file
  *    always ends with a single line break.
  *
+ * And one thing is removed that is not a line break: **a single byte order
+ * mark (`U+FEFF`) at the very start of the text.** Editors put one there
+ * unseen. Served, it is glued to the first line, and a crawler does not
+ * recognise `\uFEFFUser-agent: …` as the start of a group — so the rules
+ * under it attach to the group above, which is the generated one for every
+ * crawler, and a `Disallow: /` written for one crawler would close the site
+ * to all of them. Exactly one, and only there: a second one, or one anywhere
+ * else in the text, is the operator's character like any other.
+ *
  * `base` is never altered apart from the line breaks it ends with.
+ *
+ * ## Its cost is proportional to the text
+ *
+ * It runs for every request of a public file, on text an operator saved, so
+ * it must not be possible to write a text that makes it slow. The trailing
+ * line breaks are therefore counted from the end rather than matched with
+ * `/\n+$/`: that pattern re-scans a run of line breaks from each of its
+ * positions when the run is not at the end, and took four and a half seconds
+ * on 64 KiB of them — during which a single-threaded server answers nobody.
+ * `seo.test.ts` holds the function to a time bound on such texts.
  */
 export function composeCrawlerFile(base: string, extra: string): string {
-  if (extra.trim().length === 0) return base;
-  const text = extra.replace(/\r\n?/g, '\n').replace(/\n+$/, '');
-  return `${base.replace(/\n+$/, '')}\n\n${text}\n`;
+  const written = extra.charCodeAt(0) === BYTE_ORDER_MARK ? extra.slice(1) : extra;
+  if (written.trim().length === 0) return base;
+  // One pass, no backtracking: a `\r` is consumed with the `\n` after it, if any.
+  const text = withoutTrailingLineFeeds(written.replace(/\r\n?/g, '\n'));
+  return `${withoutTrailingLineFeeds(base)}\n\n${text}\n`;
+}
+
+const BYTE_ORDER_MARK = 0xfeff;
+const LINE_FEED = 0x0a;
+
+/** `text` without the line feeds it ends with. Linear in their number. */
+function withoutTrailingLineFeeds(text: string): string {
+  let end = text.length;
+  while (end > 0 && text.charCodeAt(end - 1) === LINE_FEED) end -= 1;
+  return end === text.length ? text : text.slice(0, end);
 }
 
 /**

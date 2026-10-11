@@ -122,6 +122,10 @@ describe('storefrontRobotsPolicyResponseSchema', () => {
  *
  * (`specs/144-seo-search-engine-robots/tasks.md` T054 asked for `CRLF` to be
  * *preserved*; the definition above won, and the cases below hold it.)
+ *
+ * A third exception is not about line breaks: one byte order mark at the very
+ * start of the text is not served. An editor puts it there unseen, and a
+ * crawler that meets it does not recognise the line it is glued to.
  */
 describe('composeCrawlerFile', () => {
   const BASE = 'User-Agent: *\nAllow: /\nDisallow: /cart\n\nSitemap: https://shop.example.com/sitemap.xml\n';
@@ -193,6 +197,101 @@ describe('composeCrawlerFile', () => {
       composeCrawlerFile('base\n', 'User-agent: a\r\nDisallow: /x\n\rUser-agent: b\nDisallow: /y'),
     ).toBe(served);
     expect(served).not.toContain('\r');
+  });
+
+  /**
+   * The function runs for every request of a public file, on text an operator
+   * saved. Its cost has to be proportional to the text whatever the text is:
+   * a pattern that re-scans a long run of line breaks from each of its
+   * positions takes seconds on 64 KiB of them, during which the storefront
+   * process answers nobody.
+   *
+   * The bound is generous on purpose — the shapes below took one to four and a
+   * half **seconds** with such a pattern and take well under a millisecond
+   * without it, so nothing near the bound is a pass.
+   */
+  describe('takes time proportional to the text, whatever the text is', () => {
+    const LIMIT = 65_536;
+    const BOUND_MS = 250;
+    const timed = (base: string, extra: string): { out: string; ms: number } => {
+      const start = performance.now();
+      const out = composeCrawlerFile(base, extra);
+      return { out, ms: performance.now() - start };
+    };
+
+    it.each([
+      ['line feeds, then a character', `${'\n'.repeat(LIMIT - 1)}x`],
+      ['a character, line feeds, a character', `x${'\n'.repeat(LIMIT - 2)}x`],
+      ['carriage returns, then a character', `${'\r'.repeat(LIMIT - 1)}x`],
+      ['CRLF pairs, then a character', `${'\r\n'.repeat(LIMIT / 2 - 1)}x`],
+      ['alternating line feeds and carriage returns, then a character', `${'\n\r'.repeat(LIMIT / 2 - 1)}x`],
+      ['nothing but line feeds after one character', `x${'\n'.repeat(LIMIT - 1)}`],
+      ['spaces and line feeds, then a character', `${' \n'.repeat(LIMIT / 2 - 1)}x`],
+      ['byte order marks, then a character', `${'\uFEFF'.repeat(LIMIT - 1)}x`],
+    ])('%s', (_label, extra) => {
+      expect(extra.length).toBeLessThanOrEqual(LIMIT);
+      const { out, ms } = timed('base\n', extra);
+      expect(ms, `composing took ${ms.toFixed(1)} ms`).toBeLessThan(BOUND_MS);
+      expect(out.startsWith('base\n\n')).toBe(true);
+      expect(out.endsWith('\n')).toBe(true);
+      expect(out.endsWith('\n\n')).toBe(false);
+      expect(out).not.toContain('\r');
+    });
+
+    it('a base that is a long run of line feeds before its last character', () => {
+      // The base is this storefront's own and never looks like this; the
+      // function is exported, and its cost should not depend on who calls it.
+      const { out, ms } = timed(`${'\n'.repeat(LIMIT)}x${'\n'.repeat(LIMIT)}`, 'extra');
+      expect(ms, `composing took ${ms.toFixed(1)} ms`).toBeLessThan(BOUND_MS);
+      expect(out.endsWith('x\n\nextra\n')).toBe(true);
+    });
+
+    it('keeps the line breaks inside such a text — only their encoding and the trailing ones change', () => {
+      expect(composeCrawlerFile('base\n', `${'\n'.repeat(1000)}x`)).toBe(
+        `base\n\n${'\n'.repeat(1000)}x\n`,
+      );
+      expect(composeCrawlerFile('base\n', `x${'\r\n'.repeat(1000)}y${'\r'.repeat(1000)}`)).toBe(
+        `base\n\nx${'\n'.repeat(1000)}y\n`,
+      );
+    });
+  });
+
+  /**
+   * A byte order mark is invisible in every editor and is what some of them
+   * put first in a file. Served, it is glued to the first line: a crawler does
+   * not recognise `\uFEFFUser-agent: GPTBot` as the start of a group, so the
+   * rules written under it attach to the group above — the generated `*`
+   * group — and a `Disallow: /` meant for one crawler closes the site to all.
+   */
+  describe('a byte order mark at the start of the text', () => {
+    const BOM = '\uFEFF';
+
+    it('is not served', () => {
+      expect(composeCrawlerFile('base\n', `${BOM}User-agent: GPTBot\nDisallow: /`)).toBe(
+        'base\n\nUser-agent: GPTBot\nDisallow: /\n',
+      );
+    });
+
+    it('is exactly one: a second one, and one anywhere else, are the operator’s characters', () => {
+      expect(composeCrawlerFile('base\n', `${BOM}${BOM}User-agent: a`)).toBe(
+        `base\n\n${BOM}User-agent: a\n`,
+      );
+      expect(composeCrawlerFile('base\n', `User-agent: a\n${BOM}Disallow: /x`)).toBe(
+        `base\n\nUser-agent: a\n${BOM}Disallow: /x\n`,
+      );
+      expect(composeCrawlerFile('base\n', ` ${BOM}User-agent: a`)).toBe(
+        `base\n\n ${BOM}User-agent: a\n`,
+      );
+    });
+
+    it('alone, or with only whitespace after it, is an empty text', () => {
+      expect(composeCrawlerFile('base\n', BOM)).toBe('base\n');
+      expect(composeCrawlerFile('base\n', `${BOM}\r\n  \n`)).toBe('base\n');
+    });
+
+    it('is never removed from the base', () => {
+      expect(composeCrawlerFile(`${BOM}base\n`, 'extra')).toBe(`${BOM}base\n\nextra\n`);
+    });
   });
 
   it('never changes the base it was given', () => {
