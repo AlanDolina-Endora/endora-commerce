@@ -69,8 +69,13 @@ const BUNDLE = passthroughBundle('settings', [
   'editor.perChannelOverrides',
 ]);
 
-/** Three lines, a blank one among them, indentation, and a trailing break. */
-const THREE_LINES = 'User-agent: *\n\n  Disallow: /private\nAllow: /\n';
+/**
+ * Whitespace at every edge an editor might be tempted to tidy: a leading line
+ * break and leading spaces, a blank line in the middle, indentation, and a
+ * trailing break. It starts with whitespace on purpose — a fixture that began
+ * with a letter let a `trimStart()` on the saved value go unnoticed.
+ */
+const THREE_LINES = '\n  User-agent: *\n\n  Disallow: /private\nAllow: /\n';
 
 function stringSetting(overrides: Partial<SettingDto> = {}): SettingDto {
   return {
@@ -154,6 +159,61 @@ describe('SettingRowEditor — multi-line string settings', () => {
     expect(deriveDisplayValue(setting, null)).toBe(THREE_LINES);
     renderRow(setting);
     expect(textarea()!.value).toBe(THREE_LINES);
+  });
+
+  it('names the field after the setting, so it is not an unlabelled textarea', () => {
+    renderRow(stringSetting({ multiline: true }));
+    expect(textarea()!.getAttribute('aria-label')).toBe('Notes');
+    expect(screen.getByRole('textbox', { name: 'Notes' })).toBe(textarea());
+  });
+
+  it('names it with the name the row shows — the owner bundle\'s, when it has one', () => {
+    const setting = stringSetting({ multiline: true });
+    renderWithI18n(
+      <SettingRowEditor
+        setting={setting}
+        draft={{ text: '', initialText: '' }}
+        channelContext={null}
+        isCopied={false}
+        resetting={false}
+        onChange={vi.fn()}
+        onCopyCode={vi.fn()}
+        onReset={vi.fn()}
+      />,
+      { ...BUNDLE, demo: { 'settingLabels.demo.notes.name': 'Notatki' } },
+    );
+    expect(textarea()!.getAttribute('aria-label')).toBe('Notatki');
+  });
+
+  it('keeps the value previews under the field to one short line', () => {
+    const long = `${'x'.repeat(200)}\nsecond line`;
+    renderRow(stringSetting({ multiline: true, defaultValue: THREE_LINES, globalValue: long }));
+    const previews = [...document.querySelectorAll('code')].map((el) => el.textContent ?? '');
+    expect(previews).toHaveLength(2);
+    for (const preview of previews) {
+      expect(preview).not.toContain('\n');
+      expect(preview.length).toBeLessThanOrEqual(61);
+      // Cut short, and says so.
+      expect(preview.endsWith('…')).toBe(true);
+    }
+    // The first line that has text, without its indentation.
+    expect(previews[0]).toBe('User-agent: *…');
+    expect(previews[1]).toBe(`${'x'.repeat(60)}…`);
+    // The field itself still holds everything.
+    expect(textarea()!.value).toBe(long);
+  });
+
+  it('previews a short one-line value of a multi-line setting whole, and an empty one as ""', () => {
+    renderRow(stringSetting({ multiline: true, defaultValue: '', globalValue: 'Allow: /' }));
+    const previews = [...document.querySelectorAll('code')].map((el) => el.textContent ?? '');
+    expect(previews).toEqual(['""', 'Allow: /']);
+  });
+
+  it('leaves the preview of a single-line setting as it was', () => {
+    const long = 'y'.repeat(200);
+    renderRow(stringSetting({ globalValue: long }));
+    const previews = [...document.querySelectorAll('code')].map((el) => el.textContent ?? '');
+    expect(previews).toEqual(['""', long]);
   });
 
   it('reports what was typed, Enter included, as a line break in the draft', async () => {

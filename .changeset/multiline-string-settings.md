@@ -38,7 +38,19 @@ your module renders its own editor for a setting.
 
 **For an operator upgrading.** This release carries one platform migration,
 `Migration20261011T135250CoreSettingsMultiline`, which adds `settings.multiline boolean not null
-default false`. It rewrites no row and needs no backfill, and `pnpm run upgrade <version>` applies
-it with the release's other migrations. Every existing setting stays single-line, so the Settings
-screen looks and behaves exactly as it did until a module you install declares the flag. Reverting
-the migration drops the column and loses nothing the next boot does not restore.
+default false`. It rewrites no row and needs no backfill. It is one of the platform's own
+migrations, so an instance receives it with `@endora-commerce/platform` and `pnpm run upgrade
+<version>` applies it with the release's other migrations. Every existing setting stays single-line,
+so the Settings screen looks and behaves exactly as it did until a module you install declares the
+flag.
+
+Take the migration back only together with the packages. `down` drops the column and loses nothing
+but the flag, which the next boot of a release that has it would restore — but this release's code
+expects the column: over a database without it, a new setting cannot be registered and a declared
+`multiline` cannot be stored, and the instance fails at boot. Reverting the migration is safe as
+part of downgrading `@endora-commerce/platform` and `@endora-commerce/mod-settings` to the previous
+version, and not on its own.
+
+The Settings screen also names the multi-line field after the setting for assistive technology, and
+the line under it that previews the default and current value shows one shortened line for such a
+setting rather than the whole text.

@@ -161,11 +161,11 @@ describe('admin settings list/detail (T029)', () => {
     expect(all.filter((s) => typeof s.multiline !== 'boolean').map((s) => s.code)).toEqual([]);
     const group = body.groups.find((g) => g.code === 'us2_list_group')!;
     expect(group.settings.find((s) => s.code === 'us2_list.notes')!.multiline).toBe(true);
+    // Per setting, not per group or per module: the sibling that never
+    // mentions the flag stays single-line beside the one that declares it.
+    // (Asserted on this file's own fixture, deliberately: which shipped
+    // manifests declare the flag is theirs to say and changes as they do.)
     expect(group.settings.find((s) => s.code === 'us2_list.title')!.multiline).toBe(false);
-    // No shipped manifest declares the flag: an upgraded instance sees no row change shape.
-    expect(
-      all.filter((s) => s.multiline && s.ownerModule !== 'us2_test_list').map((s) => s.code),
-    ).toEqual([]);
   });
 
   it('carries multiline on the detail response', async () => {
