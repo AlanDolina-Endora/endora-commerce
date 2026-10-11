@@ -79,13 +79,19 @@ describe('seo manifest — command palette', () => {
 describe('seo manifest — what switching the module off withdraws (FR-033)', () => {
   const activation = manifest.settings?.settings.find((s) => s.code === 'seo.enabled');
 
+  // The consequence, not the topic: a description that merely mentions robots
+  // would not tell an operator that switching the module off puts a noindex
+  // sales channel back into search.
+  const CONSEQUENCE = /noindex becomes indexable again/;
+
   it('says so beside the switch on the platform modules screen', () => {
-    expect(manifest.description).toMatch(/robots/i);
-    expect(manifest.description).toMatch(/switch/i);
+    expect(manifest.description).toMatch(/Switching it off withdraws the default robots directive/);
+    expect(manifest.description).toMatch(CONSEQUENCE);
   });
 
   it('says so on the activation setting', () => {
-    expect(activation?.description).toMatch(/robots/i);
+    expect(activation?.description).toMatch(/sends no default robots directive/);
+    expect(activation?.description).toMatch(CONSEQUENCE);
   });
 });
 

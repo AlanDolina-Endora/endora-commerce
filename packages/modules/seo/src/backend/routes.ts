@@ -8,7 +8,11 @@ import type { SitemapGeneratorService } from './services/sitemap-generator.servi
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import { currentSalesChannel, getResolvedChannel } from '@endora-commerce/platform/kernel';
 import { z } from 'zod';
-import { DEFAULT_ROBOTS_SETTING_CODE, robotsPolicyForToken } from './services/robots-policy.js';
+import {
+  DEFAULT_ROBOTS_SETTING_CODE,
+  UnknownRobotsTokenError,
+  robotsPolicyForToken,
+} from './services/robots-policy.js';
 
 /** The one read this module's routes make of the settings store. */
 export interface SeoRouteSettingsPort {
@@ -43,11 +47,31 @@ export async function registerSeoRoutes(
   // There is no presence check here. The registration seam answers `503`
   // `MODULE_DISABLED` for every route of an absent module, and the storefront
   // reads that as "this feature does not exist".
+  //
+  // A stored value that cannot be read — not a string, or not one of the four
+  // choices — is a `500` and never a permissive `200`: the storefront keeps
+  // what it knew instead of withdrawing a `noindex` nobody withdrew.
   app.get('/api/v1/storefront/seo/robots-policy', async (request, reply) => {
     const channel = getResolvedChannel(request);
-    const stored = await settings.get(DEFAULT_ROBOTS_SETTING_CODE, channel.id, z.string());
     reply.header('Cache-Control', 'no-store');
-    return { data: robotsPolicyForToken(stored) };
+    const stored = await settings.get(DEFAULT_ROBOTS_SETTING_CODE, channel.id, z.string());
+    try {
+      return { data: robotsPolicyForToken(stored) };
+    } catch (error) {
+      if (error instanceof UnknownRobotsTokenError) {
+        // The value is a directive spelling, not a secret; it is what an
+        // operator needs to find the row.
+        request.log.error(
+          {
+            settingCode: DEFAULT_ROBOTS_SETTING_CODE,
+            salesChannelCode: channel.code,
+            storedValue: stored,
+          },
+          'seo: the stored default robots value is not one of the declared choices',
+        );
+      }
+      throw error;
+    }
   });
 
   // -- Public sitemap -------------------------------------------------------

@@ -34,20 +34,37 @@ export type DefaultRobotsToken = keyof typeof POLICY_BY_TOKEN;
 /** The four choices, in the order the Settings screen offers them. */
 export const DEFAULT_ROBOTS_TOKENS = Object.keys(POLICY_BY_TOKEN) as readonly DefaultRobotsToken[];
 
-/** No restriction: what an instance nobody configured has always served. */
-const UNRESTRICTED: StorefrontRobotsPolicy = { index: true, follow: true };
+/**
+ * The stored value is not one of the four choices.
+ *
+ * The settings API refuses such a value on write, so this takes a row written
+ * around it — an import, a hand-edited database, a build older than a value a
+ * newer one stored.
+ */
+export class UnknownRobotsTokenError extends Error {
+  constructor(readonly token: unknown) {
+    super(
+      `"${DEFAULT_ROBOTS_SETTING_CODE}" holds ${JSON.stringify(token) ?? String(token)}, which is ` +
+        `not one of ${DEFAULT_ROBOTS_TOKENS.map((known) => `"${known}"`).join(', ')}.`,
+    );
+    this.name = 'UnknownRobotsTokenError';
+  }
+}
 
 /**
  * The policy a stored value stands for.
  *
- * A value outside the list answers **no restriction**. The settings API
- * refuses such a value on write, so reaching this branch takes a row written
- * around it; the default never adds a restriction an operator did not choose,
- * and a token this build does not know is not a choice it can read.
+ * **Throws for a value outside the list; it does not answer "no restriction".**
+ * A permissive answer would be a definitive one: the endpoint would say `200`,
+ * and a storefront holding `noindex` for the channel would replace it within a
+ * minute — a shop put back into search on the strength of a value nobody chose.
+ * Throwing makes the endpoint answer `500`, which a storefront reads as "could
+ * not ask" and keeps what it knew. It is also what already happened for a
+ * stored value that is not a string at all, so the two now fail the same way.
  */
 export function robotsPolicyForToken(token: unknown): StorefrontRobotsPolicy {
   if (typeof token === 'string' && Object.hasOwn(POLICY_BY_TOKEN, token)) {
     return { ...POLICY_BY_TOKEN[token as DefaultRobotsToken] };
   }
-  return { ...UNRESTRICTED };
+  throw new UnknownRobotsTokenError(token);
 }

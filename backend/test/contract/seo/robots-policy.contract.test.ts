@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { storefrontRobotsPolicyResponseSchema } from '@endora-commerce/contracts';
+import { SalesChannel, Setting, SettingValue } from '@endora-commerce/platform/kernel';
 import {
   setupBackendServer,
   teardownBackendServer,
@@ -31,8 +32,10 @@ import {
  *    stored token in particular is the module's own spelling;
  *  * a value outside the four choices is refused when it is **written**
  *    (`test/integration/seo/default-robots-write.test.ts`), and a stored value
- *    the mapping does not know reads as no restriction rather than as a
- *    directive nobody chose (`robots-policy.test.ts` in the module).
+ *    the mapping does not know is a `500`, not a `200` saying "no restriction"
+ *    — the last case below. A storefront reads a `500` as "could not ask" and
+ *    keeps what it knew; a permissive `200` would be definitive and would
+ *    withdraw a `noindex` on the strength of a value nobody chose.
  */
 describe('GET /api/v1/storefront/seo/robots-policy', () => {
   let h: BackendServerHandle;
@@ -103,5 +106,38 @@ describe('GET /api/v1/storefront/seo/robots-policy', () => {
     expect(anonymous.statusCode).toBe(200);
     expect(signedIn.statusCode).toBe(200);
     expect(anonymous.json()).toEqual(signedIn.json());
+  });
+
+  it('answers 500, not "no restriction", for a stored value outside the four choices', async () => {
+    // Written around the settings API, which refuses such a value: straight
+    // into the channel's own row, for a channel no other case here has read, so
+    // no cached answer stands in front of it.
+    const CHANNEL = 'pl_b2b_vip';
+    const em = h.em();
+    const setting = await em.findOneOrFail(Setting, { code: 'seo.default_robots' });
+    const salesChannel = await em.findOneOrFail(SalesChannel, { code: CHANNEL });
+    em.create(SettingValue, { setting, salesChannel, value: 'NOINDEX' });
+    await em.flush();
+
+    try {
+      const res = await h.app.inject({
+        method: 'GET',
+        url: URL,
+        headers: { 'x-sales-channel': CHANNEL },
+      });
+      expect(res.statusCode).toBe(500);
+      expect(res.body).not.toContain('"index"');
+      // The neighbours are untouched: the failure is that channel's.
+      const other = await h.app.inject({ method: 'GET', url: URL });
+      expect(other.statusCode).toBe(200);
+    } finally {
+      // Through the API, so the settings cache is dropped with the row.
+      const reset = await h.app.inject({
+        method: 'DELETE',
+        url: `/api/v1/admin/settings/seo.default_robots/values?salesChannelCodes=${CHANNEL}`,
+        cookies: admin,
+      });
+      expect(reset.statusCode, reset.body).toBe(200);
+    }
   });
 });
