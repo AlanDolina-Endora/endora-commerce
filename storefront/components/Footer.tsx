@@ -21,6 +21,35 @@ const COL_LINK = 'block py-[5px] text-[13px] text-[#a1a1aa] hover:text-white';
 export const BUILT_WITH_URL =
   'https://commerce.endora.software/?utm_source=storefront&utm_medium=referral&utm_campaign=built-with&utm_content=footer';
 
+/**
+ * The Endora Commerce mark on its white tile — the artwork of
+ * `docs/static/img/logo.svg`, inlined so the footer costs no request for it.
+ * The tile is part of the artwork: the footer is dark in both themes, and the
+ * mark's purple needs a light ground. Decorative here, since the product name
+ * is written beside it.
+ */
+function EndoraCommerceMark(props: { className?: string }): ReactNode {
+  return (
+    <svg
+      className={props.className}
+      viewBox="0 0 40 40"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect width="40" height="40" rx="9" fill="#fff" />
+      <g transform="translate(7.03 5) scale(0.021172)">
+        <g transform="translate(-70 -123)" fill="#6322C8">
+          <path d="M172 123A65 65 0 0 0 107 188A65 65 0 0 0 172 253L769.99609 253L770 253C972.77803 253.01228 1141.3628 405.91574 1161.1094 607.73047L1161.1094 607.73242L1161.1094 607.73438C1170.8199 706.90026 1094.6421 790.90206 995.00195 790.90039L995 790.90039L904 790.90039L904 920.90039L994.99805 920.90039C1169.3725 920.90339 1307.4806 768.61427 1290.4902 595.07031L1290.4902 595.06445C1264.3364 327.79641 1038.5492 123.01364 770.00391 123A65 65 0 0 0 770 123L172 123z" />
+          <path d="m388.92578,509.11523c-119.397,-2.62101-230.13527,63.43203-284.5625,169.73438-54.427232,106.30235-43.277539,234.76053 28.64844,330.09769l0.0312,0.043 313.5332,414.1446c52.09015,68.8542 132.14453,111.1165 218.38281,115.289h0.006 0.006c284.3908,13.7094 542.6296,-167.5765 626.3555,-439.709l-124.252,-38.2285c-66.4518,215.9869-270.11667,358.9654-495.83201,348.0899-47.85038,-2.3152-92.10262,-25.6788-121.00196,-63.8867l-0.008,-0.012-313.44336,-414.02536-0.008,-0.01C194.69288,874.84699 188.22613,800.30613 220.07812,738.0957c31.8539,-62.21415 96.11821,-100.54568 165.9961,-99.01172z" />
+          <path d="m356,725.5a65,65 0 0 0-65,65 65,65 0 0 0 65,65h302a65,65 0 0 0 65,-65 65,65 0 0 0-65,-65z" />
+        </g>
+        <circle cx="127.5" cy="1313.5" r="92" fill="#1A1226" />
+      </g>
+    </svg>
+  );
+}
+
 export function Footer(props: {
   cmsLinks?: Array<{ path: string; title: string }>;
   top?: ReactNode;
@@ -110,17 +139,6 @@ export function Footer(props: {
             0000987654
           </span>
           {props.copyright}
-          <span>
-            Built with <span aria-hidden="true">❤️</span> using{' '}
-            <a
-              className="text-[#a1a1aa] underline underline-offset-2 hover:text-white"
-              href={BUILT_WITH_URL}
-              target="_blank"
-              rel="noopener"
-            >
-              Endora Commerce
-            </a>
-          </span>
           <span className="inline-flex gap-4">
             <a className="text-[#a1a1aa] hover:text-white" href="/regulamin">Regulamin</a>
             <a className="text-[#a1a1aa] hover:text-white" href="/polityka-prywatnosci">
@@ -129,6 +147,21 @@ export function Footer(props: {
             <a className="text-[#a1a1aa] hover:text-white" href="/cookies">Cookies</a>
           </span>
         </div>
+
+        <p className="mt-[22px] flex flex-wrap items-center justify-center gap-x-2.5 gap-y-2 border-t border-white/8 pt-[22px] text-[12px] text-[#71717a]">
+          <span>
+            Built with <span aria-hidden="true">❤️</span> using
+          </span>
+          <a
+            className="inline-flex items-center gap-2 text-[15px] font-semibold text-[#d4d4d8] hover:text-white"
+            href={BUILT_WITH_URL}
+            target="_blank"
+            rel="noopener"
+          >
+            <EndoraCommerceMark className="h-7 w-7 shrink-0" />
+            Endora Commerce
+          </a>
+        </p>
       </div>
     </footer>
   );
