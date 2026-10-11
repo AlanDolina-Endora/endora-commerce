@@ -11,8 +11,11 @@ import { defineModuleManifest } from '@endora-commerce/contracts';
 export const manifest = defineModuleManifest({
   id: 'seo',
   name: 'SEO',
+  // The platform modules screen renders this sentence verbatim beside the
+  // switch, so what switching the module off withdraws is said here
+  // (`specs/144-seo-search-engine-robots/`, FR-033).
   description:
-    'SEO metadata management for catalog, CMS, and blog surfaces.',
+    'SEO metadata, the generated sitemap and the search engine robots settings. Switching it off withdraws the default robots directive from every storefront response, so a sales channel set to noindex becomes indexable again.',
   version: '1.0.0',
   // `auth` owns the `requireAdmin` port the admin routes are gated by. Feature
   // 072 made it a container resolution rather than a constructor argument.
@@ -34,10 +37,28 @@ export const manifest = defineModuleManifest({
         code: 'seo.enabled',
         name: 'SEO enabled',
         description:
-          'Switches the meta-tag override screens, their API and the generated sitemap on or off. Nothing is dropped: overrides stay in the database and the sitemap regenerates from them when you switch it back on.',
+          'Switches the meta-tag override screens, their API, the generated sitemap and the search engine robots settings on or off. While it is off the storefront sends no default robots directive, so a sales channel set to noindex becomes indexable again. Nothing is dropped: overrides and settings stay in the database and apply again when you switch it back on.',
         groupCode: 'seo',
         valueType: 'boolean',
         defaultValue: true,
+      },
+      {
+        // `specs/144-seo-search-engine-robots/` — the directive every
+        // storefront response of a sales channel carries, on top of what each
+        // page declares for itself. Takes an all-channels value and per-channel
+        // values like any other setting.
+        //
+        // The four choices are the directive pairs themselves and they are the
+        // stored values. `backend/services/robots-policy.ts` is the one place
+        // that reads them; nothing outside this module sees the spelling.
+        code: 'seo.default_robots',
+        name: 'Default robots',
+        description:
+          'What search engines are told about every page of the storefront, per sales channel. It only adds restrictions: a page that already says noindex stays noindex whatever is chosen here. NOINDEX asks search engines not to list the storefront, NOFOLLOW asks them not to follow its links. robots.txt is not changed, because a crawler has to fetch a page to read that it must not be indexed. A change is in force on the storefront within a few minutes; search engines apply it when they next visit a page, which can take days or weeks.',
+        groupCode: 'seo',
+        valueType: 'string',
+        enumOptions: ['INDEX, FOLLOW', 'NOINDEX, FOLLOW', 'INDEX, NOFOLLOW', 'NOINDEX, NOFOLLOW'],
+        defaultValue: 'INDEX, FOLLOW',
       },
     ],
   },
@@ -48,4 +69,36 @@ export const manifest = defineModuleManifest({
   i18n: { bundlesDir: 'i18n' },
   docs: { dir: 'docs' },
   activation: { settingCode: 'seo.enabled', default: true },
+  // Principle XVI. `seo` owned a screen and declared no action until
+  // `specs/144-seo-search-engine-robots/` (FR-009).
+  actions: [
+    {
+      id: 'open-seo',
+      labelKey: 'actions.openSeo.label',
+      descriptionKey: 'actions.openSeo.description',
+      icon: 'Search',
+      targetRoute: '/seo',
+      // The code the screen's own routes are gated by.
+      requiredPermission: 'catalog:write',
+      keywords: ['seo', 'sitemap', 'meta', 'search engines', 'wyszukiwarki'],
+      weight: 120,
+    },
+    {
+      // The robots settings live on the generic Settings screen, which has no
+      // per-group address, so this opens `/settings`.
+      //
+      // `settings:read`, not `settings:write`: it is the code that screen is
+      // gated by, and `check:action-route-permissions` holds a declared code
+      // to the one enforced on the action's own target. A reader lands on the
+      // settings read-only; changing them still takes `settings:write`.
+      id: 'open-search-engine-robots',
+      labelKey: 'actions.openSearchEngineRobots.label',
+      descriptionKey: 'actions.openSearchEngineRobots.description',
+      icon: 'Search',
+      targetRoute: '/settings',
+      requiredPermission: 'settings:read',
+      keywords: ['robots', 'noindex', 'nofollow', 'llms', 'indexing', 'indeksowanie'],
+      weight: 110,
+    },
+  ],
 });

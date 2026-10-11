@@ -39,12 +39,16 @@ _None._
 
 ## Command palette
 
-_None._
+| Action | Opens | Permission |
+| --- | --- | --- |
+| `open-search-engine-robots` | `/settings` | `settings:read` |
+| `open-seo` | `/seo` | `catalog:write` |
 
 ## Settings
 
 | Code | Name | Type |
 | --- | --- | --- |
+| `seo.default_robots` | Default robots | `string` |
 | `seo.enabled` | SEO enabled | `boolean` |
 
 ## Translations

@@ -76,6 +76,42 @@ export const sitemapChannelListResponseSchema = z.object({
 export type SitemapChannelListResponse = z.infer<typeof sitemapChannelListResponseSchema>;
 
 /**
+ * A sales channel's default robots policy, as the storefront reads it from
+ * `GET /api/v1/storefront/seo/robots-policy`.
+ *
+ * Two booleans and nothing else. The operator's choice is stored by `seo` as a
+ * token (`NOINDEX, FOLLOW` …); that spelling is the module's own and never
+ * crosses the wire, so a consumer branches on `index` and `follow` and the
+ * stored vocabulary can change without a storefront noticing.
+ *
+ * **Strict about what it reads, tolerant of what it does not know.** `index`
+ * and `follow` must both be present and must both be booleans: a storefront
+ * validates the answer against this schema and treats a body that fails it as
+ * unreadable, and a policy with half of it missing is not one to guess at.
+ *
+ * A member this schema does not name is **dropped, not refused**. A storefront
+ * is deployed separately from its backend and is usually the older of the two;
+ * were an unknown member a failure, the first backend release to add a field
+ * here would make every storefront already in the field read the answer as
+ * unreadable — and a freshly started one would then serve a `noindex` channel
+ * with no directive at all, with nothing to say why. Additive changes to this
+ * response are therefore safe by construction, and a consumer never sees a
+ * member it was not written for.
+ */
+export const storefrontRobotsPolicySchema = z.object({
+  /** `false` asks search engines not to index the channel's storefront. */
+  index: z.boolean(),
+  /** `false` asks search engines not to follow the links on its pages. */
+  follow: z.boolean(),
+});
+export type StorefrontRobotsPolicy = z.infer<typeof storefrontRobotsPolicySchema>;
+
+export const storefrontRobotsPolicyResponseSchema = z.object({
+  data: storefrontRobotsPolicySchema,
+});
+export type StorefrontRobotsPolicyResponse = z.infer<typeof storefrontRobotsPolicyResponseSchema>;
+
+/**
  * Container name: `seoMetaWritePort`. Owner: `seo`.
  *
  * Narrow write surface for PIM importers (feature 089 / FR-029): upsert product

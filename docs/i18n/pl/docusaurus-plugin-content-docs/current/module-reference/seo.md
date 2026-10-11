@@ -39,12 +39,16 @@ _Brak._
 
 ## Paleta poleceń
 
-_Brak._
+| Akcja | Otwiera | Uprawnienie |
+| --- | --- | --- |
+| `open-search-engine-robots` | `/settings` | `settings:read` |
+| `open-seo` | `/seo` | `catalog:write` |
 
 ## Ustawienia
 
 | Kod | Nazwa | Typ |
 | --- | --- | --- |
+| `seo.default_robots` | Default robots | `string` |
 | `seo.enabled` | SEO enabled | `boolean` |
 
 ## Tłumaczenia

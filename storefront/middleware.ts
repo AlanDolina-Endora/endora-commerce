@@ -9,6 +9,14 @@ import {
   gateDecision,
   safeRetryTarget,
 } from './lib/service-unavailable';
+import { readRobotsPolicy } from './lib/seo/crawler-policy';
+import {
+  forwardRobotsDefault,
+  isDocumentPath,
+  robotsDirective,
+  stampRobotsResponse,
+  type RobotsDirective,
+} from './lib/seo/robots-directive';
 
 /**
  * Forwards the incoming request's pathname as `x-pathname` so server
@@ -17,8 +25,25 @@ import {
  * (logo-only header, no Megamenu / Footer) on `/checkout*` routes per
  * feature 036 US5.
  *
- * The matcher excludes Next.js internals and static assets so this runs
- * only for actual page requests.
+ * ## It is the one seam that puts a channel's default robots on a response
+ *
+ * An operator chooses, per sales channel, what search engines are told about
+ * the whole storefront (`specs/144-seo-search-engine-robots/`). That choice
+ * reaches a response here and nowhere else: as an `X-Robots-Tag` header on
+ * everything this function sees, and as a request header from which the root
+ * layout renders one extra `<meta name="robots">`. No route file takes part,
+ * which is what keeps a route's own declaration the route's own.
+ *
+ * So the matcher covers everything except `/_next/static` — the files a search
+ * engine can index include the sitemap, the optimised images and what is under
+ * `public/`, and no other seam can add a per-channel header to those. The
+ * function **branches first**: a path that is not a document gets the header
+ * and nothing else — no reachability probe, no `x-pathname`, no rewrite — and
+ * is otherwise served exactly as before. `isDocumentPath` is the matcher this
+ * file had before it was widened, so "document" means what it always meant.
+ *
+ * The policy is read through a per-process cache (`lib/seo/crawler-policy.ts`)
+ * that never rejects: a backend that cannot be asked costs a page nothing.
  *
  * ## It is also the storefront's status line for an unreachable backend
  *
@@ -45,19 +70,48 @@ import {
  * `backend-reachability.ts`.
  */
 export async function middleware(request: NextRequest): Promise<NextResponse> {
+  const pathname = request.nextUrl.pathname;
+  const channelCode = request.headers.get('x-sales-channel') ?? undefined;
   const requestHeaders = new Headers(request.headers);
-  requestHeaders.set('x-pathname', request.nextUrl.pathname);
 
-  const decision = gateDecision({
-    pathname: request.nextUrl.pathname,
-    prefetch: request.headers.get('next-router-prefetch') !== null,
-  });
-  if (decision === 'unavailable') return unavailable(request, requestHeaders);
-  if (decision === 'ask' && (await backendReachability()) === 'unreachable') {
-    return unavailable(request, requestHeaders);
+  if (!isDocumentPath(pathname)) {
+    // A file, not a page. The directive, and the same care with the request
+    // header as below — a missing file is answered by the not-found page, which
+    // the root layout renders — and nothing else.
+    const directive = robotsDirective(await readRobotsPolicy(channelCode));
+    forwardRobotsDefault(requestHeaders, directive);
+    return withRobots(NextResponse.next({ request: { headers: requestHeaders } }), directive);
   }
 
-  return NextResponse.next({ request: { headers: requestHeaders } });
+  requestHeaders.set('x-pathname', pathname);
+
+  const decision = gateDecision({
+    pathname,
+    prefetch: request.headers.get('next-router-prefetch') !== null,
+  });
+  // Asked together: neither waits for the other, so a document costs one round
+  // of latency however many questions the middleware has for the backend.
+  const [policy, reachability] = await Promise.all([
+    readRobotsPolicy(channelCode),
+    decision === 'ask' ? backendReachability() : Promise.resolve(null),
+  ]);
+  const directive = robotsDirective(policy);
+  // Written or deleted on every request, so the layout never reads a value a
+  // client supplied.
+  forwardRobotsDefault(requestHeaders, directive);
+
+  if (decision === 'unavailable' || reachability === 'unreachable') {
+    // The outage notice is a document of this channel like any other: it
+    // carries the directive whenever one is known.
+    return withRobots(unavailable(request, requestHeaders), directive);
+  }
+
+  return withRobots(NextResponse.next({ request: { headers: requestHeaders } }), directive);
+}
+
+function withRobots(response: NextResponse, directive: RobotsDirective | null): NextResponse {
+  stampRobotsResponse(response.headers, directive);
+  return response;
 }
 
 function unavailable(request: NextRequest, requestHeaders: Headers): NextResponse {
@@ -77,8 +131,12 @@ function unavailable(request: NextRequest, requestHeaders: Headers): NextRespons
   });
 }
 
+/**
+ * Everything except the build's own script and style files.
+ *
+ * A literal, because Next reads `config` without running this file. What is a
+ * *document* among the paths it lets through is `isDocumentPath`'s to say.
+ */
 export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|robots.txt|sitemap.xml|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|css|js|map|woff|woff2|ttf|eot)$).*)',
-  ],
+  matcher: ['/((?!_next/static).*)'],
 };

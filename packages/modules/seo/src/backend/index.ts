@@ -16,7 +16,7 @@ import {
   type SitemapGeneratorOptions,
   type SitemapSettingsPort,
 } from './services/sitemap-generator.service.js';
-import { registerSeoRoutes } from './routes.js';
+import { registerSeoRoutes, type SeoRouteSettingsPort } from './routes.js';
 import { SeoMetaOverride } from './entities/seo-meta-override.entity.js';
 import { SitemapCache } from './entities/sitemap-cache.entity.js';
 
@@ -116,6 +116,8 @@ export function registerModule(ctx: ModuleContext): void {
       metaResolver: seoMetaResolver,
       sitemap: seoSitemapService,
       requireAdmin,
+      // Resolved per call, like the sitemap's own read of the same port.
+      settings: lazyPort<SeoRouteSettingsPort>(ctx, 'settingsReadPort'),
     });
   });
 }

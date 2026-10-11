@@ -6,19 +6,73 @@ import {
 import type { MetaTagResolverService } from './services/meta-tag-resolver.service.js';
 import type { SitemapGeneratorService } from './services/sitemap-generator.service.js';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
-import { currentSalesChannel } from '@endora-commerce/platform/kernel';
+import { currentSalesChannel, getResolvedChannel } from '@endora-commerce/platform/kernel';
+import { z } from 'zod';
+import {
+  DEFAULT_ROBOTS_SETTING_CODE,
+  UnknownRobotsTokenError,
+  robotsPolicyForToken,
+} from './services/robots-policy.js';
+
+/** The one read this module's routes make of the settings store. */
+export interface SeoRouteSettingsPort {
+  get<T>(code: string, salesChannelId: string, schema: z.ZodType<T>): Promise<T>;
+}
 
 export interface SeoRoutesDeps {
   metaResolver: MetaTagResolverService;
   sitemap: SitemapGeneratorService;
   requireAdmin: RequireAdminFactory;
+  settings: SeoRouteSettingsPort;
 }
 
 export async function registerSeoRoutes(
   app: FastifyInstance,
   deps: SeoRoutesDeps,
 ): Promise<void> {
-  const { metaResolver, sitemap, requireAdmin } = deps;
+  const { metaResolver, sitemap, requireAdmin, settings } = deps;
+
+  // -- Public: a sales channel's default robots policy ----------------------
+  //
+  // `specs/144-seo-search-engine-robots/contracts/crawler-policy.md` §1. The
+  // storefront's middleware asks this on behalf of every response it serves
+  // and is itself the cache, which is why no intermediary may keep the answer.
+  //
+  // The channel is the request's resolved one — its `X-Sales-Channel`, else
+  // the system default — so there is no "no channel" answer and no value is
+  // ever computed across channels (Principle XII). The settings store resolves
+  // the channel's own value, else the all-channels value, else the declared
+  // default.
+  //
+  // There is no presence check here. The registration seam answers `503`
+  // `MODULE_DISABLED` for every route of an absent module, and the storefront
+  // reads that as "this feature does not exist".
+  //
+  // A stored value that cannot be read — not a string, or not one of the four
+  // choices — is a `500` and never a permissive `200`: the storefront keeps
+  // what it knew instead of withdrawing a `noindex` nobody withdrew.
+  app.get('/api/v1/storefront/seo/robots-policy', async (request, reply) => {
+    const channel = getResolvedChannel(request);
+    reply.header('Cache-Control', 'no-store');
+    const stored = await settings.get(DEFAULT_ROBOTS_SETTING_CODE, channel.id, z.string());
+    try {
+      return { data: robotsPolicyForToken(stored) };
+    } catch (error) {
+      if (error instanceof UnknownRobotsTokenError) {
+        // The value is a directive spelling, not a secret; it is what an
+        // operator needs to find the row.
+        request.log.error(
+          {
+            settingCode: DEFAULT_ROBOTS_SETTING_CODE,
+            salesChannelCode: channel.code,
+            storedValue: stored,
+          },
+          'seo: the stored default robots value is not one of the declared choices',
+        );
+      }
+      throw error;
+    }
+  });
 
   // -- Public sitemap -------------------------------------------------------
   //

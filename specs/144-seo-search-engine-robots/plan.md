@@ -128,7 +128,7 @@ the job.
 
 | FR | Test (the file is new unless it says "extend") |
 | --- | --- |
-| FR-001 – FR-003, FR-005 | `packages/modules/seo/src/manifest.test.ts` (declares the three settings, closed list, defaults); extend `backend/test/integration/seo/` with a per-channel resolution case |
+| FR-001 – FR-003, FR-005 | `packages/modules/seo/src/backend/manifest.test.ts` (declares the three settings, closed list, defaults); extend `backend/test/integration/seo/` with a per-channel resolution case |
 | FR-004 | `packages/contracts` unit test for the `multiline` refinement; settings row-editor render test; reconciler unit test |
 | FR-006 | `packages/modules/seo/src/backend/services/crawler-text-validator.test.ts`; contract test for the `400` |
 | FR-007 | extend `backend/test/integration/seo/`: a write by an admin without `settings:write` is refused; an audit entry exists with before/after |

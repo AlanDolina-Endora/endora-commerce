@@ -1,3 +1,9 @@
 {
-  "nav.seo.label": "SEO"
+  "nav.seo.label": "SEO",
+  "actions.openSeo.label": "Otwórz SEO",
+  "actions.openSeo.description": "Mapy witryny dla kanałów sprzedaży i nadpisania metatagów",
+  "actions.openSearchEngineRobots.label": "Roboty wyszukiwarek",
+  "actions.openSearchEngineRobots.description": "Otwórz Ustawienia, aby wybrać, czy wyszukiwarki mogą indeksować kanał sprzedaży (domyślne robots, noindex)",
+  "settingLabels.seo.default_robots.name": "Domyślne robots",
+  "settingLabels.seo.default_robots.description": "Co wyszukiwarki dowiadują się o każdej stronie sklepu, osobno dla każdego kanału sprzedaży. Ustawienie wyłącznie dodaje ograniczenia: strona, która sama deklaruje noindex, pozostaje noindex niezależnie od wyboru. NOINDEX prosi wyszukiwarki, aby nie pokazywały sklepu w wynikach, NOFOLLOW — aby nie podążały za jego linkami. Plik robots.txt nie jest zmieniany, ponieważ robot musi pobrać stronę, żeby odczytać, że nie wolno jej indeksować. Zmiana obowiązuje w sklepie w ciągu kilku minut; wyszukiwarki uwzględniają ją przy kolejnej wizycie na stronie, co może potrwać dni lub tygodnie."
 }
