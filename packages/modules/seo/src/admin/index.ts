@@ -1,6 +1,7 @@
 /**
- * `seo`'s admin surface — one route and one sidebar entry, declared by the
- * module that owns them (feature 091, Phase 4, batch 8;
+ * `seo`'s admin surface — one route, one sidebar entry and two contributions
+ * beside its own settings on the Settings screen, declared by the module that
+ * owns them (feature 091, Phase 4, batch 8;
  * `specs/091-module-owned-admin-surfaces/contracts/admin-contribution.md`).
  *
  * **Its one drain was `catalog`'s product picker**, which the screen renders to
@@ -26,13 +27,21 @@
  * **The component is a dynamic-import factory** (R6), so Vite has a split point
  * whether or not anybody remembers to ask for one.
  */
-import type { AdminContributions } from '@endora-commerce/admin-kit/contributions';
+import { zoneComponent, type AdminContributions } from '@endora-commerce/admin-kit/contributions';
 
 /** The module's only route: sitemaps and metadata overrides. */
 const ROUTE_PATH = '/seo';
 
-/** The code every `/api/v1/admin/seo/*` route enforces. */
+/** The code every `/api/v1/admin/seo/*` route of the module's own screen enforces. */
 const SEO_PERMISSION = 'catalog:write';
+
+/**
+ * The code that shows somebody the Settings screen, and the one the preview
+ * endpoint enforces: whoever may see a setting may see what it amounts to,
+ * including an administrator who may not change it
+ * (`specs/144-seo-search-engine-robots/spec.md`, FR-045).
+ */
+const SETTINGS_READ_PERMISSION = 'settings:read';
 
 export const contributions: AdminContributions = {
   routes: [
@@ -62,5 +71,27 @@ export const contributions: AdminContributions = {
       weight: 400,
       requiredPermission: SEO_PERMISSION,
     },
+  ],
+  // What this module shows beside the settings it declared, on the Settings
+  // screen `settings` owns. Each is narrowed with `match` to one setting code,
+  // so its chunk is fetched only by a browser that is showing that row — and
+  // both vanish with the module, through the zone renderer's presence filter.
+  zones: [
+    // The `robots.txt` the selected sales channel's storefront serves: the
+    // rules it generates and the text in the field, saved or not.
+    zoneComponent('settings.setting.after', () => import('./zones/RobotsTxtPreview.js'), {
+      match: { settingCode: 'seo.robots_txt_custom' },
+      requiredPermission: SETTINGS_READ_PERMISSION,
+    }),
+    // "This storefront does not apply the setting yet", on the row where an
+    // operator would otherwise believe a shop is kept out of search (R9).
+    zoneComponent(
+      'settings.setting.after',
+      () => import('./zones/DefaultRobotsStorefrontNotice.js'),
+      {
+        match: { settingCode: 'seo.default_robots' },
+        requiredPermission: SETTINGS_READ_PERMISSION,
+      },
+    ),
   ],
 };
