@@ -1,13 +1,27 @@
-import { composeCrawlerFile, type AdminCrawlerFilePreview } from '@endora-commerce/contracts';
+import {
+  composeCrawlerFile,
+  type AdminCrawlerFile,
+  type AdminCrawlerFilePreview,
+} from '@endora-commerce/contracts';
 
 /**
- * What the `robots.txt` preview shows, as a function of what it was given
+ * What the preview of a crawler file — `robots.txt` or `llms.txt` — shows, as
+ * a function of what it was given
  * (`specs/144-seo-search-engine-robots/contracts/admin-surfaces.md` §4).
  *
  * No React and no I/O: the row's props, the answer of the preview endpoint and
  * the channel being previewed go in, and a description of the screen comes out
  * — which blocks, which notices, in which order. The component
- * (`RobotsTxtPreview.tsx`) draws it and decides nothing.
+ * (`CrawlerFilePreview.tsx`) draws it and decides nothing.
+ *
+ * ## One model for both files
+ *
+ * The two previews are the same screen: one block that is the served file, the
+ * operator's lines marked inside it. They differ in two places, both below.
+ * `robots.txt` is always served, and on a channel kept out of search the
+ * preview explains why it stays open. `llms.txt` is withdrawn on such a
+ * channel, and the preview then says so **in place of** a file nobody is
+ * served.
  *
  * ## One rule for the join, and it is not written here
  *
@@ -19,8 +33,10 @@ import { composeCrawlerFile, type AdminCrawlerFilePreview } from '@endora-commer
  * trailing blank line.
  */
 
-/** The setting the preview sits beside. */
+/** The setting the `robots.txt` preview sits beside. */
 export const ROBOTS_TXT_CUSTOM_SETTING_CODE = 'seo.robots_txt_custom';
+/** The setting the `llms.txt` preview sits beside. */
+export const LLMS_TXT_ADDITIONAL_SETTING_CODE = 'seo.llms_txt_additional';
 /** The setting whose row carries the outdated-storefront notice. */
 export const DEFAULT_ROBOTS_SETTING_CODE = 'seo.default_robots';
 
@@ -51,6 +67,10 @@ export type PreviewNoticeKind =
   | 'stays-open'
   /** `NOINDEX` channel, and the operator's text closes the site to every crawler. */
   | 'site-wide-disallow'
+  /** `llms.txt`: none is served, because the channel's default robots forbids indexing. */
+  | 'llms-not-served-noindex'
+  /** `llms.txt`: the storefront serves none, though the saved default robots allows indexing. */
+  | 'llms-not-served'
   /** The address is the deployment-wide one, shared by every channel. */
   | 'shared-address'
   /** All-channels mode: these channels have a value of their own. */
@@ -98,9 +118,10 @@ export interface PreviewModel {
   /**
    * What the shown file is: `after-saving` — it includes text that is not
    * saved yet; `served-now` — it is what the storefront serves at this moment;
-   * `unknown` — there is no file to show.
+   * `unknown` — there is no file to show; `not-served` — there is no file,
+   * because the storefront serves none for the channel (`llms.txt` only).
    */
-  readonly shows: 'after-saving' | 'served-now' | 'unknown';
+  readonly shows: 'after-saving' | 'served-now' | 'unknown' | 'not-served';
   /**
    * The file, or `null` when the storefront's rules were not obtained — never
    * a remembered or example text (FR-042).
@@ -123,8 +144,17 @@ export interface PreviewModel {
   readonly notices: readonly PreviewNotice[];
 }
 
-/** The preview for one row, from the row's props and the backend's answer. */
-export function buildPreviewModel(row: PreviewRowProps, request: PreviewRequest): PreviewModel {
+/**
+ * The preview for one row, from the row's props and the backend's answer.
+ *
+ * `file` is which file the row's setting shapes. It is the caller's, not read
+ * off the answer: the row knows what it is beside before any answer arrives.
+ */
+export function buildPreviewModel(
+  row: PreviewRowProps,
+  request: PreviewRequest,
+  file: AdminCrawlerFile = 'robots',
+): PreviewModel {
   const mode = row.channelCode === null ? 'all-channels' : 'channel';
   const data = request.status === 'ready' ? request.data : null;
   const fieldText = row.draftText ?? '';
@@ -143,18 +173,32 @@ export function buildPreviewModel(row: PreviewRowProps, request: PreviewRequest)
 
   // `ok`: the storefront joins the two, so the file is the join. Otherwise, if
   // it answered at all, the file is its answer alone — that is what it serves.
-  let file: PreviewFile | null = null;
+  let previewed: PreviewFile | null = null;
   let detachedOperatorPart: string | null = operatorPart === '' ? null : operatorPart;
   if (data !== null && data.base !== null) {
     if (data.state === 'ok') {
-      file = previewFile(data.base, operatorText);
+      previewed = previewFile(data.base, operatorText);
       detachedOperatorPart = null;
     } else {
-      file = previewFile(data.base, '');
+      previewed = previewFile(data.base, '');
     }
   }
-  const shows: PreviewModel['shows'] =
-    file === null
+
+  // `llms.txt` is withdrawn on a channel that asks not to be indexed. Either
+  // the storefront said it serves none, or the saved policy says it will stop
+  // within the minute — in both cases there is no file to promise, and the
+  // sentence stands in place of one. The operator's text is not drawn apart
+  // either: it is in the field, and here it would read as part of something
+  // served.
+  const notServed =
+    file === 'llms' && data !== null && (data.state === 'not-served' || !data.policy.index);
+  if (notServed) {
+    previewed = null;
+    detachedOperatorPart = null;
+  }
+  const shows: PreviewModel['shows'] = notServed
+    ? 'not-served'
+    : previewed === null
       ? 'unknown'
       : data?.state === 'ok' && operatorPartUnsaved
         ? 'after-saving'
@@ -183,7 +227,16 @@ export function buildPreviewModel(row: PreviewRowProps, request: PreviewRequest)
       channels: [...data.channelsWithOwnValue],
     });
   }
-  if (data !== null && !data.policy.index) {
+  if (notServed && data !== null) {
+    // Which sentence depends on whether the saved setting explains it. When it
+    // does not — the storefront has not caught up with a change, or sees no
+    // `seo` — the setting is not blamed for it.
+    notices.push({
+      kind: data.policy.index ? 'llms-not-served' : 'llms-not-served-noindex',
+      tone: 'info',
+    });
+  }
+  if (file === 'robots' && data !== null && !data.policy.index) {
     notices.push({ kind: 'stays-open', tone: 'info' });
     if (closesSiteToEveryCrawler(operatorText)) {
       notices.push({ kind: 'site-wide-disallow', tone: 'warning' });
@@ -198,7 +251,7 @@ export function buildPreviewModel(row: PreviewRowProps, request: PreviewRequest)
     previewedChannel,
     loading: request.status === 'loading',
     shows,
-    file,
+    file: previewed,
     detachedOperatorPart,
     operatorPartEmpty: operatorPart === '',
     operatorPartOrigin,

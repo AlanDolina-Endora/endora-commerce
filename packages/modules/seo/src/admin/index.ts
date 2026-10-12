@@ -1,5 +1,5 @@
 /**
- * `seo`'s admin surface — one route, one sidebar entry and two contributions
+ * `seo`'s admin surface — one route, one sidebar entry and three contributions
  * beside its own settings on the Settings screen, declared by the module that
  * owns them (feature 091, Phase 4, batch 8;
  * `specs/091-module-owned-admin-surfaces/contracts/admin-contribution.md`).
@@ -75,12 +75,18 @@ export const contributions: AdminContributions = {
   // What this module shows beside the settings it declared, on the Settings
   // screen `settings` owns. Each is narrowed with `match` to one setting code,
   // so its chunk is fetched only by a browser that is showing that row — and
-  // both vanish with the module, through the zone renderer's presence filter.
+  // all of them vanish with the module, through the zone renderer's presence filter.
   zones: [
     // The `robots.txt` the selected sales channel's storefront serves: the
     // rules it generates and the text in the field, saved or not.
     zoneComponent('settings.setting.after', () => import('./zones/RobotsTxtPreview.js'), {
       match: { settingCode: 'seo.robots_txt_custom' },
+      requiredPermission: SETTINGS_READ_PERMISSION,
+    }),
+    // The `llms.txt` of the selected sales channel, drawn by the same
+    // component — or the sentence that none is served there (FR-044).
+    zoneComponent('settings.setting.after', () => import('./zones/LlmsTxtPreview.js'), {
+      match: { settingCode: 'seo.llms_txt_additional' },
       requiredPermission: SETTINGS_READ_PERMISSION,
     }),
     // "This storefront does not apply the setting yet", on the row where an

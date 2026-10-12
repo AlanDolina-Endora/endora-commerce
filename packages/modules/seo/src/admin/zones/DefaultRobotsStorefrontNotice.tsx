@@ -5,7 +5,7 @@ import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { Alert, AlertDescription } from '@endora-commerce/admin-kit/ui';
 import {
   SYSTEM_DEFAULT_CHANNEL,
-  reloadRobotsPreviews,
+  reloadCrawlerPreviews,
   usePreviewChannels,
   useRobotsPreviews,
 } from './preview-client.js';
@@ -58,11 +58,12 @@ export function DefaultRobotsStorefrontNotice({
   );
 
   // The answer carries the channel's saved policy, which the preview beside
-  // the `robots.txt` text shows a sentence about. When this row stops being
+  // the `robots.txt` text shows a sentence about and which decides whether the
+  // one beside the `llms.txt` content has a file to show at all. When this row stops being
   // dirty it was saved or put back, so the answers are asked for again.
   const wasDirty = useRef(dirty);
   useEffect(() => {
-    if (wasDirty.current && !dirty) reloadRobotsPreviews();
+    if (wasDirty.current && !dirty) reloadCrawlerPreviews();
     wasDirty.current = dirty;
   }, [dirty]);
 
