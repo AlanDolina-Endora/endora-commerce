@@ -204,7 +204,9 @@ describe('the robots.txt preview', () => {
     await waitFor(() => expect(file(container)).not.toBeNull());
     expect(file(container)?.textContent).toBe(BASE);
     expect(part(container, 'operator')).toBeNull();
-    expect(screen.getByText(en('crawlerPreview.legend.systemOnly'))).toBeTruthy();
+    expect(
+      screen.getByText(`${en('crawlerPreview.legend.systemOnly')} ${en('crawlerPreview.legend.nothingAdded')}`),
+    ).toBeTruthy();
   });
 
   it('tells the operator’s lines from the generated ones inside the block, in words', async () => {
@@ -243,9 +245,37 @@ describe('the robots.txt preview', () => {
     // Capped, with the scroll inside the block — lower on a narrow screen.
     expect(block.className).toContain('overflow-auto');
     expect(block.className).toMatch(/(^| )max-h-80( |$)/);
-    expect(block.className).toContain('sm:max-h-[36rem]');
+    expect(block.className).toContain('sm:max-h-[48rem]');
     // No sentence fell back to its key.
     expect(section.textContent).not.toContain('crawlerPreview.');
+  });
+
+  it('keeps the operator’s lines in view: a capped block is scrolled to its end, and only the block', async () => {
+    const { container, rerender } = renderWithI18n(zone({ draftText: '' }), { seo: EN });
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    const block = file(container) as HTMLElement;
+    // jsdom lays nothing out; give the block a height to scroll through.
+    Object.defineProperty(block, 'scrollHeight', { configurable: true, value: 900 });
+    block.scrollTop = 0;
+    const pageScroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    const focused = document.activeElement;
+
+    rerender(zone({ draftText: 'Disallow: /a/\n', dirty: true }));
+    expect(block.scrollTop).toBe(900);
+    // With nothing of the operator's in the file it starts from the top.
+    rerender(zone({ draftText: '', dirty: false }));
+    expect(block.scrollTop).toBe(0);
+    expect(pageScroll).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(focused);
+    pageScroll.mockRestore();
+  });
+
+  it('in the outdated state does not say the text adds nothing: it is shown apart', async () => {
+    answers['pl'] = answer('pl', { state: 'storefront-outdated' });
+    const { container } = renderWithI18n(zone({ draftText: OWN }), { seo: EN });
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    expect(container.textContent).not.toContain(en('crawlerPreview.legend.nothingAdded'));
+    expect(screen.getByText(en('crawlerPreview.legend.systemOnly'))).toBeTruthy();
   });
 
   it('renders in Polish from the Polish bundle', async () => {

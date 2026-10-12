@@ -656,6 +656,22 @@ else.
   clone, with the reason in the commit message.
   *Done; results in the pull request. No recorded read size was touched: `read-size-drift.test.ts` stayed green.*
 
+**After review and the owner's reading of the screenshots (2026-10-12)** — recorded here because
+it changes what T080 – T087 delivered:
+
+- *Presentation.* The preview is **one block whose text is the served file**, the operator's lines
+  marked inside it, under a heading that says "as served now" or "after saving"
+  (`contracts/admin-surfaces.md` §4 is amended to match). It was two blocks.
+- *T081 / T084.* `salesChannelCode` is optional and means the system default channel, so an
+  administrator who may not list sales channels still gets a preview (FR-045).
+- *T086.* What a row watches includes the editing mode, and the row asks again when it stops being
+  dirty: a channel's "has its own value" state went stale across All channels → channel → All
+  channels.
+- *T087.* The notice says the storefront "did not confirm" support and "may" not apply the
+  setting, which is what the missing header shows.
+- *T084.* The `check:channel-resolution` exemption for a sent header refuses the pattern of a
+  destructuring assignment, which has the same shape and is a read.
+
 ---
 
 ## Slice 5 — `llms.txt` (US3, FR-044)

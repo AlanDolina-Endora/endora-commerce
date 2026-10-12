@@ -68,14 +68,16 @@ const HEADING_KEY: Record<PreviewModel['shows'], string> = {
  *
  * Capped, so that the row does not take over the page: lower on a narrow
  * screen, where the row would otherwise run to several screens, and tall
- * enough on a wide one to show the rules a storefront generates today without
- * scrolling inside the block. Long lines scroll sideways inside the block; the
- * page never scrolls sideways. The block takes focus, so it can be scrolled
- * from the keyboard.
+ * enough on a wide one to show the rules a storefront generates today with a
+ * screenful of the operator's own lines under them. Past the cap the block
+ * scrolls inside, and is kept at its end while it holds the operator's lines —
+ * see the effect in the component. Long lines scroll sideways inside the
+ * block; the page never scrolls sideways. The block takes focus, so it can be
+ * scrolled from the keyboard.
  */
 const BLOCK_CLASS =
   'max-h-80 overflow-auto whitespace-pre rounded-md border bg-background font-mono text-xs ' +
-  'leading-5 sm:max-h-[36rem] focus-visible:outline-none focus-visible:ring-2 ' +
+  'leading-5 sm:max-h-[48rem] focus-visible:outline-none focus-visible:ring-2 ' +
   'focus-visible:ring-ring';
 
 /**
@@ -144,6 +146,19 @@ export function RobotsTxtPreview({
         : t('crawlerPreview.operator.label');
   const fileHasOperatorPart = model.file !== null && model.file.segments.length > 1;
 
+  // The operator's lines are the end of the file, and the block is capped. So
+  // while the file holds them, the block is kept scrolled to its end: what the
+  // operator is typing stays in view instead of sitting below the generated
+  // rules, out of sight. Only the block's own scroll position moves — never
+  // the page's, and never the focus.
+  const fileRef = useRef<HTMLPreElement>(null);
+  const fileText = model.file?.text ?? null;
+  useEffect(() => {
+    const block = fileRef.current;
+    if (block === null || fileText === null) return;
+    block.scrollTop = fileHasOperatorPart ? block.scrollHeight : 0;
+  }, [fileText, fileHasOperatorPart]);
+
   return (
     <section
       aria-labelledby={headingId}
@@ -207,7 +222,7 @@ export function RobotsTxtPreview({
           what appears in it is announced; not atomic, so that it is read on
           its own. Each notice is a sentence with an icon; the tone is never
           carried by colour alone. */}
-      <div role="status" aria-live="polite" aria-atomic="false" className="space-y-2 empty:-mt-3">
+      <div role="status" aria-live="polite" aria-atomic="false" className="space-y-2 empty:!mt-0">
         {model.loading ? (
           <p className="text-xs text-muted-foreground">{t('crawlerPreview.loading')}</p>
         ) : null}
@@ -247,11 +262,14 @@ export function RobotsTxtPreview({
           <p id={legendId} className="text-xs text-muted-foreground">
             {fileHasOperatorPart
               ? t('crawlerPreview.legend.both')
-              : t('crawlerPreview.legend.systemOnly')}
+              : model.operatorPartEmpty
+                ? `${t('crawlerPreview.legend.systemOnly')} ${t('crawlerPreview.legend.nothingAdded')}`
+                : t('crawlerPreview.legend.systemOnly')}
           </p>
           {/* The file. Its text content is the served file to the byte: the
               labels are drawn by the stylesheet and are not text in it. */}
           <pre
+            ref={fileRef}
             tabIndex={0}
             aria-labelledby={headingId}
             aria-describedby={legendId}

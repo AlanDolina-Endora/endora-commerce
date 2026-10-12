@@ -68,9 +68,9 @@ export function DefaultRobotsStorefrontNotice({
 
   // The live region is mounted before it has anything to say: a region that
   // arrives already carrying its text is not announced. Empty, it takes no
-  // room — the negative margin gives back the gap its row leaves above it.
+  // room: the gap its row would leave above it is taken away while it is empty.
   return (
-    <div role="status" aria-live="polite" className="empty:-mt-2">
+    <div role="status" aria-live="polite" className="empty:!mt-0">
       {outdated.length === 0 ? null : (
         <Alert
           role="presentation"
