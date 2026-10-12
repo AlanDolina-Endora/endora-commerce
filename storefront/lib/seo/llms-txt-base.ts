@@ -1,0 +1,120 @@
+import { SITEMAP_STATIC_ROUTES } from '../../app/sitemap';
+import { absoluteUrl, siteUrl } from './site-url';
+
+/**
+ * The part of `llms.txt` this storefront generates
+ * (`specs/144-seo-search-engine-robots/contracts/crawler-policy.md` §5; FR-025).
+ *
+ * ```text
+ * # <the shop's name>
+ *
+ * ## Pages
+ *
+ * - [Home](https://shop.example/)
+ * - [Catalog](https://shop.example/catalog)
+ * …
+ *
+ * ## Sitemap
+ *
+ * - [Sitemap](https://shop.example/sitemap.xml)
+ * ```
+ *
+ * The shape is the one <https://llmstxt.org> proposes — a heading that names
+ * the site, then sections of links — as far as this storefront can fill it in
+ * on its own. It has no summary of the shop to offer, so it writes none; what
+ * an operator adds follows this part and may say anything the proposal allows.
+ *
+ * ## Which pages, and why exactly these
+ *
+ * **`SITEMAP_STATIC_ROUTES`, and nothing else.** That list is the storefront's
+ * hand-written statement of its public, indexable, static addresses, and
+ * `check:storefront-indexability` already reconciles it against the route
+ * tree in both directions. Reading it means "only public and indexable
+ * addresses" is inherited from an instrument rather than restated here, and
+ * that no address from a family `robots.txt` closes can appear:
+ * `test/seo/llms-txt-base.test.ts` holds every address this file writes
+ * against the rule list `robots-system-rules.ts` owns.
+ *
+ * **Less {@link LLMS_TXT_CONDITIONAL_PAGES} that are not served right now.** A
+ * static route is not always a page: `/blog` answers "not found" while the
+ * `blog` module is switched off and while the sales channel has no blog. A
+ * file that sends a reader to a missing page is worse than one that does not
+ * mention it, so the caller says which of those are absent
+ * (`llms-txt-pages.ts`) and they are left out. Every other listed page is
+ * served by this storefront whatever is switched on behind it.
+ *
+ * Nothing is computed from the route tree, and nothing is taken from a
+ * request.
+ */
+
+/**
+ * How each listed page is named in the file. In English, like the rest of the
+ * generated part: the file is read by software, and its operator's own words
+ * follow it in whatever language they write.
+ *
+ * Keyed by the entries of `SITEMAP_STATIC_ROUTES`; the test holds the two sets
+ * equal, so a static route added to the sitemap is named here in the same
+ * change. A route without a title would still be listed, under its path.
+ */
+export const LLMS_TXT_PAGE_TITLES: Readonly<Record<string, string>> = {
+  '/': 'Home',
+  '/catalog': 'Catalog',
+  '/search': 'Search',
+  '/blog': 'Blog',
+  '/kontakt': 'Contact',
+};
+
+/**
+ * The listed pages this storefront serves only while something behind them is
+ * there, and what that is. The value names the question `llms-txt-pages.ts`
+ * asks; a page not here is always listed.
+ */
+export const LLMS_TXT_CONDITIONAL_PAGES = {
+  '/blog': 'blog',
+} as const satisfies Readonly<Record<string, string>>;
+
+export type LlmsTxtConditionalPath = keyof typeof LLMS_TXT_CONDITIONAL_PAGES;
+
+export interface LlmsTxtBaseInput {
+  /** The channel's configured shop name, or `''`. */
+  readonly shopName: string;
+  /**
+   * The paths not served right now. Only a member of
+   * {@link LLMS_TXT_CONDITIONAL_PAGES} is ever left out; anything else here is
+   * ignored, so this can remove a line and can never add one.
+   */
+  readonly unservedPaths: readonly string[];
+}
+
+/**
+ * The shop's name as one line of a heading: surrounding whitespace removed and
+ * every run of whitespace inside — a line break included — made one space, so
+ * that a name cannot start a line of its own in the file. Falls back to the
+ * site's host when there is no name.
+ *
+ * `split` on a single-character class and a filter, rather than a pattern
+ * with a quantifier: its cost is the length of the name whatever the name is.
+ */
+function headingText(shopName: string): string {
+  const words = shopName.split(/\s/).filter((word) => word.length > 0);
+  return words.length > 0 ? words.join(' ') : siteUrl().host;
+}
+
+/** The generated part, ending in exactly one line break. */
+export function renderLlmsTxtBase({ shopName, unservedPaths }: LlmsTxtBaseInput): string {
+  const pages = SITEMAP_STATIC_ROUTES.filter(
+    (path) => !(Object.hasOwn(LLMS_TXT_CONDITIONAL_PAGES, path) && unservedPaths.includes(path)),
+  );
+  return [
+    `# ${headingText(shopName)}`,
+    '',
+    '## Pages',
+    '',
+    ...pages.map((path) => `- [${LLMS_TXT_PAGE_TITLES[path] ?? path}](${absoluteUrl(path)})`),
+    '',
+    '## Sitemap',
+    '',
+    `- [Sitemap](${absoluteUrl('/sitemap.xml')})`,
+    '',
+  ].join('\n');
+}

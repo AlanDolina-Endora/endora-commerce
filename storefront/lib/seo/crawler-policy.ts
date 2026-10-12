@@ -7,8 +7,8 @@
  *  * the channel's **default robots policy** — asked by the middleware, on
  *    behalf of every response it serves;
  *  * what the channel's **crawler files** are built from — the operator's
- *    custom `robots.txt` instructions among it — asked when such a file is
- *    served.
+ *    custom `robots.txt` instructions and additional `llms.txt` content among
+ *    it — asked when such a file is served.
  *
  * Each is a cache first and a client second: one request per channel per
  * minute, held in this module's own memory. Neither uses Next's data cache or
@@ -132,7 +132,24 @@ export interface CrawlerFiles extends RobotsPolicy {
     /** The channel's configured shop name, or `''`. */
     readonly name: string;
   };
+  /**
+   * What the backend could not read from what is stored, by name — absent
+   * when it read everything. It answers the rest rather than fail the whole
+   * read, so that a file which needs none of what is named is still served:
+   * `robots.txt` reads neither of the two things that can be named here.
+   *
+   * {@link UNREADABLE_POLICY} — `index` and `follow` are not known, whatever
+   * they say; {@link UNREADABLE_LLMS_TXT} — `llmsTxtAdditional` is not known,
+   * and is `''`. A name this storefront does not know is one it has no use
+   * for.
+   */
+  readonly unreadable?: readonly string[];
 }
+
+/** In {@link CrawlerFiles.unreadable}: the channel's default robots is not known. */
+export const UNREADABLE_POLICY = 'policy';
+/** In {@link CrawlerFiles.unreadable}: the channel's additional `llms.txt` content is not known. */
+export const UNREADABLE_LLMS_TXT = 'llmsTxtAdditional';
 
 /**
  * The longest text this storefront takes from the backend, in characters.
@@ -158,12 +175,21 @@ function isCrawlerText(value: unknown): value is string {
  */
 export function isCrawlerFilesResponse(body: unknown): body is { data: CrawlerFiles } {
   if (!isRobotsPolicyResponse(body)) return false;
-  const { robotsTxtCustom, llmsTxtAdditional, shop } = body.data as {
+  const { robotsTxtCustom, llmsTxtAdditional, shop, unreadable } = body.data as {
     robotsTxtCustom?: unknown;
     llmsTxtAdditional?: unknown;
     shop?: unknown;
+    unreadable?: unknown;
   };
   if (!isCrawlerText(robotsTxtCustom) || !isCrawlerText(llmsTxtAdditional)) return false;
+  // Optional, and a list of names when it is there. Which names is not judged:
+  // a later backend may name something this storefront has never heard of.
+  if (
+    unreadable !== undefined &&
+    !(Array.isArray(unreadable) && unreadable.every((name) => typeof name === 'string'))
+  ) {
+    return false;
+  }
   if (typeof shop !== 'object' || shop === null || Array.isArray(shop)) return false;
   return typeof (shop as { name?: unknown }).name === 'string';
 }
@@ -462,6 +488,11 @@ export function createCrawlerPolicyReader(deps: CrawlerPolicyReaderDeps): Crawle
             robotsTxtCustom: body.data.robotsTxtCustom,
             llmsTxtAdditional: body.data.llmsTxtAdditional,
             shop: { name: body.data.shop.name },
+            // Carried only when it says something, so "everything was read"
+            // has one shape whether the backend sent an empty list or none.
+            ...(body.data.unreadable !== undefined && body.data.unreadable.length > 0
+              ? { unreadable: [...body.data.unreadable] }
+              : {}),
           }
         : null,
   });

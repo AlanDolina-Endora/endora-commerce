@@ -144,6 +144,21 @@ describe('robots.txt — what is served', () => {
     expect(noindex.split('\n')).not.toContain('Disallow: /');
   });
 
+  it('is served when the channel’s default robots, or its llms.txt content, could not be read', async () => {
+    // The backend names what it could not read instead of failing the whole
+    // answer (`contracts/crawler-policy.md` §2.2). This file reads neither of
+    // the things it can name, so a default robots row nobody can interpret
+    // does not cost the channel its robots.txt.
+    for (const unreadable of [['policy'], ['llmsTxtAdditional'], ['policy', 'llmsTxtAdditional']]) {
+      const served = await serve({
+        kind: 'value',
+        value: files({ index: false, follow: false, robotsTxtCustom: CUSTOM, unreadable }),
+      }).response;
+      expectServedHeaders(served);
+      expect(await served.text()).toBe(`${BEFORE}\n${CUSTOM}`);
+    }
+  });
+
   it('serves the text as plain text whatever it looks like', async () => {
     const hostile = '<!doctype html><script>alert(1)</script>\r\nSet-Cookie: a=b\r\n\r\n{"a":1}';
     const { response } = serve({ kind: 'value', value: files({ robotsTxtCustom: hostile }) });

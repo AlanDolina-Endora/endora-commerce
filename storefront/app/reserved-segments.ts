@@ -41,13 +41,15 @@
  * `robots.txt` is here because `app/robots.txt/route.ts` serves it, and a
  * directory under `app/` is a segment of the route tree like any other. It was
  * absent while the file came from `app/robots.ts`, a file at the app root.
+ * `llms.txt` is here on the same terms, for `app/llms.txt/route.ts`
+ * (`specs/144-seo-search-engine-robots/`, FR-028).
  *
  * `sitemap.xml` is still not here, for that reason: it is produced by
  * `app/sitemap.ts`, a file at the app root rather than a directory, so no
  * segment of the route tree names it. Nothing is lost by it — a CMS slug cannot
  * contain a `.` (`cmsSlugRe`), so that URL is reachable by no slug an operator
- * can save, and neither is `robots.txt`, whose entry is this array being
- * complete rather than a refusal anyone will meet.
+ * can save, and neither is `robots.txt` or `llms.txt`, whose entries are this
+ * array being complete rather than a refusal anyone will meet.
  */
 export const RESERVED_TOP_LEVEL_SEGMENTS: readonly string[] = [
   'account',
@@ -62,6 +64,7 @@ export const RESERVED_TOP_LEVEL_SEGMENTS: readonly string[] = [
   'compare',
   'invitations',
   'kontakt',
+  'llms.txt',
   'login',
   'manifest.webmanifest',
   'newsletter',

@@ -1145,6 +1145,16 @@ describe('isCrawlerFilesResponse agrees with the contract schema', () => {
     { data: { ...FILES, robotsTxtCustom: '', llmsTxtAdditional: '', shop: { name: '' } } },
     { data: { ...FILES, extra: 1, shop: { name: 'Shop', logoUrl: 'x' } }, meta: {} },
     { data: { ...FILES, robotsTxtCustom: AT_LIMIT, llmsTxtAdditional: AT_LIMIT } },
+    // `unreadable` — optional, a list of names, any names.
+    { data: { ...FILES, unreadable: [] } },
+    { data: { ...FILES, index: false, follow: false, unreadable: ['policy'] } },
+    { data: { ...FILES, unreadable: ['policy', 'llmsTxtAdditional', 'somethingLater'] } },
+    { data: { ...FILES, unreadable: 'policy' } },
+    { data: { ...FILES, unreadable: null } },
+    { data: { ...FILES, unreadable: true } },
+    { data: { ...FILES, unreadable: [1] } },
+    { data: { ...FILES, unreadable: ['policy', null] } },
+    { data: { ...FILES, unreadable: { policy: true } } },
     { data: { ...FILES, robotsTxtCustom: `${AT_LIMIT}a` } },
     { data: { ...FILES, llmsTxtAdditional: `${AT_LIMIT}a` } },
     { data: { ...FILES, robotsTxtCustom: null } },
@@ -1180,8 +1190,33 @@ describe('isCrawlerFilesResponse agrees with the contract schema', () => {
 
   it('accepts some fixtures and refuses others — the comparison is not vacuous', () => {
     const verdicts = FIXTURES.map((fixture) => isCrawlerFilesResponse(fixture));
-    expect(verdicts.filter(Boolean)).toHaveLength(4);
+    expect(verdicts.filter(Boolean)).toHaveLength(7);
     expect(verdicts.filter((verdict) => !verdict).length).toBeGreaterThan(15);
+  });
+
+  it('hands on what the backend could not read, and says nothing when it read everything', async () => {
+    const read = async (data: unknown) => {
+      const reader = createCrawlerPolicyReader({
+        fetch: async () => new Response(JSON.stringify({ data }), { status: 200 }),
+        now: () => 0,
+        baseUrl: () => 'http://api.test',
+        delay: () => new Promise(() => undefined),
+      });
+      return reader.crawlerFiles(undefined);
+    };
+    expect(await read({ ...FILES, unreadable: ['policy', 'later'] })).toEqual({
+      kind: 'value',
+      value: { ...FILES, unreadable: ['policy', 'later'] },
+    });
+    // Absent and empty are the same statement, and the value has one shape for it.
+    for (const data of [FILES, { ...FILES, unreadable: [] }]) {
+      const answer = await read(data);
+      expect(answer).toEqual({ kind: 'value', value: FILES });
+      expect(answer.kind === 'value' && 'unreadable' in answer.value).toBe(false);
+    }
+    // A list that is not one makes the whole answer unreadable, like any other
+    // member that fails the guard.
+    expect(await read({ ...FILES, unreadable: 'policy' })).toEqual({ kind: 'unknown' });
   });
 
   it('restates the contract’s limit rather than importing it', () => {
