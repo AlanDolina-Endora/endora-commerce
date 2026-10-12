@@ -46,8 +46,15 @@ const NOTICE_KEY: Record<PreviewNotice['kind'], string> = {
   'previewed-channel-has-own-value': 'crawlerPreview.notice.previewedChannelHasOwnValue',
 };
 
+/**
+ * Tall enough to show the rules a storefront generates today without a scroll
+ * bar inside the block — the point of a preview is to see the file — and
+ * capped, so that a very long text scrolls inside its block instead of pushing
+ * the rest of the Settings screen away. Long lines scroll sideways inside the
+ * block as well: a narrow screen never scrolls as a whole.
+ */
 const BLOCK_CLASS =
-  'max-h-64 overflow-auto whitespace-pre rounded-md px-3 py-2 font-mono text-xs leading-5 ' +
+  'max-h-[36rem] overflow-auto whitespace-pre rounded-md px-3 py-2 font-mono text-xs leading-5 ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 export function RobotsTxtPreview({
