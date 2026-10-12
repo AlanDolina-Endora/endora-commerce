@@ -15,6 +15,10 @@
  * one per-process reader (`crawler-policy.ts`). Nothing here is a second cache
  * or a second rule for the join.
  *
+ * A `200` is `public, max-age=60` — except when a listed page could not be
+ * asked about and nothing was known about it: that file leaves the page out
+ * and is sent `no-store`.
+ *
  * ## Where it differs from `robots.txt`: this file can be withdrawn
  *
  * `robots.txt` is always served — a crawler must be able to read what it may
@@ -59,6 +63,7 @@ import {
   crawlerFileGeneratedPart,
   crawlerFileHeaders,
   crawlerFileServed,
+  crawlerFileServedUncached,
   crawlerFileUnavailable,
   requestChannelCode,
 } from './crawler-file-response';
@@ -75,8 +80,9 @@ export interface UnservedPages {
   /** Members of `LLMS_TXT_CONDITIONAL_PAGES`. */
   readonly paths: readonly string[];
   /**
-   * `false` when a page could not be asked about and was counted as unserved
-   * to be safe. Such an answer is used for the request in hand and not kept.
+   * `false` when a page could not be asked about, nothing was known about it,
+   * and it was counted as unserved to be safe. A file built on such an answer
+   * is served for the request in hand and may be kept by no cache.
    */
   readonly certain: boolean;
 }
@@ -84,7 +90,11 @@ export interface UnservedPages {
 export interface LlmsTxtDeps {
   /** The channel's crawler files, through the per-process reader. Never rejects. */
   readonly readCrawlerFiles: (channelCode: string | undefined) => Promise<CrawlerFilesRead>;
-  /** See {@link UnservedPages}. May reject; a rejection is "could not ask". */
+  /**
+   * See {@link UnservedPages}. Asked for every request: remembering the
+   * answer is the reader's (`llms-txt-pages.ts`), which keeps it per channel
+   * on the terms it keeps everything else. A rejection is "could not ask".
+   */
   readonly readUnservedPages: (channelCode: string | undefined) => Promise<UnservedPages>;
 }
 
@@ -95,20 +105,20 @@ const NOTHING_CONFIRMED: UnservedPages = {
 };
 
 /**
- * What was worked out for a configuration, kept for as long as the reader
- * holds that configuration.
- *
- * Keyed by the configuration **object**, as `robots-txt.ts` keys its own: the
- * reader hands out the same object for a channel until a read replaces it —
- * within a minute or two — so what is kept cannot outlive the configuration it
- * was made for, cannot be another channel's, and is collected with the cache
- * entry it belongs to. This is how the question about pages is asked once per
- * refresh rather than once per request, without a cache of its own.
+ * The file composed for a configuration, kept for as long as the reader holds
+ * that configuration — as `robots-txt.ts` keeps its own, and for the same
+ * reasons. The base is kept beside it and compared, not assumed: which pages
+ * are served can change under a configuration that has not.
  */
-const kept = new WeakMap<
-  CrawlerFiles,
-  { unserved?: UnservedPages; composed?: { base: string; body: string } }
->();
+const composed = new WeakMap<CrawlerFiles, { base: string; body: string }>();
+
+function fileFor(base: string, configuration: CrawlerFiles): string {
+  const kept = composed.get(configuration);
+  if (kept !== undefined && kept.base === base) return kept.body;
+  const body = composeCrawlerFile(base, configuration.llmsTxtAdditional);
+  composed.set(configuration, { base, body });
+  return body;
+}
 
 function notFound(): Response {
   // `no-store`: a file that has been withdrawn must be seen withdrawn, and one
@@ -130,17 +140,11 @@ export async function llmsTxtResponse(request: Request, deps: LlmsTxtDeps): Prom
   }
   if (!configuration.index) return notFound();
 
-  const memo = kept.get(configuration) ?? {};
-  kept.set(configuration, memo);
+  const unserved = await deps.readUnservedPages(channelCode).catch(() => NOTHING_CONFIRMED);
 
-  let unserved = memo.unserved;
-  if (unserved === undefined) {
-    unserved = await deps.readUnservedPages(channelCode).catch(() => NOTHING_CONFIRMED);
-    if (unserved.certain) memo.unserved = unserved;
-  }
-
-  // Rendered per request and compared with what was kept, not assumed: the
-  // origin is read from the environment, and the pages may have just changed.
+  // The origin in the addresses is the deployment's one public origin — fixed
+  // when the storefront is built, the same for every sales channel, as in the
+  // sitemap. What varies per channel is the shop's name and the pages.
   const base = renderLlmsTxtBase({
     shopName: configuration.shop.name,
     unservedPaths: unserved.paths,
@@ -150,8 +154,8 @@ export async function llmsTxtResponse(request: Request, deps: LlmsTxtDeps): Prom
     return crawlerFileGeneratedPart(base);
   }
 
-  if (memo.composed === undefined || memo.composed.base !== base) {
-    memo.composed = { base, body: composeCrawlerFile(base, configuration.llmsTxtAdditional) };
-  }
-  return crawlerFileServed(memo.composed.body);
+  const body = fileFor(base, configuration);
+  // Built without knowing whether a listed page exists: the page is left out,
+  // and the answer is this request's alone — the next one may know.
+  return unserved.certain ? crawlerFileServed(body) : crawlerFileServedUncached(body);
 }

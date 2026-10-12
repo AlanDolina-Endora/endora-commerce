@@ -161,6 +161,23 @@ describe('the generated llms.txt base — the shop’s name', () => {
     ).toBe('# Endora Demo Polska');
   });
 
+  it('carries no control character and no direction override into the heading', () => {
+    // C0 and C1 controls, and the characters that reorder what follows them
+    // on screen: a name must not be able to make the heading — or the lines
+    // after it — read as something they are not.
+    const hostile =
+      'En\u0000do\u0007ra\u001B[31m \u202Eomed\u202C \u2066x\u2069\u0085\u009F\u007F \u202A\u202B\u202D\u2067\u2068y';
+    const heading = renderLlmsTxtBase({ shopName: hostile, unservedPaths: [] }).split('\n')[0];
+    expect(heading).toBe('# Endora[31m omed x y');
+    expect(heading).not.toMatch(/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/);
+  });
+
+  it('falls back to the host when the name is made of such characters alone', () => {
+    expect(
+      renderLlmsTxtBase({ shopName: '\u202E\u0000\u2066 \u009F', unservedPaths: [] }).split('\n')[0],
+    ).toBe('# shop.example');
+  });
+
   it('takes a name made to be slow no longer than any other', () => {
     const shopName = `${' \n'.repeat(200_000)}x${' '.repeat(200_000)}`;
     const start = performance.now();

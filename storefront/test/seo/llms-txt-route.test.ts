@@ -350,38 +350,43 @@ describe('llms.txt — pages this storefront does not serve right now (FR-025)',
     expect(pagesAsked).toEqual(['pl_retail']);
   });
 
-  it('asks once per configuration the reader holds, not once per request', async () => {
-    const value = files();
-    const first = serve({ kind: 'value', value }, { pages: { paths: ['/blog'], certain: true } });
-    expect(await (await first.response).text()).not.toContain('/blog');
-    // The same configuration object: the answer is kept with it…
-    const second = serve({ kind: 'value', value }, { pages: ALL_SERVED });
-    expect(await (await second.response).text()).not.toContain('/blog');
-    expect(second.pagesAsked).toEqual([]);
-    // …and a refreshed configuration asks again.
-    const third = serve({ kind: 'value', value: files() }, { pages: ALL_SERVED });
-    expect(await (await third.response).text()).toContain('/blog');
-    expect(third.pagesAsked).toEqual([undefined]);
-  });
-
-  it('does not keep an answer it was not sure of: the page is left out, and asked about again', async () => {
-    const value = files();
+  /**
+   * A file built without knowing whether a page exists is not one to hand to
+   * a shared cache for a minute: the next request may know. The question is
+   * the reader's to remember (`llms-txt-pages.ts`); this module asks it for
+   * every request and keeps nothing of the answer.
+   */
+  it('serves a file it was not sure of without the page, and lets no cache keep it', async () => {
+    const value = files({ llmsTxtAdditional: ADDITIONAL });
     const unsure = serve({ kind: 'value', value }, { pages: { paths: ['/blog'], certain: false } });
     const served = await unsure.response;
     expect(served.status).toBe(200);
-    expect(await served.text()).not.toContain('/blog');
+    expect(served.headers.get('cache-control')).toBe('no-store');
+    expect(await served.text()).toBe(`${base('Endora Demo', ['/blog'])}\n${ADDITIONAL}`);
+    // Once the answer is certain the same configuration is served whole, and cacheable.
     const again = serve({ kind: 'value', value }, { pages: ALL_SERVED });
-    expect(await (await again.response).text()).toContain('/blog');
+    const sure = await again.response;
+    expect(sure.headers.get('cache-control')).toBe('public, max-age=60');
+    expect(await sure.text()).toContain('/blog');
     expect(again.pagesAsked).toEqual([undefined]);
   });
 
-  it('serves the file when the question itself fails: without the pages it could not confirm', async () => {
+  it('a certain "not served" is cacheable like any other file', async () => {
+    const served = await serve(
+      { kind: 'value', value: files() },
+      { pages: { paths: ['/blog'], certain: true } },
+    ).response;
+    expect(served.headers.get('cache-control')).toBe('public, max-age=60');
+  });
+
+  it('serves the file when the question itself fails: without the pages it could not confirm, uncached', async () => {
     const { response } = serve(
       { kind: 'value', value: files({ llmsTxtAdditional: ADDITIONAL }) },
       { pages: () => Promise.reject(new Error('boom')) },
     );
     const served = await response;
     expect(served.status).toBe(200);
+    expect(served.headers.get('cache-control')).toBe('no-store');
     const body = await served.text();
     expect(body).not.toContain('/blog');
     expect(body.endsWith(`\n${ADDITIONAL}`)).toBe(true);
@@ -407,7 +412,9 @@ describe('llms.txt — the composed file is kept, and never the wrong one', () =
     expect(await serveValue(before)).toBe(`${base()}\nold\n`);
   });
 
-  it('follows the origin when it changes under a kept file', async () => {
+  it('is recomposed when the rendered base differs from the one a kept file was made with', async () => {
+    // In a unit test the origin can be moved under a kept file. A built
+    // storefront cannot do this: `NEXT_PUBLIC_SITE_URL` is fixed by the build.
     const value = files({ llmsTxtAdditional: ADDITIONAL });
     expect(await serveValue(value)).toContain('http://localhost:3000/catalog');
     process.env['NEXT_PUBLIC_SITE_URL'] = 'https://shop.example.com';
@@ -578,19 +585,128 @@ describe('app/llms.txt/route.ts', () => {
     expect(await (await get()).text()).toBe(base('Endora Demo', ['/blog']));
   });
 
-  it('serves the file without the blog when the blog cannot be asked about, and asks again', async () => {
-    const api = backend(
-      () => filesAnswer(),
-      () => json({ error: { code: 'INTERNAL' } }, 500),
-    );
-    const { GET } = await route();
-    const request = () => new Request('http://shop.test/llms.txt');
-    const first = await GET(request());
-    expect(first.status).toBe(200);
-    expect(await first.text()).toBe(base('Endora Demo', ['/blog']));
+  /**
+   * `/llms.txt` is a public address, and whether the blog exists is a read of
+   * the backend. The cases below hold that asking the file never becomes a way
+   * of asking the backend: the question is remembered per channel on the
+   * terms the reader keeps everything else (`crawler-policy.ts`).
+   */
+  describe('the question about the blog is the reader’s to remember', () => {
+    const blogCalls = (api: Backend): number =>
+      api.calls.filter((call) => call.path === '/api/v1/blog/by-channel').length;
+    const request = (channel?: string) =>
+      new Request('http://shop.test/llms.txt', {
+        headers: channel !== undefined ? { 'x-sales-channel': channel } : {},
+      });
 
-    api.blog = blogServed;
-    expect(await (await GET(request())).text()).toBe(base());
+    it('asks once for many requests while the answer is fresh', async () => {
+      const api = backend(() => filesAnswer());
+      const { GET } = await route();
+      for (let i = 0; i < 10; i += 1) expect(await (await GET(request())).text()).toBe(base());
+      expect(blogCalls(api)).toBe(1);
+    });
+
+    it('fifty requests at once for a channel nobody asked about make one request', async () => {
+      const api = backend(() => filesAnswer());
+      const { GET } = await route();
+      const bodies = await Promise.all(
+        Array.from({ length: 50 }, async () => (await GET(request('fresh'))).text()),
+      );
+      expect(new Set(bodies)).toEqual(new Set([base()]));
+      expect(blogCalls(api)).toBe(1);
+    });
+
+    it('while the blog cannot be asked about: one request per back-off, the file uncached and without the blog', async () => {
+      const api = backend(
+        () => filesAnswer(),
+        () => json({ error: { code: 'INTERNAL' } }, 500),
+      );
+      const { GET } = await route();
+      for (let i = 0; i < 10; i += 1) {
+        const served = await GET(request());
+        expect(served.status).toBe(200);
+        expect(served.headers.get('cache-control')).toBe('no-store');
+        expect(await served.text()).toBe(base('Endora Demo', ['/blog']));
+      }
+      // Ten requests of a public address were one request of the backend.
+      expect(blogCalls(api)).toBe(1);
+
+      // …and it is asked again once the back-off is over.
+      api.blog = blogServed;
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(Date.now() + 5_001);
+        const later = await GET(request());
+        expect(await later.text()).toBe(base());
+        expect(later.headers.get('cache-control')).toBe('public, max-age=60');
+        expect(blogCalls(api)).toBe(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps the line it last knew when the blog then cannot be asked about, and stays cacheable', async () => {
+      const api = backend(() => filesAnswer());
+      const { GET } = await route();
+      expect(await (await GET(request())).text()).toBe(base());
+
+      api.blog = () => json({ error: { code: 'INTERNAL' } }, 500);
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(Date.now() + 61_000);
+        const later = await GET(request());
+        expect(await later.text()).toBe(base());
+        expect(later.headers.get('cache-control')).toBe('public, max-age=60');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not make a request wait for a blog read that does not answer, once it knows something', async () => {
+      const api = backend(() => filesAnswer());
+      const { GET } = await route();
+      expect(await (await GET(request())).text()).toBe(base());
+
+      // The refresh never answers. The request is given the refresh's budget
+      // — a fraction of a second — and then served what was known.
+      api.blog = () => new Promise<Response>(() => undefined);
+      const realNow = Date.now;
+      const offset = 61_000;
+      vi.spyOn(Date, 'now').mockImplementation(() => realNow() + offset);
+      try {
+        const start = performance.now();
+        const later = await GET(request());
+        expect(performance.now() - start).toBeLessThan(1_000);
+        expect(await later.text()).toBe(base());
+      } finally {
+        vi.restoreAllMocks();
+      }
+    });
+
+    it('gives the backend a deadline: the read carries a signal that aborts', async () => {
+      let signal: AbortSignal | undefined;
+      const state = backend(() => filesAnswer());
+      const stubbed = globalThis.fetch;
+      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith('/api/v1/blog/by-channel')) signal = init?.signal ?? undefined;
+        return stubbed(input, init);
+      });
+      await get();
+      expect(blogCalls(state)).toBe(1);
+      expect(signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('never answers one channel’s blog for another', async () => {
+      backend(
+        () => filesAnswer(),
+        (channel) => (channel === 'no-blog' ? blogAbsent() : blogServed()),
+      );
+      const { GET } = await route();
+      expect(await (await GET(request('no-blog'))).text()).toBe(base('Endora Demo', ['/blog']));
+      expect(await (await GET(request('with-blog'))).text()).toBe(base());
+      expect(await (await GET(request())).text()).toBe(base());
+      expect(await (await GET(request('no-blog'))).text()).toBe(base('Endora Demo', ['/blog']));
+    });
   });
 
   it('answers the generated base for `?part=base`, and not found for it on a hidden channel', async () => {

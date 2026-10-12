@@ -64,6 +64,17 @@ export function crawlerFileServed(body: string): Response {
 }
 
 /**
+ * The file as well as it can be told right now, for this request only.
+ *
+ * For a file composed while something it is made of could not be established:
+ * it is the best answer there is, and the next request may have a better one,
+ * so no cache may keep it.
+ */
+export function crawlerFileServedUncached(body: string): Response {
+  return new Response(body, { status: 200, headers: crawlerFileHeaders('no-store') });
+}
+
+/**
  * The part of a file this storefront generates, for the Admin UI's preview.
  *
  * `no-store`: it is the file **without** the operator's text, at an address

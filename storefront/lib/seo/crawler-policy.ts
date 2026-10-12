@@ -316,7 +316,7 @@ async function jsonOrNull(response: Response): Promise<unknown> {
 }
 
 /** One question this reader can ask the backend about a channel. */
-interface Question<T> {
+export interface Question<T> {
   /** The backend route that answers it. */
   readonly path: string;
   /**
@@ -326,7 +326,7 @@ interface Question<T> {
   readonly parse: (body: unknown) => T | null;
 }
 
-interface ChannelCache<T> {
+export interface ChannelCache<T> {
   read(channelCode: string | undefined): Promise<CrawlerRead<T>>;
   size(): number;
 }
@@ -334,8 +334,12 @@ interface ChannelCache<T> {
 /**
  * The cache for one question: its own entries, its own bound, and every rule
  * the module doc states.
+ *
+ * Exported for the one other per-channel fact a crawler file is built from —
+ * whether a page it lists is served (`llms-txt-pages.ts`) — so that it is
+ * remembered on exactly these terms rather than on a second set.
  */
-function createChannelCache<T>(deps: CrawlerPolicyReaderDeps, question: Question<T>): ChannelCache<T> {
+export function createChannelCache<T>(deps: CrawlerPolicyReaderDeps, question: Question<T>): ChannelCache<T> {
   const entries = new Map<string, Entry<T>>();
 
   /** One read of the backend, classified. `null` means unreadable. */
@@ -505,12 +509,15 @@ export function createCrawlerPolicyReader(deps: CrawlerPolicyReaderDeps): Crawle
   };
 }
 
-const reader = createCrawlerPolicyReader({
+/** What this process reads the backend with. */
+export const PROCESS_READER_DEPS: CrawlerPolicyReaderDeps = {
   fetch: (input, init) => fetch(input, init),
   now: () => Date.now(),
   baseUrl: backendBaseUrl,
   delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-});
+};
+
+const reader = createCrawlerPolicyReader(PROCESS_READER_DEPS);
 
 /** This process's reader. See the module doc for what it remembers and for how long. */
 export function readRobotsPolicy(channelCode: string | undefined): Promise<RobotsPolicyRead> {

@@ -87,16 +87,28 @@ export interface LlmsTxtBaseInput {
 }
 
 /**
- * The shop's name as one line of a heading: surrounding whitespace removed and
- * every run of whitespace inside — a line break included — made one space, so
- * that a name cannot start a line of its own in the file. Falls back to the
- * site's host when there is no name.
+ * Characters that are never part of a name and can make text read as
+ * something it is not: the C0 and C1 controls other than the whitespace ones
+ * (those are separators, below), and the bidirectional embedding, override
+ * and isolate controls, which reorder what follows them on screen. One
+ * character class, so removing them costs the length of the name.
+ */
+const NOT_NAME_CHARACTERS = /[\u0000-\u0008\u000E-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/g;
+
+/**
+ * The shop's name as one line of a heading: the characters above removed,
+ * surrounding whitespace removed and every run of whitespace inside — a line
+ * break included — made one space, so that a name cannot start a line of its
+ * own in the file. Falls back to the site's host when nothing is left.
  *
  * `split` on a single-character class and a filter, rather than a pattern
  * with a quantifier: its cost is the length of the name whatever the name is.
  */
 function headingText(shopName: string): string {
-  const words = shopName.split(/\s/).filter((word) => word.length > 0);
+  const words = shopName
+    .replace(NOT_NAME_CHARACTERS, '')
+    .split(/\s/)
+    .filter((word) => word.length > 0);
   return words.length > 0 ? words.join(' ') : siteUrl().host;
 }
 
