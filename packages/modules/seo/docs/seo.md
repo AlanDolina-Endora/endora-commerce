@@ -1,6 +1,6 @@
 ---
 title: seo
-description: Meta-tag resolver, cached XML sitemap and the search engine robots settings
+description: Meta-tag resolver, cached XML sitemap, the search engine robots settings and llms.txt
 ---
 
 # `seo`
@@ -14,8 +14,8 @@ a sales channel's storefront as a whole.
 | --- | --- | --- |
 | `GET /api/v1/catalog/sitemap.xml` | crawlers | Cached XML sitemap; falls through to inline regenerate when stale |
 | `GET /api/v1/storefront/seo/robots-policy` | storefront | The request's sales channel's default robots policy, as `{ index, follow }` |
-| `GET /api/v1/storefront/seo/crawler-files` | storefront | What the request's sales channel's `robots.txt` is built from: its custom instructions, with the policy and the shop name |
-| `GET /api/v1/admin/seo/crawler-files/preview` | admin (`settings:read`) | The preview of a sales channel's `robots.txt` — the system default channel when none is named: the rules its storefront generates, asked of that storefront, beside the saved text |
+| `GET /api/v1/storefront/seo/crawler-files` | storefront | What the request's sales channel's `robots.txt` and `llms.txt` are built from: its custom instructions and additional content, with the policy and the shop name |
+| `GET /api/v1/admin/seo/crawler-files/preview` | admin (`settings:read`) | The preview of a sales channel's `robots.txt` or `llms.txt` — the system default channel when none is named: the part its storefront generates, asked of that storefront, beside the saved text |
 | `GET /api/v1/admin/seo/sitemap` | admin (`catalog:write`) | One row per sales channel: storefront address, last-generated timestamp, size, URL count |
 | `POST /api/v1/admin/seo/sitemap/:channelCode/regenerate` | admin (`catalog:write`) | Force a fresh build for that channel |
 | `GET /api/v1/admin/seo/sitemap/:channelCode/status` | admin (`catalog:write`) | Last-generated timestamp + size + URL count for that channel |
@@ -101,6 +101,11 @@ The custom `robots.txt` instructions are withdrawn with it, on the same terms: `
 goes back to the rules the storefront generates and stays available, the setting turns read-only
 and keeps its text, and the text is served again when the module is switched back on.
 
+`llms.txt` goes with it too, and entirely: while the module is off the storefront answers
+`/llms.txt` with "not found", because the whole file is this feature's. The additional content
+is kept, its setting turns read-only, and the file is served again when the module is switched
+back on.
+
 ### Two limits
 
 - **Files the backend serves are not covered.** Product images and other uploaded media are
@@ -117,14 +122,16 @@ and keeps its text, and the text is served again when the module is switched bac
 
 ### A storefront scaffolded before this feature
 
-The directive is applied by the storefront's own `middleware.ts` and `app/layout.tsx`, and the
-custom instructions by its `app/robots.txt/route.ts`. A storefront created from an earlier
+The directive is applied by the storefront's own `middleware.ts` and `app/layout.tsx`, the
+custom instructions by its `app/robots.txt/route.ts`, and `llms.txt` by its
+`app/llms.txt/route.ts`. A storefront created from an earlier
 release keeps working with an upgraded backend, but it **ignores these settings** until those
 files are updated: the Settings screen shows the choice and the text, and nothing in that
-storefront acts on them — its `robots.txt` stays the file it was built with. The Settings screen
+storefront acts on them — its `robots.txt` stays the file it was built with, and it has no
+`llms.txt`. The Settings screen
 says so where it has evidence: when a storefront answers the backend without confirming that it
-supports these settings, the *Default robots* row and the `robots.txt` preview both say that it
-may run an older version that does not apply them. The release notes list the files to copy, and the one to delete: a storefront that keeps its old `app/robots.ts`
+supports these settings, the *Default robots* row and the two previews say that it may run an
+older version that does not apply them. The release notes list the files to copy, and the one to delete: a storefront that keeps its old `app/robots.ts`
 beside the new route goes on serving the old file, and the build does not say so.
 
 ### For a custom storefront
@@ -328,30 +335,150 @@ answers, not failures.
     "index": true,
     "follow": true,
     "robotsTxtCustom": "User-agent: GPTBot\nDisallow: /\n",
-    "llmsTxtAdditional": "",
+    "llmsTxtAdditional": "## About\n\nWe sell bolts.\n",
     "shop": { "name": "Endora Demo" }
   }
 }
 ```
 
-`robotsTxtCustom` is the text resolved for the channel, exactly as stored — the backend changes
-no character of it, line breaks included. `index` and `follow` repeat the channel's policy,
-`shop.name` is its configured shop name or an empty string, and `llmsTxtAdditional` is always
-empty in this release. The schema is `storefrontCrawlerFilesResponseSchema` in
-`@endora-commerce/contracts`, which also exports `composeCrawlerFile(base, extra)` — the
-function the reference storefront joins its generated rules and the text with — and
-`CRAWLER_TEXT_MAX_BYTES`.
+`robotsTxtCustom` and `llmsTxtAdditional` are the texts resolved for the channel, exactly as
+stored — the backend changes no character of them, line breaks included. `index` and `follow`
+repeat the channel's policy, and `shop.name` is its configured shop name or an empty string. The
+schema is `storefrontCrawlerFilesResponseSchema` in `@endora-commerce/contracts`, which also
+exports `composeCrawlerFile(base, extra)` — the function the reference storefront joins what it
+generates and the text with — and `CRAWLER_TEXT_MAX_BYTES`.
 
 The answer is sent with `Cache-Control: no-store`. Treat the statuses as for `robots-policy`:
 `503` `MODULE_DISABLED` and `404` mean there is no custom text; anything else, a `500` included,
 means it could not be read, and a `robots.txt` should then be the last version you served, or a
-`503` — not a file without the text. The endpoint answers `500` rather than an empty text when a
-stored value cannot be served, which takes a row written around the settings API.
+`503` — not a file without the text.
+
+**The parts of the answer fail apart.** A stored value that cannot be served takes a row written
+around the settings API, and what the endpoint does with one depends on which file needs it:
+
+- unreadable `robots.txt` instructions — not a text, or longer than can be saved — fail the whole
+  answer with `500`, rather than answer an empty text;
+- an unreadable *Default robots* value, or unreadable `llms.txt` content, is **named** in an
+  extra member, `"unreadable": ["policy"]` or `["llmsTxtAdditional"]`, and the rest is answered.
+  `index` and `follow` are then both `false`, and `llmsTxtAdditional` is then empty; neither is to
+  be taken for the stored value.
+
+So a `robots.txt`, which needs neither, is still served on a channel whose *Default robots* row
+holds something nobody can interpret, and an `llms.txt`, which needs both, is not: answer it with
+a `503` while either is named. The member is absent when everything was read; ignore names you
+do not know. `robots-policy` itself keeps answering `500` for such a row, so pages keep the
+directive they last knew.
 
 The reference storefront's `robots.txt` also answers `GET /robots.txt?part=system` with its
-generated rules alone — sent with `Cache-Control: no-store`, because it is the file without the
-operator's text at an address a cache could mistake for the real one — and marks every answer
-with an `X-Endora-Crawler-Files: 1` header.
+generated rules alone, and its `llms.txt` answers `GET /llms.txt?part=base` with its generated
+part alone — both sent with `Cache-Control: no-store`, because each is the file without the
+operator's text at an address a cache could mistake for the real one — and it marks every answer
+of either file with an `X-Endora-Crawler-Files: 1` header.
+
+## Additional `llms.txt` content
+
+`llms.txt` is a plain-text file at the root of a site that tells AI assistants what the site is
+and where its public content starts — a newer and less settled convention than `robots.txt`
+(<https://llmstxt.org>). The storefront serves one for each sales channel, at `/llms.txt`, and
+**Settings → SEO → Additional llms.txt content** is text it adds to that file. The setting is
+empty by default, and the file is then the generated part alone.
+
+### What the file contains, and in what order
+
+1. **The part the storefront generates**: the shop's name as a heading, links to its main public
+   pages — the home page, the catalog, search, the blog, the contact page — and a link to the
+   sitemap, each with a full address.
+2. **A blank line.**
+3. **Your text**, as you wrote it — a description of the shop, links to the pages you most want
+   an assistant to read, anything the convention allows.
+
+For example, with a short description saved for a channel:
+
+```text
+# Endora Demo
+
+## Pages
+
+- [Home](https://shop.example.com/)
+- [Catalog](https://shop.example.com/catalog)
+- [Search](https://shop.example.com/search)
+- [Blog](https://shop.example.com/blog)
+- [Contact](https://shop.example.com/kontakt)
+
+## Sitemap
+
+- [Sitemap](https://shop.example.com/sitemap.xml)
+
+## About
+
+We sell industrial fasteners to businesses across Poland.
+```
+
+The shop's name is the **Shop name** setting of the sales channel; a channel without one is named
+by the storefront's host. The generated part lists only pages that are public and may be indexed
+— the same list the sitemap starts with — and never an address `robots.txt` closes to crawlers
+(the cart, the checkout, the account, the sign-in pages). A listed page that is not there at the
+moment is left out: the blog link is not written while the `blog` module is switched off or the
+channel has no blog. The generated part is in English, and cannot be edited on the Settings
+screen.
+
+Your text is served **as written**, on the same terms as the `robots.txt` instructions: every
+character is kept, line breaks are served as line feeds, the file ends with exactly one, and a
+byte order mark at the very start is left out. Like any setting it takes a value for all sales
+channels and a value per channel, a channel's own value wins — an empty one included — and one
+channel's text is never served in another channel's file. **Reset** removes the channel's own
+text. Changing it takes `settings:write` and is recorded in the audit log. The text may be at
+most **64 KiB**, the limit of the `robots.txt` instructions, and a larger one is refused with a
+message that names the limit.
+
+### When no `llms.txt` is served
+
+**A sales channel whose *Default robots* is `NOINDEX` has no `llms.txt`**, whatever the
+additional content holds: the storefront answers `/llms.txt` with "not found". A shop that asks
+search engines to stay away does not at the same time invite AI assistants in. The text is kept
+and is served again as soon as the channel allows indexing. `NOFOLLOW` alone withdraws nothing.
+
+The file is also not served while the `seo` module is switched off — see
+[when the module is switched off](#when-the-module-is-switched-off).
+
+This is the one place where the two files differ. `robots.txt` is served in every state, and
+stays open on a `NOINDEX` channel on purpose; `llms.txt` is withdrawn.
+
+### The preview
+
+Below the field, the Settings screen shows the `llms.txt` the sales channel's storefront serves,
+in the same way as [the `robots.txt` preview](#the-preview): **one block that is the file**, the
+generated lines first and your lines marked with a bar and labelled **Your content**, under a
+heading that says **llms.txt as served now** or — while the field differs from what is saved —
+**llms.txt after saving**. The channel picker under **All channels**, the note about channels
+with a value of their own, and the messages for a storefront that cannot be reached or has no
+address configured are the same as there.
+
+On a sales channel whose *Default robots* is `NOINDEX` there is no file to show, and the preview
+says so instead: **llms.txt is not served**, with the reason. Changing *Default robots* back and
+saving it brings the block back.
+
+*This storefront did not confirm that it serves llms.txt* means that the storefront answered
+without the header by which a current storefront identifies itself — most often because it runs
+a version that has no `llms.txt` at all. See
+[a storefront scaffolded before this feature](#a-storefront-scaffolded-before-this-feature).
+
+To show the generated part the backend asks the channel's storefront for
+`/llms.txt?part=base`, under exactly the rules given under
+[what the backend asks the storefront](#what-the-backend-asks-the-storefront).
+
+### How long a change takes, and when the file cannot be read
+
+As for `robots.txt`: a saved change — to the text, or to *Default robots* — is served within
+about two minutes, and the file is sent with `Cache-Control: public, max-age=60` and
+`Vary: X-Sales-Channel`, so what stands [in front of the storefront](#behind-a-proxy-or-a-cdn)
+has to treat `/llms.txt` as it treats `/robots.txt`. A "not found" answer is sent with
+`Cache-Control: no-store`.
+
+A storefront that has read a channel's configuration once goes on serving that version of the
+file while the backend cannot be reached. One that has not answers `/llms.txt` with `503` and
+`Retry-After: 120` until its first successful read — never a file without your text, and never a
+file on a channel that may have been set to `NOINDEX`.
 
 ## Meta-tag resolution
 

@@ -1,6 +1,6 @@
 ---
 title: seo
-description: Wyznaczanie meta tagów, mapa witryny XML z pamięcią podręczną i ustawienia robots dla wyszukiwarek
+description: Wyznaczanie meta tagów, mapa witryny XML z pamięcią podręczną, ustawienia robots dla wyszukiwarek i llms.txt
 ---
 
 # `seo`
@@ -14,8 +14,8 @@ dowiadują się o całym sklepie danego kanału sprzedaży.
 | --- | --- | --- |
 | `GET /api/v1/catalog/sitemap.xml` | roboty wyszukiwarek | Mapa witryny XML z pamięci podręcznej; gdy jest nieaktualna, jest generowana od razu w trakcie żądania |
 | `GET /api/v1/storefront/seo/robots-policy` | sklep | Domyślna polityka robots kanału sprzedaży, którego dotyczy żądanie, w postaci `{ index, follow }` |
-| `GET /api/v1/storefront/seo/crawler-files` | sklep | To, z czego powstaje plik `robots.txt` kanału sprzedaży, którego dotyczy żądanie: jego własne instrukcje wraz z polityką i nazwą sklepu |
-| `GET /api/v1/admin/seo/crawler-files/preview` | administrator (`settings:read`) | Podgląd pliku `robots.txt` kanału sprzedaży — domyślnego kanału systemowego, gdy żaden nie został wskazany: reguły generowane przez jego sklep, pobrane z tego sklepu, obok zapisanego tekstu |
+| `GET /api/v1/storefront/seo/crawler-files` | sklep | To, z czego powstają pliki `robots.txt` i `llms.txt` kanału sprzedaży, którego dotyczy żądanie: jego własne instrukcje i dodatkowa treść wraz z polityką i nazwą sklepu |
+| `GET /api/v1/admin/seo/crawler-files/preview` | administrator (`settings:read`) | Podgląd pliku `robots.txt` albo `llms.txt` kanału sprzedaży — domyślnego kanału systemowego, gdy żaden nie został wskazany: część generowana przez jego sklep, pobrana z tego sklepu, obok zapisanego tekstu |
 | `GET /api/v1/admin/seo/sitemap` | administrator (`catalog:write`) | Jeden wiersz na kanał sprzedaży: adres sklepu, czas ostatniego wygenerowania, rozmiar, liczba adresów URL |
 | `POST /api/v1/admin/seo/sitemap/:channelCode/regenerate` | administrator (`catalog:write`) | Wymuszenie ponownego wygenerowania dla tego kanału |
 | `GET /api/v1/admin/seo/sitemap/:channelCode/status` | administrator (`catalog:write`) | Czas ostatniego wygenerowania, rozmiar i liczba adresów URL dla tego kanału |
@@ -107,6 +107,11 @@ Własne instrukcje `robots.txt` są wycofywane razem z nim, na tych samych zasad
 przechodzi w tryb tylko do odczytu i zachowuje tekst, a po ponownym włączeniu modułu tekst jest
 znów serwowany.
 
+Plik `llms.txt` znika razem z modułem, i to w całości: gdy moduł jest wyłączony, sklep odpowiada
+na `/llms.txt` „nie znaleziono”, ponieważ cały ten plik należy do tej funkcji. Dodatkowa treść
+pozostaje zapisana, jej ustawienie przechodzi w tryb tylko do odczytu, a po ponownym włączeniu
+modułu plik jest znów serwowany.
+
 ### Dwa ograniczenia
 
 - **Pliki serwowane przez backend nie są objęte.** Zdjęcia produktów i inne przesłane media
@@ -123,14 +128,16 @@ znów serwowany.
 
 ### Sklep utworzony przed tą funkcją
 
-Dyrektywę nakładają pliki samego sklepu: `middleware.ts` i `app/layout.tsx`, a własne
-instrukcje — jego plik `app/robots.txt/route.ts`. Sklep utworzony z wcześniejszego wydania
+Dyrektywę nakładają pliki samego sklepu: `middleware.ts` i `app/layout.tsx`, własne
+instrukcje — jego plik `app/robots.txt/route.ts`, a `llms.txt` — jego plik
+`app/llms.txt/route.ts`. Sklep utworzony z wcześniejszego wydania
 działa dalej ze zaktualizowanym backendem, ale **ignoruje te ustawienia**, dopóki te pliki nie
 zostaną zaktualizowane: ekran Ustawień pokazuje wybór i tekst, a nic w takim sklepie ich nie
-stosuje — jego `robots.txt` pozostaje plikiem, z którym sklep został zbudowany. Ekran Ustawień
+stosuje — jego `robots.txt` pozostaje plikiem, z którym sklep został zbudowany, a pliku
+`llms.txt` nie ma wcale. Ekran Ustawień
 informuje o tym tam, gdzie ma na to dowód: gdy sklep odpowiada backendowi, nie potwierdzając,
-że obsługuje te ustawienia, zarówno wiersz *Domyślne robots*, jak i podgląd `robots.txt`
-informują, że sklep może działać w starszej wersji, która ich nie stosuje. Lista plików do
+że obsługuje te ustawienia, wiersz *Domyślne robots* i oba podglądy informują, że sklep może
+działać w starszej wersji, która ich nie stosuje. Lista plików do
 skopiowania oraz plik do usunięcia są podane w informacjach o wydaniu: sklep, który zachowa stary
 plik `app/robots.ts` obok nowej trasy, nadal serwuje stary plik, a build tego nie zgłasza.
 
@@ -342,31 +349,153 @@ serwuje same reguły generowane z kodem `200` — to są odpowiedzi, a nie błę
     "index": true,
     "follow": true,
     "robotsTxtCustom": "User-agent: GPTBot\nDisallow: /\n",
-    "llmsTxtAdditional": "",
+    "llmsTxtAdditional": "## About\n\nWe sell bolts.\n",
     "shop": { "name": "Endora Demo" }
   }
 }
 ```
 
-`robotsTxtCustom` to tekst ustalony dla kanału, dokładnie w zapisanej postaci — backend nie
-zmienia w nim żadnego znaku, także końców wierszy. `index` i `follow` powtarzają politykę
-kanału, `shop.name` to skonfigurowana nazwa sklepu albo pusty ciąg znaków, a `llmsTxtAdditional`
-jest w tym wydaniu zawsze puste. Schemat to `storefrontCrawlerFilesResponseSchema`
-w `@endora-commerce/contracts`; pakiet eksportuje też `composeCrawlerFile(base, extra)` —
-funkcję, którą referencyjny sklep łączy reguły generowane z tekstem — oraz
-`CRAWLER_TEXT_MAX_BYTES`.
+`robotsTxtCustom` i `llmsTxtAdditional` to teksty ustalone dla kanału, dokładnie w zapisanej
+postaci — backend nie zmienia w nich żadnego znaku, także końców wierszy. `index` i `follow`
+powtarzają politykę kanału, a `shop.name` to skonfigurowana nazwa sklepu albo pusty ciąg znaków.
+Schemat to `storefrontCrawlerFilesResponseSchema` w `@endora-commerce/contracts`; pakiet
+eksportuje też `composeCrawlerFile(base, extra)` — funkcję, którą referencyjny sklep łączy to, co
+generuje, z tekstem — oraz `CRAWLER_TEXT_MAX_BYTES`.
 
 Odpowiedź jest wysyłana z `Cache-Control: no-store`. Statusy należy traktować tak jak dla
 `robots-policy`: `503` `MODULE_DISABLED` oraz `404` oznaczają, że własnego tekstu nie ma; każdy
 inny błąd, także `500`, oznacza, że tekstu nie udało się odczytać, a wtedy `robots.txt` powinien
-być ostatnio serwowaną wersją albo odpowiedzią `503` — nie plikiem bez tekstu. Punkt końcowy
-odpowiada `500`, a nie pustym tekstem, gdy zapisanej wartości nie można serwować — do czego
-trzeba wiersza zapisanego z pominięciem API ustawień.
+być ostatnio serwowaną wersją albo odpowiedzią `503` — nie plikiem bez tekstu.
+
+**Części odpowiedzi zawodzą niezależnie od siebie.** Zapisana wartość, której nie można
+serwować, wymaga wiersza zapisanego z pominięciem API ustawień, a to, co punkt końcowy z nią
+robi, zależy od tego, który plik jej potrzebuje:
+
+- nieczytelne instrukcje `robots.txt` — wartość, która nie jest tekstem albo jest dłuższa, niż
+  można zapisać — powodują błąd całej odpowiedzi, `500`, zamiast odpowiedzi z pustym tekstem;
+- nieczytelna wartość ustawienia *Domyślne robots* albo nieczytelna treść `llms.txt` jest
+  **wymieniana z nazwy** w dodatkowym polu, `"unreadable": ["policy"]` albo
+  `["llmsTxtAdditional"]`, a reszta odpowiedzi jest podawana. `index` i `follow` mają wtedy
+  wartość `false`, a `llmsTxtAdditional` jest puste; żadnego z nich nie należy brać za zapisaną
+  wartość.
+
+Dlatego plik `robots.txt`, który nie potrzebuje żadnej z tych rzeczy, jest nadal serwowany
+w kanale, którego wiersz *Domyślne robots* zawiera coś, czego nikt nie potrafi zinterpretować,
+a plik `llms.txt`, który potrzebuje obu, nie jest: dopóki którakolwiek jest wymieniona, należy
+odpowiadać `503`. Pola nie ma, gdy wszystko udało się odczytać; nieznane nazwy należy pomijać.
+Sam punkt `robots-policy` nadal odpowiada dla takiego wiersza `500`, więc strony zachowują
+ostatnio znaną dyrektywę.
 
 `robots.txt` referencyjnego sklepu odpowiada też na `GET /robots.txt?part=system` samymi
-regułami generowanymi — z nagłówkiem `Cache-Control: no-store`, ponieważ jest to plik bez tekstu
-operatora pod adresem, który pamięć podręczna mogłaby pomylić z właściwym — i oznacza każdą
-odpowiedź nagłówkiem `X-Endora-Crawler-Files: 1`.
+regułami generowanymi, a jego `llms.txt` odpowiada na `GET /llms.txt?part=base` samą częścią
+generowaną — obie odpowiedzi mają nagłówek `Cache-Control: no-store`, ponieważ każda jest plikiem
+bez tekstu operatora pod adresem, który pamięć podręczna mogłaby pomylić z właściwym — i każdą
+odpowiedź obu plików oznacza nagłówkiem `X-Endora-Crawler-Files: 1`.
+
+## Dodatkowa treść `llms.txt`
+
+`llms.txt` to plik tekstowy w katalogu głównym witryny, który mówi asystentom AI, czym jest
+witryna i gdzie zaczyna się jej publiczna treść — konwencja nowsza i mniej ustalona niż
+`robots.txt` (<https://llmstxt.org>). Sklep serwuje taki plik dla każdego kanału sprzedaży, pod
+adresem `/llms.txt`, a **Ustawienia → SEO → Dodatkowa treść llms.txt** to tekst, który do niego
+dodaje. Ustawienie jest domyślnie puste, a plik składa się wtedy z samej części generowanej.
+
+### Co zawiera plik i w jakiej kolejności
+
+1. **Część generowana przez sklep**: nazwa sklepu jako nagłówek, linki do jego głównych
+   publicznych stron — strony głównej, katalogu, wyszukiwarki, bloga, strony kontaktowej — oraz
+   link do mapy witryny, każdy z pełnym adresem.
+2. **Pusty wiersz.**
+3. **Twój tekst**, dokładnie tak, jak został wpisany — opis sklepu, linki do stron, które
+   asystent powinien przeczytać w pierwszej kolejności, wszystko, na co pozwala konwencja.
+
+Na przykład z krótkim opisem zapisanym dla kanału:
+
+```text
+# Endora Demo
+
+## Pages
+
+- [Home](https://shop.example.com/)
+- [Catalog](https://shop.example.com/catalog)
+- [Search](https://shop.example.com/search)
+- [Blog](https://shop.example.com/blog)
+- [Contact](https://shop.example.com/kontakt)
+
+## Sitemap
+
+- [Sitemap](https://shop.example.com/sitemap.xml)
+
+## About
+
+We sell industrial fasteners to businesses across Poland.
+```
+
+Nazwa sklepu to ustawienie **Shop name** kanału sprzedaży; kanał bez nazwy jest nazywany adresem
+hosta sklepu. Część generowana wymienia wyłącznie strony publiczne, które wolno indeksować — tę
+samą listę, od której zaczyna się mapa witryny — i nigdy adresu, który `robots.txt` zamyka przed
+robotami (koszyk, zamówienie, konto, strony logowania). Strona z listy, której w danej chwili
+nie ma, jest pomijana: link do bloga nie jest wpisywany, gdy moduł `blog` jest wyłączony albo
+kanał nie ma bloga. Część generowana jest po angielsku i nie można jej edytować na ekranie
+Ustawień.
+
+Twój tekst jest serwowany **tak, jak został wpisany**, na tych samych zasadach co instrukcje
+`robots.txt`: każdy znak zostaje zachowany, końce wierszy są serwowane jako znak LF, plik kończy
+się dokładnie jednym, a znacznik kolejności bajtów na samym początku jest pomijany. Jak każde
+ustawienie przyjmuje wartość dla wszystkich kanałów sprzedaży i wartość dla każdego kanału,
+wartość kanału ma pierwszeństwo — także pusta — a tekst jednego kanału nigdy nie jest serwowany
+w pliku innego kanału. **Reset** usuwa własny tekst kanału. Zmiana wymaga uprawnienia
+`settings:write` i jest zapisywana w dzienniku audytu. Tekst może mieć najwyżej **64 KiB**, czyli
+tyle, ile instrukcje `robots.txt`, a dłuższy jest odrzucany z komunikatem, który podaje limit.
+
+### Kiedy plik `llms.txt` nie jest serwowany
+
+**Kanał sprzedaży, którego ustawienie *Domyślne robots* ma wartość `NOINDEX`, nie ma pliku
+`llms.txt`**, niezależnie od dodatkowej treści: sklep odpowiada na `/llms.txt` „nie znaleziono”.
+Sklep, który prosi wyszukiwarki, aby trzymały się z daleka, nie zaprasza jednocześnie asystentów
+AI. Tekst pozostaje zapisany i jest znów serwowany, gdy tylko kanał zezwoli na indeksowanie.
+Samo `NOFOLLOW` niczego nie wycofuje.
+
+Plik nie jest też serwowany, gdy moduł `seo` jest wyłączony — zobacz
+[gdy moduł jest wyłączony](#gdy-moduł-jest-wyłączony).
+
+To jedyne miejsce, w którym oba pliki się różnią. `robots.txt` jest serwowany w każdym stanie
+i w kanale z `NOINDEX` celowo pozostaje otwarty; `llms.txt` jest wycofywany.
+
+### Podgląd pliku `llms.txt`
+
+Pod polem ekran Ustawień pokazuje plik `llms.txt` serwowany przez sklep danego kanału sprzedaży,
+tak samo jak [podgląd `robots.txt`](#podgląd): **jeden blok, który jest plikiem**, najpierw
+linie generowane, a potem Twoje linie oznaczone paskiem i etykietą **Twoja treść**, pod
+nagłówkiem **llms.txt serwowany obecnie** albo — gdy pole różni się od zapisanej wartości —
+**llms.txt po zapisaniu**. Wybór kanału w trybie **Wszystkie kanały**, informacja o kanałach
+z własną wartością oraz komunikaty dla sklepu, z którym nie można się połączyć albo który nie ma
+skonfigurowanego adresu, są takie same jak tam.
+
+W kanale sprzedaży, którego ustawienie *Domyślne robots* ma wartość `NOINDEX`, nie ma pliku do
+pokazania i podgląd informuje o tym zamiast bloku: **llms.txt nie jest serwowany**, wraz
+z przyczyną. Zmiana ustawienia *Domyślne robots* z powrotem i jej zapisanie przywraca blok.
+
+Komunikat *Ten sklep nie potwierdził, że serwuje plik llms.txt* oznacza, że sklep odpowiedział
+bez nagłówka, którym przedstawia się aktualny sklep — najczęściej dlatego, że działa w wersji,
+w której pliku `llms.txt` w ogóle nie ma. Zobacz
+[sklep utworzony przed tą funkcją](#sklep-utworzony-przed-tą-funkcją).
+
+Aby pokazać część generowaną, backend pyta sklep kanału o `/llms.txt?part=base`, dokładnie na
+zasadach opisanych w części [o co backend pyta sklep](#o-co-backend-pyta-sklep).
+
+### Ile trwa wprowadzenie zmiany i co się dzieje, gdy pliku nie da się odczytać
+
+Tak jak w przypadku `robots.txt`: zapisana zmiana — tekstu albo ustawienia *Domyślne robots* —
+jest serwowana w ciągu około dwóch minut, a plik jest wysyłany z nagłówkami
+`Cache-Control: public, max-age=60` i `Vary: X-Sales-Channel`, więc to, co stoi
+[przed sklepem](#za-serwerem-proxy-lub-siecią-cdn), musi traktować `/llms.txt` tak samo jak
+`/robots.txt`. Odpowiedź „nie znaleziono” jest wysyłana z `Cache-Control: no-store`.
+
+Sklep, który raz odczytał konfigurację kanału, serwuje tę wersję pliku dalej, gdy backend jest
+niedostępny. Sklep, który jej nie odczytał, odpowiada na `/llms.txt` kodem `503` z nagłówkiem
+`Retry-After: 120` aż do pierwszego udanego odczytu — nigdy plikiem bez Twojego tekstu i nigdy
+plikiem w kanale, który mógł zostać ustawiony na `NOINDEX`.
 
 ## Wyznaczanie meta tagów
 

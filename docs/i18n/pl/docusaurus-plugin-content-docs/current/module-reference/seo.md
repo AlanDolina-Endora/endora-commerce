@@ -50,6 +50,7 @@ _Brak._
 | --- | --- | --- |
 | `seo.default_robots` | Default robots | `string` |
 | `seo.enabled` | SEO enabled | `boolean` |
+| `seo.llms_txt_additional` | Additional llms.txt content | `string` |
 | `seo.robots_txt_custom` | Custom robots.txt instructions | `string` |
 
 ## Tłumaczenia
