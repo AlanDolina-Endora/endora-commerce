@@ -83,6 +83,15 @@ import type { StorefrontAddress, StorefrontAddressService } from './storefront-a
  * whether something answers `GET /robots.txt` there with plain text, and read
  * it. That is the trust the setting already carries, bounded by the list
  * above; it is stated here so that nobody has to rediscover it.
+ *
+ * The `llms.txt` preview tells such a reader slightly more than the
+ * `robots.txt` one. For that file a `404` without the capability header is
+ * `storefront-outdated` — "a storefront that has no such file" — and not
+ * `storefront-unreachable`, so "an HTTP server answers at that address" can be
+ * told from "nothing answers there" even when no plain-text file is served.
+ * Accepted, for the same reason: it is what makes "update the storefront"
+ * distinguishable from "check the address" for the operator the preview is
+ * for.
  */
 
 /** Connection, headers and body together. */

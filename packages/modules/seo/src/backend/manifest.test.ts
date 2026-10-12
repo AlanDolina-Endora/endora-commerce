@@ -189,6 +189,9 @@ describe('seo bundles', () => {
     ) as Record<string, string>;
 
   const KEYS = [
+    'settingGroups.seo.name',
+    'settingLabels.seo.enabled.name',
+    'settingLabels.seo.enabled.description',
     'settingLabels.seo.default_robots.name',
     'settingLabels.seo.default_robots.description',
     'settingLabels.seo.robots_txt_custom.name',
@@ -204,6 +207,31 @@ describe('seo bundles', () => {
     for (const key of KEYS) {
       expect(entries[key], `${language}: ${key}`).toEqual(expect.stringMatching(/\S/));
     }
+  });
+
+  it('carries a name and a description key for every setting the manifest declares, and the group’s name', () => {
+    // The keys the Settings screen resolves from the owner's bundle
+    // (`settingLabels.<code>.name|description`, `settingGroups.<group>.name`).
+    for (const language of ['en', 'pl']) {
+      const entries = bundle(language);
+      for (const setting of manifest.settings?.settings ?? []) {
+        expect(entries[`settingLabels.${setting.code}.name`], `${language}: ${setting.code}`).toBeTruthy();
+        expect(entries[`settingLabels.${setting.code}.description`], `${language}: ${setting.code}`).toBeTruthy();
+      }
+      for (const group of manifest.settings?.groups ?? []) {
+        expect(entries[`settingGroups.${group.code}.name`], `${language}: ${group.code}`).toBeTruthy();
+      }
+    }
+  });
+
+  it('says in both languages, on the activation setting, what switching the module off withdraws (FR-033)', () => {
+    const declared = manifest.settings?.settings.find((s) => s.code === 'seo.enabled');
+    expect(bundle('en')['settingLabels.seo.enabled.name']).toBe(declared?.name);
+    expect(bundle('en')['settingLabels.seo.enabled.description']).toBe(declared?.description);
+    const polish = bundle('pl')['settingLabels.seo.enabled.description'];
+    expect(polish).not.toBe(declared?.description);
+    expect(polish).toMatch(/noindex znów staje się indeksowalny/);
+    expect(polish).toMatch(/llms\.txt/);
   });
 
   it('keeps the English setting name and description in step with the manifest', () => {
