@@ -14,14 +14,14 @@
 # RUNTIME (set by compose to the internal http://backend:3001).
 #
 # NEXT_PUBLIC_SITE_URL is this shop's own PUBLIC origin and is not an address of
-# the backend. It is what every canonical link, the sitemap and robots.txt name.
-# Build without it and the image serves `http://localhost:3000` in all three —
+# the backend. It is what every canonical link, the sitemap, robots.txt and
+# llms.txt name. Build without it and the image serves `http://localhost:3000` in all of them —
 # the fallback in storefront/lib/seo/site-url.ts — with nothing to say so, which
 # is what every image this repository built did until 2026-09-06. It cannot be
 # repaired on a running container: measured on this tree, `next build` inlines
 # the value and drops the variable's name from `.next/server` entirely.
-# `/robots.txt` is rendered per request, and the origin in its `Sitemap:` line
-# is that inlined value all the same.
+# `/robots.txt` and `/llms.txt` are rendered per request, and the origin in the
+# addresses they name is that inlined value all the same.
 
 FROM node:22.18-slim AS base
 ENV PNPM_HOME=/pnpm

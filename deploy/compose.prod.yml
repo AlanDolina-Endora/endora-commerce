@@ -224,15 +224,15 @@ services:
       REVALIDATE_SECRET: ${REVALIDATE_SECRET:-}
       #
       # THE PUBLIC ORIGIN IS NOT SETTABLE HERE, AND THAT IS WHY IT IS WRITTEN
-      # DOWN. The origin this shop names in every canonical link, in its sitemap
-      # and in its robots.txt is `NEXT_PUBLIC_SITE_URL`, which `build:storefront`
+      # DOWN. The origin this shop names in every canonical link, in its sitemap,
+      # in its robots.txt and in its llms.txt is `NEXT_PUBLIC_SITE_URL`, which `build:storefront`
       # passes as `https://${STOREFRONT_DOMAIN}` — the same variable the
       # backend's own `STOREFRONT_BASE_URL` above is built from. Adding it to
       # this block would change nothing and would read as though it did:
       # measured on this tree, `next build` inlines the value and drops the
-      # variable's name from `.next/server` altogether. `/robots.txt` is
-      # rendered per request, and the origin in its `Sitemap:` line is that
-      # inlined value all the same.
+      # variable's name from `.next/server` altogether. `/robots.txt` and
+      # `/llms.txt` are rendered per request, and the origin in the addresses
+      # they name is that inlined value all the same.
       # An image built without that argument serves `http://localhost:3000` in
       # all three places — the fallback in `storefront/lib/seo/site-url.ts` —
       # and the repair is to rebuild, never to set a variable here.

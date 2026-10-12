@@ -7,6 +7,7 @@ import type { CrawlerFiles, CrawlerFilesRead } from '../../lib/seo/crawler-polic
 import { CRAWLER_FILES_CAPABILITY_HEADER } from '../../lib/seo/crawler-file-response';
 import { llmsTxtResponse, type UnservedPages } from '../../lib/seo/llms-txt';
 import { renderLlmsTxtBase } from '../../lib/seo/llms-txt-base';
+import { RESERVED_TOP_LEVEL_SEGMENTS } from '../../app/reserved-segments';
 
 /**
  * `GET /llms.txt`
@@ -498,6 +499,14 @@ describe('app/llms.txt/route.ts', () => {
     expect(loaded.dynamic).toBe('force-dynamic');
     // Only what Next accepts from a route file, so the build does not refuse it.
     expect(Object.keys(loaded).sort()).toEqual(['GET', 'dynamic']);
+  });
+
+  it('reserves its address: no content page can be given it (FR-028)', () => {
+    // The deployment's reserved set is copied from this array, and the `cms`
+    // module refuses a slug whose first segment is in it. (A page slug cannot
+    // contain a dot either; the entry is the array being complete.)
+    expect(RESERVED_TOP_LEVEL_SEGMENTS).toContain('llms.txt');
+    expect(RESERVED_TOP_LEVEL_SEGMENTS).toContain('robots.txt');
   });
 
   it('has nothing beside it that would be served instead of it', () => {

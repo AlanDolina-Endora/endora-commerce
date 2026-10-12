@@ -45,6 +45,12 @@ import { absoluteUrl, siteUrl } from './site-url';
  *
  * Nothing is computed from the route tree, and nothing is taken from a
  * request.
+ *
+ * **One origin, for every sales channel.** The addresses are built from
+ * `siteUrl()`, the deployment's public origin, which the build fixes
+ * (`NEXT_PUBLIC_SITE_URL`). A storefront that serves several channels names
+ * that one origin in every channel's file, exactly as its sitemap does; what
+ * differs per channel is the shop's name and which pages are there.
  */
 
 /**

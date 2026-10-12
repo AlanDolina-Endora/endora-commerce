@@ -87,7 +87,9 @@ describe('the generated llms.txt base', () => {
     expect(Object.keys(LLMS_TXT_PAGE_TITLES).sort()).toEqual([...SITEMAP_STATIC_ROUTES].sort());
   });
 
-  it('follows the deployment’s origin, read per call', () => {
+  it('names the deployment’s one origin — whatever `siteUrl()` answers — in every address', () => {
+    // In a built storefront that origin is fixed by the build and is the same
+    // for every sales channel, as in the sitemap.
     process.env['NEXT_PUBLIC_SITE_URL'] = 'https://other.example:8443';
     expect(linkedAddresses(renderLlmsTxtBase({ shopName: 'Shop', unservedPaths: [] }))).toEqual([
       ...SITEMAP_STATIC_ROUTES.map((path) => `https://other.example:8443${path}`),
