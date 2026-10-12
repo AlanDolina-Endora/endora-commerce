@@ -39,7 +39,7 @@ describe('createCrawlerTextValidator', () => {
 
   it('is contributed by seo, for exactly the crawler text settings', () => {
     expect(validator.contributorModuleId).toBe('seo');
-    expect(validator.codes).toEqual(['seo.robots_txt_custom']);
+    expect(validator.codes).toEqual(['seo.robots_txt_custom', 'seo.llms_txt_additional']);
     expect(validator.codes).toEqual([...CRAWLER_TEXT_SETTING_CODES]);
   });
 
@@ -51,6 +51,26 @@ describe('createCrawlerTextValidator', () => {
       expect(declared?.multiline).toBe(true);
       expect(declared?.defaultValue).toBe('');
     }
+  });
+
+  it('holds the llms.txt content to the same limit, and names that setting in the refusal', async () => {
+    const forLlms = (proposedValue: unknown): SettingWriteValidationInput => ({
+      ...inputFor(proposedValue),
+      code: 'seo.llms_txt_additional',
+    });
+    await expect(
+      validator.validate(forLlms('a'.repeat(CRAWLER_TEXT_MAX_BYTES))),
+    ).resolves.toBeUndefined();
+    const refused = validator.validate(forLlms(`${'ż'.repeat(CRAWLER_TEXT_MAX_BYTES / 2)}a`));
+    await expect(refused).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'SEO_CRAWLER_TEXT_TOO_LARGE',
+      details: {
+        settingCode: 'seo.llms_txt_additional',
+        maxBytes: CRAWLER_TEXT_MAX_BYTES,
+        actualBytes: CRAWLER_TEXT_MAX_BYTES + 1,
+      },
+    });
   });
 
   it('accepts the empty text and an ordinary one', async () => {

@@ -124,7 +124,12 @@ describe('GET /api/v1/admin/seo/crawler-files/preview', () => {
   afterEach(async () => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
-    for (const code of ['seo.robots_txt_custom', 'seo.default_robots', 'sales_channels.storefront_url']) {
+    for (const code of [
+      'seo.robots_txt_custom',
+      'seo.llms_txt_additional',
+      'seo.default_robots',
+      'sales_channels.storefront_url',
+    ]) {
       await h.app.inject({
         method: 'DELETE',
         url: `/api/v1/admin/settings/${code}/values`,
@@ -240,7 +245,6 @@ describe('GET /api/v1/admin/seo/crawler-files/preview', () => {
       ['an address of the caller’s', `?file=robots&salesChannelCode=pl_retail&url=${encodeURIComponent('http://169.254.169.254/')}`],
       ['a path of the caller’s', '?file=robots&salesChannelCode=pl_retail&path=/admin'],
       ['a part of the caller’s', '?file=robots&salesChannelCode=pl_retail&part=all'],
-      ['the file that has no preview yet', '?file=llms&salesChannelCode=pl_retail'],
     ])('400 for %s, and the storefront is not asked', async (_label, query) => {
       const res = await preview(query);
       expect(res.statusCode, res.body).toBe(400);
@@ -386,6 +390,122 @@ describe('GET /api/v1/admin/seo/crawler-files/preview', () => {
       expect(data.state).toBe('ok');
       expect(data.storefront).toEqual({ url: 'https://shared.example', source: 'env' });
       expect(String(fetchSpy.mock.calls[0]![0])).toBe('https://shared.example/robots.txt?part=system');
+    });
+  });
+
+  /**
+   * `llms.txt` — the same endpoint, the same bounds, the other file
+   * (`contracts/admin-surfaces.md` §3). What differs is held here: where the
+   * storefront is asked, whose text travels, and the state a storefront uses
+   * to say it serves no such file for the channel.
+   */
+  describe('file=llms', () => {
+    const BASE = '# Endora Demo\n\n## Pages\n\n- [Home](https://retail.example/)\n';
+    const llmsOf = async (channel: string): Promise<AdminCrawlerFilePreview> => {
+      const res = await preview(`?file=llms&salesChannelCode=${channel}`);
+      expect(res.statusCode, res.body).toBe(200);
+      return adminCrawlerFilePreviewResponseSchema.parse(res.json()).data;
+    };
+
+    it('asks the channel’s storefront for exactly /llms.txt?part=base, and follows nothing', async () => {
+      storefrontAnswers(BASE);
+      await llmsOf(VIP);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [input, init] = fetchSpy.mock.calls[0]!;
+      expect(String(input)).toBe('https://vip.example/llms.txt?part=base');
+      expect(init?.method).toBe('GET');
+      expect(init?.redirect).toBe('manual');
+      const sent = new Headers(init?.headers);
+      expect(sent.get('x-sales-channel')).toBe(VIP);
+      const names: string[] = [];
+      sent.forEach((_value, name) => names.push(name));
+      expect(names.sort()).toEqual(['accept', 'user-agent', 'x-sales-channel']);
+    });
+
+    it('ok: the generated base and the channel’s saved content — not its robots.txt text', async () => {
+      storefrontAnswers(BASE);
+      await forChannel('seo.llms_txt_additional', RETAIL, '## About\n\nRetail only.\n');
+      await forChannel('seo.robots_txt_custom', RETAIL, 'User-agent: RobotsOnlyBot\nDisallow: /\n');
+      await forChannel('seo.llms_txt_additional', VIP, '## About\n\nVip only.\n');
+      const res = await preview(`?file=llms&salesChannelCode=${RETAIL}`);
+      expect(res.statusCode, res.body).toBe(200);
+      expect(adminCrawlerFilePreviewResponseSchema.parse(res.json()).data).toEqual({
+        file: 'llms',
+        salesChannelCode: RETAIL,
+        state: 'ok',
+        base: BASE,
+        savedExtra: '## About\n\nRetail only.\n',
+        savedExtraSource: 'channel',
+        channelsWithOwnValue: [VIP, RETAIL].sort(),
+        policy: { index: true, follow: true },
+        storefront: { url: 'https://retail.example', source: 'setting' },
+      });
+      // Channel isolation, and the two settings are two settings.
+      expect(res.body).not.toContain('Vip only');
+      expect(res.body).not.toContain('RobotsOnlyBot');
+    });
+
+    it('a channel without its own content shows the all-channels content', async () => {
+      storefrontAnswers(BASE);
+      await forAll('seo.llms_txt_additional', '## Shared\n');
+      await forChannel('seo.llms_txt_additional', VIP, '## Vip\n');
+      const retail = await llmsOf(RETAIL);
+      expect(retail.savedExtra).toBe('## Shared\n');
+      expect(retail.savedExtraSource).toBe('global');
+      expect(retail.channelsWithOwnValue).toEqual([VIP]);
+    });
+
+    it('not-served: the storefront answers 404 and says it supports the feature', async () => {
+      await forChannel('seo.default_robots', RETAIL, 'NOINDEX, FOLLOW');
+      await forChannel('seo.llms_txt_additional', RETAIL, '## About\n');
+      storefrontAnswers('Not found.\n', { status: 404 });
+      const data = await llmsOf(RETAIL);
+      expect(data.state).toBe('not-served');
+      expect(data.base).toBeNull();
+      expect(data.policy).toEqual({ index: false, follow: true });
+      // What the operator saved is still theirs to see.
+      expect(data.savedExtra).toBe('## About\n');
+    });
+
+    it('storefront-outdated: a 404 from a storefront that has no such file, with no base', async () => {
+      storefrontAnswers('<html>404</html>', {
+        status: 404,
+        capable: false,
+        headers: { 'content-type': 'text/html' },
+      });
+      const res = await preview(`?file=llms&salesChannelCode=${RETAIL}`);
+      const data = adminCrawlerFilePreviewResponseSchema.parse(res.json()).data;
+      expect(data.state).toBe('storefront-outdated');
+      expect(data.base).toBeNull();
+      expect(res.body).not.toContain('html');
+    });
+
+    it('storefront-unreachable: a temporary failure is not "no such file"', async () => {
+      storefrontAnswers('llms.txt is temporarily unavailable.\n', { status: 503 });
+      const data = await llmsOf(RETAIL);
+      expect(data.state).toBe('storefront-unreachable');
+      expect(data.base).toBeNull();
+    });
+
+    it('answers an administrator who may read settings and change nothing (FR-045)', async () => {
+      storefrontAnswers(BASE);
+      const res = await preview(`?file=llms&salesChannelCode=${RETAIL}`, { cookies: settingsReader });
+      expect(res.statusCode, res.body).toBe(200);
+      const write = await h.app.inject({
+        method: 'PUT',
+        url: '/api/v1/admin/settings/seo.llms_txt_additional/value',
+        cookies: settingsReader,
+        payload: { scope: 'all', value: '## About' },
+      });
+      expect(write.statusCode).toBe(403);
+    });
+
+    it('403 without settings:read, and the storefront is not asked', async () => {
+      const res = await preview(`?file=llms&salesChannelCode=${RETAIL}`, {
+        cookies: withoutSettingsRead,
+      });
+      expect(res.statusCode).toBe(403);
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
   });
 

@@ -15,7 +15,7 @@ export const manifest = defineModuleManifest({
   // switch, so what switching the module off withdraws is said here
   // (`specs/144-seo-search-engine-robots/`, FR-033).
   description:
-    'SEO metadata, the generated sitemap and the search engine robots settings. Switching it off withdraws the default robots directive from every storefront response, so a sales channel set to noindex becomes indexable again.',
+    'SEO metadata, the generated sitemap, the search engine robots settings and llms.txt. Switching it off withdraws the default robots directive from every storefront response, so a sales channel set to noindex becomes indexable again; custom robots.txt instructions and llms.txt are withdrawn with it.',
   version: '1.0.0',
   // `auth` owns the `requireAdmin` port the admin routes are gated by. Feature
   // 072 made it a container resolution rather than a constructor argument.
@@ -37,7 +37,7 @@ export const manifest = defineModuleManifest({
         code: 'seo.enabled',
         name: 'SEO enabled',
         description:
-          'Switches the meta-tag override screens, their API, the generated sitemap and the search engine robots settings on or off. While it is off the storefront sends no default robots directive, so a sales channel set to noindex becomes indexable again. Nothing is dropped: overrides and settings stay in the database and apply again when you switch it back on.',
+          'Switches the meta-tag override screens, their API, the generated sitemap and the search engine robots settings on or off. While it is off the storefront sends no default robots directive, so a sales channel set to noindex becomes indexable again; it also adds no custom instructions to robots.txt and serves no llms.txt. Nothing is dropped: overrides and settings stay in the database and apply again when you switch it back on.',
         groupCode: 'seo',
         valueType: 'boolean',
         defaultValue: true,
@@ -75,6 +75,25 @@ export const manifest = defineModuleManifest({
         name: 'Custom robots.txt instructions',
         description:
           "Rules added to the storefront's robots.txt, per sales channel. The text is added after the rules the storefront generates, exactly as written; the preview below shows the resulting file. The generated rules cannot be edited here, but a group written for one crawler (User-agent: its name) replaces them for that crawler — repeat the ones you still want in that group. Forbidding crawling does not remove pages from search results: to keep the storefront out of them use \"Default robots\", and do not add \"Disallow: /\" on top of it. At most 64 KiB of text. A change is served within a few minutes.",
+        groupCode: 'seo',
+        valueType: 'string',
+        multiline: true,
+        defaultValue: '',
+      },
+      {
+        // `specs/144-seo-search-engine-robots/` — text the storefront appends
+        // to the `llms.txt` it generates for a sales channel (FR-024). Empty
+        // by default: the file is then the generated part alone. Channel and
+        // all-channels values, and the size limit, exactly as for the
+        // `robots.txt` text above — one validator answers for both.
+        //
+        // Whether the file is served at all is not this setting's to say: a
+        // channel whose default robots forbids indexing serves none, whatever
+        // is written here (FR-027).
+        code: 'seo.llms_txt_additional',
+        name: 'Additional llms.txt content',
+        description:
+          "Text added to the storefront's llms.txt, per sales channel — the file that tells AI assistants what the shop is and where its public pages are. The text is added after the part the storefront generates (the shop's name and links to its main pages), exactly as written; the preview below shows the resulting file. The file is not served while \"Default robots\" asks search engines not to index the sales channel. At most 64 KiB of text. A change is served within a few minutes.",
         groupCode: 'seo',
         valueType: 'string',
         multiline: true,

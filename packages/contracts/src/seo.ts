@@ -124,6 +124,11 @@ export type StorefrontRobotsPolicyResponse = z.infer<typeof storefrontRobotsPoli
  */
 export const CRAWLER_TEXT_MAX_BYTES = 65_536;
 
+/** In `unreadable`: the channel's default robots — `index` and `follow` — is not known. */
+export const CRAWLER_FILES_UNREADABLE_POLICY = 'policy';
+/** In `unreadable`: the channel's additional `llms.txt` content is not known. */
+export const CRAWLER_FILES_UNREADABLE_LLMS_TXT = 'llmsTxtAdditional';
+
 /**
  * What a sales channel's crawler files are built from, as the storefront reads
  * it from `GET /api/v1/storefront/seo/crawler-files`.
@@ -135,6 +140,31 @@ export const CRAWLER_TEXT_MAX_BYTES = 65_536;
  *
  * `index` and `follow` repeat the robots policy so that a file whose existence
  * depends on it needs one read rather than two.
+ *
+ * ## `unreadable` — the parts of the answer fail apart
+ *
+ * `robots.txt` reads the texts and never the policy; `llms.txt` reads all of
+ * it. Were one unreadable stored value to fail the whole answer, a channel
+ * whose *Default robots* row holds a value nobody can interpret would lose its
+ * `robots.txt` — a file that row has no say in. So the backend answers `200`
+ * and **names** what it could not read:
+ *
+ *  * {@link CRAWLER_FILES_UNREADABLE_POLICY} — `index` and `follow` are then
+ *    both `false`, the restrictive reading, and mean "not known";
+ *  * {@link CRAWLER_FILES_UNREADABLE_LLMS_TXT} — `llmsTxtAdditional` is then
+ *    `''` and means "not known".
+ *
+ * A file that needs a named member treats it as unknown and is not served; a
+ * file that does not is unaffected. The member is optional and additive: a
+ * backend older than it never sends it (it failed the whole answer instead),
+ * and a storefront older than it ignores it — and reads neither of the two
+ * members it can name, which is why those two, and only those, may be answered
+ * this way. `robotsTxtCustom` is read by every storefront that has this
+ * endpoint, so an unreadable one still fails the whole answer: a `200` with an
+ * empty text would be a `robots.txt` that silently omits an operator's rules.
+ *
+ * It is a list of names, not a closed enum, so that a later backend can name
+ * something else without an earlier storefront finding the answer unreadable.
  *
  * Strict about the members it names and tolerant of any it does not, for the
  * reason given at {@link storefrontRobotsPolicySchema}. The `max` on the texts
@@ -152,6 +182,8 @@ export const storefrontCrawlerFilesSchema = storefrontRobotsPolicySchema.extend(
     /** The channel's configured shop name, or `''` when none is set. */
     name: z.string(),
   }),
+  /** The members above that could not be read. Absent means none. */
+  unreadable: z.array(z.string()).optional(),
 });
 export type StorefrontCrawlerFiles = z.infer<typeof storefrontCrawlerFilesSchema>;
 

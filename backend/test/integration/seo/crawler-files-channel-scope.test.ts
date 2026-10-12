@@ -9,23 +9,31 @@ import {
 import { systemDefaultSalesChannel } from '../../helpers/sales-channel-fixtures.js';
 
 /**
- * Custom `robots.txt` instructions are per sales channel (Constitution XII;
- * `specs/144-seo-search-engine-robots/` FR-003, FR-005, FR-006, FR-020).
+ * Custom `robots.txt` instructions and additional `llms.txt` content are per
+ * sales channel (Constitution XII; `specs/144-seo-search-engine-robots/`
+ * FR-003, FR-005, FR-006, FR-020, FR-029).
  *
  * The failure this file exists to refuse is one channel's instructions served
  * in another channel's `robots.txt`: a wholesale channel's `Disallow: /` taking
  * a retail shop out of every crawler's reach, with nothing on the retail
  * channel's own settings to explain it. So every case names more than one
  * channel and asserts on each of them.
+ *
+ * The two texts are two settings resolved by one rule, so every case runs for
+ * each — and each also holds that writing one text never shows up as the
+ * other.
  */
-describe('custom robots.txt instructions — sales-channel scope', () => {
+describe.each([
+  { setting: 'seo.robots_txt_custom', member: 'robotsTxtCustom', other: 'llmsTxtAdditional' },
+  { setting: 'seo.llms_txt_additional', member: 'llmsTxtAdditional', other: 'robotsTxtCustom' },
+] as const)('$setting — sales-channel scope', ({ setting, member, other }) => {
   let h: BackendServerHandle;
   let systemDefault: string;
   let everyChannel: string[];
   const admin = { b2b_session: 'stub-admin-session' };
   const A = 'pl_retail';
   const B = 'pl_b2b_vip';
-  const SETTING = '/api/v1/admin/settings/seo.robots_txt_custom';
+  const SETTING = `/api/v1/admin/settings/${setting}`;
   const FOR_A = 'User-agent: GPTBot\nDisallow: /\n';
   const FOR_ALL = 'User-agent: *\nDisallow: /internal\n';
 
@@ -75,7 +83,10 @@ describe('custom robots.txt instructions — sales-channel scope', () => {
       ...(channel !== null ? { headers: { 'x-sales-channel': channel } } : {}),
     });
     expect(res.statusCode, res.body).toBe(200);
-    return (res.json() as { data: { robotsTxtCustom: string } }).data.robotsTxtCustom;
+    const data = (res.json() as { data: Record<typeof member | typeof other, string> }).data;
+    // The other text is another setting: nothing written here reaches it.
+    expect(data[other]).toBe('');
+    return data[member];
   };
 
   it('answers a channel its own text and never serves it for a neighbour or for no channel', async () => {

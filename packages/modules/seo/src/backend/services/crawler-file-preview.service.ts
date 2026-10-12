@@ -8,6 +8,7 @@ import {
 import { SalesChannel, Setting, SettingValue } from '@endora-commerce/platform/kernel';
 import { z } from 'zod';
 import {
+  LLMS_TXT_ADDITIONAL_SETTING_CODE,
   ROBOTS_TXT_CUSTOM_SETTING_CODE,
   storedCrawlerText,
   type CrawlerFilesSettingsPort,
@@ -16,7 +17,7 @@ import { DEFAULT_ROBOTS_SETTING_CODE, robotsPolicyForToken } from './robots-poli
 import type { StorefrontAddress, StorefrontAddressService } from './storefront-address.service.js';
 
 /**
- * The preview of a sales channel's crawler file
+ * The preview of a sales channel's crawler file — `robots.txt` or `llms.txt`
  * (`specs/144-seo-search-engine-robots/contracts/admin-surfaces.md` §3).
  *
  * A crawler file is two parts: the rules the **storefront** generates and the
@@ -94,24 +95,32 @@ export const PREVIEW_MAX_BYTES = 512 * 1024;
 const USER_AGENT = 'EndoraCommerce-Seo/1.0 (+crawler-file-preview)';
 
 /**
- * What each previewable file is built from. The path and query are literals;
+ * What each file's preview is built from. The path and query are literals;
  * nothing is interpolated into them.
+ *
+ * `mayBeUnserved` is the one way the two differ. A storefront always has a
+ * `robots.txt`, so anything but its rules is a failure to reach it. It has an
+ * `llms.txt` only for a channel that may be indexed, and says "none for this
+ * channel" with a `404` — which is an answer, told from an address that
+ * serves nothing by the capability header.
  */
-const PREVIEWABLE_FILES = {
+const PREVIEW_SOURCES = {
   robots: {
     pathAndQuery: '/robots.txt?part=system',
     settingCode: ROBOTS_TXT_CUSTOM_SETTING_CODE,
+    mayBeUnserved: false,
   },
-} as const satisfies Partial<
-  Record<AdminCrawlerFile, { readonly pathAndQuery: string; readonly settingCode: string }>
+  llms: {
+    pathAndQuery: '/llms.txt?part=base',
+    settingCode: LLMS_TXT_ADDITIONAL_SETTING_CODE,
+    mayBeUnserved: true,
+  },
+} as const satisfies Record<
+  AdminCrawlerFile,
+  { readonly pathAndQuery: string; readonly settingCode: string; readonly mayBeUnserved: boolean }
 >;
 
-export type PreviewableCrawlerFile = keyof typeof PREVIEWABLE_FILES;
-
-/** Whether this release can preview `file`. */
-export function isPreviewableCrawlerFile(file: AdminCrawlerFile): file is PreviewableCrawlerFile {
-  return Object.hasOwn(PREVIEWABLE_FILES, file);
-}
+type PreviewSource = (typeof PREVIEW_SOURCES)[AdminCrawlerFile];
 
 /** The reads the preview makes of the settings store. */
 export type CrawlerFilePreviewSettingsPort = Pick<CrawlerFilesSettingsPort, 'get'>;
@@ -143,7 +152,7 @@ export class UnknownSalesChannelError extends Error {
 
 /** What became of asking the storefront, with a reason for the server log only. */
 export interface StorefrontPartOutcome {
-  readonly state: Exclude<AdminCrawlerFilePreviewState, 'not-served'>;
+  readonly state: AdminCrawlerFilePreviewState;
   readonly base: string | null;
   /** Why the state is what it is. Never the body, and never sent to a client. */
   readonly reason: string;
@@ -186,7 +195,7 @@ export class CrawlerFilePreviewService {
    *   file the storefront would not serve.
    */
   async preview(
-    file: PreviewableCrawlerFile,
+    file: AdminCrawlerFile,
     /** `undefined` asks about the system default channel. */
     salesChannelCode: string | undefined,
   ): Promise<CrawlerFilePreviewResult> {
@@ -195,7 +204,8 @@ export class CrawlerFilePreviewService {
         ? await this.store.findDefaultChannel()
         : await this.store.findChannel(salesChannelCode);
     if (channel === null) throw new UnknownSalesChannelError(salesChannelCode ?? '(system default)');
-    const { pathAndQuery, settingCode } = PREVIEWABLE_FILES[file];
+    const source = PREVIEW_SOURCES[file];
+    const { settingCode } = source;
 
     // Every read below is made for `channel.id` and no other (Principle XII).
     const policy = robotsPolicyForToken(
@@ -205,7 +215,7 @@ export class CrawlerFilePreviewService {
     const provenance = await this.store.provenance(settingCode, channel.id);
     const address = await this.storefrontAddress.resolve(channel.id);
 
-    const outcome = await this.storefrontPart(address, pathAndQuery, channel.code);
+    const outcome = await this.storefrontPart(address, source, channel.code);
 
     return {
       reason: outcome.reason,
@@ -225,14 +235,14 @@ export class CrawlerFilePreviewService {
 
   private async storefrontPart(
     address: StorefrontAddress,
-    pathAndQuery: string,
+    source: PreviewSource,
     salesChannelCode: string,
   ): Promise<StorefrontPartOutcome> {
     // An address nobody configured is not asked.
     if (address.source === 'fallback') {
       return { state: 'address-unknown', base: null, reason: 'no storefront address is configured' };
     }
-    const target = crawlerFileTarget(address.url, pathAndQuery);
+    const target = crawlerFileTarget(address.url, source.pathAndQuery);
     if (target === null) {
       return {
         state: 'storefront-unreachable',
@@ -244,14 +254,18 @@ export class CrawlerFilePreviewService {
     const key = `${target.href}\n${salesChannelCode}`;
     const running = this.inFlight.get(key);
     if (running !== undefined) return running;
-    const started = this.request(target, salesChannelCode).finally(() => {
+    const started = this.request(target, source, salesChannelCode).finally(() => {
       this.inFlight.delete(key);
     });
     this.inFlight.set(key, started);
     return started;
   }
 
-  private async request(target: URL, salesChannelCode: string): Promise<StorefrontPartOutcome> {
+  private async request(
+    target: URL,
+    source: PreviewSource,
+    salesChannelCode: string,
+  ): Promise<StorefrontPartOutcome> {
     const fetchFn = this.options.fetchFn ?? globalThis.fetch;
     const timeoutMs = this.options.timeoutMs ?? PREVIEW_TIMEOUT_MS;
     const maxBytes = this.options.maxBytes ?? PREVIEW_MAX_BYTES;
@@ -290,6 +304,25 @@ export class CrawlerFilePreviewService {
         );
       }
 
+      const capable = response.headers.get(CRAWLER_FILES_CAPABILITY_HEADER) !== null;
+
+      // "No such file", for a file a storefront may have none of. Nothing of
+      // the body is read: a `404`'s body is not the file, whoever sent it.
+      if (source.mayBeUnserved && response.status === 404) {
+        await discard(response);
+        return capable
+          ? {
+              state: 'not-served',
+              base: null,
+              reason: `it answered HTTP 404 with ${CRAWLER_FILES_CAPABILITY_HEADER}: no such file for the channel`,
+            }
+          : {
+              state: 'storefront-outdated',
+              base: null,
+              reason: `it answered HTTP 404 without ${CRAWLER_FILES_CAPABILITY_HEADER}: it has no such file`,
+            };
+      }
+
       if (response.status < 200 || response.status > 299) {
         await discard(response);
         return unreachable(
@@ -314,13 +347,16 @@ export class CrawlerFilePreviewService {
       }
 
       // A storefront that predates the feature ignores the query and answers
-      // its whole file, which is its own rules and nothing else — it appends
+      // its whole `robots.txt`, which is its own rules and nothing else — it appends
       // no operator text. The header is the only way to tell that from an
       // answer to what was asked.
-      if (response.headers.get(CRAWLER_FILES_CAPABILITY_HEADER) === null) {
+      if (!capable) {
         return {
           state: 'storefront-outdated',
-          base: body,
+          // Its `robots.txt` is at least the rules it serves. Whatever an
+          // older storefront answers at `/llms.txt` is nothing this feature
+          // generated, and is not shown as if it were.
+          base: source.mayBeUnserved ? null : body,
           reason: `it answered without ${CRAWLER_FILES_CAPABILITY_HEADER}`,
         };
       }

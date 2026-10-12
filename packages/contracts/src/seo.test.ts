@@ -363,6 +363,55 @@ describe('storefrontCrawlerFilesSchema', () => {
     }
   });
 
+  /**
+   * `unreadable` — the members the backend could not read from what is stored
+   * (`contracts/crawler-policy.md` §2.2). It is what lets `robots.txt` be
+   * served while the channel's default robots is a value nobody can interpret:
+   * the answer is still a `200`, and only a file that needs the named member
+   * treats it as unknown.
+   */
+  describe('unreadable', () => {
+    it('is optional: an answer without it has every member readable', () => {
+      expect(storefrontCrawlerFilesSchema.parse(FILES)).not.toHaveProperty('unreadable');
+    });
+
+    it('accepts the two names this release sends, and an empty list', () => {
+      for (const unreadable of [[], ['policy'], ['llmsTxtAdditional'], ['policy', 'llmsTxtAdditional']]) {
+        expect(storefrontCrawlerFilesSchema.parse({ ...FILES, unreadable }).unreadable).toEqual(
+          unreadable,
+        );
+      }
+    });
+
+    it('accepts a name it does not know: a later backend may add one', () => {
+      expect(
+        storefrontCrawlerFilesSchema.safeParse({ ...FILES, unreadable: ['shop'] }).success,
+      ).toBe(true);
+    });
+
+    it('rejects anything that is not a list of names', () => {
+      for (const unreadable of ['policy', true, null, [1], [null], { policy: true }]) {
+        expect(storefrontCrawlerFilesSchema.safeParse({ ...FILES, unreadable }).success).toBe(
+          false,
+        );
+      }
+    });
+
+    it('still requires every named member beside it: unreadable is said, not shown by absence', () => {
+      const { index: _index, ...withoutIndex } = FILES;
+      expect(
+        storefrontCrawlerFilesSchema.safeParse({ ...withoutIndex, unreadable: ['policy'] }).success,
+      ).toBe(false);
+      expect(
+        storefrontCrawlerFilesSchema.safeParse({
+          ...FILES,
+          llmsTxtAdditional: null,
+          unreadable: ['llmsTxtAdditional'],
+        }).success,
+      ).toBe(false);
+    });
+  });
+
   it('rejects a text longer than any the backend accepts', () => {
     // The limit is in bytes and is enforced where the text is saved. A text of
     // that many bytes never has more characters than that, so a longer string

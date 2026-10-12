@@ -35,8 +35,8 @@ import { expectModuleAbsent, withModuleOff, type OffStateAxis } from '../../help
  *    settings API refuses for its shape whatever the module's state, so a
  *    refusal there would not be the off state's. The third test sends a write
  *    the API accepts while the module is on and names the code it is refused
- *    with while off. `seo.robots_txt_custom` is held the same way in the
- *    fourth. `seo.enabled` is the module's activation control — the single
+ *    with while off. `seo.robots_txt_custom` and `seo.llms_txt_additional` are
+ *    held the same way in the cases after it. `seo.enabled` is the module's activation control — the single
  *    exception — and is driven by nothing here.
  *
  * The **deactivated-while-platform-available** case is the first axis the
@@ -91,6 +91,11 @@ describe('seo off-state (Constitution XVII)', () => {
         // the storefront on anybody's behalf.
         {
           url: '/api/v1/admin/seo/crawler-files/preview?file=robots&salesChannelCode=default',
+          cookies: admin,
+        },
+        // …and the one beside *Additional llms.txt content* (FR-044).
+        {
+          url: '/api/v1/admin/seo/crawler-files/preview?file=llms&salesChannelCode=default',
           cookies: admin,
         },
         {
@@ -261,8 +266,13 @@ describe('seo off-state (Constitution XVII)', () => {
    * "serve the system-generated rules alone" — the operator's text is
    * withdrawn with the module, and `robots.txt` itself never is (FR-031).
    */
-  it('withdraws the custom robots.txt instructions while off, keeps the stored text, and serves it again after', async () => {
-    const SETTING = '/api/v1/admin/settings/seo.robots_txt_custom';
+  it.each([
+    // The storefront takes the refusal as "serve the system-generated rules alone"…
+    { code: 'seo.robots_txt_custom', member: 'robotsTxtCustom' },
+    // …and as "there is no llms.txt" (FR-030): the file goes with the module.
+    { code: 'seo.llms_txt_additional', member: 'llmsTxtAdditional' },
+  ] as const)('withdraws $code while off, keeps the stored text, and serves it again after', async ({ code, member }) => {
+    const SETTING = `/api/v1/admin/settings/${code}`;
     const TEXT = 'User-agent: GPTBot\nDisallow: /\n';
     const files = async () =>
       h.app.inject({ method: 'GET', url: '/api/v1/storefront/seo/crawler-files', headers: channel });
@@ -298,7 +308,7 @@ describe('seo off-state (Constitution XVII)', () => {
       // Positive control.
       const on = await files();
       expect(on.statusCode).toBe(200);
-      expect((on.json() as { data: { robotsTxtCustom: string } }).data.robotsTxtCustom).toBe(TEXT);
+      expect((on.json() as { data: Record<string, string> }).data[member]).toBe(TEXT);
       const whileOn = await detail();
       expect(whileOn.editable).toBe(true);
       expect(whileOn.multiline, 'the Settings screen must offer a multi-line field').toBe(true);
@@ -349,7 +359,7 @@ describe('seo off-state (Constitution XVII)', () => {
       const back = await files();
       expect(back.statusCode).toBe(200);
       expect(
-        (back.json() as { data: { robotsTxtCustom: string } }).data.robotsTxtCustom,
+        (back.json() as { data: Record<string, string> }).data[member],
         'the stored text must be served again, unchanged, with no write in between',
       ).toBe(TEXT);
       expect((await detail()).editable).toBe(true);

@@ -1,6 +1,16 @@
-import { CRAWLER_TEXT_MAX_BYTES, type StorefrontCrawlerFiles } from '@endora-commerce/contracts';
+import {
+  CRAWLER_FILES_UNREADABLE_LLMS_TXT,
+  CRAWLER_FILES_UNREADABLE_POLICY,
+  CRAWLER_TEXT_MAX_BYTES,
+  type StorefrontCrawlerFiles,
+  type StorefrontRobotsPolicy,
+} from '@endora-commerce/contracts';
 import { z } from 'zod';
-import { DEFAULT_ROBOTS_SETTING_CODE, robotsPolicyForToken } from './robots-policy.js';
+import {
+  DEFAULT_ROBOTS_SETTING_CODE,
+  UnknownRobotsTokenError,
+  robotsPolicyForToken,
+} from './robots-policy.js';
 
 /**
  * What a sales channel's crawler files are built from
@@ -17,19 +27,43 @@ import { DEFAULT_ROBOTS_SETTING_CODE, robotsPolicyForToken } from './robots-poli
  * the storefront and the Admin UI's preview both read it; rewriting here as
  * well would be a second definition of the same thing.
  *
- * ## It throws rather than answer something it cannot stand behind
+ * ## It never answers something it cannot stand behind — and its parts fail apart
  *
  * Every answer at `200` is definitive to a storefront: it replaces whatever
- * the storefront knew. So a stored value that cannot be read as a text, a text
- * longer than the write door accepts, and a robots value outside the four
- * choices are all a throw — the endpoint answers `500`, the storefront keeps
- * the file it last served, and a storefront that knows nothing answers
- * `robots.txt` with a temporary failure instead of a file that silently omits
- * the operator's instructions (FR-022).
+ * the storefront knew. So nothing here is ever answered as if it had been
+ * read when it was not. What happens instead depends on who reads the member:
+ *
+ *  * **The `robots.txt` instructions** are read by every storefront that has
+ *    this endpoint. A stored value that is not a text, or is longer than the
+ *    write door accepts, is a **throw** — the endpoint answers `500`, the
+ *    storefront keeps the file it last served, and one that knows nothing
+ *    answers `robots.txt` with a temporary failure instead of a file that
+ *    silently omits the operator's rules (FR-022).
+ *  * **The default robots policy and the `llms.txt` content** are read only by
+ *    `llms.txt`. An unreadable one is **named** in `unreadable` and the rest is
+ *    answered: `robots.txt` reads neither, and a *Default robots* row holding
+ *    a value nobody can interpret must not cost a channel its `robots.txt`
+ *    (FR-015 — the policy has no say in that file). `llms.txt` is not served
+ *    while either is named.
+ *
+ * The policy is then answered as `index: false, follow: false`. That is not a
+ * guess at the value: it is the reading under which a consumer that does not
+ * know `unreadable` errs towards keeping a channel out, never towards
+ * inviting anyone in.
+ *
+ * "Unreadable" is about the **value**. A settings store that cannot be asked,
+ * or that has no such setting, still throws: that is an instance that is
+ * wrong, not a row, and nothing here can answer for it.
  */
 
 /** The setting an operator edits, per sales channel. */
 export const ROBOTS_TXT_CUSTOM_SETTING_CODE = 'seo.robots_txt_custom';
+
+/** The setting an operator edits, per sales channel. */
+export const LLMS_TXT_ADDITIONAL_SETTING_CODE = 'seo.llms_txt_additional';
+
+/** The reading of a policy nobody could read. See the module doc. */
+const POLICY_WHEN_UNREADABLE: StorefrontRobotsPolicy = { index: false, follow: false };
 
 /**
  * The shop's public name. Declared by the `settings` module; read here through
@@ -96,14 +130,40 @@ export async function resolveCrawlerFiles(
   settings: CrawlerFilesSettingsPort,
   salesChannelId: string,
 ): Promise<StorefrontCrawlerFiles> {
-  const policy = robotsPolicyForToken(
-    await settings.get(DEFAULT_ROBOTS_SETTING_CODE, salesChannelId, z.string()),
-  );
+  const unreadable: string[] = [];
+
+  // Read as whatever is stored and judged here, so that "the store could not
+  // be asked" (a throw, below this line) and "the value is not one of the
+  // four" (an answer) stay two different things.
+  let policy: StorefrontRobotsPolicy;
+  try {
+    policy = robotsPolicyForToken(
+      await settings.get(DEFAULT_ROBOTS_SETTING_CODE, salesChannelId, z.unknown()),
+    );
+  } catch (error) {
+    if (!(error instanceof UnknownRobotsTokenError)) throw error;
+    policy = { ...POLICY_WHEN_UNREADABLE };
+    unreadable.push(CRAWLER_FILES_UNREADABLE_POLICY);
+  }
+
   const robotsTxtCustom = await storedCrawlerText(
     settings,
     ROBOTS_TXT_CUSTOM_SETTING_CODE,
     salesChannelId,
   );
+
+  let llmsTxtAdditional = '';
+  const storedLlms = await settings.get(
+    LLMS_TXT_ADDITIONAL_SETTING_CODE,
+    salesChannelId,
+    z.unknown(),
+  );
+  if (typeof storedLlms === 'string' && Buffer.byteLength(storedLlms, 'utf8') <= CRAWLER_TEXT_MAX_BYTES) {
+    llmsTxtAdditional = storedLlms;
+  } else {
+    // Never the text, and never a part of it.
+    unreadable.push(CRAWLER_FILES_UNREADABLE_LLMS_TXT);
+  }
 
   // The one read that degrades instead of throwing: a shop with no name is a
   // shop with no name, and nothing a crawler file says depends on it being
@@ -115,11 +175,12 @@ export async function resolveCrawlerFiles(
   return {
     ...policy,
     robotsTxtCustom,
-    // No setting holds this yet; the member is in the contract so that a
-    // storefront reads one shape from the first release that has the endpoint.
-    llmsTxtAdditional: '',
+    llmsTxtAdditional,
     shop: {
       name: shopName?.ok === true && typeof shopName.value === 'string' ? shopName.value : '',
     },
+    // Said only when there is something to say: an answer in which everything
+    // was read is the shape it has always had.
+    ...(unreadable.length > 0 ? { unreadable } : {}),
   };
 }
