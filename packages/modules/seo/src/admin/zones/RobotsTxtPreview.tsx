@@ -1,11 +1,21 @@
-import { useId, useState, type ReactNode } from 'react';
-import { Info, Lock, PencilLine, RefreshCw, TriangleAlert } from 'lucide-react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { Info, RefreshCw, TriangleAlert } from 'lucide-react';
 import type { AdminZoneProps } from '@endora-commerce/contracts';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { cn } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Badge, Button, Label, Select } from '@endora-commerce/admin-kit/ui';
-import { usePreviewChannels, useRobotsPreview } from './preview-client.js';
-import { buildPreviewModel, type PreviewNotice } from './preview-model.js';
+import {
+  SYSTEM_DEFAULT_CHANNEL,
+  reloadRobotsPreviews,
+  usePreviewChannels,
+  useRobotsPreview,
+} from './preview-client.js';
+import {
+  buildPreviewModel,
+  type PreviewFileSegment,
+  type PreviewModel,
+  type PreviewNotice,
+} from './preview-model.js';
 
 /**
  * The `robots.txt` a sales channel's storefront serves, beside the setting
@@ -13,14 +23,17 @@ import { buildPreviewModel, type PreviewNotice } from './preview-model.js';
  * to `seo.robots_txt_custom`
  * (`specs/144-seo-search-engine-robots/contracts/admin-surfaces.md` §4).
  *
- * Two blocks in the order the file carries them: the rules the storefront
- * generates, which cannot be edited here, and the operator's own text, taken
- * from the field as it is typed. What is shown, and which sentences go with
- * it, is `buildPreviewModel`'s decision; this file draws it.
+ * **One block, and it is the file.** The text in the block is exactly what the
+ * storefront serves — or will serve once the field is saved, which the heading
+ * says. Inside it the operator's lines are marked with a bar and a label and
+ * the generated lines with a label of their own, so the two are told apart
+ * without the reader having to assemble a file from two boxes. What is shown,
+ * and which sentences go with it, is `buildPreviewModel`'s decision; this file
+ * draws it.
  *
  * **Everything a storefront sent is drawn as text.** The rules arrive from
- * another server and the address from a setting; both are React text nodes
- * inside the elements below, never markup and never a link target.
+ * another server and the address from a setting; both are React text nodes,
+ * never markup and never a link target.
  *
  * **Nothing here can hold up the row.** The component receives the draft and
  * returns nothing to the editor: it has no way to change the value, and the
@@ -33,12 +46,10 @@ export type RobotsTxtPreviewProps = AdminZoneProps<'settings.setting.after'>;
 
 /** The translation key of each notice's sentence. */
 const NOTICE_KEY: Record<PreviewNotice['kind'], string> = {
-  unsaved: 'crawlerPreview.notice.unsaved',
   'storefront-outdated': 'crawlerPreview.notice.storefrontOutdated',
   'storefront-unreachable': 'crawlerPreview.notice.storefrontUnreachable',
   'address-unknown': 'crawlerPreview.notice.addressUnknown',
   'preview-failed': 'crawlerPreview.notice.previewFailed',
-  'no-channel': 'crawlerPreview.notice.noChannel',
   'stays-open': 'crawlerPreview.notice.staysOpen',
   'site-wide-disallow': 'crawlerPreview.notice.siteWideDisallow',
   'shared-address': 'crawlerPreview.notice.sharedAddress',
@@ -46,16 +57,45 @@ const NOTICE_KEY: Record<PreviewNotice['kind'], string> = {
   'previewed-channel-has-own-value': 'crawlerPreview.notice.previewedChannelHasOwnValue',
 };
 
+const HEADING_KEY: Record<PreviewModel['shows'], string> = {
+  'after-saving': 'crawlerPreview.heading.afterSaving',
+  'served-now': 'crawlerPreview.heading.servedNow',
+  unknown: 'crawlerPreview.heading.unknown',
+};
+
 /**
- * Tall enough to show the rules a storefront generates today without a scroll
- * bar inside the block — the point of a preview is to see the file — and
- * capped, so that a very long text scrolls inside its block instead of pushing
- * the rest of the Settings screen away. Long lines scroll sideways inside the
- * block as well: a narrow screen never scrolls as a whole.
+ * A scrolling block of file text.
+ *
+ * Capped, so that the row does not take over the page: lower on a narrow
+ * screen, where the row would otherwise run to several screens, and tall
+ * enough on a wide one to show the rules a storefront generates today without
+ * scrolling inside the block. Long lines scroll sideways inside the block; the
+ * page never scrolls sideways. The block takes focus, so it can be scrolled
+ * from the keyboard.
  */
 const BLOCK_CLASS =
-  'max-h-[36rem] overflow-auto whitespace-pre rounded-md px-3 py-2 font-mono text-xs leading-5 ' +
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+  'max-h-80 overflow-auto whitespace-pre rounded-md border bg-background font-mono text-xs ' +
+  'leading-5 sm:max-h-[36rem] focus-visible:outline-none focus-visible:ring-2 ' +
+  'focus-visible:ring-ring';
+
+/**
+ * The label of a stretch, drawn from `data-label` by the stylesheet. It is not
+ * a text node on purpose: the block's text is the file and nothing but the
+ * file, so that what is selected, copied or compared is what is served. The
+ * same words are in the legend above the block, as text.
+ */
+const SEGMENT_LABEL_CLASS =
+  'before:mb-1 before:block before:font-sans before:text-[10px] before:font-semibold ' +
+  'before:uppercase before:tracking-wide before:content-[attr(data-label)]';
+
+const SEGMENT_CLASS: Record<PreviewFileSegment['kind'], string> = {
+  system: cn('block px-3 py-2 text-muted-foreground', SEGMENT_LABEL_CLASS),
+  separator: 'block px-3',
+  operator: cn(
+    'block border-l-4 border-l-primary bg-primary/5 px-3 py-2 before:text-primary',
+    SEGMENT_LABEL_CLASS,
+  ),
+};
 
 export function RobotsTxtPreview({
   channelCode,
@@ -64,30 +104,45 @@ export function RobotsTxtPreview({
 }: RobotsTxtPreviewProps): ReactNode {
   const t = useTranslation('seo');
   const headingId = useId();
+  const legendId = useId();
   const pickerId = useId();
-  const systemLabelId = useId();
-  const operatorLabelId = useId();
+  const detachedLabelId = useId();
 
   const allChannels = channelCode === null;
+  const mode = allChannels ? 'all-channels' : 'channel';
   const channels = usePreviewChannels(allChannels);
   const [picked, setPicked] = useState<string | null>(null);
   const pickedStillOffered = picked !== null && channels.items.some((item) => item.code === picked);
-  const previewedChannel = allChannels
-    ? pickedStillOffered
-      ? picked
-      : (channels.items[0]?.code ?? null)
-    : channelCode;
+  // For all channels: the picked channel, else the first offered — the system
+  // default — else, when no channel can be listed, the system default by not
+  // naming one. Nothing is asked while the list is still on its way.
+  const target = !allChannels
+    ? channelCode
+    : channels.status === 'loading'
+      ? null
+      : pickedStillOffered
+        ? picked
+        : (channels.items[0]?.code ?? SYSTEM_DEFAULT_CHANNEL);
 
-  const { request, reload } = useRobotsPreview(previewedChannel);
-  const model = buildPreviewModel({ channelCode, draftText, dirty }, previewedChannel, request);
+  const { request, reload } = useRobotsPreview(mode, target);
+  const model = buildPreviewModel({ channelCode, draftText, dirty }, request);
 
-  // In all-channels mode there is nothing to ask until the channels are known.
-  const waitingForChannels = allChannels && channels.status === 'loading';
-  const loading = previewedChannel === null ? waitingForChannels : model.loading;
-  const notices = waitingForChannels
-    ? model.notices.filter((notice) => notice.kind !== 'no-channel')
-    : model.notices;
-  const notServed = notices.some((notice) => notice.kind === 'storefront-outdated');
+  // When this row stops being dirty it was saved or put back. The answer says
+  // which channels have a value of their own, and that is what a save changes.
+  const wasDirty = useRef(dirty);
+  useEffect(() => {
+    if (wasDirty.current && !dirty) reloadRobotsPreviews();
+    wasDirty.current = dirty;
+  }, [dirty]);
+
+  const mayNotBeServed = model.notices.some((notice) => notice.kind === 'storefront-outdated');
+  const operatorLabel =
+    model.operatorPartOrigin === 'saved'
+      ? t('crawlerPreview.operator.labelSaved')
+      : model.operatorPartUnsaved
+        ? t('crawlerPreview.operator.labelUnsaved')
+        : t('crawlerPreview.operator.label');
+  const fileHasOperatorPart = model.file !== null && model.file.segments.length > 1;
 
   return (
     <section
@@ -96,13 +151,14 @@ export function RobotsTxtPreview({
     >
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0 space-y-1">
-          <h4 id={headingId} className="text-sm font-medium">
-            {t('crawlerPreview.robots.title')}
-          </h4>
-          <p className="text-xs text-muted-foreground">{t('crawlerPreview.robots.description')}</p>
-          {!allChannels ? (
+          {/* The page's own heading is the only one above this: the groups and
+              rows of the Settings screen are not headings. */}
+          <h2 id={headingId} className="text-sm font-medium">
+            {t(HEADING_KEY[model.shows])}
+          </h2>
+          {model.previewedChannel !== null && !(allChannels && channels.items.length > 0) ? (
             <p className="text-xs text-muted-foreground">
-              {t('crawlerPreview.channel.label', { channel: channelCode })}
+              {t('crawlerPreview.channel.label', { channel: model.previewedChannel })}
             </p>
           ) : null}
           {model.storefrontUrl !== null ? (
@@ -120,7 +176,7 @@ export function RobotsTxtPreview({
               <Select
                 id={pickerId}
                 className="min-h-11 sm:min-h-9"
-                value={previewedChannel ?? ''}
+                value={target ?? ''}
                 onChange={(event) => setPicked(event.target.value)}
               >
                 {channels.items.map((item) => (
@@ -137,7 +193,7 @@ export function RobotsTxtPreview({
             size="sm"
             className="min-h-11 sm:min-h-9"
             onClick={reload}
-            disabled={previewedChannel === null || loading}
+            disabled={target === null || model.loading}
           >
             <RefreshCw aria-hidden="true" className="mr-1 h-3.5 w-3.5" />
             {t('crawlerPreview.refresh')}
@@ -147,15 +203,20 @@ export function RobotsTxtPreview({
 
       {/* One polite live region for everything that appears without the
           operator asking for it: the storefront's answer arriving, and the
-          field starting to differ from what is saved. Not atomic, so that a
-          notice that appears is read on its own rather than with every other
-          one. Each notice is a sentence with an icon; the tone is never
+          file starting to differ from what is served. Always mounted, so that
+          what appears in it is announced; not atomic, so that it is read on
+          its own. Each notice is a sentence with an icon; the tone is never
           carried by colour alone. */}
-      <div role="status" aria-live="polite" aria-atomic="false" className="space-y-2">
-        {loading ? (
+      <div role="status" aria-live="polite" aria-atomic="false" className="space-y-2 empty:-mt-3">
+        {model.loading ? (
           <p className="text-xs text-muted-foreground">{t('crawlerPreview.loading')}</p>
         ) : null}
-        {notices.map((notice) => (
+        {model.shows === 'after-saving' ? (
+          <p data-note="unsaved" className="text-xs text-muted-foreground">
+            {t('crawlerPreview.unsavedNote')}
+          </p>
+        ) : null}
+        {model.notices.map((notice) => (
           <Alert
             key={notice.kind}
             role="presentation"
@@ -181,58 +242,69 @@ export function RobotsTxtPreview({
         ))}
       </div>
 
-      {model.systemPart !== null ? (
+      {model.file !== null ? (
         <div className="space-y-1">
-          <p id={systemLabelId} className="flex flex-wrap items-center gap-2 text-xs font-medium">
-            <Lock aria-hidden="true" className="h-3.5 w-3.5" />
-            {t('crawlerPreview.system.title')}
-            <Badge variant="outline" className="text-[10px] text-muted-foreground">
-              {t('crawlerPreview.system.readOnly')}
-            </Badge>
+          <p id={legendId} className="text-xs text-muted-foreground">
+            {fileHasOperatorPart
+              ? t('crawlerPreview.legend.both')
+              : t('crawlerPreview.legend.systemOnly')}
           </p>
+          {/* The file. Its text content is the served file to the byte: the
+              labels are drawn by the stylesheet and are not text in it. */}
           <pre
             tabIndex={0}
-            aria-labelledby={systemLabelId}
-            data-part="system"
-            className={cn(BLOCK_CLASS, 'border border-dashed bg-muted/60 text-muted-foreground')}
+            aria-labelledby={headingId}
+            aria-describedby={legendId}
+            data-part="file"
+            className={BLOCK_CLASS}
           >
-            {model.systemPart}
+            {model.file.segments.map((segment) => (
+              <span
+                key={segment.kind}
+                data-part={segment.kind}
+                data-label={
+                  segment.kind === 'system'
+                    ? t('crawlerPreview.system.label')
+                    : segment.kind === 'operator'
+                      ? operatorLabel
+                      : undefined
+                }
+                className={SEGMENT_CLASS[segment.kind]}
+              >
+                {segment.text}
+              </span>
+            ))}
           </pre>
         </div>
       ) : null}
 
-      <div className="space-y-1">
-        <p id={operatorLabelId} className="flex flex-wrap items-center gap-2 text-xs font-medium">
-          <PencilLine aria-hidden="true" className="h-3.5 w-3.5" />
-          {model.operatorPartOrigin === 'saved'
-            ? t('crawlerPreview.operator.titleSaved')
-            : t('crawlerPreview.operator.title')}
-          {model.operatorPartUnsaved ? (
-            <Badge variant="warning" className="text-[10px]">
-              {t('crawlerPreview.operator.unsavedBadge')}
-            </Badge>
-          ) : null}
-          {notServed ? (
-            <Badge variant="outline" className="text-[10px]">
-              {t('crawlerPreview.operator.notServedBadge')}
-            </Badge>
-          ) : null}
-        </p>
-        {model.operatorPart === '' ? (
-          <p data-part="operator-empty" className="text-xs text-muted-foreground">
-            {t('crawlerPreview.operator.empty')}
+      {/* The operator's text on its own: when there is no file to show it in,
+          or when the storefront did not confirm that it serves it. */}
+      {model.detachedOperatorPart !== null ? (
+        <div className="space-y-1">
+          <p id={detachedLabelId} className="flex flex-wrap items-center gap-2 text-xs font-medium">
+            {t('crawlerPreview.operator.label')}
+            {model.operatorPartUnsaved ? (
+              <Badge variant="warning" className="text-[10px]">
+                {t('crawlerPreview.operator.unsavedBadge')}
+              </Badge>
+            ) : null}
+            {mayNotBeServed ? (
+              <Badge variant="outline" className="text-[10px]">
+                {t('crawlerPreview.operator.mayNotBeServedBadge')}
+              </Badge>
+            ) : null}
           </p>
-        ) : (
           <pre
             tabIndex={0}
-            aria-labelledby={operatorLabelId}
-            data-part="operator"
-            className={cn(BLOCK_CLASS, 'border-y border-r border-l-4 border-l-primary bg-background')}
+            aria-labelledby={detachedLabelId}
+            data-part="operator-detached"
+            className={cn(BLOCK_CLASS, 'border-l-4 border-l-primary px-3 py-2')}
           >
-            {model.operatorPart}
+            {model.detachedOperatorPart}
           </pre>
-        )}
-      </div>
+        </div>
+      ) : null}
     </section>
   );
 }

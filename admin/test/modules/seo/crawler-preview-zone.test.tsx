@@ -18,7 +18,8 @@ import { adminSession, modulePresence, withSession } from '../../helpers/render-
  * What is shown for which state is the pure model's subject, in the package
  * (`preview-model.test.ts`). This file holds what only a rendered tree can:
  * that the contributions are declared, matched and gated; that they vanish
- * with the module; that typing asks the backend nothing; that one channel's
+ * with the module; that the one block on screen holds the served file and
+ * nothing else; that typing asks the backend nothing; that one channel's
  * answer is never drawn for another; and that what a storefront sent is drawn
  * as text.
  */
@@ -58,7 +59,8 @@ const en = (key: string, params: Record<string, string> = {}): string => {
 
 const BASE = 'User-agent: *\nAllow: /\nDisallow: /api/\n\nSitemap: https://shop.example/sitemap.xml\n';
 const OWN = 'User-agent: GPTBot\nDisallow: /\n';
-const CHANNELS_URL = '/api/v1/admin/sales-channels?activeOnly=true&pageSize=100';
+const CHANNELS_URL = '/api/v1/admin/sales-channels?activeOnly=false&pageSize=100&page=0';
+const DEFAULT_PREVIEW_URL = '/api/v1/admin/seo/crawler-files/preview?file=robots';
 const previewUrl = (channel: string): string =>
   `/api/v1/admin/seo/crawler-files/preview?file=robots&salesChannelCode=${channel}`;
 
@@ -117,20 +119,25 @@ const part = (container: HTMLElement, name: string): HTMLElement | null =>
 const notice = (container: HTMLElement, kind: string): HTMLElement | null =>
   container.querySelector(`[data-notice="${kind}"]`);
 
+/** The channel list the backend answers; `null` refuses it, as for somebody who may not list. */
+let channelList: Array<{ code: string; systemDefault: boolean }> | null;
+
 beforeEach(() => {
   answers = { pl: answer('pl'), de: answer('de') };
+  channelList = [
+    { code: 'pl', systemDefault: false },
+    { code: 'de', systemDefault: true },
+  ];
   getSpy.mockReset();
   getSpy.mockImplementation((path: string) => {
     if (path === CHANNELS_URL) {
-      return Promise.resolve({
-        items: [
-          { code: 'pl', systemDefault: false },
-          { code: 'de', systemDefault: true },
-        ],
-        page: 0,
-        pageSize: 100,
-        total: 2,
-      });
+      return channelList === null
+        ? Promise.reject(new Error('403'))
+        : Promise.resolve({ items: channelList, page: 0, pageSize: 100, total: channelList.length });
+    }
+    if (path === DEFAULT_PREVIEW_URL && answers['(default)'] !== undefined) {
+      const response = answers['(default)'];
+      return response instanceof Error ? Promise.reject(response) : Promise.resolve(response);
     }
     for (const [channel, response] of Object.entries(answers)) {
       if (path === previewUrl(channel)) {
@@ -142,6 +149,10 @@ beforeEach(() => {
 });
 
 afterEach(() => cleanup());
+
+/** The one block: the file. */
+const file = (container: HTMLElement): HTMLElement | null => part(container, 'file');
+const heading = (name: string): HTMLElement => screen.getByRole('heading', { name, level: 2 });
 
 describe('seo declares its contributions beside its settings', () => {
   it('the preview: matched to the robots.txt setting, gated on settings:read, behind a dynamic import', () => {
@@ -176,71 +187,107 @@ describe('seo declares its contributions beside its settings', () => {
 });
 
 describe('the robots.txt preview', () => {
-  it('shows the storefront’s rules and the operator’s text as two labelled blocks, in served order', async () => {
+  it('shows one block whose text is the served file, byte for byte', async () => {
     const { container } = renderWithI18n(zone({ draftText: OWN }), { seo: EN });
-    const heading = await screen.findByRole('heading', { name: en('crawlerPreview.robots.title') });
-    const section = heading.closest('section') as HTMLElement;
-    expect(section.getAttribute('aria-labelledby')).toBe(heading.id);
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    const block = file(container) as HTMLElement;
+    // The file, and nothing but the file: no label, no badge, no stray space.
+    expect(block.textContent).toBe(composeCrawlerFile(BASE, OWN));
+    expect(container.querySelectorAll('[data-part="file"]')).toHaveLength(1);
+    // Nothing of it is drawn a second time outside the block.
+    expect(part(container, 'operator-detached')).toBeNull();
+    expect(previewCalls()).toEqual([previewUrl('pl')]);
+  });
 
-    await waitFor(() => expect(part(container, 'system')).not.toBeNull());
+  it('with nothing written, the block is the generated rules alone, byte for byte', async () => {
+    const { container } = renderWithI18n(zone({ draftText: '' }), { seo: EN });
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    expect(file(container)?.textContent).toBe(BASE);
+    expect(part(container, 'operator')).toBeNull();
+    expect(screen.getByText(en('crawlerPreview.legend.systemOnly'))).toBeTruthy();
+  });
+
+  it('tells the operator’s lines from the generated ones inside the block, in words', async () => {
+    const { container } = renderWithI18n(zone({ draftText: OWN }), { seo: EN });
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    const block = file(container) as HTMLElement;
     const system = part(container, 'system') as HTMLElement;
     const operator = part(container, 'operator') as HTMLElement;
-    expect(system.textContent).toBe(BASE.trimEnd());
-    expect(operator.textContent).toBe('User-agent: GPTBot\nDisallow: /');
+    expect(block.contains(system)).toBe(true);
+    expect(block.contains(operator)).toBe(true);
     expect(system.compareDocumentPosition(operator) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(system.textContent).toBe(`${BASE.trimEnd()}\n`);
+    expect(operator.textContent).toBe(OWN);
+    // Each stretch carries its label — drawn by the stylesheet, so that it is
+    // not text in the file — and the operator's is marked by a rule as well.
+    expect(system.dataset['label']).toBe(en('crawlerPreview.system.label'));
+    expect(operator.dataset['label']).toBe(en('crawlerPreview.operator.label'));
+    expect(operator.className).toContain('border-l-4');
+    expect(system.className).not.toContain('border-l-4');
+    // The same distinction as text, for a reader who does not get the labels.
+    const legend = document.getElementById(block.getAttribute('aria-describedby') as string);
+    expect(legend?.textContent).toBe(en('crawlerPreview.legend.both'));
+    // The generated part cannot be edited: nothing in the preview is a field.
+    expect(container.querySelector('textarea, input, [contenteditable]')).toBeNull();
+  });
 
-    // The two blocks are the served file.
-    expect(`${system.textContent}\n\n${operator.textContent}\n`).toBe(composeCrawlerFile(BASE, OWN));
-
-    // Told apart in words, not by colour: each block is named, and the
-    // system block says it cannot be edited.
-    expect(screen.getByRole('region', { name: en('crawlerPreview.robots.title') })).toBe(section);
-    expect(within(section).getByText(en('crawlerPreview.system.title'))).toBeTruthy();
-    expect(within(section).getByText(en('crawlerPreview.system.readOnly'))).toBeTruthy();
-    expect(within(section).getByText(en('crawlerPreview.operator.title'))).toBeTruthy();
-    expect(system.getAttribute('aria-labelledby')).toBeTruthy();
-    expect(document.getElementById(system.getAttribute('aria-labelledby') as string)?.textContent).toContain(
-      en('crawlerPreview.system.title'),
-    );
-    // Neither block is a field: the system part cannot be edited here.
-    expect(section.querySelector('textarea, input, [contenteditable]')).toBeNull();
-    // Scrollable blocks are reachable from the keyboard.
-    expect(system.tabIndex).toBe(0);
-    expect(operator.tabIndex).toBe(0);
-    expect(previewCalls()).toEqual([previewUrl('pl')]);
+  it('is labelled, and the block can be reached and scrolled from the keyboard', async () => {
+    const { container } = renderWithI18n(zone({ draftText: OWN }), { seo: EN });
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    const title = heading(en('crawlerPreview.heading.servedNow'));
+    const section = title.closest('section') as HTMLElement;
+    expect(screen.getByRole('region', { name: en('crawlerPreview.heading.servedNow') })).toBe(section);
+    const block = file(container) as HTMLElement;
+    expect(block.tabIndex).toBe(0);
+    expect(block.getAttribute('aria-labelledby')).toBe(title.id);
+    // Capped, with the scroll inside the block — lower on a narrow screen.
+    expect(block.className).toContain('overflow-auto');
+    expect(block.className).toMatch(/(^| )max-h-80( |$)/);
+    expect(block.className).toContain('sm:max-h-[36rem]');
     // No sentence fell back to its key.
     expect(section.textContent).not.toContain('crawlerPreview.');
   });
 
   it('renders in Polish from the Polish bundle', async () => {
-    renderWithI18n(zone(), { seo: PL });
-    expect(await screen.findByRole('heading', { name: 'Podgląd robots.txt' })).toBeTruthy();
+    const { container } = renderWithI18n(zone(), { seo: PL });
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    expect(heading('robots.txt serwowany obecnie')).toBeTruthy();
   });
 
-  it('follows the field as it is typed in, says it is not saved, and asks the backend nothing', async () => {
+  it('says what the file is: served now — and, once the field differs, after saving', async () => {
     const { container, rerender } = renderWithI18n(zone({ draftText: '' }), { seo: EN });
-    await waitFor(() => expect(part(container, 'system')).not.toBeNull());
-    expect(part(container, 'operator-empty')?.textContent).toBe(en('crawlerPreview.operator.empty'));
-    expect(notice(container, 'unsaved')).toBeNull();
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    expect(heading(en('crawlerPreview.heading.servedNow'))).toBeTruthy();
+    expect(container.querySelector('[data-note="unsaved"]')).toBeNull();
     expect(previewCalls()).toHaveLength(1);
 
     for (const typed of ['D', 'Disallow', 'Disallow: /tmp/\n']) {
       rerender(zone({ draftText: typed, dirty: true }));
     }
-    expect(part(container, 'operator')?.textContent).toBe('Disallow: /tmp/');
-    // In words, in a live region — and on the block itself.
+    // The block follows the field: it is the file as it will be served.
+    expect(file(container)?.textContent).toBe(composeCrawlerFile(BASE, 'Disallow: /tmp/\n'));
+    expect(heading(en('crawlerPreview.heading.afterSaving'))).toBeTruthy();
+    expect(part(container, 'operator')?.dataset['label']).toBe(en('crawlerPreview.operator.labelUnsaved'));
+    // That the storefront still serves the previous version is a secondary
+    // line, in the polite live region.
     const status = container.querySelector('[role="status"]') as HTMLElement;
     expect(status.getAttribute('aria-live')).toBe('polite');
-    expect(within(status).getByText(en('crawlerPreview.notice.unsaved'))).toBeTruthy();
-    expect(screen.getByText(en('crawlerPreview.operator.unsavedBadge'))).toBeTruthy();
+    expect(within(status).getByText(en('crawlerPreview.unsavedNote'))).toBeTruthy();
 
+    // Typing asked the backend nothing.
     await new Promise((done) => setTimeout(done, 400));
     expect(previewCalls()).toHaveLength(1);
+  });
 
-    // Saved: the notice goes, the text stays.
-    rerender(zone({ draftText: 'Disallow: /tmp/\n', dirty: false }));
-    expect(notice(container, 'unsaved')).toBeNull();
-    expect(part(container, 'operator')?.textContent).toBe('Disallow: /tmp/');
+  it('asks again once its own row is saved, and then calls the file served now', async () => {
+    const { container, rerender } = renderWithI18n(zone({ draftText: 'x', dirty: true }), { seo: EN });
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    expect(previewCalls()).toHaveLength(1);
+    rerender(zone({ draftText: 'x', dirty: false }));
+    await waitFor(() => expect(previewCalls()).toHaveLength(2));
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    expect(heading(en('crawlerPreview.heading.servedNow'))).toBeTruthy();
+    expect(container.querySelector('[data-note="unsaved"]')).toBeNull();
   });
 
   it('draws what a storefront sent as text, never as markup', async () => {
@@ -250,9 +297,8 @@ describe('the robots.txt preview', () => {
       storefront: { url: 'javascript:alert(1)//<b>x</b>', source: 'setting' },
     });
     const { container } = renderWithI18n(zone({ draftText: '<b onclick="x()">bold</b>' }), { seo: EN });
-    await waitFor(() => expect(part(container, 'system')).not.toBeNull());
-    expect(part(container, 'system')?.textContent).toBe(hostile.trimEnd());
-    expect(part(container, 'operator')?.textContent).toBe('<b onclick="x()">bold</b>');
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    expect(file(container)?.textContent).toBe(composeCrawlerFile(hostile, '<b onclick="x()">bold</b>'));
     expect(container.querySelector('img, script, b, a')).toBeNull();
     expect((window as unknown as { __pwned?: number }).__pwned).toBeUndefined();
     // The address is shown, and is not something to click.
@@ -264,12 +310,12 @@ describe('the robots.txt preview', () => {
     answers['pl'] = answer('pl', { base: 'User-agent: *\nDisallow: /only-pl/\n' });
     answers['de'] = answer('de', { base: 'User-agent: *\nDisallow: /only-de/\n' });
     const { container, rerender } = renderWithI18n(zone({ channelCode: 'pl' }), { seo: EN });
-    await waitFor(() => expect(part(container, 'system')?.textContent).toContain('/only-pl/'));
+    await waitFor(() => expect(file(container)?.textContent).toContain('/only-pl/'));
 
     rerender(zone({ channelCode: 'de' }));
     // From the first frame of the new channel, the old one's rules are gone.
     expect(container.textContent).not.toContain('/only-pl/');
-    await waitFor(() => expect(part(container, 'system')?.textContent).toContain('/only-de/'));
+    await waitFor(() => expect(file(container)?.textContent).toContain('/only-de/'));
     expect(container.textContent).not.toContain('/only-pl/');
     expect(previewCalls()).toEqual([previewUrl('pl'), previewUrl('de')]);
 
@@ -278,7 +324,7 @@ describe('the robots.txt preview', () => {
     rerender(zone({ channelCode: 'pl' }));
     expect(container.textContent).not.toContain('/only-pl/');
     expect(container.textContent).not.toContain('/only-de/');
-    await waitFor(() => expect(part(container, 'system')?.textContent).toContain('/pl-now/'));
+    await waitFor(() => expect(file(container)?.textContent).toContain('/pl-now/'));
     expect(previewCalls()).toEqual([previewUrl('pl'), previewUrl('de'), previewUrl('pl')]);
   });
 
@@ -287,42 +333,69 @@ describe('the robots.txt preview', () => {
     rerender(zone({ channelCode: 'de' }));
     rerender(zone({ channelCode: 'pl' }));
     rerender(zone({ channelCode: 'de' }));
-    await waitFor(() => expect(part(container, 'system')).not.toBeNull());
+    await waitFor(() => expect(file(container)).not.toBeNull());
     expect(previewCalls()).toEqual([previewUrl('de')]);
+  });
+
+  it('shows no rules from the earlier answer while it is asking again (FR-042)', async () => {
+    answers['pl'] = answer('pl', { base: 'User-agent: *\nDisallow: /earlier/\n' });
+    const { container } = renderWithI18n(zone(), { seo: EN });
+    await waitFor(() => expect(container.textContent).toContain('/earlier/'));
+
+    // The next answer is held back.
+    let release: (value: unknown) => void = () => {};
+    getSpy.mockImplementation(() => new Promise((resolvePending) => (release = resolvePending)));
+    fireEvent.click(screen.getByRole('button', { name: en('crawlerPreview.refresh') }));
+    await waitFor(() => expect(previewCalls()).toHaveLength(2));
+    expect(container.textContent).not.toContain('/earlier/');
+    expect(file(container)).toBeNull();
+    expect(heading(en('crawlerPreview.heading.unknown'))).toBeTruthy();
+    release(answer('pl', { base: 'User-agent: *\nDisallow: /later/\n' }));
+    await waitFor(() => expect(container.textContent).toContain('/later/'));
   });
 
   it.each([
     ['storefront-unreachable', 'storefront-unreachable', 'crawlerPreview.notice.storefrontUnreachable'],
     ['address-unknown', 'address-unknown', 'crawlerPreview.notice.addressUnknown'],
-  ] as const)('%s: says so, shows no system block, and still shows the operator’s text', async (state, kind, key) => {
+  ] as const)('%s: says so, shows no file, and still shows the operator’s text', async (state, kind, key) => {
     answers['pl'] = answer('pl', { state, base: null });
     const { container } = renderWithI18n(zone({ draftText: OWN, dirty: true }), { seo: EN });
     await waitFor(() => expect(notice(container, kind)).not.toBeNull());
     expect(notice(container, kind)?.textContent).toContain(en(key));
     // A warning says it is one in words.
     expect(notice(container, kind)?.textContent).toContain(en('crawlerPreview.notice.warningPrefix'));
-    expect(part(container, 'system')).toBeNull();
+    expect(file(container)).toBeNull();
     expect(container.textContent).not.toContain('Sitemap:');
-    expect(part(container, 'operator')?.textContent).toBe('User-agent: GPTBot\nDisallow: /');
+    expect(heading(en('crawlerPreview.heading.unknown'))).toBeTruthy();
+    const own = part(container, 'operator-detached') as HTMLElement;
+    expect(own.textContent).toBe('User-agent: GPTBot\nDisallow: /');
+    expect(own.tabIndex).toBe(0);
+    expect(screen.getByText(en('crawlerPreview.operator.unsavedBadge'))).toBeTruthy();
   });
 
   it('a failed request: says so, invents no rules, keeps the operator’s text', async () => {
     answers['pl'] = new Error('500');
     const { container } = renderWithI18n(zone({ draftText: OWN }), { seo: EN });
     await waitFor(() => expect(notice(container, 'preview-failed')).not.toBeNull());
-    expect(part(container, 'system')).toBeNull();
-    expect(part(container, 'operator')).not.toBeNull();
+    expect(file(container)).toBeNull();
+    expect(part(container, 'operator-detached')).not.toBeNull();
   });
 
-  it('storefront-outdated: says so above the rules it serves, and marks the text as not served', async () => {
+  it('storefront-outdated: the file is the rules it serves, and the text is apart, marked as possibly not served', async () => {
     answers['pl'] = answer('pl', { state: 'storefront-outdated' });
-    const { container } = renderWithI18n(zone({ draftText: OWN }), { seo: EN });
+    const { container } = renderWithI18n(zone({ draftText: OWN, dirty: true }), { seo: EN });
     await waitFor(() => expect(notice(container, 'storefront-outdated')).not.toBeNull());
     const warning = notice(container, 'storefront-outdated') as HTMLElement;
-    const system = part(container, 'system') as HTMLElement;
-    expect(system.textContent).toBe(BASE);
-    expect(warning.compareDocumentPosition(system) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByText(en('crawlerPreview.operator.notServedBadge'))).toBeTruthy();
+    // It says what is known — not confirmed — rather than what is inferred.
+    expect(warning.textContent).toContain('did not confirm');
+    expect(warning.textContent).toContain('may run an older version');
+    const block = file(container) as HTMLElement;
+    expect(block.textContent).toBe(BASE);
+    expect(warning.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Saving would not change what that storefront serves.
+    expect(heading(en('crawlerPreview.heading.servedNow'))).toBeTruthy();
+    expect(part(container, 'operator-detached')?.textContent).toBe('User-agent: GPTBot\nDisallow: /');
+    expect(screen.getByText(en('crawlerPreview.operator.mayNotBeServedBadge'))).toBeTruthy();
   });
 
   it('on a NOINDEX channel says in words that the file stays open, and cautions about Disallow: /', async () => {
@@ -331,7 +404,7 @@ describe('the robots.txt preview', () => {
     await waitFor(() => expect(notice(container, 'stays-open')).not.toBeNull());
     expect(notice(container, 'stays-open')?.textContent).toContain(en('crawlerPreview.notice.staysOpen'));
     // The file shown is still the open one: no site-wide ban was added to it.
-    expect(part(container, 'system')?.textContent).toBe(BASE);
+    expect(file(container)?.textContent).toBe(BASE);
     expect(notice(container, 'site-wide-disallow')).toBeNull();
 
     rerender(zone({ draftText: 'User-agent: *\nDisallow: /\n', dirty: true }));
@@ -346,7 +419,7 @@ describe('the robots.txt preview', () => {
     await waitFor(() => expect(notice(container, 'storefront-unreachable')).not.toBeNull());
     answers['pl'] = answer('pl');
     fireEvent.click(screen.getByRole('button', { name: en('crawlerPreview.refresh') }));
-    await waitFor(() => expect(part(container, 'system')).not.toBeNull());
+    await waitFor(() => expect(file(container)).not.toBeNull());
     expect(notice(container, 'storefront-unreachable')).toBeNull();
     expect(previewCalls()).toEqual([previewUrl('pl'), previewUrl('pl')]);
   });
@@ -367,21 +440,23 @@ describe('the robots.txt preview', () => {
     // The system default leads the list and is previewed first.
     expect([...picker.options].map((option) => option.value)).toEqual(['de', 'pl']);
     expect(picker.value).toBe('de');
-    await waitFor(() => expect(part(container, 'system')).not.toBeNull());
-    expect(part(container, 'operator')?.textContent).toBe('Disallow: /shared/');
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    expect(file(container)?.textContent).toBe(composeCrawlerFile(BASE, 'Disallow: /shared/\n'));
+    expect(heading(en('crawlerPreview.heading.afterSaving'))).toBeTruthy();
     expect(notice(container, 'channels-with-own-value')?.textContent).toContain(
       en('crawlerPreview.notice.channelsWithOwnValue', { channels: 'pl' }),
     );
 
-    // The operator picks the channel that has its own value: it is shown what
-    // it serves, and the all-channels text is not drawn as if it reached it.
+    // The operator picks the channel that has its own value: it is shown the
+    // file it serves, and the all-channels text is not drawn as if it reached it.
     fireEvent.change(picker, { target: { value: 'pl' } });
     expect(container.textContent).not.toContain('/only-pl/');
-    await waitFor(() => expect(part(container, 'system')?.textContent).toContain('/only-pl/'));
-    expect(part(container, 'operator')?.textContent).toBe('User-agent: GPTBot\nDisallow: /');
+    await waitFor(() => expect(file(container)?.textContent).toContain('/only-pl/'));
+    expect(file(container)?.textContent).toBe(composeCrawlerFile('User-agent: *\nDisallow: /only-pl/\n', OWN));
     expect(container.textContent).not.toContain('/shared/');
     expect(notice(container, 'previewed-channel-has-own-value')).not.toBeNull();
-    expect(notice(container, 'unsaved')).toBeNull();
+    expect(part(container, 'operator')?.dataset['label']).toBe(en('crawlerPreview.operator.labelSaved'));
+    expect(heading(en('crawlerPreview.heading.servedNow'))).toBeTruthy();
   });
 
   it('re-asks when the page goes from all channels to a channel and back, so a value saved in between is known', async () => {
@@ -391,8 +466,7 @@ describe('the robots.txt preview', () => {
       { seo: EN },
     );
     // The storefront's answer for `de` has arrived: nothing of its own yet.
-    await waitFor(() => expect(part(container, 'system')).not.toBeNull());
-    expect(part(container, 'operator')?.textContent).toContain('/shared/');
+    await waitFor(() => expect(file(container)?.textContent).toContain('/shared/'));
     expect(notice(container, 'previewed-channel-has-own-value')).toBeNull();
 
     // The page is switched to `de`, and `de` is given a value of its own.
@@ -406,8 +480,11 @@ describe('the robots.txt preview', () => {
 
     // Back to "All channels": `de` now serves its own text, not the shared one.
     rerender(zone({ channelCode: null, draftText: 'Disallow: /shared/\n' }));
+    // Not for one frame is the earlier answer drawn as what `de` serves.
+    expect(container.textContent).not.toContain('/shared/\n\n');
+    expect(file(container)).toBeNull();
     await waitFor(() => expect(notice(container, 'previewed-channel-has-own-value')).not.toBeNull());
-    expect(container.textContent).toContain('GPTBot');
+    expect(file(container)?.textContent).toBe(composeCrawlerFile(BASE, OWN));
     expect(container.textContent).not.toContain('/shared/');
   });
 
@@ -429,33 +506,43 @@ describe('the robots.txt preview', () => {
     rerender(zone({ channelCode: 'de', draftText: 'Disallow: /shared/\n' }));
 
     rerender(zone({ channelCode: null, draftText: 'Disallow: /shared/\n' }));
-    await waitFor(() => expect(container.textContent).toContain('/shared/'));
-    await waitFor(() => expect(notice(container, 'previewed-channel-has-own-value')).toBeNull());
+    await waitFor(() => expect(file(container)?.textContent).toBe(composeCrawlerFile(BASE, 'Disallow: /shared/\n')));
+    expect(notice(container, 'previewed-channel-has-own-value')).toBeNull();
     expect(container.textContent).not.toContain('GPTBot');
   });
 
-  it('asks again once its own row is saved', async () => {
-    const { container, rerender } = renderWithI18n(zone({ draftText: 'x', dirty: true }), { seo: EN });
-    await waitFor(() => expect(part(container, 'system')).not.toBeNull());
-    expect(previewCalls()).toHaveLength(1);
-    rerender(zone({ draftText: 'x', dirty: false }));
-    await waitFor(() => expect(previewCalls()).toHaveLength(2));
+  it('for somebody who may not list sales channels, previews the system default channel and names it (FR-045)', async () => {
+    channelList = null;
+    answers['(default)'] = answer('main', { base: 'User-agent: *\nDisallow: /main-only/\n' });
+    const { container } = renderWithI18n(zone({ channelCode: null, draftText: OWN }), { seo: EN });
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    expect(file(container)?.textContent).toBe(composeCrawlerFile('User-agent: *\nDisallow: /main-only/\n', OWN));
+    // No picker to offer; the channel is named from the answer.
+    expect(screen.queryByLabelText(en('crawlerPreview.channel.pickerLabel'))).toBeNull();
+    expect(screen.getByText(en('crawlerPreview.channel.label', { channel: 'main' }))).toBeTruthy();
+    expect(previewCalls()).toEqual([DEFAULT_PREVIEW_URL]);
   });
 
-  it('shows no rules from the earlier answer while it is asking again (FR-042)', async () => {
-    answers['pl'] = answer('pl', { base: 'User-agent: *\nDisallow: /earlier/\n' });
-    const { container } = renderWithI18n(zone(), { seo: EN });
-    await waitFor(() => expect(container.textContent).toContain('/earlier/'));
-
-    // The next answer is held back.
-    let release: (value: unknown) => void = () => {};
-    getSpy.mockImplementation(() => new Promise((resolvePending) => (release = resolvePending)));
-    fireEvent.click(screen.getByRole('button', { name: en('crawlerPreview.refresh') }));
-    await waitFor(() => expect(previewCalls()).toHaveLength(2));
-    expect(container.textContent).not.toContain('/earlier/');
-    expect(container.textContent).not.toContain('Disallow: /');
-    release(answer('pl', { base: 'User-agent: *\nDisallow: /later/\n' }));
-    await waitFor(() => expect(container.textContent).toContain('/later/'));
+  it('reads every page of the channel list rather than the first hundred', async () => {
+    const many = Array.from({ length: 130 }, (_unused, index) => ({
+      code: `ch${String(index).padStart(3, '0')}`,
+      systemDefault: index === 129,
+    }));
+    answers['ch129'] = answer('ch129');
+    getSpy.mockImplementation((path: string) => {
+      const page = /sales-channels\?activeOnly=false&pageSize=100&page=(\d+)$/.exec(path);
+      if (page !== null) {
+        const start = Number(page[1]) * 100;
+        return Promise.resolve({ items: many.slice(start, start + 100), page: Number(page[1]), pageSize: 100, total: 130 });
+      }
+      if (path === previewUrl('ch129')) return Promise.resolve(answers['ch129']);
+      return Promise.reject(new Error(`unexpected GET ${path}`));
+    });
+    renderWithI18n(zone({ channelCode: null }), { seo: EN });
+    const picker = (await screen.findByLabelText(en('crawlerPreview.channel.pickerLabel'))) as HTMLSelectElement;
+    expect(picker.options).toHaveLength(130);
+    // The system default is on the second page, and still leads.
+    expect(picker.value).toBe('ch129');
   });
 
   it('renders nothing and asks nothing beside another setting', async () => {
@@ -474,7 +561,7 @@ describe('the robots.txt preview', () => {
 
   it('is shown to an administrator who may read settings and change nothing (FR-045)', async () => {
     const { container } = renderWithI18n(zone({}, { permissions: ['settings:read'] }), { seo: EN });
-    await waitFor(() => expect(part(container, 'system')).not.toBeNull());
+    await waitFor(() => expect(file(container)).not.toBeNull());
   });
 
   it('vanishes with the module — renders nothing and asks nothing while seo is off — and is back after', async () => {
@@ -485,7 +572,7 @@ describe('the robots.txt preview', () => {
     off.unmount();
 
     const on = renderWithI18n(zone(), { seo: EN });
-    await waitFor(() => expect(part(on.container, 'system')).not.toBeNull());
+    await waitFor(() => expect(file(on.container)).not.toBeNull());
     expect(previewCalls()).toEqual([previewUrl('pl')]);
   });
 });
@@ -495,17 +582,37 @@ describe('the outdated-storefront notice on the Default robots row', () => {
     zone({ settingCode: 'seo.default_robots', draftText: 'NOINDEX, NOFOLLOW', ...props }, options);
   const KIND = 'default-robots-storefront-outdated';
 
-  it('says the storefront does not apply the setting, when it is outdated', async () => {
+  it('says the storefront did not confirm support and may not apply the setting', async () => {
     answers['pl'] = answer('pl', { state: 'storefront-outdated' });
     const { container } = renderWithI18n(defaultRobots(), { seo: EN });
     await waitFor(() => expect(notice(container, KIND)).not.toBeNull());
     const shown = notice(container, KIND) as HTMLElement;
-    expect(shown.getAttribute('role')).toBe('status');
     expect(shown.textContent).toContain(en('crawlerPreview.defaultRobots.storefrontOutdated'));
     expect(shown.textContent).toContain(en('crawlerPreview.notice.warningPrefix'));
+    // What is known, not what is inferred.
+    expect(shown.textContent).toContain('did not confirm');
+    expect(shown.textContent).toContain('may run an older version');
+    expect(shown.textContent).not.toMatch(/does not apply "Default robots" yet/);
     // The notice and nothing else: no preview of a file on this row.
-    expect(part(container, 'system')).toBeNull();
+    expect(file(container)).toBeNull();
     expect(previewCalls()).toEqual([previewUrl('pl')]);
+  });
+
+  it('announces it: the live region is there, empty, before the notice arrives in it', async () => {
+    answers['pl'] = answer('pl', { state: 'storefront-outdated' });
+    const { container } = renderWithI18n(defaultRobots(), { seo: EN });
+    // Before the answer: the region exists and says nothing.
+    const region = await waitFor(() => {
+      const found = container.querySelector('[role="status"]');
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    expect(region.textContent).toBe('');
+    expect(region.getAttribute('aria-live')).toBe('polite');
+    await waitFor(() => expect(notice(container, KIND)).not.toBeNull());
+    // The same element, now carrying the notice.
+    expect(region.contains(notice(container, KIND))).toBe(true);
+    expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
   });
 
   it.each([
@@ -531,6 +638,15 @@ describe('the outdated-storefront notice on the Default robots row', () => {
     expect(previewCalls().sort()).toEqual([previewUrl('de'), previewUrl('pl')]);
   });
 
+  it('for somebody who may not list sales channels, asks about the system default one', async () => {
+    channelList = null;
+    answers['(default)'] = answer('main', { state: 'storefront-outdated' });
+    const { container } = renderWithI18n(defaultRobots({ channelCode: null }), { seo: EN });
+    await waitFor(() => expect(notice(container, KIND)).not.toBeNull());
+    expect(notice(container, KIND)?.textContent).toContain('main');
+    expect(previewCalls()).toEqual([DEFAULT_PREVIEW_URL]);
+  });
+
   it('shares one request with the preview on the other row', async () => {
     const { container } = renderWithI18n(
       <>
@@ -539,7 +655,7 @@ describe('the outdated-storefront notice on the Default robots row', () => {
       </>,
       { seo: EN },
     );
-    await waitFor(() => expect(part(container, 'system')).not.toBeNull());
+    await waitFor(() => expect(file(container)).not.toBeNull());
     await new Promise((done) => setTimeout(done, 50));
     expect(previewCalls()).toEqual([previewUrl('pl')]);
   });
@@ -550,6 +666,22 @@ describe('the outdated-storefront notice on the Default robots row', () => {
     rerender(defaultRobots({ dirty: false }));
     await waitFor(() => expect(previewCalls()).toHaveLength(2));
     expect(container.textContent).toBe('');
+  });
+
+  it('two rows saved together are one round of requests, not two', async () => {
+    const both = (dirty: boolean): ReactElement => (
+      <>
+        {zone({ draftText: 'x', dirty })}
+        {defaultRobots({ dirty })}
+      </>
+    );
+    const { container, rerender } = renderWithI18n(both(true), { seo: EN });
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    expect(previewCalls()).toHaveLength(1);
+    rerender(both(false));
+    await waitFor(() => expect(previewCalls()).toHaveLength(2));
+    await new Promise((done) => setTimeout(done, 100));
+    expect(previewCalls()).toHaveLength(2);
   });
 
   it('vanishes with the module', async () => {

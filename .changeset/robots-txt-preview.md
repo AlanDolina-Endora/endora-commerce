@@ -8,19 +8,25 @@
 The Settings screen previews the `robots.txt` a sales channel's storefront serves, and a module can now contribute beside a setting it declared.
 
 **For an operator.** Below **Settings → SEO → Custom robots.txt instructions** there is now a
-preview of the file the selected sales channel's storefront serves, in two labelled blocks: the
-rules the storefront generates, read-only, and your own text. Your block follows the field as you
-type; while it differs from what is saved, the preview says that it is not saved yet and that the
-storefront still serves the saved version. Under **All channels** you pick the channel to preview,
-and the preview names the channels that have a value of their own and are therefore not affected.
-On a channel whose *Default robots* is `NOINDEX` it says that `robots.txt` stays open on purpose,
-and warns when your text contains `Disallow: /` for every crawler. An administrator who may read
-settings but not change them sees it too. Nothing the storefront serves changes when you preview.
+preview of the file the selected sales channel's storefront serves, as **one block that is the
+file**: the lines the storefront generates, labelled read-only, then a blank line, then your own
+lines, marked with a bar and a label. With nothing unsaved the heading reads *robots.txt as served
+now*. As you type, the block follows the field and the heading becomes *robots.txt after saving* —
+the file the storefront will serve once you save; until then it keeps serving the previous version.
+Under **All channels** you pick the channel to preview, and the preview names the channels that
+have a value of their own and are therefore not affected. On a channel whose *Default robots* is
+`NOINDEX` it says that `robots.txt` stays open on purpose, and warns when your text forbids every
+crawler to fetch anything. An administrator who may read settings but not change them sees it too,
+and one who may not list sales channels is shown the system default channel. Nothing the storefront
+serves changes when you preview.
+
+The setting's description above the field is shorter: the preview now shows what the description
+used to explain.
 
 The generated rules are not copied into the backend or the Admin UI: each time, the backend asks
 the channel's storefront for them. So **the storefront must be reachable from the backend at the
 address the channel is configured with** — the channel's **Storefront URL** setting, else
-`STOREFRONT_BASE_URL`. When it is not, the preview says so and shows your block alone; saving is
+`STOREFRONT_BASE_URL`. When it is not, the preview says so and shows your text on its own; saving is
 never blocked. The three messages and what to do about each:
 
 - *The storefront could not be reached* — no answer within three seconds, a refused connection,
@@ -29,11 +35,13 @@ never blocked. The three messages and what to do about each:
   `seo: the crawler-file preview could not show the storefront’s part` carries the reason.
 - *This sales channel has no storefront address configured* — set **Storefront URL** for the
   channel, or `STOREFRONT_BASE_URL`.
-- *This storefront does not serve custom instructions yet* — the storefront was scaffolded from a
-  release before these settings existed. It serves only its generated rules and ignores both the
-  custom instructions and *Default robots*. The same notice now appears on the *Default robots*
-  row, so a shop is not believed to be out of search while its storefront ignores the setting.
-  Update the storefront's files as the notes of the release that introduced those settings list.
+- *This storefront did not confirm that it supports custom instructions* — it answered without the
+  `X-Endora-Crawler-Files` header. Usually the storefront was scaffolded from a release before these
+  settings existed: it serves only its generated rules and ignores both the custom instructions and
+  *Default robots*. A proxy that strips the header, or a storefront updated only in part, looks the
+  same. A matching notice now appears on the *Default robots* row, so a shop is not believed to be
+  out of search while its storefront may be ignoring the setting. Update the storefront's files as
+  the notes of the release that introduced those settings list, and check that the header arrives.
 
 What the backend sends is one request per preview: `GET <origin>/robots.txt?part=system`, to the
 origin of the configured address only, with the channel's code in `X-Sales-Channel`. It follows no
@@ -83,8 +91,9 @@ renders the row or `SettingsPage` on its own needs the providers around it.
 storefront says it serves crawler files the current way. A custom storefront that implements
 `?part=system` should send it; without it the preview treats the storefront as outdated. The
 endpoint is `GET /api/v1/admin/seo/crawler-files/preview?file=robots&salesChannelCode=<code>`,
-gated by `settings:read`; `file=llms` is declared in the schema and answers `400` until `llms.txt`
-is served.
+gated by `settings:read`. `salesChannelCode` is optional and means the system default channel; the
+answer names the channel it is about. `file=llms` is declared in the schema and answers `400` until
+`llms.txt` is served.
 
 `@endora-commerce/mod-seo` now declares `lucide-react` as an optional peer dependency, as the other
 module packages with an admin surface do; an application that has the Admin UI already has it.

@@ -106,7 +106,7 @@ Query — `adminCrawlerFilePreviewQuerySchema`:
 | Param | |
 | --- | --- |
 | `file` | `robots` \| `llms` |
-| `salesChannelCode` | required; the channel to preview |
+| `salesChannelCode` | optional; the channel to preview. Absent means the **system default channel** — what an administrator who may read settings but may not list sales channels asks for (FR-045). The answer's `salesChannelCode` names the channel it is about |
 
 Response — `adminCrawlerFilePreviewResponseSchema`:
 
@@ -129,9 +129,9 @@ Response — `adminCrawlerFilePreviewResponseSchema`:
 | `state` | Meaning | `base` |
 | --- | --- | --- |
 | `ok` | the storefront answered with the capability header | its answer to `?part=system` / `?part=base` |
-| `storefront-outdated` | it answered `2xx` **without** `X-Endora-Crawler-Files` | its whole answer for `robots`; `null` for `llms` |
+| `storefront-outdated` | it answered `2xx` **without** `X-Endora-Crawler-Files` — it did not confirm that it supports the feature. Usually an older storefront; also a partly updated one, or a proxy that strips the header, so the Admin UI says "did not confirm" and "may" | its whole answer for `robots`; `null` for `llms` |
 | `not-served` | `llms` only: `404` **with** the header — the channel is non-indexable, or `seo` is not what the storefront sees | `null` |
-| `storefront-unreachable` | timeout (3 s), refusal, any other status, a body over 512 KiB | `null` |
+| `storefront-unreachable` | timeout (3 s, over connection, headers and body), refusal, any other status **including every redirect**, an answer that is not `text/plain`, a body over 512 KiB, a configured address that is not an `http(s)` origin or carries credentials | `null` |
 | `address-unknown` | the channel's address resolved from the fallback rung; no request was made | `null` |
 
 - `savedExtra` is the stored text that resolves for the channel; `savedExtraSource` is
@@ -140,9 +140,14 @@ Response — `adminCrawlerFilePreviewResponseSchema`:
 - `storefront.source` is `setting`, `env` or `fallback`. With `env` the address is shared by
   every channel and the preview says so.
 - The endpoint stores nothing and caches nothing. It is a read; no Command, no audit entry.
-- The request to the storefront is `GET <storefront.url>/robots.txt?part=system` or
-  `/llms.txt?part=base`, with `X-Sales-Channel: <salesChannelCode>`, following no redirect to
-  another host.
+- The request to the storefront is `GET <origin of storefront.url>/robots.txt?part=system` (or
+  `/llms.txt?part=base`), with `X-Sales-Channel: <the channel's code>`. Only the **origin** of the
+  configured address is used; a path or query in it is dropped. **No redirect is followed**, to
+  another host or to the same one. No credentials, cookies or caller headers are sent.
+- `file=llms` answers `400` until `llms.txt` is served (slice 5). An unknown channel code is
+  `404`.
+- Private, loopback and link-local addresses are **not** refused: an instance's own storefront is
+  routinely reached at one. The disclosure is in the service's doc comment and the module page.
 
 ## 4. The preview component
 
@@ -151,20 +156,22 @@ requiredPermission: 'settings:read' })`).
 
 | The operator sees | When |
 | --- | --- |
-| The system part and their own part as two labelled blocks, in served order; the system block marked read-only by text and icon, not by colour alone | `state: ok` |
-| Their own part taken from `draftText`, with a "not yet saved — the storefront still serves the saved version" notice | `dirty` |
+| **One block whose text is the served file** — `composeCrawlerFile(base, operatorPart)` to the byte. Inside it the operator's lines carry a bar on the left and a label, the generated lines a "generated · read-only" label; the labels are drawn by the stylesheet and are not text in the block. Heading: "robots.txt as served now" | `state: ok` |
+| The same block with the operator's lines taken from `draftText`; heading "robots.txt after saving"; a secondary line that the storefront keeps serving the previous version until the save | `dirty` |
 | A channel picker and "these channels have their own value and are not affected: …" | `channelCode === null` (all-channels value) |
 | "robots.txt stays open to crawlers on purpose: a crawler has to fetch a page to read that it must not be indexed" | `file: robots` and `!policy.index` |
 | A caution that a site-wide `Disallow: /` prevents crawlers from reading `noindex` | as above, and the operator's part contains a `Disallow: /` line under `User-agent: *` |
 | "No llms.txt is served for this channel while its default robots forbids indexing" in place of the blocks | `file: llms` and `!policy.index`, or `state: not-served` |
-| "This storefront does not serve custom instructions yet" above the rules it does serve | `state: storefront-outdated` |
-| "The storefront could not be reached" / "This channel has no storefront address configured", the operator's own block still shown, no system block | `storefront-unreachable` / `address-unknown` |
+| "This storefront did not confirm that it supports custom instructions" above a block that is the rules it serves alone; the operator's text apart, marked "may not be served" | `state: storefront-outdated` |
+| "The storefront could not be reached" / "This channel has no storefront address configured"; no file block; the operator's own text still shown, apart | `storefront-unreachable` / `address-unknown` |
 | "This address is shared by every sales channel" | `storefront.source === 'env'` |
 
 - The composed text is `composeCrawlerFile(base, operatorPart)` — the function the storefront
   serves with (`crawler-policy.md` §4).
 - The preview never disables or delays the row's save.
-- It is refetched when the channel changes; typing does not call the backend.
+- It is refetched when the channel or the editing mode (all channels / one channel) changes, when
+  either `seo` row stops being dirty (a save or a reset), and on "Check again"; typing does not
+  call the backend. An answer is kept only while a row is showing it.
 - Built from existing admin-kit primitives; no new primitive is introduced (Principle IX).
 
 ## 5. Palette actions

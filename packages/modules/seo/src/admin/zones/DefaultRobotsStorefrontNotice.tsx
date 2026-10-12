@@ -3,11 +3,16 @@ import { TriangleAlert } from 'lucide-react';
 import type { AdminZoneProps } from '@endora-commerce/contracts';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { Alert, AlertDescription } from '@endora-commerce/admin-kit/ui';
-import { reloadRobotsPreviews, usePreviewChannels, useRobotsPreviews } from './preview-client.js';
+import {
+  SYSTEM_DEFAULT_CHANNEL,
+  reloadRobotsPreviews,
+  usePreviewChannels,
+  useRobotsPreviews,
+} from './preview-client.js';
 import { DEFAULT_ROBOTS_NOTICE_MAX_CHANNELS, outdatedStorefrontChannels } from './preview-model.js';
 
 /**
- * "This storefront does not apply *Default robots* yet" — `seo`'s second
+ * "This storefront may not apply *Default robots*" — `seo`'s second
  * contribution to `settings.setting.after`, matched to `seo.default_robots`
  * (`specs/144-seo-search-engine-robots/spec.md`, ruling R9).
  *
@@ -17,13 +22,20 @@ import { DEFAULT_ROBOTS_NOTICE_MAX_CHANNELS, outdatedStorefrontChannels } from '
  * every page is still served without the directive. This row is where that
  * operator is looking, so this is where it is said.
  *
- * It renders **only** when a storefront is known to be outdated — the answer
- * the preview endpoint already gives. While that is unknown, or the storefront
- * cannot be reached, the row is exactly the row without this contribution.
+ * **What is known is narrower than what matters, and the sentence says so.**
+ * The evidence is that the storefront answered the `robots.txt` question
+ * without the header by which a current one identifies itself. That is what an
+ * older storefront does — and also what a storefront copied by hand without
+ * that route does, or a proxy that strips the header. So the notice says the
+ * storefront *did not confirm* support and *may* not apply the setting.
+ *
+ * It renders only on that evidence. While it is unknown, or the storefront
+ * cannot be reached, the row is the row without this contribution.
  *
  * Edited for all channels, it asks about the first
- * {@link DEFAULT_ROBOTS_NOTICE_MAX_CHANNELS} active channels and names the
- * ones concerned.
+ * {@link DEFAULT_ROBOTS_NOTICE_MAX_CHANNELS} channels and names the ones
+ * concerned; when the channels cannot be listed it asks about the system
+ * default one.
  */
 export type DefaultRobotsStorefrontNoticeProps = AdminZoneProps<'settings.setting.after'>;
 
@@ -34,10 +46,16 @@ export function DefaultRobotsStorefrontNotice({
   const t = useTranslation('seo');
   const allChannels = channelCode === null;
   const channels = usePreviewChannels(allChannels);
-  const asked = allChannels
-    ? channels.items.slice(0, DEFAULT_ROBOTS_NOTICE_MAX_CHANNELS).map((item) => item.code)
-    : [channelCode];
-  const outdated = outdatedStorefrontChannels(useRobotsPreviews(asked));
+  const asked = !allChannels
+    ? [channelCode]
+    : channels.status === 'loading'
+      ? null
+      : channels.items.length === 0
+        ? [SYSTEM_DEFAULT_CHANNEL]
+        : channels.items.slice(0, DEFAULT_ROBOTS_NOTICE_MAX_CHANNELS).map((item) => item.code);
+  const outdated = outdatedStorefrontChannels(
+    useRobotsPreviews(allChannels ? 'all-channels' : 'channel', asked),
+  );
 
   // The answer carries the channel's saved policy, which the preview beside
   // the `robots.txt` text shows a sentence about. When this row stops being
@@ -48,24 +66,30 @@ export function DefaultRobotsStorefrontNotice({
     wasDirty.current = dirty;
   }, [dirty]);
 
-  if (outdated.length === 0) return null;
+  // The live region is mounted before it has anything to say: a region that
+  // arrives already carrying its text is not announced. Empty, it takes no
+  // room — the negative margin gives back the gap its row leaves above it.
   return (
-    <Alert
-      role="status"
-      variant="warning"
-      className="mt-3 px-3 py-2 [&>svg]:left-3 [&>svg]:top-2.5"
-      data-notice="default-robots-storefront-outdated"
-    >
-      <TriangleAlert aria-hidden="true" className="h-4 w-4" />
-      <AlertDescription className="text-xs">
-        <span className="font-medium">{t('crawlerPreview.notice.warningPrefix')} </span>
-        {allChannels
-          ? t('crawlerPreview.defaultRobots.storefrontOutdatedChannels', {
-              channels: outdated.join(', '),
-            })
-          : t('crawlerPreview.defaultRobots.storefrontOutdated')}
-      </AlertDescription>
-    </Alert>
+    <div role="status" aria-live="polite" className="empty:-mt-2">
+      {outdated.length === 0 ? null : (
+        <Alert
+          role="presentation"
+          variant="warning"
+          className="mt-1 px-3 py-2 [&>svg]:left-3 [&>svg]:top-2.5"
+          data-notice="default-robots-storefront-outdated"
+        >
+          <TriangleAlert aria-hidden="true" className="h-4 w-4" />
+          <AlertDescription className="text-xs">
+            <span className="font-medium">{t('crawlerPreview.notice.warningPrefix')} </span>
+            {allChannels
+              ? t('crawlerPreview.defaultRobots.storefrontOutdatedChannels', {
+                  channels: outdated.join(', '),
+                })
+              : t('crawlerPreview.defaultRobots.storefrontOutdated')}
+          </AlertDescription>
+        </Alert>
+      )}
+    </div>
   );
 }
 

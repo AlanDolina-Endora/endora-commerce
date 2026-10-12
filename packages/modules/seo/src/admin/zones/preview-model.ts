@@ -12,10 +12,11 @@ import { composeCrawlerFile, type AdminCrawlerFilePreview } from '@endora-commer
  * ## One rule for the join, and it is not written here
  *
  * The file is `composeCrawlerFile(base, operatorPart)` — the function the
- * storefront serves with. The two blocks the screen shows are **cut out of
- * that function's own output** rather than assembled beside it, so the preview
- * cannot come to disagree with the served file about a line break, a byte
- * order mark or a trailing blank line.
+ * storefront serves with. The screen shows that file as one block, and the
+ * stretches it marks inside the block are **cut out of that function's own
+ * output** rather than assembled beside it, so the preview cannot come to
+ * disagree with the served file about a line break, a byte order mark or a
+ * trailing blank line.
  */
 
 /** The setting the preview sits beside. */
@@ -40,16 +41,12 @@ export type PreviewRequest =
   | { readonly status: 'ready'; readonly data: AdminCrawlerFilePreview };
 
 export type PreviewNoticeKind =
-  /** The operator's block shows text that is not saved. */
-  | 'unsaved'
-  /** The storefront predates the feature and serves its own rules alone. */
+  /** The storefront did not confirm that it joins the operator's text to its rules. */
   | 'storefront-outdated'
   | 'storefront-unreachable'
   | 'address-unknown'
   /** The preview endpoint itself did not answer. */
   | 'preview-failed'
-  /** All-channels mode, and there is no sales channel to preview. */
-  | 'no-channel'
   /** `NOINDEX` channel: the file stays open on purpose. */
   | 'stays-open'
   /** `NOINDEX` channel, and the operator's text closes the site to every crawler. */
@@ -73,77 +70,97 @@ export interface PreviewNotice {
   readonly channels?: readonly string[];
 }
 
+/**
+ * One stretch of the file. `system` is what the storefront generates,
+ * `operator` what the operator wrote, `separator` the blank line the join puts
+ * between them.
+ */
+export interface PreviewFileSegment {
+  readonly kind: 'system' | 'separator' | 'operator';
+  readonly text: string;
+}
+
+/** The file, whole, and the same file cut into the stretches it is made of. */
+export interface PreviewFile {
+  /** Exactly what the storefront serves, or will once the field is saved. */
+  readonly text: string;
+  /** In order; their texts joined are {@link PreviewFile.text}, to the byte. */
+  readonly segments: readonly PreviewFileSegment[];
+}
+
 export interface PreviewModel {
   /** `channel` — the row is edited for one channel; `all-channels` — for all. */
   readonly mode: 'channel' | 'all-channels';
-  /** The channel whose file is shown, or `null` when there is none to show. */
+  /** The channel whose file is shown, once known. */
   readonly previewedChannel: string | null;
   /** The storefront's part is still being asked for. */
   readonly loading: boolean;
   /**
-   * The storefront-generated rules, exactly as served, or `null` when they
-   * were not obtained — never a remembered or example text (FR-042).
+   * What the shown file is: `after-saving` — it includes text that is not
+   * saved yet; `served-now` — it is what the storefront serves at this moment;
+   * `unknown` — there is no file to show.
    */
-  readonly systemPart: string | null;
+  readonly shows: 'after-saving' | 'served-now' | 'unknown';
   /**
-   * The operator's part, as it is — or would be — served. `''` when the text
-   * adds nothing to the file.
+   * The file, or `null` when the storefront's rules were not obtained — never
+   * a remembered or example text (FR-042).
    */
-  readonly operatorPart: string;
-  /** Whose text the operator's block shows. */
+  readonly file: PreviewFile | null;
+  /**
+   * The operator's text as it would be served, shown **apart** from a file:
+   * when there is no file to put it in, or when the storefront did not confirm
+   * that it serves it. `null` when it is inside {@link PreviewModel.file}.
+   */
+  readonly detachedOperatorPart: string | null;
+  /** The operator's text adds nothing to the file. */
+  readonly operatorPartEmpty: boolean;
+  /** Whose text the operator's part is. */
   readonly operatorPartOrigin: 'field' | 'saved';
-  /** The operator's block shows text the storefront does not serve yet. */
+  /** The operator's part is text the storefront does not serve yet. */
   readonly operatorPartUnsaved: boolean;
-  /**
-   * The whole file as the storefront serves it (or will, once saved), or
-   * `null` when the system part is unknown or the storefront does not join
-   * the two.
-   */
-  readonly composed: string | null;
   /** Address the file is served at, when known. */
   readonly storefrontUrl: string | null;
   readonly notices: readonly PreviewNotice[];
 }
 
-/**
- * The preview for one row.
- *
- * `previewedChannel` is the row's own channel in channel mode, and the channel
- * the operator picked in all-channels mode.
- */
-export function buildPreviewModel(
-  row: PreviewRowProps,
-  previewedChannel: string | null,
-  request: PreviewRequest,
-): PreviewModel {
+/** The preview for one row, from the row's props and the backend's answer. */
+export function buildPreviewModel(row: PreviewRowProps, request: PreviewRequest): PreviewModel {
   const mode = row.channelCode === null ? 'all-channels' : 'channel';
   const data = request.status === 'ready' ? request.data : null;
   const fieldText = row.draftText ?? '';
+  const previewedChannel = data?.salesChannelCode ?? row.channelCode;
 
   // An all-channels value reaches a channel only while that channel has no
   // value of its own; one that has is shown what it serves, not the field.
   const previewedHasOwnValue =
     mode === 'all-channels' &&
     data !== null &&
-    previewedChannel !== null &&
-    data.channelsWithOwnValue.includes(previewedChannel);
+    data.channelsWithOwnValue.includes(data.salesChannelCode);
   const operatorPartOrigin = previewedHasOwnValue ? 'saved' : 'field';
   const operatorText = previewedHasOwnValue ? (data?.savedExtra ?? '') : fieldText;
   const operatorPart = servedOperatorPart(operatorText);
   const operatorPartUnsaved = operatorPartOrigin === 'field' && row.dirty;
 
-  const hasBase = data !== null && data.base !== null;
-  const outdated = data?.state === 'storefront-outdated';
-  const systemPart = hasBase ? servedSystemPart(data.base as string, outdated ? '' : operatorText) : null;
-  const composed =
-    data !== null && data.state === 'ok' && data.base !== null
-      ? composeCrawlerFile(data.base, operatorText)
-      : null;
+  // `ok`: the storefront joins the two, so the file is the join. Otherwise, if
+  // it answered at all, the file is its answer alone — that is what it serves.
+  let file: PreviewFile | null = null;
+  let detachedOperatorPart: string | null = operatorPart === '' ? null : operatorPart;
+  if (data !== null && data.base !== null) {
+    if (data.state === 'ok') {
+      file = previewFile(data.base, operatorText);
+      detachedOperatorPart = null;
+    } else {
+      file = previewFile(data.base, '');
+    }
+  }
+  const shows: PreviewModel['shows'] =
+    file === null
+      ? 'unknown'
+      : data?.state === 'ok' && operatorPartUnsaved
+        ? 'after-saving'
+        : 'served-now';
 
   const notices: PreviewNotice[] = [];
-  if (mode === 'all-channels' && previewedChannel === null) {
-    notices.push({ kind: 'no-channel', tone: 'info' });
-  }
   if (request.status === 'failed') notices.push({ kind: 'preview-failed', tone: 'warning' });
   if (data !== null) {
     if (data.state === 'storefront-outdated') {
@@ -156,7 +173,6 @@ export function buildPreviewModel(
       notices.push({ kind: 'address-unknown', tone: 'warning' });
     }
   }
-  if (operatorPartUnsaved) notices.push({ kind: 'unsaved', tone: 'info' });
   if (previewedHasOwnValue) {
     notices.push({ kind: 'previewed-channel-has-own-value', tone: 'info' });
   }
@@ -181,14 +197,39 @@ export function buildPreviewModel(
     mode,
     previewedChannel,
     loading: request.status === 'loading',
-    systemPart,
-    operatorPart,
+    shows,
+    file,
+    detachedOperatorPart,
+    operatorPartEmpty: operatorPart === '',
     operatorPartOrigin,
     operatorPartUnsaved,
-    composed,
     storefrontUrl:
       data !== null && data.storefront.source !== 'fallback' ? data.storefront.url : null,
     notices,
+  };
+}
+
+/**
+ * The file `composeCrawlerFile(base, operatorText)` answers, and the stretches
+ * it is made of.
+ *
+ * The stretches are cut out of that function's own output, so joining them
+ * gives the file back to the byte — which is what lets the screen draw the two
+ * parts differently inside one block without ever drawing a different file.
+ */
+export function previewFile(base: string, operatorText: string): PreviewFile {
+  const text = composeCrawlerFile(base, operatorText);
+  const operator = servedOperatorPart(operatorText);
+  if (operator === '') return { text, segments: [{ kind: 'system', text }] };
+  const system = servedSystemPart(base, operatorText);
+  // system, the join, operator, the closing line break — nothing else.
+  return {
+    text,
+    segments: [
+      { kind: 'system', text: `${system}\n` },
+      { kind: 'separator', text: '\n' },
+      { kind: 'operator', text: `${operator}\n` },
+    ],
   };
 }
 
@@ -223,7 +264,7 @@ const JOIN = '\n\n';
 
 /**
  * Whether the text tells **every** crawler to fetch nothing: a `Disallow: /`
- * in a group that names `*`.
+ * (or `Disallow: /*`) in a group that names `*`.
  *
  * This is a caution, not a parser of record, so it leans towards speaking up:
  * rules written before any `User-agent` line are counted as well, because in
@@ -249,7 +290,10 @@ export function closesSiteToEveryCrawler(operatorText: string): boolean {
       continue;
     }
     lastWasAgent = false;
-    if (field === 'disallow' && value === '/' && agents.includes('*')) return true;
+    // `/*` is the same ban spelled with a wildcard.
+    if (field === 'disallow' && (value === '/' || value === '/*') && agents.includes('*')) {
+      return true;
+    }
   }
   return false;
 }
@@ -265,25 +309,28 @@ function stripComment(line: string): string {
 
 /** One channel's answer, for the *Default robots* row. */
 export interface ChannelPreviewRequest {
-  readonly channelCode: string;
   readonly request: PreviewRequest;
 }
 
 /**
- * The channels whose storefront is too old to apply *Default robots*.
+ * The channels whose storefront did not confirm that it supports the `seo`
+ * crawler settings — and may therefore not apply *Default robots*.
  *
  * The row shows a notice for these and nothing otherwise — not while loading,
  * not when a storefront cannot be reached, not when the endpoint fails: the
- * notice says one thing, and says it only when it is known to be true.
+ * notice says one thing, and says it only on evidence. The channel is named
+ * from the answer, which is what knows which channel a request without a code
+ * was about.
  */
 export function outdatedStorefrontChannels(
   requests: readonly ChannelPreviewRequest[],
 ): readonly string[] {
-  return requests
-    .filter(
-      ({ request }) => request.status === 'ready' && request.data.state === 'storefront-outdated',
-    )
-    .map(({ channelCode }) => channelCode);
+  const codes: string[] = [];
+  for (const { request } of requests) {
+    if (request.status !== 'ready' || request.data.state !== 'storefront-outdated') continue;
+    if (!codes.includes(request.data.salesChannelCode)) codes.push(request.data.salesChannelCode);
+  }
+  return codes;
 }
 
 /**
