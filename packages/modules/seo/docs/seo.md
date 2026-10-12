@@ -419,7 +419,9 @@ by the storefront's host. The generated part lists only pages that are public an
 — the same list the sitemap starts with — and never an address `robots.txt` closes to crawlers
 (the cart, the checkout, the account, the sign-in pages). A listed page that is not there at the
 moment is left out: the blog link is not written while the `blog` module is switched off or the
-channel has no blog. The generated part is in English, and cannot be edited on the Settings
+channel has no blog. The addresses use the storefront's one public origin, as the sitemap does:
+a storefront that serves several sales channels names that origin in every channel's file, with
+each channel's own shop name. The generated part is in English, and cannot be edited on the Settings
 screen.
 
 Your text is served **as written**, on the same terms as the `robots.txt` instructions: every
@@ -465,7 +467,11 @@ a version that has no `llms.txt` at all. See
 
 To show the generated part the backend asks the channel's storefront for
 `/llms.txt?part=base`, under exactly the rules given under
-[what the backend asks the storefront](#what-the-backend-asks-the-storefront).
+[what the backend asks the storefront](#what-the-backend-asks-the-storefront). One difference in
+what the answer tells an administrator who may read settings: when the configured address
+answers "not found" without the storefront's header, this preview says that the storefront did
+not confirm that it serves the file, rather than that it could not be reached — so an address
+where some web server answers can be told from one where nothing does.
 
 ### How long a change takes, and when the file cannot be read
 

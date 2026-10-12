@@ -436,7 +436,9 @@ hosta sklepu. Część generowana wymienia wyłącznie strony publiczne, które 
 samą listę, od której zaczyna się mapa witryny — i nigdy adresu, który `robots.txt` zamyka przed
 robotami (koszyk, zamówienie, konto, strony logowania). Strona z listy, której w danej chwili
 nie ma, jest pomijana: link do bloga nie jest wpisywany, gdy moduł `blog` jest wyłączony albo
-kanał nie ma bloga. Część generowana jest po angielsku i nie można jej edytować na ekranie
+kanał nie ma bloga. Adresy używają jednego publicznego adresu sklepu, tak jak mapa witryny:
+sklep obsługujący kilka kanałów sprzedaży podaje ten sam adres w pliku każdego kanału, z nazwą
+sklepu właściwą dla kanału. Część generowana jest po angielsku i nie można jej edytować na ekranie
 Ustawień.
 
 Twój tekst jest serwowany **tak, jak został wpisany**, na tych samych zasadach co instrukcje
@@ -482,7 +484,11 @@ w której pliku `llms.txt` w ogóle nie ma. Zobacz
 [sklep utworzony przed tą funkcją](#sklep-utworzony-przed-tą-funkcją).
 
 Aby pokazać część generowaną, backend pyta sklep kanału o `/llms.txt?part=base`, dokładnie na
-zasadach opisanych w części [o co backend pyta sklep](#o-co-backend-pyta-sklep).
+zasadach opisanych w części [o co backend pyta sklep](#o-co-backend-pyta-sklep). Jedna różnica
+w tym, czego odpowiedź pozwala się dowiedzieć administratorowi z prawem odczytu ustawień: gdy
+skonfigurowany adres odpowiada „nie znaleziono” bez nagłówka sklepu, ten podgląd informuje, że
+sklep nie potwierdził, że serwuje plik, a nie że nie udało się z nim połączyć — adres, pod
+którym odpowiada jakiś serwer WWW, da się więc odróżnić od adresu, pod którym nie odpowiada nic.
 
 ### Ile trwa wprowadzenie zmiany i co się dzieje, gdy pliku nie da się odczytać
 

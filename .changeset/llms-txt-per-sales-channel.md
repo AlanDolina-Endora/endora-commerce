@@ -12,7 +12,10 @@ generates — the shop's name, links to the home page, the catalog, search, the 
 page, and the sitemap — followed by the text you save in the new setting. The setting is empty by
 default, takes a value for all sales channels and a value per channel like any other, and holds at
 most 64 KiB, the limit of the `robots.txt` instructions. A saved change is served within about two
-minutes.
+minutes. The addresses in the generated part use the storefront's one public origin
+(`NEXT_PUBLIC_SITE_URL`, fixed when the storefront is built), as the sitemap does: a storefront
+that serves several sales channels names that origin in every channel's file, with each
+channel's own shop name.
 
 Two things to know before relying on it:
 
@@ -30,9 +33,17 @@ with the reason, in place of the block. The messages for a storefront that canno
 no address configured or did not confirm that it serves the file are the ones the `robots.txt`
 preview shows, and the request the backend makes for it is bound the same way — one `GET
 <origin>/llms.txt?part=base`, no redirect followed, three seconds, 512 KiB, `text/plain` only,
-nothing of the administrator's request in it.
+nothing of the administrator's request in it. As before, private and loopback addresses are not
+refused, and this preview tells a holder of `settings:read` slightly more about a configured
+address than the `robots.txt` one does: a `404` without the storefront's header is reported as
+"did not confirm that it serves llms.txt" rather than as "could not be reached", so an address
+where some HTTP server answers can be told from one where nothing does.
 
 No migration, no new environment variable, no new permission.
+
+The `seo` bundles also gain the name of the settings group and the name and description of the
+*SEO enabled* setting, in English and Polish (`settingGroups.seo.name`,
+`settingLabels.seo.enabled.*`).
 
 **`robots.txt` no longer depends on *Default robots* being readable.** A *Default robots* value
 that is not one of the four choices — which takes a row written around the settings API — made
@@ -72,9 +83,9 @@ the same header. Answer `503` rather than a file while `unreadable` names `polic
 confirm that it serves the file, and nothing serves it. To take the feature, apply these changes
 from the reference storefront to the storefront project, keeping any edits of your own. They
 assume the project has already taken the *Default robots* and *Custom robots.txt instructions*
-changes of the earlier releases — `lib/seo/crawler-policy.ts`, `lib/seo/robots-txt.ts`,
+changes that the other entries of this release describe — `lib/seo/crawler-policy.ts`, `lib/seo/robots-txt.ts`,
 `lib/seo/robots-system-rules.ts`, `lib/seo/robots-directive.ts` and `app/robots.txt/route.ts`
-exist, and `app/robots.ts` is deleted. If not, apply those releases' notes first.
+exist, and `app/robots.ts` is deleted. If not, apply those entries first.
 
 - **add** `app/llms.txt/route.ts` — the route;
 - **add** `lib/seo/llms-txt.ts` — what the route answers, and when it answers `404` and `503`;
@@ -82,12 +93,12 @@ exist, and `app/robots.ts` is deleted. If not, apply those releases' notes first
   your `app/sitemap.ts`; **if you changed that list, give each of your routes a title in
   `LLMS_TXT_PAGE_TITLES`**, and name in `LLMS_TXT_CONDITIONAL_PAGES` any of them that can answer
   "not found";
-- **add** `lib/seo/llms-txt-pages.ts` — asks whether a conditional page is served right now
-  (today: the blog);
+- **add** `lib/seo/llms-txt-pages.ts` — whether a conditional page is served right now (today:
+  the blog), remembered per channel by the cache `lib/seo/crawler-policy.ts` exports;
 - **add** `lib/seo/crawler-file-response.ts` — the headers and the temporary failure the two files
   share;
 - **replace** `lib/seo/robots-txt.ts` and `lib/seo/crawler-policy.ts` with the new versions. The
-  first now takes its headers from `crawler-file-response.ts`; the second reads `unreadable`;
+  first now takes its headers from `crawler-file-response.ts`; the second reads `unreadable` and exports the channel cache the page question uses;
 - **edit** `lib/seo/robots-directive.ts`: `isDocumentPath` must answer `false` for `/llms.txt`, as
   the reference's version does. **Do not skip this one**: without it the storefront still serves
   the file, but while the backend is unreachable it answers `/llms.txt` with the outage page
@@ -100,9 +111,9 @@ exist, and `app/robots.ts` is deleted. If not, apply those releases' notes first
   shows the header when the route is the one answering.
 
 `middleware.ts` and `app/layout.tsx` do not change in this release. The new files import
-`composeCrawlerFile` from `@endora-commerce/contracts/seo`, which the project already needs at the
-release that introduced the custom `robots.txt` instructions; this release's contracts are needed
-only for the `unreadable` constants, which the storefront restates rather than imports. Then
+`composeCrawlerFile` from `@endora-commerce/contracts/seo`, so the storefront project needs
+`@endora-commerce/contracts` at this release — as the custom `robots.txt` instructions, another
+entry of this release, already require. Then
 rebuild the storefront — the build's route list shows `ƒ /llms.txt`.
 
 The reference storefront's tests for these files (`test/seo/llms-txt-base.test.ts`,
