@@ -269,8 +269,10 @@ export class CrawlerFilePreviewService {
             'user-agent': USER_AGENT,
             // The code of the channel row that was found — a storefront reached
             // directly answers for that channel; a proxy in front of one
-            // overwrites it with its own.
-            'x-sales-channel': salesChannelCode,
+            // overwrites it with its own. This header is **sent**; nothing
+            // here reads it from a request — which channel is previewed comes
+            // from the validated query, through the channel row.
+            'X-Sales-Channel': salesChannelCode,
           },
           redirect: 'manual',
           credentials: 'omit',

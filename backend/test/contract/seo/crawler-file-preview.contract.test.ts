@@ -271,8 +271,14 @@ describe('GET /api/v1/admin/seo/crawler-files/preview', () => {
       const sent = new Headers(init?.headers);
       // The channel that was asked for by the query, not the caller's header.
       expect(sent.get('x-sales-channel')).toBe(RETAIL);
-      expect([...sent.keys()].sort()).toEqual(['accept', 'user-agent', 'x-sales-channel']);
-      expect(JSON.stringify([...sent.entries()])).not.toMatch(/caller-token|stub-admin-session|evil/);
+      const names: string[] = [];
+      const values: string[] = [];
+      sent.forEach((value, name) => {
+        names.push(name);
+        values.push(value);
+      });
+      expect(names.sort()).toEqual(['accept', 'user-agent', 'x-sales-channel']);
+      expect(values.join('\n')).not.toMatch(/caller-token|stub-admin-session|evil/);
       expect((res.json() as { data: { salesChannelCode: string } }).data.salesChannelCode).toBe(RETAIL);
     });
 

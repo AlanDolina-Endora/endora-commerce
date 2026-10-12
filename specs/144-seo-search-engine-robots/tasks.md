@@ -615,7 +615,7 @@ else.
   (new) and the route in `routes.ts`, gated `requireAdmin('settings:read')` as the route's
   `preHandler`. **Test:** T080, T081, T082, and
   `pnpm --filter backend exec vitest run test/contract/admin_users/permission-inventory.test.ts`
-  *Done.*
+  *Done. `check:channel-resolution` reported the header the request **sends**; the rule (in `packages/cli`) now exempts the key of an object literal under `headers:`, with tests that every read shape is still reported.*
 - [x] T085 [US2] RED — the preview's view model as a pure function (state + props → what is
   shown), one case per row of `contracts/admin-surfaces.md` §4, including: unsaved text marked
   not-yet-served; the all-channels case listing unaffected channels; the `NOINDEX` sentence; the

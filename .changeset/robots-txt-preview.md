@@ -2,6 +2,7 @@
 '@endora-commerce/mod-seo': minor
 '@endora-commerce/mod-settings': minor
 '@endora-commerce/contracts': minor
+'@endora-commerce/cli': minor
 ---
 
 The Settings screen previews the `robots.txt` a sales channel's storefront serves, and a module can now contribute beside a setting it declared.
@@ -87,3 +88,12 @@ is served.
 
 `@endora-commerce/mod-seo` now declares `lucide-react` as an optional peer dependency, as the other
 module packages with an admin surface do; an application that has the Admin UI already has it.
+
+**In `@endora-commerce/cli`: `check:channel-resolution` no longer reports a header that is sent.**
+The rule's first signal flags every `x-sales-channel` string literal, because a module must not
+read that header from a request — the resolver does. A module that makes a request of its own to
+another server and names the sales channel in it was reported as well. The key of an object literal
+under a `headers:` property — `fetch(url, { headers: { 'X-Sales-Channel': channel.code } })` — is
+now exempt, as a CORS policy's `allowedHeaders` array already was. Every read shape is still
+reported: an element access on a headers object, a `.get(...)` argument, the name held in a
+constant, a computed key.

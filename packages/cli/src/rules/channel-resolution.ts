@@ -15,7 +15,10 @@
  *  1. RAW CHANNEL HEADER READ — any string literal `x-sales-channel` or
  *     `x-sales-channel-id` anywhere under `src/**` outside the resolver's own
  *     directory. Legitimate code never reads these headers; only the resolver
- *     does. Global scope = strongest guard.
+ *     does. Global scope = strongest guard. Two shapes that name the header
+ *     without reading it are exempt, each by its syntax: a CORS policy's
+ *     `…Headers` array, and the key of an object literal under `headers:` —
+ *     a header being sent to another server.
  *
  *  2. REQUEST-CHANNEL RE-RESOLUTION — inside the storefront "surface" files
  *     (routes.public / routes.storefront / *storefront-resolver / the catalog
@@ -187,6 +190,33 @@ function isCorsHeaderDeclaration(node: ts.Node): boolean {
   if (property === undefined || !ts.isPropertyAssignment(property)) return false;
   const name = property.name;
   return (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) && /Headers$/.test(name.text);
+}
+
+/**
+ * Sending the header is not reading it.
+ *
+ * A module that makes a request to another server on a sales channel's behalf
+ * — `seo` asking a channel's storefront for the rules it generates
+ * (`specs/144-seo-search-engine-robots/`) — names the channel in the request
+ * it makes. The shape exempted is the one that can only be a write: the
+ * literal is the **key** of a property in an object literal that is itself the
+ * value of a property named `headers`. A read is an element access, a
+ * `.get(...)` argument or a value held in a constant, and none of those is a
+ * key of such an object — so, like the CORS exemption above, this one cannot
+ * quietly cover a real read. A computed key is not exempt: it is an
+ * expression, and what it evaluates to is not this rule's to follow.
+ */
+function isSentHeaderName(node: ts.Node): boolean {
+  const property = node.parent;
+  if (property === undefined || !ts.isPropertyAssignment(property)) return false;
+  if (property.name !== node) return false;
+  const object = property.parent;
+  if (!ts.isObjectLiteralExpression(object)) return false;
+  const owner = object.parent;
+  if (owner === undefined || !ts.isPropertyAssignment(owner)) return false;
+  if (owner.initializer !== object) return false;
+  const name = owner.name;
+  return (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) && name.text === 'headers';
 }
 
 /**
@@ -381,7 +411,8 @@ export function analyzeSource(source: string, relPath: string): Violation[] {
     if (
       ts.isStringLiteralLike(node) &&
       CHANNEL_HEADERS.has(node.text.toLowerCase()) &&
-      !isCorsHeaderDeclaration(node)
+      !isCorsHeaderDeclaration(node) &&
+      !isSentHeaderName(node)
     ) {
       violations.push({
         file: relPath,
