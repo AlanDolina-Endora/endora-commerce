@@ -1,0 +1,102 @@
+# The release page and the Discord announcement, keyed on the release tag.
+#
+# `specs/conventions/release-intent.md` § *The release page and the Discord post*
+# is the home of this rule; this file only runs it. The short version: a
+# release here is `publish.yml` spending the versions on npmjs, the owner
+# confirming the packages are served, and **then** an annotated `vX.Y.Z` tag
+# on the published commit. The tag is the assertion that the registry serves
+# this tree, so it is the right moment for a page that says what the release
+# contains — never before it, which is why nothing in `publish.yml` tags.
+#
+# ## What the job does
+#
+#   1. `backend/scripts/release-notes.ts` assembles the notes from the
+#      per-package changelogs between the previous `v*` tag and this one, and
+#      refuses (exit 2) when no changelog gained a section — a tag on the wrong
+#      commit gets no release page rather than an empty one.
+#   2. It refuses to create a second release for a tag that has one. A
+#      re-pushed tag is not a new release.
+#   3. `gh release create --verify-tag` with the summary as the description and
+#      the full per-package notes as an asset (one release is ~470 kB of
+#      changelog; the description limit is 125 000 characters).
+#   4. The Discord webhook, when `DISCORD_WEBHOOK_URL` is set. The payload is
+#      the script's `discord.json`: title, link, census, highlights. A missing
+#      secret is a warning and not a failure: the release page is the product
+#      and the post is its echo.
+#
+# ## Why the post is a step here and not a workflow of its own
+#
+# A release created with `GITHUB_TOKEN` emits a `release: published` event
+# that starts **no** workflow — Actions never triggers on events its own token
+# produced. A separate `on: release` workflow would therefore run for a release
+# clicked together by hand and never for the one this job creates, and the
+# difference would be invisible in the run list. One job, two steps.
+#
+# `contents: write` is scoped to the job and is what `gh release create` and
+# the asset upload need. `publish.yml` keeps its own, different grant — the
+# provenance token — and the two never meet in one job.
+
+name: release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: release:github
+    runs-on: ubuntu-24.04
+    permissions:
+      # The release and its asset. Nothing else in the repository needs this.
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The previous tag and both trees at the two tags: the whole history.
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.18'
+      # No install and no build: the script is dependency-free Node with
+      # erasable types, like `dco-signoff.ts`.
+      - name: assemble the notes from the changelogs
+        run: node backend/scripts/release-notes.ts "$TAG" --out release-notes --repo-url "$REPO_URL"
+      - name: refuse to describe a release twice
+        run: |
+          if gh release view "$TAG" --json tagName >/dev/null 2>&1; then
+            echo "release — a release for $TAG already exists. A re-pushed tag is not a new release; if the page is wrong, delete it first (gh release delete $TAG) and push the tag again." >&2
+            exit 2
+          fi
+      - name: create the GitHub release
+        run: |
+          gh release create "$TAG" \
+            --verify-tag \
+            --title "Endora Commerce ${TAG#v}" \
+            --notes-file release-notes/release-body.md \
+            "release-notes/release-notes-$TAG.md"
+      - name: announce the release on Discord
+        env:
+          # A webhook URL lets whoever holds it post to the channel: a secret,
+          # never a variable, and read by this step only.
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "::warning::release — DISCORD_WEBHOOK_URL is not set, so $TAG was not announced on Discord. The release page exists; add the secret to the repository to announce the next one."
+            exit 0
+          fi
+          # `wait=true` makes Discord answer with the posted message or an
+          # error, so a rejected payload fails the step instead of vanishing.
+          curl --silent --show-error --fail-with-body \
+            -H 'Content-Type: application/json' \
+            --data @release-notes/discord.json \
+            "${DISCORD_WEBHOOK_URL}?wait=true" > /dev/null
+          echo "release — $TAG announced on Discord."

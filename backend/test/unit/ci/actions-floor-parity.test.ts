@@ -132,7 +132,9 @@ describe('the floor parsed a population that looks like both hosts', () => {
     // deploy (W7.5, D-274) are held by `test/unit/ci/demo-workflow.test.ts`.
     // `pack-gate.yml`, `boot-gate.yml` and `build-docs.yml` are tranche 1, not
     // the floor, and are held by `actions-tranche-one-parity.test.ts`;
-    // `publish-docs.yml` (T046b) by `docs-publish-workflow.test.ts`.
+    // `publish-docs.yml` (T046b) by `docs-publish-workflow.test.ts`;
+    // `release.yml` (the release page and the Discord post, keyed on the
+    // release tag) by `release-workflow.test.ts`.
     // All are listed so that any new workflow still has to be named here by
     // whoever adds it.
     expect(WORKFLOW_FILES).toEqual([
@@ -145,6 +147,7 @@ describe('the floor parsed a population that looks like both hosts', () => {
       'publish-docs.yml',
       'publish.yml',
       'quality.yml',
+      'release.yml',
     ]);
     expect(TRANCHE_ONE_JOBS.map((job) => job.name)).toEqual(['pack-gate', 'boot-gate', 'build:docs']);
     expect(DOCS_PUBLICATION_JOBS).toHaveLength(2);
