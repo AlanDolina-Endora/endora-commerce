@@ -5779,6 +5779,15 @@
         }
       }
     },
+    "/api/v1/admin/seo/crawler-files/preview": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/seo/meta/{entityType}/{entityId}": {
       "delete": {
         "responses": {
@@ -7876,6 +7885,24 @@
       }
     },
     "/api/v1/storefront/sales-channel": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/storefront/seo/crawler-files": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/storefront/seo/robots-policy": {
       "get": {
         "responses": {
           "200": {
