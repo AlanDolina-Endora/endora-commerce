@@ -67,8 +67,14 @@ export class StoredCrawlerTextTooLargeError extends Error {
   }
 }
 
-async function storedText(
-  settings: CrawlerFilesSettingsPort,
+/**
+ * A crawler text as it resolves for one sales channel, or a throw when it is
+ * longer than can be saved. The storefront's read and the Admin UI's preview
+ * both go through it, so the preview never shows a text the storefront would
+ * refuse to serve.
+ */
+export async function storedCrawlerText(
+  settings: Pick<CrawlerFilesSettingsPort, 'get'>,
   code: string,
   salesChannelId: string,
 ): Promise<string> {
@@ -93,7 +99,11 @@ export async function resolveCrawlerFiles(
   const policy = robotsPolicyForToken(
     await settings.get(DEFAULT_ROBOTS_SETTING_CODE, salesChannelId, z.string()),
   );
-  const robotsTxtCustom = await storedText(settings, ROBOTS_TXT_CUSTOM_SETTING_CODE, salesChannelId);
+  const robotsTxtCustom = await storedCrawlerText(
+    settings,
+    ROBOTS_TXT_CUSTOM_SETTING_CODE,
+    salesChannelId,
+  );
 
   // The one read that degrades instead of throwing: a shop with no name is a
   // shop with no name, and nothing a crawler file says depends on it being

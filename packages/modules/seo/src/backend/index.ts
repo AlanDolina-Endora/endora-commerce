@@ -15,8 +15,16 @@ import { MetaTagResolverService } from './services/meta-tag-resolver.service.js'
 import {
   SitemapGeneratorService,
   type SitemapGeneratorOptions,
-  type SitemapSettingsPort,
 } from './services/sitemap-generator.service.js';
+import {
+  StorefrontAddressService,
+  type StorefrontAddressSettingsPort,
+} from './services/storefront-address.service.js';
+import {
+  CrawlerFilePreviewService,
+  createCrawlerFilePreviewStore,
+  type CrawlerFilePreviewSettingsPort,
+} from './services/crawler-file-preview.service.js';
 import { registerSeoRoutes, type SeoRouteSettingsPort } from './routes.js';
 import { createCrawlerTextValidator } from './services/crawler-text-validator.js';
 import { SeoMetaOverride } from './entities/seo-meta-override.entity.js';
@@ -52,11 +60,14 @@ export interface SeoCradle {
   readonly emFactory: () => EntityManager;
   readonly auditLogService: AuditPort;
   readonly requireAdmin: RequireAdminFactory;
-  readonly settingsReadPort: SitemapSettingsPort;
+  readonly settingsReadPort: StorefrontAddressSettingsPort;
   /** Composition-specific sitemap tuning; `{}` in production. */
   readonly sitemapOptions: SitemapGeneratorOptions;
   readonly seoMetaResolver: MetaTagResolverService;
   readonly seoSitemapService: SitemapGeneratorService;
+  /** Where a channel's storefront is, and which rung said so. */
+  readonly seoStorefrontAddress: StorefrontAddressService;
+  readonly seoCrawlerFilePreview: CrawlerFilePreviewService;
 }
 
 export function registerModule(ctx: ModuleContext): void {
@@ -79,12 +90,41 @@ export function registerModule(ctx: ModuleContext): void {
       )
       .singleton(),
 
+    // One resolution of a channel's storefront address, for the sitemap that
+    // stamps URLs with it and the preview that asks the storefront at it. The
+    // last rung is the composition's: the harness pins it through
+    // `sitemapOptions.baseUrl`, as it did when this lived in the sitemap service.
+    seoStorefrontAddress: ctx
+      .asFunction(
+        ({ sitemapOptions }: SeoCradle) =>
+          new StorefrontAddressService(
+            lazyPort<StorefrontAddressSettingsPort>(ctx, 'settingsReadPort'),
+            { fallbackUrl: sitemapOptions.baseUrl },
+          ),
+      )
+      .singleton(),
+
+    // The preview of a channel's crawler file
+    // (`specs/144-seo-search-engine-robots/contracts/admin-surfaces.md` §3).
+    // No `fetchFn` is passed: the service reads the platform's `fetch` at each
+    // call, and every bound on the request is a constant in its own file.
+    seoCrawlerFilePreview: ctx
+      .asFunction(
+        ({ emFactory, seoStorefrontAddress }: SeoCradle) =>
+          new CrawlerFilePreviewService(
+            lazyPort<CrawlerFilePreviewSettingsPort>(ctx, 'settingsReadPort'),
+            createCrawlerFilePreviewStore(emFactory),
+            seoStorefrontAddress,
+          ),
+      )
+      .singleton(),
+
     seoSitemapService: ctx
       .asFunction(
-        ({ emFactory, sitemapOptions }: SeoCradle) =>
+        ({ emFactory, sitemapOptions, seoStorefrontAddress }: SeoCradle) =>
           new SitemapGeneratorService(
             emFactory,
-            lazyPort<SitemapSettingsPort>(ctx, 'settingsReadPort'),
+            seoStorefrontAddress,
             lazyPort<SalesChannelMembershipPort>(ctx, 'salesChannelMembershipPort'),
             lazyPort<CatalogProductReadPort>(ctx, 'catalogProductReadPort'),
             lazyPort<CatalogCategoryReadPort>(ctx, 'catalogCategoryReadPort'),
@@ -113,10 +153,12 @@ export function registerModule(ctx: ModuleContext): void {
   );
 
   ctx.routes(async (app) => {
-    const { seoMetaResolver, seoSitemapService, requireAdmin } = ctx.cradle<SeoCradle>();
+    const { seoMetaResolver, seoSitemapService, seoCrawlerFilePreview, requireAdmin } =
+      ctx.cradle<SeoCradle>();
     await registerSeoRoutes(app, {
       metaResolver: seoMetaResolver,
       sitemap: seoSitemapService,
+      crawlerFilePreview: seoCrawlerFilePreview,
       requireAdmin,
       // Resolved per call, like the sitemap's own read of the same port.
       settings: lazyPort<SeoRouteSettingsPort>(ctx, 'settingsReadPort'),

@@ -1,5 +1,4 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
-import { z } from 'zod';
 import {
   ANONYMOUS_PRODUCT_AUDIENCE,
   isProductVisibleTo,
@@ -11,6 +10,7 @@ import {
 import { SalesChannel } from '@endora-commerce/platform/kernel';
 import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
 import { SitemapCache } from '../entities/sitemap-cache.entity.js';
+import type { StorefrontAddressService } from './storefront-address.service.js';
 
 /**
  * SitemapGeneratorService — per-channel sitemap.
@@ -21,10 +21,10 @@ import { SitemapCache } from '../entities/sitemap-cache.entity.js';
  * so a crawler hitting `https://channel-a.example.com/sitemap.xml` does
  * not see URLs that only belong to channel B.
  *
- * Storefront origin used when stamping URLs is read from the per-channel
- * setting `sales_channels.storefront_url` (see the sales_channels module
- * manifest); empty value falls back to the `STOREFRONT_BASE_URL` env, then
- * to `http://localhost:3000`.
+ * Storefront origin used when stamping URLs is `StorefrontAddressService`'s
+ * answer for the channel: the per-channel setting
+ * `sales_channels.storefront_url` (see the sales_channels module manifest),
+ * then the `STOREFRONT_BASE_URL` env, then a fallback.
  *
  * Cache: one row per channel in `sitemap_cache`, keyed by the channel
  * `code` (varchar(32)). Regenerate is per-channel; the public route
@@ -48,7 +48,6 @@ import { SitemapCache } from '../entities/sitemap-cache.entity.js';
  */
 
 const DEFAULT_STALE_AFTER_MS = 6 * 60 * 60 * 1000; // 6 hours
-const STOREFRONT_URL_SETTING = 'sales_channels.storefront_url';
 /** How many member ids one bridge read fetches. The port's own default is 100. */
 const MEMBERSHIP_PAGE_SIZE = 500;
 
@@ -72,18 +71,13 @@ export interface SitemapChannelStatus extends SitemapStatus {
   storefrontUrlSource: 'setting' | 'env' | 'fallback';
 }
 
-/** Minimal port for the SettingsService — only the read we need. */
-export interface SitemapSettingsPort {
-  get<T>(code: string, salesChannelId: string, schema: z.ZodType<T>): Promise<T>;
-}
-
 export class SitemapGeneratorService {
-  private readonly fallbackBaseUrl: string;
   private readonly staleAfterMs: number;
 
   constructor(
     private readonly emFactory: () => EntityManager,
-    private readonly settings: SitemapSettingsPort | null,
+    /** Where each channel's storefront is; the last rung is `options.baseUrl`. */
+    private readonly storefrontAddress: StorefrontAddressService,
     /** What this channel contains, and what those rows are (feature 075, Phase C). */
     private readonly membership: SalesChannelMembershipPort,
     private readonly catalogProducts: CatalogProductReadPort,
@@ -91,10 +85,6 @@ export class SitemapGeneratorService {
     private readonly cmsPages: CmsPageReadPort,
     options: SitemapGeneratorOptions = {},
   ) {
-    this.fallbackBaseUrl =
-      options.baseUrl ??
-      process.env['STOREFRONT_BASE_URL'] ??
-      'http://localhost:3000';
     this.staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
   }
 
@@ -235,7 +225,7 @@ export class SitemapGeneratorService {
     const out: SitemapChannelStatus[] = [];
     for (const channel of channels) {
       const cache = await em.findOne(SitemapCache, { key: channel.code });
-      const { url, source } = await this.resolveStorefrontUrlSource(channel);
+      const { url, source } = await this.storefrontAddress.resolve(channel.id);
       out.push({
         salesChannelCode: channel.code,
         salesChannelName: pickName(channel),
@@ -252,33 +242,8 @@ export class SitemapGeneratorService {
   // --- internals -----------------------------------------------------------
 
   private async resolveStorefrontUrl(channel: SalesChannel): Promise<string> {
-    const { url } = await this.resolveStorefrontUrlSource(channel);
+    const { url } = await this.storefrontAddress.resolve(channel.id);
     return trimTrailingSlash(url);
-  }
-
-  private async resolveStorefrontUrlSource(channel: SalesChannel): Promise<{
-    url: string;
-    source: 'setting' | 'env' | 'fallback';
-  }> {
-    if (this.settings) {
-      try {
-        const fromSetting = await this.settings.get(
-          STOREFRONT_URL_SETTING,
-          channel.id,
-          z.string(),
-        );
-        if (fromSetting && fromSetting.trim() !== '') {
-          return { url: fromSetting.trim(), source: 'setting' };
-        }
-      } catch {
-        // Not registered or out of scope — fall through to env / fallback.
-      }
-    }
-    const fromEnv = process.env['STOREFRONT_BASE_URL'];
-    if (fromEnv && fromEnv.trim() !== '') {
-      return { url: fromEnv.trim(), source: 'env' };
-    }
-    return { url: this.fallbackBaseUrl, source: 'fallback' };
   }
 
   /**
