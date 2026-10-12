@@ -15,6 +15,7 @@ dowiadują się o całym sklepie danego kanału sprzedaży.
 | `GET /api/v1/catalog/sitemap.xml` | roboty wyszukiwarek | Mapa witryny XML z pamięci podręcznej; gdy jest nieaktualna, jest generowana od razu w trakcie żądania |
 | `GET /api/v1/storefront/seo/robots-policy` | sklep | Domyślna polityka robots kanału sprzedaży, którego dotyczy żądanie, w postaci `{ index, follow }` |
 | `GET /api/v1/storefront/seo/crawler-files` | sklep | To, z czego powstaje plik `robots.txt` kanału sprzedaży, którego dotyczy żądanie: jego własne instrukcje wraz z polityką i nazwą sklepu |
+| `GET /api/v1/admin/seo/crawler-files/preview` | administrator (`settings:read`) | Podgląd pliku `robots.txt` kanału sprzedaży: reguły generowane przez jego sklep, pobrane z tego sklepu, obok zapisanego tekstu |
 | `GET /api/v1/admin/seo/sitemap` | administrator (`catalog:write`) | Jeden wiersz na kanał sprzedaży: adres sklepu, czas ostatniego wygenerowania, rozmiar, liczba adresów URL |
 | `POST /api/v1/admin/seo/sitemap/:channelCode/regenerate` | administrator (`catalog:write`) | Wymuszenie ponownego wygenerowania dla tego kanału |
 | `GET /api/v1/admin/seo/sitemap/:channelCode/status` | administrator (`catalog:write`) | Czas ostatniego wygenerowania, rozmiar i liczba adresów URL dla tego kanału |
@@ -126,7 +127,10 @@ Dyrektywę nakładają pliki samego sklepu: `middleware.ts` i `app/layout.tsx`, 
 instrukcje — jego plik `app/robots.txt/route.ts`. Sklep utworzony z wcześniejszego wydania
 działa dalej ze zaktualizowanym backendem, ale **ignoruje te ustawienia**, dopóki te pliki nie
 zostaną zaktualizowane: ekran Ustawień pokazuje wybór i tekst, a nic w takim sklepie ich nie
-stosuje — jego `robots.txt` pozostaje plikiem, z którym sklep został zbudowany. Lista plików do
+stosuje — jego `robots.txt` pozostaje plikiem, z którym sklep został zbudowany. Ekran Ustawień
+informuje o tym tam, gdzie może to stwierdzić: gdy taki sklep odpowiada backendowi, zarówno
+wiersz *Domyślne robots*, jak i podgląd `robots.txt` pokazują, że sklep tego kanału nie stosuje
+jeszcze ustawienia. Lista plików do
 skopiowania oraz plik do usunięcia są podane w informacjach o wydaniu: sklep, który zachowa stary
 plik `app/robots.ts` obok nowej trasy, nadal serwuje stary plik, a build tego nie zgłasza.
 
@@ -204,6 +208,59 @@ kanału nigdy nie trafia do pliku innego kanału. **Reset** usuwa własny tekst 
 znów dziedziczy tekst dla wszystkich kanałów; zresetowanie także jego pozostawia same reguły
 generowane. Zmiana tekstu wymaga uprawnienia `settings:write` i jest zapisywana w dzienniku
 audytu.
+
+### Podgląd
+
+Pod polem ekran Ustawień pokazuje plik `robots.txt`, który serwuje sklep danego kanału
+sprzedaży, w dwóch blokach — w kolejności, w jakiej występują w pliku:
+
+- **Generowane przez sklep** — reguły, które ten sklep generuje sam, wraz z jego linią
+  `Sitemap:`. Tylko do odczytu: należą do sklepu, a panel administracyjny za każdym razem pyta
+  o nie sklep, zamiast przechowywać kopię, która mogłaby się zdezaktualizować.
+- **Twoje instrukcje** — tekst z pola w postaci, w jakiej będzie serwowany. Podąża za tym, co
+  wpisujesz, jeszcze przed zapisaniem; dopóki różni się od zapisanego, podgląd informuje:
+  **Jeszcze niezapisane — sklep nadal udostępnia zapisaną wersję**. Podgląd niczego nie zmienia
+  w tym, co serwuje sklep.
+
+Podgląd dotyczy kanału sprzedaży wybranego u góry ekranu Ustawień. W trybie **Wszystkie
+kanały** pokazuje wynik dla jednego kanału, który wybierasz w podglądzie, i wymienia kanały
+mające własną wartość — tekst dla wszystkich kanałów ich nie dotyczy, a po wybraniu jednego
+z nich podgląd pokazuje to, co ten kanał faktycznie serwuje.
+
+W kanale sprzedaży, w którym *Domyślne robots* ma wartość `NOINDEX`, podgląd informuje, że
+`robots.txt` celowo pozostaje otwarty, i ostrzega, gdy Twój tekst zawiera `Disallow: /` dla
+wszystkich robotów — zobacz [dlaczego `robots.txt` pozostaje otwarty](#dlaczego-robotstxt-pozostaje-otwarty).
+
+Administrator, który może przeglądać ustawienia, ale nie może ich zmieniać, również widzi
+podgląd.
+
+#### Gdy podgląd nie może pokazać reguł generowanych
+
+Podgląd nigdy nie pokazuje reguł, których przed chwilą nie pobrał. W każdym z poniższych
+przypadków Twój własny blok jest nadal widoczny, a zapisywanie działa jak zwykle:
+
+| Komunikat w podglądzie | Co oznacza | Co zrobić |
+| --- | --- | --- |
+| *Nie udało się połączyć ze sklepem* | Sklep nie odpowiedział w ciągu trzech sekund, odrzucił połączenie, odpowiedział błędem lub przekierowaniem albo czymś, co nie jest tekstowym plikiem `robots.txt` | Sprawdź, czy sklep działa i czy **Storefront URL** kanału to jego rzeczywisty adres — taki, pod którym sklep sam odpowiada, a nie taki, który do niego przekierowuje. **Sprawdź ponownie** pyta jeszcze raz. Przyczynę podaje log serwera |
+| *Ten kanał sprzedaży nie ma skonfigurowanego adresu sklepu* | Nie ustawiono ani ustawienia **Storefront URL** kanału, ani zmiennej `STOREFRONT_BASE_URL`, więc nie ma adresu, pod który można zapytać | Ustaw **Ustawienia → Sales Channels → Storefront URL** dla tego kanału |
+| *Ten sklep nie udostępnia jeszcze własnych instrukcji* | Sklep odpowiedział, ale działa w wersji sprzed tej funkcji: serwuje wyłącznie reguły generowane, pokazane pod komunikatem, i ignoruje Twój tekst oraz *Domyślne robots* | Zaktualizuj sklep — zobacz [sklep utworzony przed tą funkcją](#sklep-utworzony-przed-tą-funkcją). Ten sam komunikat pojawia się w wierszu *Domyślne robots* |
+| *Ten adres jest wspólny dla wszystkich kanałów sprzedaży* | Adres pochodzi ze zmiennej `STOREFRONT_BASE_URL`, jednej dla wszystkich kanałów, więc podgląd dotyczy tego wspólnego sklepu | Nic, jeśli instancja ma jeden sklep. Gdy każdy kanał ma własny sklep, ustaw **Storefront URL** każdego kanału |
+
+#### O co backend pyta sklep
+
+Aby pokazać reguły generowane, backend wysyła jedno żądanie do sklepu danego kanału:
+`GET <origin adresu sklepu kanału>/robots.txt?part=system`, z kodem kanału w nagłówku
+`X-Sales-Channel`. Żądanie jest wysyłane wyłącznie dla zalogowanego administratora, który może
+przeglądać ustawienia, wyłącznie pod skonfigurowany adres — nic z tego, co wysyła przeglądarka
+administratora, nie jest jego częścią — i wyłącznie do originu tego adresu: ścieżka i parametry
+zapisane w skonfigurowanym adresie nie są używane, ponieważ `robots.txt` znajduje się
+w katalogu głównym witryny. Żądanie nie podąża za przekierowaniami, czeka najwyżej trzy sekundy,
+odczytuje najwyżej 512 KiB, przyjmuje wyłącznie `text/plain` i nie wysyła ciasteczek ani danych
+uwierzytelniających. Nic z odpowiedzi nie jest zapisywane.
+
+Sklep musi więc być osiągalny **z backendu** pod skonfigurowanym adresem. Sklep, który jest
+publiczny, ale nieosiągalny z sieci backendu, w podglądzie jest pokazywany jako niedostępny,
+a poza tym działa bez zmian.
 
 ### Limit rozmiaru
 
