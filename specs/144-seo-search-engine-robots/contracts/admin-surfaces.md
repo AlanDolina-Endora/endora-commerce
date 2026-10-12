@@ -129,8 +129,8 @@ Response — `adminCrawlerFilePreviewResponseSchema`:
 | `state` | Meaning | `base` |
 | --- | --- | --- |
 | `ok` | the storefront answered with the capability header | its answer to `?part=system` / `?part=base` |
-| `storefront-outdated` | it answered `2xx` **without** `X-Endora-Crawler-Files` — it did not confirm that it supports the feature. Usually an older storefront; also a partly updated one, or a proxy that strips the header, so the Admin UI says "did not confirm" and "may" | its whole answer for `robots`; `null` for `llms` |
-| `not-served` | `llms` only: `404` **with** the header — the channel is non-indexable, or `seo` is not what the storefront sees | `null` |
+| `storefront-outdated` | it answered `2xx` **without** `X-Endora-Crawler-Files` — it did not confirm that it supports the feature. Usually an older storefront; also a partly updated one, or a proxy that strips the header, so the Admin UI says "did not confirm" and "may". For `llms` also a `404` without the header *(slice 5)*: a storefront that has no such route | its whole answer for `robots`; `null` for `llms` |
+| `not-served` | `llms` only: `404` **with** the header — the channel is non-indexable, or `seo` is not what the storefront sees. Nothing of the `404`'s body is read | `null` |
 | `storefront-unreachable` | timeout (3 s, over connection, headers and body), refusal, any other status **including every redirect**, an answer that is not `text/plain`, a body over 512 KiB, a configured address that is not an `http(s)` origin or carries credentials | `null` |
 | `address-unknown` | the channel's address resolved from the fallback rung; no request was made | `null` |
 
@@ -144,15 +144,24 @@ Response — `adminCrawlerFilePreviewResponseSchema`:
   `/llms.txt?part=base`), with `X-Sales-Channel: <the channel's code>`. Only the **origin** of the
   configured address is used; a path or query in it is dropped. **No redirect is followed**, to
   another host or to the same one. No credentials, cookies or caller headers are sent.
-- `file=llms` answers `400` until `llms.txt` is served (slice 5). An unknown channel code is
-  `404`.
+- `file=llms` answered `400` until slice 5; it is now answered like `robots`. An unknown channel
+  code is `404`.
+- A `503` from the storefront's `llms.txt` — it cannot tell whether the channel may be indexed
+  (`crawler-policy.md` §5) — is `storefront-unreachable`, not `not-served`.
+- A stored `seo.default_robots` outside the four tokens still fails **this** endpoint with `500`
+  for both files (the preview's `policy` has no "not known"); the row shows "the preview could not
+  be loaded". The storefront's own `robots.txt` is served regardless (`crawler-policy.md` §2.2).
 - Private, loopback and link-local addresses are **not** refused: an instance's own storefront is
   routinely reached at one. The disclosure is in the service's doc comment and the module page.
 
 ## 4. The preview component
 
-`seo` contributes two zone components (`zoneComponent('settings.setting.after', …, { match,
-requiredPermission: 'settings:read' })`).
+`seo` contributes three zone components (`zoneComponent('settings.setting.after', …, { match,
+requiredPermission: 'settings:read' })`): the two previews and the *Default robots* notice.
+**The two previews are one component**, `CrawlerFilePreview`, given the file — `RobotsTxtPreview`
+and `LlmsTxtPreview` are wrappers that name it *(slice 5)*. Everything in the table is true of
+both unless the row names a file; beside `llms.txt` the words are "content" rather than
+"instructions" and the headings name `llms.txt`.
 
 | The operator sees | When |
 | --- | --- |
@@ -161,7 +170,9 @@ requiredPermission: 'settings:read' })`).
 | A channel picker and "these channels have their own value and are not affected: …" | `channelCode === null` (all-channels value) |
 | "robots.txt stays open to crawlers on purpose: a crawler has to fetch a page to read that it must not be indexed" | `file: robots` and `!policy.index` |
 | A caution that a site-wide `Disallow: /` prevents crawlers from reading `noindex` | as above, and the operator's part contains a `Disallow: /` line under `User-agent: *` |
-| "No llms.txt is served for this channel while its default robots forbids indexing" in place of the blocks | `file: llms` and `!policy.index`, or `state: not-served` |
+| Heading "llms.txt is not served" and "No llms.txt is served for this sales channel while its Default robots asks search engines not to index it" **in place of the block** — no file, and the operator's text is not drawn apart either | `file: llms` and `!policy.index` — whether the storefront already answers `not-served` or still serves the file inside its own minute |
+| The same heading and "The storefront serves no llms.txt for this sales channel at the moment…" *(slice 5)* — the setting is not blamed for it | `file: llms`, `state: not-served` and `policy.index` (the storefront has not caught up, or sees no `seo`) |
+| "This storefront did not confirm that it serves llms.txt"; no file block; the operator's text apart, marked "may not be served" | `file: llms` and `state: storefront-outdated` |
 | "This storefront did not confirm that it supports custom instructions" above a block that is the rules it serves alone; the operator's text apart, marked "may not be served" | `state: storefront-outdated` |
 | "The storefront could not be reached" / "This channel has no storefront address configured"; no file block; the operator's own text still shown, apart | `storefront-unreachable` / `address-unknown` |
 | "This address is shared by every sales channel" | `storefront.source === 'env'` |
@@ -170,7 +181,7 @@ requiredPermission: 'settings:read' })`).
   serves with (`crawler-policy.md` §4).
 - The preview never disables or delays the row's save.
 - It is refetched when the channel or the editing mode (all channels / one channel) changes, when
-  either `seo` row stops being dirty (a save or a reset), and on "Check again"; typing does not
+  any of the three `seo` rows stops being dirty (a save or a reset), and on "Check again"; typing does not
   call the backend. An answer is kept only while a row is showing it.
 - Built from existing admin-kit primitives; no new primitive is introduced (Principle IX).
 

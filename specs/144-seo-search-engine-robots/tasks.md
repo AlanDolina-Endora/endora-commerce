@@ -693,51 +693,129 @@ reader, the handler shape and the preview already reviewed, and adds no new seam
 > needs them — treats the answer as unreadable, or (c) dropping them and having `llms.txt` read
 > `robots-policy` as well. (b) and (c) are additive or subtractive changes to a tolerant schema;
 > say which in the changeset.
+>
+> **Decided 2026-10-12 — a variant of (b), and it is additive.** The parts of the answer fail
+> apart: the endpoint answers `200` and **names** what it could not read in a new optional member,
+> `unreadable` (`'policy'`, `'llmsTxtAdditional'`). `robots.txt` reads neither and is served;
+> `llms.txt` needs both and answers `503` while either is named — publishing an invitation on a
+> channel that may be non-indexable is the worse error, and a `404` would call an unknown a
+> decision. `index` / `follow` stay booleans and read `false, false` when not known.
+>
+> *Why not (b) as written.* `null` or an absent member retypes two members the contract itself
+> calls breaking to retype, and every storefront already carrying the slice 3 reader would read the
+> answer as unreadable — so its `robots.txt` would keep answering `503`, which is the defect.
+> Naming instead of nulling repairs those storefronts too: a storefront built from `origin/master`
+> before this slice, started cold against the new backend, serves the channel's `robots.txt`
+> (served proof, step 9c). *Why not (a).* It is the defect. *Why not (c).* Two reads for one file,
+> made by a route that cannot share the middleware's copy of the reader, and the texts would still
+> be coupled to each other.
+>
+> *The same rule, applied to the coupling this slice would otherwise have added:* stored `llms.txt`
+> content that cannot be served is named as well rather than failing the answer, so a row nobody
+> can read under `seo.llms_txt_additional` cannot take `robots.txt` down either. Unreadable
+> **`robots.txt` instructions** still fail the whole answer with `500` — every storefront that has
+> the endpoint reads that member, and an empty text at `200` would be a file without the
+> operator's rules (FR-022); so a corrupt `robots.txt` row does cost the channel its `llms.txt`
+> on a cold storefront. That direction is left: it fails closed, on the file nobody depends on.
+> `robots-policy` (§1) is unchanged and still answers `500` for the row.
 
-- [ ] T091 [US3] [OD5] RED — the `llms` rows of the preview state table (`not-served`; the
+- [x] T091 [US3] [OD5] RED — the `llms` rows of the preview state table (`not-served`; the
   "no llms.txt is served for this channel" view when `!policy.index`) — extend
   `crawler-file-preview.service.test.ts` and `preview-model.test.ts`.
   **Test:** the two commands of T080 and T085.
-- [ ] T092 [US3] [OD5] `packages/modules/seo/src/admin/zones/LlmsTxtPreview.tsx` (new) and its
+  *Done, RED first. The model gained a fourth `shows` value, `not-served`, and two notice kinds: `llms-not-served-noindex` (the saved policy forbids indexing — also when the storefront still answers the file inside its own minute) and `llms-not-served` (the storefront says "none" although the saved policy allows indexing: it has not caught up, or sees no `seo`). In both the operator's text is **not** drawn apart: "in place of the blocks". The service also gained a case the table did not have: a `404` **without** the capability header is `storefront-outdated` with no `base` — a storefront that has no such route.*
+- [x] T092 [US3] [OD5] `packages/modules/seo/src/admin/zones/LlmsTxtPreview.tsx` (new) and its
   contribution matched to `seo.llms_txt_additional`; the service's `file: 'llms'` branch
   (`/llms.txt?part=base`). **Test:** T091, `check:admin-zones`.
-- [ ] T093 [P] [US3] RED — the generated base: the shop name (or the site host when empty), one
+  *Done, as a shared component rather than a second one: `RobotsTxtPreview.tsx` became `CrawlerFilePreview.tsx` with a `file` prop, and `RobotsTxtPreview.tsx` / `LlmsTxtPreview.tsx` are wrappers that name the file — so the two previews cannot come to look or behave differently (an admin test holds their class names equal). `preview-client.ts` keys its answers by file as well, and `reloadRobotsPreviews` became `reloadCrawlerPreviews`: saving the *Default robots* row re-asks about `llms.txt` too, since whether the file exists follows from it. `isPreviewableCrawlerFile` and the route's `400` for `file=llms` are gone. `check:admin-zones` green.*
+- [x] T093 [P] [US3] RED — the generated base: the shop name (or the site host when empty), one
   line per `SITEMAP_STATIC_ROUTES` entry with an absolute address, the sitemap; **no** address
   from a family the system rules close (assert against `robots-system-rules.ts`' own list, not a
   copy) — `storefront/test/seo/llms-txt-base.test.ts` (new).
   **Test:** `pnpm --filter storefront exec vitest run test/seo/llms-txt-base.test.ts`
-- [ ] T094 [P] [US3] RED — the handler: base + additional content; `?part=base`; `404` when
+  *Done, RED first. Two deviations. (1) One line per `SITEMAP_STATIC_ROUTES` entry **less a page that would answer "not found" right now** — FR-025 says "where those exist": `/blog` is `404` while the `blog` module is off **or** the channel's `blog.enabled` is `false`, so module presence alone would not do; `lib/seo/llms-txt-pages.ts` asks the question the page itself asks (`getBlogIndex`). `/search` and `/kontakt` are served by the reference storefront unconditionally and are always listed. (2) The shop name is made one line (every run of whitespace, line breaks included, becomes a space), so a name cannot start a list entry of its own; the test holds that against the `robots-system-rules.ts` list too. Titles are English constants keyed by the static routes; a test holds the two sets equal.*
+- [x] T094 [P] [US3] RED — the handler: base + additional content; `?part=base`; `404` when
   `!index` whatever the content holds (FR-027) and when the answer is "none" (off state,
   FR-030); `503` when unreadable with nothing known; the capability header on every answer;
   **channel isolation** as T065 — `storefront/test/seo/llms-txt-route.test.ts` (new).
   **Test:** `pnpm --filter storefront exec vitest run test/seo/llms-txt-route.test.ts`
-- [ ] T095 [US3] RED — backend: `seo.llms_txt_additional` declared (`manifest.test.ts`); the
+  *Done, RED first; the decision is `lib/seo/llms-txt.ts`. Beyond the list: `503` also when the answer names the policy or the content unreadable (the decision above); `?part=base` is `no-store` and withdrawn under exactly the file's conditions; the `404` is `no-store`; the question about pages is asked once per configuration the reader holds, kept in a `WeakMap` keyed by that object as `robots-txt.ts` keeps its composed file — no second cache; an answer it was not sure of is not kept. One test runs both route files against a backend naming the policy unreadable.*
+- [x] T095 [US3] RED — backend: `seo.llms_txt_additional` declared (`manifest.test.ts`); the
   `crawler-files` contract and **channel-scope** tests cover `llmsTxtAdditional`; the validator
   covers the code; the **off-state** test covers its `editable: false` — extend the files of
   T056 – T060. **Test:** `pnpm --filter backend exec vitest run test/contract/seo test/integration/seo`
-- [ ] T096 [US3] Declare the setting and its bundle keys — `packages/modules/seo/src/manifest.ts`,
+  *Done. The channel-scope integration file now runs every case for both settings (`describe.each`) and holds that writing one text never shows up as the other. The off-state case for the text is an `it.each` over the two codes, and the preview route is probed for `file=llms` as well. The `crawler-files` contract test's "`500` for a robots value outside the four" became "`200`, `unreadable: ['policy']`, and `robots-policy` still `500`". These were written with T096, so only the unit tests (`crawler-files.service.test.ts`, `manifest.test.ts`, the validator's) were seen red.*
+- [x] T096 [US3] Declare the setting and its bundle keys — `packages/modules/seo/src/manifest.ts`,
   `i18n/en.json`, `i18n/pl.json`; add the code to the validator's `codes`. **Test:** T095.
-- [ ] T097 [US3] `storefront/lib/seo/llms-txt-base.ts` (new) and
+  *Done. Also: the module's description and `seo.enabled`'s description now say that the custom `robots.txt` instructions and `llms.txt` go with the module (FR-033).*
+- [x] T097 [US3] `storefront/lib/seo/llms-txt-base.ts` (new) and
   `storefront/app/llms.txt/route.ts` (new). **Test:** T093, T094.
-- [ ] T098 [US3] `storefront/app/reserved-segments.ts`: add `llms.txt` (FR-028). **Test:**
+  *Done, as four files rather than two: `llms-txt-base.ts` (pure), `llms-txt.ts` (the decision), `llms-txt-pages.ts` (the one I/O the base needs) and `crawler-file-response.ts`, which now holds the headers and the `503` that `robots-txt.ts` and `llms-txt.ts` share — `robots-txt.ts` re-exports the names its tests import, and what it serves is unchanged (served proof, step 8: byte-identical bodies and headers against a storefront built from `origin/master`). **And one file the plan did not list: `lib/seo/robots-directive.ts`.** `/llms.txt` was a *document* to the middleware — `.txt` is not among the extensions the old matcher excluded — so with the backend down a process holding the last-known file would have answered the outage page instead (FR-029). `isDocumentPath` now answers `false` for that exact address; `middleware-robots.test.ts` records it as the one deliberate departure from the matcher before.*
+- [x] T098 [US3] `storefront/app/reserved-segments.ts`: add `llms.txt` (FR-028). **Test:**
   `pnpm --filter backend exec vitest run test/contract/cms/admin-reserved-slug-segments.contract.test.ts`
   and `pnpm --filter backend run check:storefront-indexability`
-- [ ] T099 [US3] Served proof (`quickstart.md` § *Slice 5*) and the off-state paragraph. Docs,
+  *Done; both checks green. `BLOG_RESERVED_URL_PREFIXES` was left alone: a blog prefix cannot contain a dot.*
+- [x] T099 [US3] Served proof (`quickstart.md` § *Slice 5*) and the off-state paragraph. Docs,
   both languages; `composer:generate`; changeset `minor` naming the two new storefront files for
   earlier-scaffolded instances. **Test:** `check:module-docs`, `check:docs-translations`,
   `check:release-intent -- --since origin/master`
-- [ ] T100 [US3] Slice verification: the full Slice 1 list plus `check:admin-zones` (if T092 is
+  *Done; the served proof is `slice5-proof-transcript.txt` in the session scratchpad and is summarised in the report, since this branch was not pushed. `composer:generate` changed `docs/docs/module-reference/seo.md` (the new setting's row); its Polish page and both translation-cache entries are updated. The changeset names nine storefront changes, not two — see T097 — and `@endora-commerce/mod-settings` is not in it: nothing it publishes changed.*
+- [x] T100 [US3] Slice verification: the full Slice 1 list plus `check:admin-zones` (if T092 is
   in) and `pnpm --filter backend run i18n:hardcoded`.
+  *Done; results in the report.*
 
 ---
 
 ## After the last slice
 
-- [ ] T101 Re-read `spec.md` FR-001 – FR-045 against the merged code and tick each against the
+- [x] T101 Re-read `spec.md` FR-001 – FR-045 against the merged code and tick each against the
   test named in `plan.md` § *Requirement → test*; report any FR with no green test.
-- [ ] T102 Hand `research.md` R11's file list to whoever maintains the paid repository's demo
+  *Done 2026-10-12, against `origin/master` (`ae9f50220`) plus the slice 5 branch. The table below
+  is the result. `plan.md` named some test files that were never written under that name; the
+  table names the file that holds the requirement today.*
+- [x] T102 Hand `research.md` R11's file list to whoever maintains the paid repository's demo
   storefront copy (GitLab `endora-commerce/paid-modules`); this task does not touch that
   repository. Configuring the demos is the operational follow-up the spec places out of scope.
+  *The list is in the slice 5 report, taken from `git diff --name-status v0.105.0..HEAD -- storefront/`
+  rather than from R11, which is short of it by six files. Not handed to anyone by this task: the
+  report goes to the orchestrator.*
+
+### T101 — requirement → the test that holds it
+
+**met** — a green test holds the requirement. **partly** — the gap is stated.
+
+| FR | | Held by |
+| --- | --- | --- |
+| FR-001 – FR-003 | met | `packages/modules/seo/src/backend/manifest.test.ts` (the three settings, the closed list, the defaults); `backend/test/integration/seo/robots-policy-channel-scope.test.ts`, `crawler-files-channel-scope.test.ts` (channel → all-channels → default, for each setting) |
+| FR-004 | met | `packages/contracts` `multiline` refinement tests; `admin/test/modules/settings/` row-editor tests; `backend/test/contract/seo/crawler-files.contract.test.ts` ("returns the text exactly as stored") |
+| FR-005 | met | `crawler-files-channel-scope.test.ts` (reset per channel and for all, for both texts); `storefront/test/seo/robots-system-rules.test.ts` (the generated rules are not configuration) |
+| FR-006 | met | `crawler-text-validator.test.ts`; `crawler-files-channel-scope.test.ts` § *the size limit* (both settings, bytes, en + pl) |
+| FR-007 | **partly** | `backend/test/integration/seo/default-robots-write.test.ts` holds refusal without `settings:write` and the audit entry with before/after **for `seo.default_robots`**. For the two texts the refusal is held (`crawler-file-preview.contract.test.ts`, the FR-045 cases) and the audit entry is the settings module's own, generic test — no `seo` test names either text in an audit assertion |
+| FR-008 | met | `manifest.test.ts` § *seo bundles* (en + pl, each description's required statements); `check:bundle-pairing` |
+| FR-009 | met | `backend/test/integration/_admin_surfaces/batch-eight-palette-off-state.test.ts`; `check:action-route-permissions` |
+| FR-010, FR-021 | met | `storefront/test/seo/crawler-policy.test.ts` (fresh, stale-refresh, bounds); served proof: a saved change visible after 60 s |
+| FR-011, FR-019 | met | `robots-system-rules.test.ts` against the pre-feature capture; served proof step 8 (byte-identical to a storefront built from `origin/master`) |
+| FR-012 – FR-013 | met | `storefront/test/seo/robots-directive.test.ts`, `layout-robots.test.ts`, `middleware-effect.test.ts` |
+| FR-014 | **partly** | `middleware-effect.test.ts`, `middleware-robots.test.ts` (documents and files, the matcher). Not re-verified in slice 5 beyond what those hold: the header on not-found and outage documents was read off the served proof only where it happened to appear (`/llms.txt` `404` on a `NOINDEX` channel carries it) |
+| FR-015, FR-016 | met | `robots-txt-route.test.ts` ("never changed by the default robots policy", and since slice 5 "served when the policy could not be read"); `sitemap-*.test.ts` unchanged |
+| FR-017 | met | `crawler-policy.test.ts`; `middleware-effect.test.ts` |
+| FR-018, FR-020, FR-023 | met | `packages/contracts/src/seo.test.ts` (`composeCrawlerFile`); `robots-txt-route.test.ts`; `crawler-files-channel-scope.test.ts` |
+| FR-022 | met | `robots-txt-route.test.ts` § *when the instructions cannot be read*; served proof steps 1 and 11 |
+| FR-024 | met | `storefront/test/seo/llms-txt-route.test.ts` § *what is served* |
+| FR-025 | **partly** | `llms-txt-base.test.ts` (the name, the list, no address under a `robots-system-rules.ts` prefix), `llms-txt-route.test.ts` § *pages this storefront does not serve right now*. Gaps: only `/blog` is conditional — `/search` and `/kontakt` are listed whatever the `search` module or a contact form's backend is doing, because the reference storefront serves both pages unconditionally; the titles are English in every language; and a shop that sets `blog.url_prefix` to something other than `blog` is still pointed at `/blog`, which is where this storefront serves it |
+| FR-026 | met | `llms-txt-route.test.ts`; served proof step 3 (CRLF, a byte order mark, non-ASCII) |
+| FR-027 | met | `llms-txt-route.test.ts` § *when it is not served*; served proof step 4 |
+| FR-028 | met | `backend/test/contract/cms/admin-reserved-slug-segments.contract.test.ts`; `check:storefront-indexability` (the array is reconciled against the route tree) |
+| FR-029 | met | `llms-txt-route.test.ts` (isolation, last-known, `503`); `middleware-robots.test.ts` (`/llms.txt` is a file, so the last-known file is served while the backend is down); served proof step 11 |
+| FR-030, FR-031 | met | `llms-txt-route.test.ts`, `robots-txt-route.test.ts` (`MODULE_DISABLED`, `404`); `backend/test/integration/seo/off-state.test.ts`; served proof step 6 |
+| FR-032 | met | `off-state.test.ts` (read-only, values kept, restored, for all three settings; the preview route refuses for both files); `admin/test/modules/seo/crawler-preview-zone.test.tsx` ("vanishes with the module", three contributions); `batch-eight-palette-off-state.test.ts` |
+| FR-033 | **partly** | `manifest.test.ts` § *what switching the module off withdraws* holds the English sentence in the module's description (shown on the platform modules screen) and in `seo.enabled`'s description. **The second half is not met as written:** the Settings screen does not show that description — an activation setting's row is `ActivationPointerRow`, one fixed sentence pointing at the Modules screen — and the bundles carry no `settingLabels.seo.enabled.*` key, so there is no Polish sentence at all. Seen in the real admin session of slice 5 |
+| FR-034 | **partly** | `off-state.test.ts` covers the backend half in the deactivated-while-available case; the storefront half (pages, `robots.txt`, `/llms.txt`, the header) is held by the storefront's classification tests and the served proof, not by one test that drives a storefront against a switched-off module |
+| FR-035, FR-036 | met | `check:storefront-indexability` unchanged and green; `layout-robots.test.ts`; `route-declarations.test.ts` |
+| FR-037 | met | `check:module-docs`, `check:docs-translations` (en + pl, `packages/modules/seo/docs/seo.md`) — which hold that the page exists and is translated, not what it says |
+| FR-038 – FR-043 | met | `preview-model.test.ts`; `crawler-file-preview.service.test.ts`; `crawler-file-preview.contract.test.ts`; `crawler-preview-zone.test.tsx`; `check:admin-zones` |
+| FR-044 | met | the `llms` cases of the four files above; real admin session, slice 5 (served, unsaved, not served, storefront stopped; block equal to the served file byte for byte) |
+| FR-045 | met | `crawler-file-preview.contract.test.ts` (a `settings:read`-only administrator, both files; one who may not list channels); `crawler-preview-zone.test.tsx` (en + pl) |
 
 ## Review summary
 
