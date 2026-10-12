@@ -153,6 +153,9 @@ Response — `adminCrawlerFilePreviewResponseSchema`:
   be loaded". The storefront's own `robots.txt` is served regardless (`crawler-policy.md` §2.2).
 - Private, loopback and link-local addresses are **not** refused: an instance's own storefront is
   routinely reached at one. The disclosure is in the service's doc comment and the module page.
+  The `llms` preview widens it slightly *(after review, accepted)*: a `404` without the header is
+  `storefront-outdated`, not `storefront-unreachable`, so "an HTTP server answers there" can be
+  told from "nothing answers".
 
 ## 4. The preview component
 

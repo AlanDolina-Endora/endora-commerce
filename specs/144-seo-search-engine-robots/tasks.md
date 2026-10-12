@@ -315,7 +315,12 @@ nothing. **Second-agent review: no** — presentation only, with a fallback to t
 (`packages/modules/settings/package.json`), so its admin tests live in `admin/test/modules/settings/`,
 where `admin/test/modules/admin_users/permission-label.test.ts` sets the precedent.
 
-- [ ] T032 RED — **prove I4 and specify the resolver**: given a merged bundle carrying
+*Ticked on 2026-10-12 with slice 5, as bookkeeping: the slice merged as pull request #263 and its
+boxes were left open. The boxes record that the slice is merged, not a re-verification of each
+task — with one exception, T036 / T037, which were found short and are completed in slice 5 (see
+their notes).*
+
+- [x] T032 RED — **prove I4 and specify the resolver**: given a merged bundle carrying
   `settingLabels.seo.default_robots.name` under scope `seo`, the resolver returns the Polish
   string for `pl`, the English one for `pl` when only `en` has it, and the DTO's `name` when
   neither has it; same for `.description` and for `settingGroups.<code>.name`; a `null`
@@ -325,30 +330,31 @@ where `admin/test/modules/admin_users/permission-label.test.ts` sets the precede
   scanning, exactly as `scopeCarrying` does in
   `packages/modules/admin_users/src/admin/permission-label.ts`; the test's expectations do not
   change.
-- [ ] T033 RED — the row editor and the group heading render the resolved strings —
+- [x] T033 RED — the row editor and the group heading render the resolved strings —
   `admin/test/modules/settings/setting-row-labels.test.tsx` (new).
   **Test:** `pnpm --filter admin exec vitest run test/modules/settings/setting-row-labels.test.tsx`
-- [ ] T034 Implement `packages/modules/settings/src/admin/components/setting-label.ts` (new),
+- [x] T034 Implement `packages/modules/settings/src/admin/components/setting-label.ts` (new),
   after `permission-label.ts`. **Test:** T032.
-- [ ] T035 Use it at the three call sites — `packages/modules/settings/src/admin/components/SettingRowEditor.tsx`
+- [x] T035 Use it at the three call sites — `packages/modules/settings/src/admin/components/SettingRowEditor.tsx`
   (name, line 111; description, line 175) and
   `packages/modules/settings/src/admin/pages/SettingsPage.tsx` (group name, line 475; re-locate
   by content, the line numbers are of `ca1e265a1`). **Test:** T033.
-- [ ] T036 [P] RED — `seo`'s bundles carry `settingGroups.seo.name` and `settingLabels.*` name
+- [x] T036 [P] RED — `seo`'s bundles carry `settingGroups.seo.name` and `settingLabels.*` name
   and description keys for every setting the manifest declares, in both languages — extend
   `packages/modules/seo/src/backend/manifest.test.ts` (created in slice 1; create it here if slice 1 has
   not merged). **Test:** `pnpm --filter @endora-commerce/mod-seo exec vitest run src/backend/manifest.test.ts`
-- [ ] T037 [OD2] [OD3] Add those keys to `packages/modules/seo/i18n/en.json` and `pl.json` for
+- [x] T037 [OD2] [OD3] Add those keys to `packages/modules/seo/i18n/en.json` and `pl.json` for
   the settings that exist on `origin/master` at the time (always `seo.enabled`;
   `seo.default_robots` once slice 1 has merged). The descriptions state the consequences FR-008
   and FR-033 require. **Test:** T036, `pnpm --filter backend run check:bundle-pairing`
-- [ ] T038 [P] Document the convention for module authors in
+  *T036 / T037 were short of their own text until slice 5: the bundles carried the `settingLabels.*` keys of the three feature settings and neither `settingGroups.seo.name` nor `settingLabels.seo.enabled.name|description`. Slice 5 adds the three keys in both languages, and `manifest.test.ts` now derives the expected keys from the manifest — every declared setting and group — rather than from a list. The Polish description of `seo.enabled` therefore exists; **it is still not what the Settings screen shows on that row** (`ActivationPointerRow`, a fixed sentence), so FR-033's second half stays partly met — see the T101 table.*
+- [x] T038 [P] Document the convention for module authors in
   `packages/modules/settings/docs/` (the page that describes declaring settings) and its Polish
   counterpart under `docs/i18n/pl/`. **Test:** `pnpm --filter backend run check:module-docs && pnpm --filter backend run check:docs-translations`
-- [ ] T039 Changeset, `minor`: "a setting's name and description resolve from
+- [x] T039 Changeset, `minor`: "a setting's name and description resolve from
   `settingLabels.<code>.name|description` and `settingGroups.<code>.name` in its owner module's
   bundle; the declared string is the fallback". **Test:** `pnpm --filter backend run check:release-intent -- --since origin/master`
-- [ ] T040 Slice verification: the Slice 1 list, minus the storefront and channel lines, plus
+- [x] T040 Slice verification: the Slice 1 list, minus the storefront and channel lines, plus
   `pnpm --filter backend run i18n:hardcoded` (a hard-coded string added to the admin fails it;
   never raise a baseline number).
 
@@ -364,45 +370,49 @@ carries a migration on a platform table every instance has; the reviewer runs th
 populated database, runs the whole `test/integration/settings` tree, and checks the migration is
 registered.
 
-- [ ] T041 RED — `SettingManifestEntrySchema` accepts `multiline: true` on a `string` setting;
+*Ticked on 2026-10-12 with slice 5, as bookkeeping: the slice merged as pull request #264 and its
+boxes were left open. The boxes record that the slice is merged, not a re-verification of each
+task.*
+
+- [x] T041 RED — `SettingManifestEntrySchema` accepts `multiline: true` on a `string` setting;
   refuses it on any other `valueType` and together with `enumOptions`; `SettingDtoSchema` accepts
   the field and its absence — `packages/contracts/src/settings.test.ts` (new).
   **Test:** `pnpm --filter @endora-commerce/contracts exec vitest run src/settings.test.ts`
-- [ ] T042 Add the field and the refinement to `packages/contracts/src/settings.ts`
+- [x] T042 Add the field and the refinement to `packages/contracts/src/settings.ts`
   (`SettingManifestEntrySchema`, `SettingDtoSchema`) per `contracts/admin-surfaces.md` §2.1.
   **Test:** T041, then `pnpm --filter @endora-commerce/contracts run build`
-- [ ] T043 RED — a manifest declaring a multi-line setting produces a row with `multiline = true`
+- [x] T043 RED — a manifest declaring a multi-line setting produces a row with `multiline = true`
   at boot; removing the flag and booting again sets it back to `false`; an untouched manifest
   yields `false` — extend `backend/test/integration/settings/boot-time-sync.test.ts`.
   **Test:** `pnpm --filter backend exec vitest run test/integration/settings/boot-time-sync.test.ts`
-- [ ] T044 RED — the admin settings list and detail responses carry `multiline` — extend
+- [x] T044 RED — the admin settings list and detail responses carry `multiline` — extend
   `backend/test/contract/settings/admin-list-and-detail.contract.test.ts`.
   **Test:** `pnpm --filter backend exec vitest run test/contract/settings/admin-list-and-detail.contract.test.ts`
-- [ ] T045 Scaffold the migration — `pnpm --filter backend run migration:new -- --module core`
+- [x] T045 Scaffold the migration — `pnpm --filter backend run migration:new -- --module core`
   (read `specs/conventions/module-migrations.md` first; **do not choose a number or a
   timestamp**). Body: `alter table "settings" add column "multiline" boolean not null default
   false;` and the matching `down`. It lands in `packages/platform/src/migrations/`.
   **Test:** `pnpm --filter backend exec vitest run test/integration/settings/migration.test.ts`
-- [ ] T046 `pnpm --filter backend run composer:generate`; commit the migration registry it
+- [x] T046 `pnpm --filter backend run composer:generate`; commit the migration registry it
   regenerates — an unregistered migration does not run and nothing reports it.
   **Test:** `pnpm --filter backend run overlay:check`
-- [ ] T047 `packages/platform/src/kernel/settings/setting.entity.ts` (property and
+- [x] T047 `packages/platform/src/kernel/settings/setting.entity.ts` (property and
   `OptionalProps`), `packages/platform/src/kernel/settings/manifest-reconciler.ts` (beside the
   `hidden` sync, both the update and the create branch). **Test:** T043.
-- [ ] T048 `packages/modules/settings/src/backend/routes.admin.ts` — `serializeSetting` emits
+- [x] T048 `packages/modules/settings/src/backend/routes.admin.ts` — `serializeSetting` emits
   `multiline`. **Test:** T044.
-- [ ] T049 RED — the row editor renders a `<textarea>` for a multi-line setting, a single-line
+- [x] T049 RED — the row editor renders a `<textarea>` for a multi-line setting, a single-line
   input otherwise; a three-line value round-trips through edit and save unchanged; read-only and
   reset behave as for other rows — `admin/test/modules/settings/setting-row-multiline.test.tsx`
   (new). **Test:** `pnpm --filter admin exec vitest run test/modules/settings/setting-row-multiline.test.tsx`
-- [ ] T050 `packages/modules/settings/src/admin/components/SettingRowEditor.tsx` — pass
+- [x] T050 `packages/modules/settings/src/admin/components/SettingRowEditor.tsx` — pass
   `setting.multiline` to `renderInput` and add the branch. **Test:** T049.
-- [ ] T051 [P] Document `multiline` for module authors in `packages/modules/settings/docs/` and
+- [x] T051 [P] Document `multiline` for module authors in `packages/modules/settings/docs/` and
   the Polish counterpart. **Test:** `pnpm --filter backend run check:module-docs && pnpm --filter backend run check:docs-translations`
-- [ ] T052 Changeset, `minor`: "`multiline: true` on a `string` setting declaration; a new
+- [x] T052 Changeset, `minor`: "`multiline: true` on a `string` setting declaration; a new
   `settings.multiline` column; `SettingDto.multiline`". **Test:**
   `pnpm --filter backend run check:release-intent -- --since origin/master`
-- [ ] T053 Slice verification: the Slice 1 list minus the storefront lines, plus
+- [x] T053 Slice verification: the Slice 1 list minus the storefront lines, plus
   `pnpm --filter backend exec vitest run test/integration/settings test/contract/settings`,
   `pnpm --filter backend run check:kernel-boundary`, `pnpm --filter backend run check:lock-claims`,
   and a migration run on a database that already holds settings rows. **Never run `db:fresh`,
@@ -740,6 +750,7 @@ reader, the handler shape and the preview already reviewed, and adds no new seam
   **channel isolation** as T065 — `storefront/test/seo/llms-txt-route.test.ts` (new).
   **Test:** `pnpm --filter storefront exec vitest run test/seo/llms-txt-route.test.ts`
   *Done, RED first; the decision is `lib/seo/llms-txt.ts`. Beyond the list: `503` also when the answer names the policy or the content unreadable (the decision above); `?part=base` is `no-store` and withdrawn under exactly the file's conditions; the `404` is `no-store`; the question about pages is asked once per configuration the reader holds, kept in a `WeakMap` keyed by that object as `robots-txt.ts` keeps its composed file — no second cache; an answer it was not sure of is not kept. One test runs both route files against a backend naming the policy unreadable.*
+  *After review: the question about pages is **not** kept in that `WeakMap` any more. As first built it was unbudgeted, unshared and repeated on every request while it failed — reproduced on the served storefront: 2.0 s per request against a hanging blog endpoint with the backend request never aborted, and 10 requests → 10 backend calls against a failing one, each answered `public, max-age=60` without the Blog line. It is now a third instance of the reader's channel cache (`createChannelCache`, exported from `crawler-policy.ts`), so it is shared, aborted at its deadline, refreshed within the 150 ms budget and backed off like the other two reads; and a file built while nothing is known about a listed page is sent `no-store`. The shop name also loses control and bidi-override characters.*
 - [x] T095 [US3] RED — backend: `seo.llms_txt_additional` declared (`manifest.test.ts`); the
   `crawler-files` contract and **channel-scope** tests cover `llmsTxtAdditional`; the validator
   covers the code; the **off-state** test covers its `editable: false` — extend the files of
@@ -805,17 +816,36 @@ reader, the handler shape and the preview already reviewed, and adds no new seam
 | FR-025 | **partly** | `llms-txt-base.test.ts` (the name, the list, no address under a `robots-system-rules.ts` prefix), `llms-txt-route.test.ts` § *pages this storefront does not serve right now*. Gaps: only `/blog` is conditional — `/search` and `/kontakt` are listed whatever the `search` module or a contact form's backend is doing, because the reference storefront serves both pages unconditionally; the titles are English in every language; and a shop that sets `blog.url_prefix` to something other than `blog` is still pointed at `/blog`, which is where this storefront serves it |
 | FR-026 | met | `llms-txt-route.test.ts`; served proof step 3 (CRLF, a byte order mark, non-ASCII) |
 | FR-027 | met | `llms-txt-route.test.ts` § *when it is not served*; served proof step 4 |
-| FR-028 | met | `backend/test/contract/cms/admin-reserved-slug-segments.contract.test.ts`; `check:storefront-indexability` (the array is reconciled against the route tree) |
-| FR-029 | met | `llms-txt-route.test.ts` (isolation, last-known, `503`); `middleware-robots.test.ts` (`/llms.txt` is a file, so the last-known file is served while the backend is down); served proof step 11 |
+| FR-028 | met | `storefront/test/seo/llms-txt-route.test.ts` ("reserves its address": `RESERVED_TOP_LEVEL_SEGMENTS` names `llms.txt` and `robots.txt`); `check:storefront-indexability`, which reconciles that array against the route tree in both directions, so the entry cannot be dropped while the route exists; and independently of both, `cmsSlugRe` (`packages/contracts/src/cms.ts`) admits no dot, so no page slug can be `llms.txt`. *(This row first cited `admin-reserved-slug-segments.contract.test.ts`, which holds the refusal mechanism and names neither file.)* |
+| FR-029 | met | `llms-txt-route.test.ts` (isolation, last-known, `503`, and § *the question about the blog is the reader's to remember*); `spec.md` FR-029 was amended with slice 5 — an answer naming a member unreadable is `503` even when a version is known; `middleware-robots.test.ts` (`/llms.txt` is a file, so the last-known file is served while the backend is down); served proof step 11 |
 | FR-030, FR-031 | met | `llms-txt-route.test.ts`, `robots-txt-route.test.ts` (`MODULE_DISABLED`, `404`); `backend/test/integration/seo/off-state.test.ts`; served proof step 6 |
 | FR-032 | met | `off-state.test.ts` (read-only, values kept, restored, for all three settings; the preview route refuses for both files); `admin/test/modules/seo/crawler-preview-zone.test.tsx` ("vanishes with the module", three contributions); `batch-eight-palette-off-state.test.ts` |
-| FR-033 | **partly** | `manifest.test.ts` § *what switching the module off withdraws* holds the English sentence in the module's description (shown on the platform modules screen) and in `seo.enabled`'s description. **The second half is not met as written:** the Settings screen does not show that description — an activation setting's row is `ActivationPointerRow`, one fixed sentence pointing at the Modules screen — and the bundles carry no `settingLabels.seo.enabled.*` key, so there is no Polish sentence at all. Seen in the real admin session of slice 5 |
+| FR-033 | **partly** | `manifest.test.ts` § *what switching the module off withdraws* holds the English sentence in the module's description (shown on the platform modules screen) and in `seo.enabled`'s description; § *seo bundles* holds the Polish one (`settingLabels.seo.enabled.description`, added in slice 5). **The second half is still not met as written:** the Settings screen does not show that description in either language — an activation setting's row is `ActivationPointerRow`, one fixed sentence pointing at the Modules screen. Seen in the real admin session of slice 5 |
 | FR-034 | **partly** | `off-state.test.ts` covers the backend half in the deactivated-while-available case; the storefront half (pages, `robots.txt`, `/llms.txt`, the header) is held by the storefront's classification tests and the served proof, not by one test that drives a storefront against a switched-off module |
 | FR-035, FR-036 | met | `check:storefront-indexability` unchanged and green; `layout-robots.test.ts`; `route-declarations.test.ts` |
 | FR-037 | met | `check:module-docs`, `check:docs-translations` (en + pl, `packages/modules/seo/docs/seo.md`) — which hold that the page exists and is translated, not what it says |
 | FR-038 – FR-043 | met | `preview-model.test.ts`; `crawler-file-preview.service.test.ts`; `crawler-file-preview.contract.test.ts`; `crawler-preview-zone.test.tsx`; `check:admin-zones` |
 | FR-044 | met | the `llms` cases of the four files above; real admin session, slice 5 (served, unsaved, not served, storefront stopped; block equal to the served file byte for byte) |
 | FR-045 | met | `crawler-file-preview.contract.test.ts` (a `settings:read`-only administrator, both files; one who may not list channels); `crawler-preview-zone.test.tsx` (en + pl) |
+
+## Follow-ups recorded with slice 5 — not done on its branch
+
+- **The preview endpoint answers `500` for a corrupt *Default robots* row**, for both files
+  (`crawler-file-preview.service.ts`: the preview's `policy` has no "not known"), so the row shows
+  "the preview could not be loaded". Since slice 5 that is inconsistent with the storefront,
+  which serves the channel's `robots.txt` regardless (`contracts/crawler-policy.md` §2.2). The
+  preview should show the `robots.txt` block and say that the policy cannot be read; it needs an
+  additive member on `adminCrawlerFilePreviewSchema`.
+- **Translated link titles in the generated `llms.txt` base.** They are English constants
+  (`LLMS_TXT_PAGE_TITLES`). Whether they should follow the sales channel's language is with the
+  owner; nothing is changed until that is answered.
+- **FR-033 on the Settings screen** — the activation row does not show the setting's description
+  (T101 table). Showing it is a change to `mod-settings`' `ActivationPointerRow`, for every
+  module.
+- Two defects found in passing and filed as issues by the coordinator, outside this feature: the
+  Settings page re-baselines its rows for the previous channel when a list request lands after a
+  channel switch; and `DELETE /api/v1/admin/settings/<code>/values` with a JSON content type and
+  an empty body answers `500`.
 
 ## Review summary
 

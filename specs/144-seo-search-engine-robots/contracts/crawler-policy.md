@@ -184,7 +184,11 @@ channel, and an answer to one is never an answer to the other.
 
 And one case only `llms.txt` has *(slice 5)*: a **value** that names `policy` or
 `llmsTxtAdditional` in `unreadable` (§2.2) is, to that file, "unknown" — `503`, as above. To
-`robots.txt` it is a value like any other.
+`robots.txt` it is a value like any other. **It is a value to the reader too, so it replaces
+what was known:** a storefront that was serving a good `llms.txt` answers `503` once it reads
+such an answer, although it holds an earlier version. That departs from "the last version it
+knew" deliberately (`spec.md` FR-029): the answer says what the configuration is now, and the
+last-known `index: true` may be exactly what is wrong.
 
 The cache is per process and per runtime; it is never written to disk or shared. A stale value
 is refetched at most once per 5 s per channel while the backend keeps failing.
@@ -305,16 +309,30 @@ slice 5; the first version of this section is what the differences below are mar
   The list is `SITEMAP_STATIC_ROUTES` — the storefront's hand-written statement of its public,
   indexable, static addresses — and nothing is ever added to it. No address is computed from the
   route tree and no address family closed in §4 can appear; a test holds every address the base
-  writes against `ROBOTS_SYSTEM_RULES.disallow` itself.
+  writes against `ROBOTS_SYSTEM_RULES.disallow` itself. The addresses carry the deployment's
+  **one** origin — `NEXT_PUBLIC_SITE_URL`, fixed by the build — for every sales channel, as the
+  sitemap's do; the shop name and the pages are what differ per channel.
   - **Less a page that would answer "not found" right now** *(as shipped; FR-025's "where those
     exist")*. `LLMS_TXT_CONDITIONAL_PAGES` names the listed pages that depend on something behind
     them — today `/blog`, which is `404` while the `blog` module is off **or** the channel's
-    `blog.enabled` is `false`. `lib/seo/llms-txt-pages.ts` asks about each the way the page asks
-    about itself (`getBlogIndex`), within the 2 s a read is given. The answer is kept with the
-    configuration object — once per refresh, not per request, and no cache of its own. A page that
-    cannot be asked about is left out for that request and asked about again on the next. This
-    can remove a line and can never add one.
-  - **The shop name is one line** *(as shipped)*: surrounding whitespace removed, every run of
+    `blog.enabled` is `false`. `lib/seo/llms-txt-pages.ts` asks the endpoint the page itself
+    asks (`GET /api/v1/blog/by-channel`) and reads it the same way. This can remove a line and
+    can never add one.
+  - **The answer is remembered by the reader of §3, as a third question** *(after review)*:
+    `createChannelCache` is exported and instantiated once more, so every rule of §3 holds for
+    it and there is no second set — one read per channel per minute, shared by requests that
+    arrive together, aborted at the 2 s deadline, a stale answer refreshed within the 150 ms
+    budget while the known one is served, a failing backend asked no more than once per 5 s,
+    256 channels at most. As first written the read was unbudgeted, unshared and repeated on
+    every request while it failed: a hanging blog endpoint made every `/llms.txt` take 2 s, and a
+    failing one made one backend request per request of a public address.
+  - **A file built while nothing is known about a listed page is `Cache-Control: no-store`**
+    *(after review)*. The page is left out — the cheaper mistake — and the `200` is that request's
+    alone, because the next may know. Once anything is known for the channel the last-known line
+    is kept and the file is `public, max-age=60` as usual.
+  - **The shop name is one line** *(as shipped)*: C0 and C1 control characters and the
+    bidirectional embedding, override and isolate controls (`U+202A`–`U+202E`,
+    `U+2066`–`U+2069`) removed *(after review)*, surrounding whitespace removed, every run of
     whitespace inside — line breaks included — one space, in time linear in the name. A name
     cannot start a line of its own, so it cannot become a list entry.
   - Titles are English constants (`LLMS_TXT_PAGE_TITLES`), keyed by the static routes; a test holds
