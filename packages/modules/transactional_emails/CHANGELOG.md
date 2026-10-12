@@ -1,5 +1,21 @@
 # @endora-commerce/mod-transactional-emails
 
+## 0.106.0
+
+### Patch Changes
+
+- Updated dependencies [fc23f9e]
+- Updated dependencies [4be4642]
+- Updated dependencies [9dd3b81]
+- Updated dependencies [be99bb5]
+- Updated dependencies [ddc9382]
+  - @endora-commerce/contracts@0.106.0
+  - @endora-commerce/platform@0.106.0
+  - @endora-commerce/admin-kit@0.106.0
+  - @endora-commerce/page-builder-admin@0.106.0
+  - @endora-commerce/page-builder-core@0.106.0
+  - @endora-commerce/email-components@0.106.0
+
 ## 0.105.0
 
 ### Minor Changes
