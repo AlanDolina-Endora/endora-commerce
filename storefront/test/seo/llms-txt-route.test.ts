@@ -494,8 +494,9 @@ describe('app/llms.txt/route.ts', () => {
   });
 
   it('has nothing beside it that would be served instead of it', () => {
-    // A file in `public/` is answered before any route is looked for: a
-    // `public/llms.txt` would be served as it is, for every channel, with no
+    // A file in `public/` is answered before any route is looked for —
+    // measured on the standalone server: `200`, the file's bytes, and no
+    // capability header. A `public/llms.txt` would be served as it is, for every channel, with no
     // operator content and on a channel kept out of search — and nothing
     // would say so. A storefront taking this route has no such file.
     expect(existsSync(fileURLToPath(new URL('../../public/llms.txt', import.meta.url)))).toBe(
