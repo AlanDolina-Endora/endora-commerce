@@ -109,6 +109,10 @@ describe('check-channel-resolution / analyzeSource', () => {
       );
       expect(v, spelling).toHaveLength(0);
     }
+    // An object literal on the RIGHT of an assignment is still a value.
+    expect(
+      analyzeSource(`init = { headers: { 'X-Sales-Channel': channel.code } };`, NON_SURFACE),
+    ).toHaveLength(0);
   });
 
   it('still flags the header read in every shape that is not a sent header', () => {
@@ -125,6 +129,14 @@ describe('check-channel-resolution / analyzeSource', () => {
       `const code = headers.get('x-sales-channel');`,
       // A computed key is not a literal key.
       `const init = { headers: { ['x-sales-channel']: code } };`,
+      // A destructuring ASSIGNMENT parses as an object literal, and it reads.
+      `let code; ({ headers: { 'x-sales-channel': code } } = request);`,
+      `let code; ({ raw: { headers: { 'x-sales-channel': code } } } = request);`,
+      `let code; [{ headers: { 'x-sales-channel': code } }] = [request];`,
+      `let code; for ({ headers: { 'x-sales-channel': code } } of requests) use(code);`,
+      `let code; for ({ headers: { 'x-sales-channel': code } } in requests) use(code);`,
+      // A destructuring declaration never was an object literal.
+      `const { headers: { 'x-sales-channel': code } } = request;`,
     ]) {
       const v = analyzeSource(source, NON_SURFACE);
       expect(v.some((x) => x.kind === 'raw-channel-header'), source).toBe(true);

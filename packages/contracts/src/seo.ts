@@ -258,8 +258,13 @@ export type AdminCrawlerFile = z.infer<typeof adminCrawlerFileSchema>;
  */
 export const adminCrawlerFilePreviewQuerySchema = z.strictObject({
   file: adminCrawlerFileSchema,
-  /** The sales channel to preview. Required: there is no cross-channel file. */
-  salesChannelCode: SalesChannelCodeSchema,
+  /**
+   * The sales channel to preview. Absent means the **system default channel**,
+   * which always exists — it is what an administrator who may read settings
+   * but may not list sales channels asks for (FR-045). There is still no
+   * cross-channel file: the answer names the one channel it is about.
+   */
+  salesChannelCode: SalesChannelCodeSchema.optional(),
 });
 export type AdminCrawlerFilePreviewQuery = z.infer<typeof adminCrawlerFilePreviewQuerySchema>;
 

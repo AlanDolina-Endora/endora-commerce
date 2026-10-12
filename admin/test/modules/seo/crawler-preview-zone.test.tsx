@@ -384,6 +384,80 @@ describe('the robots.txt preview', () => {
     expect(notice(container, 'unsaved')).toBeNull();
   });
 
+  it('re-asks when the page goes from all channels to a channel and back, so a value saved in between is known', async () => {
+    // Under "All channels" the preview shows the default channel, `de`.
+    const { container, rerender } = renderWithI18n(
+      zone({ channelCode: null, draftText: 'Disallow: /shared/\n' }),
+      { seo: EN },
+    );
+    // The storefront's answer for `de` has arrived: nothing of its own yet.
+    await waitFor(() => expect(part(container, 'system')).not.toBeNull());
+    expect(part(container, 'operator')?.textContent).toContain('/shared/');
+    expect(notice(container, 'previewed-channel-has-own-value')).toBeNull();
+
+    // The page is switched to `de`, and `de` is given a value of its own.
+    rerender(zone({ channelCode: 'de', draftText: OWN, dirty: true }));
+    answers['de'] = answer('de', {
+      savedExtra: OWN,
+      savedExtraSource: 'channel',
+      channelsWithOwnValue: ['de'],
+    });
+    rerender(zone({ channelCode: 'de', draftText: OWN, dirty: false }));
+
+    // Back to "All channels": `de` now serves its own text, not the shared one.
+    rerender(zone({ channelCode: null, draftText: 'Disallow: /shared/\n' }));
+    await waitFor(() => expect(notice(container, 'previewed-channel-has-own-value')).not.toBeNull());
+    expect(container.textContent).toContain('GPTBot');
+    expect(container.textContent).not.toContain('/shared/');
+  });
+
+  it('the mirror: an own value removed in between is no longer drawn as the channel’s own', async () => {
+    answers['de'] = answer('de', {
+      savedExtra: OWN,
+      savedExtraSource: 'channel',
+      channelsWithOwnValue: ['de'],
+    });
+    const { container, rerender } = renderWithI18n(
+      zone({ channelCode: null, draftText: 'Disallow: /shared/\n' }),
+      { seo: EN },
+    );
+    await waitFor(() => expect(notice(container, 'previewed-channel-has-own-value')).not.toBeNull());
+
+    // The page is switched to `de` and its own value is reset.
+    rerender(zone({ channelCode: 'de', draftText: OWN }));
+    answers['de'] = answer('de', { savedExtraSource: 'global', savedExtra: 'Disallow: /shared/\n' });
+    rerender(zone({ channelCode: 'de', draftText: 'Disallow: /shared/\n' }));
+
+    rerender(zone({ channelCode: null, draftText: 'Disallow: /shared/\n' }));
+    await waitFor(() => expect(container.textContent).toContain('/shared/'));
+    await waitFor(() => expect(notice(container, 'previewed-channel-has-own-value')).toBeNull());
+    expect(container.textContent).not.toContain('GPTBot');
+  });
+
+  it('asks again once its own row is saved', async () => {
+    const { container, rerender } = renderWithI18n(zone({ draftText: 'x', dirty: true }), { seo: EN });
+    await waitFor(() => expect(part(container, 'system')).not.toBeNull());
+    expect(previewCalls()).toHaveLength(1);
+    rerender(zone({ draftText: 'x', dirty: false }));
+    await waitFor(() => expect(previewCalls()).toHaveLength(2));
+  });
+
+  it('shows no rules from the earlier answer while it is asking again (FR-042)', async () => {
+    answers['pl'] = answer('pl', { base: 'User-agent: *\nDisallow: /earlier/\n' });
+    const { container } = renderWithI18n(zone(), { seo: EN });
+    await waitFor(() => expect(container.textContent).toContain('/earlier/'));
+
+    // The next answer is held back.
+    let release: (value: unknown) => void = () => {};
+    getSpy.mockImplementation(() => new Promise((resolvePending) => (release = resolvePending)));
+    fireEvent.click(screen.getByRole('button', { name: en('crawlerPreview.refresh') }));
+    await waitFor(() => expect(previewCalls()).toHaveLength(2));
+    expect(container.textContent).not.toContain('/earlier/');
+    expect(container.textContent).not.toContain('Disallow: /');
+    release(answer('pl', { base: 'User-agent: *\nDisallow: /later/\n' }));
+    await waitFor(() => expect(container.textContent).toContain('/later/'));
+  });
+
   it('renders nothing and asks nothing beside another setting', async () => {
     const { container } = renderWithI18n(zone({ settingCode: 'shop.name', ownerModule: 'settings' }), { seo: EN });
     await new Promise((done) => setTimeout(done, 350));

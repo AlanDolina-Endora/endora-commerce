@@ -200,11 +200,18 @@ function isCorsHeaderDeclaration(node: ts.Node): boolean {
  * (`specs/144-seo-search-engine-robots/`) — names the channel in the request
  * it makes. The shape exempted is the one that can only be a write: the
  * literal is the **key** of a property in an object literal that is itself the
- * value of a property named `headers`. A read is an element access, a
- * `.get(...)` argument or a value held in a constant, and none of those is a
- * key of such an object — so, like the CORS exemption above, this one cannot
- * quietly cover a real read. A computed key is not exempt: it is an
- * expression, and what it evaluates to is not this rule's to follow.
+ * value of a property named `headers`. An element access, a `.get(...)`
+ * argument, a value held in a constant and a destructuring declaration are
+ * none of them a key of such an object. A computed key is not exempt either:
+ * it is an expression, and what it evaluates to is not this rule's to follow.
+ *
+ * **One read does have that shape, and it is refused separately.** The target
+ * of a destructuring *assignment* — `({ headers: { 'x-sales-channel': code } }
+ * = request)`, and the same pattern as the variable of a `for…of` or `for…in`
+ * — is parsed as an object literal, key and all. So an object literal that is
+ * being assigned **to** is not a header being sent, however deeply the pattern
+ * nests: {@link isAssignmentTarget} walks outwards through the enclosing
+ * literals and answers for the outermost one.
  */
 function isSentHeaderName(node: ts.Node): boolean {
   const property = node.parent;
@@ -216,7 +223,47 @@ function isSentHeaderName(node: ts.Node): boolean {
   if (owner === undefined || !ts.isPropertyAssignment(owner)) return false;
   if (owner.initializer !== object) return false;
   const name = owner.name;
-  return (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) && name.text === 'headers';
+  if (!(ts.isIdentifier(name) || ts.isStringLiteralLike(name)) || name.text !== 'headers') {
+    return false;
+  }
+  return !isAssignmentTarget(object);
+}
+
+/**
+ * Whether `literal` is, or is nested inside, the pattern of a destructuring
+ * assignment: the left operand of `=`, or the variable of a `for…of` /
+ * `for…in`.
+ */
+function isAssignmentTarget(literal: ts.Node): boolean {
+  let current: ts.Node = literal;
+  for (;;) {
+    const parent = current.parent;
+    if (parent === undefined) return false;
+    if (
+      ts.isBinaryExpression(parent) &&
+      parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+    ) {
+      // On the left it is a pattern; on the right it is a value, whatever is
+      // further out.
+      return parent.left === current;
+    }
+    if ((ts.isForOfStatement(parent) || ts.isForInStatement(parent)) && parent.initializer === current) {
+      return true;
+    }
+    // Keep walking only through what a pattern can be made of.
+    if (
+      ts.isParenthesizedExpression(parent) ||
+      ts.isPropertyAssignment(parent) ||
+      ts.isObjectLiteralExpression(parent) ||
+      ts.isArrayLiteralExpression(parent) ||
+      ts.isSpreadElement(parent) ||
+      ts.isSpreadAssignment(parent)
+    ) {
+      current = parent;
+      continue;
+    }
+    return false;
+  }
 }
 
 /**

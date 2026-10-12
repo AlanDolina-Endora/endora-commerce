@@ -431,10 +431,13 @@ describe('adminCrawlerFilePreviewQuerySchema', () => {
     ).toEqual({ file, salesChannelCode: 'pl' });
   });
 
+  it('accepts a query that names no sales channel: it asks about the system default one', () => {
+    expect(adminCrawlerFilePreviewQuerySchema.parse({ file: 'robots' })).toEqual({ file: 'robots' });
+  });
+
   it.each([
     ['an unknown file', { file: 'sitemap', salesChannelCode: 'pl' }],
     ['no file', { salesChannelCode: 'pl' }],
-    ['no sales channel', { file: 'robots' }],
     ['an empty sales channel', { file: 'robots', salesChannelCode: '' }],
     ['a sales channel that is not a code', { file: 'robots', salesChannelCode: 'pl\r\nHost: x' }],
     ['a sales channel longer than a code', { file: 'robots', salesChannelCode: 'x'.repeat(65) }],

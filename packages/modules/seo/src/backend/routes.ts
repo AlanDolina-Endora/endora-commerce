@@ -168,10 +168,19 @@ export async function registerSeoRoutes(
           // Why, for whoever operates the instance. The response carries the
           // state alone: it says whether a preview can be shown, not what is
           // listening at an address.
-          request.log.info(
-            { salesChannelCode: preview.salesChannelCode, file, state: preview.state, reason },
-            'seo: the crawler-file preview could not show the storefront’s part',
-          );
+          //
+          // `address-unknown` is `debug`: it is the resting state of a fresh
+          // instance, where nobody has configured an address yet, and an
+          // `info` line on every visit to the Settings screen would be noise.
+          const details = {
+            salesChannelCode: preview.salesChannelCode,
+            file,
+            state: preview.state,
+            reason,
+          };
+          const message = 'seo: the crawler-file preview could not show the storefront’s part';
+          if (preview.state === 'address-unknown') request.log.debug(details, message);
+          else request.log.info(details, message);
         }
         return { data: preview };
       } catch (error) {
@@ -183,7 +192,7 @@ export async function registerSeoRoutes(
           error instanceof StoredCrawlerTextTooLargeError
         ) {
           request.log.error(
-            { salesChannelCode, reason: error.message },
+            { salesChannelCode: salesChannelCode ?? null, reason: error.message },
             'seo: a stored crawler-file setting cannot be previewed',
           );
         }

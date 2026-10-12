@@ -182,11 +182,59 @@ describe('GET /api/v1/admin/seo/crawler-files/preview', () => {
     });
   });
 
+  describe('with no sales channel named', () => {
+    it('answers for the system default channel, and says which channel that is', async () => {
+      await forChannel('sales_channels.storefront_url', 'default', 'https://default.example');
+      await forChannel('seo.robots_txt_custom', 'default', 'Disallow: /default-only/\n');
+      await forChannel('seo.robots_txt_custom', RETAIL, 'Disallow: /retail-only/\n');
+      try {
+        const res = await preview('?file=robots');
+        expect(res.statusCode, res.body).toBe(200);
+        const data = adminCrawlerFilePreviewResponseSchema.parse(res.json()).data;
+        expect(data.salesChannelCode).toBe('default');
+        expect(data.savedExtra).toBe('Disallow: /default-only/\n');
+        expect(res.body).not.toContain('retail-only');
+        const [input, init] = fetchSpy.mock.calls[0]!;
+        expect(String(input)).toBe('https://default.example/robots.txt?part=system');
+        expect(new Headers(init?.headers).get('x-sales-channel')).toBe('default');
+      } finally {
+        await h.app.inject({
+          method: 'DELETE',
+          url: '/api/v1/admin/settings/seo.robots_txt_custom/values?salesChannelCodes=default',
+          cookies: admin,
+        });
+        await h.app.inject({
+          method: 'DELETE',
+          url: '/api/v1/admin/settings/sales_channels.storefront_url/values?salesChannelCodes=default',
+          cookies: admin,
+        });
+      }
+    });
+
+    it('is what lets an administrator who may not list sales channels see a preview (FR-045)', async () => {
+      // The premise: that administrator cannot learn a channel code to ask with.
+      const list = await h.app.inject({
+        method: 'GET',
+        url: '/api/v1/admin/sales-channels?activeOnly=false&pageSize=100',
+        cookies: settingsReader,
+      });
+      expect(list.statusCode).toBe(403);
+      const res = await preview('?file=robots', { cookies: settingsReader });
+      expect(res.statusCode, res.body).toBe(200);
+      expect(adminCrawlerFilePreviewResponseSchema.parse(res.json()).data.salesChannelCode).toBe('default');
+    });
+
+    it('still refuses an empty code: absent and empty are not the same request', async () => {
+      const res = await preview('?file=robots&salesChannelCode=');
+      expect(res.statusCode).toBe(400);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('what it refuses', () => {
     it.each([
       ['an unknown file', '?file=sitemap&salesChannelCode=pl_retail'],
       ['no file', '?salesChannelCode=pl_retail'],
-      ['no sales channel', '?file=robots'],
       ['an empty sales channel', '?file=robots&salesChannelCode='],
       ['a sales channel that is not a code', `?file=robots&salesChannelCode=${encodeURIComponent('pl_retail\r\nX-Evil: 1')}`],
       ['an address of the caller’s', `?file=robots&salesChannelCode=pl_retail&url=${encodeURIComponent('http://169.254.169.254/')}`],

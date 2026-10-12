@@ -128,6 +128,8 @@ export interface CrawlerTextProvenance {
  */
 export interface CrawlerFilePreviewStore {
   findChannel(code: string): Promise<{ readonly id: string; readonly code: string } | null>;
+  /** The system default channel. One always exists; `null` is a broken instance. */
+  findDefaultChannel(): Promise<{ readonly id: string; readonly code: string } | null>;
   provenance(settingCode: string, salesChannelId: string): Promise<CrawlerTextProvenance>;
 }
 
@@ -185,10 +187,14 @@ export class CrawlerFilePreviewService {
    */
   async preview(
     file: PreviewableCrawlerFile,
-    salesChannelCode: string,
+    /** `undefined` asks about the system default channel. */
+    salesChannelCode: string | undefined,
   ): Promise<CrawlerFilePreviewResult> {
-    const channel = await this.store.findChannel(salesChannelCode);
-    if (channel === null) throw new UnknownSalesChannelError(salesChannelCode);
+    const channel =
+      salesChannelCode === undefined
+        ? await this.store.findDefaultChannel()
+        : await this.store.findChannel(salesChannelCode);
+    if (channel === null) throw new UnknownSalesChannelError(salesChannelCode ?? '(system default)');
     const { pathAndQuery, settingCode } = PREVIEWABLE_FILES[file];
 
     // Every read below is made for `channel.id` and no other (Principle XII).
@@ -403,6 +409,10 @@ export function createCrawlerFilePreviewStore(
   return {
     async findChannel(code) {
       const channel = await emFactory().findOne(SalesChannel, { code });
+      return channel === null ? null : { id: channel.id, code: channel.code };
+    },
+    async findDefaultChannel() {
+      const channel = await emFactory().findOne(SalesChannel, { systemDefault: true });
       return channel === null ? null : { id: channel.id, code: channel.code };
     },
     async provenance(settingCode, salesChannelId) {

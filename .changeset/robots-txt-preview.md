@@ -94,6 +94,8 @@ The rule's first signal flags every `x-sales-channel` string literal, because a 
 read that header from a request — the resolver does. A module that makes a request of its own to
 another server and names the sales channel in it was reported as well. The key of an object literal
 under a `headers:` property — `fetch(url, { headers: { 'X-Sales-Channel': channel.code } })` — is
-now exempt, as a CORS policy's `allowedHeaders` array already was. Every read shape is still
-reported: an element access on a headers object, a `.get(...)` argument, the name held in a
-constant, a computed key.
+now exempt, as a CORS policy's `allowedHeaders` array already was. What stays reported: an
+element access on a headers object, a `.get(...)` argument, the name held in a constant, a
+computed key, a destructuring declaration, and a destructuring *assignment*
+(`({ headers: { 'x-sales-channel': code } } = request)`, also as the variable of a `for…of` or
+`for…in`), which has the exempted shape and is refused by its position.

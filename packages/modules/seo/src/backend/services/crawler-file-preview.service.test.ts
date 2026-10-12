@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { createServer, type IncomingHttpHeaders, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { z } from 'zod';
 import {
   CRAWLER_FILES_CAPABILITY_HEADER,
@@ -70,6 +72,7 @@ function world(options: World = {}) {
   };
   const store: CrawlerFilePreviewStore = {
     findChannel: async (code) => CHANNELS[code] ?? null,
+    findDefaultChannel: async () => CHANNELS['de'] ?? null,
     provenance: async (_settingCode, salesChannelId) =>
       options.provenance?.[salesChannelId] ?? { source: 'default', channelsWithOwnValue: [] },
   };
@@ -325,6 +328,7 @@ describe('CrawlerFilePreviewService — the request it makes', () => {
       {
         // A store that finds a row for whatever it is asked.
         findChannel: async () => ({ id: CHANNELS.pl!.id, code: 'pl' }),
+        findDefaultChannel: async () => null,
         provenance: async () => ({ source: 'default', channelsWithOwnValue: [] }),
       },
       { resolve: async () => ({ url: 'https://shop.example', source: 'setting' }) },
@@ -340,6 +344,17 @@ describe('CrawlerFilePreviewService — the request it makes', () => {
     expect(fetchFn).not.toHaveBeenCalled();
     expect(reads).toEqual([]);
     expect(resolved).toEqual([]);
+  });
+
+  it('with no channel named, asks about the system default channel and says which it is', async () => {
+    const { service, fetchFn, reads } = world({
+      values: { 'seo.robots_txt_custom': { [CHANNELS.de!.id]: 'Disallow: /de-only/\n' } },
+    });
+    const { preview } = await service.preview('robots', undefined);
+    expect(preview.salesChannelCode).toBe('de');
+    expect(preview.savedExtra).toBe('Disallow: /de-only/\n');
+    expect(new Headers(theRequest(fetchFn).init.headers).get('x-sales-channel')).toBe('de');
+    expect(new Set(reads.map(([, channelId]) => channelId))).toEqual(new Set([CHANNELS.de!.id]));
   });
 
   it('shares one request between previews of one channel asked for at the same moment', async () => {
@@ -453,5 +468,128 @@ describe('isPreviewableCrawlerFile', () => {
   it('knows robots, and not yet llms', () => {
     expect(isPreviewableCrawlerFile('robots')).toBe(true);
     expect(isPreviewableCrawlerFile('llms')).toBe(false);
+  });
+});
+
+/**
+ * The two bounds that are otherwise asserted on what a stubbed `fetch` was
+ * handed, proved here against real sockets: the platform's own `fetch`, two
+ * `node:http` servers on loopback ports the system picks.
+ */
+describe('CrawlerFilePreviewService — against a real server', () => {
+  interface Seen {
+    readonly url: string;
+    readonly headers: IncomingHttpHeaders;
+  }
+  const servers: Server[] = [];
+
+  async function listen(
+    handler: (request: IncomingMessage, response: ServerResponse, seen: Seen[]) => void,
+  ): Promise<{ origin: string; seen: Seen[] }> {
+    const seen: Seen[] = [];
+    const server = createServer((request, response) => {
+      seen.push({ url: request.url ?? '', headers: request.headers });
+      handler(request, response, seen);
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    return { origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, seen };
+  }
+
+  function serviceAt(origin: string): CrawlerFilePreviewService {
+    return new CrawlerFilePreviewService(
+      { get: async (code, _id, schema) => schema.parse(code === 'seo.default_robots' ? 'INDEX, FOLLOW' : '') },
+      {
+        findChannel: async (code) => CHANNELS[code] ?? null,
+        findDefaultChannel: async () => null,
+        provenance: async () => ({ source: 'default', channelsWithOwnValue: [] }),
+      },
+      { resolve: async () => ({ url: origin, source: 'setting' }) },
+    );
+  }
+
+  afterEach(async () => {
+    await Promise.all(
+      servers.splice(0).map((server) => new Promise((resolve) => server.close(() => resolve(undefined)))),
+    );
+  });
+
+  it('does not follow a redirect: the server it points at is never asked', async () => {
+    const elsewhere = await listen((_request, response) => {
+      response.writeHead(200, { 'content-type': 'text/plain', [CRAWLER_FILES_CAPABILITY_HEADER]: '1' });
+      response.end('User-agent: *\nDisallow: /from-elsewhere/\n');
+    });
+    const storefront = await listen((_request, response) => {
+      response.writeHead(302, { location: `${elsewhere.origin}/robots.txt?part=system` });
+      response.end();
+    });
+    const { preview } = await serviceAt(storefront.origin).preview('robots', 'pl');
+    expect(preview.state).toBe('storefront-unreachable');
+    expect(preview.base).toBeNull();
+    expect(storefront.seen.map((request) => request.url)).toEqual(['/robots.txt?part=system']);
+    expect(elsewhere.seen).toEqual([]);
+  });
+
+  it('does not follow a redirect to a path on the same server either', async () => {
+    const storefront = await listen((request, response) => {
+      if (request.url === '/robots.txt?part=system') {
+        response.writeHead(301, { location: '/elsewhere.txt' });
+        response.end();
+        return;
+      }
+      response.writeHead(200, { 'content-type': 'text/plain' });
+      response.end('secret');
+    });
+    const { preview } = await serviceAt(storefront.origin).preview('robots', 'pl');
+    expect(preview.state).toBe('storefront-unreachable');
+    expect(storefront.seen.map((request) => request.url)).toEqual(['/robots.txt?part=system']);
+  });
+
+  it('arrives with no cookie and nothing that authenticates, and reads the answer', async () => {
+    const storefront = await listen((_request, response) => {
+      response.writeHead(200, {
+        'content-type': 'text/plain; charset=utf-8',
+        [CRAWLER_FILES_CAPABILITY_HEADER]: '1',
+        // A storefront that tries to set a cookie on the backend.
+        'set-cookie': 'session=planted; Path=/',
+      });
+      response.end(SYSTEM_RULES);
+    });
+    const service = serviceAt(storefront.origin);
+    const first = await service.preview('robots', 'pl');
+    expect(first.preview.state).toBe('ok');
+    expect(first.preview.base).toBe(SYSTEM_RULES);
+    // A second request: a cookie the first answer set must not come back.
+    await service.preview('robots', 'pl');
+    expect(storefront.seen).toHaveLength(2);
+    for (const request of storefront.seen) {
+      expect(request.url).toBe('/robots.txt?part=system');
+      expect(request.headers.cookie).toBeUndefined();
+      expect(request.headers.authorization).toBeUndefined();
+      expect(request.headers['proxy-authorization']).toBeUndefined();
+      expect(request.headers['x-sales-channel']).toBe('pl');
+    }
+  });
+
+  it('gives up on a server that accepts the connection and never answers', async () => {
+    const storefront = await listen(() => {
+      /* never answers */
+    });
+    const service = new CrawlerFilePreviewService(
+      { get: async (code, _id, schema) => schema.parse(code === 'seo.default_robots' ? 'INDEX, FOLLOW' : '') },
+      {
+        findChannel: async (code) => CHANNELS[code] ?? null,
+        findDefaultChannel: async () => null,
+        provenance: async () => ({ source: 'default', channelsWithOwnValue: [] }),
+      },
+      { resolve: async () => ({ url: storefront.origin, source: 'setting' }) },
+      { timeoutMs: 150 },
+    );
+    const started = Date.now();
+    const { preview } = await service.preview('robots', 'pl');
+    expect(preview.state).toBe('storefront-unreachable');
+    expect(Date.now() - started).toBeLessThan(2_000);
+    // Release the hanging socket so the server can close.
+    for (const server of servers) server.closeAllConnections();
   });
 });
