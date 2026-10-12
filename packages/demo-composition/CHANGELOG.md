@@ -1,5 +1,28 @@
 # @endora-commerce/demo-composition
 
+## 0.106.0
+
+### Patch Changes
+
+- Updated dependencies [fc23f9e]
+- Updated dependencies [4be4642]
+- Updated dependencies [9dd3b81]
+- Updated dependencies [be99bb5]
+- Updated dependencies [ddc9382]
+  - @endora-commerce/contracts@0.106.0
+  - @endora-commerce/platform@0.106.0
+  - @endora-commerce/mod-admin-roles@0.106.0
+  - @endora-commerce/mod-admin-users@0.106.0
+  - @endora-commerce/mod-catalog@0.106.0
+  - @endora-commerce/mod-credit-limits@0.106.0
+  - @endora-commerce/mod-crm@0.106.0
+  - @endora-commerce/mod-custom-fields@0.106.0
+  - @endora-commerce/mod-customer-accounts@0.106.0
+  - @endora-commerce/mod-inventory@0.106.0
+  - @endora-commerce/mod-megamenu@0.106.0
+  - @endora-commerce/mod-organizations@0.106.0
+  - @endora-commerce/mod-price-lists@0.106.0
+
 ## 0.105.0
 
 ### Minor Changes

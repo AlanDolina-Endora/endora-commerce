@@ -1,5 +1,469 @@
 # @endora-commerce/contracts
 
+## 0.106.0
+
+### Minor Changes
+
+- fc23f9e: An operator can add rules to a sales channel's `robots.txt`: **Settings → SEO → Custom robots.txt instructions**.
+
+  The text is appended to the rules the storefront generates itself — after them, separated by one
+  blank line — for all sales channels or per channel. The generated rules (the closed address
+  families and the `Sitemap:` line) are unchanged and cannot be edited or removed from the Settings
+  screen. With no text, `robots.txt` is byte for byte what it was. Resetting the setting removes the
+  text. A saved change is served within about two minutes.
+
+  The text is served as written: every character is kept, in order. Two things about line breaks
+  are made uniform — every line break is served as a line feed (`LF`), whether it was saved as `LF`,
+  `CRLF` or `CR`, and the file ends with exactly one — and one byte order mark (`U+FEFF`) at the
+  very start of the text is not served, because a crawler does not recognise the line it is
+  attached to. Nothing in the text is validated.
+
+  The generated lines cannot be changed, but their effect on one crawler can: a group written for a
+  crawler by name replaces the `*` group for that crawler. Repeat the generated rules in such a
+  group if they should still apply to it. Indexing does not depend on it — the pages those rules
+  close declare `noindex` themselves.
+
+  **`robots.txt` does not take pages out of search results.** It controls what a crawler may fetch.
+  To keep a storefront out of search use _Default robots_ = `NOINDEX`, and do not add `Disallow: /`
+  on top of it: a crawler that may not fetch a page never reads its `noindex`. The setting's
+  description says so, in English and in Polish.
+
+  A text may be at most **64 KiB** (65 536 bytes of UTF-8). A larger one is refused when saved, with
+  `400` `SEO_CRAWLER_TEXT_TOO_LARGE` and a message naming the limit, and the stored text is kept.
+
+  **`/robots.txt` on the reference storefront is no longer a build-time file.** It is rendered per
+  request, for the request's sales channel:
+
+  - `200` with the generated rules and the channel's text; `Content-Type: text/plain; charset=utf-8`,
+    `Cache-Control: public, max-age=60`, `Vary: X-Sales-Channel`, `X-Endora-Crawler-Files: 1`. Before,
+    the file was prerendered and sent with `Cache-Control: public, max-age=0, must-revalidate` and
+    `Content-Type: text/plain`;
+  - the generated rules alone while the `seo` module is switched off, and against a backend that
+    does not have this feature;
+  - **`503` with `Retry-After: 120`** when the channel's text cannot be read and the storefront
+    process has never read it — rather than a file that silently omits the operator's rules. A
+    process that has read the text once goes on serving that version for as long as the backend
+    cannot be reached. A storefront started while its backend is down therefore answers
+    `robots.txt` with `503` until the backend is back; pages are unaffected;
+  - `GET /robots.txt?part=system` answers the generated rules alone, without the route asking the
+    backend, and is sent with `Cache-Control: no-store`.
+
+  **If a reverse proxy or a CDN stands in front of a storefront that serves more than one sales
+  channel**, check two things, because the file now differs per channel and the channel is named by
+  the `X-Sales-Channel` request header: the proxy must set that header itself, per host, and not
+  pass through a value a visitor sent; and a shared cache that ignores `Vary` on such a header must
+  include it in its cache key or not cache `/robots.txt`. In nginx that is one line in the
+  storefront's `location` block — `proxy_set_header X-Sales-Channel "<this host's channel code>";`
+  for a multi-channel deployment, or `proxy_set_header X-Sales-Channel "";` to drop the header on a
+  single-channel one, which is otherwise unaffected. The `nginx.example.conf` an instance was
+  scaffolded with does not carry the line; this repository's `deploy/nginx.example.conf` now shows
+  both, commented.
+
+  The origin in the `Sitemap:` line is still `NEXT_PUBLIC_SITE_URL` as inlined at build time.
+
+  What is new, by package:
+
+  - `@endora-commerce/mod-seo` declares the multi-line setting `seo.robots_txt_custom` (default
+    empty) with its name and description in `en` and `pl`; serves the public, channel-resolved
+    `GET /api/v1/storefront/seo/crawler-files`
+    (`{ "data": { "index", "follow", "robotsTxtCustom", "llmsTxtAdditional", "shop": { "name" } } }`,
+    `Cache-Control: no-store`, `503` `MODULE_DISABLED` while the module is off, and `500` — never
+    an empty text — when a stored value cannot be served); and declares the error code
+    `SEO_CRAWLER_TEXT_TOO_LARGE`. `llmsTxtAdditional` is always `""` in this release.
+  - `@endora-commerce/contracts` exports `storefrontCrawlerFilesSchema`,
+    `storefrontCrawlerFilesResponseSchema`, the types `StorefrontCrawlerFiles` and
+    `StorefrontCrawlerFilesResponse`, `composeCrawlerFile(base, extra)` (the join described above),
+    `CRAWLER_TEXT_MAX_BYTES` and `ERROR_CODES.SEO_CRAWLER_TEXT_TOO_LARGE`. The schemas drop members
+    they do not know.
+  - `@endora-commerce/contracts` and `@endora-commerce/mod-settings`: `SettingWriteValidationInput`
+    gains **`proposedValue`** — the value a settings write proposes, beside the per-channel
+    projection it already carried. An all-channels write reaches no channel that has a value of its
+    own, so on an instance where every channel has one the proposed value was in no channel's
+    projection, and a validator whose rule is about the value itself could not see it. A module that
+    contributes a `SettingWriteValidator` needs no change; code that _constructs_ a
+    `SettingWriteValidationInput` (a test calling a validator directly) must now supply the member.
+  - `@endora-commerce/cli`: the storefront that `endora new storefront` writes serves `robots.txt`
+    as described above.
+
+  **An existing storefront is not changed by upgrading, and until it is updated it ignores the
+  setting**: its `robots.txt` stays the file it was built with, and the Settings screen shows a text
+  nothing serves. To take the feature, apply these changes from the reference storefront to the
+  storefront project, keeping any edits of your own:
+
+  - **delete** `app/robots.ts`. It must go, and nothing will tell you if it has not: with both it
+    and `app/robots.txt/route.ts` present, Next builds without a warning, goes on serving the old
+    build-time file and never reaches the new route. The build's route list shows which one won —
+    `○ /robots.txt` is the old file, `ƒ /robots.txt` is the new route;
+  - **add** `app/robots.txt/route.ts` — the route;
+  - **add** `lib/seo/robots-txt.ts` — what the route answers, and when it answers `503`;
+  - **add** `lib/seo/robots-system-rules.ts` — the generated rules, moved out of `app/robots.ts`
+    unchanged. **If you edited the `disallow` list in your `app/robots.ts`, carry your edits into
+    `ROBOTS_SYSTEM_RULES` here**;
+  - **replace** `lib/seo/crawler-policy.ts` with the new version. It now reads the crawler files as
+    well as the default robots policy, and gives up a backend read that a frozen process left
+    hanging instead of waiting on it for ever. If the project does not have this file yet, it has
+    not taken the _Default robots_ feature either — add the file, and see that release's notes for
+    `middleware.ts` and `app/layout.tsx`;
+  - **edit** `app/reserved-segments.ts`: add `'robots.txt'` to `RESERVED_TOP_LEVEL_SEGMENTS`, and add
+    the same entry to the deployment's `cms.reserved_slug_segments` setting if you maintain one;
+  - in `test/seo/route-declarations.test.ts`, if you copied it, replace the import of
+    `'../../app/robots'` with `ROBOTS_SYSTEM_RULES` and `robotsSitemapUrl` from
+    `'../../lib/seo/robots-system-rules'`, as the reference's version does.
+
+  `lib/seo/robots-txt.ts` imports `composeCrawlerFile` from `@endora-commerce/contracts/seo`, so
+  **the storefront project needs `@endora-commerce/contracts` at this release or later** — unlike
+  the _Default robots_ files, which needed no upgrade. `middleware.ts` and `app/layout.tsx` do not
+  change in this release. Then rebuild the storefront;
+  `curl -sI https://<your shop>/robots.txt | grep -i x-endora-crawler-files` shows the header once
+  the new route is serving.
+
+  The reference storefront's tests for these files (`test/seo/robots-system-rules.test.ts` with its
+  fixture `test/seo/__fixtures__/robots-before.txt`, `test/seo/robots-txt-route.test.ts` and the
+  additions to `test/seo/crawler-policy.test.ts`) are optional to copy. The fixture is the
+  reference's own generated rules with `http://localhost:3000` as the origin; a project that edited
+  its list edits the fixture to match.
+
+- 4be4642: The storefront serves an `llms.txt` per sales channel, and an operator can add to it: **Settings → SEO → Additional llms.txt content**.
+
+  **For an operator.** `/llms.txt` is a plain-text file that tells AI assistants what a shop is and
+  where its public pages are. The storefront now serves one for each sales channel: a part it
+  generates — the shop's name, links to the home page, the catalog, search, the blog and the contact
+  page, and the sitemap — followed by the text you save in the new setting. The setting is empty by
+  default, takes a value for all sales channels and a value per channel like any other, and holds at
+  most 64 KiB, the limit of the `robots.txt` instructions. A saved change is served within about two
+  minutes. The addresses in the generated part use the storefront's one public origin
+  (`NEXT_PUBLIC_SITE_URL`, fixed when the storefront is built), as the sitemap does: a storefront
+  that serves several sales channels names that origin in every channel's file, with each
+  channel's own shop name.
+
+  Two things to know before relying on it:
+
+  - **A sales channel whose _Default robots_ is `NOINDEX` has no `llms.txt`.** The storefront answers
+    `/llms.txt` with "not found" there, whatever the setting holds: a shop that asks search engines
+    to stay away does not invite AI assistants in. The text is kept and is served again when the
+    channel allows indexing. `robots.txt` is unaffected — it stays open on such a channel, as before.
+  - **Switching the `seo` module off withdraws the file**, with the _Default robots_ policy and the
+    custom `robots.txt` instructions. The module's description and its activation setting now say so.
+
+  Below the field there is a preview, the same as the one beside _Custom robots.txt instructions_:
+  one block that is the file, your lines marked inside it, under a heading that reads _llms.txt as
+  served now_ or _llms.txt after saving_. On a `NOINDEX` channel it says _llms.txt is not served_,
+  with the reason, in place of the block. The messages for a storefront that cannot be reached, has
+  no address configured or did not confirm that it serves the file are the ones the `robots.txt`
+  preview shows, and the request the backend makes for it is bound the same way — one `GET
+<origin>/llms.txt?part=base`, no redirect followed, three seconds, 512 KiB, `text/plain` only,
+  nothing of the administrator's request in it. As before, private and loopback addresses are not
+  refused, and this preview tells a holder of `settings:read` slightly more about a configured
+  address than the `robots.txt` one does: a `404` without the storefront's header is reported as
+  "did not confirm that it serves llms.txt" rather than as "could not be reached", so an address
+  where some HTTP server answers can be told from one where nothing does.
+
+  No migration, no new environment variable, no new permission.
+
+  The `seo` bundles also gain the name of the settings group and the name and description of the
+  _SEO enabled_ setting, in English and Polish (`settingGroups.seo.name`,
+  `settingLabels.seo.enabled.*`).
+
+  **`robots.txt` no longer depends on _Default robots_ being readable.** A _Default robots_ value
+  that is not one of the four choices — which takes a row written around the settings API — made
+  `GET /api/v1/storefront/seo/crawler-files` answer `500`, so a storefront that had just started
+  answered that channel's `robots.txt` with `503`, although the file has never depended on that
+  setting. The endpoint now answers, and names what it could not read (below). Such a channel keeps
+  its `robots.txt`; its `llms.txt`, which does depend on the setting, answers `503` until the value
+  is repaired by saving _Default robots_ again. A storefront that has not been updated benefits
+  too: its `robots.txt` is served as well.
+
+  **In `@endora-commerce/contracts`.**
+
+  - `storefrontCrawlerFilesSchema` gains an optional member, **`unreadable`**: the names of the
+    members the backend could not read from what is stored — `CRAWLER_FILES_UNREADABLE_POLICY`
+    (`'policy'`: `index` and `follow` are then both `false` and mean "not known") and
+    `CRAWLER_FILES_UNREADABLE_LLMS_TXT` (`'llmsTxtAdditional'`: that member is then `''` and means
+    "not known"). It is absent when everything was read. **Additive**: a consumer that does not read
+    it is unaffected unless it reads `index`, `follow` or `llmsTxtAdditional` from this endpoint, in
+    which case it should treat a named member as unknown rather than as its value. Unreadable
+    `robots.txt` instructions still fail the whole answer with `500`.
+  - `llmsTxtAdditional` now carries the channel's saved text; it was always `''`.
+  - `GET /api/v1/admin/seo/crawler-files/preview?file=llms` now answers; it answered `400`. The
+    `not-served` state means the storefront answered `404` **with** the `X-Endora-Crawler-Files`
+    header — no file for that channel; a `404` without the header is `storefront-outdated`, with no
+    `base`.
+
+  **For a custom storefront.** To be previewed, `/llms.txt?part=base` answers the generated part
+  alone, as `text/plain`, with `X-Endora-Crawler-Files: 1`; a channel with no file answers `404` with
+  the same header. Answer `503` rather than a file while `unreadable` names `policy` or
+  `llmsTxtAdditional`.
+
+  **In `@endora-commerce/cli`.** The storefront that `endora new storefront` writes serves
+  `/llms.txt` as described above.
+
+  **An existing storefront is not changed by upgrading, and until it is updated it has no
+  `llms.txt`**: the Settings screen shows the text, the preview says that the storefront did not
+  confirm that it serves the file, and nothing serves it. To take the feature, apply these changes
+  from the reference storefront to the storefront project, keeping any edits of your own. They
+  assume the project has already taken the _Default robots_ and _Custom robots.txt instructions_
+  changes that the other entries of this release describe — `lib/seo/crawler-policy.ts`, `lib/seo/robots-txt.ts`,
+  `lib/seo/robots-system-rules.ts`, `lib/seo/robots-directive.ts` and `app/robots.txt/route.ts`
+  exist, and `app/robots.ts` is deleted. If not, apply those entries first.
+
+  - **add** `app/llms.txt/route.ts` — the route;
+  - **add** `lib/seo/llms-txt.ts` — what the route answers, and when it answers `404` and `503`;
+  - **add** `lib/seo/llms-txt-base.ts` — the generated part. It lists `SITEMAP_STATIC_ROUTES` from
+    your `app/sitemap.ts`; **if you changed that list, give each of your routes a title in
+    `LLMS_TXT_PAGE_TITLES`**, and name in `LLMS_TXT_CONDITIONAL_PAGES` any of them that can answer
+    "not found";
+  - **add** `lib/seo/llms-txt-pages.ts` — whether a conditional page is served right now (today:
+    the blog), remembered per channel by the cache `lib/seo/crawler-policy.ts` exports;
+  - **add** `lib/seo/crawler-file-response.ts` — the headers and the temporary failure the two files
+    share;
+  - **replace** `lib/seo/robots-txt.ts` and `lib/seo/crawler-policy.ts` with the new versions. The
+    first now takes its headers from `crawler-file-response.ts`; the second reads `unreadable` and exports the channel cache the page question uses;
+  - **edit** `lib/seo/robots-directive.ts`: `isDocumentPath` must answer `false` for `/llms.txt`, as
+    the reference's version does. **Do not skip this one**: without it the storefront still serves
+    the file, but while the backend is unreachable it answers `/llms.txt` with the outage page
+    instead of the last version it knew;
+  - **edit** `app/reserved-segments.ts`: add `'llms.txt'` to `RESERVED_TOP_LEVEL_SEGMENTS`, and add
+    the same entry to the deployment's `cms.reserved_slug_segments` setting if you maintain one;
+  - **make sure there is no `public/llms.txt`.** A file there is served instead of the route — for
+    every channel, with no operator text, and on a channel set to `NOINDEX` — and neither the build
+    nor the server says so. `curl -sI https://<your shop>/llms.txt | grep -i x-endora-crawler-files`
+    shows the header when the route is the one answering.
+
+  `middleware.ts` and `app/layout.tsx` do not change in this release. The new files import
+  `composeCrawlerFile` from `@endora-commerce/contracts/seo`, so the storefront project needs
+  `@endora-commerce/contracts` at this release — as the custom `robots.txt` instructions, another
+  entry of this release, already require. Then
+  rebuild the storefront — the build's route list shows `ƒ /llms.txt`.
+
+  The reference storefront's tests for these files (`test/seo/llms-txt-base.test.ts`,
+  `test/seo/llms-txt-route.test.ts`, and the additions to `test/seo/crawler-policy.test.ts`,
+  `test/seo/robots-txt-route.test.ts`, `test/seo/middleware-robots.test.ts` and
+  `test/seo/middleware-effect.test.ts`) are optional to copy.
+
+- 9dd3b81: A `string` setting can be declared multi-line, and the Settings screen then edits it in a multi-line field that keeps line breaks exactly.
+
+  **For a module author.** Add `multiline: true` to the setting's entry in the module's settings
+  manifest:
+
+  ```ts
+  defineModuleSettingsManifest({
+    moduleCode: 'your_module',
+    settings: [
+      {
+        code: 'your_module.footer_note',
+        name: 'Footer note',
+        valueType: 'string',
+        defaultValue: '',
+        multiline: true,
+      },
+    ],
+  });
+  ```
+
+  Nothing else changes: the value is still a `string`, is read through `SettingsService.get` as
+  before, and resolves per sales channel like every other setting. What is typed is what is stored —
+  line breaks, blank lines, indentation and a trailing line break included.
+
+  `SettingManifestEntrySchema` accepts `multiline` only on `valueType: 'string'` and not together with
+  `enumOptions`; any other combination fails when the manifest is parsed, with the issue on
+  `multiline`. The flag is presentation, kept in step with the manifest by `ManifestReconciler` on
+  every boot in both directions, so adding or removing it later is not a breaking change and never
+  touches a stored value. `SettingDtoSchema` gains an optional `multiline: boolean`, which
+  `GET /api/v1/admin/settings` and `GET /api/v1/admin/settings/:code` now always send — read it if
+  your module renders its own editor for a setting.
+
+  **For an operator upgrading.** This release carries one platform migration,
+  `Migration20261011T135250CoreSettingsMultiline`, which adds `settings.multiline boolean not null
+default false`. It rewrites no row and needs no backfill. It is one of the platform's own
+  migrations, so an instance receives it with `@endora-commerce/platform` and `pnpm run upgrade
+<version>` applies it with the release's other migrations. Every existing setting stays single-line,
+  so the Settings screen looks and behaves exactly as it did until a module you install declares the
+  flag.
+
+  Take the migration back only together with the packages. `down` drops the column and loses nothing
+  but the flag, which the next boot of a release that has it would restore — but this release's code
+  expects the column: over a database without it, a new setting cannot be registered and a declared
+  `multiline` cannot be stored, and the instance fails at boot. Reverting the migration is safe as
+  part of downgrading `@endora-commerce/platform` and `@endora-commerce/mod-settings` to the previous
+  version, and not on its own.
+
+  The Settings screen also names the multi-line field after the setting for assistive technology, and
+  the line under it that previews the default and current value shows one shortened line for such a
+  setting rather than the whole text.
+
+- be99bb5: The Settings screen previews the `robots.txt` a sales channel's storefront serves, and a module can now contribute beside a setting it declared.
+
+  **For an operator.** Below **Settings → SEO → Custom robots.txt instructions** there is now a
+  preview of the file the selected sales channel's storefront serves, as **one block that is the
+  file**: the lines the storefront generates, labelled read-only, then a blank line, then your own
+  lines, marked with a bar and a label. With nothing unsaved the heading reads _robots.txt as served
+  now_. As you type, the block follows the field and the heading becomes _robots.txt after saving_ —
+  the file the storefront will serve once you save; until then it keeps serving the previous version.
+  Under **All channels** you pick the channel to preview, and the preview names the channels that
+  have a value of their own and are therefore not affected. On a channel whose _Default robots_ is
+  `NOINDEX` it says that `robots.txt` stays open on purpose, and warns when your text forbids every
+  crawler to fetch anything. An administrator who may read settings but not change them sees it too,
+  and one who may not list sales channels is shown the system default channel. Nothing the storefront
+  serves changes when you preview.
+
+  The setting's description above the field is shorter: the preview now shows what the description
+  used to explain.
+
+  The generated rules are not copied into the backend or the Admin UI: each time, the backend asks
+  the channel's storefront for them. So **the storefront must be reachable from the backend at the
+  address the channel is configured with** — the channel's **Storefront URL** setting, else
+  `STOREFRONT_BASE_URL`. When it is not, the preview says so and shows your text on its own; saving is
+  never blocked. The three messages and what to do about each:
+
+  - _The storefront could not be reached_ — no answer within three seconds, a refused connection,
+    an error, a redirect, or an answer that is not a plain-text file. Check that the storefront runs
+    and that the configured address is the one it answers at itself. The server log line
+    `seo: the crawler-file preview could not show the storefront’s part` carries the reason.
+  - _This sales channel has no storefront address configured_ — set **Storefront URL** for the
+    channel, or `STOREFRONT_BASE_URL`.
+  - _This storefront did not confirm that it supports custom instructions_ — it answered without the
+    `X-Endora-Crawler-Files` header. Usually the storefront was scaffolded from a release before these
+    settings existed: it serves only its generated rules and ignores both the custom instructions and
+    _Default robots_. A proxy that strips the header, or a storefront updated only in part, looks the
+    same. A matching notice now appears on the _Default robots_ row, so a shop is not believed to be
+    out of search while its storefront may be ignoring the setting. Update the storefront's files as
+    the notes of the release that introduced those settings list, and check that the header arrives.
+
+  What the backend sends is one request per preview: `GET <origin>/robots.txt?part=system`, to the
+  origin of the configured address only, with the channel's code in `X-Sales-Channel`. It follows no
+  redirect, waits at most three seconds, reads at most 512 KiB, accepts only `text/plain`, sends no
+  cookie or credentials, and stores nothing. A path or query in the configured address is not used.
+  Private and loopback addresses are **not** refused, because an instance's own storefront is
+  routinely reached at one; who may point a channel at an address is whoever holds `settings:write`,
+  as before.
+
+  No migration, no new setting, no new environment variable, no new permission.
+
+  **For a module author: `settings.setting.after`.** `AdminZoneNameSchema` has a new member, mounted
+  by the Settings screen once per setting row, below the field. Contribute to it to show what a
+  setting you declared amounts to — a preview, a consequence, a warning:
+
+  ```ts
+  import { zoneComponent, type AdminContributions } from '@endora-commerce/admin-kit/contributions';
+
+  export const contributions: AdminContributions = {
+    zones: [
+      zoneComponent('settings.setting.after', () => import('./zones/FooterNotePreview.js'), {
+        match: { settingCode: 'your_module.footer_note' },
+        requiredPermission: 'settings:read',
+      }),
+    ],
+  };
+  ```
+
+  The component receives `SettingsSettingAfterZoneProps`: `settingCode`, `ownerModule`,
+  `channelCode` (the sales channel being edited, or `null` for the all-channels value), `draftText`
+  (the text in the field **now**, saved or not, for a `string` setting; `null` for every other value
+  type) and `dirty`. Narrow with `match` on `settingCode` or `ownerModule` — an unmatched
+  contribution's chunk is never fetched. The props go one way: a contribution cannot change the
+  value or hold up the row's save, and it should say in words when what it shows is not saved yet.
+  The zone is not mounted for a `secret` setting, so a contribution never receives a secret's draft.
+  A contribution vanishes with its module, and a failing one does not take the row with it.
+
+  **If you render `SettingRowEditor` yourself.** `@endora-commerce/mod-settings`' row editor now
+  mounts a zone, so it must be rendered under `AdminContributionsProvider` and the session
+  providers, as every host screen that mounts a zone is. The Admin UI already does; a test that
+  renders the row or `SettingsPage` on its own needs the providers around it.
+
+  **In `@endora-commerce/contracts`.** New: `adminCrawlerFilePreviewQuerySchema`,
+  `adminCrawlerFilePreviewResponseSchema`, `adminCrawlerFilePreviewSchema`,
+  `adminCrawlerFilePreviewStateSchema`, `adminCrawlerFileSchema`, their inferred types, and
+  `CRAWLER_FILES_CAPABILITY_HEADER` (`X-Endora-Crawler-Files`) — the response header by which a
+  storefront says it serves crawler files the current way. A custom storefront that implements
+  `?part=system` should send it; without it the preview treats the storefront as outdated. The
+  endpoint is `GET /api/v1/admin/seo/crawler-files/preview?file=robots&salesChannelCode=<code>`,
+  gated by `settings:read`. `salesChannelCode` is optional and means the system default channel; the
+  answer names the channel it is about. `file=llms` is declared in the schema and answers `400` until
+  `llms.txt` is served.
+
+  `@endora-commerce/mod-seo` now declares `lucide-react` as an optional peer dependency, as the other
+  module packages with an admin surface do; an application that has the Admin UI already has it.
+
+  **In `@endora-commerce/cli`: `check:channel-resolution` no longer reports a header that is sent.**
+  The rule's first signal flags every `x-sales-channel` string literal, because a module must not
+  read that header from a request — the resolver does. A module that makes a request of its own to
+  another server and names the sales channel in it was reported as well. The key of an object literal
+  under a `headers:` property — `fetch(url, { headers: { 'X-Sales-Channel': channel.code } })` — is
+  now exempt, as a CORS policy's `allowedHeaders` array already was. What stays reported: an
+  element access on a headers object, a `.get(...)` argument, the name held in a constant, a
+  computed key, a destructuring declaration, and a destructuring _assignment_
+  (`({ headers: { 'x-sales-channel': code } } = request)`, also as the variable of a `for…of` or
+  `for…in`), which has the exempted shape and is refused by its position.
+
+- ddc9382: A sales channel's storefront can be taken out of search engines with one setting: **Settings → SEO → Default robots**.
+
+  The setting offers `INDEX, FOLLOW` (the default), `NOINDEX, FOLLOW`, `INDEX, NOFOLLOW` and
+  `NOINDEX, NOFOLLOW`, for all sales channels or per channel. For a channel whose value restricts
+  something, the storefront adds the directive to what it serves for that channel: an
+  `X-Robots-Tag` header on pages (not-found pages and the offline page included), on
+  `/sitemap.xml`, on `/_next/image` and on the files under `public/`, and one extra
+  `<meta name="robots">` in the `<head>` of the pages it renders for a request. Not-found pages
+  and the statically built `/offline` page carry the header without the extra element — both
+  already declare `noindex, nofollow` themselves — and redirects declared in `next.config.js`
+  and the files under `/_next/static` carry neither. It only adds restrictions — a page that
+  declares `noindex` for itself keeps its own tag — and `robots.txt` is not changed. With the
+  default nothing is added. A saved change is in force on the storefront within a minute or two.
+
+  **Switching the `seo` module off withdraws the directive**, so a channel set to `NOINDEX` becomes
+  indexable again until the module is switched back on. The stored value is kept.
+
+  What is new, by package:
+
+  - `@endora-commerce/mod-seo` declares the setting `seo.default_robots`, serves the public,
+    channel-resolved `GET /api/v1/storefront/seo/robots-policy` (`{ "data": { "index", "follow" } }`,
+    `Cache-Control: no-store`, `503` `MODULE_DISABLED` while the module is off, and `500` — never
+    a permissive answer — when the stored value is not one of the four choices), and declares two
+    command-palette actions: `open-seo` (`catalog:write`) and `open-search-engine-robots`, which
+    opens the Settings screen for holders of `settings:read`.
+  - `@endora-commerce/contracts` exports `storefrontRobotsPolicySchema`,
+    `storefrontRobotsPolicyResponseSchema` and the types `StorefrontRobotsPolicy` and
+    `StorefrontRobotsPolicyResponse`. The schema drops members it does not know, so a later
+    release can add one without an older consumer refusing the answer.
+  - `@endora-commerce/cli`: the storefront that `endora new storefront` writes reads the policy
+    and applies it. Its middleware now runs for every path except `/_next/static` (it used to skip
+    public files, `/sitemap.xml`, `/robots.txt`, `/manifest.webmanifest` and `/_next/image`); for
+    those paths it only adds the header. Measured on the reference storefront, that costs a public
+    file about one millisecond. A storefront that already knows a channel's policy never waits
+    more than a fraction of a second for a refresh; only the first read after a start is waited
+    for, up to two seconds, once.
+
+  **An existing storefront is not changed by upgrading, and until it is updated it ignores the
+  setting.** `endora new storefront` copies the reference once and the project owns it afterwards.
+  With an upgraded backend and an older storefront the Settings screen shows _Default robots_ and
+  nothing acts on it — a channel set to `NOINDEX` stays indexable. To take the feature, copy these
+  four files from the reference storefront into the storefront project, keeping any edits of your
+  own. They import nothing from a package that an earlier storefront does not already have, so
+  **no dependency has to be upgraded for them to build and run**:
+
+  - `lib/seo/crawler-policy.ts` — new: reads the policy, caches it for a minute per channel, and
+    keeps the last value it read while the backend cannot be reached;
+  - `lib/seo/robots-directive.ts` — new: what the policy puts on a response;
+  - `middleware.ts` — changed: the policy read, the response header, the request header for the
+    layout, and the widened `config.matcher`;
+  - `app/layout.tsx` — changed: renders the extra `<meta name="robots">` in both documents it
+    returns. Do not move the directive into the layout's `metadata` export: a page's own `robots`
+    replaces a layout's there, so it would be dropped on every page that declares one.
+
+  Then rebuild the storefront. `curl -sI https://<your shop>/ | grep -i x-robots-tag` shows the
+  header once a restricting value is saved.
+
+  The reference storefront's tests for these files (`test/seo/crawler-policy.test.ts`,
+  `robots-directive.test.ts`, `middleware-robots.test.ts`, `middleware-effect.test.ts`,
+  `layout-robots.test.ts`, `layout-outage-render.test.tsx` and
+  `test/conformance/robots-directive.spec.ts`) are optional to copy. One of them,
+  `crawler-policy.test.ts`, compares the storefront's own check of the answer with the published
+  schema and therefore needs `@endora-commerce/contracts` at this release or later in the
+  storefront project; nothing else does.
+
+  Two limits are stated in the module's documentation: files the backend serves (product images
+  and other uploaded media) carry no `X-Robots-Tag`, and a storefront that starts while its backend
+  is unreachable serves pages without the default directive until its first successful read.
+
 ## 0.105.0
 
 ### Minor Changes
