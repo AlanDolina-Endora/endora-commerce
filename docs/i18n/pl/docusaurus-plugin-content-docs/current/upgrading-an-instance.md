@@ -1097,6 +1097,574 @@ webhooka; zmian w storefroncie dotyczących subskrypcji push i bloków katalogu,
 To, co ta sekcja o nich mówi, pochodzi z dzienników zmian wydania, sprawdzonych ze źródłami tego
 wydania.
 
+### Po aktualizacji do wydania 0.106.0 {#after-0-106-0}
+
+`pnpm run upgrade 0.106.0` przenosi 73 pakiety wydania z `0.105.0` i wykonuje jego jedyną migrację,
+która dodaje kolumnę do tabeli `settings` i nie przepisuje żadnego wiersza; instancja uruchamia się
+potem bez edycji żadnego ze swoich plików, a wydanie nie dodaje żadnej zmiennej środowiskowej ani
+żadnego uprawnienia. To, co dodaje, znajduje się na karcie SEO w **Ustawieniach**: storefront
+kanału sprzedaży można wyłączyć z wyszukiwarek, dopisać mu własne reguły do `robots.txt` i nadać
+mu plik `llms.txt` — i żadna z tych trzech rzeczy nie dociera do storefrontu utworzonego we
+wcześniejszym wydaniu, dopóki jego pliki nie zostaną zaktualizowane. Ta sekcja mówi, co zrobić i w
+jakiej kolejności, a potem — co działa inaczej, osobno dla każdego czytelnika:
+[operatorów](#after-0-106-0-operators), [klientów API i integratorów](#after-0-106-0-api),
+[autorów modułów i modułów nakładkowych](#after-0-106-0-authors) oraz właściciela
+[istniejącego storefrontu](#after-0-106-0-storefront).
+
+#### Co zrobić i w jakiej kolejności {#after-0-106-0-steps}
+
+Przed aktualizacją: nic poza tym, co opisuje [Zanim zaczniesz](#zanim-zaczniesz). Migracja
+`Migration20261011T135250CoreSettingsMultiline` dodaje kolumnę `settings.multiline boolean not null
+default false`, nie wymaga żadnego uzupełnienia danych i nie zmienia wartości ani znaczenia
+żadnego ustawienia. Cofaj ją wyłącznie razem z pakietami: kod tego wydania oczekuje tej kolumny,
+więc cofnięcie samej migracji zostawia instancję, która nie uruchomi się, podczas gdy cofnięcie
+jej w ramach obniżenia wersji `@endora-commerce/platform` i `@endora-commerce/mod-settings` traci
+tylko tę flagę.
+
+Po aktualizacji, zanim instancja znów przyjmie ruch:
+
+1. **Zdecyduj, czy storefront przejmie pliki z tego wydania.** Trzy nowe ustawienia na karcie SEO —
+   *Domyślne robots*, *Własne instrukcje robots.txt* i *Dodatkowa treść llms.txt* — pojawiają się w
+   każdej zaktualizowanej instancji, a storefront utworzony we wcześniejszym wydaniu nie reaguje na
+   żadne z nich: kanał ustawiony na `NOINDEX` nadal jest indeksowany, `robots.txt` pozostaje
+   plikiem, z którym storefront został zbudowany, i nic nie serwuje `llms.txt`. Wiersz *Domyślne
+   robots* i oba podglądy informują o tym, dopóki tak jest. Zmiany opisuje część
+   [W istniejącym storefroncie](#after-0-106-0-storefront); dopóki nie zostaną wprowadzone, nie
+   polegaj na tych ustawieniach.
+2. **W storefroncie, który obsługuje więcej niż jeden kanał sprzedaży za reverse proxy albo siecią
+   CDN**, spraw, by proxy samo ustawiało nagłówek `X-Sales-Channel`, osobno dla każdego hosta, i nie
+   przekazywało dalej wartości przysłanej przez odwiedzającego. Po zaktualizowaniu storefrontu
+   `robots.txt` i `llms.txt` różnią się między kanałami, a kanał wskazuje właśnie ten nagłówek. W
+   nginx to jeden wiersz w bloku `location` storefrontu —
+   `proxy_set_header X-Sales-Channel "<kod kanału tego hosta>";` we wdrożeniu wielokanałowym albo
+   `proxy_set_header X-Sales-Channel "";`, aby usunąć nagłówek we wdrożeniu jednokanałowym, którego
+   poza tym zmiana nie dotyczy. Plik `nginx.example.conf`, z którym utworzono instancję, nie
+   zawiera tego wiersza; `deploy/nginx.example.conf` w repozytorium platformy pokazuje oba warianty,
+   zakomentowane. Współdzielona pamięć podręczna, która ignoruje `Vary` dla tego nagłówka, musi
+   włączyć go do klucza albo nie buforować `/robots.txt`.
+3. **Ustaw *Domyślne robots* dla każdego kanału sprzedaży, którego storefront ma pozostać poza
+   wyszukiwarkami** — `NOINDEX, FOLLOW` albo `NOINDEX, NOFOLLOW`, w **Ustawienia → SEO** — i nie
+   dopisuj do tego `Disallow: /` we własnych instrukcjach `robots.txt`: robot, któremu nie wolno
+   pobrać strony, nigdy nie odczyta jej `noindex`. Przy zaktualizowanym storefroncie
+   `curl -sI https://<twój sklep>/ | grep -i x-robots-tag` pokazuje nagłówek w ciągu minuty lub
+   dwóch.
+4. **Sprawdź, czy `robots.txt` storefrontu nadal serwuje to, co powinien.** Po wprowadzeniu zmian
+   z części [W istniejącym storefroncie](#after-0-106-0-storefront) lista tras w wyniku budowania
+   musi pokazywać `ƒ /robots.txt`, a nie `○ /robots.txt`, a
+   `curl -sI https://<twój sklep>/robots.txt | grep -i x-endora-crawler-files` musi wypisać
+   nagłówek. Jeśli lista tras nadal pokazuje `○`, plik `app/robots.ts` nie został usunięty i stary
+   plik z czasu budowania nadal wygrywa — po cichu. Jeśli edytowano listę `disallow` w
+   `app/robots.ts`, te same wiersze muszą teraz być w `ROBOTS_SYSTEM_RULES` w
+   `lib/seo/robots-system-rules.ts`.
+
+W dowolnym momencie:
+
+5. Jeśli utrzymujesz ustawienie `cms.reserved_slug_segments`, dodaj do niego `robots.txt` i
+   `llms.txt`, tak jak zmiany w storefroncie dodają je do `RESERVED_TOP_LEVEL_SEGMENTS` w
+   `app/reserved-segments.ts`.
+6. **Zbuduj własne moduły ponownie z tym wydaniem tylko wtedy**, gdy któryś z Twoich testów
+   konstruuje `SettingWriteValidationInput` albo renderuje samodzielnie `SettingRowEditor` lub
+   `SettingsPage` — część [Dla autorów modułów i modułów nakładkowych](#after-0-106-0-authors)
+   mówi, czego każdy z nich potrzebuje. Moduł, który tylko dostarcza `SettingWriteValidator` albo
+   tylko deklaruje ustawienia, nie wymaga zmian.
+
+#### Dla operatorów {#after-0-106-0-operators}
+
+**Storefront kanału sprzedaży można wyłączyć z wyszukiwarek jednym ustawieniem: Ustawienia → SEO →
+Domyślne robots.** Do wyboru są `INDEX, FOLLOW` (wartość domyślna), `NOINDEX, FOLLOW`,
+`INDEX, NOFOLLOW` i `NOINDEX, NOFOLLOW`, dla wszystkich kanałów sprzedaży albo osobno dla kanału.
+Dla kanału, którego wartość coś ogranicza, zaktualizowany storefront dodaje dyrektywę do tego, co
+serwuje w tym kanale: nagłówek `X-Robots-Tag` na stronach (także na stronach „nie znaleziono” i na
+stronie offline), na `/sitemap.xml`, na `/_next/image` i na plikach z katalogu `public/`, oraz
+jeden dodatkowy element `<meta name="robots">` w `<head>` stron renderowanych dla żądania. Strony
+„nie znaleziono” i statycznie zbudowana strona `/offline` niosą nagłówek bez dodatkowego elementu —
+obie same deklarują `noindex, nofollow` — a przekierowania zadeklarowane w `next.config.js` i pliki
+w `/_next/static` nie niosą ani jednego, ani drugiego. Ustawienie tylko dodaje ograniczenia: strona,
+która sama deklaruje `noindex`, zachowuje własny tag, a `robots.txt` się nie zmienia. Przy
+wartości domyślnej nic nie jest dodawane. Zapisana zmiana obowiązuje w storefroncie w ciągu minuty
+lub dwóch. Dwa ograniczenia: pliki serwowane przez backend (zdjęcia produktów i inne przesłane
+media) nie niosą `X-Robots-Tag`, a storefront uruchomiony, gdy jego backend jest nieosiągalny,
+serwuje strony bez domyślnej dyrektywy aż do pierwszego udanego odczytu. Ustawienie jest też
+osiągalne z palety poleceń jako *Roboty wyszukiwarek* dla posiadacza `settings:read`. Zobacz
+[Roboty wyszukiwarek](./modules/seo.md#roboty-wyszukiwarek).
+
+**Do `robots.txt` kanału sprzedaży można dopisać reguły: Ustawienia → SEO → Własne instrukcje
+robots.txt.** Tekst jest dopisywany po regułach, które storefront generuje sam — za nimi,
+oddzielony jednym pustym wierszem — dla wszystkich kanałów sprzedaży albo osobno dla kanału.
+Generowane reguły (zamknięte rodziny adresów i wiersz `Sitemap:`) się nie zmieniają i nie można ich
+edytować ani usunąć z ekranu Ustawień. Bez tekstu `robots.txt` jest bajt w bajt tym, czym był;
+zresetowanie ustawienia usuwa tekst; zapisana zmiana jest serwowana w ciągu około dwóch minut.
+
+- Tekst jest serwowany tak, jak go napisano: każdy znak jest zachowany, w tej samej kolejności, i
+  nic w nim nie jest walidowane. Dwie rzeczy dotyczące końców wierszy są ujednolicane — każdy
+  koniec wiersza jest serwowany jako znak nowej linii (`LF`), niezależnie od tego, czy zapisano go
+  jako `LF`, `CRLF` czy `CR`, a plik kończy się dokładnie jednym — a jeden znacznik kolejności
+  bajtów (`U+FEFF`) na samym początku tekstu nie jest serwowany, bo robot nie rozpoznaje wiersza, do
+  którego jest doklejony.
+- Generowanych wierszy nie da się zmienić, ale ich skutek dla jednego robota — tak: grupa
+  napisana dla robota wskazanego z nazwy zastępuje dla niego grupę `*`. Powtórz w takiej grupie
+  generowane reguły, jeśli mają go nadal dotyczyć. Indeksowanie od tego nie zależy — strony, które
+  te reguły zamykają, same deklarują `noindex`.
+- Tekst może mieć najwyżej **64 KiB** (65 536 bajtów UTF-8). Większy jest odrzucany przy zapisie
+  odpowiedzią `400 SEO_CRAWLER_TEXT_TOO_LARGE` z komunikatem podającym limit, a zapisany wcześniej
+  tekst zostaje zachowany.
+- **`robots.txt` nie usuwa stron z wyników wyszukiwania.** Decyduje o tym, co robot może pobrać.
+  Aby storefront pozostał poza wyszukiwarkami, użyj *Domyślne robots* = `NOINDEX` i nie dopisuj do
+  tego `Disallow: /`. Opis ustawienia mówi o tym, po angielsku i po polsku.
+
+Zobacz [Własne instrukcje `robots.txt`](./modules/seo.md#własne-instrukcje-robotstxt).
+
+**Pod polem znajduje się podgląd pliku, który serwuje storefront wybranego kanału**, jako jeden
+blok będący tym plikiem: wiersze generowane przez storefront, oznaczone jako tylko do odczytu,
+potem pusty wiersz, potem Twoje wiersze, oznaczone paskiem i etykietą. Gdy nic nie jest
+niezapisane, nagłówek brzmi *robots.txt serwowany obecnie*; w miarę pisania blok podąża za polem,
+a nagłówek zmienia się na *robots.txt po zapisaniu* — plik, który storefront będzie serwował po
+zapisaniu; do tego czasu serwuje poprzednią wersję. W widoku **Wszystkie kanały** wybierasz kanał
+do podglądu, a podgląd wymienia kanały, które mają własną wartość i których zmiana w związku z tym
+nie dotyczy. W kanale, którego *Domyślne robots* to `NOINDEX`, mówi, że `robots.txt` celowo
+pozostaje otwarty, i ostrzega, gdy Twój tekst zabrania wszystkim robotom pobierania czegokolwiek.
+Administrator, który może odczytywać ustawienia, ale nie może ich zmieniać, też go widzi, a temu,
+kto nie może wyświetlać listy kanałów sprzedaży, pokazywany jest systemowy kanał domyślny.
+Podgląd niczego nie zmienia w tym, co serwuje storefront.
+
+Generowane reguły nie są kopiowane do backendu ani do panelu administracyjnego: za każdym razem
+backend pyta o nie storefront kanału. Dlatego **storefront musi być osiągalny z backendu pod
+adresem skonfigurowanym dla kanału** — ustawienie **Storefront URL** kanału, a w jego braku
+`STOREFRONT_BASE_URL`. Gdy nie jest, podgląd o tym informuje i pokazuje sam Twój tekst; zapis
+nigdy nie jest blokowany. Trzy komunikaty i co z każdym zrobić:
+
+- *Nie udało się połączyć ze sklepem* — brak odpowiedzi w ciągu trzech sekund, odrzucone
+  połączenie, błąd, przekierowanie albo odpowiedź, która nie jest plikiem tekstowym. Sprawdź, czy
+  storefront działa i czy skonfigurowany adres to ten, pod którym sam odpowiada. Wiersz dziennika
+  serwera `seo: the crawler-file preview could not show the storefront’s part` podaje przyczynę.
+- *Ten kanał sprzedaży nie ma skonfigurowanego adresu sklepu* — ustaw **Storefront URL** dla
+  kanału albo `STOREFRONT_BASE_URL`.
+- *Ten sklep nie potwierdził, że obsługuje własne instrukcje* — odpowiedział bez nagłówka
+  `X-Endora-Crawler-Files`. Zwykle storefront został utworzony w wydaniu sprzed tych ustawień:
+  serwuje tylko swoje generowane reguły i ignoruje zarówno własne instrukcje, jak i *Domyślne
+  robots*. Tak samo wygląda proxy, które usuwa ten nagłówek, albo storefront zaktualizowany tylko
+  częściowo. Odpowiednia informacja pojawia się w wierszu *Domyślne robots*, żeby nie uznać sklepu
+  za wyłączony z wyszukiwarek, gdy jego storefront może ignorować to ustawienie. Wprowadź zmiany z
+  części [W istniejącym storefroncie](#after-0-106-0-storefront) i sprawdź, czy nagłówek dociera.
+
+Backend wysyła jedno żądanie na podgląd: `GET <origin>/robots.txt?part=system`, wyłącznie do
+originu skonfigurowanego adresu, z kodem kanału w nagłówku `X-Sales-Channel`. Nie podąża za
+przekierowaniem, czeka najwyżej trzy sekundy, czyta najwyżej 512 KiB, przyjmuje wyłącznie
+`text/plain`, nie wysyła ciasteczek ani danych uwierzytelniających i niczego nie zapisuje. Ścieżka
+ani zapytanie w skonfigurowanym adresie nie są używane. Adresy prywatne i pętli zwrotnej **nie**
+są odrzucane, bo własny storefront instancji jest rutynowo osiągany pod takim adresem; o tym, kto
+może wskazać adres kanału, decyduje jak dotąd posiadanie `settings:write`.
+
+**Storefront serwuje `llms.txt` osobno dla każdego kanału sprzedaży, a Ty możesz go uzupełnić:
+Ustawienia → SEO → Dodatkowa treść llms.txt.** `/llms.txt` to plik tekstowy, który mówi
+asystentom AI, czym jest sklep i gdzie są jego publiczne strony. Zaktualizowany storefront serwuje
+po jednym dla każdego kanału sprzedaży: część generowaną — nazwę sklepu, odnośniki do strony
+głównej, katalogu, wyszukiwania, bloga i strony kontaktowej oraz do mapy witryny — a po niej tekst
+zapisany w tym ustawieniu. Ustawienie jest domyślnie puste, przyjmuje wartość dla wszystkich
+kanałów sprzedaży i wartość osobno dla kanału jak każde inne i mieści najwyżej 64 KiB — limit
+instrukcji `robots.txt`. Zapisana zmiana jest serwowana w ciągu około dwóch minut. Adresy w
+generowanej części używają jedynego publicznego originu storefrontu (`NEXT_PUBLIC_SITE_URL`,
+ustalonego przy budowaniu storefrontu), tak jak mapa witryny: storefront obsługujący kilka kanałów
+sprzedaży podaje ten origin w pliku każdego kanału, z nazwą sklepu właściwą dla tego kanału. Dwie
+rzeczy, które warto wiedzieć, zanim na nim polegasz:
+
+- **Kanał sprzedaży, którego *Domyślne robots* to `NOINDEX`, nie ma `llms.txt`.** Storefront
+  odpowiada tam na `/llms.txt` „nie znaleziono”, niezależnie od zawartości ustawienia: sklep, który
+  prosi wyszukiwarki, by trzymały się z daleka, nie zaprasza asystentów AI. Tekst jest zachowany i
+  serwowany ponownie, gdy kanał zezwoli na indeksowanie. `robots.txt` to nie dotyczy — w takim
+  kanale pozostaje otwarty, jak dotąd.
+- **Wyłączenie modułu `seo` wycofuje ten plik**, razem z polityką *Domyślne robots* i własnymi
+  instrukcjami `robots.txt` (poniżej).
+
+Pod polem znajduje się podgląd, taki sam jak przy *Własnych instrukcjach robots.txt*: jeden blok
+będący plikiem, z Twoimi wierszami oznaczonymi w środku, pod nagłówkiem *llms.txt serwowany
+obecnie* albo *llms.txt po zapisaniu*. W kanale `NOINDEX` zamiast bloku mówi *llms.txt nie jest
+serwowany*, z podaniem przyczyny. Komunikaty dla storefrontu, z którym nie udało się połączyć,
+który nie ma skonfigurowanego adresu albo nie potwierdził, że serwuje plik, są tymi, które pokazuje
+podgląd `robots.txt`, a żądanie, które backend wysyła w tym celu, jest ograniczone tak samo — jedno
+`GET <origin>/llms.txt?part=base`, bez podążania za przekierowaniem, trzy sekundy, 512 KiB,
+wyłącznie `text/plain`, nic z żądania administratora w środku. Jak dotąd adresy prywatne i pętli
+zwrotnej nie są odrzucane, a ten podgląd mówi posiadaczowi `settings:read` nieco więcej o
+skonfigurowanym adresie niż podgląd `robots.txt`: `404` bez nagłówka storefrontu jest zgłaszane
+jako „nie potwierdził, że serwuje plik llms.txt”, a nie jako „nie udało się połączyć”, więc adres,
+pod którym odpowiada jakiś serwer HTTP, da się odróżnić od takiego, pod którym nie odpowiada nic.
+Zobacz [Dodatkowa treść `llms.txt`](./modules/seo.md#dodatkowa-treść-llmstxt).
+
+**Wyłączenie modułu `seo` wycofuje wszystkie trzy.** Storefront nie wysyła domyślnej dyrektywy
+robots, więc kanał ustawiony na `NOINDEX` znów jest indeksowany, dopóki moduł nie zostanie
+ponownie włączony; `robots.txt` jest serwowany z samymi generowanymi regułami; a `llms.txt` nie
+jest serwowany. Zapisane wartości są zachowane i obowiązują ponownie po włączeniu modułu. Opis
+modułu i jego ustawienie aktywacji na ekranie `/platform/modules` mówią o tym. Zobacz
+[Gdy moduł jest wyłączony](./modules/seo.md#gdy-moduł-jest-wyłączony).
+
+**`robots.txt` nie zależy już od tego, czy *Domyślne robots* da się odczytać.** Wartość *Domyślne
+robots* spoza czterech dostępnych — co wymaga wiersza zapisanego z pominięciem API ustawień —
+sprawiała, że `GET /api/v1/storefront/seo/crawler-files` odpowiadało `500`, więc świeżo
+uruchomiony storefront odpowiadał na `robots.txt` tego kanału kodem `503`, choć ten plik nigdy od
+tego ustawienia nie zależał. Endpoint odpowiada teraz i wskazuje, czego nie udało się odczytać.
+Taki kanał zachowuje swój `robots.txt`; jego `llms.txt`, który od tego ustawienia zależy, odpowiada
+`503`, dopóki wartość nie zostanie naprawiona przez ponowne zapisanie *Domyślne robots*. Korzysta
+na tym także niezaktualizowany storefront: jego `robots.txt` również jest serwowany.
+
+**Ślad audytowy zmiany wartości ustawienia zapisuje wartość sprzed zmiany.** Dotąd
+`setting.global_value_set` i `setting.value_set` niosły tylko `stateAfter`, a oba resety
+(`setting.global_value_reset`, `setting.value_reset`) odnotowywały, że wartość została usunięta,
+nie odnotowując której. Każde z tych czterech zdarzeń niesie teraz także `stateBefore`:
+
+```json
+{ "settingCode": "your_module.base_url", "value": "https://old.example", "valueType": "string", "stored": true }
+```
+
+a w dwóch akcjach dotyczących kanału dodatkowo `salesChannelId`. Przeglądarka dziennika audytu już
+renderuje `stateBefore` obok `stateAfter`, więc poprzednia wartość pojawia się tam bez żadnej
+dalszej zmiany. `value` to wartość **zapisana** na poziomie, na którym następuje zapis — wartość
+dla wszystkich kanałów przy zapisie lub resecie dla wszystkich kanałów, własna wartość danego
+kanału przy zapisie lub resecie dla kanału — a nie wartość, do której kanał się rozstrzygnął:
+pierwszy zapis odnotowuje `"value": null, "stored": false`, nie wartość domyślną z manifestu ani
+odziedziczoną wartość dla wszystkich kanałów. `stored` odróżnia „nic nie było zapisane” od
+zapisanego `null`, który ustawienie typu `json` może zgodnie z prawem przechowywać. Poprzednia
+wartość ustawienia typu `secret` jest odnotowywana jako `"[redacted]"`, dokładnie tak, jak już
+była odnotowywana jego nowa wartość — ani tekst jawny, ani zapisany szyfrogram nie trafia do śladu
+audytowego — a `credential_ref` odnotowuje po obu stronach kod konfiguracji, jak dotąd. Sam zapis
+się nie zmienia, odrzucony zapis nadal niczego nie odnotowuje, a wpisy zapisane przed tym wydaniem
+zachowują pusty stan sprzed zmiany.
+
+**Ekran Ustawień może pokazywać nazwę i opis ustawienia w języku administratora.** Dotąd pokazywał
+`name` i `description` zadeklarowane w manifeście ustawień, po angielsku, niezależnie od języka, w
+którym pracuje administrator. Teraz najpierw szuka ich we własnym pakiecie tłumaczeń modułu
+będącego właścicielem ustawienia, a gdy brakuje klucza, wraca do zadeklarowanego tekstu; filtr na
+ekranie dopasowuje przetłumaczoną nazwę i opis tak samo jak zadeklarowane, a opcje ustawienia z
+`enumOptions` są wartościami zapisywanymi i pozostają nieprzetłumaczone. **Dla operatora nic się
+nie zmienia, dopóki moduł nie dostarczy tych kluczy.** Wydanie dodaje tylko sam mechanizm
+wyszukiwania i żadne istniejące wcześniej ustawienie nie jest przez niego tłumaczone; jedynym
+modułem, który w tym wydaniu dostarcza klucze, jest `seo` — dla swojej grupy i czterech ustawień
+(*SEO włączone*, *Domyślne robots*, *Własne instrukcje robots.txt*, *Dodatkowa treść llms.txt*), po
+angielsku i po polsku. Własny moduł dodaje je tak, jak opisuje część
+[Dla autorów modułów i modułów nakładkowych](#after-0-106-0-authors).
+
+**Ustawienie może być wielowierszowe.** Ustawienie typu `string`, które jego moduł tak zadeklaruje,
+jest edytowane na ekranie Ustawień w polu wielowierszowym, które dokładnie zachowuje końce
+wierszy, puste wiersze, wcięcia i końcowy znak nowej linii; pole jest nazwane po ustawieniu na
+potrzeby technologii wspomagających, a wiersz pod nim, który podgląda wartość domyślną i bieżącą,
+pokazuje jeden skrócony wiersz zamiast całego tekstu. W tym wydaniu takimi ustawieniami są oba
+teksty SEO. Każde istniejące wcześniej ustawienie pozostaje jednowierszowe, więc ekran Ustawień
+wygląda i zachowuje się dokładnie tak jak dotąd, dopóki zainstalowany moduł nie zadeklaruje tej
+flagi.
+
+#### Dla klientów API i integratorów {#after-0-106-0-api}
+
+- **Dwa publiczne endpointy storefrontu rozstrzygane dla kanału.**
+  `GET /api/v1/storefront/seo/robots-policy` odpowiada `{ "data": { "index", "follow" } }` z
+  `Cache-Control: no-store`; `503 MODULE_DISABLED`, gdy moduł `seo` jest wyłączony; i `500` — nigdy
+  odpowiedzią zezwalającą — gdy zapisana wartość nie jest jedną z czterech dostępnych.
+  `GET /api/v1/storefront/seo/crawler-files` odpowiada
+  `{ "data": { "index", "follow", "robotsTxtCustom", "llmsTxtAdditional", "shop": { "name" } } }` z
+  `Cache-Control: no-store`, `503 MODULE_DISABLED`, gdy moduł jest wyłączony, i `500` — nigdy pustym
+  tekstem — gdy zapisanych instrukcji `robots.txt` nie da się zaserwować. Jego `data` ma opcjonalny
+  element **`unreadable`**: nazwy elementów, których backend nie zdołał odczytać z tego, co
+  zapisano — `'policy'` (`index` i `follow` są wtedy oba `false` i znaczą „nieznane”) oraz
+  `'llmsTxtAdditional'` (ten element jest wtedy `''` i znaczy „nieznane”). Brakuje go, gdy
+  wszystko udało się odczytać, a konsument, który odczytuje z tego endpointu `index`, `follow` lub
+  `llmsTxtAdditional`, powinien traktować wymieniony element jako nieznany, a nie jako jego
+  wartość. Oba schematy odrzucają elementy, których nie znają, więc późniejsze wydanie może dodać
+  nowy bez odrzucenia odpowiedzi przez starszego konsumenta. Kanał sprzedaży to rozstrzygnięty
+  kanał żądania, jak na każdej trasie storefrontu.
+- **Endpoint podglądu dla administratorów.**
+  `GET /api/v1/admin/seo/crawler-files/preview?file=robots|llms&salesChannelCode=<code>`, chroniony
+  uprawnieniem `settings:read`. `salesChannelCode` jest opcjonalny i oznacza systemowy kanał
+  domyślny; odpowiedź wskazuje kanał, którego dotyczy, i jeden z pięciu stanów: `ok`,
+  `storefront-outdated` (storefront odpowiedział bez nagłówka `X-Endora-Crawler-Files`; brak
+  `base`), `not-served` (`404` **z** nagłówkiem — brak pliku dla tego kanału, czym jest `llms.txt` w
+  kanale `NOINDEX`), `storefront-unreachable` i `address-unknown`.
+- **Zapis zbyt długiego tekstu dla robotów odpowiada `400 SEO_CRAWLER_TEXT_TOO_LARGE`** z
+  komunikatem podającym limit 65 536 bajtów UTF-8; zapisany wcześniej tekst zostaje zachowany.
+- **`SettingDto` zyskuje `multiline: boolean`**, które `GET /api/v1/admin/settings` i
+  `GET /api/v1/admin/settings/:code` teraz zawsze wysyłają. Odczytaj je, jeśli renderujesz własny
+  edytor ustawienia.
+- **Cztery akcje audytu zyskują `stateBefore`** — `setting.global_value_set`, `setting.value_set`,
+  `setting.global_value_reset` i `setting.value_reset` — w kształcie podanym w części
+  [Dla operatorów](#after-0-106-0-operators). `stateAfter` zachowuje swój kształt.
+- **Szczegóły automatyzacji newslettera** — `GET /api/v1/admin/newsletter/automations/:id` oraz
+  odpowiedź każdego zapisu, który zwraca szczegóły — niosą `salesChannelId: null` dla
+  automatyzacji bez przypisanego kanału sprzedaży, także po ponownym wczytaniu rekordu z bazy
+  danych; wcześniej tego elementu w nich brakowało. Lista, która nigdy tego elementu nie niosła,
+  się nie zmienia.
+- **Nowe w `@endora-commerce/contracts`**, wszystko eksportowane z korzenia pakietu i z podścieżki
+  `seo`: `storefrontRobotsPolicySchema`, `storefrontRobotsPolicyResponseSchema` oraz typy
+  `StorefrontRobotsPolicy` i `StorefrontRobotsPolicyResponse`; `storefrontCrawlerFilesSchema`,
+  `storefrontCrawlerFilesResponseSchema`, typy `StorefrontCrawlerFiles` i
+  `StorefrontCrawlerFilesResponse`, `CRAWLER_FILES_UNREADABLE_POLICY` i
+  `CRAWLER_FILES_UNREADABLE_LLMS_TXT`; `composeCrawlerFile(base, extra)` — opisane wyżej złączenie
+  części generowanej z tekstem operatora, którym storefront serwuje plik, a podgląd go renderuje;
+  `CRAWLER_TEXT_MAX_BYTES` i `ERROR_CODES.SEO_CRAWLER_TEXT_TOO_LARGE`;
+  `adminCrawlerFilePreviewQuerySchema`, `adminCrawlerFilePreviewResponseSchema`,
+  `adminCrawlerFilePreviewSchema`, `adminCrawlerFilePreviewStateSchema`, `adminCrawlerFileSchema`
+  i ich wywnioskowane typy; oraz `CRAWLER_FILES_CAPABILITY_HEADER` (`X-Endora-Crawler-Files`) —
+  nagłówek odpowiedzi, którym storefront informuje, że serwuje pliki dla robotów w bieżący sposób.
+- **`SettingWriteValidationInput` zyskuje `proposedValue`** — wartość, którą proponuje zapis
+  ustawienia, obok rzutowania na kanały, które już niósł. Zapis dla wszystkich kanałów nie dociera
+  do żadnego kanału mającego własną wartość, więc w instancji, w której każdy kanał ją ma,
+  proponowana wartość nie była w rzutowaniu żadnego kanału i walidator, którego reguła dotyczy
+  samej wartości, nie mógł jej zobaczyć. Kod, który *konstruuje* to wejście, musi teraz podać ten
+  element; zobacz [Dla autorów modułów i modułów nakładkowych](#after-0-106-0-authors).
+
+#### Dla autorów modułów i modułów nakładkowych {#after-0-106-0-authors}
+
+**Ustawienie typu `string` można zadeklarować jako wielowierszowe.** Dodaj `multiline: true` do
+jego wpisu w manifeście ustawień modułu:
+
+```ts
+defineModuleSettingsManifest({
+  moduleCode: 'your_module',
+  settings: [
+    {
+      code: 'your_module.footer_note',
+      name: 'Footer note',
+      valueType: 'string',
+      defaultValue: '',
+      multiline: true,
+    },
+  ],
+});
+```
+
+Nic więcej się nie zmienia: wartość nadal jest typu `string`, jest odczytywana przez
+`SettingsService.get` jak dotąd i rozstrzyga się dla kanału sprzedaży jak każde inne ustawienie.
+To, co wpisano, jest tym, co zapisano. `SettingManifestEntrySchema` przyjmuje `multiline` tylko
+przy `valueType: 'string'` i nie razem z `enumOptions`; każda inna kombinacja zawodzi przy
+parsowaniu manifestu, z błędem wskazanym na `multiline`. Flaga dotyczy prezentacji, `ManifestReconciler`
+utrzymuje ją w zgodzie z manifestem przy każdym starcie w obu kierunkach, więc jej późniejsze
+dodanie lub usunięcie nie jest zmianą łamiącą zgodność i nigdy nie dotyka zapisanej wartości.
+
+**Moduł może dołożyć coś pod ustawieniem, które zadeklarował: strefa `settings.setting.after`.**
+`AdminZoneNameSchema` ma nowy element, montowany przez ekran Ustawień raz na wiersz ustawienia,
+pod polem. Dołóż do niej, aby pokazać, co z ustawienia wynika — podgląd, konsekwencję, ostrzeżenie:
+
+```ts
+import { zoneComponent, type AdminContributions } from '@endora-commerce/admin-kit/contributions';
+
+export const contributions: AdminContributions = {
+  zones: [
+    zoneComponent('settings.setting.after', () => import('./zones/FooterNotePreview.js'), {
+      match: { settingCode: 'your_module.footer_note' },
+      requiredPermission: 'settings:read',
+    }),
+  ],
+};
+```
+
+Komponent otrzymuje `SettingsSettingAfterZoneProps`: `settingCode`, `ownerModule`, `channelCode`
+(edytowany kanał sprzedaży albo `null` dla wartości dla wszystkich kanałów), `draftText` (tekst w
+polu **w tej chwili**, zapisany lub nie, dla ustawienia typu `string`; `null` dla każdego innego
+typu wartości) oraz `dirty`. Zawęź przez `match` po `settingCode` albo `ownerModule` — fragment
+niedopasowanego wkładu nigdy nie jest pobierany. Właściwości płyną w jedną stronę: wkład nie może
+zmienić wartości ani wstrzymać zapisu wiersza i powinien powiedzieć słowami, gdy to, co pokazuje,
+nie jest jeszcze zapisane. Strefa nie jest montowana dla ustawienia typu `secret`, więc wkład nigdy
+nie otrzymuje roboczej wartości sekretu. Wkład znika razem ze swoim modułem, a zawodzący wkład nie
+pociąga za sobą wiersza. Oba podglądy SEO są wkładami do tej strefy.
+
+**Jeśli sam renderujesz `SettingRowEditor`.** Edytor wiersza w `@endora-commerce/mod-settings`
+montuje teraz strefę, więc musi być renderowany pod `AdminContributionsProvider` i dostawcami
+sesji, jak każdy ekran hosta montujący strefę. Panel administracyjny już to robi; test, który
+renderuje wiersz albo `SettingsPage` samodzielnie, potrzebuje wokół nich tych dostawców.
+
+**Moduł może tłumaczyć nazwy i opisy własnych ustawień.** Ekran Ustawień szuka ich w pakiecie
+tłumaczeń modułu będącego właścicielem pod trzema rodzinami kluczy i wraca do zadeklarowanego
+tekstu, gdy klucza brakuje:
+
+| Klucz | Zastępuje |
+| --- | --- |
+| `settingLabels.<kod ustawienia>.name` | `name` ustawienia |
+| `settingLabels.<kod ustawienia>.description` | `description` ustawienia |
+| `settingGroups.<kod grupy>.name` | `name` grupy |
+
+Kod jest zapisywany w całości, z kropkami, a klucze są płaskie jak każdy inny klucz w pakiecie
+tłumaczeń. Dla modułu `your_module`, który deklaruje ustawienie `your_module.base_url` w grupie
+`your_section`, dodaj do `i18n/pl.json` (a angielskie brzmienie do `i18n/en.json`):
+
+```json
+{
+  "settingGroups.your_section.name": "Twoja sekcja",
+  "settingLabels.your_module.base_url.name": "Bazowy adres URL",
+  "settingLabels.your_module.base_url.description": "Adres, pod którym usługa jest dostępna."
+}
+```
+
+Rozstrzyganie odbywa się dla każdego klucza z osobna — język administratora, potem angielski,
+potem tekst z manifestu — więc ustawienia można tłumaczyć pojedynczo. Odczytywany jest wyłącznie
+pakiet tłumaczeń modułu, którego manifest ustawień zadeklarował dany wiersz (jego `moduleCode`,
+który musi być równy `id` modułu); klucz dla ustawienia innego modułu jest ignorowany. Tekst jest
+pokazywany tak, jak go napisano, bez podstawiania parametrów. `name` i `description` w manifeście
+pozostają wymagane: to je zwraca API i to one są ostatnim wariantem zapasowym.
+
+**Kod, który konstruuje `SettingWriteValidationInput`, musi podać `proposedValue`** — zwykle
+test wywołujący walidator bezpośrednio. Moduł, który dostarcza `SettingWriteValidator`, nie
+wymaga zmian, a taki, którego reguła dotyczy samej wartości, może ją teraz tam odczytać.
+
+**`check:channel-resolution` nie zgłasza już nagłówka, który jest wysyłany.** Pierwszy sygnał tej
+reguły oznacza każdy literał tekstowy `x-sales-channel`, bo moduł nie może odczytywać tego nagłówka
+z żądania — robi to resolver. Zgłaszany był również moduł, który sam wysyła żądanie do innego
+serwera i wskazuje w nim kanał sprzedaży. Klucz literału obiektu pod właściwością `headers:` —
+`fetch(url, { headers: { 'X-Sales-Channel': channel.code } })` — jest teraz wyłączony z reguły, tak
+jak już wcześniej tablica `allowedHeaders` polityki CORS. Co nadal jest zgłaszane: dostęp
+indeksowy do obiektu nagłówków, argument `.get(...)`, nazwa trzymana w stałej, klucz obliczany,
+deklaracja destrukturyzująca oraz *przypisanie* destrukturyzujące
+(`({ headers: { 'x-sales-channel': code } } = request)`, także jako zmienna pętli `for…of` lub
+`for…in`), które ma wyłączony kształt, a jest odrzucane ze względu na swoje położenie.
+
+**`@endora-commerce/mod-seo` deklaruje `lucide-react` jako opcjonalną zależność peer**, tak jak
+pozostałe pakiety modułów z powierzchnią w panelu administracyjnym; aplikacja, która ma panel
+administracyjny, już ją ma.
+
+#### W istniejącym storefroncie {#after-0-106-0-storefront}
+
+**Istniejący storefront nie zmienia się przez aktualizację i dopóki nie zostanie zaktualizowany,
+ignoruje wszystkie trzy ustawienia.** `endora new storefront` kopiuje wzorzec raz, a potem projekt
+należy do Ciebie. Przy zaktualizowanym backendzie i starszym storefroncie ekran Ustawień pokazuje
+trzy ustawienia i nic na nie nie reaguje: kanał ustawiony na `NOINDEX` nadal jest indeksowany,
+`robots.txt` pozostaje plikiem, z którym storefront został zbudowany, i nic nie serwuje
+`llms.txt`. Aby przejąć te funkcje, przenieś poniższe zmiany ze wzorcowego storefrontu do projektu
+storefrontu, zachowując własne edycje. Storefront do kopiowania utwórz tak, jak opisuje
+[Bloki modułów w istniejącym storefroncie](#storefront-block-renderers). Trzy grupy budują jedna na
+drugiej i **trzeba je wprowadzać w tej kolejności**; każdą można przejąć bez następnych.
+
+**1. *Domyślne robots* — cztery pliki, bez podnoszenia zależności.** Nie importują niczego z
+pakietu, którego wcześniejszy storefront by nie miał, więc nic nie trzeba podnosić, aby się
+zbudowały i działały:
+
+- `lib/seo/crawler-policy.ts` — nowy: odczytuje politykę, buforuje ją na minutę dla kanału i
+  zachowuje ostatnio odczytaną wartość, gdy backend jest nieosiągalny;
+- `lib/seo/robots-directive.ts` — nowy: co polityka umieszcza w odpowiedzi;
+- `middleware.ts` — zmieniony: odczyt polityki, nagłówek odpowiedzi, nagłówek żądania dla layoutu
+  i rozszerzony `config.matcher`. Middleware działa teraz dla każdej ścieżki poza `/_next/static`
+  (dotąd pomijał pliki publiczne, `/sitemap.xml`, `/robots.txt`, `/manifest.webmanifest` i
+  `/_next/image`); dla tych ścieżek tylko dodaje nagłówek. Zmierzone na wzorcowym storefroncie,
+  kosztuje to plik publiczny około jednej milisekundy. Storefront, który już zna politykę kanału,
+  nigdy nie czeka na odświeżenie dłużej niż ułamek sekundy; czeka się tylko na pierwszy odczyt po
+  starcie, najwyżej dwie sekundy, raz;
+- `app/layout.tsx` — zmieniony: renderuje dodatkowy `<meta name="robots">` w obu dokumentach,
+  które zwraca. Nie przenoś dyrektywy do eksportu `metadata` layoutu: własne `robots` strony
+  zastępuje tam `robots` layoutu, więc zostałaby pominięta na każdej stronie, która je deklaruje.
+
+Potem zbuduj storefront ponownie. `curl -sI https://<twój sklep>/ | grep -i x-robots-tag` pokazuje
+nagłówek po zapisaniu wartości ograniczającej. Testy wzorcowego storefrontu dla tych plików
+(`test/seo/crawler-policy.test.ts`, `robots-directive.test.ts`, `middleware-robots.test.ts`,
+`middleware-effect.test.ts`, `layout-robots.test.ts`, `layout-outage-render.test.tsx` i
+`test/conformance/robots-directive.spec.ts`) można skopiować opcjonalnie; jeden z nich,
+`crawler-policy.test.ts`, porównuje własne sprawdzenie odpowiedzi w storefroncie z opublikowanym
+schematem i dlatego wymaga w projekcie storefrontu `@endora-commerce/contracts` w tym wydaniu lub
+nowszym; nic innego w tej grupie tego nie wymaga.
+
+**2. Własne instrukcje `robots.txt` — `robots.txt` staje się trasą, a projekt potrzebuje
+`@endora-commerce/contracts` w wersji `0.106.0` lub nowszej.** `lib/seo/robots-txt.ts` importuje
+`composeCrawlerFile` z `@endora-commerce/contracts/seo`, czego cztery powyższe pliki nie
+potrzebowały. `middleware.ts` i `app/layout.tsx` nie zmieniają się w tej grupie:
+
+- **usuń** `app/robots.ts`. Musi zniknąć i nic Ci nie powie, jeśli nie zniknął: gdy istnieje
+  razem z `app/robots.txt/route.ts`, Next buduje się bez ostrzeżenia, dalej serwuje stary plik z
+  czasu budowania i nigdy nie dociera do nowej trasy. Lista tras w wyniku budowania pokazuje, który
+  wygrał — `○ /robots.txt` to stary plik, `ƒ /robots.txt` to nowa trasa;
+- **dodaj** `app/robots.txt/route.ts` — trasę;
+- **dodaj** `lib/seo/robots-txt.ts` — to, czym trasa odpowiada, i kiedy odpowiada `503`;
+- **dodaj** `lib/seo/robots-system-rules.ts` — generowane reguły, przeniesione bez zmian z
+  `app/robots.ts`. **Jeśli edytowano listę `disallow` w Twoim `app/robots.ts`, przenieś te zmiany
+  do `ROBOTS_SYSTEM_RULES` w tym pliku**;
+- **zastąp** `lib/seo/crawler-policy.ts` nową wersją. Odczytuje teraz pliki dla robotów obok
+  domyślnej polityki robots i porzuca odczyt z backendu, który zamrożony proces zostawił w
+  zawieszeniu, zamiast czekać na niego w nieskończoność;
+- **edytuj** `app/reserved-segments.ts`: dodaj `'robots.txt'` do `RESERVED_TOP_LEVEL_SEGMENTS` i
+  dodaj ten sam wpis do ustawienia `cms.reserved_slug_segments` wdrożenia, jeśli je utrzymujesz;
+- w `test/seo/route-declarations.test.ts`, jeśli go skopiowano, zastąp import z
+  `'../../app/robots'` importem `ROBOTS_SYSTEM_RULES` i `robotsSitemapUrl` z
+  `'../../lib/seo/robots-system-rules'`, tak jak robi to wersja wzorcowa.
+
+Potem zbuduj storefront ponownie;
+`curl -sI https://<twój sklep>/robots.txt | grep -i x-endora-crawler-files` pokazuje nagłówek, gdy
+serwuje już nowa trasa. Czym trasa odpowiada:
+
+- `200` z generowanymi regułami i tekstem kanału; `Content-Type: text/plain; charset=utf-8`,
+  `Cache-Control: public, max-age=60`, `Vary: X-Sales-Channel`, `X-Endora-Crawler-Files: 1`. Dotąd
+  plik był prerenderowany i wysyłany z `Cache-Control: public, max-age=0, must-revalidate` i
+  `Content-Type: text/plain`;
+- samymi generowanymi regułami, gdy moduł `seo` jest wyłączony, oraz wobec backendu, który nie ma
+  tej funkcji;
+- **`503` z `Retry-After: 120`**, gdy tekstu kanału nie da się odczytać, a proces storefrontu nigdy
+  go nie odczytał — zamiast plikiem, który po cichu pomija reguły operatora. Proces, który raz
+  odczytał tekst, serwuje tę wersję tak długo, jak backend jest nieosiągalny. Storefront
+  uruchomiony, gdy jego backend nie działa, odpowiada więc na `robots.txt` kodem `503`, dopóki
+  backend nie wróci; stron to nie dotyczy;
+- `GET /robots.txt?part=system` odpowiada samymi generowanymi regułami, bez pytania backendu przez
+  trasę, i jest wysyłane z `Cache-Control: no-store`.
+
+Origin w wierszu `Sitemap:` to nadal `NEXT_PUBLIC_SITE_URL` wkompilowany przy budowaniu. Testy
+wzorcowego storefrontu dla tych plików (`test/seo/robots-system-rules.test.ts` z jego fixture
+`test/seo/__fixtures__/robots-before.txt`, `test/seo/robots-txt-route.test.ts` oraz uzupełnienia
+w `test/seo/crawler-policy.test.ts`) można skopiować opcjonalnie. Fixture to własne generowane
+reguły wzorca z originem `http://localhost:3000`; projekt, który zmienił swoją listę, dostosowuje
+fixture do niej.
+
+**3. `llms.txt` — zakłada, że grupy 1 i 2 są na miejscu**: `lib/seo/crawler-policy.ts`,
+`lib/seo/robots-txt.ts`, `lib/seo/robots-system-rules.ts`, `lib/seo/robots-directive.ts` i
+`app/robots.txt/route.ts` istnieją, a `app/robots.ts` jest usunięty. `middleware.ts` i
+`app/layout.tsx` nie zmieniają się także w tej grupie:
+
+- **dodaj** `app/llms.txt/route.ts` — trasę;
+- **dodaj** `lib/seo/llms-txt.ts` — to, czym trasa odpowiada, i kiedy odpowiada `404` i `503`;
+- **dodaj** `lib/seo/llms-txt-base.ts` — część generowaną. Wymienia `SITEMAP_STATIC_ROUTES` z
+  Twojego `app/sitemap.ts`; **jeśli zmieniono tę listę, nadaj każdej ze swoich tras tytuł w
+  `LLMS_TXT_PAGE_TITLES`** i wskaż w `LLMS_TXT_CONDITIONAL_PAGES` te z nich, które mogą odpowiedzieć
+  „nie znaleziono”;
+- **dodaj** `lib/seo/llms-txt-pages.ts` — czy strona warunkowa jest w tej chwili serwowana (dziś:
+  blog), zapamiętywane dla kanału w pamięci podręcznej eksportowanej przez
+  `lib/seo/crawler-policy.ts`;
+- **dodaj** `lib/seo/crawler-file-response.ts` — nagłówki i tymczasową awarię wspólne dla obu
+  plików;
+- **zastąp** `lib/seo/robots-txt.ts` i `lib/seo/crawler-policy.ts` nowymi wersjami. Pierwszy bierze
+  teraz nagłówki z `crawler-file-response.ts`; drugi odczytuje `unreadable` i eksportuje pamięć
+  podręczną kanału, z której korzysta pytanie o stronę;
+- **edytuj** `lib/seo/robots-directive.ts`: `isDocumentPath` musi odpowiadać `false` dla
+  `/llms.txt`, tak jak wersja wzorcowa. **Nie pomijaj tego kroku**: bez niego storefront nadal
+  serwuje plik, ale gdy backend jest nieosiągalny, odpowiada na `/llms.txt` stroną awarii zamiast
+  ostatnią znaną wersją;
+- **edytuj** `app/reserved-segments.ts`: dodaj `'llms.txt'` do `RESERVED_TOP_LEVEL_SEGMENTS` i
+  dodaj ten sam wpis do ustawienia `cms.reserved_slug_segments` wdrożenia, jeśli je utrzymujesz;
+- **upewnij się, że nie ma pliku `public/llms.txt`.** Plik w tym miejscu jest serwowany zamiast
+  trasy — dla każdego kanału, bez tekstu operatora i w kanale ustawionym na `NOINDEX` — a ani
+  budowanie, ani serwer tego nie zgłaszają.
+  `curl -sI https://<twój sklep>/llms.txt | grep -i x-endora-crawler-files` pokazuje nagłówek, gdy
+  odpowiada trasa.
+
+Potem zbuduj storefront ponownie — lista tras w wyniku budowania pokazuje `ƒ /llms.txt`. Testy
+wzorcowego storefrontu dla tych plików (`test/seo/llms-txt-base.test.ts`,
+`test/seo/llms-txt-route.test.ts` oraz uzupełnienia w `test/seo/crawler-policy.test.ts`,
+`test/seo/robots-txt-route.test.ts`, `test/seo/middleware-robots.test.ts` i
+`test/seo/middleware-effect.test.ts`) można skopiować opcjonalnie.
+
+**Podpis w stopce.** Storefront utworzony przez CLI `0.106.0` pokazuje podpis „Built with ❤️ using
+Endora Commerce” jako ostatni wiersz stopki — osobny wiersz pod wszystkim, co stopka renderuje
+(kolumnami, wierszem praw autorskich i tym, co moduł dodaje przez hooki `footer.bottom` i
+`footer.copyright`), wyśrodkowany, w jednym wierszu, dopóki szerokość na to pozwala, ze znakiem
+Endora Commerce obok nazwy produktu — podczas gdy dotąd siedział wewnątrz wiersza praw autorskich,
+między danymi firmy a odnośnikami prawnymi. Odnośnik i jego parametry UTM się nie zmieniają.
+Istniejący storefront się nie zmienia; aby przejąć ten układ, wprowadź tę samą zmianę w
+`components/Footer.tsx` w projekcie storefrontu.
+
+**Własny storefront**, który nie pochodzi od wzorca, serwuje pliki na tych samych zasadach:
+`GET /robots.txt?part=system` odpowiada samymi jego generowanymi regułami, a
+`GET /llms.txt?part=base` generowaną częścią `llms.txt`, oba jako `text/plain` z
+`X-Endora-Crawler-Files: 1`, a kanał bez `llms.txt` odpowiada `404` z tym samym nagłówkiem; bez
+nagłówka podgląd traktuje storefront jako nieaktualny. Odpowiada `503` zamiast plikiem, dopóki
+`unreadable` w `GET /api/v1/storefront/seo/crawler-files` wskazuje `policy` lub
+`llmsTxtAdditional`. Zobacz [Dla własnego sklepu](./modules/seo.md#dla-własnego-sklepu).
+
+Jak dalece to sprawdzono: to, co mówi ta sekcja, pochodzi z dzienników zmian wydania, sprawdzonych
+ze źródłami tego wydania — trasami i manifestem ustawień modułu `seo`, migracją platformy,
+kontraktami, plikami wzorcowego storefrontu i przykładową konfiguracją nginx. W chwili pisania tej
+sekcji żadna instancja nie została zaktualizowana z `0.105.0` poleceniem
+`pnpm run upgrade 0.106.0` i w żadnym storefroncie utworzonym we wcześniejszym wydaniu nie
+wprowadzono trzech powyższych grup plików; kolejność kroków, wiersz dla proxy i zmiany w
+storefroncie nie były wypróbowane.
+
 ## Instancja niespójna od początku
 
 Instalator `0.101.x` lub starszy zapisywał każdy pakiet wydania z `^` poza
