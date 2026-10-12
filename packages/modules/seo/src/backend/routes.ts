@@ -1,8 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import {
+  ERROR_CODES,
+  adminCrawlerFilePreviewQuerySchema,
   seoEntityTypeSchema,
   upsertSeoMetaOverrideRequestSchema,
 } from '@endora-commerce/contracts';
+import { HttpError } from '@endora-commerce/platform/http';
 import type { MetaTagResolverService } from './services/meta-tag-resolver.service.js';
 import type { SitemapGeneratorService } from './services/sitemap-generator.service.js';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
@@ -18,6 +21,11 @@ import {
   resolveCrawlerFiles,
   type CrawlerFilesSettingsPort,
 } from './services/crawler-files.service.js';
+import {
+  UnknownSalesChannelError,
+  isPreviewableCrawlerFile,
+  type CrawlerFilePreviewService,
+} from './services/crawler-file-preview.service.js';
 
 /** The reads this module's routes make of the settings store. */
 export interface SeoRouteSettingsPort extends CrawlerFilesSettingsPort {
@@ -27,6 +35,7 @@ export interface SeoRouteSettingsPort extends CrawlerFilesSettingsPort {
 export interface SeoRoutesDeps {
   metaResolver: MetaTagResolverService;
   sitemap: SitemapGeneratorService;
+  crawlerFilePreview: Pick<CrawlerFilePreviewService, 'preview'>;
   requireAdmin: RequireAdminFactory;
   settings: SeoRouteSettingsPort;
 }
@@ -35,7 +44,7 @@ export async function registerSeoRoutes(
   app: FastifyInstance,
   deps: SeoRoutesDeps,
 ): Promise<void> {
-  const { metaResolver, sitemap, requireAdmin, settings } = deps;
+  const { metaResolver, sitemap, crawlerFilePreview, requireAdmin, settings } = deps;
 
   // -- Public: a sales channel's default robots policy ----------------------
   //
@@ -117,6 +126,80 @@ export async function registerSeoRoutes(
       throw error;
     }
   });
+
+  // -- Admin: the preview of a sales channel's crawler file ------------------
+  //
+  // `specs/144-seo-search-engine-robots/contracts/admin-surfaces.md` §3. The
+  // Settings screen shows, beside the operator's text, the file the channel's
+  // storefront will serve. The rules the storefront generates are the
+  // storefront's (FR-041), so the service asks that storefront for them and
+  // this route hands back both parts; it stores nothing and caches nothing.
+  //
+  // **The permission is `settings:read`**, the code that lets somebody see the
+  // setting the preview sits beside (FR-045). It shows a public file and the
+  // saved text that reader can already see, and it writes nothing — so there
+  // is no Command and no audit entry.
+  //
+  // **The caller says which file and which channel, and nothing else.** The
+  // query schema is strict: no address, path or header of the caller's reaches
+  // the request the service makes, and a member it does not declare is a `400`.
+  // The guard runs before that validation, so an unauthenticated caller learns
+  // nothing about what the route accepts.
+  //
+  // No presence check, for the reason given on the storefront routes above:
+  // while `seo` is off the registration seam answers `503` `MODULE_DISABLED`.
+  app.get(
+    '/api/v1/admin/seo/crawler-files/preview',
+    {
+      preHandler: requireAdmin('settings:read'),
+      schema: { querystring: adminCrawlerFilePreviewQuerySchema },
+    },
+    async (request, reply) => {
+      const { file, salesChannelCode } = adminCrawlerFilePreviewQuerySchema.parse(request.query);
+      reply.header('Cache-Control', 'no-store');
+      if (!isPreviewableCrawlerFile(file)) {
+        throw new HttpError(400, ERROR_CODES.VALIDATION_FAILED, 'This file has no preview.', [
+          { path: 'file', issue: `"${file}" cannot be previewed.` },
+        ]);
+      }
+      try {
+        const { preview, reason } = await crawlerFilePreview.preview(file, salesChannelCode);
+        if (preview.state !== 'ok') {
+          // Why, for whoever operates the instance. The response carries the
+          // state alone: it says whether a preview can be shown, not what is
+          // listening at an address.
+          //
+          // `address-unknown` is `debug`: it is the resting state of a fresh
+          // instance, where nobody has configured an address yet, and an
+          // `info` line on every visit to the Settings screen would be noise.
+          const details = {
+            salesChannelCode: preview.salesChannelCode,
+            file,
+            state: preview.state,
+            reason,
+          };
+          const message = 'seo: the crawler-file preview could not show the storefront’s part';
+          if (preview.state === 'address-unknown') request.log.debug(details, message);
+          else request.log.info(details, message);
+        }
+        return { data: preview };
+      } catch (error) {
+        if (error instanceof UnknownSalesChannelError) {
+          throw new HttpError(404, ERROR_CODES.NOT_FOUND, 'Sales channel not found.');
+        }
+        if (
+          error instanceof UnknownRobotsTokenError ||
+          error instanceof StoredCrawlerTextTooLargeError
+        ) {
+          request.log.error(
+            { salesChannelCode: salesChannelCode ?? null, reason: error.message },
+            'seo: a stored crawler-file setting cannot be previewed',
+          );
+        }
+        throw error;
+      }
+    },
+  );
 
   // -- Public sitemap -------------------------------------------------------
   //

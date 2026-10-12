@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   setupBackendServer,
   teardownBackendServer,
@@ -56,6 +56,19 @@ describe('seo off-state (Constitution XVII)', () => {
     await teardownBackendServer(h);
   });
 
+  // The crawler-file preview asks a channel's storefront, at the address the
+  // channel is configured with. The harness loads `backend/.env`, whose
+  // `STOREFRONT_BASE_URL` would be that address; emptied, no channel here has
+  // one, so the probe below answers `address-unknown` while the module is on
+  // and no request leaves the process in any phase.
+  beforeEach(() => {
+    vi.stubEnv('STOREFRONT_BASE_URL', '');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('is absent from every admin surface while off, on both axes, and restored after', async () => {
     await expectModuleAbsent(h, 'seo', {
       routes: [
@@ -69,6 +82,17 @@ describe('seo off-state (Constitution XVII)', () => {
         // what makes it serve the system-generated rules alone; any other
         // failure would make it answer `503` or keep an earlier text.
         { url: '/api/v1/storefront/seo/crawler-files', headers: channel },
+        // The preview beside *Custom robots.txt instructions* on the Settings
+        // screen (`specs/144-seo-search-engine-robots/`, FR-034, FR-038). The
+        // row it sits on stays visible and read-only while the module is off;
+        // the preview must not — and this is the half of that the server
+        // holds: the endpoint refuses, so a stale tab cannot go on previewing
+        // a file the module no longer shapes, and the backend stops asking
+        // the storefront on anybody's behalf.
+        {
+          url: '/api/v1/admin/seo/crawler-files/preview?file=robots&salesChannelCode=default',
+          cookies: admin,
+        },
         {
           method: 'POST',
           url: '/api/v1/admin/seo/sitemap/default/regenerate',

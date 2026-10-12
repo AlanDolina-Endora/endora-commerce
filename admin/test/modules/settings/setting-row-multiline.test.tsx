@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { SettingDto, SettingGroupDto } from '@endora-commerce/contracts';
+import type { ReactElement } from 'react';
 import { renderWithI18n, passthroughBundle } from '../../helpers/render-with-i18n';
 
 /**
@@ -34,6 +35,12 @@ vi.mock('../../../../packages/modules/settings/src/admin/api/settings-client', (
   },
 }));
 
+// Imported after the mocks above, like the page itself: the helper loads the
+// kit's `lib` barrel, and a static import would evaluate it before the mock's
+// spy exists.
+const { adminSession, modulePresence, withSession } = await import(
+  '../../helpers/render-with-session'
+);
 const { SettingsPage } = await import(
   '../../../../packages/modules/settings/src/admin/pages/SettingsPage'
 );
@@ -96,6 +103,18 @@ function stringSetting(overrides: Partial<SettingDto> = {}): SettingDto {
   } as SettingDto;
 }
 
+/**
+ * The row mounts the `settings.setting.after` zone, and a zone refuses to
+ * render outside the session and contribution providers. Nobody contributes
+ * here: what a contribution is handed is `setting-row-zone.test.tsx`'s subject.
+ */
+function hosted(ui: ReactElement): ReactElement {
+  return withSession(ui, {
+    session: adminSession({ permissions: ['*'] }),
+    presence: modulePresence({ present: ['settings'] }),
+  });
+}
+
 function rowHandlers() {
   return {
     onChange: vi.fn<(patch: { text?: string; initialText?: string }) => void>(),
@@ -111,17 +130,19 @@ function renderRow(
   const handlers = rowHandlers();
   const text = options.text ?? deriveDisplayValue(setting, null);
   renderWithI18n(
-    <SettingRowEditor
-      setting={setting}
-      draft={{ text, initialText: options.initialText ?? text }}
-      channelContext={null}
-      isCopied={false}
-      resetting={false}
-      readOnly={options.readOnly ?? false}
-      onChange={handlers.onChange}
-      onCopyCode={vi.fn()}
-      onReset={handlers.onReset}
-    />,
+    hosted(
+      <SettingRowEditor
+        setting={setting}
+        draft={{ text, initialText: options.initialText ?? text }}
+        channelContext={null}
+        isCopied={false}
+        resetting={false}
+        readOnly={options.readOnly ?? false}
+        onChange={handlers.onChange}
+        onCopyCode={vi.fn()}
+        onReset={handlers.onReset}
+      />,
+    ),
     BUNDLE,
   );
   return handlers;
@@ -170,16 +191,18 @@ describe('SettingRowEditor — multi-line string settings', () => {
   it('names it with the name the row shows — the owner bundle\'s, when it has one', () => {
     const setting = stringSetting({ multiline: true });
     renderWithI18n(
-      <SettingRowEditor
-        setting={setting}
-        draft={{ text: '', initialText: '' }}
-        channelContext={null}
-        isCopied={false}
-        resetting={false}
-        onChange={vi.fn()}
-        onCopyCode={vi.fn()}
-        onReset={vi.fn()}
-      />,
+      hosted(
+        <SettingRowEditor
+          setting={setting}
+          draft={{ text: '', initialText: '' }}
+          channelContext={null}
+          isCopied={false}
+          resetting={false}
+          onChange={vi.fn()}
+          onCopyCode={vi.fn()}
+          onReset={vi.fn()}
+        />,
+      ),
       { ...BUNDLE, demo: { 'settingLabels.demo.notes.name': 'Notatki' } },
     );
     expect(textarea()!.getAttribute('aria-label')).toBe('Notatki');
@@ -285,7 +308,7 @@ describe('SettingsPage — a multi-line value round-trips through edit and save'
 
   it('sends exactly the text in the field, and shows it again after the reload', async () => {
     listMock.mockResolvedValueOnce({ groups: [structuredClone(GROUP)] });
-    renderWithI18n(<SettingsPage />, BUNDLE);
+    renderWithI18n(hosted(<SettingsPage />), BUNDLE);
     await waitFor(() => expect(textarea()).not.toBeNull());
     // One multi-line row, one single-line row: the flag is per setting.
     expect(document.querySelectorAll('textarea')).toHaveLength(1);

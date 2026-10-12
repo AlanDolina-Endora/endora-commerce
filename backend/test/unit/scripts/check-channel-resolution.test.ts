@@ -97,6 +97,52 @@ describe('check-channel-resolution / analyzeSource', () => {
     expect(v).toHaveLength(0);
   });
 
+  it('does NOT flag a request that sends the header to another server', () => {
+    // `specs/144-seo-search-engine-robots/` — the backend asks a sales
+    // channel's storefront for its `robots.txt` rules and names the channel in
+    // the request it makes. A key of an object literal under `headers:` is a
+    // header being written; it cannot be a read.
+    for (const spelling of ['X-Sales-Channel', 'x-sales-channel', 'x-sales-channel-id']) {
+      const v = analyzeSource(
+        `await fetch(target, { method: 'GET', headers: { accept: 'text/plain', '${spelling}': channel.code } });`,
+        NON_SURFACE,
+      );
+      expect(v, spelling).toHaveLength(0);
+    }
+    // An object literal on the RIGHT of an assignment is still a value.
+    expect(
+      analyzeSource(`init = { headers: { 'X-Sales-Channel': channel.code } };`, NON_SURFACE),
+    ).toHaveLength(0);
+  });
+
+  it('still flags the header read in every shape that is not a sent header', () => {
+    for (const source of [
+      // An element access on a `headers` object is the read itself.
+      `const code = request.headers['x-sales-channel'];`,
+      `const code = init.headers['X-Sales-Channel'];`,
+      // A key under a property that is not `headers`.
+      `const lookup = { 'x-sales-channel': true };`,
+      `const options = { expose: { 'x-sales-channel': 1 } };`,
+      // The header name as a value, under `headers` or anywhere else.
+      `const init = { headers: { name: 'x-sales-channel' } };`,
+      `const code = request.headers[HEADER]; const HEADER = 'x-sales-channel';`,
+      `const code = headers.get('x-sales-channel');`,
+      // A computed key is not a literal key.
+      `const init = { headers: { ['x-sales-channel']: code } };`,
+      // A destructuring ASSIGNMENT parses as an object literal, and it reads.
+      `let code; ({ headers: { 'x-sales-channel': code } } = request);`,
+      `let code; ({ raw: { headers: { 'x-sales-channel': code } } } = request);`,
+      `let code; [{ headers: { 'x-sales-channel': code } }] = [request];`,
+      `let code; for ({ headers: { 'x-sales-channel': code } } of requests) use(code);`,
+      `let code; for ({ headers: { 'x-sales-channel': code } } in requests) use(code);`,
+      // A destructuring declaration never was an object literal.
+      `const { headers: { 'x-sales-channel': code } } = request;`,
+    ]) {
+      const v = analyzeSource(source, NON_SURFACE);
+      expect(v.some((x) => x.kind === 'raw-channel-header'), source).toBe(true);
+    }
+  });
+
   it('still flags a real header read in the same file', () => {
     const v = analyzeSource(
       `const code = request.headers['x-sales-channel'];`,

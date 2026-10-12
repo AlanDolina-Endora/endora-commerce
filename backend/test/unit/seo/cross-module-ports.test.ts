@@ -12,6 +12,7 @@ import type {
 import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
 import { MetaTagResolverService } from '../../../../packages/modules/seo/src/backend/services/meta-tag-resolver.service.js';
 import { SitemapGeneratorService } from '../../../../packages/modules/seo/src/backend/services/sitemap-generator.service.js';
+import { StorefrontAddressService } from '../../../../packages/modules/seo/src/backend/services/storefront-address.service.js';
 
 /**
  * Feature 075, Phase C — `seo` asks `catalog` and `cms` for their rows, and
@@ -310,7 +311,7 @@ describe('seo — the sitemap reads memberships through the sanctioned bridge ac
 
     const service = new SitemapGeneratorService(
       fakeEm({ SalesChannel: CHANNEL, SitemapCache: null }),
-      null,
+      new StorefrontAddressService(null, { fallbackUrl: 'https://shop.test' }),
       membership,
       catalogProducts,
       catalogCategories,
@@ -347,7 +348,7 @@ describe('seo — the sitemap reads memberships through the sanctioned bridge ac
 
     const service = new SitemapGeneratorService(
       fakeEm({ SalesChannel: CHANNEL, SitemapCache: null }),
-      null,
+      new StorefrontAddressService(null, { fallbackUrl: 'https://shop.test' }),
       membership,
       catalogProducts,
       { findByIds: async () => [] } as unknown as CatalogCategoryReadPort,

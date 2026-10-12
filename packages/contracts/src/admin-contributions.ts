@@ -484,6 +484,34 @@ export const AdminZoneNameSchema = z.enum([
    * stored stays stored and keeps rendering.
    */
   'category.content.editor',
+  /**
+   * Below the field of one setting on the Settings screen.
+   *
+   * Mounted **once per setting row** by `settings`' row editor
+   * (`SettingRowEditor.tsx`), each mount carrying that row's own
+   * {@link SettingsSettingAfterZoneProps} — one host, one place, many mounts
+   * (Z13), so a contributor narrows itself with
+   * `match: { settingCode: '…' }` and its chunk is fetched only on a screen
+   * that shows that setting.
+   *
+   * It exists so that the module that **declared** a setting can show what the
+   * value in the field amounts to — a preview, a consequence, a warning —
+   * without the `settings` module learning what any setting means. The first
+   * contributor is `seo`'s preview of the `robots.txt` a sales channel serves;
+   * `settings` names no contributor and gains no edge.
+   *
+   * **Read-only by construction.** The props carry the draft out and nothing
+   * back: a contribution cannot change the field, and cannot delay or prevent
+   * the row's save. A contribution that needs to write has a route of its own.
+   *
+   * **Not mounted for a `secret` setting.** A contribution must never be
+   * handed a secret's draft, and a secret's stored value never reaches the
+   * browser at all — so there is nothing for one to show.
+   *
+   * A row whose owning module is switched off is read-only and shows no
+   * contribution of that module, through the renderer's own presence filter.
+   */
+  'settings.setting.after',
 ])
 
 export type AdminZoneName = z.infer<typeof AdminZoneNameSchema>;
@@ -691,6 +719,30 @@ export interface OrderEntryTabsZoneProps {}
  */
 export interface LedgerSectionTabsZoneProps {}
 
+/**
+ * A zone mounted below one setting's field on the Settings screen.
+ *
+ * `settingCode` and `ownerModule` are props **because they are matched on**:
+ * `match` compares by string value and a key the props do not carry never
+ * agrees.
+ *
+ * `draftText` is what is in the field **now**, saved or not, and `dirty` says
+ * which — so a contribution can follow the operator's typing and must say, in
+ * words, when what it shows is not yet in force.
+ */
+export interface SettingsSettingAfterZoneProps {
+  /** The row's setting code, e.g. `seo.robots_txt_custom`. Matchable. */
+  readonly settingCode: string;
+  /** The module that declared the setting. Matchable. */
+  readonly ownerModule: string;
+  /** The sales channel being edited, or `null` for the all-channels value. */
+  readonly channelCode: string | null;
+  /** The field's current text, saved or not, for a string-typed setting; `null` otherwise. */
+  readonly draftText: string | null;
+  /** Whether `draftText` differs from what is stored. */
+  readonly dirty: boolean;
+}
+
 /** A zone mounted beside one field of the product editor. */
 export interface ProductEditorFieldZoneProps {
   readonly productId: string;
@@ -755,6 +807,7 @@ export interface AdminZonePropsMap extends Record<AdminZoneName, object> {
   'order.entry.tabs': OrderEntryTabsZoneProps;
   'ledger.section.tabs': LedgerSectionTabsZoneProps;
   'category.content.editor': CategoryContentEditorZoneProps;
+  'settings.setting.after': SettingsSettingAfterZoneProps;
 }
 
 /** The props of one zone, by name. */

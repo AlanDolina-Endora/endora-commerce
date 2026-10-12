@@ -557,30 +557,35 @@ outbound request to an operator-configured address; the reviewer tests the bound
 cap, no cross-host redirect, fixed paths) and that the endpoint cannot be made to fetch anything
 else.
 
-- [ ] T075 [US2] RED — `AdminZoneNameSchema` contains `settings.setting.after` and
+- [x] T075 [US2] RED — `AdminZoneNameSchema` contains `settings.setting.after` and
   `AdminZonePropsMap` types its props per `contracts/admin-surfaces.md` §2.3; the preview query
   and response schemas accept each of the five states and refuse an unknown one — extend
   `packages/contracts/src/seo.test.ts`; add a type-level case where the contracts package keeps
   its zone tests (search `packages/contracts/src` for an existing zone-name test and extend it;
   create `admin-contributions.test.ts` if there is none).
   **Test:** `pnpm --filter @endora-commerce/contracts exec vitest run`
-- [ ] T076 [US2] Add the zone member and its props to `packages/contracts/src/admin-contributions.ts`
+  *Done. The query schema is a strict object, so a member it does not declare — an address, a path — is refused rather than ignored; the response schema also refuses a `base` beside a state that obtained none.*
+- [x] T076 [US2] Add the zone member and its props to `packages/contracts/src/admin-contributions.ts`
   (with the doc comment every member carries: where it is mounted, how many times, its props);
   add the preview schemas to `packages/contracts/src/seo.ts`. **Test:** T075, build the package.
-- [ ] T077 [US2] RED — the row editor mounts the zone once per row with the documented props,
+  *Done. Also exports `CRAWLER_FILES_CAPABILITY_HEADER`; the storefront keeps its own spelling of the same literal, held by its own test.*
+- [x] T077 [US2] RED — the row editor mounts the zone once per row with the documented props,
   passes the **unsaved** text and `dirty`, and does **not** mount it for a `secret` setting —
   `admin/test/modules/settings/setting-row-zone.test.tsx` (new).
   **Test:** `pnpm --filter admin exec vitest run test/modules/settings/setting-row-zone.test.tsx`
-- [ ] T078 [US2] Mount `<AdminZone name="settings.setting.after" …>` in
+  *Done.*
+- [x] T078 [US2] Mount `<AdminZone name="settings.setting.after" …>` in
   `packages/modules/settings/src/admin/components/SettingRowEditor.tsx`. **Test:** T077 and
   `pnpm --filter backend run check:admin-zones`. The check's two directions are *declared ⇒
   mounted by a host* and *contributed ⇒ declared* (the enum's own doc comment in
   `admin-contributions.ts`), so T076 alone is red and T076 + T078 is expected green with no
   contributor yet. If it also demands a contributor, do T086 in the same commit.
-- [ ] T079 [P] [US2] RED — the storefront-address resolution, extracted: setting → env →
+  *Done; `check:admin-zones` was green with the mount alone. Three existing row tests now render under the session and contribution providers, which a zone mount requires.*
+- [x] T079 [P] [US2] RED — the storefront-address resolution, extracted: setting → env →
   fallback, reporting the rung — `packages/modules/seo/src/backend/services/storefront-address.service.test.ts`
   (new). **Test:** `pnpm --filter @endora-commerce/mod-seo exec vitest run src/backend/services/storefront-address.service.test.ts`
-- [ ] T080 [P] [US2] RED — the preview service with a stubbed `fetch`, one case per row of the
+  *Done — written together with T083, so it was not seen red on its own.*
+- [x] T080 [P] [US2] RED — the preview service with a stubbed `fetch`, one case per row of the
   state table in `contracts/admin-surfaces.md` §3: `ok`; `storefront-outdated` (2xx, no
   capability header); `storefront-unreachable` for a timeout, a refusal, a `500`, a body over
   512 KiB, and a redirect to another host; `address-unknown` makes **no** request; the request
@@ -588,25 +593,30 @@ else.
   `savedExtraSource` and `channelsWithOwnValue` are correct for a channel value, an inherited
   value and none — `packages/modules/seo/src/backend/services/crawler-file-preview.service.test.ts`
   (new). **Test:** `pnpm --filter @endora-commerce/mod-seo exec vitest run src/backend/services/crawler-file-preview.service.test.ts`
-- [ ] T081 [US2] RED — contract test for `GET /api/v1/admin/seo/crawler-files/preview`: `401`
+  *Done. Stricter than listed: **no** redirect is followed, same host included, and an answer that is not `text/plain` is `storefront-unreachable`. Only the origin of the configured address is asked.*
+- [x] T081 [US2] RED — contract test for `GET /api/v1/admin/seo/crawler-files/preview`: `401`
   unauthenticated, `403` without `settings:read`, `400` for a bad `file` or a missing channel,
   `200` and the schema; **channel isolation** — previewing channel A returns A's saved text and
   never B's — `backend/test/contract/seo/crawler-file-preview.contract.test.ts` (new).
   **Test:** `pnpm --filter backend exec vitest run test/contract/seo/crawler-file-preview.contract.test.ts`
-- [ ] T082 [US4] RED — **off state**: extend `backend/test/integration/seo/off-state.test.ts` —
+  *Done — written after T084, so not seen red; held by mutation instead (see the pull request). `file=llms` answers `400` until slice 5, and an unknown channel `404`.*
+- [x] T082 [US4] RED — **off state**: extend `backend/test/integration/seo/off-state.test.ts` —
   the preview route answers `503` `MODULE_DISABLED`; and extend
   `backend/test/integration/_admin_surfaces/batch-eight-palette-off-state.test.ts` or the admin
   zone test of T085 so that the zone contribution is absent while `seo` is off and back after.
   **Test:** `pnpm --filter backend exec vitest run test/integration/seo/off-state.test.ts`
-- [ ] T083 [US2] `packages/modules/seo/src/backend/services/storefront-address.service.ts` (new);
+  *Done. The route is in `off-state.test.ts`; the zone contributions' absence and return are in `admin/test/modules/seo/crawler-preview-zone.test.tsx`.*
+- [x] T083 [US2] `packages/modules/seo/src/backend/services/storefront-address.service.ts` (new);
   make `sitemap-generator.service.ts` use it and delete its private copy. **Test:** T079 and
   `pnpm --filter backend exec vitest run test/contract/seo/sitemap.test.ts test/integration/seo`
   (the sitemap must be unchanged).
-- [ ] T084 [US2] `packages/modules/seo/src/backend/services/crawler-file-preview.service.ts`
+  *Done; the sitemap tests are unchanged and green.*
+- [x] T084 [US2] `packages/modules/seo/src/backend/services/crawler-file-preview.service.ts`
   (new) and the route in `routes.ts`, gated `requireAdmin('settings:read')` as the route's
   `preHandler`. **Test:** T080, T081, T082, and
   `pnpm --filter backend exec vitest run test/contract/admin_users/permission-inventory.test.ts`
-- [ ] T085 [US2] RED — the preview's view model as a pure function (state + props → what is
+  *Done. `check:channel-resolution` reported the header the request **sends**; the rule (in `packages/cli`) now exempts the key of an object literal under `headers:`, with tests that every read shape is still reported.*
+- [x] T085 [US2] RED — the preview's view model as a pure function (state + props → what is
   shown), one case per row of `contracts/admin-surfaces.md` §4, including: unsaved text marked
   not-yet-served; the all-channels case listing unaffected channels; the `NOINDEX` sentence; the
   `Disallow: /` caution; `storefront-outdated`; unreachable and address-unknown still showing the
@@ -615,30 +625,52 @@ else.
   setting code, and gated — `admin/test/modules/seo/crawler-preview-zone.test.tsx` (new).
   **Test:** `pnpm --filter @endora-commerce/mod-seo exec vitest run src/admin/zones/preview-model.test.ts`
   and `pnpm --filter admin exec vitest run test/modules/seo/crawler-preview-zone.test.tsx`
-- [ ] T086 [US2] `packages/modules/seo/src/admin/zones/preview-model.ts` and
+  *Done.*
+- [x] T086 [US2] `packages/modules/seo/src/admin/zones/preview-model.ts` and
   `RobotsTxtPreview.tsx` (new); contribute it in `packages/modules/seo/src/admin/index.ts` with
   `zoneComponent('settings.setting.after', () => import('./zones/RobotsTxtPreview.js'), { match:
   { settingCode: 'seo.robots_txt_custom' }, requiredPermission: 'settings:read' })`; add the
   `crawlerPreview.*` keys to both bundles. Compose with `composeCrawlerFile`. Existing admin-kit
   primitives only. **Test:** T085, `check:admin-zones`, `pnpm --filter backend run i18n:hardcoded`
-- [ ] T087 [US1] [OD4] The outdated-storefront notice on the *Default robots* row: a second
+  *Done. A third file, `preview-client.ts`, holds the one request both contributions share. `mod-seo` gains `lucide-react` as an optional peer (generated manifest, lockfile).*
+- [x] T087 [US1] [OD4] The outdated-storefront notice on the *Default robots* row: a second
   contribution matched to `seo.default_robots`, reusing the preview endpoint's `state`, rendering
   only when it is `storefront-outdated`; its case added to T085's model test.
   **Test:** T085's commands.
-- [ ] T088 [US2] `storefront/app/robots.txt/route.ts` already answers `?part=system` (slice 3);
+  *Done as `DefaultRobotsStorefrontNotice.tsx`. Edited for all channels it asks about the first five active channels and names the outdated ones.*
+- [x] T088 [US2] `storefront/app/robots.txt/route.ts` already answers `?part=system` (slice 3);
   confirm against the running pair and do the served proof of `quickstart.md` § *Slice 4*,
   including SC-010: the preview's composed text `diff`s empty against `curl /robots.txt` after
   saving. Paste into the pull request.
-- [ ] T089 [US2] Docs (the preview, its states, what "outdated" means and how to resolve it);
+  *Done against a harness backend, the built storefront and a real admin session; the two blocks on screen `diff` empty against the served file after saving. No storefront file changed.*
+- [x] T089 [US2] Docs (the preview, its states, what "outdated" means and how to resolve it);
   `composer:generate`; changeset `minor` naming the new zone member for module authors.
   **Test:** `check:module-docs`, `check:docs-translations`, `check:release-intent -- --since origin/master`
-- [ ] T090 [US2] Slice verification: the full Slice 1 list plus
+  *Done. `composer:generate` changed nothing; the Polish page and its translation-cache entry are updated.*
+- [x] T090 [US2] Slice verification: the full Slice 1 list plus
   `pnpm --filter backend run check:admin-zones`, `pnpm --filter backend run check:admin-surface`,
   `pnpm --filter backend run i18n:hardcoded`, and
   `pnpm --filter backend exec vitest run test/unit/scripts/check-read-size.test.ts test/unit/scripts/read-size-drift.test.ts`.
   **Read sizes**: adding a zone member is a change to `check:admin-zones`' own subject; if its
   recorded read moves outside the band, re-record **that entry only**, measured on a pristine
   clone, with the reason in the commit message.
+  *Done; results in the pull request. No recorded read size was touched: `read-size-drift.test.ts` stayed green.*
+
+**After review and the owner's reading of the screenshots (2026-10-12)** — recorded here because
+it changes what T080 – T087 delivered:
+
+- *Presentation.* The preview is **one block whose text is the served file**, the operator's lines
+  marked inside it, under a heading that says "as served now" or "after saving"
+  (`contracts/admin-surfaces.md` §4 is amended to match). It was two blocks.
+- *T081 / T084.* `salesChannelCode` is optional and means the system default channel, so an
+  administrator who may not list sales channels still gets a preview (FR-045).
+- *T086.* What a row watches includes the editing mode, and the row asks again when it stops being
+  dirty: a channel's "has its own value" state went stale across All channels → channel → All
+  channels.
+- *T087.* The notice says the storefront "did not confirm" support and "may" not apply the
+  setting, which is what the missing header shows.
+- *T084.* The `check:channel-resolution` exemption for a sent header refuses the pattern of a
+  destructuring assignment, which has the same shape and is a read.
 
 ---
 

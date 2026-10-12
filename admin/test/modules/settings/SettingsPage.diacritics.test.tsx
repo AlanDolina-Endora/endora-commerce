@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import type { SettingDto, SettingGroupDto } from '@endora-commerce/contracts';
+import type { ReactElement } from 'react';
 import { renderWithI18n, passthroughBundle } from '../../helpers/render-with-i18n';
 
 /**
@@ -44,6 +45,12 @@ vi.mock('../../../../packages/modules/settings/src/admin/api/settings-client', (
   },
 }));
 
+// Imported after the mocks above, like the page itself: the helper loads the
+// kit's `lib` barrel, and a static import would evaluate it before the mock's
+// spy exists.
+const { adminSession, modulePresence, withSession } = await import(
+  '../../helpers/render-with-session'
+);
 const { SettingsPage } = await import(
   '../../../../packages/modules/settings/src/admin/pages/SettingsPage'
 );
@@ -115,6 +122,18 @@ function searchInput(): HTMLInputElement {
   return input;
 }
 
+/**
+ * The row mounts the `settings.setting.after` zone, and a zone refuses to
+ * render outside the session and contribution providers. Nobody contributes
+ * here: what a contribution is handed is `setting-row-zone.test.tsx`'s subject.
+ */
+function hosted(ui: ReactElement): ReactElement {
+  return withSession(ui, {
+    session: adminSession({ permissions: ['*'] }),
+    presence: modulePresence({ present: ['settings'] }),
+  });
+}
+
 /** The setting names currently rendered, in document order. */
 function visibleSettings(): string[] {
   return [...document.querySelectorAll('span.text-sm.font-medium')].map((el) =>
@@ -124,7 +143,7 @@ function visibleSettings(): string[] {
 
 async function renderPage(): Promise<void> {
   listMock.mockResolvedValue({ groups: [structuredClone(GROUP)] });
-  renderWithI18n(<SettingsPage />, bundle);
+  renderWithI18n(hosted(<SettingsPage />), bundle);
   await waitFor(() => expect(visibleSettings().length).toBe(3));
 }
 

@@ -15,7 +15,10 @@
  *  1. RAW CHANNEL HEADER READ — any string literal `x-sales-channel` or
  *     `x-sales-channel-id` anywhere under `src/**` outside the resolver's own
  *     directory. Legitimate code never reads these headers; only the resolver
- *     does. Global scope = strongest guard.
+ *     does. Global scope = strongest guard. Two shapes that name the header
+ *     without reading it are exempt, each by its syntax: a CORS policy's
+ *     `…Headers` array, and the key of an object literal under `headers:` —
+ *     a header being sent to another server.
  *
  *  2. REQUEST-CHANNEL RE-RESOLUTION — inside the storefront "surface" files
  *     (routes.public / routes.storefront / *storefront-resolver / the catalog
@@ -187,6 +190,80 @@ function isCorsHeaderDeclaration(node: ts.Node): boolean {
   if (property === undefined || !ts.isPropertyAssignment(property)) return false;
   const name = property.name;
   return (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) && /Headers$/.test(name.text);
+}
+
+/**
+ * Sending the header is not reading it.
+ *
+ * A module that makes a request to another server on a sales channel's behalf
+ * — `seo` asking a channel's storefront for the rules it generates
+ * (`specs/144-seo-search-engine-robots/`) — names the channel in the request
+ * it makes. The shape exempted is the one that can only be a write: the
+ * literal is the **key** of a property in an object literal that is itself the
+ * value of a property named `headers`. An element access, a `.get(...)`
+ * argument, a value held in a constant and a destructuring declaration are
+ * none of them a key of such an object. A computed key is not exempt either:
+ * it is an expression, and what it evaluates to is not this rule's to follow.
+ *
+ * **One read does have that shape, and it is refused separately.** The target
+ * of a destructuring *assignment* — `({ headers: { 'x-sales-channel': code } }
+ * = request)`, and the same pattern as the variable of a `for…of` or `for…in`
+ * — is parsed as an object literal, key and all. So an object literal that is
+ * being assigned **to** is not a header being sent, however deeply the pattern
+ * nests: {@link isAssignmentTarget} walks outwards through the enclosing
+ * literals and answers for the outermost one.
+ */
+function isSentHeaderName(node: ts.Node): boolean {
+  const property = node.parent;
+  if (property === undefined || !ts.isPropertyAssignment(property)) return false;
+  if (property.name !== node) return false;
+  const object = property.parent;
+  if (!ts.isObjectLiteralExpression(object)) return false;
+  const owner = object.parent;
+  if (owner === undefined || !ts.isPropertyAssignment(owner)) return false;
+  if (owner.initializer !== object) return false;
+  const name = owner.name;
+  if (!(ts.isIdentifier(name) || ts.isStringLiteralLike(name)) || name.text !== 'headers') {
+    return false;
+  }
+  return !isAssignmentTarget(object);
+}
+
+/**
+ * Whether `literal` is, or is nested inside, the pattern of a destructuring
+ * assignment: the left operand of `=`, or the variable of a `for…of` /
+ * `for…in`.
+ */
+function isAssignmentTarget(literal: ts.Node): boolean {
+  let current: ts.Node = literal;
+  for (;;) {
+    const parent = current.parent;
+    if (parent === undefined) return false;
+    if (
+      ts.isBinaryExpression(parent) &&
+      parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+    ) {
+      // On the left it is a pattern; on the right it is a value, whatever is
+      // further out.
+      return parent.left === current;
+    }
+    if ((ts.isForOfStatement(parent) || ts.isForInStatement(parent)) && parent.initializer === current) {
+      return true;
+    }
+    // Keep walking only through what a pattern can be made of.
+    if (
+      ts.isParenthesizedExpression(parent) ||
+      ts.isPropertyAssignment(parent) ||
+      ts.isObjectLiteralExpression(parent) ||
+      ts.isArrayLiteralExpression(parent) ||
+      ts.isSpreadElement(parent) ||
+      ts.isSpreadAssignment(parent)
+    ) {
+      current = parent;
+      continue;
+    }
+    return false;
+  }
 }
 
 /**
@@ -381,7 +458,8 @@ export function analyzeSource(source: string, relPath: string): Violation[] {
     if (
       ts.isStringLiteralLike(node) &&
       CHANNEL_HEADERS.has(node.text.toLowerCase()) &&
-      !isCorsHeaderDeclaration(node)
+      !isCorsHeaderDeclaration(node) &&
+      !isSentHeaderName(node)
     ) {
       violations.push({
         file: relPath,

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   CRAWLER_TEXT_MAX_BYTES,
+  adminCrawlerFilePreviewQuerySchema,
+  adminCrawlerFilePreviewResponseSchema,
+  adminCrawlerFilePreviewStateSchema,
   composeCrawlerFile,
   storefrontCrawlerFilesResponseSchema,
   storefrontCrawlerFilesSchema,
@@ -411,4 +414,120 @@ describe('storefrontCrawlerFilesResponseSchema', () => {
         .success,
     ).toBe(false);
   });
+});
+
+/**
+ * `specs/144-seo-search-engine-robots/contracts/admin-surfaces.md` §3 — what
+ * `GET /api/v1/admin/seo/crawler-files/preview` is asked and answers.
+ *
+ * The response is read by the Admin UI, which is built from the same release
+ * as the backend that answers it, so it is held strictly: a state the UI has
+ * no words for is refused rather than rendered as a blank preview.
+ */
+describe('adminCrawlerFilePreviewQuerySchema', () => {
+  it.each(['robots', 'llms'] as const)('accepts file=%s with a sales channel', (file) => {
+    expect(
+      adminCrawlerFilePreviewQuerySchema.parse({ file, salesChannelCode: 'pl' }),
+    ).toEqual({ file, salesChannelCode: 'pl' });
+  });
+
+  it('accepts a query that names no sales channel: it asks about the system default one', () => {
+    expect(adminCrawlerFilePreviewQuerySchema.parse({ file: 'robots' })).toEqual({ file: 'robots' });
+  });
+
+  it.each([
+    ['an unknown file', { file: 'sitemap', salesChannelCode: 'pl' }],
+    ['no file', { salesChannelCode: 'pl' }],
+    ['an empty sales channel', { file: 'robots', salesChannelCode: '' }],
+    ['a sales channel that is not a code', { file: 'robots', salesChannelCode: 'pl\r\nHost: x' }],
+    ['a sales channel longer than a code', { file: 'robots', salesChannelCode: 'x'.repeat(65) }],
+  ])('refuses %s', (_label, query) => {
+    expect(adminCrawlerFilePreviewQuerySchema.safeParse(query).success).toBe(false);
+  });
+
+  it('names no address: a caller cannot say where the request goes', () => {
+    expect(Object.keys(adminCrawlerFilePreviewQuerySchema.shape).sort()).toEqual([
+      'file',
+      'salesChannelCode',
+    ]);
+    expect(
+      adminCrawlerFilePreviewQuerySchema.safeParse({
+        file: 'robots',
+        salesChannelCode: 'pl',
+        url: 'http://169.254.169.254/',
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('adminCrawlerFilePreviewResponseSchema', () => {
+  const BASE = 'User-agent: *\nAllow: /\n';
+  const answer = (overrides: Record<string, unknown> = {}): unknown => ({
+    data: {
+      file: 'robots',
+      salesChannelCode: 'pl',
+      state: 'ok',
+      base: BASE,
+      savedExtra: 'User-agent: GPTBot\nDisallow: /\n',
+      savedExtraSource: 'channel',
+      channelsWithOwnValue: ['pl', 'de'],
+      policy: { index: false, follow: false },
+      storefront: { url: 'https://shop.example', source: 'setting' },
+      ...overrides,
+    },
+  });
+
+  it.each([
+    ['ok', BASE],
+    ['storefront-outdated', BASE],
+    ['storefront-outdated', null],
+    ['not-served', null],
+    ['storefront-unreachable', null],
+    ['address-unknown', null],
+  ] as const)('accepts state %s with base %j', (state, base) => {
+    expect(adminCrawlerFilePreviewResponseSchema.safeParse(answer({ state, base })).success).toBe(
+      true,
+    );
+  });
+
+  it('declares exactly the five states', () => {
+    expect([...adminCrawlerFilePreviewStateSchema.options].sort()).toEqual([
+      'address-unknown',
+      'not-served',
+      'ok',
+      'storefront-outdated',
+      'storefront-unreachable',
+    ]);
+  });
+
+  it.each([
+    ['an unknown state', { state: 'cached' }],
+    ['an unknown source of the saved text', { savedExtraSource: 'env' }],
+    ['an unknown source of the address', { storefront: { url: 'https://x', source: 'guess' } }],
+    ['a policy with half of it missing', { policy: { index: true } }],
+    ['a base that is not text', { base: 42 }],
+  ])('refuses %s', (_label, overrides) => {
+    expect(adminCrawlerFilePreviewResponseSchema.safeParse(answer(overrides)).success).toBe(false);
+  });
+
+  it.each(['channel', 'global', 'default'] as const)('accepts savedExtraSource %s', (source) => {
+    expect(
+      adminCrawlerFilePreviewResponseSchema.safeParse(answer({ savedExtraSource: source })).success,
+    ).toBe(true);
+  });
+
+  it('never carries system rules it did not obtain: ok without a base is refused', () => {
+    expect(
+      adminCrawlerFilePreviewResponseSchema.safeParse(answer({ state: 'ok', base: null })).success,
+    ).toBe(false);
+  });
+
+  it.each(['storefront-unreachable', 'address-unknown', 'not-served'] as const)(
+    'refuses a base beside state %s, which obtained none',
+    (state) => {
+      expect(
+        adminCrawlerFilePreviewResponseSchema.safeParse(answer({ state, base: BASE })).success,
+      ).toBe(false);
+    },
+  );
 });
