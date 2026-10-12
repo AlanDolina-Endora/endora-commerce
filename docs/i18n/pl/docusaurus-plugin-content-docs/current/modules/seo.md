@@ -396,7 +396,7 @@ odpowiedź obu plików oznacza nagłówkiem `X-Endora-Crawler-Files: 1`.
 
 `llms.txt` to plik tekstowy w katalogu głównym witryny, który mówi asystentom AI, czym jest
 witryna i gdzie zaczyna się jej publiczna treść — konwencja nowsza i mniej ustalona niż
-`robots.txt` (<https://llmstxt.org>). Sklep serwuje taki plik dla każdego kanału sprzedaży, pod
+`robots.txt` ([llmstxt.org](https://llmstxt.org)). Sklep serwuje taki plik dla każdego kanału sprzedaży, pod
 adresem `/llms.txt`, a **Ustawienia → SEO → Dodatkowa treść llms.txt** to tekst, który do niego
 dodaje. Ustawienie jest domyślnie puste, a plik składa się wtedy z samej części generowanej.
 

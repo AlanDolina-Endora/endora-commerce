@@ -379,7 +379,7 @@ of either file with an `X-Endora-Crawler-Files: 1` header.
 
 `llms.txt` is a plain-text file at the root of a site that tells AI assistants what the site is
 and where its public content starts — a newer and less settled convention than `robots.txt`
-(<https://llmstxt.org>). The storefront serves one for each sales channel, at `/llms.txt`, and
+([llmstxt.org](https://llmstxt.org)). The storefront serves one for each sales channel, at `/llms.txt`, and
 **Settings → SEO → Additional llms.txt content** is text it adds to that file. The setting is
 empty by default, and the file is then the generated part alone.
 
