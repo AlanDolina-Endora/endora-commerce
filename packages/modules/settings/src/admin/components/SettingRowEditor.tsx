@@ -8,6 +8,7 @@ import type { SettingDto } from '@endora-commerce/contracts';
 import { Badge, Button, Input } from '@endora-commerce/admin-kit/ui';
 import { cn } from '@endora-commerce/admin-kit/lib';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
+import { AdminZone } from '@endora-commerce/admin-kit/zones';
 import { ImageSettingInput } from './ImageSettingInput.js';
 import { AssetIdSettingInput } from './AssetIdSettingInput.js';
 import { SellerCompanyDataInput, SELLER_COMPANY_DATA_CODE } from './SellerCompanyDataInput.js';
@@ -281,6 +282,29 @@ export function SettingRowEditor({
         <span>·</span>
         <span>{t('editor.perChannelOverrides', { count: overrideCount })}</span>
       </div>
+
+      {/* What the module that declared this setting wants shown beside it — a
+          preview of what the value amounts to, a consequence, a warning. This
+          file does not know who contributes or what: it hands over which
+          setting this is and what is in the field, and nothing comes back, so
+          a contribution cannot change the value or hold up the save.
+
+          Never for a secret: its draft is the one text on this screen that
+          must not be handed to code this module did not write. */}
+      {isSecret ? null : (
+        <AdminZone
+          name="settings.setting.after"
+          props={{
+            settingCode: setting.code,
+            ownerModule: setting.ownerModule,
+            channelCode: channelContext,
+            // Only a `string` setting's text is its value; every other type's
+            // field holds a spelling of the value that this file parses.
+            draftText: setting.valueType === 'string' ? draft.text : null,
+            dirty: isDirty,
+          }}
+        />
+      )}
     </div>
   );
 }
