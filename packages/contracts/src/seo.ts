@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isoDateTimeSchema, uuidSchema } from './common.js';
+import { SalesChannelCodeSchema } from './sales-channels.js';
 
 /**
  * SEO meta + sitemap contracts (T235 / FR-101, FR-102).
@@ -224,6 +225,133 @@ function withoutTrailingLineFeeds(text: string): string {
   while (end > 0 && text.charCodeAt(end - 1) === LINE_FEED) end -= 1;
   return end === text.length ? text : text.slice(0, end);
 }
+
+/**
+ * The response header by which a storefront says it serves crawler files the
+ * way `specs/144-seo-search-engine-robots/` describes — it joins the
+ * operator's text to its own rules and answers `?part=system` with its own
+ * rules alone.
+ *
+ * A storefront is deployed separately from its backend and is often the older
+ * of the two. One that predates the feature ignores `?part=system` and answers
+ * its whole file, which looks exactly like an answer; the header is how the
+ * preview tells the two apart instead of showing a file that storefront will
+ * never serve.
+ */
+export const CRAWLER_FILES_CAPABILITY_HEADER = 'X-Endora-Crawler-Files';
+
+/** The crawler file a preview is asked for. */
+export const adminCrawlerFileSchema = z.enum(['robots', 'llms']);
+export type AdminCrawlerFile = z.infer<typeof adminCrawlerFileSchema>;
+
+/**
+ * What `GET /api/v1/admin/seo/crawler-files/preview` is asked
+ * (`specs/144-seo-search-engine-robots/contracts/admin-surfaces.md` §3).
+ *
+ * **Two members, both closed, and neither is an address.** The backend makes a
+ * request to a storefront on the caller's behalf, so what the caller may say
+ * is which of two files and which sales channel — a code, in the shape every
+ * channel code has. Where the request goes is the channel's configured
+ * storefront address and nothing a caller sends; the object is strict so that
+ * a member nobody declared is refused rather than ignored, and adding one is a
+ * visible change to this schema.
+ */
+export const adminCrawlerFilePreviewQuerySchema = z.strictObject({
+  file: adminCrawlerFileSchema,
+  /** The sales channel to preview. Required: there is no cross-channel file. */
+  salesChannelCode: SalesChannelCodeSchema,
+});
+export type AdminCrawlerFilePreviewQuery = z.infer<typeof adminCrawlerFilePreviewQuerySchema>;
+
+/**
+ * What became of asking the channel's storefront for the part it generates.
+ *
+ *  * `ok` — it answered, and said it serves crawler files the current way;
+ *  * `storefront-outdated` — it answered without
+ *    {@link CRAWLER_FILES_CAPABILITY_HEADER}: it predates the feature, serves
+ *    its own rules alone and applies none of the `seo` crawler settings;
+ *  * `not-served` — `llms` only: the storefront serves no such file for the
+ *    channel;
+ *  * `storefront-unreachable` — no usable answer. Deliberately one state for a
+ *    refusal, a timeout, a redirect, an error status, an answer that is not
+ *    plain text and one that is too large: the endpoint tells an administrator
+ *    whether the preview can be shown, not what is listening at an address;
+ *  * `address-unknown` — no storefront address is configured for the channel,
+ *    and no request was made.
+ */
+export const adminCrawlerFilePreviewStateSchema = z.enum([
+  'ok',
+  'storefront-outdated',
+  'not-served',
+  'storefront-unreachable',
+  'address-unknown',
+]);
+export type AdminCrawlerFilePreviewState = z.infer<typeof adminCrawlerFilePreviewStateSchema>;
+
+/** States whose answer carries no storefront-generated part at all. */
+const STATES_WITHOUT_BASE: readonly AdminCrawlerFilePreviewState[] = [
+  'not-served',
+  'storefront-unreachable',
+  'address-unknown',
+];
+
+/**
+ * The preview of one sales channel's crawler file.
+ *
+ * `base` is the part the storefront generates, as that storefront answered it
+ * a moment ago — never a copy the backend keeps (FR-041). It is `null`
+ * whenever it was not obtained, so a consumer cannot show remembered or
+ * invented rules as current (FR-042); the schema holds the two to each other.
+ *
+ * `savedExtra` is the operator's stored text as it resolves for the channel,
+ * character for character. The Admin UI joins the two with
+ * {@link composeCrawlerFile}, the function the storefront serves with.
+ *
+ * `base` is text a remote server sent. A consumer renders it as text.
+ */
+export const adminCrawlerFilePreviewSchema = z
+  .object({
+    file: adminCrawlerFileSchema,
+    salesChannelCode: SalesChannelCodeSchema,
+    state: adminCrawlerFilePreviewStateSchema,
+    base: z.string().nullable(),
+    /** The stored text that resolves for the channel, or `''`. */
+    savedExtra: z.string(),
+    /** Where that text comes from: the channel's own value, the all-channels value, or neither. */
+    savedExtraSource: z.enum(['channel', 'global', 'default']),
+    /** The codes of the channels holding a value of their own for the setting. */
+    channelsWithOwnValue: z.array(SalesChannelCodeSchema),
+    /** The channel's saved *Default robots*, as the storefront reads it. */
+    policy: storefrontRobotsPolicySchema,
+    storefront: z.object({
+      /** The address the channel's storefront is taken to be at. */
+      url: z.string(),
+      /**
+       * `setting` — the channel's own configured address; `env` — the
+       * deployment-wide one, shared by every channel; `fallback` — neither is
+       * configured.
+       */
+      source: z.enum(['setting', 'env', 'fallback']),
+    }),
+  })
+  .superRefine((preview, ctx) => {
+    if (preview.state === 'ok' && preview.base === null) {
+      ctx.addIssue({ code: 'custom', path: ['base'], message: 'state "ok" carries the base' });
+    }
+    if (STATES_WITHOUT_BASE.includes(preview.state) && preview.base !== null) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['base'],
+        message: `state "${preview.state}" obtained no base and must not carry one`,
+      });
+    }
+  });
+export type AdminCrawlerFilePreview = z.infer<typeof adminCrawlerFilePreviewSchema>;
+
+export const adminCrawlerFilePreviewResponseSchema = z.object({
+  data: adminCrawlerFilePreviewSchema,
+});
+export type AdminCrawlerFilePreviewResponse = z.infer<typeof adminCrawlerFilePreviewResponseSchema>;
 
 /**
  * Container name: `seoMetaWritePort`. Owner: `seo`.
