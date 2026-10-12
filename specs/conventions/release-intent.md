@@ -174,6 +174,33 @@ about a registry, and that assertion is worth making only once something is actu
 The tag question is therefore not the same question as this field, and reading the two together
 is what made the paragraph above wrong twice.
 
+**The release page and the Discord post are keyed on that tag, and on nothing earlier.**
+`.github/workflows/release.yml` runs on a pushed `vX.Y.Z` tag and does two things in one job:
+`backend/scripts/release-notes.ts` assembles the notes from the per-package `CHANGELOG.md`
+sections the previous `v*` tag did not have — deduplicated by changeset id, because one changeset
+lands in every package it names, so 73 changelogs carry some 50 changes — and
+`gh release create --verify-tag` publishes them as the GitHub Release, the summary as the
+description and the full per-package text as an asset (one release is ~470 kB of changelog
+against a 125 000-character description limit); then, when the `DISCORD_WEBHOOK_URL` repository
+secret is set, the same job posts the title, the link, the census and the first highlights to
+Discord. Three consequences, each written from a failure shape this repository already knows:
+
+- **A tag on a commit whose changelogs gained no section gets no release page.** The script exits
+  2 and the job stops. The alternative is a page saying "0 packages", which is the silent green in
+  a new costume.
+- **A re-pushed tag is refused**, not re-described: `gh release view` finding a release ends the
+  job. Delete the page first if it is wrong, then push the tag again.
+- **The post is a step of that job, not a workflow on `release: published`.** A release created
+  with `GITHUB_TOKEN` starts no workflow, so a separate announcer would fire for a release clicked
+  together in the browser and never for the one the job creates. The tag — not the publish and
+  not the release event — is the one trigger.
+
+The procedure therefore does not change: publish, confirm the registry serves the versions, tag
+the published commit. What changes is that the tag now has two visible effects beyond the ref,
+and that the Discord webhook is repository configuration the owner adds once, as a secret and
+never as a variable, because the URL alone lets its holder post to the channel. The instruments
+are `backend/test/unit/ci/release-workflow.test.ts` and `release-notes.test.ts`.
+
 Two things about `.changeset/config.json` that are load-bearing and look like boilerplate:
 
 - **`privatePackages: { "version": true, "tag": false }`.** This bullet described a
