@@ -24,18 +24,23 @@ import {
  *  * no shared cache may keep the answer — the storefront is the cache;
  *  * it needs no session.
  *
- * And one thing it must never do: answer `200` with a text it could not read.
- * An empty text at `200` is definitive — the storefront would serve the file
- * without the operator's instructions and call it current — so a stored value
- * this module cannot stand behind is a `500`, which a storefront reads as
- * "could not ask" and answers with what it last knew, or with a temporary
- * failure.
+ * And one thing it must never do: answer `200` as if it had read something it
+ * could not. Stored `robots.txt` instructions it cannot stand behind are a
+ * `500` — an empty text at `200` would be a file without the operator's rules,
+ * called current. A default robots value or `llms.txt` content it cannot read
+ * is **named** in the answer instead, so that it costs the channel its
+ * `llms.txt` and never its `robots.txt`.
  */
 describe('GET /api/v1/storefront/seo/crawler-files', () => {
   let h: BackendServerHandle;
   const admin = { b2b_session: 'stub-admin-session' };
   const URL = '/api/v1/storefront/seo/crawler-files';
-  const CODES = ['seo.robots_txt_custom', 'seo.default_robots', 'shop.name'];
+  const CODES = [
+    'seo.robots_txt_custom',
+    'seo.llms_txt_additional',
+    'seo.default_robots',
+    'shop.name',
+  ];
 
   beforeAll(async () => {
     h = await setupBackendServer();
@@ -80,6 +85,7 @@ describe('GET /api/v1/storefront/seo/crawler-files', () => {
 
   it('answers the schema, and sends exactly the members it names', async () => {
     await store('seo.robots_txt_custom', 'User-agent: GPTBot\nDisallow: /\n');
+    await store('seo.llms_txt_additional', '## About\n\nWe sell bolts.\n');
     await store('seo.default_robots', 'NOINDEX, FOLLOW');
     await store('shop.name', 'Endora Demo');
 
@@ -90,7 +96,7 @@ describe('GET /api/v1/storefront/seo/crawler-files', () => {
         index: false,
         follow: true,
         robotsTxtCustom: 'User-agent: GPTBot\nDisallow: /\n',
-        llmsTxtAdditional: '',
+        llmsTxtAdditional: '## About\n\nWe sell bolts.\n',
         shop: { name: 'Endora Demo' },
       },
     });
@@ -117,9 +123,12 @@ describe('GET /api/v1/storefront/seo/crawler-files', () => {
     ['what would be markup or a header anywhere else', '<script>alert(1)</script>\r\nSet-Cookie: a=b\r\n\r\n{"json":true}'],
   ])('returns the text exactly as stored: %s', async (_label, text) => {
     await store('seo.robots_txt_custom', text);
+    await store('seo.llms_txt_additional', `# llms\n${text}`);
     const res = await h.app.inject({ method: 'GET', url: URL });
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { data: { robotsTxtCustom: string } }).data.robotsTxtCustom).toBe(text);
+    const data = (res.json() as { data: { robotsTxtCustom: string; llmsTxtAdditional: string } }).data;
+    expect(data.robotsTxtCustom).toBe(text);
+    expect(data.llmsTxtAdditional).toBe(`# llms\n${text}`);
     // It travels as a JSON string and as nothing else.
     expect(String(res.headers['content-type'])).toContain('application/json');
     expect(res.headers['set-cookie']).toBeUndefined();
@@ -182,8 +191,15 @@ describe('GET /api/v1/storefront/seo/crawler-files', () => {
       }
     });
 
-    it('answers 500, not "no restriction", for a stored robots value outside the four choices', async () => {
+    /**
+     * The parts of the answer fail apart (`contracts/crawler-policy.md` §2.2).
+     * `robots.txt` reads the texts and never the policy, so a default robots
+     * row nobody can interpret answers `200` with the texts and **names** the
+     * policy unreadable — and `llms.txt`, which needs it, is not served.
+     */
+    it('answers the texts and names the policy unreadable for a stored robots value outside the four choices', async () => {
       const CHANNEL = 'pl_b2b_vip';
+      await store('seo.robots_txt_custom', 'User-agent: GPTBot\nDisallow: /\n');
       await plant('seo.default_robots', CHANNEL, 'NOINDEX');
       try {
         const res = await h.app.inject({
@@ -191,11 +207,54 @@ describe('GET /api/v1/storefront/seo/crawler-files', () => {
           url: URL,
           headers: { 'x-sales-channel': CHANNEL },
         });
-        expect(res.statusCode).toBe(500);
-        expect(res.body).not.toContain('"index"');
-        expect((await h.app.inject({ method: 'GET', url: URL })).statusCode).toBe(200);
+        expect(res.statusCode, res.body).toBe(200);
+        const body = storefrontCrawlerFilesResponseSchema.parse(res.json());
+        expect(body.data.unreadable).toEqual(['policy']);
+        expect(body.data.robotsTxtCustom).toBe('User-agent: GPTBot\nDisallow: /\n');
+        // Never "no restriction": the restrictive pair, for a reader that does
+        // not know `unreadable`.
+        expect(body.data.index).toBe(false);
+        expect(body.data.follow).toBe(false);
+        // The stored spelling still does not travel.
+        expect(res.body).not.toContain('NOINDEX');
+        // The neighbours say nothing of the kind.
+        const neighbour = await h.app.inject({ method: 'GET', url: URL });
+        expect(neighbour.statusCode).toBe(200);
+        expect(neighbour.json()).not.toHaveProperty('data.unreadable');
+        // The policy's own endpoint keeps answering `500` for the row: the
+        // storefront's pages keep the directive they last knew.
+        const policy = await h.app.inject({
+          method: 'GET',
+          url: '/api/v1/storefront/seo/robots-policy',
+          headers: { 'x-sales-channel': CHANNEL },
+        });
+        expect(policy.statusCode).toBe(500);
       } finally {
         await unplant('seo.default_robots', CHANNEL);
+      }
+    });
+
+    it('answers robots.txt its text and names the llms.txt content unreadable when that is over the limit', async () => {
+      // `pl_retail`'s content has not been read in this file: the case above
+      // it on that channel stops at the robots text.
+      const CHANNEL = 'pl_retail';
+      await store('seo.robots_txt_custom', 'Disallow: /private\n');
+      await plant('seo.llms_txt_additional', CHANNEL, 'a'.repeat(CRAWLER_TEXT_MAX_BYTES + 1));
+      try {
+        const res = await h.app.inject({
+          method: 'GET',
+          url: URL,
+          headers: { 'x-sales-channel': CHANNEL },
+        });
+        expect(res.statusCode, res.body.slice(0, 500)).toBe(200);
+        const body = storefrontCrawlerFilesResponseSchema.parse(res.json());
+        expect(body.data.unreadable).toEqual(['llmsTxtAdditional']);
+        expect(body.data.llmsTxtAdditional).toBe('');
+        expect(body.data.robotsTxtCustom).toBe('Disallow: /private\n');
+        expect(body.data.index).toBe(true);
+        expect(res.body.length).toBeLessThan(2_000);
+      } finally {
+        await unplant('seo.llms_txt_additional', CHANNEL);
       }
     });
   });

@@ -92,6 +92,17 @@ const DOCUMENTS = [
   '/p/version-1.2',
 ];
 
+/**
+ * The one path classified differently from how that matcher would have
+ * classified it, on purpose. The address did not exist then — a request for
+ * it fell through to the content catch-all and was a missing page. It is now a
+ * file this storefront serves (`app/llms.txt/route.ts`), and it has to be
+ * treated as `/robots.txt` is: gated as a document, a process that holds the
+ * channel's last-known `llms.txt` would answer the outage notice instead of
+ * serving it while the backend is down (FR-029).
+ */
+const FILES_SINCE = ['/llms.txt'];
+
 const NON_DOCUMENTS = [
   '/robots.txt',
   '/sitemap.xml',
@@ -114,6 +125,19 @@ describe('isDocumentPath', () => {
 
   it.each(NON_DOCUMENTS)('treats %s as a file, not a document', (pathname) => {
     expect(isDocumentPath(pathname)).toBe(false);
+  });
+
+  it.each(FILES_SINCE)('treats %s as a file, though the matcher before did not know it', (pathname) => {
+    expect(isDocumentPath(pathname)).toBe(false);
+    // The premise: it is an exception, and the only kind there is.
+    expect(wasDocument(pathname)).toBe(true);
+  });
+
+  it('makes that exception for the exact address and nothing near it', () => {
+    for (const pathname of ['/llms.txt/', '/llms.txt/x', '/llms.txtx', '/x/llms.txt', '/llms', '/LLMS.TXT', '/llms-full.txt']) {
+      expect(isDocumentPath(pathname), pathname).toBe(wasDocument(pathname));
+      expect(isDocumentPath(pathname), pathname).toBe(true);
+    }
   });
 
   it('agrees with the matcher this storefront had before, on every sample', () => {

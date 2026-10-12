@@ -7,8 +7,8 @@
  *  * the channel's **default robots policy** — asked by the middleware, on
  *    behalf of every response it serves;
  *  * what the channel's **crawler files** are built from — the operator's
- *    custom `robots.txt` instructions among it — asked when such a file is
- *    served.
+ *    custom `robots.txt` instructions and additional `llms.txt` content among
+ *    it — asked when such a file is served.
  *
  * Each is a cache first and a client second: one request per channel per
  * minute, held in this module's own memory. Neither uses Next's data cache or
@@ -132,7 +132,24 @@ export interface CrawlerFiles extends RobotsPolicy {
     /** The channel's configured shop name, or `''`. */
     readonly name: string;
   };
+  /**
+   * What the backend could not read from what is stored, by name — absent
+   * when it read everything. It answers the rest rather than fail the whole
+   * read, so that a file which needs none of what is named is still served:
+   * `robots.txt` reads neither of the two things that can be named here.
+   *
+   * {@link UNREADABLE_POLICY} — `index` and `follow` are not known, whatever
+   * they say; {@link UNREADABLE_LLMS_TXT} — `llmsTxtAdditional` is not known,
+   * and is `''`. A name this storefront does not know is one it has no use
+   * for.
+   */
+  readonly unreadable?: readonly string[];
 }
+
+/** In {@link CrawlerFiles.unreadable}: the channel's default robots is not known. */
+export const UNREADABLE_POLICY = 'policy';
+/** In {@link CrawlerFiles.unreadable}: the channel's additional `llms.txt` content is not known. */
+export const UNREADABLE_LLMS_TXT = 'llmsTxtAdditional';
 
 /**
  * The longest text this storefront takes from the backend, in characters.
@@ -158,12 +175,21 @@ function isCrawlerText(value: unknown): value is string {
  */
 export function isCrawlerFilesResponse(body: unknown): body is { data: CrawlerFiles } {
   if (!isRobotsPolicyResponse(body)) return false;
-  const { robotsTxtCustom, llmsTxtAdditional, shop } = body.data as {
+  const { robotsTxtCustom, llmsTxtAdditional, shop, unreadable } = body.data as {
     robotsTxtCustom?: unknown;
     llmsTxtAdditional?: unknown;
     shop?: unknown;
+    unreadable?: unknown;
   };
   if (!isCrawlerText(robotsTxtCustom) || !isCrawlerText(llmsTxtAdditional)) return false;
+  // Optional, and a list of names when it is there. Which names is not judged:
+  // a later backend may name something this storefront has never heard of.
+  if (
+    unreadable !== undefined &&
+    !(Array.isArray(unreadable) && unreadable.every((name) => typeof name === 'string'))
+  ) {
+    return false;
+  }
   if (typeof shop !== 'object' || shop === null || Array.isArray(shop)) return false;
   return typeof (shop as { name?: unknown }).name === 'string';
 }
@@ -290,7 +316,7 @@ async function jsonOrNull(response: Response): Promise<unknown> {
 }
 
 /** One question this reader can ask the backend about a channel. */
-interface Question<T> {
+export interface Question<T> {
   /** The backend route that answers it. */
   readonly path: string;
   /**
@@ -300,7 +326,7 @@ interface Question<T> {
   readonly parse: (body: unknown) => T | null;
 }
 
-interface ChannelCache<T> {
+export interface ChannelCache<T> {
   read(channelCode: string | undefined): Promise<CrawlerRead<T>>;
   size(): number;
 }
@@ -308,8 +334,12 @@ interface ChannelCache<T> {
 /**
  * The cache for one question: its own entries, its own bound, and every rule
  * the module doc states.
+ *
+ * Exported for the one other per-channel fact a crawler file is built from —
+ * whether a page it lists is served (`llms-txt-pages.ts`) — so that it is
+ * remembered on exactly these terms rather than on a second set.
  */
-function createChannelCache<T>(deps: CrawlerPolicyReaderDeps, question: Question<T>): ChannelCache<T> {
+export function createChannelCache<T>(deps: CrawlerPolicyReaderDeps, question: Question<T>): ChannelCache<T> {
   const entries = new Map<string, Entry<T>>();
 
   /** One read of the backend, classified. `null` means unreadable. */
@@ -462,6 +492,11 @@ export function createCrawlerPolicyReader(deps: CrawlerPolicyReaderDeps): Crawle
             robotsTxtCustom: body.data.robotsTxtCustom,
             llmsTxtAdditional: body.data.llmsTxtAdditional,
             shop: { name: body.data.shop.name },
+            // Carried only when it says something, so "everything was read"
+            // has one shape whether the backend sent an empty list or none.
+            ...(body.data.unreadable !== undefined && body.data.unreadable.length > 0
+              ? { unreadable: [...body.data.unreadable] }
+              : {}),
           }
         : null,
   });
@@ -474,12 +509,15 @@ export function createCrawlerPolicyReader(deps: CrawlerPolicyReaderDeps): Crawle
   };
 }
 
-const reader = createCrawlerPolicyReader({
+/** What this process reads the backend with. */
+export const PROCESS_READER_DEPS: CrawlerPolicyReaderDeps = {
   fetch: (input, init) => fetch(input, init),
   now: () => Date.now(),
   baseUrl: backendBaseUrl,
   delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-});
+};
+
+const reader = createCrawlerPolicyReader(PROCESS_READER_DEPS);
 
 /** This process's reader. See the module doc for what it remembers and for how long. */
 export function readRobotsPolicy(channelCode: string | undefined): Promise<RobotsPolicyRead> {

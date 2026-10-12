@@ -426,7 +426,15 @@ repeat.
 - **FR-028**: The address `/llms.txt` MUST be reserved: operator-authored content (a content
   page) MUST NOT be able to take it.
 - **FR-029**: `llms.txt` MUST reflect the current configuration on the same terms as `robots.txt`
-  (FR-010, FR-020, FR-022 applied to it).
+  (FR-010, FR-020, FR-022 applied to it). *(Added 2026-10-12, with slice 5:)* One case departs
+  from FR-022's "serve the last version it knew", on purpose. When the platform answers that the
+  channel's stored *Default robots* — or its stored additional content — cannot be read, the
+  storefront answers `/llms.txt` with a temporary failure **even when it holds an earlier
+  version**. That answer is a statement about the configuration as it is now, not a failure to
+  ask, and the earlier version may be exactly what is wrong: the unreadable value may be an
+  attempt to take the channel out of search. Publishing an invitation on a channel that may be
+  non-indexable is the worse error (FR-027). When the platform cannot be asked at all, FR-022
+  applies unchanged and the last version is served.
 
 #### When SEO is off
 

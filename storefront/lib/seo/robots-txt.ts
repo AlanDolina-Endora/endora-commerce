@@ -46,7 +46,9 @@
  * A channel set to `noindex` keeps an open `robots.txt` (FR-015). A crawler has
  * to be allowed to fetch a page in order to read that it must not be indexed;
  * closing the file would hide the directive that does the work. The policy is
- * in the answer this module reads and is not looked at.
+ * in the answer this module reads and is not looked at — nor is whether it
+ * could be read: a channel whose default robots is a value nobody can
+ * interpret keeps its `robots.txt` (see `CrawlerFiles.unreadable`).
  *
  * ## Who may keep the answer
  *
@@ -69,59 +71,30 @@
  *
  * ## The text is an operator's, and it is served as text
  *
- * It reaches the response body and nothing else: the status, every header and
- * the content type are constants of this module. `text/plain` with `nosniff`
- * means no browser renders it, whatever it looks like.
+ * See `crawler-file-response.ts`, which holds what this file's answers share
+ * with `llms.txt`'s: the headers and the temporary failure.
  */
 
 import { composeCrawlerFile } from '@endora-commerce/contracts/seo';
 
+import {
+  CRAWLER_FILE_RETRY_AFTER_SECONDS,
+  crawlerFileGeneratedPart,
+  crawlerFileServed,
+  crawlerFileUnavailable,
+  requestChannelCode,
+} from './crawler-file-response';
 import type { CrawlerFiles, CrawlerFilesRead } from './crawler-policy';
 import { renderRobotsSystemRules } from './robots-system-rules';
 
-/**
- * Marks a response as coming from a storefront that serves operator-configured
- * crawler files. On every answer of the handler, `503` included.
- *
- * A storefront older than this feature ignores `?part=system` and returns its
- * whole file. The Admin UI's preview tells the two apart by this header, so
- * that it never shows an operator's text appended to the file of a storefront
- * that will not append it.
- */
-export const CRAWLER_FILES_CAPABILITY_HEADER = 'X-Endora-Crawler-Files';
+export { CRAWLER_FILES_CAPABILITY_HEADER } from './crawler-file-response';
 
 /** How long a crawler is asked to wait before asking again, on `503`. */
-export const ROBOTS_TXT_RETRY_AFTER_SECONDS = 120;
-
-/**
- * The request header a sales channel is named in. A reverse proxy stamps it
- * per host; a storefront reached directly has none and the backend resolves
- * its system-default channel.
- */
-const SALES_CHANNEL_HEADER = 'x-sales-channel';
+export const ROBOTS_TXT_RETRY_AFTER_SECONDS = CRAWLER_FILE_RETRY_AFTER_SECONDS;
 
 export interface RobotsTxtDeps {
   /** The channel's crawler files, through the per-process reader. Never rejects. */
   readonly readCrawlerFiles: (channelCode: string | undefined) => Promise<CrawlerFilesRead>;
-}
-
-function headers(cacheControl: string): Headers {
-  return new Headers({
-    'Content-Type': 'text/plain; charset=utf-8',
-    'Cache-Control': cacheControl,
-    // Plain text, and to be read as nothing else.
-    'X-Content-Type-Options': 'nosniff',
-    // The body is one sales channel's. A cache that keys on the address alone
-    // would serve it for every channel behind that address.
-    Vary: 'X-Sales-Channel',
-    [CRAWLER_FILES_CAPABILITY_HEADER]: '1',
-  });
-}
-
-function served(body: string): Response {
-  // A minute, on top of the reader's own minute: a saved change is in every
-  // crawler's reach within two.
-  return new Response(body, { status: 200, headers: headers('public, max-age=60') });
 }
 
 /**
@@ -150,22 +123,17 @@ export async function robotsTxtResponse(request: Request, deps: RobotsTxtDeps): 
   // The system-generated rules alone. Answered from this storefront's own
   // sources, so it answers while the backend is down.
   if (new URL(request.url).searchParams.get('part') === 'system') {
-    return new Response(systemRules, { status: 200, headers: headers('no-store') });
+    return crawlerFileGeneratedPart(systemRules);
   }
 
-  const channelCode = request.headers.get(SALES_CHANNEL_HEADER) ?? undefined;
-  const read = await deps.readCrawlerFiles(channelCode);
+  const read = await deps.readCrawlerFiles(requestChannelCode(request));
 
-  if (read.kind === 'unknown') {
-    const unavailable = headers('no-store');
-    unavailable.set('Retry-After', String(ROBOTS_TXT_RETRY_AFTER_SECONDS));
-    // Not a robots.txt, and not shaped like one: nothing here is a rule.
-    return new Response('robots.txt is temporarily unavailable. Try again shortly.\n', {
-      status: 503,
-      headers: unavailable,
-    });
-  }
+  // Not a robots.txt, and not shaped like one: nothing in it is a rule.
+  if (read.kind === 'unknown') return crawlerFileUnavailable('robots.txt');
 
-  if (read.kind === 'none') return served(systemRules);
-  return served(fileFor(systemRules, read.value));
+  if (read.kind === 'none') return crawlerFileServed(systemRules);
+  // `read.value.unreadable` is not looked at: what the backend can name there
+  // — the default robots policy, the `llms.txt` content — is nothing this
+  // file is made of.
+  return crawlerFileServed(fileFor(systemRules, read.value));
 }

@@ -10,9 +10,10 @@ import { renderWithI18n } from '../../helpers/render-with-i18n';
 import { adminSession, modulePresence, withSession } from '../../helpers/render-with-session';
 
 /**
- * `seo`'s two contributions beside its own settings on the Settings screen
+ * `seo`'s three contributions beside its own settings on the Settings screen
  * (`specs/144-seo-search-engine-robots/contracts/admin-surfaces.md` §4):
- * the `robots.txt` preview on *Custom robots.txt instructions*, and the
+ * the `robots.txt` preview on *Custom robots.txt instructions*, the `llms.txt`
+ * preview on *Additional llms.txt content* (ruling R10), and the
  * outdated-storefront notice on *Default robots* (ruling R9).
  *
  * What is shown for which state is the pure model's subject, in the package
@@ -157,10 +158,21 @@ const heading = (name: string): HTMLElement => screen.getByRole('heading', { nam
 describe('seo declares its contributions beside its settings', () => {
   it('the preview: matched to the robots.txt setting, gated on settings:read, behind a dynamic import', () => {
     const zones = (seo.contributions.zones ?? []).filter((entry) => entry.zone === 'settings.setting.after');
-    expect(zones).toHaveLength(2);
+    expect(zones).toHaveLength(3);
     const preview = zones.find((entry) => entry.match?.['settingCode'] === 'seo.robots_txt_custom');
     expect(preview?.requiredPermission).toBe('settings:read');
     expect(typeof preview?.component).toBe('function');
+  });
+
+  it('the llms.txt preview: matched to its own setting, gated on settings:read, behind a dynamic import', () => {
+    const zones = seo.contributions.zones ?? [];
+    const preview = zones.find((entry) => entry.match?.['settingCode'] === 'seo.llms_txt_additional');
+    expect(preview?.zone).toBe('settings.setting.after');
+    expect(preview?.requiredPermission).toBe('settings:read');
+    expect(typeof preview?.component).toBe('function');
+    // One contribution per setting: no two are drawn beside the same row.
+    const codes = zones.map((entry) => entry.match?.['settingCode']);
+    expect(new Set(codes).size).toBe(codes.length);
   });
 
   it('the notice: matched to the default robots setting, gated on settings:read', () => {
@@ -604,6 +616,259 @@ describe('the robots.txt preview', () => {
     const on = renderWithI18n(zone(), { seo: EN });
     await waitFor(() => expect(file(on.container)).not.toBeNull());
     expect(previewCalls()).toEqual([previewUrl('pl')]);
+  });
+});
+
+/**
+ * The preview beside *Additional llms.txt content* (FR-044). It is drawn by
+ * the component the `robots.txt` preview is drawn by, so what is held above
+ * about the block — its labels, its cap, its scrolling, its keyboard reach —
+ * is not repeated; what is held here is that it is that component, asked
+ * about the other file, and the one state only this file has.
+ */
+describe('the llms.txt preview', () => {
+  const LLMS_BASE = '# Endora Demo\n\n## Pages\n\n- [Home](https://pl.shop.example/)\n';
+  const CONTENT = '## About\n\nWe sell bolts.\n';
+  const llmsUrl = (channel: string): string =>
+    `/api/v1/admin/seo/crawler-files/preview?file=llms&salesChannelCode=${channel}`;
+  const llmsAnswer = (
+    channel: string,
+    overrides: Partial<AdminCrawlerFilePreview> = {},
+  ): { data: AdminCrawlerFilePreview } => answer(channel, { file: 'llms', base: LLMS_BASE, ...overrides });
+  const llms = (props: Partial<ZoneProps> = {}, options: Parameters<typeof zone>[1] = {}): ReactElement =>
+    zone({ settingCode: 'seo.llms_txt_additional', ...props }, options);
+
+  /** What the backend answers about `llms.txt`, per channel. */
+  let llmsAnswers: Record<string, { data: AdminCrawlerFilePreview } | Error>;
+
+  beforeEach(() => {
+    llmsAnswers = { pl: llmsAnswer('pl'), de: llmsAnswer('de') };
+    const robots = getSpy.getMockImplementation() as (path: string) => Promise<unknown>;
+    getSpy.mockImplementation((path: string) => {
+      for (const [channel, response] of Object.entries(llmsAnswers)) {
+        if (path === llmsUrl(channel)) {
+          return response instanceof Error ? Promise.reject(response) : Promise.resolve(response);
+        }
+      }
+      return robots(path);
+    });
+  });
+
+  it('shows one block whose text is the served file, byte for byte, and asks about llms.txt', async () => {
+    const { container } = renderWithI18n(llms({ draftText: CONTENT }), { seo: EN });
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    expect(file(container)?.textContent).toBe(composeCrawlerFile(LLMS_BASE, CONTENT));
+    expect(container.querySelectorAll('[data-part="file"]')).toHaveLength(1);
+    expect(part(container, 'operator-detached')).toBeNull();
+    expect(previewCalls()).toEqual([llmsUrl('pl')]);
+  });
+
+  it('looks and reads as the robots.txt preview does: the same block, its own words', async () => {
+    const robots = renderWithI18n(zone({ draftText: OWN }), { seo: EN });
+    await waitFor(() => expect(file(robots.container)).not.toBeNull());
+    const robotsBlock = file(robots.container) as HTMLElement;
+    const robotsClasses = {
+      block: robotsBlock.className,
+      system: part(robots.container, 'system')?.className,
+      operator: part(robots.container, 'operator')?.className,
+      section: robots.container.querySelector('section')?.className,
+    };
+    robots.unmount();
+
+    const { container } = renderWithI18n(llms({ draftText: CONTENT }), { seo: EN });
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    const block = file(container) as HTMLElement;
+    // The same capped, scrollable, focusable block and the same marking.
+    expect({
+      block: block.className,
+      system: part(container, 'system')?.className,
+      operator: part(container, 'operator')?.className,
+      section: container.querySelector('section')?.className,
+    }).toEqual(robotsClasses);
+    expect(block.className).toContain('max-h-80');
+    expect(block.className).toContain('overflow-auto');
+    expect(block.getAttribute('tabindex')).toBe('0');
+    // Its own words: "content", not "instructions", and the file's own name.
+    expect(heading(en('crawlerPreview.llms.heading.servedNow'))).toBeTruthy();
+    expect(heading('llms.txt as served now')).toBeTruthy();
+    expect(part(container, 'operator')?.dataset['label']).toBe(en('crawlerPreview.llms.operator.label'));
+    expect(part(container, 'system')?.dataset['label']).toBe(en('crawlerPreview.system.label'));
+    const legend = document.getElementById(block.getAttribute('aria-describedby') as string);
+    expect(legend?.textContent).toBe(en('crawlerPreview.llms.legend.both'));
+    expect(container.textContent).not.toMatch(/instructions|robots\.txt/);
+  });
+
+  it('says what the file is: served now — and, once the field differs, after saving', async () => {
+    const { container, rerender } = renderWithI18n(llms({ draftText: '' }), { seo: EN });
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    expect(file(container)?.textContent).toBe(LLMS_BASE);
+    expect(heading('llms.txt as served now')).toBeTruthy();
+
+    rerender(llms({ draftText: CONTENT, dirty: true }));
+    expect(file(container)?.textContent).toBe(composeCrawlerFile(LLMS_BASE, CONTENT));
+    expect(heading('llms.txt after saving')).toBeTruthy();
+    expect(part(container, 'operator')?.dataset['label']).toBe(
+      en('crawlerPreview.llms.operator.labelUnsaved'),
+    );
+    expect(container.querySelector('[data-note="unsaved"]')?.textContent).toBe(
+      en('crawlerPreview.unsavedNote'),
+    );
+    // Typing asked the backend nothing.
+    await new Promise((done) => setTimeout(done, 400));
+    expect(previewCalls()).toEqual([llmsUrl('pl')]);
+  });
+
+  it('on a NOINDEX channel says, in words, that no llms.txt is served — in place of the block', async () => {
+    llmsAnswers['pl'] = llmsAnswer('pl', {
+      state: 'not-served',
+      base: null,
+      policy: { index: false, follow: true },
+      savedExtra: CONTENT,
+    });
+    const { container } = renderWithI18n(llms({ draftText: CONTENT, dirty: true }), { seo: EN });
+    await waitFor(() => expect(notice(container, 'llms-not-served-noindex')).not.toBeNull());
+    expect(heading('llms.txt is not served')).toBeTruthy();
+    const shown = notice(container, 'llms-not-served-noindex') as HTMLElement;
+    expect(shown.textContent).toBe(en('crawlerPreview.llms.notice.notServedNoindex'));
+    // The reason, not only the fact — and that nothing is lost.
+    expect(shown.textContent).toContain('asks search engines not to index');
+    expect(shown.textContent).toContain('Your content is kept');
+    // An explanation, not an alarm: it is what the operator configured.
+    expect(shown.textContent).not.toContain(en('crawlerPreview.notice.warningPrefix'));
+    // No file, and nothing drawn that could be taken for one.
+    expect(file(container)).toBeNull();
+    expect(part(container, 'operator-detached')).toBeNull();
+    expect(container.querySelector('pre')).toBeNull();
+    expect(container.querySelector('[data-note="unsaved"]')).toBeNull();
+    // It is in the polite live region, like every other answer that arrives.
+    expect(shown.closest('[role="status"]')?.getAttribute('aria-live')).toBe('polite');
+  });
+
+  it('says the same when the saved setting already forbids indexing and the storefront has not caught up', async () => {
+    llmsAnswers['pl'] = llmsAnswer('pl', { policy: { index: false, follow: false } });
+    const { container } = renderWithI18n(llms({ draftText: CONTENT }), { seo: EN });
+    await waitFor(() => expect(notice(container, 'llms-not-served-noindex')).not.toBeNull());
+    expect(file(container)).toBeNull();
+  });
+
+  it('not served on a channel that may be indexed: says so without blaming the setting', async () => {
+    llmsAnswers['pl'] = llmsAnswer('pl', { state: 'not-served', base: null });
+    const { container } = renderWithI18n(llms({ draftText: CONTENT }), { seo: EN });
+    await waitFor(() => expect(notice(container, 'llms-not-served')).not.toBeNull());
+    expect(notice(container, 'llms-not-served')?.textContent).toBe(
+      en('crawlerPreview.llms.notice.notServed'),
+    );
+    expect(notice(container, 'llms-not-served-noindex')).toBeNull();
+    expect(file(container)).toBeNull();
+  });
+
+  it('comes back once the channel is indexable again and the operator checks again', async () => {
+    llmsAnswers['pl'] = llmsAnswer('pl', { state: 'not-served', base: null, policy: { index: false, follow: true } });
+    const { container } = renderWithI18n(llms({ draftText: CONTENT }), { seo: EN });
+    await waitFor(() => expect(notice(container, 'llms-not-served-noindex')).not.toBeNull());
+    llmsAnswers['pl'] = llmsAnswer('pl');
+    fireEvent.click(screen.getByRole('button', { name: en('crawlerPreview.refresh') }));
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    expect(file(container)?.textContent).toBe(composeCrawlerFile(LLMS_BASE, CONTENT));
+    expect(notice(container, 'llms-not-served-noindex')).toBeNull();
+  });
+
+  it.each([
+    ['storefront-unreachable', 'crawlerPreview.llms.notice.storefrontUnreachable'],
+    ['address-unknown', 'crawlerPreview.llms.notice.addressUnknown'],
+    ['storefront-outdated', 'crawlerPreview.llms.notice.storefrontOutdated'],
+  ] as const)('%s: one sentence, no file, the content still shown apart', async (state, key) => {
+    llmsAnswers['pl'] = llmsAnswer('pl', { state, base: null });
+    const { container } = renderWithI18n(llms({ draftText: CONTENT }), { seo: EN });
+    await waitFor(() => expect(notice(container, state)).not.toBeNull());
+    expect(notice(container, state)?.textContent).toContain(en(key));
+    expect(file(container)).toBeNull();
+    expect(part(container, 'operator-detached')?.textContent).toBe(CONTENT.trimEnd());
+    expect(heading('llms.txt preview')).toBeTruthy();
+  });
+
+  it('a failed request: says so, invents no base, keeps the operator’s content', async () => {
+    llmsAnswers['pl'] = new Error('500');
+    const { container } = renderWithI18n(llms({ draftText: CONTENT }), { seo: EN });
+    await waitFor(() => expect(notice(container, 'preview-failed')).not.toBeNull());
+    expect(notice(container, 'preview-failed')?.textContent).toContain(
+      en('crawlerPreview.llms.notice.previewFailed'),
+    );
+    expect(file(container)).toBeNull();
+  });
+
+  it('never draws the robots.txt answer in it, nor its own in the robots.txt preview: two rows, two requests', async () => {
+    const { container } = renderWithI18n(
+      <>
+        <div data-row="robots">{zone({ draftText: OWN })}</div>
+        <div data-row="llms">{llms({ draftText: CONTENT })}</div>
+      </>,
+      { seo: EN },
+    );
+    await waitFor(() => expect(container.querySelectorAll('[data-part="file"]')).toHaveLength(2));
+    const robotsRow = container.querySelector('[data-row="robots"]') as HTMLElement;
+    const llmsRow = container.querySelector('[data-row="llms"]') as HTMLElement;
+    expect(file(robotsRow)?.textContent).toBe(composeCrawlerFile(BASE, OWN));
+    expect(file(llmsRow)?.textContent).toBe(composeCrawlerFile(LLMS_BASE, CONTENT));
+    expect(previewCalls().sort()).toEqual([llmsUrl('pl'), previewUrl('pl')].sort());
+  });
+
+  it('asks again when the Default robots row is saved: whether a file exists follows from it', async () => {
+    const both = (dirty: boolean): ReactElement => (
+      <>
+        {zone({ settingCode: 'seo.default_robots', draftText: 'NOINDEX, FOLLOW', dirty })}
+        <div data-row="llms">{llms({ draftText: CONTENT })}</div>
+      </>
+    );
+    const { container, rerender } = renderWithI18n(both(true), { seo: EN });
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    // The Default robots row is mounted once it has asked its own question: a
+    // row that mounts after the save has no "was being edited" to compare with.
+    await waitFor(() => expect(previewCalls()).toContain(previewUrl('pl')));
+    llmsAnswers['pl'] = llmsAnswer('pl', { state: 'not-served', base: null, policy: { index: false, follow: true } });
+    rerender(both(false));
+    await waitFor(() => expect(notice(container, 'llms-not-served-noindex')).not.toBeNull());
+    expect(file(container.querySelector('[data-row="llms"]') as HTMLElement)).toBeNull();
+  });
+
+  it('the all-channels value: the channel picker, and the channel asked about is the one chosen', async () => {
+    llmsAnswers['de'] = llmsAnswer('de', { base: '# Only DE\n', channelsWithOwnValue: ['pl'] });
+    const { container } = renderWithI18n(llms({ channelCode: null, draftText: CONTENT, dirty: true }), { seo: EN });
+    await waitFor(() => expect(file(container)).not.toBeNull());
+    // The system default channel first.
+    expect(previewCalls()).toEqual([llmsUrl('de')]);
+    expect(file(container)?.textContent).toBe(composeCrawlerFile('# Only DE\n', CONTENT));
+    expect(notice(container, 'channels-with-own-value')?.textContent).toContain('pl');
+    expect(screen.getByLabelText(en('crawlerPreview.channel.pickerLabel'))).toBeTruthy();
+  });
+
+  it('renders in Polish from the Polish bundle', async () => {
+    llmsAnswers['pl'] = llmsAnswer('pl', { state: 'not-served', base: null, policy: { index: false, follow: true } });
+    const { container } = renderWithI18n(llms(), { seo: PL });
+    await waitFor(() => expect(notice(container, 'llms-not-served-noindex')).not.toBeNull());
+    expect(heading('llms.txt nie jest serwowany')).toBeTruthy();
+    expect(notice(container, 'llms-not-served-noindex')?.textContent).toBe(
+      PL['crawlerPreview.llms.notice.notServedNoindex'],
+    );
+  });
+
+  it('renders nothing and asks nothing without settings:read', async () => {
+    const { container } = renderWithI18n(llms({}, { permissions: ['catalog:write'] }), { seo: EN });
+    await new Promise((done) => setTimeout(done, 350));
+    expect(container.textContent).toBe('');
+    expect(getSpy).not.toHaveBeenCalled();
+  });
+
+  it('vanishes with the module — renders nothing and asks nothing while seo is off — and is back after', async () => {
+    const off = renderWithI18n(llms({}, { present: ['settings'] }), { seo: EN });
+    await new Promise((done) => setTimeout(done, 350));
+    expect(off.container.textContent).toBe('');
+    expect(getSpy).not.toHaveBeenCalled();
+    off.unmount();
+
+    const on = renderWithI18n(llms(), { seo: EN });
+    await waitFor(() => expect(file(on.container)).not.toBeNull());
+    expect(previewCalls()).toEqual([llmsUrl('pl')]);
   });
 });
 

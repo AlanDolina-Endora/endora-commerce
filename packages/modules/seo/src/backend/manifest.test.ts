@@ -81,6 +81,45 @@ describe('seo manifest — custom robots.txt instructions', () => {
   });
 });
 
+describe('seo manifest — additional llms.txt content', () => {
+  const setting = manifest.settings?.settings.find((s) => s.code === 'seo.llms_txt_additional');
+
+  it('declares a multi-line text in the seo group, empty by default', () => {
+    expect(setting).toBeDefined();
+    expect(setting?.groupCode).toBe('seo');
+    expect(setting?.valueType).toBe('string');
+    expect(setting?.multiline).toBe(true);
+    expect(setting?.enumOptions).toBeUndefined();
+    expect(setting?.defaultValue).toBe('');
+  });
+
+  it('is shown on the Settings screen and can be set for any sales channel', () => {
+    expect(setting?.hidden).not.toBe(true);
+    expect(setting?.salesChannelCodes).toBeUndefined();
+  });
+
+  it('says what an operator needs before writing it', () => {
+    // It follows what the storefront generates, never replaces it…
+    expect(setting?.description).toMatch(/added after the part the storefront generates/);
+    // …the file is withdrawn with indexing (FR-027)…
+    expect(setting?.description).toMatch(/not served .* asks search engines not to index/);
+    // …and the limit is named where the text is typed.
+    expect(setting?.description).toMatch(/64 KiB/);
+    // No longer than the robots one, which was cut down for the row it sits in.
+    const robots = manifest.settings?.settings.find((s) => s.code === 'seo.robots_txt_custom');
+    expect(setting?.description?.length).toBeLessThanOrEqual(robots?.description?.length ?? 0);
+  });
+
+  it('declares the three settings of the feature beside the activation control, and no other', () => {
+    expect(manifest.settings?.settings.map((s) => s.code)).toEqual([
+      'seo.enabled',
+      'seo.default_robots',
+      'seo.robots_txt_custom',
+      'seo.llms_txt_additional',
+    ]);
+  });
+});
+
 describe('seo manifest — command palette', () => {
   const action = (id: string) => manifest.actions?.find((a) => a.id === id);
 
@@ -150,10 +189,15 @@ describe('seo bundles', () => {
     ) as Record<string, string>;
 
   const KEYS = [
+    'settingGroups.seo.name',
+    'settingLabels.seo.enabled.name',
+    'settingLabels.seo.enabled.description',
     'settingLabels.seo.default_robots.name',
     'settingLabels.seo.default_robots.description',
     'settingLabels.seo.robots_txt_custom.name',
     'settingLabels.seo.robots_txt_custom.description',
+    'settingLabels.seo.llms_txt_additional.name',
+    'settingLabels.seo.llms_txt_additional.description',
     'errors.SEO_CRAWLER_TEXT_TOO_LARGE',
     ...(manifest.actions ?? []).flatMap((a) => [a.labelKey, a.descriptionKey]),
   ];
@@ -163,6 +207,31 @@ describe('seo bundles', () => {
     for (const key of KEYS) {
       expect(entries[key], `${language}: ${key}`).toEqual(expect.stringMatching(/\S/));
     }
+  });
+
+  it('carries a name and a description key for every setting the manifest declares, and the group’s name', () => {
+    // The keys the Settings screen resolves from the owner's bundle
+    // (`settingLabels.<code>.name|description`, `settingGroups.<group>.name`).
+    for (const language of ['en', 'pl']) {
+      const entries = bundle(language);
+      for (const setting of manifest.settings?.settings ?? []) {
+        expect(entries[`settingLabels.${setting.code}.name`], `${language}: ${setting.code}`).toBeTruthy();
+        expect(entries[`settingLabels.${setting.code}.description`], `${language}: ${setting.code}`).toBeTruthy();
+      }
+      for (const group of manifest.settings?.groups ?? []) {
+        expect(entries[`settingGroups.${group.code}.name`], `${language}: ${group.code}`).toBeTruthy();
+      }
+    }
+  });
+
+  it('says in both languages, on the activation setting, what switching the module off withdraws (FR-033)', () => {
+    const declared = manifest.settings?.settings.find((s) => s.code === 'seo.enabled');
+    expect(bundle('en')['settingLabels.seo.enabled.name']).toBe(declared?.name);
+    expect(bundle('en')['settingLabels.seo.enabled.description']).toBe(declared?.description);
+    const polish = bundle('pl')['settingLabels.seo.enabled.description'];
+    expect(polish).not.toBe(declared?.description);
+    expect(polish).toMatch(/noindex znów staje się indeksowalny/);
+    expect(polish).toMatch(/llms\.txt/);
   });
 
   it('keeps the English setting name and description in step with the manifest', () => {
@@ -179,6 +248,22 @@ describe('seo bundles', () => {
     expect(bundle('en')['settingLabels.seo.robots_txt_custom.description']).toBe(
       declared?.description,
     );
+  });
+
+  it('keeps the English name and description of the llms.txt content in step with the manifest', () => {
+    const declared = manifest.settings?.settings.find((s) => s.code === 'seo.llms_txt_additional');
+    expect(bundle('en')['settingLabels.seo.llms_txt_additional.name']).toBe(declared?.name);
+    expect(bundle('en')['settingLabels.seo.llms_txt_additional.description']).toBe(
+      declared?.description,
+    );
+  });
+
+  it('says in Polish, too, where the llms.txt content goes and when the file is withdrawn', () => {
+    const polish = bundle('pl')['settingLabels.seo.llms_txt_additional.description'];
+    expect(polish).not.toBe(bundle('en')['settingLabels.seo.llms_txt_additional.description']);
+    expect(polish).toMatch(/po części generowanej przez sklep/);
+    expect(polish).toMatch(/nie jest serwowany/);
+    expect(polish).toMatch(/64 KiB/);
   });
 
   it('says in Polish, too, that the text is appended and that Disallow does not de-index', () => {

@@ -4,7 +4,10 @@ import {
   type SettingWriteValidator,
 } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
-import { ROBOTS_TXT_CUSTOM_SETTING_CODE } from './crawler-files.service.js';
+import {
+  LLMS_TXT_ADDITIONAL_SETTING_CODE,
+  ROBOTS_TXT_CUSTOM_SETTING_CODE,
+} from './crawler-files.service.js';
 
 /**
  * `seo`'s answer to "may this text be saved" for the settings whose value ends
@@ -31,7 +34,10 @@ import { ROBOTS_TXT_CUSTOM_SETTING_CODE } from './crawler-files.service.js';
  */
 
 /** The settings this validator answers for. */
-export const CRAWLER_TEXT_SETTING_CODES: readonly string[] = [ROBOTS_TXT_CUSTOM_SETTING_CODE];
+export const CRAWLER_TEXT_SETTING_CODES: readonly string[] = [
+  ROBOTS_TXT_CUSTOM_SETTING_CODE,
+  LLMS_TXT_ADDITIONAL_SETTING_CODE,
+];
 
 export function createCrawlerTextValidator(): SettingWriteValidator {
   return {

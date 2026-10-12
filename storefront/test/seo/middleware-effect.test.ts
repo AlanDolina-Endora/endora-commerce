@@ -139,6 +139,7 @@ describe.each([
   '/service-worker.js',
   '/sitemap.xml',
   '/robots.txt',
+  '/llms.txt',
   '/manifest.webmanifest',
   '/_next/image',
 ])('the file %s', (path) => {

@@ -13,7 +13,6 @@ import {
   PREVIEW_TIMEOUT_MS,
   UnknownSalesChannelError,
   crawlerFileTarget,
-  isPreviewableCrawlerFile,
   type CrawlerFilePreviewStore,
   type CrawlerTextProvenance,
 } from './crawler-file-preview.service.js';
@@ -62,6 +61,7 @@ function plainText(
 function world(options: World = {}) {
   const fetchFn = vi.fn<typeof fetch>(options.fetch ?? (async () => plainText(SYSTEM_RULES)));
   const reads: Array<[string, string]> = [];
+  const provenanceAsked: Array<[string, string]> = [];
   const settings = {
     async get<T>(code: string, salesChannelId: string, schema: z.ZodType<T>): Promise<T> {
       reads.push([code, salesChannelId]);
@@ -73,8 +73,10 @@ function world(options: World = {}) {
   const store: CrawlerFilePreviewStore = {
     findChannel: async (code) => CHANNELS[code] ?? null,
     findDefaultChannel: async () => CHANNELS['de'] ?? null,
-    provenance: async (_settingCode, salesChannelId) =>
-      options.provenance?.[salesChannelId] ?? { source: 'default', channelsWithOwnValue: [] },
+    provenance: async (settingCode, salesChannelId) => {
+      provenanceAsked.push([settingCode, salesChannelId]);
+      return options.provenance?.[salesChannelId] ?? { source: 'default', channelsWithOwnValue: [] };
+    },
   };
   const resolved: string[] = [];
   const address = options.address ?? { url: 'https://shop.example', source: 'setting' as const };
@@ -89,7 +91,7 @@ function world(options: World = {}) {
     ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
     ...(options.maxBytes === undefined ? {} : { maxBytes: options.maxBytes }),
   });
-  return { service, fetchFn, reads, resolved };
+  return { service, fetchFn, reads, resolved, provenanceAsked };
 }
 
 /** The one request `fetch` was called with. */
@@ -464,18 +466,127 @@ describe('CrawlerFilePreviewService — the operator’s part', () => {
   });
 });
 
-describe('isPreviewableCrawlerFile', () => {
-  it('knows robots, and not yet llms', () => {
-    expect(isPreviewableCrawlerFile('robots')).toBe(true);
-    expect(isPreviewableCrawlerFile('llms')).toBe(false);
+/**
+ * `llms.txt` (`contracts/admin-surfaces.md` §3, the `llms` rows). The same
+ * request under the same bounds — the cases above are not repeated — and one
+ * state more: a storefront that supports the feature and serves no such file
+ * for the channel says so with a `404` that carries the capability header.
+ */
+describe('CrawlerFilePreviewService — llms.txt', () => {
+  const BASE = '# Endora Demo\n\n## Pages\n\n- [Home](https://shop.example/)\n';
+
+  it('is a GET to exactly <origin>/llms.txt?part=base, naming the channel', async () => {
+    const { service, fetchFn } = world({
+      address: { url: 'https://shop.example/pl/?x=1#y', source: 'setting' },
+      fetch: async () => plainText(BASE),
+    });
+    await service.preview('llms', 'pl');
+    const { url, init } = theRequest(fetchFn);
+    expect(url).toBe('https://shop.example/llms.txt?part=base');
+    expect(init.method).toBe('GET');
+    expect(init.redirect).toBe('manual');
+    expect(new Headers(init.headers).get('x-sales-channel')).toBe('pl');
+  });
+
+  it('ok: the generated base beside the saved additional content — never the robots text', async () => {
+    const { service, reads, provenanceAsked } = world({
+      values: {
+        'seo.llms_txt_additional': { [CHANNELS.pl!.id]: '## About\r\nBolts.\n' },
+        'seo.robots_txt_custom': { [CHANNELS.pl!.id]: 'User-agent: GPTBot\nDisallow: /\n' },
+      },
+      provenance: { [CHANNELS.pl!.id]: { source: 'channel', channelsWithOwnValue: ['pl'] } },
+      fetch: async () => plainText(BASE),
+    });
+    const { preview } = await service.preview('llms', 'pl');
+    expect(preview).toEqual({
+      file: 'llms',
+      salesChannelCode: 'pl',
+      state: 'ok',
+      base: BASE,
+      savedExtra: '## About\r\nBolts.\n',
+      savedExtraSource: 'channel',
+      channelsWithOwnValue: ['pl'],
+      policy: { index: true, follow: true },
+      storefront: { url: 'https://shop.example', source: 'setting' },
+    });
+    expect(adminCrawlerFilePreviewSchema.safeParse(preview).success).toBe(true);
+    // The text and its provenance are this file's setting's, for this channel.
+    expect(reads.map(([code]) => code)).not.toContain('seo.robots_txt_custom');
+    expect(provenanceAsked).toEqual([['seo.llms_txt_additional', CHANNELS.pl!.id]]);
+  });
+
+  it('not-served: a 404 that carries the capability header — and none of its body travels', async () => {
+    const { service, fetchFn } = world({
+      values: { 'seo.default_robots': { [CHANNELS.pl!.id]: 'NOINDEX, FOLLOW' } },
+      fetch: async () => plainText('Not found.\n', { status: 404 }),
+    });
+    const { preview, reason } = await service.preview('llms', 'pl');
+    expect(preview.state).toBe('not-served');
+    expect(preview.base).toBeNull();
+    expect(preview.policy).toEqual({ index: false, follow: true });
+    expect(reason).toMatch(/404/);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(adminCrawlerFilePreviewSchema.safeParse(preview).success).toBe(true);
+  });
+
+  it.each([
+    ['a 404 without the capability header', async () => plainText('Not found', { status: 404, capable: false })],
+    ['a 404 that is a web page', async () => plainText('<html>', { status: 404, capable: false, contentType: 'text/html' })],
+    ['a 2xx without the capability header', async () => plainText('# Something else\n', { capable: false })],
+  ] as Array<[string, typeof fetch]>)(
+    'storefront-outdated: %s — it has no such file, and whatever it answered is not the base',
+    async (_label, fetchImpl) => {
+      const { service } = world({ fetch: fetchImpl });
+      const { preview } = await service.preview('llms', 'pl');
+      expect(preview.state).toBe('storefront-outdated');
+      expect(preview.base).toBeNull();
+      expect(adminCrawlerFilePreviewSchema.safeParse(preview).success).toBe(true);
+    },
+  );
+
+  it.each([
+    ['a 503 that carries the capability header', async () => plainText('later', { status: 503 })],
+    ['a 500', async () => plainText('boom', { status: 500 })],
+    ['a 410 that carries the capability header', async () => plainText('gone', { status: 410 })],
+    ['a redirect', async () => plainText('', { status: 302, headers: { location: 'https://shop.example/' } })],
+    ['a base that is a web page', async () => plainText('<html>', { contentType: 'text/html' })],
+    ['a refused connection', async () => Promise.reject(new TypeError('fetch failed'))],
+  ] as Array<[string, typeof fetch]>)('storefront-unreachable: %s', async (_label, fetchImpl) => {
+    const { service } = world({ fetch: fetchImpl });
+    const { preview } = await service.preview('llms', 'pl');
+    expect(preview.state).toBe('storefront-unreachable');
+    expect(preview.base).toBeNull();
+  });
+
+  it('address-unknown: no request is made', async () => {
+    const { service, fetchFn } = world({ address: { url: 'http://localhost:3000', source: 'fallback' } });
+    const { preview } = await service.preview('llms', 'pl');
+    expect(preview.state).toBe('address-unknown');
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('a robots.txt is never "not served": its 404 with the header stays unreachable', async () => {
+    const { service } = world({ fetch: async () => plainText('', { status: 404 }) });
+    expect((await service.preview('robots', 'pl')).preview.state).toBe('storefront-unreachable');
+  });
+
+  it('does not share a request with the robots preview of the same channel', async () => {
+    const { service, fetchFn } = world({ fetch: async () => plainText(BASE) });
+    await Promise.all([service.preview('llms', 'pl'), service.preview('robots', 'pl')]);
+    expect(fetchFn.mock.calls.map(([input]) => String(input)).sort()).toEqual([
+      'https://shop.example/llms.txt?part=base',
+      'https://shop.example/robots.txt?part=system',
+    ]);
+  });
+
+  it('throws for stored content over the limit, as for the robots text', async () => {
+    const { service } = world({
+      values: { 'seo.llms_txt_additional': { [CHANNELS.pl!.id]: 'a'.repeat(CRAWLER_TEXT_MAX_BYTES + 1) } },
+    });
+    await expect(service.preview('llms', 'pl')).rejects.toBeInstanceOf(StoredCrawlerTextTooLargeError);
   });
 });
 
-/**
- * The two bounds that are otherwise asserted on what a stubbed `fetch` was
- * handed, proved here against real sockets: the platform's own `fetch`, two
- * `node:http` servers on loopback ports the system picks.
- */
 describe('CrawlerFilePreviewService — against a real server', () => {
   interface Seen {
     readonly url: string;

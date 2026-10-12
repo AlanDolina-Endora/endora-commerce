@@ -99,14 +99,26 @@ export function robotsDirectiveFromHeader(value: string | null | undefined): Rob
  *
  * A document gets the reachability gate, `x-pathname` and the `503` rewrite.
  * Everything else the middleware now sees — public files, `/robots.txt`,
- * `/sitemap.xml`, `/manifest.webmanifest`, `/_next/image` — is there for the
+ * `/llms.txt`, `/sitemap.xml`, `/manifest.webmanifest`, `/_next/image` — is there for the
  * response header alone and must not be gated: an image is not a page, and
  * rewriting one to the outage notice would answer a `<img>` with HTML.
  */
 const DOCUMENT_PATH =
   /^\/((?!_next\/static|_next\/image|favicon.ico|manifest.webmanifest|robots.txt|sitemap.xml|.*\.(?:png|jpg|jpeg|gif|svg|webp|ico|css|js|map|woff|woff2|ttf|eot)$).*)$/;
 
+/**
+ * The files this storefront has come to serve since, at addresses that
+ * matcher took for documents because nothing was there. Exact addresses, kept
+ * apart from the pattern so that the pattern stays the matcher it was.
+ *
+ * `/llms.txt` (`app/llms.txt/route.ts`) is handled as `/robots.txt` is. Gated
+ * as a document, a process holding the channel's last-known `llms.txt` would
+ * answer the outage notice — a web page — instead of serving it while the
+ * backend is down.
+ */
+const FILES_SINCE: ReadonlySet<string> = new Set(['/llms.txt']);
+
 /** Whether `pathname` is a document rather than a file. See {@link DOCUMENT_PATH}. */
 export function isDocumentPath(pathname: string): boolean {
-  return DOCUMENT_PATH.test(pathname);
+  return !FILES_SINCE.has(pathname) && DOCUMENT_PATH.test(pathname);
 }

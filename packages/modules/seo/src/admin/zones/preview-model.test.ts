@@ -340,6 +340,157 @@ describe('buildPreviewModel — the address every channel shares', () => {
   });
 });
 
+/**
+ * `llms.txt` — the same model, asked about the other file
+ * (`contracts/admin-surfaces.md` §4, the `llms` rows; FR-044).
+ *
+ * Everything the cases above hold about the block is true of this file too,
+ * because it is the same function: what is held here is where the two differ.
+ * `robots.txt` is always served; `llms.txt` is withdrawn on a channel that
+ * asks not to be indexed, and the preview then says so instead of showing a
+ * file nobody is served.
+ */
+describe('buildPreviewModel — llms.txt', () => {
+  const LLMS_BASE = '# Endora Demo\n\n## Pages\n\n- [Home](https://shop.example/)\n';
+  const CONTENT = '## About\n\nWe sell bolts.\n';
+  const llms = (overrides: Partial<AdminCrawlerFilePreview> = {}): PreviewRequest =>
+    ready({ file: 'llms', base: LLMS_BASE, ...overrides });
+
+  it('is one block that is the served file: the generated base, a blank line, the content', () => {
+    const model = buildPreviewModel(
+      { channelCode: 'pl', draftText: CONTENT, dirty: false },
+      llms({ savedExtra: CONTENT, savedExtraSource: 'channel', channelsWithOwnValue: ['pl'] }),
+      'llms',
+    );
+    expect(model.shows).toBe('served-now');
+    expect(model.file?.text).toBe(composeCrawlerFile(LLMS_BASE, CONTENT));
+    expect(blockText(model)).toBe(composeCrawlerFile(LLMS_BASE, CONTENT));
+    expect(segmentKinds(model)).toEqual(['system', 'separator', 'operator']);
+    expect(model.detachedOperatorPart).toBeNull();
+    expect(kinds(model)).toEqual([]);
+  });
+
+  it('with unsaved content the file is the one served after saving', () => {
+    const model = buildPreviewModel(
+      { channelCode: 'pl', draftText: CONTENT, dirty: true },
+      llms(),
+      'llms',
+    );
+    expect(model.shows).toBe('after-saving');
+    expect(model.operatorPartUnsaved).toBe(true);
+    expect(blockText(model)).toBe(composeCrawlerFile(LLMS_BASE, CONTENT));
+  });
+
+  it('with no content the file is the generated base alone, byte for byte', () => {
+    const model = buildPreviewModel({ channelCode: 'pl', draftText: '', dirty: false }, llms(), 'llms');
+    expect(blockText(model)).toBe(LLMS_BASE);
+    expect(segmentKinds(model)).toEqual(['system']);
+  });
+
+  describe('a channel whose default robots forbids indexing', () => {
+    it.each([
+      ['the storefront says so', { state: 'not-served', base: null } as const],
+      // The storefront's own minute has not passed since the setting was saved.
+      ['the storefront still serves it', { state: 'ok', base: LLMS_BASE } as const],
+    ])('says that no llms.txt is served, in place of the file — %s', (_label, storefront) => {
+      const model = buildPreviewModel(
+        { channelCode: 'pl', draftText: CONTENT, dirty: true },
+        llms({ ...storefront, policy: { index: false, follow: true }, savedExtra: CONTENT }),
+        'llms',
+      );
+      expect(model.shows).toBe('not-served');
+      expect(model.file).toBeNull();
+      // In place of the blocks: the operator's text is in the field above and
+      // is not drawn a second time as if it were part of something served.
+      expect(model.detachedOperatorPart).toBeNull();
+      expect(kinds(model)).toEqual(['llms-not-served-noindex']);
+      expect(model.notices[0]?.tone).toBe('info');
+    });
+
+    it('does not say robots.txt stays open, nor caution about a crawl ban: that is the other file', () => {
+      const model = buildPreviewModel(
+        { channelCode: 'pl', draftText: 'User-agent: *\nDisallow: /\n', dirty: false },
+        llms({ state: 'not-served', base: null, policy: { index: false, follow: false } }),
+        'llms',
+      );
+      expect(kinds(model)).not.toContain('stays-open');
+      expect(kinds(model)).not.toContain('site-wide-disallow');
+    });
+
+    it('NOFOLLOW alone withdraws nothing', () => {
+      const model = buildPreviewModel(
+        { channelCode: 'pl', draftText: CONTENT, dirty: false },
+        llms({ policy: { index: true, follow: false } }),
+        'llms',
+      );
+      expect(model.shows).toBe('served-now');
+      expect(kinds(model)).toEqual([]);
+    });
+  });
+
+  it('not served on a channel that may be indexed: says so, without blaming a setting that allows it', () => {
+    // The storefront has not caught up with a change yet, or sees no `seo`.
+    const model = buildPreviewModel(
+      { channelCode: 'pl', draftText: CONTENT, dirty: false },
+      llms({ state: 'not-served', base: null }),
+      'llms',
+    );
+    expect(model.shows).toBe('not-served');
+    expect(model.file).toBeNull();
+    expect(model.detachedOperatorPart).toBeNull();
+    expect(kinds(model)).toEqual(['llms-not-served']);
+  });
+
+  it('storefront-outdated: no file — it has none — and the content shown apart', () => {
+    const model = buildPreviewModel(
+      { channelCode: 'pl', draftText: CONTENT, dirty: false },
+      llms({ state: 'storefront-outdated', base: null }),
+      'llms',
+    );
+    expect(model.shows).toBe('unknown');
+    expect(model.file).toBeNull();
+    expect(model.detachedOperatorPart).toBe(CONTENT.trimEnd());
+    expect(kinds(model)).toEqual(['storefront-outdated']);
+  });
+
+  it.each([
+    ['storefront-unreachable', 'storefront-unreachable'],
+    ['address-unknown', 'address-unknown'],
+  ] as const)('%s: no file, the content still shown, and it is not called "not served"', (state, notice) => {
+    const model = buildPreviewModel(
+      { channelCode: 'pl', draftText: CONTENT, dirty: true },
+      llms({ state, base: null }),
+      'llms',
+    );
+    expect(model.shows).toBe('unknown');
+    expect(model.file).toBeNull();
+    expect(model.detachedOperatorPart).toBe(CONTENT.trimEnd());
+    expect(kinds(model)).toEqual([notice]);
+  });
+
+  it('the all-channels value: names the channels it does not reach, as for robots.txt', () => {
+    const model = buildPreviewModel(
+      { channelCode: null, draftText: CONTENT, dirty: true },
+      llms({ salesChannelCode: 'de', channelsWithOwnValue: ['pl'] }),
+      'llms',
+    );
+    expect(model.mode).toBe('all-channels');
+    expect(blockText(model)).toBe(composeCrawlerFile(LLMS_BASE, CONTENT));
+    expect(kinds(model)).toEqual(['channels-with-own-value']);
+  });
+
+  it('robots.txt is never "not served", whatever the channel’s default robots', () => {
+    const model = buildPreviewModel(
+      { channelCode: 'pl', draftText: OWN, dirty: false },
+      ready({ policy: { index: false, follow: false } }),
+    );
+    expect(model.shows).toBe('served-now');
+    expect(model.file).not.toBeNull();
+    expect(kinds(model)).toContain('stays-open');
+    expect(kinds(model)).not.toContain('llms-not-served-noindex');
+  });
+});
+
 describe('servedOperatorPart and servedSystemPart', () => {
   it.each([
     ['', ''],

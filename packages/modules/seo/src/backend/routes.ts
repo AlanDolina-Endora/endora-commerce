@@ -23,7 +23,6 @@ import {
 } from './services/crawler-files.service.js';
 import {
   UnknownSalesChannelError,
-  isPreviewableCrawlerFile,
   type CrawlerFilePreviewService,
 } from './services/crawler-file-preview.service.js';
 
@@ -91,7 +90,8 @@ export async function registerSeoRoutes(
   // -- Public: what a sales channel's crawler files are built from -----------
   //
   // `specs/144-seo-search-engine-robots/contracts/crawler-policy.md` §2. The
-  // storefront asks this when it serves `robots.txt`, and is itself the cache.
+  // storefront asks this when it serves `robots.txt` or `llms.txt`, and is
+  // itself the cache.
   //
   // The channel is resolved exactly as above, and every value in the answer is
   // that channel's: one channel's instructions are never in another channel's
@@ -104,18 +104,27 @@ export async function registerSeoRoutes(
   // No presence check, for the reason given above: `MODULE_DISABLED` is what
   // tells the storefront to serve its own rules alone.
   //
-  // A stored value this module cannot stand behind is a `500` and never an
-  // empty text at `200` — see `services/crawler-files.service.ts`.
+  // Stored `robots.txt` instructions this module cannot stand behind are a
+  // `500` and never an empty text at `200`. An unreadable default robots or
+  // `llms.txt` content is named in the answer instead, so that it costs the
+  // channel its `llms.txt` and not its `robots.txt` — see
+  // `services/crawler-files.service.ts`.
   app.get('/api/v1/storefront/seo/crawler-files', async (request, reply) => {
     const channel = getResolvedChannel(request);
     reply.header('Cache-Control', 'no-store');
     try {
-      return { data: await resolveCrawlerFiles(settings, channel.id) };
+      const files = await resolveCrawlerFiles(settings, channel.id);
+      if (files.unreadable !== undefined) {
+        // Answered, with what could not be read named in it — `robots.txt`
+        // needs none of it. Names of members only; never a stored value.
+        request.log.error(
+          { salesChannelCode: channel.code, unreadable: files.unreadable },
+          'seo: a stored crawler-file setting cannot be read; llms.txt is not served for the channel',
+        );
+      }
+      return { data: files };
     } catch (error) {
-      if (
-        error instanceof UnknownRobotsTokenError ||
-        error instanceof StoredCrawlerTextTooLargeError
-      ) {
+      if (error instanceof StoredCrawlerTextTooLargeError) {
         // The message names the setting and what is wrong with it, and carries
         // none of the text.
         request.log.error(
@@ -157,11 +166,6 @@ export async function registerSeoRoutes(
     async (request, reply) => {
       const { file, salesChannelCode } = adminCrawlerFilePreviewQuerySchema.parse(request.query);
       reply.header('Cache-Control', 'no-store');
-      if (!isPreviewableCrawlerFile(file)) {
-        throw new HttpError(400, ERROR_CODES.VALIDATION_FAILED, 'This file has no preview.', [
-          { path: 'file', issue: `"${file}" cannot be previewed.` },
-        ]);
-      }
       try {
         const { preview, reason } = await crawlerFilePreview.preview(file, salesChannelCode);
         if (preview.state !== 'ok') {
@@ -172,6 +176,8 @@ export async function registerSeoRoutes(
           // `address-unknown` is `debug`: it is the resting state of a fresh
           // instance, where nobody has configured an address yet, and an
           // `info` line on every visit to the Settings screen would be noise.
+          // So is `not-served`: it is what a channel kept out of search
+          // answers for its `llms.txt`, by design.
           const details = {
             salesChannelCode: preview.salesChannelCode,
             file,
@@ -179,8 +185,11 @@ export async function registerSeoRoutes(
             reason,
           };
           const message = 'seo: the crawler-file preview could not show the storefront’s part';
-          if (preview.state === 'address-unknown') request.log.debug(details, message);
-          else request.log.info(details, message);
+          if (preview.state === 'address-unknown' || preview.state === 'not-served') {
+            request.log.debug(details, message);
+          } else {
+            request.log.info(details, message);
+          }
         }
         return { data: preview };
       } catch (error) {

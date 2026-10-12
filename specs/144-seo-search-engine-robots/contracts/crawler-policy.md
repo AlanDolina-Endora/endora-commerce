@@ -7,7 +7,8 @@ The Zod schemas named here are written in `packages/contracts/src/seo.ts` **befo
 is implemented (Principle II); this document is their prose. Names are final unless a test in the
 owning slice refutes one.
 
-**Brought in line with what shipped on 2026-10-11** (slices 1 and 3). Where the first version of
+**Brought in line with what shipped on 2026-10-11** (slices 1 and 3) **and on 2026-10-12**
+(slice 5: §2.2, §5, and the `llms.txt` rows of §3 and §6). Where the first version of
 this document said something else, the difference is marked *(as shipped)* and the reason is
 beside it; `tasks.md` records each as a deviation on the task that made it.
 
@@ -57,21 +58,23 @@ Public, unauthenticated, channel-resolved as §1.
     "index": false,
     "follow": false,
     "robotsTxtCustom": "User-agent: GPTBot\nDisallow: /\n",
-    "llmsTxtAdditional": "",
+    "llmsTxtAdditional": "## About\n\nWe sell bolts.\n",
     "shop": { "name": "Endora Demo" }
+    // "unreadable": ["policy"]   — only when something could not be read; see §2.2
   }
 }
 ```
 
 - Schema: `storefrontCrawlerFilesSchema` / `storefrontCrawlerFilesResponseSchema`, tolerant of
-  unknown members exactly as §1. All five named members are required.
+  unknown members exactly as §1. The five members above are required; `unreadable` is optional.
 - `robotsTxtCustom` and `llmsTxtAdditional` are the values resolved for the channel (its own,
   else all-channels, else the empty default), each at most `CRAWLER_TEXT_MAX_BYTES` = 65 536
   bytes of UTF-8, returned exactly as stored. Line endings are not normalised by the backend;
   §4 says what a served file does with them. An empty channel value is a value: it overrides a
   non-empty all-channels text.
-- `llmsTxtAdditional` is `""` until slice 5 declares its setting; the member is in the contract
-  from the first release that has the endpoint, so a storefront reads one shape.
+- `llmsTxtAdditional` was `""` until slice 5 declared `seo.llms_txt_additional`; the member has
+  been in the contract from the first release that has the endpoint, so a storefront reads one
+  shape.
 - The schema bounds each text at 65 536 **characters**. That is deliberately the looser test —
   a text within the byte limit never has more characters than that — and it is what a consumer
   can check without encoding the text.
@@ -80,11 +83,43 @@ Public, unauthenticated, channel-resolved as §1.
   registered or does not hold a string. It is read through the settings read port, not by calling
   the `settings` module's `shop-info` route.
 - `Cache-Control: no-store`; `503 MODULE_DISABLED` as §1.
-- **`500`, never an empty text at `200`, when a stored value cannot be served** *(as shipped, by
-  analogy with §1)*: a `seo.default_robots` outside the four tokens, a text that is not a string,
-  or a text over the byte limit. Each takes a row written around the settings API. An empty text
-  at `200` would be definitive: the storefront would serve a `robots.txt` without the operator's
-  instructions and call it current.
+- **`500`, never an empty text at `200`, when the stored `robots.txt` instructions cannot be
+  served** — not a string, or over the byte limit. It takes a row written around the settings API.
+  An empty text at `200` would be definitive: the storefront would serve a `robots.txt` without
+  the operator's instructions and call it current. *(Slices 3 and 4 answered `500` for an
+  unreadable `seo.default_robots` as well; §2.2 is what replaced that.)*
+
+### 2.2 The parts of the answer fail apart — `unreadable` *(slice 5)*
+
+`robots.txt` is built from the texts and never from the policy (§4, FR-015). As first shipped, a
+`seo.default_robots` row holding a value outside the four tokens failed the whole answer, so a
+storefront that knew nothing answered that channel's `robots.txt` `503` — for a setting the file
+has no path from. `llms.txt` is the first reader of `index` / `follow`, and with it the coupling
+had to be decided (`tasks.md`, the note before T093).
+
+**The endpoint answers `200` and names what it could not read**, in an optional member:
+
+| In `unreadable` | Means | The members it concerns then read |
+| --- | --- | --- |
+| `"policy"` | the stored `seo.default_robots` is not one of the four tokens | `index: false`, `follow: false` — "not known", not a value |
+| `"llmsTxtAdditional"` | the stored `seo.llms_txt_additional` is not a string, or is over the byte limit | `""` — "not known", and never a part of the text |
+
+- Absent when everything was read; never an empty list. A list of **names**, not a closed enum, so
+  that a later backend can name something else: a consumer ignores a name it does not know.
+- **Additive.** A backend older than the member never sends it (it answered `500`); a storefront
+  older than it ignores it, and reads neither thing it can name — which is why those two, and only
+  those, may be answered this way. Such a storefront now serves `robots.txt` on a channel with an
+  unreadable policy too.
+- `false, false` is not a guess at the policy. It is the reading under which a consumer that does
+  not know `unreadable` errs towards keeping a channel out.
+- `robotsTxtCustom` is deliberately **not** nameable: every storefront that has the endpoint reads
+  it. So unreadable `robots.txt` instructions still cost a cold storefront the channel's
+  `llms.txt` as well as its `robots.txt`; that direction fails closed and is left.
+- "Unreadable" is about the stored **value**. A settings store that cannot be asked, or has no
+  such setting, is still a `500`.
+- §1 is unchanged: `robots-policy` answers `500` for the same row, and pages keep the directive
+  they last knew.
+- Each such answer is logged at `error`, naming the channel and the members — never a value.
 
 ### 2.1 The size limit, on write
 
@@ -146,6 +181,14 @@ channel, and an answer to one is never an answer to the other.
 | Middleware, any path | no header, no request header | **as "none"** (FR-017) |
 | `robots.txt` | system rules alone, `200` | `503`, `Retry-After: 120`, `Cache-Control: no-store` (FR-022) |
 | `llms.txt` | `404` | `503`, as above |
+
+And one case only `llms.txt` has *(slice 5)*: a **value** that names `policy` or
+`llmsTxtAdditional` in `unreadable` (§2.2) is, to that file, "unknown" — `503`, as above. To
+`robots.txt` it is a value like any other. **It is a value to the reader too, so it replaces
+what was known:** a storefront that was serving a good `llms.txt` answers `503` once it reads
+such an answer, although it holds an earlier version. That departs from "the last version it
+knew" deliberately (`spec.md` FR-029): the answer says what the configuration is now, and the
+last-known `index: true` may be exactly what is wrong.
 
 The cache is per process and per runtime; it is never written to disk or shared. A stale value
 is refetched at most once per 5 s per channel while the backend keeps failing.
@@ -225,10 +268,29 @@ Served by `storefront/app/robots.txt/route.ts` (`dynamic = 'force-dynamic'`); th
 
 ## 5. `GET /llms.txt`
 
-- `404` when the channel's policy has `index: false` (FR-027), and when the answer of §2 is
-  "none" (FR-030).
-- Otherwise `composeCrawlerFile(base, llmsTxtAdditional)`, `Content-Type: text/plain;
-  charset=utf-8`, `Cache-Control: public, max-age=60`, `X-Endora-Crawler-Files: 1`.
+Served by `storefront/app/llms.txt/route.ts` (`dynamic = 'force-dynamic'`); the decision is
+`storefront/lib/seo/llms-txt.ts`, the generated base `lib/seo/llms-txt-base.ts`. *(As shipped in
+slice 5; the first version of this section is what the differences below are marked against.)*
+
+| What is known about the channel | Answer |
+| --- | --- |
+| it may be indexed, and its configuration was read now or is remembered | `200`, `composeCrawlerFile(base, llmsTxtAdditional)` |
+| its policy has `index: false` (FR-027) | `404`, whatever the content holds |
+| the answer of §2 is "none" (FR-030) | `404` |
+| "unknown", or a value naming `policy` or `llmsTxtAdditional` unreadable (§2.2) | `503`, `Retry-After: 120` |
+
+- `Content-Type: text/plain; charset=utf-8`, `X-Content-Type-Options: nosniff`,
+  `Vary: X-Sales-Channel` and `X-Endora-Crawler-Files: 1` on **every** answer, `404` and `503`
+  included — the constants `robots.txt` answers with, written once in
+  `lib/seo/crawler-file-response.ts`. `Cache-Control: public, max-age=60` on the `200`;
+  **`no-store` on the `404`** *(as shipped)*, so that a withdrawn file is seen withdrawn and an
+  allowed one is seen back without a cache's say; `no-store` on the `503`.
+- **The capability header on the `404` is load-bearing**: it is how the Admin UI's preview tells
+  "no `llms.txt` for this channel" from a storefront that has no such route
+  (`admin-surfaces.md` §3).
+- Only `index` withdraws the file. `follow: false` alone does not.
+- Composition, "verbatim", the byte order mark and the linear cost are §4's, unchanged: one
+  function. The composed file is kept per configuration object, as §4's is.
 - The generated base, in this order:
 
   ```text
@@ -245,11 +307,52 @@ Served by `storefront/app/robots.txt/route.ts` (`dynamic = 'force-dynamic'`); th
   ```
 
   The list is `SITEMAP_STATIC_ROUTES` — the storefront's hand-written statement of its public,
-  indexable, static addresses — and nothing else. No address is computed from the route tree and
-  no address family closed in §4 can appear.
-- **`?part=base`** → the generated base alone; `404` under the same conditions as the plain
-  address.
-- `llms.txt` and `robots.txt` are added to `RESERVED_TOP_LEVEL_SEGMENTS` (FR-028).
+  indexable, static addresses — and nothing is ever added to it. No address is computed from the
+  route tree and no address family closed in §4 can appear; a test holds every address the base
+  writes against `ROBOTS_SYSTEM_RULES.disallow` itself. The addresses carry the deployment's
+  **one** origin — `NEXT_PUBLIC_SITE_URL`, fixed by the build — for every sales channel, as the
+  sitemap's do; the shop name and the pages are what differ per channel.
+  - **Less a page that would answer "not found" right now** *(as shipped; FR-025's "where those
+    exist")*. `LLMS_TXT_CONDITIONAL_PAGES` names the listed pages that depend on something behind
+    them — today `/blog`, which is `404` while the `blog` module is off **or** the channel's
+    `blog.enabled` is `false`. `lib/seo/llms-txt-pages.ts` asks the endpoint the page itself
+    asks (`GET /api/v1/blog/by-channel`) and reads it the same way. This can remove a line and
+    can never add one.
+  - **The answer is remembered by the reader of §3, as a third question** *(after review)*:
+    `createChannelCache` is exported and instantiated once more, so every rule of §3 holds for
+    it and there is no second set — one read per channel per minute, shared by requests that
+    arrive together, aborted at the 2 s deadline, a stale answer refreshed within the 150 ms
+    budget while the known one is served, a failing backend asked no more than once per 5 s,
+    256 channels at most. As first written the read was unbudgeted, unshared and repeated on
+    every request while it failed: a hanging blog endpoint made every `/llms.txt` take 2 s, and a
+    failing one made one backend request per request of a public address.
+  - **A file built while nothing is known about a listed page is `Cache-Control: no-store`**
+    *(after review)*. The page is left out — the cheaper mistake — and the `200` is that request's
+    alone, because the next may know. Once anything is known for the channel the last-known line
+    is kept and the file is `public, max-age=60` as usual.
+  - **The shop name is one line** *(as shipped)*: C0 and C1 control characters and the
+    bidirectional embedding, override and isolate controls (`U+202A`–`U+202E`,
+    `U+2066`–`U+2069`) removed *(after review)*, surrounding whitespace removed, every run of
+    whitespace inside — line breaks included — one space, in time linear in the name. A name
+    cannot start a line of its own, so it cannot become a list entry.
+  - Titles are English constants (`LLMS_TXT_PAGE_TITLES`), keyed by the static routes; a test holds
+    the two sets equal, so a route added to the sitemap is named in the same change.
+  - No summary blockquote: the storefront has no description of the shop to offer. An operator
+    writes one in the additional content.
+- **`?part=base`** → the generated base alone, `no-store`; `404` and `503` under exactly the
+  conditions of the plain address. Unlike `?part=system` of §4 it **does** read §2: whether there
+  is a file to preview is part of the answer.
+- **`/llms.txt` is a non-document path to the middleware** *(as shipped; §6)*. The matcher the
+  document classification is taken from knew no such address — `.txt` is not among the extensions
+  it excluded — so the path was gated as a page, and a process holding the last-known file would
+  have answered the outage notice instead of serving it while the backend is down.
+  `isDocumentPath` answers `false` for that exact address and nothing near it.
+- `llms.txt` and `robots.txt` are in `RESERVED_TOP_LEVEL_SEGMENTS` (FR-028).
+- **A `public/llms.txt` shadows the route** *(measured on the standalone server: `200`, the
+  file's bytes, no capability header)* — for every channel, on a `NOINDEX` channel too. Next has
+  no metadata-file convention for this address, which is what let `app/robots.ts` shadow §4's
+  route; the route test holds that neither exists. Not measured: a build made with the file
+  present.
 
 ## 6. The directive on responses
 
@@ -268,8 +371,8 @@ everything except `/_next/static/*`.
   a header; a crawler applies the most restrictive of them (FR-012).
 - The request header is written or deleted on **every** request the middleware handles, so a
   value supplied by a client never reaches the layout.
-- A non-document path (a file extension, `robots.txt`, `sitemap.xml`, `manifest.webmanifest`,
-  `/_next/image`) gets the response header and nothing else: no reachability probe, no
+- A non-document path (a file extension, `robots.txt`, `llms.txt` *(slice 5)*, `sitemap.xml`,
+  `manifest.webmanifest`, `/_next/image`) gets the response header and nothing else: no reachability probe, no
   `x-pathname`, no rewrite. Its behaviour before this feature is otherwise unchanged.
 - The `503` rewrite the middleware already performs when the backend is unreachable is unchanged
   and takes precedence; it carries the header when a last-known value exists.
