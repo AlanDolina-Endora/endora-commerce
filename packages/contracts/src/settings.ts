@@ -504,6 +504,19 @@ export interface SettingWriteValidationInput {
   readonly code: string;
   /** The module that declared the setting. */
   readonly ownerModuleId: string;
+  /**
+   * The value the write proposes, after the type and option checks and before
+   * it is stored.
+   *
+   * It travels beside the projection because the projection can leave it out
+   * entirely: a platform-wide write reaches no channel that carries a row of
+   * its own, so when every channel does, the proposed value is no channel's
+   * post-write value — and a rule about the value itself, a size limit for
+   * one, would never see what is about to be stored. A rule about how
+   * channels' values relate reads the projection; a rule about the value reads
+   * this.
+   */
+  readonly proposedValue: unknown;
   /** Every sales channel in the platform, active or not, with its post-write value. */
   readonly projection: readonly SettingWriteChannelProjection[];
   /** Channel ids the write targets; empty for a platform-wide (`scope: 'all'`) write. */

@@ -242,6 +242,15 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'did not exist when the prefix chain was deleted: the refusal to edit or delete an ' +
       'internal message on an Opportunity, which is immutable once sent, whoever asks.',
   },
+  SEO_CRAWLER_TEXT_TOO_LARGE: {
+    to: 'seo',
+    reason:
+      'Minted for the refusal a settings write earns when the custom `robots.txt` instructions ' +
+      'being saved are over the size limit (`specs/144-seo-search-engine-robots/`, FR-006). The ' +
+      'limit is `seo`\'s rule and its one raise site is the write validator that module ' +
+      'contributes to the settings store; `SETTING_VALUE_SHAPE_MISMATCH` is not reused, because ' +
+      'the value has the right type and the sentence has to name the limit.',
+  },
   CART_PRODUCT_QUOTE_ONLY: {
     to: 'carts',
     reason:

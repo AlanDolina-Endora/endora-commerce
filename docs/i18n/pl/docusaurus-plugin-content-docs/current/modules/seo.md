@@ -1,6 +1,6 @@
 ---
 title: seo
-description: Wyznaczanie meta tagów, mapa witryny XML z pamięcią podręczną i domyślne ustawienie robots dla wyszukiwarek
+description: Wyznaczanie meta tagów, mapa witryny XML z pamięcią podręczną i ustawienia robots dla wyszukiwarek
 ---
 
 # `seo`
@@ -14,6 +14,7 @@ dowiadują się o całym sklepie danego kanału sprzedaży.
 | --- | --- | --- |
 | `GET /api/v1/catalog/sitemap.xml` | roboty wyszukiwarek | Mapa witryny XML z pamięci podręcznej; gdy jest nieaktualna, jest generowana od razu w trakcie żądania |
 | `GET /api/v1/storefront/seo/robots-policy` | sklep | Domyślna polityka robots kanału sprzedaży, którego dotyczy żądanie, w postaci `{ index, follow }` |
+| `GET /api/v1/storefront/seo/crawler-files` | sklep | To, z czego powstaje plik `robots.txt` kanału sprzedaży, którego dotyczy żądanie: jego własne instrukcje wraz z polityką i nazwą sklepu |
 | `GET /api/v1/admin/seo/sitemap` | administrator (`catalog:write`) | Jeden wiersz na kanał sprzedaży: adres sklepu, czas ostatniego wygenerowania, rozmiar, liczba adresów URL |
 | `POST /api/v1/admin/seo/sitemap/:channelCode/regenerate` | administrator (`catalog:write`) | Wymuszenie ponownego wygenerowania dla tego kanału |
 | `GET /api/v1/admin/seo/sitemap/:channelCode/status` | administrator (`catalog:write`) | Czas ostatniego wygenerowania, rozmiar i liczba adresów URL dla tego kanału |
@@ -24,7 +25,7 @@ dowiadują się o całym sklepie danego kanału sprzedaży.
 
 ## Roboty wyszukiwarek
 
-**Ustawienia → SEO → Default robots** decyduje o tym, co wyszukiwarki dowiadują się o każdej
+**Ustawienia → SEO → Domyślne robots** decyduje o tym, co wyszukiwarki dowiadują się o każdej
 stronie sklepu danego kanału sprzedaży. To przełącznik, którym można wyłączyć cały sklep
 z wyników wyszukiwania — kopię testową, wersję demonstracyjną, sklep przed otwarciem — bez
 zmieniania jakiejkolwiek strony.
@@ -72,10 +73,13 @@ przed wprowadzeniem tego ustawienia.
 
 ### Dlaczego `robots.txt` pozostaje otwarty
 
-*Default robots* nie zmienia pliku `robots.txt`, a kanał z `NOINDEX` nie może go zamykać wpisem
+*Domyślne robots* nie zmienia pliku `robots.txt`, a kanał z `NOINDEX` nie może go zamykać wpisem
 `Disallow: /`. Robot musi pobrać stronę, żeby odczytać, że nie wolno jej indeksować; strona,
 której nie wolno mu pobrać, nadal może trafić do wyników — po samym adresie — jeśli linkują do
 niej inne witryny.
+
+To samo dotyczy tego, co operator wpisuje do pliku — zobacz niżej
+[*Nie używaj ich, aby zniknąć z wyników wyszukiwania*](#nie-używaj-ich-aby-zniknąć-z-wyników-wyszukiwania).
 
 ### Ile trwa wprowadzenie zmiany
 
@@ -97,6 +101,11 @@ wartość, pozycje w palecie poleceń znikają, a `GET /api/v1/storefront/seo/ro
 odpowiada `503` `MODULE_DISABLED`. Ponowne włączenie modułu przywraca działanie zapisanej
 wartości.
 
+Własne instrukcje `robots.txt` są wycofywane razem z nim, na tych samych zasadach: plik
+`robots.txt` wraca do reguł generowanych przez sklep i pozostaje dostępny, ustawienie
+przechodzi w tryb tylko do odczytu i zachowuje tekst, a po ponownym włączeniu modułu tekst jest
+znów serwowany.
+
 ### Dwa ograniczenia
 
 - **Pliki serwowane przez backend nie są objęte.** Zdjęcia produktów i inne przesłane media
@@ -113,11 +122,13 @@ wartości.
 
 ### Sklep utworzony przed tą funkcją
 
-Dyrektywę nakładają pliki samego sklepu: `middleware.ts` i `app/layout.tsx`. Sklep utworzony
-z wcześniejszego wydania działa dalej ze zaktualizowanym backendem, ale **ignoruje to
-ustawienie**, dopóki te pliki nie zostaną zaktualizowane: ekran Ustawień pokazuje wybór, a nic
-w takim sklepie go nie stosuje. Lista plików do skopiowania jest w informacjach o wydaniu; do
-działania nie wymagają one aktualizacji żadnego pakietu.
+Dyrektywę nakładają pliki samego sklepu: `middleware.ts` i `app/layout.tsx`, a własne
+instrukcje — jego plik `app/robots.txt/route.ts`. Sklep utworzony z wcześniejszego wydania
+działa dalej ze zaktualizowanym backendem, ale **ignoruje te ustawienia**, dopóki te pliki nie
+zostaną zaktualizowane: ekran Ustawień pokazuje wybór i tekst, a nic w takim sklepie ich nie
+stosuje — jego `robots.txt` pozostaje plikiem, z którym sklep został zbudowany. Lista plików do
+skopiowania oraz plik do usunięcia są podane w informacjach o wydaniu: sklep, który zachowa stary
+plik `app/robots.ts` obok nowej trasy, nadal serwuje stary plik, a build tego nie zgłasza.
 
 ### Dla własnego sklepu
 
@@ -137,6 +148,161 @@ Statusy należy traktować różnie. `503` z `error.code: "MODULE_DISABLED"` ora
 polityki nie udało się odczytać: należy zachować ostatnio odczytaną. Punkt końcowy odpowiada
 `500`, a nie „brak ograniczeń", gdy zapisana wartość nie jest jedną z czterech opcji — do czego
 trzeba wiersza zapisanego z pominięciem API ustawień.
+
+## Własne instrukcje `robots.txt`
+
+**Ustawienia → SEO → Własne instrukcje robots.txt** to tekst, który sklep dopisuje do pliku
+`robots.txt` kanału sprzedaży — reguły dla konkretnego robota, dodatkowy wpis `Disallow`,
+`Crawl-delay`. Domyślnie jest pusty, a pusty tekst pozostawia plik dokładnie takim, jaki był.
+
+### Co zawiera plik i w jakiej kolejności
+
+1. **Reguły generowane przez sklep.** Zamykają rodziny adresów, które nigdy nie są indeksowane —
+   koszyk, kasę, konto, strony logowania, `/api/` — i wskazują mapę witryny. Odzwierciedlają
+   trasy samego sklepu; nie są ustawieniem i na ekranie Ustawień nie da się ich edytować ani
+   usunąć.
+2. **Pusty wiersz.**
+3. **Twój tekst**, w takiej postaci, w jakiej został wpisany.
+
+Na przykład po zapisaniu dla kanału wierszy `User-agent: GPTBot` i `Disallow: /`:
+
+```text
+User-Agent: *
+Allow: /
+Disallow: /api/
+Disallow: /account
+…
+Disallow: /offline
+
+Sitemap: https://shop.example.com/sitemap.xml
+
+User-agent: GPTBot
+Disallow: /
+```
+
+Tekst jest serwowany **tak, jak został wpisany**: każdy znak zostaje zachowany, w tej samej
+kolejności — wcięcia, puste wiersze, komentarze. Ujednolicane są dwie rzeczy dotyczące końców
+wierszy: każdy koniec wiersza jest serwowany jako znak nowego wiersza (LF), niezależnie od tego,
+jak tekst został zapisany, a plik zawsze kończy się dokładnie jednym. Pomijany jest też jeden
+niewidoczny znak: znacznik kolejności bajtów (BOM) na samym początku tekstu, który niektóre
+edytory dodają przy zapisie pliku — robot nie rozpoznałby wiersza, do którego jest doklejony.
+Nic w tekście nie jest sprawdzane ani poprawiane; wiersz, którego robot nie rozumie, jest
+serwowany jak każdy inny.
+
+**Grupa napisana dla jednego robota zastępuje dla niego reguły generowane.** Robot stosuje się
+do grupy, która go wymienia, i pomija wtedy grupę `*`, więc po wierszu `User-agent: GPTBot`
+i Twoich regułach GPTBot nie widzi już generowanych wierszy `Disallow`. Powtórz je w tej grupie,
+jeśli nadal mają go obowiązywać. Samych wierszy generowanych nie da się zmienić, ale wpis `Allow`
+tej samej długości co generowany `Disallow` ma przed nim pierwszeństwo. To, czy stronę można
+indeksować, nie zależy od żadnej z tych rzeczy: strony zamykane przez te reguły same deklarują
+`noindex`.
+
+Jak każde ustawienie, to również ma wartość dla wszystkich kanałów sprzedaży oraz wartości dla
+poszczególnych kanałów, a własna wartość kanału ma pierwszeństwo — także pusta, która sprawia,
+że kanał nie ma własnych instrukcji niezależnie od tekstu dla wszystkich kanałów. Tekst jednego
+kanału nigdy nie trafia do pliku innego kanału. **Reset** usuwa własny tekst kanału, więc kanał
+znów dziedziczy tekst dla wszystkich kanałów; zresetowanie także jego pozostawia same reguły
+generowane. Zmiana tekstu wymaga uprawnienia `settings:write` i jest zapisywana w dzienniku
+audytu.
+
+### Limit rozmiaru
+
+Tekst może mieć najwyżej **64 KiB** (65 536 bajtów w UTF-8 — litera spoza ASCII zajmuje dwa
+bajty lub więcej). Większy tekst jest odrzucany przy zapisie, z komunikatem podającym limit,
+a tekst zapisany wcześniej nadal obowiązuje. Wyszukiwarki czytają tylko pierwsze 500 KiB pliku
+`robots.txt`; limit sprawia, że cały plik mieści się w tym z dużym zapasem.
+
+### Nie używaj ich, aby zniknąć z wyników wyszukiwania
+
+Plik `robots.txt` określa, co robot może **pobrać**. Nie określa, co wyszukiwarka **pokazuje**.
+Strona, której nie wolno pobrać, nadal może pojawić się w wynikach — po samym adresie, bez
+opisu — jeśli linkują do niej inne witryny.
+
+Aby wyłączyć sklep z wyników wyszukiwania, ustaw *Domyślne robots* na `NOINDEX`. I nie dodawaj do
+tego `Disallow: /`: robot, któremu nie wolno pobrać strony, nigdy nie odczyta umieszczonego na
+niej `noindex`, więc reguła, która wygląda na mocniejszą, wyłącza tę, która działa. Nic, co
+zostanie tu wpisane, nie sprawi, że strona deklarująca `noindex` stanie się indeksowalna; może
+najwyżej sprawić, że roboty tego nie zobaczą.
+
+### Za serwerem proxy lub siecią CDN
+
+Plik jest inny dla każdego kanału sprzedaży, a sklep rozpoznaje kanał po nagłówku żądania
+`X-Sales-Channel`. Wysyła plik z nagłówkami `Cache-Control: public, max-age=60`
+i `Vary: X-Sales-Channel`. Dla tego, co stoi przed sklepem obsługującym więcej niż jeden kanał,
+wynikają z tego dwie rzeczy:
+
+- serwer proxy musi sam ustawiać `X-Sales-Channel`, osobno dla każdego hosta, i nie może
+  przepuszczać wartości przysłanej przez odwiedzającego — inaczej odwiedzający sam wybiera, czyj
+  plik zobaczy;
+- współdzielona pamięć podręczna, która pomija `Vary` dla takiego nagłówka, musi uwzględniać go
+  w kluczu pamięci podręcznej albo w ogóle nie przechowywać `/robots.txt` — inaczej plik jednego
+  kanału zostanie podany dla innego.
+
+Sklep obsługujący jeden kanał nie potrzebuje żadnej z nich; jego serwer proxy może ten nagłówek
+usuwać.
+
+### Ile trwa wprowadzenie zmiany w pliku
+
+Sklep pyta backend o tekst kanału najwyżej raz na minutę i pozwala robotowi przechowywać plik
+przez kolejną minutę, więc zapisana zmiana jest serwowana w ciągu około dwóch minut. Wyszukiwarki
+pobierają `robots.txt` według własnego harmonogramu, zwykle mniej więcej raz na dobę.
+
+### Gdy tekstu nie da się odczytać
+
+Sklep, który choć raz odczytał tekst kanału, serwuje tę wersję tak długo, jak długo backend
+jest niedostępny. Sklep, który tego nie zrobił — uruchomiony w czasie, gdy backend nie
+działał — do pierwszego udanego odczytu odpowiada na `robots.txt` kodem `503`
+z `Retry-After: 120`, zamiast serwować same reguły generowane.
+
+To celowe i różni się od zachowania stron. Plik `robots.txt` zwrócony z kodem `200` jest pełnym
+oświadczeniem o tym, co wolno pobierać, więc plik, w którym po cichu zabrakłoby Twoich wierszy
+`Disallow`, byłby zgodą, której nie udzielono. Wyszukiwarka odczytuje `503` jako „zapytaj
+później” i nadal korzysta z kopii, którą już ma. Żaden klient nie czyta tego pliku, więc nic, co
+widzi klient, od niego nie zależy.
+
+Na pierwszy odczyt kanału po uruchomieniu sklep czeka do dwóch sekund — a żądanie pliku
+`robots.txt` wykonuje dwa takie odczyty jeden po drugim: domyślnej polityki robots kanału,
+a potem jego tekstu. Gdy backend przyjmuje połączenia, ale nie odpowiada, pierwsze żądanie może
+więc trwać od czterech do pięciu sekund. Następnie sklep przez pięć sekund nie pyta ponownie
+i odpowiada od razu. Gdy moduł `seo` jest wyłączony oraz gdy backend nie ma tej funkcji, sklep
+serwuje same reguły generowane z kodem `200` — to są odpowiedzi, a nie błędy.
+
+### Odczyt tekstu we własnym sklepie
+
+`GET /api/v1/storefront/seo/crawler-files` jest publiczny i ustala kanał sprzedaży tak samo jak
+`robots-policy`:
+
+```json
+{
+  "data": {
+    "index": true,
+    "follow": true,
+    "robotsTxtCustom": "User-agent: GPTBot\nDisallow: /\n",
+    "llmsTxtAdditional": "",
+    "shop": { "name": "Endora Demo" }
+  }
+}
+```
+
+`robotsTxtCustom` to tekst ustalony dla kanału, dokładnie w zapisanej postaci — backend nie
+zmienia w nim żadnego znaku, także końców wierszy. `index` i `follow` powtarzają politykę
+kanału, `shop.name` to skonfigurowana nazwa sklepu albo pusty ciąg znaków, a `llmsTxtAdditional`
+jest w tym wydaniu zawsze puste. Schemat to `storefrontCrawlerFilesResponseSchema`
+w `@endora-commerce/contracts`; pakiet eksportuje też `composeCrawlerFile(base, extra)` —
+funkcję, którą referencyjny sklep łączy reguły generowane z tekstem — oraz
+`CRAWLER_TEXT_MAX_BYTES`.
+
+Odpowiedź jest wysyłana z `Cache-Control: no-store`. Statusy należy traktować tak jak dla
+`robots-policy`: `503` `MODULE_DISABLED` oraz `404` oznaczają, że własnego tekstu nie ma; każdy
+inny błąd, także `500`, oznacza, że tekstu nie udało się odczytać, a wtedy `robots.txt` powinien
+być ostatnio serwowaną wersją albo odpowiedzią `503` — nie plikiem bez tekstu. Punkt końcowy
+odpowiada `500`, a nie pustym tekstem, gdy zapisanej wartości nie można serwować — do czego
+trzeba wiersza zapisanego z pominięciem API ustawień.
+
+`robots.txt` referencyjnego sklepu odpowiada też na `GET /robots.txt?part=system` samymi
+regułami generowanymi — z nagłówkiem `Cache-Control: no-store`, ponieważ jest to plik bez tekstu
+operatora pod adresem, który pamięć podręczna mogłaby pomylić z właściwym — i oznacza każdą
+odpowiedź nagłówkiem `X-Endora-Crawler-Files: 1`.
 
 ## Wyznaczanie meta tagów
 

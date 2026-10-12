@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CRAWLER_TEXT_MAX_BYTES,
+  composeCrawlerFile,
+  storefrontCrawlerFilesResponseSchema,
+  storefrontCrawlerFilesSchema,
   storefrontRobotsPolicyResponseSchema,
   storefrontRobotsPolicySchema,
 } from './seo.js';
@@ -93,6 +97,318 @@ describe('storefrontRobotsPolicyResponseSchema', () => {
     expect(storefrontRobotsPolicyResponseSchema.safeParse({ data: {} }).success).toBe(false);
     expect(
       storefrontRobotsPolicyResponseSchema.safeParse({ data: 'NOINDEX, FOLLOW' }).success,
+    ).toBe(false);
+  });
+});
+
+/**
+ * `specs/144-seo-search-engine-robots/contracts/crawler-policy.md` §4 — how a
+ * crawler file is put together from the part the storefront generates and the
+ * part an operator wrote.
+ *
+ * One function, because two things have to agree about the join: the file the
+ * storefront serves and the preview the Admin UI shows of it.
+ *
+ * ## What "verbatim" means here
+ *
+ * Every character of the operator's text is served, unchanged and in order,
+ * with two exceptions that are about line breaks and nothing else:
+ *
+ *  * a line break is served as a line feed however it was stored. A browser's
+ *    text field always sends line feeds, an API client may send `CRLF`, and
+ *    one file must not come out with two conventions in it depending on which
+ *    of them saved last;
+ *  * line breaks at the very end of the text are served as exactly one.
+ *
+ * (`specs/144-seo-search-engine-robots/tasks.md` T054 asked for `CRLF` to be
+ * *preserved*; the definition above won, and the cases below hold it.)
+ *
+ * A third exception is not about line breaks: one byte order mark at the very
+ * start of the text is not served. An editor puts it there unseen, and a
+ * crawler that meets it does not recognise the line it is glued to.
+ */
+describe('composeCrawlerFile', () => {
+  const BASE = 'User-Agent: *\nAllow: /\nDisallow: /cart\n\nSitemap: https://shop.example.com/sitemap.xml\n';
+
+  it.each([
+    ['the empty string', ''],
+    ['spaces', '   '],
+    ['line breaks', '\n\n'],
+    ['CRLF line breaks and a tab', '\r\n\t\r\n'],
+  ])('returns the base byte for byte when the extra text is %s', (_label, extra) => {
+    expect(composeCrawlerFile(BASE, extra)).toBe(BASE);
+    // …whatever the base ends with: it is not this function's to tidy.
+    expect(composeCrawlerFile('no trailing break', extra)).toBe('no trailing break');
+    expect(composeCrawlerFile('three breaks\n\n\n', extra)).toBe('three breaks\n\n\n');
+  });
+
+  it('appends the extra text after one blank line and ends with one line break', () => {
+    expect(composeCrawlerFile(BASE, 'User-agent: GPTBot\nDisallow: /')).toBe(
+      `${BASE}\nUser-agent: GPTBot\nDisallow: /\n`,
+    );
+  });
+
+  it('separates by exactly one blank line whatever the base ends with', () => {
+    const expected = 'base\n\nextra\n';
+    expect(composeCrawlerFile('base', 'extra')).toBe(expected);
+    expect(composeCrawlerFile('base\n', 'extra')).toBe(expected);
+    expect(composeCrawlerFile('base\n\n\n', 'extra')).toBe(expected);
+  });
+
+  it('ends with exactly one line break however many the extra text ends with', () => {
+    expect(composeCrawlerFile('base\n', 'extra\n')).toBe('base\n\nextra\n');
+    expect(composeCrawlerFile('base\n', 'extra\n\n\n')).toBe('base\n\nextra\n');
+    expect(composeCrawlerFile('base\n', 'extra\r\n\r\n')).toBe('base\n\nextra\n');
+  });
+
+  it('leaves everything inside the extra text as it was written', () => {
+    const extra = [
+      '# Zażółć gęślą jaźń — a comment, with non-ASCII and trailing spaces   ',
+      '',
+      '',
+      '\tUser-agent:  GPTBot',
+      'Disallow: /*?sort=',
+      '  Crawl-delay: 10',
+      '<script>alert(1)</script>',
+    ].join('\n');
+    expect(composeCrawlerFile('base\n', extra)).toBe(`base\n\n${extra}\n`);
+  });
+
+  it('keeps blank lines the extra text starts with', () => {
+    expect(composeCrawlerFile('base\n', '\n\nextra')).toBe('base\n\n\n\nextra\n');
+  });
+
+  it('serves every line break as a line feed, whichever way it was stored', () => {
+    const served = 'base\n\nUser-agent: a\nDisallow: /x\n\nUser-agent: b\nDisallow: /y\n';
+    expect(
+      composeCrawlerFile('base\n', 'User-agent: a\nDisallow: /x\n\nUser-agent: b\nDisallow: /y'),
+    ).toBe(served);
+    expect(
+      composeCrawlerFile(
+        'base\n',
+        'User-agent: a\r\nDisallow: /x\r\n\r\nUser-agent: b\r\nDisallow: /y\r\n',
+      ),
+    ).toBe(served);
+    expect(
+      composeCrawlerFile('base\n', 'User-agent: a\rDisallow: /x\r\rUser-agent: b\rDisallow: /y'),
+    ).toBe(served);
+    // Mixed, as a text edited through two clients ends up.
+    expect(
+      composeCrawlerFile('base\n', 'User-agent: a\r\nDisallow: /x\n\rUser-agent: b\nDisallow: /y'),
+    ).toBe(served);
+    expect(served).not.toContain('\r');
+  });
+
+  /**
+   * The function runs for every request of a public file, on text an operator
+   * saved. Its cost has to be proportional to the text whatever the text is:
+   * a pattern that re-scans a long run of line breaks from each of its
+   * positions takes seconds on 64 KiB of them, during which the storefront
+   * process answers nobody.
+   *
+   * The bound is generous on purpose — the shapes below took one to four and a
+   * half **seconds** with such a pattern and take well under a millisecond
+   * without it, so nothing near the bound is a pass.
+   */
+  describe('takes time proportional to the text, whatever the text is', () => {
+    const LIMIT = 65_536;
+    const BOUND_MS = 250;
+    const timed = (base: string, extra: string): { out: string; ms: number } => {
+      // `Date.now()` and not a finer clock: the bound is a quarter of a
+      // second, and this package's tests are typed against no runtime.
+      const start = Date.now();
+      const out = composeCrawlerFile(base, extra);
+      return { out, ms: Date.now() - start };
+    };
+
+    it.each([
+      ['line feeds, then a character', `${'\n'.repeat(LIMIT - 1)}x`],
+      ['a character, line feeds, a character', `x${'\n'.repeat(LIMIT - 2)}x`],
+      ['carriage returns, then a character', `${'\r'.repeat(LIMIT - 1)}x`],
+      ['CRLF pairs, then a character', `${'\r\n'.repeat(LIMIT / 2 - 1)}x`],
+      ['alternating line feeds and carriage returns, then a character', `${'\n\r'.repeat(LIMIT / 2 - 1)}x`],
+      ['nothing but line feeds after one character', `x${'\n'.repeat(LIMIT - 1)}`],
+      ['spaces and line feeds, then a character', `${' \n'.repeat(LIMIT / 2 - 1)}x`],
+      ['byte order marks, then a character', `${'\uFEFF'.repeat(LIMIT - 1)}x`],
+    ])('%s', (_label, extra) => {
+      expect(extra.length).toBeLessThanOrEqual(LIMIT);
+      const { out, ms } = timed('base\n', extra);
+      expect(ms, `composing took ${ms} ms`).toBeLessThan(BOUND_MS);
+      expect(out.startsWith('base\n\n')).toBe(true);
+      expect(out.endsWith('\n')).toBe(true);
+      expect(out.endsWith('\n\n')).toBe(false);
+      expect(out).not.toContain('\r');
+    });
+
+    it('a base that is a long run of line feeds before its last character', () => {
+      // The base is this storefront's own and never looks like this; the
+      // function is exported, and its cost should not depend on who calls it.
+      const { out, ms } = timed(`${'\n'.repeat(LIMIT)}x${'\n'.repeat(LIMIT)}`, 'extra');
+      expect(ms, `composing took ${ms} ms`).toBeLessThan(BOUND_MS);
+      expect(out.endsWith('x\n\nextra\n')).toBe(true);
+    });
+
+    it('keeps the line breaks inside such a text — only their encoding and the trailing ones change', () => {
+      expect(composeCrawlerFile('base\n', `${'\n'.repeat(1000)}x`)).toBe(
+        `base\n\n${'\n'.repeat(1000)}x\n`,
+      );
+      expect(composeCrawlerFile('base\n', `x${'\r\n'.repeat(1000)}y${'\r'.repeat(1000)}`)).toBe(
+        `base\n\nx${'\n'.repeat(1000)}y\n`,
+      );
+    });
+  });
+
+  /**
+   * A byte order mark is invisible in every editor and is what some of them
+   * put first in a file. Served, it is glued to the first line: a crawler does
+   * not recognise `\uFEFFUser-agent: GPTBot` as the start of a group, so the
+   * rules written under it attach to the group above — the generated `*`
+   * group — and a `Disallow: /` meant for one crawler closes the site to all.
+   */
+  describe('a byte order mark at the start of the text', () => {
+    const BOM = '\uFEFF';
+
+    it('is not served', () => {
+      expect(composeCrawlerFile('base\n', `${BOM}User-agent: GPTBot\nDisallow: /`)).toBe(
+        'base\n\nUser-agent: GPTBot\nDisallow: /\n',
+      );
+    });
+
+    it('is exactly one: a second one, and one anywhere else, are the operator’s characters', () => {
+      expect(composeCrawlerFile('base\n', `${BOM}${BOM}User-agent: a`)).toBe(
+        `base\n\n${BOM}User-agent: a\n`,
+      );
+      expect(composeCrawlerFile('base\n', `User-agent: a\n${BOM}Disallow: /x`)).toBe(
+        `base\n\nUser-agent: a\n${BOM}Disallow: /x\n`,
+      );
+      expect(composeCrawlerFile('base\n', ` ${BOM}User-agent: a`)).toBe(
+        `base\n\n ${BOM}User-agent: a\n`,
+      );
+    });
+
+    it('alone, or with only whitespace after it, is an empty text', () => {
+      expect(composeCrawlerFile('base\n', BOM)).toBe('base\n');
+      expect(composeCrawlerFile('base\n', `${BOM}\r\n  \n`)).toBe('base\n');
+    });
+
+    it('is never removed from the base', () => {
+      expect(composeCrawlerFile(`${BOM}base\n`, 'extra')).toBe(`${BOM}base\n\nextra\n`);
+    });
+  });
+
+  it('never changes the base it was given', () => {
+    // The system-generated rules are the storefront's; an operator's text can
+    // follow them and cannot reach into them.
+    const composed = composeCrawlerFile(BASE, 'Disallow: /');
+    expect(composed.startsWith(BASE)).toBe(true);
+  });
+});
+
+/**
+ * `specs/144-seo-search-engine-robots/contracts/crawler-policy.md` §2 — what
+ * `GET /api/v1/storefront/seo/crawler-files` answers.
+ *
+ * Tolerant of members it does not know and strict about the ones it names, for
+ * the reason given at `storefrontRobotsPolicySchema`: a storefront is usually
+ * older than its backend.
+ */
+describe('storefrontCrawlerFilesSchema', () => {
+  const FILES = {
+    index: false,
+    follow: true,
+    robotsTxtCustom: 'User-agent: GPTBot\nDisallow: /\n',
+    llmsTxtAdditional: '',
+    shop: { name: 'Endora Demo' },
+  };
+
+  it('accepts the documented shape', () => {
+    expect(storefrontCrawlerFilesSchema.parse(FILES)).toEqual(FILES);
+  });
+
+  it('accepts empty texts and an empty shop name', () => {
+    const empty = { ...FILES, robotsTxtCustom: '', shop: { name: '' } };
+    expect(storefrontCrawlerFilesSchema.parse(empty)).toEqual(empty);
+  });
+
+  it('returns the texts exactly as given, line breaks included', () => {
+    const text = '  first\r\n\r\n\tsecond \n';
+    expect(
+      storefrontCrawlerFilesSchema.parse({ ...FILES, robotsTxtCustom: text }).robotsTxtCustom,
+    ).toBe(text);
+  });
+
+  it.each(['index', 'follow', 'robotsTxtCustom', 'llmsTxtAdditional', 'shop'] as const)(
+    'rejects a missing %s',
+    (member) => {
+      const partial: Record<string, unknown> = { ...FILES };
+      delete partial[member];
+      expect(storefrontCrawlerFilesSchema.safeParse(partial).success).toBe(false);
+    },
+  );
+
+  it('rejects a text that is not a string, and a shop without a name', () => {
+    for (const wrong of [
+      { ...FILES, robotsTxtCustom: null },
+      { ...FILES, robotsTxtCustom: ['Disallow: /'] },
+      { ...FILES, llmsTxtAdditional: 1 },
+      { ...FILES, shop: {} },
+      { ...FILES, shop: 'Endora Demo' },
+      { ...FILES, shop: { name: null } },
+      { ...FILES, index: 'false' },
+    ]) {
+      expect(storefrontCrawlerFilesSchema.safeParse(wrong).success).toBe(false);
+    }
+  });
+
+  it('rejects a text longer than any the backend accepts', () => {
+    // The limit is in bytes and is enforced where the text is saved. A text of
+    // that many bytes never has more characters than that, so a longer string
+    // is one that did not come through that door.
+    expect(CRAWLER_TEXT_MAX_BYTES).toBe(65_536);
+    const atLimit = 'a'.repeat(CRAWLER_TEXT_MAX_BYTES);
+    expect(
+      storefrontCrawlerFilesSchema.safeParse({ ...FILES, robotsTxtCustom: atLimit }).success,
+    ).toBe(true);
+    expect(
+      storefrontCrawlerFilesSchema.safeParse({ ...FILES, robotsTxtCustom: `${atLimit}a` }).success,
+    ).toBe(false);
+    expect(
+      storefrontCrawlerFilesSchema.safeParse({ ...FILES, llmsTxtAdditional: `${atLimit}a` }).success,
+    ).toBe(false);
+  });
+
+  it('accepts members it does not know, and drops them', () => {
+    const parsed = storefrontCrawlerFilesSchema.parse({
+      ...FILES,
+      somethingNewer: true,
+      shop: { name: 'Endora Demo', logoUrl: 'https://cdn.example.com/logo.png' },
+    });
+    expect(parsed).toEqual(FILES);
+  });
+});
+
+describe('storefrontCrawlerFilesResponseSchema', () => {
+  const FILES = {
+    index: true,
+    follow: true,
+    robotsTxtCustom: '',
+    llmsTxtAdditional: '',
+    shop: { name: '' },
+  };
+
+  it('accepts the envelope, with or without members it does not know', () => {
+    expect(storefrontCrawlerFilesResponseSchema.parse({ data: FILES })).toEqual({ data: FILES });
+    expect(
+      storefrontCrawlerFilesResponseSchema.parse({ data: FILES, meta: { a: 1 } }),
+    ).toEqual({ data: FILES });
+  });
+
+  it('rejects the bare value, an empty envelope and a robots policy alone', () => {
+    expect(storefrontCrawlerFilesResponseSchema.safeParse(FILES).success).toBe(false);
+    expect(storefrontCrawlerFilesResponseSchema.safeParse({ data: {} }).success).toBe(false);
+    expect(
+      storefrontCrawlerFilesResponseSchema.safeParse({ data: { index: true, follow: true } })
+        .success,
     ).toBe(false);
   });
 });

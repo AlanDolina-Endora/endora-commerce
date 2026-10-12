@@ -13,9 +13,14 @@ import {
   UnknownRobotsTokenError,
   robotsPolicyForToken,
 } from './services/robots-policy.js';
+import {
+  StoredCrawlerTextTooLargeError,
+  resolveCrawlerFiles,
+  type CrawlerFilesSettingsPort,
+} from './services/crawler-files.service.js';
 
-/** The one read this module's routes make of the settings store. */
-export interface SeoRouteSettingsPort {
+/** The reads this module's routes make of the settings store. */
+export interface SeoRouteSettingsPort extends CrawlerFilesSettingsPort {
   get<T>(code: string, salesChannelId: string, schema: z.ZodType<T>): Promise<T>;
 }
 
@@ -68,6 +73,45 @@ export async function registerSeoRoutes(
             storedValue: stored,
           },
           'seo: the stored default robots value is not one of the declared choices',
+        );
+      }
+      throw error;
+    }
+  });
+
+  // -- Public: what a sales channel's crawler files are built from -----------
+  //
+  // `specs/144-seo-search-engine-robots/contracts/crawler-policy.md` §2. The
+  // storefront asks this when it serves `robots.txt`, and is itself the cache.
+  //
+  // The channel is resolved exactly as above, and every value in the answer is
+  // that channel's: one channel's instructions are never in another channel's
+  // answer, and there is no answer computed across channels (Principle XII).
+  //
+  // The operator's text is in the body as a JSON string, as it was stored. It
+  // is never a header, never a status line and never this response's content
+  // type — which is the platform's, for JSON.
+  //
+  // No presence check, for the reason given above: `MODULE_DISABLED` is what
+  // tells the storefront to serve its own rules alone.
+  //
+  // A stored value this module cannot stand behind is a `500` and never an
+  // empty text at `200` — see `services/crawler-files.service.ts`.
+  app.get('/api/v1/storefront/seo/crawler-files', async (request, reply) => {
+    const channel = getResolvedChannel(request);
+    reply.header('Cache-Control', 'no-store');
+    try {
+      return { data: await resolveCrawlerFiles(settings, channel.id) };
+    } catch (error) {
+      if (
+        error instanceof UnknownRobotsTokenError ||
+        error instanceof StoredCrawlerTextTooLargeError
+      ) {
+        // The message names the setting and what is wrong with it, and carries
+        // none of the text.
+        request.log.error(
+          { salesChannelCode: channel.code, reason: error.message },
+          'seo: a stored crawler-file setting cannot be served',
         );
       }
       throw error;

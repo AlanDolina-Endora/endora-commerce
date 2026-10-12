@@ -1,13 +1,21 @@
 /**
- * How this storefront learns a sales channel's default robots policy
- * (`specs/144-seo-search-engine-robots/contracts/crawler-policy.md` §3).
+ * How this storefront learns what the `seo` module configured for a sales
+ * channel (`specs/144-seo-search-engine-robots/contracts/crawler-policy.md` §3).
  *
- * The middleware asks on behalf of every response it serves, so the reader is a
- * cache first and a client second: one request per channel per minute, held in
- * this module's own memory. It uses neither Next's data cache nor cache tags,
- * for two reasons — the middleware cannot reach them, and the requirement is a
- * guaranteed answer when the backend cannot be asked, which a tag-invalidated
- * entry does not promise.
+ * Two questions, one way of asking them:
+ *
+ *  * the channel's **default robots policy** — asked by the middleware, on
+ *    behalf of every response it serves;
+ *  * what the channel's **crawler files** are built from — the operator's
+ *    custom `robots.txt` instructions among it — asked when such a file is
+ *    served.
+ *
+ * Each is a cache first and a client second: one request per channel per
+ * minute, held in this module's own memory. Neither uses Next's data cache or
+ * cache tags, for two reasons — the middleware cannot reach them, and the
+ * requirement is a guaranteed answer when the backend cannot be asked, which a
+ * tag-invalidated entry does not promise. The two share every rule below and
+ * no state: an answer to one question is never an answer to the other.
  *
  * ## Three answers, and why two of them must not be confused
  *
@@ -27,7 +35,11 @@
  * ## What it never does
  *
  * **It never rejects.** No page is answered with a failure because this read
- * failed (FR-017); every failure becomes one of the three answers above.
+ * failed (FR-017); every failure becomes one of the three answers above. What
+ * `unknown` *means* is each caller's to decide, and they decide differently on
+ * purpose: a page is served without a default directive, while `robots.txt`
+ * answers a temporary failure rather than a file that silently omits the
+ * operator's instructions (FR-022; `lib/seo/robots-txt.ts`).
  *
  * **It never makes a response wait for a backend that is not answering, once it
  * knows something.** A stale value is refreshed on the request that finds it
@@ -49,13 +61,21 @@
  * The background refresh relies on this process outliving the response, which
  * is true of the standalone server this storefront is built as.
  *
+ * **It never waits on a read that can no longer answer.** A read ends within
+ * {@link READ_TIMEOUT_MS} one way or the other — unless the process was frozen
+ * under it, in which case it may never settle. A read in progress for longer
+ * than {@link IN_FLIGHT_ABANDONED_AFTER_MS} is given up: the next request
+ * starts another, and the abandoned one's answer, should it ever arrive, is
+ * ignored.
+ *
  * ## What "known" means
  *
  * Per storefront process, in memory, per runtime: the middleware's copy and a
  * route handler's are separate and each is bounded by the same minute. A
  * freshly started process knows nothing, so until its first successful read a
  * channel's documents carry no default directive — the cold-start window the
- * module's documentation names.
+ * module's documentation names — and its `robots.txt` answers a temporary
+ * failure.
  */
 
 import { backendBaseUrl } from '../env.mjs';
@@ -91,8 +111,65 @@ export function isRobotsPolicyResponse(body: unknown): body is { data: RobotsPol
   return typeof index === 'boolean' && typeof follow === 'boolean';
 }
 
-/** The backend route this reader asks. */
+/** The backend route the policy is read from. */
 export const ROBOTS_POLICY_PATH = '/api/v1/storefront/seo/robots-policy';
+
+/**
+ * What a sales channel's crawler files are built from, as the backend answers
+ * it.
+ *
+ * The contract is `storefrontCrawlerFilesSchema` in `@endora-commerce/contracts`,
+ * restated and guarded here for the reason given at {@link RobotsPolicy}: this
+ * file is in the middleware bundle. The two texts are the operator's, exactly
+ * as stored; `lib/seo/robots-txt.ts` says what a served file does with them.
+ */
+export interface CrawlerFiles extends RobotsPolicy {
+  /** The operator's custom `robots.txt` instructions, or `''`. */
+  readonly robotsTxtCustom: string;
+  /** The operator's additional `llms.txt` content, or `''`. */
+  readonly llmsTxtAdditional: string;
+  readonly shop: {
+    /** The channel's configured shop name, or `''`. */
+    readonly name: string;
+  };
+}
+
+/**
+ * The longest text this storefront takes from the backend, in characters.
+ *
+ * `CRAWLER_TEXT_MAX_BYTES` in the contract, restated. The backend refuses a
+ * longer text when it is saved and refuses to answer with one, so this is the
+ * third door and is not expected to turn anything away. It is here because the
+ * text ends up in a public file: an answer carrying more than can be saved did
+ * not come from a backend behaving as agreed, and is treated as unreadable
+ * rather than served.
+ */
+export const CRAWLER_TEXT_MAX_LENGTH = 65_536;
+
+function isCrawlerText(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= CRAWLER_TEXT_MAX_LENGTH;
+}
+
+/**
+ * Whether `body` is `{ data: <crawler files> }`.
+ *
+ * Strict about the members it names, tolerant of any it does not — as
+ * {@link isRobotsPolicyResponse} is, and for the same reason.
+ */
+export function isCrawlerFilesResponse(body: unknown): body is { data: CrawlerFiles } {
+  if (!isRobotsPolicyResponse(body)) return false;
+  const { robotsTxtCustom, llmsTxtAdditional, shop } = body.data as {
+    robotsTxtCustom?: unknown;
+    llmsTxtAdditional?: unknown;
+    shop?: unknown;
+  };
+  if (!isCrawlerText(robotsTxtCustom) || !isCrawlerText(llmsTxtAdditional)) return false;
+  if (typeof shop !== 'object' || shop === null || Array.isArray(shop)) return false;
+  return typeof (shop as { name?: unknown }).name === 'string';
+}
+
+/** The backend route the crawler files are read from. */
+export const CRAWLER_FILES_PATH = '/api/v1/storefront/seo/crawler-files';
 
 /** How long an answer is served without asking again. */
 export const FRESH_FOR_MS = 60_000;
@@ -112,7 +189,15 @@ export const READ_TIMEOUT_MS = 2_000;
 export const STALE_REFRESH_BUDGET_MS = 150;
 
 /**
- * How many channels are held at once.
+ * How long a read may be in progress before it is taken for dead.
+ *
+ * More than twice the longest a read can take, so a slow read is never
+ * mistaken for an abandoned one.
+ */
+export const IN_FLIGHT_ABANDONED_AFTER_MS = 5_000;
+
+/**
+ * How many channels are held at once, per question.
  *
  * The channel code is a request header: behind a proxy it is the proxy's, but a
  * storefront reached directly takes whatever the client typed. Without a bound
@@ -133,6 +218,7 @@ export type CrawlerRead<T> =
   | { readonly kind: 'unknown' };
 
 export type RobotsPolicyRead = CrawlerRead<RobotsPolicy>;
+export type CrawlerFilesRead = CrawlerRead<CrawlerFiles>;
 
 /** A definitive answer — the only kind that is cached and the only kind that is "known". */
 type Known<T> = Exclude<CrawlerRead<T>, { kind: 'unknown' }>;
@@ -165,8 +251,15 @@ export interface CrawlerPolicyReader {
    * channel when the request named none.
    */
   robotsPolicy(channelCode: string | undefined): Promise<RobotsPolicyRead>;
-  /** How many channels are held. For tests. */
+  /**
+   * What the crawler files of `channelCode` are built from, or those of the
+   * system-default channel when the request named none.
+   */
+  crawlerFiles(channelCode: string | undefined): Promise<CrawlerFilesRead>;
+  /** How many channels' policies are held. For tests. */
   cachedChannelCount(): number;
+  /** How many channels' crawler files are held. For tests. */
+  cachedCrawlerFilesCount(): number;
 }
 
 /**
@@ -196,16 +289,34 @@ async function jsonOrNull(response: Response): Promise<unknown> {
   }
 }
 
-export function createCrawlerPolicyReader(deps: CrawlerPolicyReaderDeps): CrawlerPolicyReader {
-  const entries = new Map<string, Entry<RobotsPolicy>>();
+/** One question this reader can ask the backend about a channel. */
+interface Question<T> {
+  /** The backend route that answers it. */
+  readonly path: string;
+  /**
+   * The value in a `200` body, or `null` when the body is not one. Only the
+   * members this storefront was written for leave it.
+   */
+  readonly parse: (body: unknown) => T | null;
+}
+
+interface ChannelCache<T> {
+  read(channelCode: string | undefined): Promise<CrawlerRead<T>>;
+  size(): number;
+}
+
+/**
+ * The cache for one question: its own entries, its own bound, and every rule
+ * the module doc states.
+ */
+function createChannelCache<T>(deps: CrawlerPolicyReaderDeps, question: Question<T>): ChannelCache<T> {
+  const entries = new Map<string, Entry<T>>();
 
   /** One read of the backend, classified. `null` means unreadable. */
-  async function ask(
-    channelCode: string | undefined,
-  ): Promise<Known<RobotsPolicy> | null> {
+  async function ask(channelCode: string | undefined): Promise<Known<T> | null> {
     let response: Response;
     try {
-      response = await deps.fetch(`${deps.baseUrl()}${ROBOTS_POLICY_PATH}`, {
+      response = await deps.fetch(`${deps.baseUrl()}${question.path}`, {
         headers: {
           accept: 'application/json',
           ...(channelCode !== undefined ? { 'x-sales-channel': channelCode } : {}),
@@ -224,10 +335,8 @@ export function createCrawlerPolicyReader(deps: CrawlerPolicyReaderDeps): Crawle
     }
     if (response.status !== 200) return null;
 
-    const body = await jsonOrNull(response);
-    if (!isRobotsPolicyResponse(body)) return null;
-    // Only the two members this storefront was written for leave this function.
-    return { kind: 'value', value: { index: body.data.index, follow: body.data.follow } };
+    const value = question.parse(await jsonOrNull(response));
+    return value === null ? null : { kind: 'value', value };
   }
 
   /** Drop one entry to make room. See {@link MAX_CACHED_CHANNELS} for the order. */
@@ -248,11 +357,11 @@ export function createCrawlerPolicyReader(deps: CrawlerPolicyReaderDeps): Crawle
     if (victim !== undefined) entries.delete(victim);
   }
 
-  function entryFor(key: string): Entry<RobotsPolicy> {
+  function entryFor(key: string): Entry<T> {
     const existing = entries.get(key);
     if (existing) return existing;
     if (entries.size >= MAX_CACHED_CHANNELS) evictOne();
-    const created: Entry<RobotsPolicy> = {
+    const created: Entry<T> = {
       known: null,
       knownAt: 0,
       failedAt: null,
@@ -264,39 +373,63 @@ export function createCrawlerPolicyReader(deps: CrawlerPolicyReaderDeps): Crawle
   }
 
   return {
-    cachedChannelCount: () => entries.size,
+    size: () => entries.size,
 
-    async robotsPolicy(channelCode) {
+    async read(channelCode) {
       const key = channelKey(channelCode);
       const entry = entryFor(key);
-      const lastKnown = (): RobotsPolicyRead => entry.known ?? { kind: 'unknown' };
+      const lastKnown = (): CrawlerRead<T> => entry.known ?? { kind: 'unknown' };
 
       const now = deps.now();
       if (entry.known !== null && now - entry.knownAt < FRESH_FOR_MS) return entry.known;
       if (entry.failedAt !== null && now - entry.failedAt < FAILURE_BACKOFF_MS) return lastKnown();
 
-      if (entry.inFlight === null) {
+      // A read older than any read can be is one this process was frozen
+      // under. It is given up here, and — because it is no longer the entry's
+      // read in progress — whatever it answers later is ignored below.
+      const abandoned =
+        entry.inFlight !== null && now - entry.inFlightSince >= IN_FLIGHT_ABANDONED_AFTER_MS;
+
+      if (entry.inFlight === null || abandoned) {
         entry.inFlightSince = now;
         // `ask` turns every failure into `null`; the `catch` is for whatever it
         // did not foresee. This promise never rejects, which is what makes it
         // safe to leave running after the request that started it has answered.
-        entry.inFlight = ask(channelCode)
+        const started: Promise<CrawlerRead<T>> = ask(channelCode)
           .catch(() => null)
           .then((answer) => {
+            // Superseded: a later read took this one's place, and its answer —
+            // older than anything that read brings — changes nothing.
+            if (entry.inFlight !== started) return lastKnown();
             if (answer === null) {
               entry.failedAt = deps.now();
             } else {
+              // Recorded on the entry whatever happens next, so every request
+              // that waited for this read is told what the backend answered.
               entry.known = answer;
               entry.knownAt = deps.now();
               entry.failedAt = null;
-              // Most recently read goes last, so it is the last to be evicted —
-              // and an entry evicted while its read was running comes back.
-              entries.delete(key);
-              entries.set(key, entry);
+
+              // Whether the cache keeps it is a separate question, because
+              // this entry may have been evicted while its read was running —
+              // an entry that holds nothing is the first to go.
+              if (entries.get(key) === entry) {
+                // Most recently read goes last, so it is the last to be evicted.
+                entries.delete(key);
+                entries.set(key, entry);
+              }
+              // An evicted entry's answer is not kept. Eviction only happens
+              // when the cache is full, and it stays full, so there are two
+              // cases and both end here: a later read of this channel holds
+              // the place, and this answer is the older of the two; or the
+              // place went to another channel, and a late answer does not get
+              // to evict anything — putting every such entry back is how asking
+              // for many codes at once would grow the cache without limit.
             }
             entry.inFlight = null;
             return lastKnown();
           });
+        entry.inFlight = started;
       }
       const refresh = entry.inFlight;
 
@@ -313,6 +446,34 @@ export function createCrawlerPolicyReader(deps: CrawlerPolicyReaderDeps): Crawle
   };
 }
 
+export function createCrawlerPolicyReader(deps: CrawlerPolicyReaderDeps): CrawlerPolicyReader {
+  const policies = createChannelCache<RobotsPolicy>(deps, {
+    path: ROBOTS_POLICY_PATH,
+    parse: (body) =>
+      isRobotsPolicyResponse(body) ? { index: body.data.index, follow: body.data.follow } : null,
+  });
+  const files = createChannelCache<CrawlerFiles>(deps, {
+    path: CRAWLER_FILES_PATH,
+    parse: (body) =>
+      isCrawlerFilesResponse(body)
+        ? {
+            index: body.data.index,
+            follow: body.data.follow,
+            robotsTxtCustom: body.data.robotsTxtCustom,
+            llmsTxtAdditional: body.data.llmsTxtAdditional,
+            shop: { name: body.data.shop.name },
+          }
+        : null,
+  });
+
+  return {
+    robotsPolicy: (channelCode) => policies.read(channelCode),
+    crawlerFiles: (channelCode) => files.read(channelCode),
+    cachedChannelCount: () => policies.size(),
+    cachedCrawlerFilesCount: () => files.size(),
+  };
+}
+
 const reader = createCrawlerPolicyReader({
   fetch: (input, init) => fetch(input, init),
   now: () => Date.now(),
@@ -323,4 +484,12 @@ const reader = createCrawlerPolicyReader({
 /** This process's reader. See the module doc for what it remembers and for how long. */
 export function readRobotsPolicy(channelCode: string | undefined): Promise<RobotsPolicyRead> {
   return reader.robotsPolicy(channelCode);
+}
+
+/**
+ * What `channelCode`'s crawler files are built from, read through this
+ * process's reader.
+ */
+export function readCrawlerFiles(channelCode: string | undefined): Promise<CrawlerFilesRead> {
+  return reader.crawlerFiles(channelCode);
 }

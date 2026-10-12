@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { canonicalPath } from '../../lib/seo/route-seo';
 import { absoluteUrl, siteUrl } from '../../lib/seo/site-url';
 import { SITEMAP_DYNAMIC_ROUTES, SITEMAP_STATIC_ROUTES } from '../../app/sitemap';
-import robots from '../../app/robots';
+import { ROBOTS_SYSTEM_RULES, robotsSitemapUrl } from '../../lib/seo/robots-system-rules';
 
 /**
  * The two pure halves of the SEO declarations
@@ -68,7 +68,7 @@ describe('the declared origin', () => {
 
   it('is the origin `robots.txt` publishes its sitemap at', () => {
     process.env['NEXT_PUBLIC_SITE_URL'] = 'https://shop.example.com';
-    expect(robots().sitemap).toBe('https://shop.example.com/sitemap.xml');
+    expect(robotsSitemapUrl()).toBe('https://shop.example.com/sitemap.xml');
     expect(absoluteUrl('/catalog')).toBe('https://shop.example.com/catalog');
   });
 });
@@ -78,11 +78,10 @@ describe('the sitemap declaration', () => {
     // Two files, one shop. A URL in the sitemap that `robots.txt` refuses is a
     // crawler being told to fetch something it is also told not to fetch, and
     // neither file can see the other.
-    const rules = robots().rules;
-    const disallowed = (Array.isArray(rules) ? rules : [rules]).flatMap((rule) => {
-      const value = rule.disallow ?? [];
-      return Array.isArray(value) ? value : [value];
-    });
+    // The system-generated rules only: what an operator adds to the file is
+    // configuration, per sales channel, and no test of this tree can see it.
+    const disallowed: readonly string[] = ROBOTS_SYSTEM_RULES.disallow;
+    expect(disallowed.length).toBeGreaterThan(0);
     for (const route of SITEMAP_STATIC_ROUTES) {
       for (const prefix of disallowed) {
         if (prefix === '/') continue;

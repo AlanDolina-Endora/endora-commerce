@@ -533,6 +533,14 @@ export const ERROR_CODES = {
   CRM_TAG_NAME_TAKEN: 'CRM_TAG_NAME_TAKEN',
   /** A message on an Opportunity cannot be edited or deleted once sent. */
   CRM_MESSAGE_IMMUTABLE: 'CRM_MESSAGE_IMMUTABLE',
+
+  // SEO — search engine robots (`specs/144-seo-search-engine-robots/`, FR-006).
+  // Declared by the `seo` module's manifest.
+  /**
+   * The custom `robots.txt` instructions or additional `llms.txt` content being
+   * saved is larger than `CRAWLER_TEXT_MAX_BYTES`; `details.maxBytes` names the limit.
+   */
+  SEO_CRAWLER_TEXT_TOO_LARGE: 'SEO_CRAWLER_TEXT_TOO_LARGE',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

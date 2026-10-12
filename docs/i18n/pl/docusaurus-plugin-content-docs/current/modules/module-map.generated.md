@@ -73,7 +73,7 @@ platformy, a nie tego, co akurat zostało opisane.
 | [returns](./returns.md) | Zwroty i reklamacje (RMA) — zgłoszenie, weryfikacja, przesyłki zwrotne i rozliczenie według konfigurowalnego grafu statusów | @endora-commerce/mod-returns |
 | [Kanały sprzedaży](./sales_channels/index.md) | Rejestr kanałów, wyznaczanie kanału dla żądania i dwukierunkowe przypisania dla każdej encji zależnej od kanału | @endora-commerce/mod-sales-channels |
 | [search](./search.md) | Indeksator Meilisearch i warstwa zapytań | @endora-commerce/mod-search |
-| [seo](./seo.md) | Wyznaczanie meta tagów, mapa witryny XML z pamięcią podręczną i domyślne ustawienie robots dla wyszukiwarek | @endora-commerce/mod-seo |
+| [seo](./seo.md) | Wyznaczanie meta tagów, mapa witryny XML z pamięcią podręczną i ustawienia robots dla wyszukiwarek | @endora-commerce/mod-seo |
 | [Ustawienia](./settings/index.md) | Konfiguracja platformy deklarowana w manifestach, z wartościami dla poszczególnych kanałów sprzedaży i API odczytu z pamięcią podręczną | @endora-commerce/mod-settings |
 | [shipments](./shipments.md) | Rekord przesyłki z możliwością ponowienia i jego cykl życia — odpowiednik modułu payments po stronie dostawy | @endora-commerce/mod-shipments |
 | [shopping_lists](./shopping_lists.md) | Nazwane listy zakupów klienta, które można zamienić w koszyk lub zapytanie ofertowe | @endora-commerce/mod-shopping-lists |

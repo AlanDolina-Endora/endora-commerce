@@ -41,6 +41,46 @@ describe('seo manifest — default robots', () => {
   });
 });
 
+describe('seo manifest — custom robots.txt instructions', () => {
+  const setting = manifest.settings?.settings.find((s) => s.code === 'seo.robots_txt_custom');
+
+  it('declares a multi-line text in the seo group, empty by default', () => {
+    expect(setting).toBeDefined();
+    expect(setting?.groupCode).toBe('seo');
+    expect(setting?.valueType).toBe('string');
+    expect(setting?.multiline).toBe(true);
+    expect(setting?.enumOptions).toBeUndefined();
+    // Empty is what keeps an untouched instance's robots.txt what it was.
+    expect(setting?.defaultValue).toBe('');
+  });
+
+  it('is shown on the Settings screen and can be set for any sales channel', () => {
+    expect(setting?.hidden).not.toBe(true);
+    expect(setting?.salesChannelCodes).toBeUndefined();
+  });
+
+  it('says what an operator needs before writing a rule (FR-008)', () => {
+    // Appended to the system-generated rules, never instead of them…
+    expect(setting?.description).toMatch(/added after the rules the storefront generates/);
+    // …and a Disallow is not a way out of search results.
+    expect(setting?.description).toMatch(/does not remove pages from search results/);
+    // The limit is named where the text is typed, not only in the refusal.
+    expect(setting?.description).toMatch(/64 KiB/);
+    // "Cannot be edited" is true of the generated lines and not of their
+    // effect: a crawler obeys the most specific group that names it, so a
+    // group written for one crawler replaces the generated one for it.
+    expect(setting?.description).toMatch(
+      /a group written for one crawler .* replaces them for that crawler/,
+    );
+    // The Settings store refuses a longer description.
+    expect(setting?.description?.length).toBeLessThanOrEqual(2000);
+  });
+
+  it('declares the refusal for a text over the limit', () => {
+    expect(manifest.errorCodes).toEqual([{ code: 'SEO_CRAWLER_TEXT_TOO_LARGE' }]);
+  });
+});
+
 describe('seo manifest — command palette', () => {
   const action = (id: string) => manifest.actions?.find((a) => a.id === id);
 
@@ -112,6 +152,9 @@ describe('seo bundles', () => {
   const KEYS = [
     'settingLabels.seo.default_robots.name',
     'settingLabels.seo.default_robots.description',
+    'settingLabels.seo.robots_txt_custom.name',
+    'settingLabels.seo.robots_txt_custom.description',
+    'errors.SEO_CRAWLER_TEXT_TOO_LARGE',
     ...(manifest.actions ?? []).flatMap((a) => [a.labelKey, a.descriptionKey]),
   ];
 
@@ -128,6 +171,30 @@ describe('seo bundles', () => {
     expect(bundle('en')['settingLabels.seo.default_robots.description']).toBe(
       declared?.description,
     );
+  });
+
+  it('keeps the English name and description of the custom instructions in step with the manifest', () => {
+    const declared = manifest.settings?.settings.find((s) => s.code === 'seo.robots_txt_custom');
+    expect(bundle('en')['settingLabels.seo.robots_txt_custom.name']).toBe(declared?.name);
+    expect(bundle('en')['settingLabels.seo.robots_txt_custom.description']).toBe(
+      declared?.description,
+    );
+  });
+
+  it('says in Polish, too, that the text is appended and that Disallow does not de-index', () => {
+    const polish = bundle('pl')['settingLabels.seo.robots_txt_custom.description'];
+    expect(polish).not.toBe(bundle('en')['settingLabels.seo.robots_txt_custom.description']);
+    expect(polish).toMatch(/po regułach generowanych przez sklep/);
+    expect(polish).toMatch(/nie usuwa stron z wyników wyszukiwania/);
+    expect(polish).toMatch(/64 KiB/);
+    expect(polish).toMatch(/zastępuje je dla tego robota/);
+  });
+
+  it.each(['en', 'pl'])('names the limit in the %s refusal, from what the raise carries', (language) => {
+    const sentence = bundle(language)['errors.SEO_CRAWLER_TEXT_TOO_LARGE'];
+    expect(sentence).toContain('{maxBytes}');
+    expect(sentence).toContain('{actualBytes}');
+    expect(sentence).toContain('64 KiB');
   });
 
   it('translates the description rather than repeating the English one', () => {

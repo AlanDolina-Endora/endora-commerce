@@ -19,8 +19,9 @@
 # the fallback in storefront/lib/seo/site-url.ts — with nothing to say so, which
 # is what every image this repository built did until 2026-09-06. It cannot be
 # repaired on a running container: measured on this tree, `next build` inlines
-# the value and drops the variable's name from `.next/server` entirely, and
-# `/robots.txt` is prerendered, so its `Sitemap:` line is a static file here.
+# the value and drops the variable's name from `.next/server` entirely.
+# `/robots.txt` is rendered per request, and the origin in its `Sitemap:` line
+# is that inlined value all the same.
 
 FROM node:22.18-slim AS base
 ENV PNPM_HOME=/pnpm

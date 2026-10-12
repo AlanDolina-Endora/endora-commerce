@@ -210,4 +210,33 @@ describe('settings — contributed write validators', () => {
       await db.rollbackTx();
     }
   });
+
+  it('hands over the value being written, which the projection can leave out entirely', async () => {
+    // A platform-wide write reaches no channel that carries a row of its own.
+    // When every channel does, the proposed value is in nobody's projection —
+    // and a rule about the value itself (a size limit, say) would never see
+    // what is about to be stored. So the value travels beside the projection.
+    try {
+      await seed();
+      const em = db.em();
+      const channels = await em.find(SalesChannel, {});
+      const setting = await em.findOne(Setting, { code: CODE });
+      for (const channel of channels) {
+        em.create(SettingValue, { setting: setting!, salesChannel: channel, value: 'its own' });
+      }
+      await em.flush();
+
+      const seenAll = recorder();
+      const { service } = build(seenAll.validator);
+      await service.setValueForAllChannels(CODE, 'proposed globally', null, ACTOR);
+      await service.setValueForSubset(CODE, [channels[0]!.code], 'proposed for one', null, ACTOR);
+
+      const [platformWide, subset] = seenAll.seen;
+      expect(platformWide!.projection.map((p) => p.value)).not.toContain('proposed globally');
+      expect(platformWide!.proposedValue).toBe('proposed globally');
+      expect(subset!.proposedValue).toBe('proposed for one');
+    } finally {
+      await db.rollbackTx();
+    }
+  });
 });

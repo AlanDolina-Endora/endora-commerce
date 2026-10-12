@@ -35,8 +35,9 @@ import { expectModuleAbsent, withModuleOff, type OffStateAxis } from '../../help
  *    settings API refuses for its shape whatever the module's state, so a
  *    refusal there would not be the off state's. The third test sends a write
  *    the API accepts while the module is on and names the code it is refused
- *    with while off. `seo.enabled` is the module's activation control — the
- *    single exception — and is driven by nothing here.
+ *    with while off. `seo.robots_txt_custom` is held the same way in the
+ *    fourth. `seo.enabled` is the module's activation control — the single
+ *    exception — and is driven by nothing here.
  *
  * The **deactivated-while-platform-available** case is the first axis the
  * harness drives, and it is the one an operator creates: withdrawing sitemap
@@ -64,6 +65,10 @@ describe('seo off-state (Constitution XVII)', () => {
         // `MODULE_DISABLED` as "this feature does not exist" and applies no
         // policy, which is a different answer from "no restriction" at `200`.
         { url: '/api/v1/storefront/seo/robots-policy', headers: channel },
+        // What the storefront builds `robots.txt` from. `MODULE_DISABLED` is
+        // what makes it serve the system-generated rules alone; any other
+        // failure would make it answer `503` or keep an earlier text.
+        { url: '/api/v1/storefront/seo/crawler-files', headers: channel },
         {
           method: 'POST',
           url: '/api/v1/admin/seo/sitemap/default/regenerate',
@@ -213,6 +218,116 @@ describe('seo off-state (Constitution XVII)', () => {
       expect(back.json(), 'the stored value must be served again, unchanged').toEqual({
         data: { index: false, follow: false },
       });
+      expect((await detail()).editable).toBe(true);
+    } finally {
+      await h.app.inject({
+        method: 'DELETE',
+        url: `${SETTING}/values?salesChannelCodes=default`,
+        cookies: admin,
+      });
+    }
+  });
+
+  /**
+   * *Custom robots.txt instructions* while the module is off, and after
+   * (`specs/144-seo-search-engine-robots/`, FR-030 – FR-032, FR-034).
+   *
+   * Same shape as the test above, for the text. What differs is what the
+   * refusal means to its reader: the storefront takes `MODULE_DISABLED` as
+   * "serve the system-generated rules alone" — the operator's text is
+   * withdrawn with the module, and `robots.txt` itself never is (FR-031).
+   */
+  it('withdraws the custom robots.txt instructions while off, keeps the stored text, and serves it again after', async () => {
+    const SETTING = '/api/v1/admin/settings/seo.robots_txt_custom';
+    const TEXT = 'User-agent: GPTBot\nDisallow: /\n';
+    const files = async () =>
+      h.app.inject({ method: 'GET', url: '/api/v1/storefront/seo/crawler-files', headers: channel });
+    const detail = async () => {
+      const body = (await h.app.inject({ method: 'GET', url: SETTING, cookies: admin })).json() as {
+        editable: boolean;
+        multiline?: boolean;
+        globalValue: unknown;
+        valuesByChannel: { salesChannelCode: string; value: unknown }[];
+      };
+      return {
+        editable: body.editable,
+        multiline: body.multiline,
+        values: {
+          global: body.globalValue,
+          byChannel: body.valuesByChannel.map(({ salesChannelCode, value }) => ({
+            salesChannelCode,
+            value,
+          })),
+        },
+      };
+    };
+
+    const stored = await h.app.inject({
+      method: 'PUT',
+      url: `${SETTING}/value`,
+      cookies: admin,
+      payload: { scope: 'subset', salesChannelCodes: ['default'], value: TEXT },
+    });
+    expect(stored.statusCode, stored.body).toBe(200);
+
+    try {
+      // Positive control.
+      const on = await files();
+      expect(on.statusCode).toBe(200);
+      expect((on.json() as { data: { robotsTxtCustom: string } }).data.robotsTxtCustom).toBe(TEXT);
+      const whileOn = await detail();
+      expect(whileOn.editable).toBe(true);
+      expect(whileOn.multiline, 'the Settings screen must offer a multi-line field').toBe(true);
+      expect(whileOn.values).toEqual({
+        global: null,
+        byChannel: [{ salesChannelCode: 'default', value: TEXT }],
+      });
+
+      await withModuleOff('seo', 'deactivated', async () => {
+        const off = await files();
+        expect(off.statusCode, 'the crawler-files endpoint must refuse while seo is off').toBe(503);
+        expect((off.json() as { error?: { code?: string } }).error?.code).toBe('MODULE_DISABLED');
+        expect(off.body, 'the withdrawn text must not be in the refusal').not.toContain('GPTBot');
+
+        const whileOff = await detail();
+        expect(whileOff.editable, 'the setting must be read-only while seo is off').toBe(false);
+        expect(whileOff.values, 'the stored text must still be shown').toEqual(whileOn.values);
+
+        for (const refused of [
+          await h.app.inject({
+            method: 'PUT',
+            url: `${SETTING}/value`,
+            cookies: admin,
+            payload: { scope: 'subset', salesChannelCodes: ['default'], value: 'Disallow: /' },
+          }),
+          await h.app.inject({
+            method: 'PUT',
+            url: `${SETTING}/value`,
+            cookies: admin,
+            payload: { scope: 'all', value: 'Disallow: /' },
+          }),
+          await h.app.inject({
+            method: 'DELETE',
+            url: `${SETTING}/values?salesChannelCodes=default`,
+            cookies: admin,
+          }),
+        ]) {
+          expect(refused.statusCode).toBe(400);
+          expect((refused.json() as { error: { code: string } }).error.code).toBe(
+            'MODULE_SETTING_READ_ONLY',
+          );
+        }
+        expect((await detail()).values, 'a refused write must change nothing').toEqual(
+          whileOn.values,
+        );
+      });
+
+      const back = await files();
+      expect(back.statusCode).toBe(200);
+      expect(
+        (back.json() as { data: { robotsTxtCustom: string } }).data.robotsTxtCustom,
+        'the stored text must be served again, unchanged, with no write in between',
+      ).toBe(TEXT);
       expect((await detail()).editable).toBe(true);
     } finally {
       await h.app.inject({
