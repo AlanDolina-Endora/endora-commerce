@@ -622,6 +622,9 @@ export function commerceModule(options: OrdersModuleOptions) {
       catalogProductRead: options.catalogProductRead,
       customerAccountRead: options.customerAccountRead,
       organizationDetails: options.organizationDetails,
+      ...(options.salesChannelMembership
+        ? { salesChannelMembership: options.salesChannelMembership }
+        : {}),
       deliveryMethodRead: options.deliveryMethodRead,
       paymentMethodRead: options.paymentMethodRead,
       invoiceRead: options.invoiceRead,
