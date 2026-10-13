@@ -47,6 +47,10 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | Action | Opens | Permission |
 | --- | --- | --- |
 | `new-page` | `/cms/pages/new` | `cms.write` |
+| `open-blocks` | `/cms/blocks` | `cms.read` |
+| `open-hooks` | `/cms/hooks` | `cms.read` |
+| `open-pages` | `/cms/pages` | `cms.read` |
+| `open-templates` | `/cms/templates` | `cms.read` |
 
 ## Settings
 

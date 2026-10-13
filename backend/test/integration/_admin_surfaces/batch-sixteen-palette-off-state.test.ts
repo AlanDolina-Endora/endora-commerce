@@ -87,7 +87,12 @@ interface Subject {
 }
 
 const SUBJECTS: readonly Subject[] = [
-  { module: 'cms', actions: ['new-page'], axis: 'deactivated', admin: cmsAdmin },
+  {
+    module: 'cms',
+    actions: ['new-page', 'open-blocks', 'open-hooks', 'open-pages', 'open-templates'],
+    axis: 'deactivated',
+    admin: cmsAdmin,
+  },
   { module: 'blog', actions: ['new-post'], axis: 'deactivated', admin: blogAdmin },
 ];
 
