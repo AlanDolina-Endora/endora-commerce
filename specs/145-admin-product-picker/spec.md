@@ -546,8 +546,9 @@ present products changed their brackets.
   `salesChannelId` names; the current fallback to another active channel is removed. A
   `salesChannelId` naming no channel MUST be refused with the route's existing not-found error
   (`404 NOT_FOUND`, the existing error shape) before any line is evaluated — the preview neither
-  falls back to another channel nor marks lines, matching the create path, which refuses such a
-  channel too. The screen shows its existing **Could not calculate prices** (US1 scenario 14).
+  falls back to another channel nor marks lines. The create path does not refuse such a channel
+  today (`POST /api/v1/admin/orders` answers 201); that gap is a separate fix (*Out of Scope*),
+  and the preview's refusal does not wait on it. The screen shows its existing **Could not calculate prices** (US1 scenario 14).
   The plan MUST justify the distinct codes against the single-answer (enumeration-oracle) rule
   documented on `isProductVisibleTo`, on the ground that the preview is an admin-only surface gated
   `orders:write`, and MUST record that justification where the rule is documented. The picker and
@@ -728,6 +729,9 @@ present products changed their brackets.
   sales channel the admin request was resolved on (`outOfRequestChannel` in `CartService.addItem`)
   instead of the order's `salesChannelId`. This feature does not change the create path; the preview
   check of FR-027 already uses the order's chosen channel.
+- **Separate fix, after this feature**: admin order creation (`POST /api/v1/admin/orders`) accepts a
+  `salesChannelId` naming no channel and answers 201, where the preview (FR-027) refuses it with
+  404. This feature does not change the create path.
 - Greying out or filtering, in the picker or the quick search, products the chosen customer may not
   see or that are outside the channel's assortment (FR-027 marks them on the line instead).
 - Server-side refusal of products for their status or type (FR-012 stays a rule of the admin
@@ -801,8 +805,9 @@ Answers given by the product owner.
   unknown `salesChannelId`). Fall back to another channel, mark the lines, or refuse? → A: Refuse.
   The preview answers the route's existing not-found error (404, existing error shape) and the
   screen shows its existing **Could not calculate prices**; it does not fall back to another
-  channel and does not mark lines. This matches the create path (FR-027, US1 scenario 14, Edge
-  Cases).
+  channel and does not mark lines (FR-027, US1 scenario 14, Edge Cases). The create path accepts
+  an unknown `salesChannelId` today (201); closing that is a separate create-path fix (*Out of
+  Scope*). Re-confirmed by the product owner on 2026-10-13 after that gap was found.
 - Q: On **Create order**, a product soft-deleted from the catalogue — should the preview mark it
   unavailable? → A: No; today's behaviour stays: the preview prices it as a live product,
   consistent with order creation, which accepts it. Only an id with no catalogue row is
