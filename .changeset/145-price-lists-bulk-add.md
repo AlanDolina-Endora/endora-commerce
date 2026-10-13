@@ -25,3 +25,16 @@ Add many products to a price list in one request.
 
 `PriceListService.addProducts(priceListId, productIds, auditCtx?)` is the service method behind
 it. The single-product `POST …/products` and the replacing `PUT …/products` are unchanged.
+
+**Admin screen.** On a price list's *Products & brackets* tab, **Add** now opens the shared product
+browser over the whole catalogue: it opens on *All*, every status and type can be ticked, products
+already on the list are shown as *Already on this price list* and cannot be ticked, and one confirm
+sends one bulk-add request. A refused or lost request keeps the browser open with the selection and
+a **Retry** that re-sends the same products; an accepted one closes it, reloads the roster, opens
+the first added product's bracket editor and names any product that could not be added with the
+reason. The roster now resolves product names for a list of any size (`batch-by-id`, 500 ids per
+request, at most two in flight) instead of reading the catalogue's newest 20, and the bracket
+editor opens for every roster product — one whose name is unknown shows its id prefix rather than
+staying on *Loading product…*. **Add** is disabled, with a hint, for an operator without
+`price_lists:write`, and stays disabled on the system Default list. The single-product picker
+drawer is removed.
