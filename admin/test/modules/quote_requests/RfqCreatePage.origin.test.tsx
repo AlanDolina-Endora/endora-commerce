@@ -52,9 +52,15 @@ const CUSTOMER = {
   organizationId: ORGANIZATION_ID,
   organizationName: 'Acme',
 };
-const PRODUCT = { id: 'prod-1', sku: 'SKU-1', slug: 'p1', status: 'active', name: { 'en-US': 'Widget' } };
+const PRODUCT = { id: 'prod-1', sku: 'SKU-1', slug: 'p1', status: 'active', type: 'simple', name: { 'en-US': 'Widget' } };
 
-const BUNDLE = passthroughBundle('core', ['rfqCreate.submit', 'rfqCreate.back', 'common.action.back']);
+const BUNDLE = passthroughBundle('core', [
+  'rfqCreate.submit',
+  'rfqCreate.back',
+  'common.action.back',
+  'rfqCreate.items.quickSearch',
+  'rfqCreate.field.agreedUnitPrice',
+]);
 
 beforeEach(() => {
   getSpy.mockReset();
@@ -93,11 +99,14 @@ function renderPage(params: Record<string, string> = {}): void {
   );
 }
 
-/** One priced line, then submit. */
+/** One priced line, added through the quick search (feature 145), then submit. */
 async function addLineAndSubmit(): Promise<void> {
-  await userEvent.type(screen.getByLabelText('product-0'), 'Wid');
-  await pick('product-0', 'Widget');
-  await waitFor(() => expect(screen.getByLabelText('price-0')).toHaveValue(10));
+  const quick = screen.getByRole('combobox', { name: 'rfqCreate.items.quickSearch' });
+  await userEvent.type(quick, 'Wid');
+  await userEvent.click(await screen.findByRole('option', { name: /Widget/ }));
+  await waitFor(() =>
+    expect(screen.getByRole('spinbutton', { name: 'rfqCreate.field.agreedUnitPrice Widget' })).toHaveValue(10),
+  );
   const submit = screen.getByText('rfqCreate.submit');
   await waitFor(() => expect(submit).not.toBeDisabled());
   await userEvent.click(submit);
