@@ -23,4 +23,4 @@ on screen is sent. The running total counts the lines with both a valid quantity
 
 The `core` bundle gains `rfqCreate.items.browse`, `rfqCreate.items.quickSearch`,
 `rfqCreate.items.empty`, `rfqCreate.line.priceMissing` and `rfqCreate.line.quantityInvalid` in
-English and Polish. No existing key changes.
+English and Polish, and loses `rfqCreate.addItem`, which nothing reads any more.

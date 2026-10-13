@@ -43,4 +43,5 @@ sales channel deleted meanwhile) shows **Could not calculate prices** and marks 
 created order still carries exactly the lines and quantities on screen, in the unchanged payload
 shape. The `core` bundle gains `orderCreate.items.browse`, `orderCreate.items.quickSearch`,
 `orderCreate.items.empty`, `orderCreate.line.notVisible`, `orderCreate.line.notInChannel` and
-`orderCreate.line.quantityInvalid` in English and Polish; no existing key changes.
+`orderCreate.line.quantityInvalid` in English and Polish, and loses `orderCreate.addItem`, which
+nothing reads any more.
