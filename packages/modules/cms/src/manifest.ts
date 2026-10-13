@@ -244,6 +244,48 @@ export const manifest = defineModuleManifest({
       keywords: ['page', 'new', 'create', 'strona', 'nowa', 'utwórz'],
       weight: 130,
     },
+    // Navigation to the four list screens, under the read code that opens
+    // them and with the glyphs their sidebar rows draw (`src/admin/index.ts`).
+    {
+      id: 'open-pages',
+      labelKey: 'actions.openPages.label',
+      descriptionKey: 'actions.openPages.description',
+      icon: 'Newspaper',
+      targetRoute: '/cms/pages',
+      requiredPermission: 'cms.read',
+      keywords: ['cms', 'pages', 'page', 'content', 'strony', 'strona', 'treści'],
+      weight: 131,
+    },
+    {
+      id: 'open-blocks',
+      labelKey: 'actions.openBlocks.label',
+      descriptionKey: 'actions.openBlocks.description',
+      icon: 'Newspaper',
+      targetRoute: '/cms/blocks',
+      requiredPermission: 'cms.read',
+      keywords: ['cms', 'blocks', 'block', 'bloki', 'blok'],
+      weight: 132,
+    },
+    {
+      id: 'open-templates',
+      labelKey: 'actions.openTemplates.label',
+      descriptionKey: 'actions.openTemplates.description',
+      icon: 'Newspaper',
+      targetRoute: '/cms/templates',
+      requiredPermission: 'cms.read',
+      keywords: ['cms', 'templates', 'template', 'szablony', 'szablon'],
+      weight: 133,
+    },
+    {
+      id: 'open-hooks',
+      labelKey: 'actions.openHooks.label',
+      descriptionKey: 'actions.openHooks.description',
+      icon: 'Webhook',
+      targetRoute: '/cms/hooks',
+      requiredPermission: 'cms.read',
+      keywords: ['cms', 'hooks', 'hook', 'hooki'],
+      weight: 134,
+    },
   ],
   // Feature 073 — the operator's activation control. A platform without a CMS
   // is a smaller platform, not a broken one: pages, blocks and hooks are
