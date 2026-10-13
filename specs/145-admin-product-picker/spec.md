@@ -3,6 +3,7 @@
 **Feature Branch**: `feat/145-admin-product-picker` (spec directory `specs/145-admin-product-picker/`)
 **Created**: 2026-10-13
 **Status**: Clarified — ready for plan (clarify session 2026-10-13, fourteen answers; a final clarify pass on 2026-10-13 raised no further question)
+**Issues**: #280, #281, #282, #291
 **Input**: Product owner's request, summarised in English. Three admin screens that put products
 onto a document — **Create order** (`/orders/new`), **Create quote request**
 (`/quote-requests/new`) and a price list's **Products & brackets** tab (`/price-lists/:id`) — make
