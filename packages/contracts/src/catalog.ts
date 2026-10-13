@@ -37,6 +37,15 @@ export type ProductType = z.infer<typeof productTypeSchema>;
 export const productStatusSchema = z.enum(['draft', 'active', 'inactive']);
 export type ProductStatus = z.infer<typeof productStatusSchema>;
 
+/**
+ * The most products one admin selection may carry: the cap of the admin product
+ * browser (a session refuses to select a 201st row) and the `.max()` of every
+ * request that submits such a selection in one call, e.g.
+ * `bulkAddPriceListProductsRequestSchema`. One home for the number, so the
+ * screen and the endpoint cannot disagree about it.
+ */
+export const ADMIN_PRODUCT_SELECTION_MAX = 200;
+
 /** Maps legacy `archived` writes to `inactive` (feature 032). */
 export function coerceProductStatusWrite(
   value: unknown,
@@ -1976,6 +1985,29 @@ export const ANONYMOUS_PRODUCT_AUDIENCE: ProductAudience = {
  * operator surfaces are exempt on the operator's-permission ground instead:
  * `RfqAdminService.createOnBehalf` and `quick_order`'s `'unrestricted'` import
  * arm, both of which say so where they stand.
+ *
+ * **One admin diagnostic is exempt from the single answer, on a third
+ * ground**: `POST /api/v1/admin/orders/preview` tells an operator *why* a line
+ * cannot be ordered for the chosen customer, and reports the two refusals this
+ * rule otherwise folds into one as two distinct message codes —
+ * `PRODUCT_NOT_VISIBLE_TO_CUSTOMER` when this predicate is `false` for the
+ * customer's organization, `PRODUCT_NOT_IN_SALES_CHANNEL` when the product is
+ * outside the order's sales-channel assortment (see
+ * `ADMIN_ORDER_PREVIEW_MESSAGE_PRECEDENCE` in `orders.ts`). That does not
+ * reopen the enumeration the single answer closes, because:
+ *
+ *  1. the single answer protects a **buyer**-facing seam — its subject is a
+ *     buyer who must not learn what an operator keeps from him, and the
+ *     preview's caller is not that buyer;
+ *  2. the route is admin-only, gated `orders:write`, and scope-checked by
+ *     `assertCustomerInScope` before any product is read, so only an operator
+ *     already entitled to act for that customer receives the distinction;
+ *  3. visibility, the allow-list and channel assortment are already the
+ *     operator's to read — every one of them is shown and edited on the
+ *     product and sales-channel screens — so the codes disclose nothing new;
+ *  4. every buyer-facing seam keeps its one `PRODUCT_NOT_FOUND`: the two codes
+ *     exist only in the admin preview's `messages`, never in an error envelope
+ *     or a storefront answer.
  */
 export function isProductVisibleTo(
   product: Pick<CatalogProductRecord, 'visibility' | 'allowedOrganizationIds'>,
