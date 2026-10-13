@@ -60,7 +60,7 @@ always de-selectable.
 ```text
 selection: insertion-ordered Map<id, ProductBrowserItem>     // ≤ ADMIN_PRODUCT_SELECTION_MAX
 filter: { status: 'all'|'active'|'draft'|'inactive', type: ProductType | null, q: string }
-page: number (0-based), pageSize: PageSizeOption
+page: number (0-based), pageSize: PageSizeOption               // seeded from the 'catalog-products' preference; never written back
 view: 'all' | 'selectedOnly'
 load: 'loading' | 'ready' | 'empty' | 'error'
 confirm: 'idle' | 'pending' | 'failed'                       // 'pending'/'failed' only when onConfirm returns a promise

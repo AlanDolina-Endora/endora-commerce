@@ -72,7 +72,8 @@ export interface ProductBrowserTriggerProps {
 `ProductPicker` (existing) gains, all optional and additive:
 
 ```ts
-rules?: ProductBrowserRules;            // option disabled + reason in description when not selectable
+rules?: ProductBrowserRules;            // option disabled + reason in description when not selectable;
+                                        // passing it also opts in to the catalog:read gate (B12)
 alreadyAddedIds?: readonly string[];    // evaluated through productSelectability
 onPickProduct?: (item: ProductBrowserItem) => void;   // full summary of the picked option
 ```
@@ -84,7 +85,7 @@ onPickProduct?: (item: ProductBrowserItem) => void;   // full summary of the pic
 | B1 | Requests `GET /api/v1/admin/catalog/products?includeArchived=1&page=<0-based>&pageSize=<n>[&status][&type][&q]`; `q` debounced 250 ms; stale responses discarded by sequence. | FR-002, FR-004 |
 | B2 | Status tabs All / Active / Draft / Inactive with counts from `counts`; type chip cycling the five types and "all"; search placeholder says SKU, slug or name. Opens on `rules.initialStatus`. | FR-002, FR-012 |
 | B3 | Columns: checkbox, product (name `en-US` + `pl-PL` second line when different, truncated with full text in `title`), SKU, status (translated badge), type (translated). | FR-003, FR-014 |
-| B4 | `PaginationFooter` with `usePageSizePreference('catalog-products')`. | FR-004 |
+| B4 | `PaginationFooter`. The initial page size is read from `usePageSizePreference('catalog-products')` (the Products list's preference) **read-only**: a page-size change inside the picker is session state and never calls `setPageSize`, so using the picker does not change the Products list's page size. | FR-004 |
 | B5 | Selection persists across page / page-size / filter changes; header checkbox adds or removes the selectable rows of the current page only. | FR-005 |
 | B6 | Footer: "N selected", **Clear selection**, **Show selected only** toggle, **Cancel**, **Add N** (disabled at 0). | FR-006, FR-007 |
 | B7 | At `ADMIN_PRODUCT_SELECTION_MAX` further unselected rows render disabled with `productBrowser.reason.limitReached`, and a notice says the per-Add limit is reached. | FR-008 |
@@ -92,7 +93,7 @@ onPickProduct?: (item: ProductBrowserItem) => void;   // full summary of the pic
 | B9 | Distinct loading, empty (selection count stays, Add stays enabled) and load-error (message + Retry) states; none alters the host. | FR-010 |
 | B10 | Async confirm: pending disables Add and Retry; reject → stays open, selection unchanged, error + **Retry** re-invokes `onConfirm` with the same items. | FR-010 |
 | B11 | `role="dialog"`, `aria-modal="true"`, `aria-labelledby` the title; focus moves in on open (`useFocusTrap`), Tab is trapped, Esc and scrim click cancel, focus returns to the trigger on close; every checkbox has an accessible name including the product name. | FR-011 |
-| B12 | `ProductBrowserTrigger` is disabled with `productBrowser.trigger.noPermission` as hint when `useAuth().hasPermission('catalog:read')` is false. The quick search (`ProductPicker`) is disabled with the same hint. | FR-013 |
+| B12 | `ProductBrowserTrigger` is disabled with `productBrowser.trigger.noPermission` as hint when `useAuth().hasPermission('catalog:read')` is false. The quick search (`ProductPicker`) is disabled with the same hint **only when the host passes `rules`** (opt-in): existing consumers that pass none — `seo` `SeoPage.tsx`, `quote_requests` `RfqDetail.tsx`, `catalog` `ProductEditor.tsx` — keep today's behaviour, with no `catalog:read` gate added. | FR-013 |
 | B13 | Every string from `useTranslation('core')`, keys `productBrowser.*`, in `en` and `pl`. | FR-014 |
 | B14 | Table scrolls horizontally inside its own container at tablet width (`ResponsiveTable mode="table-scroll"`). | Edge Cases |
 

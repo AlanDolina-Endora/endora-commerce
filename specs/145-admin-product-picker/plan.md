@@ -181,7 +181,7 @@ Complete: [data-model.md](./data-model.md), [contracts/](./contracts/),
 
 | Concern | Answer |
 | --- | --- |
-| Admin permission manifest | No new code. New route gated by the existing `writeGate` constant (`price_lists:write`), resolvable by the inventory scanner. Client gates: `catalog:read` (picker trigger, quick search), `price_lists:write` (**Add**). |
+| Admin permission manifest | No new code. New route gated by the existing `writeGate` constant (`price_lists:write`), resolvable by the inventory scanner. Client gates: `catalog:read` (picker trigger; quick search only where the host passes `rules` — existing `ProductPicker` consumers unaffected), `price_lists:write` (**Add**). |
 | Command palette | No new surface → no new entry. |
 | pl + en i18n | Kit strings `productBrowser.*` and host strings in `core` (`_i18n` bundle), both languages, flat keys; status/type labels translated (FR-014). `i18n:hardcoded` must not grow. |
 | Settings / secrets | None. |
@@ -198,7 +198,7 @@ Complete: [data-model.md](./data-model.md), [contracts/](./contracts/),
 
 | Risk | Mitigation |
 | --- | --- |
-| Two admins bulk-add the same new product at once → composite-PK collision at flush; the loser's whole request errors. | Nothing is written for the loser (one transaction); the picker's confirm-failure state offers Retry, which then reports the product `unchanged`. Documented in the contract; no `ON CONFLICT` bypass of the unit of work. |
+| Two admins bulk-add the same new product at once → composite-PK collision at flush; the loser's whole request errors. | Nothing is written for the loser (one transaction), which is answered 409 `VERSION_CONFLICT` by the platform envelope's existing mapping (research.md R-8); the picker's confirm-failure state offers Retry, which then reports the product `unchanged`. Documented in the contract; no `ON CONFLICT` bypass of the unit of work. |
 | A product is **hard**-deleted between the existence read and the flush → FK violation aborts the request. | Catalogue deletion is a soft delete (`deletedAt`); the window is a race against a path that does not exist in the admin. Same Retry path. |
 | Large Default list rosters (seeded with every product) make the name lookup ⌈N/500⌉ requests. | ≤ 2 in flight; Add stays disabled on the Default list; the roster renders immediately with id-prefix labels that fill in. Same order of cost as the roster endpoint itself, which already returns every row. |
 | Existing admin tests drive the removed per-row `product-${i}` combobox. | Rewritten as explicit tasks (T027, T033), not left red. |

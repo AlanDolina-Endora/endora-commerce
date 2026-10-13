@@ -20,6 +20,23 @@ pnpm run dev
 Sign in to the admin as a platform administrator (holds `orders:write`, `rfqs:handle`,
 `price_lists:read|write`, `catalog:read`).
 
+## Shared picker checklist (SC-002) — tick it on each of §1, §2 and §3
+
+The picker must behave identically on all three screens; only the host rules differ (opening
+tab, which rows are selectable, the already-added wording). On each screen, confirm:
+
+- [ ] Status tabs All / Active / Draft / Inactive with counts; type filter; search by SKU, slug or
+      name.
+- [ ] Columns: checkbox, product (Polish name as a second line when different), SKU, status,
+      type.
+- [ ] Selection survives a page change, a page-size change and a filter change; "N selected",
+      **Clear selection** and **Show selected only** work.
+- [ ] Non-selectable rows show a disabled checkbox and a reason; already-added rows are marked.
+- [ ] **Add N** is disabled at 0; **Cancel**, Esc and a scrim click add nothing; focus returns to
+      **Browse products** / **Add**.
+- [ ] Switching the language to Polish translates every picker string.
+- [ ] Changing the page size inside the picker does not change the Products list's page size.
+
 ## 1. Create order (US1, US2)
 
 1. Open `/orders/new`. **Items** and **Order summary** are not shown; a hint names *customer* and

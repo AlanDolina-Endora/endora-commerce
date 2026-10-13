@@ -126,8 +126,11 @@ route — loses the host form's state and its unsaved-changes prompt.
 - The picker always requests `includeArchived=1` (as the Products list does) so the Inactive
   tab is reachable on every host; status tabs send `status`, the type chip sends `type`, the
   250 ms debounced search sends `q`; counts come from the response's `counts`.
-- Default page size: `usePageSizePreference('catalog-products')`, the Products list's own key
-  (Assumption: the picker follows the user's Products-list preference).
+- Default page size: read from `usePageSizePreference('catalog-products')`, the Products list's own
+  key (Assumption: the picker follows the user's Products-list preference), **read-only** — the
+  picker never calls `setPageSize`; a page-size change inside it lives in session state only.
+  Rejected: writing back (a picker session would silently change the Products list's page size);
+  a picker-owned key (a second preference the operator never set, for no FR).
 
 **Rationale**: FR-005…FR-009, FR-012 and the edge cases are one state machine; keeping the rule
 evaluation pure makes it unit-testable without a DOM (Constitution III: non-trivial frontend
@@ -147,7 +150,11 @@ exists in `packages/admin-kit/src/ui/combobox.tsx`), and `onPickProduct?: (item)
 hands the host the full summary (id, SKU, name, status, type) so a line can show name and SKU
 (FR-022) without a second fetch. The order and quote-request hosts mount it with `value={null}`
 so it clears after each pick, and pass `includeArchived` so inactive products are shown (and,
-on orders, shown disabled). Its local `AdminProductSummary` gains `type`.
+on orders, shown disabled). Its local `AdminProductSummary` gains `type`. The `catalog:read` gate
+(FR-013) is **opt-in**: `ProductPicker` applies it only when `rules` is passed, so the consumers
+that pass none — `seo` `SeoPage.tsx`, `quote_requests` `RfqDetail.tsx`, `catalog`
+`ProductEditor.tsx` — are unchanged (rejected: gating every consumer, which would alter three
+screens outside this feature's scope).
 
 **Rationale**: FR-020 requires the same selectability rules; one predicate, two entry points.
 The per-row combobox on each line is removed (FR-020), so lines only come from these two.
@@ -307,6 +314,18 @@ malformed (harmless, and "every requested product in exactly one bucket" holds a
 `INSERT … ON CONFLICT DO NOTHING` to absorb a concurrent identical add (see plan.md § Risks — the retry
 path already covers it and MikroORM's unit of work would need bypassing).
 
+**Concurrent identical add → 409** (decided, no new code): when two requests add the same new id
+at once, the loser's flush raises MikroORM's `UniqueConstraintViolationException` on the
+`price_list_products` composite primary key; the command rolls back (nothing written, no audit
+entry) and the platform's error envelope already maps that exception to **409
+`VERSION_CONFLICT`** (`packages/platform/src/http/error-envelope.ts`). That is the genuine-race
+case the envelope's D-260 comment keeps the mapping for — `price_list_products` is not
+tenant-keyed, so it is not a missing scope gate. The screen treats it like any non-2xx (confirm
+failure + **Retry**, which then reports the id `unchanged`). No catch-and-remap in the service and
+no dedicated test: the race cannot be made deterministic in a contract test, and the mapping is the
+platform's, already covered there. Rejected: remapping to 500 (it is a retryable conflict, not a
+fault); a new error code (FR-045 adds none).
+
 ## R-9 — The roster beyond the newest 20, and the picker's confirm-failure state
 
 **Decision**:
@@ -409,7 +428,7 @@ previous customer's price on a failed re-resolution (stale terms presented as cu
 
 - **Permission codes**: none new (Assumption). The new route reuses `price_lists:write` through
   the module's `writeGate` constant, which the permission-inventory scanner resolves.
-  Client-side gates added: `catalog:read` on the picker trigger and the quick search (FR-013,
+  Client-side gates added: `catalog:read` on the picker trigger and, opt-in through `rules`, the quick search (FR-013,
   `ProductBrowserTrigger` reads `useAuth().hasPermission`), `price_lists:write` on **Add**
   (FR-044). Gate by permission only — never `useSurfaceVisibility()({ module: 'catalog' })` in the
   kit, which `check:admin-zones` reports as `foreign-module-id`, and which would be moot anyway.
