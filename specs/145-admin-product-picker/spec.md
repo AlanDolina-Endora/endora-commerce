@@ -2,7 +2,7 @@
 
 **Feature Branch**: `feat/145-admin-product-picker` (spec directory `specs/145-admin-product-picker/`)
 **Created**: 2026-10-13
-**Status**: Clarified and planned (clarify session 2026-10-13, fourteen answers; a final clarify pass on 2026-10-13 raised no further question; `plan.md` and `tasks.md` written 2026-10-13, analyze pending resolution)
+**Status**: Clarified and planned (clarify session 2026-10-13, sixteen answers — the last two are product-owner rulings on findings of the analyze pass; `plan.md` and `tasks.md` written 2026-10-13; analyze re-run 2026-10-13 after those rulings)
 **Issues**: #280, #281, #282, #291
 **Input**: Product owner's request, summarised in English. Three admin screens that put products
 onto a document — **Create order** (`/orders/new`), **Create quote request**
@@ -116,6 +116,16 @@ touches these screens (per-channel delivery and payment methods, 0.105.0) is ref
   from its catalogue `defaultPrice`/`price` attribute, possibly 0.00. A customer without an
   organization makes the preview fail (422), which the page shows as **Could not calculate prices**
   (`orderCreate.preview.error`) without blocking submit.
+- The preview resolves its channel as the body's `salesChannelId` **or, when that id names no
+  channel, any active channel** (`findOne(SalesChannel, { status: 'active' })` in the preview
+  handler) — so a channel deleted after it was chosen is silently replaced by another one for
+  pricing. Only when no active channel exists at all does it answer `404 NOT_FOUND` "Sales channel
+  not found.".
+- `PRODUCT_NOT_FOUND` on the preview means an id with **no catalogue row**. Catalogue deletion is a
+  soft delete (`deletedAt`), and both the preview and order creation read products with the port's
+  default (wider) lookup, which returns soft-deleted rows: a soft-deleted product is priced like a
+  live one on the preview and accepted on create (`CatalogProductReadPort.findById`,
+  `catalog-product-read.service.ts`; `CartService.addItem`).
 - Submit needs customer, channel, delivery method, payment method, both addresses, at least one line
   and no preview message; lines with quantity ≤ 0 are silently dropped. Items `{productId,
   variantId?, quantity}` (`adminCreateOrderRequestSchema`); the page never sends `variantId`.
@@ -225,6 +235,11 @@ order summary.
     shows the visibility reason; **and when** the rep instead changes the customer to one who can
     see it (the channel still lacking it), the re-priced preview reports the assortment reason in
     its place (FR-024, FR-027).
+14. **Given** lines exist and the order's chosen sales channel is deleted by someone else (the form
+    still holds its id), **When** the preview runs, **Then** it is refused with the route's
+    existing not-found error, the screen shows **Could not calculate prices** as for any preview
+    failure, no line is marked unavailable, and no other channel is used for pricing or for the
+    assortment check (FR-027).
 
 ---
 
@@ -358,10 +373,13 @@ present products changed their brackets.
 - **Header checkbox**: selects or deselects the selectable rows on the current page only, adding to
   (not replacing) the existing selection.
 - **Product removed or deactivated between selection and Add**: order / quote request — the line is
-  added and then priced by the existing pricing (a removed product shows as unavailable on the
-  order; a deactivated one is priced as today and the create endpoint's existing rules apply; on the
-  quote request its price may stay empty). Price list — a product the bulk-add endpoint cannot add is
-  reported in the response's `failed` entries with a reason, and the others are still added
+  added and then priced by the existing pricing. On the order, an id with **no catalogue row** shows
+  as unavailable (`PRODUCT_NOT_FOUND`, **No price**); a product **soft-deleted** from the catalogue
+  is priced like a live product, as today, and order creation accepts it likewise — the preview
+  stays consistent with create (FR-024). A deactivated one is priced as today and the create
+  endpoint's existing rules apply. On the quote request its price may stay empty. Price list — a
+  product the bulk-add endpoint cannot add, including a soft-deleted one, is reported in the
+  response's `failed` entries with reason `product_not_found`, and the others are still added
   (FR-043, FR-045).
 - **Product added to the price list by someone else meanwhile**: reported `unchanged`, not failed;
   its brackets are untouched.
@@ -395,9 +413,10 @@ present products changed their brackets.
 - **No price for the customer**: the order line shows **No price** and blocks submit only when the
   preview marks it unavailable (FR-024); otherwise the catalogue default price applies, as today,
   including 0.00. The quote-request line keeps an empty agreed price for manual entry.
-- **Pricing preview fails as a whole** (e.g. a customer with no organization, or a method the
-  organization may not use): the existing **Could not calculate prices** message is shown; lines
-  stay and show no price. Behaviour otherwise unchanged by this feature.
+- **Pricing preview fails as a whole** (e.g. a customer with no organization, a method the
+  organization may not use, or — new, FR-027 — a chosen sales channel that no longer exists): the
+  existing **Could not calculate prices** message is shown; lines stay, show no price and are not
+  marked unavailable. Behaviour otherwise unchanged by this feature.
 - **Customer or channel changed after lines exist**: lines kept and re-priced (order) / re-prefilled
   except hand-edited prices (quote request). On the order screen, changing the channel can also
   clear a delivery or payment method the new channel does not offer (existing, 0.105.0).
@@ -500,7 +519,9 @@ present products changed their brackets.
   marked **No price**), and — new, FR-027 — not visible to the chosen customer and outside the
   order's chosen sales channel's assortment, each marked with its own translated reason instead of
   **No price**. A line shows exactly one reason; a product failing both new checks shows the
-  visibility reason (FR-027). A
+  visibility reason (FR-027). "Product not found" means an id with no catalogue row; a product
+  soft-deleted from the catalogue is not "not found" — it is priced like a live product, as today
+  and as order creation accepts it. A
   product without an applicable price list keeps today's catalogue-default pricing, possibly 0.00,
   and is not unavailable.
 - **FR-025**: Hiding the sections because a gating field is cleared MUST NOT discard the lines
@@ -521,6 +542,12 @@ present products changed their brackets.
   code alone. The order screen MUST show each code's
   own translated reason on the line (FR-014). The change is additive to `adminOrderPreviewResponseSchema`
   (`packages/contracts/src/orders.ts`): no field removed or retyped, the request schema unchanged.
+  The preview MUST price on, and check assortment against, exactly the channel the body's
+  `salesChannelId` names; the current fallback to another active channel is removed. A
+  `salesChannelId` naming no channel MUST be refused with the route's existing not-found error
+  (`404 NOT_FOUND`, the existing error shape) before any line is evaluated — the preview neither
+  falls back to another channel nor marks lines, matching the create path, which refuses such a
+  channel too. The screen shows its existing **Could not calculate prices** (US1 scenario 14).
   The plan MUST justify the distinct codes against the single-answer (enumeration-oracle) rule
   documented on `isProductVisibleTo`, on the ground that the preview is an admin-only surface gated
   `orders:write`, and MUST record that justification where the rule is documented. The picker and
@@ -638,8 +665,10 @@ present products changed their brackets.
   today.
 - FR-012 and FR-009 are rules of the admin screens. The order-create and quote-request endpoints keep
   accepting what they accept today, and no endpoint's request payload changes. The feature makes
-  exactly two additive server changes: the price-list bulk-add endpoint (FR-045) and the preview's
-  new unavailability checks and their two message codes (FR-027).
+  two additive server changes — the price-list bulk-add endpoint (FR-045) and the preview's new
+  unavailability checks and their two message codes (FR-027) — and one behaviour change on the
+  preview: a `salesChannelId` naming no channel is refused (404) instead of being replaced by
+  another active channel (FR-027). No response field is removed or retyped.
 - The picker sorts like the Products list (newest first); no column sorting is added.
 - The picker opens as an overlay (dialog or side panel) above the host screen; the exact pattern is a
   design decision constrained by FR-001…FR-011 and the admin design system.
@@ -674,6 +703,14 @@ present products changed their brackets.
   (FR-045).
 - The confirm and **Retry** actions are disabled while the bulk-add request is in flight, so one
   click sends one request.
+- Price-list bulk add: "deleted from the catalog" (US4 scenario 4, FR-043) means soft-deleted
+  (`deletedAt` set) → `failed: product_not_found`. An archived (inactive) or draft product is a live
+  product and is **added** — every status is selectable on price lists (FR-012). Default accepted at
+  analyze, 2026-10-13.
+- Create quote request: on a customer change, every agreed price **not** typed by hand is cleared
+  and then re-resolved for the new customer, so a line may go from a price to empty when nothing
+  resolves for the new customer; a previous customer's price never survives as the new customer's.
+  Hand-typed prices are kept (FR-031, FR-033). Default accepted at analyze, 2026-10-13.
 
 ## Out of Scope
 
@@ -685,7 +722,8 @@ present products changed their brackets.
   English labels.
 - Line notes, packaging units, or discounts on quote-request lines.
 - Any change to the request payloads of the order and quote-request create endpoints (SC-006). The
-  preview response changes only additively (FR-027).
+  preview response changes only additively (FR-027); its one new refusal, an unknown
+  `salesChannelId`, uses the route's existing not-found error.
 - **Separate fix, after this feature**: admin order creation checks channel assortment against the
   sales channel the admin request was resolved on (`outOfRequestChannel` in `CartService.addItem`)
   instead of the order's `salesChannelId`. This feature does not change the create path; the preview
@@ -698,6 +736,10 @@ present products changed their brackets.
   `PUT …/products`; only the new bulk-add endpoint refuses the Default list (FR-045).
 - Visibility or assortment checks on quote-request creation (`createOnBehalf` stays exempt by
   ruling).
+- Treating a product **soft-deleted** from the catalogue as unavailable on the order. Today both
+  the preview and order creation accept it; a future change would cover the preview and the create
+  path together, never the preview alone. (The price-list bulk add already refuses it per product,
+  `failed: product_not_found`.)
 
 ## Clarifications
 
@@ -755,3 +797,15 @@ Answers given by the product owner.
   meanwhile, network error, 4xx/5xx)? → A: The picker stays open, the selection is kept, and an
   error message is shown in the picker with a **Retry** action; nothing was written (FR-010,
   FR-041, FR-043, US4 scenario 13).
+- Q: On **Create order**, the chosen sales channel no longer exists (the preview body carries an
+  unknown `salesChannelId`). Fall back to another channel, mark the lines, or refuse? → A: Refuse.
+  The preview answers the route's existing not-found error (404, existing error shape) and the
+  screen shows its existing **Could not calculate prices**; it does not fall back to another
+  channel and does not mark lines. This matches the create path (FR-027, US1 scenario 14, Edge
+  Cases).
+- Q: On **Create order**, a product soft-deleted from the catalogue — should the preview mark it
+  unavailable? → A: No; today's behaviour stays: the preview prices it as a live product,
+  consistent with order creation, which accepts it. Only an id with no catalogue row is
+  `PRODUCT_NOT_FOUND`. A future change for soft-deleted products would cover the preview and create
+  together (*Out of Scope*). The price-list bulk add keeps `failed: product_not_found` for
+  soft-deleted products (FR-024, FR-043, Edge Cases).
