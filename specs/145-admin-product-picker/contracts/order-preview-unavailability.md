@@ -53,9 +53,18 @@ Steps 1–3 are `previewLineAvailability({ product, organizationId, inChannel })
 `packages/modules/orders/src/backend/services/preview-line-availability.ts`; step 4 stays in the
 route because it needs the resolved price. The membership read is **one** call per preview over
 the ids that passed steps 1–2, against `body.salesChannelId` — never the request-resolved channel
-(`outOfRequestChannel`), and not the pricing fallback channel (a stale id publishes nothing, so
-lines fail closed). The route fails closed with `500 INTERNAL` when the membership port is not
+(`outOfRequestChannel`). The route fails closed with `500 INTERNAL` when the membership port is not
 wired.
+
+**Channel resolution (changed)**: the preview prices on, and checks assortment against, exactly
+`findOne(SalesChannel, { id: body.salesChannelId })`. The former fallback to any active channel is
+removed: a `salesChannelId` naming no channel is refused **404 `NOT_FOUND`** ("Sales channel not
+found.", the route's existing envelope) before any line is evaluated — as the create path refuses
+it. The admin screen renders its existing preview error (*Could not calculate prices*).
+
+**Product read**: `findByIds` with default lookup options (not `liveOnly`): a soft-deleted
+product resolves and is priced as today, consistent with the create path; it is **not**
+`PRODUCT_NOT_FOUND` (research.md R-7).
 
 Unchanged: `assertCustomerInScope` runs first; a customer without an organization is still `422`;
 method gates unchanged; a product with no applicable price list is still priced from its
@@ -91,5 +100,7 @@ already list exempt seams, naming `POST /api/v1/admin/orders/preview` and the tw
   sc. 11 (allow-list excluding the org → visibility code, other lines priced), sc. 12 (visible,
   not in channel A → assortment code; channel B containing it → priced), sc. 13 (both → visibility
   only; channel switch keeps visibility; customer switch to a permitted org → assortment), one
-  message per line, `PRODUCT_NOT_FOUND` before visibility, `QUOTE_ONLY` after assortment; the
+  message per line, `PRODUCT_NOT_FOUND` before visibility, `QUOTE_ONLY` after assortment; an
+  unknown `salesChannelId` → 404 `NOT_FOUND` with no preview body; a soft-deleted product is priced
+  with no message; the
   existing `backend/test/contract/orders/admin-order-preview.test.ts` stays green.

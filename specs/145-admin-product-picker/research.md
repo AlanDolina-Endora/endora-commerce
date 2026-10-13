@@ -239,16 +239,24 @@ by threading the `salesChannelMembership` option `plugin.ts` already receives (a
 naming the missing port) rather than treating "not wired" as "in assortment" — the reason
 `CartService` gives for making the same port required.
 
-**The stale-channel case**: the preview resolves the channel it **prices** on as
+**The stale-channel case — refused (product-owner ruling, 2026-10-13)**: today the preview
+resolves the channel it prices on as
 `findOne(SalesChannel, { id: body.salesChannelId }) ?? findOne(SalesChannel, { status: 'active' })`.
-That pricing fallback is unchanged. The assortment check does not follow it: an id naming no
-channel publishes nothing, so every existing, visible line is reported
-`PRODUCT_NOT_IN_SALES_CHANNEL` — fail closed (Principle XII: an unresolved channel must not match
-a channel-bound record). On a valid id the two are the same channel. Listed under *Open items*
-for the product owner to confirm; it changes nothing on the happy path.
+The active-channel fallback is **removed**: a `salesChannelId` naming no channel answers **404
+`NOT_FOUND` "Sales channel not found."** — the route's existing error for the no-channel case,
+already thrown on the line below the lookup — before any line is evaluated. The screen shows its
+existing preview error (`orderCreate.preview.error`, *Could not calculate prices*). This matches
+the create path, which refuses a stale channel too, and means the pricing channel and the
+assortment channel are always the same one. Rejected: keeping the fallback and marking every line
+`PRODUCT_NOT_IN_SALES_CHANNEL` (the earlier proposal — priced on one channel, checked against
+another, and a per-line message for what is a whole-request problem; the PO chose the refusal).
 
 **Product loading**: the loop's per-line `catalogProductRead.findById` becomes one
-`findByIds(uniqueIds)` (default lookup options — soft-deleted rows still resolve, as today), so
+`findByIds(uniqueIds)` with **default lookup options, deliberately not `liveOnly`** — a
+soft-deleted product still resolves and is priced like a live one, as today and as on the create
+path (product-owner ruling, 2026-10-13: keep today's behaviour; the PO amends spec.md's edge case
+separately). The price-list bulk add (R-8) is a different seam and keeps `liveOnly` and
+`failed: product_not_found` for soft-deleted products. So
 a 200-line preview issues one product read and one membership read instead of 200 + 0. Pricing
 stays per line (`pricingService.resolveLinePrice`), unchanged.
 
@@ -256,7 +264,7 @@ stays per line (`pricingService.resolveLinePrice`), unchanged.
 SC-008 needs the preview to agree with what the create path refuses once the separate fix lands.
 
 **Alternatives rejected**: `outOfRequestChannel` (wrong channel — the out-of-scope defect);
-the resolved fallback channel for the assortment too (fails open against a channel nobody chose);
+keeping the active-channel fallback for pricing or assortment (prices or checks against a channel nobody chose — superseded by the PO's refusal ruling above);
 a direct query on `sales_channel_products` (forbidden — `check:module-boundary` `sql` predicate);
 per-line membership reads (200 round trips).
 
@@ -508,10 +516,11 @@ pure `methodsOfferedInChannel` export only and must keep passing unchanged (the 
 
 ## Open items (not resolved here — for the product owner)
 
-1. **Stale `salesChannelId` on the preview** (R-7): pricing keeps falling back to an active
-   channel while the assortment check fails closed against the body's id, so a stale id marks
-   every line *not in this sales channel's assortment*. The create path refuses a stale channel
-   anyway; confirm this is the wanted operator message.
+1. ~~**Stale `salesChannelId` on the preview**~~ — **resolved** by the product owner
+   (2026-10-13): the preview refuses with 404 `NOT_FOUND`, like the create path; the
+   active-channel fallback is removed (R-7). Also resolved: a **soft-deleted** product on the
+   order preview keeps today's behaviour — priced like a live product, no `liveOnly` on the
+   preview read (R-7 § Product loading); spec.md's edge case is amended by the PO.
 2. **"Deleted from the catalog"** (R-8): read as *soft-deleted* (`deletedAt` set) → `failed /
    product_not_found`. A product **archived** (inactive) is not deleted and is added. Confirm.
 3. **Customer change on the quote-request screen** (R-11): non-hand-edited prices are cleared

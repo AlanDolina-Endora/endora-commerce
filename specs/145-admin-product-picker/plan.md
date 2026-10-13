@@ -78,7 +78,7 @@ product owner.
 | **IX. UI reuse** | PASS with one justified new composite | Reused: side drawer classes, `useFocusTrap`, `ResponsiveTable`, `Checkbox`, `Badge`, `PaginationFooter`, `usePageSizePreference`, `Combobox`, existing `ProductPicker` (extended additively). Net-new: `ProductBrowserDialog` (+ its trigger), promoted to the kit from the start because three modules consume it — justification in Complexity Tracking. |
 | **X. Queue consumers** | N/A | No asynchronous or repeatable work. |
 | **XI. Multi-tenant isolation (NN)** | PASS | No new tenant-scoped entity (`PriceListProduct` is `@GlobalEntity`, as today). The preview keeps `assertCustomerInScope` before any read; visibility is evaluated for the customer's own organization, never a request-supplied one. There is no "no-organization" path: a customer without an organization is still refused (422) as today. |
-| **XII. Sales-channel scoping (NN)** | PASS | The assortment check resolves a concrete channel (the order's chosen one), reads membership only through `filterEntityIdsInChannel`, and fails closed for an id that names no channel (research R-7). Cross-channel tests: product in channel A only, previewed on A and on B. No query on a `sales_channel_*` table. |
+| **XII. Sales-channel scoping (NN)** | PASS | The assortment check resolves a concrete channel (the order's chosen one), reads membership only through `filterEntityIdsInChannel`, and refuses (404) an id that names no channel instead of falling back to another channel (research R-7, PO ruling). Cross-channel tests: product in channel A only, previewed on A and on B. No query on a `sales_channel_*` table. |
 | **XIII. Command Bus auditing (NN)** | PASS | The one new write runs as one `CommandBus.run` through `PriceListService.#runAudited` (action `price_list.products_add`), co-transactional, actor from the ambient TenantContext, one entry or none; no hand-written audit call. The preview writes nothing. |
 | **XIV. Entity-agnostic extensibility** | N/A | No field added to any entity. |
 | **XV. Untouched core & overlay** | PASS | Core behaviour change requested by the product owner for every deployment; no deployment-specific branch. Overlays are unaffected (no core interface they override changes shape). |
@@ -187,7 +187,7 @@ Complete: [data-model.md](./data-model.md), [contracts/](./contracts/),
 | Settings / secrets | None. |
 | Auditing via Command Bus | Bulk add: one command, one entry or none, counts only. |
 | Tenant scoping | Unchanged model; preview keeps the scope assertion and evaluates the customer's organization. |
-| Channel scoping | Preview assortment via `filterEntityIdsInChannel(body.salesChannelId, …)`, fail closed. |
+| Channel scoping | Preview assortment via `filterEntityIdsInChannel(body.salesChannelId, …)`; an unknown `salesChannelId` is refused 404 (no active-channel fallback). |
 | Redis cache invalidation | No Redis cache introduced; the bulk add reuses the in-process pricing-cache invalidation every price-list write performs. |
 | Activation / off-state | Research R-13: no new seam; the new route inherits the module's registration gate. |
 | Changesets | Six, levels in research R-14. |
