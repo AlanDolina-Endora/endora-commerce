@@ -15,6 +15,7 @@ import {
   seedCartForStubCustomer,
 } from '../../helpers/seed-commerce.js';
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 import {
   seedOtherTestOrganization,
   STUB_CUSTOMER_PASSWORD,
@@ -84,6 +85,12 @@ describe('order placement honours the Organization method allow-lists', () => {
   /** A key bound to Organization B, with buyer B as its service account. */
   let apiKeyTokenB: string;
   let defaultChannelCode: string;
+  /**
+   * The channel the admin preview is sent. The preview answers 404 for a
+   * channel naming no row, so it gets the system-default channel the seeded
+   * catalogue is published on rather than the fixture id the create path takes.
+   */
+  let previewChannelId: string;
 
   const restrict = async (
     organizationId: string,
@@ -231,7 +238,7 @@ describe('order placement honours the Organization method allow-lists', () => {
       method: 'POST',
       url: '/api/v1/admin/orders/preview',
       cookies: ADMIN,
-      payload: rest,
+      payload: { ...rest, salesChannelId: previewChannelId },
     });
   };
   const storefrontPreview = (
@@ -410,6 +417,7 @@ describe('order placement honours the Organization method allow-lists', () => {
 
     // One-click buy, switched on for the channel a header-less request resolves to.
     defaultChannelCode = (await em.findOneOrFail(SalesChannel, { systemDefault: true })).code;
+    previewChannelId = await systemDefaultSalesChannelId(em);
     await h.settings.adminService.setValueForSubset(
       ONE_CLICK_ENABLED,
       [defaultChannelCode],
@@ -576,7 +584,7 @@ describe('order placement honours the Organization method allow-lists', () => {
           cookies: ADMIN,
           payload: {
             customerAccountId: TEST_CUSTOMER_ID,
-            salesChannelId: SALES_CHANNEL_ID,
+            salesChannelId: previewChannelId,
             items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }],
             deliveryMethodId: SEED_DELIVERY_METHOD_ID,
             paymentMethodId: SEED_PAYMENT_METHOD_ID,
