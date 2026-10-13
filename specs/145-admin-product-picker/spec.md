@@ -2,7 +2,7 @@
 
 **Feature Branch**: `feat/145-admin-product-picker` (spec directory `specs/145-admin-product-picker/`)
 **Created**: 2026-10-13
-**Status**: Draft — clarify session 2026-10-13 (twelve answers); a further clarify pass (2026-10-13) raised 2 questions, pending with the product owner
+**Status**: Clarified — ready for plan (clarify session 2026-10-13, fourteen answers; a final clarify pass on 2026-10-13 raised no further question)
 **Input**: Product owner's request, summarised in English. Three admin screens that put products
 onto a document — **Create order** (`/orders/new`), **Create quote request**
 (`/quote-requests/new`) and a price list's **Products & brackets** tab (`/price-lists/:id`) — make
@@ -215,6 +215,13 @@ order summary.
     instead of a price, and submit is disabled; **and when** the rep switches the order to a sales
     channel whose assortment includes it, the re-priced preview no longer marks the line, it shows
     unit price and line total, and it no longer blocks submit.
+13. **Given** a product the chosen customer cannot see **and** that is not in the order's chosen
+    sales channel's assortment, **When** the rep adds it, **Then** the preview returns exactly one
+    message for that line, carrying the visibility code, and the line shows only the visibility
+    reason; **when** the rep switches to a channel whose assortment includes it, the line still
+    shows the visibility reason; **and when** the rep instead changes the customer to one who can
+    see it (the channel still lacking it), the re-priced preview reports the assortment reason in
+    its place (FR-024, FR-027).
 
 ---
 
@@ -329,6 +336,11 @@ present products changed their brackets.
 12. **Given** a bulk-add request carrying 201 product ids (or a malformed body), **When** it is
     sent, **Then** it is refused with an error, no product is added, the existing roster and its
     brackets are unchanged and no audit entry is produced (FR-043, FR-045).
+13. **Given** 30 products are selected and the price list is deleted by someone else (or the network
+    fails, or the server answers with any other error) before the admin confirms, **When** the admin
+    confirms "Add 30", **Then** the picker stays open with all 30 still selected, an error message
+    with a **Retry** action is shown inside the picker, the roster and its brackets are unchanged
+    and no audit entry is produced; **Retry** re-sends the same selection (FR-010, FR-043).
 
 ---
 
@@ -353,8 +365,12 @@ present products changed their brackets.
 - **Bulk-add request invalid as a whole** (unknown or deleted price list, more than 200 ids,
   malformed body, the system Default list): the server answers with an error in the existing
   price-list endpoints' error shape and writes nothing — no roster entry, no audit entry; no
-  `added` / `unchanged` / `failed` report is returned (FR-043, FR-045). What the picker does with
-  the selection when the confirm fails this way is pending clarification (2026-10-13 pass).
+  `added` / `unchanged` / `failed` report is returned (FR-043, FR-045). On the screen, a confirm
+  that fails as a whole — this error, a network failure, or no response — keeps the picker open
+  with the selection intact and shows an error with **Retry** inside the picker; nothing was
+  written (FR-010). This differs from a request **accepted with `failed` entries**, which follows
+  the normal path: the picker closes, the accepted products join the roster and the screen names
+  the failed products (FR-041, FR-043).
 - **Non-purchasable products (grouped/bundle parents, draft, inactive)**: shown with a reason and not
   selectable where FR-012 says so; the quick search applies the same rules. These are rules of the
   admin screens; the server does not refuse these products today and this feature does not add such
@@ -362,7 +378,10 @@ present products changed their brackets.
 - **Product the customer may not see, or outside the channel's assortment (orders)**: the picker and
   the quick search still offer it (no greying out); once added, the preview reports the line as
   unavailable with the cause's own reason (one message code for "the customer cannot see this
-  product", another for "not in the chosen sales channel's assortment"), evaluated against the chosen customer's organization and the
+  product", another for "not in the chosen sales channel's assortment"; exactly one message per
+  line — a product failing both checks is reported with the visibility reason only, the assortment
+  reason being reported only for a product the customer can see), evaluated against the chosen
+  customer's organization and the
   **order's chosen** sales channel, and submit is blocked until the line is removed or the customer
   or channel changes so that the line is available (FR-024, FR-027). Known residue until the
   separate create-path fix lands (see *Out of Scope*): when the order's chosen channel differs from
@@ -429,7 +448,13 @@ present products changed their brackets.
 - **FR-009**: Products already present in the host (order lines, quote-request lines, price-list
   roster) MUST be shown as already added and MUST NOT be selectable.
 - **FR-010**: The picker MUST show distinct loading, empty-result and load-error states; a load error
-  MUST offer retry and MUST NOT alter the host's existing lines.
+  MUST offer retry and MUST NOT alter the host's existing lines. Where the confirm itself performs a
+  server write — the price-list screen only (FR-045) — the picker MUST also have a confirm-failure
+  state: when the write fails as a whole (an error response such as an unknown or deleted price
+  list, a network failure, no response), the picker MUST stay open, keep the selection unchanged,
+  and show an error message inside the picker with a **Retry** action that re-sends the same
+  selection; the host is unchanged because nothing was written. On the order and quote-request
+  screens the confirm only appends lines locally and has no confirm-failure state.
 - **FR-011**: The picker MUST be usable by keyboard (focus moves into the picker on open, Esc
   cancels, rows and checkboxes are reachable and labelled for screen readers) and MUST return focus
   to the trigger on close.
@@ -471,7 +496,8 @@ present products changed their brackets.
   (existing rule, kept and extended). The causes are: product not found and quote-only (today,
   marked **No price**), and — new, FR-027 — not visible to the chosen customer and outside the
   order's chosen sales channel's assortment, each marked with its own translated reason instead of
-  **No price**. A
+  **No price**. A line shows exactly one reason; a product failing both new checks shows the
+  visibility reason (FR-027). A
   product without an applicable price list keeps today's catalogue-default pricing, possibly 0.00,
   and is not unavailable.
 - **FR-025**: Hiding the sections because a gating field is cleared MUST NOT discard the lines
@@ -486,7 +512,10 @@ present products changed their brackets.
   check MUST be returned with `unavailable: true` and a `messages` entry carrying one of **two new
   message codes**, one per cause — (a) the customer cannot see the product (organization visibility
   or restriction), (b) the product is not in the chosen sales channel's assortment — distinct from
-  each other and from `PRODUCT_NOT_FOUND` and `QUOTE_ONLY`. The order screen MUST show each code's
+  each other and from `PRODUCT_NOT_FOUND` and `QUOTE_ONLY`. The preview MUST return **exactly one**
+  such message per line: the visibility check takes precedence, and the assortment code is returned
+  only for a product the customer can see, so a product failing both checks carries the visibility
+  code alone. The order screen MUST show each code's
   own translated reason on the line (FR-014). The change is additive to `adminOrderPreviewResponseSchema`
   (`packages/contracts/src/orders.ts`): no field removed or retyped, the request schema unchanged.
   The plan MUST justify the distinct codes against the single-answer (enumeration-oracle) rule
@@ -518,7 +547,8 @@ present products changed their brackets.
 - **FR-040**: **Add** MUST open the product picker over the whole catalog (FR-004) instead of the
   current single-product drawer.
 - **FR-041**: Confirming MUST add every selected product to the price list without prices, in one
-  request to the bulk-add endpoint (FR-045); the roster MUST then show every product on the list
+  request to the bulk-add endpoint (FR-045) — a request failing as a whole leaves the picker open
+  with the selection kept (FR-010); after an accepted request the roster MUST show every product on the list
   (newly added and pre-existing, regardless of catalog size) by name and SKU, MUST open the bracket
   editor for any roster product selected, and MUST select the first added one.
 - **FR-042**: Adding products MUST NOT change, remove or reset any product or bracket already on the
@@ -531,7 +561,8 @@ present products changed their brackets.
   MUST NOT treat `unchanged` as a failure. A request **invalid as a whole** — an unknown or deleted
   price list, more than 200 product ids, a malformed body, or the system Default list (FR-045) — MUST
   be refused with an error status and MUST add nothing; such a response carries no `added` /
-  `unchanged` / `failed` report.
+  `unchanged` / `failed` report; the screen handles it with the picker's confirm-failure state
+  (FR-010).
 - **FR-044**: **Add** MUST stay disabled on the system price list (as today) and MUST be disabled for
   users without `price_lists:write` (a new client-side gate; the server already refuses the write).
   The bulk-add endpoint enforces the system-list rule on the server as well (FR-045).
@@ -563,7 +594,8 @@ present products changed their brackets.
   entry. A request refused as a whole (FR-043) returns an error instead and has no bulk-add result.
 - **Preview unavailability reason**: the message code the order preview attaches to an unavailable
   line; the existing `PRODUCT_NOT_FOUND` and `QUOTE_ONLY` plus the two new codes of FR-027 (not
-  visible to the customer; outside the chosen sales channel's assortment).
+  visible to the customer; outside the chosen sales channel's assortment). Exactly one per line;
+  visibility takes precedence over assortment (FR-027).
 
 ## Success Criteria *(mandatory)*
 
@@ -604,7 +636,7 @@ present products changed their brackets.
 - FR-012 and FR-009 are rules of the admin screens. The order-create and quote-request endpoints keep
   accepting what they accept today, and no endpoint's request payload changes. The feature makes
   exactly two additive server changes: the price-list bulk-add endpoint (FR-045) and the preview's
-  new unavailability check and message code (FR-027).
+  new unavailability checks and their two message codes (FR-027).
 - The picker sorts like the Products list (newest first); no column sorting is added.
 - The picker opens as an overlay (dialog or side panel) above the host screen; the exact pattern is a
   design decision constrained by FR-001…FR-011 and the admin design system.
@@ -624,6 +656,21 @@ present products changed their brackets.
   endpoint for browsing, `batch-by-id` for names of products already on a host). The one new write
   endpoint is the price-list bulk add (FR-045), gated by the existing `price_lists:write`.
 - The **Quick order** tab (`quick_order`, `/orders/quick-order`) is unchanged.
+- Ordering of all four preview unavailability codes on one line: the product owner ruled only
+  visibility over assortment (FR-027). The default, for the plan to confirm against the preview
+  code, is `PRODUCT_NOT_FOUND` > visibility > assortment > `QUOTE_ONLY`, still exactly one message
+  per line — a product that does not exist cannot be checked further, and a product the customer
+  cannot see or cannot buy in the channel is not reported as quote-only.
+- A price-list bulk add accepted with `failed` entries closes the picker like a fully successful one
+  (US4 scenario 4); only a request failing as a whole keeps it open (FR-010).
+- When an accepted bulk add has no `added` product (every product `unchanged` or `failed`), the
+  picker closes, the roster reloads, and the roster selection is left as it was — FR-041's "select
+  the first added one" has no referent.
+- **Retry** after a confirm whose write did land but whose response was lost is safe: the bulk add
+  is idempotent, so the retry reports those products `unchanged` and writes no audit entry
+  (FR-045).
+- The confirm and **Retry** actions are disabled while the bulk-add request is in flight, so one
+  click sends one request.
 
 ## Out of Scope
 
@@ -679,7 +726,7 @@ Answers given by the product owner.
 - Q: Order lines that order creation would refuse — the customer may not see the product, or it is
   outside the order's channel assortment — are priced by the preview and refused only at submit.
   Leave as today, mark them in the picker, or have the preview report them? → A: The preview reports
-  such lines as unavailable with a reason (an additive message code), so the line is marked and
+  such lines as unavailable with a reason (an additive message code (refined below: two codes)), so the line is marked and
   submit is blocked before sending — the same path as **No price**. The check uses the order's chosen
   sales channel. The plan must justify the distinct code against `isProductVisibleTo`'s single-answer
   rule (the preview is admin-only) (FR-024, FR-027, US1 scenarios 6, 11, 12, SC-008). The create
@@ -696,3 +743,12 @@ Answers given by the product owner.
   server (error, nothing added). Default is the system fallback whose roster is seeded from the
   product's `defaultPrice` and is read-only in the admin by design. The existing single
   `POST …/products` is unchanged (FR-044, FR-045, US4 scenario 10, *Out of Scope*).
+- Q: A preview line failing both new checks — the customer cannot see the product **and** it is
+  outside the chosen sales channel's assortment — carries which message? → A: One message per line;
+  the visibility reason takes precedence, and the assortment reason is reported only for a product
+  the customer can see. One message per line keeps the contract and the tests deterministic
+  (FR-024, FR-027, US1 scenario 13).
+- Q: What does the picker do when a price-list bulk-add confirm fails as a whole (list deleted
+  meanwhile, network error, 4xx/5xx)? → A: The picker stays open, the selection is kept, and an
+  error message is shown in the picker with a **Retry** action; nothing was written (FR-010,
+  FR-041, FR-043, US4 scenario 13).
