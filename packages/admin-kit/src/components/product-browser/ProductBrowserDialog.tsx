@@ -219,6 +219,12 @@ function ProductBrowserSession(props: ProductBrowserDialogProps): ReactNode {
     });
   }, [max]);
 
+  // An emptied "selected only" view has nothing to review; go back to the list
+  // rather than show the no-match sentence, which would be untrue there.
+  useEffect(() => {
+    if (view === 'selectedOnly' && selection.size === 0) setView('all');
+  }, [view, selection]);
+
   const shownRows = useMemo(
     () => (view === 'selectedOnly' ? [...selection.values()] : rows),
     [view, selection, rows],

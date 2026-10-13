@@ -269,7 +269,7 @@ describe('requests and filters (B1, B2)', () => {
     renderHarness(<Harness rules={PRICE_LIST_RULES} />);
     await openPicker(user);
 
-    await user.click(screen.getByRole('button', { name: 'Type: all' }));
+    await user.click(screen.getByRole('button', { name: 'Type' }));
     await waitFor(() =>
       expect(requestedUrls().at(-1)).toBe(`${PATH}?includeArchived=1&page=0&pageSize=10&type=simple`),
     );
@@ -279,7 +279,8 @@ describe('requests and filters (B1, B2)', () => {
       expect(screen.getByRole('button', { name: `Type: ${label}` })).toBeTruthy();
     }
     await user.click(screen.getByRole('button', { name: /^Type: / }));
-    expect(screen.getByRole('button', { name: 'Type: all' })).toBeTruthy();
+    // Unset, the chip reads as the Products list's does.
+    expect(screen.getByRole('button', { name: 'Type' })).toBeTruthy();
     await waitFor(() =>
       expect(requestedUrls().at(-1)).toBe(`${PATH}?includeArchived=1&page=0&pageSize=10`),
     );
@@ -462,6 +463,14 @@ describe('footer, cap and reasons (B6, B7, B8)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Show all products' }));
     await waitFor(() => expect(screen.getByText('Widget 01')).toBeTruthy());
+
+    // Unticking the last selected row in that view returns to the full list.
+    await user.click(screen.getByRole('button', { name: 'Show selected only' }));
+    await user.click(rowCheckbox('Widget 03'));
+    await user.click(rowCheckbox('Widget 05'));
+    await waitFor(() => expect(screen.getByText('Widget 01')).toBeTruthy());
+    expect(screen.getByRole('button', { name: 'Show selected only' })).toBeTruthy();
+    await user.click(rowCheckbox('Widget 03'));
 
     await user.click(screen.getByRole('button', { name: 'Clear selection' }));
     expect(screen.getByText('0 selected')).toBeTruthy();

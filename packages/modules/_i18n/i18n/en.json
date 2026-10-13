@@ -414,7 +414,7 @@
   "productBrowser.tab.draft": "Draft",
   "productBrowser.tab.inactive": "Inactive",
   "productBrowser.filter.type": "Type: {value}",
-  "productBrowser.filter.type.all": "Type: all",
+  "productBrowser.filter.type.all": "Type",
   "productBrowser.search.placeholder": "Search SKU, slug, name…",
   "productBrowser.column.product": "Product",
   "productBrowser.column.sku": "SKU",

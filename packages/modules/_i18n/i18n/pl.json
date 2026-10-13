@@ -414,7 +414,7 @@
   "productBrowser.tab.draft": "Robocze",
   "productBrowser.tab.inactive": "Nieaktywne",
   "productBrowser.filter.type": "Rodzaj: {value}",
-  "productBrowser.filter.type.all": "Rodzaj: wszystkie",
+  "productBrowser.filter.type.all": "Rodzaj",
   "productBrowser.search.placeholder": "Szukaj po SKU, slug, nazwie…",
   "productBrowser.column.product": "Produkt",
   "productBrowser.column.sku": "SKU",
