@@ -4591,6 +4591,15 @@
         }
       }
     },
+    "/api/v1/admin/price-lists-engine/{id}/products/bulk-add": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/price-lists-engine/{id}/products/{productId}": {
       "delete": {
         "responses": {
