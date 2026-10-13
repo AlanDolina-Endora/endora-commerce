@@ -56,6 +56,7 @@ const SUMMARY = 'orderCreate.summary.title';
 const MISSING_BOTH = 'orderCreate.gate.missingBoth';
 const MISSING_CUSTOMER = 'orderCreate.gate.missingCustomer';
 const MISSING_CHANNEL = 'orderCreate.gate.missingChannel';
+const QUICK_SEARCH = 'orderCreate.items.quickSearch';
 
 const BUNDLE = passthroughBundle('core', [
   'common.action.back',
@@ -65,6 +66,7 @@ const BUNDLE = passthroughBundle('core', [
   MISSING_BOTH,
   MISSING_CUSTOMER,
   MISSING_CHANNEL,
+  QUICK_SEARCH,
 ]);
 
 beforeEach(() => {
@@ -125,9 +127,15 @@ async function clearCombobox(label: string): Promise<void> {
   await userEvent.click(within(container).getByRole('button', { name: 'common.combobox.clearSelection' }));
 }
 
+/** Add the widget as a line through the quick search beside Browse products. */
 async function addWidget(): Promise<void> {
-  await userEvent.type(screen.getByLabelText('product-0'), 'Wid');
-  await pick('product-0', 'Widget');
+  await userEvent.type(screen.getByLabelText(QUICK_SEARCH), 'Wid');
+  await pick(QUICK_SEARCH, 'Widget');
+}
+
+/** The widget's line, by its name cell. */
+function widgetLine(): HTMLElement | null {
+  return screen.queryByText('Widget', { selector: '[data-line-name]' });
 }
 
 const previewCalls = (): Array<Record<string, unknown>> =>
@@ -138,7 +146,8 @@ const previewCalls = (): Array<Record<string, unknown>> =>
 function expectGated(hint: string): void {
   expect(screen.queryByText(ITEMS)).not.toBeInTheDocument();
   expect(screen.queryByText(SUMMARY)).not.toBeInTheDocument();
-  expect(screen.queryByLabelText('product-0')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText(QUICK_SEARCH)).not.toBeInTheDocument();
+  expect(widgetLine()).not.toBeInTheDocument();
   expect(screen.getByText(hint)).toBeInTheDocument();
 }
 
@@ -196,7 +205,7 @@ describe('OrderCreatePage — Items and Order summary gated on customer and sale
         items: [{ productId: 'prod-1', quantity: 1 }],
       }),
     );
-    expect(screen.getByLabelText('product-0')).toHaveValue('Widget');
+    expect(widgetLine()).toBeInTheDocument();
   });
 
   it('hides both sections when a required field is cleared and brings the same lines back (sc. 4, FR-025)', async () => {
@@ -210,14 +219,14 @@ describe('OrderCreatePage — Items and Order summary gated on customer and sale
     await waitFor(() => expectGated(MISSING_CHANNEL));
 
     await pick('salesChannelId', 'Channel 1');
-    await waitFor(() => expect(screen.getByLabelText('product-0')).toHaveValue('Widget'));
+    await waitFor(() => expect(widgetLine()).toBeInTheDocument());
     expect(await screen.findByText(SUMMARY)).toBeInTheDocument();
   });
 
   it('shows Items at once when opened with a customer and a sales channel (sc. 5)', async () => {
     renderPage('/orders/new?customerAccountId=cust-1&salesChannelId=chan-1');
     expect(screen.getByText(ITEMS)).toBeInTheDocument();
-    expect(screen.getByLabelText('product-0')).toBeInTheDocument();
+    expect(screen.getByLabelText(QUICK_SEARCH)).toBeInTheDocument();
     expect(screen.queryByText(MISSING_BOTH)).not.toBeInTheDocument();
   });
 

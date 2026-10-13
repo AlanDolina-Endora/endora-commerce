@@ -1,16 +1,93 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Copy, Info, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, Info, Trash2 } from 'lucide-react';
+import type { AdminOrderPreviewMessageCode } from '@endora-commerce/contracts';
 import { ApiError, apiClient, useUnsavedChangesPrompt, formatMoney as formatMoneyShared } from '@endora-commerce/admin-kit/lib';
-import { Alert, AlertDescription, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Input, Label, Separator, PageHeader, Combobox } from '@endora-commerce/admin-kit/ui';
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Checkbox,
+  Input,
+  Label,
+  Separator,
+  PageHeader,
+  Combobox,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@endora-commerce/admin-kit/ui';
 import type { ComboboxOption } from '@endora-commerce/admin-kit/ui';
-import { CountrySelect, ProductPicker } from '@endora-commerce/admin-kit/components';
+import {
+  CountrySelect,
+  ProductBrowserDialog,
+  ProductBrowserTrigger,
+  ProductPicker,
+  type ProductBrowserItem,
+  type ProductBrowserRules,
+} from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { RouteTabsZone } from '@endora-commerce/admin-kit/zones';
 
+/**
+ * One order line (feature 145, FR-022). Keyed by `productId`: a product is a line
+ * at most once, which is what the picker's and the quick search's *already added*
+ * state relies on. `quantityInput` is what the operator typed — kept as text so an
+ * invalid entry stays on screen, marked, instead of being coerced away.
+ */
 interface ItemRow {
   productId: string;
-  quantity: number;
+  sku: string;
+  name: string;
+  quantityInput: string;
+}
+
+/** The order's selectability rules for the picker and the quick search (Clarifications). */
+const ORDER_PRODUCT_RULES: ProductBrowserRules = {
+  initialStatus: 'active',
+  blockedTypes: ['grouped', 'bundle'],
+  blockedStatuses: ['draft', 'inactive'],
+};
+
+/** A whole number of at least 1, or `null` when the input is not one. */
+function parseQuantity(input: string): number | null {
+  const trimmed = input.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const n = Number(trimmed);
+  return Number.isSafeInteger(n) && n >= 1 ? n : null;
+}
+
+// Members of `ADMIN_ORDER_PREVIEW_MESSAGE_PRECEDENCE`, named rather than taken by
+// position: a renamed code then fails to compile instead of remapping a reason.
+const NOT_VISIBLE_CODE: AdminOrderPreviewMessageCode = 'PRODUCT_NOT_VISIBLE_TO_CUSTOMER';
+const NOT_IN_CHANNEL_CODE: AdminOrderPreviewMessageCode = 'PRODUCT_NOT_IN_SALES_CHANNEL';
+
+/**
+ * The line reason for a preview message code
+ * (`contracts/order-preview-unavailability.md` § Consumer mapping): the two
+ * assortment/visibility codes carry their own reason; `PRODUCT_NOT_FOUND`,
+ * `QUOTE_ONLY` and any code this client does not know read **No price**.
+ */
+function unavailableReasonKey(code: string | undefined): string {
+  if (code === NOT_VISIBLE_CODE) return 'orderCreate.line.notVisible';
+  if (code === NOT_IN_CHANNEL_CODE) return 'orderCreate.line.notInChannel';
+  return 'orderCreate.line.unavailable';
+}
+
+function productLine(item: ProductBrowserItem): ItemRow {
+  return {
+    productId: item.id,
+    sku: item.sku,
+    name: pickName(item.name, item.slug),
+    quantityInput: '1',
+  };
 }
 
 interface SalesChannelSummary {
@@ -469,7 +546,9 @@ export function OrderCreatePage(): ReactNode {
   const [deliveryChoice, setDeliveryChoice] = useState<AddressChoice>({ mode: 'existing', id: '' });
   const [billingChoice, setBillingChoice] = useState<AddressChoice>({ mode: 'existing', id: '' });
   const [customerNote, setCustomerNote] = useState('');
-  const [items, setItems] = useState<ItemRow[]>([{ productId: '', quantity: 1 }]);
+  const [items, setItems] = useState<ItemRow[]>([]);
+  const [browserOpen, setBrowserOpen] = useState(false);
+  const itemsId = useId();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -491,7 +570,7 @@ export function OrderCreatePage(): ReactNode {
       customerNote !== '' ||
       addressIsDraft(deliveryChoice) ||
       addressIsDraft(billingChoice) ||
-      items.some((it) => it.productId !== '' || it.quantity !== 1));
+      items.length > 0);
   useUnsavedChangesPrompt(dirty);
 
   // Static reference lists, loaded once on mount.
@@ -608,9 +687,20 @@ export function OrderCreatePage(): ReactNode {
     };
   }, [customerAccountId, openedWith.customerAccountId, t]);
 
-  // Live pricing preview — debounced; fires whenever the priced inputs change.
+  // The lines that may be priced and sent: an invalid quantity keeps its line on
+  // screen, marked, and out of both requests (FR-022, FR-026).
+  const validItems = useMemo(
+    () =>
+      items.flatMap((it) => {
+        const quantity = parseQuantity(it.quantityInput);
+        return quantity === null ? [] : [{ productId: it.productId, quantity }];
+      }),
+    [items],
+  );
+
+  // Live pricing preview — debounced; fires whenever the priced inputs change
+  // (FR-023: lines, quantities, customer, channel, delivery and payment method).
   useEffect(() => {
-    const validItems = items.filter((it) => it.productId.trim() && it.quantity > 0);
     if (!customerAccountId || !salesChannelId || validItems.length === 0) {
       setPreview(null);
       setPreviewError(null);
@@ -626,7 +716,7 @@ export function OrderCreatePage(): ReactNode {
           salesChannelId,
           ...(deliveryMethodId ? { deliveryMethodId } : {}),
           ...(paymentMethodId ? { paymentMethodId } : {}),
-          items: validItems.map((it) => ({ productId: it.productId, quantity: it.quantity })),
+          items: validItems,
         })
         .then((res) => {
           if (alive) setPreview(res.data);
@@ -644,18 +734,36 @@ export function OrderCreatePage(): ReactNode {
       alive = false;
       clearTimeout(handle);
     };
-  }, [customerAccountId, salesChannelId, deliveryMethodId, paymentMethodId, items, t]);
+  }, [customerAccountId, salesChannelId, deliveryMethodId, paymentMethodId, validItems, t]);
 
-  const setItem = (i: number, patch: Partial<ItemRow>): void =>
-    setItems((prev) => prev.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
-  const addRow = (): void => setItems((prev) => [...prev, { productId: '', quantity: 1 }]);
-  const removeRow = (i: number): void => setItems((prev) => prev.filter((_, idx) => idx !== i));
+  /** Append products as lines, in the order given, skipping any already a line. */
+  const appendLines = (products: readonly ProductBrowserItem[]): void =>
+    setItems((prev) => {
+      const present = new Set(prev.map((row) => row.productId));
+      const added: ItemRow[] = [];
+      for (const p of products) {
+        if (present.has(p.id)) continue;
+        present.add(p.id);
+        added.push(productLine(p));
+      }
+      return added.length === 0 ? prev : [...prev, ...added];
+    });
+  const setQuantity = (productId: string, quantityInput: string): void =>
+    setItems((prev) => prev.map((row) => (row.productId === productId ? { ...row, quantityInput } : row)));
+  const removeLine = (productId: string): void =>
+    setItems((prev) => prev.filter((row) => row.productId !== productId));
+  const lineIds = items.map((row) => row.productId);
 
-  // Per-line price lookup for the items table (keyed by product + quantity;
-  // identical keys necessarily resolve to the same price).
+  // Per-line price lookup for the items table (keyed by product + quantity, so a
+  // line whose quantity just changed shows nothing until its new price arrives).
   const lineByKey = new Map<string, PreviewLine>();
   for (const line of preview?.lines ?? []) lineByKey.set(`${line.productId}:${line.quantity}`, line);
-  const hasUnavailable = (preview?.messages.length ?? 0) > 0;
+  const messageCodeByProduct = new Map<string, string>();
+  for (const m of preview?.messages ?? []) messageCodeByProduct.set(m.productId, m.code);
+  // Only a message about a line still on the form blocks submit: a removed
+  // line's message lingers until the next preview answers.
+  const hasUnavailable = items.some((row) => messageCodeByProduct.has(row.productId));
+  const allQuantitiesValid = validItems.length === items.length;
 
   const canSubmit =
     !!customerAccountId.trim() &&
@@ -664,7 +772,8 @@ export function OrderCreatePage(): ReactNode {
     !!paymentMethodId.trim() &&
     addressComplete(deliveryChoice) &&
     addressComplete(billingChoice) &&
-    items.some((it) => it.productId.trim() && it.quantity > 0) &&
+    items.length > 0 &&
+    allQuantitiesValid &&
     !hasUnavailable;
 
   const addressPayload = (
@@ -698,9 +807,7 @@ export function OrderCreatePage(): ReactNode {
         ...addressPayload(deliveryChoice, 'deliveryAddressId', 'deliveryAddress'),
         ...addressPayload(billingChoice, 'billingAddressId', 'billingAddress'),
         ...(customerNote.trim() ? { customerNote: customerNote.trim() } : {}),
-        items: items
-          .filter((it) => it.productId.trim() && it.quantity > 0)
-          .map((it) => ({ productId: it.productId.trim(), quantity: it.quantity })),
+        items: validItems,
         ...(openedWith.origin ? { origin: openedWith.origin } : {}),
       });
       setSubmitted(true);
@@ -867,64 +974,119 @@ export function OrderCreatePage(): ReactNode {
             <CardTitle>{t('orderCreate.section.items')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {items.map((row, i) => {
-              const line = row.productId ? lineByKey.get(`${row.productId}:${row.quantity}`) : undefined;
-              return (
-                <div key={i} className="flex items-end gap-3">
-                  <div className="flex-1 space-y-1">
-                    <Label htmlFor={`product-${i}`}>{t('orderCreate.field.product')}</Label>
-                    <ProductPicker
-                      mode="select"
-                      id={`product-${i}`}
-                      ariaLabel={`product-${i}`}
-                      value={row.productId === '' ? null : row.productId}
-                      onChange={(next): void => setItem(i, { productId: next ?? '' })}
-                      placeholder={t('orderCreate.placeholder.product')}
-                    />
-                  </div>
-                  <div className="w-24 space-y-1">
-                    <Label htmlFor={`qty-${i}`}>{t('orderCreate.field.quantity')}</Label>
-                    <Input
-                      id={`qty-${i}`}
-                      aria-label={`qty-${i}`}
-                      type="number"
-                      min={1}
-                      value={row.quantity}
-                      onChange={(e): void => setItem(i, { quantity: Number(e.target.value) })}
-                    />
-                  </div>
-                  <div className="w-32 pb-2 text-right text-sm">
-                    {line ? (
-                      line.unavailable ? (
-                        <span className="text-destructive">{t('orderCreate.line.unavailable')}</span>
-                      ) : (
-                        <>
-                          <div className="text-muted-foreground">
-                            {formatMoney(Number(line.unitPrice), line.currency)}
+            <div className="flex flex-wrap items-end gap-3">
+              <ProductBrowserTrigger onOpen={(): void => setBrowserOpen(true)} />
+              <div className="min-w-64 flex-1 space-y-1">
+                <Label htmlFor={`${itemsId}-quick-search`}>{t('orderCreate.items.quickSearch')}</Label>
+                <ProductPicker
+                  mode="select"
+                  id={`${itemsId}-quick-search`}
+                  ariaLabel={t('orderCreate.items.quickSearch')}
+                  value={null}
+                  onChange={(): void => {}}
+                  onPickProduct={(item): void => appendLines([item])}
+                  rules={ORDER_PRODUCT_RULES}
+                  alreadyAddedIds={lineIds}
+                  includeArchived
+                  placeholder={t('orderCreate.placeholder.product')}
+                />
+              </div>
+            </div>
+            <ProductBrowserDialog
+              open={browserOpen}
+              title={t('orderCreate.items.browse')}
+              rules={ORDER_PRODUCT_RULES}
+              alreadyAddedIds={lineIds}
+              onConfirm={(picked): void => {
+                appendLines(picked);
+                setBrowserOpen(false);
+              }}
+              onCancel={(): void => setBrowserOpen(false)}
+            />
+
+            {items.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t('orderCreate.items.empty')}</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t('orderCreate.field.product')}</TableHead>
+                    <TableHead id={`${itemsId}-qty`} className="w-28">
+                      {t('orderCreate.field.quantity')}
+                    </TableHead>
+                    <TableHead className="text-right">{t('orderCreate.line.unitPrice')}</TableHead>
+                    <TableHead className="text-right">{t('orderCreate.line.lineTotal')}</TableHead>
+                    <TableHead className="w-12">
+                      <span className="sr-only">{t('common.action.delete')}</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((row) => {
+                    const quantity = parseQuantity(row.quantityInput);
+                    const line = quantity === null ? undefined : lineByKey.get(`${row.productId}:${quantity}`);
+                    const rowId = `${itemsId}-${row.productId}`;
+                    const reason =
+                      quantity === null
+                        ? t('orderCreate.line.quantityInvalid')
+                        : line?.unavailable
+                          ? t(unavailableReasonKey(messageCodeByProduct.get(row.productId)))
+                          : null;
+                    return (
+                      <TableRow key={row.productId}>
+                        <TableCell>
+                          <div id={`${rowId}-name`} data-line-name className="font-medium">
+                            {row.name}
                           </div>
-                          <div className="font-medium">
-                            {formatMoney(line.lineTotal, line.currency)}
-                          </div>
-                        </>
-                      )
-                    ) : null}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`remove-item-${i}`}
-                    disabled={items.length === 1}
-                    onClick={(): void => removeRow(i)}
-                  >
-                    <Trash2 />
-                  </Button>
-                </div>
-              );
-            })}
-            <Button variant="outline" size="sm" onClick={addRow}>
-              <Plus />
-              {t('orderCreate.addItem')}
-            </Button>
+                          <div className="font-mono text-xs text-muted-foreground">{row.sku}</div>
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            id={`${rowId}-qty`}
+                            type="text"
+                            inputMode="numeric"
+                            aria-labelledby={`${itemsId}-qty ${rowId}-name`}
+                            aria-invalid={quantity === null || undefined}
+                            aria-describedby={reason !== null ? `${rowId}-reason` : undefined}
+                            value={row.quantityInput}
+                            onChange={(e): void => setQuantity(row.productId, e.target.value)}
+                          />
+                        </TableCell>
+                        {reason !== null ? (
+                          <TableCell colSpan={2} className="text-right">
+                            <span id={`${rowId}-reason`} className="text-sm text-destructive">
+                              {reason}
+                            </span>
+                          </TableCell>
+                        ) : (
+                          <>
+                            <TableCell className="text-right text-muted-foreground">
+                              {line ? formatMoney(Number(line.unitPrice), line.currency) : null}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {line ? formatMoney(line.lineTotal, line.currency) : null}
+                            </TableCell>
+                          </>
+                        )}
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-labelledby={`${rowId}-remove ${rowId}-name`}
+                            onClick={(): void => removeLine(row.productId)}
+                          >
+                            <Trash2 aria-hidden="true" />
+                            <span id={`${rowId}-remove`} className="sr-only">
+                              {t('common.action.delete')}
+                            </span>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       ) : null}
