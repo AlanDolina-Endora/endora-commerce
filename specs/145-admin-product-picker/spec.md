@@ -2,7 +2,7 @@
 
 **Feature Branch**: `feat/145-admin-product-picker` (spec directory `specs/145-admin-product-picker/`)
 **Created**: 2026-10-13
-**Status**: Clarified — ready for plan (clarify session 2026-10-13, fourteen answers; a final clarify pass on 2026-10-13 raised no further question)
+**Status**: Clarified and planned (clarify session 2026-10-13, fourteen answers; a final clarify pass on 2026-10-13 raised no further question; `plan.md` and `tasks.md` written 2026-10-13, analyze pending resolution)
 **Issues**: #280, #281, #282, #291
 **Input**: Product owner's request, summarised in English. Three admin screens that put products
 onto a document — **Create order** (`/orders/new`), **Create quote request**
@@ -58,7 +58,9 @@ touches these screens (per-channel delivery and payment methods, 0.105.0) is ref
   "select" | "multiselect"`) over the same list endpoint: page 0 only, 20 results, search only, no
   filters, no table, no pagination. It omits `includeArchived` by default, so inactive products are
   not offered; drafts are, with a `· draft` suffix. It accepts `excludeIds`. Its strings are
-  `productPicker.*` in `core`. Used by both create screens below (and by `seo`).
+  `productPicker.*` in `core`. Used by both create screens below, and also by `seo`
+  (`SeoPage.tsx`), the quote-request detail screen (`RfqDetail.tsx`) and the catalog product editor
+  (`ProductEditor.tsx`).
 
 ### Create quote request (`/quote-requests/new`)
 
