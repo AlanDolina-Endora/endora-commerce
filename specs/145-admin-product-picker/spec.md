@@ -2,7 +2,7 @@
 
 **Feature Branch**: `feat/145-admin-product-picker` (spec directory `specs/145-admin-product-picker/`)
 **Created**: 2026-10-13
-**Status**: Draft — one clarify session held 2026-10-13; clarify pending, 2 open questions (see *Open questions*)
+**Status**: Draft — clarify session 2026-10-13 (nine answers); a further clarify pass (2026-10-13) raised 3 questions, pending with the product owner
 **Input**: Product owner's request, summarised in English. Three admin screens that put products
 onto a document — **Create order** (`/orders/new`), **Create quote request**
 (`/quote-requests/new`) and a price list's **Products & brackets** tab (`/price-lists/:id`) — make
@@ -118,10 +118,13 @@ touches these screens (per-channel delivery and payment methods, 0.105.0) is ref
   variantId?, quantity}` (`adminCreateOrderRequestSchema`); the page never sends `variantId`.
 - The order is created by filling the customer's cart line by line
   (`order-creation-admin-service.ts` → `CartService.addItem`), which refuses a product the customer
-  may not see (`isProductVisibleTo`: `allowedOrganizationIds`, `organization_restricted`,
-  `logged_in_only`) or one outside the **request's** sales channel (`outOfRequestChannel`) with
-  `404 PRODUCT_NOT_FOUND`. The preview runs neither check. Nothing on the server refuses a product
-  for its status or type.
+  may not see (`isProductVisibleTo` with the customer's organization and `authenticated: true`, so
+  `allowedOrganizationIds` not naming that organization and `organization_restricted` refuse, while
+  `logged_in_only` passes) or one outside the **request's** sales channel (`outOfRequestChannel`)
+  with `404 PRODUCT_NOT_FOUND` — one answer for all three causes, by the enumeration-oracle ruling in
+  `isProductVisibleTo`'s documentation (`packages/contracts/src/catalog.ts`) and at the call site
+  (`packages/modules/carts/src/backend/services/cart-service.ts`). The preview runs neither check.
+  Nothing on the server refuses a product for its status or type.
 
 ### Price list — Products & brackets (`/price-lists/:id`)
 
@@ -185,11 +188,12 @@ order summary.
    (which may change with quantity brackets), line total and the summary update.
 5. **Given** a product is already a line, **When** the picker is opened again, **Then** that
    product's row is shown as already added and cannot be selected again.
-6. **Given** a selected product the pricing preview reports as unavailable (product not found, or
-   quote-only for this customer and channel), **When** it is added, **Then** its line shows
-   **No price** and the order cannot be submitted until that line is removed. (A product with no
-   applicable price list is priced from its catalogue default price, possibly 0.00, as today; it is
-   not "No price".)
+6. **Given** a selected product the pricing preview reports as unavailable (product not found,
+   quote-only for this customer and channel, not visible to the chosen customer, or outside the
+   order's chosen sales channel's assortment — FR-024, FR-027), **When** it is added, **Then** its
+   line is marked unavailable with the reason and the order cannot be submitted until that line is
+   removed. (A product with no applicable price list is priced from its catalogue default price,
+   possibly 0.00, as today; it is not "No price".)
 7. **Given** the picker opens on the order screen, **When** it loads, **Then** the Active tab is
    selected, and grouped/bundle parents and draft/inactive products are shown with a reason and
    cannot be ticked.
@@ -199,6 +203,15 @@ order summary.
    checkbox is unavailable and the picker says the per-Add limit of 200 is reached.
 10. **Given** the rep cancels the picker, **When** it closes, **Then** no lines are added and the
     existing lines are unchanged.
+11. **Given** a product whose `allowedOrganizationIds` does not name the chosen customer's
+    organization, **When** the rep adds it (through the picker or the quick search — neither greys
+    it out), **Then** the preview reports that line as unavailable with the visibility reason, the
+    line is marked with that reason instead of a price, and submit is disabled until the line is
+    removed; the order's other lines keep their prices.
+12. **Given** a line marked unavailable because the product is not in the order's chosen sales
+    channel's assortment, **When** the rep switches the order to a sales channel whose assortment
+    includes it, **Then** the re-priced preview no longer marks the line, it shows unit price and
+    line total, and it no longer blocks submit.
 
 ---
 
@@ -287,8 +300,10 @@ present products changed their brackets.
 3. **Given** 30 products are selected, **When** the admin confirms "Add 30", **Then** all 30 join
    the roster without prices, the picker closes and the first added product is selected in the
    roster with its bracket editor open.
-4. **Given** some products could not be added (e.g. deleted meanwhile), **When** the add finishes,
-   **Then** the successful ones are on the roster and a message names the ones that failed.
+4. **Given** 30 products are selected and 2 of them are deleted from the catalog before the admin
+   confirms, **When** the admin confirms "Add 30", **Then** one bulk-add request is sent, its
+   response reports 28 `added` and 2 `failed` with a reason, the 28 are on the roster, and a message
+   names the 2 failed products and the reason (FR-043, FR-045).
 5. **Given** products already on the list have brackets, **When** new products are added, **Then**
    those existing brackets are unchanged.
 6. **Given** the system (Default) price list, **When** the tab is shown, **Then** **Add** stays
@@ -296,6 +311,12 @@ present products changed their brackets.
 7. **Given** a price list whose roster holds products older than the catalog's newest 20, **When**
    the tab loads, **Then** every roster row shows its name and SKU and selecting it opens the
    bracket editor.
+8. **Given** another admin added one of the selected products to the same price list after the
+   picker was opened, **When** the admin confirms the Add, **Then** that product is reported
+   `unchanged` (not a failure, no error shown for it), its brackets are untouched, and the others
+   are `added`.
+9. **Given** a bulk add of N products of which at least one is new to the list, **When** it
+   completes, **Then** exactly one audit entry records the write, through the Command Bus (FR-045).
 
 ---
 
@@ -312,16 +333,25 @@ present products changed their brackets.
 - **Product removed or deactivated between selection and Add**: order / quote request — the line is
   added and then priced by the existing pricing (a removed product shows as unavailable on the
   order; a deactivated one is priced as today and the create endpoint's existing rules apply; on the
-  quote request its price may stay empty). Price list — a product the server refuses is reported as
-  a failed add (FR-043).
+  quote request its price may stay empty). Price list — a product the bulk-add endpoint cannot add is
+  reported in the response's `failed` entries with a reason, and the others are still added
+  (FR-043, FR-045).
+- **Product added to the price list by someone else meanwhile**: reported `unchanged`, not failed;
+  its brackets are untouched.
 - **Non-purchasable products (grouped/bundle parents, draft, inactive)**: shown with a reason and not
   selectable where FR-012 says so; the quick search applies the same rules. These are rules of the
   admin screens; the server does not refuse these products today and this feature does not add such
   a refusal.
-- **Product the customer may not see, or outside the channel's assortment (orders)**: the preview
-  prices it, and order creation refuses it with "Product not found." (existing behaviour, see
-  *What the product does today*). Whether this feature closes that gap is open — see *Open
-  questions*.
+- **Product the customer may not see, or outside the channel's assortment (orders)**: the picker and
+  the quick search still offer it (no greying out); once added, the preview reports the line as
+  unavailable with the reason, evaluated against the chosen customer's organization and the
+  **order's chosen** sales channel, and submit is blocked until the line is removed or the customer
+  or channel changes so that the line is available (FR-024, FR-027). Known residue until the
+  separate create-path fix lands (see *Out of Scope*): when the order's chosen channel differs from
+  the admin request's channel, a line the preview accepts can still be refused at create with
+  "Product not found.", and the reverse.
+- **Quote requests**: no visibility or assortment check is added; `RfqAdminService.createOnBehalf`
+  is exempt by ruling (see *What the product does today*).
 - **No price for the customer**: the order line shows **No price** and blocks submit only when the
   preview marks it unavailable (FR-024); otherwise the catalogue default price applies, as today,
   including 0.00. The quote-request line keeps an empty agreed price for manual entry.
@@ -419,13 +449,29 @@ present products changed their brackets.
 - **FR-023**: Line prices and the summary MUST be recalculated whenever lines, quantities, customer,
   sales channel, delivery or payment method change, using the same pricing the order will be created
   with.
-- **FR-024**: A line the pricing preview reports as unavailable (today: product not found or
-  quote-only) MUST be marked **No price** and MUST block submit (existing rule, kept; a product
-  without an applicable price list keeps today's catalogue-default pricing, possibly 0.00).
+- **FR-024**: A line the pricing preview reports as unavailable MUST be marked and MUST block submit
+  (existing rule, kept and extended). The causes are: product not found and quote-only (today,
+  marked **No price**), and — new, FR-027 — not visible to the chosen customer and outside the
+  order's chosen sales channel's assortment, each marked with its reason instead of **No price**. A
+  product without an applicable price list keeps today's catalogue-default pricing, possibly 0.00,
+  and is not unavailable.
 - **FR-025**: Hiding the sections because a gating field is cleared MUST NOT discard the lines
   already added.
 - **FR-026**: The created order MUST contain exactly the visible lines and quantities; the submitted
   payload shape is unchanged.
+- **FR-027**: The order pricing preview (`POST /api/v1/admin/orders/preview`) MUST, per line, check
+  (a) whether the product is visible to the chosen customer — the same `isProductVisibleTo` answer
+  order creation applies, i.e. the customer's organization with `authenticated: true` — and (b)
+  whether the product is in the assortment of the **order's chosen sales channel** (the request
+  body's `salesChannelId`, not the channel the admin request was resolved on). A line failing either
+  check MUST be returned with `unavailable: true` and a `messages` entry carrying a new message code
+  distinct from `PRODUCT_NOT_FOUND`. The change is additive to `adminOrderPreviewResponseSchema`
+  (`packages/contracts/src/orders.ts`): no field removed or retyped, the request schema unchanged.
+  The plan MUST justify the distinct code against the single-answer (enumeration-oracle) rule
+  documented on `isProductVisibleTo`, on the ground that the preview is an admin-only surface gated
+  `orders:write`, and MUST record that justification where the rule is documented. The picker and
+  the quick search MUST NOT pre-filter or grey out such products (the answer chose preview marking,
+  not picker marking).
 
 **Create quote request**
 
@@ -449,16 +495,27 @@ present products changed their brackets.
 
 - **FR-040**: **Add** MUST open the product picker over the whole catalog (FR-004) instead of the
   current single-product drawer.
-- **FR-041**: Confirming MUST add every selected product to the price list without prices; the
-  roster MUST then show every product on the list (newly added and pre-existing, regardless of
-  catalog size) by name and SKU, MUST open the bracket editor for any roster product selected, and
-  MUST select the first added one.
+- **FR-041**: Confirming MUST add every selected product to the price list without prices, in one
+  request to the bulk-add endpoint (FR-045); the roster MUST then show every product on the list
+  (newly added and pre-existing, regardless of catalog size) by name and SKU, MUST open the bracket
+  editor for any roster product selected, and MUST select the first added one.
 - **FR-042**: Adding products MUST NOT change, remove or reset any product or bracket already on the
   price list.
-- **FR-043**: If some products fail to add, the others MUST still be added and a message MUST name
-  the failed products and the reason.
+- **FR-043**: Partial failure is a server contract: a product that cannot be added MUST NOT prevent
+  the others in the same request from being added. The bulk-add response MUST report every requested
+  product in exactly one of `added`, `unchanged` (already on the list) or `failed` (with a reason
+  code); the screen MUST name each failed product with its translated reason (FR-014), and MUST NOT
+  treat `unchanged` as a failure.
 - **FR-044**: **Add** MUST stay disabled on the system price list (as today) and MUST be disabled for
   users without `price_lists:write` (a new client-side gate; the server already refuses the write).
+- **FR-045**: `price_lists` MUST gain an additive bulk-add endpoint that appends a set of products
+  to a price list's roster without prices: at most 200 product ids per request (the FR-008 cap),
+  gated `price_lists:write`, its request and response shapes defined as Zod schemas in
+  `packages/contracts/` before implementation (Constitution II). The write MUST run as one audited
+  command through the Command Bus (Constitution XIII), producing one audit entry for the request
+  rather than one per product — and none when nothing was added, as the single add skips its audit
+  entry today on a no-op (`price-list-service.ts`, `addProduct`). The existing single `POST …/products` and the delta-replace
+  `PUT …/products` keep their current behaviour.
 
 ### Key Entities
 
@@ -467,6 +524,10 @@ present products changed their brackets.
 - **Picker selection**: the transient set of product ids chosen in one picker session; never stored.
 - **Order line / quote-request line / price-list roster entry**: the existing host records the
   selection is turned into; shapes unchanged.
+- **Bulk-add result**: the per-product outcome of one price-list bulk add — `added`, `unchanged` or
+  `failed` with a reason code; returned to the client, not stored beyond the audit entry.
+- **Preview unavailability reason**: the message code the order preview attaches to an unavailable
+  line; the existing `PRODUCT_NOT_FOUND` and `QUOTE_ONLY` plus the new code(s) of FR-027.
 
 ## Success Criteria *(mandatory)*
 
@@ -487,6 +548,12 @@ present products changed their brackets.
 - **SC-006**: Orders and quote requests created through the new flow are accepted by the existing
   create endpoints with no payload changes; price-list brackets of pre-existing roster products are
   byte-for-byte unchanged after a bulk add.
+- **SC-007**: A price-list Add of 200 products issues exactly one write request and produces exactly
+  one audit entry (none when every product was already on the list).
+- **SC-008**: For a given customer and sales channel, every order line that order creation would
+  refuse as not visible to the customer is marked unavailable by the preview before submit; the same
+  holds for assortment once the separate create-path fix (see *Out of Scope*) aligns the create
+  check with the order's sales channel.
 
 ## Assumptions
 
@@ -497,8 +564,10 @@ present products changed their brackets.
 - `simple`, `virtual` and `configurable` products are selectable on orders and quote requests
   (subject to the status rules in FR-012); a `configurable` product is added without a variant, as
   today.
-- FR-012 and FR-009 are rules of the admin screens. The order, preview and quote-request endpoints
-  keep accepting what they accept today.
+- FR-012 and FR-009 are rules of the admin screens. The order-create and quote-request endpoints keep
+  accepting what they accept today, and no endpoint's request payload changes. The feature makes
+  exactly two additive server changes: the price-list bulk-add endpoint (FR-045) and the preview's
+  new unavailability check and message code (FR-027).
 - The picker sorts like the Products list (newest first); no column sorting is added.
 - The picker opens as an overlay (dialog or side panel) above the host screen; the exact pattern is a
   design decision constrained by FR-001…FR-011 and the admin design system.
@@ -515,8 +584,8 @@ present products changed their brackets.
 - **Line items** on the quote-request screen stays visible before a customer is chosen (no gating
   was asked for there); prices are filled once a customer with an organization is chosen (FR-032).
 - The existing read endpoints are expected to suffice for the picker and the roster (the list
-  endpoint for browsing, `batch-by-id` for names of products already on a host). Whether the
-  price-list bulk add needs a new write endpoint is an open question, not a given.
+  endpoint for browsing, `batch-by-id` for names of products already on a host). The one new write
+  endpoint is the price-list bulk add (FR-045), gated by the existing `price_lists:write`.
 - The **Quick order** tab (`quick_order`, `/orders/quick-order`) is unchanged.
 
 ## Out of Scope
@@ -529,7 +598,17 @@ present products changed their brackets.
   English labels.
 - Line notes, packaging units, or discounts on quote-request lines.
 - Any change to the request payloads of the order and quote-request create endpoints (SC-006). The
-  preview response is the subject of open question 2.
+  preview response changes only additively (FR-027).
+- **Separate fix, after this feature**: admin order creation checks channel assortment against the
+  sales channel the admin request was resolved on (`outOfRequestChannel` in `CartService.addItem`)
+  instead of the order's `salesChannelId`. This feature does not change the create path; the preview
+  check of FR-027 already uses the order's chosen channel.
+- Greying out or filtering, in the picker or the quick search, products the chosen customer may not
+  see or that are outside the channel's assortment (FR-027 marks them on the line instead).
+- Server-side refusal of products for their status or type (FR-012 stays a rule of the admin
+  screens).
+- Visibility or assortment checks on quote-request creation (`createOnBehalf` stays exempt by
+  ruling).
 
 ## Clarifications
 
@@ -552,22 +631,17 @@ Answers given by the product owner.
   flagged? → A: No; it keeps today's behaviour and no new block is added (FR-024).
 - Q: Is the price-list defect — **Add** and the roster seeing only the newest 20 products — in scope?
   → A: Yes; fix it (FR-040, FR-041, SC-003).
-
-## Open questions
-
-Raised by re-deriving the current state on 0.106.0; not answered by the session above. To be put to
-the product owner before `/speckit.plan`.
-
-1. **Price-list bulk add — write path.** With up to 200 products per Add (FR-008), should the page
-   call the existing single-product `POST …/products` once per product (no backend change; up to 200
-   requests and 200 `price_list.product_add` audit entries; per-product failures fall out naturally
-   for FR-043), or should `price_lists` gain an additive bulk-append endpoint (one request, one
-   audited write; the partial-success semantics FR-043 needs must be defined)? `PUT …/products` is
-   not usable, because it removes every roster entry absent from the body.
-2. **Order lines the create will refuse.** Order creation refuses a product the chosen customer may
-   not see (organization restriction, `logged_in_only`) or that is outside the request's sales
-   channel, but the preview prices it, so the rep learns only at submit ("Product not found."). Should
-   this feature (a) leave it as today, (b) have the order picker and quick search show such products
-   as not selectable with a reason (organization restriction is decidable from the list row;
-   channel assortment is not), or (c) have the preview report them as unavailable with an additive
-   `messages` code, so FR-024 marks the line before submit?
+- Q: How is a bulk add of up to 200 products to a price list written — one existing single-product
+  `POST …/products` call per product, or a new bulk-add endpoint? → A: A new bulk-add endpoint in
+  `price_lists`: one request, one audited write through the Command Bus, the response reporting
+  `added` / `unchanged` / `failed` per product; FR-043's partial failure becomes a server contract
+  (FR-041, FR-043, FR-045, US4 scenarios 4, 8, 9, SC-007). The earlier "no backend change" premise
+  is withdrawn.
+- Q: Order lines that order creation would refuse — the customer may not see the product, or it is
+  outside the order's channel assortment — are priced by the preview and refused only at submit.
+  Leave as today, mark them in the picker, or have the preview report them? → A: The preview reports
+  such lines as unavailable with a reason (an additive message code), so the line is marked and
+  submit is blocked before sending — the same path as **No price**. The check uses the order's chosen
+  sales channel. The plan must justify the distinct code against `isProductVisibleTo`'s single-answer
+  rule (the preview is admin-only) (FR-024, FR-027, US1 scenarios 6, 11, 12, SC-008). The create
+  path's request-channel assortment check is a separate fix, not this feature (*Out of Scope*).
