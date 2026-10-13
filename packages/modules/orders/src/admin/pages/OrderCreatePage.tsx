@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Copy, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, Info, Plus, Trash2 } from 'lucide-react';
 import { ApiError, apiClient, useUnsavedChangesPrompt, formatMoney as formatMoneyShared } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Input, Label, Separator, PageHeader, Combobox } from '@endora-commerce/admin-kit/ui';
 import type { ComboboxOption } from '@endora-commerce/admin-kit/ui';
@@ -480,7 +480,8 @@ export function OrderCreatePage(): ReactNode {
   const addressIsDraft = (c: AddressChoice): boolean =>
     addressHasContent(c) && !(c.mode === 'existing' && c.id === arrivedAddressId.current);
 
-  // Warn before leaving with a partially-filled order draft.
+  // Warn before leaving with a partially-filled order draft. The lines count
+  // whether or not **Items** is shown: hiding it (FR-025) keeps them.
   const dirty =
     !submitted &&
     (customerAccountId !== openedWith.customerAccountId ||
@@ -743,6 +744,17 @@ export function OrderCreatePage(): ReactNode {
       ? t('orderCreate.loading')
       : t('orderCreate.address.none');
 
+  // Items and Order summary need the two inputs pricing needs (FR-021);
+  // payment, delivery and addresses do not gate them.
+  const canPrice = customerAccountId !== '' && salesChannelId !== '';
+  const gateHint = canPrice
+    ? null
+    : customerAccountId === '' && salesChannelId === ''
+      ? t('orderCreate.gate.missingBoth')
+      : customerAccountId === ''
+        ? t('orderCreate.gate.missingCustomer')
+        : t('orderCreate.gate.missingChannel');
+
   const summaryRow = (label: string, value: number, currency: string, strong = false): ReactNode => (
     <div className={`flex justify-between text-sm ${strong ? 'font-semibold' : ''}`}>
       <span className={strong ? '' : 'text-muted-foreground'}>{label}</span>
@@ -840,73 +852,84 @@ export function OrderCreatePage(): ReactNode {
         </CardContent>
       </Card>
 
-      <Card className="mb-4">
-        <CardHeader>
-          <CardTitle>{t('orderCreate.section.items')}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {items.map((row, i) => {
-            const line = row.productId ? lineByKey.get(`${row.productId}:${row.quantity}`) : undefined;
-            return (
-              <div key={i} className="flex items-end gap-3">
-                <div className="flex-1 space-y-1">
-                  <Label htmlFor={`product-${i}`}>{t('orderCreate.field.product')}</Label>
-                  <ProductPicker
-                    mode="select"
-                    id={`product-${i}`}
-                    ariaLabel={`product-${i}`}
-                    value={row.productId === '' ? null : row.productId}
-                    onChange={(next): void => setItem(i, { productId: next ?? '' })}
-                    placeholder={t('orderCreate.placeholder.product')}
-                  />
-                </div>
-                <div className="w-24 space-y-1">
-                  <Label htmlFor={`qty-${i}`}>{t('orderCreate.field.quantity')}</Label>
-                  <Input
-                    id={`qty-${i}`}
-                    aria-label={`qty-${i}`}
-                    type="number"
-                    min={1}
-                    value={row.quantity}
-                    onChange={(e): void => setItem(i, { quantity: Number(e.target.value) })}
-                  />
-                </div>
-                <div className="w-32 pb-2 text-right text-sm">
-                  {line ? (
-                    line.unavailable ? (
-                      <span className="text-destructive">{t('orderCreate.line.unavailable')}</span>
-                    ) : (
-                      <>
-                        <div className="text-muted-foreground">
-                          {formatMoney(Number(line.unitPrice), line.currency)}
-                        </div>
-                        <div className="font-medium">
-                          {formatMoney(line.lineTotal, line.currency)}
-                        </div>
-                      </>
-                    )
-                  ) : null}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label={`remove-item-${i}`}
-                  disabled={items.length === 1}
-                  onClick={(): void => removeRow(i)}
-                >
-                  <Trash2 />
-                </Button>
-              </div>
-            );
-          })}
-          <Button variant="outline" size="sm" onClick={addRow}>
-            <Plus />
-            {t('orderCreate.addItem')}
-          </Button>
-        </CardContent>
-      </Card>
+      {gateHint ? (
+        <Card className="mb-4">
+          <CardContent className="flex items-center gap-2 pt-6 text-sm text-muted-foreground">
+            <Info className="size-4 shrink-0" aria-hidden="true" />
+            <p>{gateHint}</p>
+          </CardContent>
+        </Card>
+      ) : null}
 
-      {preview ? (
+      {canPrice ? (
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle>{t('orderCreate.section.items')}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {items.map((row, i) => {
+              const line = row.productId ? lineByKey.get(`${row.productId}:${row.quantity}`) : undefined;
+              return (
+                <div key={i} className="flex items-end gap-3">
+                  <div className="flex-1 space-y-1">
+                    <Label htmlFor={`product-${i}`}>{t('orderCreate.field.product')}</Label>
+                    <ProductPicker
+                      mode="select"
+                      id={`product-${i}`}
+                      ariaLabel={`product-${i}`}
+                      value={row.productId === '' ? null : row.productId}
+                      onChange={(next): void => setItem(i, { productId: next ?? '' })}
+                      placeholder={t('orderCreate.placeholder.product')}
+                    />
+                  </div>
+                  <div className="w-24 space-y-1">
+                    <Label htmlFor={`qty-${i}`}>{t('orderCreate.field.quantity')}</Label>
+                    <Input
+                      id={`qty-${i}`}
+                      aria-label={`qty-${i}`}
+                      type="number"
+                      min={1}
+                      value={row.quantity}
+                      onChange={(e): void => setItem(i, { quantity: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="w-32 pb-2 text-right text-sm">
+                    {line ? (
+                      line.unavailable ? (
+                        <span className="text-destructive">{t('orderCreate.line.unavailable')}</span>
+                      ) : (
+                        <>
+                          <div className="text-muted-foreground">
+                            {formatMoney(Number(line.unitPrice), line.currency)}
+                          </div>
+                          <div className="font-medium">
+                            {formatMoney(line.lineTotal, line.currency)}
+                          </div>
+                        </>
+                      )
+                    ) : null}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`remove-item-${i}`}
+                    disabled={items.length === 1}
+                    onClick={(): void => removeRow(i)}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+              );
+            })}
+            <Button variant="outline" size="sm" onClick={addRow}>
+              <Plus />
+              {t('orderCreate.addItem')}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {canPrice && preview ? (
         <Card className="mb-4">
           <CardHeader>
             <CardTitle>{t('orderCreate.summary.title')}</CardTitle>
