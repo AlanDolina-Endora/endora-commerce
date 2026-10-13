@@ -316,6 +316,41 @@ w całości; ścisłe schematy to `QUOTE_REQUEST_WEBHOOK_EVENT_SCHEMAS` w `@endo
 Żadne inne zdarzenie zapytań ofertowych nie jest dostarczane do webhooków: zatwierdzenie, zmiana,
 anulowanie i zamiana na zamówienie są ogłaszane wyłącznie na działającej w procesie szynie zdarzeń.
 
+## Pozycje na ekranie tworzenia zapytania ofertowego
+
+Ekran panelu administracyjnego, na którym tworzy się zapytanie ofertowe w imieniu klienta
+(`/quote-requests/new`, wysyłany jako `POST /api/v1/admin/quote-requests`), dodaje produkty na dwa
+sposoby:
+
+- **Przeglądaj produkty** otwiera wspólną przeglądarkę produktów panelu administracyjnego na
+  zakładce **Aktywne**: katalog podzielony na strony, z zakładkami statusów i ich licznikami,
+  filtrem typu i wyszukiwaniem po SKU, slugu lub nazwie. Zaznaczenie przetrwa zmianę strony,
+  rozmiaru strony i filtrów, a **Dodaj N** dodaje każdy zaznaczony produkt jako pozycję o ilości 1
+  — najwyżej 200 naraz. Produkty robocze i nieaktywne można dodać; produkty nadrzędne typu grouped
+  i bundle są widoczne z powodem i nie da się ich zaznaczyć; produkt, który już jest w zapytaniu,
+  jest oznaczony jako już dodany. Bez uprawnienia `catalog:read` przycisk jest nieaktywny i
+  pokazuje podpowiedź.
+- **Szybkie dodawanie po nazwie lub SKU**, obok, dopisuje jeden produkt według tych samych zasad.
+
+Każda pozycja pokazuje nazwę i SKU produktu, edytowalną ilość (liczbę całkowitą), edytowalną
+uzgodnioną cenę jednostkową i akcję usunięcia.
+
+**Uzgodniona cena jednostkowa jest wstępnie wypełniana z cenników klienta** przez
+`GET /api/v1/admin/products/:id/resolved-price` dla wybranego klienta i ilości w pozycji, przy
+najwyżej czterech żądaniach naraz. Cena jest wypełniana dopiero po wybraniu klienta z organizacją —
+pozycje dodane wcześniej są wtedy uzupełniane — a odpowiedź jest stosowana tylko wtedy, gdy nadal
+pasuje do produktu, ilości i klienta pozycji. Gdy żadna cena nie zostanie wyznaczona, pole zostaje
+puste. **Cena wpisana ręcznie nigdy nie jest nadpisywana**: zmiana ilości jej nie zmienia. Zmiana
+klienta czyści każdą cenę, która nie została wpisana ręcznie, i wyznacza ją ponownie dla nowego
+klienta, więc taka cena może stać się pusta.
+
+**Niekompletna pozycja blokuje zapytanie zamiast z niego znikać.** Pozycja bez uzgodnionej ceny
+albo z ilością, która nie jest liczbą całkowitą równą 1 lub większą, jest oznaczona, a **Utwórz
+zapytanie ofertowe** pozostaje nieaktywne, dopóki nie zostanie poprawiona albo usunięta; wysyłana
+jest każda pozycja widoczna na ekranie. Suma bieżąca liczy pozycje, które mają i poprawną ilość, i
+cenę. Klient bez organizacji nadal wywołuje dotychczasowe ostrzeżenie, bo zapytanie ofertowe jej
+wymaga.
+
 ## Panele na ekranie zapytania ofertowego
 
 Strefa panelu administracyjnego `quote_request.detail.after` jest osadzona raz, na końcu ekranu

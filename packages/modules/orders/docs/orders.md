@@ -358,6 +358,56 @@ that fails announces nothing.
 - **Reorder** — `…/:id/reorder` rebuilds the cart (gated by
   `orders.reorder_enabled`); **clone-to-quote** — `…/:id/clone-to-quote`.
 
+### The Create order screen
+
+**Items and the order summary appear once the customer and the sales channel
+are chosen.** They are the two inputs pricing needs; the payment method, the
+delivery method and the addresses do not gate anything. Until both are set, one
+hint names what is still missing. Clearing either field hides both sections
+again without discarding the lines, which come back when the field is set. A
+screen opened with `customerAccountId` and `salesChannelId` in its query string
+shows **Items** at once.
+
+**Products are added in two ways.**
+
+- **Browse products** opens the admin's shared product browser on the
+  **Active** tab: the catalogue in pages, with status tabs and their counts, a
+  type filter and a search by SKU, slug or name. The selection survives page,
+  page-size and filter changes, and **Add N** adds every ticked product as a
+  line of quantity 1 — at most 200 in one step. Grouped and bundle parents,
+  draft and inactive products, and products already on the order are listed
+  with their reason and cannot be ticked. The button is disabled, with a hint,
+  for an operator without `catalog:read`.
+- **Quick add by name or SKU**, beside it, appends one product under the same
+  rules.
+
+Each line shows the product's name and SKU, an editable quantity, the unit
+price, the line total and a remove action. Changing a quantity, the customer,
+the sales channel, the delivery method or the payment method prices the lines
+again through `POST /api/v1/admin/orders/preview` (`orders:write`). A quantity
+that is not a whole number of 1 or more marks the line, keeps it out of the
+preview and blocks **Create order**.
+
+**A line the preview cannot price shows why, and blocks Create order until it
+is removed or the cause is fixed.** Each unavailable line carries exactly one
+code — the first that applies, in this order — and shows one reason:
+
+| Preview code | Line reason | What to change |
+| --- | --- | --- |
+| `PRODUCT_NOT_FOUND` | *No price* | The product is no longer in the catalogue: remove the line. |
+| `PRODUCT_NOT_VISIBLE_TO_CUSTOMER` | *The customer cannot see this product* | The product's visibility or its allowed organizations exclude the customer's Organization: change them on the product in the catalogue, choose another customer, or remove the line. |
+| `PRODUCT_NOT_IN_SALES_CHANNEL` | *Not in this sales channel's assortment* | Choose a sales channel whose assortment holds the product, add the product to this channel's assortment, or remove the line. |
+| `QUOTE_ONLY` | *No price* | The customer's price for the product is quote-only: remove the line, or create a quote request instead. |
+
+A code the screen does not know is shown as *No price* as well. The other lines
+keep their prices and the summary counts only the priced ones. The preview
+checks the assortment of exactly the sales channel the request names; a
+`salesChannelId` that names no channel is refused with `404 NOT_FOUND`, and the
+screen shows *Could not calculate prices* without marking any line. A
+soft-deleted product is priced as before. The order created is exactly the
+lines and quantities on screen, in the unchanged `POST /api/v1/admin/orders`
+payload.
+
 ## An order placed from an accepted quote request
 
 An order placed from the basket an accepted quote request filled records that

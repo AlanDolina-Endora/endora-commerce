@@ -342,6 +342,45 @@ modules are switched on. The payload is sent whole; the strict schemas are
 No other quote-request event is delivered to webhooks: approval, modification,
 cancellation and conversion are announced on the in-process event bus only.
 
+## Line items on the Create quote request screen
+
+The admin screen that drafts a quote request on a customer's behalf
+(`/quote-requests/new`, sent as `POST /api/v1/admin/quote-requests`) adds
+products in two ways:
+
+- **Browse products** opens the admin's shared product browser on the
+  **Active** tab: the catalogue in pages, with status tabs and their counts, a
+  type filter and a search by SKU, slug or name. The selection survives page,
+  page-size and filter changes, and **Add N** adds every ticked product as a
+  line of quantity 1 — at most 200 in one step. Draft and inactive products
+  may be added; grouped and bundle parents are listed with their reason and
+  cannot be ticked; a product already on the request is marked as already
+  added. The button is disabled, with a hint, for an operator without
+  `catalog:read`.
+- **Quick add by name or SKU**, beside it, appends one product under the same
+  rules.
+
+Each line shows the product's name and SKU, an editable whole-number quantity,
+an editable agreed unit price and a remove action.
+
+**The agreed unit price is prefilled from the customer's price lists**, through
+`GET /api/v1/admin/products/:id/resolved-price` for the chosen customer and the
+line's quantity, with at most four requests in flight. A price is prefilled
+only once a customer with an organization is chosen — lines added before that
+are prefilled then — and an answer is applied only while it still matches the
+line's product, quantity and customer. Where no price resolves the field stays
+empty. **A price typed by hand is never overwritten**: changing the quantity
+leaves it as it is. Changing the customer clears every price that was not
+typed by hand and resolves it again for the new customer, so such a price may
+become empty.
+
+**An incomplete line blocks the request instead of being dropped.** A line with
+no agreed price, or with a quantity that is not a whole number of 1 or more, is
+marked, and **Create quote request** stays disabled until it is fixed or
+removed; every line on screen is sent. The running total counts the lines that
+have both a valid quantity and a price. A customer without an organization
+still shows the existing warning, since a quote request needs one.
+
 ## Panels on the quote request screen
 
 The admin zone `quote_request.detail.after` is mounted once at the end of a

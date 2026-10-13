@@ -152,11 +152,46 @@ order-placement endpoints additionally refuse the line with
 | `GET /api/v1/admin/price-lists-engine/:id/products` | List roster + per-currency brackets |
 | `PUT /api/v1/admin/price-lists-engine/:id/products` | Replace roster (delta) |
 | `POST /api/v1/admin/price-lists-engine/:id/products` | Append one product |
+| `POST /api/v1/admin/price-lists-engine/:id/products/bulk-add` | Append up to 200 products in one audited write — see *Adding many products at once* |
 | `DELETE /api/v1/admin/price-lists-engine/:id/products/:productId` | Remove (cascade brackets) |
 | `GET /api/v1/admin/price-lists-engine/:id/products/:productId/brackets` | Read brackets for one product |
 | `PUT /api/v1/admin/price-lists-engine/:id/products/:productId/brackets` | Replace brackets (`{ bracketsByCurrency }`) |
 | `POST /api/v1/admin/price-lists-engine/:id/products/:productId/brackets/copy` | Identity copy of one currency to N others |
 | `POST /api/v1/admin/price-lists-engine/internal/sweep` | Test-only worker tick |
+
+### Adding many products at once
+
+`POST /api/v1/admin/price-lists-engine/:id/products/bulk-add`, gated by
+`price_lists:write`, takes `{ productIds }` — 1 to 200 product ids
+(`bulkAddPriceListProductsRequestSchema` in `@endora-commerce/contracts`) —
+and only ever appends. Duplicates are collapsed, the first occurrence kept.
+
+An accepted request answers `200 { data: { added, unchanged, failed } }`, each
+id in exactly one of the three:
+
+- **`unchanged`** — already on the list; its brackets are left exactly as they
+  were.
+- **`failed`** — `{ productId, reason: 'product_not_found' }`, for an id the
+  catalogue does not hold as a live product (unknown or soft-deleted). A draft
+  or inactive product is live and is added.
+- **`added`** — every other product, in request order, whatever its status or
+  type.
+
+The whole request is one Command, `price_list.products_add`, and writes one
+audit entry whose after-state holds counts only (`{ name, added, unchanged,
+failed }`) — and no entry at all when nothing was added. Sending the same body
+again is therefore safe: the products added the first time come back
+`unchanged`, silently.
+
+Refusals write nothing:
+
+| Case | Answer |
+| --- | --- |
+| The caller lacks `price_lists:write` | `403 FORBIDDEN` |
+| The list is the system Default (its roster is seeded from each product's default price) | `403 FORBIDDEN` |
+| The list is unknown or deleted | `404 NOT_FOUND` |
+| The body is not an object, or `productIds` is missing, empty, longer than 200 or holds a non-uuid | `400 VALIDATION_FAILED` |
+| Another request added the same new product at the same moment | `409 VERSION_CONFLICT`; a retry reports it `unchanged` |
 
 ### Rule-builder pickers (admin)
 
@@ -265,6 +300,21 @@ one currency.
   Details / Products & brackets / Application rule tabs).
 - `/price-lists/display-modes` — overrides browser plus the two
   `pricing.*` settings keys.
+- **Products & brackets** lists the roster by name and SKU for a list of
+  any size — names are resolved through the catalogue's
+  `POST /api/v1/admin/catalog/products/batch-by-id`, 500 ids per request and
+  at most two requests in flight — and opens the bracket editor for every
+  roster product; a product whose name cannot be resolved shows its id prefix.
+  **Add** opens the admin's shared product browser on the **All** tab, where
+  every status and type can be ticked and products already on the list are
+  marked *Already on this price list*. **Add N** sends one bulk-add request for
+  up to 200 products. When it is accepted the browser closes, the roster
+  reloads, the first added product is selected with its bracket editor open,
+  and any product that could not be added is named with its reason. When it is
+  refused, or the answer is lost, the browser stays open with the selection
+  kept, an error and **Retry**, which sends the same products again. **Add** is
+  disabled on the system Default list, and disabled with a hint for an
+  operator without `price_lists:write`.
 - `DisplayModeOverrideRow` is embedded in the Organization editor,
   the Categories tree EditForm, and the LinkedPriceListsPanel that
   replaces the old `PricingPlaceholder` on the catalog Product editor.

@@ -138,11 +138,43 @@ i składania zamówienia dodatkowo odrzucają pozycję z `400 CART_PRODUCT_QUOTE
 | `GET /api/v1/admin/price-lists-engine/:id/products` | Lista produktów z progami w poszczególnych walutach |
 | `PUT /api/v1/admin/price-lists-engine/:id/products` | Zamiana listy produktów (różnicowo) |
 | `POST /api/v1/admin/price-lists-engine/:id/products` | Dodanie jednego produktu |
+| `POST /api/v1/admin/price-lists-engine/:id/products/bulk-add` | Dodanie do 200 produktów w jednym audytowanym zapisie — zob. *Dodawanie wielu produktów naraz* |
 | `DELETE /api/v1/admin/price-lists-engine/:id/products/:productId` | Usunięcie (razem z progami) |
 | `GET /api/v1/admin/price-lists-engine/:id/products/:productId/brackets` | Odczyt progów jednego produktu |
 | `PUT /api/v1/admin/price-lists-engine/:id/products/:productId/brackets` | Zamiana progów (`{ bracketsByCurrency }`) |
 | `POST /api/v1/admin/price-lists-engine/:id/products/:productId/brackets/copy` | Skopiowanie progów jednej waluty bez zmian do N innych |
 | `POST /api/v1/admin/price-lists-engine/internal/sweep` | Jeden przebieg workera, tylko na potrzeby testów |
+
+### Dodawanie wielu produktów naraz
+
+`POST /api/v1/admin/price-lists-engine/:id/products/bulk-add`, chroniony przez `price_lists:write`,
+przyjmuje `{ productIds }` — od 1 do 200 identyfikatorów produktów
+(`bulkAddPriceListProductsRequestSchema` w `@endora-commerce/contracts`) — i wyłącznie dopisuje.
+Powtórzenia są scalane, z zachowaniem pierwszego wystąpienia.
+
+Przyjęte żądanie odpowiada `200 { data: { added, unchanged, failed } }`, a każdy identyfikator trafia
+do dokładnie jednej z trzech list:
+
+- **`unchanged`** — produkt już jest w cenniku; jego progi pozostają dokładnie takie, jakie były.
+- **`failed`** — `{ productId, reason: 'product_not_found' }` dla identyfikatora, którego katalog nie
+  ma jako żywego produktu (nieznany albo usunięty miękko). Produkt roboczy albo nieaktywny jest żywy
+  i zostaje dodany.
+- **`added`** — każdy pozostały produkt, w kolejności z żądania, niezależnie od statusu i typu.
+
+Całe żądanie to jedno polecenie, `price_list.products_add`, które zapisuje jeden wpis w dzienniku
+audytu ze stanem po zmianie zawierającym wyłącznie liczby (`{ name, added, unchanged, failed }`) —
+a gdy nic nie zostało dodane, nie zapisuje żadnego. Ponowne wysłanie tej samej treści jest więc
+bezpieczne: produkty dodane za pierwszym razem wracają jako `unchanged`, bez śladu w dzienniku.
+
+Odmowy niczego nie zapisują:
+
+| Przypadek | Odpowiedź |
+| --- | --- |
+| Wywołujący nie ma `price_lists:write` | `403 FORBIDDEN` |
+| Cennik jest systemowym cennikiem Default (jego lista produktów powstaje z domyślnej ceny każdego produktu) | `403 FORBIDDEN` |
+| Cennik jest nieznany albo usunięty | `404 NOT_FOUND` |
+| Treść nie jest obiektem albo `productIds` brakuje, jest puste, ma więcej niż 200 elementów lub zawiera coś, co nie jest UUID | `400 VALIDATION_FAILED` |
+| Inne żądanie w tej samej chwili dodało ten sam nowy produkt | `409 VERSION_CONFLICT`; ponowienie zgłasza go jako `unchanged` |
 
 ### Listy wyboru w kreatorze reguł (panel administracyjny)
 
@@ -238,6 +270,20 @@ którego pojedyncza dawna cena została skopiowana do więcej niż jednej waluty
 - `/price-lists` (lista cenników) i `/price-lists/:id` (edytor z zakładkami Details / Products &
   brackets / Application rule).
 - `/price-lists/display-modes` — przegląd nadpisań oraz dwa klucze ustawień `pricing.*`.
+- **Produkty i widełki** pokazuje listę produktów cennika z nazwą i SKU przy dowolnej jej długości —
+  nazwy są pobierane przez `POST /api/v1/admin/catalog/products/batch-by-id` z katalogu, po 500
+  identyfikatorów w żądaniu i najwyżej dwa żądania naraz — i otwiera edytor progów dla każdego
+  produktu z listy; produkt, którego nazwy nie udało się ustalić, pokazuje początek swojego
+  identyfikatora. **Dodaj** otwiera wspólną przeglądarkę produktów panelu administracyjnego na
+  zakładce **Wszystkie**, gdzie można zaznaczyć produkt o dowolnym statusie i typie, a produkty, które
+  już są w cenniku, mają oznaczenie *Już jest w tym cenniku*. **Dodaj N** wysyła jedno żądanie
+  dodania zbiorczego dla najwyżej 200 produktów. Gdy zostanie przyjęte, przeglądarka się zamyka,
+  lista produktów się odświeża, pierwszy dodany produkt zostaje wybrany z otwartym edytorem progów,
+  a każdy produkt, którego nie udało się dodać, jest wymieniony z powodem. Gdy żądanie zostanie
+  odrzucone albo odpowiedź się zgubi, przeglądarka zostaje otwarta z zachowanym zaznaczeniem,
+  komunikatem o błędzie i przyciskiem **Ponów**, który wysyła te same produkty jeszcze raz. **Dodaj**
+  jest nieaktywne w systemowym cenniku Default, a bez uprawnienia `price_lists:write` jest nieaktywne
+  i pokazuje podpowiedź.
 - `DisplayModeOverrideRow` jest osadzony w edytorze organizacji, w formularzu edycji drzewa kategorii
   i w panelu LinkedPriceListsPanel, który zastępuje dawny `PricingPlaceholder` w edytorze produktu.
 

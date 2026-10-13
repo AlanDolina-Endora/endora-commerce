@@ -343,6 +343,50 @@ złożenie zamówienia niczego nie ogłasza.
 - **Ponowne zamówienie** — `…/:id/reorder` odtwarza koszyk (zależnie od ustawienia
   `orders.reorder_enabled`); **kopia jako zapytanie ofertowe** — `…/:id/clone-to-quote`.
 
+### Ekran tworzenia zamówienia
+
+**Sekcje Pozycje i podsumowanie zamówienia pojawiają się dopiero po wybraniu klienta i kanału
+sprzedaży.** To dwie dane, których potrzebuje wycena; metoda płatności, metoda dostawy i adresy
+niczego nie blokują. Dopóki obie nie są ustawione, jedna podpowiedź mówi, czego jeszcze brakuje.
+Wyczyszczenie któregoś z tych pól znowu ukrywa obie sekcje, ale nie usuwa pozycji — wracają, gdy
+pole zostanie ponownie ustawione. Ekran otwarty z `customerAccountId` i `salesChannelId` w adresie
+od razu pokazuje sekcję **Pozycje**.
+
+**Produkty dodaje się na dwa sposoby.**
+
+- **Przeglądaj produkty** otwiera wspólną przeglądarkę produktów panelu administracyjnego na
+  zakładce **Aktywne**: katalog podzielony na strony, z zakładkami statusów i ich licznikami,
+  filtrem typu i wyszukiwaniem po SKU, slugu lub nazwie. Zaznaczenie przetrwa zmianę strony,
+  rozmiaru strony i filtrów, a **Dodaj N** dodaje każdy zaznaczony produkt jako pozycję o ilości 1
+  — najwyżej 200 naraz. Produkty nadrzędne typu grouped i bundle, produkty robocze i nieaktywne
+  oraz produkty, które już są w zamówieniu, są widoczne z powodem i nie da się ich zaznaczyć.
+  Bez uprawnienia `catalog:read` przycisk jest nieaktywny i pokazuje podpowiedź.
+- **Szybkie dodawanie po nazwie lub SKU**, obok, dopisuje jeden produkt według tych samych zasad.
+
+Każda pozycja pokazuje nazwę i SKU produktu, edytowalną ilość, cenę jednostkową, wartość pozycji
+i akcję usunięcia. Zmiana ilości, klienta, kanału sprzedaży, metody dostawy albo metody płatności
+ponownie wycenia pozycje przez `POST /api/v1/admin/orders/preview` (`orders:write`). Ilość, która
+nie jest liczbą całkowitą równą 1 lub większą, oznacza pozycję, wyłącza ją z wyceny i blokuje
+**Utwórz zamówienie**.
+
+**Pozycja, której nie da się wycenić, pokazuje przyczynę i blokuje Utwórz zamówienie, dopóki
+jej nie usuniesz albo nie usuniesz przyczyny.** Każda niedostępna pozycja ma dokładnie
+jeden kod — pierwszy pasujący, w tej kolejności — i pokazuje jeden powód:
+
+| Kod wyceny | Powód przy pozycji | Co zmienić |
+| --- | --- | --- |
+| `PRODUCT_NOT_FOUND` | *Brak ceny* | Produktu nie ma już w katalogu: usuń pozycję. |
+| `PRODUCT_NOT_VISIBLE_TO_CUSTOMER` | *Klient nie widzi tego produktu* | Widoczność produktu albo jego lista dozwolonych organizacji wyklucza organizację klienta: zmień je przy produkcie w katalogu, wybierz innego klienta albo usuń pozycję. |
+| `PRODUCT_NOT_IN_SALES_CHANNEL` | *Poza asortymentem tego kanału sprzedaży* | Wybierz kanał sprzedaży, którego asortyment zawiera produkt, dodaj produkt do asortymentu tego kanału albo usuń pozycję. |
+| `QUOTE_ONLY` | *Brak ceny* | Cena produktu dla tego klienta jest dostępna tylko w ofercie: usuń pozycję albo utwórz zapytanie ofertowe. |
+
+Kod, którego ekran nie zna, też jest pokazywany jako *Brak ceny*. Pozostałe pozycje zachowują
+ceny, a podsumowanie liczy tylko wycenione. Wycena sprawdza asortyment dokładnie tego kanału
+sprzedaży, który wskazuje żądanie; `salesChannelId`, który nie wskazuje żadnego kanału, jest
+odrzucany z `404 NOT_FOUND`, a ekran pokazuje *Nie udało się przeliczyć cen*, nie oznaczając żadnej
+pozycji. Produkt usunięty miękko jest wyceniany jak dotąd. Utworzone zamówienie zawiera dokładnie
+pozycje i ilości widoczne na ekranie, w niezmienionym kształcie żądania `POST /api/v1/admin/orders`.
+
 ## Zamówienie złożone z zaakceptowanego zapytania ofertowego
 
 Zamówienie złożone z koszyka wypełnionego zaakceptowanym zapytaniem ofertowym zapisuje to zapytanie
