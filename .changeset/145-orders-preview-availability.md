@@ -18,8 +18,8 @@ product is priced as before.
 
 **Behaviour change: an unknown `salesChannelId` is now refused.** The preview used to fall back
 silently to any active channel when the body's `salesChannelId` named none, and priced the
-basket on that other channel. It now answers **404 `NOT_FOUND`** (the route's existing "Sales
-channel not found." error) before any line is evaluated, so the channel a preview is priced on
+basket on that other channel. It now answers **404 `NOT_FOUND`** (the route's existing
+not-found error) before any line is evaluated, so the channel a preview is priced on
 and the channel its assortment is checked against are always the one the operator chose. The
 route is admin-only (`orders:write`); an admin client that sends a stale channel id now receives
 the error instead of a preview priced on a different channel. Order creation

@@ -59,8 +59,10 @@ wired.
 **Channel resolution (changed)**: the preview prices on, and checks assortment against, exactly
 `findOne(SalesChannel, { id: body.salesChannelId })`. The former fallback to any active channel is
 removed: a `salesChannelId` naming no channel is refused **404 `NOT_FOUND`** ("Sales channel not
-found.", the route's existing envelope) before any line is evaluated — as the create path refuses
-it. The admin screen renders its existing preview error (*Could not calculate prices*).
+found.", the route's existing envelope) before any line is evaluated. The admin screen renders its
+existing preview error (*Could not calculate prices*). The create path does **not** refuse it
+today: `POST /api/v1/admin/orders` with a `salesChannelId` naming no channel answers `201`. Closing
+that gap belongs to the separate create-path fix, out of scope for this feature.
 
 **Product read**: `findByIds` with default lookup options (not `liveOnly`): a soft-deleted
 product resolves and is priced as today, consistent with the create path; it is **not**

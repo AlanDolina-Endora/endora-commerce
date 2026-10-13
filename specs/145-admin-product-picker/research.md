@@ -245,9 +245,10 @@ resolves the channel it prices on as
 The active-channel fallback is **removed**: a `salesChannelId` naming no channel answers **404
 `NOT_FOUND` "Sales channel not found."** — the route's existing error for the no-channel case,
 already thrown on the line below the lookup — before any line is evaluated. The screen shows its
-existing preview error (`orderCreate.preview.error`, *Could not calculate prices*). This matches
-the create path, which refuses a stale channel too, and means the pricing channel and the
-assortment channel are always the same one. Rejected: keeping the fallback and marking every line
+existing preview error (`orderCreate.preview.error`, *Could not calculate prices*). This means the
+pricing channel and the assortment channel are always the same one. The create path does **not**
+match it today: `POST /api/v1/admin/orders` with a `salesChannelId` naming no channel answers `201`
+(observed at T025). Closing that gap belongs to the separate create-path fix, out of scope here. Rejected: keeping the fallback and marking every line
 `PRODUCT_NOT_IN_SALES_CHANNEL` (the earlier proposal — priced on one channel, checked against
 another, and a per-line message for what is a whole-request problem; the PO chose the refusal).
 
@@ -261,7 +262,8 @@ a 200-line preview issues one product read and one membership read instead of 20
 stays per line (`pricingService.resolveLinePrice`), unchanged.
 
 **Rationale**: FR-027 names the body's channel; Principle XII names the accessor and fail-closed;
-SC-008 needs the preview to agree with what the create path refuses once the separate fix lands.
+SC-008 needs the preview to agree with what the create path will refuse once the separate fix lands
+(today the create path accepts a stale channel; see above).
 
 **Alternatives rejected**: `outOfRequestChannel` (wrong channel — the out-of-scope defect);
 keeping the active-channel fallback for pricing or assortment (prices or checks against a channel nobody chose — superseded by the PO's refusal ruling above);
@@ -517,7 +519,7 @@ pure `methodsOfferedInChannel` export only and must keep passing unchanged (the 
 ## Open items (raised for the product owner — all resolved)
 
 1. ~~**Stale `salesChannelId` on the preview**~~ — **resolved** by the product owner
-   (2026-10-13): the preview refuses with 404 `NOT_FOUND`, like the create path; the
+   (2026-10-13): the preview refuses with 404 `NOT_FOUND` (the create path still accepts it); the
    active-channel fallback is removed (R-7). Also resolved: a **soft-deleted** product on the
    order preview keeps today's behaviour — priced like a live product, no `liveOnly` on the
    preview read (R-7 § Product loading); spec.md's edge case is amended by the PO.
