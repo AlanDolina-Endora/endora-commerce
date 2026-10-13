@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -11,10 +12,16 @@ import { X } from 'lucide-react';
 // `SalesChannelPicker.tsx` records at length: `vi.mock` keys on a resolved
 // module id and the `exports` map declares no deep subpath, so the barrel is
 // the only spelling an admin test outside this package can name.
-import { ApiError, apiClient } from '../../lib/index.js';
+import { ApiError, apiClient, useAuth } from '../../lib/index.js';
 import { useTranslation } from '../../i18n/useTranslation.js';
 import { Badge } from '../../ui/badge.js';
 import { Combobox, type ComboboxOption } from '../../ui/combobox.js';
+import {
+  productSelectability,
+  productSelectabilityReasonKey,
+  type ProductBrowserRules,
+} from '../product-browser/selectability.js';
+import type { ProductBrowserItem } from '../product-browser/types.js';
 
 /**
  * Searchable product dropdown reusable across the Admin UI.
@@ -44,15 +51,21 @@ import { Combobox, type ComboboxOption } from '../../ui/combobox.js';
  * are cached locally so chip and selected-label rendering doesn't pay
  * an extra round-trip. Ids that haven't been seen yet render with a
  * short UUID placeholder until the cache fills in.
+ *
+ * **Feature 145 adds three optional props, all additive** (research R-5). With
+ * `rules` (and `alreadyAddedIds`) every option is judged by the product browser's
+ * own `productSelectability`, and one the host refuses is rendered disabled with
+ * the translated reason as its description — shown, never hidden (FR-009).
+ * `onPickProduct` hands the host the whole summary of the picked option, so a new
+ * line can show name and SKU without a second request. Passing `rules` also opts
+ * in to the `catalog:read` gate (contract B12): only then is the picker disabled,
+ * with `productBrowser.trigger.noPermission` as its hint, for an operator without
+ * that code. A consumer passing none of these renders exactly as before and reads
+ * no session at all — which is why the gate is a separate component rather than a
+ * conditional hook.
  */
 
-interface AdminProductSummary {
-  id: string;
-  sku: string;
-  slug: string;
-  status: 'draft' | 'active' | 'inactive';
-  name: Record<string, string>;
-}
+type AdminProductSummary = ProductBrowserItem;
 
 function pickName(name: Record<string, string> | undefined | null, fallback: string): string {
   if (!name) return fallback;
@@ -69,6 +82,15 @@ function productToOption(p: AdminProductSummary): ComboboxOption<string> {
 }
 
 interface CommonProductPickerProps {
+  /**
+   * The host's selectability rules. Refused options are shown disabled with their
+   * reason, and passing this opts in to the `catalog:read` gate.
+   */
+  rules?: ProductBrowserRules | undefined;
+  /** Products already on the host; judged through `productSelectability`. */
+  alreadyAddedIds?: readonly string[] | undefined;
+  /** Receives the full summary of the picked option (`select` and `multiselect`). */
+  onPickProduct?: ((item: ProductBrowserItem) => void) | undefined;
   excludeIds?: string[] | undefined;
   includeArchived?: boolean | undefined;
   placeholder?: string | undefined;
@@ -91,10 +113,42 @@ export type ProductPickerProps =
     });
 
 const SEARCH_DEBOUNCE_MS = 250;
+const NO_IDS: ReadonlySet<string> = new Set<string>();
+const STATUS_LABEL_KEY: Record<AdminProductSummary['status'], string> = {
+  draft: 'productBrowser.status.draft',
+  active: 'productBrowser.status.active',
+  inactive: 'productBrowser.status.inactive',
+};
 const DEFAULT_PAGE_SIZE = 20;
 const UUID_PREFIX_LENGTH = 8;
 
 export function ProductPicker(props: ProductPickerProps): ReactNode {
+  return props.rules !== undefined ? (
+    <PermissionGatedProductPicker {...props} />
+  ) : (
+    <ProductPickerBody {...props} />
+  );
+}
+
+/** The opt-in `catalog:read` gate; mounted only when the host passes `rules`. */
+function PermissionGatedProductPicker(props: ProductPickerProps): ReactNode {
+  const t = useTranslation('core');
+  const { hasPermission } = useAuth();
+  const hintId = useId();
+  if (hasPermission('catalog:read')) return <ProductPickerBody {...props} />;
+  return (
+    <div className="space-y-1">
+      <ProductPickerBody {...props} disabled ariaDescribedBy={hintId} />
+      <p id={hintId} className="text-xs text-muted-foreground">
+        {t('productBrowser.trigger.noPermission')}
+      </p>
+    </div>
+  );
+}
+
+function ProductPickerBody(
+  props: ProductPickerProps & { ariaDescribedBy?: string | undefined },
+): ReactNode {
   const {
     excludeIds,
     includeArchived = false,
@@ -103,6 +157,10 @@ export function ProductPicker(props: ProductPickerProps): ReactNode {
     id,
     ariaLabel,
     pageSize = DEFAULT_PAGE_SIZE,
+    rules,
+    alreadyAddedIds,
+    onPickProduct,
+    ariaDescribedBy,
   } = props;
 
   const t = useTranslation('core');
@@ -207,10 +265,44 @@ export function ProductPicker(props: ProductPickerProps): ReactNode {
     };
   }, [valueKey, props.mode, productCache]);
 
-  const visibleOptions = useMemo(
-    () => options.filter((opt) => !excludeSet.has(opt.value)),
-    [options, excludeSet],
+  const alreadyAddedKey = (alreadyAddedIds ?? []).join(',');
+  // Keyed by content: hosts pass a fresh array on every render.
+  const alreadyAddedSet = useMemo(
+    () => new Set<string>(alreadyAddedKey === '' ? [] : alreadyAddedKey.split(',')),
+    [alreadyAddedKey],
   );
+
+  const visibleOptions = useMemo(() => {
+    const kept = options.filter((opt) => !excludeSet.has(opt.value));
+    if (rules === undefined) return kept;
+    // With host rules, a refused product stays in the list, disabled, with the
+    // reason where the raw status suffix used to be (FR-009, FR-020).
+    return kept.map((opt): ComboboxOption<string> => {
+      const product = productCache.get(opt.value);
+      if (!product) return opt;
+      const verdict = productSelectability(product, rules, {
+        alreadyAddedIds: alreadyAddedSet,
+        selectedIds: NO_IDS,
+        max: Number.POSITIVE_INFINITY,
+      });
+      if (!verdict.selectable) {
+        return {
+          ...opt,
+          disabled: true,
+          description: `${product.sku} · ${t(productSelectabilityReasonKey(verdict.reason, rules))}`,
+        };
+      }
+      const statusSuffix =
+        product.status === 'active' ? '' : ` · ${t(STATUS_LABEL_KEY[product.status])}`;
+      return { ...opt, description: `${product.sku}${statusSuffix}` };
+    });
+  }, [options, excludeSet, rules, productCache, alreadyAddedSet, t]);
+
+  const pick = (id: string | null): void => {
+    if (id === null || !onPickProduct) return;
+    const product = productCache.get(id);
+    if (product) onPickProduct(product);
+  };
 
   const emptyMessage =
     error ?? (searching ? t('productPicker.searching') : t('productPicker.empty'));
@@ -219,6 +311,7 @@ export function ProductPicker(props: ProductPickerProps): ReactNode {
   const optionalProps = {
     ...(id !== undefined ? { id } : {}),
     ...(ariaLabel !== undefined ? { ariaLabel } : {}),
+    ...(ariaDescribedBy !== undefined ? { ariaDescribedBy } : {}),
   };
 
   if (props.mode === 'select') {
@@ -231,7 +324,10 @@ export function ProductPicker(props: ProductPickerProps): ReactNode {
         selectedLabel={
           selectedProduct ? pickName(selectedProduct.name, selectedProduct.slug) : ''
         }
-        onChange={(next): void => props.onChange(next)}
+        onChange={(next): void => {
+          props.onChange(next);
+          pick(next);
+        }}
         onSearchChange={handleSearchChange}
         manualFilter
         loading={searching}
@@ -285,6 +381,7 @@ export function ProductPicker(props: ProductPickerProps): ReactNode {
           if (next === null) return;
           if (selectedIds.includes(next)) return;
           props.onChange([...selectedIds, next]);
+          pick(next);
         }}
         onSearchChange={handleSearchChange}
         manualFilter
