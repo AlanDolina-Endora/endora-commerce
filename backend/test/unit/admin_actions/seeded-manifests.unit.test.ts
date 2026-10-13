@@ -92,6 +92,42 @@ const EXPECTED: ReadonlyArray<ExpectedAction> = [
     labelKey: 'actions.newPage.label',
   },
   {
+    module: { id: 'cms', manifest: cmsManifest },
+    actionId: 'open-pages',
+    targetRoute: '/cms/pages',
+    icon: 'Newspaper',
+    requiredPermission: 'cms.read',
+    weight: 131,
+    labelKey: 'actions.openPages.label',
+  },
+  {
+    module: { id: 'cms', manifest: cmsManifest },
+    actionId: 'open-blocks',
+    targetRoute: '/cms/blocks',
+    icon: 'Newspaper',
+    requiredPermission: 'cms.read',
+    weight: 132,
+    labelKey: 'actions.openBlocks.label',
+  },
+  {
+    module: { id: 'cms', manifest: cmsManifest },
+    actionId: 'open-templates',
+    targetRoute: '/cms/templates',
+    icon: 'Newspaper',
+    requiredPermission: 'cms.read',
+    weight: 133,
+    labelKey: 'actions.openTemplates.label',
+  },
+  {
+    module: { id: 'cms', manifest: cmsManifest },
+    actionId: 'open-hooks',
+    targetRoute: '/cms/hooks',
+    icon: 'Webhook',
+    requiredPermission: 'cms.read',
+    weight: 134,
+    labelKey: 'actions.openHooks.label',
+  },
+  {
     module: { id: 'blog', manifest: blogManifest },
     actionId: 'new-post',
     targetRoute: '/blog/posts/new',
@@ -132,11 +168,11 @@ const EXPECTED: ReadonlyArray<ExpectedAction> = [
 ];
 
 describe('seeded action manifests — v1 set', () => {
-  it('exactly 10 distinct (moduleId, actionId) pairs', () => {
+  it('exactly 14 distinct (moduleId, actionId) pairs', () => {
     const pairs = EXPECTED.map((e) => `${e.module.id}:${e.actionId}`);
     const unique = new Set(pairs);
-    expect(unique.size).toBe(10);
-    expect(pairs.length).toBe(10);
+    expect(unique.size).toBe(14);
+    expect(pairs.length).toBe(14);
   });
 
   for (const expected of EXPECTED) {
