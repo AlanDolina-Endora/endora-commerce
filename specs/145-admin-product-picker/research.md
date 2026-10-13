@@ -514,15 +514,17 @@ pure `methodsOfferedInChannel` export only and must keep passing unchanged (the 
 
 ---
 
-## Open items (not resolved here — for the product owner)
+## Open items (raised for the product owner — all resolved)
 
 1. ~~**Stale `salesChannelId` on the preview**~~ — **resolved** by the product owner
    (2026-10-13): the preview refuses with 404 `NOT_FOUND`, like the create path; the
    active-channel fallback is removed (R-7). Also resolved: a **soft-deleted** product on the
    order preview keeps today's behaviour — priced like a live product, no `liveOnly` on the
    preview read (R-7 § Product loading); spec.md's edge case is amended by the PO.
-2. **"Deleted from the catalog"** (R-8): read as *soft-deleted* (`deletedAt` set) → `failed /
-   product_not_found`. A product **archived** (inactive) is not deleted and is added. Confirm.
-3. **Customer change on the quote-request screen** (R-11): non-hand-edited prices are cleared
-   before re-resolution, so a line may go from a price to empty when the new customer resolves
-   none. FR-031 reads that way; confirm it is preferred over keeping the old customer's price.
+2. ~~**"Deleted from the catalog"**~~ (R-8) — **resolved** (default accepted at analyze,
+   2026-10-13; spec.md *Assumptions*): *soft-deleted* (`deletedAt` set) → `failed /
+   product_not_found`; an archived (inactive) or draft product is live and is added.
+3. ~~**Customer change on the quote-request screen**~~ (R-11) — **resolved** (default accepted at
+   analyze, 2026-10-13; spec.md *Assumptions*): non-hand-edited prices are cleared before
+   re-resolution, so a line may go from a price to empty when the new customer resolves none;
+   hand-typed prices are kept.

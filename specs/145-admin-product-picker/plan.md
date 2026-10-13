@@ -4,7 +4,7 @@
 **Issues**: #280, #281, #282, #291
 (US1 bulk add on Create order → #282 · US2 Items/summary gating → #281 · US3 bulk add on Create quote request → #280 · US4 price-list picker and bulk add → #291)
 **Input**: Feature specification from `specs/145-admin-product-picker/spec.md` (status *Clarified —
-ready for plan*; fourteen clarifications, all binding)
+ready for plan*; sixteen clarifications, all binding)
 
 ## Summary
 
@@ -17,13 +17,17 @@ existing kit primitives (side drawer, `ResponsiveTable`, `PaginationFooter`, `Ch
 (FR-009); the selection persists across pages and filters, is capped at 200 per Add, and is handed
 back in selection order.
 
-Two additive server changes, both contract-first in `packages/contracts/`:
+Two server changes, both contract-first in `packages/contracts/` — additive except for one ruled
+behaviour change on the admin-only preview route (an unknown `salesChannelId` is refused 404 instead
+of falling back to an active channel; item 1):
 
 1. **Order preview** (`POST /api/v1/admin/orders/preview`) reports two new per-line message codes,
    `PRODUCT_NOT_VISIBLE_TO_CUSTOMER` and `PRODUCT_NOT_IN_SALES_CHANNEL`, exactly one message per
    line with precedence `PRODUCT_NOT_FOUND` > visibility > assortment > `QUOTE_ONLY`; assortment is
    checked against the **request body's** `salesChannelId` through the sanctioned membership
-   accessor. The distinct codes are justified against `isProductVisibleTo`'s single-answer rule
+   accessor. The active-channel fallback is removed: a `salesChannelId` naming no channel is refused
+   **404 `NOT_FOUND`** (PO ruling, research R-7), stated as a behaviour change in the `mod-orders`
+   changeset. The distinct codes are justified against `isProductVisibleTo`'s single-answer rule
    and the justification is written into that function's documentation.
 2. **Price-list bulk add** (`POST /api/v1/admin/price-lists-engine/:id/products/bulk-add`),
    `price_lists:write`, ≤ 200 ids, one Command Bus command and at most one audit entry, refusing
@@ -51,15 +55,17 @@ tests under `backend/test/contract/**` (Postgres-backed), admin tests under `adm
 (today: one product read per line); the quote-request prefill keeps ≤ 4 resolved-price requests in
 flight; roster names for an N-product list take ⌈N/500⌉ `batch-by-id` requests, ≤ 2 in flight
 **Constraints**: request payloads of order create and quote-request create unchanged (SC-006);
-preview response additive only (FR-027); no new permission code, Setting, error code, palette entry
+preview response additive only (FR-027), the one ruled behaviour change being 404 instead of the
+active-channel fallback for an unknown `salesChannelId` on the admin-only preview route; no new permission code, Setting, error code, palette entry
 or Redis key
 **Scale/Scope**: 200 products per Add; catalogs > 500 products (SC-003); four packages with code
 changes (`contracts`, `admin-kit`, `mod-orders`, `mod-price-lists`), two with screen/strings only
 (`mod-quote-requests`, `mod-i18n`)
 
-No `NEEDS CLARIFICATION` remains in the technical context. Three readings the code forced and the
-spec does not state are decided in research.md and listed there under *Open items* for the
-product owner.
+No `NEEDS CLARIFICATION` remains in the technical context. The three readings the code forced are
+all resolved: the stale preview channel and soft-deleted products by PO ruling (research R-7), the
+other two by defaults accepted at analyze and now written into the spec's Assumptions (research.md
+*Open items*).
 
 ## Constitution Check
 
@@ -68,7 +74,7 @@ product owner.
 | Principle | Verdict | Evidence |
 | --- | --- | --- |
 | **I. Modular architecture (NN)** | PASS | The picker is design-system code in `admin-kit`, consuming a published HTTP API; no module imports another module's file (research R-1 — a `catalog` admin export was rejected as a counted reach under D-171). Backend: `orders` reads products through `CatalogProductReadPort` and channel membership through `SalesChannelMembershipPort`, both already in its composition; `price_lists` reads products through its existing `targetReads.catalogProductRead`. No new manifest edge. |
-| **II. API-first** | PASS | Bulk-add request/response schemas, the preview message-code enum and the shared 200 cap are written in `packages/contracts/` before any route or screen (Phase 1 of tasks.md). Both changes are additive; nothing is versioned because nothing breaks. |
+| **II. API-first** | PASS | Bulk-add request/response schemas, the preview message-code enum and the shared 200 cap are written in `packages/contracts/` before any route or screen (Phase 1 of tasks.md). Both changes are additive except one ruled behaviour change: the admin-only preview refuses an unknown `salesChannelId` with 404 instead of falling back to an active channel. Nothing is versioned — the response shape is unchanged, the route is admin-only, and the change is stated in the `mod-orders` changeset (T026). |
 | **III. TDD (NN)** | PASS | Every task group starts with a failing test; the traceability table in tasks.md maps every FR and SC to a test. Pure logic (selectability, preview availability, bulk-add partition) is unit-tested; both routes get Postgres-backed contract tests; each user story has interaction tests. |
 | **IV. YAGNI & minimal dependencies** | PASS | No new runtime dependency (Complexity Tracking). No configuration knob: 200 is a product rule held in one constant. No new endpoint beyond the one the PO ruled; roster names and the picker reuse existing read endpoints. |
 | **V. TypeScript everywhere** | PASS | Zod at the new route boundary; TS types inferred (`z.infer`). |
@@ -168,8 +174,8 @@ plan.
 ## Phase 0 — Research
 
 Complete: [research.md](./research.md). Fifteen decisions, each with rationale and rejected
-alternatives; three open items for the product owner that do not block implementation (each
-has a decided default that is safe and reversible).
+alternatives; the three open items raised for the product owner are all resolved — one by PO
+ruling (R-7), two by defaults accepted at analyze and recorded in the spec's Assumptions.
 
 ## Phase 1 — Design & contracts
 
@@ -231,5 +237,5 @@ Complete: [data-model.md](./data-model.md), [contracts/](./contracts/),
   `CartService.addItem` or the order-create path (out of scope); narrow `messages[].code`; write a
   module id or a non-`core` namespace in admin-kit; re-record a read size the band accepts; commit
   with an AI trailer.
-- **Open items** (research.md, end): three product-owner confirmations; each has a safe default
-  already designed in, so they do not block.
+- **Open items** (research.md, end): all three resolved — one by PO ruling, two in the spec's
+  Assumptions; nothing remains open.
