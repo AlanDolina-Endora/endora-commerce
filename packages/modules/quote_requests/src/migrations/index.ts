@@ -11,7 +11,7 @@
  * invisible because a workspace member is not an installed package and the
  * committed host registry names each class directly.
  *
- * **Nine classes, and the order in this array is not the order they run in.**
+ * **Ten classes, and the order in this array is not the order they run in.**
  * They are listed here in ascending timestamp, which is the order
  * `backend/src/db/migration-order.ts` computes *within* a module — and within a
  * module only. Where this module's block sits relative to every other module's
@@ -51,6 +51,7 @@ import { Migration20260718T200342QuoteRequestsQuoteRequestCustomFieldValues } fr
 import { Migration20260912T125614QuoteRequestsQuoteRequestChannelAttribution } from './20260912T125614_quote_requests_quote_request_channel_attribution.js';
 import { Migration20261014T115049QuoteRequestsItemReferencePrice } from './20261014T115049_quote_requests_item_reference_price.js';
 import { Migration20261014T115053QuoteRequestsNegotiationPolicies } from './20261014T115053_quote_requests_negotiation_policies.js';
+import { Migration20261014T173236QuoteRequestsQuoteRequestListSavedViews } from './20261014T173236_quote_requests_quote_request_list_saved_views.js';
 
 export const migrations = [
   Migration20260424T190112QuoteRequestsInit,
@@ -62,6 +63,7 @@ export const migrations = [
   Migration20260912T125614QuoteRequestsQuoteRequestChannelAttribution,
   Migration20261014T115049QuoteRequestsItemReferencePrice,
   Migration20261014T115053QuoteRequestsNegotiationPolicies,
+  Migration20261014T173236QuoteRequestsQuoteRequestListSavedViews,
 ];
 
 export {
@@ -74,4 +76,5 @@ export {
   Migration20260912T125614QuoteRequestsQuoteRequestChannelAttribution,
   Migration20261014T115049QuoteRequestsItemReferencePrice,
   Migration20261014T115053QuoteRequestsNegotiationPolicies,
+  Migration20261014T173236QuoteRequestsQuoteRequestListSavedViews,
 };

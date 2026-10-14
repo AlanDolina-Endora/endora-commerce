@@ -300,6 +300,7 @@ import { Migration20260718T200342QuoteRequestsQuoteRequestCustomFieldValues } fr
 import { Migration20260912T125614QuoteRequestsQuoteRequestChannelAttribution } from '@endora-commerce/mod-quote-requests/migrations';
 import { Migration20261014T115049QuoteRequestsItemReferencePrice } from '@endora-commerce/mod-quote-requests/migrations';
 import { Migration20261014T115053QuoteRequestsNegotiationPolicies } from '@endora-commerce/mod-quote-requests/migrations';
+import { Migration20261014T173236QuoteRequestsQuoteRequestListSavedViews } from '@endora-commerce/mod-quote-requests/migrations';
 
 // ── returns ─────────────────────────────────────────────────────────────────
 import { Migration20260625T144227ReturnsInit } from '@endora-commerce/mod-returns/migrations';
@@ -608,6 +609,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('quote_requests', Migration20260912T125614QuoteRequestsQuoteRequestChannelAttribution),
   migration('quote_requests', Migration20261014T115049QuoteRequestsItemReferencePrice),
   migration('quote_requests', Migration20261014T115053QuoteRequestsNegotiationPolicies),
+  migration('quote_requests', Migration20261014T173236QuoteRequestsQuoteRequestListSavedViews),
 
   // ── returns ─────────────────────────────────────────────────────────────────
   migration('returns', Migration20260625T144227ReturnsInit),
