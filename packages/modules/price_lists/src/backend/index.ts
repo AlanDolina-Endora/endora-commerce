@@ -1,6 +1,7 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type { FastifyRequest } from 'fastify';
 import type {
+  BuyerLinePricePort,
   CatalogCategoryReadPort,
   CatalogProductReadPort,
   CustomerAccountReadPort,
@@ -9,6 +10,7 @@ import type {
   PriceListAdminPort,
   PriceListReadPort,
   DictionaryReferenceRegistryPort,
+  SalesRepAssignmentPort,
 } from '@endora-commerce/contracts';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { CommandBus } from '@endora-commerce/platform/commands';
@@ -158,6 +160,10 @@ export function registerModule(ctx: ModuleContext): void {
             // fails closed, deliberately: refusing the probe is better than
             // pricing for a customer the platform will not identify.
             customerAccountRead: lazyPort<CustomerAccountReadPort>(ctx, 'customerAccountReadPort'),
+            // Feature 146 (threat model T8, D-3M) — the probe answers a
+            // non-platform admin only about organizations they may see.
+            // `organizations` is already a declared dependency.
+            salesRepScope: lazyPort<SalesRepAssignmentPort>(ctx, 'organizationSalesRepScopePort'),
           }),
       )
       .singleton(),
@@ -201,6 +207,27 @@ export function registerModule(ctx: ModuleContext): void {
   // makes a type-only `./ports` reach not a boundary reach) — not to
   // reintroduce a file seam.
   // ---------------------------------------------------------------------------
+
+  // Feature 146 — "what does this buyer pay for each line, on this channel,
+  // now", asked for many lines at once (`specs/146-quote-request-pricing-history/`
+  // research R2). It is the admin resolved-price probe's own implementation, so
+  // a quote's stored "price at request" and the probe's "current price" are one
+  // question at two moments.
+  //
+  // **The port performs no authority check.** Its one caller, `quote_requests`,
+  // passes the owner of a quote request it has already authorised; the
+  // sales-representative scope belongs to the HTTP probe, which serves
+  // arbitrary admin input (threat model T8).
+  ctx.di.providePort<BuyerLinePricePort>(
+    'buyerLinePricePort',
+    ctx
+      .asFunction(
+        ({ priceLists }: PriceListsCradle): BuyerLinePricePort => ({
+          resolveForBuyer: (query) => priceLists.handle.buyerLinePriceService.resolveForBuyer(query),
+        }),
+      )
+      .singleton(),
+  );
 
   ctx.di.providePort<PriceListReadPort>(
     'priceListReadPort',

@@ -1,12 +1,14 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { EntityManager } from '@mikro-orm/postgresql';
-import type { CustomerAccountReadPort } from '@endora-commerce/contracts';
+import type { CustomerAccountReadPort, SalesRepAssignmentPort } from '@endora-commerce/contracts';
+import { SalesChannel } from '@endora-commerce/platform/kernel';
 import { PriceListService } from './services/price-list-service.js';
 import { PricingService } from './services/pricing-service.js';
 import type { PriceListTargetReads } from './services/price-list-service.js';
 import type { PricingServiceContract } from './services/pricing-service.interface.js';
 import { PriceListStatusWorker, type SweepResult } from './services/price-list-status-worker.js';
 import { PricingCache } from './services/pricing-cache.js';
+import { BuyerLinePriceService } from './services/buyer-line-price-service.js';
 import { registerPricingRoutes } from './routes.js';
 import { registerStorefrontPricingRoutes } from './routes.storefront.js';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
@@ -110,12 +112,23 @@ export interface PriceListsModuleOptions {
    * `targetReads`.
    */
   customerAccountRead: CustomerAccountReadPort;
+  /**
+   * Feature 146 (threat model T8) — `organizations`' sales-rep scope. The admin
+   * resolved-price probe answers a non-platform admin only about organizations
+   * they may see.
+   */
+  salesRepScope: SalesRepAssignmentPort;
 }
 
 export interface PriceListsModuleHandle {
   priceListService: PriceListService;
   pricingService: PricingServiceContract;
   statusWorker: PriceListStatusWorker;
+  /**
+   * Feature 146 — the probe's body as a service, behind both the admin probe and
+   * `buyerLinePricePort`, so the two cannot drift (research R2).
+   */
+  buyerLinePriceService: BuyerLinePriceService;
 }
 
 export function priceListsModule(options: PriceListsModuleOptions): {
@@ -150,13 +163,24 @@ export function priceListsModule(options: PriceListsModuleOptions): {
     options.targetReads,
   );
   const statusWorker = new PriceListStatusWorker(options.emFactory);
+  // One engine instance behind the probe and the port alike: a quote's "price
+  // at request" and its "current price" must be the same question.
+  const buyerLinePriceService = new BuyerLinePriceService({
+    pricingService,
+    catalogProductRead: options.targetReads.catalogProductRead,
+    customerAccountRead: options.customerAccountRead,
+    organizationDetails: options.targetReads.organizationDetails,
+    salesChannels: {
+      findById: (id) => options.emFactory().findOne(SalesChannel, { id }),
+      findSystemDefault: () => options.emFactory().findOne(SalesChannel, { systemDefault: true }),
+    },
+  });
 
   return {
-    handle: { priceListService, pricingService, statusWorker },
+    handle: { priceListService, pricingService, statusWorker, buyerLinePriceService },
     plugin: async (app: FastifyInstance) => {
       await registerPricingRoutes(app, {
         priceListService,
-        pricingService,
         emFactory: options.emFactory,
         requireAdmin: options.requireAdmin,
         catalogProductRead: options.targetReads.catalogProductRead,
@@ -164,6 +188,8 @@ export function priceListsModule(options: PriceListsModuleOptions): {
         organizationDetails: options.targetReads.organizationDetails,
         customerGroupRead: options.targetReads.customerGroupRead,
         customerAccountRead: options.customerAccountRead,
+        buyerLinePriceService,
+        salesRepScope: options.salesRepScope,
         ...(options.resolveAdminAuditContext
           ? { resolveAdminAuditContext: options.resolveAdminAuditContext }
           : {}),
