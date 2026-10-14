@@ -352,6 +352,8 @@ pointing at whichever tree it was created from; the same property issue #255 dep
 - PostgreSQL — no schema change and no migration; the one new write goes to the existing `price_list_products` table (145-admin-product-picker)
 - TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite + admin-kit zones (admin); Next.js 15 App Router server components and server actions (storefront) — **no new runtime dependency** (146-quote-request-pricing-history)
 - PostgreSQL — three nullable columns on `quote_request_items` and two new tables (`quote_request_org_policies`, `quote_request_account_policies`), all owned by `quote_requests`, in two migrations (146-quote-request-pricing-history)
+- TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite through `@endora-commerce/admin-kit` (admin) — **no new runtime dependency**; `axe-core` added as an `admin` devDependency (test-only) (147-saved-views)
+- PostgreSQL — two new platform-global tables, `product_list_saved_views` (owned by `catalog`) and `quote_request_list_saved_views` (owned by `quote_requests`); `order_list_saved_views` unchanged (147-saved-views)
 
 - TypeScript 5.x strict on Node.js ≥ 22.17; Fastify + MikroORM (PostgreSQL) + Zod + ioredis + BullMQ + Meilisearch (backend)
 - React 19 + Vite + react-router-dom 7 + Tailwind 4 (admin); Next.js 15 App Router + React 19 + Tailwind v4 (storefront)
@@ -362,6 +364,6 @@ pointing at whichever tree it was created from; the same property issue #255 dep
 See "Repo map" above.
 
 ## Recent Changes
+- 147-saved-views: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite through `@endora-commerce/admin-kit` (admin) — **no new runtime dependency**; `axe-core` added as an `admin` devDependency (test-only)
 - 146-quote-request-pricing-history: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite + admin-kit zones (admin); Next.js 15 App Router server components and server actions (storefront) — **no new runtime dependency**
 - 145-admin-product-picker: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite + react-router-dom 7 through `@endora-commerce/admin-kit` (admin) — **no new runtime dependency**
-- 144-seo-search-engine-robots: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite + admin-kit zones (admin); Next.js 15 App Router middleware and route handlers (storefront) — **no new runtime dependency**
