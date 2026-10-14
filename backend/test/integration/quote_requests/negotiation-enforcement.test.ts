@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { asValue, type Resolver } from 'awilix';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { EntityManager } from '@mikro-orm/postgresql';
@@ -43,6 +45,14 @@ interface NegotiationPolicy {
 }
 
 const POLICY_SERVICE = 'quoteRequestNegotiationPolicyService';
+
+/** The module's own shipped sentence, read rather than copied (one source of truth). */
+const EN_BUNDLE = JSON.parse(
+  readFileSync(
+    fileURLToPath(new URL('../../../../packages/modules/quote_requests/i18n/en.json', import.meta.url)),
+    'utf8',
+  ),
+) as Record<string, string>;
 
 describe('146 — price-negotiation lock enforcement [integration]', () => {
   let h: BackendServerHandle;
@@ -154,9 +164,9 @@ describe('146 — price-negotiation lock enforcement [integration]', () => {
     expect(res.statusCode, res.body).toBe(422);
     const { error } = res.json() as { error: { code: string; message: string } };
     expect(error.code).toBe('RFQ_PRICE_PROPOSAL_NOT_ALLOWED');
-    // Translated, not the bare code.
-    expect(error.message).not.toBe('RFQ_PRICE_PROPOSAL_NOT_ALLOWED');
-    expect(error.message.length).toBeGreaterThan(20);
+    // The bundle's sentence, not the raise site's fallback.
+    expect(EN_BUNDLE['errors.RFQ_PRICE_PROPOSAL_NOT_ALLOWED']).toBeTruthy();
+    expect(error.message).toBe(EN_BUNDLE['errors.RFQ_PRICE_PROPOSAL_NOT_ALLOWED']);
   };
 
   const policyService = () => h.container.resolve(POLICY_SERVICE) as NegotiationPolicy;
