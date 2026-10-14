@@ -53,6 +53,20 @@ export function adminUserIdKeys(value: unknown, path = ''): string[] {
 }
 
 /**
+ * Every path, at any depth, whose key is one of `names` — arrays, nested
+ * objects and event payloads included. Asserted against `[]` to prove a
+ * reply carries none of a set of keys anywhere (feature 146, threat model T7).
+ */
+export function keyPaths(value: unknown, names: readonly string[], path = ''): string[] {
+  if (Array.isArray(value)) return value.flatMap((v, i) => keyPaths(v, names, `${path}[${i}]`));
+  if (value === null || typeof value !== 'object') return [];
+  return Object.entries(value).flatMap(([key, child]) => {
+    const here = path ? `${path}.${key}` : key;
+    return [...(names.includes(key) ? [here] : []), ...keyPaths(child, names, here)];
+  });
+}
+
+/**
  * Every disagreement between a value and a schema, as `path: message` lines.
  * Asserted against `[]` so a failure names all the fields that drifted at once
  * rather than the first one zod met.
