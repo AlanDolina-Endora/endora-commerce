@@ -35,7 +35,8 @@ Paths are relative to the repository root. Module source is under `packages/modu
 - Admin modify (`services/rfq-admin-service.ts` `modify`) deletes all lines and recreates them from the
   PATCH body. The admin line schema carries no `desiredUnitPrice`, so **after the first admin revision the
   customer's proposed price is gone from the current lines**; it survives only in the earlier revision
-  snapshots. `modify` and `patchDraft` also do not carry the packaging-unit fields across the rewrite.
+  snapshots. `modify` and `patchDraft` also do not carry the packaging-unit fields across the rewrite
+  (`patchDraft` carries variant and line note; the admin PATCH line schema has no packaging-unit fields).
 - The admin Modify tab (`packages/modules/quote_requests/src/admin/pages/RfqDetail.tsx`, `ModifyCard`)
   saves `{ productId, quantity, agreedUnitPrice }` only — no `variantId` and no `lineNote`, although
   `adminPatchQuoteRequestLineSchema` (`packages/contracts/src/quote-requests.ts`) accepts both — so every
@@ -113,7 +114,13 @@ Paths are relative to the repository root. Module source is under `packages/modu
   accept or reject one raised by a colleague: the deciding person is not necessarily the request's
   `customerAccountId`.
 - `patchDraft` refuses an edit once **any** `modified` event exists — including the one a previous
-  customer draft edit wrote — so a customer can edit a draft only once.
+  customer draft edit wrote — so a customer can edit a draft only once. The guard's own comment says it is
+  meant to fire on a modification "written by an admin user"; the query filters on the event type only.
+  No storefront screen calls the customer draft-edit API today; it is reachable by direct API clients.
+- An organization administrator reaches a colleague's quote request through the same visibility rule
+  (`findVisibleForCustomer`, `isOrgAdmin`) and can therefore edit a colleague's draft through the API.
+  Create and resubmit always stamp the acting customer account as the request's owner, so draft edit is
+  the only customer write where the actor and the owner can differ.
 
 ### Settings and per-customer attributes
 
@@ -145,7 +152,9 @@ Paths are relative to the repository root. Module source is under `packages/modu
 - The reference price (US1) is **not stored anywhere**, and line rows are rewritten on every revision, so
   a value kept only on mutable line rows is lost at the first revision. The storage mechanism is the
   plan's decision.
-- The per-customer lock (US4) has no home today (see Settings above).
+- The negotiation lock (US4) has no home today (see Settings above): it needs an organization-level value
+  and a customer-account-level override. Whether they are columns or runtime custom fields is the plan's
+  decision.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -175,6 +184,9 @@ negotiation starts with a manual price lookup.
 4. **Given** the rep has already sent a revised offer, **When** the request is reopened, **Then** the
    customer's original proposed price is still shown per line (it is not lost by the revision) together
    with the reference price and the current agreed price.
+4b. **Given** a customer whose price for P is 120.00 PLN on sales channel A and 130.00 PLN on the
+   system-default channel raises a request on channel A, **When** the rep opens it, **Then** the reference
+   price is 120.00 PLN (the channel the request was raised on).
 5. **Given** the price of P changed after the request was submitted, **When** the rep opens it, **Then**
    the reference price shown is the one stored at submission, labelled "price at request"; the current
    price is not shown for that line.
@@ -185,6 +197,14 @@ negotiation starts with a manual price lookup.
    screen fails.
 8. **Given** a request created by converting a cart in which P cost 120.00, **When** the rep opens it,
    **Then** the line shows reference price 120.00 (price at request) and no customer proposal ("—").
+9. **Given** a request whose line for product P has variant V, a line note and a packaging unit, **When** a
+   rep changes only the agreed price of that line in the Modify tab and saves, **Then** the line still has
+   variant V, the same line note and the same packaging unit, and the History entry for that revision lists
+   only the agreed-price change (no line removed/added, no line-note change).
+10. **Given** a pending, not-yet-revised request whose line for P has variant V, a line note and a
+   packaging unit, **When** the customer, through the customer draft-edit API, resends the line with the
+   same variant, line note and packaging-unit fields and a changed quantity, **Then** variant, line note and
+   packaging unit are stored as sent and History lists only the quantity change.
 
 ---
 
@@ -261,18 +281,22 @@ colleague A; as rep C, cancel another request. Verify History names B (not A) an
 
 ### User Story 4 - Administrator locks price negotiation for a customer (Priority: P2)
 
-An administrator turns on a negotiation lock for a given customer. That customer then sees no
-proposed-price input on the storefront quote request draft; they still request quotes with quantities and
-notes, and sales prices the lines as today. The block holds for direct API calls too. Other customers are
-unaffected.
+An administrator turns off price negotiation for an organization (all its members) or for an individual
+customer account, which may override its organization in either direction. A customer for whom negotiation
+is not allowed sees no proposed-price input on the storefront quote request draft; they still request
+quotes with quantities and notes, and sales prices the lines as today. The block holds for direct API calls
+too. Other customers are unaffected.
 
 **Why this priority**: Business control; independent of US1–US3 and small, but it opens a buyer-facing
 refusal path that needs API enforcement.
 
-**Independent Test**: Lock customer X; as X, check the storefront draft page has no proposed-price input;
-as X, POST a quote request with a `desiredUnitPrice` directly to the API and observe the refusal; as X,
-convert a cart to a quote request and observe it succeeds; as unlocked customer Y on the same sales
-channel, observe the input and a successful proposal.
+**Independent Test**: Lock organization O on `/organizations/:id`; as member X of O, check the storefront
+draft page has no proposed-price input; as X, POST a quote request with a `desiredUnitPrice` directly to the
+API and observe the refusal; as X, convert a cart to a quote request and observe it succeeds; set member Y
+of O to "allowed" on `/customers/:id` and observe Y gets the input and a successful proposal; as customer Z
+of another organization on the same sales channel, observe the input and a successful proposal.
+
+In the scenarios below, "the lock is on / off for a customer" means the customer's effective value (FR-020).
 
 **Acceptance Scenarios**:
 
@@ -294,9 +318,20 @@ channel, observe the input and a successful proposal.
 7. **Given** customer X is locked and customer Y is not, both buying on the same sales channel, **When**
    both request quotes, **Then** only X has the input hidden and proposals refused; the lock applies to X
    on every sales channel.
-8. **Given** an administrator turns the lock on or off for a customer, **When** that customer next loads
-   the draft page, **Then** the new state is reflected, and the change is recorded in the audit log with
-   the administrator who made it.
+7a. **Given** organization O is locked and its member Y has the account override "allowed", **When** Y and
+   another member X (no override) request quotes, **Then** Y may propose prices and X may not.
+7b. **Given** organization O is not locked (default) and its member X has the account override "locked",
+   **When** X and another member W (no override) request quotes, **Then** X may not propose prices and W
+   may.
+7c. **Given** member X's account override is cleared ("as organization"), **When** X next loads the draft
+   page, **Then** X follows the organization value again.
+7d. **Given** organization administrator B, who may propose prices, edits through the draft-edit API a
+   pending request owned by colleague A for whom negotiation is not allowed, **When** the edit carries a
+   proposed price, **Then** it is refused (the request owner's effective value governs); conversely B, if
+   locked, may send a proposal on a request of an allowed colleague.
+8. **Given** an administrator changes the organization value or a customer account's override, **When**
+   an affected customer next loads the draft page, **Then** the new effective state is reflected, and the
+   change is recorded in the audit log with the administrator who made it and the old and new value.
 
 ---
 
@@ -310,8 +345,9 @@ channel, observe the input and a successful proposal.
   record, not from current lines (FR-002).
 - **Customer edits the draft before sales touches it** (customer draft PATCH): the proposal shown is the
   latest customer-entered one; the reference price is resolved and stored for added or changed lines at that
-  moment; the change appears in history as a customer modification with proposed-price changes. (Today a
-  customer can make only one such edit; see Current state.)
+  moment; the change appears in history as a customer modification with proposed-price changes. Variant,
+  line note and packaging unit of lines the edit keeps are carried over (FR-035). (Today a customer can make
+  only one such edit; see Current state.) [NEEDS CLARIFICATION: is lifting the one-edit limit in scope?]
 - **Resubmit** (new request cloned from an old one): a new request, reference resolved at its submission;
   no proposals (as today).
 - **Cart-converted request**: the cart unit price is not a customer proposal; lines show no proposal and the
@@ -341,23 +377,33 @@ channel, observe the input and a successful proposal.
 - **Same product twice with different variants**: history and reference must distinguish lines by product
   and variant, not product alone.
 - **Actor no longer exists / cannot be read**: recorded role label + "unknown user" (US3 #5).
-- **Lock scope**: per customer, on every sales channel (Clarifications). Admin screens show stored
-  proposals regardless of the lock.
+- **Lock scope**: an organization value (applies to all its members) plus an optional per-customer-account
+  override ("allowed" / "locked" / "as organization"); effective value = account override if set, else the
+  organization value, else "allowed". Applies on every sales channel; there is no platform or channel
+  default (Clarifications). Admin screens show stored proposals regardless of the lock.
 - **Lock turned on while requests are pending with proposals**: existing proposals stay; a customer draft
   edit of such a request after the lock is refused only if it sends a proposal (FR-022).
 - **Anonymous draft, then sign-in as a locked customer**: the draft is built in the browser before the
   storefront knows who the buyer is, so a proposal may already have been typed. Once the buyer is known to
   be locked, the draft page hides the input and does not send the stored proposals; the server refuses any
   that are sent anyway (FR-021, FR-022). *(Assumption; see Assumptions.)*
-- **Organization administrator acting for a colleague**: whether the lock follows the person acting or the
-  organization [NEEDS CLARIFICATION: depends on the account-vs-organization decision for FR-020].
+- **Organization administrator acting for a colleague**: an organization administrator can edit a
+  colleague's pending draft through the draft-edit API. The lock is evaluated for the request's owner
+  (`customerAccountId`), not for the acting user (US4 #7d). Create and resubmit always make the acting user
+  the owner, so there the two coincide. The storefront draft page reads the signed-in user's own effective
+  value, which is correct because the draft page only ever creates the user's own request.
+- **Customer account moved to another organization**: the account's override (if any) moves with it; with
+  no override it follows the new organization's value.
+- **Admin Modify save**: lines the rep keeps retain their variant, line note and packaging unit; a line the
+  rep adds has the variant and note the rep chose and no packaging unit (FR-034).
 - **Validity changes before release**: not reconstructable (validity is not in revision snapshots); such
   history entries list only the other changes.
 - **Lock state unreadable**: the storefront shows the input (fail-open display, as for the existing
-  storefront flags); the API decides on the lock in the same request that writes the quote request, so an
-  unreadable lock fails that request rather than letting a proposal through.
-- **Quote Requests module switched off**: no lock control, enforcement or UI is contributed (a module that
-  is off contributes nothing); the stored lock value is kept and applies again when the module returns.
+  storefront flags); the API decides on the lock (organization value and account override) in the same
+  request that writes the quote request, so an unreadable lock fails that request rather than letting a
+  proposal through. A request carrying no proposal does not need the lock and is not failed by it.
+- **Quote Requests module switched off**: no lock controls, enforcement or UI are contributed (a module that
+  is off contributes nothing); the stored lock values are kept and apply again when the module returns.
 
 ## Requirements *(mandatory)*
 
@@ -367,9 +413,11 @@ channel, observe the input and a successful proposal.
 
 - **FR-001**: At customer submission of a quote request (every customer path that creates or edits one:
   storefront form, cart conversion, customer draft edit, resubmit, quick order, shopping list → quote,
-  order copy → quote), the system MUST determine, server-side, each line's reference unit price for that
-  customer: the net unit price the customer would pay for that product/variant at that line quantity on a
-  normal order at that moment (customer's price lists, quantity bracket, active sale price). A reference
+  order copy → quote), the system MUST determine, server-side, each line's reference unit price for the
+  request's customer (its owning customer account and organization, also when an organization
+  administrator edits a colleague's draft): the net unit price that customer would pay for that
+  product/variant at that line quantity on a normal order at that moment, on the sales channel the request
+  was raised on (`salesChannelId`) (customer's price lists, quantity bracket, active sale price). A reference
   price supplied by the client MUST NOT be trusted. Exception: on cart conversion the reference is the cart
   line's unit price (FR-008), which is itself a server-side snapshot.
 - **FR-002**: The system MUST retain the submission-time reference price per line, and the customer's last
@@ -387,15 +435,19 @@ channel, observe the input and a successful proposal.
   non-computable difference, without errors.
 - **FR-006**: For lines without a stored submission-time reference (requests created before this feature,
   lines added by sales, admin-created requests), the screen MUST show the customer's current reference
-  price, visibly labelled "current price", distinct from "price at request".
+  price, resolved on the request's sales channel, visibly labelled "current price", distinct from "price at
+  request".
 - **FR-007**: The Modify tab's empty agreed-price prefill MUST use the customer-specific price (the same
-  resolution as FR-001 for the request's customer), not the administrator's own storefront price.
+  resolution as FR-001 for the request's customer and sales channel), not the administrator's own
+  storefront price.
 - **FR-008**: A cart-to-quote conversion MUST NOT record the cart's unit price as a customer proposal; the
   cart line's unit price MUST be stored as that line's reference (at-request) price.
 - **FR-009**: A quote request on which no line carries a customer proposal (e.g. cart-converted, or raised
   by a locked customer) MUST show no customer-price total ("—") on the storefront account list until a
   total at the agreed price exists, never `0,00 PLN`. The reference price is not used as a fallback for
   list totals or the CRM opportunity value; the CRM value of such a request stays 0 until sales prices it.
+  [NEEDS CLARIFICATION: what the storefront list total shows when only some lines carry a proposal — today a
+  partial sum, while the admin list shows "—" unless every line does.]
 
 **Readable history (US2, US3)**
 
@@ -430,32 +482,54 @@ channel, observe the input and a successful proposal.
 
 **Negotiation lock (US4)**
 
-- **FR-020**: An administrator MUST be able to turn a negotiation lock on or off for an individual customer
-  — "Allow this customer to propose prices" (default: allowed — current behaviour) — from the admin
-  customer surface, with Polish and English label and description. The lock is a property of the customer,
-  not of a sales channel: it applies on every channel, and two customers on one channel can differ.
-  [NEEDS CLARIFICATION: which party carries the lock — the customer account or its organization?]
+- **FR-020**: An administrator MUST be able to set price negotiation at two levels, each with a Polish and
+  English label and description:
+  (a) on the organization (`/organizations/:id`) — "Members may propose prices": allowed (default) or not
+  allowed; applies to every customer account of the organization;
+  (b) on the customer account (`/customers/:id`) — an override with three states: "as organization"
+  (default, no override), "allowed", "not allowed". The customer screen MUST show the resulting effective
+  value and whether it comes from the override or the organization.
+  The effective value for a customer account = its override if set, else its organization's value, else
+  "allowed". There is no platform-wide or per-sales-channel default. The value applies on every sales
+  channel; two customers on one channel, and two members of one organization, can differ.
 - **FR-021**: When negotiation is not allowed for the signed-in customer, the storefront quote request draft
   MUST NOT show the proposed-price input and MUST NOT send stored proposals; it MUST show the catalogue unit
   price read-only where known and a localized note that sales will price the request.
-- **FR-022**: When negotiation is not allowed for the acting customer, the customer create and draft-edit
-  APIs MUST refuse a line carrying a proposed price with a dedicated, translated (Polish and English) error
-  and write nothing.
+- **FR-022**: When negotiation is not allowed for the request's owner (FR-037), the customer create and
+  draft-edit APIs MUST refuse a line carrying a proposed price with a dedicated, translated (Polish and
+  English) error and write nothing.
 - **FR-023**: Cart-to-quote conversion MUST keep working when negotiation is not allowed (FR-008 makes it
   carry no proposal).
 - **FR-024**: The lock MUST NOT affect admin create/modify/approve or the agreed price, and MUST NOT alter
   proposals already stored on existing quote requests.
-- **FR-025**: The storefront MUST learn the lock state for the signed-in customer from an authenticated
-  read; it MUST NOT be readable for another customer, and the UI MUST NOT be the only enforcement (FR-022).
-- **FR-026**: Turning the lock on or off MUST be an audited admin write (Command Bus), recording the
-  administrator, the customer and the old and new value.
-- **FR-027**: The lock control MUST be gated by an admin permission code that is listed on `/admin-roles`.
-  [NEEDS CLARIFICATION: which permission code gates the control — an existing one or a new one?]
-- **FR-028**: With the Quote Requests module switched off, the lock control, its storefront read and its
-  enforcement MUST NOT be contributed; the stored value MUST be kept and take effect again when the module
+- **FR-025**: The storefront MUST learn the signed-in customer's effective value from an authenticated
+  read; it MUST NOT be readable for another customer, it needs only the effective value (not the
+  organization value and override separately), and the UI MUST NOT be the only enforcement (FR-022).
+- **FR-026**: Changing the organization value or a customer account's override MUST be an audited admin
+  write (Command Bus), recording the administrator, the organization or customer account and the old and
+  new value (for the override, one of the three states).
+- **FR-027**: Both controls (organization value and customer-account override) MUST be gated by the
+  existing `customers:manage` permission (already listed on `/admin-roles`); reading them on the admin
+  screens follows the existing `customers:read`. No new permission code is introduced.
+- **FR-028**: With the Quote Requests module switched off, both lock controls, the storefront read and the
+  enforcement MUST NOT be contributed; the stored values MUST be kept and take effect again when the module
   is switched back on.
-- **FR-029**: No new command-palette entry is required: the lock lives on an existing admin screen, which is
-  already reachable from the palette.
+- **FR-029**: No new command-palette entry is required: the controls live on two existing admin screens
+  (`/organizations/:id`, `/customers/:id`), which are already reachable from the palette.
+- **FR-037**: Every customer-side check of the lock (FR-021, FR-022) MUST use the effective value of the
+  quote request's owner (`customerAccountId`); on create and resubmit the owner is the acting customer, on
+  draft edit by an organization administrator it is the colleague who owns the request.
+
+**Line data carry-over on revisions (Q5)**
+
+- **FR-034**: Saving an admin revision (the Modify tab and the admin modify API) MUST keep each surviving
+  line's variant, line note and packaging unit (name and units per package) unless the rep changed them;
+  the Modify tab MUST send the line's variant and line note rather than dropping them. Lines the rep adds
+  carry the variant and note the rep chose and no packaging unit.
+- **FR-035**: A customer draft edit (`patchDraft`) MUST store each line's packaging unit (name and units per
+  package) as sent, as customer create already does; variant and line note continue to be carried as today.
+- **FR-036**: As a consequence of FR-034 and FR-035, the History diff (FR-012, FR-015) MUST NOT report a
+  line as removed and added, or a line note as changed, when the revision did not change it.
 
 **Cross-cutting**
 
@@ -469,14 +543,19 @@ channel, observe the input and a successful proposal.
 
 ### Key Entities
 
-- **Quote request line**: product, variant, quantity, customer's proposed unit price, agreed unit price,
-  currency. Gains a submission-time reference unit price and a preserved original proposal.
+- **Quote request line**: product, variant, quantity, line note, packaging unit, customer's proposed unit
+  price, agreed unit price, currency. Gains a submission-time reference unit price and a preserved original
+  proposal; variant, line note and packaging unit survive revisions (FR-034, FR-035).
 - **Reference price**: net unit price the customer would pay for the line at a given moment; "at request"
   (stored) or "current" (resolved on read).
 - **History entry**: a rendered, possibly merged, view over one or more stored events: title, timestamp,
   actor (person + role, or System), details (reason, note, list of changes).
-- **Negotiation lock**: a boolean per customer [NEEDS CLARIFICATION: account or organization], default "allowed",
-  changed by an administrator, audited.
+- **Organization negotiation value**: allowed / not allowed per organization, default allowed; changed by
+  an administrator with `customers:manage`, audited.
+- **Customer-account negotiation override**: as organization (none) / allowed / not allowed per customer
+  account, default none; changed by an administrator with `customers:manage`, audited.
+- **Effective negotiation value**: derived, never stored: override if set, else organization value, else
+  allowed; evaluated for a quote request's owner.
 
 ## Success Criteria *(mandatory)*
 
@@ -500,13 +579,16 @@ channel, observe the input and a successful proposal.
 
 - Reference price = effective net unit price for the customer (sale price if active, else base), resolved
   the way the admin create screen's prefill resolves it (`RfqCreatePage.tsx` →
-  `GET /api/v1/admin/products/:id/resolved-price`). [NEEDS CLARIFICATION: resolved on the sales channel
-  the request was raised on, or on the system-default channel as the probe does today?]
+  `GET /api/v1/admin/products/:id/resolved-price`), but on the sales channel the request was raised on
+  (`salesChannelId`, stamped by `raisedOnChannelId()`), not the system-default channel the probe uses today;
+  the plan makes the probe/port accept a channel. A resubmitted request resolves on its own (new) channel.
 - Percentage difference = (proposed − reference) / reference × 100, rounded to 2 decimals; negative means
   a discount requested.
 - The customer storefront history (`describeEvent`) is not changed; #283 is about the admin view.
 - When locked, the customer may still enter a header note, line notes and line quantities.
-- The lock is read at request time; toggling it migrates no quote request state.
+- The lock is read at request time; changing either value migrates no quote request state.
+- The reference price is resolved for the request's owner (FR-001), including when an organization
+  administrator edits a colleague's draft; this follows the owner rule of FR-037.
 - Actor role labels stored as English strings are mapped to translated labels for the known values
   (`Customer`, `System`, `Platform administrator`, `Sales representative`, `Administrator`); other values
   (custom role names) are shown as stored.
@@ -520,7 +602,9 @@ channel, observe the input and a successful proposal.
 - Customer-side (storefront) history readability and storefront display of reference/difference.
 - Showing reference/difference on the admin quote request list (`/quote-requests`) or totals at reference
   price.
-- A per-sales-channel negotiation lock (superseded by the per-customer lock).
+- A per-sales-channel negotiation lock (superseded by the per-customer lock) and any platform-wide or
+  per-channel negotiation default.
+- A storefront screen for editing a submitted pending request (the draft-edit API stays API-only).
 - Showing the current price beside a stored at-request price.
 - Listing custom-field changes in history.
 - Recomputing or backfilling reference prices for requests created before release.
@@ -552,5 +636,20 @@ channel, observe the input and a successful proposal.
 ### Session 2026-10-14
 
 - Q: Scope of the negotiation lock — per sales channel or per customer? → A: Per customer (issue #284), not
-  per sales channel; this supersedes an earlier per-channel answer (FR-020; US4 #7). Whether "customer"
-  means the customer account or its whole organization is not yet decided. Answered by the product owner.
+  per sales channel; this supersedes an earlier per-channel answer (FR-020; US4 #7). Answered by the
+  product owner; the account-vs-organization question is answered below.
+- Q: Which party carries the negotiation lock — the customer account or its organization? → A: Both: an
+  organization value applying to all its members, with a per-customer-account override (allowed / locked /
+  as organization); effective = override, else organization, else allowed. Controls on `/organizations/:id`
+  and `/customers/:id`. An organization administrator editing a colleague's request is governed by the
+  request owner's effective value (FR-020, FR-037, FR-022; US4 #7a–#7d). Answered by the product owner.
+- Q: Is there a platform-wide or per-channel negotiation default? → A: No; only the organization value and
+  the account override, default "allowed" (FR-020; Out of Scope). Answered by the product owner.
+- Q: Which permission gates the controls? → A: The existing `customers:manage`, for both (FR-027).
+  Answered by the product owner.
+- Q: On which sales channel is the reference price resolved? → A: The channel the quote request was raised
+  on (`salesChannelId`, `raisedOnChannelId()`); the plan makes the price probe/port accept a channel
+  (FR-001, FR-006, FR-007; US1 #4b; Assumptions). Answered by the product owner.
+- Q: Is fixing the loss of variant, line note and packaging unit on the Modify-tab save, admin `modify` and
+  customer `patchDraft` in scope? → A: Yes, so the History diff shows no false removals or changes (FR-034,
+  FR-035, FR-036; US1 #9, #10). Answered by the product owner.
