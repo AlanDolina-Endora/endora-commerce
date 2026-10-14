@@ -15,6 +15,7 @@ import {
   type RfqDraftItem,
 } from '../../lib/rfqDraft';
 import { submitQuoteRequest } from '../../app/(commerce)/quote-request/actions';
+import type { CreateRfqLine } from '../../lib/api/rfq';
 
 /**
  * Quote-request draft view — the cart-modelled "review & submit" page at
@@ -27,10 +28,21 @@ import { submitQuoteRequest } from '../../app/(commerce)/quote-request/actions';
  * success page (`/quote-requests/success?id=…`). Anonymous buyers (401) are
  * bounced to /login first, keeping their draft intact so they can finish after
  * signing in.
+ *
+ * Feature 146 (FR-021): `priceProposalsAllowed` is the signed-in buyer's own
+ * effective negotiation value, read by the server page. When it is `false` the
+ * proposed-price input is hidden, each line shows its catalogue price
+ * read-only, a note says sales will price the request, and the stored
+ * proposals are not sent — they stay in the browser draft, untouched (spec
+ * Assumption). The API refuses a proposal sent anyway (FR-022).
  */
-export function RfqDraftView(props: { locale: string }): ReactNode {
+export function RfqDraftView(props: {
+  locale: string;
+  priceProposalsAllowed: boolean;
+}): ReactNode {
   const pl = props.locale.startsWith('pl');
   const t = strings(pl);
+  const proposalsAllowed = props.priceProposalsAllowed;
   const router = useRouter();
 
   const [items, setItems] = useState<RfqDraftItem[]>([]);
@@ -56,12 +68,13 @@ export function RfqDraftView(props: { locale: string }): ReactNode {
 
   const currency = items.find((i) => i.unitPrice)?.unitPrice?.currency ?? null;
   // A line counts as priced when the buyer proposed a price or the catalogue
-  // carries one; the subtotal then uses the proposed price where given.
+  // carries one; the subtotal then uses the proposed price where given. A
+  // locked buyer's proposals are not sent, so they are not counted either.
   const allPriced =
-    items.length > 0 && items.every((i) => i.proposedUnitPrice != null || i.unitPrice);
+    items.length > 0 && items.every((i) => effectiveUnitPrice(i, proposalsAllowed) !== null);
   const subtotal = allPriced
     ? items.reduce(
-        (sum, i) => sum + (i.proposedUnitPrice ?? i.unitPrice?.amount ?? 0) * i.quantity,
+        (sum, i) => sum + (effectiveUnitPrice(i, proposalsAllowed) ?? 0) * i.quantity,
         0,
       )
     : null;
@@ -77,11 +90,7 @@ export function RfqDraftView(props: { locale: string }): ReactNode {
       // cookie, which previously 401'd logged-in buyers and dropped the draft.
       const result = await submitQuoteRequest({
         ...(note.trim() ? { headerNote: note.trim() } : {}),
-        items: items.map((i) => ({
-          productId: i.productId,
-          quantity: i.quantity,
-          ...(i.proposedUnitPrice != null ? { desiredUnitPrice: i.proposedUnitPrice } : {}),
-        })),
+        items: buildSubmitItems(items, proposalsAllowed),
       });
       if (!result.ok && result.reason === 'auth') {
         window.location.href = '/login?next=/quote-request';
@@ -144,6 +153,8 @@ export function RfqDraftView(props: { locale: string }): ReactNode {
         </div>
       ) : null}
 
+      {proposalsAllowed ? null : <LockedPricingNote t={t} />}
+
       <div className="grid grid-cols-[1fr_380px] items-start gap-8 max-[960px]:grid-cols-1">
         <div className="overflow-hidden rounded-md border border-line bg-surface">
           <div className="flex items-center justify-between border-b border-line px-[22px] py-[18px]">
@@ -156,6 +167,7 @@ export function RfqDraftView(props: { locale: string }): ReactNode {
               key={line.productId}
               line={line}
               t={t}
+              proposalsAllowed={proposalsAllowed}
               onQty={(q): void => setItems(setRfqDraftQuantity(line.productId, q))}
               onProposedPrice={(p): void =>
                 setItems(setRfqDraftProposedPrice(line.productId, p))
@@ -226,22 +238,67 @@ export function RfqDraftView(props: { locale: string }): ReactNode {
   );
 }
 
-function DraftLine({
+/**
+ * The submit payload (FR-021): a line carries `desiredUnitPrice` only when the
+ * buyer may propose prices and proposed one. The draft lines are not modified.
+ */
+export function buildSubmitItems(
+  items: readonly RfqDraftItem[],
+  proposalsAllowed: boolean,
+): CreateRfqLine[] {
+  return items.map((i) => ({
+    productId: i.productId,
+    quantity: i.quantity,
+    ...(proposalsAllowed && i.proposedUnitPrice != null
+      ? { desiredUnitPrice: i.proposedUnitPrice }
+      : {}),
+  }));
+}
+
+/**
+ * The unit price a line is valued at on this page: the buyer's proposal where
+ * they may propose and did, otherwise the catalogue snapshot.
+ */
+function effectiveUnitPrice(line: RfqDraftItem, proposalsAllowed: boolean): number | null {
+  if (proposalsAllowed && line.proposedUnitPrice != null) return line.proposedUnitPrice;
+  return line.unitPrice?.amount ?? null;
+}
+
+/**
+ * The page-level note shown to a buyer who may not propose prices (FR-021).
+ * Said once above the lines rather than on every line (Law of Proximity: it
+ * describes the whole request, not one product).
+ */
+export function LockedPricingNote({ t }: { t: Strings }): ReactNode {
+  return (
+    <p
+      role="note"
+      className="mb-3 rounded-md border border-line bg-surface-alt px-[14px] py-[10px] text-[13px] text-fg-soft"
+    >
+      {t.lockedPricingNote}
+    </p>
+  );
+}
+
+export function DraftLine({
   line,
   t,
+  proposalsAllowed,
   onQty,
   onProposedPrice,
   onRemove,
 }: {
   line: RfqDraftItem;
   t: Strings;
+  proposalsAllowed: boolean;
   onQty: (q: number) => void;
   onProposedPrice: (price: number | null) => void;
   onRemove: () => void;
 }): ReactNode {
   // The line total reflects the buyer's proposed price when given, otherwise
   // the catalogue snapshot — so it tracks whatever they actually want quoted.
-  const effectiveUnit = line.proposedUnitPrice ?? line.unitPrice?.amount ?? null;
+  // A locked buyer's stored proposal is neither shown nor counted (FR-021).
+  const effectiveUnit = effectiveUnitPrice(line, proposalsAllowed);
   const currency = line.unitPrice?.currency ?? 'PLN';
   const lineTotal = effectiveUnit !== null ? effectiveUnit * line.quantity : null;
   return (
@@ -296,33 +353,46 @@ function DraftLine({
         </button>
       </div>
 
-      <label className="flex flex-col gap-[3px]">
-        <span className="text-[10px] font-medium uppercase tracking-[0.04em] text-muted">
-          {t.proposedPriceLabel}
-        </span>
-        <span className="flex items-center gap-[6px] rounded-sm border border-line px-[8px] py-[6px] focus-within:border-line-strong">
-          <input
-            type="number"
-            min={0}
-            step="0.01"
-            inputMode="decimal"
-            value={line.proposedUnitPrice ?? ''}
-            placeholder={line.unitPrice ? line.unitPrice.amount.toFixed(2) : '—'}
-            aria-label={t.proposedPriceLabel}
-            className="w-full min-w-0 border-0 bg-transparent p-0 text-right font-mono text-[14px] text-fg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-            onChange={(e): void => {
-              const raw = e.target.value.trim();
-              if (raw === '') {
-                onProposedPrice(null);
-                return;
-              }
-              const n = Number(raw);
-              onProposedPrice(Number.isFinite(n) && n >= 0 ? n : null);
-            }}
-          />
-          <span className="font-mono text-[11px] text-muted">{currency}</span>
-        </span>
-      </label>
+      {proposalsAllowed ? (
+        <label className="flex flex-col gap-[3px]">
+          <span className="text-[10px] font-medium uppercase tracking-[0.04em] text-muted">
+            {t.proposedPriceLabel}
+          </span>
+          <span className="flex items-center gap-[6px] rounded-sm border border-line px-[8px] py-[6px] focus-within:border-line-strong">
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              value={line.proposedUnitPrice ?? ''}
+              placeholder={line.unitPrice ? line.unitPrice.amount.toFixed(2) : '—'}
+              aria-label={t.proposedPriceLabel}
+              className="w-full min-w-0 border-0 bg-transparent p-0 text-right font-mono text-[14px] text-fg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              onChange={(e): void => {
+                const raw = e.target.value.trim();
+                if (raw === '') {
+                  onProposedPrice(null);
+                  return;
+                }
+                const n = Number(raw);
+                onProposedPrice(Number.isFinite(n) && n >= 0 ? n : null);
+              }}
+            />
+            <span className="font-mono text-[11px] text-muted">{currency}</span>
+          </span>
+        </label>
+      ) : (
+        <div className="flex flex-col gap-[3px]">
+          <span className="text-[10px] font-medium uppercase tracking-[0.04em] text-muted">
+            {t.catalogPriceLabel}
+          </span>
+          <span className="py-[6px] text-right font-mono text-[14px] text-fg">
+            {line.unitPrice
+              ? formatMoney(line.unitPrice.amount, line.unitPrice.currency)
+              : t.onRequest}
+          </span>
+        </div>
+      )}
 
       <span className="text-right font-mono text-[14px] font-semibold text-fg max-[720px]:hidden" aria-label={t.lineTotalLabel}>
         {lineTotal !== null ? formatMoney(lineTotal, currency) : '—'}
@@ -366,7 +436,7 @@ function formatMoney(amount: number, currency: string): string {
   return formatMoneyShared(amount, currency);
 }
 
-interface Strings {
+export interface Strings {
   home: string;
   heading: string;
   subheading: (n: number) => string;
@@ -384,6 +454,8 @@ interface Strings {
   unit: string;
   qtyLabel: string;
   proposedPriceLabel: string;
+  catalogPriceLabel: string;
+  lockedPricingNote: string;
   lineTotalLabel: string;
   removeLabel: string;
   noteLabel: string;
@@ -394,7 +466,7 @@ interface Strings {
   errorGeneric: string;
 }
 
-function strings(pl: boolean): Strings {
+export function strings(pl: boolean): Strings {
   if (pl) {
     return {
       home: 'Strona główna',
@@ -414,6 +486,9 @@ function strings(pl: boolean): Strings {
       unit: 'szt.',
       qtyLabel: 'Ilość',
       proposedPriceLabel: 'Proponowana cena',
+      catalogPriceLabel: 'Cena katalogowa',
+      lockedPricingNote:
+        'Ceny w tym zapytaniu ustali dział sprzedaży. Przy pozycjach widzisz cenę katalogową — możesz zmienić ilości i dodać uwagi.',
       lineTotalLabel: 'Wartość pozycji',
       removeLabel: 'Usuń',
       noteLabel: 'Uwagi do zapytania (opcjonalnie)',
@@ -442,6 +517,9 @@ function strings(pl: boolean): Strings {
     unit: 'pc.',
     qtyLabel: 'Quantity',
     proposedPriceLabel: 'Proposed price',
+    catalogPriceLabel: 'Catalogue price',
+    lockedPricingNote:
+      'Our sales team will set the prices for this request. Each line shows its catalogue price — you can still change quantities and add notes.',
     lineTotalLabel: 'Line total',
     removeLabel: 'Remove',
     noteLabel: 'Notes for sales (optional)',

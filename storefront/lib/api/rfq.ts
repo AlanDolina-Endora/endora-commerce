@@ -1,3 +1,4 @@
+import { storefrontQuoteRequestNegotiationSchema } from '@endora-commerce/contracts';
 import { apiGetAuthed, apiMutate } from './mutations';
 import { backendBaseUrl } from '../env.mjs';
 
@@ -238,6 +239,33 @@ export async function convertRfqToOrder(
     sessionCookie,
   });
   return result.data!;
+}
+
+/**
+ * Whether the signed-in buyer may propose prices on a quote request
+ * (feature 146, FR-025) — the buyer's own effective value, nobody else's.
+ *
+ * Fetched per request with the session cookie and `cache: 'no-store'`
+ * (`apiGetAuthed`); never through `unstable_cache` or any cache keyed without
+ * the session, which would hand one buyer's lock to another (threat model T15).
+ *
+ * **Fails open**: no session, a failed read or an answer that does not parse
+ * all return `true`, and the draft shows the input as it always has. This is a
+ * display decision only — the API refuses a locked buyer's proposal in the
+ * same request that would write it (FR-022), so the UI is never the guarantee.
+ */
+export async function getQuoteRequestNegotiation(sessionCookie: string | null): Promise<boolean> {
+  if (!sessionCookie) return true;
+  try {
+    const data = await apiGetAuthed<unknown>({
+      path: '/api/v1/quote-requests/price-negotiation',
+      sessionCookie,
+    });
+    const parsed = storefrontQuoteRequestNegotiationSchema.safeParse(data);
+    return parsed.success ? parsed.data.priceProposalsAllowed : true;
+  } catch {
+    return true;
+  }
 }
 
 export async function getStorefrontQuoteRequestSettings(): Promise<{

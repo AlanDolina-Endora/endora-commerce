@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { RfqDraftView } from '../../../components/rfq/RfqDraftView';
 import { getServerContext } from '../../../lib/server-context';
+import { getSessionCookie } from '../../../lib/session';
+import { getQuoteRequestNegotiation } from '../../../lib/api/rfq';
 import type { Metadata } from 'next';
 
 /**
@@ -16,8 +18,14 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
  * server component only resolves the locale and hands off to the client
  * `<RfqDraftView>`. Submission runs through a server action (see
  * `actions.ts`) so the httpOnly session cookie reaches the backend.
+ *
+ * Feature 146 (FR-021, FR-025): whether this buyer may propose prices is read
+ * here, on the server, with the buyer's own session and no shared cache, and
+ * handed to the view. An anonymous visitor has no session and is shown the
+ * input (fail-open display; the API decides on submit).
  */
 export default async function QuoteRequestDraftPage(): Promise<ReactNode> {
-  const { locale } = await getServerContext();
-  return <RfqDraftView locale={locale} />;
+  const [{ locale }, session] = await Promise.all([getServerContext(), getSessionCookie()]);
+  const priceProposalsAllowed = await getQuoteRequestNegotiation(session);
+  return <RfqDraftView locale={locale} priceProposalsAllowed={priceProposalsAllowed} />;
 }
