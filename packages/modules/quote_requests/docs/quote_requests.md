@@ -355,10 +355,11 @@ products in two ways:
   line of quantity 1 — at most 200 in one step. Draft and inactive products
   may be added; grouped and bundle parents are listed with their reason and
   cannot be ticked; a product already on the request is marked as already
-  added. The button is disabled, with a hint, for an operator without
-  `catalog:read`.
+  added.
 - **Quick add by name or SKU**, beside it, appends one product under the same
   rules.
+
+Both are disabled, each with a hint, for an operator without `catalog:read`.
 
 Each line shows the product's name and SKU, an editable whole-number quantity,
 an editable agreed unit price and a remove action.
@@ -370,9 +371,12 @@ only once a customer with an organization is chosen — lines added before that
 are prefilled then — and an answer is applied only while it still matches the
 line's product, quantity and customer. Where no price resolves the field stays
 empty. **A price typed by hand is never overwritten**: changing the quantity
-leaves it as it is. Changing the customer clears every price that was not
-typed by hand and resolves it again for the new customer, so such a price may
-become empty.
+leaves it as it is. A prefilled price follows the quantity instead: it is
+resolved again for each new valid quantity, and cleared as soon as the
+quantity is not a whole number of 1 or more — it no longer answers any
+quantity — then resolved again once the quantity is valid. Changing the
+customer clears every price that was not typed by hand and resolves it again
+for the new customer, so such a price may become empty.
 
 **An incomplete line blocks the request instead of being dropped.** A line with
 no agreed price, or with a quantity that is not a whole number of 1 or more, is

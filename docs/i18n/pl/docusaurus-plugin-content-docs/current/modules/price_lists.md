@@ -163,7 +163,8 @@ do dokładnie jednej z trzech list:
 
 Całe żądanie to jedno polecenie, `price_list.products_add`, które zapisuje jeden wpis w dzienniku
 audytu ze stanem po zmianie zawierającym wyłącznie liczby (`{ name, added, unchanged, failed }`) —
-a gdy nic nie zostało dodane, nie zapisuje żadnego. Ponowne wysłanie tej samej treści jest więc
+a gdy nic nie zostało dodane, nie zapisuje żadnego. Wpis pojawia się na karcie **Ostatnia
+aktywność** na pulpicie jako *dodał(a) produkty do cennika*. Ponowne wysłanie tej samej treści jest więc
 bezpieczne: produkty dodane za pierwszym razem wracają jako `unchanged`, bez śladu w dzienniku.
 
 Odmowy niczego nie zapisują:
@@ -281,9 +282,12 @@ którego pojedyncza dawna cena została skopiowana do więcej niż jednej waluty
   lista produktów się odświeża, pierwszy dodany produkt zostaje wybrany z otwartym edytorem progów,
   a każdy produkt, którego nie udało się dodać, jest wymieniony z powodem. Gdy żądanie zostanie
   odrzucone albo odpowiedź się zgubi, przeglądarka zostaje otwarta z zachowanym zaznaczeniem,
-  komunikatem o błędzie i przyciskiem **Ponów**, który wysyła te same produkty jeszcze raz. **Dodaj**
-  jest nieaktywne w systemowym cenniku Default, a bez uprawnienia `price_lists:write` jest nieaktywne
-  i pokazuje podpowiedź.
+  komunikatem o błędzie i przyciskiem **Ponów**, który wysyła te same produkty jeszcze raz; komunikat
+  podaje przyczynę, jeśli odpowiedź ją zawiera — cennik Default albo brak uprawnienia (403), cennik,
+  który już nie istnieje (404), nieprawidłowe żądanie (400) albo równoczesna zmiana cennika przez
+  kogoś innego (409) — i informuje, że niczego nie zmieniono. **Dodaj** jest nieaktywne w systemowym
+  cenniku Default, a bez uprawnienia `price_lists:write` albo `catalog:read` jest nieaktywne i
+  pokazuje podpowiedź.
 - `DisplayModeOverrideRow` jest osadzony w edytorze organizacji, w formularzu edycji drzewa kategorii
   i w panelu LinkedPriceListsPanel, który zastępuje dawny `PricingPlaceholder` w edytorze produktu.
 

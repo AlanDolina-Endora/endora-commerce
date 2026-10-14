@@ -360,8 +360,9 @@ od razu pokazuje sekcję **Pozycje**.
   rozmiaru strony i filtrów, a **Dodaj N** dodaje każdy zaznaczony produkt jako pozycję o ilości 1
   — najwyżej 200 naraz. Produkty nadrzędne typu grouped i bundle, produkty robocze i nieaktywne
   oraz produkty, które już są w zamówieniu, są widoczne z powodem i nie da się ich zaznaczyć.
-  Bez uprawnienia `catalog:read` przycisk jest nieaktywny i pokazuje podpowiedź.
 - **Szybkie dodawanie po nazwie lub SKU**, obok, dopisuje jeden produkt według tych samych zasad.
+
+Bez uprawnienia `catalog:read` obie te opcje są nieaktywne i każda pokazuje podpowiedź.
 
 Każda pozycja pokazuje nazwę i SKU produktu, edytowalną ilość, cenę jednostkową, wartość pozycji
 i akcję usunięcia. Zmiana ilości, klienta, kanału sprzedaży, metody dostawy albo metody płatności

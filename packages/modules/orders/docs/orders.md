@@ -376,10 +376,11 @@ shows **Items** at once.
   page-size and filter changes, and **Add N** adds every ticked product as a
   line of quantity 1 — at most 200 in one step. Grouped and bundle parents,
   draft and inactive products, and products already on the order are listed
-  with their reason and cannot be ticked. The button is disabled, with a hint,
-  for an operator without `catalog:read`.
+  with their reason and cannot be ticked.
 - **Quick add by name or SKU**, beside it, appends one product under the same
   rules.
+
+Both are disabled, each with a hint, for an operator without `catalog:read`.
 
 Each line shows the product's name and SKU, an editable quantity, the unit
 price, the line total and a remove action. Changing a quantity, the customer,

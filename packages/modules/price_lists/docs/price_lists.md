@@ -179,9 +179,10 @@ id in exactly one of the three:
 
 The whole request is one Command, `price_list.products_add`, and writes one
 audit entry whose after-state holds counts only (`{ name, added, unchanged,
-failed }`) — and no entry at all when nothing was added. Sending the same body
-again is therefore safe: the products added the first time come back
-`unchanged`, silently.
+failed }`) — and no entry at all when nothing was added. The entry shows on the
+home dashboard's **Recent activity** card as *added products to price list*.
+Sending the same body again is therefore safe: the products added the first
+time come back `unchanged`, silently.
 
 Refusals write nothing:
 
@@ -312,9 +313,13 @@ one currency.
   reloads, the first added product is selected with its bracket editor open,
   and any product that could not be added is named with its reason. When it is
   refused, or the answer is lost, the browser stays open with the selection
-  kept, an error and **Retry**, which sends the same products again. **Add** is
-  disabled on the system Default list, and disabled with a hint for an
-  operator without `price_lists:write`.
+  kept, an error and **Retry**, which sends the same products again; the error
+  names the cause where the answer gives one — the Default list or a missing
+  permission (403), a list that no longer exists (404), an invalid request
+  (400), or someone changing the list at the same moment (409) — and says that
+  nothing was changed. **Add** is disabled on the system Default list, and
+  disabled with a hint for an operator without `price_lists:write` or without
+  `catalog:read`.
 - `DisplayModeOverrideRow` is embedded in the Organization editor,
   the Categories tree EditForm, and the LinkedPriceListsPanel that
   replaces the old `PricingPlaceholder` on the catalog Product editor.

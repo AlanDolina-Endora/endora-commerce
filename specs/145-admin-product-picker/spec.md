@@ -2,7 +2,7 @@
 
 **Feature Branch**: `feat/145-admin-product-picker` (spec directory `specs/145-admin-product-picker/`)
 **Created**: 2026-10-13
-**Status**: Clarified and planned (clarify session 2026-10-13, sixteen answers — the last two are product-owner rulings on findings of the analyze pass; `plan.md` and `tasks.md` written 2026-10-13; analyze re-run 2026-10-13 after those rulings)
+**Status**: Implemented — accepted by the product owner 2026-10-14 against code and tests, pending the manual browser walk of `quickstart.md` §1–§3 (T060; §4's API checks were already smoke-tested against a running stack). History: clarify session 2026-10-13 (sixteen answers — the last two product-owner rulings on findings of the analyze pass); `plan.md` and `tasks.md` written 2026-10-13; analyze re-run 2026-10-13 after those rulings; all nine phases built, QA, code review and security review passed 2026-10-14
 **Issues**: #280, #281, #282, #291
 **Input**: Product owner's request, summarised in English. Three admin screens that put products
 onto a document — **Create order** (`/orders/new`), **Create quote request**

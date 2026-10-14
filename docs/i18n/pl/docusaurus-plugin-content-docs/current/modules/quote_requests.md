@@ -328,9 +328,10 @@ sposoby:
   rozmiaru strony i filtrów, a **Dodaj N** dodaje każdy zaznaczony produkt jako pozycję o ilości 1
   — najwyżej 200 naraz. Produkty robocze i nieaktywne można dodać; produkty nadrzędne typu grouped
   i bundle są widoczne z powodem i nie da się ich zaznaczyć; produkt, który już jest w zapytaniu,
-  jest oznaczony jako już dodany. Bez uprawnienia `catalog:read` przycisk jest nieaktywny i
-  pokazuje podpowiedź.
+  jest oznaczony jako już dodany.
 - **Szybkie dodawanie po nazwie lub SKU**, obok, dopisuje jeden produkt według tych samych zasad.
+
+Bez uprawnienia `catalog:read` obie te opcje są nieaktywne i każda pokazuje podpowiedź.
 
 Każda pozycja pokazuje nazwę i SKU produktu, edytowalną ilość (liczbę całkowitą), edytowalną
 uzgodnioną cenę jednostkową i akcję usunięcia.
@@ -340,7 +341,10 @@ uzgodnioną cenę jednostkową i akcję usunięcia.
 najwyżej czterech żądaniach naraz. Cena jest wypełniana dopiero po wybraniu klienta z organizacją —
 pozycje dodane wcześniej są wtedy uzupełniane — a odpowiedź jest stosowana tylko wtedy, gdy nadal
 pasuje do produktu, ilości i klienta pozycji. Gdy żadna cena nie zostanie wyznaczona, pole zostaje
-puste. **Cena wpisana ręcznie nigdy nie jest nadpisywana**: zmiana ilości jej nie zmienia. Zmiana
+puste. **Cena wpisana ręcznie nigdy nie jest nadpisywana**: zmiana ilości jej nie zmienia. Cena
+wypełniona wstępnie podąża natomiast za ilością: jest wyznaczana ponownie dla każdej nowej poprawnej
+ilości i czyszczona, gdy tylko ilość przestaje być liczbą całkowitą równą 1 lub większą — nie
+odpowiada już wtedy żadnej ilości — a po poprawieniu ilości jest wyznaczana ponownie. Zmiana
 klienta czyści każdą cenę, która nie została wpisana ręcznie, i wyznacza ją ponownie dla nowego
 klienta, więc taka cena może stać się pusta.
 
