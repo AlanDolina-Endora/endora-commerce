@@ -138,7 +138,7 @@ price "per base unit".
 **Currency**: the reference is resolved in the channel's default currency (what a normal order on
 that channel is priced in — the probe's own default). Lines are still hard-coded `PLN`; when the
 two differ, FR-005 applies (shown in its own currency, no difference). Fixing `lineCurrency` is out
-of scope (coordinator decision D-3K); the defect is logged, not fixed (tasks T089a).
+of scope (coordinator decision D-3K); the defect is logged in `plan.md` § *Deferred defects (outside this feature)*, not fixed (tasks T089a).
 
 ## R3 — Cart conversion: the reference comes from the cart, and the HTTP body cannot supply one
 

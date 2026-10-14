@@ -250,6 +250,34 @@ none is accepted as residual risk. `T10` was not issued to this plan.
 | T16 | note | Audit row without the admin on a system-scope path | `actorAdminUserId` asserted on every path | R12; T064 |
 | T17 | note | Stored XSS through notes in History | Text nodes only, no `dangerouslySetInnerHTML` | admin API §3 H5; T057, T059 |
 
+## Deferred defects (outside this feature)
+
+Logged here because `specs/deferred-defects.md` is not in this repository (withheld pre-migration
+record); T089a carries this section into the PR description. Not fixed by feature 146 (D-3K).
+
+**Quote request line currency is hard-coded `'PLN'`.**
+
+- **Where** (at 12efc10ac), under `packages/modules/quote_requests/src/backend/services/`:
+  - `rfq-service.ts:332` — `createForCustomer` writes `lineCurrency: 'PLN'`;
+  - `rfq-service.ts:447` — `patchDraft` writes `lineCurrency: 'PLN'`;
+  - `rfq-admin-service.ts:456` — `modify` writes `lineCurrency: 'PLN'`;
+  - `rfq-admin-service.ts:619` — `createOnBehalf` writes `lineCurrency: 'PLN'`;
+  - `rfq-service.ts:1126` and `rfq-admin-service.ts:203` — list summaries fall back to `'PLN'` when
+    a request has no lines.
+  `resubmit` (`rfq-service.ts:556`) copies the source line's currency, so it inherits the defect.
+- **Impact**: on a sales channel whose default currency is not PLN, every quote line is labelled
+  PLN although the customer's prices — and this feature's stored reference — are in the channel's
+  currency. Proposed and agreed prices are shown and totalled under the wrong currency; with this
+  feature the reference is shown in its own currency and FR-005 suppresses the difference, so the
+  rep loses the comparison on exactly those channels. Exports reading `lineCurrency`
+  (`QuoteRequestLineRecord`) carry the wrong code.
+- **Suggested fix**: stamp `lineCurrency` from the request's sales channel default currency
+  (the channel `raisedOnChannelId()` records; the same currency `buyerLinePricePort` resolves in)
+  on customer create, draft edit and admin create; carry the stored currency in `modify`; read it
+  from the request rather than a literal in the summaries. Existing rows need no migration if every
+  current channel is PLN; otherwise a one-off backfill from `quote_requests.sales_channel_id`.
+  A separate issue (the coordinator proposes it to the owner).
+
 ## Complexity Tracking
 
 No constitution violation. Recorded so a reviewer does not have to ask:
@@ -301,7 +329,7 @@ No constitution violation. Recorded so a reviewer does not have to ask:
 - After adding an entity, a migration or a manifest change: `composer:generate`, `manifests:generate`,
   `pnpm install --lockfile-only`, and commit all artefacts — including the generated module
   reference page and its Polish cache entry and materialised mirror when they move (M1).
-- Never tighten a request schema's strictness (M4); never `em.upsert` / `nativeUpdate` the policy
+- Never make a customer-facing request schema strict (M4; admin `set*` bodies stay `.strict()`); never `em.upsert` / `nativeUpdate` the policy
   entities (T2).
 - I3's fallback is pre-authorised (D-3J): apply it if `check:admin-zones` refuses, and record it.
 - Changesets (`minor`, never `major`): `@endora-commerce/contracts`, `@endora-commerce/mod-quote-requests`,
@@ -316,10 +344,8 @@ No constitution violation. Recorded so a reviewer does not have to ask:
     feature; prices are labelled "per base unit" (T044, T047).
 - **Out of scope (plan)**: validating a customer-supplied packaging unit against the catalogue's
   packaging units — it belongs to the minimum-quantity feature (issue #285); fixing the hard-coded
-  `lineCurrency = 'PLN'` (D-3K, logged by T089a).
-- **Coordinator questions — process, not product; not resolved in code**:
-  1. The new `set*` bodies are declared `.strict()`; confirm the "never make request schemas
-     strict" rule (M4) is about the existing customer-facing schemas and not these new admin
-     bodies.
-  2. `specs/deferred-defects.md` (T089a, D-3K) is not in this checkout (withheld pre-migration
-     record): where should the `lineCurrency = 'PLN'` entry be logged?
+  `lineCurrency = 'PLN'` (D-3K, § *Deferred defects* above; carried into the PR by T089a).
+- **Coordinator rulings (2026-10-14)**: M4's "never strict" covers customer-facing request schemas
+  only (existing and new); the admin `set*` bodies keep `.strict()`. The `lineCurrency` defect is
+  logged above, not in `specs/deferred-defects.md` (absent from this repository), and carried into
+  the PR by T089a. Nothing remains open.

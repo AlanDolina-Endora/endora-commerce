@@ -53,8 +53,11 @@ suffix (`T040a`) rather than renumbering.
   `check:docs-translations`.
 - Migrations are scaffolded, never numbered by hand:
   `pnpm --filter backend run migration:new -- --module quote_requests --name <slug>`.
-- **Never make a request schema strict** that is not strict today (M4). `createQuoteRequestSchema`
-  strips unknown keys and stays that way; `patchQuoteRequestSchema` is already `.strict()`.
+- **Never make a customer-facing request schema strict** (M4, coordinator ruling): this holds for
+  existing and new customer-facing schemas alike — clients may send extra keys, which are stripped.
+  `createQuoteRequestSchema` stays non-strict; `patchQuoteRequestSchema` keeps the `.strict()` it
+  already has (not tightened by this feature). The new **admin** `set*` bodies keep `.strict()`
+  exactly as `contracts/price-negotiation-api.md` declares.
 - **No `em.upsert`, `nativeUpdate` or `nativeInsert` on the two policy entities** (T2): find, then
   `em.create` or assign, then flush, so the org write guard sees the row.
 
@@ -88,7 +91,7 @@ sequence** on one checkout, not in parallel. Phases 11 and 12 may run in paralle
 
 **Goal**: every new shape exists in `packages/contracts/` with a test, before any service code.
 
-- [ ] T003 [P] RED contract tests for the quote-request additions: item `referencePrice` / `customerProposedUnitPrice` / packaging keys optional; history entry, change and actor unions (every kind parses, an unknown kind is refused); the history response carries `truncated` (T9); the admin actor carries no `email` key (T9); negotiation DTOs parse and the two `set*` bodies refuse an unknown key (declared `.strict()` in `contracts/price-negotiation-api.md` — new bodies; see plan § Hand-off, coordinator question 1); `storefrontQuoteRequestNegotiationSchema` has exactly one key; `createQuoteRequestSchema` and `patchQuoteRequestSchema` refuse 201 items and accept 200 (T11), and `createQuoteRequestSchema` still **strips** an unknown line key such as `referenceUnitPrice` (it is not made strict, M4); a `QuoteRequestLineRecord` stub without the two new reference fields still type-checks against `QuoteRequestReadPort` (option (b) is additive) — `packages/contracts/src/quote-requests.test.ts`
+- [ ] T003 [P] RED contract tests for the quote-request additions: item `referencePrice` / `customerProposedUnitPrice` / packaging keys optional; history entry, change and actor unions (every kind parses, an unknown kind is refused); the history response carries `truncated` (T9); the admin actor carries no `email` key (T9); negotiation DTOs parse and the two `set*` bodies refuse an unknown key (admin bodies, `.strict()` as the contract declares — the M4 rule covers customer-facing schemas only); `storefrontQuoteRequestNegotiationSchema` has exactly one key; `createQuoteRequestSchema` and `patchQuoteRequestSchema` refuse 201 items and accept 200 (T11), and `createQuoteRequestSchema` still **strips** an unknown line key such as `referenceUnitPrice` (it is not made strict, M4); a `QuoteRequestLineRecord` stub without the two new reference fields still type-checks against `QuoteRequestReadPort` (option (b) is additive) — `packages/contracts/src/quote-requests.test.ts`
 - [ ] T004 [P] RED contract test for `BuyerLinePricePort` / `BuyerLinePriceQuery` (type-level: a structural stub compiles; `LinePricePort` stubs still compile unchanged) — `packages/contracts/src/price-lists.test.ts`
 - [ ] T005 Add to `packages/contracts/src/quote-requests.ts`, per `contracts/admin-quote-request-api.md` §1, §3:
   - (a) the admin item keys, `salesChannelId` (admin-only, optional) on `quoteRequestSchema`, the history schemas (`{ entries, truncated }`) and `QuoteRequestHistoryEntry` types;
@@ -297,7 +300,7 @@ sequence** on one checkout, not in parallel. Phases 11 and 12 may run in paralle
   - `@endora-commerce/mod-quote-requests`: reference price, history endpoint, lock, `totalAtCustomerPrice` meaning; **the manifest gains a binding dependency on `price_lists`**; **the admin list's customer-price total no longer turns `null` at the first revision** (the proposal is now carried); **a revised line the customer left unpriced is valued in CRM at the proposal carried from the customer's last draft edit** rather than nothing, until sales sets an agreed price; customer draft edits are rate-limited (L6); **for ERP / connector readers of `quoteRequestReadPort.listItems`: cart-converted lines now carry `desiredUnitPrice = null` — read the cart price from the new `referenceUnitPrice` / `referenceCurrency`** (owner decision (b));
   - `@endora-commerce/mod-price-lists`: port, probe parameter, probe refuses organizations outside a sales representative's scope;
   - `@endora-commerce/mod-carts`: conversion no longer writes a proposal.
-- [ ] T089a [P] Log the known defect this feature works around without fixing (D-3K): `lineCurrency` is hard-coded `'PLN'` on every write path in `rfq-service.ts` and `rfq-admin-service.ts`, so a non-PLN channel's reference is shown without a difference (FR-005). Target `specs/deferred-defects.md`, following that file's own format. **[NEEDS CLARIFICATION]**: that file is cited by `AGENTS.md` and the constitution but is **not in this checkout** at 12efc10ac (a withheld pre-migration record, D-247). Do not create it with an invented format: ask the coordinator whether to create it here or where to log the entry, and leave this task open until answered
+- [ ] T089a [P] Carry `plan.md` § *Deferred defects (outside this feature)* — the hard-coded `lineCurrency = 'PLN'` (D-3K), with its file:line list, impact and suggested fix — into the PR description's Risks / out-of-scope section, verbatim. Do not fix it in this feature
 - [ ] T090 Run the docs and release checks
 
 **Verification**: `pnpm --filter backend exec vitest run test/integration/quote_requests/off-state.test.ts` `[PG]` `&& pnpm --filter backend run check:off-state-coverage && pnpm --filter backend run check:module-docs && pnpm --filter backend run check:docs-translations && pnpm --filter backend run check:doc-snippets && pnpm --filter backend run check:release-intent`
