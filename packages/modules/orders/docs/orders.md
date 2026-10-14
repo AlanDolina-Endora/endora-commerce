@@ -50,7 +50,11 @@ anything is written, the customer's basket included. The ordered products are
 checked against **that** channel's assortment, not the one the admin request
 itself resolved — a product the chosen channel does not sell is refused with
 `404 PRODUCT_NOT_FOUND`, and one it sells is accepted even when the system
-default does not sell it.
+default does not sell it. Admin creation does accept a channel that exists but
+is switched off, which the storefront refuses with `422`
+`order_sales_channel_mismatch`; and a product outside the chosen channel's
+assortment is refused only after the customer's basket has been cleared, so
+that basket is not restored.
 
 What is read from an order's channel:
 

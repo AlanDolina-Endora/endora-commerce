@@ -50,7 +50,11 @@ koszyk klienta. Zamawiane produkty są sprawdzane względem asortymentu **tego**
 kanału, a nie kanału rozpoznanego dla samego żądania panelu — produkt, którego
 wybrany kanał nie sprzedaje, jest odrzucany odpowiedzią `404 PRODUCT_NOT_FOUND`,
 a produkt, który sprzedaje, jest przyjmowany, nawet jeśli kanał domyślny go nie
-sprzedaje.
+sprzedaje. Tworzenie zamówienia w panelu przyjmuje natomiast kanał, który istnieje,
+ale jest wyłączony — sklep odrzuca taki kanał odpowiedzią `422`
+`order_sales_channel_mismatch` — a produkt spoza asortymentu wybranego kanału jest
+odrzucany dopiero po wyczyszczeniu koszyka klienta, więc koszyk ten nie zostaje
+przywrócony.
 
 Z kanału zamówienia odczytywane są:
 

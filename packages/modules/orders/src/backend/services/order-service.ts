@@ -1489,6 +1489,13 @@ export class OrderService {
       // (D-47), and since D-51 an operator can move it, so the lookup has to
       // follow it. Read inside the transaction rather than through the
       // resolver's cache so the three uses below see one consistent snapshot.
+      //
+      // The fallback is not an existence check on a named id. Admin create
+      // refuses an unknown channel upstream (`order-creation-admin-service.ts`);
+      // the storefront route and one-click pass the request's resolved channel,
+      // and the API-key intake the key's bound one. So it is reached by a
+      // caller that names no channel, or by one that resolves its channel
+      // itself.
       const orderChannel =
         (req.salesChannelId
           ? await tx.findOne(SalesChannel, { id: req.salesChannelId })
