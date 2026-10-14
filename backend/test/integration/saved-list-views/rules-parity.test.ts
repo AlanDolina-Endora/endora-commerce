@@ -7,6 +7,7 @@ import {
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
 import { OrderListViewService } from '../../../../packages/modules/orders/src/backend/services/order-list-view-service.js';
+import { ProductListViewService } from '../../../../packages/modules/catalog/src/backend/services/product-list-view-service.js';
 
 /**
  * `specs/147-saved-views/` — one set of saved-view rules, judged the same way
@@ -68,6 +69,14 @@ interface ListAdapter {
   table: string;
   /** The list's own conflict code. */
   conflictCode: string;
+  /**
+   * Whether the table can hold two rows of one owner whose names share a key.
+   * `orders`' can — rows written before the rule are kept (research R-5) — so
+   * S8 proves they are left alone. The new tables carry a unique index on
+   * `(owner_admin_user_id, lower(name))`, so for them S8 proves the schema
+   * itself refuses the duplicate instead.
+   */
+  holdsLegacyDuplicates: boolean;
   make(emFactory: () => EntityManager, log: SpyLogger): SavedViewServiceUnderTest;
   /** Insert a row without going through the service's rules. */
   seedRaw(em: EntityManager, row: { ownerAdminUserId: string; name: string; shared: boolean }): Promise<string>;
@@ -78,6 +87,7 @@ const ADAPTERS: ListAdapter[] = [
     label: 'orders',
     table: 'order_list_saved_views',
     conflictCode: 'ORDER_SAVED_VIEW_NAME_TAKEN',
+    holdsLegacyDuplicates: true,
     // The cast is deliberate and must stay this narrow: the lists' input
     // shapes differ (orders requires `sort`, products accept none), so no one
     // type fits every service exactly. The scenarios below are what hold the
@@ -90,6 +100,26 @@ const ADAPTERS: ListAdapter[] = [
         `insert into order_list_saved_views
            (id, owner_admin_user_id, name, shared, filters, sort, visible_columns, created_at, updated_at)
          values (?, ?, ?, ?, '{}'::jsonb, '{"field":"placedAt","dir":"desc"}'::jsonb, null, now(), now())`,
+        [id, row.ownerAdminUserId, row.name, row.shared],
+      );
+      return id;
+    },
+  },
+  {
+    label: 'catalog',
+    table: 'product_list_saved_views',
+    conflictCode: 'PRODUCT_SAVED_VIEW_NAME_TAKEN',
+    holdsLegacyDuplicates: false,
+    // Same narrow cast as orders': the product list stores neither `sort` nor
+    // `visibleColumns`, so the shared `input()` carries keys it ignores.
+    make: (emFactory, log) =>
+      new ProductListViewService(emFactory, log) as unknown as SavedViewServiceUnderTest,
+    async seedRaw(em, row) {
+      const id = randomUUID();
+      await em.execute(
+        `insert into product_list_saved_views
+           (id, owner_admin_user_id, name, shared, filters, created_at, updated_at)
+         values (?, ?, ?, ?, '{}'::jsonb, now(), now())`,
         [id, row.ownerAdminUserId, row.name, row.shared],
       );
       return id;
@@ -239,7 +269,15 @@ describe('saved list views — one rule set for every list (spec 147)', () => {
       expect(renamed.name).toBe(`S7 admin own ${run}`);
     });
 
-    it('S8 leaves a pre-existing duplicate alone when only `shared` changes', async () => {
+    it.runIf(!adapter.holdsLegacyDuplicates)('S8 refuses a duplicate key at the schema, around the service', async () => {
+      const em = h.em();
+      await adapter.seedRaw(em, { ownerAdminUserId: owner.adminUserId, name: `S8 unique ${run}`, shared: false });
+      await expect(
+        adapter.seedRaw(em, { ownerAdminUserId: owner.adminUserId, name: `s8 UNIQUE ${run}`, shared: false }),
+      ).rejects.toThrow(`${adapter.table}_owner_name_key_uq`);
+    });
+
+    it.runIf(adapter.holdsLegacyDuplicates)('S8 leaves a pre-existing duplicate alone when only `shared` changes', async () => {
       const em = h.em();
       const a = await adapter.seedRaw(em, { ownerAdminUserId: owner.adminUserId, name: `S8 dup ${run}`, shared: false });
       await adapter.seedRaw(em, { ownerAdminUserId: owner.adminUserId, name: `s8 DUP ${run}`, shared: false });

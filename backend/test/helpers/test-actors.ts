@@ -317,6 +317,24 @@ export const ADMIN_COOKIES: Record<string, { adminUserId: string }> = {
   'stub-order-views-polish-admin-session': {
     adminUserId: '00000000-0000-4000-8000-0000000147a3',
   },
+  // `specs/147-saved-views/` — the product list's saved views, with ids of
+  // their own rather than the order list's three, for the reason every set
+  // above has its own. A catalogue reader on a custom role (not
+  // `sales_representative`, so a platform admin for saved views — owner ruling
+  // A) saves its own views and may modify a colleague's shared one; a sales
+  // representative holding `catalog:read` reads a shared view and may not
+  // modify it; an admin without `catalog:read` proves the gate on all four
+  // routes. The users, and the custom roles, are created by
+  // `test/contract/catalog/product-list-views.test.ts`.
+  'stub-product-views-catalog-reader-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147b1',
+  },
+  'stub-product-views-sales-rep-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147b2',
+  },
+  'stub-product-views-no-catalog-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147b3',
+  },
 };
 
 declare module 'fastify' {
