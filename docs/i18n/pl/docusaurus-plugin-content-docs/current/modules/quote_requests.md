@@ -186,8 +186,9 @@ jest odrzucana z `409 RFQ_NOT_DRAFT`, a klient składa zapytanie ponownie. Edycj
 edycja szkicu współpracownika przez administratora organizacji — nigdy nie zamykają szkicu.
 
 - Edycja zachowuje wariant, notatkę i jednostkę opakowania każdej pozycji w postaci przysłanej.
-- Endpoint przyjmuje najwyżej **30 edycji na minutę dla jednego zapytania**; kolejne dostają
-  odpowiedź `429`.
+- Endpoint przyjmuje najwyżej **30 edycji na minutę dla jednego zapytania**, liczonych
+  osobno dla każdego klienta; kolejne dostają odpowiedź `429 RATE_LIMITED` z nagłówkiem
+  `Retry-After`. Żądanie odrzucone przed uwierzytelnieniem nie jest liczone.
 
 Rewizja sprzedawcy (`PATCH /api/v1/admin/quote-requests/:id`) zachowuje wariant, notatkę,
 jednostkę opakowania, propozycję klienta i zapisaną cenę referencyjną każdej pozostającej

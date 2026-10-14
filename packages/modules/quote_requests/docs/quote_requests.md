@@ -204,8 +204,9 @@ customer resubmits instead. Edits by customers — an organization
 administrator's edit of a colleague's draft included — never close the draft.
 
 - An edit keeps each line's variant, line note and packaging unit as sent.
-- The route accepts at most **30 edits per minute for one request**; more
-  answer `429`.
+- The route accepts at most **30 edits per minute for one request**, counted
+  per customer; more answer `429 RATE_LIMITED` with a `Retry-After` header. A
+  request refused before it is authenticated is not counted.
 
 A seller's revision (`PATCH /api/v1/admin/quote-requests/:id`) keeps each
 surviving line's variant, line note, packaging unit, customer proposal and

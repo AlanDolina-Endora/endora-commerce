@@ -89,14 +89,13 @@ describe('146 — customer draft-edit rate limit [integration]', () => {
   });
 
   /**
-   * QA finding (feature 146): the bucket key is the request id alone and
-   * `@fastify/rate-limit` counts at `onRequest`, before `requireCustomer` runs.
-   * So 31 *unauthenticated* PATCHes naming a request's id (each answered 401)
-   * lock its owner out for the rest of the minute. Ids are random UUIDs, which
-   * bounds the abuse to someone who already holds one — hence minor — but the
-   * key should carry the caller (session or ip) as well. `it.fails` pins it.
+   * QA finding (feature 146): the bucket key used to be the request id alone,
+   * counted at `onRequest` before `requireCustomer` ran, so 31 unauthenticated
+   * PATCHes naming a request's id (each answered 401) locked its owner out for
+   * the rest of the minute. The limit now counts behind the customer guard and
+   * keys on the customer as well as the request.
    */
-  it.fails('an anonymous caller cannot exhaust the owner\'s bucket for a request', async () => {
+  it('an anonymous caller cannot exhaust the owner\'s bucket for a request', async () => {
     const mine = await create();
     for (let i = 0; i < 31; i += 1) {
       const res = await h.app.inject({

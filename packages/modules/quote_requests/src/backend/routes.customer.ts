@@ -12,16 +12,35 @@ import {
   resubmitQuoteRequestSchema,
   ERROR_CODES,
   OrganizationCannotTransactError,
+  type Actor,
 } from '@endora-commerce/contracts';
 import type { RfqService, CustomerContext } from './services/rfq-service.js';
 import { HttpError } from '@endora-commerce/platform/http';
 
-/** Draft edits per quote request per minute (research R16). */
+/**
+ * Draft edits per quote request per minute (research R16).
+ *
+ * Counted **after** the customer guard and keyed on the caller as well as the
+ * request. The limiter's default hook is `onRequest`, ahead of every guard, and
+ * the key used to be the request id alone — so 31 unauthenticated PATCHes
+ * naming a request's id, each answered 401, emptied its owner's bucket for the
+ * rest of the minute (feature 146 QA finding). `preHandler` lands the counter
+ * behind `requireCustomer` — the limiter appends its hook after the route's own
+ * guard, and the platform's guards-before-validation listener moves that chain
+ * to `preValidation` in order — so a refused caller consumes nothing; the
+ * actor in the key keeps one customer's edits from spending another's budget
+ * for the same request.
+ */
 const DRAFT_EDIT_RATE_LIMIT = {
   max: 30,
   timeWindow: '1 minute',
-  keyGenerator: (request: { params?: unknown; ip: string }): string =>
-    `quote-request-draft-edit:${(request.params as { id?: string } | undefined)?.id ?? request.ip}`,
+  hook: 'preHandler' as const,
+  keyGenerator: (request: FastifyRequest): string => {
+    const actor = request.actor as Actor | undefined;
+    const caller = actor?.kind === 'customer' ? actor.customerAccountId : request.ip;
+    const id = (request.params as { id?: string } | undefined)?.id ?? '';
+    return `quote-request-draft-edit:${caller}:${id}`;
+  },
 };
 
 export type RequireCustomerGuard = (
