@@ -2,7 +2,7 @@
 
 **Feature Branch**: `feat/146-quote-request-pricing-history`
 **Created**: 2026-10-14
-**Status**: Clarified — ready for plan
+**Status**: Clarified — planned; `/speckit.analyze` run 2026-10-14 (open owner questions in the analysis report)
 **Issues**: #279, #283, #284
 **Input**: Three open issues against the Quote Requests module:
 
@@ -352,8 +352,9 @@ In the scenarios below, "the lock is on / off for a customer" means the customer
   price is not shown for that line (Clarifications).
 - **Requests created before this feature**: no stored reference → current price, labelled "current price"
   (FR-006). Earlier modifications are diffed from stored revision snapshots (FR-016).
-- **Customer proposal lost after an admin revision**: the original proposal is taken from the submission
-  record, not from current lines (FR-002).
+- **Customer proposal lost after an admin revision**: the proposal is retained on the line across revisions
+  (FR-002, FR-034); for requests revised before this feature shipped, whose current lines already lost it,
+  it is taken from the submission record.
 - **Customer edits the draft before sales touches it** (customer draft PATCH): the proposal shown is the
   latest customer-entered one; the reference price is resolved and stored for added or changed lines at that
   moment; the change appears in history as a customer modification with proposed-price changes. Variant,
@@ -384,8 +385,11 @@ In the scenarios below, "the lock is on / off for a customer" means the customer
 - **Net vs gross**: proposal, agreed and reference are compared on the same basis — net unit prices, as
   quote prices are net today.
 - **Quantity brackets / packaging units**: the reference is resolved for the line's quantity (bracket) and
-  variant, per the unit the line quantity is expressed in. If the line is in packaging units, the reference
-  is per packaging unit (base unit price × units per package).
+  variant, per the unit the line quantity is expressed in. A quote request line's quantity is always in base
+  pieces, also for a line added as a packaging unit (2 pallets of 100 are stored as quantity 200 with the
+  packaging-unit name and units per package kept as a snapshot — `cart-service.ts` `effectiveQuantity`,
+  `backend/test/integration/quote_requests/rfq-packaging-snapshot.test.ts`); the reference, the proposal and
+  the agreed price are therefore all per base piece, and no multiplication by units per package applies.
 - **Line added later by sales**: has no customer proposal and no submission-time reference; shows the
   current reference price, labelled current.
 - **Same product twice with different variants**: history and reference must distinguish lines by product
@@ -555,8 +559,11 @@ In the scenarios below, "the lock is on / off for a customer" means the customer
 
 - **FR-030**: All new admin and storefront texts MUST exist in Polish and English.
 - **FR-031**: Admin-side reading changes (reference price, history) MUST be gated by the existing
-  `rfqs:handle` permission (and `price_lists:read` for price resolution, already required by it). Existing
-  permission codes MUST be reused wherever one fits (FR-027).
+  `rfqs:handle` permission (and `price_lists:read` for price resolution, which `rfqs:handle` declares as an
+  advisory `requires` — shown on `/admin-roles`, not enforced, D-173). The stored at-request price is quote
+  data and is shown to any `rfqs:handle` holder; resolving a current price (FR-006) or the prefill (FR-007)
+  needs `price_lists:read`, and without it the screen shows "—" and leaves the input empty, as the admin
+  create screen already does. Existing permission codes MUST be reused wherever one fits (FR-027).
 - **FR-032**: *Withdrawn.*
 - **FR-033**: The module documentation page `packages/modules/quote_requests/docs/quote_requests.md` MUST
   describe the reference price, the history entries and the negotiation lock, for operators and engineers.
@@ -612,8 +619,8 @@ In the scenarios below, "the lock is on / off for a customer" means the customer
 - Actor role labels stored as English strings are mapped to translated labels for the known values
   (`Customer`, `System`, `Platform administrator`, `Sales representative`, `Administrator`); other values
   (custom role names) are shown as stored.
-- An anonymous draft's typed proposals are dropped by the storefront, not refused, once the buyer is known
-  to be locked; the server-side refusal (FR-022) is the guarantee.
+- An anonymous draft's typed proposals are not sent by the storefront (they stay in the browser draft),
+  not refused, once the buyer is known to be locked; the server-side refusal (FR-022) is the guarantee.
 - A security threat model follows the plan: the buyer-facing proposal refusal and the per-customer lock
   read are a new trust boundary.
 - If reference-price resolution fails at customer submission for a reason other than "no price" (e.g. a
