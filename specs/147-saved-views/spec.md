@@ -32,6 +32,15 @@ changes behaviour (see *Clarifications*)
 - **Save dialog** / **delete confirmation** — the two design-system modals this feature
   introduces: one replaces the native `prompt()` / `confirm()` pair when a view is saved, the
   other stands in front of deleting a view.
+- **Platform admin (for saved views)** — an admin whose role resolves to any role code **other
+  than `sales_representative`**: exactly the rule the Order list already applies to saved views
+  (`isPlatformAdmin` reads `allowAll` in `packages/modules/orders/src/backend/routes.ts:499-502`,
+  which `packages/modules/organizations/src/backend/services/admin-tenant-scope.ts:43` sets for
+  every role but `sales_representative`; an admin whose role does not resolve is not one). It is
+  **not** the `platform_admin` role code: a custom role such as a catalog manager counts as a
+  platform admin here and may modify or delete a colleague's shared view on all three lists
+  (owner ruling, Session 2026-10-14). Wherever this specification says "platform admin" about
+  saved views, this definition applies.
 - **Quote Requests off** — the `quote_requests` module is not effectively present (switched off
   by the operator, or not available on the platform; Constitution XVII treats the two alike).
 
@@ -71,7 +80,7 @@ changes behaviour (see *Clarifications*)
 | --- | --- |
 | The screen's header comment states it mirrors the Order list but omits "saved views" among the order-only affordances. No saved-view entity, route or component exists in `quote_requests` | `packages/modules/quote_requests/src/admin/pages/RfqList.tsx:8-19` |
 | Filters: visibility scope (`mine` / `unassigned` / `all`) and organization are sent to the server; status (multi), search text, sort (newest / oldest / highest total) and the column picker are applied in the browser | same file `:107-123`, `:126-145`, `:340-342` |
-| The default scope depends on who is looking: `all` for a platform admin, `mine` otherwise | same file `:108-112` |
+| The default scope depends on who is looking: `all` for an admin holding the literal `platform_admin` role code, `mine` otherwise — a narrower test than the *Platform admin (for saved views)* of the Vocabulary (see *Assumptions*) | same file `:100`, `:108-112` |
 | `mine` is relative to the viewer, and visibility is always narrowed server-side to the organizations the caller may see, whatever scope is requested | `packages/modules/quote_requests/src/backend/services/rfq-admin-service.ts:134-152` |
 | The list is gated by `rfqs:handle` | `packages/modules/quote_requests/src/backend/routes.admin.ts:40` |
 | `quote_requests` is operator-toggleable (`quote_requests.enabled`) | `packages/modules/quote_requests/src/manifest.ts:38` |
@@ -194,9 +203,11 @@ the saved state.
    list, **Then** they can save, load and delete their own views, private or shared.
 5. **Given** a view was selected and then rows were selected for a bulk action, **When** another
    view is loaded, **Then** the row selection is cleared, as any filter change clears it today.
-6. **Given** another admin's shared Product view, **When** a platform admin deletes it through the
+6. **Given** another admin's shared Product view, **When** a platform admin (Vocabulary — any
+   role but `sales_representative`, e.g. a custom catalog-manager role) deletes it through the
    confirmation, **Then** it disappears for everyone; **when** an admin who is neither its owner
-   nor a platform admin selects it, **Then** no delete control is available to them.
+   nor a platform admin (a `sales_representative`) selects it, **Then** no delete control is
+   available to them.
 
 ---
 
@@ -221,8 +232,8 @@ colleague's shared view and confirm it shows only requests the loader may see; t
    replaced as in Story 2 scenario 3, and unknown column ids in the view are ignored.
 3. **Given** a shared view with scope `mine` saved by admin A, **When** admin B loads it, **Then**
    the list shows the requests of organizations assigned to B, not to A.
-4. **Given** a shared view with scope `all` saved by a platform admin, **When** a sales
-   representative loads it, **Then** the list shows only requests of organizations that
+4. **Given** a shared view with scope `all` saved by a platform admin (Vocabulary), **When** a
+   sales representative loads it, **Then** the list shows only requests of organizations that
    representative may see — loading a view never widens what an admin can see.
 5. **Given** a shared view whose captured organization the loader cannot see, **When** they load
    it, **Then** the list is empty and nothing on the screen discloses that organization's name.
@@ -244,7 +255,7 @@ colleague's shared view and confirm it shows only requests the loader may see; t
 - **Order views saved before this feature with duplicate names** — kept as they are; the rule
   applies to saves from now on (see Assumptions).
 - **The view's owner is deleted or loses access to the list** — their shared views remain visible
-  to others; only a platform admin can then delete them.
+  to others; only a platform admin (Vocabulary) can then delete them.
 - **A view saved before a filter, column or sort option existed, or after one was removed** —
   unknown keys and values are ignored on load and the remaining state is applied; the list never
   errors because of a stale view.
@@ -321,9 +332,12 @@ colleague's shared view and confirm it shows only requests the loader may see; t
 - **FR-013**: Visibility, ownership and modification rules for Product and Quote Request views
   MUST be those of Order views: an admin sees their own views and every shared view; another
   admin's private view is indistinguishable from one that does not exist; a shared view may be
-  modified or deleted only by its owner or a platform admin.
+  modified or deleted only by its owner or a platform admin as defined in the Vocabulary (any
+  role but `sales_representative`, not the `platform_admin` role code alone). The same test
+  applies on all three lists.
 - **FR-014**: The delete control MUST be available only for a view the current admin may delete —
-  their own views and, for a platform admin, shared views of others.
+  their own views and, for a platform admin (Vocabulary), shared views of others; a
+  `sales_representative` sees it only on their own views.
 
 **Permissions, tenancy, activation**
 
@@ -351,7 +365,10 @@ colleague's shared view and confirm it shows only requests the loader may see; t
   placeholder — MUST ship in English and Polish.
 - **FR-021**: The module documentation for orders, catalog and quote requests MUST describe saved
   views as shipped (what is captured, private versus shared, the duplicate-name rule, who may
-  delete), for both the operator and the engineer audience.
+  delete), for both the operator and the engineer audience. "Who may delete" MUST state plainly
+  that any admin whose role is not `sales_representative` can modify or delete a colleague's
+  shared view, and that such a deletion leaves no audit trail (see *Assumptions*), so an
+  operator can decide which roles to grant before relying on shared views.
 
 ### Key Entities
 
@@ -401,6 +418,15 @@ colleague's shared view and confirm it shows only requests the loader may see; t
   issues.
 - **No URL encoding**: saved views are not expressed in the page URL, and a view is not
   shareable as a link.
+- **Known, accepted divergence — two meanings of "platform admin" on the Quote Request list**:
+  saved views use the Vocabulary's definition (any role but `sales_representative`), while the
+  Quote Request list's default visibility scope and its `listAll` visibility still key on the
+  literal `role.code === 'platform_admin'`
+  (`packages/modules/quote_requests/src/backend/index.ts:241`,
+  `packages/modules/quote_requests/src/admin/pages/RfqList.tsx:100`). So an admin with, say, a
+  custom catalog-manager role may delete a colleague's shared Quote Request view yet opens the
+  list on scope `mine`. This feature does not change the Quote Request list's rule; aligning
+  the two is a separate decision.
 
 ## Out of scope
 
@@ -446,6 +472,7 @@ colleague's shared view and confirm it shows only requests the loader may see; t
   delete control only where deletion is allowed, no new permission code, the `quote_requests`
   module route gate for the off-state, no default view, no limit, no audit? → A: Accepted as
   stated (FR-003, FR-004, FR-011, FR-014, FR-015, FR-018, *Assumptions*).
+- Q: Who counts as a "platform admin" for modifying/deleting another admin's shared view? → A: Any admin role except sales_representative — the Order list's existing rule; not the platform_admin role code.
 
 A second clarify pass over the amended specification (functional scope, data, interaction and
 UX, non-functional attributes, integration, edge cases, constraints, terminology, completion
