@@ -234,9 +234,8 @@ Refusals write nothing:
   probe does not tell anybody what exists. A platform administrator skips only
   the representative check. A customer account that is not a member of the
   named organization is `400 VALIDATION_FAILED`.
-- **Behaviour change.** Up to and including 0.106.0 an unknown or out-of-scope
-  organization or account was answered with the anonymous price; it is now
-  `404`. A request naming neither an organization nor an account is still the
+- **Behaviour change.** Earlier releases answered an unknown or out-of-scope
+  organization or account with the anonymous price; it is now `404`. A request naming neither an organization nor an account is still the
   anonymous price.
 
 ### Storefront (public)

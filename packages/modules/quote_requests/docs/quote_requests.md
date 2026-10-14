@@ -280,9 +280,8 @@ predicate centralises the visibility rule:
 
 A sales representative who names a quote request of an organization they may
 not see gets the same `404` as for an id that does not exist, on every admin
-quote-request route — the detail, the history and every action. (Up to and including 0.106.0
-some of those routes answered `403`, which told the caller the request
-existed.)
+quote-request route — the detail, the history and every action. (Earlier releases answered
+`403` on some of those routes, which told the caller the request existed.)
 
 A customer with the `org_admin` role on their own organization sees
 every Quote Request in the organization, not just their own.

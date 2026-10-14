@@ -216,7 +216,7 @@ Odmowy niczego nie zapisują:
   dostają ten sam `404`, więc endpoint nikomu nie zdradza, co istnieje. Administrator platformy
   pomija tylko sprawdzenie opiekuna. Konto klienta, które nie należy do wskazanej organizacji,
   dostaje `400 VALIDATION_FAILED`.
-- **Zmiana zachowania.** Do wersji 0.106.0 włącznie nieznana organizacja lub konto albo
+- **Zmiana zachowania.** We wcześniejszych wersjach nieznana organizacja lub konto albo
   organizacja spoza zakresu dostawały cenę anonimową; teraz dostają `404`. Żądanie bez organizacji
   i bez konta nadal dostaje cenę anonimową.
 

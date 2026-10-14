@@ -256,7 +256,7 @@ skupia w jednym miejscu predykat
 
 Opiekun handlowy, który wskaże zapytanie ofertowe organizacji, której nie może widzieć, dostaje ten
 sam `404` co dla nieistniejącego identyfikatora, na każdym endpoincie administracyjnym zapytań
-ofertowych — szczegółach, historii i każdej akcji. (Do wersji 0.106.0 włącznie część z nich
+ofertowych — szczegółach, historii i każdej akcji. (We wcześniejszych wersjach część z nich
 odpowiadała `403`, co zdradzało, że zapytanie istnieje).
 
 Klient z rolą `org_admin` we własnej organizacji widzi każde zapytanie ofertowe tej organizacji, a
