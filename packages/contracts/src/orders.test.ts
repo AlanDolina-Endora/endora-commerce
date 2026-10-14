@@ -187,7 +187,10 @@ describe('order saved views (FR-003, R-8, S-05, S-06)', () => {
   });
 
   it('orderSavedViewSchema requires ownedByCaller and canModify', () => {
-    expect(orderSavedViewSchema.parse(VIEW)).toMatchObject({ ownedByCaller: false, canModify: false });
+    expect(orderSavedViewSchema.parse(VIEW)).toMatchObject({
+      ownedByCaller: false,
+      canModify: false,
+    });
     const { ownedByCaller: _o, ...withoutOwned } = VIEW;
     const { canModify: _c, ...withoutCanModify } = VIEW;
     expect(orderSavedViewSchema.safeParse(withoutOwned).success).toBe(false);
@@ -215,9 +218,9 @@ describe('order saved views (FR-003, R-8, S-05, S-06)', () => {
       it('bounds filters to 8192 UTF-8 bytes', () => {
         expect(schema.safeParse({ ...CREATE, filters: filtersOfBytes(8192) }).success).toBe(true);
         expect(schema.safeParse({ ...CREATE, filters: filtersOfBytes(8193) }).success).toBe(false);
-        expect(
-          schema.safeParse({ ...CREATE, filters: filtersOfBytes(8194, 'ł', 2) }).success,
-        ).toBe(false);
+        expect(schema.safeParse({ ...CREATE, filters: filtersOfBytes(8194, 'ł', 2) }).success).toBe(
+          false,
+        );
       });
 
       it('bounds visibleColumns to 64 entries of 64 characters', () => {
