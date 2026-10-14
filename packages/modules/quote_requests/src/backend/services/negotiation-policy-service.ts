@@ -36,6 +36,32 @@ export function carriesProposal(lines: ReadonlyArray<ProposalLine> | undefined):
   return (lines ?? []).some((line) => line.desiredUnitPrice !== undefined);
 }
 
+/**
+ * The precedence rule, and nothing else (data-model §7): the account override
+ * when it is set, else the organization value when its row exists, else
+ * "allowed". Pure, so the enforcement read and the display read cannot disagree
+ * about it — what can differ between them is only how the two rows were read.
+ */
+export function resolveEffective(
+  accountRow: Pick<QuoteRequestAccountPolicy, 'priceProposalsAllowed'> | null,
+  organizationRow: Pick<QuoteRequestOrgPolicy, 'priceProposalsAllowed'> | null,
+): EffectiveNegotiation {
+  if (accountRow && accountRow.priceProposalsAllowed != null) {
+    return { allowed: accountRow.priceProposalsAllowed, source: 'account' };
+  }
+  if (organizationRow) {
+    return { allowed: organizationRow.priceProposalsAllowed, source: 'organization' };
+  }
+  return { allowed: true, source: 'default' };
+}
+
+/** What a display read answers: both rows as read, and the effective value they give. */
+export interface NegotiationDisplay {
+  accountRow: QuoteRequestAccountPolicy | null;
+  organizationRow: QuoteRequestOrgPolicy | null;
+  effective: EffectiveNegotiation;
+}
+
 export interface NegotiationPolicyDeps {
   /** The owner's **current** organization (decision D-3L, analyze M3). */
   customerAccounts: Pick<CustomerAccountReadPort, 'findById'>;
@@ -69,7 +95,7 @@ export class NegotiationPolicyService {
     return withSystemScope(NEGOTIATION_LOCK_SCOPE_REASON, async () => {
       const override = await em.findOne(QuoteRequestAccountPolicy, { customerAccountId });
       if (override && override.priceProposalsAllowed != null) {
-        return { allowed: override.priceProposalsAllowed, source: 'account' };
+        return resolveEffective(override, null);
       }
       // The account's organization now — not the request's stamp, which is
       // history: an account moved after raising a draft follows its new one.
@@ -82,11 +108,32 @@ export class NegotiationPolicyService {
       const organization = await em.findOne(QuoteRequestOrgPolicy, {
         organizationId: account.organizationId,
       });
-      if (organization) {
-        return { allowed: organization.priceProposalsAllowed, source: 'organization' };
-      }
-      return { allowed: true, source: 'default' };
+      return resolveEffective(override, organization);
     });
+  }
+
+  /**
+   * The same value for a **display** (coordinator ruling D-3V): the admin
+   * panels and the storefront's own read. `effectiveFor` opens a named system
+   * scope, and every opening is an escape-hatch audit row — right for the
+   * enforcement it exists for, noise on a screen that is merely being looked
+   * at. So this reads both rows by primary key in the caller's **own** scope.
+   *
+   * The caller must already have proven the account visible — loaded the
+   * `CustomerAccount` through its `@OrgScoped` filter (admin) or be its owner
+   * (storefront session) — because `QuoteRequestAccountPolicy` carries no
+   * filter of its own (plan I1). `organizationId` is the organization the
+   * caller resolved for that account; the organization row is `@OrgScoped`, so
+   * it answers for a caller who may see that organization.
+   */
+  async displayFor(
+    customerAccountId: string,
+    organizationId: string,
+    em: EntityManager,
+  ): Promise<NegotiationDisplay> {
+    const accountRow = await em.findOne(QuoteRequestAccountPolicy, { customerAccountId });
+    const organizationRow = await em.findOne(QuoteRequestOrgPolicy, { organizationId });
+    return { accountRow, organizationRow, effective: resolveEffective(accountRow, organizationRow) };
   }
 
   /**

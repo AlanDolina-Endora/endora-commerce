@@ -9,6 +9,7 @@ import {
   carriesProposal,
   NEGOTIATION_LOCK_SCOPE_REASON,
   NegotiationPolicyService,
+  resolveEffective,
 } from './negotiation-policy-service.js';
 
 /**
@@ -193,5 +194,56 @@ describe('NegotiationPolicyService.assertProposalsAllowed (T062)', () => {
     await expect(service.assertProposalsAllowed(ACCOUNT, [{ desiredUnitPrice: 5 }], em)).rejects.toThrow(
       'account policy read failed (test)',
     );
+  });
+});
+
+describe('NegotiationPolicyService.displayFor (Phase 10b, coordinator ruling D-3V)', () => {
+  const cases: Array<[string, Rows]> = [
+    ['no rows → default', {}],
+    ['organization row only', { organization: false }],
+    ['allowed organization row', { organization: true }],
+    ['null account value inherits', { account: null, organization: false }],
+    ['account allowed over a locked organization', { account: true, organization: false }],
+    ['account locked over an allowed organization', { account: false, organization: true }],
+    ['account locked, no organization row', { account: false }],
+  ];
+
+  it.each(cases)('answers what effectiveFor answers — %s', async (_label, rows) => {
+    const service = new NegotiationPolicyService({ customerAccounts: accountsPort().port });
+    const enforced = await service.effectiveFor(ACCOUNT, fakeEm(rows).em);
+    const display = await service.displayFor(ACCOUNT, ORG, fakeEm(rows).em);
+    expect(display.effective).toEqual(enforced);
+  });
+
+  it('reads both rows by primary key in the caller’s own scope — no system scope, so no escape-hatch row', async () => {
+    const { em, reads } = fakeEm({ account: null, organization: false });
+    const accounts = accountsPort();
+    const service = new NegotiationPolicyService({ customerAccounts: accounts.port });
+    const display = await service.displayFor(ACCOUNT, ORG, em);
+    expect(display.accountRow).toMatchObject({ customerAccountId: ACCOUNT, priceProposalsAllowed: null });
+    expect(display.organizationRow).toMatchObject({ organizationId: ORG, priceProposalsAllowed: false });
+    // `withSystemScope` would show as mode `system` with the lock's reason; the
+    // display read runs in whatever scope the caller is in (none, here).
+    expect(reads.map((r) => [r.entity, r.where, r.mode, r.reason])).toEqual([
+      ['account', { customerAccountId: ACCOUNT }, undefined, undefined],
+      ['organization', { organizationId: ORG }, undefined, undefined],
+    ]);
+    // The caller resolved the organization; the display read asks nobody.
+    expect(accounts.findById).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveEffective', () => {
+  it('is the precedence rule: account value, else organization value, else allowed', () => {
+    expect(resolveEffective(null, null)).toEqual({ allowed: true, source: 'default' });
+    expect(resolveEffective({ priceProposalsAllowed: null }, null)).toEqual({ allowed: true, source: 'default' });
+    expect(resolveEffective({ priceProposalsAllowed: null }, { priceProposalsAllowed: false })).toEqual({
+      allowed: false,
+      source: 'organization',
+    });
+    expect(resolveEffective({ priceProposalsAllowed: true }, { priceProposalsAllowed: false })).toEqual({
+      allowed: true,
+      source: 'account',
+    });
   });
 });

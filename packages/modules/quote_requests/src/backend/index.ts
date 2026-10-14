@@ -35,7 +35,8 @@ import {
   SettingNotRegistered,
   SettingOutOfScopeForChannel,
 } from '@endora-commerce/platform/kernel';
-import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
+import type { RequireAdminAnyFactory, RequireAdminFactory } from '@endora-commerce/platform/kernel';
+import type { CommandBus } from '@endora-commerce/platform/commands';
 import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
 import type { SettingsReadPort } from '@endora-commerce/platform/kernel';
 import { QUOTE_REQUESTS_SETTING_CODES } from '../manifest.js';
@@ -82,6 +83,10 @@ export interface QuoteRequestsCradle {
   readonly eventBus: EventBus;
   readonly auditLogService: AuditPort;
   readonly requireAdmin: RequireAdminFactory;
+  /** Feature 146, US4 — the policy reads open to `customers:read` or `customers:manage`. */
+  readonly requireAdminAny: RequireAdminAnyFactory;
+  /** Feature 146, US4 — the two price-negotiation writes run as Commands (Principle XIII). */
+  readonly commandBus: CommandBus;
   readonly requireCustomer: QuoteRequestsModuleOptions['requireCustomer'];
   readonly settingsReadPort: SettingsReadPort;
   /**
@@ -324,7 +329,7 @@ export function registerModule(ctx: ModuleContext): void {
   });
   ctx.di.register({
     quoteRequests: ctx
-      .asFunction(({ emFactory, eventBus, auditLogService }: QuoteRequestsCradle) => {
+      .asFunction(({ emFactory, eventBus, auditLogService, commandBus }: QuoteRequestsCradle) => {
         /**
          * This module's own settings, read through the port it already holds,
          * against the **resolved** sales channel.
@@ -403,6 +408,9 @@ export function registerModule(ctx: ModuleContext): void {
           ),
           requireAdmin: (permission) => async (req, reply) =>
             ctx.cradle<QuoteRequestsCradle>().requireAdmin(permission)(req, reply),
+          requireAdminAny: (permissions) => async (req, reply) =>
+            ctx.cradle<QuoteRequestsCradle>().requireAdminAny(permissions)(req, reply),
+          commandBus,
           requireCustomer: (req, reply) =>
             ctx.cradle<QuoteRequestsCradle>().requireCustomer(req, reply),
           resolveCustomerContext: (req) =>
@@ -465,6 +473,7 @@ export function registerModule(ctx: ModuleContext): void {
                 .cradle<QuoteRequestsCradle>()
                 .quoteRequestNegotiationPolicyService.assertProposalsAllowed(customerAccountId, lines, em),
           },
+          negotiationDisplay: () => ctx.cradle<QuoteRequestsCradle>().quoteRequestNegotiationPolicyService,
           resolveExpiryDays: () =>
             setting(QUOTE_REQUESTS_SETTING_CODES.EXPIRY_DAYS, z.number().int().nonnegative(), 0),
           resolveBoolSetting: (key) =>

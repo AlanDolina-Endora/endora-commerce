@@ -2425,6 +2425,22 @@
         }
       }
     },
+    "/api/v1/admin/customers/{id}/quote-price-negotiation": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/customers/{id}/quote-requests": {
       "get": {
         "responses": {
@@ -4285,6 +4301,22 @@
     },
     "/api/v1/admin/organizations/{id}/parent": {
       "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/organizations/{id}/quote-price-negotiation": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
         "responses": {
           "200": {
             "description": "OK"
@@ -7470,6 +7502,15 @@
         }
       },
       "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/quote-requests/price-negotiation": {
+      "get": {
         "responses": {
           "200": {
             "description": "OK"

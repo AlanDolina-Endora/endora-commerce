@@ -31,7 +31,10 @@ import {
   type AdminContextResolver,
 } from './routes.admin.js';
 import { registerQuoteRequestsSalesRepRoutes } from './routes.sales-reps.js';
-import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
+import { registerQuoteRequestsNegotiationRoutes } from './routes.negotiation.js';
+import type { NegotiationPolicyService } from './services/negotiation-policy-service.js';
+import type { CommandBus } from '@endora-commerce/platform/commands';
+import type { RequireAdminAnyFactory, RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
 import { ModuleDisabledError } from '@endora-commerce/platform/kernel';
 
@@ -118,6 +121,16 @@ export interface QuoteRequestsModuleOptions {
    * on customer create and draft edit (FR-022; research R11).
    */
   negotiationPolicy: RfqServiceDeps['negotiationPolicy'];
+  /**
+   * Feature 146, US4 — the lock's display read, for the admin panels and the
+   * buyer's own read (coordinator ruling D-3V: never the system-scoped
+   * enforcement read). Resolved per call.
+   */
+  negotiationDisplay: () => Pick<NegotiationPolicyService, 'displayFor'>;
+  /** Feature 146, US4 — the audited path of the two policy writes (Principle XIII). */
+  commandBus: Pick<CommandBus, 'run'>;
+  /** Feature 146, US4 — the any-of gate the policy reads open with (`customers:read` or `customers:manage`). */
+  requireAdminAny: RequireAdminAnyFactory;
   /**
    * `organizations`' sales-rep assignment port (issue #108).
    *
@@ -240,6 +253,20 @@ export function quoteRequestsModule(options: QuoteRequestsModuleOptions): {
       // module's cross-module-import shard. The three endpoints that qualify an
       // organisation are registered by `organizations` from its own
       // `backend.ts` now, under a code that module declares.
+      // Feature 146, US4 — the price-negotiation lock's controls and the
+      // buyer's own read (`contracts/price-negotiation-api.md` §1 – §3).
+      await registerQuoteRequestsNegotiationRoutes(app, {
+        emFactory: options.emFactory,
+        commandBus: options.commandBus,
+        requireAdmin: options.requireAdmin,
+        requireAdminAny: options.requireAdminAny,
+        requireCustomer: options.requireCustomer,
+        resolveCustomerContext: options.resolveCustomerContext,
+        customerAccounts: options.customerAccounts,
+        organizations: options.organizations,
+        salesRepAssignment,
+        negotiationPolicy: options.negotiationDisplay,
+      });
       await registerQuoteRequestsSalesRepRoutes(app, {
         emFactory: options.emFactory,
         requireAdmin: options.requireAdmin,
