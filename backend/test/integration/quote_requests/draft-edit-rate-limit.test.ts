@@ -70,16 +70,21 @@ describe('146 — customer draft-edit rate limit [integration]', () => {
   });
 
   /**
-   * QA finding (feature 146): the limiter works, but its refusal is answered
-   * `500 INTERNAL` — the platform's `setErrorHandler` has no branch for a
-   * Fastify error that carries `statusCode: 429`, so `@fastify/rate-limit`'s
-   * thrown error reaches the fallback ("unhandled error"; `Retry-After` is still set).
-   * `it.fails` pins the defect: this file goes red the day the handler answers
-   * 429, which is the signal to turn it into a plain `it`.
+   * QA finding (feature 146): the refusal used to be answered `500 INTERNAL` —
+   * the platform's `setErrorHandler` had no branch for the plain error
+   * `@fastify/rate-limit` throws with `statusCode: 429`, so it reached the
+   * fallback. The envelope now answers it `429 RATE_LIMITED`, keeping the
+   * limiter's `Retry-After`.
    */
-  it.fails('answers the refused edit 429 with Retry-After (currently 500 INTERNAL)', async () => {
+  it('answers the refused edit 429 RATE_LIMITED in the envelope, with Retry-After', async () => {
     const { refusal } = await exhaust();
     expect(refusal.statusCode, refusal.body).toBe(429);
+    expect(refusal.json()).toMatchObject({
+      error: { code: 'RATE_LIMITED', requestId: expect.any(String) },
+    });
+    expect((refusal.json() as { error: { message: string } }).error.message).toEqual(
+      expect.any(String),
+    );
     expect(refusal.headers['retry-after']).toBeDefined();
   });
 

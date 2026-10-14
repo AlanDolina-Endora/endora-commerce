@@ -281,6 +281,31 @@ export function registerErrorEnvelope(app: FastifyInstance, options: ErrorEnvelo
       return;
     }
 
+    // The rate limiter's refusal. `@fastify/rate-limit` refuses by throwing a
+    // plain `Error` with `statusCode: 429` (its default `errorResponseBuilder`),
+    // having already set `Retry-After` and the `x-ratelimit-*` headers on the
+    // reply — which `send` below keeps. Without this branch it reached the
+    // fallback and every refusal, the host's global per-client limit and a
+    // route's own (feature 146's draft-edit limit) alike, answered
+    // `500 INTERNAL` and was logged as an unhandled error.
+    //
+    // **Only 429, deliberately.** Other throwers carry a `statusCode` too —
+    // Fastify's content-type-parser errors among them — and mapping each of
+    // those to a client error is a decision about that error, not this one.
+    // A 5xx `statusCode` keeps reaching the logged fallback. Silent, like every
+    // other 4xx: the client exceeded a budget; nothing is broken.
+    if (isRateLimitRefusal(error)) {
+      const envelope: ErrorEnvelope = {
+        error: {
+          code: ERROR_CODES.RATE_LIMITED,
+          message: 'Too many requests.',
+          requestId,
+        },
+      };
+      reply.status(429).send(envelope);
+      return;
+    }
+
     // The tenant write guard's refusal (D-260/A). Raised by
     // `tenancy/org-write-guard.ts` from inside `em.flush()`, so it arrives here
     // having rolled the whole transaction back — including the audit row.
@@ -539,6 +564,12 @@ function varyBy(reply: FastifyReply, field: string): void {
     .filter((part) => part.length > 0);
   if (fields.some((part) => part.toLowerCase() === field.toLowerCase())) return;
   reply.header('Vary', [...fields, field].join(', '));
+}
+
+/** A thrown error carrying `statusCode: 429` — the rate limiter's refusal; see the call site. */
+function isRateLimitRefusal(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  return (error as { statusCode?: unknown }).statusCode === 429;
 }
 
 /** `{name}` left standing after interpolation — see the call site. */
