@@ -73,7 +73,7 @@ describe('146 — customer draft-edit rate limit [integration]', () => {
    * QA finding (feature 146): the limiter works, but its refusal is answered
    * `500 INTERNAL` — the platform's `setErrorHandler` has no branch for a
    * Fastify error that carries `statusCode: 429`, so `@fastify/rate-limit`'s
-   * thrown error reaches the fallback ("unhandled error", no `Retry-After`).
+   * thrown error reaches the fallback ("unhandled error"; `Retry-After` is still set).
    * `it.fails` pins the defect: this file goes red the day the handler answers
    * 429, which is the signal to turn it into a plain `it`.
    */
@@ -81,5 +81,28 @@ describe('146 — customer draft-edit rate limit [integration]', () => {
     const { refusal } = await exhaust();
     expect(refusal.statusCode, refusal.body).toBe(429);
     expect(refusal.headers['retry-after']).toBeDefined();
+  });
+
+  /**
+   * QA finding (feature 146): the bucket key is the request id alone and
+   * `@fastify/rate-limit` counts at `onRequest`, before `requireCustomer` runs.
+   * So 31 *unauthenticated* PATCHes naming a request's id (each answered 401)
+   * lock its owner out for the rest of the minute. Ids are random UUIDs, which
+   * bounds the abuse to someone who already holds one — hence minor — but the
+   * key should carry the caller (session or ip) as well. `it.fails` pins it.
+   */
+  it.fails('an anonymous caller cannot exhaust the owner\'s bucket for a request', async () => {
+    const mine = await create();
+    for (let i = 0; i < 31; i += 1) {
+      const res = await h.app.inject({
+        method: 'PATCH',
+        url: `/api/v1/quote-requests/${mine.id}`,
+        headers: { 'if-match': `"${mine.version}"` },
+        payload: { items: [{ productId: SEED_PRODUCT_101_ID, quantity: 9 }] },
+      });
+      expect(res.statusCode).toBe(401);
+    }
+    const owner = await edit(mine.id, mine.version, 11);
+    expect(owner.statusCode, owner.body).toBe(200);
   });
 });
