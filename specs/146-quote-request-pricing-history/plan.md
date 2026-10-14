@@ -277,6 +277,56 @@ record); T089a carries this section into the PR description. Not fixed by featur
   from the request rather than a literal in the summaries. Existing rows need no migration if every
   current channel is PLN; otherwise a one-off backfill from `quote_requests.sales_channel_id`.
   A separate issue (the coordinator proposes it to the owner).
+- **The same places at 978f9c620** (Phase 13), after Phases 5–10 moved the code:
+  `rfq-service.ts:385` (`createForCustomer`), `rfq-service.ts:538` (`patchDraft`),
+  `rfq-admin-service.ts:746` (`createOnBehalf`), `rfq-admin-service.ts:226` (list summary
+  fallback). `modify` (`rfq-admin-service.ts:577`) now carries the stored line's currency and
+  falls back to `'PLN'` only for a line the seller adds.
+
+The three items below were found while building this feature (Phases 9–12) and are logged, not
+fixed, by the same rule. T089a carries them into the PR beside the currency defect.
+
+**Storefront quote-request server actions send no `Accept-Language`.**
+
+- **Where** (at 978f9c620): `storefront/lib/api/rfq.ts:160` (`createRfq`) and
+  `storefront/lib/api/rfq.ts:175` (`patchRfqDraft`) call `apiMutate` without `ctx`, so
+  `storefront/lib/api/mutations.ts:85` never sets the header. The submit action
+  (`storefront/app/(commerce)/quote-request/actions.ts:43`) shows the refusal's `detail` to the
+  buyer verbatim.
+- **Impact**: an API refusal — the new `422 RFQ_PRICE_PROPOSAL_NOT_ALLOWED` included — reaches a
+  buyer browsing in Polish in the channel's default language rather than in theirs. The guarantee
+  is unaffected; only the sentence's language is.
+- **Suggested fix**: pass the server context (`storefront/lib/server-context.ts`, which already
+  resolves the locale and channel) as `ctx` to every quote-request mutation, as other
+  storefront mutations do.
+
+**Money is formatted three different ways on the admin quote-request screen.**
+
+- **Where** (at 978f9c620), under `packages/modules/quote_requests/src/admin/pages/`:
+  - `RfqHistory.tsx:51` — the History tab: `Intl.NumberFormat(<UI locale>)` with two decimals and
+    the currency code appended;
+  - `RfqDetail.tsx:238`, `:736`, `:746`, `:1256` — the Overview and Modify tabs: `toFixed(2)`,
+    with the code appended where one is shown, no grouping and a `.` decimal separator in every
+    language;
+  - `packages/admin-kit/src/lib/money.ts:44` — the design system's `formatMoney`, which formats
+    in the currency's home locale (`1 234,56 zł` for PLN) whatever the UI language.
+- **Impact**: the same price reads `1 234,56 PLN` in History, `1234.56 PLN` in Overview and
+  `1 234,56 zł` on screens that use `formatMoney`. Cosmetic; no value is wrong.
+- **Suggested fix**: one formatter for the screen — `formatMoney` with the UI locale passed
+  explicitly — in a separate change that also decides whether admin money follows the UI language
+  or the currency's home locale.
+
+**Packaging units are stored as the customer sent them, without catalogue validation.**
+
+- **Where**: `packages/modules/quote_requests/src/backend/services/rfq-service.ts:366`–`:380`
+  (create) and the `patchDraft` path store `packagingUnitName` / `packagingUnitBaseQuantity` from
+  the body. Out of scope by owner decision (option (a), research R2 and *Out of scope* below): it
+  belongs to the minimum-quantity feature (issue #285).
+- **Impact**: a customer can label a line with a packaging unit the product does not have. Prices
+  are unaffected — the reference is resolved on the line's quantity in base pieces only and every
+  admin price is labelled "per base unit" — but the label the seller reads may be wrong.
+- **Suggested fix**: validate the pair against the product's packaging units in the
+  minimum-quantity feature (issue #285).
 
 ## Complexity Tracking
 
