@@ -281,6 +281,7 @@ export const manifest = defineModuleManifest({
     { code: 'RFQ_NOT_NEW' },
     { code: 'RFQ_NOT_QUOTED' },
     { code: 'RFQ_PRICE_PROPOSAL_NOT_ALLOWED' },
+    { code: 'RFQ_SAVED_VIEW_NAME_TAKEN' },
   ],
   /**
    * `rfqs:handle` is declared in the core `PERMISSION_CATALOGUE`, which carries

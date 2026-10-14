@@ -92,6 +92,10 @@ export const ERROR_CODES = {
   // Feature 146 (FR-022) — a customer whose effective price-negotiation value
   // is "not allowed" sent a line carrying a proposed unit price.
   RFQ_PRICE_PROPOSAL_NOT_ALLOWED: 'RFQ_PRICE_PROPOSAL_NOT_ALLOWED',
+  // Saved list views (`specs/147-saved-views/`, FR-022) — an admin already
+  // holds a view on the quote request list whose name differs only by case or
+  // surrounding spaces.
+  RFQ_SAVED_VIEW_NAME_TAKEN: 'RFQ_SAVED_VIEW_NAME_TAKEN',
   QUOTE_INCOMPLETE: 'QUOTE_INCOMPLETE',
   QUOTE_VALIDITY_ENDED: 'QUOTE_VALIDITY_ENDED',
 

@@ -402,6 +402,7 @@ export function registerModule(ctx: ModuleContext): void {
         return quoteRequestsModule({
           emFactory,
           eventBus,
+          log: ctx.log,
           auditLog: auditLogService,
           customFieldValues: lazyPort<QuoteRequestsCradle['customFieldValueService']>(
             ctx,

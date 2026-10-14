@@ -11,6 +11,7 @@
   "errors.RFQ_PRICE_PROPOSAL_NOT_ALLOWED": "Your account cannot propose prices on quote requests. Remove the proposed prices and send the request again — sales will price it.",
   "errors.QUOTE_INCOMPLETE": "This quote request has a line with no agreed price. The seller must price every line before the request can be accepted, approved or ordered.",
   "errors.QUOTE_VALIDITY_ENDED": "The accepted quote is no longer valid — its validity period has ended. Ask your sales representative for a new quote before ordering.",
+  "errors.RFQ_SAVED_VIEW_NAME_TAKEN": "You already have a saved view with this name on the quote request list. Choose a different name.",
   "nav.quoteRequests.label": "Quote requests",
   "negotiation.title": "Price negotiation on quote requests",
   "negotiation.organization.label": "Members may propose prices",
