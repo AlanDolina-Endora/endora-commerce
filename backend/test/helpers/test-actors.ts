@@ -335,6 +335,24 @@ export const ADMIN_COOKIES: Record<string, { adminUserId: string }> = {
   'stub-product-views-no-catalog-session': {
     adminUserId: '00000000-0000-4000-8000-0000000147b3',
   },
+  // `specs/147-saved-views/` — the Quote Request list's saved views, with ids
+  // of their own for the same reason. A sales representative holding
+  // `rfqs:handle`, assigned to `TEST_ORGANIZATION_ID` only, reads a shared view
+  // it may not modify and replays views on the list (FR-016); an admin on a
+  // custom role (not `sales_representative`, so a platform admin for saved
+  // views — owner ruling A) holding `rfqs:handle` may modify a colleague's
+  // shared view; an admin without `rfqs:handle` proves the gate on all four
+  // routes. The users, the custom roles and the assignment are created by
+  // `test/contract/quote_requests/list-views.test.ts`.
+  'stub-rfq-views-sales-rep-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147c1',
+  },
+  'stub-rfq-views-handler-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147c2',
+  },
+  'stub-rfq-views-no-rfqs-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147c3',
+  },
 };
 
 declare module 'fastify' {

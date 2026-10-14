@@ -69,6 +69,7 @@ describe('quote_requests off-state, from a package (Constitution XVII)', () => {
     await expectModuleAbsent(h, 'quote_requests', {
       routes: [
         { url: '/api/v1/admin/quote-requests', cookies: admin },
+        { url: '/api/v1/admin/quote-requests/list-views', cookies: admin },
         { url: '/api/v1/quote-requests', cookies: customer },
         '/api/v1/storefront/settings/quote-requests',
       ],
@@ -79,6 +80,57 @@ describe('quote_requests off-state, from a package (Constitution XVII)', () => {
         cookies: admin,
       },
     });
+  });
+
+  /**
+   * `specs/147-saved-views/` FR-018 (US3-7, threat model S-09): a saved view
+   * on the Quote Request list is refused on **every** method while the module
+   * is off — the collection's `GET` and `POST` and the item's `PATCH` and
+   * `DELETE` — exactly as the list itself is, and the stored row is untouched:
+   * once the module is back the view is listed as it was.
+   */
+  it('refuses all four saved-view routes while deactivated and keeps the view (FR-018)', async () => {
+    const VIEWS = '/api/v1/admin/quote-requests/list-views';
+    const name = `Off-state view ${randomUUID().slice(0, 8)}`;
+    const created = await h.app.inject({
+      method: 'POST',
+      url: VIEWS,
+      cookies: admin,
+      payload: { name, shared: true, filters: { scope: 'all' }, sort: { field: 'total', dir: 'desc' } },
+    });
+    expect(created.statusCode).toBe(201);
+    const view = (created.json() as { data: { id: string } }).data;
+
+    const listView = async (): Promise<unknown> => {
+      const res = await h.app.inject({ method: 'GET', url: VIEWS, cookies: admin });
+      expect(res.statusCode).toBe(200);
+      return (res.json() as { data: Array<{ id: string }> }).data.find((v) => v.id === view.id);
+    };
+    const before = await listView();
+    expect(before).toMatchObject({ name, shared: true, filters: { scope: 'all' } });
+
+    await withModuleOff('quote_requests', 'deactivated', async () => {
+      const list = await h.app.inject({ method: 'GET', url: '/api/v1/admin/quote-requests', cookies: admin });
+      const probes = [
+        { method: 'GET' as const, url: VIEWS },
+        { method: 'POST' as const, url: VIEWS, payload: { name: `${name} 2`, shared: false, filters: {} } },
+        { method: 'PATCH' as const, url: `${VIEWS}/${view.id}`, payload: { name: `${name} renamed` } },
+        { method: 'DELETE' as const, url: `${VIEWS}/${view.id}` },
+      ];
+      for (const probe of probes) {
+        const res = await h.app.inject({ ...probe, cookies: admin });
+        expect(res.statusCode, `${probe.method} ${probe.url}`).toBe(list.statusCode);
+        expect((res.json() as { error?: { code?: string } }).error?.code, `${probe.method} ${probe.url}`).toBe(
+          (list.json() as { error?: { code?: string } }).error?.code,
+        );
+      }
+      // The list itself is what the four are measured against; it answers the
+      // module's absence, so a match above is a refusal and not a coincidence.
+      expect(list.statusCode).toBe(503);
+      expect((list.json() as { error?: { code?: string } }).error?.code).toBe('MODULE_DISABLED');
+    });
+
+    expect(await listView()).toEqual(before);
   });
 
   /**

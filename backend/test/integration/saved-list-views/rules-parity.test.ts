@@ -8,6 +8,7 @@ import {
 } from '../../helpers/test-server.js';
 import { OrderListViewService } from '../../../../packages/modules/orders/src/backend/services/order-list-view-service.js';
 import { ProductListViewService } from '../../../../packages/modules/catalog/src/backend/services/product-list-view-service.js';
+import { QuoteRequestListViewService } from '../../../../packages/modules/quote_requests/src/backend/services/quote-request-list-view-service.js';
 
 /**
  * `specs/147-saved-views/` — one set of saved-view rules, judged the same way
@@ -120,6 +121,26 @@ const ADAPTERS: ListAdapter[] = [
         `insert into product_list_saved_views
            (id, owner_admin_user_id, name, shared, filters, created_at, updated_at)
          values (?, ?, ?, ?, '{}'::jsonb, now(), now())`,
+        [id, row.ownerAdminUserId, row.name, row.shared],
+      );
+      return id;
+    },
+  },
+  {
+    label: 'quote_requests',
+    table: 'quote_request_list_saved_views',
+    conflictCode: 'RFQ_SAVED_VIEW_NAME_TAKEN',
+    holdsLegacyDuplicates: false,
+    // Same narrow cast as the others': the quote-request list's `sort` and
+    // `visibleColumns` are optional, which no one input type shares exactly.
+    make: (emFactory, log) =>
+      new QuoteRequestListViewService(emFactory, log) as unknown as SavedViewServiceUnderTest,
+    async seedRaw(em, row) {
+      const id = randomUUID();
+      await em.execute(
+        `insert into quote_request_list_saved_views
+           (id, owner_admin_user_id, name, shared, filters, sort, visible_columns, created_at, updated_at)
+         values (?, ?, ?, ?, '{}'::jsonb, null, null, now(), now())`,
         [id, row.ownerAdminUserId, row.name, row.shared],
       );
       return id;
