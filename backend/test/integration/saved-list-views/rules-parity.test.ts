@@ -78,6 +78,10 @@ const ADAPTERS: ListAdapter[] = [
     label: 'orders',
     table: 'order_list_saved_views',
     conflictCode: 'ORDER_SAVED_VIEW_NAME_TAKEN',
+    // The cast is deliberate and must stay this narrow: the lists' input
+    // shapes differ (orders requires `sort`, products accept none), so no one
+    // type fits every service exactly. The scenarios below are what hold the
+    // four methods to one shape — do not widen the cast to hide a drift.
     make: (emFactory, log) =>
       new OrderListViewService(emFactory, log) as unknown as SavedViewServiceUnderTest,
     async seedRaw(em, row) {
