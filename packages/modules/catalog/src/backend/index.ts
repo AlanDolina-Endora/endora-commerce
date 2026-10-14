@@ -538,6 +538,7 @@ export function registerModule(ctx: ModuleContext): void {
             auditLogService,
             ...(moduleQueueRedis === undefined ? {} : { redis: moduleQueueRedis }),
             runBulkOperationWorker: catalogRunBulkOperationWorker,
+            log: ctx.log,
             // The lifecycle gate, threaded in rather than imported. The
             // consumer is built inside the attach function — it needs `app.log`
             // and an `onClose` hook — so `plugin.ts` has no `ModuleContext`

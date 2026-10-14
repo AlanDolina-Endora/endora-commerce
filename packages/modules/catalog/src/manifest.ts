@@ -479,6 +479,7 @@ export const manifest = defineModuleManifest({
     { code: 'PRODUCT_LINK_NOT_FOUND' },
     { code: 'PRODUCT_NOT_FOUND' },
     { code: 'PRODUCT_NOT_IN_COMPARISON' },
+    { code: 'PRODUCT_SAVED_VIEW_NAME_TAKEN' },
     { code: 'PRODUCT_TYPE_MISMATCH' },
     { code: 'PRODUCT_UNMANAGED_STOCK' },
     { code: 'SELECTION_TOO_LARGE' },

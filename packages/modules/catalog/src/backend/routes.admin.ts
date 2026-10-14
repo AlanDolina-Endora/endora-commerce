@@ -33,9 +33,12 @@ import {
   updateGalleryItemRequestSchema,
   updateProductRequestSchema,
   updateVariantRequestSchema,
+  createProductSavedViewRequestSchema,
+  updateProductSavedViewRequestSchema,
   ERROR_CODES,
 } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
+import { getTenantContext } from '@endora-commerce/platform/tenancy';
 import type { CatalogAdminService } from './services/catalog-admin.service.js';
 import type { CatalogBulkUpdateService } from './services/catalog-bulk-update.service.js';
 import type { BulkOperationService } from './services/bulk-operation.service.js';
@@ -51,6 +54,7 @@ import type { GroupedService } from './services/grouped.service.js';
 import type { BundleService } from './services/bundle.service.js';
 import type { ProductScopeContextService } from './services/product-scope-context.service.js';
 import type { ProductEditorPreferencesService } from './services/product-editor-preferences.service.js';
+import type { ProductListViewService, ProductSavedViewActor } from './services/product-list-view-service.js';
 import type { ProductValueResolverService } from './services/product-value-resolver.service.js';
 import type { ProductOverridesService } from './services/product-overrides.service.js';
 import { productValueOverridesPatchRequestSchema } from '@endora-commerce/contracts';
@@ -123,6 +127,11 @@ export interface CatalogAdminDeps {
    * switcher state. Optional same reason as above.
    */
   productEditorPreferencesService?: ProductEditorPreferencesService;
+  /**
+   * `specs/147-saved-views/` (US2) — the product list's saved views. When
+   * omitted, the four `products/list-views` routes are NOT registered.
+   */
+  productListViewService?: ProductListViewService;
   /**
    * Feature 023 — resolver wrapper used by the modified
    * `GET /admin/products/:id` to attach a `resolved` preview block
@@ -683,6 +692,52 @@ export async function registerCatalogAdminRoutes(
             })),
           },
         };
+      },
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // `specs/147-saved-views/` (US2) — saved views on the product list. The
+  // static `list-views` segment outranks `products/:id` in Fastify's router,
+  // so these never reach the product routes (contract §2, route precedence).
+  // -------------------------------------------------------------------------
+
+  if (deps.productListViewService) {
+    const viewSvc = deps.productListViewService;
+    const VIEWS = '/api/v1/admin/catalog/products/list-views';
+
+    app.get(VIEWS, { preHandler: requireAdmin('catalog:read') }, async () => {
+      return { data: await viewSvc.listFor(savedViewActor()) };
+    });
+
+    app.post(
+      VIEWS,
+      { preHandler: requireAdmin('catalog:read'), schema: { body: createProductSavedViewRequestSchema } },
+      async (request, reply) => {
+        const actor = savedViewActor();
+        const body = createProductSavedViewRequestSchema.parse(request.body);
+        const view = await viewSvc.create(actor, body);
+        reply.code(201);
+        return { data: view };
+      },
+    );
+
+    app.patch<{ Params: { id: string } }>(
+      `${VIEWS}/:id`,
+      { preHandler: requireAdmin('catalog:read'), schema: { body: updateProductSavedViewRequestSchema } },
+      async (request) => {
+        const actor = savedViewActor();
+        const body = updateProductSavedViewRequestSchema.parse(request.body);
+        return { data: await viewSvc.update(request.params.id, actor, body) };
+      },
+    );
+
+    app.delete<{ Params: { id: string } }>(
+      `${VIEWS}/:id`,
+      { preHandler: requireAdmin('catalog:read') },
+      async (request) => {
+        await viewSvc.remove(request.params.id, savedViewActor());
+        return { data: { deleted: request.params.id } };
       },
     );
   }
@@ -1865,4 +1920,19 @@ function serializeAdminCategory(c: Category) {
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
   };
+}
+
+/**
+ * The saved-view actor from the request's ambient tenant context (contract
+ * §4): the admin, and whether that admin reaches every organization — the
+ * "platform admin (for saved views)" of the spec's *Vocabulary* (research
+ * R-7). Fails closed: no admin actor is a 401, never a write under an empty
+ * owner id (threat model S-03).
+ */
+function savedViewActor(): ProductSavedViewActor {
+  const ctx = getTenantContext();
+  if (!ctx || ctx.actor.kind !== 'admin' || !ctx.actor.id) {
+    throw new HttpError(401, ERROR_CODES.UNAUTHORIZED, 'Admin session required.');
+  }
+  return { adminUserId: ctx.actor.id, isPlatformAdmin: ctx.mode === 'all' };
 }
