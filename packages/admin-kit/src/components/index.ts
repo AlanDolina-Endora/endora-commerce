@@ -120,5 +120,7 @@ export type {
 export { StatusTransitionGraph } from './status-transition-graph/StatusTransitionGraph.js';
 export type { StatusTransitionGraphProps, StatusTransitionGraphStatus, StatusTransitionGraphTransition } from './status-transition-graph/StatusTransitionGraph.js';
 export { ScopeNotice } from './scope-notice/ScopeNotice.js';
+export { SavedViewsControl } from './saved-views/SavedViewsControl.js';
+export type { SavedViewState, SavedViewsControlProps } from './saved-views/SavedViewsControl.js';
 export type { ScopeNoticeProps } from './scope-notice/ScopeNotice.js';
 export type { RuleAttributeField, RuleBuilderBuiltinField, RuleBuilderLabels, RuleBuilderProps, RuleFieldOptions, StructuralRule, StructuralRuleCondition, StructuralRuleField, StructuralRuleValue } from './rule-builder/RuleBuilder.js';
