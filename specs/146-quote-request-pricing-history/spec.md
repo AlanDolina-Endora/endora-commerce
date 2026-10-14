@@ -2,7 +2,7 @@
 
 **Feature Branch**: `feat/146-quote-request-pricing-history`
 **Created**: 2026-10-14
-**Status**: Draft (clarification in progress)
+**Status**: Clarified — ready for plan
 **Issues**: #279, #283, #284
 **Input**: Three open issues against the Quote Requests module:
 
@@ -197,6 +197,13 @@ negotiation starts with a manual price lookup.
    screen fails.
 8. **Given** a request created by converting a cart in which P cost 120.00, **When** the rep opens it,
    **Then** the line shows reference price 120.00 (price at request) and no customer proposal ("—").
+8a. **Given** that cart-converted request (no line carries a proposal), **When** the customer opens the
+   storefront quote request list, **Then** the customer-price total shows "—", not `0,00 PLN` (FR-009).
+8b. **Given** a request with two lines of which only one carries a customer proposal, **When** the customer
+   opens the storefront list, **Then** the customer-price total shows "—" (no partial sum and no reference
+   price filled in for the unproposed line), as the admin list does (FR-009).
+8c. **Given** a request on which every line carries a customer proposal (P: 2 × 100.00, Q: 1 × 50.00),
+   **When** the customer opens the storefront list, **Then** the customer-price total is 250.00 PLN.
 9. **Given** a request whose line for product P has variant V, a line note and a packaging unit, **When** a
    rep changes only the agreed price of that line in the Modify tab and saves, **Then** the line still has
    variant V, the same line note and the same packaging unit, and the History entry for that revision lists
@@ -205,6 +212,10 @@ negotiation starts with a manual price lookup.
    packaging unit, **When** the customer, through the customer draft-edit API, resends the line with the
    same variant, line note and packaging-unit fields and a changed quantity, **Then** variant, line note and
    packaging unit are stored as sent and History lists only the quantity change.
+11. **Given** a pending request no administrator has modified, **When** the customer edits it through the
+   customer draft-edit API twice in a row, **Then** both edits succeed and History shows two customer
+   modification entries; **and when** a sales rep then saves a revision and the customer attempts a third
+   edit, **Then** that edit is refused and nothing is written (FR-038).
 
 ---
 
@@ -346,18 +357,21 @@ In the scenarios below, "the lock is on / off for a customer" means the customer
 - **Customer edits the draft before sales touches it** (customer draft PATCH): the proposal shown is the
   latest customer-entered one; the reference price is resolved and stored for added or changed lines at that
   moment; the change appears in history as a customer modification with proposed-price changes. Variant,
-  line note and packaging unit of lines the edit keeps are carried over (FR-035). (Today a customer can make
-  only one such edit; see Current state.) [NEEDS CLARIFICATION: is lifting the one-edit limit in scope?]
+  line note and packaging unit of lines the edit keeps are carried over (FR-035). A customer may edit the
+  draft any number of times until an administrator saves a revision; only an admin-authored modification
+  closes the draft to customer edits (FR-038). Edits by an organization administrator on a colleague's
+  draft are customer edits and do not close it.
 - **Resubmit** (new request cloned from an old one): a new request, reference resolved at its submission;
   no proposals (as today).
 - **Cart-converted request**: the cart unit price is not a customer proposal; lines show no proposal and the
   cart price is the stored reference (FR-008). Requests converted before this feature carry the cart price
   in the proposal field and will show a ~0 % difference — accepted, not migrated.
-- **List totals for requests without proposals** (new cart-converted requests, every request of a locked
-  customer): the storefront account list shows "—" instead of a customer-price total (today it shows
-  `0,00 PLN` when no line carries a proposal), the admin list already shows "—", and the CRM opportunity
-  value of such a request is 0 until sales sets agreed prices (FR-009). The cart total is no longer shown
-  on those lists.
+- **List totals for requests without a proposal on every line** (new cart-converted requests, every
+  request of a locked customer, requests where the customer proposed prices for some lines only): the
+  storefront account list shows "—" instead of a customer-price total (today it shows `0,00 PLN` when no line
+  carries a proposal and a partial sum when some do); the admin list already follows the same every-line
+  rule. The CRM opportunity value of a request with no proposals is 0 until sales sets agreed prices
+  (FR-009). The cart total is no longer shown on those lists.
 - **Admin-created request** ("Created from admin"): no customer proposal exists; reference price shown for
   the chosen customer; proposal "—".
 - **No resolvable price** for the customer (no price list entry, product not priced): "no price",
@@ -442,12 +456,13 @@ In the scenarios below, "the lock is on / off for a customer" means the customer
   storefront price.
 - **FR-008**: A cart-to-quote conversion MUST NOT record the cart's unit price as a customer proposal; the
   cart line's unit price MUST be stored as that line's reference (at-request) price.
-- **FR-009**: A quote request on which no line carries a customer proposal (e.g. cart-converted, or raised
-  by a locked customer) MUST show no customer-price total ("—") on the storefront account list until a
-  total at the agreed price exists, never `0,00 PLN`. The reference price is not used as a fallback for
-  list totals or the CRM opportunity value; the CRM value of such a request stays 0 until sales prices it.
-  [NEEDS CLARIFICATION: what the storefront list total shows when only some lines carry a proposal — today a
-  partial sum, while the admin list shows "—" unless every line does.]
+- **FR-009**: The customer-price total of a quote request MUST exist only when **every** line carries a
+  customer proposal: the customer list summary's `totalAtCustomerPrice` MUST be `null` otherwise — the same
+  rule the admin list summary already applies, and the same all-lines-or-`null` rule `totalAtAgreedPrice`
+  already follows — and the storefront account list MUST render `null` as "—", never `0,00 PLN` and never a
+  partial sum. This covers requests with no proposal at all (cart-converted, raised by a locked customer)
+  until a total at the agreed price exists. The reference price is not used as a fallback for list totals
+  or the CRM opportunity value; the CRM value of a request with no proposals stays 0 until sales prices it.
 
 **Readable history (US2, US3)**
 
@@ -461,7 +476,7 @@ In the scenarios below, "the lock is on / off for a customer" means the customer
 - **FR-012**: Each modification entry MUST list what changed versus the previous revision: lines added (with
   quantity and agreed price), lines removed, quantity changes, agreed-price changes, customer
   proposed-price changes, line-note changes, header-note changes, and validity-date changes, each as
-  old → new. Custom-field changes are not listed.
+  old → new. Custom-field changes and packaging-unit changes are not listed.
 - **FR-013**: A modification with no listed changes MUST be rendered as "offer re-sent without changes"
   (localized), not as an empty entry.
 - **FR-014**: Entries for cancellation, rejection and approval MUST show the reason or note when one was
@@ -520,7 +535,7 @@ In the scenarios below, "the lock is on / off for a customer" means the customer
   quote request's owner (`customerAccountId`); on create and resubmit the owner is the acting customer, on
   draft edit by an organization administrator it is the colleague who owns the request.
 
-**Line data carry-over on revisions (Q5)**
+**Customer draft edit and line data carry-over on revisions (Q5)**
 
 - **FR-034**: Saving an admin revision (the Modify tab and the admin modify API) MUST keep each surviving
   line's variant, line note and packaging unit (name and units per package) unless the rep changed them;
@@ -530,6 +545,11 @@ In the scenarios below, "the lock is on / off for a customer" means the customer
   package) as sent, as customer create already does; variant and line note continue to be carried as today.
 - **FR-036**: As a consequence of FR-034 and FR-035, the History diff (FR-012, FR-015) MUST NOT report a
   line as removed and added, or a line note as changed, when the revision did not change it.
+- **FR-038**: The customer draft-edit API (`patchDraft`) MUST refuse an edit only once the quote request
+  has a `modified` event authored by an administrator (`actorAdminUserId` set). `modified` events written by
+  customer draft edits — including an organization administrator's edit of a colleague's draft — MUST NOT
+  block further customer edits. The existing refusals (status not `Pending`, version conflict) are
+  unchanged.
 
 **Cross-cutting**
 
@@ -596,6 +616,20 @@ In the scenarios below, "the lock is on / off for a customer" means the customer
   to be locked; the server-side refusal (FR-022) is the guarantee.
 - A security threat model follows the plan: the buyer-facing proposal refusal and the per-customer lock
   read are a new trust boundary.
+- If reference-price resolution fails at customer submission for a reason other than "no price" (e.g. a
+  pricing read error), the submission proceeds and the line stores no reference; on read it falls back to
+  the current price (FR-006). Unlike the negotiation lock, the reference price is informational, so it does
+  not fail the customer's write.
+- A "changed line" in a customer draft edit (for re-resolving and storing the reference, FR-001) is any
+  line whose product, variant, quantity or packaging unit differs from the line it replaces, since each can
+  move the price bracket; a change of proposal or line note alone keeps the stored reference.
+- Requests created before release that already carry one customer-authored `modified` event become editable
+  by the customer again under FR-038; no data change is needed.
+- An admin note (`note-added`) on a pending request does not close the draft to customer edits; only an
+  admin `modified` event does (FR-038).
+- The FR-009 every-line rule changes the meaning of `totalAtCustomerPrice` in the customer list summary for
+  every consumer of that API, not only the storefront list; it is not a breaking shape change (the field is
+  already `z.number().nullable()` in `packages/contracts/src/quote-requests.ts`).
 
 ## Out of Scope
 
@@ -607,6 +641,7 @@ In the scenarios below, "the lock is on / off for a customer" means the customer
 - A storefront screen for editing a submitted pending request (the draft-edit API stays API-only).
 - Showing the current price beside a stored at-request price.
 - Listing custom-field changes in history.
+- Listing packaging-unit changes in history (FR-012).
 - Recomputing or backfilling reference prices for requests created before release.
 - Changing who may accept/reject, status rules, notifications or e-mails.
 - Using `discountPercent` (unused column) for anything.
@@ -653,3 +688,13 @@ In the scenarios below, "the lock is on / off for a customer" means the customer
 - Q: Is fixing the loss of variant, line note and packaging unit on the Modify-tab save, admin `modify` and
   customer `patchDraft` in scope? → A: Yes, so the History diff shows no false removals or changes (FR-034,
   FR-035, FR-036; US1 #9, #10). Answered by the product owner.
+- Q: What does the storefront list's customer-price total show when only some lines carry a proposal? →
+  A: "—" unless every line carries a proposal, as on the admin list; no partial sum and no reference-price
+  fill (FR-009; US1 #8a–#8c; Edge Cases). Answered by the product owner.
+- Q: Is lifting the customer draft-edit "one edit only" limit in scope? → A: Yes — a customer draft edit is
+  refused only once an admin-authored `modified` event (`actorAdminUserId` set) exists; the customer's own
+  edits do not block further edits (FR-038; US1 #11; Edge Cases). Answered by the product owner.
+- Q: Are packaging-unit changes listed in History? → A: No; added to Out of Scope (FR-012; Out of Scope).
+  Answered by the product owner.
+- Q: Is FR-025's "the storefront needs only the effective value" acceptable as written? → A: Yes,
+  unchanged (FR-025). Answered by the product owner.
