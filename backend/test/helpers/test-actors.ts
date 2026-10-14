@@ -26,6 +26,8 @@ export const OTHER_TEST_ORGANIZATION_ID = '00000000-0000-4000-8000-0000000000ab'
 export const TEST_CUSTOMER_ID = '00000000-0000-4000-8000-0000000000a1';
 export const TEST_CUSTOMER_RFQ_ID = '00000000-0000-4000-8000-0000000000a2';
 export const TEST_CUSTOMER_EMPTY_ID = '00000000-0000-4000-8000-0000000000a3';
+/** The buyer behind `stub-customer-session-other-org`; seeded on demand by `seedOtherTestCustomer`. */
+export const OTHER_TEST_CUSTOMER_ID = '00000000-0000-4000-8000-0000000000a7';
 export const TEST_ADMIN_ID = '00000000-0000-4000-8000-0000000000b1';
 
 export interface TestCustomerActor {
@@ -98,7 +100,7 @@ export const CUSTOMER_COOKIES: Record<string, { customerAccountId: string; organ
   // only a claim about enforcement when a signed-in buyer who is not on the
   // allow-list is refused, next to one who is on it and is served.
   'stub-customer-session-other-org': {
-    customerAccountId: '00000000-0000-4000-8000-0000000000a7',
+    customerAccountId: OTHER_TEST_CUSTOMER_ID,
     organizationId: OTHER_TEST_ORGANIZATION_ID,
   },
   // Stock-race customers (T100 fixture).

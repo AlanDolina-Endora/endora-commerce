@@ -6,6 +6,7 @@ import {
   TEST_CUSTOMER_EMPTY_ID,
   TEST_CUSTOMER_ID,
   TEST_CUSTOMER_RFQ_ID,
+  OTHER_TEST_CUSTOMER_ID,
   OTHER_TEST_ORGANIZATION_ID,
   TEST_ORGANIZATION_ID,
 } from './test-actors.js';
@@ -61,6 +62,39 @@ export async function seedOtherTestOrganization(em: EntityManager): Promise<void
         postalCode: '00-901',
         country: 'PL',
       },
+    }),
+  );
+}
+
+/**
+ * The buyer behind `stub-customer-session-other-org` (`OTHER_TEST_CUSTOMER_ID`),
+ * as a real `customer_accounts` row of `organizationId` — the second test
+ * Organization unless a fixture names its own.
+ *
+ * The stub map resolves that cookie whether or not a row stands behind it, and
+ * for as long as nothing read the account the phantom was harmless. Feature
+ * 146's negotiation lock reads the owner's account to find its *current*
+ * organization, and refuses — deliberately, never defaulting to "allowed" —
+ * when the account does not resolve; a fixture that raises a quote request as
+ * this buyer therefore needs the row. Idempotent.
+ */
+export async function seedOtherTestCustomer(
+  em: EntityManager,
+  organizationId: string = OTHER_TEST_ORGANIZATION_ID,
+): Promise<void> {
+  if (organizationId === OTHER_TEST_ORGANIZATION_ID) await seedOtherTestOrganization(em);
+  const existing = await em.findOne(CustomerAccount, { id: OTHER_TEST_CUSTOMER_ID }, { filters: false });
+  if (existing) return;
+  await em.persistAndFlush(
+    em.create(CustomerAccount, {
+      id: OTHER_TEST_CUSTOMER_ID,
+      organizationId,
+      email: 'stub-customer-other-org@example.com',
+      passwordHash: await hashPassword(STUB_CUSTOMER_PASSWORD),
+      firstName: 'Stub',
+      lastName: 'Other',
+      role: 'regular_user',
+      emailVerifiedAt: new Date(),
     }),
   );
 }

@@ -16,6 +16,7 @@ import {
   SEED_PAYMENT_METHOD_ID,
 } from '../../helpers/seed-commerce.js';
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
+import { seedOtherTestCustomer } from '../../helpers/seed-organizations.js';
 import { cartWritePortOf } from '../../helpers/orders-neighbour-ports.js';
 import {
   acceptedQuoteRequest,
@@ -117,6 +118,8 @@ describe('orders — an order placed from an accepted quote request', () => {
     });
     await em.flush();
     await em.execute(`update "stock_levels" set "on_hand" = 100000`);
+    // The other Organization's buyer raises a request below, so it needs a real account.
+    await seedOtherTestCustomer(em);
   });
 
   beforeEach(async () => {
