@@ -9,14 +9,29 @@ ones). Research: R-1, R-5 – R-11.
 
 ```ts
 export const SAVED_LIST_VIEW_NAME_MAX = 160;
+export const SAVED_LIST_VIEW_FILTERS_MAX_BYTES = 8192;   // UTF-8 bytes of JSON.stringify(filters) — S-05
+export const SAVED_LIST_VIEW_COLUMNS_MAX = 64;            // entries — S-05
+export const SAVED_LIST_VIEW_TOKEN_MAX = 64;              // chars per column id and per sort.field — S-05
 
-/** Trimmed, 1–160 characters (FR-003). Used by every create and update schema. */
-export const savedListViewNameSchema = z.string().trim().min(1).max(SAVED_LIST_VIEW_NAME_MAX);
+/** Control (Cc) and format (Cf) characters — NUL, bidi overrides, zero-width — S-06. */
+export function hasForbiddenNameCharacters(name: string): boolean; // /[\p{Cc}\p{Cf}]/u
+
+/** Trimmed, 1–160 characters (FR-003), no Cc/Cf characters (S-06). Used by every create and update schema. */
+export const savedListViewNameSchema = z.string().trim().min(1).max(SAVED_LIST_VIEW_NAME_MAX)
+  .refine((n) => !hasForbiddenNameCharacters(n));
 
 export const savedListViewSortSchema = z.object({
-  field: z.string().min(1),
+  field: z.string().min(1).max(SAVED_LIST_VIEW_TOKEN_MAX),
   dir: z.enum(['asc', 'desc']),
 });
+
+/** Opaque, but bounded (S-05). */
+export const savedListViewFiltersSchema = z.record(z.string(), z.unknown())
+  .refine((f) => Buffer.byteLength(JSON.stringify(f), 'utf8') <= SAVED_LIST_VIEW_FILTERS_MAX_BYTES);
+// (use TextEncoder rather than Buffer if the package must stay browser-safe)
+
+export const savedListViewColumnsSchema = z.array(z.string().min(1).max(SAVED_LIST_VIEW_TOKEN_MAX))
+  .max(SAVED_LIST_VIEW_COLUMNS_MAX);
 
 /** One list item, as every list's GET returns it. */
 export const savedListViewSchema = z.object({
@@ -47,9 +62,12 @@ decide — it compares in SQL (R-5) — and the kit uses it for the inline check
 
 | List | Create body | Update body |
 | --- | --- | --- |
-| Orders (`orders.ts`, names kept) | `createOrderSavedViewRequestSchema` = `{ name: savedListViewNameSchema, shared: boolean, filters: record, sort: savedListViewSortSchema, visibleColumns?: string[] \| null }` | `updateOrderSavedViewRequestSchema` = create `.partial()` |
-| Products (`saved-list-views.ts`) | `createProductSavedViewRequestSchema` = `{ name, shared: boolean, filters: record }` — other keys stripped | `updateProductSavedViewRequestSchema` = create `.partial()` |
-| Quote requests (`saved-list-views.ts`) | `createQuoteRequestSavedViewRequestSchema` = `{ name, shared: boolean, filters: record, sort?: sort \| null, visibleColumns?: string[] \| null }` | `updateQuoteRequestSavedViewRequestSchema` = create `.partial()` |
+| Orders (`orders.ts`, names kept) | `createOrderSavedViewRequestSchema` = `{ name: savedListViewNameSchema, shared: boolean, filters: savedListViewFiltersSchema, sort: savedListViewSortSchema, visibleColumns?: savedListViewColumnsSchema \| null }` | `updateOrderSavedViewRequestSchema` = create `.partial()` |
+| Products (`saved-list-views.ts`) | `createProductSavedViewRequestSchema` = `{ name, shared: boolean, filters: savedListViewFiltersSchema }` — other keys stripped | `updateProductSavedViewRequestSchema` = create `.partial()` |
+| Quote requests (`saved-list-views.ts`) | `createQuoteRequestSavedViewRequestSchema` = `{ name, shared: boolean, filters: savedListViewFiltersSchema, sort?: sort \| null, visibleColumns?: savedListViewColumnsSchema \| null }` | `updateQuoteRequestSavedViewRequestSchema` = create `.partial()` |
+
+Out-of-bound payloads and forbidden characters are refused with 400 `VALIDATION_FAILED`. There is
+**no** per-owner or per-list view-count cap — the spec's *Assumptions* keep "no limit".
 
 `orderSavedViewSchema` (response) becomes `savedListViewSchema` with `sort` required and
 non-null, preserving its current type for existing consumers; it gains `ownedByCaller` and
@@ -68,7 +86,7 @@ Same four operations on each list. `{base}` is:
 
 | Method & path | Body | 2xx | Refusals |
 | --- | --- | --- | --- |
-| `GET {base}` | — | 200 `savedListViewListResponseSchema`: caller's own views ∪ every shared view, ordered by `name` asc | 401 no admin session; 403 missing gate code |
+| `GET {base}` | — | 200 `savedListViewListResponseSchema`: caller's own views ∪ every shared view, ordered by `name` asc | 401 no admin actor (on all four routes — never an empty owner id, S-03); 403 missing gate code |
 | `POST {base}` | create schema | 201 `savedListViewResponseSchema` | 400 `VALIDATION_FAILED` (empty / whitespace-only / > 160 / malformed); 409 `<LIST>_SAVED_VIEW_NAME_TAKEN` |
 | `PATCH {base}/:id` | update schema | 200 `savedListViewResponseSchema` | 400; 404 `NOT_FOUND` (absent, or another admin's private view); 403 `FORBIDDEN` (shared, caller neither owner nor platform admin); 409 on a name whose key changes to one the **view's owner** already uses on this list |
 | `DELETE {base}/:id` | — | 200 `savedListViewDeleteResponseSchema` | 404; 403 — as `PATCH` |
@@ -106,10 +124,16 @@ Each code: a member of `ERROR_CODES`; `{ code }` in the owner manifest's `errorC
 ## §4 Server-side rules the routes depend on
 
 1. `adminUserId` from the request's admin actor (orders: `resolveAdminUserId`; catalog and
-   quote_requests: `getTenantContext().actor` where `kind === 'admin'`).
+   quote_requests: `getTenantContext().actor` where `kind === 'admin'`). **No actor → 401
+   `UNAUTHORIZED`**; the `?? ''` fallbacks in `orders/src/backend/routes.ts:710,720,732,747` are
+   removed (S-03).
 2. `isPlatformAdmin`: orders — unchanged (`allowAll`); catalog and quote_requests —
    `getTenantContext().mode === 'all'` (R-7). The list `GET` needs it too, for `canModify`.
-3. Writes of `create`, name-changing `update`: R-5's lock-and-probe inside `em.transactional`.
+3. Writes of `create`, name-changing `update`: R-5's lock-and-probe inside `em.transactional`,
+   keyed on the **view owner's** id (on `update` by a platform admin, the stored row's owner, not
+   the caller — S-04); lock, probe and write all on the transaction.
 4. `remove`/`update` authorisation: absent or private-and-not-owned → 404; shared and neither
    owner nor platform admin → 403.
-5. No Command Bus, no audit (R-14).
+5. No Command Bus, no audit (R-14). When the actor is not the owner on `update`/`remove`, one
+   structured `info` log record (R-18, S-11):
+   `{ event: 'saved_view.updated' | 'saved_view.deleted', list: '<table>', viewId, ownerAdminUserId, actorAdminUserId }`.

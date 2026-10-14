@@ -179,7 +179,10 @@ backend translates an HTTP response; a third-party API client would get a raw co
 `em.transactional(async (tx) => …)`:
 
 1. `select pg_advisory_xact_lock(hashtextextended(?, 0))` with the key
-   `'<table>:' || ownerAdminUserId` — one lock per owner per list;
+   `'<table>:' || ownerAdminUserId` — one lock per owner per list. The owner is the **view's**
+   owner: on an `update` by a platform admin it is the stored row's `ownerAdminUserId`, never the
+   caller's, so a platform admin's rename and the owner's own save serialise on the same lock
+   (threat model S-04);
 2. probe: `select 1 from <table> where owner_admin_user_id = ? and lower(btrim(name)) = lower(?)
    [and id <> ?] limit 1`;
 3. refuse with 409 and the module's `*_SAVED_VIEW_NAME_TAKEN` code if a row is found, else write.
@@ -263,6 +266,10 @@ is **not** used: it is a different predicate from orders' (a non-sales-rep role 
 harness answers it `… || true` (`test-server.ts:2435`), which would make FR-013's refusal cases
 untestable through HTTP.
 
+**Owner ruling A (2026-10-14).** The spec's *Vocabulary* now defines "Platform admin (for saved
+views)" as any role except `sales_representative`; this decision is therefore the spec's, not
+only the plan's.
+
 **Measured consequence, recorded rather than changed.** Under orders' predicate any admin whose
 role is not `sales_representative` may delete another admin's shared view. That is today's
 Order-list behaviour, which FR-013 extends; it is not a new rule.
@@ -325,6 +332,20 @@ used by every create and update schema, `orders`' included. The server compares 
 `lower(btrim(name))`; the kit compares `name.trim().toLocaleLowerCase()` for its inline check.
 The server is authoritative; the client check exists to answer before a request (FR-022).
 `SAVED_LIST_VIEW_NAME_MAX = 160` is exported for the dialog's limit message.
+
+**Characters (threat model S-06).** The name schema refuses control and format characters
+(`/[\p{Cc}\p{Cf}]/u` — NUL, bidi overrides such as U+202E, zero-width characters) with 400, and
+the dialog mirrors it inline (`savedViews.error.nameInvalidCharacters`). No homoglyph folding:
+two shared views whose names look alike (Latin `a` vs Cyrillic `а`) remain possible. That is
+**accepted as low risk** — a view stores filter values only, a look-alike can at worst make an
+admin load the wrong filters, which the list then shows them, and the shared suffix plus the
+owner-only/platform-admin delete rule bound the nuisance.
+
+**Payload bounds (threat model S-05).** `filters` is opaque but bounded: its serialised JSON ≤
+8 192 UTF-8 bytes; `visibleColumns` ≤ 64 entries of ≤ 64 characters; `sort.field` ≤ 64
+characters; anything larger is 400. The largest real captured state (the Order list's twelve
+filters) is well under 1 KB. **No per-owner view-count cap** is added: the spec's *Assumptions*
+keep "no limit", and the owner is asked separately.
 
 **Rationale.** FR-003 requires trimming before validation and storage; doing it in the shared
 schema puts it on every path, API clients included. For orders this tightens two inputs that were
@@ -444,6 +465,24 @@ their organizations' requests; an admin test loads a view naming an organization
 rows and the picker's results and asserts that organization's name is nowhere in the document.
 
 ---
+
+## R-18 — Hardening from the threat model
+
+- **Fail-closed actor (S-03).** Every saved-view route answers 401 when no admin actor resolves;
+  `orders`' four `resolveAdminUserId(request) ?? ''` fallbacks (`routes.ts:710,720,732,747`) are
+  removed in the orders phase. An empty owner id would otherwise be a shared bucket every
+  actor-less request writes into.
+- **Owner-keyed lock (S-04)** — R-5. **Bounds (S-05), characters (S-06)** — R-10.
+- **Off-state on every method (S-09)** — the off-state test drives `GET`/`POST` on the collection
+  and `PATCH`/`DELETE` on `/:id`, not only the collection `GET`.
+- **Names are text (S-10)** — rendered as React text children everywhere, tested with markup-like
+  names.
+- **Actor-≠-owner trail (S-11).** No audit row (R-14), but when a platform admin modifies or
+  deletes another admin's view, the service writes one structured `info` log record
+  `{ event: 'saved_view.updated' | 'saved_view.deleted', list, viewId, ownerAdminUserId,
+  actorAdminUserId }` through a constructor-injected logger (the module's own logger, supplied in
+  `plugin.ts`). No schema change, no Command Bus. The parity test passes a spy logger, which is
+  why the services take it as a constructor argument rather than reading a global.
 
 ## R-17 — What this feature does not touch
 

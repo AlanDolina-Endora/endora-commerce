@@ -87,7 +87,8 @@ Exports added to `packages/admin-kit/src/components/index.ts`: `ModalDialog`,
   1. trimmed name empty → `t('savedViews.error.nameRequired')`;
   2. trimmed name longer than `SAVED_LIST_VIEW_NAME_MAX` → `t('savedViews.error.nameTooLong',
      { max: 160 })`;
-  3. `savedListViewNameKey(name)` equals the key of a listed view with `ownedByCaller` →
+  3. `hasForbiddenNameCharacters(name)` → `t('savedViews.error.nameInvalidCharacters')` (S-06);
+  4. `savedListViewNameKey(name)` equals the key of a listed view with `ownedByCaller` →
      `t('savedViews.error.nameTaken')`.
 - Otherwise `POST endpoint` with `{ name: trimmed, shared, filters, sort, visibleColumns }` from
   `current` (keys the list does not use are sent as given; the server strips what it does not
@@ -110,6 +111,12 @@ Exports added to `packages/admin-kit/src/components/index.ts`: `ModalDialog`,
   admin closes the dialog.
 - Other non-2xx → envelope message in the dialog; nothing else changes.
 - Escape, *Cancel*, backdrop → close, view kept, focus returns to *Delete view*.
+
+### Names are text (S-10)
+
+Every place a view name appears — selector option, duplicate feedback, delete confirmation
+(interpolated through `t(…, { name })`) — renders it as a React text child; never
+`dangerouslySetInnerHTML`, never HTML-interpreting interpolation.
 
 ### No native dialogs (FR-001, SC-001)
 
@@ -148,6 +155,7 @@ New keys:
 | `savedViews.error.nameRequired` | Enter a name for the view. | Podaj nazwę widoku. |
 | `savedViews.error.nameTooLong` | The name can be at most {max} characters long. | Nazwa może mieć najwyżej {max} znaków. |
 | `savedViews.error.nameTaken` | You already have a view with this name. | Masz już widok o tej nazwie. |
+| `savedViews.error.nameInvalidCharacters` | The name contains characters that cannot be used. | Nazwa zawiera niedozwolone znaki. |
 | `savedViews.error.gone` | This view no longer exists. | Ten widok już nie istnieje. |
 | `savedViews.error.load` | Saved views could not be loaded. | Nie udało się wczytać zapisanych widoków. |
 | `savedViews.error.save` | The view could not be saved. | Nie udało się zapisać widoku. |

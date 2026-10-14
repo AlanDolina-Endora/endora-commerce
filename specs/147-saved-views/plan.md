@@ -41,7 +41,7 @@ lockfile) for SC-002 — see Complexity Tracking. Two module migrations (one new
 **Project Type**: web application — monorepo with `backend/`, `admin/`, `packages/`
 **Performance Goals**: list views per admin are tens, not thousands; one indexed read per list mount and after each save/delete; no added request on the list's own data path
 **Constraints**: no native browser dialog in the save/delete flows (FR-001); keyboard-only operable, WCAG 2.2 AA (SC-002); no new permission code (FR-015); loading a view never widens visibility (FR-016/FR-017); a switched-off `quote_requests` answers as absent and keeps its rows (FR-018)
-**Scale/Scope**: 2 tables, 2 entities, 2 services, 8 new routes, 1 changed service and 4 changed routes in `orders`, 3 error codes, 1 promoted kit primitive, 1 new kit composite, 3 page integrations, 17 `core` keys, 3 module docs pages × 2 languages; 10 phases, 74 tasks
+**Scale/Scope**: 2 tables, 2 entities, 2 services, 8 new routes, 1 changed service and 4 changed routes in `orders`, 3 error codes, 1 promoted kit primitive, 1 new kit composite, 3 page integrations, 18 `core` keys, 3 module docs pages × 2 languages; 10 phases, 74 tasks
 
 ## Constitution Check
 
