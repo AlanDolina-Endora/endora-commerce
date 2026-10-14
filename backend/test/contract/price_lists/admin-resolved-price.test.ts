@@ -139,12 +139,9 @@ describe('Admin resolved-price endpoint — channel and authority (feature 146)'
   beforeAll(async () => {
     h = await setupBackendServer();
     const em = h.em();
-
-    await em
-      .getConnection()
-      .execute(
-        `truncate table "price_list_price_brackets", "price_list_products", "price_lists" cascade`,
-      );
+    // `setupBackendServer` has just emptied the price tables (`price_lists` is
+    // a seeded table, truncated with cascade), so this block adds its lists
+    // and wipes nothing (`check-shared-table-wipes`).
     await new DefaultPriceListMigrator(h.em).seedDefault();
     const lists = new PriceListService(
       h.em,
