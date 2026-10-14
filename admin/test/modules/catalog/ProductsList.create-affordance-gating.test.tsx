@@ -73,6 +73,17 @@ const { ProductsList } = await import(
   '../../../../packages/modules/catalog/src/admin/pages/ProductsList'
 );
 
+// Feature 147 (#289): the page mounts the kit's saved-views control, which
+// requests its own list on mount. It answers no views here — this file's
+// subject is not saved views (`ProductsList.saved-views.test.tsx` is) — and the
+// product payload keeps answering every other request, as before.
+const LIST_VIEWS = '/api/v1/admin/catalog/products/list-views';
+function answerList(response: unknown): void {
+  getSpy.mockImplementation(async (path: string) =>
+    typeof path === 'string' && path.startsWith(LIST_VIEWS) ? { data: [] } : response,
+  );
+}
+
 const BUNDLE = passthroughBundle('catalog', [
   'productsList.title',
   'productsList.subtitle',
@@ -142,7 +153,7 @@ function mount(permissions: readonly string[]): void {
 describe('the page-head create affordance', () => {
   beforeEach(() => {
     getSpy.mockReset();
-    getSpy.mockResolvedValue(ONE_ROW);
+    answerList(ONE_ROW);
   });
 
   afterEach(() => {
@@ -173,7 +184,7 @@ describe('the page-head create affordance', () => {
 describe('the empty-state create affordance', () => {
   beforeEach(() => {
     getSpy.mockReset();
-    getSpy.mockResolvedValue(NO_ROWS);
+    answerList(NO_ROWS);
   });
 
   afterEach(() => {

@@ -48,6 +48,17 @@ vi.mock('@endora-commerce/admin-kit/lib', async () => {
 
 const { ProductsList } = await import('../../../../packages/modules/catalog/src/admin/pages/ProductsList');
 
+// Feature 147 (#289): the page mounts the kit's saved-views control, which
+// requests its own list on mount. It answers no views here — this file's
+// subject is not saved views (`ProductsList.saved-views.test.tsx` is) — and the
+// product payload keeps answering every other request, as before.
+const LIST_VIEWS = '/api/v1/admin/catalog/products/list-views';
+function answerList(response: unknown): void {
+  getSpy.mockImplementation(async (path: string) =>
+    typeof path === 'string' && path.startsWith(LIST_VIEWS) ? { data: [] } : response,
+  );
+}
+
 const BUNDLE = passthroughBundle('catalog', [
   'productsList.title',
   'productsList.subtitle',
@@ -96,7 +107,7 @@ describe('ProductsList — collection selection (feature 033)', () => {
   });
 
   it('shows select-all-matching banner and switches to collection scope', async () => {
-    getSpy.mockResolvedValue({
+    answerList({
       data: [row('00000000-0000-4000-8000-000000000001', 'Alpha'), row('00000000-0000-4000-8000-000000000002', 'Beta')],
       pagination: { page: 0, pageSize: 2, total: 5 },
       counts: { all: 5, active: 5, draft: 0, archived: 0 },
@@ -143,7 +154,7 @@ describe('ProductsList — collection selection (feature 033)', () => {
   });
 
   it('page-only selection shows scopePage count without resolve on bulk edit', async () => {
-    getSpy.mockResolvedValue({
+    answerList({
       data: [row('00000000-0000-4000-8000-00000000000a', 'Solo')],
       pagination: { page: 0, pageSize: 2, total: 1 },
       counts: { all: 1, active: 1, draft: 0, archived: 0 },
@@ -178,7 +189,7 @@ describe('ProductsList — collection selection (feature 033)', () => {
     const manyIds = Array.from({ length: overLimit }, (_, i) =>
       `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
     );
-    getSpy.mockResolvedValue({
+    answerList({
       data: [
         row('00000000-0000-4000-8000-000000000001', 'One'),
         row('00000000-0000-4000-8000-000000000002', 'Two'),

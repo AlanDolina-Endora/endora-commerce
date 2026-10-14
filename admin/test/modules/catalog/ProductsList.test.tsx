@@ -57,6 +57,17 @@ vi.mock('@endora-commerce/admin-kit/lib', async () => {
 
 const { ProductsList } = await import('../../../../packages/modules/catalog/src/admin/pages/ProductsList');
 
+// Feature 147 (#289): the page mounts the kit's saved-views control, which
+// requests its own list on mount. It answers no views here — this file's
+// subject is not saved views (`ProductsList.saved-views.test.tsx` is) — and the
+// product payload keeps answering every other request, as before.
+const LIST_VIEWS = '/api/v1/admin/catalog/products/list-views';
+function answerList(response: unknown): void {
+  getSpy.mockImplementation(async (path: string) =>
+    typeof path === 'string' && path.startsWith(LIST_VIEWS) ? { data: [] } : response,
+  );
+}
+
 const BUNDLE = passthroughBundle('catalog', [
   'productsList.title',
   'productsList.description',
@@ -120,7 +131,7 @@ describe('ProductsList — streamlined selection toolbar (T041)', () => {
   });
 
   it('toolbar appears on selection and contains only Bulk Edit / Edit Price / Delete', async () => {
-    getSpy.mockResolvedValue({
+    answerList({
       data: [productRow('00000000-0000-4000-8000-000000000a01', 'ROW-A', 'Row A widget')],
       pagination: { page: 0, pageSize: 25, total: 1 },
       counts: { all: 1, active: 1, draft: 0, inactive: 0 },
@@ -164,7 +175,7 @@ describe('ProductsList — streamlined selection toolbar (T041)', () => {
   });
 
   it('Bulk Edit is the primary (first) action in the toolbar', async () => {
-    getSpy.mockResolvedValue({
+    answerList({
       data: [productRow('00000000-0000-4000-8000-000000000a02', 'ROW-B', 'Row B widget')],
       pagination: { page: 0, pageSize: 25, total: 1 },
       counts: { all: 1, active: 1, draft: 0, inactive: 0 },
@@ -200,7 +211,7 @@ describe('ProductsList — streamlined selection toolbar (T041)', () => {
 
   it('Delete calls DELETE for each selected product after confirm', async () => {
     const id = '00000000-0000-4000-8000-000000000a03';
-    getSpy.mockResolvedValue({
+    answerList({
       data: [productRow(id, 'ROW-C', 'Row C widget')],
       pagination: { page: 0, pageSize: 25, total: 1 },
       counts: { all: 1, active: 1, draft: 0, inactive: 0 },
