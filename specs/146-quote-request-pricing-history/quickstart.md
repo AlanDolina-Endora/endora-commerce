@@ -37,12 +37,17 @@ and 130.00 PLN on the system-default channel.
 ## 2. Carry-over and draft edits (US1 #9–#11)
 
 ```bash
-# As X (cookie b2b_session), edit a pending draft twice through the API:
+# As X (cookie b2b_session), edit a pending draft twice through the API.
+# "quantity" is always in BASE PIECES: 2 pallets of 100 are sent as quantity 200, with the
+# packaging unit kept only as a snapshot (spec Edge Cases). The proposal 95 is per base piece.
 curl -X PATCH "$API/api/v1/quote-requests/$ID" -H "Cookie: b2b_session=$X" \
   -H 'Content-Type: application/json' \
-  -d '{"items":[{"productId":"'$P'","variantId":"'$V'","quantity":12,"lineNote":"pallets",
+  -d '{"items":[{"productId":"'$P'","variantId":"'$V'","quantity":200,"lineNote":"pallets",
        "packagingUnitName":"Paleta","packagingUnitBaseQuantity":100,"desiredUnitPrice":95}]}'
 ```
+
+The stored reference is resolved for quantity **200** (the bracket for 200 pieces), per base piece
+— never 2 × 100 × the unit price.
 
 Both edits succeed (US1 #11). After a rep saves a revision, a third edit answers `409 RFQ_NOT_DRAFT`.
 A rep saving only a new agreed price keeps variant, note and packaging unit; History lists only the

@@ -2,6 +2,12 @@
 
 **Feature**: `specs/146-quote-request-pricing-history/` | **Date**: 2026-10-14 | **Spec**: [spec.md](./spec.md)
 
+**Revised 2026-10-14** after `/speckit.analyze` and the security threat model: R2 (probe authority,
+batching), R3 (create schema strips, reference validation), R5 (omitted proposal carried), R8
+(exposure and bounds), R10 (classification no longer carries enforcement), R11 (primary-key reads in
+system scope, current organization, placement), R12 (authority inside the Commands), R15 (three-way
+guard, re-checked under the row lock), R16 (new: abuse bounds).
+
 Every decision below is stated as *decision → rationale → alternatives rejected*. Paths are relative
 to the repository root; module sources are under `packages/modules/<id>/src/`. Nothing here was run
 against a built tree — the assumptions that only a test can settle are collected in
@@ -72,6 +78,25 @@ system-default channel replaced by `salesChannelId ?? <system default>`. The pro
 - *Have the admin UI call the probe at submission time* — the reference must be server-side and
   untrusted input must not set it (FR-001).
 
+**Probe authority (threat model T8, coordinator decision D-3M)**: the probe today answers any
+`price_lists:read` holder about any organization or customer account. Once it accepts a channel and
+backs a screen every sales representative uses, a representative scoped to organization A could
+read organization B's negotiated prices through it. The route therefore resolves the organization
+it is asked about (`organizationId`, else the account's own), refuses a `customerAccountId` that is
+not a member of the given `organizationId` (`400`), and for a non-platform admin requires
+`organizationSalesRepScopePort.canSeeOrganization` — refusing with the same status and body as an
+unknown organization, so the answer discloses nothing about existence. An unknown `salesChannelId`
+answers the same `400 VALIDATION_FAILED` as a malformed one, without echoing the id. `price_lists`
+already depends on `organizations`, so the `lazyPort` adds no manifest edge. The **port** performs
+no such check: its one caller (`quote_requests`) passes the owner of a quote request it has already
+authorised, and the check belongs to the HTTP boundary. *Alternative rejected*: leaving the probe
+platform-wide on the ground that `price_lists:read` is a broad grant — the grant is about price
+lists, not about other organizations' customers, and every other sales-rep surface is scoped.
+
+**Batching bound (T11)**: the service resolves in chunks (one load of products, customer,
+organization and channel per chunk), and `quote_requests` sends lines in chunks, so a large cart
+conversion is several bounded queries rather than one unbounded `IN` list.
+
 **Dependency edge**: `quote_requests` adds `price_lists` to its manifest `dependencies`. `price_lists`
 is `nonDeactivatable`, so the edge makes no activation control a dead switch (`module-composition.md`
 item 4a is about the reverse direction: a non-deactivatable *dependent*); it is what
@@ -100,25 +125,38 @@ is informational; the spec says the submission proceeds). The admin read path do
 reaches a quote request with its quantity **in base pieces** and the cart's unit price **per base
 piece**; the storefront draft (`storefront/lib/rfqDraft.ts`) has no packaging units, and quick order
 sends none. So the reference is resolved at the line's quantity and per the unit that quantity is
-expressed in — base pieces — which is the governing rule of the spec's edge case. The spec's
-"(base unit price × units per package)" clause has no line to apply to today; it is recorded as an
-ambiguity in the hand-off, not implemented speculatively.
+expressed in — base pieces — which is the governing rule of the spec's edge case. **Resolved by
+12efc10ac**: the spec now states that a quote line's quantity is always in base pieces and that no
+multiplication by units per package applies, which is what this design does. The resolver is asked
+with the line's `quantity` only — `packagingUnitBaseQuantity` never enters the query (T6) — and the
+admin screen labels the reference "per base unit". Whether a customer-supplied
+`packagingUnitName` / `packagingUnitBaseQuantity` should be validated against the catalogue's
+packaging units is **not decided here**: it is an owner question in the plan's hand-off.
 
 **Currency**: the reference is resolved in the channel's default currency (what a normal order on
 that channel is priced in — the probe's own default). Lines are still hard-coded `PLN`; when the
 two differ, FR-005 applies (shown in its own currency, no difference). Fixing `lineCurrency` is out
-of scope.
+of scope (coordinator decision D-3K); the defect is logged, not fixed (tasks T089a).
 
 ## R3 — Cart conversion: the reference comes from the cart, and the HTTP body cannot supply one
 
 **Decision**: `RfqCustomerPort.createForCustomer` gains an optional third argument,
 `options?: { lineReferencePrices?: ReadonlyArray<{ amount: string; currency: string } | null> }`,
 index-aligned with `input.items`. It is a TypeScript port parameter, not a field of
-`createQuoteRequestLineSchema`, so it is unreachable from `POST /api/v1/quote-requests`, whose body
-stays parsed by the unchanged strict schema. `carts`' `convertToQuoteRequest` stops sending
+`createQuoteRequestLineSchema`, so it is unreachable from `POST /api/v1/quote-requests`. That body
+is parsed by `createQuoteRequestSchema`, which is **not** strict: an unknown key such as
+`referenceUnitPrice` or `lineReferencePrices` is stripped, not refused, and it stays that way (the
+request schemas are not tightened, analyze finding M4). The guarantee is therefore *ignored*, and
+the test asserts that the stored reference equals the server-resolved value, not a 400.
+`PATCH /api/v1/quote-requests/:id` parses with `patchQuoteRequestSchema`, which is already
+`.strict()` and refuses the same keys. `carts`' `convertToQuoteRequest` stops sending
 `desiredUnitPrice` and passes `{ amount: it.unitPrice, currency: it.currency }` per line. When a
-caller passes `lineReferencePrices`, `createForCustomer` stores those and does not call
-`buyerLinePricePort` for the supplied lines; every other path resolves server-side (R2).
+caller passes `lineReferencePrices`, `createForCustomer` validates every entry before any write —
+finite, ≥ 0, at most two decimals, currency matching `/^[A-Z]{3}$/`, array length equal to
+`input.items` — and throws on the first violation (T6); then it stores those and does not call
+`buyerLinePricePort` for the supplied lines; every other path resolves server-side (R2). The port
+is in-process, so the validation defends against a programming error in a composed module, not a
+buyer; it is cheap and it keeps a malformed value out of a `numeric(12,2)` column.
 
 **Rationale**: FR-001 forbids trusting a client-supplied reference and FR-008 makes the cart's own
 server-side snapshot the reference. An in-process port argument is the trust boundary: only modules
@@ -177,7 +215,11 @@ rows:
    name suffix is applied as `createForCustomer` does. A paired line whose product, variant,
    quantity and packaging unit are unchanged keeps its stored reference; any other line is
    re-resolved (spec Assumption: such a change can move the bracket). A change of proposal or line
-   note alone keeps the reference.
+   note alone keeps the reference. **A paired line whose body omits `desiredUnitPrice` keeps the
+   stored proposal** (threat model T5): otherwise a locked owner — who may not send a proposal —
+   could erase a proposal stored before the lock just by resending the line, which FR-024 forbids
+   ("MUST NOT alter proposals already stored"). An explicit value replaces it; the lock decides
+   whether an explicit value is allowed (R11).
 4. **The admin Modify tab** sends `id`, `variantId` and `lineNote` for every kept line (FR-034).
 
 **Rationale**: `adminPatchQuoteRequestLineSchema` already declares an optional `id`, which `modify`
@@ -269,6 +311,24 @@ UI; any other label (a custom role name) is shown as stored.
 - A separate endpoint, loaded when the tab opens, keeps the detail response (read on every visit
   and every save) from paying for revisions and name lookups.
 
+**Exposure and bounds (threat model T9)**:
+
+- **Actor mapper, explicit**: from `AdminUserRecord` only `firstName` and `lastName` are copied
+  (never `email`, `lastLoginAt`, `twoFactorEnabled`, `status`); from `CustomerAccountRecord` the
+  name and e-mail FR-017 requires. A mapper rather than a spread, so a field added to either record
+  later does not reach the response.
+- **No deleted-customer PII**: customer lookups pass `activeOnly: true`. A deleted customer is then
+  not returned and renders through FR-018's path — recorded role and "unknown user" — rather than
+  a dedicated "deleted user" string, which the spec does not define.
+- **Bounded reads**: `RfqEventService.listForRfq` already caps at 100 oldest-first. History reads
+  the **most recent** 100 events (`limit: 101` to detect more), returns them oldest-first with
+  `truncated: true` when older ones exist, and reads only the revisions those events reference plus
+  each one's predecessor. A request with more than 100 events is not a realistic negotiation; the
+  bound is about a hostile or runaway writer, and the admin sees a notice rather than a silent cut.
+- **Gate**: `401` without a session, `401`/`403` for a customer session (the route is admin-only),
+  and for a sales representative outside the request's organization the same `404` and body as an
+  unknown id — `findVisibleForAdmin` already behaves so, and a test pins it (C1, Constitution XI).
+
 **Alternatives rejected**: *names on `events` in the detail reply* — widens a schema shared with the
 customer path, and still leaves pairing and diff to the browser; *backend-composed sentences* —
 plural readers are not the issue here, but a sentence per locale on the server duplicates the
@@ -328,10 +388,18 @@ the existing zones `organization.detail.after` and `customer.detail.after`, back
   organization's row; a platform admin (`all`) reads any; a sales representative (`allowed-set`)
   reads the rows of the organizations they may see.
 - The override follows the **account**, which can move between organizations (spec edge case).
-  `@CustomerScoped` would filter `customerAccountId = actor` in a buyer context, so an organization
-  administrator editing a colleague's draft (FR-037) would read *no* override for the owner — a
-  silent fail-open — and in a sales representative's `allowed-set` context a `@CustomerScoped`
-  table without an organization column matches nothing (`filters.ts`, `customerFilterCond`).
+  `@CustomerScoped` would filter `customerAccountId = actor` in a buyer context, and in a sales
+  representative's `allowed-set` context a `@CustomerScoped` table without an organization column
+  matches nothing (`filters.ts`, `customerFilterCond`), so the admin screens could not show it.
+- **What this classification is for, and what it is not for** (revised after threat model T1):
+  it governs the **admin reads** (`GET …/quote-price-negotiation`) and satisfies
+  `check-entity-tenant-classification`. **Enforcement does not rely on it.** The lock is read in
+  the writing request by exact primary key inside a named `withSystemScope` (R11), because any
+  filtered read can return "no row" for a row that exists — and for the lock "no row" means
+  "allowed". The earlier version of this section argued that `@TransitivelyScoped` avoided that
+  fail-open for an organization administrator acting on a colleague's draft; that is true, but
+  making enforcement depend on a filter's reach is the fragile shape, and T1 removes the
+  dependency instead of reasoning about it.
   Copying `organization_id` onto the row would go stale when the account moves.
   `@TransitivelyScoped` grounds the row in `CustomerAccount`'s own organization, which is the truth
   at every read, and `CustomerAccount` is always composed when `quote_requests` is, because
@@ -342,22 +410,42 @@ the existing zones `organization.detail.after` and `customer.detail.after`, back
 tables — every read's tenant constraint would be hand-written, which is the shape feature 087
 measured as disclosing. *If* the first test of Phase 3 (T011) shows the transitive filter cannot resolve a
 cross-module parent at boot, the fallback is `@GlobalEntity` with every query keyed by
-`customerAccountId` and authorised by the route (plan, Inferred I3).
+`customerAccountId` and authorised by the route (plan, Inferred I1). The enforcement read is the
+same either way.
 
 ## R11 — Effective value, enforcement and the read path
 
 **Decision**: one service, `services/negotiation-policy-service.ts`, owns:
 
-- `effectiveFor(customerAccountId, organizationId, em)` → `{ allowed, source: 'account' |
-  'organization' | 'default' }`, reading both rows **on the caller's `em`** (the request's own unit
-  of work) — so the lock is decided in the request that writes the quote request, and an unreadable
-  lock fails it (spec edge case).
+- `effectiveFor(customerAccountId, em)` → `{ allowed, source: 'account' | 'organization' |
+  'default' }`:
+  - **Owner ids** come from the `rfq` row (draft edit) or the session (create, resubmit) — never
+    from the body.
+  - **Organization** = the account's **current** organization, read through
+    `customerAccountReadPort.findById(customerAccountId)` (coordinator decision D-3L, analyze M3).
+    Not `rfq.organizationId`: an account moved after raising a draft follows its new organization,
+    as the spec's edge case says, and the request row's stamp is history, not policy.
+  - **Both policy rows are read by exact primary key** (`organizationId`, `customerAccountId`)
+    inside `withSystemScope('quote_requests: negotiation lock for the request owner, read by
+    primary key after the caller authorised the request', …)`, **on the caller's `em`** (threat
+    model T1). The reason string is the documentation the escape hatch requires; the authorisation
+    it refers to is the visibility check that loaded the `rfq` (`findVisibleForCustomer`) or the
+    session itself. A primary-key read in system scope can only answer "this row" or "no row", and
+    "no row" then really means no row — a tenant filter can no longer make an existing lock read
+    as absent, which would be a fail-open.
+  - An unreadable lock (any thrown error) propagates: no `catch` (spec edge case, analyze M5).
 - `assertProposalsAllowed(owner, lines, em)` → throws `HttpError(422,
-  RFQ_PRICE_PROPOSAL_NOT_ALLOWED)` when any line carries `desiredUnitPrice` and the owner's effective
-  value is "not allowed"; returns without reading anything when no line carries one.
+  RFQ_PRICE_PROPOSAL_NOT_ALLOWED)` when any line carries a proposal and the owner's effective value
+  is "not allowed"; returns without reading anything when no line carries one. **"Carries a
+  proposal" is `line.desiredUnitPrice !== undefined`** on the validated body (T4) — `0` and
+  `0.00` are proposals; a truthiness test would let a zero price through.
 
-`createForCustomer` calls it with the acting customer (who is the owner); `patchDraft` calls it with
-`rfq.customerAccountId` and `rfq.organizationId` (FR-037). It runs **before** the first write.
+**Placement (T4)**: `createForCustomer` calls it with the acting customer (who is the owner) after
+body validation and before the first `persist`. `patchDraft` calls it for `rfq.customerAccountId`
+(FR-037) **inside `underRowLock`, after the version check and the FR-038 re-check** (R15), before
+any line is written — so the decision and the write are serialised against a concurrent change of
+the request. Cart conversion and `resubmit` send no proposal and are therefore never refused (T4
+regression tests).
 The storefront reads its own effective value through `GET /api/v1/quote-requests/price-negotiation`
 (`requireCustomer`, `Cache-Control: private, no-store`), answering `{ priceProposalsAllowed }` and
 nothing else (FR-025). No cache, so no Redis invalidation is needed (the lifecycle pub/sub pattern
@@ -372,7 +460,8 @@ failures.
 
 **Alternatives rejected**: *strip the proposals silently* — the spec's clarification says refuse;
 *check in the route* — `patchDraft` resolves the owner only after loading the request, and two call
-sites would diverge.
+sites would diverge; *read through the tenant filter* (the first version of this decision) — see
+R10's revision and T1; *use `rfq.organizationId`* — stale after an account move (D-3L).
 
 ## R12 — Auditing the two writes (Principle XIII)
 
@@ -382,6 +471,23 @@ and `quote_request_policy.customer_account.set` (objectType `customer_account`),
 returning the old value and `run` returning the new one, so the audit row carries the
 administrator (from the ambient TenantContext), the subject and old → new (FR-026). A write that
 does not change the value returns `skipAudit: true`. `commandBus` joins `QuoteRequestsCradle`.
+
+**Authority inside the Command (threat model T2)**: the route's gate is necessary, not sufficient
+— a Command is reachable from more than one caller, and the audit row must never record a write
+that should not have happened. Each Command therefore checks before its first read-for-write:
+
+- organization Command: for a non-platform admin, `salesRepAssignment.canSeeOrganization(actor,
+  organizationId)`; refused → `404 NOT_FOUND`, identical to an unknown organization;
+- account Command: resolve the account's current organization, confirm membership with
+  `customerAccountReadPort.findInOrganization(accountId, organizationId)`, then the same
+  `canSeeOrganization`; refused → the same `404`.
+
+A refusal writes nothing and records no audit row. The write is **find, then `em.create` or
+assign, then flush** — never `em.upsert`, `nativeUpdate` or `nativeInsert`, which bypass the unit
+of work and with it the org write guard that is the second line of defence. If plan I2 shows the
+guard refusing a legitimate sales-representative write, the write moves inside `withSystemScope`
+**after** the authority step, with a reason string naming it. The audit row carries
+`actorAdminUserId` on every path, including that one (T16).
 
 **Rationale**: Constitution XIII's last bullet — new sensitive writes are Commands even in a module
 that still hand-audits its older writes. The older `recordAuditFromContext` calls in this module are
@@ -436,6 +542,43 @@ until priced, which a CRM integration test asserts.
 
 ## R15 — Draft-edit guard (FR-038)
 
-**Decision**: the `patchDraft` guard queries `{ quoteRequestId, eventType: 'modified',
-actorAdminUserId: { $ne: null } }`. No data change; requests that already carry one customer
-`modified` event become editable again (spec Assumption).
+**Decision** (revised after threat model T3): `patchDraft` refuses with `409 RFQ_NOT_DRAFT` when
+**any** of these holds — they are three views of "an administrator has revised this request", and
+each one alone can be true before the others are:
+
+1. `rfq.awaitingCustomerRevisionAcceptance` is set;
+2. a `modified` event with `actorAdminUserId` set exists (`{ quoteRequestId, eventType:
+   'modified', actorAdminUserId: { $ne: null } }`);
+3. the current (latest) revision was authored by an administrator (`created_by_admin_user_id` set).
+
+The check runs once before the lock (a cheap early refusal) and **again inside `underRowLock`,
+after the version check, re-reading the row, the latest revision and the events** — the admin
+`modify` commits its revision and line rewrite before it appends its event, so a check outside the
+lock, or one that looked only at events, could let a customer edit land on top of an admin
+revision in that window. Customer-authored `modified` events (including an organization
+administrator's edit of a colleague's draft) never close the draft, however many there are. No data
+change; requests that already carry one customer `modified` event become editable again (spec
+Assumption). *Alternative rejected*: the event query alone (the first version of this decision) —
+correct in steady state, wrong in the race.
+
+## R16 — Abuse bounds on the customer write paths (threat model T11)
+
+**Decision**:
+
+- `createQuoteRequestSchema.items` and `patchQuoteRequestSchema.items` gain `.max(200)` — an
+  additive cap on an array that had none; neither schema's strictness changes (M4). In-process
+  callers (cart conversion, quick order, shopping lists, order copy) do not parse that schema; they
+  stay uncapped and the chunking of R2 bounds their pricing queries.
+- The customer `PATCH /api/v1/quote-requests/:id` route gets a per-route `config: { rateLimit }`
+  (`@fastify/rate-limit`, registered globally by the platform's HTTP server; the module declares it
+  as a peer and dev dependency for the type augmentation, exactly as `product_feeds` and `settings`
+  do). Lifting the one-edit limit (FR-038) is what makes an unbounded edit loop possible, and each
+  edit appends a revision and an event.
+- History reads are bounded (R8).
+
+**Rationale**: the cheapest instruments that already exist in the stack; nothing new is installed
+(the package is already a dependency of `packages/platform`).
+
+**Alternatives rejected**: *a hard cap of N customer edits per request* — needs a new error code,
+bundle keys and a spec-visible refusal the owner did not ask for, while a rate limit is generic
+infrastructure answering `429`; *no bound* — FR-038 removed the only one there was.

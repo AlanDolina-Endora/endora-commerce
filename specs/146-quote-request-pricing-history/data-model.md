@@ -26,8 +26,14 @@ No backfill: every new column is nullable or defaulted, and a missing policy row
   unchanged by `modify` and by `patchDraft` for unchanged lines; never written by
   `createOnBehalf` (admin-created lines have no at-request reference, FR-006).
 - **Read by**: the admin detail serialiser only (`referencePrice` on the admin item, contract
-  `contracts/admin-quote-request-api.md` §1). Not on `QuoteRequestLineRecord`, not on the customer
-  reply.
+  `contracts/admin-quote-request-api.md` §1). Not on the customer reply (the customer serialiser is
+  an allow-list, T7). **`QuoteRequestLineRecord`: [NEEDS CLARIFICATION — owner answer pending]**
+  — not today; if the owner chooses option (b) for ERP/connector readers of cart-converted lines,
+  the record gains optional `referenceUnitPrice` / `referenceCurrency` read from these columns
+  (`contracts/ports.md` §4, tasks T005 (c)).
+- **Validated on write** (T6): an in-process `lineReferencePrices` entry must be finite, ≥ 0, at
+  most two decimals, with a `/^[A-Z]{3}$/` currency; a server-resolved one is the resolver's own
+  output. The value is always **per base piece** (the line's quantity unit).
 - **States of a line**:
 
 | Stored reference | Customer proposal | Shown (FR-003, FR-005, FR-006) |
@@ -53,6 +59,9 @@ No backfill: every new column is nullable or defaulted, and a missing policy row
   `lineNote: null` clears the note.
 - `patchDraft`: `packagingUnitName` / `packagingUnitBaseQuantity` are stored as sent;
   `productName` gets the `" (<packaging name>)"` suffix exactly as `createForCustomer` writes it.
+- `patchDraft`: a paired line whose body **omits** `desiredUnitPrice` keeps the stored proposal; an
+  explicit value replaces it (research R5.3, threat model T5 — a locked owner cannot erase a
+  proposal stored before the lock, FR-024).
 
 ## 3. `quote_request_revisions.items_snapshot` — two optional keys (jsonb, no migration)
 
@@ -77,7 +86,10 @@ null }` (ISO-8601) when the call changed `expiresAt` (research R7). Older events
 
 - **Entity** `QuoteRequestOrgPolicy`, `@OrgScoped()` (key `organizationId`) — research R10.
 - **No row** = allowed (default). Written only by the `quote_request_policy.organization.set`
-  Command (upsert).
+  Command, after its authority check, as **find, then create or assign** — never `em.upsert` /
+  `nativeUpdate` (research R12, T2).
+- The FK cascade removes the **policy row only** when its organization is deleted; it never reaches
+  a quote request (migration comment, T14).
 
 ## 6. `quote_request_account_policies` — new table (same migration)
 
@@ -92,7 +104,9 @@ null }` (ISO-8601) when the call changed `expiresAt` (research R7). Older events
   'customerAccountId')` — research R10.
 - **No row** = "as organization". Setting "as organization" writes `null` (the row is kept, so the
   audit before/after is always a value).
-- Written only by the `quote_request_policy.customer_account.set` Command (upsert).
+- Written only by the `quote_request_policy.customer_account.set` Command, after its authority
+  check (`findInOrganization` + `canSeeOrganization`), as find, then create or assign (T2). The FK
+  cascade removes the policy row only (T14).
 
 Both new entities join the `entities` array in `quote_requests/src/backend/index.ts` and the
 generated `backend/src/db/entities-registry.generated.ts`. Both FKs point at binding
@@ -108,14 +122,22 @@ effective(account, organization) =
   else                                                                  → true         (source: default)
 ```
 
-Evaluated for the quote request's **owner** — `(rfq.customerAccountId, rfq.organizationId)` on
-draft edit, the acting customer on create and resubmit (FR-037) — on the request's own `em`.
-Not channel-dependent. Reading it is skipped when no line carries a proposal.
+Evaluated for the quote request's **owner** — `rfq.customerAccountId` on draft edit, the acting
+customer on create and resubmit (FR-037); ids from the row or the session, never the body.
+`organization` is the owner's **current** organization, read through
+`customerAccountReadPort.findById` (decision D-3L) — not `rfq.organizationId`, so an account moved
+after raising a draft follows its new organization. Both rows are read by **exact primary key**
+inside a documented `withSystemScope` on the request's own `em` (research R11, threat model T1):
+the reads are not subject to the tenant filter, so an existing row can never read as absent
+("allowed"). An unreadable row fails the request. Not channel-dependent. Reading it is skipped when
+no line carries a proposal (`desiredUnitPrice !== undefined`; `0` counts, T4).
 
 ## 8. History entry (read model, never stored)
 
-Built per request on `GET /api/v1/admin/quote-requests/:id/history` from `quote_request_events`,
-`quote_request_revisions` and two name lookups. Shape: `contracts/admin-quote-request-api.md` §3.
+Built per request on `GET /api/v1/admin/quote-requests/:id/history` from the **most recent 100**
+`quote_request_events` (response flag `truncated` when older ones exist), the
+`quote_request_revisions` those events reference plus their predecessors, and two name lookups
+(customers with `activeOnly: true`; admin names only, never e-mail — research R8, T9). Shape: `contracts/admin-quote-request-api.md` §3.
 Fields: `kind`, `occurredAt`, `eventIds` (1 or 2), `actor` (`admin` with name and recorded role /
 `customer` with name and e-mail / `system` / `unknown` with recorded role), `revisionNumber`,
 `note`, `reason`, `changes` (modified entries only; empty list = "re-sent without changes",

@@ -51,8 +51,12 @@ No schema change: `adminPatchQuoteRequestLineSchema` already has `id?`, `variant
 
 ## 3. `GET /api/v1/admin/quote-requests/:id/history` — new
 
-Gate: `requireAdmin('rfqs:handle')` + `findVisibleForAdmin` (FR-019, FR-031). Response
-`{ data: { entries: QuoteRequestHistoryEntry[] } }`, oldest first.
+Gate: `requireAdmin('rfqs:handle')` + `findVisibleForAdmin` (FR-019, FR-031). No session → `401`;
+a customer session → `401`/`403`; a sales representative outside the request's organization → the
+**same `404` and body as an unknown id** (C1, Constitution XI). Response
+`{ data: { entries: QuoteRequestHistoryEntry[], truncated: boolean } }`, oldest first, built from
+the **most recent 100 events** (`truncated: true` when older ones exist) and only the revisions they
+reference plus their predecessors (T9).
 
 ```ts
 export const quoteRequestHistoryLineRefSchema = z.object({
@@ -78,8 +82,8 @@ export const quoteRequestHistoryChangeSchema = z.discriminatedUnion('kind', [
 
 export const quoteRequestHistoryActorSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('admin'), adminUserId: uuidSchema,
-             name: z.string().nullable(),          // null = unknown user (FR-018)
-             recordedRole: z.string().nullable() }), // the stored actorRoleLabel
+             name: z.string().nullable(),          // first + last name only; null = unknown user (FR-018)
+             recordedRole: z.string().nullable() }), // the stored actorRoleLabel; never e-mail (T9)
   z.object({ kind: z.literal('customer'), customerAccountId: uuidSchema,
              name: z.string().nullable(), email: z.string().nullable(),
              recordedRole: z.string().nullable() }),
@@ -117,14 +121,18 @@ Rules the projection holds (each a unit test):
 - **H2 actor** (FR-017, FR-018): `actorAdminUserId` → `admin`; else `actorCustomerAccountId` →
   `customer` (the **acting** account — for an organization administrator who decided, that is B,
   not the requester A); else `actorRoleLabel === 'System'` → `system`; else `unknown`. Names come
-  from one `findByIds` per port (`includeDeleted` where the port offers it); an id no port returns
-  gives `name: null`.
+  from one `findByIds` per port through an **explicit mapper** (admin: `firstName` + `lastName`
+  only; customer: name + e-mail) — never a spread of the record (T9). Customer lookups pass
+  `activeOnly: true`, so a deleted customer's PII is not read; an id no port returns gives
+  `name: null` and renders as FR-018's "unknown user".
 - **H3 diff** (FR-012, FR-015, FR-016, FR-036): `changes` for a `modified` event = `historyDiff`
   of its revision against the previous revision (`previousRevisionId`, else revision number − 1),
   plus a `validity` change when the event payload has one. Packaging-unit and custom-field changes
   are never listed.
 - **H4 no raw identifiers** (FR-010): the response carries `kind` codes; the UI maps every kind and
   every change kind to a bundle key, and a unit test fails on an unmapped one.
+- **H5 text is text** (T17): notes, reasons and line notes are customer- or operator-typed; the UI
+  renders them as React text nodes only, never through `dangerouslySetInnerHTML`.
 
 ## 4. `GET /api/v1/admin/products/:id/resolved-price` — one new query parameter
 
@@ -132,8 +140,16 @@ Owner: `price_lists`. Gate unchanged: `price_lists:read`.
 
 | Query | Change |
 | --- | --- |
-| `salesChannelId` (uuid, optional) | **new** — resolve on that channel; absent = system-default channel (today's behaviour). An id naming no channel → `400 VALIDATION_FAILED` |
-| `customerAccountId`, `organizationId`, `quantity`, `variantId`, `currency` | unchanged |
+| `salesChannelId` (uuid, optional) | **new** — resolve on that channel; absent = system-default channel (today's behaviour). An id naming no channel → `400 VALIDATION_FAILED`, the same body as a malformed id (no existence leak) |
+| `customerAccountId`, `organizationId`, `quantity`, `variantId`, `currency` | unchanged in shape; **new authority rules below** |
+
+**Authority (T8, decision D-3M)** — new, before any price is resolved:
+
+- the organization asked about is `organizationId`, else the `customerAccountId`'s own;
+- a `customerAccountId` that is not a member of the given `organizationId` → `400 VALIDATION_FAILED`;
+- a non-platform admin must pass `organizationSalesRepScopePort.canSeeOrganization(actor,
+  organization)`; refused → the same status and body as an unknown organization;
+- a platform administrator is unaffected; a request naming neither (anonymous price) is unchanged.
 
 Implementation: the route delegates to the same service as `buyerLinePricePort` (`ports.md` §1).
 The admin Modify tab and the Overview call it per line **without a stored reference** (FR-006) and
@@ -141,4 +157,7 @@ for the empty agreed-price prefill (FR-007) with `customerAccountId = rfq.custom
 `salesChannelId = rfq.salesChannelId`, `quantity = line.quantity`, `variantId`. The old prefill
 through `GET /api/v1/storefront/products/:id/resolved-price` (the administrator's own price) is
 removed. Without `price_lists:read` the probe answers 403 and the screen shows "—" and leaves the
-input empty (the degrade D-173 already recorded for `RfqCreatePage`).
+input empty (the degrade D-173 already recorded for `RfqCreatePage`). **Any** 4xx or 5xx from the
+probe degrades the same way — "no price" on Overview, an empty input and "—" in Modify (L2) — so
+an out-of-scope or failing probe never breaks the screen. The reference and the prefill are labelled
+**per base unit** (T6).

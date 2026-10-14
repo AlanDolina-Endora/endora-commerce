@@ -14,7 +14,8 @@ export interface BuyerLinePriceLine {
   key: string;
   productId: string;
   variantId?: string | null;
-  /** In the unit the line is expressed in — base pieces for every path today (research R2). */
+  /** In base pieces, the unit every quote line's quantity is in (spec Edge Cases, 12efc10ac).
+   *  The caller never multiplies by a packaging unit's base quantity (T6). */
   quantity: number;
 }
 
@@ -56,6 +57,12 @@ Registered in `packages/modules/price_lists/src/backend/index.ts` with
 `ctx.di.providePort<BuyerLinePricePort>('buyerLinePricePort', …)`. Customer group precedence:
 the account's `customerGroupId`, else the organization's (unchanged from the probe).
 
+The implementation resolves in bounded chunks (one load of products, customer, organization and
+channel per chunk) and callers send lines in chunks (T11). The port performs **no authority
+check** — its caller passes the owner of a quote request it already authorised; the HTTP probe,
+which serves arbitrary admin input, carries the sales-representative scope check (T8,
+`admin-quote-request-api.md` §4).
+
 Consumer: `quote_requests` (adds `price_lists` to its manifest `dependencies`).
 
 ## 2. `rfqService` (`RfqCustomerPort`) — one optional argument, owner `quote_requests`
@@ -84,8 +91,17 @@ export interface RfqCustomerPort {
 ```
 
 Optional and trailing: every existing caller (`orders`, `shopping_lists`, `quick_order`,
-`customers`) compiles unchanged. A length mismatch with `input.items` is a programming error and
-throws.
+`customers`) compiles unchanged. Validated before any write, each violation a programming error
+that throws (T6):
+
+- array length equal to `input.items.length`;
+- each non-`null` entry: `amount` a finite decimal string ≥ 0 with at most two decimals;
+  `currency` matching `/^[A-Z]{3}$/`.
+
+The HTTP body cannot reach this argument: `createQuoteRequestSchema` is **not** strict and strips a
+body `lineReferencePrices` or per-line `referenceUnitPrice` (they are ignored, not refused — M4);
+`patchQuoteRequestSchema` is already strict and refuses them. Neither schema's strictness changes.
+Both schemas' `items` gain `.max(200)` (T11, additive).
 
 `listForCustomer`'s `totalAtCustomerPrice` changes **meaning, not shape** (FR-009): `null` unless
 every line carries a proposal.
@@ -97,12 +113,20 @@ stop sending `desiredUnitPrice`; pass
 `{ lineReferencePrices: items.map((it) => ({ amount: it.unitPrice, currency: it.currency })) }`.
 No manifest change: `carts` already resolves `rfqService`.
 
+**Basis (T12)**: `CartItem.unitPrice` is the **net** unit price per base piece (the cart's own
+snapshot, the same basis as `desiredUnitPrice` / `agreedUnitPrice` on a quote line), which is what
+the reference is compared against. A cart line priced per packaging unit stores its quantity in
+base pieces and its unit price per base piece (`cart-service.ts` `effectiveQuantity`).
+
 ## 4. Unchanged, deliberately
 
-- `QuoteRequestLineRecord` (`quoteRequestReadPort.listItems`) gains nothing: its readers
-  (cart conversion back, `comarch_xl`) have no use for the reference, and the record is narrow on
-  purpose. A cart-converted line's `desiredUnitPrice` is now `null`, which those readers already
-  handle (it is nullable).
+- **`QuoteRequestLineRecord` (`quoteRequestReadPort.listItems`) — [NEEDS CLARIFICATION — owner
+  answer pending].** A cart-converted line's `desiredUnitPrice` becomes `null` (FR-008); the ERP /
+  connector readers (`comarch_xl`, cart conversion back) handle `null` without failing, but lose
+  the price they used to read there. Option (b), the coordinator's candidate: add optional
+  `referenceUnitPrice: string | null` and `referenceCurrency: string | null` to the record — an
+  additive change, filled from the stored reference columns. Until the owner answers, the record is
+  unchanged; tasks T005 (c) is the one sub-step that implements (b) if chosen.
 - `rfqDiffEntrySchema` / `RfqRevisionService.diffRevisions` (customer comparison) — research R6.
 - `LinePricePort` / `OrgLinePricePort` — no new method; the new port is separate so no structural
   stub of the old ones breaks (the reason `OrgLinePricePort` extends rather than widens).
