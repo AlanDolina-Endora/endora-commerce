@@ -20,6 +20,8 @@ export * from './organizations.js';
 export * from './customers.js';
 export * from './carts.js';
 export * from './orders.js';
+// Saved list views shared by the order, product and quote-request lists (specs/147-saved-views/).
+export * from './saved-list-views.js';
 export * from './returns.js';
 export * from './price-lists.js';
 export * from './taxes.js';
