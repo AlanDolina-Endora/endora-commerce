@@ -232,6 +232,13 @@ export async function setupTestServer(): Promise<FastifyInstance> {
 
 export interface BackendServerOptions {
   seed?: 'us1-catalog' | 'none';
+  /**
+   * Register `@fastify/rate-limit` for this run. Off by default — the harness
+   * boots with `disableRateLimit: true` so one file's burst can never 429
+   * another's — and turned on only by a test whose subject is a route's own
+   * `config.rateLimit` (feature 146, the customer draft-edit limit).
+   */
+  enableRateLimit?: boolean;
   extraModules?: ModulePlugin[];
   /** When set, injected into `organizationsModule` so tests can assert outbound mail (verification + invitations). */
   organizationsMailer?: Mailer;
@@ -2732,6 +2739,7 @@ export async function setupBackendServer(
       await assertErrorTranslationsInstalled(adminI18nCradle.adminI18nService);
     },
     server: {
+      ...(options.enableRateLimit === true ? { disableRateLimit: false } : {}),
       openApi: {
         title: 'B2B Platform API (test)',
         version: 'test',

@@ -125,6 +125,21 @@ describe('146 — reference price captured at customer submission [integration]'
     expect(line?.desiredUnitPrice ?? null).toBeNull();
   });
 
+  it('quick order → quote request takes the same server-side reference (FR-001)', async () => {
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/quick-order/build',
+      cookies: customer,
+      payload: { target: 'quote_request', items: [{ productId: SEED_PRODUCT_101_ID, quantity: 3 }] },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const { quoteRequestId } = (res.json() as { data: { quoteRequestId: string } }).data;
+    const [line] = await linesOf(quoteRequestId);
+    expect(line?.referenceUnitPrice).toBe('130.00');
+    expect(line?.referenceCurrency).toBe('PLN');
+    expect(line?.desiredUnitPrice ?? null).toBeNull();
+  });
+
   it('a pricing failure still creates the request, with no reference', async () => {
     const original = h.container.registrations['buyerLinePricePort'] as Resolver<unknown>;
     let asked = 0;
