@@ -6,6 +6,7 @@ import { getMe } from '../../lib/api/account';
 import { logoutCustomer } from '../../lib/api/auth';
 import { StorefrontApiError } from '../../lib/api/client';
 import { ImpersonationBanner } from '../../components/ImpersonationBanner';
+import { SignOutButton } from '../../components/account/SignOutButton';
 
 /**
  * Authenticated route-group layout (T154 + T155). Loads `/me` once for the
@@ -66,11 +67,7 @@ export default async function AccountLayout({
             {isAdmin ? <Link href="/organization/members">Members</Link> : null}
           </>
         ) : null}
-        <form action={logoutAction}>
-          <button type="submit" className="b2b-account__logout">
-            Sign out
-          </button>
-        </form>
+        <SignOutButton signOut={logoutAction} />
       </aside>
       <div className="b2b-account__panel">{children}</div>
     </section>

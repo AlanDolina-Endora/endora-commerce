@@ -4,6 +4,7 @@ import { getSessionCookie } from '../../../lib/session';
 import { getMe } from '../../../lib/api/account';
 import { getMyCreditLimit } from '../../../lib/api/credit-limit';
 import { CreditLimitWidget } from '../../../components/CreditLimitWidget';
+import { PushNotificationsToggle } from '../../../components/pwa/PushNotificationsToggle';
 import type { Metadata } from 'next';
 
 /**
@@ -64,6 +65,7 @@ export default async function AccountProfilePage(): Promise<ReactNode> {
           </tr>
         </tbody>
       </table>
+      <PushNotificationsToggle />
     </>
   );
 }

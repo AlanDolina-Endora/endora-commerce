@@ -26,6 +26,9 @@ abstraction.
 - **Push notifications** — when enabled, buyers can opt in to notifications.
   You can send a broadcast or targeted message from the admin, and order-status
   changes / quote-request updates notify subscribed customers automatically.
+  A buyer can turn notifications off again on their account profile, and
+  signing out stops them in that browser, so a shared or handed-on device does
+  not keep receiving the account's messages.
   The admin panel does not receive push in this version.
 
 ## For developers
