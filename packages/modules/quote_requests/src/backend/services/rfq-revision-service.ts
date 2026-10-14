@@ -181,5 +181,7 @@ function toSnapshotLine(item: QuoteRequestItem): QuoteRequestRevisionLine {
     lineNote: item.lineNote ?? null,
     lineCurrency: item.lineCurrency,
     discountPercent: item.discountPercent != null ? Number(item.discountPercent) : null,
+    packagingUnitName: item.packagingUnitName ?? null,
+    packagingUnitBaseQuantity: item.packagingUnitBaseQuantity ?? null,
   };
 }

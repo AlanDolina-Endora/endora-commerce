@@ -22,6 +22,13 @@ export interface QuoteRequestRevisionLine {
   lineNote: string | null;
   lineCurrency: string;
   discountPercent: number | null;
+  /**
+   * Feature 146 (research R6) — the packaging unit of the line. Written from
+   * feature 146 on; older snapshots lack both keys and the history matcher
+   * treats an absent key as unknown.
+   */
+  packagingUnitName?: string | null;
+  packagingUnitBaseQuantity?: number | null;
 }
 
 @GlobalEntity()

@@ -43,6 +43,8 @@ import { QuoteRequestEvent } from './entities/quote-request-event.entity.js';
 import { QuoteRequestItem } from './entities/quote-request-item.entity.js';
 import { QuoteRequestNotificationEvent } from './entities/quote-request-notification-event.entity.js';
 import { QuoteRequestRevision } from './entities/quote-request-revision.entity.js';
+import { QuoteRequestOrgPolicy } from './entities/quote-request-org-policy.entity.js';
+import { QuoteRequestAccountPolicy } from './entities/quote-request-account-policy.entity.js';
 
 /**
  * `quote_requests` — four settings resolvers that belonged to the module
@@ -603,4 +605,6 @@ export const entities = [
   QuoteRequestItem,
   QuoteRequestNotificationEvent,
   QuoteRequestRevision,
+  QuoteRequestOrgPolicy,
+  QuoteRequestAccountPolicy,
 ];
