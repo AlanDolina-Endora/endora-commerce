@@ -11,7 +11,13 @@ import type {
   PaymentMethodReadPort,
 } from '@endora-commerce/contracts';
 import { resolveAllocations, resolveEffectiveFulfilmentStrategy } from '@endora-commerce/contracts';
-import { CustomerAccountReadService } from '../../../packages/modules/customer_accounts/src/backend/services/customer-account-ports.js';
+// **`dist`, not `src`** (feature 146; the `Invoice` precedent below, D-160.6.1).
+// This specifier value-imports `customer_accounts`' `CustomerAccount` entity, and
+// `QuoteRequestAccountPolicy` is `@TransitivelyScoped('CustomerAccount', …)`, so a
+// second, source-evaluated `CustomerAccount` class beside the one the ORM
+// registered out of `dist` is an ambiguity `assertTransitiveParentsResolve`
+// refuses at ORM init.
+import { CustomerAccountReadService } from '../../../packages/modules/customer_accounts/dist/backend/services/customer-account-ports.js';
 import { twoFactorEnrolmentsFor } from './two-factor-enrolments.js';
 import { OrganizationDetailsService } from '../../../packages/modules/organizations/src/backend/services/organization-details-port.js';
 import { OrganizationRestrictionService } from '../../../packages/modules/organizations/src/backend/services/organization-restriction-service.js';

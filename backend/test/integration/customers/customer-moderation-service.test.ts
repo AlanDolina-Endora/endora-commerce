@@ -7,7 +7,7 @@ import { SessionService } from '@endora-commerce/mod-auth/backend';
 import { createAuthSessionPort } from '@endora-commerce/mod-auth/backend';
 import { AuditLogService } from '@endora-commerce/platform/composition';
 import { AuditLogEntry } from '@endora-commerce/platform/kernel';
-import { CustomerAuthService } from '../../../../packages/modules/customer_accounts/src/backend/services/customer-auth-service.js';
+import { CustomerAuthService } from '../../../../packages/modules/customer_accounts/dist/backend/services/customer-auth-service.js';
 import { CustomerAccount } from '../../helpers/package-entities.js';
 import {
   CustomerAuthorityService,
@@ -15,7 +15,10 @@ import {
 } from '../../../../packages/modules/customers/src/backend/services/customer-authority-service.js';
 import { CustomerModerationService } from '../../../../packages/modules/customers/src/backend/services/customer-moderation-service.js';
 import { hashPassword } from '@endora-commerce/platform/kernel';
-import { CustomerAccountReadService } from '../../../../packages/modules/customer_accounts/src/backend/services/customer-account-ports.js';
+// `dist`, not `src` (feature 146): see `test/helpers/customer-account-ports.ts` —
+// a source-evaluated `CustomerAccount` makes `QuoteRequestAccountPolicy`'s
+// transitive parent ambiguous and the ORM refuses to initialise.
+import { CustomerAccountReadService } from '../../../../packages/modules/customer_accounts/dist/backend/services/customer-account-ports.js';
 import { twoFactorEnrolmentsFor } from '../../helpers/two-factor-enrolments.js';
 import { customerAccountLifecycleWriteFor } from '../../helpers/customer-account-ports.js';
 
