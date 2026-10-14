@@ -300,6 +300,23 @@ export const ADMIN_COOKIES: Record<string, { adminUserId: string }> = {
   'stub-inventory-seeded-sales-rep-session': {
     adminUserId: '00000000-0000-4000-8000-0000000000ee',
   },
+  // `specs/147-saved-views/` — the order list's saved views. A sales
+  // representative holding `orders:read` (role code exactly
+  // `sales_representative`, which is what confines the orders scope) proves a
+  // shared view it did not create is readable and not modifiable; an admin
+  // without `orders:read` proves the gate on all four routes; and an admin of
+  // its own reads the conflict sentence in Polish without changing the shared
+  // stub admin's language. The users, and the custom roles, are created by
+  // `test/contract/orders/list-and-views.test.ts`.
+  'stub-order-views-sales-rep-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147a1',
+  },
+  'stub-order-views-no-orders-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147a2',
+  },
+  'stub-order-views-polish-admin-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147a3',
+  },
 };
 
 declare module 'fastify' {

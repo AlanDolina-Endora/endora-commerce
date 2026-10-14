@@ -144,6 +144,10 @@ export const ERROR_CODES = {
   ORGANIZATION_SUSPENDED: 'ORGANIZATION_SUSPENDED',
   ORDER_NOT_FOUND: 'ORDER_NOT_FOUND',
   ORDER_NOT_CANCELLABLE: 'ORDER_NOT_CANCELLABLE',
+  // Saved list views (`specs/147-saved-views/`, FR-022) — an admin already
+  // holds a view on the order list whose name differs only by case or
+  // surrounding spaces.
+  ORDER_SAVED_VIEW_NAME_TAKEN: 'ORDER_SAVED_VIEW_NAME_TAKEN',
   INVOICE_NOT_READY: 'INVOICE_NOT_READY',
   // Invoices — number uniqueness (feature 078, D-95). The numbering series is
   // per (sales channel, kind, year) while `invoices.number` is unique across
