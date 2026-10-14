@@ -52,6 +52,7 @@ import {
 } from './reference-price.js';
 import { carriedProposal, pairLines, referenceInputsUnchanged } from './line-carry-over.js';
 import { QuoteRequestRevision } from '../entities/quote-request-revision.entity.js';
+import type { NegotiationPolicyService } from './negotiation-policy-service.js';
 
 /**
  * Customer-facing Quote Requests service — feature 008 workflow.
@@ -135,6 +136,12 @@ export interface RfqServiceDeps {
    * off is tolerated in `reference-price.ts` (research R2).
    */
   buyerLinePrices: BuyerLinePricePort;
+  /**
+   * Feature 146, US4 — the price-negotiation lock of the request's **owner**
+   * (FR-022, FR-037; research R11). Asked on create and draft edit only; a body
+   * with no proposal reads nothing.
+   */
+  negotiationPolicy: Pick<NegotiationPolicyService, 'assertProposalsAllowed'>;
   /**
    * Generates the customer-facing business Quote Request ID. Optional so
    * legacy/test compositions that don't wire it fall back to the entity's
@@ -307,6 +314,10 @@ export class RfqService {
       assertValidSuppliedReferences(options.lineReferencePrices, input.items.length);
     }
     const em = this.deps.emFactory();
+    // FR-022 / FR-037 — the acting customer is the owner of what they create.
+    // After the body is validated and before anything is priced, numbered or
+    // persisted, so a refusal writes nothing and draws no business id (T4).
+    await this.deps.negotiationPolicy.assertProposalsAllowed(ctx.customerAccountId, input.items, em);
     const productById = await this.#acquirableProductsById(
       input.items.map((it) => it.productId),
       ctx,
@@ -541,6 +552,14 @@ export class RfqService {
         [rfq.id],
       );
       await assertDraftOpenForCustomer(em, rfq.id, current?.awaiting === true);
+
+      // FR-022 / FR-037 — the lock of the request's **owner**, not of whoever
+      // is editing (an organization administrator editing a colleague's draft
+      // is held to the colleague's value). Asked of the body as sent: the
+      // rewrite's lines also carry the stored proposals an edit omits (T5),
+      // which are not a proposal being made. Inside the row lock, after the
+      // version and guard checks and before any line is written (T4).
+      await this.deps.negotiationPolicy.assertProposalsAllowed(rfq.customerAccountId, body.items, em);
 
       if (body.headerNote !== undefined) rfq.headerNote = body.headerNote ?? null;
 

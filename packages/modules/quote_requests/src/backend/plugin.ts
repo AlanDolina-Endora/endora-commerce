@@ -13,7 +13,7 @@ import type {
   OrganizationDetailsPort,
   SalesRepAssignmentPort,
 } from '@endora-commerce/contracts';
-import { RfqService, type RfqEventBus } from './services/rfq-service.js';
+import { RfqService, type RfqEventBus, type RfqServiceDeps } from './services/rfq-service.js';
 import { createQuoteRequestBusinessIdGenerator } from './services/quote-request-business-id-generator.js';
 import { RfqAdminService } from './services/rfq-admin-service.js';
 import { RfqEventService } from './services/rfq-event-service.js';
@@ -114,6 +114,11 @@ export interface QuoteRequestsModuleOptions {
    */
   buyerLinePrices: BuyerLinePricePort;
   /**
+   * Feature 146, US4 — the request owner's price-negotiation lock, enforced
+   * on customer create and draft edit (FR-022; research R11).
+   */
+  negotiationPolicy: RfqServiceDeps['negotiationPolicy'];
+  /**
    * `organizations`' sales-rep assignment port (issue #108).
    *
    * This used to be `salesRepSubtree`, the feature-056 deps out of which this
@@ -169,6 +174,7 @@ export function quoteRequestsModule(options: QuoteRequestsModuleOptions): {
     adminUsers: options.adminUsers,
     carts: options.carts,
     buyerLinePrices: options.buyerLinePrices,
+    negotiationPolicy: options.negotiationPolicy,
     businessId: businessIdGenerator,
     resolveTaxRate: options.resolveTaxRate,
     ...(options.auditLog ? { auditLog: options.auditLog } : {}),

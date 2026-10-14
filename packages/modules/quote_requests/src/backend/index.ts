@@ -25,6 +25,7 @@ import type {
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
 import type { Redis } from 'ioredis';
 import { QuoteRequestReadService } from './services/quote-request-read-port.js';
+import { NegotiationPolicyService } from './services/negotiation-policy-service.js';
 import { startRfqExpirySweep } from './workers/rfq-expiry-sweep-worker.js';
 import { registerQuoteRequestSalesChannelAttributions } from './services/sales-channel-attributions.js';
 import {
@@ -130,6 +131,12 @@ export interface QuoteRequestsCradle {
    */
   readonly moduleQueueRedis: Redis | undefined;
   readonly quoteRequests: ReturnType<typeof quoteRequestsModule>;
+  /**
+   * Feature 146, US4 — the request owner's price-negotiation lock (research
+   * R11). This module's own; resolved per call by `RfqService`, so the one
+   * instance is what the routes of Phase 10b and the enforcement both read.
+   */
+  readonly quoteRequestNegotiationPolicyService: NegotiationPolicyService;
   readonly rfqService: ReturnType<typeof quoteRequestsModule>['handle'] extends () => infer H
     ? H extends { rfqService: infer S }
       ? S
@@ -304,6 +311,18 @@ export function registerModule(ctx: ModuleContext): void {
   registerActorResolvers(ctx);
   registerTaxRateResolver(ctx);
   ctx.di.register({
+    quoteRequestNegotiationPolicyService: ctx
+      .asFunction(
+        () =>
+          new NegotiationPolicyService({
+            // `customer_accounts` is a binding dependency: off, the read
+            // throws and the lock fails closed (analyze M5).
+            customerAccounts: lazyPort<CustomerAccountReadPort>(ctx, 'customerAccountReadPort'),
+          }),
+      )
+      .singleton(),
+  });
+  ctx.di.register({
     quoteRequests: ctx
       .asFunction(({ emFactory, eventBus, auditLogService }: QuoteRequestsCradle) => {
         /**
@@ -438,6 +457,14 @@ export function registerModule(ctx: ModuleContext): void {
           // (FR-001). `price_lists` is a binding `dependencies` entry for it;
           // the one tolerated failure is in `services/reference-price.ts`.
           buyerLinePrices: lazyPort<BuyerLinePricePort>(ctx, 'buyerLinePricePort'),
+          // Feature 146, US4 — resolved at each call rather than captured, so
+          // the container's current registration is the one asked.
+          negotiationPolicy: {
+            assertProposalsAllowed: (customerAccountId, lines, em) =>
+              ctx
+                .cradle<QuoteRequestsCradle>()
+                .quoteRequestNegotiationPolicyService.assertProposalsAllowed(customerAccountId, lines, em),
+          },
           resolveExpiryDays: () =>
             setting(QUOTE_REQUESTS_SETTING_CODES.EXPIRY_DAYS, z.number().int().nonnegative(), 0),
           resolveBoolSetting: (key) =>
