@@ -50,11 +50,13 @@ export function SavedViewsControl(props: SavedViewsControlProps): ReactNode {
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
   const deleteReturnFocusRef = useRef<HTMLElement | null>(null);
 
-  // The page's callback is read through a ref so an inline `onError` does not
-  // re-create `load` on every render and re-request the list in a loop.
+  // The page's callback and `t` are read through refs so neither an inline
+  // `onError` nor a bundle arriving re-creates `load` and re-requests the list.
   const onErrorRef = useRef(onError);
+  const tRef = useRef(t);
   useEffect(() => {
     onErrorRef.current = onError;
+    tRef.current = t;
   });
 
   // Only the latest request may write: StrictMode's double mount and a reload
@@ -69,9 +71,9 @@ export function SavedViewsControl(props: SavedViewsControlProps): ReactNode {
       setSelectedId((id) => (id && !list.some((view) => view.id === id) ? '' : id));
     } catch (err) {
       if (request !== latestRequest.current) return;
-      onErrorRef.current(requestErrorMessage(err, t('savedViews.error.load')));
+      onErrorRef.current(requestErrorMessage(err, tRef.current('savedViews.error.load')));
     }
-  }, [endpoint, t]);
+  }, [endpoint]);
 
   useEffect(() => {
     void load();
