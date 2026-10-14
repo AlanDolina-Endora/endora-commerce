@@ -231,7 +231,10 @@ const SUBJECTS: readonly Subject[] = [
     routes: ['/quote-requests', '/quote-requests/new', '/quote-requests/:id'],
     navTargets: ['/quote-requests'],
     retiredSharedKeys: ['appShell.nav.quoteRequests', 'appShell.palette.sub.customerRfqs'],
-    zones: [],
+    // Feature 146's price-negotiation panels (US4). Their own proof — present,
+    // switched off, permission withheld, restored — is
+    // `admin/test/modules/quote_requests/negotiation-zones.test.tsx`.
+    zones: ['organization.detail.after', 'customer.detail.after'],
     locked: false,
   },
 ];
@@ -683,9 +686,10 @@ describe('the surfaces each module does not contribute, derived from the contrib
   it.each(SUBJECTS)('$module contributes exactly the zones this file drives', async (subject) => {
     // Ruling 1: the off-state test asserts every surface the module
     // contributes, and names the ones it does not **derived from the
-    // contribution set** rather than asserted. `invoices` and `quote_requests`
-    // declare none — so there is no rendering of theirs to withdraw, and this
-    // case fails the day one is added without a proof of its own. `ksef`
+    // contribution set** rather than asserted. `invoices` declares none — so
+    // there is no rendering of its to withdraw, and this case fails the day one
+    // is added without a proof of its own. `quote_requests` declares two since
+    // feature 146, proven in `quote_requests/negotiation-zones.test.tsx`. `ksef`
     // declares exactly one, and its package asserts that since feature 134's
     // W2.2.
     const { contributions } = (await import(
