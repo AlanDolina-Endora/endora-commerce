@@ -191,7 +191,13 @@ export class CartService {
 
   async addItem(
     actor: { customer?: CustomerContext; anonymousToken?: string },
-    input: { productId: string; variantId?: string; quantity: number; packagingUnitId?: string },
+    input: {
+      productId: string;
+      variantId?: string;
+      quantity: number;
+      packagingUnitId?: string;
+      salesChannelId?: string;
+    },
   ): Promise<{ cart: Cart; items: CartItem[] }> {
     const em = this.emFactory();
     const cart = actor.customer
@@ -243,7 +249,20 @@ export class CartService {
     // to be one answer, or the pair of them is an enumeration oracle over an
     // operator's private assortment — the defect issue #174 found in the
     // type-ahead next door.
-    if (await outOfRequestChannel(this.channelMembership, product.id)) {
+    //
+    // The one exception is a caller that names the channel itself: an
+    // administrator creating an order on a customer's behalf chooses the
+    // order's channel in the request body, and the request scope of an admin
+    // call resolves to the system default, which is not that channel. Buyer
+    // routes never pass `salesChannelId`.
+    const outOfChannel = input.salesChannelId
+      ? !(
+          await this.channelMembership.filterEntityIdsInChannel(input.salesChannelId, 'product', [
+            product.id,
+          ])
+        ).includes(product.id)
+      : await outOfRequestChannel(this.channelMembership, product.id);
+    if (outOfChannel) {
       throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'Product not found.');
     }
 

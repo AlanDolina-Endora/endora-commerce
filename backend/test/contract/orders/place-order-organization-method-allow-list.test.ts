@@ -7,6 +7,7 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 import {
   SEED_ADDRESS_BILLING_ID,
   SEED_ADDRESS_DELIVERY_ID,
@@ -15,7 +16,6 @@ import {
   seedCartForStubCustomer,
 } from '../../helpers/seed-commerce.js';
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
-import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 import {
   seedOtherTestOrganization,
   STUB_CUSTOMER_PASSWORD,
@@ -66,7 +66,12 @@ const ADMIN = { b2b_session: 'stub-admin-session' };
 const BUYER_B_ID = '00000000-0000-4000-8000-0000000000a7';
 const ORG_B_DELIVERY_ADDRESS_ID = '00000000-0000-4000-8000-000000a110d1';
 const ORG_B_BILLING_ADDRESS_ID = '00000000-0000-4000-8000-000000a110d2';
-const SALES_CHANNEL_ID = '00000000-0000-4000-8000-0000000000c1';
+/**
+ * The system-default channel the seeded catalogue is published on. Both the
+ * admin create and the admin preview answer 404 for a channel naming no row,
+ * so every admin payload carries this real one. Set in `beforeAll`.
+ */
+let orderChannelId: string;
 const ONE_CLICK_ENABLED = 'quick_order.one_click_buy_enabled';
 
 const DELIVERY_REFUSAL = 'delivery_method_not_allowed_for_organization';
@@ -85,12 +90,6 @@ describe('order placement honours the Organization method allow-lists', () => {
   /** A key bound to Organization B, with buyer B as its service account. */
   let apiKeyTokenB: string;
   let defaultChannelCode: string;
-  /**
-   * The channel the admin preview is sent. The preview answers 404 for a
-   * channel naming no row, so it gets the system-default channel the seeded
-   * catalogue is published on rather than the fixture id the create path takes.
-   */
-  let previewChannelId: string;
 
   const restrict = async (
     organizationId: string,
@@ -164,7 +163,7 @@ describe('order placement honours the Organization method allow-lists', () => {
 
   const adminPayload = (overrides: Record<string, unknown> = {}) => ({
     customerAccountId: TEST_CUSTOMER_ID,
-    salesChannelId: SALES_CHANNEL_ID,
+    salesChannelId: orderChannelId,
     // One unit, where the buyer's own basket holds two: a create that reaches
     // the basket before it is refused leaves this line behind instead.
     items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }],
@@ -238,7 +237,7 @@ describe('order placement honours the Organization method allow-lists', () => {
       method: 'POST',
       url: '/api/v1/admin/orders/preview',
       cookies: ADMIN,
-      payload: { ...rest, salesChannelId: previewChannelId },
+      payload: rest,
     });
   };
   const storefrontPreview = (
@@ -309,6 +308,7 @@ describe('order placement honours the Organization method allow-lists', () => {
 
   beforeAll(async () => {
     h = await setupBackendServer();
+    orderChannelId = await systemDefaultSalesChannelId(h.em());
     const em = h.em();
 
     const delivery = em.create(DeliveryMethod, {
@@ -417,7 +417,6 @@ describe('order placement honours the Organization method allow-lists', () => {
 
     // One-click buy, switched on for the channel a header-less request resolves to.
     defaultChannelCode = (await em.findOneOrFail(SalesChannel, { systemDefault: true })).code;
-    previewChannelId = await systemDefaultSalesChannelId(em);
     await h.settings.adminService.setValueForSubset(
       ONE_CLICK_ENABLED,
       [defaultChannelCode],
@@ -584,7 +583,7 @@ describe('order placement honours the Organization method allow-lists', () => {
           cookies: ADMIN,
           payload: {
             customerAccountId: TEST_CUSTOMER_ID,
-            salesChannelId: previewChannelId,
+            salesChannelId: orderChannelId,
             items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }],
             deliveryMethodId: SEED_DELIVERY_METHOD_ID,
             paymentMethodId: SEED_PAYMENT_METHOD_ID,

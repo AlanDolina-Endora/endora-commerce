@@ -88,6 +88,8 @@ describe('OrderCreationAdminService — inline-address cleanup', () => {
 
   const emFactory = () =>
     ({
+      // The order's sales channel exists — the only row this service reads.
+      findOne: async () => ({ id: CHANNEL_ID }),
       persist: () => undefined,
       create: () => ({}),
       flush: async () => undefined,

@@ -9,6 +9,7 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 import { adminUserIdKeys, deepStrict, disagreements } from '../../helpers/strict-schema.js';
 import {
   seedCustomFieldAudienceCases,
@@ -18,7 +19,11 @@ import { seedCartForStubCustomer, SEED_PAYMENT_METHOD_ID } from '../../helpers/s
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 
-const SALES_CHANNEL_ID = '00000000-0000-4000-8000-0000000000c1';
+/**
+ * A real channel: an admin-created order naming no channel is refused with 404.
+ * Set in `beforeAll`.
+ */
+let orderChannelId: string;
 const DELIVERY_ADDRESS_ID = '00000000-0000-4000-8000-0000000000d1';
 const BILLING_ADDRESS_ID = '00000000-0000-4000-8000-0000000000d2';
 const DELIVERY_METHOD_ID = '00000000-0000-4000-8000-0000000000e1';
@@ -74,6 +79,7 @@ describe('order responses parse with the published order schemas', () => {
 
   beforeAll(async () => {
     h = await setupBackendServer();
+    orderChannelId = await systemDefaultSalesChannelId(h.em());
     await seedCartForStubCustomer(h.em());
     const res = await h.app.inject({
       method: 'POST',
@@ -211,7 +217,7 @@ describe('order responses parse with the published order schemas', () => {
       ...ADMIN,
       payload: {
         customerAccountId: TEST_CUSTOMER_ID,
-        salesChannelId: SALES_CHANNEL_ID,
+        salesChannelId: orderChannelId,
         items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }],
         deliveryMethodId: DELIVERY_METHOD_ID,
         paymentMethodId: SEED_PAYMENT_METHOD_ID,

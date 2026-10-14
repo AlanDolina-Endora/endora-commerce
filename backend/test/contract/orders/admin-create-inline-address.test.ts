@@ -4,12 +4,17 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 import { SEED_DELIVERY_METHOD_ID, SEED_PAYMENT_METHOD_ID } from '../../helpers/seed-commerce.js';
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import { Address } from '../../helpers/package-entities.js';
 
-const SALES_CHANNEL_ID = '00000000-0000-4000-8000-0000000000c1';
+/**
+ * A real channel: an admin-created order naming no channel is refused with 404.
+ * Set in `beforeAll`.
+ */
+let orderChannelId: string;
 
 interface OrderBody {
   data: {
@@ -29,6 +34,7 @@ describe('Admin create order with inline addresses (US3)', () => {
 
   beforeAll(async () => {
     h = await setupBackendServer();
+    orderChannelId = await systemDefaultSalesChannelId(h.em());
   });
   afterAll(async () => {
     await teardownBackendServer(h);
@@ -41,7 +47,7 @@ describe('Admin create order with inline addresses (US3)', () => {
       cookies: { b2b_session: 'stub-admin-session' },
       payload: {
         customerAccountId: TEST_CUSTOMER_ID,
-        salesChannelId: SALES_CHANNEL_ID,
+        salesChannelId: orderChannelId,
         items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }],
         deliveryMethodId: SEED_DELIVERY_METHOD_ID,
         paymentMethodId: SEED_PAYMENT_METHOD_ID,
@@ -88,7 +94,7 @@ describe('Admin create order with inline addresses (US3)', () => {
       cookies: { b2b_session: 'stub-admin-session' },
       payload: {
         customerAccountId: TEST_CUSTOMER_ID,
-        salesChannelId: SALES_CHANNEL_ID,
+        salesChannelId: orderChannelId,
         items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }],
         deliveryMethodId: SEED_DELIVERY_METHOD_ID,
         paymentMethodId: SEED_PAYMENT_METHOD_ID,

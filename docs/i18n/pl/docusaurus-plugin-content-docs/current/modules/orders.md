@@ -43,6 +43,15 @@ istniejący, nieistniejący albo wyłączony — jest odrzucane odpowiedzią
 (szczegóły zawierają `requestedSalesChannelId` i `resolvedSalesChannelId`), zanim
 cokolwiek zostanie zapisane — koszyk pozostaje bez zmian.
 
+Przy tworzeniu zamówienia w panelu pole `salesChannelId` w treści żądania musi
+wskazywać istniejący kanał: żądanie wskazujące kanał, którego nie ma, jest
+odrzucane odpowiedzią `404 NOT_FOUND`, zanim cokolwiek zostanie zapisane — także
+koszyk klienta. Zamawiane produkty są sprawdzane względem asortymentu **tego**
+kanału, a nie kanału rozpoznanego dla samego żądania panelu — produkt, którego
+wybrany kanał nie sprzedaje, jest odrzucany odpowiedzią `404 PRODUCT_NOT_FOUND`,
+a produkt, który sprzedaje, jest przyjmowany, nawet jeśli kanał domyślny go nie
+sprzedaje.
+
 Z kanału zamówienia odczytywane są:
 
 - przy składaniu zamówienia — minimalna wartość zamówienia
@@ -65,7 +74,8 @@ nie robił; kroki opisuje strona *Aktualizacja instancji*.
 - **Koszyk.** Koszyk powstaje w kanale domyślnym, niezależnie od kanału, w którym
   kupuje klient, i trzy rzeczy są ustalane dla kanału koszyka, a nie zamówienia:
   czy produkt można dodać (asortyment kanału rozpoznanego dla żądania
-  *dodającego*), ceny pozycji oraz promocje — przy składaniu zamówienia dokładnie
+  *dodającego* — wyjątkiem jest opisane wyżej tworzenie zamówienia w panelu),
+  ceny pozycji oraz promocje — przy składaniu zamówienia dokładnie
   tak jak w koszyku. W instancji z wieloma kanałami zamówienie może więc zostać
   zapisane w kanale, który nie sprzedaje jednego z jego produktów, w cenach kanału
   domyślnego, a promocja ograniczona do kanału innego niż domyślny nie obejmuje

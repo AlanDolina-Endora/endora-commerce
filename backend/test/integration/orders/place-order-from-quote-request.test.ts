@@ -5,6 +5,7 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 import { withModuleOff, type OffStateAxis } from '../../helpers/off-state.js';
 import { Cart, CartItem, Order, OrderItem, QuoteRequest, StockLevel } from '../../helpers/package-entities.js';
 import { SEED_PRODUCT_101_ID, SEED_PRODUCT_102_ID } from '../../helpers/seed-catalog.js';
@@ -23,7 +24,11 @@ import {
   whenOrderCreatedSettled,
 } from '../../helpers/quote-conversion.js';
 
-const SALES_CHANNEL_ID = '00000000-0000-4000-8000-0000000000c1';
+/**
+ * A real channel: an admin-created order naming no channel is refused with 404.
+ * Set in `beforeAll`.
+ */
+let orderChannelId: string;
 const CUSTOMER = { b2b_session: 'stub-customer-session' };
 const OTHER_ORG_CUSTOMER = { b2b_session: 'stub-customer-session-other-org' };
 const ADMIN = { b2b_session: 'stub-admin-session' };
@@ -100,6 +105,7 @@ describe('orders — an order placed from an accepted quote request', () => {
 
   beforeAll(async () => {
     h = await setupBackendServer();
+    orderChannelId = await systemDefaultSalesChannelId(h.em());
     // The seed stocks one product; the cases that add a second line need it
     // to be orderable too.
     const em = h.em();
@@ -257,7 +263,7 @@ describe('orders — an order placed from an accepted quote request', () => {
           cookies: ADMIN,
           payload: {
             customerAccountId: TEST_CUSTOMER_ID,
-            salesChannelId: SALES_CHANNEL_ID,
+            salesChannelId: orderChannelId,
             items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }],
             deliveryMethodId: SEED_DELIVERY_METHOD_ID,
             paymentMethodId: SEED_PAYMENT_METHOD_ID,

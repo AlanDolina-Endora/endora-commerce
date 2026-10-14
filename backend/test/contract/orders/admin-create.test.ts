@@ -4,6 +4,7 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 import { seedCartForStubCustomer, SEED_PAYMENT_METHOD_ID } from '../../helpers/seed-commerce.js';
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
@@ -15,7 +16,11 @@ import { EnumOrderStatusRegistry } from '../../../../packages/modules/payment_me
 import { builtInPaymentAdapters } from '../../../../packages/modules/payments/src/backend/adapters/built-in-adapters.js';
 import { orderServiceNeighbours } from '../../helpers/orders-neighbour-ports.js';
 
-const SALES_CHANNEL_ID = '00000000-0000-4000-8000-0000000000c1';
+/**
+ * A real channel: an admin-created order naming no channel is refused with 404.
+ * Set in `beforeAll`.
+ */
+let orderChannelId: string;
 const DELIVERY_ADDRESS_ID = '00000000-0000-4000-8000-0000000000d1';
 const BILLING_ADDRESS_ID = '00000000-0000-4000-8000-0000000000d2';
 const DELIVERY_METHOD_ID = '00000000-0000-4000-8000-0000000000e1';
@@ -30,6 +35,7 @@ describe('Admin create order on behalf (US3)', () => {
 
   beforeAll(async () => {
     h = await setupBackendServer();
+    orderChannelId = await systemDefaultSalesChannelId(h.em());
   });
   afterAll(async () => {
     await teardownBackendServer(h);
@@ -42,7 +48,7 @@ describe('Admin create order on behalf (US3)', () => {
       cookies: { b2b_session: 'stub-admin-session' },
       payload: {
         customerAccountId: TEST_CUSTOMER_ID,
-        salesChannelId: SALES_CHANNEL_ID,
+        salesChannelId: orderChannelId,
         items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }],
         deliveryMethodId: DELIVERY_METHOD_ID,
         paymentMethodId: SEED_PAYMENT_METHOD_ID,
@@ -63,7 +69,7 @@ describe('Admin create order on behalf (US3)', () => {
   it('accepts an optional origin and answers the order without it', async () => {
     const payload = {
       customerAccountId: TEST_CUSTOMER_ID,
-      salesChannelId: SALES_CHANNEL_ID,
+      salesChannelId: orderChannelId,
       items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }],
       deliveryMethodId: DELIVERY_METHOD_ID,
       paymentMethodId: SEED_PAYMENT_METHOD_ID,
