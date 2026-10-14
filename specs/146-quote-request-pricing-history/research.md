@@ -129,9 +129,11 @@ expressed in — base pieces — which is the governing rule of the spec's edge 
 12efc10ac**: the spec now states that a quote line's quantity is always in base pieces and that no
 multiplication by units per package applies, which is what this design does. The resolver is asked
 with the line's `quantity` only — `packagingUnitBaseQuantity` never enters the query (T6) — and the
-admin screen labels the reference "per base unit". Whether a customer-supplied
-`packagingUnitName` / `packagingUnitBaseQuantity` should be validated against the catalogue's
-packaging units is **not decided here**: it is an owner question in the plan's hand-off.
+admin screen labels the reference "per base unit". Validating a customer-supplied
+`packagingUnitName` / `packagingUnitBaseQuantity` against the catalogue's packaging units is **out
+of scope** (owner decision, option (a)): it belongs to the minimum-quantity feature (issue #285).
+Here the snapshot is stored as sent and never enters the price query; the admin UI labels every
+price "per base unit".
 
 **Currency**: the reference is resolved in the channel's default currency (what a normal order on
 that channel is priced in — the probe's own default). Lines are still hard-coded `PLN`; when the

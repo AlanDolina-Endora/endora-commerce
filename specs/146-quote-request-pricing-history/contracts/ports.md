@@ -120,13 +120,32 @@ base pieces and its unit price per base piece (`cart-service.ts` `effectiveQuant
 
 ## 4. Unchanged, deliberately
 
-- **`QuoteRequestLineRecord` (`quoteRequestReadPort.listItems`) — [NEEDS CLARIFICATION — owner
-  answer pending].** A cart-converted line's `desiredUnitPrice` becomes `null` (FR-008); the ERP /
-  connector readers (`comarch_xl`, cart conversion back) handle `null` without failing, but lose
-  the price they used to read there. Option (b), the coordinator's candidate: add optional
-  `referenceUnitPrice: string | null` and `referenceCurrency: string | null` to the record — an
-  additive change, filled from the stored reference columns. Until the owner answers, the record is
-  unchanged; tasks T005 (c) is the one sub-step that implements (b) if chosen.
+- *(moved to §5 — `QuoteRequestLineRecord` is no longer unchanged.)*
+
+## 5. `quoteRequestReadPort` (`QuoteRequestLineRecord`) — two optional fields, owner `quote_requests`
+
+Owner decision, option (b). A cart-converted line's `desiredUnitPrice` becomes `null` (FR-008); the
+ERP / connector readers (`comarch_xl`, and anything reading `listItems`) used to find the cart price
+there. The record gains, additively:
+
+```ts
+export interface QuoteRequestLineRecord {
+  // … existing fields unchanged …
+  /** The stored at-request reference unit price (net, per base piece), decimal string; `null` when
+   *  none is stored. For a cart-converted line this is the cart's unit price (FR-008) — read it
+   *  here, not from `desiredUnitPrice`, which is now `null` on those lines. */
+  referenceUnitPrice?: string | null;
+  /** Currency of `referenceUnitPrice`; `null` exactly when it is `null`. */
+  referenceCurrency?: string | null;
+}
+```
+
+Populated by `quote_requests/src/backend/services/quote-request-read-port.ts` `listItems` (the one
+place the record is built) from the item's reference columns. Optional, so every structural stub
+of the port compiles unchanged. The quote → cart conversion still ignores money fields (it
+re-resolves prices, FR-017 of feature 075); the record's doc comment is updated to say the new
+fields are for export readers. Tests: contract-level in `packages/contracts/src/quote-requests.test.ts`
+(T003), `[PG]` in `cart-conversion-reference.test.ts` (T028).
 - `rfqDiffEntrySchema` / `RfqRevisionService.diffRevisions` (customer comparison) — research R6.
 - `LinePricePort` / `OrgLinePricePort` — no new method; the new port is separate so no structural
   stub of the old ones breaks (the reason `OrgLinePricePort` extends rather than widens).

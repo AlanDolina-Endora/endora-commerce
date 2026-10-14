@@ -27,10 +27,11 @@ No backfill: every new column is nullable or defaulted, and a missing policy row
   `createOnBehalf` (admin-created lines have no at-request reference, FR-006).
 - **Read by**: the admin detail serialiser only (`referencePrice` on the admin item, contract
   `contracts/admin-quote-request-api.md` §1). Not on the customer reply (the customer serialiser is
-  an allow-list, T7). **`QuoteRequestLineRecord`: [NEEDS CLARIFICATION — owner answer pending]**
-  — not today; if the owner chooses option (b) for ERP/connector readers of cart-converted lines,
-  the record gains optional `referenceUnitPrice` / `referenceCurrency` read from these columns
-  (`contracts/ports.md` §4, tasks T005 (c)).
+  an allow-list, T7). **Also read by `quoteRequestReadPort.listItems`** (owner decision,
+  option (b)): `QuoteRequestLineRecord` gains optional `referenceUnitPrice` (decimal string) and
+  `referenceCurrency`, `null` when no reference is stored, so ERP / connector readers of a
+  cart-converted line — whose `desiredUnitPrice` is now `null` — read the cart price there
+  (`contracts/ports.md` §4).
 - **Validated on write** (T6): an in-process `lineReferencePrices` entry must be finite, ≥ 0, at
   most two decimals, with a `/^[A-Z]{3}$/` currency; a server-resolved one is the resolver's own
   output. The value is always **per base piece** (the line's quantity unit).

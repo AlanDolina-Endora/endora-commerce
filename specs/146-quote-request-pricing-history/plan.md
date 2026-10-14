@@ -218,7 +218,7 @@ by `composer:generate`, ordered by the module graph:
 | A pricing failure at submission blocks quote requests | One narrow catch with `rethrowIfModuleDisabled` first (R2); integration test with a throwing port stub |
 | Carry-over pairs the wrong row (two lines of one product) | Pairing by `id` first, then product + variant + packaging + order; unit-tested matrix in `line-carry-over.test.ts` |
 | Meaning change of `totalAtCustomerPrice` for other `listForCustomer` consumers (`customers` admin list of a buyer's quotes) | Not a shape change (spec Assumption); changeset names the change; `customers`' own tests run in the final gate |
-| Cart-converted lines lose `desiredUnitPrice`: ERP readers of `QuoteRequestLineRecord` (`comarch_xl`) and CRM valuation see `null` | Field is nullable and both handle `null`; CRM 0-until-priced is the clarified rule (FR-009); changeset says so |
+| Cart-converted lines lose `desiredUnitPrice`: ERP readers of `QuoteRequestLineRecord` (`comarch_xl`) and CRM valuation see `null` | Field is nullable and both handle `null`; the record gains `referenceUnitPrice` / `referenceCurrency` for connectors (owner decision (b), T032a); CRM 0-until-priced is the clarified rule (FR-009); changeset says so |
 | Transitive tenant scoping across modules (I1) | First `[PG]` test of the schema phase; fallback written in R10 |
 | `RfqDetail.tsx` is on the `i18n:hardcoded` per-file ratchet | All new strings through `useTranslation('quote_requests')`; the final gate runs the check |
 | A stale generated artefact (entities and migrations registries, package manifests, the generated module reference page and its Polish mirror) | `composer:generate`, `manifests:generate`, `pnpm install --lockfile-only` in the phase that adds the entity or changes the manifest; the reference page's Polish cache entry and materialised page refreshed in the same commit (M1); `overlay:check` + `check:docs-translations` in Phases 5 and 10, `manifests:check` + `overlay:check` in the final gate |
@@ -238,7 +238,7 @@ none is accepted as residual risk. `T10` was not issued to this plan.
 | T3 | block | A customer edit lands after an admin revision (event appended late) | Guard: awaiting acceptance ∨ admin `modified` event ∨ admin-authored latest revision; re-checked under `underRowLock` | R15; T037, T037a, T040 |
 | T4 | warn | `0.00` proposal slips past a truthy check; assert misplaced | `desiredUnitPrice !== undefined`; after validation, before first persist; in `patchDraft` under the lock after the version check | R11; T062, T065, T069 |
 | T5 | warn | A locked owner erases a stored proposal by resending the line | Omitted proposal on a paired line is carried | R5.3; data-model §2; T034, T036, T038, T040, T065 |
-| T6 | warn | Malformed or client-supplied reference; packaging multiplication | Validate `lineReferencePrices`; body keys ignored (create) / refused (patch); quantity-only resolution; "per base unit" label. Packaging-vs-catalogue validation → owner question | R2, R3; ports §2; T005, T007, T025, T027, T028, T031, T044 |
+| T6 | warn | Malformed or client-supplied reference; packaging multiplication | Validate `lineReferencePrices`; body keys ignored (create) / refused (patch); quantity-only resolution; "per base unit" label. Packaging-vs-catalogue validation out of scope (owner decision (a) → issue #285) | R2, R3; ports §2; T005, T007, T025, T027, T028, T031, T044 |
 | T7 | note | Admin-only keys leak to the customer | Customer serializer is an allow-list; contract test over reply, `events[].payload`, notifications, e-mail | T042, T045 |
 | T8 | warn → in scope (D-3M) | The probe reveals a foreign organization's prices to a scoped representative | `canSeeOrganization` for non-platform admins; account/org mismatch refused; unknown channel 400 without leak | R2; admin API §4; T020, T022 |
 | T9 | warn | History over-exposes admin PII or is unbounded | Explicit actor mapper (names only); `activeOnly` for customers; most recent 100 events + `truncated`; 404 for out-of-org rep | R8; admin API §3; T003, T051, T052a, T054, T056 |
@@ -274,7 +274,7 @@ No constitution violation. Recorded so a reviewer does not have to ask:
   | 2 | Contracts | T003–T010 |
   | 3 | Schema, entities | T011–T018 |
   | 4 | US1 `price_lists` buyer price, scoped probe | T019–T024 |
-  | 5 | US1 capture, cart conversion, list totals | T025–T033 |
+  | 5 | US1 capture, cart conversion, list totals, read-port reference | T025–T032, T032a, T033 |
   | 6 | US1 carry-over, three-way draft guard | T034–T037, T037a, T038–T041 |
   | 7 | US1 admin detail | T042–T046, T046a, T047–T049 |
   | 8 | US2/US3 history projection | T050–T052, T052a, T053–T056 |
@@ -307,16 +307,19 @@ No constitution violation. Recorded so a reviewer does not have to ask:
 - Changesets (`minor`, never `major`): `@endora-commerce/contracts`, `@endora-commerce/mod-quote-requests`,
   `@endora-commerce/mod-price-lists`, `@endora-commerce/mod-carts`, each written for the consumer
   (T089 lists the consequences each must name).
-- **Owner / coordinator questions — not resolved in code**:
-  1. **[NEEDS CLARIFICATION — answer pending]** ERP / connector readers of cart-converted lines
-     (`QuoteRequestLineRecord.desiredUnitPrice` becomes `null`): option (b) adds optional
-     `referenceUnitPrice` + `referenceCurrency` to the record. T005 (c) is the single sub-step that
-     implements it; do not start it before the answer.
-  2. Should a customer-supplied packaging unit (`packagingUnitName`, `packagingUnitBaseQuantity` on
-     create / draft edit) be validated against the catalogue's packaging units (T6)? Not decided;
-     today it is stored as sent and never affects the price query.
-  3. The new `set*` bodies are declared `.strict()`; confirm the "never make request schemas
+- **Owner decisions folded in (2026-10-14)** — nothing remains open for the owner:
+  - ERP / connector readers → **option (b)**: `QuoteRequestLineRecord` gains optional
+    `referenceUnitPrice` / `referenceCurrency`, populated by `listItems` (T005 (c), T028, T032a;
+    `contracts/ports.md` §5); the changeset tells connectors to read them, since cart-converted
+    lines now carry `desiredUnitPrice = null` (T089).
+  - Packaging validation → **option (a)**: no catalogue validation of packaging units in this
+    feature; prices are labelled "per base unit" (T044, T047).
+- **Out of scope (plan)**: validating a customer-supplied packaging unit against the catalogue's
+  packaging units — it belongs to the minimum-quantity feature (issue #285); fixing the hard-coded
+  `lineCurrency = 'PLN'` (D-3K, logged by T089a).
+- **Coordinator questions — process, not product; not resolved in code**:
+  1. The new `set*` bodies are declared `.strict()`; confirm the "never make request schemas
      strict" rule (M4) is about the existing customer-facing schemas and not these new admin
      bodies.
-  4. `specs/deferred-defects.md` (T089a, D-3K) is not in this checkout (withheld pre-migration
+  2. `specs/deferred-defects.md` (T089a, D-3K) is not in this checkout (withheld pre-migration
      record): where should the `lineCurrency = 'PLN'` entry be logged?
