@@ -6,10 +6,21 @@ import {
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
 import { expectModuleAbsent, withModuleOff } from '../../helpers/off-state.js';
-import { QuoteRequest } from '../../helpers/package-entities.js';
+import {
+  CustomerAccount,
+  Organization,
+  QuoteRequest,
+  QuoteRequestAccountPolicy,
+  QuoteRequestOrgPolicy,
+} from '../../helpers/package-entities.js';
 import { QUOTE_REQUESTS_SETTING_CODES } from '../../../../packages/modules/quote_requests/src/manifest.js';
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
-import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
+import {
+  CUSTOMER_COOKIES,
+  TEST_CUSTOMER_ID,
+  TEST_ORGANIZATION_ID,
+} from '../../helpers/test-actors.js';
+import { withSystemScope } from '../../../src/tenancy/escape-hatch.js';
 import { Order } from '../../helpers/package-entities.js';
 import { whenOrderCreatedSettled } from '../../helpers/quote-conversion.js';
 
@@ -151,5 +162,150 @@ describe('quote_requests off-state, from a package (Constitution XVII)', () => {
 
     await announceOrder(orderId);
     expect(await statusOf(quoteRequestId)).toBe('Completed');
+  });
+
+  /**
+   * Feature 146 (T085, FR-028) — the price-negotiation lock and the history
+   * read are module surfaces like any other: while `quote_requests` is off the
+   * four admin negotiation routes, the buyer's own read and `/history` answer
+   * `MODULE_DISABLED`; the stored policy rows are not touched by the flip; and
+   * once it is back on, the routes answer the values written before.
+   *
+   * The organization, account and buyer session are this file's own, so a
+   * lock written here cannot reach another file's buyer.
+   */
+  describe('feature 146 — negotiation lock and history (FR-028)', () => {
+    const stamp = Date.now();
+    const BUYER_SESSION = `stub-146-off-buyer-${stamp}`;
+    const buyer = { b2b_session: BUYER_SESSION };
+    let organizationId: string;
+    let customerAccountId: string;
+    let quoteRequestId: string;
+
+    const orgUrl = () => `/api/v1/admin/organizations/${organizationId}/quote-price-negotiation`;
+    const accountUrl = () => `/api/v1/admin/customers/${customerAccountId}/quote-price-negotiation`;
+    const historyUrl = () => `/api/v1/admin/quote-requests/${quoteRequestId}/history`;
+    const STOREFRONT_URL = '/api/v1/quote-requests/price-negotiation';
+
+    const policyRows = () =>
+      withSystemScope('146 T085: read the policy rows back across the off-state flip', async () => {
+        const em = h.orm.em.fork();
+        const org = await em.findOne(QuoteRequestOrgPolicy, { organizationId });
+        const account = await em.findOne(QuoteRequestAccountPolicy, { customerAccountId });
+        return {
+          org: org ? { allowed: org.priceProposalsAllowed, updatedAt: org.updatedAt.toISOString() } : null,
+          account: account
+            ? { allowed: account.priceProposalsAllowed, updatedAt: account.updatedAt.toISOString() }
+            : null,
+        };
+      });
+
+    beforeAll(async () => {
+      await withSystemScope('146 T085: seed the off-state tenant', async () => {
+        const em = h.orm.em.fork();
+        const org = em.create(Organization, {
+          name: `146 off-state ${stamp}`,
+          taxId: `PL146O${String(stamp).slice(-7)}`,
+          status: 'active',
+          vatStatus: 'vat_payer',
+          registeredAddress: { street: 'ul. Testowa 1', city: 'Warszawa', postalCode: '00-100', country: 'PL' },
+        });
+        await em.persistAndFlush(org);
+        const account = em.create(CustomerAccount, {
+          organizationId: org.id,
+          email: `146-off-${stamp}@off.local`,
+          passwordHash: 'x'.repeat(60),
+          firstName: '146',
+          lastName: 'off',
+          role: 'regular_user',
+        });
+        await em.persistAndFlush(account);
+        organizationId = org.id;
+        customerAccountId = account.id;
+      });
+      CUSTOMER_COOKIES[BUYER_SESSION] = { customerAccountId, organizationId };
+
+      const created = await h.app.inject({
+        method: 'POST',
+        url: '/api/v1/quote-requests',
+        cookies: buyer,
+        payload: { items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }] },
+      });
+      expect(created.statusCode, created.body).toBe(201);
+      quoteRequestId = (created.json() as { data: { id: string } }).data.id;
+
+      const orgWrite = await h.app.inject({
+        method: 'PUT',
+        url: orgUrl(),
+        cookies: admin,
+        payload: { priceProposalsAllowed: false },
+      });
+      expect(orgWrite.statusCode, orgWrite.body).toBe(200);
+      const accountWrite = await h.app.inject({
+        method: 'PUT',
+        url: accountUrl(),
+        cookies: admin,
+        payload: { override: 'allowed' },
+      });
+      expect(accountWrite.statusCode, accountWrite.body).toBe(200);
+    });
+
+    afterAll(() => {
+      delete CUSTOMER_COOKIES[BUYER_SESSION];
+    });
+
+    it('the four admin routes, the storefront read and /history are absent while off, and restored after', async () => {
+      await expectModuleAbsent(h, 'quote_requests', {
+        routes: [
+          { url: orgUrl(), cookies: admin },
+          { method: 'PUT', url: orgUrl(), cookies: admin, payload: { priceProposalsAllowed: false } },
+          { url: accountUrl(), cookies: admin },
+          { method: 'PUT', url: accountUrl(), cookies: admin, payload: { override: 'allowed' } },
+          { url: STOREFRONT_URL, cookies: buyer },
+          { url: historyUrl(), cookies: admin },
+        ],
+      });
+    });
+
+    it('keeps the stored values through the flip, and answers them once switched back on', async () => {
+      const before = await policyRows();
+      expect(before.org?.allowed).toBe(false);
+      expect(before.account?.allowed).toBe(true);
+
+      await withModuleOff('quote_requests', 'deactivated', async () => {
+        const refused = await h.app.inject({
+          method: 'PUT',
+          url: orgUrl(),
+          cookies: admin,
+          payload: { priceProposalsAllowed: true },
+        });
+        expect(refused.statusCode).toBe(503);
+        expect(await policyRows()).toEqual(before);
+      });
+
+      expect(await policyRows()).toEqual(before);
+
+      const org = await h.app.inject({ method: 'GET', url: orgUrl(), cookies: admin });
+      expect(org.statusCode, org.body).toBe(200);
+      expect((org.json() as { data: { priceProposalsAllowed: boolean } }).data.priceProposalsAllowed).toBe(false);
+
+      const account = await h.app.inject({ method: 'GET', url: accountUrl(), cookies: admin });
+      expect(account.statusCode, account.body).toBe(200);
+      expect(account.json()).toMatchObject({
+        data: {
+          override: 'allowed',
+          organizationPriceProposalsAllowed: false,
+          effectivePriceProposalsAllowed: true,
+          effectiveSource: 'account',
+        },
+      });
+
+      const own = await h.app.inject({ method: 'GET', url: STOREFRONT_URL, cookies: buyer });
+      expect(own.statusCode, own.body).toBe(200);
+      expect(own.json()).toEqual({ data: { priceProposalsAllowed: true } });
+
+      const history = await h.app.inject({ method: 'GET', url: historyUrl(), cookies: admin });
+      expect(history.statusCode, history.body).toBe(200);
+    });
   });
 });
