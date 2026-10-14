@@ -265,7 +265,7 @@ describe('RfqList — saved views (feature 147, #290)', () => {
     await user.click(screen.getByRole('button', { name: /Filters/ }));
     await user.selectOptions(screen.getByLabelText('Visibility'), 'unassigned');
     await user.click(screen.getByRole('combobox', { name: 'Select organization' }));
-    await user.click(await screen.findByRole('option', { name: /Acme/ }));
+    await user.click(await screen.findByRole('option', { name: /^Acme/ }));
 
     const statuses = await openMultiSelect(user, 'Status');
     await user.click(within(statuses).getByLabelText('Pending'));
@@ -388,7 +388,7 @@ describe('RfqList — saved views (feature 147, #290)', () => {
       expect(getPaths().filter((p) => p.startsWith(ORGANIZATIONS)).length).toBeGreaterThan(organizationCalls),
     );
     await user.click(screen.getByRole('combobox', { name: 'Select organization' }));
-    await screen.findByRole('option', { name: /Acme/ });
+    await screen.findByRole('option', { name: /^Acme/ });
 
     expect(document.body.textContent ?? '').not.toContain(FOREIGN_NAME);
     for (const path of getPaths().filter((p) => p.startsWith(ORGANIZATIONS))) {
