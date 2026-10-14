@@ -257,11 +257,20 @@ sequence** on one checkout, not in parallel. Phases 11 and 12 may run in paralle
 
 **Goal**: the tab reads as a translated, attributed timeline.
 
-- [ ] T057 [P] [US2] [US3] RED admin test: the tab fetches `/history` when opened; every entry kind and change kind renders a translated title in `en` and `pl` and no raw identifier (FR-010, a test iterates the schema enums); actor shows name + e-mail for customers, name + translated role for admins, "System", or recorded role + "unknown user"; reason and note shown; an empty change list renders "re-sent without changes"; `truncated: true` renders a "older entries not shown" notice; **a note, reason or line note containing `<img src=x onerror=…>` renders as literal text** (T17) — `admin/test/modules/quote_requests/RfqDetail.history.test.tsx`
-- [ ] T058 [P] [US2] RED test that every `quoteRequestHistoryEntryKindSchema` and change `kind` value has a `detail.history.*` key in both bundles — `packages/modules/quote_requests/src/backend/history-bundle-coverage.test.ts`
-- [ ] T059 [US2] [US3] History tab component (entry list, change list formatting with the locale's money and date formats, role-label mapping for the five known labels, custom role shown as stored, truncation notice; free text rendered as React text only — no `dangerouslySetInnerHTML`, T17) — `packages/modules/quote_requests/src/admin/pages/RfqHistory.tsx`, mounted from `RfqDetail.tsx`
-- [ ] T060 [US2] [US3] `detail.history.*` keys in both languages — `packages/modules/quote_requests/i18n/en.json`, `pl.json`
-- [ ] T061 [US2] Run the module's admin tests, `i18n:hardcoded`, `check:bundle-pairing`
+- [x] T057 [P] [US2] [US3] RED admin test: the tab fetches `/history` when opened; every entry kind and change kind renders a translated title in `en` and `pl` and no raw identifier (FR-010, a test iterates the schema enums); actor shows name + e-mail for customers, name + translated role for admins, "System", or recorded role + "unknown user"; reason and note shown; an empty change list renders "re-sent without changes"; `truncated: true` renders a "older entries not shown" notice; **a note, reason or line note containing `<img src=x onerror=…>` renders as literal text** (T17) — `admin/test/modules/quote_requests/RfqDetail.history.test.tsx`
+- [x] T058 [P] [US2] RED test that every `quoteRequestHistoryEntryKindSchema` and change `kind` value has a `detail.history.*` key in both bundles — `packages/modules/quote_requests/src/backend/history-bundle-coverage.test.ts`
+- [x] T059 [US2] [US3] History tab component (entry list, change list formatting with the locale's money and date formats, role-label mapping for the five known labels, custom role shown as stored, truncation notice; free text rendered as React text only — no `dangerouslySetInnerHTML`, T17) — `packages/modules/quote_requests/src/admin/pages/RfqHistory.tsx`, mounted from `RfqDetail.tsx`
+- [x] T060 [US2] [US3] `detail.history.*` keys in both languages — `packages/modules/quote_requests/i18n/en.json`, `pl.json`
+  - **Outcome (Phase 9)**: the keys went to the bundle the host screen reads, not the module's own
+    (coordinator ruling): `RfqDetail` and `RfqHistory` call `useTranslation('core')`, which the admin
+    serves from `_i18n`, so the keys are `rfq.detail.history.*` in
+    `packages/modules/_i18n/i18n/en.json` and `pl.json`; T058 reads those two files. The module's own
+    `i18n/` is unchanged. Money in a change is the admin language's number format plus the ISO code
+    (`110.00 → 105.00 PLN`, `110,00 → 105,00 PLN`), dates `dateStyle: medium, timeStyle: short` in
+    `en-GB` / `pl-PL`. Entries render oldest first, as the API answers, with the truncation notice on
+    top. The detail screen now shows its own translated "not found" for a 404 (unknown id and,
+    since Phase 8, an out-of-scope request) instead of the server's English sentence.
+- [x] T061 [US2] Run the module's admin tests, `i18n:hardcoded`, `check:bundle-pairing`
 
 **Verification**: `pnpm --filter admin exec vitest run test/modules/quote_requests && pnpm --filter @endora-commerce/mod-quote-requests exec vitest run src/backend/history-bundle-coverage.test.ts && pnpm --filter backend run i18n:hardcoded && pnpm --filter backend run check:bundle-pairing && pnpm --filter admin run typecheck`
 

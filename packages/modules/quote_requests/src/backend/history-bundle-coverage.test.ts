@@ -1,0 +1,98 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import {
+  quoteRequestHistoryChangeSchema,
+  quoteRequestHistoryEntryKindSchema,
+} from '@endora-commerce/contracts';
+
+/**
+ * Feature 146, T058 (FR-010, FR-030, contract H4) — every history entry kind
+ * and every change kind the API can answer has a translated title in both
+ * admin languages, so the History tab never falls back to a raw identifier.
+ *
+ * The keys live in the bundle the host screen reads: `RfqDetail` and its
+ * History tab call `useTranslation('core')`, which the admin serves from
+ * `_i18n`'s bundle (coordinator ruling, recorded on T060). The component builds
+ * the keys as `rfq.detail.history.entry.<kind>` and
+ * `rfq.detail.history.change.<kind>`; the admin test
+ * `admin/test/modules/quote_requests/RfqDetail.history.test.tsx` holds the
+ * other half — that the component renders those keys' text.
+ */
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const CORE_BUNDLE_DIR = join(HERE, '..', '..', '..', '_i18n', 'i18n');
+
+function bundle(language: 'en' | 'pl'): Record<string, string> {
+  return JSON.parse(readFileSync(join(CORE_BUNDLE_DIR, `${language}.json`), 'utf8')) as Record<
+    string,
+    string
+  >;
+}
+
+const EN = bundle('en');
+const PL = bundle('pl');
+
+const ENTRY_KINDS = [...quoteRequestHistoryEntryKindSchema.options];
+const CHANGE_KINDS = quoteRequestHistoryChangeSchema.options.map((o) => o.shape.kind.value);
+
+/** The recorded role labels the projection can answer, plus the generic one. */
+const ROLE_KEYS = [
+  'platformAdministrator',
+  'salesRepresentative',
+  'customer',
+  'system',
+  'administrator',
+];
+
+const OTHER_KEYS = [
+  'rfq.detail.history.title',
+  'rfq.detail.history.empty',
+  'rfq.detail.history.loading',
+  'rfq.detail.history.error',
+  'rfq.detail.history.truncated',
+  'rfq.detail.history.noChanges',
+  'rfq.detail.history.none',
+  'rfq.detail.history.note',
+  'rfq.detail.history.reason',
+  'rfq.detail.history.revision',
+  'rfq.detail.history.order',
+  'rfq.detail.history.relatedRequest',
+  'rfq.detail.history.lineWithVariant',
+  'rfq.detail.history.money',
+  'rfq.detail.history.actor.system',
+  'rfq.detail.history.actor.unknownUser',
+  'rfq.detail.history.actor.withDetail',
+  'rfq.detail.history.change.validity_set',
+  'rfq.detail.history.change.validity_removed',
+];
+
+const REQUIRED = [
+  ...ENTRY_KINDS.map((k) => `rfq.detail.history.entry.${k}`),
+  ...CHANGE_KINDS.map((k) => `rfq.detail.history.change.${k}`),
+  ...ROLE_KEYS.map((k) => `rfq.detail.history.role.${k}`),
+  ...OTHER_KEYS,
+];
+
+describe('quote request history — bundle coverage (T058)', () => {
+  it('iterates the full schema enums', () => {
+    expect(ENTRY_KINDS).toHaveLength(12);
+    expect(CHANGE_KINDS).toHaveLength(8);
+  });
+
+  it.each(REQUIRED)('%s exists, non-empty, in en and pl', (key) => {
+    expect(EN[key], `en: ${key}`).toEqual(expect.any(String));
+    expect(PL[key], `pl: ${key}`).toEqual(expect.any(String));
+    expect(EN[key]?.trim()).not.toBe('');
+    expect(PL[key]?.trim()).not.toBe('');
+  });
+
+  it('the Polish entry and change titles are translations, not English copies', () => {
+    const titles = [
+      ...ENTRY_KINDS.map((k) => `rfq.detail.history.entry.${k}`),
+      ...CHANGE_KINDS.map((k) => `rfq.detail.history.change.${k}`),
+    ];
+    for (const key of titles) expect(PL[key], key).not.toBe(EN[key]);
+  });
+});

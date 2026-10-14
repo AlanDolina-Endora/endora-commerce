@@ -23,6 +23,7 @@ import {
   referenceDifference,
   type ReferenceAmount,
 } from '../reference-difference.js';
+import { RfqHistory } from './RfqHistory.js';
 
 /**
  * Admin Quote Request detail (feature 008 / T043). Restructured to mirror the
@@ -304,7 +305,10 @@ export function RfqDetail(): ReactNode {
       );
       setRfq(res.data);
     } catch (err) {
-      setError(err instanceof ApiError ? err.envelope.error.message : t('rfq.detail.error.load'));
+      // An unknown id and an out-of-scope request both answer 404 (feature
+      // 146, C1); either is "not found" here, in the operator's language.
+      if (err instanceof ApiError && err.status === 404) setError(t('rfq.detail.notFound'));
+      else setError(err instanceof ApiError ? err.envelope.error.message : t('rfq.detail.error.load'));
     } finally {
       setLoading(false);
     }
@@ -819,21 +823,7 @@ export function RfqDetail(): ReactNode {
 
           {tab === 'history' ? (
             <Section title={t('rfq.detail.history.title')}>
-              {rfq.events.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t('rfq.detail.history.empty')}</p>
-              ) : (
-                <ul className="space-y-2">
-                  {rfq.events.map((e) => (
-                    <li key={e.id} className="rounded-md border p-3 text-sm">
-                      <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{formatDateTime(e.createdAt)}</span>
-                        {e.actorRoleLabel ? <span>· {e.actorRoleLabel}</span> : null}
-                      </div>
-                      <p className="font-medium">{e.eventType}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <RfqHistory quoteRequestId={rfq.id} />
             </Section>
           ) : null}
         </CardContent>
