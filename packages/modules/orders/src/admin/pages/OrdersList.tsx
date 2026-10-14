@@ -13,12 +13,11 @@ import {
 import { ApiError, apiBaseUrl, apiClient, formatDateTime, formatMoney, statusBadgeStyle, usePageSizePreference } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Badge, Button, Card, CardContent, Label, PageHeader, Select, MultiSelect } from '@endora-commerce/admin-kit/ui';
 import type { MultiSelectOption } from '@endora-commerce/admin-kit/ui';
-import { ResponsiveTable, PaginationFooter } from '@endora-commerce/admin-kit/components';
-import type { ResponsiveColumn } from '@endora-commerce/admin-kit/components';
+import { ResponsiveTable, PaginationFooter, SavedViewsControl } from '@endora-commerce/admin-kit/components';
+import type { ResponsiveColumn, SavedViewState } from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { DISPLAYABLE_PAYMENT_STATUSES, paymentStatusLabelKey } from '../lib/paymentStatus.js';
 import { OrdersBulkStatusDialog } from '../components/OrdersBulkStatusDialog.js';
-import { OrderSavedViews, type SavedViewState } from '../components/OrderSavedViews.js';
 
 interface AdminOrderRow {
   id: string;
@@ -124,6 +123,9 @@ function asString(v: unknown): string {
 
 const EMPTY_TEXT = { q: '', orgName: '', customerName: '', totalMin: '', totalMax: '' };
 
+/** The list's sort before anything is chosen, and what a view saved without one loads. */
+const DEFAULT_SORT = 'placedAt:desc';
+
 export function OrdersList(): ReactNode {
   const t = useTranslation('core');
   const { pageSize, setPageSize } = usePageSizePreference('orders');
@@ -154,7 +156,7 @@ export function OrdersList(): ReactNode {
   const [textFilters, setTextFilters] = useState(EMPTY_TEXT);
   const [debouncedText, setDebouncedText] = useState(EMPTY_TEXT);
 
-  const [sort, setSort] = useState('placedAt:desc');
+  const [sort, setSort] = useState(DEFAULT_SORT);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [visibleColumnIds, setVisibleColumnIds] = useState<ColumnId[]>(DEFAULT_VISIBLE);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -316,7 +318,8 @@ export function OrdersList(): ReactNode {
       totalMin: asString(f['totalMin']),
       totalMax: asString(f['totalMax']),
     });
-    setSort(`${view.sort.field}:${view.sort.dir}`);
+    // A view need not carry a sort (feature 147: the kit hands over `sort ?? null`).
+    setSort(view.sort ? `${view.sort.field}:${view.sort.dir}` : DEFAULT_SORT);
     if (view.visibleColumns && view.visibleColumns.length) {
       setVisibleColumnIds(view.visibleColumns.filter((c): c is ColumnId => COLUMN_IDS.includes(c as ColumnId)));
     } else {
@@ -645,7 +648,12 @@ export function OrdersList(): ReactNode {
                   setVisibleColumnIds(next.filter((c): c is ColumnId => COLUMN_IDS.includes(c as ColumnId)))
                 }
               />
-              <OrderSavedViews current={currentView} onLoad={applyView} onError={setError} />
+              <SavedViewsControl
+                endpoint="/api/v1/admin/orders/list-views"
+                current={currentView}
+                onApply={applyView}
+                onError={setError}
+              />
             </div>
           </div>
 

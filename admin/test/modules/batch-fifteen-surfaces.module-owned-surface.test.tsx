@@ -936,7 +936,6 @@ describe('the moved screens take no reach the package cannot resolve', () => {
     'orders/src/admin/pages/OrderDetail.tsx',
     'orders/src/admin/pages/OrderStatusConfigPage.tsx',
     'orders/src/admin/pages/OrdersList.tsx',
-    'orders/src/admin/components/OrderSavedViews.tsx',
     'orders/src/admin/components/OrderShipmentsTab.tsx',
     'orders/src/admin/components/OrdersBulkStatusDialog.tsx',
     'orders/src/admin/components/StatusColorPicker.tsx',
