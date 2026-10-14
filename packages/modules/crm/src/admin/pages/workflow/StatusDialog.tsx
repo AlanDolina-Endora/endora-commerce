@@ -17,7 +17,7 @@ import {
   Select,
 } from '@endora-commerce/admin-kit/ui';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
-import { ModalDialog } from '../../components/ModalDialog.js';
+import { ModalDialog } from '@endora-commerce/admin-kit/components';
 import { errorMessage, workflowStatusLabel } from '../../lib/labels.js';
 
 /**

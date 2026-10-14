@@ -78,6 +78,9 @@ export type { OrganizationStatusBadgeProps } from './organization-picker/Organiz
 export { useOrganizationsQuery } from './organization-picker/useOrganizationsQuery.js';
 export type { UseOrganizationsQueryOptions, UseOrganizationsQueryResult } from './organization-picker/useOrganizationsQuery.js';
 export { useFocusTrap } from './hooks/useFocusTrap.js';
+export type { FocusTrapOptions } from './hooks/useFocusTrap.js';
+export { ModalDialog } from './modal-dialog/ModalDialog.js';
+export type { ModalDialogProps } from './modal-dialog/ModalDialog.js';
 export { useViewportTier } from './hooks/useViewportTier.js';
 export type { ViewportTier } from './hooks/useViewportTier.js';
 export { MethodAvailabilityCaption, MethodAvailabilityCell, MethodNotOfferedNotice } from './payment-method-availability/MethodAvailabilityCell.js';

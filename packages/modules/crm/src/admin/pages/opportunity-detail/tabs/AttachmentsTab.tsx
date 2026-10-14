@@ -19,7 +19,7 @@ import {
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { crmApi } from '../../../api.js';
 import { AttachmentUploader } from '../../../components/AttachmentUploader.js';
-import { ModalDialog } from '../../../components/ModalDialog.js';
+import { ModalDialog } from '@endora-commerce/admin-kit/components';
 import { errorMessage, fileSizeLabel } from '../../../lib/labels.js';
 import { uploadOpportunityAttachment } from '../../../lib/upload-attachment.js';
 import type { OpportunityTabProps } from '../tabs.js';
