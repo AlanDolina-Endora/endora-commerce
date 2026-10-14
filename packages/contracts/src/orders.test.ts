@@ -4,7 +4,10 @@ import {
   adminOrderDetailSchema,
   adminOrderPreviewMessageCodeSchema,
   adminOrderPreviewResponseSchema,
+  createOrderSavedViewRequestSchema,
+  orderSavedViewSchema,
   orderSchema,
+  updateOrderSavedViewRequestSchema,
 } from './orders.js';
 
 const ADDRESS = {
@@ -137,4 +140,105 @@ describe('admin order preview message codes', () => {
       'SOME_FUTURE_CODE',
     );
   });
+});
+
+describe('order saved views (FR-003, R-8, S-05, S-06)', () => {
+  const VIEW = {
+    id: '00000000-0000-4000-8000-000000000010',
+    name: 'Unpaid EU',
+    shared: true,
+    ownerAdminUserId: '00000000-0000-4000-8000-000000000011',
+    ownedByCaller: false,
+    canModify: false,
+    filters: { paymentStatus: 'awaiting_payment' },
+    sort: { field: 'placedAt', dir: 'desc' },
+    visibleColumns: null,
+  };
+  const CREATE = {
+    name: 'Unpaid EU',
+    shared: false,
+    filters: {},
+    sort: { field: 'placedAt', dir: 'desc' },
+  };
+  /** `JSON.stringify` of the result is exactly `bytes` UTF-8 bytes; `ł` is 2 bytes. */
+  const filtersOfBytes = (bytes: number, fill = 'x', fillBytes = 1) => ({
+    k: fill.repeat(Math.floor((bytes - 8) / fillBytes)) + 'x'.repeat((bytes - 8) % fillBytes),
+  });
+
+  it('createOrderSavedViewRequestSchema trims the name', () => {
+    expect(createOrderSavedViewRequestSchema.parse({ ...CREATE, name: '  a  ' }).name).toBe('a');
+  });
+
+  it('createOrderSavedViewRequestSchema rejects a whitespace-only and a 161-character name', () => {
+    expect(createOrderSavedViewRequestSchema.safeParse({ ...CREATE, name: '   ' }).success).toBe(
+      false,
+    );
+    expect(
+      createOrderSavedViewRequestSchema.safeParse({ ...CREATE, name: 'a'.repeat(161) }).success,
+    ).toBe(false);
+    expect(
+      createOrderSavedViewRequestSchema.safeParse({ ...CREATE, name: 'a'.repeat(160) }).success,
+    ).toBe(true);
+  });
+
+  it('updateOrderSavedViewRequestSchema trims a supplied name and stays partial', () => {
+    expect(updateOrderSavedViewRequestSchema.parse({ name: ' b ' })).toEqual({ name: 'b' });
+    expect(updateOrderSavedViewRequestSchema.parse({})).toEqual({});
+  });
+
+  it('orderSavedViewSchema requires ownedByCaller and canModify', () => {
+    expect(orderSavedViewSchema.parse(VIEW)).toMatchObject({ ownedByCaller: false, canModify: false });
+    const { ownedByCaller: _o, ...withoutOwned } = VIEW;
+    const { canModify: _c, ...withoutCanModify } = VIEW;
+    expect(orderSavedViewSchema.safeParse(withoutOwned).success).toBe(false);
+    expect(orderSavedViewSchema.safeParse(withoutCanModify).success).toBe(false);
+  });
+
+  it('orderSavedViewSchema still requires a non-null sort', () => {
+    const { sort: _s, ...withoutSort } = VIEW;
+    expect(orderSavedViewSchema.safeParse(withoutSort).success).toBe(false);
+    expect(orderSavedViewSchema.safeParse({ ...VIEW, sort: null }).success).toBe(false);
+  });
+
+  for (const [label, schema] of [
+    ['createOrderSavedViewRequestSchema', createOrderSavedViewRequestSchema],
+    ['updateOrderSavedViewRequestSchema', updateOrderSavedViewRequestSchema],
+  ] as const) {
+    describe(label, () => {
+      it('rejects a name with a control or format character', () => {
+        for (const name of ['a\u0000b', 'a‮b', 'a​b']) {
+          expect(schema.safeParse({ ...CREATE, name }).success).toBe(false);
+        }
+        expect(schema.safeParse({ ...CREATE, name: 'Zaległe 🚀' }).success).toBe(true);
+      });
+
+      it('bounds filters to 8192 UTF-8 bytes', () => {
+        expect(schema.safeParse({ ...CREATE, filters: filtersOfBytes(8192) }).success).toBe(true);
+        expect(schema.safeParse({ ...CREATE, filters: filtersOfBytes(8193) }).success).toBe(false);
+        expect(
+          schema.safeParse({ ...CREATE, filters: filtersOfBytes(8194, 'ł', 2) }).success,
+        ).toBe(false);
+      });
+
+      it('bounds visibleColumns to 64 entries of 64 characters', () => {
+        const ok = Array.from({ length: 64 }, (_, i) => `${i}`.padEnd(64, 'c'));
+        expect(schema.safeParse({ ...CREATE, visibleColumns: ok }).success).toBe(true);
+        expect(schema.safeParse({ ...CREATE, visibleColumns: [...ok, 'extra'] }).success).toBe(
+          false,
+        );
+        expect(schema.safeParse({ ...CREATE, visibleColumns: ['c'.repeat(65)] }).success).toBe(
+          false,
+        );
+      });
+
+      it('bounds sort.field to 64 characters', () => {
+        expect(
+          schema.safeParse({ ...CREATE, sort: { field: 'f'.repeat(64), dir: 'asc' } }).success,
+        ).toBe(true);
+        expect(
+          schema.safeParse({ ...CREATE, sort: { field: 'f'.repeat(65), dir: 'asc' } }).success,
+        ).toBe(false);
+      });
+    });
+  }
 });
