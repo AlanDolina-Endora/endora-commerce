@@ -73,6 +73,18 @@ export async function registerQuoteRequestsAdminRoutes(
     },
   );
 
+  // Feature 146 (FR-010 – FR-019) — the readable History, loaded when the tab
+  // opens. Same gate and visibility rule as the detail; a request outside the
+  // caller's organizations answers as an unknown id (threat model C1).
+  app.get<{ Params: { id: string } }>(
+    '/api/v1/admin/quote-requests/:id/history',
+    { preHandler: guard },
+    async (request) => {
+      const ctx = await resolveAdminContext(request);
+      return { data: await adminService.history(ctx, request.params.id) };
+    },
+  );
+
   app.post(
     '/api/v1/admin/quote-requests',
     { preHandler: guard, schema: { body: adminCreateQuoteRequestSchema } },

@@ -328,4 +328,45 @@ describe('Customer Quote Requests routes (US1)', () => {
       for (const off of offs) off();
     }
   });
+
+  /**
+   * Feature 146, Phase 8 (research R7; coordinator ruling) — a revision that
+   * changes the validity records `payload.validity`, and the customer reads it:
+   * it is the expiry date the customer already sees. It is the **only** key
+   * the allow-list gained — the payload of a `modified` event still carries
+   * nothing else beside `type` and `diff`.
+   */
+  it('146 — a modified event answers the customer `validity` and no other new payload key', async () => {
+    const created = await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/quote-requests',
+      cookies: { b2b_session: 'stub-customer-session' },
+      payload: { items: [{ productId: SEED_PRODUCT_101_ID, quantity: 2 }] },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const { id, version } = (created.json() as { data: { id: string; version: number } }).data;
+    const modified = await h.app.inject({
+      method: 'PATCH',
+      url: `/api/v1/admin/quote-requests/${id}`,
+      cookies: { b2b_session: 'stub-admin-session' },
+      headers: { 'if-match': `"${version}"` },
+      payload: { items: [{ productId: SEED_PRODUCT_101_ID, quantity: 2, agreedUnitPrice: 9 }], expiresInDays: 12 },
+    });
+    expect(modified.statusCode, modified.body).toBe(200);
+
+    const detail = await h.app.inject({
+      method: 'GET',
+      url: `/api/v1/quote-requests/${id}`,
+      cookies: { b2b_session: 'stub-customer-session' },
+    });
+    expect(detail.statusCode, detail.body).toBe(200);
+    const events = (detail.json() as {
+      data: { expiresAt: string | null; events: Array<{ eventType: string; payload: Record<string, unknown> }> };
+    }).data;
+    const event = events.events.find((e) => e.eventType === 'modified');
+    expect(Object.keys(event?.payload ?? {}).sort()).toEqual(['diff', 'type', 'validity']);
+    expect(Object.keys(event?.payload['validity'] as object).sort()).toEqual(['after', 'before']);
+    expect((event?.payload['validity'] as { after: string }).after).toBe(events.expiresAt);
+    expect(adminUserIdKeys(detail.json())).toEqual([]);
+  });
 });

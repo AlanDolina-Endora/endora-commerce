@@ -1366,6 +1366,9 @@ const CUSTOMER_PAYLOAD_KEYS = new Set([
   'revisionNumber',
   'orderId',
   'expiryDaysAtTime',
+  // Feature 146 (research R7) — a revision's validity change. The customer
+  // already reads `expiresAt`; the before/after pair widens nothing.
+  'validity',
 ]);
 
 /** The keys of one `payload.diff` entry (`RfqDiffEntry`). */

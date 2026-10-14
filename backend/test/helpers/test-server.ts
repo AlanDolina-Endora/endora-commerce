@@ -2430,11 +2430,19 @@ export async function setupBackendServer(
           const role = adminUser?.adminRoleId
             ? await ports.adminRolePort.getById(adminUser.adminRoleId)
             : null;
+          // The production answer (`quote_requests`' own resolver): only the
+          // `platform_admin` role skips the sales-rep visibility rule. This read
+          // `|| true` until feature 146, which made every admin a platform
+          // administrator here and left the C1 refusal untestable.
           return {
             adminUserId,
-            isPlatformAdmin: role?.code === 'platform_admin' || true,
+            isPlatformAdmin: role?.code === 'platform_admin',
             roleLabel:
-              role?.code === 'platform_admin' ? 'Platform administrator' : 'Sales representative',
+              role?.code === 'platform_admin'
+                ? 'Platform administrator'
+                : role?.code === 'sales_representative'
+                  ? 'Sales representative'
+                  : (role?.name ?? 'Administrator'),
           };
         },
         // `rfqTaxRateResolver` was contributed here and is `quote_requests`'

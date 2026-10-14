@@ -5372,6 +5372,15 @@
         }
       }
     },
+    "/api/v1/admin/quote-requests/{id}/history": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/returns": {
       "get": {
         "responses": {

@@ -6,6 +6,7 @@ import {
   type AdminCreateQuoteRequest,
   type AdminPatchQuoteRequest,
   type QuoteRequest as RfqDto,
+  type QuoteRequestHistory,
   type QuoteRequestSummary,
   isCustomFieldValidationFailure,
   type AdminUserReadPort,
@@ -33,6 +34,15 @@ import { raisedOnChannelId } from './raised-on-channel.js';
 import { hasUnpricedLine, quoteIncompleteError } from './agreed-price.js';
 import { pairLines } from './line-carry-over.js';
 import { storedReferenceColumns } from './reference-price.js';
+import {
+  adminActorDirectory,
+  customerActorDirectory,
+  predecessorsToRead,
+  projectHistory,
+  variantLabelDirectory,
+  type HistoryEventInput,
+  type HistoryRevisionInput,
+} from './history/history-projection.js';
 
 /**
  * Admin-facing Quote Requests service — feature 008 workflow.
@@ -49,6 +59,17 @@ import { storedReferenceColumns } from './reference-price.js';
  * Visibility scoping is centralised in `SalesRepAssignmentService.canSeeOrganization`
  * (research §R2). Platform admins skip the predicate.
  */
+
+/**
+ * The note `createOnBehalf` writes beside its `created` event. History
+ * recognises it by exact equality and replaces it with a translated title
+ * (FR-011); any other note is an operator's and is always shown.
+ */
+export const AUTOMATIC_ADMIN_CREATION_NOTE =
+  'Quote Request created on customer behalf — awaiting customer acceptance.';
+
+/** How many of the most recent events the admin History reads (threat model T9). */
+export const HISTORY_EVENT_WINDOW = 100;
 
 export interface AdminContext {
   adminUserId: string;
@@ -250,6 +271,72 @@ export class RfqAdminService {
     };
   }
 
+  /**
+   * Feature 146 (FR-010 – FR-019; research R8; contract §3) — the admin
+   * History: the most recent {@link HISTORY_EVENT_WINDOW} events merged into
+   * entries, attributed and diffed on read.
+   *
+   * Bounded (threat model T9): one read of `window + 1` events, the revisions
+   * those events reference, then only the predecessors of the modifications'
+   * revisions. One `findByIds` per actor port — customers `activeOnly`, so a
+   * deleted account's PII is never read and its entries name an unknown user
+   * (FR-018) — and one variant read for the labels.
+   */
+  async history(ctx: AdminContext, rfqId: string): Promise<QuoteRequestHistory> {
+    const em = this.deps.emFactory();
+    const rfq = await this.findVisibleForAdmin(em, ctx, rfqId);
+
+    const latest = await this.deps.eventService.listLatestForRfq(rfq.id, HISTORY_EVENT_WINDOW + 1);
+    const truncated = latest.length > HISTORY_EVENT_WINDOW;
+    const events: HistoryEventInput[] = latest
+      .slice(0, HISTORY_EVENT_WINDOW)
+      .reverse()
+      .map((event) => ({
+        id: event.id,
+        eventType: event.eventType,
+        actorAdminUserId: event.actorAdminUserId ?? null,
+        actorCustomerAccountId: event.actorCustomerAccountId ?? null,
+        actorRoleLabel: event.actorRoleLabel ?? null,
+        payload: event.payload ?? {},
+        revisionId: event.revisionId ?? null,
+        createdAt: event.createdAt,
+      }));
+
+    const referenced = await this.deps.revisionService.findForHistory(rfq.id, {
+      ids: events.flatMap((event) => (event.revisionId ? [event.revisionId] : [])),
+    });
+    const revisions: HistoryRevisionInput[] = referenced.map(toHistoryRevision);
+    revisions.push(
+      ...(await this.deps.revisionService.findForHistory(rfq.id, predecessorsToRead(events, revisions))).map(
+        toHistoryRevision,
+      ),
+    );
+
+    const adminIds = unique(events.map((event) => event.actorAdminUserId));
+    const customerIds = unique(
+      events.filter((event) => !event.actorAdminUserId).map((event) => event.actorCustomerAccountId),
+    );
+    const productIds = unique(
+      revisions.flatMap((revision) =>
+        revision.itemsSnapshot.filter((line) => line.variantId).map((line) => line.productId),
+      ),
+    );
+    const [admins, customers, variants] = await Promise.all([
+      adminIds.length > 0 ? this.deps.adminUsers.findByIds(adminIds) : [],
+      customerIds.length > 0 ? this.deps.customerAccounts.findByIds(customerIds, { activeOnly: true }) : [],
+      productIds.length > 0 ? this.deps.catalogProducts.listVariantsByProductIds(productIds) : [],
+    ]);
+
+    return {
+      entries: projectHistory(events, revisions, {
+        admins: adminActorDirectory(admins),
+        customers: customerActorDirectory(customers),
+        variantLabels: variantLabelDirectory(variants),
+      }),
+      truncated,
+    };
+  }
+
   // -------------------------------------------------------------------------
   // Approve (US2)
   // -------------------------------------------------------------------------
@@ -405,6 +492,9 @@ export class RfqAdminService {
     }
     this.assertVersion(rfq, expectedVersion);
 
+    // Research R7 — a validity change is recorded on the event, since no
+    // revision snapshot carries `expiresAt`.
+    const recorded: { validity?: { before: string | null; after: string | null } } = {};
     await underRowLock(em, rfq, async () => {
       if (body.headerNote !== undefined) rfq.headerNote = body.headerNote ?? null;
 
@@ -498,7 +588,10 @@ export class RfqAdminService {
       rfq.awaitingCustomerRevisionAcceptance = true;
       rfq.assignedAdminUserId = ctx.adminUserId;
       if (body.expiresInDays !== undefined) {
+        const before = rfq.expiresAt?.toISOString() ?? null;
         rfq.expiresAt = new Date(Date.now() + body.expiresInDays * 86_400_000);
+        const after = rfq.expiresAt.toISOString();
+        if (before !== after) recorded.validity = { before, after };
       }
       rfq.version += 1;
       this.#audit(em, 'quote_request.modify', rfq.id, null, {
@@ -533,7 +626,7 @@ export class RfqAdminService {
       quoteRequestId: rfq.id,
       eventType: 'modified',
       actor: { adminUserId: ctx.adminUserId, roleLabel: ctx.roleLabel },
-      payload: { type: 'modified', diff },
+      payload: { type: 'modified', diff, ...recorded },
       revisionId: revision.id,
     });
 
@@ -679,7 +772,7 @@ export class RfqAdminService {
       quoteRequestId: rfq.id,
       eventType: 'note-added',
       actor: { adminUserId: ctx.adminUserId, roleLabel: ctx.roleLabel },
-      payload: { type: 'note-added', note: 'Quote Request created on customer behalf — awaiting customer acceptance.' },
+      payload: { type: 'note-added', note: AUTOMATIC_ADMIN_CREATION_NOTE },
       revisionId: revision.id,
     });
 
@@ -717,13 +810,17 @@ export class RfqAdminService {
     ctx: AdminContext,
     rfqId: string,
   ): Promise<QuoteRequest> {
+    // Threat model C1 (Constitution XI) — a request outside the caller's
+    // organizations answers exactly as an unknown id does, so its existence
+    // does not leak.
+    const notFound = () => new HttpError(404, ERROR_CODES.NOT_FOUND, 'Quote Request not found.');
     const rfq = await em.findOne(QuoteRequest, { id: rfqId });
-    if (!rfq) throw new HttpError(404, ERROR_CODES.NOT_FOUND, 'Quote Request not found.');
+    if (!rfq) throw notFound();
     if (
       !ctx.isPlatformAdmin &&
       !(await this.deps.salesRepAssignment.canSeeOrganization(ctx.adminUserId, rfq.organizationId))
     ) {
-      throw new HttpError(403, ERROR_CODES.FORBIDDEN, 'Not authorized for this Quote Request.');
+      throw notFound();
     }
     return rfq;
   }
@@ -739,6 +836,26 @@ export class RfqAdminService {
     void em;
     return reps.length === 0;
   }
+}
+
+function toHistoryRevision(revision: {
+  id: string;
+  revisionNumber: number;
+  previousRevisionId?: string | null;
+  headerNoteSnapshot?: string | null;
+  itemsSnapshot: HistoryRevisionInput['itemsSnapshot'];
+}): HistoryRevisionInput {
+  return {
+    id: revision.id,
+    revisionNumber: revision.revisionNumber,
+    previousRevisionId: revision.previousRevisionId ?? null,
+    headerNoteSnapshot: revision.headerNoteSnapshot ?? null,
+    itemsSnapshot: Array.isArray(revision.itemsSnapshot) ? revision.itemsSnapshot : [],
+  };
+}
+
+function unique(values: ReadonlyArray<string | null | undefined>): string[] {
+  return [...new Set(values.filter((value): value is string => typeof value === 'string' && value.length > 0))];
 }
 
 function anyLocaleValue(blob: Record<string, string>): string {

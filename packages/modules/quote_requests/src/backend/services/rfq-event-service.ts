@@ -52,6 +52,20 @@ export class RfqEventService {
     return event;
   }
 
+  /**
+   * Feature 146 (threat model T9) — the **most recent** `limit` events,
+   * newest first. The admin History reads `limit + 1` to know whether older
+   * ones exist, and never the whole log.
+   */
+  async listLatestForRfq(quoteRequestId: string, limit: number): Promise<QuoteRequestEvent[]> {
+    const em = this.emFactory();
+    return em.find(
+      QuoteRequestEvent,
+      { quoteRequestId },
+      { orderBy: { createdAt: 'desc' }, limit },
+    );
+  }
+
   async listForRfq(quoteRequestId: string, limit = 100): Promise<QuoteRequestEvent[]> {
     const em = this.emFactory();
     return em.find(
