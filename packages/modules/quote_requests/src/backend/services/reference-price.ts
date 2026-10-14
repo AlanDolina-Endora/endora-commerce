@@ -155,3 +155,43 @@ export function assertValidSuppliedReferences(
     }
   });
 }
+
+/** The three reference columns of a quote line. */
+export interface ReferenceColumns {
+  referenceUnitPrice: string | null;
+  referenceCurrency: string | null;
+  referenceCapturedAt: Date | null;
+}
+
+/**
+ * The three reference columns of a quote line, all or none — the check
+ * constraint `quote_request_items_reference_all_or_none` refuses anything else.
+ */
+export function referenceColumns(reference: LineReference | null, capturedAt: Date): ReferenceColumns {
+  return reference
+    ? {
+        referenceUnitPrice: reference.amount,
+        referenceCurrency: reference.currency,
+        referenceCapturedAt: capturedAt,
+      }
+    : { referenceUnitPrice: null, referenceCurrency: null, referenceCapturedAt: null };
+}
+
+/**
+ * A stored line's reference columns, carried verbatim to the row that replaces
+ * it on a rewrite (research R5) — capture time included, so the reference still
+ * says when it was taken.
+ */
+export function storedReferenceColumns(row: {
+  referenceUnitPrice?: string | null;
+  referenceCurrency?: string | null;
+  referenceCapturedAt?: Date | null;
+}): ReferenceColumns {
+  return row.referenceUnitPrice != null && row.referenceCurrency != null && row.referenceCapturedAt != null
+    ? {
+        referenceUnitPrice: row.referenceUnitPrice,
+        referenceCurrency: row.referenceCurrency,
+        referenceCapturedAt: row.referenceCapturedAt,
+      }
+    : { referenceUnitPrice: null, referenceCurrency: null, referenceCapturedAt: null };
+}

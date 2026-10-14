@@ -31,6 +31,8 @@ import type { RfqRevisionService } from './rfq-revision-service.js';
 import type { RfqNotificationService } from './rfq-notification-service.js';
 import { raisedOnChannelId } from './raised-on-channel.js';
 import { hasUnpricedLine, quoteIncompleteError } from './agreed-price.js';
+import { pairLines } from './line-carry-over.js';
+import { storedReferenceColumns } from './reference-price.js';
 
 /**
  * Admin-facing Quote Requests service — feature 008 workflow.
@@ -435,25 +437,57 @@ export class RfqAdminService {
         if (productById.size !== new Set(body.items.map((it) => it.productId)).size) {
           throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'One or more products do not exist.');
         }
-        const existing = await em.find(QuoteRequestItem, { quoteRequestId: rfq.id });
+        const existing = await em.find(
+          QuoteRequestItem,
+          { quoteRequestId: rfq.id },
+          { orderBy: { createdAt: 'asc', id: 'asc' } },
+        );
+        // Feature 146, FR-034 (research R5.1, R5.2) — a body line is the stored
+        // row its `id` names (same product only), else the row the R6 rule
+        // pairs it with. A paired line keeps what the rep did not change:
+        // packaging unit, product name snapshot, the customer's proposal and the
+        // stored reference; variant and note too, unless the body carries the
+        // key (`lineNote: null` clears). A new line has no packaging unit and no
+        // reference — `modify` never prices a line.
+        const { paired } = pairLines(
+          existing,
+          body.items.map((line) => ({
+            id: line.id,
+            productId: line.productId,
+            variantId: line.variantId,
+          })),
+          'admin',
+        );
         await em.removeAndFlush(existing);
         const items: QuoteRequestItem[] = [];
-        for (const lineInput of body.items) {
+        for (const [index, lineInput] of body.items.entries()) {
           const product = productById.get(lineInput.productId)!;
+          const row = paired[index] ?? null;
+          const variantId =
+            lineInput.variantId !== undefined ? lineInput.variantId : (row?.variantId ?? null);
           items.push(
             em.create(QuoteRequestItem, {
               quoteRequestId: rfq.id,
               productId: product.id,
-              productName: anyLocaleValue(product.name),
+              productName: row?.productName ?? anyLocaleValue(product.name),
               productSlug: product.slug,
-              variantId: lineInput.variantId ?? null,
+              variantId,
+              variantLabel:
+                row !== null && (row.variantId ?? null) === variantId ? (row.variantLabel ?? null) : null,
               quantity: lineInput.quantity,
+              packagingUnitName: row?.packagingUnitName ?? null,
+              packagingUnitBaseQuantity: row?.packagingUnitBaseQuantity ?? null,
+              desiredUnitPrice: row?.desiredUnitPrice ?? null,
               agreedUnitPrice:
                 lineInput.agreedUnitPrice !== undefined && lineInput.agreedUnitPrice !== null
                   ? lineInput.agreedUnitPrice.toFixed(2)
                   : null,
-              lineNote: lineInput.lineNote ?? null,
-              lineCurrency: 'PLN',
+              lineNote:
+                lineInput.lineNote !== undefined ? lineInput.lineNote : (row?.lineNote ?? null),
+              lineCurrency: row?.lineCurrency ?? 'PLN',
+              ...(row !== null
+                ? storedReferenceColumns(row)
+                : { referenceUnitPrice: null, referenceCurrency: null, referenceCapturedAt: null }),
             }),
           );
         }

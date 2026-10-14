@@ -45,9 +45,13 @@ import { underRowLock } from './transition-lock.js';
 import { summarize } from './summarize.js';
 import {
   assertValidSuppliedReferences,
+  referenceColumns,
   resolveReferencePrices,
-  type LineReference,
+  storedReferenceColumns,
+  type ReferenceColumns,
 } from './reference-price.js';
+import { carriedProposal, pairLines, referenceInputsUnchanged } from './line-carry-over.js';
+import { QuoteRequestRevision } from '../entities/quote-request-revision.entity.js';
 
 /**
  * Customer-facing Quote Requests service — feature 008 workflow.
@@ -432,61 +436,117 @@ export class RfqService {
       throw new HttpError(409, ERROR_CODES.RFQ_NOT_DRAFT, 'Quote Request is not editable.');
     }
 
-    // Reject if any modify event has been written by an admin user — the
-    // customer must use accept-revision/reject-revision instead.
-    const adminTouched = await em.findOne(QuoteRequestEvent, {
-      quoteRequestId: rfq.id,
-      eventType: 'modified',
-    });
-    if (adminTouched) {
-      throw new HttpError(
-        409,
-        ERROR_CODES.RFQ_NOT_DRAFT,
-        'Quote Request is in admin review; resubmit instead of editing.',
-      );
-    }
+    // FR-038 / research R15 — a cheap refusal before anything else is read;
+    // repeated inside the row lock below, which is the check that counts.
+    await assertDraftOpenForCustomer(em, rfq.id, rfq.awaitingCustomerRevisionAcceptance);
 
     if (expectedVersion !== null && rfq.version !== expectedVersion) {
       throw new HttpError(409, ERROR_CODES.VERSION_CONFLICT, 'Quote Request was updated concurrently.');
     }
 
+    // Everything the line rewrite needs is read and priced before the row is
+    // taken: the reference is a call into `price_lists`, and the lock is held
+    // for the row's own write only. What was read here is what is rewritten —
+    // every write to a request bumps its `version`, and `underRowLock` refuses
+    // the change if the version it locks is not the one read here.
+    let rewrite: { existing: QuoteRequestItem[]; lines: QuoteRequestItemDraft[] } | null = null;
+    if (body.items) {
+      const productById = await this.#acquirableProductsById(
+        body.items.map((it) => it.productId),
+        ctx,
+      );
+      if (productById.size !== new Set(body.items.map((it) => it.productId)).size) {
+        // Issues #227 and #259 — see `createForCustomer`. A revision may not
+        // add a line the original submission could not have carried, on either
+        // axis.
+        throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'One or more products do not exist.');
+      }
+      const existing = await em.find(
+        QuoteRequestItem,
+        { quoteRequestId: rfq.id },
+        { orderBy: { createdAt: 'asc', id: 'asc' } },
+      );
+      // Research R5.3 — pair by product, variant, packaging name, position.
+      const { paired } = pairLines(
+        existing,
+        body.items.map((line) => ({
+          productId: line.productId,
+          variantId: line.variantId ?? null,
+          packagingUnitName: line.packagingUnitName ?? null,
+        })),
+        'customer',
+      );
+
+      // A paired line whose product, variant, quantity and packaging unit are
+      // unchanged keeps its stored reference; every other line is priced
+      // afresh — for the request's **owner**, on the channel it was raised on,
+      // never for the acting user (an organization administrator editing a
+      // colleague's draft prices it as the colleague would pay).
+      const keeps = body.items.map((line, index) => {
+        const row = paired[index] ?? null;
+        return row !== null && referenceInputsUnchanged(row, line);
+      });
+      const toResolve = body.items.filter((_, index) => !keeps[index]);
+      const resolved = await resolveReferencePrices(this.deps.buyerLinePrices, {
+        owner: { customerAccountId: rfq.customerAccountId, organizationId: rfq.organizationId },
+        salesChannelId: rfq.salesChannelId ?? null,
+        lines: toResolve,
+      });
+      const capturedAt = new Date();
+      let next = 0;
+      const references: ReferenceColumns[] = body.items.map((_, index) =>
+        keeps[index]
+          ? storedReferenceColumns(paired[index]!)
+          : referenceColumns(resolved[next++] ?? null, capturedAt),
+      );
+
+      const lines = body.items.map((lineInput, index): QuoteRequestItemDraft => {
+        const product = productById.get(lineInput.productId)!;
+        const row = paired[index] ?? null;
+        // FR-035 — packaging stored as sent, with the name suffix
+        // `createForCustomer` writes.
+        const baseName = anyLocaleValue(product.name);
+        return {
+          quoteRequestId: rfq.id,
+          productId: product.id,
+          productName: lineInput.packagingUnitName
+            ? `${baseName} (${lineInput.packagingUnitName})`
+            : baseName,
+          productSlug: product.slug,
+          variantId: lineInput.variantId ?? null,
+          variantLabel:
+            row !== null && (row.variantId ?? null) === (lineInput.variantId ?? null)
+              ? (row.variantLabel ?? null)
+              : null,
+          quantity: lineInput.quantity,
+          packagingUnitName: lineInput.packagingUnitName ?? null,
+          packagingUnitBaseQuantity: lineInput.packagingUnitBaseQuantity ?? null,
+          // Threat model T5 — an omitted proposal on a paired line is kept.
+          desiredUnitPrice: carriedProposal(lineInput.desiredUnitPrice, row),
+          lineNote: lineInput.lineNote ?? null,
+          lineCurrency: 'PLN',
+          ...references[index]!,
+        };
+      });
+      rewrite = { existing, lines };
+    }
+
     await underRowLock(em, rfq, async () => {
+      // Threat model T3 — the version check passed, so this is the row that was
+      // read; but an admin `modify` commits its revision and lines before it
+      // appends its event, so the guard is asked again, of what is committed
+      // now, while the row is held.
+      const [current] = await em.execute<Array<{ awaiting: boolean }>>(
+        `select "awaiting_customer_revision_acceptance" as "awaiting" from "quote_requests" where "id" = ?`,
+        [rfq.id],
+      );
+      await assertDraftOpenForCustomer(em, rfq.id, current?.awaiting === true);
+
       if (body.headerNote !== undefined) rfq.headerNote = body.headerNote ?? null;
 
-      if (body.items) {
-        const productById = await this.#acquirableProductsById(
-          body.items.map((it) => it.productId),
-          ctx,
-        );
-        if (productById.size !== new Set(body.items.map((it) => it.productId)).size) {
-          // Issues #227 and #259 — see `createForCustomer`. A revision may not
-          // add a line the original submission could not have carried, on either
-          // axis.
-          throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'One or more products do not exist.');
-        }
-        const existingItems = await em.find(QuoteRequestItem, { quoteRequestId: rfq.id });
-        await em.removeAndFlush(existingItems);
-
-        const items: QuoteRequestItem[] = [];
-        for (const lineInput of body.items) {
-          const product = productById.get(lineInput.productId)!;
-          items.push(
-            em.create(QuoteRequestItem, {
-              quoteRequestId: rfq.id,
-              productId: product.id,
-              productName: anyLocaleValue(product.name),
-              productSlug: product.slug,
-              variantId: lineInput.variantId ?? null,
-              quantity: lineInput.quantity,
-              desiredUnitPrice:
-                lineInput.desiredUnitPrice !== undefined
-                  ? lineInput.desiredUnitPrice.toFixed(2)
-                  : null,
-              lineNote: lineInput.lineNote ?? null,
-              lineCurrency: 'PLN',
-            }),
-          );
-        }
+      if (rewrite) {
+        await em.removeAndFlush(rewrite.existing);
+        const items = rewrite.lines.map((line) => em.create(QuoteRequestItem, line));
         await em.persistAndFlush(items);
       }
 
@@ -1161,21 +1221,61 @@ function customerDisplayName(c: CustomerAccountRecord): string {
   return [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email;
 }
 
+/** The columns of a quote line a rewrite creates. */
+type QuoteRequestItemDraft = Pick<
+  QuoteRequestItem,
+  | 'quoteRequestId'
+  | 'productId'
+  | 'productName'
+  | 'productSlug'
+  | 'variantId'
+  | 'variantLabel'
+  | 'quantity'
+  | 'packagingUnitName'
+  | 'packagingUnitBaseQuantity'
+  | 'desiredUnitPrice'
+  | 'lineNote'
+  | 'lineCurrency'
+> &
+  ReferenceColumns;
+
 /**
- * The three reference columns of a quote line, all or none — the check
- * constraint `quote_request_items_reference_all_or_none` refuses anything else.
+ * FR-038 (research R15, threat model T3) — a customer may edit a draft until an
+ * administrator has revised it, and never after. Three marks say "revised", and
+ * each one alone can be visible before the others:
+ *
+ *  1. `awaitingCustomerRevisionAcceptance` — committed with the admin's lines;
+ *  2. a `modified` event with an administrator as actor — appended last;
+ *  3. an admin-authored latest revision — recorded between the two.
+ *
+ * Customer-authored `modified` events, an organization administrator's edit of
+ * a colleague's draft included, never close the draft, however many there are.
  */
-function referenceColumns(
-  reference: LineReference | null,
-  capturedAt: Date,
-): Pick<QuoteRequestItem, 'referenceUnitPrice' | 'referenceCurrency' | 'referenceCapturedAt'> {
-  return reference
-    ? {
-        referenceUnitPrice: reference.amount,
-        referenceCurrency: reference.currency,
-        referenceCapturedAt: capturedAt,
-      }
-    : { referenceUnitPrice: null, referenceCurrency: null, referenceCapturedAt: null };
+async function assertDraftOpenForCustomer(
+  em: EntityManager,
+  quoteRequestId: string,
+  awaitingCustomerRevisionAcceptance: boolean,
+): Promise<void> {
+  const refuse = (): never => {
+    throw new HttpError(
+      409,
+      ERROR_CODES.RFQ_NOT_DRAFT,
+      'Quote Request is in admin review; resubmit instead of editing.',
+    );
+  };
+  if (awaitingCustomerRevisionAcceptance) refuse();
+  const adminModified = await em.count(QuoteRequestEvent, {
+    quoteRequestId,
+    eventType: 'modified',
+    actorAdminUserId: { $ne: null },
+  });
+  if (adminModified > 0) refuse();
+  const [latest] = await em.find(
+    QuoteRequestRevision,
+    { quoteRequestId },
+    { orderBy: { revisionNumber: 'desc' }, limit: 1 },
+  );
+  if (latest?.createdByAdminUserId != null) refuse();
 }
 
 function groupBy<T, K>(arr: T[], key: (t: T) => K): Map<K, T[]> {

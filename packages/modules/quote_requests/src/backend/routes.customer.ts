@@ -1,3 +1,8 @@
+// `config: { rateLimit }` is a declaration-merging augmentation of
+// `@fastify/rate-limit`, which the host registers globally; the type-only
+// import loads the declarations for this package's own compile and emits
+// nothing (the `product_feeds` precedent, `routes.public.ts`).
+import type {} from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import {
   createQuoteRequestSchema,
@@ -10,6 +15,14 @@ import {
 } from '@endora-commerce/contracts';
 import type { RfqService, CustomerContext } from './services/rfq-service.js';
 import { HttpError } from '@endora-commerce/platform/http';
+
+/** Draft edits per quote request per minute (research R16). */
+const DRAFT_EDIT_RATE_LIMIT = {
+  max: 30,
+  timeWindow: '1 minute',
+  keyGenerator: (request: { params?: unknown; ip: string }): string =>
+    `quote-request-draft-edit:${(request.params as { id?: string } | undefined)?.id ?? request.ip}`,
+};
 
 export type RequireCustomerGuard = (
   req: FastifyRequest,
@@ -105,9 +118,18 @@ export async function registerQuoteRequestsCustomerRoutes(
   );
 
   // PATCH /api/v1/quote-requests/:id — customer-side draft edit
+  //
+  // Feature 146 (research R16, threat model T11): FR-038 lifted the one-edit
+  // limit, and every edit appends a revision and a history event, so the edit
+  // loop is bounded per request — generously for a person, tightly for a
+  // script. The host's global per-client limit still applies on top.
   app.patch<{ Params: { id: string } }>(
     '/api/v1/quote-requests/:id',
-    { preHandler: requireCustomer, schema: { body: patchQuoteRequestSchema } },
+    {
+      preHandler: requireCustomer,
+      schema: { body: patchQuoteRequestSchema },
+      config: { rateLimit: DRAFT_EDIT_RATE_LIMIT },
+    },
     async (request, reply) => {
       const ctx = await resolveCustomerContext(request);
       const body = patchQuoteRequestSchema.parse(request.body);
