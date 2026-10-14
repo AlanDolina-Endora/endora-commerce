@@ -131,7 +131,11 @@ export function CustomerPriceNegotiation({ customerId }: CustomerPriceNegotiatio
           <fieldset
             className="space-y-2"
             disabled={!canManage || loading || saving}
-            aria-describedby={[descriptionId, effectiveId, canManage ? null : hintId]
+            aria-describedby={[
+              descriptionId,
+              state === null ? null : effectiveId,
+              canManage ? null : hintId,
+            ]
               .filter((id): id is string => id !== null)
               .join(' ')}
           >
