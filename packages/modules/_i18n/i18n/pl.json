@@ -1712,6 +1712,7 @@
   "rfq.detail.history.title": "Historia zmian",
   "rfq.detail.history.loading": "Wczytywanie historii…",
   "rfq.detail.history.error": "Nie udało się wczytać historii.",
+  "rfq.detail.history.retry": "Spróbuj ponownie",
   "rfq.detail.history.truncated": "Starsze wpisy nie są wyświetlane — pokazano tylko 100 najnowszych zdarzeń.",
   "rfq.detail.history.noChanges": "Oferta wysłana ponownie bez zmian w pozycjach, notatkach i terminie ważności.",
   "rfq.detail.history.none": "brak",

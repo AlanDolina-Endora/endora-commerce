@@ -397,6 +397,21 @@ describe('RfqHistory — failure and source hygiene', () => {
     expect(await screen.findByText(tr('en', 'error'))).toBeInTheDocument();
   });
 
+  it('offers a retry that asks again (ux-laws: error state has a retry path)', async () => {
+    getSpy.mockRejectedValue(new Error('network down'));
+    renderHistory('en');
+    const retry = await screen.findByRole('button', { name: tr('en', 'retry') });
+    answerHistory({ entries: [], truncated: false });
+    fireEvent.click(retry);
+    expect(await screen.findByText(ENTRIES.en['rfq.detail.history.empty']!)).toBeInTheDocument();
+  });
+
+  it('announces loading through a live region mounted before it has text', async () => {
+    getSpy.mockReturnValue(new Promise(() => undefined));
+    renderHistory('en');
+    expect(screen.getByRole('status')).toHaveTextContent(tr('en', 'loading'));
+  });
+
   it('never uses dangerouslySetInnerHTML (T17)', () => {
     expect(readFileSync(HISTORY_SOURCE, 'utf8')).not.toContain('dangerouslySetInnerHTML');
   });

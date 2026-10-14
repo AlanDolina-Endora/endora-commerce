@@ -1712,6 +1712,7 @@
   "rfq.detail.history.title": "Change history",
   "rfq.detail.history.loading": "Loading history…",
   "rfq.detail.history.error": "Could not load the history.",
+  "rfq.detail.history.retry": "Try again",
   "rfq.detail.history.truncated": "Older entries are not shown — only the most recent 100 events are listed.",
   "rfq.detail.history.noChanges": "Offer re-sent without changes to lines, notes or validity.",
   "rfq.detail.history.none": "none",

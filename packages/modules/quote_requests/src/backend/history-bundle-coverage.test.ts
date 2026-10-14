@@ -51,6 +51,7 @@ const OTHER_KEYS = [
   'rfq.detail.history.empty',
   'rfq.detail.history.loading',
   'rfq.detail.history.error',
+  'rfq.detail.history.retry',
   'rfq.detail.history.truncated',
   'rfq.detail.history.noChanges',
   'rfq.detail.history.none',

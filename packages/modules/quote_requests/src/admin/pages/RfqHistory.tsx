@@ -7,7 +7,7 @@ import type {
   QuoteRequestHistoryLineRef,
 } from '@endora-commerce/contracts';
 import { apiClient } from '@endora-commerce/admin-kit/lib';
-import { Alert, AlertDescription } from '@endora-commerce/admin-kit/ui';
+import { Alert, AlertDescription, Button } from '@endora-commerce/admin-kit/ui';
 import { useTranslation, useTranslationContext } from '@endora-commerce/admin-kit/i18n';
 
 /**
@@ -176,6 +176,7 @@ export function RfqHistory({ quoteRequestId }: { quoteRequestId: string }): Reac
   const { t } = f;
   const [history, setHistory] = useState<QuoteRequestHistory | null>(null);
   const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -192,33 +193,41 @@ export function RfqHistory({ quoteRequestId }: { quoteRequestId: string }): Reac
     return (): void => {
       live = false;
     };
-  }, [quoteRequestId]);
+  }, [quoteRequestId, attempt]);
 
-  if (failed) {
-    return (
-      <Alert variant="destructive">
-        <AlertDescription>{t('error')}</AlertDescription>
-      </Alert>
-    );
-  }
-  if (history === null) return <p className="text-sm text-muted-foreground">{t('loading')}</p>;
+  const loading = history === null && !failed;
 
   return (
-    <div className="space-y-3">
-      {history.truncated ? (
+    <div className="space-y-3" aria-busy={loading}>
+      {/* Mounted before it has text, so the loading message is announced (WCAG 4.1.3). */}
+      <p role="status" className="text-sm text-muted-foreground empty:hidden">
+        {loading ? t('loading') : null}
+      </p>
+      {failed ? (
+        <Alert variant="destructive">
+          <AlertDescription className="flex flex-wrap items-center gap-3">
+            <span>{t('error')}</span>
+            <Button type="button" size="sm" variant="outline" onClick={(): void => setAttempt((n) => n + 1)}>
+              {t('retry')}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {history?.truncated ? (
         <Alert>
           <AlertDescription>{t('truncated')}</AlertDescription>
         </Alert>
       ) : null}
-      {history.entries.length === 0 ? (
+      {history !== null && history.entries.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('empty')}</p>
-      ) : (
+      ) : null}
+      {history !== null && history.entries.length > 0 ? (
         <ul className="space-y-2">
           {history.entries.map((entry) => (
             <HistoryEntry key={entry.id} entry={entry} f={f} />
           ))}
         </ul>
-      )}
+      ) : null}
     </div>
   );
 }
