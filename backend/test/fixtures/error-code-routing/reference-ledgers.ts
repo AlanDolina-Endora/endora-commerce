@@ -251,6 +251,16 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'contributes to the settings store; `SETTING_VALUE_SHAPE_MISMATCH` is not reused, because ' +
       'the value has the right type and the sentence has to name the limit.',
   },
+  RFQ_PRICE_PROPOSAL_NOT_ALLOWED: {
+    to: 'quote_requests',
+    reason:
+      'Minted by feature 146 (`specs/146-quote-request-pricing-history/`, FR-022) for the ' +
+      'refusal a customer create or draft edit earns when it carries a proposed unit price and ' +
+      'the request owner\'s effective price-negotiation value is "not allowed". It is 422 and ' +
+      'not 403: the session may create quote requests, only the content is refused (research ' +
+      'R11). The lock and both raise sites are `quote_requests`\' own, and its `RFQ_` prefix ' +
+      'names the module.',
+  },
   CART_PRODUCT_QUOTE_ONLY: {
     to: 'carts',
     reason:

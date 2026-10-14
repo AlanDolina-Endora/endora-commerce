@@ -8,6 +8,7 @@
   "errors.RFQ_NOT_NEW": "Błąd: rfq not new.",
   "errors.RFQ_ALREADY_CLAIMED": "Błąd: rfq already claimed.",
   "errors.RFQ_EXPIRED": "Ta oferta straciła ważność — termin jej ważności upłynął. Poproś opiekuna handlowego o nową ofertę lub złóż zapytanie ponownie.",
+  "errors.RFQ_PRICE_PROPOSAL_NOT_ALLOWED": "Twoje konto nie może proponować cen w zapytaniach ofertowych. Usuń proponowane ceny i wyślij zapytanie ponownie — ceny ustali dział sprzedaży.",
   "errors.QUOTE_INCOMPLETE": "To zapytanie ofertowe zawiera pozycję bez uzgodnionej ceny. Sprzedawca musi wycenić każdą pozycję, zanim zapytanie będzie można zaakceptować, zatwierdzić lub zamówić.",
   "errors.QUOTE_VALIDITY_ENDED": "Zaakceptowana oferta straciła ważność — termin jej ważności upłynął. Przed złożeniem zamówienia poproś opiekuna handlowego o nową ofertę.",
   "nav.quoteRequests.label": "Zapytania ofertowe"

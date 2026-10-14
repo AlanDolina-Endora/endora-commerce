@@ -100,13 +100,17 @@ sequence** on one checkout, not in parallel. Phases 11 and 12 may run in paralle
 - [x] T006 Add the negotiation schemas (`quoteRequestOrgNegotiationSchema`, `setQuoteRequestOrgNegotiationSchema`, `quoteRequestNegotiationOverrideSchema`, `quoteRequestAccountNegotiationSchema`, `setQuoteRequestAccountNegotiationSchema`, `storefrontQuoteRequestNegotiationSchema`) per `contracts/price-negotiation-api.md` — `packages/contracts/src/quote-requests.ts`
 - [x] T007 Add `CreateForCustomerOptions` and the optional third parameter of `RfqCustomerPort.createForCustomer` per `contracts/ports.md` §2, with the T6 validation rules written into its doc comment — `packages/contracts/src/quote-requests.ts`
 - [x] T008 Add `BuyerLinePriceLine`, `BuyerLinePriceQuery`, `BuyerLinePriceAnswer`, `BuyerLinePricePort` per `contracts/ports.md` §1 — `packages/contracts/src/price-lists.ts`
-- [ ] T009 Add `RFQ_PRICE_PROPOSAL_NOT_ALLOWED` to `ERROR_CODES` — `packages/contracts/src/errors.ts`; export everything new from `packages/contracts/src/index.ts` if that barrel lists names explicitly
+- [x] T009 Add `RFQ_PRICE_PROPOSAL_NOT_ALLOWED` to `ERROR_CODES` — `packages/contracts/src/errors.ts`; export everything new from `packages/contracts/src/index.ts` if that barrel lists names explicitly
   - **Deferred to T070** (Phase 10b): adding the member to `ERROR_CODES` alone reds
     `backend/test/unit/kernel/error-code-routing-equality.test.ts` (a minted code needs an entry in
     `backend/test/fixtures/error-code-routing/reference-ledgers.ts` `MINTED_ERROR_CODES` and a manifest
     `errorCodes` declaration). The enum member, the ledger entry (owner `quote_requests`) and the
     manifest declaration land together in T070. The barrel half is a no-op: `index.ts` re-exports
     `errors.js`, `quote-requests.js` and `price-lists.js` with `export *`.
+  - **Done with T070 (Phase 10, coordinator ruling)**: the enum member, its `MINTED_ERROR_CODES`
+    entry, the manifest `errorCodes` declaration (comment re-derived: nine captured + one minted)
+    and both bundle sentences landed in one commit, ahead of the phase; `composer:generate` and
+    `manifests:generate` rewrote nothing.
 - [x] T010 Build contracts and type-check every consumer of `RfqCustomerPort` (carts, orders, shopping_lists, quick_order, customers must compile unchanged)
 
 **Verification**: `pnpm --filter @endora-commerce/contracts exec vitest run src/quote-requests.test.ts src/price-lists.test.ts && pnpm --filter @endora-commerce/contracts run build && pnpm -r run typecheck`

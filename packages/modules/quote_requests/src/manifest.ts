@@ -185,14 +185,22 @@ export const manifest = defineModuleManifest({
   // Feature 073 (Constitution XVII) — the operator's activation control.
   activation: { settingCode: 'quote_requests.enabled', default: true },
   /**
-   * The nine error codes this module owns — feature 090 Phase 3
+   * The ten error codes this module owns — feature 090 Phase 3
    * (`specs/090-module-owned-error-codes/contracts/error-code-declaration.md`
    * §1.1). This is where the sentence for each is looked up from: `errors.<CODE>`
-   * in this module's own `i18n/{en,pl}.json`, which holds all nine in both
-   * languages and no tenth. None of them is a `check-error-translations.ts`
+   * in this module's own `i18n/{en,pl}.json`, which holds all ten in both
+   * languages and no eleventh. None of them is a `check-error-translations.ts`
    * `UNTRANSLATED_ERROR_CODES` entry.
    *
-   * The list is answer-preserving, not a judgement (§6.2 and §6.5), and it was
+   * **Nine came from the capture and one was minted.**
+   * `RFQ_PRICE_PROPOSAL_NOT_ALLOWED` was created by feature 146
+   * (`specs/146-quote-request-pricing-history/`, FR-022) after the prefix chain
+   * was deleted, so the capture below cannot hold it; its owner and reason are
+   * recorded in `backend/test/fixtures/error-code-routing/reference-ledgers.ts`
+   * `MINTED_ERROR_CODES` instead. Everything said below about "the nine" is
+   * about the captured ones.
+   *
+   * The captured list is answer-preserving, not a judgement (§6.2 and §6.5), and it was
    * not written by hand: it is the verbatim output of the runbook's step-1
    * derivation over the frozen capture at
    * `backend/test/fixtures/error-code-routing/chain-answers.ts`, which records
@@ -259,7 +267,7 @@ export const manifest = defineModuleManifest({
    * codes was enumerated over `packages` and `backend/src` rather than over
    * this package alone (runbook §5), and not one passes a fourth argument at
    * all; the codes nothing raises reach no token by construction. The
-   * bundle agrees from the other direction: nine `errors.<CODE>` keys in each
+   * bundle agrees from the other direction: ten `errors.<CODE>` keys in each
    * language and not one `errors.<CODE>.<token>`.
    */
   errorCodes: [
@@ -272,6 +280,7 @@ export const manifest = defineModuleManifest({
     { code: 'RFQ_NOT_DRAFT' },
     { code: 'RFQ_NOT_NEW' },
     { code: 'RFQ_NOT_QUOTED' },
+    { code: 'RFQ_PRICE_PROPOSAL_NOT_ALLOWED' },
   ],
   /**
    * `rfqs:handle` is declared in the core `PERMISSION_CATALOGUE`, which carries
