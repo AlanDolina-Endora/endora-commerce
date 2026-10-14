@@ -16,7 +16,9 @@ import { ApiError, apiClient, useAuth } from '../../lib/index.js';
 import { useTranslation } from '../../i18n/useTranslation.js';
 import { Badge } from '../../ui/badge.js';
 import { Combobox, type ComboboxOption } from '../../ui/combobox.js';
+import { productDisplayName } from '../product-browser/product-line.js';
 import {
+  NO_PRODUCT_IDS,
   productSelectability,
   productSelectabilityReasonKey,
   type ProductBrowserRules,
@@ -67,16 +69,11 @@ import type { ProductBrowserItem } from '../product-browser/types.js';
 
 type AdminProductSummary = ProductBrowserItem;
 
-function pickName(name: Record<string, string> | undefined | null, fallback: string): string {
-  if (!name) return fallback;
-  return name['en-US'] ?? Object.values(name)[0] ?? fallback;
-}
-
 function productToOption(p: AdminProductSummary): ComboboxOption<string> {
   const statusSuffix = p.status === 'active' ? '' : ` · ${p.status}`;
   return {
     value: p.id,
-    label: pickName(p.name, p.slug),
+    label: productDisplayName(p),
     description: `${p.sku}${statusSuffix}`,
   };
 }
@@ -113,7 +110,6 @@ export type ProductPickerProps =
     });
 
 const SEARCH_DEBOUNCE_MS = 250;
-const NO_IDS: ReadonlySet<string> = new Set<string>();
 const STATUS_LABEL_KEY: Record<AdminProductSummary['status'], string> = {
   draft: 'productBrowser.status.draft',
   active: 'productBrowser.status.active',
@@ -265,11 +261,9 @@ function ProductPickerBody(
     };
   }, [valueKey, props.mode, productCache]);
 
-  const alreadyAddedKey = (alreadyAddedIds ?? []).join(',');
-  // Keyed by content: hosts pass a fresh array on every render.
   const alreadyAddedSet = useMemo(
-    () => new Set<string>(alreadyAddedKey === '' ? [] : alreadyAddedKey.split(',')),
-    [alreadyAddedKey],
+    () => (alreadyAddedIds ? new Set<string>(alreadyAddedIds) : NO_PRODUCT_IDS),
+    [alreadyAddedIds],
   );
 
   const visibleOptions = useMemo(() => {
@@ -282,7 +276,7 @@ function ProductPickerBody(
       if (!product) return opt;
       const verdict = productSelectability(product, rules, {
         alreadyAddedIds: alreadyAddedSet,
-        selectedIds: NO_IDS,
+        selectedIds: NO_PRODUCT_IDS,
         max: Number.POSITIVE_INFINITY,
       });
       if (!verdict.selectable) {
@@ -322,7 +316,7 @@ function ProductPickerBody(
         options={visibleOptions}
         value={props.value}
         selectedLabel={
-          selectedProduct ? pickName(selectedProduct.name, selectedProduct.slug) : ''
+          selectedProduct ? productDisplayName(selectedProduct) : ''
         }
         onChange={(next): void => {
           props.onChange(next);
@@ -345,7 +339,7 @@ function ProductPickerBody(
         <div className="flex flex-wrap gap-1.5" role="list">
           {selectedIds.map((sid) => {
             const p = productCache.get(sid);
-            const label = p ? pickName(p.name, p.slug) : `${sid.slice(0, UUID_PREFIX_LENGTH)}…`;
+            const label = p ? productDisplayName(p) : `${sid.slice(0, UUID_PREFIX_LENGTH)}…`;
             return (
               <Badge
                 key={sid}

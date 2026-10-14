@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { StrictMode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { Bundle } from '../../../../packages/admin-shell/src/i18n/types';
 import { renderWithI18n } from '../../helpers/render-with-i18n';
@@ -210,18 +211,22 @@ beforeEach(() => {
 // ---------------------------------------------------------------- rig
 
 function renderPage(permissions: readonly string[] = ['*']): void {
+  // <StrictMode>, as the admin renders (admin-shell's AdminRoot): its dev
+  // double-mount is what an effect cleared only in cleanup does not survive.
   renderWithI18n(
-    withSession(
-      <MemoryRouter initialEntries={[`/price-lists/${PL_ID}`]}>
-        <Routes>
-          <Route path="/price-lists/:id" element={<PriceListDetailPage />} />
-        </Routes>
-      </MemoryRouter>,
-      {
-        session: adminSession({ permissions: [...permissions] }),
-        presence: modulePresence({ present: ['price_lists', 'catalog'] }),
-      },
-    ),
+    <StrictMode>
+      {withSession(
+        <MemoryRouter initialEntries={[`/price-lists/${PL_ID}`]}>
+          <Routes>
+            <Route path="/price-lists/:id" element={<PriceListDetailPage />} />
+          </Routes>
+        </MemoryRouter>,
+        {
+          session: adminSession({ permissions: [...permissions] }),
+          presence: modulePresence({ present: ['price_lists', 'catalog'] }),
+        },
+      )}
+    </StrictMode>,
     BUNDLE,
   );
 }
@@ -406,11 +411,13 @@ describe('Price list Products & brackets — bulk add through the product browse
   });
 
   it.each([
-    ['404 list deleted', () => new ApiError(404, { error: { code: 'NOT_FOUND', message: 'Price list pl-1 not found.' } } as never)],
-    ['403 refused', () => new ApiError(403, { error: { code: 'FORBIDDEN', message: 'Forbidden' } } as never)],
-    ['500 server error', () => new ApiError(500, { error: { code: 'INTERNAL', message: 'boom' } } as never)],
-    ['network error', () => new TypeError('Failed to fetch')],
-  ])('keeps the picker open with the selection and a Retry on %s; Retry re-sends the same body (sc. 13)', async (_l, makeError) => {
+    ['404 list deleted', () => new ApiError(404, { error: { code: 'NOT_FOUND', message: 'Price list pl-1 not found.' } } as never), 'priceLists.detail.bulkAdd.error.notFound'],
+    ['403 refused', () => new ApiError(403, { error: { code: 'FORBIDDEN', message: 'Forbidden' } } as never), 'priceLists.detail.bulkAdd.error.forbidden'],
+    ['400 refused', () => new ApiError(400, { error: { code: 'VALIDATION_FAILED', message: 'bad' } } as never), 'priceLists.detail.bulkAdd.error.invalid'],
+    ['409 concurrent add', () => new ApiError(409, { error: { code: 'VERSION_CONFLICT', message: 'conflict' } } as never), 'priceLists.detail.bulkAdd.error.conflict'],
+    ['500 server error', () => new ApiError(500, { error: { code: 'INTERNAL', message: 'boom' } } as never), 'priceLists.detail.bulkAdd.error'],
+    ['network error', () => new TypeError('Failed to fetch'), 'priceLists.detail.bulkAdd.error'],
+  ])('keeps the picker open with the selection and a Retry on %s; Retry re-sends the same body (sc. 13)', async (_l, makeError, messageKey) => {
     const user = userEvent.setup();
     let fail = true;
     bulkAdd = (body) => (fail ? Promise.reject(makeError()) : defaultBulkAdd(body));
@@ -421,7 +428,7 @@ describe('Price list Products & brackets — bulk add through the product browse
 
     await user.click(within(dialog).getByRole('button', { name: 'Add 12' }));
     const alert = await within(dialog).findByRole('alert');
-    expect(alert.textContent).toContain(key('priceLists.detail.bulkAdd.error'));
+    expect(within(alert).getByText(key(messageKey))).toBeInTheDocument();
     expect(within(dialog).getByText('12 selected')).toBeInTheDocument();
     expect(rosterNames()).toEqual(['Widget 39', 'Widget 40']);
 

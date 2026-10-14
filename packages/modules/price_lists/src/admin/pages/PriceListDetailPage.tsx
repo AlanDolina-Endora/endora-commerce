@@ -25,13 +25,18 @@ import { ApiError, apiClient, cn, useAuth } from '@endora-commerce/admin-kit/lib
 import {
   ProductBrowserDialog,
   ProductBrowserTrigger,
+  productDisplayName,
   type ProductBrowserItem,
   type ProductBrowserRules,
 } from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { BracketGrid, type BracketsByCurrency } from '../components/BracketGrid.js';
 import { ApplicationRuleBuilder } from '../components/ApplicationRuleBuilder.js';
-import { fetchRosterProductNames, type RosterProductSummary } from '../lib/roster-product-names.js';
+import {
+  createRosterNameResolver,
+  type RosterNameResolver,
+  type RosterProductSummary,
+} from '../lib/roster-product-names.js';
 type PriceListType = 'base' | 'sale';
 type PriceListStatus = 'draft' | 'active' | 'scheduled' | 'expired';
 
@@ -537,11 +542,6 @@ function DetailsPanel({
   );
 }
 
-function pickName(name: Record<string, string> | undefined | null, fallback = ''): string {
-  if (!name) return fallback;
-  return name['en-US'] ?? name['pl-PL'] ?? Object.values(name)[0] ?? fallback;
-}
-
 /** A roster row's label when its name is not (yet) known: the id prefix. */
 function idPrefix(productId: string): string {
   return productId.slice(0, 8);
@@ -561,6 +561,20 @@ const PRICE_LIST_PRODUCT_RULES: ProductBrowserRules = {
   initialStatus: 'all',
   alreadyAddedLabelKey: 'priceLists.detail.picker.alreadyOnList',
 };
+
+/**
+ * The browser's message for a refused or lost bulk add: the reason where the
+ * answer names one, otherwise the generic sentence (a network or server failure).
+ */
+function bulkAddErrorKey(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 403) return 'priceLists.detail.bulkAdd.error.forbidden';
+    if (error.status === 404) return 'priceLists.detail.bulkAdd.error.notFound';
+    if (error.status === 400) return 'priceLists.detail.bulkAdd.error.invalid';
+    if (error.status === 409) return 'priceLists.detail.bulkAdd.error.conflict';
+  }
+  return 'priceLists.detail.bulkAdd.error';
+}
 
 const BULK_ADD_FAILURE_KEY: Record<BulkAddPriceListProductsResult['failed'][number]['reason'], string> = {
   product_not_found: 'priceLists.detail.bulkAdd.failed.product_not_found',
@@ -618,19 +632,28 @@ function ProductsAndBracketsPanel({
   }, [priceListId]);
 
   // Names for every roster product, whatever the catalogue's size: batch-by-id
-  // in chunks of 500, at most two in flight. Only ids not yet known are asked for.
+  // in chunks of 500. One resolver serves the panel's life, so a roster that
+  // changes while names are loading shares its two request slots, asks only for
+  // ids not known and not already asked for, and every answer is merged — even one
+  // a newer roster overtook. Created in the effect (not at render) so StrictMode's
+  // dev remount gets a live one after disposing the first.
+  const resolverRef = useRef<RosterNameResolver | null>(null);
+  useEffect(() => {
+    const resolver = createRosterNameResolver({
+      onFound: (found) => {
+        if (found.size > 0) setProducts((prev) => new Map([...prev, ...found]));
+      },
+    });
+    resolverRef.current = resolver;
+    return (): void => {
+      resolver.dispose();
+      resolverRef.current = null;
+    };
+  }, []);
   const rosterKey = useMemo(() => roster.map((e) => e.productId).join('|'), [roster]);
   useEffect(() => {
     const missing = (rosterKey ? rosterKey.split('|') : []).filter((id) => !productsRef.current.has(id));
-    if (missing.length === 0) return undefined;
-    let cancelled = false;
-    void fetchRosterProductNames(missing).then((found) => {
-      if (cancelled || found.size === 0) return;
-      setProducts((prev) => new Map([...prev, ...found]));
-    });
-    return (): void => {
-      cancelled = true;
-    };
+    if (missing.length > 0) void resolverRef.current?.request(missing);
   }, [rosterKey]);
 
   /**
@@ -651,7 +674,7 @@ function ProductsAndBracketsPanel({
       const byId = new Map(items.map((i) => [i.id, i]));
       const named = failed.map((f) => {
         const item = byId.get(f.productId);
-        const label = item ? `${pickName(item.name, item.sku)} (${item.sku})` : idPrefix(f.productId);
+        const label = item ? `${productDisplayName(item)} (${item.sku})` : idPrefix(f.productId);
         return `${label}: ${t(BULK_ADD_FAILURE_KEY[f.reason])}`;
       });
       setFailedMessage(t('priceLists.detail.bulkAdd.failed', { count: failed.length, products: named.join('; ') }));
@@ -804,7 +827,7 @@ function ProductsAndBracketsPanel({
                       }}
                     >
                       <div data-roster-name style={{ fontSize: 12, fontWeight: 500 }}>
-                        {product ? pickName(product.name, idPrefix(e.productId)) : idPrefix(e.productId)}
+                        {product ? productDisplayName(product) : idPrefix(e.productId)}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--fg-muted)', display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
                         <span className="b2b-mono">{product?.sku ?? '—'}</span>
@@ -823,7 +846,7 @@ function ProductsAndBracketsPanel({
             <BracketGrid
               priceListId={priceListId}
               productId={selected.productId}
-              productName={pickName(selectedProduct?.name, idPrefix(selected.productId))}
+              productName={selectedProduct ? productDisplayName(selectedProduct) : idPrefix(selected.productId)}
               initial={selected.bracketsByCurrency}
               systemList={systemList}
               onSaved={(next): void => handleBracketsSaved(selected.productId, next)}
@@ -857,7 +880,7 @@ function ProductsAndBracketsPanel({
         alreadyAddedIds={roster.map((e) => e.productId)}
         onConfirm={handleBulkAdd}
         onCancel={(): void => setBrowserOpen(false)}
-        confirmErrorMessage={(): string => t('priceLists.detail.bulkAdd.error')}
+        confirmErrorMessage={(error): string => t(bulkAddErrorKey(error))}
       />
     </div>
   );

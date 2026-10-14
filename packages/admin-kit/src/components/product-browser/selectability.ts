@@ -28,6 +28,9 @@ export type ProductSelectability =
   | { selectable: true }
   | { selectable: false; reason: ProductSelectabilityReason };
 
+/** An empty id set, for a context with nothing already added or selected. */
+export const NO_PRODUCT_IDS: ReadonlySet<string> = new Set<string>();
+
 export interface ProductSelectabilityContext {
   alreadyAddedIds: ReadonlySet<string>;
   selectedIds: ReadonlySet<string>;

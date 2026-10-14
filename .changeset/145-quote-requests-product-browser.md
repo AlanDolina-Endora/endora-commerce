@@ -13,9 +13,11 @@ agreed unit price and remove.
 The agreed unit price is prefilled from the customer's price lists through a queue with at most
 four requests in flight, and a response is applied only while it still answers the line's current
 product, quantity and customer. **A hand-typed agreed price is no longer overwritten** — before,
-changing the quantity or the customer replaced it. On a customer change every price not typed by
-hand is cleared and resolved again for the new customer, so it may become empty; lines added
-before a customer is chosen are prefilled once one with an organization is.
+changing the quantity or the customer replaced it. A prefilled price answers one quantity, so
+once the quantity is no longer a valid one that price is cleared and the line is marked. On a
+customer change every price not typed by hand is cleared and resolved again for the new
+customer, so it may become empty; lines added before a customer is chosen are prefilled once one
+with an organization is.
 
 **Incomplete lines block submit instead of being dropped**: a line with no agreed price or an
 invalid quantity is marked and the request cannot be sent until it is fixed or removed; every line

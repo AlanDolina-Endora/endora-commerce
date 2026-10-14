@@ -248,6 +248,41 @@ describe('POST /api/v1/admin/price-lists-engine/:id/products/bulk-add (feature 1
     expect(await rosterIds(listId)).toEqual([...ids].sort());
   });
 
+  it('two concurrent adds of the same new product: one adds it, the other may answer 409 VERSION_CONFLICT or unchanged; a retry reports it unchanged', async () => {
+    const listId = await createList('Bulk add — concurrent');
+    const [id] = await seedProducts(1);
+
+    // Which outcome the loser gets depends on whether it read the roster before
+    // or after the winner committed — both are correct, neither is deterministic.
+    const [a, b] = await Promise.all([
+      bulkAdd(listId, { productIds: [id!] }),
+      bulkAdd(listId, { productIds: [id!] }),
+    ]);
+    const winners = [a, b].filter(
+      (r) => r.statusCode === 200 && (r.json() as { data: BulkAddResult }).data.added.includes(id!),
+    );
+    expect(winners).toHaveLength(1);
+    const loser = winners[0] === a ? b : a;
+    if (loser.statusCode === 409) {
+      expect((loser.json() as { error: { code: string } }).error.code).toBe('VERSION_CONFLICT');
+    } else {
+      expect(loser.statusCode).toBe(200);
+      expect((loser.json() as { data: BulkAddResult }).data).toEqual({
+        added: [],
+        unchanged: [id],
+        failed: [],
+      });
+    }
+
+    const retry = await bulkAdd(listId, { productIds: [id!] });
+    expect(retry.statusCode).toBe(200);
+    expect((retry.json() as { data: BulkAddResult }).data).toEqual({ added: [], unchanged: [id], failed: [] });
+
+    // One roster row and one audit entry, whichever way the race went.
+    expect(await rosterIds(listId)).toEqual([id]);
+    expect(await auditEntries(listId)).toHaveLength(1);
+  });
+
   it('adds 200 products in one request with one audit entry (SC-007)', async () => {
     const listId = await createList('Bulk add — 200');
     const ids = await seedProducts(200);

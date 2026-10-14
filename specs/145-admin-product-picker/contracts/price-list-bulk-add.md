@@ -74,9 +74,11 @@ Errors use `HttpError` with an `ERROR_CODES` member (FR-045). No new error code.
 
 Re-sending the same body after a lost response reports the previously added ids as `unchanged`
 and writes no audit entry (spec Assumptions: Retry is safe). Two concurrent requests adding the
-same new id can collide on the composite primary key at flush; the loser is answered **409
-`VERSION_CONFLICT`** (the platform envelope's existing mapping of a unique-constraint violation),
-writes nothing, and its Retry reports the id `unchanged` (research.md R-8, plan.md § Risks).
+same new id can collide on the composite primary key at flush: one adds it; the other **may
+answer 409 `VERSION_CONFLICT`** (the platform envelope's existing mapping of a unique-constraint
+violation) and write nothing — or, had it read the roster after the first committed, report the id
+`unchanged`. Which of the two depends on timing and is not deterministic; retrying reports the
+product `unchanged` (research.md R-8, plan.md § Risks).
 
 ## Tests that pin this contract
 

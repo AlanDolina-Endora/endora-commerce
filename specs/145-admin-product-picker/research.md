@@ -331,9 +331,11 @@ entry) and the platform's error envelope already maps that exception to **409
 `VERSION_CONFLICT`** (`packages/platform/src/http/error-envelope.ts`). That is the genuine-race
 case the envelope's D-260 comment keeps the mapping for — `price_list_products` is not
 tenant-keyed, so it is not a missing scope gate. The screen treats it like any non-2xx (confirm
-failure + **Retry**, which then reports the id `unchanged`). No catch-and-remap in the service and
-no dedicated test: the race cannot be made deterministic in a contract test, and the mapping is the
-platform's, already covered there. Rejected: remapping to 500 (it is a retryable conflict, not a
+failure + **Retry**, which then reports the id `unchanged`). No catch-and-remap in the service.
+The race cannot be made deterministic, so the loser *may* answer 409 or — had it read the roster
+after the winner committed — 200 with the id `unchanged`; the contract test fires two concurrent
+requests and accepts either loser outcome while pinning what is deterministic: exactly one `added`,
+one roster row, one audit entry, and a retry reporting `unchanged`. Rejected: remapping to 500 (it is a retryable conflict, not a
 fault); a new error code (FR-045 adds none).
 
 ## R-9 — The roster beyond the newest 20, and the picker's confirm-failure state

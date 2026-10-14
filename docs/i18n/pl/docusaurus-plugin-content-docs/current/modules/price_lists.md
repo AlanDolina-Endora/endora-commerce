@@ -174,7 +174,7 @@ Odmowy niczego nie zapisują:
 | Cennik jest systemowym cennikiem Default (jego lista produktów powstaje z domyślnej ceny każdego produktu) | `403 FORBIDDEN` |
 | Cennik jest nieznany albo usunięty | `404 NOT_FOUND` |
 | Treść nie jest obiektem albo `productIds` brakuje, jest puste, ma więcej niż 200 elementów lub zawiera coś, co nie jest UUID | `400 VALIDATION_FAILED` |
-| Inne żądanie w tej samej chwili dodało ten sam nowy produkt | `409 VERSION_CONFLICT`; ponowienie zgłasza go jako `unchanged` |
+| Inne żądanie w tej samej chwili dodało ten sam nowy produkt | Może zwrócić `409 VERSION_CONFLICT`; ponowienie zgłasza produkt jako `unchanged` |
 
 ### Listy wyboru w kreatorze reguł (panel administracyjny)
 

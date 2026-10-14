@@ -227,6 +227,16 @@ the roster shows all 30 by name, each opens the bracket editor, earlier brackets
 - [ ] T060 Walk [quickstart.md](./quickstart.md) §1–§4 on a local stack and record the outcome in the merge-request description (incl. the *Open items* of research.md still open for the product owner).
   - *Status*: §5's targeted automated checks were run headless and are green (contracts, the two pure domain tests, the four Postgres contract tests one at a time, the admin kit and the three host screens' tests), and they cover §4's API cases. The manual browser walk of §1–§3, the shared picker checklist and §4's `curl` calls against a signed-in session still need a human; ticked when that walk is recorded. research.md's *Open items* are all resolved — none is open for the product owner.
 
+**Review fix round 1** (code review of phases 1–9; no new task IDs — each change re-opens nothing above and is covered by the tests named):
+
+- B1 — `ProductBrowserDialog` no longer hangs under React StrictMode: `aliveRef` is set in the effect's setup as well as cleared in its cleanup, and the page fetch cancels through its own effect cleanup instead of a sequence ref (StrictMode cases in `admin/test/kit/kit-product-browser.test.tsx`).
+- S1 — `productDisplayName` and `parsePositiveInt` live once in `packages/admin-kit/src/components/product-browser/product-line.ts`, exported from `@endora-commerce/admin-kit/components`; the order, quote-request and price-list screens and `ProductPicker` drop their local copies (`admin/test/kit/kit-product-line.test.ts`).
+- S2 — a contract case for two concurrent bulk adds of the same new product; the contract, research and changeset say the loser *may* answer `409 VERSION_CONFLICT` (`backend/test/contract/price_lists/price-list-products-bulk-add.test.ts`).
+- S3 — `price_list.products_add` is declared in the price_lists manifest's `recentActivity`, with `activity.verb.price_list.products_add` in the module's en/pl bundles (`packages/modules/price_lists/src/recent-activity.test.ts`).
+- S4 — `createRosterNameResolver` in `roster-product-names.ts`: one resolver per roster panel shares the two request slots across roster changes and never re-asks an id in flight (`admin/test/modules/price_lists/roster-product-names.test.ts`).
+- S5 — a Complexity Tracking note in plan.md.
+- Nits — a rejected bulk add names its cause (four new `core` keys `priceLists.detail.bulkAdd.error.{forbidden,notFound,invalid,conflict}` mapped from 403/404/400/409); the quote-request prefill runs only for the rows actually appended; an invalid quantity clears a prefilled (not hand-typed) agreed price; one shared `NO_PRODUCT_IDS` set; `ProductPicker` memoises `alreadyAddedIds` by reference. Changesets `145-admin-kit-product-browser`, `145-i18n-price-list-bulk-add`, `145-price-lists-bulk-add` and `145-quote-requests-product-browser` updated to match.
+
 **Verification**:
 `pnpm --filter backend run check:docs-translations && pnpm --filter backend run check:module-docs && pnpm --filter backend run check:module-boundary && pnpm --filter backend run check:admin-surface && pnpm --filter backend run check:admin-zones && pnpm --filter backend run check:bundle-pairing && pnpm --filter backend run check:command-coverage && pnpm --filter backend run i18n:hardcoded && pnpm changeset:status`
 

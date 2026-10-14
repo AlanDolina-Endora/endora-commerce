@@ -18,10 +18,14 @@ Add many products to a price list in one request.
   from each product's default price) and for a caller without `price_lists:write`,
   `404 NOT_FOUND` for an unknown or deleted price list, `400 VALIDATION_FAILED` for an invalid
   body (not an object, no ids, more than 200, a non-uuid id). Two requests racing to add the same
-  new product: the loser is answered `409 VERSION_CONFLICT` and a retry reports it `unchanged`.
+  new product: one adds it; the other may answer `409 VERSION_CONFLICT` (or report it
+  `unchanged`), and retrying reports the product `unchanged`.
 - One request is one Command, `price_list.products_add`, and writes **one** audit entry whose
   after-state holds counts only — `{ name, added, unchanged, failed }`, never the id list — and
   **no** entry when nothing was added, so a retry of an accepted request is silent.
+- The manifest's `recentActivity` declares `price_list.products_add`, so the dashboard's recent
+  activity shows a bulk add as "added products to price list" / "dodał(a) produkty do cennika";
+  the module's own bundle gains `activity.verb.price_list.products_add` in English and Polish.
 
 `PriceListService.addProducts(priceListId, productIds, auditCtx?)` is the service method behind
 it. The single-product `POST …/products` and the replacing `PUT …/products` are unchanged.
@@ -29,12 +33,14 @@ it. The single-product `POST …/products` and the replacing `PUT …/products` 
 **Admin screen.** On a price list's *Products & brackets* tab, **Add** now opens the shared product
 browser over the whole catalogue: it opens on *All*, every status and type can be ticked, products
 already on the list are shown as *Already on this price list* and cannot be ticked, and one confirm
-sends one bulk-add request. A refused or lost request keeps the browser open with the selection and
-a **Retry** that re-sends the same products; an accepted one closes it, reloads the roster, opens
-the first added product's bracket editor and names any product that could not be added with the
-reason. The roster now resolves product names for a list of any size (`batch-by-id`, 500 ids per
-request, at most two in flight) instead of reading the catalogue's newest 20, and the bracket
-editor opens for every roster product — one whose name is unknown shows its id prefix rather than
-staying on *Loading product…*. **Add** is disabled, with a hint, for an operator without
-`price_lists:write`, and stays disabled on the system Default list. The single-product picker
-drawer is removed.
+sends one bulk-add request. A refused or lost request keeps the browser open with the selection, a
+message naming the cause where the answer gives one (the Default list or a missing permission, a
+price list deleted meanwhile, an invalid request, a concurrent change) and a **Retry** that
+re-sends the same products; an accepted one closes it, reloads the roster, opens the first added
+product's bracket editor and names any product that could not be added with the reason. The
+roster now resolves product names for a list of any size (`batch-by-id`, 500 ids per request, at
+most two in flight, shared by every roster change while names are still loading) instead of
+reading the catalogue's newest 20, and the bracket editor opens for every roster product — one
+whose name is unknown shows its id prefix rather than staying on *Loading product…*. **Add** is
+disabled, with a hint, for an operator without `price_lists:write`, and stays disabled on the
+system Default list. The single-product picker drawer is removed.

@@ -27,6 +27,8 @@ import {
   ProductBrowserDialog,
   ProductBrowserTrigger,
   ProductPicker,
+  parsePositiveInt,
+  productDisplayName,
   type ProductBrowserItem,
   type ProductBrowserRules,
 } from '@endora-commerce/admin-kit/components';
@@ -206,14 +208,6 @@ const RFQ_PRODUCT_RULES: ProductBrowserRules = {
   blockedTypes: ['grouped', 'bundle'],
 };
 
-/** A whole number of at least 1, or `null` when the input is not one. */
-function parseQuantity(input: string): number | null {
-  const trimmed = input.trim();
-  if (!/^\d+$/.test(trimmed)) return null;
-  const n = Number(trimmed);
-  return Number.isSafeInteger(n) && n >= 1 ? n : null;
-}
-
 /** An agreed unit price of 0 or more, or `null` when the field holds none. */
 function parsePrice(input: string): number | null {
   const trimmed = input.trim();
@@ -222,17 +216,11 @@ function parsePrice(input: string): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
-/** Product names are localized maps; pick a display string. */
-function pickName(name: Record<string, string> | undefined | null, fallback: string): string {
-  if (!name) return fallback;
-  return name['en-US'] ?? Object.values(name)[0] ?? fallback;
-}
-
 function productLine(item: ProductBrowserItem): LineRow {
   return {
     productId: item.id,
     sku: item.sku,
-    name: pickName(item.name, item.slug),
+    name: productDisplayName(item),
     quantityInput: '1',
     agreedUnitPrice: '',
     priceSource: 'none',
@@ -327,7 +315,7 @@ export function RfqCreatePage(): ReactNode {
     (row: Pick<LineRow, 'productId' | 'quantityInput' | 'priceSource'>, cust: AdminCustomerListItem | null): void => {
       const queue = queueRef.current;
       if (!queue) return;
-      const quantity = parseQuantity(row.quantityInput);
+      const quantity = parsePositiveInt(row.quantityInput);
       if (row.priceSource === 'manual' || quantity === null || !cust?.organizationId) {
         queue.forget(row.productId);
         markResolving(row.productId, false);
@@ -367,9 +355,16 @@ export function RfqCreatePage(): ReactNode {
     for (const row of linesRef.current) prefill(row, customer);
   }, [customer, prefill]);
 
-  /** Append products as lines, in the order given, skipping any already a line. */
+  /**
+   * Append products as lines, in the order given, skipping any already a line.
+   *
+   * De-duplicated once, against `linesRef` — which this advances at once, so a
+   * second add landing before the next render (two confirms in one tick) sees the
+   * first one's lines — and exactly the rows appended are prefilled. The prefill
+   * stays out of the `setLines` updater, which StrictMode runs twice.
+   */
   const appendLines = (products: readonly ProductBrowserItem[]): void => {
-    const present = new Set(lines.map((row) => row.productId));
+    const present = new Set(linesRef.current.map((row) => row.productId));
     const added: LineRow[] = [];
     for (const p of products) {
       if (present.has(p.id)) continue;
@@ -377,16 +372,26 @@ export function RfqCreatePage(): ReactNode {
       added.push(productLine(p));
     }
     if (added.length === 0) return;
-    setLines((prev) => {
-      const already = new Set(prev.map((row) => row.productId));
-      return [...prev, ...added.filter((row) => !already.has(row.productId))];
-    });
+    linesRef.current = [...linesRef.current, ...added];
+    setLines((prev) => [...prev, ...added]);
     for (const row of added) prefill(row, customer);
   };
 
+  // A resolved price answers one quantity; once the quantity is not a valid one it
+  // answers nothing, so it is cleared rather than left on screen as current
+  // (FR-034 then marks the line). A hand-typed price is the operator's and stays.
+  // A valid quantity asks again through `prefill`.
   const setQuantity = (productId: string, quantityInput: string): void => {
     const row = lines.find((r) => r.productId === productId);
-    setLines((prev) => prev.map((r) => (r.productId === productId ? { ...r, quantityInput } : r)));
+    const invalid = parsePositiveInt(quantityInput) === null;
+    setLines((prev) =>
+      prev.map((r) => {
+        if (r.productId !== productId) return r;
+        return invalid && r.priceSource === 'resolved'
+          ? { ...r, quantityInput, agreedUnitPrice: '', priceSource: 'none' }
+          : { ...r, quantityInput };
+      }),
+    );
     if (row) prefill({ ...row, quantityInput }, customer);
   };
 
@@ -410,7 +415,7 @@ export function RfqCreatePage(): ReactNode {
   // submit rather than being dropped from the request (FR-034).
   const parsedLines = lines.map((row) => ({
     row,
-    quantity: parseQuantity(row.quantityInput),
+    quantity: parsePositiveInt(row.quantityInput),
     price: parsePrice(row.agreedUnitPrice),
   }));
   const allLinesComplete = parsedLines.every((l) => l.quantity !== null && l.price !== null);

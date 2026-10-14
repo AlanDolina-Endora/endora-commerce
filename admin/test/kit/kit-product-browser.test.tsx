@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { useState, type ReactElement, type ReactNode } from 'react';
+import { StrictMode, useState, type ReactElement, type ReactNode } from 'react';
 import { ADMIN_PRODUCT_SELECTION_MAX } from '@endora-commerce/contracts';
 import { TranslationProvider } from '../../../packages/admin-shell/src/i18n/TranslationProvider';
 import type { Bundle } from '../../../packages/admin-shell/src/i18n/types';
@@ -195,17 +195,22 @@ function Harness(props: HarnessProps): ReactNode {
 
 function renderHarness(
   ui: ReactElement,
-  options: { language?: 'en' | 'pl'; permissions?: readonly string[] } = {},
+  options: { language?: 'en' | 'pl'; permissions?: readonly string[]; strict?: boolean } = {},
 ): ReturnType<typeof render> {
   const language = options.language ?? 'en';
   const session = options.permissions ? adminSession({ permissions: options.permissions }) : SESSION;
-  const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
-    <TranslationProvider language={language} initialBundle={BUNDLES[language]}>
-      <AuthProvider initial={session}>
-        <>{children}</>
-      </AuthProvider>
-    </TranslationProvider>
-  );
+  const wrapper = ({ children }: { children: ReactNode }): ReactElement => {
+    const tree = (
+      <TranslationProvider language={language} initialBundle={BUNDLES[language]}>
+        <AuthProvider initial={session}>
+          <>{children}</>
+        </AuthProvider>
+      </TranslationProvider>
+    );
+    // The admin renders inside <StrictMode> (admin-shell's AdminRoot), whose dev
+    // double-mount runs every effect's cleanup once before its setup runs again.
+    return options.strict ? <StrictMode>{tree}</StrictMode> : tree;
+  };
   return render(ui, { wrapper });
 }
 
@@ -749,5 +754,44 @@ describe('the trigger (B12)', () => {
     expect(document.getElementById(trigger.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
       'The Default list holds every product.',
     );
+  });
+});
+
+// ---------------------------------------------------------------- StrictMode
+
+describe('under <StrictMode>, as the admin renders it', () => {
+  it('shows the rows of the first page after the dev double-mount', async () => {
+    useCatalog();
+    const user = userEvent.setup();
+    renderHarness(<Harness />, { strict: true });
+    const dialog = await openPicker(user);
+    expect(within(dialog).getByText('Widget 01')).toBeTruthy();
+    expect(within(dialog).queryByText('Loading products…')).toBeNull();
+  });
+
+  it('a rejected async confirm offers Retry, and a resolved one closes', async () => {
+    useCatalog();
+    const attempts: Array<(ok: boolean) => void> = [];
+    const onConfirm = vi.fn(
+      () =>
+        new Promise<void>((done, fail) => {
+          attempts.push((ok): void => (ok ? done() : fail(new Error('nope'))));
+        }),
+    );
+    const user = userEvent.setup();
+    renderHarness(<Harness mode="async" rules={PRICE_LIST_RULES} onConfirm={onConfirm} />, {
+      strict: true,
+    });
+    const dialog = await openPicker(user);
+    await user.click(rowCheckbox('Widget 01'));
+    await user.click(within(dialog).getByRole('button', { name: 'Add 1' }));
+
+    attempts[0]!(false);
+    const alert = await within(dialog).findByRole('alert');
+    await user.click(within(alert).getByRole('button', { name: 'Retry' }));
+    expect(onConfirm).toHaveBeenCalledTimes(2);
+
+    attempts[1]!(true);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });

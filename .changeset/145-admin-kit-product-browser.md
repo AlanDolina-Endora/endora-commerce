@@ -10,11 +10,12 @@ A shared product browser for admin screens that add many products at once, and s
   `GET /api/v1/admin/catalog/products` in a paginated table (status tabs with counts, a type
   filter, a debounced SKU / slug / name search) and keeps a selection across pages, page sizes
   and filters. Props: `open`, `rules`, `alreadyAddedIds`, `title?`, `onConfirm(items)`,
-  `onCancel`, `confirmErrorMessage?`. `onConfirm` receives the selected `ProductBrowserItem`s in
-  the order they were ticked. Return nothing for a local append; return a promise to make the
-  confirm a server write — the dialog shows pending, and on rejection stays open with the
-  selection kept and a **Retry** that sends the same items again. **The host owns `open`**: close
-  the dialog in `onConfirm`, or once its promise resolves. One confirm takes at most
+  `onCancel`, `confirmErrorMessage?(error)` (the message shown for a rejected confirm, given the
+  rejection so a host can name its cause). `onConfirm` receives the selected
+  `ProductBrowserItem`s in the order they were ticked. Return nothing for a local append; return a
+  promise to make the confirm a server write — the dialog shows pending, and on rejection stays
+  open with the selection kept and a **Retry** that sends the same items again. **The host owns
+  `open`**: close the dialog in `onConfirm`, or once its promise resolves. One confirm takes at most
   `ADMIN_PRODUCT_SELECTION_MAX` (200) products. Its first page size follows the operator's
   Products-list preference, and changing it inside the dialog does not change that preference.
 - `ProductBrowserTrigger` — the **Browse products** button. It is disabled, with a visible hint,
@@ -24,6 +25,10 @@ A shared product browser for admin screens that add many products at once, and s
   the first of `alreadyAdded`, `typeBlocked`, `statusBlocked`, `limitReached`. A row already
   selected stays de-selectable at the cap. `productSelectabilityReasonKey(reason, rules)` gives
   the `core` translation key for a reason.
+- `productDisplayName(item)` — the name a product is shown under: `en-US`, else the first locale
+  present, else the slug, else the SKU. `parsePositiveInt(input)` — a whole number of at least 1
+  from a quantity field, or `null`. The two line helpers every product-browser host shares, so
+  their screens and the kit's own picker show the same name and accept the same quantities.
 - Types: `ProductBrowserRules` (`initialStatus: 'all' | 'active'`, `blockedTypes?`,
   `blockedStatuses?`, `alreadyAddedLabelKey?`), `ProductBrowserItem`, `ProductBrowserStatus`,
   `ProductBrowserType`, `ProductSelectability`, `ProductSelectabilityReason`,

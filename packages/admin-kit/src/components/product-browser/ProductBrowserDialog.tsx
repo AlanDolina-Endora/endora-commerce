@@ -23,7 +23,9 @@ import {
   type ProductBrowserCounts,
   type ProductBrowserStatusFilter,
 } from './product-browser-api.js';
+import { productDisplayName } from './product-line.js';
 import {
+  NO_PRODUCT_IDS,
   productSelectability,
   productSelectabilityReasonKey,
   type ProductBrowserRules,
@@ -80,7 +82,6 @@ export function ProductBrowserDialog(props: ProductBrowserDialogProps): ReactNod
 const SEARCH_DEBOUNCE_MS = 250;
 const TYPES: readonly ProductBrowserType[] = productTypeSchema.options;
 const STATUS_TABS: readonly ProductBrowserStatusFilter[] = ['all', 'active', 'draft', 'inactive'];
-const NO_IDS: ReadonlySet<string> = new Set<string>();
 
 const TAB_LABEL_KEY: Record<ProductBrowserStatusFilter, string> = {
   all: 'productBrowser.tab.all',
@@ -106,13 +107,9 @@ const TYPE_LABEL_KEY: Record<ProductBrowserType, string> = {
   virtual: 'productBrowser.type.virtual',
 };
 
-function primaryName(item: ProductBrowserItem): string {
-  return item.name['en-US'] ?? Object.values(item.name)[0] ?? item.slug;
-}
-
 function secondaryName(item: ProductBrowserItem): string | null {
   const pl = item.name['pl-PL'];
-  return pl !== undefined && pl !== primaryName(item) ? pl : null;
+  return pl !== undefined && pl !== productDisplayName(item) ? pl : null;
 }
 
 type ConfirmState =
@@ -154,13 +151,16 @@ function ProductBrowserSession(props: ProductBrowserDialogProps): ReactNode {
 
   const containerRef = useRef<HTMLElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
-  const aliveRef = useRef(true);
-  useEffect(
-    () => (): void => {
+  // Set in setup as well as cleared in cleanup: StrictMode's dev double-mount runs
+  // the cleanup once before the setup runs again, and a ref only cleared would stay
+  // `false` for the life of the session and drop every confirm result.
+  const aliveRef = useRef(false);
+  useEffect(() => {
+    aliveRef.current = true;
+    return (): void => {
       aliveRef.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   // Trap first, so the element it restores focus to on close is the trigger; then
   // move focus to the search field, the operator's most likely first action.
@@ -179,24 +179,27 @@ function ProductBrowserSession(props: ProductBrowserDialogProps): ReactNode {
     return (): void => window.clearTimeout(timer);
   }, [query, debouncedQuery]);
 
-  // One request per filter/page state; a response that is not the latest is dropped.
-  const seqRef = useRef(0);
+  // One request per filter/page state; a response that is not the latest is dropped —
+  // the effect's own cleanup marks it superseded (or unmounted).
   useEffect(() => {
-    const seq = ++seqRef.current;
+    let cancelled = false;
     setLoad('loading');
     fetchProductBrowserPage({ page, pageSize, status, type, q: debouncedQuery }).then(
       (result) => {
-        if (seq !== seqRef.current || !aliveRef.current) return;
+        if (cancelled) return;
         setRows(result.rows);
         setTotal(result.total);
         setCounts(result.counts);
         setLoad('ready');
       },
       () => {
-        if (seq !== seqRef.current || !aliveRef.current) return;
+        if (cancelled) return;
         setLoad('error');
       },
     );
+    return (): void => {
+      cancelled = true;
+    };
   }, [page, pageSize, status, type, debouncedQuery, reloadToken]);
 
   const alreadyAdded = useMemo(() => new Set(props.alreadyAddedIds), [props.alreadyAddedIds]);
@@ -238,7 +241,7 @@ function ProductBrowserSession(props: ProductBrowserDialogProps): ReactNode {
         (row) =>
           productSelectability(row, rules, {
             alreadyAddedIds: alreadyAdded,
-            selectedIds: NO_IDS,
+            selectedIds: NO_PRODUCT_IDS,
             max: Number.POSITIVE_INFINITY,
           }).selectable,
       ),
@@ -326,7 +329,7 @@ function ProductBrowserSession(props: ProductBrowserDialogProps): ReactNode {
         const reasonId = `${baseId}-reason-${row.id}`;
         return (
           <Checkbox
-            aria-label={t('productBrowser.selectRow', { name: primaryName(row) })}
+            aria-label={t('productBrowser.selectRow', { name: productDisplayName(row) })}
             aria-describedby={verdict.selectable ? undefined : reasonId}
             checked={selection.has(row.id)}
             disabled={!verdict.selectable || pending}
@@ -341,7 +344,7 @@ function ProductBrowserSession(props: ProductBrowserDialogProps): ReactNode {
       header: t('productBrowser.column.product'),
       render: (row): ReactNode => {
         const verdict = selectabilityOf(row);
-        const name = primaryName(row);
+        const name = productDisplayName(row);
         const second = secondaryName(row);
         return (
           <div className="min-w-0 max-w-[22rem]">

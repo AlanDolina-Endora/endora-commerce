@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { StrictMode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { ADMIN_PRODUCT_SELECTION_MAX } from '@endora-commerce/contracts';
 import type { Bundle } from '../../../../packages/admin-shell/src/i18n/types';
@@ -226,13 +227,17 @@ beforeEach(() => {
 
 /** Opened with the customer and the channel chosen, so **Items** shows at once. */
 function renderPage(): void {
+  // <StrictMode>, as the admin renders (admin-shell's AdminRoot): its dev
+  // double-mount is what an effect cleared only in cleanup does not survive.
   renderWithI18n(
-    withSession(
-      <MemoryRouter initialEntries={['/orders/new?customerAccountId=cust-1&salesChannelId=chan-1']}>
-        <OrderCreatePage />
-      </MemoryRouter>,
-      { session: SESSION, presence: modulePresence({ present: ['orders', 'quick_order'] }) },
-    ),
+    <StrictMode>
+      {withSession(
+        <MemoryRouter initialEntries={['/orders/new?customerAccountId=cust-1&salesChannelId=chan-1']}>
+          <OrderCreatePage />
+        </MemoryRouter>,
+        { session: SESSION, presence: modulePresence({ present: ['orders', 'quick_order'] }) },
+      )}
+    </StrictMode>,
     BUNDLE,
   );
 }

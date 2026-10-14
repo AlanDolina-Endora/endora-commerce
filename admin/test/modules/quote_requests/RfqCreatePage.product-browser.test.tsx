@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { StrictMode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import type { Bundle } from '../../../../packages/admin-shell/src/i18n/types';
 import { renderWithI18n } from '../../helpers/render-with-i18n';
@@ -216,13 +217,17 @@ beforeEach(() => {
 
 /** Opened with cust-1 chosen unless `customer` says otherwise (`null` = none). */
 function renderPage(customer: string | null = 'cust-1'): void {
+  // <StrictMode>, as the admin renders (admin-shell's AdminRoot): its dev
+  // double-mount is what an effect cleared only in cleanup does not survive.
   renderWithI18n(
-    withSession(
-      <MemoryRouter initialEntries={[`/quote-requests/new${customer ? `?customerAccountId=${customer}` : ''}`]}>
-        <RfqCreatePage />
-      </MemoryRouter>,
-      { session: SESSION, presence: modulePresence({ present: ['quote_requests'] }) },
-    ),
+    <StrictMode>
+      {withSession(
+        <MemoryRouter initialEntries={[`/quote-requests/new${customer ? `?customerAccountId=${customer}` : ''}`]}>
+          <RfqCreatePage />
+        </MemoryRouter>,
+        { session: SESSION, presence: modulePresence({ present: ['quote_requests'] }) },
+      )}
+    </StrictMode>,
     BUNDLE,
   );
 }
@@ -364,6 +369,48 @@ describe('RfqCreatePage — Browse products and the quick search (US3)', () => {
     // The hand-typed price is not re-resolved, and not overwritten.
     expect(resolveCalls().filter((c) => c.productId === 'a02').map((c) => c.quantity)).toEqual([1]);
     expect(priceInput('Widget 02')).toHaveValue(15);
+  });
+
+  it('clears a prefilled price when its quantity becomes invalid, and resolves it again once the quantity is valid (FR-033, FR-034)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await waitForCustomer('Jan Kowalski');
+    await addThroughPicker(user, ['Widget 01', 'Widget 02']);
+    await waitFor(() => expect(priceInput('Widget 02')).toHaveValue(10));
+    await retype(user, priceInput('Widget 02'), '15');
+
+    // A resolved price is the answer for a quantity; with no valid quantity it is no
+    // one's answer, so it is not left on screen as if it were.
+    await retype(user, qtyInput('Widget 01'), '0');
+    expect(priceInput('Widget 01')).toHaveValue(null);
+    expect(within(lineRow('Widget 01')).getByText(tr('rfqCreate.line.quantityInvalid'))).toBeInTheDocument();
+    expect(submitButton()).toBeDisabled();
+    // A hand-typed price is the operator's and stays.
+    await retype(user, qtyInput('Widget 02'), '');
+    expect(priceInput('Widget 02')).toHaveValue(15);
+
+    await retype(user, qtyInput('Widget 01'), '5');
+    await waitFor(() => expect(priceInput('Widget 01')).toHaveValue(9));
+  });
+
+  it('prefills only the lines an add actually appended, when two confirms land in the same tick', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await waitForCustomer('Jan Kowalski');
+    const dialog = await openPicker(user);
+    await user.click(rowCheckbox(dialog, 'Widget 01'));
+    await user.click(rowCheckbox(dialog, 'Widget 02'));
+    const add = within(dialog).getByRole('button', { name: 'Add 2' });
+    // Both clicks reach the same, not yet re-rendered handlers.
+    act(() => {
+      add.click();
+      add.click();
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(priceInput('Widget 02')).toHaveValue(10));
+
+    expect(lineNames()).toEqual(['Widget 01', 'Widget 02']);
+    expect(resolveCalls().map((c) => c.productId)).toEqual(['a01', 'a02']);
   });
 
   it('keeps a price typed while its prefill is still in flight', async () => {

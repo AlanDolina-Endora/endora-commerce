@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ROSTER_NAMES_CHUNK,
+  createRosterNameResolver,
   fetchRosterProductNames,
   type RosterNamesPost,
 } from '../../../../packages/modules/price_lists/src/admin/lib/roster-product-names';
@@ -122,5 +123,106 @@ describe('fetchRosterProductNames', () => {
     expect(map.has('p0004')).toBe(true);
     expect(map.has('p0500')).toBe(false);
     expect(map.size).toBe(499);
+  });
+});
+
+/**
+ * The page keeps one resolver for its life, so a roster that changes while names
+ * are still loading (an add, a reload) shares the same two request slots and asks
+ * only for ids nobody has asked for yet — and a run overtaken by a newer roster
+ * still delivers what it fetched.
+ */
+describe('createRosterNameResolver', () => {
+  function collecting(post: RosterNamesPost) {
+    const found = new Map<string, unknown>();
+    const resolver = createRosterNameResolver({
+      post,
+      onFound: (batch) => {
+        for (const [id, p] of batch) found.set(id, p);
+      },
+    });
+    return { resolver, found };
+  }
+
+  it('shares two request slots across overlapping requests and asks for each id once', async () => {
+    const t = deferredPost();
+    const { resolver, found } = collecting(t.post);
+    const first = ids(700);
+    const second = ids(1200);
+
+    const a = resolver.request(first);
+    const b = resolver.request(second);
+    await flush();
+    expect(t.inFlight()).toBe(2);
+
+    // Settle every call made so far, let the queue send the next, until it stops.
+    let settled = 0;
+    while (settled < t.calls.length) {
+      for (; settled < t.calls.length; settled += 1) t.calls[settled]!.resolve();
+      await flush();
+    }
+    await Promise.all([a, b]);
+
+    expect(t.maxInFlight()).toBe(2);
+    const asked = t.calls.flatMap((c) => c.body.ids);
+    expect(asked).toHaveLength(1200);
+    expect(new Set(asked).size).toBe(1200);
+    expect(t.calls.every((c) => c.body.ids.length <= ROSTER_NAMES_CHUNK)).toBe(true);
+    expect(found.size).toBe(1200);
+  });
+
+  it('delivers the answers of a request a newer one overlapped, and skips ids already answered', async () => {
+    const t = deferredPost();
+    const { resolver, found } = collecting(t.post);
+
+    const a = resolver.request(ids(3));
+    await flush();
+    resolver.request(ids(5));
+    await flush();
+    t.calls[0]!.resolve();
+    await a;
+    await flush();
+    expect(found.size).toBe(3);
+
+    expect(t.calls.map((c) => c.body.ids)).toEqual([ids(3), ['p0003', 'p0004']]);
+    t.calls[1]!.resolve();
+    await flush();
+    expect(found.size).toBe(5);
+
+    await resolver.request(ids(5));
+    expect(t.calls).toHaveLength(2);
+  });
+
+  it('asks again for the ids of a chunk that failed, on a later request', async () => {
+    const t = deferredPost();
+    const { resolver, found } = collecting(t.post);
+
+    const a = resolver.request(ids(2));
+    await flush();
+    t.calls[0]!.reject(new Error('network'));
+    await a;
+    expect(found.size).toBe(0);
+
+    const b = resolver.request(ids(2));
+    await flush();
+    expect(t.calls).toHaveLength(2);
+    t.calls[1]!.resolve();
+    await b;
+    expect(found.size).toBe(2);
+  });
+
+  it('after dispose sends nothing waiting and delivers no answer', async () => {
+    const t = deferredPost();
+    const { resolver, found } = collecting(t.post);
+
+    void resolver.request(ids(1200));
+    await flush();
+    expect(t.calls).toHaveLength(2);
+    resolver.dispose();
+    t.calls[0]!.resolve();
+    t.calls[1]!.resolve();
+    await flush();
+    expect(t.calls).toHaveLength(2);
+    expect(found.size).toBe(0);
   });
 });

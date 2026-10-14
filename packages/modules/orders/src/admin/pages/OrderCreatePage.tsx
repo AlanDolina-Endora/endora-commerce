@@ -30,6 +30,8 @@ import {
   ProductBrowserDialog,
   ProductBrowserTrigger,
   ProductPicker,
+  parsePositiveInt,
+  productDisplayName,
   type ProductBrowserItem,
   type ProductBrowserRules,
 } from '@endora-commerce/admin-kit/components';
@@ -56,14 +58,6 @@ const ORDER_PRODUCT_RULES: ProductBrowserRules = {
   blockedStatuses: ['draft', 'inactive'],
 };
 
-/** A whole number of at least 1, or `null` when the input is not one. */
-function parseQuantity(input: string): number | null {
-  const trimmed = input.trim();
-  if (!/^\d+$/.test(trimmed)) return null;
-  const n = Number(trimmed);
-  return Number.isSafeInteger(n) && n >= 1 ? n : null;
-}
-
 // Members of `ADMIN_ORDER_PREVIEW_MESSAGE_PRECEDENCE`, named rather than taken by
 // position: a renamed code then fails to compile instead of remapping a reason.
 const NOT_VISIBLE_CODE: AdminOrderPreviewMessageCode = 'PRODUCT_NOT_VISIBLE_TO_CUSTOMER';
@@ -85,7 +79,7 @@ function productLine(item: ProductBrowserItem): ItemRow {
   return {
     productId: item.id,
     sku: item.sku,
-    name: pickName(item.name, item.slug),
+    name: productDisplayName(item),
     quantityInput: '1',
   };
 }
@@ -692,7 +686,7 @@ export function OrderCreatePage(): ReactNode {
   const validItems = useMemo(
     () =>
       items.flatMap((it) => {
-        const quantity = parseQuantity(it.quantityInput);
+        const quantity = parsePositiveInt(it.quantityInput);
         return quantity === null ? [] : [{ productId: it.productId, quantity }];
       }),
     [items],
@@ -1023,7 +1017,7 @@ export function OrderCreatePage(): ReactNode {
                 </TableHeader>
                 <TableBody>
                   {items.map((row) => {
-                    const quantity = parseQuantity(row.quantityInput);
+                    const quantity = parsePositiveInt(row.quantityInput);
                     const line = quantity === null ? undefined : lineByKey.get(`${row.productId}:${quantity}`);
                     const rowId = `${itemsId}-${row.productId}`;
                     const reason =

@@ -5,6 +5,7 @@
   "activity.verb.price_list.draftify": "przeniósł(esła) cennik do wersji roboczej",
   "activity.verb.price_list.duplicate": "zduplikował(a) cennik",
   "activity.verb.price_list.expire": "zakończył(a) cennik",
+  "activity.verb.price_list.products_add": "dodał(a) produkty do cennika",
   "activity.verb.price_list.products_replace": "zaktualizował(a) produkty na cenniku",
   "activity.verb.price_list.update": "zaktualizował(a) cennik",
 

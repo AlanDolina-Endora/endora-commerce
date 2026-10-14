@@ -191,7 +191,7 @@ Refusals write nothing:
 | The list is the system Default (its roster is seeded from each product's default price) | `403 FORBIDDEN` |
 | The list is unknown or deleted | `404 NOT_FOUND` |
 | The body is not an object, or `productIds` is missing, empty, longer than 200 or holds a non-uuid | `400 VALIDATION_FAILED` |
-| Another request added the same new product at the same moment | `409 VERSION_CONFLICT`; a retry reports it `unchanged` |
+| Another request added the same new product at the same moment | May answer `409 VERSION_CONFLICT`; retrying reports the product `unchanged` |
 
 ### Rule-builder pickers (admin)
 
