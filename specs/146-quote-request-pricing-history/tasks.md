@@ -399,19 +399,22 @@ sequence** on one checkout, not in parallel. Phases 11 and 12 may run in paralle
 
 **Goal**: everything the `quality`, `quality:static`, `test:backend:unit`, `test:frontend` and `release:changeset` jobs of `.github/workflows/quality.yml` run, run locally, in that job's order. PR #297 went red on checks no targeted run reached; this phase and Phase 15 are why.
 
-- [ ] T091 Fresh install and build exactly as CI does: `pnpm install --frozen-lockfile && pnpm run build:packages` (a lockfile drift fails here, as it would fail every CI job)
-- [ ] T092 `pnpm --filter backend run test:unit:fast` — **run alone**, not combined with anything; includes `agents-router.test.ts` (the `AGENTS.md` appendix grew) and the generated-registry tests
-- [ ] T093 The `quality` job's run-block, verbatim and in order:
+- [x] T091 Fresh install and build exactly as CI does: `pnpm install --frozen-lockfile && pnpm run build:packages` (a lockfile drift fails here, as it would fail every CI job)
+- [x] T092 `pnpm --filter backend run test:unit:fast` — **run alone**, not combined with anything; includes `agents-router.test.ts` (the `AGENTS.md` appendix grew) and the generated-registry tests
+- [x] T093 The `quality` job's run-block, verbatim and in order:
   `pnpm -r run typecheck && pnpm -r run lint && pnpm --filter backend exec tsx scripts/check-entity-tenant-classification.ts && pnpm --filter backend exec tsx scripts/check-channel-resolution.ts --enforce && pnpm --filter backend run check:command-coverage -- --strict && pnpm --filter backend run check:kernel-boundary && pnpm --filter backend run check:module-boundary && pnpm --filter backend run check:admin-surface && pnpm --filter backend run check:admin-zones && pnpm --filter backend run check:entry-scope && pnpm --filter backend run check:container-imports && pnpm --filter backend run check:port-dependencies && pnpm --filter backend run check:port-catches && pnpm --filter backend run check:port-shape && pnpm --filter backend run check:subscribe-seam && pnpm --filter backend run check:queue-names && pnpm --filter backend run check:transaction-context && pnpm --filter backend run check:singleton-identity && pnpm --filter backend run check:entry-presence && pnpm --filter backend run check:lock-claims && pnpm --filter backend run check:action-route-permissions && pnpm --filter backend run check:harness-teardown && pnpm --filter backend run check:fixture-substitution && pnpm --filter backend run check:shared-table-wipes && pnpm --filter backend run check:nul-bytes && pnpm --filter backend run check:diacritic-folds && pnpm --filter backend run check:doc-snippets && pnpm --filter backend run check:module-docs && pnpm --filter backend run check:docs-translations && pnpm --filter backend run check:error-translations && pnpm --filter backend run check:bundle-pairing && pnpm --filter backend run check:env-inputs && pnpm --filter backend run check:block-names && pnpm --filter backend run check:block-renderers && pnpm --filter backend run check:class-vocabulary && pnpm --filter backend run check:off-state-coverage && pnpm --filter backend run check:test-ownership && pnpm --filter backend run check:default-language-prose && pnpm --filter backend run check:demo-data-budget && pnpm --filter backend run check:storefront-indexability && pnpm --filter backend run check:rsc-discipline && pnpm --filter backend run i18n:hardcoded && pnpm run check:pdfmake-footprint && pnpm --filter backend run overlay:check && pnpm --filter backend run check:divergence && pnpm --filter backend run check:release-intent && pnpm --filter backend run check:platform-surface && pnpm --filter backend run manifests:check`
   (re-read `.github/workflows/quality.yml` first; if a step was added since this list was written, run it too)
-- [ ] T094 `quality:static`: `bash scripts/check-naming.sh && bash scripts/check-language.sh`
-- [ ] T095 `test:frontend`-equivalent: `pnpm --filter '!backend' run test` (admin, storefront, contracts and every module package — this is the only command that reaches `mod-quote-requests`' and `mod-price-lists`' co-located tests)
-- [ ] T096 `release:changeset`-equivalent: `pnpm --filter backend run check:release-intent -- --since origin/master && pnpm --filter backend run test:release-gate`
-- [ ] T097 [PG] Every `[PG]` file this feature added or extended, in one run: `pnpm --filter backend exec vitest run test/integration/quote_requests test/contract/quote_requests test/contract/price_lists/admin-resolved-price.test.ts test/integration/crm/value.test.ts test/integration/crm/quote-conversion.test.ts test/integration/crm/quote-requests-off.test.ts test/contract/admin_users/permission-inventory.test.ts test/contract/kernel/harness-parity.test.ts` — paste the summary into the PR (D-198: CI will not run these before merge)
-- [ ] T098 Deleted or moved a file? `grep -rn` its path under `backend/test/` before finishing (AGENTS.md trap); confirm `git status` shows no stray generated artefact
+- [x] T094 `quality:static`: `bash scripts/check-naming.sh && bash scripts/check-language.sh`
+- [x] T095 `test:frontend`-equivalent: `pnpm --filter '!backend' run test` (admin, storefront, contracts and every module package — this is the only command that reaches `mod-quote-requests`' and `mod-price-lists`' co-located tests)
+- [x] T096 `release:changeset`-equivalent: `pnpm --filter backend run check:release-intent -- --since origin/master && pnpm --filter backend run test:release-gate`
+- [x] T097 [PG] Every `[PG]` file this feature added or extended, in one run: `pnpm --filter backend exec vitest run test/integration/quote_requests test/contract/quote_requests test/contract/price_lists/admin-resolved-price.test.ts test/integration/crm/value.test.ts test/integration/crm/quote-conversion.test.ts test/integration/crm/quote-requests-off.test.ts test/contract/admin_users/permission-inventory.test.ts test/contract/kernel/harness-parity.test.ts` — paste the summary into the PR (D-198: CI will not run these before merge)
+- [x] T098 Deleted or moved a file? `grep -rn` its path under `backend/test/` before finishing (AGENTS.md trap); confirm `git status` shows no stray generated artefact
 - [ ] T099 Walk `quickstart.md` §1–§4 on `pnpm run dev` and note any divergence in the PR
 
 **Verification**: T091–T097 all exit 0, each run on its own; the PR description carries the T097 summary and the T099 notes.
+
+T099 stays open: its headless part is covered by the T097 files (map below); the browser walk of
+`quickstart.md` §1–§4 on `pnpm run dev` has not been done and is handed to the reviewer.
 
 ---
 
@@ -419,12 +422,55 @@ sequence** on one checkout, not in parallel. Phases 11 and 12 may run in paralle
 
 **Goal**: the four PR-triggered jobs outside `quality.yml` — `pack-gate.yml`, `boot-gate.yml`, `build-docs.yml`, `dco.yml` — run locally, so the PR opens green on all **nine** PR checks (five in `quality.yml` plus these four). Each command is copied from its workflow; re-read the workflow first in case it changed.
 
-- [ ] T099a `pack-gate`: `pnpm --filter backend run pack-gate -- --no-build` (after T091's build; the job is path-filtered to `packages/**`, which this feature touches)
-- [ ] T099b `boot-gate`: `bash scripts/boot-gate.sh --with-negatives` — **needs Docker**; if Docker is unavailable on the builder, say so in the PR instead of skipping silently
-- [ ] T099c `build:docs`: `pnpm --filter docs run build && pnpm --filter backend run verify:docs-build` (the module docs, the generated reference page and the Polish mirrors changed)
-- [ ] T099d `dco`: `node backend/scripts/dco-signoff.ts origin/master HEAD` — every commit on the branch carries `Signed-off-by` (the phase rules' `-s`); fix an unsigned commit by amending or rebasing with `--signoff`, never by force-pushing a shared branch without the coordinator
+- [x] T099a `pack-gate`: `pnpm --filter backend run pack-gate -- --no-build` (after T091's build; the job is path-filtered to `packages/**`, which this feature touches)
+- [x] T099b `boot-gate`: `bash scripts/boot-gate.sh --with-negatives` — **needs Docker**; if Docker is unavailable on the builder, say so in the PR instead of skipping silently
+- [x] T099c `build:docs`: `pnpm --filter docs run build && pnpm --filter backend run verify:docs-build` (the module docs, the generated reference page and the Polish mirrors changed)
+- [x] T099d `dco`: `node backend/scripts/dco-signoff.ts origin/master HEAD` — every commit on the branch carries `Signed-off-by` (the phase rules' `-s`); fix an unsigned commit by amending or rebasing with `--signoff`, never by force-pushing a shared branch without the coordinator
 
 **Verification**: T099a–T099d all exit 0 (T099b may be reported as "not runnable here: no Docker"); results pasted into the PR beside T097's.
+
+### Gate results (2026-10-14, `origin/master` = merge base `433dc3890`)
+
+Every command was run on its own, in this order, on the primary checkout.
+
+| Task | Command | Result |
+| --- | --- | --- |
+| T091 | `pnpm install --frozen-lockfile && pnpm run build:packages` | pass — lockfile up to date, 78 projects, build exit 0 |
+| T092 | `pnpm --filter backend run test:unit:fast` (alone) | pass — 351 files, 7528 tests; re-run after the fixture fix: same |
+| T093 | the 48 lines of `quality.yml`'s `quality` run-block, one per invocation, `NODE_OPTIONS=--max-old-space-size=2560` | pass — 48/48 exit 0; re-run in full after the fixture fix: 48/48 |
+| T094 | `bash scripts/check-naming.sh`; `bash scripts/check-language.sh` | pass — both exit 0 (re-run after the fix: same) |
+| T095 | `pnpm --filter '!backend' run test` | pass — 67 workspace suites, 906 files, 9341 tests, 0 failed (`mod-quote-requests` 15 files / 211 tests, `mod-price-lists` 10 / 85, admin 257 / 2533, storefront 120 / 1243) |
+| T096 | `check:release-intent -- --since origin/master`; `test:release-gate` | pass — `changed=128 changesets-added=10 violations=0`; release gate 1 file / 29 tests |
+| T097 | 69 Postgres-backed files, **one `vitest run <file>` per invocation** (not one run, on this host's instruction), from `backend/` against `localhost:55433/56379/57700` | first pass: 66/69 files green, 3 red (below); after the fix: **69/69 files, 551 tests, 0 failed** |
+| T098 | `git diff --name-status --diff-filter=DR origin/master...HEAD`; `git status --porcelain`; `composer:check`, `manifests:check`, `overlay:check` | pass — no deleted or renamed file on the branch, tree clean after every step, all three checks up to date |
+| T099a | `pnpm --filter backend run pack-gate -- --no-build` | pass — 73 packages, 2 bins, 0 violations |
+| T099b | `bash scripts/boot-gate.sh --with-negatives` (Docker) | pass — 4 cases (positive + `drop-platform-bundles`, `drop-every-bundle`, `drop-overlays` all red as required); 71 modules, 9 overlays |
+| T099c | `pnpm --filter docs run build && pnpm --filter backend run verify:docs-build` | pass — `en` and `pl` built; 334 pages, 0 findings |
+| T099d | `node backend/scripts/dco-signoff.ts origin/master HEAD` | pass — 34 commits judged, 0 findings |
+
+**T097 files.** `test/contract/{quote_requests,price_lists}/*` and `test/integration/{quote_requests,price_lists}/*`
+(every file), `test/contract/carts/cart-conversions{,-happy}.contract.test.ts`,
+`test/contract/orders/clone-to-quote.test.ts`, `test/integration/crm/{quote-conversion,quote-requests-off,value}.test.ts`,
+`test/integration/orders/{admin-write-scope,place-order-from-quote-request,quote-request-source-review}.test.ts`,
+`test/contract/customer_accounts/read-port-name-search.test.ts`,
+`test/integration/customers/customer-{address,deletion,moderation}-service.test.ts`,
+`test/contract/admin_users/permission-inventory.test.ts`, `test/contract/kernel/harness-parity.test.ts`.
+
+**Found and fixed by the gate.** `crm/quote-conversion`, `orders/place-order-from-quote-request` and
+`orders/quote-request-source-review` each raised a quote request, with a proposal, as
+`stub-customer-session-other-org`, whose customer account (`…a7`) had no row. The negotiation lock
+reads the owner's account and refuses by design when it does not resolve (analyze M5,
+`negotiation-enforcement.test.ts` "an unreadable lock fails the request"), so the create answered
+500. Fixture defect, not a product one: `seedOtherTestCustomer` now seeds the row in all three.
+
+**T099 headless coverage.** §1 → `reference-price`, `cart-conversion-reference`, `line-carry-over`,
+`summarize.test.ts` (US1 #8c); §2 → `line-carry-over`, `negotiation-loop` (FR-038, `409 RFQ_NOT_DRAFT`);
+§3 → `history` (integration) and `history-projection.test.ts` (US3 #1); §4 → `negotiation-enforcement`,
+`negotiation-policy-routes`, `off-state` (FR-028). **Needs a browser:** §1 steps 2–3 (Overview and
+Modify tab rendering, live difference while typing), §1 step 8's storefront list total, §3's
+translated titles when switching the admin language, §4 step 2 (storefront draft without the
+proposed-price input and its note), §4 step 5's "Effective: allowed (from account)" panel text, and
+§4 step 7's panels disappearing and reappearing on `/platform/modules`.
 
 ---
 
