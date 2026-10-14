@@ -310,6 +310,33 @@ describe('crm computed value and Quote Request links (US8)', () => {
       expect(Number(read.value)).toBe(await quoteDeskTotal(rfq.id));
     });
 
+    // Feature 146 (FR-008, FR-009) — a cart-converted request carries the cart
+    // price as its reference and no customer proposal, and the reference is
+    // never a fallback for the value: 0 until sales prices it.
+    it('a Quote Request converted from a cart is valued 0 until priced', async () => {
+      const add = await h.app.inject({
+        method: 'POST',
+        url: '/api/v1/cart/items',
+        cookies: CRM_CUSTOMER,
+        payload: { productId: SEED_PRODUCT_101_ID, quantity: 4 },
+      });
+      expect(add.statusCode, add.body).toBe(200);
+      const converted = await h.app.inject({
+        method: 'POST',
+        url: '/api/v1/cart/convert-to-quote-request',
+        cookies: CRM_CUSTOMER,
+        payload: {},
+      });
+      expect(converted.statusCode, converted.body).toBe(200);
+      const rfqId = (converted.json() as { data: { quoteRequestId: string } }).data.quoteRequestId;
+
+      const opportunity = await computed();
+      expect((await linkCrmQuoteRequest(h, opportunity.id, rfqId)).statusCode).toBe(201);
+      const read = await detail(opportunity.id);
+      expect(read.links[0]).toMatchObject({ status: 'Pending' });
+      expect(read.value).toBe('0.00');
+    });
+
     it('a Quote Request canceled', async () => {
       const opportunity = await computed();
       const rfq = await submitCrmQuoteRequest(h);

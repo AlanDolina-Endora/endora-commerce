@@ -4,6 +4,7 @@ import type { EventBus } from '@endora-commerce/platform/events';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type {
   AdminUserReadPort,
+  BuyerLinePricePort,
   CartWritePort,
   CatalogProductReadPort,
   CustomerAccountReadPort,
@@ -108,6 +109,11 @@ export interface QuoteRequestsModuleOptions {
   isStillPresent: () => boolean;
   carts: CartWritePort;
   /**
+   * Feature 146 — `price_lists`' buyer line price, the reference a quote line
+   * stores at every customer write (FR-001; research R2).
+   */
+  buyerLinePrices: BuyerLinePricePort;
+  /**
    * `organizations`' sales-rep assignment port (issue #108).
    *
    * This used to be `salesRepSubtree`, the feature-056 deps out of which this
@@ -162,6 +168,7 @@ export function quoteRequestsModule(options: QuoteRequestsModuleOptions): {
     customerAccounts: options.customerAccounts,
     adminUsers: options.adminUsers,
     carts: options.carts,
+    buyerLinePrices: options.buyerLinePrices,
     businessId: businessIdGenerator,
     resolveTaxRate: options.resolveTaxRate,
     ...(options.auditLog ? { auditLog: options.auditLog } : {}),

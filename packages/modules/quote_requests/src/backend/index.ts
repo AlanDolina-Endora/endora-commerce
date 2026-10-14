@@ -9,6 +9,7 @@ import type {
   Actor,
   AdminRolePort,
   AdminUserReadPort,
+  BuyerLinePricePort,
   CartWritePort,
   CatalogProductReadPort,
   CustomerAccountReadPort,
@@ -433,6 +434,10 @@ export function registerModule(ctx: ModuleContext): void {
             }),
           isStillPresent: () => effectiveState.isPresent('quote_requests'),
           carts: lazyPort<CartWritePort>(ctx, 'cartWritePort'),
+          // Feature 146 — the reference price a customer write stores per line
+          // (FR-001). `price_lists` is a binding `dependencies` entry for it;
+          // the one tolerated failure is in `services/reference-price.ts`.
+          buyerLinePrices: lazyPort<BuyerLinePricePort>(ctx, 'buyerLinePricePort'),
           resolveExpiryDays: () =>
             setting(QUOTE_REQUESTS_SETTING_CODES.EXPIRY_DAYS, z.number().int().nonnegative(), 0),
           resolveBoolSetting: (key) =>

@@ -110,6 +110,12 @@ export const manifest = defineModuleManifest({
   // counter into (feature 075, D-87). The registry is ungated and its owner is
   // non-deactivatable, so the declaration buys install and migration order
   // rather than a flip-time refusal.
+  //
+  // `price_lists` since feature 146: every customer write stores each line's
+  // reference price, resolved through `buyerLinePricePort`
+  // (`specs/146-quote-request-pricing-history/research.md` R2). `price_lists`
+  // is `nonDeactivatable` and does not reach back to this module, so the edge
+  // closes no cycle and makes no activation control a dead switch.
   dependencies: [
     'admin_roles',
     'admin_users',
@@ -118,6 +124,7 @@ export const manifest = defineModuleManifest({
     'custom_fields',
     'customer_accounts',
     'organizations',
+    'price_lists',
     'sales_channels',
     'settings',
     'taxes',
@@ -286,10 +293,14 @@ export const manifest = defineModuleManifest({
    *
    * That sentence was in a ruling, a route comment and a seed, and in nothing
    * an operator could read. It is here now. It is advisory only: the screen's
-   * fallback stays, no upsert is refused, and this is **not** a `dependencies`
-   * entry — `price_lists` is not this module's lifecycle dependency and making
-   * it one would put a locked module's schema in the way of switching quote
-   * requests off.
+   * fallback stays and no upsert is refused.
+   *
+   * Feature 146 made `price_lists` a real lifecycle dependency of this module,
+   * for a different reason: the server-side reference price every customer
+   * write stores per line comes from its `buyerLinePricePort` (research R2).
+   * That edge is about the port, read in-process with no permission at all; it
+   * does not change this entry, which stays about the admin UI probe and stays
+   * advisory.
    */
   permissions: [
     { code: 'rfqs:handle', label: 'Handle quote requests', requires: ['price_lists:read'] },

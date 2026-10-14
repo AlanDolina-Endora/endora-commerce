@@ -18,6 +18,8 @@ import {
   type CustomerAccountReadPort,
   type CustomerAccountRecord,
   type SalesRepAssignmentPort,
+  type BuyerLinePricePort,
+  type CreateForCustomerOptions,
 } from '@endora-commerce/contracts';
 import type { EventBase, EventBus } from '@endora-commerce/platform/events';
 import { HttpError } from '@endora-commerce/platform/http';
@@ -40,6 +42,12 @@ import { productIdsInRequestChannel } from '@endora-commerce/platform/kernel';
 import { raisedOnChannelId } from './raised-on-channel.js';
 import { hasUnpricedLine, quoteIncompleteError } from './agreed-price.js';
 import { underRowLock } from './transition-lock.js';
+import { summarize } from './summarize.js';
+import {
+  assertValidSuppliedReferences,
+  resolveReferencePrices,
+  type LineReference,
+} from './reference-price.js';
 
 /**
  * Customer-facing Quote Requests service — feature 008 workflow.
@@ -115,6 +123,14 @@ export interface RfqServiceDeps {
   customerAccounts: CustomerAccountReadPort;
   adminUsers: AdminUserReadPort;
   carts: CartWritePort;
+  /**
+   * Feature 146 — `price_lists`' answer to "what would this buyer pay for these
+   * lines on this channel, now", asked at every customer write for the
+   * request's owner and stored as each line's reference (FR-001). A binding
+   * `dependencies` entry of this manifest; a failure other than the owner being
+   * off is tolerated in `reference-price.ts` (research R2).
+   */
+  buyerLinePrices: BuyerLinePricePort;
   /**
    * Generates the customer-facing business Quote Request ID. Optional so
    * legacy/test compositions that don't wire it fall back to the entity's
@@ -273,9 +289,18 @@ export class RfqService {
   // Create + submit (US1)
   // -------------------------------------------------------------------------
 
-  async createForCustomer(ctx: CustomerContext, input: CreateQuoteRequest): Promise<RfqDto> {
+  async createForCustomer(
+    ctx: CustomerContext,
+    input: CreateQuoteRequest,
+    options: CreateForCustomerOptions = {},
+  ): Promise<RfqDto> {
     if (input.items.length === 0) {
       throw new HttpError(400, ERROR_CODES.RFQ_EMPTY, 'Quote Request must have at least one line item.');
+    }
+    // Threat model T6 — an in-process caller's references are checked before
+    // anything is read or written, so a malformed one writes nothing.
+    if (options.lineReferencePrices) {
+      assertValidSuppliedReferences(options.lineReferencePrices, input.items.length);
     }
     const em = this.deps.emFactory();
     const productById = await this.#acquirableProductsById(
@@ -290,12 +315,25 @@ export class RfqService {
       throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'One or more products do not exist.');
     }
 
+    // FR-001 / FR-008 — each line's reference, for the request's owner on the
+    // channel it is raised on; a cart conversion supplies its own snapshot.
+    // Resolved before any write: a pricing failure leaves no reference and
+    // never blocks the request (research R2).
+    const salesChannelId = raisedOnChannelId();
+    const references = await resolveReferencePrices(this.deps.buyerLinePrices, {
+      owner: { customerAccountId: ctx.customerAccountId, organizationId: ctx.organizationId },
+      salesChannelId,
+      lines: input.items,
+      ...(options.lineReferencePrices ? { supplied: options.lineReferencePrices } : {}),
+    });
+    const capturedAt = new Date();
+
     const businessId = await this.generateBusinessId(em);
     const rfq = em.create(QuoteRequest, {
       ...(businessId ? { businessId } : {}),
       organizationId: ctx.organizationId,
       customerAccountId: ctx.customerAccountId,
-      salesChannelId: raisedOnChannelId(),
+      salesChannelId,
       status: 'Pending' satisfies QuoteRequestStatus,
       headerNote: input.headerNote ?? null,
       submittedAt: new Date(),
@@ -305,7 +343,7 @@ export class RfqService {
     await em.persistAndFlush(rfq);
 
     const items: QuoteRequestItem[] = [];
-    for (const lineInput of input.items) {
+    for (const [index, lineInput] of input.items.entries()) {
       const product = productById.get(lineInput.productId)!;
       // Feature 043 — append the packaging-unit name to the snapshot name so
       // RFQ views show "<name> (Paleta)", and persist the structured snapshot.
@@ -330,6 +368,7 @@ export class RfqService {
           lineInput.desiredUnitPrice !== undefined ? lineInput.desiredUnitPrice.toFixed(2) : null,
         lineNote: lineInput.lineNote ?? null,
         lineCurrency: 'PLN',
+        ...referenceColumns(references[index] ?? null, capturedAt),
       });
       items.push(item);
     }
@@ -528,13 +567,23 @@ export class RfqService {
       throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'One or more products do not exist.');
     }
 
+    // The resubmit is its own request, so it is raised on the channel *this*
+    // request resolved to — not the one the source RFQ carries. A buyer who
+    // asks again from a different storefront asked from there. Its references
+    // are resolved afresh on that channel, for the caller, who is its owner
+    // (FR-001; spec Assumptions).
+    const salesChannelId = raisedOnChannelId();
+    const references = await resolveReferencePrices(this.deps.buyerLinePrices, {
+      owner: { customerAccountId: ctx.customerAccountId, organizationId: ctx.organizationId },
+      salesChannelId,
+      lines: sourceItems,
+    });
+    const capturedAt = new Date();
+
     const newRfq = em.create(QuoteRequest, {
       organizationId: ctx.organizationId,
       customerAccountId: ctx.customerAccountId,
-      // The resubmit is its own request, so it is raised on the channel *this*
-      // request resolved to — not the one the source RFQ carries. A buyer who
-      // asks again from a different storefront asked from there.
-      salesChannelId: raisedOnChannelId(),
+      salesChannelId,
       status: 'Pending' satisfies QuoteRequestStatus,
       headerNote: body.headerNote ?? null,
       submittedAt: new Date(),
@@ -543,7 +592,7 @@ export class RfqService {
     });
     await em.persistAndFlush(newRfq);
 
-    const newItems: QuoteRequestItem[] = sourceItems.map((src) =>
+    const newItems: QuoteRequestItem[] = sourceItems.map((src, index) =>
       em.create(QuoteRequestItem, {
         quoteRequestId: newRfq.id,
         productId: src.productId,
@@ -554,6 +603,7 @@ export class RfqService {
         desiredUnitPrice: null,
         lineNote: src.lineNote ?? null,
         lineCurrency: src.lineCurrency,
+        ...referenceColumns(references[index] ?? null, capturedAt),
       }),
     );
     this.#audit(em, 'quote_request.resubmit', newRfq.id, null, {
@@ -1111,41 +1161,21 @@ function customerDisplayName(c: CustomerAccountRecord): string {
   return [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email;
 }
 
-function summarize(
-  rfq: QuoteRequest,
-  items: QuoteRequestItem[],
-  extras: { requesterDisplayName?: string | null; taxRate?: number },
-): QuoteRequestSummary {
-  const totalAtCustomerPrice = items.reduce((sum, it) => {
-    const desired = it.desiredUnitPrice != null ? Number(it.desiredUnitPrice) : null;
-    return desired != null ? sum + desired * it.quantity : sum;
-  }, 0);
-  const totalAtAgreedPrice = items.every((it) => it.agreedUnitPrice != null)
-    ? items.reduce((sum, it) => sum + Number(it.agreedUnitPrice ?? 0) * it.quantity, 0)
-    : null;
-  const currency = items[0]?.lineCurrency ?? 'PLN';
-  return {
-    id: rfq.id,
-    businessId: rfq.businessId,
-    organizationId: rfq.organizationId,
-    customerAccountId: rfq.customerAccountId,
-    status: rfq.status,
-    awaitingCustomerRevisionAcceptance: rfq.awaitingCustomerRevisionAcceptance,
-    lineCount: items.length,
-    totalAtCustomerPrice: items.length > 0 ? totalAtCustomerPrice : null,
-    totalAtAgreedPrice,
-    taxRate: extras.taxRate ?? 0,
-    currency,
-    submittedAt: rfq.submittedAt?.toISOString() ?? null,
-    expiresAt: rfq.expiresAt?.toISOString() ?? null,
-    createdAt: rfq.createdAt.toISOString(),
-    updatedAt: rfq.updatedAt.toISOString(),
-    version: rfq.version,
-    originalRequester: {
-      customerAccountId: rfq.customerAccountId,
-      displayName: extras.requesterDisplayName ?? null,
-    },
-  };
+/**
+ * The three reference columns of a quote line, all or none — the check
+ * constraint `quote_request_items_reference_all_or_none` refuses anything else.
+ */
+function referenceColumns(
+  reference: LineReference | null,
+  capturedAt: Date,
+): Pick<QuoteRequestItem, 'referenceUnitPrice' | 'referenceCurrency' | 'referenceCapturedAt'> {
+  return reference
+    ? {
+        referenceUnitPrice: reference.amount,
+        referenceCurrency: reference.currency,
+        referenceCapturedAt: capturedAt,
+      }
+    : { referenceUnitPrice: null, referenceCurrency: null, referenceCapturedAt: null };
 }
 
 function groupBy<T, K>(arr: T[], key: (t: T) => K): Map<K, T[]> {

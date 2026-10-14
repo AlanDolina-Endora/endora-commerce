@@ -53,10 +53,14 @@ export class QuoteRequestReadService implements QuoteRequestReadPort {
 
   /**
    * Added in feature 075's `carts` cut. The quote-to-cart conversion read
-   * `QuoteRequestItem` itself; the money columns are deliberately not on the
-   * record, because that conversion re-resolves every price against the
-   * buyer's current list (FR-017) and a caller that cannot see the quoted
-   * price cannot carry it over by accident.
+   * `QuoteRequestItem` itself, and still ignores every money field here: it
+   * re-resolves each price against the buyer's current list (FR-017).
+   *
+   * Feature 146 (owner decision, option (b)) adds the stored at-request
+   * reference for the export readers. A cart-converted line no longer carries
+   * the cart price in `desiredUnitPrice` (FR-008) — it is the line's reference
+   * now, so a reader that used to find it there reads `referenceUnitPrice`.
+   * Both are `null` when the line stores no reference.
    */
   async listItems(quoteRequestId: string): Promise<QuoteRequestLineRecord[]> {
     const items = await this.emFactory().find(
@@ -76,6 +80,8 @@ export class QuoteRequestReadService implements QuoteRequestReadPort {
       lineCurrency: item.lineCurrency,
       agreedUnitPrice: item.agreedUnitPrice ?? null,
       desiredUnitPrice: item.desiredUnitPrice ?? null,
+      referenceUnitPrice: item.referenceUnitPrice ?? null,
+      referenceCurrency: item.referenceCurrency ?? null,
     }));
   }
 }
