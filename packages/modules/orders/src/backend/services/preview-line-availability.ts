@@ -3,6 +3,7 @@ import {
   isProductVisibleTo,
   type AdminOrderPreviewMessageCode,
   type CatalogProductRecord,
+  type ProductAudience,
 } from '@endora-commerce/contracts';
 
 const [PRODUCT_NOT_FOUND, PRODUCT_NOT_VISIBLE_TO_CUSTOMER, PRODUCT_NOT_IN_SALES_CHANNEL] =
@@ -27,14 +28,21 @@ export function previewLineAvailability(input: {
   inChannel: boolean;
 }): PreviewLineAvailability {
   if (!input.product) return { available: false, code: PRODUCT_NOT_FOUND };
-  if (
-    !isProductVisibleTo(input.product, {
-      organizationId: input.organizationId,
-      authenticated: true,
-    })
-  ) {
+  if (!isProductVisibleTo(input.product, customerAudience(input.organizationId))) {
     return { available: false, code: PRODUCT_NOT_VISIBLE_TO_CUSTOMER };
   }
   if (!input.inChannel) return { available: false, code: PRODUCT_NOT_IN_SALES_CHANNEL };
   return { available: true };
+}
+
+/**
+ * The {@link ProductAudience} of the customer the operator is previewing for.
+ *
+ * Not `productAudienceOf(request)`: the request's actor is the operator, and the
+ * question this preview answers is what the **chosen customer** may order. The
+ * customer is a signed-in buyer of that Organization — the same audience
+ * `cartAudience` yields when the order is placed through the cart.
+ */
+function customerAudience(organizationId: string): ProductAudience {
+  return { organizationId, authenticated: true };
 }

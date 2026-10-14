@@ -91,6 +91,14 @@ const SANCTIONED_AUDIENCE_SOURCES: ReadonlyMap<string, string> = new Map([
     'packages/modules/shopping_lists/src/backend/services/shopping-list-service.ts',
     'the saved-list add, scoped by the `CustomerContext` that owns the list',
   ],
+  [
+    // Feature 145: the admin order preview. The request's actor is the
+    // operator, so `productAudienceOf` would answer for the wrong party.
+    'packages/modules/orders/src/backend/services/preview-line-availability.ts',
+    '`customerAudience` — the admin order preview asks what the **chosen customer** may order, ' +
+      'scoped by that customer\'s Organization after `assertCustomerInScope`; the request ' +
+      'speaks for the operator (see the admin-preview paragraph on `isProductVisibleTo`)',
+  ],
 ]);
 
 interface AudienceConstruction {

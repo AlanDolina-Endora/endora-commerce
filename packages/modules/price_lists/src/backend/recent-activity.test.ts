@@ -1,15 +1,19 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { recentActivity } from './manifest.js';
+import { recentActivity } from '../manifest.js';
 
 /**
  * The bulk add (feature 145) is an audited write like the roster replace beside
  * it, so the dashboard's recent activity must be able to show it — declared in
  * the manifest, with a verb in both shipped bundles.
+ *
+ * Under `backend/` rather than beside `manifest.ts`: only the manifest is
+ * published at the package's root subpath, and `manifests:generate` refuses a
+ * sibling file there.
  */
 
 function bundle(language: 'en' | 'pl'): Record<string, string> {
-  const url = new URL(`../i18n/${language}.json`, import.meta.url);
+  const url = new URL(`../../i18n/${language}.json`, import.meta.url);
   return JSON.parse(readFileSync(url, 'utf8')) as Record<string, string>;
 }
 
