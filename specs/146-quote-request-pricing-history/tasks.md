@@ -441,12 +441,12 @@ Every command was run on its own, in this order, on the primary checkout.
 | T094 | `bash scripts/check-naming.sh`; `bash scripts/check-language.sh` | pass — both exit 0 (re-run after the fix: same) |
 | T095 | `pnpm --filter '!backend' run test` | pass — 67 workspace suites, 906 files, 9341 tests, 0 failed (`mod-quote-requests` 15 files / 211 tests, `mod-price-lists` 10 / 85, admin 257 / 2533, storefront 120 / 1243) |
 | T096 | `check:release-intent -- --since origin/master`; `test:release-gate` | pass — `changed=128 changesets-added=10 violations=0`; release gate 1 file / 29 tests |
-| T097 | 69 Postgres-backed files, **one `vitest run <file>` per invocation** (not one run, on this host's instruction), from `backend/` against `localhost:55433/56379/57700` | first pass: 66/69 files green, 3 red (below); after the fix: **69/69 files, 551 tests, 0 failed** |
+| T097 | 69 Postgres-backed files, **one `vitest run <file>` per invocation** (not one run, on this host's instruction), from `backend/` against `localhost:55433/56379/57700` | first pass: 66/69 files green, 3 red (below); the 3 re-run after the fix: 6 + 16 + 7 passed — **69/69 files, 551 tests green across the two passes**. The fix only adds to the shared helpers (a new export, a new function, a literal replaced by a same-value constant), so the 66 earlier results stand |
 | T098 | `git diff --name-status --diff-filter=DR origin/master...HEAD`; `git status --porcelain`; `composer:check`, `manifests:check`, `overlay:check` | pass — no deleted or renamed file on the branch, tree clean after every step, all three checks up to date |
 | T099a | `pnpm --filter backend run pack-gate -- --no-build` | pass — 73 packages, 2 bins, 0 violations |
 | T099b | `bash scripts/boot-gate.sh --with-negatives` (Docker) | pass — 4 cases (positive + `drop-platform-bundles`, `drop-every-bundle`, `drop-overlays` all red as required); 71 modules, 9 overlays |
 | T099c | `pnpm --filter docs run build && pnpm --filter backend run verify:docs-build` | pass — `en` and `pl` built; 334 pages, 0 findings |
-| T099d | `node backend/scripts/dco-signoff.ts origin/master HEAD` | pass — 34 commits judged, 0 findings |
+| T099d | `node backend/scripts/dco-signoff.ts origin/master HEAD` | pass — 0 findings (34 commits when first run; 36 at the final HEAD) |
 
 **T097 files.** `test/contract/{quote_requests,price_lists}/*` and `test/integration/{quote_requests,price_lists}/*`
 (every file), `test/contract/carts/cart-conversions{,-happy}.contract.test.ts`,
