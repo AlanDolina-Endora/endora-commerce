@@ -39,13 +39,14 @@ revision additionally pin `expectedRevisionNumber`.
 | `GET /api/v1/quote-requests` | customer | List visible Quote Requests (org-admin role expands to whole-org visibility). |
 | `GET /api/v1/quote-requests/:id` | customer | Detail with optional `comparisonAgainstLastSeen` block while awaiting acceptance. |
 | `POST /api/v1/quote-requests` | customer | Create + submit in one call. |
-| `PATCH /api/v1/quote-requests/:id` | customer | Edit a Pending RFQ that the internal side has not yet touched. |
+| `PATCH /api/v1/quote-requests/:id` | customer | Edit a Pending RFQ that the internal side has not yet revised — see *Customer draft edits*. |
 | `POST /api/v1/quote-requests/:id/accept-revision` | customer | Accept the seller's latest revision (also covers `Created from admin`). Needs an offer from the seller with every line priced — see *Agreed prices*. |
 | `POST /api/v1/quote-requests/:id/reject-revision` | customer | Reject the latest revision with optional reason. |
 | `POST /api/v1/quote-requests/:id/resubmit` | customer | Clone an old Quote Request into a new Pending one at the customer's current price list. |
 | `POST /api/v1/quote-requests/:id/convert-to-order` | customer | Seed the customer's cart from an Approved RFQ at the agreed unit prices and return the checkout URL. |
 | `GET /api/v1/admin/quote-requests` | admin | List, scoped by sales-rep assignment + filterable by status / organization. |
-| `GET /api/v1/admin/quote-requests/:id` | admin | Detail with full actor identity in the event log. |
+| `GET /api/v1/admin/quote-requests/:id` | admin | Detail with full actor identity in the event log, and per line the reference price and the customer's proposal — see *Reference price*. |
+| `GET /api/v1/admin/quote-requests/:id/history` | admin | The request's history as readable entries — see *History*. |
 | `POST /api/v1/admin/quote-requests` | admin | Create on customer's behalf → status `Created from admin`. |
 | `PATCH /api/v1/admin/quote-requests/:id` | admin | Modify a Pending or Created from admin RFQ → triggers customer re-acceptance. |
 | `POST /api/v1/admin/quote-requests/:id/approve` | admin | Approve a Pending RFQ whose every line has an agreed unit price. |
@@ -53,6 +54,12 @@ revision additionally pin `expectedRevisionNumber`.
 | `POST /api/v1/admin/quote-requests/:id/assign` | admin | Set `assignedAdminUserId` (informational). |
 | `GET /api/v1/admin/sales-reps/:adminUserId/organizations` | admin | Reverse view — organizations a rep is responsible for, with the count of open quote requests in each. |
 | `GET /api/v1/storefront/settings/quote-requests` | public | Returns the two storefront visibility flags. |
+| `GET /api/v1/quote-requests/price-negotiation` | customer | The signed-in customer's own effective price-negotiation value — see *Price negotiation lock*. |
+| `GET` / `PUT /api/v1/admin/organizations/:id/quote-price-negotiation` | admin | Read / set an organization's price-negotiation value. Read needs `customers:read`, write `customers:manage`. |
+| `GET` / `PUT /api/v1/admin/customers/:id/quote-price-negotiation` | admin | Read / set a customer account's override, with the resulting effective value. Read needs `customers:read`, write `customers:manage`. |
+
+The customer create and draft-edit bodies accept at most **200 lines**; a longer
+list is refused with `400 VALIDATION_FAILED`.
 
 The three endpoints that assign a sales representative *to* an organization —
 `GET`, `POST` and `DELETE` under
@@ -99,6 +106,165 @@ What this means in practice:
   edited, so the way forward is `resubmit`, which raises a new request for the
   seller to price.
 
+## Reference price
+
+Every quote line carries a **reference price**: what the request's customer
+would pay for that product, variant and quantity on a normal order. It is
+what the seller compares the customer's proposal with.
+
+- **Net, per base unit.** The price is the net unit price of one base piece —
+  the unit every line quantity is counted in — whatever packaging unit the
+  customer chose. The customer's price lists, the quantity bracket and an
+  active sale price apply.
+- **Resolved on the server, for the request's owner, on the request's sales
+  channel.** The owner is the customer account that raised the request and its
+  organization — also when an organization administrator edits a colleague's
+  draft. A price sent by a client is never used: an unknown key in the customer
+  body is stripped.
+- **Stored at request time.** It is captured on every customer write — the
+  storefront form, a cart converted to a quote request, a draft edit, a
+  resubmission, quick order, a shopping list and an order copied to a quote
+  request — and kept for the life of the request; a seller's revision does not
+  change it. A draft edit keeps the stored price of an unchanged line and
+  resolves a changed or new line again. When no price can be resolved, the line
+  stores none and the request is still accepted.
+- **A cart is its own reference.** A request converted from a cart stores each
+  cart line's unit price as that line's reference price. It does **not** record
+  it as the customer's proposal: such lines carry no proposed price.
+
+The admin detail shows, per line, the reference price, the customer's proposed
+unit price, their difference as a signed amount and a percentage of the
+reference (two decimals), and the agreed unit price. The Modify tab shows the
+same beside the agreed-price input, with the live difference of the price being
+entered. A line with no stored reference — raised before reference prices were
+stored, added by the seller, or on a request an administrator created — shows
+the customer's **current** price on the request's channel instead, labelled
+*current price* rather than *price at request*. Where the difference cannot be
+computed — no price, a reference in another currency than the line, or a
+reference of `0` — the screen shows `—`. An empty agreed price is prefilled
+with the same customer-specific price, not with the administrator's own
+storefront price.
+
+The reference price, the customer's proposal and the request's
+`salesChannelId` are in the **admin** replies only; the customer's API does not
+carry them.
+
+Readers of `quoteRequestReadPort.listItems` — exports and connectors — find the
+stored price in `referenceUnitPrice` and `referenceCurrency` (both `null` when
+none is stored). A line converted from a cart has `desiredUnitPrice = null`;
+read the cart price from `referenceUnitPrice`.
+
+**Totals.** The reference price is never used as a fallback for a total. The
+customer list's `totalAtCustomerPrice` is `null` — shown as `—` — unless
+**every** line carries a proposal, the rule the admin list already applied; a
+cart-converted request therefore has none until it is priced. The admin list's
+customer-price total survives the seller's revisions, because a revision keeps
+each line's proposal. The CRM opportunity value of a request with no proposal
+and no agreed price is `0`; a revised line the customer left unpriced is valued
+at the proposal carried from the customer's last draft edit until the seller
+sets an agreed price.
+
+## History
+
+`GET /api/v1/admin/quote-requests/:id/history` — and the History tab of the
+admin detail — turns the request's stored events into readable entries, in
+English and Polish:
+
+- **One entry per decision.** Records that belong together are merged:
+  the customer's acceptance and the approval, the customer's rejection and the
+  cancellation, an administrator's note and the approval, and the system pairs
+  written when a request is created, resubmitted or created on a customer's
+  behalf.
+- **Who did it.** Every entry names the person who acted, not the requester:
+  an administrator by first and last name and role, a customer user by name and
+  e-mail address, and *System* for an expiry or a completion by an order. An
+  actor who can no longer be resolved is shown by the recorded role as an
+  unknown user, and the rest of the history still renders. Names appear on the
+  admin surface only; the customer's API exposes no more than before.
+- **What changed.** A modification lists, against the previous revision: lines
+  added (with quantity and agreed price) and removed, quantity, agreed price,
+  the customer's proposed price, line note, header note and validity date, each
+  as old → new. Lines are named by product and variant. Packaging-unit and
+  custom-field changes are not listed. A revision with no listed change reads
+  *offer re-sent without changes*. A reason or note given with a cancellation,
+  rejection or approval is shown.
+- **Bounded.** The history reads the **most recent 100 events**. When older
+  events exist, the reply carries `truncated: true` and the tab says that older
+  entries are not shown.
+
+Requests raised before this history existed are described from the data
+already stored; nothing is backfilled.
+
+## Customer draft edits
+
+A customer edits a `Pending` request with `PATCH /api/v1/quote-requests/:id`
+as often as they like until a seller **revises** it. Once an administrator has
+modified the request, the edit is refused with `409 RFQ_NOT_DRAFT` and the
+customer resubmits instead. Edits by customers — an organization
+administrator's edit of a colleague's draft included — never close the draft.
+
+- An edit keeps each line's variant, line note and packaging unit as sent.
+- The route accepts at most **30 edits per minute for one request**; more
+  answer `429`.
+
+A seller's revision (`PATCH /api/v1/admin/quote-requests/:id`) keeps each
+surviving line's variant, line note, packaging unit, customer proposal and
+stored reference price, unless the seller changed them. A line the seller adds
+carries the variant and note chosen and no packaging unit.
+
+## Price negotiation lock
+
+An administrator can decide whether a customer may **propose prices** on a
+quote request:
+
+- **On the organization** (`/organizations/:id`) — *Members may propose
+  prices*: allowed (the default) or not allowed, for every customer account of
+  the organization.
+- **On the customer account** (`/customers/:id`) — an override: *as
+  organization* (the default), *allowed* or *not allowed*. The screen shows the
+  resulting value and whether it comes from the override or the organization.
+
+The effective value of an account is its override if set, else its
+organization's value, else *allowed*. There is no platform-wide or
+per-channel default: the value applies on every sales channel, and two members
+of one organization can differ.
+
+**What a locked customer meets.**
+
+- The storefront draft hides the proposed-price input and shows the catalogue
+  unit price, read-only, where it is known, with a note that sales will price
+  the request. Prices the customer typed before stay in the browser's draft but
+  are never sent. The storefront learns the value from
+  `GET /api/v1/quote-requests/price-negotiation`, which answers the signed-in
+  customer's effective value and nothing else; if that read fails, the page
+  shows the input — the display fails open.
+- **The API is the guarantee.** A customer create or draft edit whose lines
+  carry a proposed price — `0` included — is refused with
+  `422 RFQ_PRICE_PROPOSAL_NOT_ALLOWED`, translated, and nothing is written.
+- Converting a cart and resubmitting keep working: they carry no proposal.
+
+**The lock binds the request's owner, not the acting user.** On create and
+resubmit the owner is the acting customer; on a draft edit by an organization
+administrator it is the colleague who owns the draft. A locked organization
+administrator may therefore propose prices on an unlocked colleague's draft,
+and an allowed one may not on a locked colleague's.
+
+The lock does not touch the seller's side — admin create, modify, approve and
+the agreed price — and does not alter proposals already stored. It is read for
+every request, uncached, so a change applies to the next request.
+
+**Who sees and changes it.** Both controls are panels on the organization and
+customer screens, shown to roles with `customers:read`; changing a value needs
+`customers:manage`, and the panel's control is disabled without it. A role that
+holds `customers:manage` but **not** `customers:read` sees no panel. A sales
+representative reaches only the organizations they may see; any other id
+answers `404`. Every change is an audited write that records the
+administrator, the organization or account and the old and new value.
+
+**Switched off.** While this module is off, the panels, the four admin routes,
+the storefront read and the enforcement are gone; the stored values are kept
+and apply again once the module is switched back on.
+
 ## Visibility model
 
 A sales representative is a platform administrator with the
@@ -111,6 +277,12 @@ predicate centralises the visibility rule:
    `organization_sales_rep_assignments` ties them together, OR the
    organization has zero rows in that table (the "unassigned-org
    fallback" — visible to every sales rep).
+
+A sales representative who names a quote request of an organization they may
+not see gets the same `404` as for an id that does not exist, on every admin
+quote-request route — the detail, the history and every action. (Up to and including 0.106.0
+some of those routes answered `403`, which told the caller the request
+existed.)
 
 A customer with the `org_admin` role on their own organization sees
 every Quote Request in the organization, not just their own.
@@ -212,6 +384,17 @@ Three tables on top of the foundation `quote_requests` and
 - `quote_request_notification_events` — one row per recipient ×
   channel; unique on `(quote_request_id, source_event_id, recipient*,
   channel)` so retries are idempotent.
+
+`quote_request_items` carries the stored reference price in
+`reference_unit_price`, `reference_currency` and `reference_captured_at` — all
+three set or all three `null`.
+
+Two tables hold the price negotiation lock: `quote_request_org_policies` (one
+row per organization that has a value) and `quote_request_account_policies`
+(one row per customer account with an override; `null` = as organization).
+A missing row means the default. Deleting the organization or the customer
+account deletes its row and nothing else — no quote request refers to either
+table.
 
 `organization_sales_rep_assignments` — the m:n relation between
 organizations and admin users that the visibility model above reads —

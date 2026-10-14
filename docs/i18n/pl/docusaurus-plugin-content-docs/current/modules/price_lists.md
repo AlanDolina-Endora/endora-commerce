@@ -201,6 +201,25 @@ Odmowy niczego nie zapisują:
 | --- | --- |
 | `GET /api/v1/admin/products/:productId/price-lists` | Wszystkie cenniki, w których jest produkt, z podsumowaniem progów w poszczególnych walutach i linkiem do cennika |
 
+### Sprawdzenie ceny kupującego (panel administracyjny)
+
+| Metoda i ścieżka | Przeznaczenie |
+| --- | --- |
+| `GET /api/v1/admin/products/:id/resolved-price?organizationId=&customerAccountId=&quantity=&currency=&variantId=&salesChannelId=` | Cena, jaką dany kupujący zapłaciłby za jeden produkt, tak jak pokazują ją ekrany zapytań ofertowych w panelu administracyjnym. Chronione przez `price_lists:read` |
+
+- **`salesChannelId`** wskazuje kanał sprzedaży, w którym wyznaczana jest cena; bez niego —
+  domyślny kanał systemowy. Nieznany albo błędny identyfikator jest odrzucany z
+  `400 VALIDATION_FAILED`, a komunikat go nie powtarza.
+- **Kupujący jest sprawdzany przed wyznaczeniem ceny.** Pytanie dotyczy organizacji
+  `organizationId`, a w jej braku — organizacji konta klienta. Organizacja lub konto klienta,
+  które nie istnieje, oraz — dla opiekuna handlowego — organizacja spoza tych, które może widzieć,
+  dostają ten sam `404`, więc endpoint nikomu nie zdradza, co istnieje. Administrator platformy
+  pomija tylko sprawdzenie opiekuna. Konto klienta, które nie należy do wskazanej organizacji,
+  dostaje `400 VALIDATION_FAILED`.
+- **Zmiana zachowania.** Do wersji 0.106.0 włącznie nieznana organizacja lub konto albo
+  organizacja spoza zakresu dostawały cenę anonimową; teraz dostają `404`. Żądanie bez organizacji
+  i bez konta nadal dostaje cenę anonimową.
+
 ### Storefront (publiczne)
 
 | Metoda i ścieżka | Przeznaczenie |
@@ -290,6 +309,20 @@ którego pojedyncza dawna cena została skopiowana do więcej niż jednej waluty
   pokazuje podpowiedź.
 - `DisplayModeOverrideRow` jest osadzony w edytorze organizacji, w formularzu edycji drzewa kategorii
   i w panelu LinkedPriceListsPanel, który zastępuje dawny `PricingPlaceholder` w edytorze produktu.
+
+## Porty
+
+- **`buyerLinePricePort`** (`BuyerLinePricePort` w `@endora-commerce/contracts`) —
+  `resolveForBuyer({ buyer, salesChannelId, currencyCode?, lines })` zwraca dla każdej pozycji
+  cenę jednostkową netto, jaką kupujący zapłaciłby teraz w zwykłym zamówieniu w tym kanale: grupa
+  klientów konta przed grupą organizacji, przedział ilościowy, aktywna cena promocyjna.
+  `salesChannelId: null` oznacza domyślny kanał systemowy; brak `currencyCode` — domyślną walutę
+  kanału; `quantity` jest w sztukach podstawowych. Produkt, który nie istnieje, dostaje
+  `price: null` dla swojej pozycji; nieznany kanał zgłasza `400 VALIDATION_FAILED`. Klucze są
+  zwracane w tej samej kolejności, a pozycje wyznaczane w ograniczonych porcjach. To ta sama
+  implementacja, z której korzysta opisane wyżej sprawdzenie ceny kupującego, i **nie** sprawdza
+  ona uprawnień — wywołujący przekazuje kupującego, którego już autoryzował. Moduł
+  `quote_requests` korzysta z niej przy cenie referencyjnej każdej pozycji.
 
 ## Punkty rozszerzenia
 

@@ -218,6 +218,27 @@ Refusals write nothing:
 | --- | --- |
 | `GET /api/v1/admin/products/:productId/price-lists` | Lists every price list a product is part of, with per-currency bracket summary and a deep-link path |
 
+### Buyer price probe (admin)
+
+| Verb + Path | Purpose |
+| --- | --- |
+| `GET /api/v1/admin/products/:id/resolved-price?organizationId=&customerAccountId=&quantity=&currency=&variantId=&salesChannelId=` | The price a given buyer would pay for one product, as the admin quote-request screens show it. Gated by `price_lists:read` |
+
+- **`salesChannelId`** names the sales channel to resolve on; absent, the system
+  default channel. An unknown or malformed id is refused with
+  `400 VALIDATION_FAILED`, and the message does not repeat the id.
+- **The buyer is checked before anything is priced.** The organization asked
+  about is `organizationId`, else the customer account's own. An organization
+  or customer account that does not exist, and — for a sales representative —
+  one outside the organizations they may see, all answer the same `404`, so the
+  probe does not tell anybody what exists. A platform administrator skips only
+  the representative check. A customer account that is not a member of the
+  named organization is `400 VALIDATION_FAILED`.
+- **Behaviour change.** Up to and including 0.106.0 an unknown or out-of-scope
+  organization or account was answered with the anonymous price; it is now
+  `404`. A request naming neither an organization nor an account is still the
+  anonymous price.
+
 ### Storefront (public)
 
 | Verb + Path | Purpose |
@@ -323,6 +344,21 @@ one currency.
 - `DisplayModeOverrideRow` is embedded in the Organization editor,
   the Categories tree EditForm, and the LinkedPriceListsPanel that
   replaces the old `PricingPlaceholder` on the catalog Product editor.
+
+## Ports
+
+- **`buyerLinePricePort`** (`BuyerLinePricePort` in `@endora-commerce/contracts`)
+  — `resolveForBuyer({ buyer, salesChannelId, currencyCode?, lines })` answers,
+  for each line, the net unit price the buyer would pay on a normal order on
+  that channel, now: the account's customer group before the organization's,
+  the quantity bracket, an active sale price. `salesChannelId: null` is the
+  system default channel; `currencyCode` absent is the channel's default
+  currency; `quantity` is in base pieces. A product that does not exist answers
+  `price: null` for its line; an unknown channel throws `400 VALIDATION_FAILED`.
+  Keys are echoed in order and lines are resolved in bounded chunks. It is the
+  same implementation the buyer price probe above serves, and it carries **no**
+  authority check — the caller passes a buyer it has already authorised. The
+  `quote_requests` module uses it for every line's reference price.
 
 ## Extension points
 
