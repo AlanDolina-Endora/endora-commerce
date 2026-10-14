@@ -25,6 +25,14 @@ export function listingPriceFrom(
   line: PricingLineResult | null,
   product: { attributeValues: Record<string, unknown> },
   currencyCode: string,
+  /**
+   * The currency the Product's own price is in: the sales channel's default,
+   * which is the only currency that legacy attribute was ever entered in.
+   * Required, not defaulted to `currencyCode`, because that default is the bug:
+   * once a listing may be priced in the shopper's currency (issue #249), a
+   * 100 PLN attribute relabelled as `currencyCode` would quote 100 EUR.
+   */
+  ownPriceCurrency: string,
 ): ListingPrice {
   if (line) {
     return {
@@ -35,6 +43,10 @@ export function listingPriceFrom(
       isSale: line.isSale,
     };
   }
+  // A listing in another currency has no own price to fall back to: the
+  // attribute carries an amount and no currency, and converting it is not this
+  // chain's to do. `none` renders honestly as "no price".
+  if (currencyCode.toUpperCase() !== ownPriceCurrency.toUpperCase()) return { source: 'none' };
   const own = productOwnAmount(product);
   if (own === null) return { source: 'none' };
   return { source: 'product', amount: own, currency: currencyCode.toUpperCase() };

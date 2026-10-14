@@ -461,6 +461,60 @@ export interface ListingPriceViewerContext {
   customerGroupId?: string | null;
 }
 
+/**
+ * `?currency=` on a storefront catalogue read (issue #249): the currency the
+ * shopper selected, as an ISO 4217 code in any case, answered in upper case.
+ *
+ * A malformed value is the caller's bug and is refused. A well-formed one the
+ * sales channel does not offer is not — see {@link resolveListingCurrency}.
+ */
+export const listingCurrencyQuerySchema = z
+  .string()
+  .regex(/^[A-Za-z]{3}$/, 'must be a three-letter ISO 4217 currency code')
+  .transform((code) => code.toUpperCase());
+
+/**
+ * The currency a catalogue read is priced in: the requested one when the sales
+ * channel offers it, otherwise the channel's default.
+ *
+ * Falling back rather than refusing is deliberate. The request comes from a
+ * shopper's stored preference, which outlives a channel dropping a currency;
+ * refusing would turn a stale cookie into a catalogue that will not render,
+ * while the default is a price the channel genuinely quotes — and every price
+ * on the wire names its currency, so the fallback is visible rather than a
+ * silent relabelling.
+ */
+export function resolveListingCurrency(
+  requested: string | undefined,
+  channel: { defaultCurrency: string; currencies: readonly string[] },
+): string {
+  const fallback = channel.defaultCurrency.toUpperCase();
+  if (requested === undefined) return fallback;
+  const code = requested.toUpperCase();
+  return channel.currencies.some((offered) => offered.toUpperCase() === code) ? code : fallback;
+}
+
+/**
+ * The channel half of a {@link ListingPriceViewerContext}, for a read priced in
+ * `currency` — the one place `catalog` and `search` turn the resolved currency
+ * into the ports' `currencyCode`.
+ *
+ * The channel's default stays implicit: a read in the default currency asks the
+ * port exactly what it asked before `currencyCode` was ever passed, and lands
+ * on the same pricing-cache entries.
+ */
+export function listingPriceChannelContext(
+  channel: { id: string; defaultCurrency: string },
+  currency: string | undefined,
+): Pick<ListingPriceViewerContext, 'salesChannel' | 'currencyCode'> {
+  const salesChannel = { id: channel.id, defaultCurrency: channel.defaultCurrency };
+  if (currency === undefined) return { salesChannel };
+  const code = currency.toUpperCase();
+  return code === channel.defaultCurrency.toUpperCase()
+    ? { salesChannel }
+    : { salesChannel, currencyCode: code };
+}
+
 export interface ListingPriceOrderQuery {
   context: ListingPriceViewerContext;
   direction: 'asc' | 'desc';

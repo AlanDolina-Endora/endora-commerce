@@ -2,6 +2,7 @@ import { Meilisearch, MeilisearchApiError, type SearchResponse } from 'meilisear
 import {
   ERROR_CODES,
   isProductVisibleTo,
+  listingPriceChannelContext,
   listingPriceMoney,
   type CatalogAttributeReadPort,
   type CatalogProductReadPort,
@@ -59,6 +60,8 @@ export interface SearchQueryContext {
   /** Who is asking (issue #227) — see the published `SearchQueryContext`. */
   audience: ProductAudience;
   preferredLanguage?: string | undefined;
+  /** The currency the page is priced in (issue #249) — see the published `SearchQueryContext`. */
+  currency?: string | undefined;
 }
 
 export interface SearchListProductsParams {
@@ -278,7 +281,9 @@ export class SearchQueryService {
         ? await this.#requireListingPrices().resolveListingPrices({
             products,
             context: {
-              salesChannel: { id: channel.id, defaultCurrency: channel.defaultCurrency },
+              // Issue #249 — the currency the catalogue route resolved for this
+              // page, so a Meilisearch page and a Postgres page price alike.
+              ...listingPriceChannelContext(channel, ctx.currency),
               organization: viewerOrganization,
             },
           })

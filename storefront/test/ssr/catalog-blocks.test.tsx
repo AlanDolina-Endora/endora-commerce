@@ -248,7 +248,7 @@ describe('a catalogue block given no data', () => {
 describe('the reads behind a page of catalogue blocks', () => {
   const page = documentOf(BLOCKS.grid, BLOCKS.slider, BLOCKS.card, BLOCKS.categoryList, BLOCKS.categoryGrid);
 
-  it('carries the sales channel and the language of the request on every read', async () => {
+  it('carries the sales channel, the language and the currency of the request on every read', async () => {
     stubBackend();
     await resolveCatalogBlockDataFor([page], CTX);
 
@@ -257,6 +257,11 @@ describe('the reads behind a page of catalogue blocks', () => {
       expect(call.url.startsWith('http://api.test/api/v1/catalog/')).toBe(true);
       expect(headerOf(call, 'X-Sales-Channel')).toBe('b2b-eu');
       expect(headerOf(call, 'Accept-Language')).toBe('en-US');
+    }
+    // Issue #249 — every priced read carries the shopper's currency; the
+    // category tree carries no price and stays one shared entry.
+    for (const call of calls.filter((c) => c.url.includes('/catalog/products'))) {
+      expect(new URL(call.url).searchParams.get('currency')).toBe('EUR');
     }
   });
 
@@ -267,9 +272,9 @@ describe('the reads behind a page of catalogue blocks', () => {
     const paths = calls.map((call) => call.url.replace('http://api.test', '')).sort();
     expect(paths).toEqual([
       '/api/v1/catalog/categories',
-      '/api/v1/catalog/products/claw-hammer',
-      '/api/v1/catalog/products/cordless-drill',
-      '/api/v1/catalog/products?limit=8&filter%5Bcategory%5D=power-tools',
+      '/api/v1/catalog/products/claw-hammer?currency=EUR',
+      '/api/v1/catalog/products/cordless-drill?currency=EUR',
+      '/api/v1/catalog/products?limit=8&filter%5Bcategory%5D=power-tools&currency=EUR',
     ]);
   });
 

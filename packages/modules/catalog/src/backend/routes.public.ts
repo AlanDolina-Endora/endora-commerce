@@ -6,8 +6,11 @@ import type { BundleService } from './services/bundle.service.js';
 import {
   ERROR_CODES,
   isPriceSort,
+  listingCurrencyQuerySchema,
+  listingPriceChannelContext,
   productLinkKindSchema,
   productListSortSchema,
+  resolveListingCurrency,
   validateBundleConfigurationRequestSchema,
   type ListingPriceOrderPort,
   type ProductAudience,
@@ -172,10 +175,7 @@ export async function registerCatalogPublicRoutes(
       ctx.audience.organizationId === null ? null : { id: ctx.audience.organizationId };
     const mode = await deps.listingPriceOrder.pageDisplayMode({
       context: {
-        salesChannel: {
-          id: ctx.resolvedChannel.id,
-          defaultCurrency: ctx.resolvedChannel.defaultCurrency,
-        },
+        ...listingPriceChannelContext(ctx.resolvedChannel, ctx.currency),
         organization,
       },
     });
@@ -409,10 +409,21 @@ function readContext(request: FastifyRequest): {
   };
   audience: ProductAudience;
   preferredLanguage?: string | undefined;
+  currency: string;
 } {
   // Feature 053 / FR-002: the sales channel is resolved once by the canonical
   // middleware. Read it here instead of re-parsing the `x-sales-channel` header.
   const ch = getResolvedChannel(request);
+  // Issue #249 — the currency every read on this request is priced in,
+  // resolved once here so a listing, its ordering, its price range and the
+  // Meilisearch path cannot disagree. A malformed `?currency=` is a 400 (the
+  // ZodError reaches the error envelope); one the channel does not offer falls
+  // back to its default — see `resolveListingCurrency`.
+  const requestedCurrency = (request.query as Record<string, unknown> | undefined)?.['currency'];
+  const currency = resolveListingCurrency(
+    requestedCurrency === undefined ? undefined : listingCurrencyQuerySchema.parse(requestedCurrency),
+    ch,
+  );
   const acceptLanguage = acceptLanguageHeaderSchema.parse(request.headers['accept-language']);
   const preferredLanguage = acceptLanguage ? acceptLanguage.split(',')[0]?.trim() : undefined;
   return {
@@ -425,6 +436,7 @@ function readContext(request: FastifyRequest): {
     },
     audience: productAudienceOf(request),
     preferredLanguage,
+    currency,
   };
 }
 
