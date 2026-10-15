@@ -51,8 +51,14 @@ import {
   type ReferenceColumns,
 } from './reference-price.js';
 import { carriedProposal, pairLines, referenceInputsUnchanged } from './line-carry-over.js';
-import { QuoteRequestRevision } from '../entities/quote-request-revision.entity.js';
 import type { NegotiationPolicyService } from './negotiation-policy-service.js';
+import {
+  CUSTOMER_EVENT_KEYS,
+  CUSTOMER_ITEM_KEYS,
+  customerEventPayload,
+  pickKeys,
+} from './customer-projection.js';
+import { assertDraftOpenForCustomer, submissionRecordProposals } from './draft-guard.js';
 
 /**
  * Customer-facing Quote Requests service — feature 008 workflow.
@@ -1292,198 +1298,6 @@ type QuoteRequestItemDraft = Pick<
   | 'lineCurrency'
 > &
   ReferenceColumns;
-
-/**
- * FR-038 (research R15, threat model T3) — a customer may edit a draft until an
- * administrator has revised it, and never after. Three marks say "revised", and
- * each one alone can be visible before the others:
- *
- *  1. `awaitingCustomerRevisionAcceptance` — committed with the admin's lines;
- *  2. a `modified` event with an administrator as actor — appended last;
- *  3. an admin-authored latest revision — recorded between the two.
- *
- * Customer-authored `modified` events, an organization administrator's edit of
- * a colleague's draft included, never close the draft, however many there are.
- */
-async function assertDraftOpenForCustomer(
-  em: EntityManager,
-  quoteRequestId: string,
-  awaitingCustomerRevisionAcceptance: boolean,
-): Promise<void> {
-  const refuse = (): never => {
-    throw new HttpError(
-      409,
-      ERROR_CODES.RFQ_NOT_DRAFT,
-      'Quote Request is in admin review; resubmit instead of editing.',
-    );
-  };
-  if (awaitingCustomerRevisionAcceptance) refuse();
-  const adminModified = await em.count(QuoteRequestEvent, {
-    quoteRequestId,
-    eventType: 'modified',
-    actorAdminUserId: { $ne: null },
-  });
-  if (adminModified > 0) refuse();
-  const [latest] = await em.find(
-    QuoteRequestRevision,
-    { quoteRequestId },
-    { orderBy: { revisionNumber: 'desc' }, limit: 1 },
-  );
-  if (latest?.createdByAdminUserId != null) refuse();
-}
-
-// ---------------------------------------------------------------------------
-// Feature 146 — the customer allow-list (threat model T7) and the
-// submission-record fallback (research R4)
-// ---------------------------------------------------------------------------
-
-/** The item keys a customer reply carries. Admin-only keys are not listed. */
-const CUSTOMER_ITEM_KEYS = [
-  'id',
-  'productId',
-  'productName',
-  'productSlug',
-  'variantId',
-  'variantLabel',
-  'quantity',
-  'desiredUnitPrice',
-  'agreedUnitPrice',
-  'lineNote',
-  'lineCurrency',
-  'discountPercent',
-  'taxRate',
-  'packagingUnitName',
-  'packagingUnitBaseQuantity',
-] as const;
-
-/** The event keys a customer reply carries; `payload` is filtered on its own. */
-const CUSTOMER_EVENT_KEYS = [
-  'id',
-  'eventType',
-  'actorCustomerAccountId',
-  'actorRoleLabel',
-  'payload',
-  'revisionId',
-  'createdAt',
-] as const;
-
-/**
- * The payload keys this module writes and a customer may read — the event
- * kind, counts, reasons, notes, the related request and order, and the
- * customer-facing revision diff.
- */
-const CUSTOMER_PAYLOAD_KEYS = new Set([
-  'type',
-  'itemCount',
-  'diff',
-  'note',
-  'approvedBy',
-  'canceledBy',
-  'reason',
-  'sourceRfqId',
-  'newRfqId',
-  'revisionNumber',
-  'orderId',
-  'expiryDaysAtTime',
-  // Feature 146 (research R7) — a revision's validity change. The customer
-  // already reads `expiresAt`; the before/after pair widens nothing.
-  'validity',
-]);
-
-/** The keys of one `payload.diff` entry (`RfqDiffEntry`). */
-const CUSTOMER_DIFF_KEYS = new Set([
-  'kind',
-  'productId',
-  'productName',
-  'quantity',
-  'agreedUnitPrice',
-  'before',
-  'after',
-]);
-
-function pickKeys<T extends object, K extends keyof T>(source: T, keys: readonly K[]): Pick<T, K> {
-  const out = {} as Pick<T, K>;
-  for (const key of keys) out[key] = source[key];
-  return out;
-}
-
-function pickAllowed(source: Record<string, unknown>, allowed: ReadonlySet<string>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(source)) {
-    if (allowed.has(key)) out[key] = value;
-  }
-  return out;
-}
-
-/** A stored event payload as a customer may read it. */
-function customerEventPayload(payload: Record<string, unknown>): Record<string, unknown> {
-  const out = pickAllowed(payload ?? {}, CUSTOMER_PAYLOAD_KEYS);
-  if (Array.isArray(out['diff'])) {
-    out['diff'] = (out['diff'] as unknown[]).map((entry) =>
-      entry !== null && typeof entry === 'object'
-        ? pickAllowed(entry as Record<string, unknown>, CUSTOMER_DIFF_KEYS)
-        : entry,
-    );
-  }
-  return out;
-}
-
-/**
- * The customer's proposal per line from the **submission record** (research
- * R4), for a line whose row lost it to an admin revision written before
- * feature 146 carried `desiredUnitPrice`.
- *
- * The submission record is the latest customer-authored revision before the
- * first admin-authored one. The events, already read, name both in order, so
- * this costs one revision read — and none when every line still carries its
- * proposal or no administrator has revised the request. Lines pair with the
- * snapshot by the R6 rule (`pairLines`, customer mode).
- */
-async function submissionRecordProposals(
-  em: EntityManager,
-  items: readonly QuoteRequestItem[],
-  events: readonly QuoteRequestEvent[],
-): Promise<Map<string, number | null>> {
-  const out = new Map<string, number | null>();
-  if (items.every((it) => it.desiredUnitPrice != null)) return out;
-
-  let recordId: string | null = null;
-  let adminRevised = false;
-  for (const event of events) {
-    if (!event.revisionId) continue;
-    if (event.actorAdminUserId != null) {
-      adminRevised = true;
-      break;
-    }
-    if (event.actorCustomerAccountId != null) recordId = event.revisionId;
-  }
-  if (!adminRevised || recordId === null) return out;
-
-  const record = await em.findOne(QuoteRequestRevision, { id: recordId });
-  if (!record || record.createdByCustomerAccountId == null) return out;
-
-  const snapshot = record.itemsSnapshot.map((line, index) => ({
-    id: String(index),
-    productId: line.productId,
-    variantId: line.variantId ?? null,
-    packagingUnitName: line.packagingUnitName ?? null,
-    desiredUnitPrice: line.desiredUnitPrice ?? null,
-  }));
-  const { paired } = pairLines(
-    snapshot,
-    items.map((it) => ({
-      productId: it.productId,
-      variantId: it.variantId ?? null,
-      packagingUnitName: it.packagingUnitName ?? null,
-    })),
-    'customer',
-  );
-  items.forEach((it, index) => {
-    const match = paired[index];
-    if (match) out.set(it.id, match.desiredUnitPrice);
-  });
-  return out;
-}
 
 function groupBy<T, K>(arr: T[], key: (t: T) => K): Map<K, T[]> {
   const out = new Map<K, T[]>();

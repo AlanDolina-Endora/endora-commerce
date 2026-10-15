@@ -1,0 +1,97 @@
+/**
+ * Feature 146 — the customer allow-list (threat model T7): the keys of a quote
+ * request's items, events, event payloads and revision diffs that a customer
+ * reply may carry. Anything not listed here is admin-only and is dropped from
+ * a customer reply.
+ */
+
+/** The item keys a customer reply carries. Admin-only keys are not listed. */
+export const CUSTOMER_ITEM_KEYS = [
+  'id',
+  'productId',
+  'productName',
+  'productSlug',
+  'variantId',
+  'variantLabel',
+  'quantity',
+  'desiredUnitPrice',
+  'agreedUnitPrice',
+  'lineNote',
+  'lineCurrency',
+  'discountPercent',
+  'taxRate',
+  'packagingUnitName',
+  'packagingUnitBaseQuantity',
+] as const;
+
+/** The event keys a customer reply carries; `payload` is filtered on its own. */
+export const CUSTOMER_EVENT_KEYS = [
+  'id',
+  'eventType',
+  'actorCustomerAccountId',
+  'actorRoleLabel',
+  'payload',
+  'revisionId',
+  'createdAt',
+] as const;
+
+/**
+ * The payload keys this module writes and a customer may read — the event
+ * kind, counts, reasons, notes, the related request and order, and the
+ * customer-facing revision diff.
+ */
+export const CUSTOMER_PAYLOAD_KEYS = new Set([
+  'type',
+  'itemCount',
+  'diff',
+  'note',
+  'approvedBy',
+  'canceledBy',
+  'reason',
+  'sourceRfqId',
+  'newRfqId',
+  'revisionNumber',
+  'orderId',
+  'expiryDaysAtTime',
+  // Feature 146 (research R7) — a revision's validity change. The customer
+  // already reads `expiresAt`; the before/after pair widens nothing.
+  'validity',
+]);
+
+/** The keys of one `payload.diff` entry (`RfqDiffEntry`). */
+export const CUSTOMER_DIFF_KEYS = new Set([
+  'kind',
+  'productId',
+  'productName',
+  'quantity',
+  'agreedUnitPrice',
+  'before',
+  'after',
+]);
+
+export function pickKeys<T extends object, K extends keyof T>(source: T, keys: readonly K[]): Pick<T, K> {
+  const out = {} as Pick<T, K>;
+  for (const key of keys) out[key] = source[key];
+  return out;
+}
+
+export function pickAllowed(source: Record<string, unknown>, allowed: ReadonlySet<string>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (allowed.has(key)) out[key] = value;
+  }
+  return out;
+}
+
+/** A stored event payload as a customer may read it. */
+export function customerEventPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const out = pickAllowed(payload ?? {}, CUSTOMER_PAYLOAD_KEYS);
+  if (Array.isArray(out['diff'])) {
+    out['diff'] = (out['diff'] as unknown[]).map((entry) =>
+      entry !== null && typeof entry === 'object'
+        ? pickAllowed(entry as Record<string, unknown>, CUSTOMER_DIFF_KEYS)
+        : entry,
+    );
+  }
+  return out;
+}
