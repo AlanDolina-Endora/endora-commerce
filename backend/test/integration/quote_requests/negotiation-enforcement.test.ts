@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { asValue, type Resolver } from 'awilix';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { EntityManager } from '@mikro-orm/postgresql';
+import type { BuyerLinePricePort } from '@endora-commerce/contracts';
 import {
   setupBackendServer,
   teardownBackendServer,
@@ -328,6 +329,38 @@ describe('146 — price-negotiation lock enforcement [integration]', () => {
       expect(lines).toHaveLength(1);
       expect(lines[0]?.quantity).toBe(2);
       expect(lines[0]?.desiredUnitPrice ?? null).toBeNull();
+    });
+
+    it('a refused edit asks price_lists nothing — the lock is checked before pricing (review fix N9)', async () => {
+      const id = await createOk(lockedBuyer, [{ productId: SEED_PRODUCT_101_ID, quantity: 2 }]);
+      const original = h.container.registrations['buyerLinePricePort'] as Resolver<unknown>;
+      const real = h.container.resolve('buyerLinePricePort') as BuyerLinePricePort;
+      let asked = 0;
+      h.container.register({
+        buyerLinePricePort: asValue({
+          resolveForBuyer: async (query: Parameters<BuyerLinePricePort['resolveForBuyer']>[0]) => {
+            asked += 1;
+            return real.resolveForBuyer(query);
+          },
+        }),
+      });
+      try {
+        expectRefusal(
+          await patch(lockedBuyer, id, {
+            items: [{ productId: SEED_PRODUCT_101_ID, quantity: 5, desiredUnitPrice: 3 }],
+          }),
+        );
+        expect(asked).toBe(0);
+        // The counting port is the one an accepted edit asks — otherwise the
+        // zero above proves nothing.
+        const accepted = await patch(lockedBuyer, id, {
+          items: [{ productId: SEED_PRODUCT_101_ID, quantity: 5 }],
+        });
+        expect(accepted.statusCode, accepted.body).toBe(200);
+        expect(asked).toBe(1);
+      } finally {
+        h.container.register('buyerLinePricePort', original);
+      }
     });
 
     it('existing proposals are untouched by a lock, and an edit omitting them keeps them (US4 #5, T5, FR-024)', async () => {

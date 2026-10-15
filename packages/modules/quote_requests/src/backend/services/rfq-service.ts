@@ -461,6 +461,11 @@ export class RfqService {
       throw new HttpError(409, ERROR_CODES.VERSION_CONFLICT, 'Quote Request was updated concurrently.');
     }
 
+    // FR-022 — a cheap refusal before the line rewrite is priced, so a refused
+    // edit costs no call into `price_lists`. Repeated inside the row lock
+    // below, after the version and guard checks, which is the check that counts.
+    await this.deps.negotiationPolicy.assertProposalsAllowed(rfq.customerAccountId, body.items, em);
+
     // Everything the line rewrite needs is read and priced before the row is
     // taken: the reference is a call into `price_lists`, and the lock is held
     // for the row's own write only. What was read here is what is rewritten —
