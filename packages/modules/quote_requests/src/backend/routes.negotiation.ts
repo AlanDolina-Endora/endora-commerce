@@ -14,7 +14,6 @@ import {
 } from '@endora-commerce/contracts';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import type { RequireAdminAnyFactory, RequireAdminFactory } from '@endora-commerce/platform/kernel';
-import { orgConstraintFor } from '@endora-commerce/platform/tenancy';
 import { QuoteRequestOrgPolicy } from './entities/quote-request-org-policy.entity.js';
 import {
   customerNotFound,
@@ -25,6 +24,7 @@ import {
   type NegotiationCommandDeps,
 } from './commands/negotiation-policy-commands.js';
 import type { NegotiationPolicyService } from './services/negotiation-policy-service.js';
+import { adminCanSeeOrganization } from './services/admin-org-visibility.js';
 import type { CustomerContextResolver, RequireCustomerGuard } from './routes.customer.js';
 
 /**
@@ -83,10 +83,9 @@ export async function registerQuoteRequestsNegotiationRoutes(
    * rule, D-3M), else the representative's assignments.
    */
   const canSee = async (request: FastifyRequest, organizationId: string): Promise<boolean> => {
-    if (orgConstraintFor().kind === 'all') return true;
     const actor = request.actor as Actor | undefined;
-    if (actor?.kind !== 'admin') return false;
-    return deps.salesRepAssignment.canSeeOrganization(actor.adminUserId, organizationId);
+    const adminUserId = actor?.kind === 'admin' ? actor.adminUserId : null;
+    return adminCanSeeOrganization(deps.salesRepAssignment, adminUserId, organizationId);
   };
 
   const organizationState = async (organizationId: string): Promise<QuoteRequestOrgNegotiation> => {

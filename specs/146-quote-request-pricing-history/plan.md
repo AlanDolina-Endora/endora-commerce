@@ -399,3 +399,10 @@ No constitution violation. Recorded so a reviewer does not have to ask:
   only (existing and new); the admin `set*` bodies keep `.strict()`. The `lineCurrency` defect is
   logged above, not in `specs/deferred-defects.md` (absent from this repository), and carried into
   the PR by T089a. Nothing remains open.
+- **Review fix round 1 (2026-10-15)**:
+  - The "platform-wide scope, else `SalesRepAssignmentPort.canSeeOrganization`" check is one
+    module-local function, `services/admin-org-visibility.ts`, shared by the negotiation routes and
+    the negotiation Commands. `price_lists` carries the same check in
+    `packages/modules/price_lists/src/backend/routes.ts` (`authorizeBuyer`'s `canSee`); it stays
+    there, because a module never imports another's internals — it is a **candidate for a platform
+    helper** (`@endora-commerce/platform/tenancy`), out of scope for this feature.

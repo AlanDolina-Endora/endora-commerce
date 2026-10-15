@@ -7,9 +7,9 @@ import {
 } from '@endora-commerce/contracts';
 import type { Command, CommandActor } from '@endora-commerce/platform/commands';
 import { HttpError } from '@endora-commerce/platform/http';
-import { orgConstraintFor } from '@endora-commerce/platform/tenancy';
 import { QuoteRequestAccountPolicy } from '../entities/quote-request-account-policy.entity.js';
 import { QuoteRequestOrgPolicy } from '../entities/quote-request-org-policy.entity.js';
+import { adminCanSeeOrganization, isPlatformWideScope } from '../services/admin-org-visibility.js';
 
 /**
  * Feature 146, US4 — the two audited writes of the price-negotiation lock
@@ -63,8 +63,6 @@ export interface AccountNegotiationState {
   updatedAt: Date | null;
 }
 
-const platformWide = (): boolean => orgConstraintFor().kind === 'all';
-
 /** One refusal per subject, for an unknown id and an unreachable one alike (C1). */
 export const organizationNotFound = (): HttpError =>
   new HttpError(404, ERROR_CODES.NOT_FOUND, 'Organization not found.');
@@ -76,9 +74,12 @@ async function canReach(
   actor: CommandActor,
   organizationId: string,
 ): Promise<boolean> {
-  if ((deps.isPlatformAdmin ?? platformWide)()) return true;
-  if (!actor.actorAdminUserId) return false;
-  return deps.salesRepScope.canSeeOrganization(actor.actorAdminUserId, organizationId);
+  return adminCanSeeOrganization(
+    deps.salesRepScope,
+    actor.actorAdminUserId,
+    organizationId,
+    deps.isPlatformAdmin ?? isPlatformWideScope,
+  );
 }
 
 export function overrideOf(value: boolean | null | undefined): QuoteRequestNegotiationOverride {
