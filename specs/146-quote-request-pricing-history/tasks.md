@@ -416,6 +416,17 @@ sequence** on one checkout, not in parallel. Phases 11 and 12 may run in paralle
 T099 stays open: its headless part is covered by the T097 files (map below); the browser walk of
 `quickstart.md` §1–§4 on `pnpm run dev` has not been done and is handed to the reviewer.
 
+**T099 owner finding (2026-10-15, manual test).** On a quote request's Modify tab the product field
+of every kept line was empty; the product appeared only after the field's dropdown was opened and
+closed. Root cause in the kit's `ProductPicker`, not in `RfqDetail`: its warm-up lookup marked a
+preselected id as fetched *before* the answer arrived, so under `<StrictMode>` (the admin's root)
+the simulated unmount discarded the answer and the remount asked for nothing; opening the dropdown
+only "fixed" it because the search results happened to contain the product. The same file is on
+`origin/master`, so every `ProductPicker` mounted with a value is affected there too. Fixed in
+`@endora-commerce/admin-kit` (patch changeset): the lookup in flight is kept per id and re-awaited
+by every effect run; only a failed lookup is remembered. Tests: `admin/test/kit/kit-pickers.test.tsx`
+(*preselected value under StrictMode*) and `admin/test/modules/quote_requests/RfqDetail.modify-product.test.tsx`.
+
 ---
 
 ## Phase 15: Final — the other pull-request workflows (G1)
