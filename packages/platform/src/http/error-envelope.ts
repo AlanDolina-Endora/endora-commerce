@@ -335,6 +335,30 @@ export function registerErrorEnvelope(app: FastifyInstance, options: ErrorEnvelo
       return;
     }
 
+    // A request Fastify itself refused before any route hook ran — an empty
+    // body declared as JSON, a malformed one, one over `bodyLimit`, a media type
+    // with no parser. Fastify raises these as `FST_*` errors carrying the 4xx
+    // it means, and they used to reach the fallback below: `DELETE …/values`
+    // with `Content-Type: application/json` and no body answered 500 INTERNAL
+    // and was logged as an unhandled fault (error-envelope-body-parser.test.ts).
+    //
+    // The status is Fastify's, and the code is `VALIDATION_FAILED` because what
+    // failed is the request's shape. Only Fastify's own codes are trusted: a
+    // `statusCode` on an arbitrary thrown object is not a claim this handler
+    // takes at face value, and a stray one stays a logged 500. Silent, like
+    // every other 4xx here.
+    if (isFastifyClientError(error)) {
+      const envelope: ErrorEnvelope = {
+        error: {
+          code: ERROR_CODES.VALIDATION_FAILED,
+          message: error.message,
+          requestId,
+        },
+      };
+      reply.status(error.statusCode).send(envelope);
+      return;
+    }
+
     // Fallback — 500. Log the full error; do not leak details to the client.
     request.log.error({ err: error }, 'unhandled error');
     const envelope: ErrorEnvelope = {
@@ -520,6 +544,20 @@ function varyBy(reply: FastifyReply, field: string): void {
 /** `{name}` left standing after interpolation — see the call site. */
 function hasUnfilledPlaceholder(message: string): boolean {
   return /\{\w+\}/.test(message);
+}
+
+/** A 4xx Fastify raised about the request itself — see the call site. */
+function isFastifyClientError(error: unknown): error is { statusCode: number; message: string } {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown; statusCode?: unknown; message?: unknown };
+  return (
+    typeof candidate.code === 'string' &&
+    candidate.code.startsWith('FST_') &&
+    typeof candidate.statusCode === 'number' &&
+    candidate.statusCode >= 400 &&
+    candidate.statusCode < 500 &&
+    typeof candidate.message === 'string'
+  );
 }
 
 function isErrorEnvelope(payload: unknown): payload is ErrorEnvelope {
