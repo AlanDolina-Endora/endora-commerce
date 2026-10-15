@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   SAVED_LIST_VIEW_COLUMNS_MAX,
   SAVED_LIST_VIEW_FILTERS_MAX_BYTES,
@@ -80,6 +80,20 @@ describe('savedListViewNameKey (FR-022)', () => {
 
   it('keeps names that differ by more than case and whitespace apart', () => {
     expect(savedListViewNameKey('Unpaid EU')).not.toBe(savedListViewNameKey('Unpaid US'));
+  });
+
+  it('does not depend on the host locale, as SQL lower() does not', () => {
+    // A Turkish default locale lower-cases `I` to dotless `ı`; the server's
+    // `lower(btrim(name))` does not, so the client key must not either.
+    const original = String.prototype.toLocaleLowerCase;
+    vi.spyOn(String.prototype, 'toLocaleLowerCase').mockImplementation(function (this: string) {
+      return original.call(this, 'tr-TR');
+    });
+    try {
+      expect(savedListViewNameKey(' Invoices ')).toBe('invoices');
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });
 

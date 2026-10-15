@@ -100,9 +100,11 @@ export type SavedListViewDeleteResponse = z.infer<typeof savedListViewDeleteResp
 /**
  * The key two names are compared by for uniqueness — the client-side twin of
  * SQL `lower(btrim(name))`. The server decides in SQL; this answers early.
+ * `toLowerCase`, not `toLocaleLowerCase`: the key must not follow the browser's
+ * locale (Turkish lower-cases `I` to `ı`), or client and server disagree.
  */
 export function savedListViewNameKey(name: string): string {
-  return name.trim().toLocaleLowerCase();
+  return name.trim().toLowerCase();
 }
 
 // --- Products: filters only (the product list has no sort and no column picker)
