@@ -76,6 +76,8 @@ first and only propose a glossary edit if the term genuinely does not fit.
 | value (setting)         | wartość                     |                                                     |
 | comparison              | porównanie                  | the customer-facing compare feature                 |
 | shopping list           | lista zakupów               |                                                     |
+| saved view              | zapisany widok              | a named list setup; plural "zapisane widoki"        |
+| shared (saved view)     | udostępniony                | not "współdzielony"                                |
 | credit limit            | limit kredytowy             |                                                     |
 | asset                   | zasób                       | generic file/image asset                            |
 | integration             | integracja                  |                                                     |

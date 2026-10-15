@@ -52,6 +52,7 @@ revision additionally pin `expectedRevisionNumber`.
 | `POST /api/v1/admin/quote-requests/:id/approve` | admin | Approve a Pending RFQ whose every line has an agreed unit price. |
 | `POST /api/v1/admin/quote-requests/:id/cancel` | admin | Cancel with optional reason. |
 | `POST /api/v1/admin/quote-requests/:id/assign` | admin | Set `assignedAdminUserId` (informational). |
+| `GET`, `POST /api/v1/admin/quote-requests/list-views`; `PATCH`, `DELETE …/list-views/:id` | admin | Saved views on the quote request list — see *Saved views*. |
 | `GET /api/v1/admin/sales-reps/:adminUserId/organizations` | admin | Reverse view — organizations a rep is responsible for, with the count of open quote requests in each. |
 | `GET /api/v1/storefront/settings/quote-requests` | public | Returns the two storefront visibility flags. |
 | `GET /api/v1/quote-requests/price-negotiation` | customer | The signed-in customer's own effective price-negotiation value — see *Price negotiation lock*. |
@@ -298,6 +299,131 @@ quote-request route — the detail, the history and every action. (Earlier relea
 A customer with the `org_admin` role on their own organization sees
 every Quote Request in the organization, not just their own.
 
+## Saved views
+
+A saved view is a named setup of the quote request list — its filters, sort and
+columns — that an admin can apply again with one selection.
+
+### Using saved views
+
+The quote request list's toolbar carries a **Saved views** selector, whose
+first entry is **— Select a view —**, and two buttons beside it: **Save view**
+and **Delete view**.
+
+- **What a view remembers.** Six things: the **Visibility** scope, the
+  organization, the status selection, the search text, the sort and the
+  visible columns. Choosing a view replaces all six with the view's values,
+  discards anything you had changed and not saved, and goes back to the first
+  page. A status or column the list no longer knows is dropped; a view with no
+  columns shows the default ones; a view with no usable scope opens on your own
+  default scope.
+- **A view never widens what you can see.** It stores filter values, never
+  results. After you load a view, the list is read with *your* permissions and
+  *your* organizations, whoever saved it. *My organizations* means the
+  organizations assigned to you, the admin loading the view — not to the one
+  who saved it — and *All* still shows only what you are allowed to see. The
+  organization is stored as an id: if it is outside your reach, its name is not
+  shown and the list is simply empty.
+- **Saving.** **Save view** opens one dialog with a **Name** field and a
+  **Share with every admin who can open this list** checkbox. The checkbox
+  starts unchecked, so a new view is private unless you tick it. The name is
+  required, leading and trailing spaces are removed, and it can be at most 160
+  characters long. Problems are shown on the field and nothing is sent until
+  they are fixed; a refusal from the server is shown inside the dialog, which
+  stays open with what you typed.
+- **Private or shared.** A private view is listed only for you. A shared view
+  is listed for every admin who can open the quote request list, with
+  **(shared)** after its name. The selector does not show who saved a shared
+  view.
+- **One name per admin.** You cannot hold two views on this list whose names
+  differ only in letter case or in surrounding spaces. The dialog answers
+  **You already have a view with this name.** before sending anything, and the
+  server refuses the name as well. Accented letters are different letters:
+  *Łódź* and *Lodz* are two names. Names other admins use, and names
+  used on other lists, do not count.
+- **Deleting.** **Delete view** is enabled only when the selected view is one
+  you may delete. It asks for confirmation and names the view —
+  **Delete the view “…”?** — and for a shared view adds that it will disappear
+  for every admin who can open this list. Nothing is deleted until you press
+  **Delete**.
+- **Who may delete or change a shared view.** Its owner, or **any admin whose
+  role is not `sales_representative`** — not only the `platform_admin` role: a
+  custom role counts as well. **Such a deletion or change leaves no audit
+  trail**: saved views are not written to the audit log. Decide which roles you
+  grant with that in mind before your team relies on shared views. A sales
+  representative can delete only their own views, and nobody can see or delete
+  another admin's private view.
+- **Two meanings of "platform admin" on this list.** The rule above is not the
+  one *Visibility model* applies: the list's default scope and its
+  every-organization visibility still key on the literal `platform_admin` role.
+  So an admin with a custom role may delete a colleague's shared view yet opens
+  the list on *My organizations*.
+- **Only save, load and delete.** The Admin UI does not rename a view, change
+  whether it is shared, or overwrite it with the current setup; save a new view
+  and delete the old one instead. There is no limit on the number of views.
+- **When quote requests are switched off,** the saved views go with the rest of
+  the module but are not deleted. Switch the module back on and every view is
+  there as it was.
+
+### Saved views API
+
+| Method and path | Answers |
+| --- | --- |
+| `GET /api/v1/admin/quote-requests/list-views` | `200` — the caller's own views plus every shared view, ordered by name |
+| `POST /api/v1/admin/quote-requests/list-views` | `201` — the created view |
+| `PATCH /api/v1/admin/quote-requests/list-views/:id` | `200` — the modified view; any of `name`, `shared`, `filters`, `sort`, `visibleColumns`. The Admin UI does not call it |
+| `DELETE /api/v1/admin/quote-requests/list-views/:id` | `200` — `{ data: { deleted: <id> } }` |
+
+- **Gate.** All four routes are gated by `rfqs:handle` — the code that gates the
+  list — and registered behind the module's presence gate with the rest of its
+  admin routes. There is no separate permission code. A request without an
+  admin actor is refused with `401 UNAUTHORIZED`. The static `list-views`
+  segment takes precedence over `quote-requests/:id`.
+- **Off-state.** While `quote_requests` is not effectively present, all four
+  answer as `GET /api/v1/admin/quote-requests` does — `503 MODULE_DISABLED`.
+  The rows in `quote_request_list_saved_views` are not touched.
+- **Body.** `name` (trimmed, 1–160 characters, no Unicode control or format
+  characters), `shared` (boolean), `filters` (an object, at most 8192 bytes as
+  UTF-8 JSON), an optional `sort` (`{ field, dir }`, `field` at most 64
+  characters, `dir` `asc` or `desc`, or `null`) and an optional
+  `visibleColumns` (at most 64 ids of at most 64 characters each, or `null`).
+  The Admin UI writes `filters` as `{ scope, organizationId?, status?, q? }`.
+  Anything outside those bounds is `400 VALIDATION_FAILED`. The shapes are
+  `createQuoteRequestSavedViewRequestSchema` and
+  `updateQuoteRequestSavedViewRequestSchema` in `@endora-commerce/contracts`.
+- **Loading is a new list read.** A view's values only set the list's
+  controls; the list is then read through the ordinary
+  `GET /api/v1/admin/quote-requests` as the loader, so the server applies the
+  loader's own visibility and `scope=mine` resolves against the loader. A view
+  never carries an organization name.
+- **Two caller-relative flags.** Every view in a response carries
+  `ownedByCaller` and `canModify` — `true` when the caller owns the view, or
+  the view is shared and the caller is a platform admin in the sense below. The
+  Admin UI enables **Delete view** from `canModify` and runs its duplicate-name
+  check against the views with `ownedByCaller`.
+- **Platform admin, for saved views,** is an admin whose request tenant context
+  has `mode === 'all'` — every role except `sales_representative`, the same
+  predicate the order list's views use. It is deliberately not the module's own
+  `role.code === 'platform_admin'` test, which the list's visibility uses.
+- **Refusals.** An absent view, or another admin's private view, is
+  `404 NOT_FOUND` — the two are indistinguishable. A shared view the caller
+  neither owns nor may modify as a platform admin is `403 FORBIDDEN`. A name
+  whose key the view's owner already uses on this list is
+  `409 RFQ_SAVED_VIEW_NAME_TAKEN`, *"You already have a saved view with this
+  name on the quote request list. Choose a different name."*, in the request's
+  language.
+- **The name key** is the name trimmed and lower-cased — no accent folding. The
+  rule binds the view's **owner**: a platform admin renaming a colleague's
+  shared view is refused when the colleague already uses that key. Creating a
+  view and changing a name's key take a transaction-scoped advisory lock keyed
+  on the owner, and a unique index on `(owner_admin_user_id, lower(name))`
+  backs it, so two concurrent saves under one name leave exactly one view.
+- **No audit.** Saved views are personal UI configuration and do not run
+  through the Command Bus. When an admin modifies or deletes a view they do not
+  own, the service writes one `info` log record:
+  `{ event: 'saved_view.updated' | 'saved_view.deleted', list: 'quote_request_list_saved_views', viewId, ownerAdminUserId, actorAdminUserId }`.
+  That log line is the only trace.
+
 ## Settings
 
 Three settings drive the module — all live under the `quote_requests`
@@ -406,6 +532,11 @@ row per organization that has a value) and `quote_request_account_policies`
 A missing row means the default. Deleting the organization or the customer
 account deletes its row and nothing else — no quote request refers to either
 table.
+
+`quote_request_list_saved_views` holds the list's saved views (see *Saved
+views*). It is platform-global, not organization-scoped: it stores filter
+values, never quote requests, and is not removed when the module is switched
+off.
 
 `organization_sales_rep_assignments` — the m:n relation between
 organizations and admin users that the visibility model above reads —

@@ -34,6 +34,7 @@ otherwise; every price names its currency either way. A malformed code is refuse
 | `POST /api/v1/admin/catalog/products` | admin | Create product (`type` immutable post-create; `sku` is editable) |
 | `PATCH /api/v1/admin/catalog/products/:id` | admin | Update (incl. `sku`); writes an audit row with stateBefore / stateAfter; refuses with `409 sku_in_use` if the new SKU already belongs to another product |
 | `DELETE /api/v1/admin/catalog/products/:id` | admin | Archive (soft) |
+| `GET`, `POST /api/v1/admin/catalog/products/list-views`; `PATCH`, `DELETE …/list-views/:id` | admin | Saved views on the product list — see *Saved views* below |
 | `GET /api/v1/admin/catalog/attributes` | admin | List attributes |
 | `GET /api/v1/admin/catalog/attributes/by-flag?flag=isPromoRule\|isComparable\|...` | admin | Picker payload — every attribute carrying the requested flag |
 | `GET /api/v1/admin/catalog/attributes/:idOrKey` | admin | Single attribute read |
@@ -57,7 +58,111 @@ otherwise; every price names its currency either way. A malformed code is refuse
 
 `Product`, `ProductVariant`, `Category`, `ProductAttribute`,
 `SalesChannel`, plus the M:N bridges
-`product_categories`, `sales_channel_products`, `product_assets`.
+`product_categories`, `sales_channel_products`, `product_assets`, and
+`ProductListSavedView` (`product_list_saved_views`, the product list's saved
+views).
+
+## Saved views
+
+A saved view is a named set of product-list filters that an admin can apply
+again with one selection.
+
+### Using saved views
+
+The product list's toolbar carries a **Saved views** selector, whose first
+entry is **— Select a view —**, and two buttons beside it: **Save view** and
+**Delete view**.
+
+- **What a view remembers.** The status, the type and the search text — and
+  nothing else. The **Stock**, **Category** and **Channel** chips are not saved.
+  Choosing a view sets status, type and search to the view's values (a value
+  the list no longer offers loads as *All*), resets the Stock chip to *All*,
+  discards anything you had changed and not saved, clears the row selection and
+  goes back to the first page.
+- **Saving.** **Save view** opens one dialog with a **Name** field and a
+  **Share with every admin who can open this list** checkbox. The checkbox
+  starts unchecked, so a new view is private unless you tick it. The name is
+  required, leading and trailing spaces are removed, and it can be at most 160
+  characters long. Problems are shown on the field and nothing is sent until
+  they are fixed; a refusal from the server is shown inside the dialog, which
+  stays open with what you typed.
+- **Private or shared.** A private view is listed only for you. A shared view
+  is listed for every admin who can open the product list, with **(shared)**
+  after its name. The selector does not show who saved a shared view.
+- **One name per admin.** You cannot hold two views on this list whose names
+  differ only in letter case or in surrounding spaces. The dialog answers
+  **You already have a view with this name.** before sending anything, and the
+  server refuses the name as well. Accented letters are different letters:
+  *Wózki* and *Wozki* are two names. Names other admins use, and names used on
+  other lists, do not count.
+- **Deleting.** **Delete view** is enabled only when the selected view is one
+  you may delete. It asks for confirmation and names the view —
+  **Delete the view “…”?** — and for a shared view adds that it will disappear
+  for every admin who can open this list. Nothing is deleted until you press
+  **Delete**.
+- **Who may delete or change a shared view.** Its owner, or **any admin whose
+  role is not `sales_representative`** — not only the `platform_admin` role: a
+  custom role such as a catalog manager counts as well. **Such a deletion or
+  change leaves no audit trail**: saved views are not written to the audit log.
+  Decide which roles you grant with that in mind before your team relies on
+  shared views. A sales representative can delete only their own views, and
+  nobody can see or delete another admin's private view.
+- **Only save, load and delete.** The Admin UI does not rename a view, change
+  whether it is shared, or overwrite it with the current filters; save a new
+  view and delete the old one instead. There is no limit on the number of
+  views.
+
+### Saved views API
+
+| Method and path | Answers |
+| --- | --- |
+| `GET /api/v1/admin/catalog/products/list-views` | `200` — the caller's own views plus every shared view, ordered by name |
+| `POST /api/v1/admin/catalog/products/list-views` | `201` — the created view |
+| `PATCH /api/v1/admin/catalog/products/list-views/:id` | `200` — the modified view; any of `name`, `shared`, `filters`. The Admin UI does not call it |
+| `DELETE /api/v1/admin/catalog/products/list-views/:id` | `200` — `{ data: { deleted: <id> } }` |
+
+- **Gate.** All four routes are gated by `catalog:read` — the code that gates
+  reading the product list; there is no separate permission code. A request
+  without an admin actor is refused with `401 UNAUTHORIZED`. The static
+  `list-views` segment takes precedence over `products/:id`.
+- **Body.** `name` (trimmed, 1–160 characters, no Unicode control or format
+  characters), `shared` (boolean) and `filters` (an object, at most 8192 bytes
+  as UTF-8 JSON). The product list has no sort or column control, so a view
+  stores no `sort` or `visibleColumns`; those keys are dropped. The Admin UI
+  writes `filters` as `{ status?, type?, q? }`, only the non-default ones.
+  Anything outside those bounds is `400 VALIDATION_FAILED`. The shapes are
+  `createProductSavedViewRequestSchema` and
+  `updateProductSavedViewRequestSchema` in `@endora-commerce/contracts`.
+- **Two caller-relative flags.** Every view in a response carries
+  `ownedByCaller` and `canModify` — `true` when the caller owns the view, or
+  the view is shared and the caller is a platform admin in the sense below. The
+  Admin UI enables **Delete view** from `canModify` and runs its duplicate-name
+  check against the views with `ownedByCaller`.
+- **Platform admin, for saved views,** is an admin whose request tenant context
+  has `mode === 'all'` — every role except `sales_representative`, the same
+  predicate the order list's views use.
+- **Refusals.** An absent view, or another admin's private view, is
+  `404 NOT_FOUND` — the two are indistinguishable. A shared view the caller
+  neither owns nor may modify as a platform admin is `403 FORBIDDEN`. A name
+  whose key the view's owner already uses on this list is
+  `409 PRODUCT_SAVED_VIEW_NAME_TAKEN`, *"You already have a saved view with this
+  name on the product list. Choose a different name."*, in the request's
+  language.
+- **The name key** is the name trimmed and lower-cased — no accent folding. The
+  rule binds the view's **owner**: a platform admin renaming a colleague's
+  shared view is refused when the colleague already uses that key. Creating a
+  view and changing a name's key take a transaction-scoped advisory lock keyed
+  on the owner, and a unique index on `(owner_admin_user_id, lower(name))`
+  backs it, so two concurrent saves under one name leave exactly one view.
+- **No audit.** Saved views are personal UI configuration and do not run
+  through the Command Bus. When an admin modifies or deletes a view they do not
+  own, the service writes one `info` log record:
+  `{ event: 'saved_view.updated' | 'saved_view.deleted', list: 'product_list_saved_views', viewId, ownerAdminUserId, actorAdminUserId }`.
+  That log line is the only trace.
+- **Storage.** `product_list_saved_views` (`ProductListSavedView`) is
+  platform-global, not organization-scoped: it holds filter values, never list
+  results, and every list read after a view is applied runs under the loader's
+  own scope.
 
 ## Events emitted
 

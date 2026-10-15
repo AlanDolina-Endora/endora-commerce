@@ -348,7 +348,7 @@ złożenie zamówienia niczego nie ogłasza.
   się po utworzeniu zamówienia.
 - **Lista** — `GET /api/v1/admin/orders` filtruje, sortuje i wyszukuje po stronie serwera, z
   licznikami dla każdego statusu; `GET …/export` zwraca CSV strumieniowo; zapisane widoki przez
-  `…/list-views` (prywatne lub współdzielone).
+  `…/list-views` — zob. *Zapisane widoki* niżej.
 - **Operacje masowe** — `POST …/bulk/status` (zamówienia, które się kwalifikują, zmieniają status;
   pominięte są zgłaszane z powodem — pominięte zamówienie nie zmieniło statusu) oraz
   `…/bulk/print-invoices`.
@@ -401,6 +401,99 @@ sprzedaży, który wskazuje żądanie; `salesChannelId`, który nie wskazuje ża
 odrzucany z `404 NOT_FOUND`, a ekran pokazuje *Nie udało się przeliczyć cen*, nie oznaczając żadnej
 pozycji. Produkt usunięty miękko jest wyceniany jak dotąd. Utworzone zamówienie zawiera dokładnie
 pozycje i ilości widoczne na ekranie, w niezmienionym kształcie żądania `POST /api/v1/admin/orders`.
+
+## Zapisane widoki
+
+Zapisany widok to nazwany zestaw filtrów listy zamówień, który administrator może ponownie
+zastosować jednym wyborem.
+
+### Korzystanie z zapisanych widoków
+
+Na pasku narzędzi listy zamówień jest lista wyboru **Zapisane widoki**, której pierwsza pozycja to
+**— Wybierz widok —**, a obok niej dwa przyciski: **Zapisz widok** i **Usuń widok**.
+
+- **Co zapamiętuje widok.** Wszystkie filtry listy zamówień — status, status płatności, kanał
+  sprzedaży, metodę płatności, metodę dostawy, zakres dat, wyszukiwany tekst, nazwy organizacji i
+  klienta oraz zakres kwoty — a także sortowanie i widoczne kolumny. Wybranie widoku zastępuje je
+  wszystkie wartościami z widoku: filtr, którego widok nie zawiera, zostaje wyczyszczony, to, co
+  zmieniono i nie zapisano, przepada, a lista wraca na pierwszą stronę.
+- **Zapisywanie.** **Zapisz widok** otwiera jedno okno z polem **Nazwa** i polem wyboru
+  **Udostępnij wszystkim administratorom, którzy mają dostęp do tej listy**. Pole wyboru jest na
+  początku odznaczone, więc nowy widok jest prywatny, dopóki go nie zaznaczysz. Nazwa jest
+  wymagana, spacje na początku i na końcu są usuwane, a jej długość to najwyżej 160 znaków.
+  Problemy są pokazywane przy polu i nic nie zostaje wysłane, dopóki ich nie poprawisz; odmowa
+  serwera jest pokazywana w oknie, które pozostaje otwarte z wpisanymi danymi.
+- **Prywatny czy udostępniony.** Widok prywatny widzisz tylko ty. Widok udostępniony widzi każdy
+  administrator, który ma dostęp do listy zamówień, z dopiskiem **(udostępniony)** po nazwie. Lista
+  wyboru nie pokazuje, kto zapisał udostępniony widok.
+- **Jedna nazwa na administratora.** Nie możesz mieć na tej liście dwóch widoków, których nazwy
+  różnią się tylko wielkością liter albo spacjami na początku lub końcu. Okno odpowiada
+  **Masz już widok o tej nazwie.**, zanim cokolwiek wyśle, a serwer także odrzuca taką nazwę.
+  Litery ze znakami diakrytycznymi są innymi literami: *Zamówienia* i *Zamowienia* to dwie różne
+  nazwy. Nazwy używane przez innych administratorów i nazwy z listy produktów lub zapytań
+  ofertowych się nie liczą. Widoki, których nazwy powtarzały się już przed wprowadzeniem tej
+  zasady, pozostały bez zmian.
+- **Usuwanie.** **Usuń widok** jest aktywny tylko wtedy, gdy wybrany widok jest jednym z tych,
+  które możesz usunąć. Prosi o potwierdzenie i podaje nazwę widoku — **Usunąć widok „…”?** — a dla
+  widoku udostępnionego dodaje, że zniknie on dla wszystkich administratorów, którzy mają dostęp do
+  tej listy. Nic nie zostaje usunięte, dopóki nie naciśniesz **Usuń**.
+- **Kto może usunąć lub zmienić udostępniony widok.** Jego właściciel albo **każdy administrator,
+  którego rola nie jest `sales_representative`** — nie tylko rola `platform_admin`: liczy się
+  także rola niestandardowa. **Takie usunięcie lub zmiana nie zostawia śladu audytu**: zapisane
+  widoki nie trafiają do dziennika audytu. Weź to pod uwagę, przydzielając role, zanim zespół
+  zacznie polegać na udostępnionych widokach. Opiekun handlowy może usuwać tylko własne widoki, a
+  prywatnego widoku innego administratora nikt nie widzi i nikt nie może go usunąć.
+- **Tylko zapis, wczytanie i usunięcie.** Panel administracyjny nie zmienia nazwy widoku, nie
+  zmienia tego, czy jest udostępniony, i nie nadpisuje go bieżącymi filtrami; zamiast tego zapisz
+  nowy widok i usuń stary. Liczba widoków nie jest ograniczona.
+
+### API zapisanych widoków
+
+| Metoda i ścieżka | Odpowiedź |
+| --- | --- |
+| `GET /api/v1/admin/orders/list-views` | `200` — własne widoki wywołującego oraz wszystkie widoki udostępnione, posortowane po nazwie |
+| `POST /api/v1/admin/orders/list-views` | `201` — utworzony widok |
+| `PATCH /api/v1/admin/orders/list-views/:id` | `200` — zmieniony widok; dowolne z `name`, `shared`, `filters`, `sort`, `visibleColumns`. Panel administracyjny go nie wywołuje |
+| `DELETE /api/v1/admin/orders/list-views/:id` | `200` — `{ data: { deleted: <id> } }` |
+
+- **Uprawnienie.** Wszystkie cztery trasy wymagają `orders:read`; nie ma osobnego kodu
+  uprawnienia. Żądanie bez aktora-administratora jest odrzucane z `401 UNAUTHORIZED`.
+- **Treść żądania.** `name` (po przycięciu 1–160 znaków, bez znaków sterujących ani formatujących
+  Unicode), `shared` (wartość logiczna), `filters` (obiekt, najwyżej 8192 bajty jako JSON w
+  UTF-8), `sort` (`{ field, dir }`, `field` najwyżej 64 znaki, `dir` to `asc` albo `desc`;
+  wymagane przy tworzeniu) oraz opcjonalne `visibleColumns` (najwyżej 64 identyfikatory po
+  najwyżej 64 znaki albo `null` dla kolumn domyślnych). Wszystko poza tymi granicami to
+  `400 VALIDATION_FAILED`. Kształty to `createOrderSavedViewRequestSchema` i
+  `updateOrderSavedViewRequestSchema` w `@endora-commerce/contracts`.
+- **Dwie flagi zależne od wywołującego.** Każdy widok w odpowiedzi ma `ownedByCaller` i
+  `canModify` — `true`, gdy wywołujący jest właścicielem widoku albo widok jest udostępniony, a
+  wywołujący jest administratorem platformy w rozumieniu poniżej. Panel administracyjny włącza
+  **Usuń widok** na podstawie `canModify` i sprawdza powtórzenie nazwy wśród widoków z
+  `ownedByCaller`.
+- **Administrator platformy, na potrzeby zapisanych widoków,** to administrator, którego zakres
+  zamówień w panelu ma `allowAll` — a ten zakres administratora w module `organizations` przyznaje
+  każdej roli poza `sales_representative`.
+- **Odmowy.** Nieistniejący widok i prywatny widok innego administratora to `404 NOT_FOUND` —
+  nie da się ich odróżnić. Udostępniony widok, którego wywołujący nie jest właścicielem i którego
+  nie może zmienić jako administrator platformy, to `403 FORBIDDEN`. Nazwa, której klucza
+  właściciel widoku już używa na tej liście, to `409 ORDER_SAVED_VIEW_NAME_TAKEN`, *„Masz już
+  zapisany widok o tej nazwie na liście zamówień. Wybierz inną nazwę.”*, w języku żądania.
+- **Klucz nazwy** to nazwa przycięta i zapisana małymi literami, porównywana w PostgreSQL jako
+  `lower(btrim(name))` — bez usuwania znaków diakrytycznych. Zasada wiąże **właściciela** widoku:
+  administrator platformy zmieniający nazwę udostępnionego widoku kolegi dostaje odmowę, gdy kolega
+  już używa tego klucza. Utworzenie widoku i zmiana klucza nazwy biorą blokadę doradczą
+  (advisory lock) w zakresie transakcji, kluczowaną właścicielem, więc dwa równoczesne zapisy pod
+  jedną nazwą zostawiają dokładnie jeden widok. Wiersze w `order_list_saved_views`, które już
+  dzieliły klucz, pozostawiono bez zmian; zasada dotyczy tylko zapisów, a zapisana nazwa może być
+  dłuższa, niż pozwala reguła zapisu.
+- **Brak audytu.** Zapisane widoki to osobista konfiguracja interfejsu i nie przechodzą przez
+  Command Bus. Gdy administrator zmienia lub usuwa widok, którego nie jest właścicielem, usługa
+  zapisuje jeden wpis dziennika na poziomie `info`:
+  `{ event: 'saved_view.updated' | 'saved_view.deleted', list: 'order_list_saved_views', viewId, ownerAdminUserId, actorAdminUserId }`.
+  Ten wpis jest jedynym śladem.
+- **Przechowywanie.** `order_list_saved_views` (`OrderListSavedView`) jest globalna dla platformy,
+  a nie przypisana do organizacji: przechowuje wartości filtrów, nigdy wyniki listy, a każdy odczyt
+  listy po zastosowaniu widoku odbywa się w zakresie osoby, która go wczytała.
 
 ## Zamówienie złożone z zaakceptowanego zapytania ofertowego
 
