@@ -294,7 +294,16 @@ export function registerErrorEnvelope(app: FastifyInstance, options: ErrorEnvelo
     // those to a client error is a decision about that error, not this one.
     // A 5xx `statusCode` keeps reaching the logged fallback. Silent, like every
     // other 4xx: the client exceeded a budget; nothing is broken.
-    if (isRateLimitRefusal(error)) {
+    //
+    // **And only the limiter's own 429** (security review W4). A handler that
+    // lets an upstream client's 429 escape is this server's fault, and mapping
+    // it silently would hide it, so such an error reaches the logged
+    // `500 INTERNAL` fallback like any other unrecognised `statusCode`. The
+    // limiter's refusal is told apart by the `Retry-After` it has already set
+    // on the reply: it writes that header on the exceeded path only, whereas
+    // the `x-ratelimit-*` headers go on every request it counts — including
+    // an allowed one whose handler then throws.
+    if (isRateLimitRefusal(error, reply)) {
       const envelope: ErrorEnvelope = {
         error: {
           code: ERROR_CODES.RATE_LIMITED,
@@ -566,10 +575,14 @@ function varyBy(reply: FastifyReply, field: string): void {
   reply.header('Vary', [...fields, field].join(', '));
 }
 
-/** A thrown error carrying `statusCode: 429` — the rate limiter's refusal; see the call site. */
-function isRateLimitRefusal(error: unknown): boolean {
+/**
+ * The rate limiter's refusal: a thrown `statusCode: 429` on a reply the limiter
+ * has stamped with `Retry-After` and `x-ratelimit-limit`; see the call site.
+ */
+function isRateLimitRefusal(error: unknown, reply: FastifyReply): boolean {
   if (!error || typeof error !== 'object') return false;
-  return (error as { statusCode?: unknown }).statusCode === 429;
+  if ((error as { statusCode?: unknown }).statusCode !== 429) return false;
+  return reply.hasHeader('retry-after') && reply.hasHeader('x-ratelimit-limit');
 }
 
 /** `{name}` left standing after interpolation — see the call site. */

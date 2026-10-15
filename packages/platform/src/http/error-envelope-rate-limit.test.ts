@@ -25,6 +25,13 @@ import { registerErrorEnvelope } from './error-envelope.js';
  * client error would be a decision about each of them, not this one. A thrown
  * error with a 5xx `statusCode`, or none, keeps answering `500 INTERNAL` and is
  * still logged.
+ *
+ * And only the **limiter's** 429 (security review W4). A handler that lets an
+ * upstream client's 429 escape is a fault of this server, not the caller
+ * exceeding a budget; mapping it silently would hide it. The limiter's refusal
+ * is recognised by the `Retry-After` it set on the reply — a header it writes
+ * on the exceeded path only, where the `x-ratelimit-*` headers are written on
+ * every request it counts.
  */
 
 interface CapturedLine {
@@ -72,6 +79,49 @@ describe('the error envelope answers a rate-limited request 429', () => {
       lines.filter((line) => line.level >= 50),
       'a refused request is the client exceeding a budget, not a server fault',
     ).toHaveLength(0);
+  });
+
+  it("answers a route's own config.rateLimit refusal the same way", async () => {
+    const { app, lines } = buildProbe();
+    await app.register(rateLimit, { global: false });
+    app.get('/route-limited', { config: { rateLimit: { max: 1, timeWindow: '1 minute' } } }, async () => ({
+      ok: true,
+    }));
+
+    expect((await app.inject({ method: 'GET', url: '/route-limited' })).statusCode).toBe(200);
+    const refused = await app.inject({ method: 'GET', url: '/route-limited' });
+    expect(refused.statusCode, refused.body).toBe(429);
+    expect(refused.json()).toMatchObject({ error: { code: ERROR_CODES.RATE_LIMITED } });
+    expect(lines.filter((line) => line.level >= 50)).toHaveLength(0);
+  });
+
+  it('does not silently map a foreign 429 thrown on a route the limiter counts', async () => {
+    // An upstream client's 429 escaping a handler: the reply already carries
+    // the limiter's `x-ratelimit-*` headers for this (allowed) request, and no
+    // `Retry-After`. It is this server's fault, so it stays a logged 500.
+    const { app, lines } = buildProbe();
+    await app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
+    app.get('/upstream-429', async () => {
+      throw Object.assign(new Error('upstream said too many requests'), { statusCode: 429 });
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/upstream-429' });
+    expect(response.headers['x-ratelimit-limit']).toBe('100');
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toMatchObject({ error: { code: ERROR_CODES.INTERNAL } });
+    expect(lines.filter((line) => line.level >= 50)).toHaveLength(1);
+  });
+
+  it('does not silently map a foreign 429 thrown where no limiter runs', async () => {
+    const { app, lines } = buildProbe();
+    app.get('/upstream-429', async () => {
+      throw Object.assign(new Error('upstream said too many requests'), { statusCode: 429 });
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/upstream-429' });
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toMatchObject({ error: { code: ERROR_CODES.INTERNAL } });
+    expect(lines.filter((line) => line.level >= 50)).toHaveLength(1);
   });
 
   it('keeps a thrown error with a 5xx statusCode a logged 500 INTERNAL', async () => {
