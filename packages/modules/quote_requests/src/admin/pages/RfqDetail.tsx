@@ -25,6 +25,7 @@ import {
   proposalOf,
   referencePriceOf,
   referenceViewOf,
+  useCurrentPrices,
   type CurrentPrices,
   type ReferenceView,
 } from '../reference-view.js';
@@ -171,9 +172,6 @@ export function RfqDetail(): ReactNode {
   // lapsed banner, so the Modify tab opens with the deadline field focused
   // rather than at the top of a form the operator then has to scan.
   const [validityFocusNonce, setValidityFocusNonce] = useState(0);
-  // Feature 146 (FR-006) — the customer's current price for every line with no
-  // stored reference, asked once per load and read by both Overview and Modify.
-  const [currentPrices, setCurrentPrices] = useState<CurrentPrices>({});
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!id) return;
@@ -198,20 +196,10 @@ export function RfqDetail(): ReactNode {
     void refresh();
   }, [refresh]);
 
-  useEffect(() => {
-    if (!rfq) return undefined;
-    let live = true;
-    setCurrentPrices({});
-    for (const it of rfq.items) {
-      if (it.referencePrice) continue;
-      void probeCustomerPrice(rfq, it).then((price) => {
-        if (live) setCurrentPrices((prev) => ({ ...prev, [it.id]: price }));
-      });
-    }
-    return (): void => {
-      live = false;
-    };
-  }, [rfq]);
+  // Feature 146 (FR-006) — the customer's current price for every line with no
+  // stored reference, read by both Overview and Modify.
+  const currentPrices = useCurrentPrices(rfq);
+
 
   const approve = async (): Promise<void> => {
     if (!rfq) return;

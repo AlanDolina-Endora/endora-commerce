@@ -38,6 +38,7 @@ export const BUNDLE = passthroughBundle('core', [
   'rfq.detail.reference.perBaseUnit',
   'rfq.detail.modify.saveRevision',
   'rfq.detail.modify.agreedUnitPrice',
+  'rfq.detail.approve',
 ]);
 
 export interface ItemOverrides {
@@ -102,6 +103,34 @@ export function rfqPayload(item: ItemOverrides = {}): Record<string, unknown> {
     createdAt: '2026-10-01T10:00:00.000Z',
     updatedAt: '2026-10-01T10:00:00.000Z',
     version: 3,
+  };
+}
+
+/** One extra line of a multi-line payload (`rfqPayloadWithLines`). */
+export interface ExtraLine {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  referencePrice?: { amount: number; currency: string; capturedAt: string } | null;
+}
+
+/** The fixture request carrying the given lines instead of its one `Widget` line. */
+export function rfqPayloadWithLines(lines: ExtraLine[]): Record<string, unknown> {
+  const base = rfqPayload({ referencePrice: null });
+  const [template] = base['items'] as Array<Record<string, unknown>>;
+  return {
+    ...base,
+    items: lines.map((line) => ({
+      ...template,
+      id: line.id,
+      productId: line.productId,
+      productName: line.productName,
+      variantId: null,
+      variantLabel: null,
+      quantity: line.quantity,
+      referencePrice: line.referencePrice ?? null,
+    })),
   };
 }
 

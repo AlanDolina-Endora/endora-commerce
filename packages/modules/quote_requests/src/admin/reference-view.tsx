@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { apiClient } from '@endora-commerce/admin-kit/lib';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import {
@@ -83,6 +83,7 @@ export function proposalOf(item: ReferenceLine): number | null {
 export async function probeCustomerPrice(
   rfq: ProbeBuyer,
   line: { productId: string; variantId?: string | null; quantity: number },
+  signal?: AbortSignal,
 ): Promise<ReferenceAmount | null> {
   try {
     const params = new URLSearchParams({
@@ -93,7 +94,10 @@ export async function probeCustomerPrice(
     if (line.variantId) params.set('variantId', line.variantId);
     const res = await apiClient.get<{
       data: { resolvedPrice: { amount: string; currency: string } | null };
-    }>(`/api/v1/admin/products/${line.productId}/resolved-price?${params.toString()}`);
+    }>(
+      `/api/v1/admin/products/${line.productId}/resolved-price?${params.toString()}`,
+      signal ? { signal } : undefined,
+    );
     const resolved = res.data.resolvedPrice;
     if (!resolved) return null;
     const amount = Number(resolved.amount);
@@ -158,4 +162,149 @@ export function DifferenceCell({
       </div>
     </div>
   );
+}
+
+/** How many current-price probes one screen keeps in flight at once (review fix S4). */
+export const PROBE_CONCURRENCY = 4;
+
+interface Limiter {
+  /**
+   * Run `task` when a slot is free; `null` when `signal` aborted before it
+   * started, or when the task failed. A slot is held until the task settles.
+   */
+  run<T>(task: () => Promise<T>, signal: AbortSignal): Promise<{ value: T } | null>;
+}
+
+function createLimiter(max: number): Limiter {
+  let active = 0;
+  const queue: Array<() => void> = [];
+  const next = (): void => {
+    while (active < max && queue.length > 0) queue.shift()!();
+  };
+  return {
+    run<T>(task: () => Promise<T>, signal: AbortSignal): Promise<{ value: T } | null> {
+      return new Promise((resolve) => {
+        queue.push((): void => {
+          // A task whose screen moved on before its turn is dropped unasked.
+          if (signal.aborted) {
+            resolve(null);
+            return;
+          }
+          active += 1;
+          task()
+            .then(
+              (value) => resolve({ value }),
+              () => resolve(null),
+            )
+            .finally(() => {
+              active -= 1;
+              next();
+            });
+        });
+        next();
+      });
+    },
+  };
+}
+
+/** A line the probe asks about: one with no stored reference. */
+interface ProbeLine {
+  id: string;
+  productId: string;
+  variantId: string | null;
+  quantity: number;
+}
+
+interface ProbeRequest {
+  buyer: { customerAccountId: string; salesChannelId: string | null };
+  lines: ProbeLine[];
+}
+
+/** The request lines `useCurrentPrices` reads. */
+export type ProbedLine = ReferenceLine & {
+  productId: string;
+  variantId?: string | null;
+  quantity: number;
+};
+
+/**
+ * Everything the probe depends on, as one string: equal content gives an equal
+ * key, so a refresh that changed none of it re-runs nothing.
+ */
+function probeKeyOf(rfq: (ProbeBuyer & { items: readonly ProbedLine[] }) | null): string | null {
+  if (rfq === null) return null;
+  const request: ProbeRequest = {
+    buyer: { customerAccountId: rfq.customerAccountId, salesChannelId: rfq.salesChannelId ?? null },
+    lines: rfq.items
+      .filter((item) => !item.referencePrice)
+      .map((item) => ({
+        id: item.id,
+        productId: item.productId,
+        variantId: item.variantId ?? null,
+        quantity: item.quantity,
+      })),
+  };
+  return JSON.stringify(request);
+}
+
+/** What one line's answer was asked for; a different signature is a different question. */
+function signatureOf(buyer: ProbeRequest['buyer'], line: ProbeLine): string {
+  return JSON.stringify([buyer.customerAccountId, buyer.salesChannelId, line.productId, line.variantId, line.quantity]);
+}
+
+/**
+ * The customer's current price for every line of `rfq` with no stored
+ * reference (FR-006), read by Overview and Modify alike.
+ *
+ * Bounded and incremental (review fix S4): at most {@link PROBE_CONCURRENCY}
+ * probes in flight; keyed on the probed lines' content rather than on the
+ * request object, so a refresh that changed none of them asks nothing again;
+ * a line whose product, variant or quantity changed — or every line, when the
+ * buyer or channel did — is asked again, and the previous answers stay shown
+ * meanwhile instead of flashing back to "—". Leaving the screen aborts what is
+ * in flight; StrictMode's mount–unmount–mount is the same abort, followed by a
+ * second run that asks again, because a line is recorded as answered only when
+ * its answer arrives.
+ */
+export function useCurrentPrices(
+  rfq: (ProbeBuyer & { items: readonly ProbedLine[] }) | null,
+): CurrentPrices {
+  const key = useMemo(() => probeKeyOf(rfq), [rfq]);
+  const [prices, setPrices] = useState<CurrentPrices>({});
+  const answered = useRef(new Map<string, string>());
+  const limiter = useRef<Limiter | null>(null);
+  limiter.current ??= createLimiter(PROBE_CONCURRENCY);
+
+  useEffect(() => {
+    if (key === null) return undefined;
+    const { buyer, lines } = JSON.parse(key) as ProbeRequest;
+    const controller = new AbortController();
+    const present = new Set(lines.map((line) => line.id));
+    for (const id of [...answered.current.keys()]) {
+      if (!present.has(id)) answered.current.delete(id);
+    }
+    setPrices((previous) => {
+      const stale = Object.keys(previous).filter((id) => !present.has(id));
+      if (stale.length === 0) return previous;
+      const next = { ...previous };
+      for (const id of stale) delete next[id];
+      return next;
+    });
+    for (const line of lines) {
+      const signature = signatureOf(buyer, line);
+      if (answered.current.get(line.id) === signature) continue;
+      void limiter
+        .current!.run(() => probeCustomerPrice(buyer, line, controller.signal), controller.signal)
+        .then((answer) => {
+          if (controller.signal.aborted || answer === null) return;
+          answered.current.set(line.id, signature);
+          setPrices((previous) => ({ ...previous, [line.id]: answer.value }));
+        });
+    }
+    return (): void => {
+      controller.abort();
+    };
+  }, [key]);
+
+  return prices;
 }
