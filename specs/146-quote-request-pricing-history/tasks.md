@@ -409,12 +409,14 @@ sequence** on one checkout, not in parallel. Phases 11 and 12 may run in paralle
 - [x] T096 `release:changeset`-equivalent: `pnpm --filter backend run check:release-intent -- --since origin/master && pnpm --filter backend run test:release-gate`
 - [x] T097 [PG] Every `[PG]` file this feature added or extended, in one run: `pnpm --filter backend exec vitest run test/integration/quote_requests test/contract/quote_requests test/contract/price_lists/admin-resolved-price.test.ts test/integration/crm/value.test.ts test/integration/crm/quote-conversion.test.ts test/integration/crm/quote-requests-off.test.ts test/contract/admin_users/permission-inventory.test.ts test/contract/kernel/harness-parity.test.ts` — paste the summary into the PR (D-198: CI will not run these before merge)
 - [x] T098 Deleted or moved a file? `grep -rn` its path under `backend/test/` before finishing (AGENTS.md trap); confirm `git status` shows no stray generated artefact
-- [ ] T099 Walk `quickstart.md` §1–§4 on `pnpm run dev` and note any divergence in the PR
+- [x] T099 Walk `quickstart.md` §1–§4 on `pnpm run dev` and note any divergence in the PR
 
 **Verification**: T091–T097 all exit 0, each run on its own; the PR description carries the T097 summary and the T099 notes.
 
-T099 stays open: its headless part is covered by the T097 files (map below); the browser walk of
-`quickstart.md` §1–§4 on `pnpm run dev` has not been done and is handed to the reviewer.
+T099 done: its headless part is covered by the T097 files (map below); the browser walk of
+`quickstart.md` §1–§4 (the `test-U3` scenario) was done by the owner on 2026-10-15. One defect
+was found — the Modify tab's empty product field, below — fixed in 61b002d22 and re-checked by the
+owner: OK. Everything else in §1–§4 matched the quickstart.
 
 **T099 owner finding (2026-10-15, manual test).** On a quote request's Modify tab the product field
 of every kept line was empty; the product appeared only after the field's dropdown was opened and
