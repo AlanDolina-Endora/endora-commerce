@@ -304,6 +304,11 @@ export function OrdersList(): ReactNode {
 
   const applyView = (view: SavedViewState): void => {
     const f = view.filters;
+    // FR-011: a loaded view starts on the first page. Set here, in the same
+    // batch as the filters, so the list is never requested with the old page;
+    // the reset effect below runs only after the first request has gone out.
+    setPage(0);
+    setSelected(new Set());
     setStatusCodes(asStringArray(f['status']));
     setPaymentStatuses(asStringArray(f['paymentStatus']));
     setSalesChannelIds(asStringArray(f['salesChannelId']));

@@ -273,6 +273,63 @@ describe('OrdersList — saved views on the kit control (feature 147, #288)', ()
     });
   });
 
+  describe('loading a view returns the list to its first page (FR-011)', () => {
+    /** Same filters and sort as the page's defaults; only the columns differ. */
+    const COLUMNS_ONLY = view('66666666-6666-4666-8666-666666666666', 'Columns only', {
+      sort: { field: 'placedAt', dir: 'desc' },
+      visibleColumns: ['order', 'total'],
+    });
+    /** Only a debounced free-text filter differs from the page's defaults. */
+    const TEXT_ONLY = view('77777777-7777-4777-8777-777777777777', 'Text only', {
+      filters: { q: 'acme' },
+      sort: { field: 'placedAt', dir: 'desc' },
+    });
+
+    beforeEach(() => {
+      const base = api.get.getMockImplementation();
+      api.get.mockImplementation(async (path: string) => {
+        if (path.startsWith(ENDPOINT)) return { data: [...VIEWS, COLUMNS_ONLY, TEXT_ONLY] };
+        if (path.startsWith('/api/v1/admin/orders?')) {
+          return { data: [row('o1', 'ORD-1')], pagination: { page: 1, pageSize: 20, total: 40 }, counts: { new: 40 } };
+        }
+        return base?.(path);
+      });
+    });
+
+    function listRequestsSince(before: number): URLSearchParams[] {
+      return api.get.mock.calls
+        .slice(before)
+        .map(([path]) => path)
+        .filter((path): path is string => typeof path === 'string' && path.startsWith('/api/v1/admin/orders?'))
+        .map((path) => new URLSearchParams(path.slice(path.indexOf('?') + 1)));
+    }
+
+    async function goToPageTwo(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+      await user.click(screen.getByRole('button', { name: /Next/ }));
+      expect(await screen.findByText('Page 2 of 2')).toBeInTheDocument();
+      await waitFor(() => expect(listRequested('page=2')).toBe(true));
+    }
+
+    it.each([
+      ['a view whose filters and sort differ', NEW_BY_TOTAL.id, (p: URLSearchParams) => p.get('status') === 'new'],
+      ['a view whose filters equal the current ones and only the columns differ', COLUMNS_ONLY.id, () => true],
+      ['a view where only a text filter differs', TEXT_ONLY.id, (p: URLSearchParams) => p.get('q') === 'acme'],
+    ])('%s: no list request after loading carries the old page', async (_label, id, carriesView) => {
+      const user = await renderList();
+      await goToPageTwo(user);
+
+      const before = api.get.mock.calls.length;
+      await user.selectOptions(savedViewsSelect(), id);
+
+      expect(await screen.findByText('Page 1 of 2')).toBeInTheDocument();
+      expect(screen.queryByText('Page 2 of 2')).toBeNull();
+      await waitFor(() => expect(listRequestsSince(before).some(carriesView)).toBe(true));
+      const requests = listRequestsSince(before);
+      expect(requests.length).toBeGreaterThan(0);
+      for (const params of requests) expect(params.get('page')).toBe('1');
+    });
+  });
+
   it('a view with no sort at all loads the default sort', async () => {
     const user = await renderList();
     await user.selectOptions(sortSelect(), 'businessId:asc');
