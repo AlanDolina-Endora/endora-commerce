@@ -429,24 +429,26 @@ T099 stays open: its headless part is covered by the T097 files (map below); the
 
 **Verification**: T099a–T099d all exit 0 (T099b may be reported as "not runnable here: no Docker"); results pasted into the PR beside T097's.
 
-### Gate results (2026-10-14, `origin/master` = merge base `433dc3890`)
+### Gate results (2026-10-15, rebased onto `origin/master` = `75cd0b8f2`)
 
-Every command was run on its own, in this order, on the primary checkout.
+The branch was rebased onto `75cd0b8f2`, which carries feature 145 (admin product picker, PR #297)
+and the fixes merged after it; the 2026-10-14 run against merge base `433dc3890` is superseded by
+this one. Every command was run on its own, in this order, on the primary checkout.
 
 | Task | Command | Result |
 | --- | --- | --- |
-| T091 | `pnpm install --frozen-lockfile && pnpm run build:packages` | pass — lockfile up to date, 78 projects, build exit 0 |
-| T092 | `pnpm --filter backend run test:unit:fast` (alone) | pass — 351 files, 7528 tests; re-run after the fixture fix: same |
-| T093 | the 48 lines of `quality.yml`'s `quality` run-block, one per invocation, `NODE_OPTIONS=--max-old-space-size=2560` | pass — 48/48 exit 0; re-run in full after the fixture fix: 48/48 |
-| T094 | `bash scripts/check-naming.sh`; `bash scripts/check-language.sh` | pass — both exit 0 (re-run after the fix: same) |
-| T095 | `pnpm --filter '!backend' run test` | pass — 67 workspace suites, 906 files, 9341 tests, 0 failed (`mod-quote-requests` 15 files / 211 tests, `mod-price-lists` 10 / 85, admin 257 / 2533, storefront 120 / 1243) |
-| T096 | `check:release-intent -- --since origin/master`; `test:release-gate` | pass — `changed=128 changesets-added=10 violations=0`; release gate 1 file / 29 tests |
-| T097 | 69 Postgres-backed files, **one `vitest run <file>` per invocation** (not one run, on this host's instruction), from `backend/` against `localhost:55433/56379/57700` | first pass: 66/69 files green, 3 red (below); the 3 re-run after the fix: 6 + 16 + 7 passed — **69/69 files, 551 tests green across the two passes**. The fix only adds to the shared helpers (a new export, a new function, a literal replaced by a same-value constant), so the 66 earlier results stand |
+| T091 | `pnpm install --frozen-lockfile && pnpm run build:packages` | pass — lockfile up to date, build exit 0; `composer:generate`, `manifests:generate` and `pnpm install --lockfile-only` re-run after the rebase left the tree unchanged |
+| T092 | `pnpm --filter backend run test:unit:fast` (alone) | pass — 352 files, 7535 tests |
+| T093 | the 48 lines of `quality.yml`'s `quality` run-block, one per invocation, `NODE_OPTIONS=--max-old-space-size=2560` | pass — 48/48 exit 0 |
+| T094 | `bash scripts/check-naming.sh`; `bash scripts/check-language.sh` | pass — both exit 0 |
+| T095 | `pnpm --filter '!backend' run test` | pass — 67 workspace suites, 932 files, 9646 tests, 0 failed (`mod-quote-requests` 16 files / 220 tests, `mod-price-lists` 12 / 99, contracts 29 / 538, admin 270 / 2717, storefront 124 / 1276) |
+| T096 | `check:release-intent -- --since origin/master`; `test:release-gate` | pass — `changed=151 changesets-added=12 violations=0`; release gate 1 file / 29 tests |
+| T097 | 76 Postgres-backed files plus `test/contract/kernel/openapi-baseline.test.ts`, **one `vitest run <file>` per invocation**, from `backend/` against `localhost:55433/56379/57700` | pass — 76/76 files, 588 tests green; the OpenAPI baseline re-recorded with `UPDATE_OPENAPI_BASELINE=1` produced no diff (the auto-merged fixture already held 145's and 146's routes), then passed without the flag (2 tests) |
 | T098 | `git diff --name-status --diff-filter=DR origin/master...HEAD`; `git status --porcelain`; `composer:check`, `manifests:check`, `overlay:check` | pass — no deleted or renamed file on the branch, tree clean after every step, all three checks up to date |
 | T099a | `pnpm --filter backend run pack-gate -- --no-build` | pass — 73 packages, 2 bins, 0 violations |
 | T099b | `bash scripts/boot-gate.sh --with-negatives` (Docker) | pass — 4 cases (positive + `drop-platform-bundles`, `drop-every-bundle`, `drop-overlays` all red as required); 71 modules, 9 overlays |
 | T099c | `pnpm --filter docs run build && pnpm --filter backend run verify:docs-build` | pass — `en` and `pl` built; 334 pages, 0 findings |
-| T099d | `node backend/scripts/dco-signoff.ts origin/master HEAD` | pass — 0 findings (34 commits when first run; 36 at the final HEAD) |
+| T099d | `node backend/scripts/dco-signoff.ts origin/master HEAD` | pass — 65 commits judged, 0 findings |
 
 **T097 files.** `test/contract/{quote_requests,price_lists}/*` and `test/integration/{quote_requests,price_lists}/*`
 (every file), `test/contract/carts/cart-conversions{,-happy}.contract.test.ts`,
@@ -454,9 +456,11 @@ Every command was run on its own, in this order, on the primary checkout.
 `test/integration/orders/{admin-write-scope,place-order-from-quote-request,quote-request-source-review}.test.ts`,
 `test/contract/customer_accounts/read-port-name-search.test.ts`,
 `test/integration/customers/customer-{address,deletion,moderation}-service.test.ts`,
-`test/contract/admin_users/permission-inventory.test.ts`, `test/contract/kernel/harness-parity.test.ts`.
+`test/contract/admin_users/permission-inventory.test.ts`, `test/contract/kernel/harness-parity.test.ts`,
+and, since the rebase, feature 145's `test/contract/orders/admin-order-preview{,-availability}.test.ts`
+(its `price_lists` bulk-add contract test is already in the `price_lists` glob).
 
-**Found and fixed by the gate.** `crm/quote-conversion`, `orders/place-order-from-quote-request` and
+**Found and fixed by the gate (2026-10-14 run).** `crm/quote-conversion`, `orders/place-order-from-quote-request` and
 `orders/quote-request-source-review` each raised a quote request, with a proposal, as
 `stub-customer-session-other-org`, whose customer account (`…a7`) had no row. The negotiation lock
 reads the owner's account and refuses by design when it does not resolve (analyze M5,
