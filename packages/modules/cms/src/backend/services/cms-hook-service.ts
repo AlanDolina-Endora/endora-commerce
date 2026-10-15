@@ -282,18 +282,21 @@ export class CmsHookService {
       run: async ({ em: tx }) => {
         await this.assertExists(hookId, tx);
         const previous = await this.attachmentPosition(tx, hookId, blockId);
-        const result = (await tx.execute(
+        // Issue #246 — a block that is not attached has no position to move, so
+        // it is refused before the UPDATE rather than after it. The refusal used
+        // to follow the statement and read `rowCount` off `tx.execute`'s answer,
+        // a field MikroORM does not return (it reports `affectedRows`): it never
+        // fired, and the route answered 200 having moved nothing. Detaching an
+        // unattached block still answers success — see `removeAttachment`.
+        if (previous === null) {
+          throw new HttpError(404, ERROR_CODES.CMS_BLOCK_NOT_FOUND, 'CMS Hook attachment not found.');
+        }
+        await tx.execute(
           `update cms_hook_block_attachments
            set position = ?
            where hook_id = ? and block_id = ?`,
           [position, hookId, blockId],
-        )) as { rowCount?: number };
-        if (result.rowCount === 0) {
-          throw new HttpError(404, ERROR_CODES.CMS_BLOCK_NOT_FOUND, 'CMS Hook attachment not found.');
-        }
-        // The statement matched no attachment, so nothing moved and nothing is
-        // recorded. What the route answers in that case is unchanged here.
-        if (previous === null) return { result: undefined, skipAudit: true };
+        );
         return {
           result: undefined,
           before: { blockId, position: previous },
