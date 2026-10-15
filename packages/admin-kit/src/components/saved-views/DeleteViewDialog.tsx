@@ -78,7 +78,9 @@ export function DeleteViewDialog(props: DeleteViewDialogProps): ReactNode {
             type="button"
             variant="destructive"
             disabled={busy || gone}
-            aria-describedby={errorId}
+            // Only while there is an error to point at: an empty alert region
+            // would be read out as a blank description.
+            aria-describedby={error ? errorId : undefined}
             onClick={(): void => void confirmDelete()}
           >
             {busy ? <Loader2 aria-hidden="true" className="motion-safe:animate-spin" /> : null}

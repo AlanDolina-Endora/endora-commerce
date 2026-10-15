@@ -163,10 +163,16 @@ describe('SavedViewsControl — delete', () => {
   it('shows any other refusal in the dialog and changes nothing else', async () => {
     api.delete.mockRejectedValue(new ApiError(403, { error: { code: 'FORBIDDEN', message: 'You may not delete this view.' } }));
     const { user, dialog, select } = await openDelete(OWN_VIEW);
+    // Described by nothing until there is something to say: an empty alert
+    // region would be announced as a blank description.
+    expect(within(dialog).getByRole('button', { name: 'Delete' })).not.toHaveAttribute('aria-describedby');
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveTextContent('You may not delete this view.'));
     expect(select).toHaveValue(OWN_VIEW.id);
     expect(within(dialog).getByRole('button', { name: 'Delete' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Delete' })).toHaveAccessibleDescription(
+      'You may not delete this view.',
+    );
   });
 
   it('is inert while the delete is in flight and sends one request', async () => {
