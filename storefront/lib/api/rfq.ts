@@ -262,8 +262,16 @@ export async function getQuoteRequestNegotiation(sessionCookie: string | null): 
       sessionCookie,
     });
     const parsed = storefrontQuoteRequestNegotiationSchema.safeParse(data);
-    return parsed.success ? parsed.data.priceProposalsAllowed : true;
-  } catch {
+    if (parsed.success) return parsed.data.priceProposalsAllowed;
+    console.warn('[storefront] quote-request negotiation read returned an unexpected shape');
+    return true;
+  } catch (err) {
+    // Fails open — the page shows the proposal input and the API still
+    // enforces the lock — but never silently. The cookie is not logged.
+    console.warn(
+      '[storefront] quote-request negotiation read failed',
+      err instanceof Error ? err.message : String(err),
+    );
     return true;
   }
 }
