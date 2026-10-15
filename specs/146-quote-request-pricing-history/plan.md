@@ -315,6 +315,17 @@ fixed, by the same rule. T089a carries them into the PR beside the currency defe
 - **Suggested fix**: one formatter for the screen — `formatMoney` with the UI locale passed
   explicitly — in a separate change that also decides whether admin money follows the UI language
   or the currency's home locale.
+- **Status at de7061658**: fixed for the RFQ **detail and History** screens only — review fix N3
+  (`admin/number-format.ts`) formats every amount there in the admin language. It is not a claim
+  about the admin as a whole. Two quote-request screens outside 146's scope still format money on
+  their own (pre-existing, batch 12):
+  - `packages/modules/quote_requests/src/admin/pages/RfqList.tsx:89` — `formatTotal` hard-codes
+    `toLocaleString('pl-PL', …)`, so the list reads `1 234,56 PLN` in English too;
+  - `packages/modules/quote_requests/src/admin/pages/RfqCreatePage.tsx:393` — the create page's
+    total uses `toFixed(2)` (no grouping, always a dot).
+  **Impact**: cosmetic; the same total reads differently on the list, the create page and the
+  detail. **Suggested fix**: reuse `useRfqNumberFormat().money` from `admin/number-format.ts` on
+  both screens.
 
 **Packaging units are stored as the customer sent them, without catalogue validation.**
 
@@ -327,6 +338,34 @@ fixed, by the same rule. T089a carries them into the PR beside the currency defe
   admin price is labelled "per base unit" — but the label the seller reads may be wrong.
 - **Suggested fix**: validate the pair against the product's packaging units in the
   minimum-quantity feature (issue #285).
+
+The two items below were found in review of this feature (review fix round 1) and are logged, not
+fixed, by the same rule; T089a carries them into the PR beside the others.
+
+**The Modify tab's agreed-price prefill probes without a cap, an abort or shared answers.**
+
+- **Where** (at de7061658): `packages/modules/quote_requests/src/admin/pages/RfqDetail.tsx:854`–`:885`
+  — `ModifyCard.prefillAgreed` calls `probeCustomerPrice` once per line with no agreed and no
+  proposed price on mount, and again at `:1096` when the operator picks a product. Neither call
+  goes through the limiter `useCurrentPrices` uses (`admin/reference-view.tsx:181`, `:272`), and
+  neither is aborted when the card unmounts or the line changes (a late answer is matched by index
+  and `productId` only). Overview's `useCurrentPrices` and Modify probe the same lines separately.
+- **Impact**: a request with many unpriced lines fires one `resolved-price` request per line at
+  once when Modify opens, on top of the Overview's own bounded probes for the same lines — load on
+  the price endpoint and its rate limit, not a wrong value. A late answer after unmount is a no-op
+  state update.
+- **Suggested fix**: route the Modify prefill through the same limiter (and an `AbortController`
+  per card), or lift the Overview's answers so Modify reads them instead of asking again.
+
+**A late save answer for the previous subject can clear the new subject's *saving* flag** (cosmetic).
+
+- **Where** (at de7061658): `packages/modules/quote_requests/src/admin/negotiation-panel.tsx:97`–`:98`
+  — the `finally { setSaving(false) }` runs even when the `current.current !== route` guard in the
+  `try`/`catch` has dropped the answer.
+- **Impact**: if the operator switches subject while a save is in flight and starts a save on the
+  new subject, the old answer can turn the new save's busy state off early. The value and the
+  error are unaffected (both are guarded).
+- **Suggested fix**: apply the same route check in `finally` before `setSaving(false)`.
 
 ## Complexity Tracking
 
