@@ -123,12 +123,15 @@ Each code: a member of `ERROR_CODES`; `{ code }` in the owner manifest's `errorC
 
 ## §4 Server-side rules the routes depend on
 
-1. `adminUserId` from the request's admin actor (orders: `resolveAdminUserId`; catalog and
-   quote_requests: `getTenantContext().actor` where `kind === 'admin'`). **No actor → 401
-   `UNAUTHORIZED`**; the `?? ''` fallbacks in `orders/src/backend/routes.ts:710,720,732,747` are
-   removed (S-03).
-2. `isPlatformAdmin`: orders — unchanged (`allowAll`); catalog and quote_requests —
-   `getTenantContext().mode === 'all'` (R-7). The list `GET` needs it too, for `canModify`.
+1. Every route takes the actor `{ adminUserId, isPlatformAdmin }` from its module's
+   `src/backend/saved-view-actor.ts` (`packages/modules/{orders,catalog,quote_requests}`), which
+   reads the ambient tenant context: `adminUserId` is `getTenantContext().actor.id` where
+   `kind === 'admin'`. **No actor → 401 `UNAUTHORIZED`**; the `?? ''` fallbacks the order
+   list's saved-view routes used to carry are removed (S-03).
+2. `isPlatformAdmin` is `getTenantContext().mode === 'all'` on all three lists (R-7) — orders
+   included; the order list's `allowAll` organisation scope is not consulted. An admin whose
+   reach cannot be resolved is in `allowed-set` mode, so is not a platform admin. The list
+   `GET` needs it too, for `canModify`; every service method takes the whole actor.
 3. Writes of `create`, name-changing `update`: R-5's lock-and-probe inside `em.transactional`,
    keyed on the **view owner's** id (on `update` by a platform admin, the stored row's owner, not
    the caller — S-04); lock, probe and write all on the transaction.

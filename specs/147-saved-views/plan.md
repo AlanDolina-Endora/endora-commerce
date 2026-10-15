@@ -113,7 +113,7 @@ packages/modules/crm/src/admin/          # 8 imports re-pointed; components/Moda
 
 packages/modules/orders/
 ├── src/backend/services/order-list-view-service.ts   # trim, lock+probe, flags
-├── src/backend/routes.ts                              # list passes isPlatformAdmin; 409
+├── src/backend/routes.ts                              # every route passes savedViewActor(); 409
 ├── src/admin/pages/OrdersList.tsx                     # mounts SavedViewsControl
 ├── src/admin/components/OrderSavedViews.tsx           # DELETED
 ├── src/manifest.ts                                    # + errorCodes entry

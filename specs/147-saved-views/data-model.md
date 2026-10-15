@@ -19,7 +19,7 @@ item 4).
 | `name` is trimmed, 1–160 characters | `savedListViewNameSchema` in `packages/contracts/src/saved-list-views.ts`, used by every create and update schema |
 | Name key = `lower(btrim(name))`; one owner holds no two views with one key on one list | Service: advisory lock per (table, owner) + probe, in one transaction (R-5). New tables also: unique expression index |
 | Pre-existing duplicate keys (orders only) are kept | `orders` gets no index; `update` probes only when the key changes |
-| Visible to the caller: own views ∪ every `shared` view, ordered by `name` | Service `listFor(adminUserId, isPlatformAdmin)` |
+| Visible to the caller: own views ∪ every `shared` view, ordered by `name` | Service `listFor(actor)`, `actor = { adminUserId, isPlatformAdmin }` from the module's `saved-view-actor.ts` |
 | Another admin's private view behaves as absent | `PATCH`/`DELETE` answer 404 `NOT_FOUND` |
 | A shared view is modified or deleted only by its owner or a platform admin | `PATCH`/`DELETE` answer 403 `FORBIDDEN` otherwise; platform admin = tenant context `mode === 'all'` (R-7) |
 | `ownedByCaller`, `canModify` | Computed per request, never stored (R-8) |
