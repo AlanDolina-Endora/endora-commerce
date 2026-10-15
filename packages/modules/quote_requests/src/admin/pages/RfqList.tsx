@@ -79,8 +79,15 @@ const COLUMN_IDS = ['rfq', 'updated', 'org', 'customer', 'status', 'lines', 'tot
 type ColumnId = (typeof COLUMN_IDS)[number];
 const DEFAULT_VISIBLE: ColumnId[] = ['rfq', 'org', 'customer', 'status', 'lines', 'total'];
 
-// The sort select's values; a saved view's sort outside them loads as the first.
-const SORT_VALUES = ['updatedAt:desc', 'updatedAt:asc', 'total:desc'] as const;
+// The sort select's options, and the one allowlist a saved view's sort is
+// checked against: a sort outside them loads as the first.
+const SORT_OPTIONS = [
+  { value: 'updatedAt:desc', labelKey: 'rfq.list.sort.newest' },
+  { value: 'updatedAt:asc', labelKey: 'rfq.list.sort.oldest' },
+  { value: 'total:desc', labelKey: 'rfq.list.sort.totalDesc' },
+] as const;
+const SORT_VALUES: readonly string[] = SORT_OPTIONS.map((option) => option.value);
+const DEFAULT_SORT = SORT_OPTIONS[0].value;
 
 function rowTotal(r: AdminRfqRow): number | null {
   return r.totalAtAgreedPrice ?? r.totalAtCustomerPrice;
@@ -121,7 +128,7 @@ export function RfqList(): ReactNode {
     return fromUrl !== null && RFQ_STATUSES.includes(fromUrl as RfqStatus) ? [fromUrl] : [];
   });
   const [q, setQ] = useState('');
-  const [sort, setSort] = useState('updatedAt:desc');
+  const [sort, setSort] = useState<string>(DEFAULT_SORT);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [visibleColumnIds, setVisibleColumnIds] = useState<ColumnId[]>(DEFAULT_VISIBLE);
 
@@ -265,7 +272,7 @@ export function RfqList(): ReactNode {
     );
     setQ(typeof f['q'] === 'string' ? f['q'] : '');
     const nextSort = state.sort ? `${state.sort.field}:${state.sort.dir}` : '';
-    setSort((SORT_VALUES as readonly string[]).includes(nextSort) ? nextSort : SORT_VALUES[0]);
+    setSort(SORT_VALUES.includes(nextSort) ? nextSort : DEFAULT_SORT);
     const columns = (state.visibleColumns ?? []).filter((c): c is ColumnId =>
       COLUMN_IDS.includes(c as ColumnId),
     );
@@ -389,9 +396,11 @@ export function RfqList(): ReactNode {
               onChange={(e): void => setSort(e.target.value)}
               className="w-auto"
             >
-              <option value="updatedAt:desc">{t('rfq.list.sort.newest')}</option>
-              <option value="updatedAt:asc">{t('rfq.list.sort.oldest')}</option>
-              <option value="total:desc">{t('rfq.list.sort.totalDesc')}</option>
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {t(option.labelKey)}
+                </option>
+              ))}
             </Select>
             <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center gap-2">
               <Button
