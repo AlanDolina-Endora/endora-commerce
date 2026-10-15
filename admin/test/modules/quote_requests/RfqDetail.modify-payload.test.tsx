@@ -74,7 +74,7 @@ beforeEach(() => {
  */
 describe('RfqDetail Modify — reference, proposal, live difference, payload', () => {
   it('shows reference, "per base unit", proposal, and a difference that follows the typed price (US1 #2, T6)', async () => {
-    const input = await openModify({}, 'reject');
+    const input = await openModify({ packagingUnitName: 'Box' }, 'reject');
     const line = modifyLine(input);
     expect(line).toHaveTextContent('120.00 PLN');
     expect(line).toHaveTextContent('rfq.detail.reference.perBaseUnit');
@@ -92,6 +92,29 @@ describe('RfqDetail Modify — reference, proposal, live difference, payload', (
 
     await userEvent.clear(input);
     expect(line).not.toHaveTextContent('%');
+  });
+
+  it('labels the reference the way Overview does — no "per base unit" on a line without a packaging unit (review fix N4)', async () => {
+    const input = await openModify({}, 'reject');
+    const line = modifyLine(input);
+    expect(line).toHaveTextContent('rfq.detail.reference.atRequest');
+    expect(line).not.toHaveTextContent('rfq.detail.reference.perBaseUnit');
+  });
+
+  it('formats the Modify amounts in the admin language (review fix N3)', async () => {
+    installGet(getSpy, {}, 'reject');
+    renderRfqDetail(RfqDetail, 'pl');
+    await userEvent.click(await screen.findByRole('tab', { name: /rfq\.detail\.tabs\.modify/ }));
+    const input = (await screen.findByRole('spinbutton', {
+      name: 'rfq.detail.modify.agreedUnitPrice',
+    })) as HTMLInputElement;
+    const line = modifyLine(input);
+    // The input keeps a dot: it is a number field, not a display.
+    expect(input.value).toBe('100.00');
+    expect(line).toHaveTextContent('120,00 PLN');
+    expect(line).toHaveTextContent('−20,00 PLN');
+    expect(line).toHaveTextContent('−16,67 %');
+    expect(line).toHaveTextContent('200,00 PLN');
   });
 
   it('prefills an empty agreed price from the admin probe for the request’s customer and channel, never the storefront probe (FR-007)', async () => {

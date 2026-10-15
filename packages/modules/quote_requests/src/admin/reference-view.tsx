@@ -1,12 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { apiClient } from '@endora-commerce/admin-kit/lib';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
-import {
-  formatSignedAmount,
-  formatSignedPercent,
-  referenceDifference,
-  type ReferenceAmount,
-} from './reference-difference.js';
+import { useRfqNumberFormat } from './number-format.js';
+import { referenceDifference, type ReferenceAmount } from './reference-difference.js';
 
 /**
  * Feature 146 — the reference-price plumbing of the admin quote request detail
@@ -113,9 +109,15 @@ export function ReferenceCell({
   perBaseUnit,
 }: {
   view: ReferenceView;
+  /**
+   * The line is sold in a packaging unit: its reference is the price of one
+   * base unit, never of the package (T6), so the cell says so. Overview and
+   * Modify pass the same answer for the same line (review fix N4).
+   */
   perBaseUnit: boolean;
 }): ReactNode {
   const t = useTranslation('core');
+  const format = useRfqNumberFormat();
   if (view.kind === 'pending') return <span className="text-muted-foreground">—</span>;
   if (view.kind === 'none') {
     return <span className="text-xs text-muted-foreground">{t('rfq.detail.reference.none')}</span>;
@@ -123,7 +125,7 @@ export function ReferenceCell({
   return (
     <div className="space-y-0.5">
       <div className="tabular-nums">
-        {view.price.amount.toFixed(2)} {view.price.currency}
+        {format.money(view.price.amount, view.price.currency)}
       </div>
       <div className="flex flex-wrap gap-x-1 text-xs text-muted-foreground">
         <span>
@@ -150,15 +152,16 @@ export function DifferenceCell({
   currency: string;
   reference: ReferenceAmount | null;
 }): ReactNode {
+  const format = useRfqNumberFormat();
   const difference = referenceDifference(price, currency, reference);
   if (difference === null) return <span className="text-muted-foreground">—</span>;
   return (
     <div className="space-y-0.5 tabular-nums">
       <div>
-        {formatSignedAmount(difference.amount)} {currency}
+        {format.signedAmount(difference.amount)} {currency}
       </div>
       <div className="text-xs text-muted-foreground">
-        {difference.percent !== null ? formatSignedPercent(difference.percent) : '—'}
+        {difference.percent !== null ? format.signedPercent(difference.percent) : '—'}
       </div>
     </div>
   );

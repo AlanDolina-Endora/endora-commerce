@@ -4,8 +4,8 @@
  * percentage of the reference, both signed and rounded to two decimals.
  *
  * Overview compares the customer's proposal; the Modify tab compares the agreed
- * price being typed. Both read this one rule and format at the edge. Pure: no
- * I/O, no locale.
+ * price being typed. Both read this one rule and format at the edge, through
+ * `number-format.ts` in the admin's language. Pure: no I/O, no locale.
  */
 
 /** A reference price as the screen holds it — stored at request, or current. */
@@ -44,23 +44,4 @@ export function referenceDifference(
   const percent =
     reference.amount === 0 ? null : round2(((price - reference.amount) / reference.amount) * 100);
   return { amount, percent };
-}
-
-const MINUS = '−';
-
-function signed(n: number): string {
-  const abs = Math.abs(n).toFixed(2);
-  if (n > 0) return `+${abs}`;
-  if (n < 0) return `${MINUS}${abs}`;
-  return abs;
-}
-
-/** `−20.00`, `+12.00`, `0.00` — the currency is appended by the caller. */
-export function formatSignedAmount(amount: number): string {
-  return signed(amount);
-}
-
-/** `−16.67 %`, `+10.00 %`, `0.00 %`. */
-export function formatSignedPercent(percent: number): string {
-  return `${signed(percent)} %`;
 }

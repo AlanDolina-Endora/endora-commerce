@@ -9,6 +9,7 @@ import type {
 import { apiClient } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Button } from '@endora-commerce/admin-kit/ui';
 import { useTranslation, useTranslationContext } from '@endora-commerce/admin-kit/i18n';
+import { adminNumberLocale, rfqNumberFormat } from '../number-format.js';
 
 /**
  * Feature 146, T059 — the History tab of the admin quote request detail
@@ -36,8 +37,6 @@ const ROLE_KEYS: Record<string, string> = {
   Administrator: 'administrator',
 };
 
-const LOCALES: Record<string, string> = { en: 'en-GB', pl: 'pl-PL' };
-
 interface Formatters {
   t: T;
   amount: (n: number | null) => string;
@@ -47,13 +46,13 @@ interface Formatters {
 function useFormatters(): Formatters {
   const t = useTranslation('core');
   const { language } = useTranslationContext();
-  const locale = LOCALES[language] ?? language;
-  const numbers = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const locale = adminNumberLocale(language);
+  const numbers = rfqNumberFormat(locale);
   const dates = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' });
   const h: T = (key, params) => t(`rfq.detail.history.${key}`, params);
   return {
     t: h,
-    amount: (n) => (n === null ? h('none') : numbers.format(n)),
+    amount: (n) => (n === null ? h('none') : numbers.amount(n)),
     dateTime: (iso) => {
       const d = new Date(iso);
       return Number.isNaN(d.getTime()) ? iso : dates.format(d);

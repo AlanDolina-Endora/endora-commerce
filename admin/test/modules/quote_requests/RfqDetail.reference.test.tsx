@@ -84,6 +84,41 @@ describe('RfqDetail Overview — reference, proposal, difference', () => {
     expect(within(row).queryByText('rfq.detail.reference.current')).not.toBeInTheDocument();
   });
 
+  it('formats every amount in the admin language — Polish separators in Polish (review fix N3)', async () => {
+    installGet(getSpy, { agreedUnitPrice: 110 }, 'reject');
+    renderRfqDetail(RfqDetail, 'pl');
+    const row = await lineRow();
+    const cells = within(row).getAllByRole('cell');
+    expect(cells[2]).toHaveTextContent('120,00 PLN');
+    expect(cells[3]).toHaveTextContent(/^100,00$/);
+    expect(cells[4]).toHaveTextContent('−20,00 PLN');
+    expect(cells[4]).toHaveTextContent('−16,67 %');
+    expect(cells[5]).toHaveTextContent(/^110,00$/);
+    expect(cells[6]).toHaveTextContent('220,00 PLN');
+  });
+
+  it('formats in English conventions in English, whatever the currency (review fix N3)', async () => {
+    installGet(getSpy, { agreedUnitPrice: 1100 }, 'reject');
+    renderRfqDetail(RfqDetail);
+    const row = await lineRow();
+    // 2 × 1100 — English grouping, not the Polish the screen used to hard-code.
+    expect(within(row).getAllByRole('cell')[6]).toHaveTextContent('2,200.00 PLN');
+  });
+
+  it('labels the reference "per base unit" only on a line sold in a packaging unit (review fix N4)', async () => {
+    installGet(getSpy, { packagingUnitName: 'Box' }, 'reject');
+    renderRfqDetail(RfqDetail);
+    const row = await lineRow();
+    expect(within(row).getByText(/rfq\.detail\.reference\.perBaseUnit/)).toBeInTheDocument();
+  });
+
+  it('shows no "per base unit" label on a line without a packaging unit', async () => {
+    installGet(getSpy, {}, 'reject');
+    renderRfqDetail(RfqDetail);
+    const row = await lineRow();
+    expect(within(row).queryByText(/rfq\.detail\.reference\.perBaseUnit/)).not.toBeInTheDocument();
+  });
+
   it('signs a proposal above the reference with "+"', async () => {
     installGet(getSpy, { customerProposedUnitPrice: 132 }, 'reject');
     renderRfqDetail(RfqDetail);

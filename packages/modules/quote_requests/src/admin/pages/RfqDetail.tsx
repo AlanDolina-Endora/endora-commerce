@@ -17,6 +17,7 @@ import { CustomFieldValuesPanel, ProductPicker } from '@endora-commerce/admin-ki
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { AdminZone } from '@endora-commerce/admin-kit/zones';
 import { deadlineForDays, isValidityDaysInvalid, rfqValidity } from '../validity.js';
+import { useRfqNumberFormat } from '../number-format.js';
 import type { ReferenceAmount } from '../reference-difference.js';
 import {
   DifferenceCell,
@@ -159,6 +160,7 @@ const STATUS_VARIANT: Record<
 
 export function RfqDetail(): ReactNode {
   const t = useTranslation('core');
+  const format = useRfqNumberFormat();
   const { id } = useParams<{ id: string }>();
   const [rfq, setRfq] = useState<AdminRfqDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -595,13 +597,10 @@ export function RfqDetail(): ReactNode {
                           </TableCell>
                           <TableCell>{it.quantity}</TableCell>
                           <TableCell>
-                            <ReferenceCell
-                              view={reference}
-                              perBaseUnit={Boolean(it.packagingUnitName)}
-                            />
+                            <ReferenceCell view={reference} perBaseUnit={Boolean(it.packagingUnitName)} />
                           </TableCell>
                           <TableCell className="tabular-nums">
-                            {proposal !== null ? proposal.toFixed(2) : '—'}
+                            {proposal !== null ? format.amount(proposal) : '—'}
                           </TableCell>
                           <TableCell>
                             <DifferenceCell
@@ -611,11 +610,11 @@ export function RfqDetail(): ReactNode {
                             />
                           </TableCell>
                           <TableCell className="tabular-nums">
-                            {it.agreedUnitPrice !== null ? it.agreedUnitPrice.toFixed(2) : '—'}
+                            {it.agreedUnitPrice !== null ? format.amount(it.agreedUnitPrice) : '—'}
                           </TableCell>
                           <TableCell className="tabular-nums text-right">
                             {lineTotal !== null
-                              ? `${lineTotal.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} ${it.lineCurrency}`
+                              ? format.money(lineTotal, it.lineCurrency)
                               : '—'}
                           </TableCell>
                         </TableRow>
@@ -631,7 +630,7 @@ export function RfqDetail(): ReactNode {
                               {t('rfq.detail.netLabel')}
                             </th>
                             <td className="tabular-nums text-right">
-                              {total.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} {currency}
+                              {format.money(total, currency)}
                             </td>
                           </tr>
                           <tr>
@@ -639,8 +638,7 @@ export function RfqDetail(): ReactNode {
                               {t('rfq.detail.taxLabel', { rate: (taxRate * 100).toFixed(0) })}
                             </th>
                             <td className="tabular-nums text-right">
-                              {(taxTotal ?? 0).toLocaleString('pl-PL', { minimumFractionDigits: 2 })}{' '}
-                              {currency}
+                              {format.money(taxTotal ?? 0, currency)}
                             </td>
                           </tr>
                         </>
@@ -650,10 +648,7 @@ export function RfqDetail(): ReactNode {
                           {taxRate > 0 ? t('rfq.detail.grossLabel') : t('rfq.detail.totalLabel')}
                         </th>
                         <td className="tabular-nums text-right font-semibold">
-                          {(grossTotal ?? total).toLocaleString('pl-PL', {
-                            minimumFractionDigits: 2,
-                          })}{' '}
-                          {currency}
+                          {format.money(grossTotal ?? total, currency)}
                         </td>
                       </tr>
                     </tfoot>
@@ -822,6 +817,7 @@ function ModifyCard({
   focusValidityNonce: number;
 }): ReactNode {
   const t = useTranslation('core');
+  const format = useRfqNumberFormat();
   const [headerNote, setHeaderNote] = useState(rfq.headerNote ?? '');
   // Blank means "leave the deadline where it is" — that is `expiresInDays`
   // being absent from the PATCH, which is what the contract reads as "do not
@@ -959,8 +955,6 @@ function ModifyCard({
   // to share its product.
   const originalById = new Map(rfq.items.map((it) => [it.id, it]));
   const currency = rfq.items[0]?.lineCurrency ?? 'PLN';
-  const fmt = (n: number): string =>
-    `${n.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} ${currency}`;
 
   // A plain grid (not <Table>, which wraps in an overflow-auto container that
   // would clip the product dropdown) so the picker's options overlay outside
@@ -1118,10 +1112,10 @@ function ModifyCard({
                   className="tabular-nums"
                 />
                 <div className="self-center text-sm">
-                  <ReferenceCell view={reference} perBaseUnit />
+                  <ReferenceCell view={reference} perBaseUnit={Boolean(orig?.packagingUnitName)} />
                 </div>
                 <span className="self-center text-sm tabular-nums text-muted-foreground">
-                  {desired !== null ? `${desired.toFixed(2)} ${currency}` : '—'}
+                  {desired !== null ? format.money(desired, currency) : '—'}
                 </span>
                 <div className="self-center text-sm">
                   <DifferenceCell
@@ -1131,7 +1125,7 @@ function ModifyCard({
                   />
                 </div>
                 <span className="self-center text-sm font-medium tabular-nums">
-                  {lineTotal !== null ? fmt(lineTotal) : '—'}
+                  {lineTotal !== null ? format.money(lineTotal, currency) : '—'}
                 </span>
                 <Button
                   variant="ghost"

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { referenceDifference } from '../../../../packages/modules/quote_requests/src/admin/reference-difference';
 import {
-  formatSignedAmount,
-  formatSignedPercent,
-  referenceDifference,
-} from '../../../../packages/modules/quote_requests/src/admin/reference-difference';
+  adminNumberLocale,
+  rfqNumberFormat,
+} from '../../../../packages/modules/quote_requests/src/admin/number-format';
 
 /**
  * Feature 146, T046 — the difference between a price (the customer's proposal
@@ -58,11 +58,29 @@ describe('referenceDifference', () => {
 
 describe('signed formatting', () => {
   it('prefixes a minus sign (U+2212) and a plus sign, two decimals', () => {
-    expect(formatSignedAmount(-20)).toBe('−20.00');
-    expect(formatSignedAmount(12)).toBe('+12.00');
-    expect(formatSignedAmount(0)).toBe('0.00');
-    expect(formatSignedPercent(-16.67)).toBe('−16.67 %');
-    expect(formatSignedPercent(10)).toBe('+10.00 %');
-    expect(formatSignedPercent(0)).toBe('0.00 %');
+    const f = rfqNumberFormat('en-GB');
+    expect(f.signedAmount(-20)).toBe('−20.00');
+    expect(f.signedAmount(12)).toBe('+12.00');
+    expect(f.signedAmount(0)).toBe('0.00');
+    expect(f.signedPercent(-16.67)).toBe('−16.67 %');
+    expect(f.signedPercent(10)).toBe('+10.00 %');
+    expect(f.signedPercent(0)).toBe('0.00 %');
+  });
+});
+
+/** Review fix round 1 (part B, N3) — one formatting, in the admin's language. */
+describe('rfqNumberFormat', () => {
+  it('formats in the admin language’s conventions', () => {
+    expect(adminNumberLocale('en')).toBe('en-GB');
+    expect(adminNumberLocale('pl')).toBe('pl-PL');
+    const en = rfqNumberFormat(adminNumberLocale('en'));
+    expect(en.money(1234.5, 'PLN')).toBe('1,234.50 PLN');
+    const pl = rfqNumberFormat(adminNumberLocale('pl'));
+    expect(pl.amount(120)).toBe('120,00');
+    expect(pl.signedAmount(-20)).toBe('−20,00');
+    expect(pl.signedPercent(-16.67)).toBe('−16,67 %');
+    expect(pl.money(1234.5, 'PLN')).toBe(
+      `${new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2 }).format(1234.5)} PLN`,
+    );
   });
 });

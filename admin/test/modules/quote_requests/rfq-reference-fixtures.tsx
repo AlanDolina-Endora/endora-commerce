@@ -1,7 +1,9 @@
 import { createElement, StrictMode, type ReactNode } from 'react';
 import type { Mock } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { render } from '@testing-library/react';
 import { ApiError } from '@endora-commerce/admin-kit/lib';
+import { TranslationProvider } from '../../../../packages/admin-shell/src/i18n/TranslationProvider';
 import { renderWithI18n, passthroughBundle } from '../../helpers/render-with-i18n';
 import { adminSession, modulePresence, withSession } from '../../helpers/render-with-session';
 
@@ -48,6 +50,7 @@ export interface ItemOverrides {
   agreedUnitPrice?: number | null;
   variantId?: string | null;
   lineNote?: string | null;
+  packagingUnitName?: string | null;
 }
 
 export function rfqPayload(item: ItemOverrides = {}): Record<string, unknown> {
@@ -87,8 +90,8 @@ export function rfqPayload(item: ItemOverrides = {}): Record<string, unknown> {
             ? { amount: 120, currency: 'PLN', capturedAt: '2026-10-01T10:00:00.000Z' }
             : item.referencePrice,
         customerProposedUnitPrice: proposal,
-        packagingUnitName: null,
-        packagingUnitBaseQuantity: null,
+        packagingUnitName: item.packagingUnitName ?? null,
+        packagingUnitBaseQuantity: item.packagingUnitName ? 10 : null,
       },
     ],
     events: [],
@@ -169,8 +172,8 @@ export function installGet(
   });
 }
 
-export function renderRfqDetail(detailScreen: () => ReactNode): void {
-  renderWithI18n(
+export function renderRfqDetail(detailScreen: () => ReactNode, language: 'en' | 'pl' = 'en'): void {
+  const ui = (
     <StrictMode>
       {withSession(
         <MemoryRouter initialEntries={[`/quote-requests/${RFQ_ID}`]}>
@@ -186,8 +189,16 @@ export function renderRfqDetail(detailScreen: () => ReactNode): void {
           contributions: [],
         },
       )}
-    </StrictMode>,
-    BUNDLE,
+    </StrictMode>
+  );
+  if (language === 'en') {
+    renderWithI18n(ui, BUNDLE);
+    return;
+  }
+  render(
+    <TranslationProvider language={language} initialBundle={BUNDLE}>
+      {ui}
+    </TranslationProvider>,
   );
 }
 
