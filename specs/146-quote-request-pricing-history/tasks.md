@@ -515,7 +515,9 @@ Code review findings, fixed on this branch; part B (the admin UI: S4, S5, S6, N3
   (Overview, Modify, difference, History) in the admin language's `Intl` conventions; number inputs
   keep their dot. `formatMoney` was not used: it derives the locale from the currency.
 - [x] **N4** "per base unit" is shown on a line sold in a packaging unit, in Overview and Modify
-  alike.
+  alike — the line where the label tells the seller something (T6: the reference is never the
+  package's price). This narrows T044's Modify assertion, which had labelled every line: T044 now
+  asserts the label on a packaged line and its absence on an unpackaged one.
 - [x] **N5** `QUOTE_REQUEST_HISTORY_EVENT_WINDOW` in contracts; the truncation notice interpolates
   `{count}` (EN + PL).
 - [x] **N6** `RfqHistory` memoizes its formatters and keys changes by kind and line.

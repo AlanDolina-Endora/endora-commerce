@@ -363,7 +363,7 @@ describe('146 — price-negotiation lock enforcement [integration]', () => {
       }
     });
 
-    it('an accepted edit carrying a proposal opens the lock’s system scope once — one escape-hatch row (review fix round 1, part B)', async () => {
+    it('an accepted edit carrying a proposal opens the lock’s system scope once — one escape-hatch audit record (review fix round 1, part B)', async () => {
       const id = await createOk(colleagueAllowed, [{ productId: SEED_PRODUCT_101_ID, quantity: 2 }]);
       const lockReads: string[] = [];
       const previous = setEscapeHatchAuditSink((record) => {
