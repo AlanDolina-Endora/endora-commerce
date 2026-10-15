@@ -25,9 +25,7 @@ import {
 } from '@endora-commerce/contracts';
 import type { QuoteRequestEventType } from '../../entities/quote-request-event.entity.js';
 import type { QuoteRequestRevisionLine } from '../../entities/quote-request-revision.entity.js';
-// A cycle with `rfq-admin-service.ts` (which calls `projectHistory`) that is
-// safe: the constant is read inside functions only, never at module load.
-import { AUTOMATIC_ADMIN_CREATION_NOTE } from '../rfq-admin-service.js';
+import { AUTOMATIC_ADMIN_CREATION_NOTE } from './constants.js';
 import { historyDiff } from './history-diff.js';
 
 /** The part of a stored event the projection reads. */

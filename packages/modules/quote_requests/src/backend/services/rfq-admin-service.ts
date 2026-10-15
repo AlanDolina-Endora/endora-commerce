@@ -34,6 +34,7 @@ import { raisedOnChannelId } from './raised-on-channel.js';
 import { hasUnpricedLine, quoteIncompleteError } from './agreed-price.js';
 import { pairLines } from './line-carry-over.js';
 import { storedReferenceColumns } from './reference-price.js';
+import { AUTOMATIC_ADMIN_CREATION_NOTE } from './history/constants.js';
 import {
   adminActorDirectory,
   customerActorDirectory,
@@ -59,14 +60,6 @@ import {
  * Visibility scoping is centralised in `SalesRepAssignmentService.canSeeOrganization`
  * (research §R2). Platform admins skip the predicate.
  */
-
-/**
- * The note `createOnBehalf` writes beside its `created` event. History
- * recognises it by exact equality and replaces it with a translated title
- * (FR-011); any other note is an operator's and is always shown.
- */
-export const AUTOMATIC_ADMIN_CREATION_NOTE =
-  'Quote Request created on customer behalf — awaiting customer acceptance.';
 
 /** How many of the most recent events the admin History reads (threat model T9). */
 export const HISTORY_EVENT_WINDOW = 100;

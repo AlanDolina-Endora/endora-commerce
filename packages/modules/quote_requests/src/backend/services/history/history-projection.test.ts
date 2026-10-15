@@ -6,7 +6,7 @@ import {
   type CustomerAccountRecord,
 } from '@endora-commerce/contracts';
 import type { QuoteRequestRevisionLine } from '../../entities/quote-request-revision.entity.js';
-import { AUTOMATIC_ADMIN_CREATION_NOTE } from '../rfq-admin-service.js';
+import { AUTOMATIC_ADMIN_CREATION_NOTE } from './constants.js';
 import {
   adminActorDirectory,
   customerActorDirectory,
