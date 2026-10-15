@@ -1,10 +1,39 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { ApiError, apiClient } from '@endora-commerce/admin-kit/lib';
-import { Alert, AlertDescription, Button, Card, CardContent, CardHeader, CardTitle, Combobox, Input, Label, PageHeader, Textarea, type ComboboxOption } from '@endora-commerce/admin-kit/ui';
-import { ProductPicker } from '@endora-commerce/admin-kit/components';
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Combobox,
+  Input,
+  Label,
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Textarea,
+  type ComboboxOption,
+} from '@endora-commerce/admin-kit/ui';
+import {
+  ProductBrowserDialog,
+  ProductBrowserTrigger,
+  ProductPicker,
+  parsePositiveInt,
+  productDisplayName,
+  type ProductBrowserItem,
+  type ProductBrowserRules,
+} from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
+import { createPricePrefillQueue, type PricePrefillQueue } from '../lib/price-prefill-queue';
 
 /**
  * Admin "create a Quote Request on behalf of a customer" (feature 008 US4).
@@ -25,11 +54,21 @@ interface AdminCustomerListItem {
   organizationName: string | null;
 }
 
+/**
+ * One quote-request line (feature 145, FR-030). Keyed by `productId`: a product
+ * is a line at most once, which is what the picker's and the quick search's
+ * *already added* state relies on. `quantityInput` is kept as typed so an
+ * invalid entry stays on screen, marked. `priceSource` says where the agreed
+ * price came from: `manual` once the operator has typed in the field, after
+ * which no prefill ever overwrites it (FR-033).
+ */
 interface LineRow {
   productId: string;
-  quantity: number;
+  sku: string;
+  name: string;
+  quantityInput: string;
   agreedUnitPrice: string;
-  lineNote: string;
+  priceSource: 'resolved' | 'manual' | 'none';
 }
 
 const SEARCH_DEBOUNCE_MS = 250;
@@ -163,8 +202,29 @@ function CustomerPicker(props: {
   );
 }
 
-function emptyLine(): LineRow {
-  return { productId: '', quantity: 1, agreedUnitPrice: '', lineNote: '' };
+/** The quote request's selectability rules for the picker and the quick search (Clarifications). */
+const RFQ_PRODUCT_RULES: ProductBrowserRules = {
+  initialStatus: 'active',
+  blockedTypes: ['grouped', 'bundle'],
+};
+
+/** An agreed unit price of 0 or more, or `null` when the field holds none. */
+function parsePrice(input: string): number | null {
+  const trimmed = input.trim();
+  if (trimmed === '') return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+function productLine(item: ProductBrowserItem): LineRow {
+  return {
+    productId: item.id,
+    sku: item.sku,
+    name: productDisplayName(item),
+    quantityInput: '1',
+    agreedUnitPrice: '',
+    priceSource: 'none',
+  };
 }
 
 export function RfqCreatePage(): ReactNode {
@@ -193,71 +253,181 @@ export function RfqCreatePage(): ReactNode {
       alive = false;
     };
   }, [openedWith.customerAccountId]);
-  const [lines, setLines] = useState<LineRow[]>([emptyLine()]);
+  const [lines, setLines] = useState<LineRow[]>([]);
+  const [browserOpen, setBrowserOpen] = useState(false);
+  const itemsId = useId();
   const [headerNote, setHeaderNote] = useState('');
   const [expiresInDays, setExpiresInDays] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const setLine = (i: number, patch: Partial<LineRow>): void =>
-    setLines((prev) => prev.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
-  const addRow = (): void => setLines((prev) => [...prev, emptyLine()]);
-  const removeRow = (i: number): void => setLines((prev) => prev.filter((_, idx) => idx !== i));
+  // ---- agreed-price prefill (FR-031…FR-033, research R-11)
+  //
+  // Every question goes through one queue: at most four in flight, and an
+  // answer applied only while it is still the line's question. The answer is
+  // also refused here when the line's price has been typed by hand in the
+  // meantime — the operator may type one while its question is in flight.
+  const queueRef = useRef<PricePrefillQueue | null>(null);
+  const [resolving, setResolving] = useState<ReadonlySet<string>>(() => new Set());
+  const markResolving = useCallback((productId: string, on: boolean): void => {
+    setResolving((prev) => {
+      if (prev.has(productId) === on) return prev;
+      const next = new Set(prev);
+      if (on) next.add(productId);
+      else next.delete(productId);
+      return next;
+    });
+  }, []);
 
-  // Pre-fill the agreed unit price from the selected customer's price lists.
-  // Resolution depends on the (organization, customer, product, quantity)
-  // tuple, so we re-resolve whenever any of them changes. Failures leave the
-  // field for manual entry.
-  const resolveAndFill = useCallback(
-    async (
-      index: number,
-      productId: string,
-      quantity: number,
-      cust: AdminCustomerListItem | null,
-    ): Promise<void> => {
-      if (!productId.trim() || !cust?.organizationId) return;
-      try {
+  useEffect(() => {
+    const queue = createPricePrefillQueue({
+      fetch: async (q) => {
         const params = new URLSearchParams({
-          organizationId: cust.organizationId,
-          customerAccountId: cust.id,
-          quantity: String(quantity > 0 ? quantity : 1),
+          organizationId: q.organizationId,
+          customerAccountId: q.customerId,
+          quantity: String(q.quantity),
         });
         const res = await apiClient.get<{ data: { resolvedPrice: { amount: string } | null } }>(
-          `/api/v1/admin/products/${productId.trim()}/resolved-price?${params.toString()}`,
+          `/api/v1/admin/products/${encodeURIComponent(q.productId)}/resolved-price?${params.toString()}`,
         );
-        const amount = res.data.resolvedPrice?.amount;
-        if (amount != null) {
-          setLines((prev) =>
-            prev.map((row, idx) => (idx === index ? { ...row, agreedUnitPrice: amount } : row)),
-          );
-        }
-      } catch {
-        // Leave the field for manual entry when resolution is unavailable.
+        return res.data.resolvedPrice?.amount ?? null;
+      },
+      onResult: (productId, amount) => {
+        markResolving(productId, false);
+        setLines((prev) =>
+          prev.map((row) =>
+            row.productId === productId && row.priceSource !== 'manual'
+              ? { ...row, agreedUnitPrice: amount ?? '', priceSource: amount === null ? 'none' : 'resolved' }
+              : row,
+          ),
+        );
+      },
+    });
+    queueRef.current = queue;
+    return (): void => {
+      queue.dispose();
+      queueRef.current = null;
+    };
+  }, [markResolving]);
+
+  /** Ask for a line's price, when it may be prefilled at all; otherwise drop any question it had. */
+  const prefill = useCallback(
+    (row: Pick<LineRow, 'productId' | 'quantityInput' | 'priceSource'>, cust: AdminCustomerListItem | null): void => {
+      const queue = queueRef.current;
+      if (!queue) return;
+      const quantity = parsePositiveInt(row.quantityInput);
+      if (row.priceSource === 'manual' || quantity === null || !cust?.organizationId) {
+        queue.forget(row.productId);
+        markResolving(row.productId, false);
+        return;
       }
+      queue.request({
+        productId: row.productId,
+        quantity,
+        customerId: cust.id,
+        organizationId: cust.organizationId,
+      });
+      markResolving(row.productId, true);
     },
-    [],
+    [markResolving],
   );
 
-  const handleCustomerChange = (next: AdminCustomerListItem | null): void => {
-    setCustomer(next);
-    // Re-price every line already carrying a product against the new customer.
-    lines.forEach((row, idx) => {
-      if (row.productId.trim()) void resolveAndFill(idx, row.productId, row.quantity, next);
-    });
+  // A customer change (including the one the page was opened with) clears every
+  // price not typed by hand and asks again for the new customer — a previous
+  // customer's price never stays on as if it were this one's (research R-11).
+  const linesRef = useRef(lines);
+  useEffect(() => {
+    linesRef.current = lines;
+  });
+  const pricedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    // Identity and organization, not the object: re-reading the same customer is no change.
+    const key = `${customer?.id ?? ''}:${customer?.organizationId ?? ''}`;
+    if (pricedForRef.current === key) return;
+    pricedForRef.current = key;
+    setLines((prev) =>
+      prev.some((row) => row.priceSource !== 'manual' && row.agreedUnitPrice !== '')
+        ? prev.map((row) =>
+            row.priceSource === 'manual' ? row : { ...row, agreedUnitPrice: '', priceSource: 'none' },
+          )
+        : prev,
+    );
+    for (const row of linesRef.current) prefill(row, customer);
+  }, [customer, prefill]);
+
+  /**
+   * Append products as lines, in the order given, skipping any already a line.
+   *
+   * De-duplicated once, against `linesRef` — which this advances at once, so a
+   * second add landing before the next render (two confirms in one tick) sees the
+   * first one's lines — and exactly the rows appended are prefilled. The prefill
+   * stays out of the `setLines` updater, which StrictMode runs twice.
+   */
+  const appendLines = (products: readonly ProductBrowserItem[]): void => {
+    const present = new Set(linesRef.current.map((row) => row.productId));
+    const added: LineRow[] = [];
+    for (const p of products) {
+      if (present.has(p.id)) continue;
+      present.add(p.id);
+      added.push(productLine(p));
+    }
+    if (added.length === 0) return;
+    linesRef.current = [...linesRef.current, ...added];
+    setLines((prev) => [...prev, ...added]);
+    for (const row of added) prefill(row, customer);
   };
 
-  const validLines = lines.filter(
-    (l) => l.productId.trim() && l.quantity > 0 && l.agreedUnitPrice.trim() !== '',
-  );
+  // A resolved price answers one quantity; once the quantity is not a valid one it
+  // answers nothing, so it is cleared rather than left on screen as current
+  // (FR-034 then marks the line). A hand-typed price is the operator's and stays.
+  // A valid quantity asks again through `prefill`.
+  const setQuantity = (productId: string, quantityInput: string): void => {
+    const row = lines.find((r) => r.productId === productId);
+    const invalid = parsePositiveInt(quantityInput) === null;
+    setLines((prev) =>
+      prev.map((r) => {
+        if (r.productId !== productId) return r;
+        return invalid && r.priceSource === 'resolved'
+          ? { ...r, quantityInput, agreedUnitPrice: '', priceSource: 'none' }
+          : { ...r, quantityInput };
+      }),
+    );
+    if (row) prefill({ ...row, quantityInput }, customer);
+  };
+
+  // Typing a price makes it the operator's: it is never prefilled again (FR-033).
+  const setPrice = (productId: string, agreedUnitPrice: string): void => {
+    setLines((prev) =>
+      prev.map((r) => (r.productId === productId ? { ...r, agreedUnitPrice, priceSource: 'manual' } : r)),
+    );
+    queueRef.current?.forget(productId);
+    markResolving(productId, false);
+  };
+
+  const removeLine = (productId: string): void => {
+    setLines((prev) => prev.filter((r) => r.productId !== productId));
+    queueRef.current?.forget(productId);
+    markResolving(productId, false);
+  };
+  const lineIds = lines.map((row) => row.productId);
+
+  // Every line is sent; a line with an invalid quantity or no price blocks
+  // submit rather than being dropped from the request (FR-034).
+  const parsedLines = lines.map((row) => ({
+    row,
+    quantity: parsePositiveInt(row.quantityInput),
+    price: parsePrice(row.agreedUnitPrice),
+  }));
+  const allLinesComplete = parsedLines.every((l) => l.quantity !== null && l.price !== null);
   const hasOrg = Boolean(customer?.organizationId);
-  const total = validLines.reduce(
-    (sum, l) => sum + l.quantity * Number(l.agreedUnitPrice || 0),
+  const total = parsedLines.reduce(
+    (sum, l) => (l.quantity !== null && l.price !== null ? sum + l.quantity * l.price : sum),
     0,
   );
-  const canSubmit = hasOrg && validLines.length > 0 && !busy;
+  const canSubmit = hasOrg && lines.length > 0 && allLinesComplete && !busy;
 
   const submit = async (): Promise<void> => {
-    if (!customer?.organizationId) return;
+    if (!customer?.organizationId || !allLinesComplete) return;
     setBusy(true);
     setError(null);
     try {
@@ -267,11 +437,10 @@ export function RfqCreatePage(): ReactNode {
         customerAccountId: customer.id,
         ...(headerNote.trim() ? { headerNote: headerNote.trim() } : {}),
         ...(trimmedExpiry !== '' ? { expiresInDays: Number(trimmedExpiry) } : {}),
-        items: validLines.map((l) => ({
-          productId: l.productId.trim(),
-          quantity: l.quantity,
-          agreedUnitPrice: Number(l.agreedUnitPrice),
-          ...(l.lineNote.trim() ? { lineNote: l.lineNote.trim() } : {}),
+        items: parsedLines.map((l) => ({
+          productId: l.row.productId,
+          quantity: l.quantity ?? 0,
+          agreedUnitPrice: l.price ?? 0,
         })),
         ...(openedWith.origin ? { origin: openedWith.origin } : {}),
       });
@@ -314,7 +483,7 @@ export function RfqCreatePage(): ReactNode {
           <Label htmlFor="customerAccountId">{t('rfqCreate.field.customer')}</Label>
           <CustomerPicker
             value={customer}
-            onChange={handleCustomerChange}
+            onChange={setCustomer}
             organizationId={openedWith.organizationId}
           />
           {customer && !hasOrg ? (
@@ -330,70 +499,130 @@ export function RfqCreatePage(): ReactNode {
           <CardTitle>{t('rfqCreate.section.items')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {lines.map((row, i) => (
-            <div key={i} className="flex items-end gap-3">
-              <div className="flex-1 space-y-1">
-                <Label htmlFor={`product-${i}`}>{t('rfqCreate.field.product')}</Label>
-                <ProductPicker
-                  mode="select"
-                  id={`product-${i}`}
-                  ariaLabel={`product-${i}`}
-                  value={row.productId === '' ? null : row.productId}
-                  onChange={(next): void => {
-                    const pid = next ?? '';
-                    setLine(i, { productId: pid });
-                    void resolveAndFill(i, pid, row.quantity, customer);
-                  }}
-                  placeholder={t('rfqCreate.placeholder.product')}
-                />
-              </div>
-              <div className="w-20 space-y-1">
-                <Label htmlFor={`qty-${i}`}>{t('rfqCreate.field.quantity')}</Label>
-                <Input
-                  id={`qty-${i}`}
-                  aria-label={`qty-${i}`}
-                  type="number"
-                  min={1}
-                  value={row.quantity}
-                  onChange={(e): void => {
-                    const q = Number(e.target.value);
-                    setLine(i, { quantity: q });
-                    void resolveAndFill(i, row.productId, q, customer);
-                  }}
-                />
-              </div>
-              <div className="w-32 space-y-1">
-                <Label htmlFor={`price-${i}`}>{t('rfqCreate.field.agreedUnitPrice')}</Label>
-                <Input
-                  id={`price-${i}`}
-                  aria-label={`price-${i}`}
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={row.agreedUnitPrice}
-                  onChange={(e): void => setLine(i, { agreedUnitPrice: e.target.value })}
-                />
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label={`remove-item-${i}`}
-                disabled={lines.length === 1}
-                onClick={(): void => removeRow(i)}
-              >
-                <Trash2 />
-              </Button>
+          <div className="flex flex-wrap items-end gap-3">
+            <ProductBrowserTrigger onOpen={(): void => setBrowserOpen(true)} />
+            <div className="min-w-64 flex-1 space-y-1">
+              <Label htmlFor={`${itemsId}-quick-search`}>{t('rfqCreate.items.quickSearch')}</Label>
+              <ProductPicker
+                mode="select"
+                id={`${itemsId}-quick-search`}
+                ariaLabel={t('rfqCreate.items.quickSearch')}
+                value={null}
+                onChange={(): void => {}}
+                onPickProduct={(item): void => appendLines([item])}
+                rules={RFQ_PRODUCT_RULES}
+                alreadyAddedIds={lineIds}
+                includeArchived
+                placeholder={t('rfqCreate.placeholder.product')}
+              />
             </div>
-          ))}
-          <Button variant="outline" size="sm" onClick={addRow}>
-            <Plus />
-            {t('rfqCreate.addItem')}
-          </Button>
+          </div>
+          <ProductBrowserDialog
+            open={browserOpen}
+            title={t('rfqCreate.items.browse')}
+            rules={RFQ_PRODUCT_RULES}
+            alreadyAddedIds={lineIds}
+            onConfirm={(picked): void => {
+              appendLines(picked);
+              setBrowserOpen(false);
+            }}
+            onCancel={(): void => setBrowserOpen(false)}
+          />
+
+          {lines.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t('rfqCreate.items.empty')}</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('rfqCreate.field.product')}</TableHead>
+                  <TableHead id={`${itemsId}-qty`} className="w-28">
+                    {t('rfqCreate.field.quantity')}
+                  </TableHead>
+                  <TableHead id={`${itemsId}-price`} className="w-40">
+                    {t('rfqCreate.field.agreedUnitPrice')}
+                  </TableHead>
+                  <TableHead className="w-12">
+                    <span className="sr-only">{t('common.action.delete')}</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {parsedLines.map(({ row, quantity, price }) => {
+                  const rowId = `${itemsId}-${row.productId}`;
+                  const isResolving = resolving.has(row.productId);
+                  const priceMissing = price === null && !isResolving;
+                  return (
+                    <TableRow key={row.productId}>
+                      <TableCell>
+                        <div id={`${rowId}-name`} data-line-name className="font-medium">
+                          {row.name}
+                        </div>
+                        <div className="font-mono text-xs text-muted-foreground">{row.sku}</div>
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <Input
+                          id={`${rowId}-qty`}
+                          type="text"
+                          inputMode="numeric"
+                          aria-labelledby={`${itemsId}-qty ${rowId}-name`}
+                          aria-invalid={quantity === null || undefined}
+                          aria-describedby={quantity === null ? `${rowId}-qty-reason` : undefined}
+                          value={row.quantityInput}
+                          onChange={(e): void => setQuantity(row.productId, e.target.value)}
+                        />
+                        {quantity === null ? (
+                          <p id={`${rowId}-qty-reason`} className="mt-1 text-xs text-destructive">
+                            {t('rfqCreate.line.quantityInvalid')}
+                          </p>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <Input
+                          id={`${rowId}-price`}
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          aria-labelledby={`${itemsId}-price ${rowId}-name`}
+                          aria-invalid={priceMissing || undefined}
+                          aria-describedby={priceMissing ? `${rowId}-price-reason` : undefined}
+                          aria-busy={isResolving || undefined}
+                          value={row.agreedUnitPrice}
+                          onChange={(e): void => setPrice(row.productId, e.target.value)}
+                        />
+                        {isResolving ? (
+                          <p className="mt-1 text-xs text-muted-foreground">{t('rfqCreate.loading')}</p>
+                        ) : priceMissing ? (
+                          <p id={`${rowId}-price-reason`} className="mt-1 text-xs text-destructive">
+                            {t('rfqCreate.line.priceMissing')}
+                          </p>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-labelledby={`${rowId}-remove ${rowId}-name`}
+                          onClick={(): void => removeLine(row.productId)}
+                        >
+                          <Trash2 aria-hidden="true" />
+                          <span id={`${rowId}-remove`} className="sr-only">
+                            {t('common.action.delete')}
+                          </span>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
           <div className="flex justify-end pt-2 text-sm font-medium">
             {t('rfqCreate.total')}: {total.toFixed(2)}
           </div>
         </CardContent>
       </Card>
+
 
       <Card className="mb-4">
         <CardHeader>

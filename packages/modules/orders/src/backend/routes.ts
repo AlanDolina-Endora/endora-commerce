@@ -39,9 +39,11 @@ import type {
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { HttpError } from '@endora-commerce/platform/http';
 import { getResolvedChannel, rethrowIfModuleDisabled } from '@endora-commerce/platform/kernel';
+import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
 import type { Command, CommandBus } from '@endora-commerce/platform/commands';
 import type { OrderService } from './services/order-service.js';
 import { assertMethodsOfferedInChannel } from './services/method-channel-gate.js';
+import { previewLineAvailability } from './services/preview-line-availability.js';
 import type { OrderStatusGraphService } from './services/order-status-graph-service.js';
 import type { OrderTransitionService } from './services/order-transition-service.js';
 import type { OrderListService, OrderListScope } from './services/order-list-service.js';
@@ -141,6 +143,14 @@ export interface OrdersDeps {
   catalogProductRead: CatalogProductReadPort;
   customerAccountRead: CustomerAccountReadPort;
   organizationDetails: OrganizationDetailsPort;
+  /**
+   * The sanctioned bridge accessor the admin order preview checks a line's
+   * assortment through, against the **body's** `salesChannelId` (feature 145,
+   * FR-027, Principle XII). Required by the preview: when it is not wired the
+   * route fails closed with 500 rather than treating "not wired" as "in
+   * assortment".
+   */
+  salesChannelMembership?: SalesChannelMembershipPort;
   /**
    * The two method catalogues, as accessors. Both owners are deactivatable and
    * this module declares them `degrades-without` rather than as dependencies —
@@ -806,13 +816,21 @@ export async function registerOrderRoutes(
       if (!customer.organizationId) {
         throw new HttpError(422, ERROR_CODES.VALIDATION_FAILED, 'Customer has no organization.');
       }
-      // Resolve the channel like placeOrder does — prefer the requested one,
-      // fall back to an active channel so the preview never hard-fails on a
-      // stale/legacy id (the price context still resolves sensibly).
-      const salesChannel =
-        (await em.findOne(SalesChannel, { id: body.salesChannelId })) ??
-        (await em.findOne(SalesChannel, { status: 'active' }));
+      // Exactly the channel the operator chose: it is the one pricing reads and
+      // the one assortment is checked against. A stale id is refused, never
+      // replaced by another active channel (feature 145, research R-7) — a
+      // preview priced on one channel and checked against another answers
+      // neither question.
+      const salesChannel = await em.findOne(SalesChannel, { id: body.salesChannelId });
       if (!salesChannel) throw new HttpError(404, ERROR_CODES.NOT_FOUND, 'Sales channel not found.');
+      const salesChannelMembership = deps.salesChannelMembership;
+      if (!salesChannelMembership) {
+        throw new HttpError(
+          500,
+          ERROR_CODES.INTERNAL,
+          'Order preview requires the salesChannelMembership port, which is not wired.',
+        );
+      }
       const organization = await deps.organizationDetails.findById(customer.organizationId);
       // The refusal creating this order would raise, so the form is not shown
       // totals for a method the customer's Organization may not use. Only the
@@ -859,10 +877,48 @@ export async function registerOrderRoutes(
       /** Net per product tax class, so VAT resolves the way `placeOrder` resolves it. */
       const taxableByProductType = new Map<string, number>();
 
+      // One product read and one channel-membership read per preview (feature
+      // 145). Default lookup options, not `liveOnly`: a soft-deleted product is
+      // priced as it always was, consistent with the create path.
+      const uniqueIds = [...new Set(body.items.map((it) => it.productId))];
+      const productsById = new Map(
+        (await deps.catalogProductRead.findByIds(uniqueIds)).map((p) => [p.id, p] as const),
+      );
+      const organizationId = customer.organizationId;
+      // Assortment is only asked about the ids that exist and the customer may
+      // see: visibility outranks assortment, one message per line.
+      const idsToCheck = uniqueIds.filter(
+        (id) =>
+          previewLineAvailability({
+            product: productsById.get(id) ?? null,
+            organizationId,
+            inChannel: true,
+          }).available,
+      );
+      const inChannel = new Set(
+        idsToCheck.length > 0
+          ? await salesChannelMembership.filterEntityIdsInChannel(
+              body.salesChannelId,
+              'product',
+              idsToCheck,
+            )
+          : [],
+      );
+
       for (const it of body.items) {
-        const product = await deps.catalogProductRead.findById(it.productId);
-        if (!product) {
-          messages.push({ productId: it.productId, code: 'PRODUCT_NOT_FOUND' });
+        const product = productsById.get(it.productId) ?? null;
+        const availability = previewLineAvailability({
+          product,
+          organizationId,
+          inChannel: inChannel.has(it.productId),
+        });
+        // `!product` is implied by `available === false` with PRODUCT_NOT_FOUND;
+        // it is stated again only so the compiler narrows `product` below.
+        if (!availability.available || !product) {
+          messages.push({
+            productId: it.productId,
+            code: availability.available ? 'PRODUCT_NOT_FOUND' : availability.code,
+          });
           lines.push({
             productId: it.productId,
             variantId: it.variantId ?? null,

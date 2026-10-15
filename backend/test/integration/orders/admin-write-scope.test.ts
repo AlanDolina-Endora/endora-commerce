@@ -22,6 +22,7 @@ import { CustomerAccount } from '../../helpers/package-entities.js';
 import { ADMIN_COOKIES, TEST_CUSTOMER_ID } from '../../helpers/test-actors.js';
 
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 import { Order, OrderComment } from '../../helpers/package-entities.js';
 
 
@@ -66,6 +67,11 @@ describe('Admin order routes honour the sales-rep assignment scope (feature 085 
   const invoiceNumbers: Record<string, string> = {};
 
   const salesChannelId = '00000000-0000-4000-8000-0000000000c1';
+  /**
+   * The preview answers 404 for a channel naming no row, so it is sent a real
+   * one: the system-default channel the seeded catalogue is published on.
+   */
+  let previewChannelId: string;
   const stamp = Date.now();
 
   const newOrder = (em: EntityManager, organizationId: string): Order =>
@@ -118,6 +124,7 @@ describe('Admin order routes honour the sales-rep assignment scope (feature 085 
   beforeAll(async () => {
     h = await setupBackendServer();
     const em = h.em();
+    previewChannelId = await systemDefaultSalesChannelId(em);
 
     // The admin scope resolution keys on this exact role code, so the fixture
     // cannot use a code of its own. Another file in the run may have created it
@@ -432,7 +439,7 @@ describe('Admin order routes honour the sales-rep assignment scope (feature 085 
       cookies: { b2b_session: repCookie },
       payload: {
         customerAccountId: TEST_CUSTOMER_ID,
-        salesChannelId,
+        salesChannelId: previewChannelId,
         items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }],
       },
     });
@@ -450,7 +457,7 @@ describe('Admin order routes honour the sales-rep assignment scope (feature 085 
       cookies: { b2b_session: repCookie },
       payload: {
         customerAccountId: assignedCustomerId,
-        salesChannelId,
+        salesChannelId: previewChannelId,
         items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }],
       },
     });
@@ -464,7 +471,7 @@ describe('Admin order routes honour the sales-rep assignment scope (feature 085 
       cookies: { b2b_session: 'stub-admin-session' },
       payload: {
         customerAccountId: TEST_CUSTOMER_ID,
-        salesChannelId,
+        salesChannelId: previewChannelId,
         items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }],
       },
     });

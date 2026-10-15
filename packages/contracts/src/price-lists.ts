@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ADMIN_PRODUCT_SELECTION_MAX } from './catalog.js';
 import { isoDateTimeSchema, moneySchema, uuidSchema } from './common.js';
 
 /**
@@ -171,6 +172,48 @@ export type ProductAssignment = z.infer<typeof productAssignmentSchema>;
 export const replaceProductsRequestSchema = z.object({
   productIds: z.array(uuidSchema),
 });
+
+/** Route params of every `/api/v1/admin/price-lists-engine/:id/...` route. */
+export const priceListIdParamsSchema = z.object({ id: uuidSchema });
+export type PriceListIdParams = z.infer<typeof priceListIdParamsSchema>;
+
+/**
+ * Body of `POST /api/v1/admin/price-lists-engine/:id/products/bulk-add`: add
+ * the products to the list's roster in one audited write. Additive — products
+ * already on the roster keep their brackets. At least one id, at most
+ * {@link ADMIN_PRODUCT_SELECTION_MAX}.
+ */
+export const bulkAddPriceListProductsRequestSchema = z.object({
+  productIds: z.array(uuidSchema).min(1).max(ADMIN_PRODUCT_SELECTION_MAX),
+});
+export type BulkAddPriceListProductsRequest = z.infer<typeof bulkAddPriceListProductsRequestSchema>;
+
+/** Why a product of a bulk add was not added. `product_not_found`: unknown or deleted. */
+export const bulkAddPriceListProductFailureReasonSchema = z.enum(['product_not_found']);
+export type BulkAddPriceListProductFailureReason = z.infer<
+  typeof bulkAddPriceListProductFailureReasonSchema
+>;
+
+/**
+ * Per-product outcome of a bulk add, over the de-duplicated ids: `added` now
+ * on the roster, `unchanged` already on it (a retry is safe), `failed` with a
+ * reason.
+ */
+export const bulkAddPriceListProductsResultSchema = z.object({
+  added: z.array(uuidSchema),
+  unchanged: z.array(uuidSchema),
+  failed: z.array(
+    z.object({ productId: uuidSchema, reason: bulkAddPriceListProductFailureReasonSchema }),
+  ),
+});
+export type BulkAddPriceListProductsResult = z.infer<typeof bulkAddPriceListProductsResultSchema>;
+
+export const bulkAddPriceListProductsResponseSchema = z.object({
+  data: bulkAddPriceListProductsResultSchema,
+});
+export type BulkAddPriceListProductsResponse = z.infer<
+  typeof bulkAddPriceListProductsResponseSchema
+>;
 
 // --- Display modes ----------------------------------------------------------
 

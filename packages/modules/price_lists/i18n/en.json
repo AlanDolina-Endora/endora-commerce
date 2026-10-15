@@ -5,6 +5,7 @@
   "activity.verb.price_list.draftify": "moved price list to draft",
   "activity.verb.price_list.duplicate": "duplicated price list",
   "activity.verb.price_list.expire": "expired price list",
+  "activity.verb.price_list.products_add": "added products to price list",
   "activity.verb.price_list.products_replace": "replaced products on price list",
   "activity.verb.price_list.update": "updated price list",
 

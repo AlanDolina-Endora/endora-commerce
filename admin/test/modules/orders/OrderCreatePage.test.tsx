@@ -105,8 +105,21 @@ const BUNDLE = passthroughBundle('core', [
   'orderCreate.field.deliveryMethod',
   'orderCreate.field.product',
   'orderCreate.field.quantity',
+  'orderCreate.items.quickSearch',
   'orderCreate.submit',
 ]);
+
+const QUICK_SEARCH = 'orderCreate.items.quickSearch';
+
+/**
+ * Add the widget as a line through the quick search beside **Browse products**
+ * (feature 145, FR-020) — the per-row product search these flows used to type
+ * into is gone, and lines are created only through the two entry points.
+ */
+async function addWidget(): Promise<void> {
+  await userEvent.type(screen.getByLabelText(QUICK_SEARCH), 'Wid');
+  await pick(QUICK_SEARCH, 'Widget');
+}
 
 beforeEach(() => {
   getSpy.mockReset();
@@ -174,9 +187,8 @@ describe('OrderCreatePage', () => {
     await pick('paymentMethodId', 'Payment 1');
     await pick('deliveryMethodId', 'Delivery 1');
 
-    // Product line — also a server-side search picker.
-    await userEvent.type(screen.getByLabelText('product-0'), 'Wid');
-    await pick('product-0', 'Widget');
+    // Product line — added through the quick search, a server-side search picker.
+    await addWidget();
 
     // The default org address is auto-selected for both sides once the
     // customer loads; submit unlocks after the live preview resolves.
@@ -243,8 +255,7 @@ describe('OrderCreatePage', () => {
     await pick('salesChannelId', 'Channel 1');
     await pick('paymentMethodId', 'Payment 1');
     await pick('deliveryMethodId', 'Only on channel 1');
-    await userEvent.type(screen.getByLabelText('product-0'), 'Wid');
-    await pick('product-0', 'Widget');
+    await addWidget();
 
     const submit = screen.getByText('orderCreate.submit');
     await waitFor(() => expect(submit).not.toBeDisabled());
@@ -305,8 +316,7 @@ describe('OrderCreatePage', () => {
 
       await pick('paymentMethodId', 'Payment 1');
       await pick('deliveryMethodId', 'Delivery 1');
-      await userEvent.type(screen.getByLabelText('product-0'), 'Wid');
-      await pick('product-0', 'Widget');
+      await addWidget();
 
       const submit = screen.getByText('orderCreate.submit');
       await waitFor(() => expect(submit).not.toBeDisabled());
@@ -388,8 +398,7 @@ describe('OrderCreatePage', () => {
       await waitFor(() => expect(screen.getByLabelText('customerAccountId')).toHaveValue('Jan Kowalski'));
       await pick('paymentMethodId', 'Payment 1');
       await pick('deliveryMethodId', 'Delivery 1');
-      await userEvent.type(screen.getByLabelText('product-0'), 'Wid');
-      await pick('product-0', 'Widget');
+      await addWidget();
       const submit = screen.getByText('orderCreate.submit');
       await waitFor(() => expect(submit).not.toBeDisabled());
       await userEvent.click(submit);

@@ -1,0 +1,35 @@
+import { describe, expect, it } from 'vitest';
+import { parsePositiveInt, productDisplayName } from '@endora-commerce/admin-kit/components';
+
+/**
+ * The two line helpers every product-browser host shares (feature 145): the name a
+ * line, a chip or a roster row shows for a product, and the quantity parse that
+ * marks a line invalid instead of coercing what the operator typed.
+ */
+
+describe('productDisplayName', () => {
+  it('prefers en-US over any other locale', () => {
+    expect(productDisplayName({ name: { 'pl-PL': 'Widżet', 'en-US': 'Widget' }, slug: 'w' })).toBe('Widget');
+  });
+
+  it('falls back to the first locale present when there is no en-US', () => {
+    expect(productDisplayName({ name: { 'de-DE': 'Ding', 'pl-PL': 'Rzecz' }, slug: 'w' })).toBe('Ding');
+  });
+
+  it('falls back to the slug, then the SKU, then an empty string', () => {
+    expect(productDisplayName({ name: {}, slug: 'the-slug', sku: 'SKU-1' })).toBe('the-slug');
+    expect(productDisplayName({ name: {}, sku: 'SKU-1' })).toBe('SKU-1');
+    expect(productDisplayName({ name: {} })).toBe('');
+  });
+});
+
+describe('parsePositiveInt', () => {
+  it('accepts a whole number of at least 1, surrounding spaces allowed', () => {
+    expect(parsePositiveInt('1')).toBe(1);
+    expect(parsePositiveInt(' 42 ')).toBe(42);
+  });
+
+  it.each(['', '0', '-1', '1.5', '1e3', 'abc', '9007199254740993'])('refuses %j', (input) => {
+    expect(parsePositiveInt(input)).toBeNull();
+  });
+});

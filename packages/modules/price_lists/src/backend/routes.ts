@@ -1,9 +1,11 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
+  bulkAddPriceListProductsRequestSchema,
   createPriceListEngineRequestSchema,
   patchPriceListEngineRequestSchema,
   replaceBracketsRequestSchema,
   replaceProductsRequestSchema,
+  priceListIdParamsSchema,
   ERROR_CODES,
 } from '@endora-commerce/contracts';
 import { z } from 'zod';
@@ -297,6 +299,26 @@ export async function registerPricingRoutes(
       await priceListService.addProduct(request.params.id, body.productId);
       reply.status(201);
       return { data: { priceListId: request.params.id, productId: body.productId } };
+    },
+  );
+
+  // Feature 145 / US4 — many products in one request, one Command, one audit
+  // entry (contracts/price-list-bulk-add.md). Append-only: unlike the PUT
+  // above it never removes a product.
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/admin/price-lists-engine/:id/products/bulk-add',
+    {
+      preHandler: writeGate,
+      schema: { params: priceListIdParamsSchema, body: bulkAddPriceListProductsRequestSchema },
+    },
+    async (request) => {
+      const body = bulkAddPriceListProductsRequestSchema.parse(request.body);
+      const result = await priceListService.addProducts(
+        request.params.id,
+        body.productIds,
+        buildAuditCtx(request, deps.resolveAdminAuditContext),
+      );
+      return { data: result };
     },
   );
 

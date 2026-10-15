@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { adminOrderDetailSchema, orderSchema } from './orders.js';
+import {
+  ADMIN_ORDER_PREVIEW_MESSAGE_PRECEDENCE,
+  adminOrderDetailSchema,
+  adminOrderPreviewMessageCodeSchema,
+  adminOrderPreviewResponseSchema,
+  orderSchema,
+} from './orders.js';
 
 const ADDRESS = {
   recipientName: 'Jan Kowalski',
@@ -94,5 +100,41 @@ describe('adminOrderDetailSchema', () => {
     const parsed = orderSchema.parse({ ...ORDER, organization: ORGANIZATION, customer: CUSTOMER });
     expect(parsed).not.toHaveProperty('organization');
     expect(parsed).not.toHaveProperty('customer');
+  });
+});
+
+describe('admin order preview message codes', () => {
+  const PRECEDENCE = [
+    'PRODUCT_NOT_FOUND',
+    'PRODUCT_NOT_VISIBLE_TO_CUSTOMER',
+    'PRODUCT_NOT_IN_SALES_CHANNEL',
+    'QUOTE_ONLY',
+  ];
+
+  it('orders the four codes by precedence, first match wins', () => {
+    expect([...ADMIN_ORDER_PREVIEW_MESSAGE_PRECEDENCE]).toEqual(PRECEDENCE);
+  });
+
+  it('enumerates exactly the precedence, in the same order', () => {
+    expect(adminOrderPreviewMessageCodeSchema.options).toEqual(PRECEDENCE);
+  });
+
+  it('still parses a message whose code it does not know — the field is not narrowed', () => {
+    const response = {
+      lines: [],
+      summary: {
+        subtotal: 0,
+        taxTotal: 0,
+        deliveryTotal: 0,
+        paymentSurcharge: 0,
+        discountTotal: 0,
+        total: 0,
+        currency: 'PLN',
+      },
+      messages: [{ productId: '00000000-0000-4000-8000-000000000007', code: 'SOME_FUTURE_CODE' }],
+    };
+    expect(adminOrderPreviewResponseSchema.parse(response).messages[0]?.code).toBe(
+      'SOME_FUTURE_CODE',
+    );
   });
 });

@@ -7,8 +7,8 @@ import {
 import { SEED_DELIVERY_METHOD_ID, SEED_PAYMENT_METHOD_ID } from '../../helpers/seed-commerce.js';
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
 import { TEST_CUSTOMER_ID } from '../../helpers/test-actors.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 
-const SALES_CHANNEL_ID = '00000000-0000-4000-8000-0000000000c1';
 const MISSING_PRODUCT_ID = '00000000-0000-4000-8000-0000000009ff';
 
 interface PreviewBody {
@@ -32,9 +32,13 @@ interface PreviewBody {
  */
 describe('Admin create-order pricing preview (US3)', () => {
   let h: BackendServerHandle;
+  // A real channel: the preview answers 404 for a channel naming no row. The
+  // system-default channel is the one the seeded catalogue is published on.
+  let salesChannelId: string;
 
   beforeAll(async () => {
     h = await setupBackendServer();
+    salesChannelId = await systemDefaultSalesChannelId(h.em());
   });
   afterAll(async () => {
     await teardownBackendServer(h);
@@ -47,7 +51,7 @@ describe('Admin create-order pricing preview (US3)', () => {
       cookies: { b2b_session: 'stub-admin-session' },
       payload: {
         customerAccountId: TEST_CUSTOMER_ID,
-        salesChannelId: SALES_CHANNEL_ID,
+        salesChannelId,
         items: [{ productId: SEED_PRODUCT_101_ID, quantity: 2 }],
         deliveryMethodId: SEED_DELIVERY_METHOD_ID,
         paymentMethodId: SEED_PAYMENT_METHOD_ID,
@@ -87,7 +91,7 @@ describe('Admin create-order pricing preview (US3)', () => {
       cookies: { b2b_session: 'stub-admin-session' },
       payload: {
         customerAccountId: TEST_CUSTOMER_ID,
-        salesChannelId: SALES_CHANNEL_ID,
+        salesChannelId,
         items: [{ productId: MISSING_PRODUCT_ID, quantity: 1 }],
       },
     });

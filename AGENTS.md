@@ -1,6 +1,6 @@
 # Endora Commerce (b2b-platform) — Agent Instructions
 
-Last updated: 2026-10-11
+Last updated: 2026-10-13
 
 **This file is the single source of truth for every AI coding agent working in this
 repository, and since 2026-09-11 it is a *router*.** What is below is what an agent needs
@@ -348,6 +348,8 @@ pointing at whichever tree it was created from; the same property issue #255 dep
 - PostgreSQL — 13 tables and one sequence owned by `crm`, created by one init migration (plus one column added by US15), foreign keys to `organizations` and `sales_channels` only; one BullMQ queue (`crm-value-recalculation`) on Redis (143-crm-sales-opportunities)
 - TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite + admin-kit zones (admin); Next.js 15 App Router middleware and route handlers (storefront) — **no new runtime dependency** (144-seo-search-engine-robots)
 - PostgreSQL — no new table; three rows in the existing `settings` store owned by `seo`, and one new boolean column `settings.multiline` owned by the platform (144-seo-search-engine-robots)
+- TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite + react-router-dom 7 through `@endora-commerce/admin-kit` (admin) — **no new runtime dependency** (145-admin-product-picker)
+- PostgreSQL — no schema change and no migration; the one new write goes to the existing `price_list_products` table (145-admin-product-picker)
 
 - TypeScript 5.x strict on Node.js ≥ 22.17; Fastify + MikroORM (PostgreSQL) + Zod + ioredis + BullMQ + Meilisearch (backend)
 - React 19 + Vite + react-router-dom 7 + Tailwind 4 (admin); Next.js 15 App Router + React 19 + Tailwind v4 (storefront)
@@ -358,6 +360,6 @@ pointing at whichever tree it was created from; the same property issue #255 dep
 See "Repo map" above.
 
 ## Recent Changes
+- 145-admin-product-picker: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite + react-router-dom 7 through `@endora-commerce/admin-kit` (admin) — **no new runtime dependency**
 - 144-seo-search-engine-robots: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite + admin-kit zones (admin); Next.js 15 App Router middleware and route handlers (storefront) — **no new runtime dependency**
 - 143-crm-sales-opportunities: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod, ioredis, BullMQ (backend); React 19 + Vite + react-router-dom 7 through `@endora-commerce/admin-kit`, charts through the existing `<EChart>` wrapper (admin) — **one new runtime dependency: `@dnd-kit/core`**, see Complexity Tracking
-- feat/119-infakt-integration: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM; React 19 admin + Fastify, MikroORM (PostgreSQL), Zod, ioredis, BullMQ, existing `CredentialsPort` — **no new runtime dependency**

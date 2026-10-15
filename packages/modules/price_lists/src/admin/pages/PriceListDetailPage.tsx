@@ -1,6 +1,8 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -13,18 +15,28 @@ import {
   Filter,
   Layers,
   Lock,
-  Plus,
   Save,
-  Search,
   Star,
   Trash2,
   Zap,
 } from 'lucide-react';
-import type { ApplicationRule } from '@endora-commerce/contracts';
-import { ApiError, apiClient, cn, normalize } from '@endora-commerce/admin-kit/lib';
+import type { ApplicationRule, BulkAddPriceListProductsResult } from '@endora-commerce/contracts';
+import { ApiError, apiClient, cn, useAuth } from '@endora-commerce/admin-kit/lib';
+import {
+  ProductBrowserDialog,
+  ProductBrowserTrigger,
+  productDisplayName,
+  type ProductBrowserItem,
+  type ProductBrowserRules,
+} from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { BracketGrid, type BracketsByCurrency } from '../components/BracketGrid.js';
 import { ApplicationRuleBuilder } from '../components/ApplicationRuleBuilder.js';
+import {
+  createRosterNameResolver,
+  type RosterNameResolver,
+  type RosterProductSummary,
+} from '../lib/roster-product-names.js';
 type PriceListType = 'base' | 'sale';
 type PriceListStatus = 'draft' | 'active' | 'scheduled' | 'expired';
 
@@ -530,21 +542,43 @@ function DetailsPanel({
   );
 }
 
-interface AdminProductSummary {
-  id: string;
-  sku: string;
-  name: Record<string, string>;
-}
-
-function pickName(name: Record<string, string> | undefined | null, fallback = ''): string {
-  if (!name) return fallback;
-  return name['en-US'] ?? name['pl-PL'] ?? Object.values(name)[0] ?? fallback;
+/** A roster row's label when its name is not (yet) known: the id prefix. */
+function idPrefix(productId: string): string {
+  return productId.slice(0, 8);
 }
 
 interface RosterEntry {
   productId: string;
   bracketsByCurrency: BracketsByCurrency;
 }
+
+/**
+ * The product browser's rules on a price list (feature 145, R-4): it opens on
+ * **All** and every status and type may be priced; only what is already on the
+ * roster is refused, with this screen's own reason.
+ */
+const PRICE_LIST_PRODUCT_RULES: ProductBrowserRules = {
+  initialStatus: 'all',
+  alreadyAddedLabelKey: 'priceLists.detail.picker.alreadyOnList',
+};
+
+/**
+ * The browser's message for a refused or lost bulk add: the reason where the
+ * answer names one, otherwise the generic sentence (a network or server failure).
+ */
+function bulkAddErrorKey(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 403) return 'priceLists.detail.bulkAdd.error.forbidden';
+    if (error.status === 404) return 'priceLists.detail.bulkAdd.error.notFound';
+    if (error.status === 400) return 'priceLists.detail.bulkAdd.error.invalid';
+    if (error.status === 409) return 'priceLists.detail.bulkAdd.error.conflict';
+  }
+  return 'priceLists.detail.bulkAdd.error';
+}
+
+const BULK_ADD_FAILURE_KEY: Record<BulkAddPriceListProductsResult['failed'][number]['reason'], string> = {
+  product_not_found: 'priceLists.detail.bulkAdd.failed.product_not_found',
+};
 
 function ProductsAndBracketsPanel({
   priceListId,
@@ -556,62 +590,101 @@ function ProductsAndBracketsPanel({
   focusProductId?: string | null;
 }): ReactNode {
   const t = useTranslation('core');
+  const { hasPermission } = useAuth();
+  const canWrite = hasPermission('price_lists:write');
   const [roster, setRoster] = useState<RosterEntry[]>([]);
-  const [products, setProducts] = useState<Record<string, AdminProductSummary>>({});
+  const [products, setProducts] = useState<ReadonlyMap<string, RosterProductSummary>>(new Map());
+  const productsRef = useRef(products);
+  productsRef.current = products;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [failedMessage, setFailedMessage] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(focusProductId ?? null);
-  const [picker, setPicker] = useState(false);
+  const [browserOpen, setBrowserOpen] = useState(false);
 
+  // The roster alone gates the panel; product names resolve after it, so the
+  // bracket editor never waits on the name lookup (R-9).
   const refresh = useCallback(async (): Promise<void> => {
-    setLoading(true);
     setError(null);
     try {
-      const [rosterRes, productsRes] = await Promise.all([
-        apiClient.get<{ data: { items: RosterEntry[] } }>(
-          `/api/v1/admin/price-lists-engine/${encodeURIComponent(priceListId)}/products`,
-        ),
-        apiClient.get<{ data: AdminProductSummary[] }>('/api/v1/admin/catalog/products'),
-      ]);
-      setRoster(rosterRes.data.items);
-      const map: Record<string, AdminProductSummary> = {};
-      for (const p of productsRes.data) map[p.id] = p;
-      setProducts(map);
+      const rosterRes = await apiClient.get<{ data: { items: RosterEntry[] } }>(
+        `/api/v1/admin/price-lists-engine/${encodeURIComponent(priceListId)}/products`,
+      );
+      const items = rosterRes.data.items;
+      setRoster(items);
       // Honour ?focus=<productId> first if it points at an actual roster row.
-      const focused = focusProductId
-        ? rosterRes.data.items.find((e) => e.productId === focusProductId)
-        : null;
-      if (focused) {
-        setSelectedId(focused.productId);
-      } else if (
-        rosterRes.data.items.length > 0 &&
-        !rosterRes.data.items.some((e) => e.productId === selectedId)
-      ) {
-        setSelectedId(rosterRes.data.items[0]!.productId);
-      }
+      const focused = focusProductId ? items.find((e) => e.productId === focusProductId) : null;
+      setSelectedId((prev) => {
+        if (focused) return focused.productId;
+        if (items.length > 0 && !items.some((e) => e.productId === prev)) return items[0]!.productId;
+        return prev;
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.envelope.error.message : t('priceLists.detail.products.error.load'));
     } finally {
       setLoading(false);
     }
-  }, [priceListId, selectedId, focusProductId, t]);
+  }, [priceListId, focusProductId, t]);
 
   useEffect(() => {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [priceListId]);
 
-  const handleAddProduct = async (productId: string): Promise<void> => {
-    try {
-      await apiClient.post(`/api/v1/admin/price-lists-engine/${encodeURIComponent(priceListId)}/products`, {
-        productId,
+  // Names for every roster product, whatever the catalogue's size: batch-by-id
+  // in chunks of 500. One resolver serves the panel's life, so a roster that
+  // changes while names are loading shares its two request slots, asks only for
+  // ids not known and not already asked for, and every answer is merged — even one
+  // a newer roster overtook. Created in the effect (not at render) so StrictMode's
+  // dev remount gets a live one after disposing the first.
+  const resolverRef = useRef<RosterNameResolver | null>(null);
+  useEffect(() => {
+    const resolver = createRosterNameResolver({
+      onFound: (found) => {
+        if (found.size > 0) setProducts((prev) => new Map([...prev, ...found]));
+      },
+    });
+    resolverRef.current = resolver;
+    return (): void => {
+      resolver.dispose();
+      resolverRef.current = null;
+    };
+  }, []);
+  const rosterKey = useMemo(() => roster.map((e) => e.productId).join('|'), [roster]);
+  useEffect(() => {
+    const missing = (rosterKey ? rosterKey.split('|') : []).filter((id) => !productsRef.current.has(id));
+    if (missing.length > 0) void resolverRef.current?.request(missing);
+  }, [rosterKey]);
+
+  /**
+   * The browser's confirm. A refused or lost request rejects, which keeps the
+   * browser open with its selection and a Retry (FR-010); an accepted one closes
+   * it, reloads the roster, opens the first added product (selection order) and
+   * names the products that could not be added (FR-043).
+   */
+  const handleBulkAdd = async (items: ProductBrowserItem[]): Promise<void> => {
+    const res = await apiClient.post<{ data: BulkAddPriceListProductsResult }>(
+      `/api/v1/admin/price-lists-engine/${encodeURIComponent(priceListId)}/products/bulk-add`,
+      { productIds: items.map((i) => i.id) },
+    );
+    setBrowserOpen(false);
+    setProducts((prev) => new Map([...prev, ...items.map((i) => [i.id, i] as const)]));
+    const { added, failed } = res.data;
+    if (failed.length > 0) {
+      const byId = new Map(items.map((i) => [i.id, i]));
+      const named = failed.map((f) => {
+        const item = byId.get(f.productId);
+        const label = item ? `${productDisplayName(item)} (${item.sku})` : idPrefix(f.productId);
+        return `${label}: ${t(BULK_ADD_FAILURE_KEY[f.reason])}`;
       });
-      setPicker(false);
-      setSelectedId(productId);
-      await refresh();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.envelope.error.message : t('priceLists.detail.products.error.add'));
+      setFailedMessage(t('priceLists.detail.bulkAdd.failed', { count: failed.length, products: named.join('; ') }));
+    } else {
+      setFailedMessage(null);
     }
+    await refresh();
+    const addedIds = new Set(added);
+    const firstAdded = items.find((i) => addedIds.has(i.id));
+    if (firstAdded) setSelectedId(firstAdded.id);
   };
 
   const handleRemoveProduct = async (productId: string): Promise<void> => {
@@ -638,7 +711,7 @@ function ProductsAndBracketsPanel({
   }
 
   const selected = roster.find((e) => e.productId === selectedId) ?? null;
-  const selectedProduct = selected ? products[selected.productId] : null;
+  const selectedProduct = selected ? products.get(selected.productId) : undefined;
 
   return (
     <div className="b2b-col" style={{ gap: 12 }}>
@@ -654,6 +727,31 @@ function ProductsAndBracketsPanel({
           }}
         >
           {error}
+        </div>
+      ) : null}
+      {failedMessage ? (
+        <div
+          role="alert"
+          className="b2b-row"
+          style={{
+            padding: 8,
+            background: 'var(--danger-soft)',
+            color: 'var(--danger-soft-fg)',
+            borderRadius: 6,
+            border: '1px solid hsl(8 80% 85%)',
+            fontSize: 12,
+            gap: 8,
+            alignItems: 'center',
+          }}
+        >
+          <div className="b2b-grow">{failedMessage}</div>
+          <button
+            type="button"
+            className="b2b-btn b2b-btn--ghost b2b-btn--sm"
+            onClick={(): void => setFailedMessage(null)}
+          >
+            {t('priceLists.dismiss')}
+          </button>
         </div>
       ) : null}
       {systemList ? (
@@ -689,14 +787,15 @@ function ProductsAndBracketsPanel({
             <div className="b2b-grow" style={{ fontSize: 12, fontWeight: 600 }}>
               {t('priceLists.detail.products.title', { count: roster.length })}
             </div>
-            <button
-              type="button"
-              className="b2b-btn b2b-btn--primary b2b-btn--sm"
-              disabled={systemList}
-              onClick={(): void => setPicker(true)}
-            >
-              <Plus size={12} /> {t('priceLists.detail.products.add')}
-            </button>
+            <ProductBrowserTrigger
+              label={t('priceLists.detail.products.add')}
+              disabled={systemList || !canWrite}
+              disabledReason={canWrite ? undefined : t('priceLists.detail.products.add.noPermission')}
+              onOpen={(): void => {
+                setFailedMessage(null);
+                setBrowserOpen(true);
+              }}
+            />
           </div>
           {roster.length === 0 ? (
             <div className="b2b-help" style={{ padding: 16 }}>
@@ -705,28 +804,36 @@ function ProductsAndBracketsPanel({
           ) : (
             <ul style={{ margin: 0, padding: 0, listStyle: 'none', maxHeight: 480, overflow: 'auto' }}>
               {roster.map((e) => {
-                const product = products[e.productId];
+                const product = products.get(e.productId);
                 const isSelected = e.productId === selectedId;
                 const currencyCount = Object.keys(e.bracketsByCurrency).length;
                 return (
-                  <li
-                    key={e.productId}
-                    onClick={(): void => setSelectedId(e.productId)}
-                    style={{
-                      padding: '8px 12px',
-                      cursor: 'pointer',
-                      borderBottom: '1px solid var(--border-color)',
-                      background: isSelected ? 'var(--primary-soft)' : 'transparent',
-                      borderLeft: isSelected ? '3px solid var(--primary-color)' : '3px solid transparent',
-                    }}
-                  >
-                    <div style={{ fontSize: 12, fontWeight: 500 }}>
-                      {product ? pickName(product.name, e.productId.slice(0, 8)) : e.productId.slice(0, 8)}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--fg-muted)', display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
-                      <span className="b2b-mono">{product?.sku ?? '—'}</span>
-                      <span>{currencyCount === 0 ? t('priceLists.detail.products.noPrices') : t('priceLists.detail.products.currencyCount', { count: currencyCount })}</span>
-                    </div>
+                  <li key={e.productId} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                    <button
+                      type="button"
+                      aria-current={isSelected ? 'true' : undefined}
+                      onClick={(): void => setSelectedId(e.productId)}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '8px 12px',
+                        cursor: 'pointer',
+                        border: 'none',
+                        background: isSelected ? 'var(--primary-soft)' : 'transparent',
+                        borderLeft: isSelected ? '3px solid var(--primary-color)' : '3px solid transparent',
+                        color: 'inherit',
+                        font: 'inherit',
+                      }}
+                    >
+                      <div data-roster-name style={{ fontSize: 12, fontWeight: 500 }}>
+                        {product ? productDisplayName(product) : idPrefix(e.productId)}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--fg-muted)', display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+                        <span className="b2b-mono">{product?.sku ?? '—'}</span>
+                        <span>{currencyCount === 0 ? t('priceLists.detail.products.noPrices') : t('priceLists.detail.products.currencyCount', { count: currencyCount })}</span>
+                      </div>
+                    </button>
                   </li>
                 );
               })}
@@ -735,19 +842,15 @@ function ProductsAndBracketsPanel({
         </div>
 
         <div>
-          {selected && selectedProduct ? (
+          {selected ? (
             <BracketGrid
               priceListId={priceListId}
               productId={selected.productId}
-              productName={pickName(selectedProduct.name, selected.productId.slice(0, 8))}
+              productName={selectedProduct ? productDisplayName(selectedProduct) : idPrefix(selected.productId)}
               initial={selected.bracketsByCurrency}
               systemList={systemList}
               onSaved={(next): void => handleBracketsSaved(selected.productId, next)}
             />
-          ) : selectedId ? (
-            <div className="b2b-help" style={{ padding: 16 }}>
-              {t('priceLists.detail.products.loadingProduct')}
-            </div>
           ) : (
             <div className="b2b-help" style={{ padding: 16 }}>
               {t('priceLists.detail.products.selectHint')}
@@ -770,108 +873,16 @@ function ProductsAndBracketsPanel({
         </div>
       </div>
 
-      {picker ? (
-        <ProductPickerDialog
-          existing={new Set(roster.map((e) => e.productId))}
-          onClose={(): void => setPicker(false)}
-          onPick={(id): void => {
-            void handleAddProduct(id);
-          }}
-        />
-      ) : null}
+      <ProductBrowserDialog
+        open={browserOpen}
+        title={t('priceLists.detail.picker.title')}
+        rules={PRICE_LIST_PRODUCT_RULES}
+        alreadyAddedIds={roster.map((e) => e.productId)}
+        onConfirm={handleBulkAdd}
+        onCancel={(): void => setBrowserOpen(false)}
+        confirmErrorMessage={(error): string => t(bulkAddErrorKey(error))}
+      />
     </div>
-  );
-}
-
-function ProductPickerDialog({
-  existing,
-  onClose,
-  onPick,
-}: {
-  existing: Set<string>;
-  onClose: () => void;
-  onPick: (productId: string) => void;
-}): ReactNode {
-  const t = useTranslation('core');
-  const [products, setProducts] = useState<AdminProductSummary[]>([]);
-  const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    apiClient
-      .get<{ data: AdminProductSummary[] }>('/api/v1/admin/catalog/products')
-      .then((res) => setProducts(res.data))
-      .catch((err: unknown) => {
-        setError(err instanceof ApiError ? err.envelope.error.message : t('priceLists.detail.picker.error.load'));
-      })
-      .finally(() => setLoading(false));
-  }, [t]);
-
-  const candidates = products.filter((p) => {
-    if (existing.has(p.id)) return false;
-    const q = normalize(query);
-    if (q === '') return true;
-    return normalize(pickName(p.name)).includes(q) || normalize(p.sku).includes(q);
-  });
-
-  return (
-    <>
-      <div className="b2b-scrim" onClick={onClose} />
-      <aside className="b2b-drawer" role="dialog" aria-modal="true">
-        <div className="b2b-drawer__head">
-          <div className="b2b-drawer__title">{t('priceLists.detail.picker.title')}</div>
-          <div className="b2b-card__sub">
-            {t('priceLists.detail.picker.subtitle')}
-          </div>
-        </div>
-        <div className="b2b-drawer__body">
-          <div className="b2b-input-wrap" style={{ marginBottom: 12 }}>
-            <Search size={14} className="lead" />
-            <input
-              autoFocus
-              className="b2b-field b2b-field--addon"
-              placeholder={t('priceLists.detail.picker.searchPlaceholder')}
-              value={query}
-              onChange={(e): void => setQuery(e.target.value)}
-            />
-          </div>
-          {error ? (
-            <div className="b2b-help" style={{ color: 'hsl(8 80% 40%)' }}>
-              {error}
-            </div>
-          ) : loading ? (
-            <div className="b2b-help">{t('priceLists.loading')}</div>
-          ) : candidates.length === 0 ? (
-            <div className="b2b-help">{t('priceLists.detail.picker.empty')}</div>
-          ) : (
-            <ul style={{ margin: 0, padding: 0, listStyle: 'none', maxHeight: 380, overflow: 'auto' }}>
-              {candidates.slice(0, 100).map((p) => (
-                <li
-                  key={p.id}
-                  onClick={(): void => onPick(p.id)}
-                  style={{
-                    padding: '8px 10px',
-                    cursor: 'pointer',
-                    borderBottom: '1px solid var(--border-color)',
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{pickName(p.name, p.sku)}</div>
-                  <div className="b2b-mono" style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
-                    {p.sku}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <div className="b2b-drawer__foot">
-          <button type="button" className="b2b-btn b2b-btn--ghost" onClick={onClose}>
-            {t('priceLists.detail.picker.cancel')}
-          </button>
-        </div>
-      </aside>
-    </>
   );
 }
 

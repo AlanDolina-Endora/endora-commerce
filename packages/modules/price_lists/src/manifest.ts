@@ -233,6 +233,11 @@ export const recentActivity = defineModuleRecentActivity({
       labelKey: 'activity.verb.price_list.products_replace',
     },
     {
+      action: 'price_list.products_add',
+      icon: 'Plus',
+      labelKey: 'activity.verb.price_list.products_add',
+    },
+    {
       action: 'price_list.bracket_update',
       icon: 'CircleDollarSign',
       labelKey: 'activity.verb.price_list.bracket_update',

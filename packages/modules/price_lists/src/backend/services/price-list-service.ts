@@ -1,5 +1,9 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
-import { ERROR_CODES, type ApplicationRule } from '@endora-commerce/contracts';
+import {
+  ERROR_CODES,
+  type ApplicationRule,
+  type BulkAddPriceListProductsResult,
+} from '@endora-commerce/contracts';
 import type {
   CatalogCategoryReadPort,
   CatalogProductReadPort,
@@ -19,6 +23,7 @@ import {
   settingsDisplayModeKey,
   type DisplayModeCategoryCandidate,
 } from './display-mode-resolver.js';
+import { partitionBulkAdd } from './bulk-add-partition.js';
 import { randomUUID } from 'crypto';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { Command, CommandBus } from '@endora-commerce/platform/commands';
@@ -1323,6 +1328,65 @@ export class PriceListService {
       em.remove(existing);
       list.modifiedAt = new Date();
       return { result: undefined, row: list, before: null, after: { name: list.name, productId } };
+    });
+  }
+
+  /**
+   * Feature 145 / US4 — appends many products to a price list in one Command
+   * (`contracts/price-list-bulk-add.md`). Never removes anything: an id already
+   * on the roster is `unchanged` and its brackets are left alone; an id the
+   * catalogue does not answer as live (unknown or soft-deleted) is `failed`;
+   * any other status or type is added. One audit entry carrying counts only,
+   * none when nothing was added. The system Default list is refused — its
+   * roster is seeded from each product's default price.
+   */
+  async addProducts(
+    priceListId: string,
+    productIds: readonly string[],
+    auditCtx?: PriceListsAuditContext,
+  ): Promise<BulkAddPriceListProductsResult> {
+    return this.#runAudited('price_list.products_add', priceListId, auditCtx, async (em) => {
+      const list = await this.getById(priceListId, em);
+      if (list.isSystem) {
+        throw new HttpError(
+          403,
+          ERROR_CODES.FORBIDDEN,
+          "The Default price list's products cannot be added to; it is seeded from each product's default price.",
+        );
+      }
+
+      const unique = [...new Set(productIds)];
+      const rosterRows = unique.length
+        ? await em.find(PriceListProduct, { priceListId, productId: { $in: unique } })
+        : [];
+      const onRoster = new Set(rosterRows.map((r) => r.productId));
+      const rest = unique.filter((id) => !onRoster.has(id));
+      const liveRows = rest.length
+        ? await this.targets().catalogProductRead.findByIds(rest, { liveOnly: true })
+        : [];
+      const result = partitionBulkAdd({
+        requested: unique,
+        onRoster,
+        live: new Set(liveRows.map((p) => p.id)),
+      });
+
+      if (result.added.length === 0) {
+        return { result, row: list, before: null, after: null, skipAudit: true };
+      }
+      for (const productId of result.added) em.create(PriceListProduct, { priceListId, productId });
+      list.modifiedAt = new Date();
+      // Counts only — never the product-id list (feature 024 FR-013).
+      return {
+        result,
+        row: list,
+        before: null,
+        after: {
+          name: list.name,
+          added: result.added.length,
+          unchanged: result.unchanged.length,
+          failed: result.failed.length,
+        },
+      };
     });
   }
 

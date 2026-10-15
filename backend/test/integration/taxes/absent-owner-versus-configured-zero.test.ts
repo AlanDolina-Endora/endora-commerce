@@ -14,6 +14,7 @@ import { TEST_CUSTOMER_ID } from '../../helpers/test-actors.js';
 import { registryCache } from '../../../src/kernel/lifecycle/registry-cache.js';
 import { REGISTERED_MANIFESTS } from '../../../src/lifecycle/registered-manifests.js';
 import { Tax } from '../../helpers/package-entities.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 
 /**
  * Issue #124 — the distinction the whole fix turns on.
@@ -40,10 +41,12 @@ import { Tax } from '../../helpers/package-entities.js';
 
 const ALL_IDS = REGISTERED_MANIFESTS.map((entry) => entry.manifest.id);
 const CUSTOMER = { b2b_session: 'stub-customer-session' };
-const SALES_CHANNEL_ID = '00000000-0000-4000-8000-0000000000c1';
 
 describe('taxes — a configured zero prices, an absent owner refuses [integration]', () => {
   let h: BackendServerHandle;
+  // A real channel: the preview answers 404 for a channel naming no row. The
+  // system-default channel is the one the seeded catalogue is published on.
+  let salesChannelId: string;
 
   const placeOrder = async (): Promise<{ statusCode: number; body: unknown }> => {
     const res = await h.app.inject({
@@ -73,6 +76,7 @@ describe('taxes — a configured zero prices, an absent owner refuses [integrati
 
   beforeAll(async () => {
     h = await setupBackendServer();
+    salesChannelId = await systemDefaultSalesChannelId(h.em());
   }, 60_000);
 
   beforeEach(async () => {
@@ -128,7 +132,7 @@ describe('taxes — a configured zero prices, an absent owner refuses [integrati
       cookies: { b2b_session: 'stub-admin-session' },
       payload: {
         customerAccountId: TEST_CUSTOMER_ID,
-        salesChannelId: SALES_CHANNEL_ID,
+        salesChannelId,
         items: [{ productId: SEED_PRODUCT_101_ID, quantity: 2 }],
         deliveryMethodId: SEED_DELIVERY_METHOD_ID,
         paymentMethodId: SEED_PAYMENT_METHOD_ID,
@@ -150,7 +154,7 @@ describe('taxes — a configured zero prices, an absent owner refuses [integrati
       cookies: { b2b_session: 'stub-admin-session' },
       payload: {
         customerAccountId: TEST_CUSTOMER_ID,
-        salesChannelId: SALES_CHANNEL_ID,
+        salesChannelId,
         items: [{ productId: SEED_PRODUCT_101_ID, quantity: 2 }],
       },
     });
