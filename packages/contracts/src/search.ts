@@ -219,6 +219,12 @@ export interface SearchQueryContext {
    */
   audience: ProductAudience;
   preferredLanguage?: string | undefined;
+  /**
+   * The currency the listing is priced in (issue #249), already resolved by the
+   * caller against the channel's own list (`resolveListingCurrency`). Absent
+   * means the channel's default.
+   */
+  currency?: string | undefined;
 }
 
 export interface SearchListProductsParams {

@@ -37,6 +37,8 @@ export type MessageKey =
   | 'product.outOfStock'
   | 'product.requestQuote'
   | 'product.addToCart'
+  | 'product.addToCartFailed'
+  | 'product.oneClickFailed'
   | 'product.details'
   | 'product.tabs.description'
   | 'product.tabs.parameters'
@@ -264,6 +266,8 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'product.outOfStock': 'Out of stock',
     'product.requestQuote': 'Request a quote',
     'product.addToCart': 'Add to cart',
+    'product.addToCartFailed': 'Could not add the product to the cart.',
+    'product.oneClickFailed': 'Could not place the order.',
     'product.details': 'Details',
     'product.tabs.description': 'Description',
     'product.tabs.parameters': 'Parameters',
@@ -476,6 +480,8 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'product.outOfStock': 'Brak w magazynie',
     'product.requestQuote': 'Zapytaj o oferte',
     'product.addToCart': 'Dodaj do koszyka',
+    'product.addToCartFailed': 'Nie udało się dodać produktu do koszyka.',
+    'product.oneClickFailed': 'Nie udało się złożyć zamówienia.',
     'product.details': 'Szczegóły',
     'product.tabs.description': 'Opis',
     'product.tabs.parameters': 'Parametry',

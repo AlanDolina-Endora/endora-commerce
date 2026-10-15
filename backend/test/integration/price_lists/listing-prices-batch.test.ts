@@ -272,7 +272,10 @@ describe('price_lists — batched listing price resolution', () => {
             currencyCode: salesChannel.defaultCurrency.toUpperCase(),
           },
         });
-        looped.set(product.id, listingPriceFrom(line, product, salesChannel.defaultCurrency));
+        looped.set(
+          product.id,
+          listingPriceFrom(line, product, salesChannel.defaultCurrency, salesChannel.defaultCurrency),
+        );
       }
 
       expect(batched.size).toBe(products.length);

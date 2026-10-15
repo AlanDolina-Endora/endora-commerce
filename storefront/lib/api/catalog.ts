@@ -21,7 +21,32 @@ import { apiGet, apiGetForViewer, type RequestContext } from './client';
  * forwarded no credential, so every buyer was quoted the channel price and the
  * ruling never reached the shop. `getCategoryTree` and `getFilters` carry no
  * price and stay anonymous and shared.
+ *
+ * The same three carry the shopper's currency as `?currency=` (issue #249) —
+ * see {@link setCurrency}.
  */
+
+/**
+ * Add the shopper's selected currency to a priced catalogue read.
+ *
+ * A query parameter, not a header: the Data Cache keys a `fetch` by its URL,
+ * so each currency is its own entry, and a visitor who chose nothing asks the
+ * URL — and lands on the entry — they always did. Only a well-formed code is
+ * forwarded: the backend refuses a malformed one with a 400, and a tampered
+ * cookie must not turn every catalogue page into an error. A code the channel
+ * does not offer is the backend's to answer, in the channel's default.
+ */
+function setCurrency(params: URLSearchParams, ctx: RequestContext): void {
+  if (ctx.currency && /^[A-Za-z]{3}$/.test(ctx.currency)) {
+    params.set('currency', ctx.currency.toUpperCase());
+  }
+}
+
+/** `path` with `params` appended, or `path` alone when there are none. */
+function withQuery(path: string, params: URLSearchParams): string {
+  const qs = params.toString();
+  return qs ? `${path}?${qs}` : path;
+}
 
 export interface ListProductsResponse {
   data: ProductSummary[];
@@ -76,9 +101,9 @@ export async function listProducts(
       }
     }
   }
-  const qs = params.toString();
+  setCurrency(params, ctx);
   return apiGetForViewer<ListProductsResponse>(
-    `/api/v1/catalog/products${qs ? `?${qs}` : ''}`,
+    withQuery('/api/v1/catalog/products', params),
     ctx,
     { revalidate: 60, tags: ['catalog:products'] },
   );
@@ -88,8 +113,10 @@ export async function getProductBySlug(
   slug: string,
   ctx: RequestContext,
 ): Promise<ProductDetail> {
+  const params = new URLSearchParams();
+  setCurrency(params, ctx);
   const res = await apiGetForViewer<{ data: ProductDetail }>(
-    `/api/v1/catalog/products/${encodeURIComponent(slug)}`,
+    withQuery(`/api/v1/catalog/products/${encodeURIComponent(slug)}`, params),
     ctx,
     { revalidate: 60, tags: ['catalog:product', `catalog:product:${slug}`] },
   );
@@ -121,6 +148,8 @@ export async function getProductLinks(
     };
   }>
 > {
+  const linkParams = new URLSearchParams({ kind });
+  setCurrency(linkParams, ctx);
   try {
     const res = await apiGetForViewer<{
       data: Array<{
@@ -137,7 +166,7 @@ export async function getProductLinks(
         };
       }>;
     }>(
-      `/api/v1/catalog/products/${encodeURIComponent(productIdOrSlug)}/links?kind=${kind}`,
+      withQuery(`/api/v1/catalog/products/${encodeURIComponent(productIdOrSlug)}/links`, linkParams),
       ctx,
       { revalidate: 60, tags: ['catalog:links', `catalog:product:${productIdOrSlug}`] },
     );

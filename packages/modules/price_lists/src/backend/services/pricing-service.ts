@@ -451,7 +451,7 @@ export class PricingService implements PricingServiceContract {
     const pending: PricedProductRef[] = [];
     for (const product of requested.values()) {
       const cached = this.cache?.get(cacheKeyFor(product.id));
-      if (cached) out.set(product.id, listingPriceFrom(lineFromEngine(cached), product, currencyCode));
+      if (cached) out.set(product.id, listingPriceFrom(lineFromEngine(cached), product, currencyCode, salesChannel.defaultCurrency));
       else pending.push(product);
     }
     if (pending.length === 0) return out;
@@ -538,7 +538,7 @@ export class PricingService implements PricingServiceContract {
         currencyCode,
       };
       this.cache?.set(cacheKeyFor(product.id), engine);
-      out.set(product.id, listingPriceFrom(lineFromEngine(engine), product, currencyCode));
+      out.set(product.id, listingPriceFrom(lineFromEngine(engine), product, currencyCode, salesChannel.defaultCurrency));
     }
     return out;
   }

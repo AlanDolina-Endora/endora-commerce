@@ -53,6 +53,7 @@ import { getServerContext } from '../../../../lib/server-context';
 import { canonicalPath } from '../../../../lib/seo/route-seo';
 import { seo } from './seo';
 import { tForLocale } from '../../../../lib/i18n/messages';
+import { cartActionFailure } from '../../../../lib/cart-action-failure';
 import { StorefrontApiError, withoutViewer } from '../../../../lib/api/client';
 import { publicApiBaseUrl } from '../../../../lib/env.mjs';
 
@@ -378,7 +379,7 @@ export default async function ProductPage({
                       singlePieceLabel={t('product.packaging.singlePiece')}
                       piecesLabel={t('product.packaging.pieces')}
                       addToCartAction={addToCartAction}
-                      addToCartLabel="Dodaj do koszyka"
+                      addToCartLabel={t('product.addToCart')}
                       // Secondary actions row, next to compare + quote.
                       leadingAction={
                         <AddToShoppingListButton
@@ -527,6 +528,21 @@ async function readCartJar(): Promise<CartCookieJar> {
 }
 
 /**
+ * The request's locale, for an action's failure message (issue #249). It is
+ * read while handling a failure — possibly the backend being unreachable, which
+ * `getServerContext` reads too — so it never throws: an unreadable locale
+ * falls back to the catalogue's default rather than replacing the shopper's
+ * error with an error page.
+ */
+async function failureLocale(): Promise<string | undefined> {
+  try {
+    return (await getServerContext()).locale;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Add-to-cart server action for the PDP. POSTs to the carts module,
  * persists the `b2b_cart_anon` cookie the backend mints on the first
  * call (without it the redirect lands on `/cart` with no jar and the
@@ -558,7 +574,7 @@ async function oneClickAction(formData: FormData): Promise<void> {
       ctx,
     );
   } catch (err) {
-    const message = err instanceof StorefrontApiError ? err.message : 'Could not place the order.';
+    const message = cartActionFailure(err, await failureLocale(), 'product.oneClickFailed');
     redirect(`/cart?error=${encodeURIComponent(message)}`);
   }
   if (result!.nextAction?.kind === 'redirect_to_gateway' && result!.nextAction.url) {
@@ -594,8 +610,7 @@ async function addGroupedToCartAction(formData: FormData): Promise<void> {
     }
     if (anon && anon !== (jar.anon ?? null)) await setAnonCartCookie(anon);
   } catch (err) {
-    const message =
-      err instanceof StorefrontApiError ? err.message : 'Could not add to cart.';
+    const message = cartActionFailure(err, await failureLocale(), 'product.addToCartFailed');
     redirect(`/cart?error=${encodeURIComponent(message)}`);
   }
   redirect('/cart');
@@ -633,8 +648,7 @@ async function addBundleToCartAction(formData: FormData): Promise<void> {
     }
     if (anon && anon !== (jar.anon ?? null)) await setAnonCartCookie(anon);
   } catch (err) {
-    const message =
-      err instanceof StorefrontApiError ? err.message : 'Could not add to cart.';
+    const message = cartActionFailure(err, await failureLocale(), 'product.addToCartFailed');
     redirect(`/cart?error=${encodeURIComponent(message)}`);
   }
   redirect('/cart');
@@ -652,7 +666,12 @@ async function addToCartAction(
   const variantId = ((formData.get('variantId') as string) ?? '').trim();
   const packagingUnitId = ((formData.get('packagingUnitId') as string) ?? '').trim();
   const quantity = Number(formData.get('quantity') ?? '1');
-  if (!productId) return { status: 'error', message: 'Nie udało się dodać produktu do koszyka.' };
+  if (!productId) {
+    return {
+      status: 'error',
+      message: cartActionFailure(null, await failureLocale(), 'product.addToCartFailed'),
+    };
+  }
   const qty = Number.isFinite(quantity) && quantity >= 1 ? Math.floor(quantity) : 1;
   try {
     const result = await addCartItem(await readCartJar(), {
@@ -663,9 +682,10 @@ async function addToCartAction(
     });
     if (result.newAnonCookie) await setAnonCartCookie(result.newAnonCookie);
   } catch (err) {
-    const message =
-      err instanceof StorefrontApiError ? err.message : 'Nie udało się dodać produktu do koszyka.';
-    return { status: 'error', message };
+    return {
+      status: 'error',
+      message: cartActionFailure(err, await failureLocale(), 'product.addToCartFailed'),
+    };
   }
   return { status: 'success', token: nextAddToCartToken(prevState) };
 }

@@ -14,6 +14,12 @@ których korzysta storefront, oraz za edycję katalogu w panelu administracyjnym
 
 Trasy administracyjne są chronione przez `catalog:read` (lista i odczyt) i `catalog:write` (zmiany).
 
+Odczyty storefrontu, które zawierają cenę — lista produktów, szczegóły produktu i
+`/products/:idOrSlug/links` — przyjmują `?currency=` (kod ISO 4217). Odpowiedź jest wyceniana w
+tej walucie, jeśli kanał sprzedaży ją oferuje, a w przeciwnym razie w walucie domyślnej kanału;
+w obu przypadkach każda cena podaje swoją walutę. Niepoprawny kod jest odrzucany z
+`400 VALIDATION_FAILED`.
+
 | Metoda i ścieżka | Kto | Przeznaczenie |
 | --- | --- | --- |
 | `GET /api/v1/catalog/products` | storefront / klucz API | Lista, wyszukiwanie i filtrowanie produktów w aktywnym kanale sprzedaży |

@@ -10,6 +10,7 @@ import type { CmsProductSummary } from '../schema/catalog-types.js';
 import type { CmsProductCardProps } from '../schema/component-types.js';
 import { useCatalogBlockData } from '../hooks/use-catalog-block-data.js';
 import { productCardDataRequest } from '../utils/catalog-block-data.js';
+import { useBlockRenderEnvironment } from '@endora-commerce/page-builder-core/contributions';
 
 function formatPrice(product: CmsProductSummary, locale: string): string | null {
   if (!product.price) return null;
@@ -58,7 +59,7 @@ export function productCardLayoutStyle(
 
 export function CmsProductCardView({
   product,
-  locale = 'pl-PL',
+  locale: explicitLocale,
   showPrice = true,
   showSku = true,
   showStock = true,
@@ -85,6 +86,13 @@ export function CmsProductCardView({
   ctaLabel?: string;
   previewTier?: BreakpointTier;
 }): React.ReactElement {
+  // An explicit prop wins; otherwise the language the host renders this tree
+  // in — on the storefront the request's locale, for every Page Builder tree
+  // (issue #249). This was a hard-coded `pl-PL`, which `ProductGrid` and
+  // `ProductSlider` never overrode, so an English storefront showed Polish
+  // prices.
+  const { language } = useBlockRenderEnvironment();
+  const locale = explicitLocale ?? language;
   const ratioClass = mediaRatioClass(imageRatio);
   const price = showPrice ? formatPrice(product, locale) : null;
   const layout = productCardLayoutStyle(
@@ -140,7 +148,7 @@ export function CmsProductCardView({
 export function CmsProductCardLoader(
   props: CmsProductCardProps & { locale?: string; editing?: boolean; previewTier?: BreakpointTier },
 ): React.ReactElement {
-  const { productSlug, editing = false, locale = 'pl-PL', previewTier, ...viewProps } = props;
+  const { productSlug, editing = false, locale, previewTier, ...viewProps } = props;
   // Provided by the page's server render on the storefront; fetched from an effect only in
   // the editor preview, which is the one caller that ever sees `loading`.
   const { loading, data } = useCatalogBlockData<CmsProductSummary[]>(productCardDataRequest({ productSlug }));
@@ -172,7 +180,7 @@ export function CmsProductCardLoader(
   return (
     <CmsProductCardView
       product={product}
-      locale={locale}
+      {...(locale !== undefined ? { locale } : {})}
       {...(previewTier !== undefined ? { previewTier } : {})}
       {...viewProps}
     />

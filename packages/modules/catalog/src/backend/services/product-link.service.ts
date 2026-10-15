@@ -2,6 +2,7 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 
 import {
   ERROR_CODES,
+  listingPriceChannelContext,
   listingPriceMoney,
   type AssetReadPort,
   type ListingPricePort,
@@ -50,6 +51,11 @@ interface StorefrontContext {
    */
   audience: ProductAudience;
   preferredLanguage?: string | undefined;
+  /**
+   * The currency the tiles are priced in (issue #249), resolved by the route
+   * the same way as the page they sit on. Absent means the channel's default.
+   */
+  currency?: string | undefined;
 }
 
 /**
@@ -400,10 +406,7 @@ export class ProductLinkService {
         ? await this.#requireListingPrices().resolveListingPrices({
             products: visibleTargets,
             context: {
-              salesChannel: {
-                id: ctx.resolvedChannel.id,
-                defaultCurrency: ctx.resolvedChannel.defaultCurrency,
-              },
+              ...listingPriceChannelContext(ctx.resolvedChannel, ctx.currency),
               organization: viewerOrganization,
             },
           })

@@ -15,6 +15,12 @@ depends on and the admin-side authoring surface.
 Admin routes are gated by `catalog:read` (list / get) /
 `catalog:write` (mutations).
 
+The storefront reads that carry a price — the product list, the product detail and
+`/products/:idOrSlug/links` — accept `?currency=` (an ISO 4217 code). The response is priced in
+that currency when the Sales Channel offers it, and in the channel's default currency
+otherwise; every price names its currency either way. A malformed code is refused with
+`400 VALIDATION_FAILED`.
+
 | Verb + Path | Audience | Purpose |
 | --- | --- | --- |
 | `GET /api/v1/catalog/products` | storefront / API key | List/search/filter products in the active Sales Channel |

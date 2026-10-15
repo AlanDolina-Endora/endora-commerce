@@ -24,6 +24,7 @@ import {
   ERROR_CODES,
   isPriceSort,
   isProductVisibleTo,
+  listingPriceChannelContext,
   listingPriceMoney,
   type AssetReadPort,
   type AssetRecord,
@@ -136,6 +137,14 @@ export interface CatalogQueryContext {
    * then to any available key.
    */
   preferredLanguage?: string | undefined;
+  /**
+   * The currency this read is priced in (issue #249), already resolved by the
+   * route against the channel's own list (`resolveListingCurrency`). Absent
+   * means the channel's default. Every price, price ordering and price range on
+   * this service reads it through {@link CatalogQueryService.#viewerPricingContext},
+   * so a page cannot be priced in one currency and ordered in another.
+   */
+  currency?: string | undefined;
 }
 
 /**
@@ -500,14 +509,13 @@ export class CatalogQueryService {
    */
   async #listingPricesFor(
     products: readonly Product[],
-    channel: CatalogResolvedChannel | undefined,
-    audience: ProductAudience,
+    ctx: CatalogQueryContext,
   ): Promise<Map<string, ListingPrice>> {
     if (products.length === 0) return new Map();
-    if (!(channel?.isPublic ?? true)) return new Map();
+    if (!(ctx.resolvedChannel.isPublic ?? true)) return new Map();
     return this.#requireListingPrices().resolveListingPrices({
       products,
-      context: await this.#viewerPricingContext(channel, audience),
+      context: await this.#viewerPricingContext(ctx),
     });
   }
 
@@ -521,19 +529,15 @@ export class CatalogQueryService {
    * prevent, and it would be one forgotten argument away if each seam built its
    * own context.
    */
-  async #viewerPricingContext(
-    channel: CatalogResolvedChannel | undefined,
-    audience: ProductAudience,
-  ): Promise<ListingPriceViewerContext> {
+  async #viewerPricingContext(ctx: CatalogQueryContext): Promise<ListingPriceViewerContext> {
+    const { audience } = ctx;
     const organization =
       audience.organizationId === null
         ? null
         : await viewerOrganizationFor(this.#requireOrganizationDetails(), audience);
     return {
-      salesChannel: {
-        id: channel?.id ?? '',
-        defaultCurrency: channel?.defaultCurrency ?? 'PLN',
-      },
+      // Issue #249 — the currency the route resolved, or the channel default.
+      ...listingPriceChannelContext(ctx.resolvedChannel, ctx.currency),
       organization,
     };
   }
@@ -737,7 +741,7 @@ export class CatalogQueryService {
     // Its asset and its category slugs are resolved the same way and for the
     // same reason (issue #263): both helpers took an id list already, and both
     // were being handed one id at a time from inside the loop.
-    const resolvedPrices = await this.#listingPricesFor(priceable, channel, ctx.audience);
+    const resolvedPrices = await this.#listingPricesFor(priceable, ctx);
     const cardReads = await this.#listingCardReadsFor(em, priceable.map((p) => p.id));
     const summaries = priceable.map((p) =>
       this.toSummary(p, channel, ctx.preferredLanguage, resolvedPrices, cardReads),
@@ -962,7 +966,7 @@ export class CatalogQueryService {
   ): Promise<ListResult<ProductSummary>> {
     const channel = ctx.resolvedChannel;
     const direction = sort === 'price' ? 'asc' : 'desc';
-    const context = await this.#viewerPricingContext(channel, ctx.audience);
+    const context = await this.#viewerPricingContext(ctx);
     const amountRange = this.#amountRange(params);
     const restrictToProductIds = params.categorySlug
       ? [...(await this.productIdsInCategoryTree(em, params.categorySlug))]
@@ -1106,7 +1110,7 @@ export class CatalogQueryService {
     const nextCursor =
       hasMore && page.length > 0 ? encodeObjectCursor(cursors[params.limit - 1]!) : null;
 
-    const resolvedPrices = await this.#listingPricesFor(page, channel, ctx.audience);
+    const resolvedPrices = await this.#listingPricesFor(page, ctx);
     const cardReads = await this.#listingCardReadsFor(em, page.map((p) => p.id));
     return {
       data: page.map((p) =>
@@ -1190,7 +1194,7 @@ export class CatalogQueryService {
           this.#passesPageFilters(r, params, ctx) &&
           (categoryFilteredIds === null || categoryFilteredIds.has(r.id)),
       );
-      const chunkPrices = await this.#listingPricesFor(candidates, channel, ctx.audience);
+      const chunkPrices = await this.#listingPricesFor(candidates, ctx);
       for (const product of candidates) {
         const price = chunkPrices.get(product.id);
         if (price === undefined || price.source !== 'price_list') continue;
@@ -1289,7 +1293,7 @@ export class CatalogQueryService {
       product,
       channel,
       ctx.preferredLanguage,
-      await this.#listingPricesFor([product], channel, ctx.audience),
+      await this.#listingPricesFor([product], ctx),
       await this.#listingCardReadsFor(em, [product.id]),
     );
 
@@ -1660,7 +1664,7 @@ export class CatalogQueryService {
     // and `ProductLinkService`, so the chain and the port call have one home.
     const assetUrlByProduct = await resolvePrimaryAssetUrls(em, this.#requireAssets(), ids);
 
-    const resolvedPrices = await this.#listingPricesFor(products, channel, ctx.audience);
+    const resolvedPrices = await this.#listingPricesFor(products, ctx);
     for (const p of products) {
       const price = this.#summaryPrice(resolvedPrices, p.id);
       result.set(p.id, {
