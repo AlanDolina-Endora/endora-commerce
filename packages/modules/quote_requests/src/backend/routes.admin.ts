@@ -6,17 +6,12 @@ import {
   adminCreateQuoteRequestSchema,
   adminPatchQuoteRequestSchema,
   createQuoteRequestSavedViewRequestSchema,
-  ERROR_CODES,
   rfqStatusSchema,
   updateQuoteRequestSavedViewRequestSchema,
 } from '@endora-commerce/contracts';
-import { HttpError } from '@endora-commerce/platform/http';
-import { getTenantContext } from '@endora-commerce/platform/tenancy';
+import { savedViewActor } from './saved-view-actor.js';
 import type { RfqAdminService, AdminContext, AdminAssignmentScope } from './services/rfq-admin-service.js';
-import type {
-  QuoteRequestListViewService,
-  QuoteRequestSavedViewActor,
-} from './services/quote-request-list-view-service.js';
+import type { QuoteRequestListViewService } from './services/quote-request-list-view-service.js';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 
 export interface AdminContextResolver {
@@ -202,19 +197,4 @@ export async function registerQuoteRequestsAdminRoutes(
     await listViewService.remove(request.params.id, savedViewActor());
     return { data: { deleted: request.params.id } };
   });
-}
-
-/**
- * The saved-view actor from the request's ambient tenant context (contract
- * §4): the admin, and whether that admin reaches every organization — the
- * "platform admin (for saved views)" of the spec's *Vocabulary* (research
- * R-7). Fails closed: no admin actor is a 401, never a write under an empty
- * owner id (threat model S-03).
- */
-function savedViewActor(): QuoteRequestSavedViewActor {
-  const ctx = getTenantContext();
-  if (!ctx || ctx.actor.kind !== 'admin' || !ctx.actor.id) {
-    throw new HttpError(401, ERROR_CODES.UNAUTHORIZED, 'Admin session required.');
-  }
-  return { adminUserId: ctx.actor.id, isPlatformAdmin: ctx.mode === 'all' };
 }

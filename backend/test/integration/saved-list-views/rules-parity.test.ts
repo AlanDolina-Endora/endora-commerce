@@ -9,6 +9,11 @@ import {
 import { OrderListViewService } from '../../../../packages/modules/orders/src/backend/services/order-list-view-service.js';
 import { ProductListViewService } from '../../../../packages/modules/catalog/src/backend/services/product-list-view-service.js';
 import { QuoteRequestListViewService } from '../../../../packages/modules/quote_requests/src/backend/services/quote-request-list-view-service.js';
+import { savedViewActor as orderSavedViewActor } from '../../../../packages/modules/orders/src/backend/saved-view-actor.js';
+import { savedViewActor as productSavedViewActor } from '../../../../packages/modules/catalog/src/backend/saved-view-actor.js';
+import { savedViewActor as quoteRequestSavedViewActor } from '../../../../packages/modules/quote_requests/src/backend/saved-view-actor.js';
+import { resolveTenantContext } from '@endora-commerce/platform/composition';
+import { runWithTenantContext, type TenantContext } from '../../../src/tenancy/tenant-context.js';
 
 /**
  * `specs/147-saved-views/` — one set of saved-view rules, judged the same way
@@ -79,6 +84,12 @@ interface ListAdapter {
    */
   holdsLegacyDuplicates: boolean;
   make(emFactory: () => EntityManager, log: SpyLogger): SavedViewServiceUnderTest;
+  /**
+   * The list's route-side actor derivation: who is asking, read from the
+   * request's ambient tenant context. Every list must derive
+   * "platform admin (for saved views)" the same way (A1–A5 below).
+   */
+  actor(): Actor;
   /** Insert a row without going through the service's rules. */
   seedRaw(em: EntityManager, row: { ownerAdminUserId: string; name: string; shared: boolean }): Promise<string>;
 }
@@ -95,6 +106,7 @@ const ADAPTERS: ListAdapter[] = [
     // four methods to one shape — do not widen the cast to hide a drift.
     make: (emFactory, log) =>
       new OrderListViewService(emFactory, log) as unknown as SavedViewServiceUnderTest,
+    actor: orderSavedViewActor,
     async seedRaw(em, row) {
       const id = randomUUID();
       await em.execute(
@@ -115,6 +127,7 @@ const ADAPTERS: ListAdapter[] = [
     // `visibleColumns`, so the shared `input()` carries keys it ignores.
     make: (emFactory, log) =>
       new ProductListViewService(emFactory, log) as unknown as SavedViewServiceUnderTest,
+    actor: productSavedViewActor,
     async seedRaw(em, row) {
       const id = randomUUID();
       await em.execute(
@@ -135,6 +148,7 @@ const ADAPTERS: ListAdapter[] = [
     // `visibleColumns` are optional, which no one input type shares exactly.
     make: (emFactory, log) =>
       new QuoteRequestListViewService(emFactory, log) as unknown as SavedViewServiceUnderTest,
+    actor: quoteRequestSavedViewActor,
     async seedRaw(em, row) {
       const id = randomUUID();
       await em.execute(
@@ -388,6 +402,60 @@ describe('saved list views — one rule set for every list (spec 147)', () => {
           actorAdminUserId: platformAdmin.adminUserId,
         },
       ]);
+    });
+  });
+
+  // A1–A5 — "platform admin (for saved views)" is derived from the request's
+  // tenant context, identically for every list and failing closed. The orders
+  // list used to read its own admin-orders scope resolver instead and answered
+  // `true` when the composition did not provide one (security review SV-1).
+  describe.each(ADAPTERS)('$label actor derivation', (adapter) => {
+    const adminUserId = randomUUID();
+    const within = <T>(ctx: TenantContext | undefined, fn: () => T): Promise<T> =>
+      ctx === undefined ? Promise.resolve().then(fn) : runWithTenantContext(ctx, async () => fn());
+    const refusal = (fn: () => unknown): Promise<unknown> =>
+      rejection(Promise.resolve().then(fn));
+
+    it('A1 treats an admin whose context reaches every organization as a platform admin', async () => {
+      const ctx = resolveTenantContext({ kind: 'admin', adminUserId }, { allowAll: true });
+      expect(await within(ctx, adapter.actor)).toEqual({ adminUserId, isPlatformAdmin: true });
+    });
+
+    it('A2 does not treat a sales representative (an allowed set) as a platform admin', async () => {
+      const ctx = resolveTenantContext(
+        { kind: 'admin', adminUserId },
+        { allowAll: false, allowedOrganizationIds: [randomUUID()] },
+      );
+      expect(await within(ctx, adapter.actor)).toEqual({ adminUserId, isPlatformAdmin: false });
+    });
+
+    it('A3 fails closed when nothing could say what the admin reaches (no scope port composed)', async () => {
+      // The exact scope the platform's request hook builds for an admin when no
+      // `adminTenantScopePort` is registered: no organization. The old orders
+      // derivation answered `true` here.
+      const ctx = resolveTenantContext(
+        { kind: 'admin', adminUserId },
+        { allowAll: false, allowedOrganizationIds: [] },
+      );
+      expect(await within(ctx, adapter.actor)).toEqual({ adminUserId, isPlatformAdmin: false });
+    });
+
+    it('A4 fails closed for an admin whose role could not be resolved', async () => {
+      const ctx = resolveTenantContext(
+        { kind: 'admin', adminUserId },
+        { allowAll: true, unresolved: new Error('ADMIN_ROLE_REQUIRED') },
+      );
+      expect(await within(ctx, adapter.actor)).toEqual({ adminUserId, isPlatformAdmin: false });
+    });
+
+    it('A5 answers 401 when the context carries no admin actor', async () => {
+      const customer = resolveTenantContext({
+        kind: 'customer',
+        customerAccountId: randomUUID(),
+        organizationId: randomUUID(),
+      });
+      expect(statusOf(await within(customer, () => refusal(adapter.actor)))).toBe(401);
+      expect(statusOf(await refusal(adapter.actor))).toBe(401);
     });
   });
 

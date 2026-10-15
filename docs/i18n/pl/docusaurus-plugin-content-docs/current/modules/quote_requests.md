@@ -362,9 +362,11 @@ pozycja to **— Wybierz widok —**, a obok niej dwa przyciski: **Zapisz widok*
   **Usuń widok** na podstawie `canModify` i sprawdza powtórzenie nazwy wśród widoków z
   `ownedByCaller`.
 - **Administrator platformy, na potrzeby zapisanych widoków,** to administrator, którego kontekst
-  dzierżawy (tenant context) żądania ma `mode === 'all'` — każda rola poza `sales_representative`,
-  ten sam predykat, którego używają widoki listy zamówień. To celowo nie jest własny test modułu
-  `role.code === 'platform_admin'`, którego używa widoczność listy.
+  dzierżawy (tenant context) żądania ma `mode === 'all'` — każda rola poza `sales_representative`.
+  Listy zamówień, produktów i zapytań ofertowych wyznaczają go tak samo, a w razie wątpliwości
+  odmawiają: administrator, którego zasięgu nie da się ustalić, nie jest administratorem platformy.
+  To celowo nie jest własny test modułu `role.code === 'platform_admin'`, którego używa
+  widoczność listy.
 - **Odmowy.** Nieistniejący widok i prywatny widok innego administratora to `404 NOT_FOUND` —
   nie da się ich odróżnić. Udostępniony widok, którego wywołujący nie jest właścicielem i którego
   nie może zmienić jako administrator platformy, to `403 FORBIDDEN`. Nazwa, której klucza

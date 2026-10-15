@@ -47,7 +47,8 @@ import { previewLineAvailability } from './services/preview-line-availability.js
 import type { OrderStatusGraphService } from './services/order-status-graph-service.js';
 import type { OrderTransitionService } from './services/order-transition-service.js';
 import type { OrderListService, OrderListScope } from './services/order-list-service.js';
-import type { OrderListViewService, SavedViewActor } from './services/order-list-view-service.js';
+import type { OrderListViewService } from './services/order-list-view-service.js';
+import { savedViewActor } from './saved-view-actor.js';
 import type { OrderExportService } from './services/order-export-service.js';
 import type { OrderCommentService } from './services/order-comment-service.js';
 import type { OrderComment } from './entities/order-comment.entity.js';
@@ -506,10 +507,6 @@ export async function registerOrderRoutes(
     const scope = await deps.resolveAdminOrdersScope(request);
     return scope.allowAll ? undefined : { allowedOrganizationIds: scope.allowedOrganizationIds };
   };
-  const isPlatformAdmin = async (request: FastifyRequest): Promise<boolean> => {
-    if (!deps.resolveAdminOrdersScope) return true;
-    return (await deps.resolveAdminOrdersScope(request)).allowAll;
-  };
 
   /**
    * Load an order for an admin route that names one, through the tenant guard.
@@ -716,18 +713,13 @@ export async function registerOrderRoutes(
   );
 
   // --- Saved list views (feature 038 US2; `specs/147-saved-views/`) ----
-  // The actor is the admin the request resolves to, failing closed: with no
-  // admin actor there is no owner, and an empty owner id would be one bucket
-  // every actor-less request writes into (threat model S-03). `isPlatformAdmin`
-  // is read on every route, the list included, because it decides `canModify`.
-  const savedViewActor = async (request: FastifyRequest): Promise<SavedViewActor> => {
-    const adminUserId = resolveAdminUserId(request);
-    if (!adminUserId) throw new HttpError(401, ERROR_CODES.UNAUTHORIZED, 'Admin session required.');
-    return { adminUserId, isPlatformAdmin: await isPlatformAdmin(request) };
-  };
-
-  app.get('/api/v1/admin/orders/list-views', { preHandler: requireAdmin('orders:read') }, async (request) => {
-    const views = await deps.orderListViewService.listFor(await savedViewActor(request));
+  // The actor comes from the request's tenant context (`./saved-view-actor.ts`),
+  // derived exactly as the product and quote request lists derive theirs —
+  // not from `resolveAdminOrdersScope`, which answers "no restriction" when a
+  // composition does not provide it. It is read on every route, the list
+  // included, because `isPlatformAdmin` decides `canModify`.
+  app.get('/api/v1/admin/orders/list-views', { preHandler: requireAdmin('orders:read') }, async () => {
+    const views = await deps.orderListViewService.listFor(savedViewActor());
     return { data: views };
   });
 
@@ -735,7 +727,7 @@ export async function registerOrderRoutes(
     '/api/v1/admin/orders/list-views',
     { preHandler: requireAdmin('orders:read'), schema: { body: createOrderSavedViewRequestSchema } },
     async (request, reply) => {
-      const actor = await savedViewActor(request);
+      const actor = savedViewActor();
       const body = createOrderSavedViewRequestSchema.parse(request.body);
       const view = await deps.orderListViewService.create(actor, body);
       reply.code(201);
@@ -747,7 +739,7 @@ export async function registerOrderRoutes(
     '/api/v1/admin/orders/list-views/:id',
     { preHandler: requireAdmin('orders:read'), schema: { body: updateOrderSavedViewRequestSchema } },
     async (request) => {
-      const actor = await savedViewActor(request);
+      const actor = savedViewActor();
       const body = updateOrderSavedViewRequestSchema.parse(request.body);
       const view = await deps.orderListViewService.update(request.params.id, actor, body);
       return { data: view };
@@ -758,7 +750,7 @@ export async function registerOrderRoutes(
     '/api/v1/admin/orders/list-views/:id',
     { preHandler: requireAdmin('orders:read') },
     async (request) => {
-      const actor = await savedViewActor(request);
+      const actor = savedViewActor();
       await deps.orderListViewService.remove(request.params.id, actor);
       return { data: { deleted: request.params.id } };
     },

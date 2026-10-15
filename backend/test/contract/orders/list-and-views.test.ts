@@ -396,6 +396,27 @@ describe('Order saved views — names, ownership and the gate (spec 147)', () =>
     expect((delPrivate.json() as ErrorBody).error.code).toBe('NOT_FOUND');
   });
 
+  it('lets a non-representative role, a platform admin for saved views, modify a colleague\'s shared view', async () => {
+    // Derived from the request's tenant context, as on the product and quote
+    // request lists: every role except `sales_representative` reaches all.
+    const shared = await createView(admin, { name: `Colleague shared ${run}`, shared: true });
+    const sharedId = (shared.body as { data: ViewItem }).data.id;
+    expect((await listAs(polishAdmin)).find((v) => v.id === sharedId)).toMatchObject({
+      ownedByCaller: false,
+      canModify: true,
+    });
+    const patch = await h.app.inject({
+      method: 'PATCH',
+      url: `${URL}/${sharedId}`,
+      ...polishAdmin,
+      payload: { name: `Colleague renamed ${run}` },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect((patch.json() as { data: ViewItem }).data).toMatchObject({ name: `Colleague renamed ${run}`, canModify: true });
+    const del = await h.app.inject({ method: 'DELETE', url: `${URL}/${sharedId}`, ...polishAdmin });
+    expect(del.statusCode).toBe(200);
+  });
+
   it('refuses an admin without orders:read on all four routes', async () => {
     const view = await createView(admin, { name: `Gate ${run}`, shared: true });
     const id = (view.body as { data: ViewItem }).data.id;

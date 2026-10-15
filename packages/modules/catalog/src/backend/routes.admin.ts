@@ -38,7 +38,7 @@ import {
   ERROR_CODES,
 } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
-import { getTenantContext } from '@endora-commerce/platform/tenancy';
+import { savedViewActor } from './saved-view-actor.js';
 import type { CatalogAdminService } from './services/catalog-admin.service.js';
 import type { CatalogBulkUpdateService } from './services/catalog-bulk-update.service.js';
 import type { BulkOperationService } from './services/bulk-operation.service.js';
@@ -54,7 +54,7 @@ import type { GroupedService } from './services/grouped.service.js';
 import type { BundleService } from './services/bundle.service.js';
 import type { ProductScopeContextService } from './services/product-scope-context.service.js';
 import type { ProductEditorPreferencesService } from './services/product-editor-preferences.service.js';
-import type { ProductListViewService, ProductSavedViewActor } from './services/product-list-view-service.js';
+import type { ProductListViewService } from './services/product-list-view-service.js';
 import type { ProductValueResolverService } from './services/product-value-resolver.service.js';
 import type { ProductOverridesService } from './services/product-overrides.service.js';
 import { productValueOverridesPatchRequestSchema } from '@endora-commerce/contracts';
@@ -1920,19 +1920,4 @@ function serializeAdminCategory(c: Category) {
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
   };
-}
-
-/**
- * The saved-view actor from the request's ambient tenant context (contract
- * §4): the admin, and whether that admin reaches every organization — the
- * "platform admin (for saved views)" of the spec's *Vocabulary* (research
- * R-7). Fails closed: no admin actor is a 401, never a write under an empty
- * owner id (threat model S-03).
- */
-function savedViewActor(): ProductSavedViewActor {
-  const ctx = getTenantContext();
-  if (!ctx || ctx.actor.kind !== 'admin' || !ctx.actor.id) {
-    throw new HttpError(401, ERROR_CODES.UNAUTHORIZED, 'Admin session required.');
-  }
-  return { adminUserId: ctx.actor.id, isPlatformAdmin: ctx.mode === 'all' };
 }

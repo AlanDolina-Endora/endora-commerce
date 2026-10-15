@@ -470,9 +470,10 @@ Na pasku narzędzi listy zamówień jest lista wyboru **Zapisane widoki**, któr
   wywołujący jest administratorem platformy w rozumieniu poniżej. Panel administracyjny włącza
   **Usuń widok** na podstawie `canModify` i sprawdza powtórzenie nazwy wśród widoków z
   `ownedByCaller`.
-- **Administrator platformy, na potrzeby zapisanych widoków,** to administrator, którego zakres
-  zamówień w panelu ma `allowAll` — a ten zakres administratora w module `organizations` przyznaje
-  każdej roli poza `sales_representative`.
+- **Administrator platformy, na potrzeby zapisanych widoków,** to administrator, którego kontekst
+  dzierżawy (tenant context) żądania ma `mode === 'all'` — każda rola poza `sales_representative`.
+  Listy zamówień, produktów i zapytań ofertowych wyznaczają go tak samo, a w razie wątpliwości
+  odmawiają: administrator, którego zasięgu nie da się ustalić, nie jest administratorem platformy.
 - **Odmowy.** Nieistniejący widok i prywatny widok innego administratora to `404 NOT_FOUND` —
   nie da się ich odróżnić. Udostępniony widok, którego wywołujący nie jest właścicielem i którego
   nie może zmienić jako administrator platformy, to `403 FORBIDDEN`. Nazwa, której klucza

@@ -402,9 +402,11 @@ and **Delete view**.
   Admin UI enables **Delete view** from `canModify` and runs its duplicate-name
   check against the views with `ownedByCaller`.
 - **Platform admin, for saved views,** is an admin whose request tenant context
-  has `mode === 'all'` — every role except `sales_representative`, the same
-  predicate the order list's views use. It is deliberately not the module's own
-  `role.code === 'platform_admin'` test, which the list's visibility uses.
+  has `mode === 'all'` — every role except `sales_representative`. The order,
+  product and quote request lists derive it the same way, and it fails closed:
+  an admin whose reach cannot be resolved is not a platform admin.
+  It is deliberately not the module's own `role.code === 'platform_admin'`
+  test, which the list's visibility uses.
 - **Refusals.** An absent view, or another admin's private view, is
   `404 NOT_FOUND` — the two are indistinguishable. A shared view the caller
   neither owns nor may modify as a platform admin is `403 FORBIDDEN`. A name
