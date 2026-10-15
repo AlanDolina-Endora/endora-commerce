@@ -83,6 +83,9 @@ describe('the error envelope answers a refused request body as a client error', 
     ['a malformed JSON body', 'application/json', '{not json', 400],
     ['a body over the limit', 'application/json', JSON.stringify({ padding: 'x'.repeat(64) }), 413],
     ['an unsupported media type', 'text/x-unknown', 'anything', 415],
+    // Issue #245 — the case it was reported with: a form post to a JSON route.
+    // The platform registers no `application/x-www-form-urlencoded` parser.
+    ['a form-encoded body on a JSON route', 'application/x-www-form-urlencoded', 'a=1', 415],
   ])('answers %s with Fastify\'s own status and the envelope', async (_label, contentType, payload, status) => {
     const { app, lines } = buildProbe();
     const response = await app.inject({
