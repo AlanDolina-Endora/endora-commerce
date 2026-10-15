@@ -399,8 +399,11 @@ and **Delete view**.
 - **Two caller-relative flags.** Every view in a response carries
   `ownedByCaller` and `canModify` — `true` when the caller owns the view, or
   the view is shared and the caller is a platform admin in the sense below. The
-  Admin UI enables **Delete view** from `canModify` and runs its duplicate-name
-  check against the views with `ownedByCaller`.
+  Admin UI enables **Delete view** from `canModify`, and before saving runs a
+  best-effort duplicate-name pre-check against the listed views with
+  `ownedByCaller`. The server's `lower(btrim(name))` comparison is
+  authoritative: a name the pre-check lets through can still be refused with
+  `409`.
 - **Platform admin, for saved views,** is an admin whose request tenant context
   has `mode === 'all'` — every role except `sales_representative`. The order,
   product and quote request lists derive it the same way, and it fails closed:

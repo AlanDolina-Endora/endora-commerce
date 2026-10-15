@@ -98,8 +98,12 @@ export const savedListViewDeleteResponseSchema = z.object({
 export type SavedListViewDeleteResponse = z.infer<typeof savedListViewDeleteResponseSchema>;
 
 /**
- * The key two names are compared by for uniqueness — the client-side twin of
- * SQL `lower(btrim(name))`. The server decides in SQL; this answers early.
+ * The key two names are compared by for uniqueness, as the client computes it
+ * for a **best-effort pre-check** before saving. The server's SQL
+ * `lower(btrim(name))` is authoritative and refuses a taken key with 409 on
+ * its own: the client checks only the views it has listed, and JavaScript's
+ * `trim`/`toLowerCase` and PostgreSQL's `btrim`/`lower` need not agree on
+ * every character.
  * `toLowerCase`, not `toLocaleLowerCase`: the key must not follow the browser's
  * locale (Turkish lower-cases `I` to `ı`), or client and server disagree.
  */

@@ -468,8 +468,10 @@ Na pasku narzędzi listy zamówień jest lista wyboru **Zapisane widoki**, któr
 - **Dwie flagi zależne od wywołującego.** Każdy widok w odpowiedzi ma `ownedByCaller` i
   `canModify` — `true`, gdy wywołujący jest właścicielem widoku albo widok jest udostępniony, a
   wywołujący jest administratorem platformy w rozumieniu poniżej. Panel administracyjny włącza
-  **Usuń widok** na podstawie `canModify` i sprawdza powtórzenie nazwy wśród widoków z
-  `ownedByCaller`.
+  **Usuń widok** na podstawie `canModify`, a przed zapisem wstępnie, w miarę możliwości, sprawdza
+  powtórzenie nazwy wśród wyświetlonych widoków z `ownedByCaller`. Rozstrzyga porównanie
+  `lower(btrim(name))` po stronie serwera: nazwa przepuszczona przez to wstępne sprawdzenie nadal
+  może zostać odrzucona z `409`.
 - **Administrator platformy, na potrzeby zapisanych widoków,** to administrator, którego kontekst
   dzierżawy (tenant context) żądania ma `mode === 'all'` — każda rola poza `sales_representative`.
   Listy zamówień, produktów i zapytań ofertowych wyznaczają go tak samo, a w razie wątpliwości

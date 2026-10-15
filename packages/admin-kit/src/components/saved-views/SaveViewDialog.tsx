@@ -19,15 +19,22 @@ import type { SavedViewState } from './SavedViewsControl.js';
  * contract `admin-kit-saved-views.md` §2). Internal to the kit.
  *
  * The client checks run in the contract's order and send nothing when one
- * fails; the server stays the judge (a 409 from a race lands in the same alert
- * region and marks the name field invalid, as an inline refusal does). The alert region is mounted empty from the first render so the
+ * fails. The duplicate-name check is a best-effort pre-check; the server stays
+ * the judge (a 409 it could not foresee — a race, a view not listed, a key the
+ * two sides compute differently — lands in the same alert region and marks the
+ * name field invalid, as an inline refusal does). The alert region is mounted
+ * empty from the first render so the
  * message that later fills it is announced, and so the input's
  * `aria-describedby` never points at a missing element.
  */
 export interface SaveViewDialogProps {
   endpoint: string;
   current: SavedViewState;
-  /** `savedListViewNameKey` of every listed view the caller owns. */
+  /**
+   * `savedListViewNameKey` of every listed view the caller owns — the input to
+   * a best-effort duplicate-name pre-check. The server's `lower(btrim(name))`
+   * is authoritative; its 409 is shown on the name field too.
+   */
   ownedNameKeys: ReadonlySet<string>;
   /** Where focus lands when the dialog closes, whichever way it closes. */
   returnFocusRef: RefObject<HTMLElement | null>;
