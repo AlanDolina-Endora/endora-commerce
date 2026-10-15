@@ -58,7 +58,10 @@ describe('146 — price-negotiation admin and storefront routes [integration]', 
 
   /** Assigned to the representative. */
   let orgA: string;
-  /** Assigned to another representative, so it is not "unassigned" and visible to everybody. */
+  /**
+   * Assigned to another representative, so it is not "unassigned" — an
+   * unassigned organization would be visible to every representative.
+   */
   let orgB: string;
   /** A third organization, for the moved account. */
   let orgC: string;
