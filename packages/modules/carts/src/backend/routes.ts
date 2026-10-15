@@ -53,10 +53,21 @@ export interface CartsDeps {
   cartUpsellService?: CartUpsellService;
   /**
    * Feature 027 — pushes a cart line into the buyer's named Purchase
-   * List. Cross-module call to ShoppingListService.addItem; optional
-   * for the same reason as above.
+   * List. Cross-module call to ShoppingListService.addItem, through
+   * `cartShoppingListBridge`, which refuses with 503 `MODULE_DISABLED`
+   * naming `shopping_lists` where that module is absent.
+   *
+   * Required, like the three below (issue #248). They were optional "so
+   * legacy compositions still build", and each route answered a missing
+   * one with `503` + `NOT_FOUND` + an untranslated token
+   * (`shopping_lists_unavailable`, …) — a code contradicting its status,
+   * shown to a buyer as a machine string. No composition omits them: the
+   * module's own wires all four unconditionally, and an owner that is off
+   * answers through its gated port instead, as the translated
+   * `MODULE_DISABLED` envelope. The branches were unreachable, and
+   * requiring the four is what keeps them that way.
    */
-  pushLineToShoppingList?: (input: {
+  pushLineToShoppingList: (input: {
     customerAccountId: string;
     organizationId: string | null;
     shoppingListId: string;
@@ -65,17 +76,17 @@ export interface CartsDeps {
     quantity: number;
   }) => Promise<void>;
   /**
-   * Feature 027 US2 — coupon application service. Optional so legacy
-   * compositions still build; production wires it. Also drives the
+   * Feature 027 US2 — coupon application service. Also drives the
    * `reevaluateOnRead` auto-drop in the GET handler when a previously-
-   * applied code no longer fits the cart.
+   * applied code no longer fits the cart. Required — see
+   * {@link CartsDeps.pushLineToShoppingList}.
    */
-  cartCouponService?: CartCouponService;
+  cartCouponService: CartCouponService;
   /**
    * Feature 027 US3 — three conversions (Cart→QR, QR→Cart, ShoppingList→Cart).
-   * Optional so legacy compositions still build.
+   * Required — see {@link CartsDeps.pushLineToShoppingList}.
    */
-  cartConversionService?: CartConversionService;
+  cartConversionService: CartConversionService;
   /**
    * Feature 027 §R5 — re-pricing on read. When wired, every full-cart
    * read calls the helper to refresh `cart_items.unit_price` from the
@@ -87,9 +98,10 @@ export interface CartsDeps {
   /**
    * Feature 027 US3 — ShoppingListService.convertToCart bridge for the
    * `POST /api/v1/cart/from-shopping-list/:listId` endpoint. Returns the
-   * cart-side append result.
+   * cart-side append result. Required — see
+   * {@link CartsDeps.pushLineToShoppingList}.
    */
-  appendShoppingListToCart?: (input: {
+  appendShoppingListToCart: (input: {
     customerAccountId: string;
     organizationId: string | null;
     shoppingListId: string;
@@ -255,7 +267,7 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
     // on the cart record and surface `couponDroppedThisRead` so the
     // storefront banner can inform the buyer.
     let couponDroppedThisRead: { code: string; reason: string } | null = null;
-    if (deps.cartCouponService && cart.appliedPromotionCode && items.length > 0) {
+    if (cart.appliedPromotionCode && items.length > 0) {
       try {
         const result = await deps.cartCouponService.reevaluateOnRead(cart, items);
         if (result.dropped) {
@@ -273,7 +285,7 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
     // read so the cart shows applied promotions (FR-031/FR-033). Never block
     // a cart read on a promotion-engine hiccup.
     let application: PromotionApplication | null = null;
-    if (deps.cartCouponService && items.length > 0) {
+    if (items.length > 0) {
       try {
         application = await deps.cartCouponService.computeApplication(cart, items);
       } catch (err) {
@@ -351,9 +363,9 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
 
   /**
    * Push one cart line into the named Purchase List. Cross-module call
-   * goes through the optional `pushLineToShoppingList` port; if not
-   * wired, the route returns HTTP 503 so the storefront surfaces the
-   * "feature unavailable" message instead of silently dropping.
+   * goes through `pushLineToShoppingList`; with `shopping_lists` absent it
+   * answers 503 `MODULE_DISABLED` naming the module, so the storefront
+   * surfaces "feature unavailable" instead of silently dropping.
    */
   app.post<{ Params: { itemId: string } }>(
     '/api/v1/cart/items/:itemId/save-to-shopping-list',
@@ -365,13 +377,6 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
           401,
           ERROR_CODES.UNAUTHORIZED,
           'Sign-in required to save to a shopping list.',
-        );
-      }
-      if (!deps.pushLineToShoppingList) {
-        throw new HttpError(
-          503,
-          ERROR_CODES.NOT_FOUND,
-          'shopping_lists_unavailable',
         );
       }
       const body = saveCartItemToListSchema.parse(request.body);
@@ -430,9 +435,6 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
       if (items.length === 0) {
         throw new HttpError(422, ERROR_CODES.CART_EMPTY, 'cart_empty');
       }
-      if (!deps.cartCouponService) {
-        throw new HttpError(503, ERROR_CODES.NOT_FOUND, 'promotions_unavailable');
-      }
       const body = applyCartCouponSchema.parse(request.body);
       const result = await deps.cartCouponService.apply(cart, body.code);
       if (result.outcome === 'dropped') {
@@ -484,9 +486,7 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
     } else {
       throw new HttpError(401, ERROR_CODES.UNAUTHORIZED, 'Cart not found.');
     }
-    if (deps.cartCouponService) {
-      await deps.cartCouponService.clear(cart);
-    }
+    await deps.cartCouponService.clear(cart);
     const items = await cartService.getItems(cart.id);
     return { data: serializeCart(cart, items) };
   });
@@ -505,9 +505,6 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
       const actor = resolveCartActor(request);
       if (!actor.customer) {
         throw new HttpError(401, ERROR_CODES.UNAUTHORIZED, 'Sign-in required.');
-      }
-      if (!deps.cartConversionService) {
-        throw new HttpError(503, ERROR_CODES.NOT_FOUND, 'quote_requests_unavailable');
       }
       // D-178 — an invariant, not a business state; see
       // `routes.organization.ts`'s twin.
@@ -551,9 +548,6 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
       if (!actor.customer) {
         throw new HttpError(401, ERROR_CODES.UNAUTHORIZED, 'Sign-in required.');
       }
-      if (!deps.cartConversionService) {
-        throw new HttpError(503, ERROR_CODES.NOT_FOUND, 'quote_requests_unavailable');
-      }
       const result = await deps.cartConversionService.createCartFromQuoteRequest(
         request.params.quoteRequestId,
         actor.customer,
@@ -573,9 +567,6 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
       const actor = resolveCartActor(request);
       if (!actor.customer) {
         throw new HttpError(401, ERROR_CODES.UNAUTHORIZED, 'Sign-in required.');
-      }
-      if (!deps.appendShoppingListToCart) {
-        throw new HttpError(503, ERROR_CODES.NOT_FOUND, 'shopping_lists_unavailable');
       }
       const result = await deps.appendShoppingListToCart({
         customerAccountId: actor.customer.customerAccountId,
