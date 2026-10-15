@@ -62,6 +62,28 @@ describe('resolveReferencePrices', () => {
     });
   });
 
+  it('stores no reference for an amount a numeric(12,2) column cannot hold, and still answers', async () => {
+    // Review fix N1 — 1e10 and above passed the finite / non-negative guard and
+    // then failed the insert with a 500. The reference is informational
+    // (research R2), so such a line stores none and the request goes on.
+    const amounts: Record<string, string> = {
+      'p-1': '10000000000',
+      'p-2': '9999999999.994',
+      'p-3': '1e21',
+      'p-4': '9999999999.99',
+    };
+    const { port } = answeringPort((productId) => amounts[productId] ?? null);
+    const out = await resolveReferencePrices(port, {
+      owner: OWNER,
+      salesChannelId: null,
+      lines: [line('p-1'), line('p-2'), line('p-3'), line('p-4')],
+    });
+    expect(out).toEqual([null, { amount: '9999999999.99', currency: 'PLN' }, null, {
+      amount: '9999999999.99',
+      currency: 'PLN',
+    }]);
+  });
+
   it('uses supplied references verbatim and does not resolve them', async () => {
     const { port, queries } = answeringPort();
     const out = await resolveReferencePrices(port, {

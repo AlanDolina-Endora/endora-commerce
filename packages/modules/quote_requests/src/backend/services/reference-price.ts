@@ -97,8 +97,13 @@ export async function resolveReferencePrices(
         if (!answer.price) continue;
         const amount = Number(answer.price.amount);
         if (!Number.isFinite(amount) || amount < 0) continue;
+        // What `numeric(12,2)` holds, checked on the stored text: a larger
+        // amount would fail the insert. Such a line stores no reference
+        // (research R2) rather than failing the customer's request.
+        const stored = amount.toFixed(2);
+        if (!AMOUNT_PATTERN.test(stored)) continue;
         resolved.set(Number(answer.key), {
-          amount: amount.toFixed(2),
+          amount: stored,
           currency: answer.price.currency,
         });
       }
