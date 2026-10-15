@@ -472,6 +472,31 @@ translated titles when switching the admin language, §4 step 2 (storefront draf
 proposed-price input and its note), §4 step 5's "Effective: allowed (from account)" panel text, and
 §4 step 7's panels disappearing and reappearing on `/platform/modules`.
 
+## Review fix round 1 (part A) — backend, docs, changesets (2026-10-15)
+
+Code review findings, fixed on this branch; part B (the admin UI: S4, S5, S6, N3–N7) is separate.
+
+- [x] **B1** Owner ruling D-3W on the module page (EN + PL, cache re-pinned) and in `plan.md`: an
+  organization with no assigned representative is visible to every representative, so any of them
+  may change its lock; issue #305 tracks the rule.
+- [x] **S1** One `services/admin-org-visibility.ts` for the negotiation routes and Commands; the
+  `price_lists` copy is noted in `plan.md` as a platform-helper candidate.
+- [x] **S2** `services/customer-projection.ts` (customer allow-list) and `services/draft-guard.ts`
+  (FR-038 guard, submission-record proposals) extracted from `rfq-service.ts`; no behaviour change.
+- [x] **S3** `AUTOMATIC_ADMIN_CREATION_NOTE` moved to `services/history/constants.ts`; the
+  `rfq-admin-service` ↔ `history-projection` import cycle is gone.
+- [x] **S7** Both changesets lead with the 200-item cap as a behaviour change.
+- [x] **N1** A resolved amount `numeric(12,2)` cannot hold stores no reference (unit test).
+- [x] **N2** An unresolved lock owner answers `404 NOT_FOUND 'Customer not found.'`, still fail-closed
+  (unit + `rep-scope` integration).
+- [x] **N8** Fixture comment in `negotiation-policy-routes.test.ts`.
+- [x] **N9** `patchDraft` asks the lock before pricing (pre-check) and again inside the row lock
+  (authoritative); `negotiation-enforcement` proves a refused edit makes no `price_lists` call.
+- [x] **N10** Module page (EN + PL): a seller's revision keeps the stored reference when the quantity
+  changes (R5.2).
+- [x] **N11** `getQuoteRequestNegotiation` warns on the server before failing open
+  (`storefront/test/rfq/rfq-negotiation-read.test.ts`).
+
 ---
 
 ## Requirement coverage
