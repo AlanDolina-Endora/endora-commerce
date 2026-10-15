@@ -192,8 +192,9 @@ edycja szkicu współpracownika przez administratora organizacji — nigdy nie z
 
 Rewizja sprzedawcy (`PATCH /api/v1/admin/quote-requests/:id`) zachowuje wariant, notatkę,
 jednostkę opakowania, propozycję klienta i zapisaną cenę referencyjną każdej pozostającej
-pozycji, o ile sprzedawca ich nie zmienił. Pozycja dodana przez sprzedawcę ma wybrany przez niego
-wariant i notatkę, a jednostki opakowania nie ma.
+pozycji, o ile sprzedawca ich nie zmienił. Zapisana cena referencyjna zostaje także wtedy, gdy
+sprzedawca zmienia ilość pozycji: rewizja sprzedawcy nigdy nie ustala jej ponownie. Pozycja dodana
+przez sprzedawcę ma wybrany przez niego wariant i notatkę, a jednostki opakowania nie ma.
 
 ## Blokada negocjacji cen
 
@@ -237,7 +238,9 @@ bez pamięci podręcznej, więc zmiana obowiązuje od następnego żądania.
 dla ról z `customers:read`; zmiana wartości wymaga `customers:manage`, a bez niego kontrolka panelu
 jest nieaktywna. Rola, która ma `customers:manage`, ale **nie** ma `customers:read`, nie widzi
 panelu. Opiekun handlowy sięga tylko do organizacji, które może widzieć; każdy inny identyfikator
-dostaje `404`. Każda zmiana jest audytowanym zapisem, który zapisuje administratora, organizację
+dostaje `404`. Organizacja bez przypisanego opiekuna handlowego jest widoczna dla każdego opiekuna
+(zob. *Model widoczności*), więc każdy opiekun może zmienić jej blokadę i nadpisania kont jej
+klientów; samą tę regułę opisuje zgłoszenie #305. Każda zmiana jest audytowanym zapisem, który zapisuje administratora, organizację
 lub konto oraz starą i nową wartość.
 
 **Moduł wyłączony.** Gdy ten moduł jest wyłączony, panele, cztery endpointy administracyjne, odczyt

@@ -406,3 +406,8 @@ No constitution violation. Recorded so a reviewer does not have to ask:
     `packages/modules/price_lists/src/backend/routes.ts` (`authorizeBuyer`'s `canSee`); it stays
     there, because a module never imports another's internals — it is a **candidate for a platform
     helper** (`@endora-commerce/platform/tenancy`), out of scope for this feature.
+  - **Owner ruling D-3W**: an organization with no assigned sales representative is visible to
+    every representative (the existing unassigned-organization rule, *Visibility model* in the
+    module page), so any representative may change its price-negotiation lock and its customer
+    accounts' overrides. Accepted as is for this feature; issue #305 tracks the rule itself. The
+    module page states it in *Who sees and changes it* (EN and PL).

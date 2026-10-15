@@ -210,8 +210,10 @@ administrator's edit of a colleague's draft included — never close the draft.
 
 A seller's revision (`PATCH /api/v1/admin/quote-requests/:id`) keeps each
 surviving line's variant, line note, packaging unit, customer proposal and
-stored reference price, unless the seller changed them. A line the seller adds
-carries the variant and note chosen and no packaging unit.
+stored reference price, unless the seller changed them. The stored reference
+price stays even when the seller changes the line's quantity: a seller's
+revision never resolves it again. A line the seller adds carries the variant
+and note chosen and no packaging unit.
 
 ## Price negotiation lock
 
@@ -259,7 +261,10 @@ customer screens, shown to roles with `customers:read`; changing a value needs
 `customers:manage`, and the panel's control is disabled without it. A role that
 holds `customers:manage` but **not** `customers:read` sees no panel. A sales
 representative reaches only the organizations they may see; any other id
-answers `404`. Every change is an audited write that records the
+answers `404`. An organization with no assigned sales representative is visible
+to every representative (see *Visibility model*), so any representative may
+change its lock and the overrides of its customer accounts; issue #305 tracks
+that rule itself. Every change is an audited write that records the
 administrator, the organization or account and the old and new value.
 
 **Switched off.** While this module is off, the panels, the four admin routes,
