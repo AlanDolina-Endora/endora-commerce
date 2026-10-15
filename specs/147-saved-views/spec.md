@@ -2,9 +2,10 @@
 
 **Feature Branch**: `feat/147-saved-views` (spec directory `specs/147-saved-views/`)
 **Created**: 2026-10-14
-**Status**: Clarified — ready for plan. Session 2026-10-14 answered Q1 – Q5 and accepted the
-defaults the first draft had chosen; a second clarify pass found no remaining ambiguity that
-changes behaviour (see *Clarifications*)
+**Status**: Accepted — 2026-10-15, product-owner acceptance of the implementation at
+`54c9f8c72`: FR-001 – FR-023 and SC-001 – SC-005 verified against code and tests. Merge still
+waits on the CI gate (`tasks.md` Phase 10) being re-run on the final tip. (Clarified
+2026-10-14: Q1 – Q5 answered, the first draft's defaults accepted; see *Clarifications*.)
 **Issues**: #288, #289, #290
 **Input**: three GitHub issues:
 
@@ -33,14 +34,21 @@ changes behaviour (see *Clarifications*)
   introduces: one replaces the native `prompt()` / `confirm()` pair when a view is saved, the
   other stands in front of deleting a view.
 - **Platform admin (for saved views)** — an admin whose role resolves to any role code **other
-  than `sales_representative`**: exactly the rule the Order list already applies to saved views
-  (`isPlatformAdmin` reads `allowAll` in `packages/modules/orders/src/backend/routes.ts:499-502`,
-  which `packages/modules/organizations/src/backend/services/admin-tenant-scope.ts:43` sets for
-  every role but `sales_representative`; an admin whose role does not resolve is not one). It is
-  **not** the `platform_admin` role code: a custom role such as a catalog manager counts as a
-  platform admin here and may modify or delete a colleague's shared view on all three lists
-  (owner ruling, Session 2026-10-14). Wherever this specification says "platform admin" about
-  saved views, this definition applies.
+  than `sales_representative`**: the rule the Order list applied to saved views before this
+  feature. As shipped, all three lists derive it the same way on every saved-view route, from
+  the request's tenant context: `ctx.mode === 'all'`
+  (`packages/modules/<orders|catalog|quote_requests>/src/backend/saved-view-actor.ts`). The
+  platform sets `mode: 'all'` for an admin
+  (`packages/platform/src/tenancy/resolve-tenant-context.ts:155-156`) when `organizations`'
+  admin tenant scope answers `allowAll`, which
+  `packages/modules/organizations/src/backend/services/admin-tenant-scope.ts:43` does for every
+  role but `sales_representative`. It fails closed: an admin whose role does not resolve, or a
+  composition with no admin tenant scope, yields an `allowed-set` context and is not one
+  (`backend/test/integration/saved-list-views/rules-parity.test.ts`, A1 – A5). It is **not** the
+  `platform_admin` role code: a custom role such as a catalog manager counts as a platform admin
+  here and may modify or delete a colleague's shared view on all three lists (owner ruling,
+  Session 2026-10-14). Wherever this specification says "platform admin" about saved views, this
+  definition applies.
 - **Quote Requests off** — the `quote_requests` module is not effectively present (switched off
   by the operator, or not available on the platform; Constitution XVII treats the two alike).
 
@@ -423,11 +431,12 @@ colleague's shared view and confirm it shows only requests the loader may see; t
   Quote Request list's default visibility scope and its `listAll` visibility still key on the
   literal `role.code === 'platform_admin'`: the admin context resolver sets
   `isPlatformAdmin: role?.code === 'platform_admin'`
-  (`packages/modules/quote_requests/src/backend/index.ts:242`), `listAll` skips its
+  (`packages/modules/quote_requests/src/backend/index.ts:257`), `listAll` skips its
   organization-visibility filter when that flag is set
-  (`packages/modules/quote_requests/src/backend/services/rfq-admin-service.ts:125-143`, the branch
-  at `:136`), and the list page picks its default scope from the same role code
-  (`packages/modules/quote_requests/src/admin/pages/RfqList.tsx:103`). So an admin with, say, a
+  (`packages/modules/quote_requests/src/backend/services/rfq-admin-service.ts:144`, the branch
+  at `:156`), and the list page picks its default scope from the same role code
+  (`packages/modules/quote_requests/src/admin/pages/RfqList.tsx:110`, applied at `:121`).
+  Line numbers measured at `54c9f8c72`. So an admin with, say, a
   custom catalog-manager role may delete a colleague's shared Quote Request view yet opens the
   list on scope `mine`. This feature does not change the Quote Request list's rule; aligning
   the two is a separate decision.

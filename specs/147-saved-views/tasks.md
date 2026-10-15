@@ -241,6 +241,11 @@ failure with its output. Do not re-record a read size unless a band refuses it, 
   - Green on the macOS host: 334 pages, 0 findings; DCO 36/36 before this record.
   - T063 re-run green on the macOS host on tip `1de3ba3ab` (typecheck 523 s, lint 118 s, 0 errors). T063 – T071 above are on tip `1de3ba3ab`, base `854f8564f`. `origin/master` advanced to `328ac4c1d` (feature 146, 50 commits) during this run; the gate above was not run against it, so a rebase means re-running T062 – T071.
 - Rebased onto 328ac4c1d (feature 146); full gate to be re-run after review.
+- **Open (product-owner acceptance, 2026-10-15):** T062 – T071 are **not** re-run on the review
+  fix tip `54c9f8c72` (thirteen commits after `1ddaf3e77`, including the SV-1 predicate change,
+  the no-op `PATCH` and the non-UUID 404), and `origin/master` has advanced to `39b9b9989`. The
+  ticks above record the gate on `1de3ba3ab`; re-run T062 – T071 on the rebased tip before the
+  pull request is merged.
 
 **Verification**: T062 – T071 each green, in order, on the same tip; the tip is the one pushed.
 

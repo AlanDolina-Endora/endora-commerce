@@ -248,8 +248,11 @@ admin must do, and FR-022 requires a translated message specific to the conflict
 
 **Decision.** In `catalog` and `quote_requests`, "platform admin" is **the admin whose ambient
 tenant context has `mode === 'all'`**, read with `getTenantContext()` from the published
-`@endora-commerce/platform/tenancy` barrel. `orders` keeps its existing `isPlatformAdmin`
-(`routes.ts:499-502`, `resolveAdminOrdersScope(request).allowAll`), which is the same predicate.
+`@endora-commerce/platform/tenancy` barrel. `orders` derives it the same way since the security
+review's SV-1 fix: all three lists read it through their own
+`packages/modules/<id>/src/backend/saved-view-actor.ts`. (Before that fix `orders` kept its
+`isPlatformAdmin` on `resolveAdminOrdersScope(request).allowAll` in `routes.ts`, the same
+predicate except that it answered `true` when no scope resolver was composed.)
 
 **Rationale.** FR-013 says the rules are *those of Order views*. Orders' predicate is
 `allowAll`, and `allowAll` is decided by `organizations`' `adminTenantScopePort`
