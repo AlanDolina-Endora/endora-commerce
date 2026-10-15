@@ -4,7 +4,10 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
-import { CustomerAccountReadService } from '../../../../packages/modules/customer_accounts/src/backend/services/customer-account-ports.js';
+// `dist`, not `src` (feature 146): see `test/helpers/customer-account-ports.ts` —
+// a source-evaluated `CustomerAccount` makes `QuoteRequestAccountPolicy`'s
+// transitive parent ambiguous and the ORM refuses to initialise.
+import { CustomerAccountReadService } from '../../../../packages/modules/customer_accounts/dist/backend/services/customer-account-ports.js';
 import { twoFactorEnrolmentsFor } from '../../helpers/two-factor-enrolments.js';
 import { CustomerAccount } from '../../helpers/package-entities.js';
 

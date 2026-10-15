@@ -269,6 +269,68 @@ describe('carts — quote-to-cart conversion reads quote_requests through its po
   });
 });
 
+describe('carts — cart-to-quote conversion hands quote_requests the cart price as the reference', () => {
+  /**
+   * Feature 146 (FR-008, research R3) — the cart's unit price is not a buyer's
+   * proposal. It travels as the line's reference through the port's in-process
+   * third argument, index-aligned with the items, and no line carries a
+   * `desiredUnitPrice`.
+   */
+  it('sends no desiredUnitPrice and passes lineReferencePrices from the cart snapshot', async () => {
+    const createForCustomer = vi.fn(async () => ({ id: 'qr-new' }) as never);
+    const rfq = { createForCustomer, listForCustomer: vi.fn() } as unknown as RfqCustomerPort;
+    const items = [
+      itemRow({ id: 'item-1', productId: 'p-1', quantity: 2, unitPrice: '120.00', currency: 'PLN' }),
+      itemRow({
+        id: 'item-2',
+        productId: 'p-2',
+        variantId: 'v-2',
+        quantity: 200,
+        unitPrice: '4.25',
+        currency: 'EUR',
+        packagingUnitName: 'Paleta',
+        packagingUnitBaseQuantity: 100,
+      } as Partial<CartItem>),
+    ];
+    const service = new CartConversionService(
+      ownTablesOnly({ carts: [cartRow()], items }),
+      {} as never,
+      rfq,
+      {} as unknown as QuoteRequestReadPort,
+      {} as unknown as CatalogProductReadPort,
+      {} as SalesChannelMembershipPort,
+    );
+    const ctx = { customerAccountId: 'cust-1', organizationId: 'org-1', isOrgAdmin: false };
+
+    const result = await service.convertToQuoteRequest(cartRow(), ctx, 'Please quote');
+
+    expect(result.quoteRequestId).toBe('qr-new');
+    expect(createForCustomer).toHaveBeenCalledTimes(1);
+    expect(createForCustomer).toHaveBeenCalledWith(
+      ctx,
+      {
+        headerNote: 'Please quote',
+        items: [
+          { productId: 'p-1', quantity: 2 },
+          {
+            productId: 'p-2',
+            variantId: 'v-2',
+            quantity: 200,
+            packagingUnitName: 'Paleta',
+            packagingUnitBaseQuantity: 100,
+          },
+        ],
+      },
+      {
+        lineReferencePrices: [
+          { amount: '120.00', currency: 'PLN' },
+          { amount: '4.25', currency: 'EUR' },
+        ],
+      },
+    );
+  });
+});
+
 describe('carts — the published price and coupon slices are the ones the module needs', () => {
   it('LinePricePort answers the six fields a cart line snapshots', async () => {
     const port: LinePricePort = {

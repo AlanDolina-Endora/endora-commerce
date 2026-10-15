@@ -11,13 +11,15 @@ import {
 import { z } from 'zod';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { ApplicationRule } from '@endora-commerce/contracts';
-import { ruleVisibleForScope } from '@endora-commerce/platform/tenancy';
+import { orgConstraintFor, ruleVisibleForScope } from '@endora-commerce/platform/tenancy';
 import type { PriceListService } from './services/price-list-service.js';
-import type { PricingServiceContract } from './services/pricing-service.interface.js';
 import type { PriceList } from './entities/price-list.entity.js';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
+import type { BuyerLinePriceService } from './services/buyer-line-price-service.js';
 import type {
+  Actor,
+  SalesRepAssignmentPort,
   CatalogCategoryReadPort,
   CatalogProductReadPort,
   CustomerAccountReadPort,
@@ -29,7 +31,6 @@ import { PRICE_LIST_PERMISSIONS } from '../manifest.js';
 
 export interface PricingRoutesDeps {
   priceListService: PriceListService;
-  pricingService: PricingServiceContract;
   emFactory: () => EntityManager;
   requireAdmin: RequireAdminFactory;
   /**
@@ -53,6 +54,16 @@ export interface PricingRoutesDeps {
    */
   customerGroupRead: CustomerGroupReadPort;
   customerAccountRead: CustomerAccountReadPort;
+  /**
+   * Feature 146 — the resolved-price probe's body, shared with
+   * `buyerLinePricePort` (research R2).
+   */
+  buyerLinePriceService: BuyerLinePriceService;
+  /**
+   * Feature 146 (threat model T8, D-3M) — which organizations a non-platform
+   * admin may ask the probe about. Owned by `organizations`.
+   */
+  salesRepScope: SalesRepAssignmentPort;
   /** Feature 024 — resolves admin actor identity for audit entries. */
   resolveAdminAuditContext?: (req: FastifyRequest) => {
     actorAdminUserId: string;
@@ -103,7 +114,6 @@ export async function registerPricingRoutes(
 ): Promise<void> {
   const {
     priceListService,
-    pricingService,
     emFactory,
     requireAdmin,
     catalogProductRead,
@@ -111,6 +121,8 @@ export async function registerPricingRoutes(
     organizationDetails,
     customerGroupRead,
     customerAccountRead,
+    buyerLinePriceService,
+    salesRepScope,
   } = deps;
 
   /**
@@ -647,6 +659,13 @@ export async function registerPricingRoutes(
   // ruled that a pricing read sits behind `price_lists:read`; a role that
   // handles RFQs and prefills agreed prices holds both, which is why
   // `sales_representative` gains the read code in the dev seed.
+  //
+  // Feature 146 (`specs/146-quote-request-pricing-history/`) — the body is now
+  // `BuyerLinePriceService`, the same implementation `buyerLinePricePort`
+  // serves, and the probe resolves on `salesChannelId` (absent = the system
+  // default). Because it now backs a screen every sales representative uses, it
+  // answers only about organizations the caller may see (threat model T8,
+  // decision D-3M) — see `authorizeBuyer` below.
   app.get<{
     Params: { id: string };
     Querystring: {
@@ -655,65 +674,105 @@ export async function registerPricingRoutes(
       quantity?: string;
       currency?: string;
       variantId?: string;
+      salesChannelId?: string;
     };
   }>(
     '/api/v1/admin/products/:id/resolved-price',
     { preHandler: readGate },
     async (request, reply) => {
-      const em = emFactory();
-      const product = await catalogProductRead.findById(request.params.id);
-      if (!product) {
+      const buyer = await authorizeBuyer(request, {
+        organizationId: request.query.organizationId ?? null,
+        customerAccountId: request.query.customerAccountId ?? null,
+      });
+
+      const [answer] = await buyerLinePriceService.resolveDetailed({
+        buyer,
+        salesChannelId: request.query.salesChannelId ?? null,
+        ...(request.query.currency ? { currencyCode: request.query.currency } : {}),
+        lines: [
+          {
+            key: request.params.id,
+            productId: request.params.id,
+            variantId: request.query.variantId ?? null,
+            quantity: Math.max(1, Number(request.query.quantity ?? '1') || 1),
+          },
+        ],
+      });
+      if (!answer?.productFound) {
         return reply
           .status(404)
           .send({ error: { code: 'NOT_FOUND', message: 'Product not found.' } });
       }
 
-      const customer = request.query.customerAccountId
-        ? await customerAccountRead.findById(request.query.customerAccountId)
-        : null;
-      const organizationId = request.query.organizationId ?? customer?.organizationId ?? null;
-      const organization = organizationId
-        ? await organizationDetails.findById(organizationId)
-        : null;
-
-      const salesChannel = await em.findOne(SalesChannel, { systemDefault: true });
-      if (!salesChannel) {
-        return reply
-          .status(400)
-          .send({ error: { code: 'VALIDATION_FAILED', message: 'No default sales channel.' } });
-      }
-
-      const quantity = Math.max(1, Number(request.query.quantity ?? '1') || 1);
-      const currency = request.query.currency?.toUpperCase() ?? salesChannel.defaultCurrency;
-      const customerGroupId =
-        customer?.customerGroupId ?? organization?.customerGroupId ?? null;
-
-      const resolved = await pricingService.resolveLinePrice({
-        product,
-        variantId: request.query.variantId ?? null,
-        context: {
-          quantity,
-          organization: organization ?? null,
-          customerGroupId,
-          salesChannel,
-          currencyCode: currency,
-        },
-      });
-
-      return {
-        data: {
-          resolvedPrice: resolved
-            ? {
-                amount: resolved.amount,
-                currency: resolved.currency,
-                isSale: resolved.isSale,
-                priceListId: resolved.priceListId,
-              }
-            : null,
-        },
-      };
+      return { data: { resolvedPrice: answer.price } };
     },
   );
+
+  /**
+   * The probe's authority step (feature 146, threat model T8, decision D-3M),
+   * run before any price is resolved.
+   *
+   * The organization asked about is `organizationId`, else the account's own.
+   * Every way of naming an organization the caller may not see — an id that
+   * does not exist, one outside a representative's scope, a customer account
+   * that does not exist or belongs to such an organization — answers the same
+   * 404 and body, so the probe tells nobody what exists (Constitution XI, C1).
+   * Only once both sides are visible is a membership mismatch a 400.
+   *
+   * A platform administrator — an ambient tenant context that reaches every
+   * organization, derived from the admin's role and never from the request —
+   * skips the representative check only; existence and membership still hold.
+   * A request naming neither an organization nor an account is the anonymous
+   * price, unchanged.
+   */
+  async function authorizeBuyer(
+    request: FastifyRequest,
+    asked: { organizationId: string | null; customerAccountId: string | null },
+  ): Promise<{ organizationId: string | null; customerAccountId: string | null }> {
+    if (!asked.organizationId && !asked.customerAccountId) {
+      return { organizationId: null, customerAccountId: null };
+    }
+    const notFound = (): HttpError =>
+      new HttpError(404, ERROR_CODES.NOT_FOUND, 'Organization not found.');
+    const isPlatformAdmin = orgConstraintFor().kind === 'all';
+    const actor = request.actor as Actor | undefined;
+    const canSee = async (organizationId: string): Promise<boolean> => {
+      if (isPlatformAdmin) return true;
+      if (actor?.kind !== 'admin') return false;
+      return salesRepScope.canSeeOrganization(actor.adminUserId, organizationId);
+    };
+
+    let accountOrganizationId: string | null = null;
+    if (asked.customerAccountId) {
+      const account = isUuid(asked.customerAccountId)
+        ? await customerAccountRead.findById(asked.customerAccountId)
+        : null;
+      if (!account || !(await canSee(account.organizationId))) throw notFound();
+      accountOrganizationId = account.organizationId;
+    }
+
+    const organizationId = asked.organizationId ?? accountOrganizationId;
+    if (!organizationId || !isUuid(organizationId)) throw notFound();
+    if (asked.organizationId) {
+      if (!(await canSee(organizationId))) throw notFound();
+      if (!(await organizationDetails.findById(organizationId))) throw notFound();
+    }
+    if (accountOrganizationId !== null && accountOrganizationId !== organizationId) {
+      throw new HttpError(
+        400,
+        ERROR_CODES.VALIDATION_FAILED,
+        'The customer account is not a member of the organization.',
+      );
+    }
+    return { organizationId, customerAccountId: asked.customerAccountId };
+  }
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A malformed id names nothing, and must not reach Postgres as a failed `uuid` cast. */
+function isUuid(value: string): boolean {
+  return UUID.test(value);
 }
 
 function toArray(v: string | string[] | undefined): string[] {

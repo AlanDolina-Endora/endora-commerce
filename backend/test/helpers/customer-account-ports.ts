@@ -9,14 +9,20 @@ import type { AuditLogService } from '@endora-commerce/platform/composition';
 import type { CommandBus } from '../../src/commands/index.js';
 import type { PersonalOrganizationProvisionApi } from '@endora-commerce/mod-organizations/ports';
 import { PersonalOrganizationService } from '../../../packages/modules/organizations/src/backend/services/personal-organization-service.js';
+// **`dist`, not `src`** (feature 146): these value-import `customer_accounts`'
+// `CustomerAccount` entity, and `QuoteRequestAccountPolicy` is
+// `@TransitivelyScoped('CustomerAccount', …)`. A second, source-evaluated class
+// beside the one the ORM registered out of `dist` is an ambiguity
+// `assertTransitiveParentsResolve` refuses at ORM init (precedent: D-160.6.1,
+// `orders-neighbour-ports.ts`).
 import {
   CustomerAccountMemberWriteService,
   CustomerAccountReadService,
-} from '../../../packages/modules/customer_accounts/src/backend/services/customer-account-ports.js';
+} from '../../../packages/modules/customer_accounts/dist/backend/services/customer-account-ports.js';
 import {
   CustomerAccountAdminSearchService,
   CustomerAccountLifecycleWriteService,
-} from '../../../packages/modules/customer_accounts/src/backend/services/customer-account-lifecycle-ports.js';
+} from '../../../packages/modules/customer_accounts/dist/backend/services/customer-account-lifecycle-ports.js';
 import { twoFactorEnrolmentsFor } from './two-factor-enrolments.js';
 
 /**

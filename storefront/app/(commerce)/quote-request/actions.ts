@@ -37,7 +37,10 @@ export async function submitQuoteRequest(input: {
   } catch (err) {
     if (err instanceof StorefrontApiError) {
       if (err.status === 401) return { ok: false, reason: 'auth' };
-      return { ok: false, reason: 'error', message: err.message };
+      // `detail`, not `message`: `message` carries the `CODE: ` prefix meant
+      // for logs, and the buyer is shown this sentence verbatim — e.g. the
+      // translated `RFQ_PRICE_PROPOSAL_NOT_ALLOWED` refusal (feature 146, FR-022).
+      return { ok: false, reason: 'error', message: err.detail };
     }
     throw err;
   }

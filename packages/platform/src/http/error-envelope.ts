@@ -281,6 +281,40 @@ export function registerErrorEnvelope(app: FastifyInstance, options: ErrorEnvelo
       return;
     }
 
+    // The rate limiter's refusal. `@fastify/rate-limit` refuses by throwing a
+    // plain `Error` with `statusCode: 429` (its default `errorResponseBuilder`),
+    // having already set `Retry-After` and the `x-ratelimit-*` headers on the
+    // reply — which `send` below keeps. Without this branch it reached the
+    // fallback and every refusal, the host's global per-client limit and a
+    // route's own (feature 146's draft-edit limit) alike, answered
+    // `500 INTERNAL` and was logged as an unhandled error.
+    //
+    // **Only 429, deliberately.** Other throwers carry a `statusCode` too —
+    // Fastify's content-type-parser errors among them — and mapping each of
+    // those to a client error is a decision about that error, not this one.
+    // A 5xx `statusCode` keeps reaching the logged fallback. Silent, like every
+    // other 4xx: the client exceeded a budget; nothing is broken.
+    //
+    // **And only the limiter's own 429** (security review W4). A handler that
+    // lets an upstream client's 429 escape is this server's fault, and mapping
+    // it silently would hide it, so such an error reaches the logged
+    // `500 INTERNAL` fallback like any other unrecognised `statusCode`. The
+    // limiter's refusal is told apart by the `Retry-After` it has already set
+    // on the reply: it writes that header on the exceeded path only, whereas
+    // the `x-ratelimit-*` headers go on every request it counts — including
+    // an allowed one whose handler then throws.
+    if (isRateLimitRefusal(error, reply)) {
+      const envelope: ErrorEnvelope = {
+        error: {
+          code: ERROR_CODES.RATE_LIMITED,
+          message: 'Too many requests.',
+          requestId,
+        },
+      };
+      reply.status(429).send(envelope);
+      return;
+    }
+
     // The tenant write guard's refusal (D-260/A). Raised by
     // `tenancy/org-write-guard.ts` from inside `em.flush()`, so it arrives here
     // having rolled the whole transaction back — including the audit row.
@@ -539,6 +573,16 @@ function varyBy(reply: FastifyReply, field: string): void {
     .filter((part) => part.length > 0);
   if (fields.some((part) => part.toLowerCase() === field.toLowerCase())) return;
   reply.header('Vary', [...fields, field].join(', '));
+}
+
+/**
+ * The rate limiter's refusal: a thrown `statusCode: 429` on a reply the limiter
+ * has stamped with `Retry-After` and `x-ratelimit-limit`; see the call site.
+ */
+function isRateLimitRefusal(error: unknown, reply: FastifyReply): boolean {
+  if (!error || typeof error !== 'object') return false;
+  if ((error as { statusCode?: unknown }).statusCode !== 429) return false;
+  return reply.hasHeader('retry-after') && reply.hasHeader('x-ratelimit-limit');
 }
 
 /** `{name}` left standing after interpolation — see the call site. */

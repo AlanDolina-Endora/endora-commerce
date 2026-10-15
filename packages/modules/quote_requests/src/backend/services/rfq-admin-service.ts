@@ -2,10 +2,12 @@ import { randomUUID } from 'crypto';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   ERROR_CODES,
+  QUOTE_REQUEST_HISTORY_EVENT_WINDOW,
   RFQ_CREATED_BY_ADMIN_EVENT,
   type AdminCreateQuoteRequest,
   type AdminPatchQuoteRequest,
   type QuoteRequest as RfqDto,
+  type QuoteRequestHistory,
   type QuoteRequestSummary,
   isCustomFieldValidationFailure,
   type AdminUserReadPort,
@@ -31,6 +33,18 @@ import type { RfqRevisionService } from './rfq-revision-service.js';
 import type { RfqNotificationService } from './rfq-notification-service.js';
 import { raisedOnChannelId } from './raised-on-channel.js';
 import { hasUnpricedLine, quoteIncompleteError } from './agreed-price.js';
+import { pairLines } from './line-carry-over.js';
+import { storedReferenceColumns } from './reference-price.js';
+import { AUTOMATIC_ADMIN_CREATION_NOTE } from './history/constants.js';
+import {
+  adminActorDirectory,
+  customerActorDirectory,
+  predecessorsToRead,
+  projectHistory,
+  variantLabelDirectory,
+  type HistoryEventInput,
+  type HistoryRevisionInput,
+} from './history/history-projection.js';
 
 /**
  * Admin-facing Quote Requests service — feature 008 workflow.
@@ -47,6 +61,12 @@ import { hasUnpricedLine, quoteIncompleteError } from './agreed-price.js';
  * Visibility scoping is centralised in `SalesRepAssignmentService.canSeeOrganization`
  * (research §R2). Platform admins skip the predicate.
  */
+
+/**
+ * How many of the most recent events the admin History reads (threat model T9)
+ * — the contracts' number, which the admin's truncation notice states too.
+ */
+export const HISTORY_EVENT_WINDOW = QUOTE_REQUEST_HISTORY_EVENT_WINDOW;
 
 export interface AdminContext {
   adminUserId: string;
@@ -248,6 +268,72 @@ export class RfqAdminService {
     };
   }
 
+  /**
+   * Feature 146 (FR-010 – FR-019; research R8; contract §3) — the admin
+   * History: the most recent {@link HISTORY_EVENT_WINDOW} events merged into
+   * entries, attributed and diffed on read.
+   *
+   * Bounded (threat model T9): one read of `window + 1` events, the revisions
+   * those events reference, then only the predecessors of the modifications'
+   * revisions. One `findByIds` per actor port — customers `activeOnly`, so a
+   * deleted account's PII is never read and its entries name an unknown user
+   * (FR-018) — and one variant read for the labels.
+   */
+  async history(ctx: AdminContext, rfqId: string): Promise<QuoteRequestHistory> {
+    const em = this.deps.emFactory();
+    const rfq = await this.findVisibleForAdmin(em, ctx, rfqId);
+
+    const latest = await this.deps.eventService.listLatestForRfq(rfq.id, HISTORY_EVENT_WINDOW + 1);
+    const truncated = latest.length > HISTORY_EVENT_WINDOW;
+    const events: HistoryEventInput[] = latest
+      .slice(0, HISTORY_EVENT_WINDOW)
+      .reverse()
+      .map((event) => ({
+        id: event.id,
+        eventType: event.eventType,
+        actorAdminUserId: event.actorAdminUserId ?? null,
+        actorCustomerAccountId: event.actorCustomerAccountId ?? null,
+        actorRoleLabel: event.actorRoleLabel ?? null,
+        payload: event.payload ?? {},
+        revisionId: event.revisionId ?? null,
+        createdAt: event.createdAt,
+      }));
+
+    const referenced = await this.deps.revisionService.findForHistory(rfq.id, {
+      ids: events.flatMap((event) => (event.revisionId ? [event.revisionId] : [])),
+    });
+    const revisions: HistoryRevisionInput[] = referenced.map(toHistoryRevision);
+    revisions.push(
+      ...(await this.deps.revisionService.findForHistory(rfq.id, predecessorsToRead(events, revisions))).map(
+        toHistoryRevision,
+      ),
+    );
+
+    const adminIds = unique(events.map((event) => event.actorAdminUserId));
+    const customerIds = unique(
+      events.filter((event) => !event.actorAdminUserId).map((event) => event.actorCustomerAccountId),
+    );
+    const productIds = unique(
+      revisions.flatMap((revision) =>
+        revision.itemsSnapshot.filter((line) => line.variantId).map((line) => line.productId),
+      ),
+    );
+    const [admins, customers, variants] = await Promise.all([
+      adminIds.length > 0 ? this.deps.adminUsers.findByIds(adminIds) : [],
+      customerIds.length > 0 ? this.deps.customerAccounts.findByIds(customerIds, { activeOnly: true }) : [],
+      productIds.length > 0 ? this.deps.catalogProducts.listVariantsByProductIds(productIds) : [],
+    ]);
+
+    return {
+      entries: projectHistory(events, revisions, {
+        admins: adminActorDirectory(admins),
+        customers: customerActorDirectory(customers),
+        variantLabels: variantLabelDirectory(variants),
+      }),
+      truncated,
+    };
+  }
+
   // -------------------------------------------------------------------------
   // Approve (US2)
   // -------------------------------------------------------------------------
@@ -403,6 +489,9 @@ export class RfqAdminService {
     }
     this.assertVersion(rfq, expectedVersion);
 
+    // Research R7 — a validity change is recorded on the event, since no
+    // revision snapshot carries `expiresAt`.
+    const recorded: { validity?: { before: string | null; after: string | null } } = {};
     await underRowLock(em, rfq, async () => {
       if (body.headerNote !== undefined) rfq.headerNote = body.headerNote ?? null;
 
@@ -435,25 +524,57 @@ export class RfqAdminService {
         if (productById.size !== new Set(body.items.map((it) => it.productId)).size) {
           throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'One or more products do not exist.');
         }
-        const existing = await em.find(QuoteRequestItem, { quoteRequestId: rfq.id });
+        const existing = await em.find(
+          QuoteRequestItem,
+          { quoteRequestId: rfq.id },
+          { orderBy: { createdAt: 'asc', id: 'asc' } },
+        );
+        // Feature 146, FR-034 (research R5.1, R5.2) — a body line is the stored
+        // row its `id` names (same product only), else the row the R6 rule
+        // pairs it with. A paired line keeps what the rep did not change:
+        // packaging unit, product name snapshot, the customer's proposal and the
+        // stored reference; variant and note too, unless the body carries the
+        // key (`lineNote: null` clears). A new line has no packaging unit and no
+        // reference — `modify` never prices a line.
+        const { paired } = pairLines(
+          existing,
+          body.items.map((line) => ({
+            id: line.id,
+            productId: line.productId,
+            variantId: line.variantId,
+          })),
+          'admin',
+        );
         await em.removeAndFlush(existing);
         const items: QuoteRequestItem[] = [];
-        for (const lineInput of body.items) {
+        for (const [index, lineInput] of body.items.entries()) {
           const product = productById.get(lineInput.productId)!;
+          const row = paired[index] ?? null;
+          const variantId =
+            lineInput.variantId !== undefined ? lineInput.variantId : (row?.variantId ?? null);
           items.push(
             em.create(QuoteRequestItem, {
               quoteRequestId: rfq.id,
               productId: product.id,
-              productName: anyLocaleValue(product.name),
+              productName: row?.productName ?? anyLocaleValue(product.name),
               productSlug: product.slug,
-              variantId: lineInput.variantId ?? null,
+              variantId,
+              variantLabel:
+                row !== null && (row.variantId ?? null) === variantId ? (row.variantLabel ?? null) : null,
               quantity: lineInput.quantity,
+              packagingUnitName: row?.packagingUnitName ?? null,
+              packagingUnitBaseQuantity: row?.packagingUnitBaseQuantity ?? null,
+              desiredUnitPrice: row?.desiredUnitPrice ?? null,
               agreedUnitPrice:
                 lineInput.agreedUnitPrice !== undefined && lineInput.agreedUnitPrice !== null
                   ? lineInput.agreedUnitPrice.toFixed(2)
                   : null,
-              lineNote: lineInput.lineNote ?? null,
-              lineCurrency: 'PLN',
+              lineNote:
+                lineInput.lineNote !== undefined ? lineInput.lineNote : (row?.lineNote ?? null),
+              lineCurrency: row?.lineCurrency ?? 'PLN',
+              ...(row !== null
+                ? storedReferenceColumns(row)
+                : { referenceUnitPrice: null, referenceCurrency: null, referenceCapturedAt: null }),
             }),
           );
         }
@@ -464,7 +585,10 @@ export class RfqAdminService {
       rfq.awaitingCustomerRevisionAcceptance = true;
       rfq.assignedAdminUserId = ctx.adminUserId;
       if (body.expiresInDays !== undefined) {
+        const before = rfq.expiresAt?.toISOString() ?? null;
         rfq.expiresAt = new Date(Date.now() + body.expiresInDays * 86_400_000);
+        const after = rfq.expiresAt.toISOString();
+        if (before !== after) recorded.validity = { before, after };
       }
       rfq.version += 1;
       this.#audit(em, 'quote_request.modify', rfq.id, null, {
@@ -499,7 +623,7 @@ export class RfqAdminService {
       quoteRequestId: rfq.id,
       eventType: 'modified',
       actor: { adminUserId: ctx.adminUserId, roleLabel: ctx.roleLabel },
-      payload: { type: 'modified', diff },
+      payload: { type: 'modified', diff, ...recorded },
       revisionId: revision.id,
     });
 
@@ -645,7 +769,7 @@ export class RfqAdminService {
       quoteRequestId: rfq.id,
       eventType: 'note-added',
       actor: { adminUserId: ctx.adminUserId, roleLabel: ctx.roleLabel },
-      payload: { type: 'note-added', note: 'Quote Request created on customer behalf — awaiting customer acceptance.' },
+      payload: { type: 'note-added', note: AUTOMATIC_ADMIN_CREATION_NOTE },
       revisionId: revision.id,
     });
 
@@ -683,13 +807,17 @@ export class RfqAdminService {
     ctx: AdminContext,
     rfqId: string,
   ): Promise<QuoteRequest> {
+    // Threat model C1 (Constitution XI) — a request outside the caller's
+    // organizations answers exactly as an unknown id does, so its existence
+    // does not leak.
+    const notFound = () => new HttpError(404, ERROR_CODES.NOT_FOUND, 'Quote Request not found.');
     const rfq = await em.findOne(QuoteRequest, { id: rfqId });
-    if (!rfq) throw new HttpError(404, ERROR_CODES.NOT_FOUND, 'Quote Request not found.');
+    if (!rfq) throw notFound();
     if (
       !ctx.isPlatformAdmin &&
       !(await this.deps.salesRepAssignment.canSeeOrganization(ctx.adminUserId, rfq.organizationId))
     ) {
-      throw new HttpError(403, ERROR_CODES.FORBIDDEN, 'Not authorized for this Quote Request.');
+      throw notFound();
     }
     return rfq;
   }
@@ -705,6 +833,26 @@ export class RfqAdminService {
     void em;
     return reps.length === 0;
   }
+}
+
+function toHistoryRevision(revision: {
+  id: string;
+  revisionNumber: number;
+  previousRevisionId?: string | null;
+  headerNoteSnapshot?: string | null;
+  itemsSnapshot: HistoryRevisionInput['itemsSnapshot'];
+}): HistoryRevisionInput {
+  return {
+    id: revision.id,
+    revisionNumber: revision.revisionNumber,
+    previousRevisionId: revision.previousRevisionId ?? null,
+    headerNoteSnapshot: revision.headerNoteSnapshot ?? null,
+    itemsSnapshot: Array.isArray(revision.itemsSnapshot) ? revision.itemsSnapshot : [],
+  };
+}
+
+function unique(values: ReadonlyArray<string | null | undefined>): string[] {
+  return [...new Set(values.filter((value): value is string => typeof value === 'string' && value.length > 0))];
 }
 
 function anyLocaleValue(blob: Record<string, string>): string {

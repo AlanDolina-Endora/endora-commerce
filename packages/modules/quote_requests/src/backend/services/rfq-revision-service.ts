@@ -81,6 +81,24 @@ export class RfqRevisionService {
     return found[0] ?? null;
   }
 
+  /**
+   * Feature 146 (threat model T9) — the named revisions of one request, by id
+   * or by number; nothing else. An empty ask reads nothing.
+   */
+  async findForHistory(
+    quoteRequestId: string,
+    ask: { ids?: readonly string[]; numbers?: readonly number[] },
+  ): Promise<QuoteRequestRevision[]> {
+    const ids = [...new Set(ask.ids ?? [])];
+    const numbers = [...new Set(ask.numbers ?? [])];
+    if (ids.length === 0 && numbers.length === 0) return [];
+    const em = this.emFactory();
+    const or: Array<Record<string, unknown>> = [];
+    if (ids.length > 0) or.push({ id: { $in: ids } });
+    if (numbers.length > 0) or.push({ revisionNumber: { $in: numbers } });
+    return em.find(QuoteRequestRevision, { quoteRequestId, $or: or });
+  }
+
   /** Returns the revision whose `revisionNumber === n`, if any. */
   async byNumber(quoteRequestId: string, n: number): Promise<QuoteRequestRevision | null> {
     const em = this.emFactory();
@@ -181,5 +199,7 @@ function toSnapshotLine(item: QuoteRequestItem): QuoteRequestRevisionLine {
     lineNote: item.lineNote ?? null,
     lineCurrency: item.lineCurrency,
     discountPercent: item.discountPercent != null ? Number(item.discountPercent) : null,
+    packagingUnitName: item.packagingUnitName ?? null,
+    packagingUnitBaseQuantity: item.packagingUnitBaseQuantity ?? null,
   };
 }

@@ -38,13 +38,14 @@ dodatkowo wymagają podania `expectedRevisionNumber`.
 | `GET /api/v1/quote-requests` | klient | Lista widocznych zapytań ofertowych (rola org-admin rozszerza widoczność na całą organizację). |
 | `GET /api/v1/quote-requests/:id` | klient | Szczegóły, z opcjonalnym blokiem `comparisonAgainstLastSeen`, gdy zapytanie czeka na akceptację. |
 | `POST /api/v1/quote-requests` | klient | Utworzenie i wysłanie w jednym wywołaniu. |
-| `PATCH /api/v1/quote-requests/:id` | klient | Edycja zapytania w statusie Pending, którego strona wewnętrzna jeszcze nie ruszyła. |
+| `PATCH /api/v1/quote-requests/:id` | klient | Edycja zapytania w statusie Pending, którego strona wewnętrzna jeszcze nie zmieniła — zob. *Edycja szkicu przez klienta*. |
 | `POST /api/v1/quote-requests/:id/accept-revision` | klient | Akceptacja najnowszej wersji przygotowanej przez sprzedawcę (dotyczy też `Created from admin`). Wymaga oferty sprzedawcy z wyceną każdej pozycji — zob. *Uzgodnione ceny*. |
 | `POST /api/v1/quote-requests/:id/reject-revision` | klient | Odrzucenie najnowszej wersji z opcjonalnym powodem. |
 | `POST /api/v1/quote-requests/:id/resubmit` | klient | Skopiowanie starego zapytania do nowego, w statusie Pending, według bieżącego cennika klienta. |
 | `POST /api/v1/quote-requests/:id/convert-to-order` | klient | Wypełnienie koszyka klienta pozycjami zapytania w statusie Approved po uzgodnionych cenach jednostkowych i zwrócenie adresu procesu zamówienia. |
 | `GET /api/v1/admin/quote-requests` | administrator | Lista zawężona do przypisań opiekuna handlowego, z filtrami według statusu i organizacji. |
-| `GET /api/v1/admin/quote-requests/:id` | administrator | Szczegóły z pełną tożsamością wykonawców w dzienniku zdarzeń. |
+| `GET /api/v1/admin/quote-requests/:id` | administrator | Szczegóły z pełną tożsamością wykonawców w dzienniku zdarzeń oraz, dla każdej pozycji, ceną referencyjną i propozycją klienta — zob. *Cena referencyjna*. |
+| `GET /api/v1/admin/quote-requests/:id/history` | administrator | Historia zapytania w postaci czytelnych wpisów — zob. *Historia*. |
 | `POST /api/v1/admin/quote-requests` | administrator | Utworzenie w imieniu klienta → status `Created from admin`. |
 | `PATCH /api/v1/admin/quote-requests/:id` | administrator | Zmiana zapytania w statusie Pending lub Created from admin → wymaga ponownej akceptacji klienta. |
 | `POST /api/v1/admin/quote-requests/:id/approve` | administrator | Zatwierdzenie zapytania w statusie Pending, którego każda pozycja ma uzgodnioną cenę jednostkową. |
@@ -52,6 +53,12 @@ dodatkowo wymagają podania `expectedRevisionNumber`.
 | `POST /api/v1/admin/quote-requests/:id/assign` | administrator | Ustawienie `assignedAdminUserId` (wyłącznie informacyjne). |
 | `GET /api/v1/admin/sales-reps/:adminUserId/organizations` | administrator | Widok odwrotny — organizacje, za które odpowiada opiekun, z liczbą otwartych zapytań w każdej z nich. |
 | `GET /api/v1/storefront/settings/quote-requests` | publiczny | Zwraca dwie flagi widoczności w storefroncie. |
+| `GET /api/v1/quote-requests/price-negotiation` | klient | Obowiązująca wartość negocjacji cen zalogowanego klienta — zob. *Blokada negocjacji cen*. |
+| `GET` / `PUT /api/v1/admin/organizations/:id/quote-price-negotiation` | administrator | Odczyt i ustawienie wartości negocjacji cen organizacji. Odczyt wymaga `customers:read`, zapis `customers:manage`. |
+| `GET` / `PUT /api/v1/admin/customers/:id/quote-price-negotiation` | administrator | Odczyt i ustawienie nadpisania na koncie klienta, z wynikową obowiązującą wartością. Odczyt wymaga `customers:read`, zapis `customers:manage`. |
+
+Treść żądania utworzenia i edycji szkicu przez klienta przyjmuje najwyżej **200 pozycji**; dłuższa
+lista jest odrzucana z `400 VALIDATION_FAILED`.
 
 Trzy endpointy przypisujące opiekuna handlowego *do* organizacji — `GET`, `POST` i `DELETE` pod
 `/api/v1/admin/organizations/:id/sales-reps` — należą do modułu **organizations** i są chronione
@@ -91,6 +98,161 @@ W praktyce oznacza to, że:
   obowiązywać, nie da się zamienić na zamówienie. Jego pozycji nie można już edytować, więc
   rozwiązaniem jest `resubmit`, które tworzy nowe zapytanie do wyceny przez sprzedawcę.
 
+## Cena referencyjna
+
+Każda pozycja zapytania ofertowego ma **cenę referencyjną**: tyle, ile klient zapytania zapłaciłby
+za ten produkt, wariant i ilość w zwykłym zamówieniu. Z nią sprzedawca porównuje propozycję
+klienta.
+
+- **Netto, za jednostkę podstawową.** To cena jednostkowa netto jednej sztuki podstawowej —
+  jednostki, w której liczona jest ilość każdej pozycji — bez względu na jednostkę opakowania
+  wybraną przez klienta. Obowiązują cenniki klienta, przedział ilościowy i aktywna cena promocyjna.
+- **Ustalana na serwerze, dla właściciela zapytania, w kanale sprzedaży zapytania.** Właścicielem
+  jest konto klienta, które złożyło zapytanie, i jego organizacja — także wtedy, gdy administrator
+  organizacji edytuje szkic współpracownika. Cena przysłana przez klienta nigdy nie jest używana:
+  nieznany klucz w treści żądania klienta jest pomijany.
+- **Zapisywana w chwili zapytania.** Jest zapisywana przy każdym zapisie po stronie klienta —
+  formularz w storefroncie, koszyk zamieniony na zapytanie, edycja szkicu, ponowne złożenie, szybkie
+  zamówienie, lista zakupowa i zamówienie skopiowane do zapytania — i zostaje na cały czas życia
+  zapytania; rewizja sprzedawcy jej nie zmienia. Edycja szkicu zachowuje zapisaną cenę
+  niezmienionej pozycji, a dla zmienionej lub nowej ustala ją ponownie. Gdy ceny nie da się ustalić,
+  pozycja nie zapisuje żadnej, a zapytanie i tak zostaje przyjęte.
+- **Koszyk jest własnym punktem odniesienia.** Zapytanie utworzone z koszyka zapisuje cenę
+  jednostkową każdej pozycji koszyka jako cenę referencyjną tej pozycji. **Nie** zapisuje jej jako
+  propozycji klienta: takie pozycje nie mają proponowanej ceny.
+
+Ekran szczegółów w panelu administracyjnym pokazuje dla każdej pozycji cenę referencyjną,
+proponowaną przez klienta cenę jednostkową, różnicę między nimi jako kwotę ze znakiem i jako
+procent ceny referencyjnej (dwa miejsca po przecinku) oraz uzgodnioną cenę jednostkową. Zakładka
+zmiany pokazuje to samo obok pola uzgodnionej ceny, z różnicą wpisywanej ceny liczoną na bieżąco.
+Pozycja bez zapisanej ceny referencyjnej — złożona, zanim ceny referencyjne były zapisywane,
+dodana przez sprzedawcę albo należąca do zapytania utworzonego przez administratora — pokazuje
+zamiast niej **bieżącą** cenę klienta w kanale zapytania, oznaczoną jako *cena bieżąca*, a nie
+*cena z dnia zapytania*. Gdy różnicy nie da się policzyć — brak ceny, cena referencyjna w innej
+walucie niż pozycja albo cena referencyjna równa `0` — ekran pokazuje `—`. Pusta uzgodniona cena
+jest wstępnie wypełniana tą samą ceną właściwą dla klienta, a nie ceną, którą w storefroncie
+widziałby sam administrator.
+
+Cena referencyjna, propozycja klienta i `salesChannelId` zapytania są wyłącznie w odpowiedziach
+**panelu administracyjnego**; API klienta ich nie zawiera.
+
+Odbiorcy `quoteRequestReadPort.listItems` — eksporty i konektory — znajdują zapisaną cenę w
+`referenceUnitPrice` i `referenceCurrency` (oba `null`, gdy żadnej nie zapisano). Pozycja
+zamieniona z koszyka ma `desiredUnitPrice = null`; cenę z koszyka należy czytać z
+`referenceUnitPrice`.
+
+**Sumy.** Cena referencyjna nigdy nie zastępuje brakującej wartości w sumie. `totalAtCustomerPrice`
+na liście klienta ma wartość `null` — wyświetlaną jako `—` — chyba że propozycję ma **każda**
+pozycja; to ta sama reguła, którą lista w panelu administracyjnym stosowała już wcześniej. Zapytanie
+zamienione z koszyka nie ma więc tej sumy, dopóki nie zostanie wycenione. Suma w cenach klienta na
+liście w panelu administracyjnym przetrwa rewizje sprzedawcy, bo rewizja zachowuje propozycję
+każdej pozycji. Wartość szansy w CRM dla zapytania bez propozycji i bez uzgodnionej ceny wynosi
+`0`; pozycja po rewizji, której klient nie wycenił, jest wyceniana według propozycji przeniesionej
+z ostatniej edycji szkicu przez klienta, dopóki sprzedawca nie ustali uzgodnionej ceny.
+
+## Historia
+
+`GET /api/v1/admin/quote-requests/:id/history` — i zakładka Historia na ekranie szczegółów w
+panelu administracyjnym — zamienia zapisane zdarzenia zapytania w czytelne wpisy, po polsku i po
+angielsku:
+
+- **Jeden wpis na decyzję.** Zapisy, które należą do siebie, są łączone: akceptacja klienta i
+  zatwierdzenie, odrzucenie przez klienta i anulowanie, notatka administratora i zatwierdzenie oraz
+  pary systemowe zapisywane przy utworzeniu zapytania, ponownym złożeniu i utworzeniu w imieniu
+  klienta.
+- **Kto to zrobił.** Każdy wpis wskazuje osobę, która działała, a nie autora zapytania:
+  administratora imieniem, nazwiskiem i rolą, użytkownika klienta imieniem, nazwiskiem i adresem
+  e-mail, a wygaśnięcie i zakończenie przez zamówienie jako *System*. Wykonawca, którego nie da się
+  już ustalić, jest pokazywany jako nieznany użytkownik z zapisaną rolą, a reszta historii nadal
+  się wyświetla. Nazwiska pojawiają się wyłącznie w panelu administracyjnym; API klienta nie
+  ujawnia więcej niż wcześniej.
+- **Co się zmieniło.** Zmiana wymienia, względem poprzedniej rewizji: dodane pozycje (z ilością i
+  uzgodnioną ceną) i usunięte, ilość, uzgodnioną cenę, cenę proponowaną przez klienta, notatkę
+  pozycji, notatkę nagłówka i termin ważności — każdą jako stara → nowa wartość. Pozycje są
+  nazywane produktem i wariantem. Zmiany jednostki opakowania i pól niestandardowych nie są
+  wymieniane. Rewizja bez wymienionej zmiany brzmi *oferta wysłana ponownie bez zmian*. Powód lub
+  notatka podane przy anulowaniu, odrzuceniu albo zatwierdzeniu są pokazywane.
+- **Ograniczona.** Historia odczytuje **100 najnowszych zdarzeń**. Gdy istnieją starsze, odpowiedź
+  zawiera `truncated: true`, a zakładka informuje, że starsze wpisy nie są wyświetlane.
+
+Zapytania złożone, zanim ta historia powstała, są opisywane na podstawie już zapisanych danych;
+niczego się nie uzupełnia wstecz.
+
+## Edycja szkicu przez klienta
+
+Klient może edytować zapytanie w statusie `Pending` przez `PATCH /api/v1/quote-requests/:id` tyle
+razy, ile chce, dopóki sprzedawca go nie **zmieni**. Gdy administrator zmienił zapytanie, edycja
+jest odrzucana z `409 RFQ_NOT_DRAFT`, a klient składa zapytanie ponownie. Edycje klientów — także
+edycja szkicu współpracownika przez administratora organizacji — nigdy nie zamykają szkicu.
+
+- Edycja zachowuje wariant, notatkę i jednostkę opakowania każdej pozycji w postaci przysłanej.
+- Endpoint przyjmuje najwyżej **30 edycji na minutę dla jednego zapytania**, liczonych
+  osobno dla każdego klienta; kolejne dostają odpowiedź `429 RATE_LIMITED` z nagłówkiem
+  `Retry-After`. Żądanie odrzucone przed uwierzytelnieniem nie jest liczone.
+
+Rewizja sprzedawcy (`PATCH /api/v1/admin/quote-requests/:id`) zachowuje wariant, notatkę,
+jednostkę opakowania, propozycję klienta i zapisaną cenę referencyjną każdej pozostającej
+pozycji, o ile sprzedawca ich nie zmienił. Zapisana cena referencyjna zostaje także wtedy, gdy
+sprzedawca zmienia ilość pozycji: rewizja sprzedawcy nigdy nie ustala jej ponownie. Pozycja dodana
+przez sprzedawcę ma wybrany przez niego wariant i notatkę, a jednostki opakowania nie ma.
+
+## Blokada negocjacji cen
+
+Administrator decyduje, czy klient może **proponować ceny** w zapytaniu ofertowym:
+
+- **W organizacji** (`/organizations/:id`) — *Członkowie mogą proponować ceny*: dozwolone
+  (domyślnie) albo niedozwolone, dla każdego konta klienta organizacji.
+- **Na koncie klienta** (`/customers/:id`) — nadpisanie: *jak organizacja* (domyślnie),
+  *dozwolone* albo *niedozwolone*. Ekran pokazuje wynikową wartość i to, czy pochodzi z
+  nadpisania, czy z organizacji.
+
+Obowiązująca wartość konta to jego nadpisanie, jeśli jest ustawione, w przeciwnym razie wartość
+organizacji, a w ostateczności *dozwolone*. Nie ma wartości domyślnej dla całej platformy ani dla
+kanału: wartość obowiązuje w każdym kanale sprzedaży, a dwóch członków jednej organizacji może mieć
+różne wartości.
+
+**Co spotyka zablokowanego klienta.**
+
+- Szkic w storefroncie ukrywa pole proponowanej ceny i pokazuje cenę jednostkową z katalogu, tylko
+  do odczytu, tam gdzie jest znana, z informacją, że zapytanie wyceni dział sprzedaży. Ceny wpisane
+  wcześniej przez klienta zostają w szkicu w przeglądarce, ale nigdy nie są wysyłane. Storefront
+  poznaje wartość z `GET /api/v1/quote-requests/price-negotiation`, który zwraca obowiązującą
+  wartość zalogowanego klienta i nic więcej; jeśli ten odczyt się nie powiedzie, strona pokazuje
+  pole — wyświetlanie działa w trybie otwartym.
+- **Gwarancją jest API.** Utworzenie lub edycja szkicu przez klienta, w której pozycje mają
+  proponowaną cenę — także `0` — jest odrzucana z `422 RFQ_PRICE_PROPOSAL_NOT_ALLOWED`, z
+  przetłumaczonym komunikatem, i nic nie zostaje zapisane.
+  O blokadzie decyduje to samo żądanie, które zapisuje zapytanie, i nigdy nie przepuszcza ono
+  propozycji w razie wątpliwości: jeśli wartości właściciela nie da się odczytać, żądanie z
+  propozycją kończy się błędem i niczego nie zapisuje, a żądanie bez propozycji nie potrzebuje
+  blokady i przechodzi.
+- Zamiana koszyka na zapytanie i ponowne złożenie nadal działają: nie niosą propozycji.
+
+**Blokada wiąże właściciela zapytania, a nie osobę, która działa.** Przy utworzeniu i ponownym
+złożeniu właścicielem jest działający klient; przy edycji szkicu przez administratora organizacji
+— współpracownik, do którego szkic należy. Zablokowany administrator organizacji może więc
+proponować ceny w szkicu niezablokowanego współpracownika, a niezablokowany nie może w szkicu
+zablokowanego.
+
+Blokada nie dotyczy strony sprzedawcy — tworzenia, zmiany i zatwierdzania przez administratora ani
+uzgodnionej ceny — i nie zmienia propozycji już zapisanych. Jest odczytywana przy każdym żądaniu,
+bez pamięci podręcznej, więc zmiana obowiązuje od następnego żądania.
+
+**Kto ją widzi i zmienia.** Obie kontrolki to panele na ekranach organizacji i klienta, widoczne
+dla ról z `customers:read`; zmiana wartości wymaga `customers:manage`, a bez niego kontrolka panelu
+jest nieaktywna. Rola, która ma `customers:manage`, ale **nie** ma `customers:read`, nie widzi
+panelu. Opiekun handlowy sięga tylko do organizacji, które może widzieć; każdy inny identyfikator
+dostaje `404`. Organizacja bez przypisanego opiekuna handlowego jest widoczna dla każdego opiekuna
+(zob. *Model widoczności*), więc każdy opiekun może zmienić jej blokadę; samą tę regułę opisuje
+zgłoszenie #305. Nie dotyczy to kont jej klientów: podlegają filtrowi przypisanych
+organizacji, więc żądanie opiekuna o panel konta — odczyt lub zmiana — dostaje `404`, a nadpisania
+tych kont pozostają w gestii administratora platformy. Każda zmiana jest audytowanym zapisem, który zapisuje administratora, organizację
+lub konto oraz starą i nową wartość.
+
+**Moduł wyłączony.** Gdy ten moduł jest wyłączony, panele, cztery endpointy administracyjne, odczyt
+w storefroncie i egzekwowanie znikają; zapisane wartości zostają i znów obowiązują po ponownym
+włączeniu modułu.
+
 ## Model widoczności
 
 Opiekun handlowy to administrator platformy z rolą `sales_representative`. Regułę widoczności
@@ -101,6 +263,11 @@ skupia w jednym miejscu predykat
 2. W przeciwnym razie administrator widzi organizację wtedy i tylko wtedy, gdy łączy ich wiersz w
    `organization_sales_rep_assignments` LUB organizacja nie ma w tej tabeli żadnych wierszy
    (reguła zastępcza dla organizacji bez opiekuna — taką organizację widzi każdy opiekun handlowy).
+
+Opiekun handlowy, który wskaże zapytanie ofertowe organizacji, której nie może widzieć, dostaje ten
+sam `404` co dla nieistniejącego identyfikatora, na każdym endpoincie administracyjnym zapytań
+ofertowych — szczegółach, historii i każdej akcji. (We wcześniejszych wersjach część z nich
+odpowiadała `403`, co zdradzało, że zapytanie istnieje).
 
 Klient z rolą `org_admin` we własnej organizacji widzi każde zapytanie ofertowe tej organizacji, a
 nie tylko własne.
@@ -198,6 +365,16 @@ Trzy tabele uzupełniające podstawowe `quote_requests` i `quote_request_items`:
 - `quote_request_notification_events` — jeden wiersz na parę odbiorca × kanał; unikalność na
   `(quote_request_id, source_event_id, recipient*, channel)` sprawia, że ponowienia są
   idempotentne.
+
+`quote_request_items` przechowuje zapisaną cenę referencyjną w `reference_unit_price`,
+`reference_currency` i `reference_captured_at` — wszystkie trzy ustawione albo wszystkie trzy
+`null`.
+
+Blokadę negocjacji cen przechowują dwie tabele: `quote_request_org_policies` (jeden wiersz na
+organizację, która ma ustawioną wartość) i `quote_request_account_policies` (jeden wiersz na konto
+klienta z nadpisaniem; `null` = jak organizacja). Brak wiersza oznacza wartość domyślną. Usunięcie
+organizacji lub konta klienta usuwa jego wiersz i nic poza nim — żadne zapytanie ofertowe nie
+odwołuje się do żadnej z tych tabel.
 
 `organization_sales_rep_assignments` — relacja wiele-do-wielu między organizacjami a
 administratorami, z której korzysta opisany wyżej model widoczności — **nie** należy do tych tabel:

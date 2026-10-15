@@ -18,6 +18,8 @@ import {
   type CustomerAccountReadPort,
   type CustomerAccountRecord,
   type SalesRepAssignmentPort,
+  type BuyerLinePricePort,
+  type CreateForCustomerOptions,
 } from '@endora-commerce/contracts';
 import type { EventBase, EventBus } from '@endora-commerce/platform/events';
 import { HttpError } from '@endora-commerce/platform/http';
@@ -40,6 +42,23 @@ import { productIdsInRequestChannel } from '@endora-commerce/platform/kernel';
 import { raisedOnChannelId } from './raised-on-channel.js';
 import { hasUnpricedLine, quoteIncompleteError } from './agreed-price.js';
 import { underRowLock } from './transition-lock.js';
+import { summarize } from './summarize.js';
+import {
+  assertValidSuppliedReferences,
+  referenceColumns,
+  resolveReferencePrices,
+  storedReferenceColumns,
+  type ReferenceColumns,
+} from './reference-price.js';
+import { carriedProposal, pairLines, referenceInputsUnchanged } from './line-carry-over.js';
+import type { NegotiationPolicyService } from './negotiation-policy-service.js';
+import {
+  CUSTOMER_EVENT_KEYS,
+  CUSTOMER_ITEM_KEYS,
+  customerEventPayload,
+  pickKeys,
+} from './customer-projection.js';
+import { assertDraftOpenForCustomer, submissionRecordProposals } from './draft-guard.js';
 
 /**
  * Customer-facing Quote Requests service — feature 008 workflow.
@@ -115,6 +134,20 @@ export interface RfqServiceDeps {
   customerAccounts: CustomerAccountReadPort;
   adminUsers: AdminUserReadPort;
   carts: CartWritePort;
+  /**
+   * Feature 146 — `price_lists`' answer to "what would this buyer pay for these
+   * lines on this channel, now", asked at every customer write for the
+   * request's owner and stored as each line's reference (FR-001). A binding
+   * `dependencies` entry of this manifest; a failure other than the owner being
+   * off is tolerated in `reference-price.ts` (research R2).
+   */
+  buyerLinePrices: BuyerLinePricePort;
+  /**
+   * Feature 146, US4 — the price-negotiation lock of the request's **owner**
+   * (FR-022, FR-037; research R11). Asked on create and draft edit only; a body
+   * with no proposal reads nothing.
+   */
+  negotiationPolicy: Pick<NegotiationPolicyService, 'assertProposalsAllowed' | 'precheckProposalsAllowed'>;
   /**
    * Generates the customer-facing business Quote Request ID. Optional so
    * legacy/test compositions that don't wire it fall back to the entity's
@@ -273,11 +306,24 @@ export class RfqService {
   // Create + submit (US1)
   // -------------------------------------------------------------------------
 
-  async createForCustomer(ctx: CustomerContext, input: CreateQuoteRequest): Promise<RfqDto> {
+  async createForCustomer(
+    ctx: CustomerContext,
+    input: CreateQuoteRequest,
+    options: CreateForCustomerOptions = {},
+  ): Promise<RfqDto> {
     if (input.items.length === 0) {
       throw new HttpError(400, ERROR_CODES.RFQ_EMPTY, 'Quote Request must have at least one line item.');
     }
+    // Threat model T6 — an in-process caller's references are checked before
+    // anything is read or written, so a malformed one writes nothing.
+    if (options.lineReferencePrices) {
+      assertValidSuppliedReferences(options.lineReferencePrices, input.items.length);
+    }
     const em = this.deps.emFactory();
+    // FR-022 / FR-037 — the acting customer is the owner of what they create.
+    // After the body is validated and before anything is priced, numbered or
+    // persisted, so a refusal writes nothing and draws no business id (T4).
+    await this.deps.negotiationPolicy.assertProposalsAllowed(ctx.customerAccountId, input.items, em);
     const productById = await this.#acquirableProductsById(
       input.items.map((it) => it.productId),
       ctx,
@@ -290,12 +336,25 @@ export class RfqService {
       throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'One or more products do not exist.');
     }
 
+    // FR-001 / FR-008 — each line's reference, for the request's owner on the
+    // channel it is raised on; a cart conversion supplies its own snapshot.
+    // Resolved before any write: a pricing failure leaves no reference and
+    // never blocks the request (research R2).
+    const salesChannelId = raisedOnChannelId();
+    const references = await resolveReferencePrices(this.deps.buyerLinePrices, {
+      owner: { customerAccountId: ctx.customerAccountId, organizationId: ctx.organizationId },
+      salesChannelId,
+      lines: input.items,
+      ...(options.lineReferencePrices ? { supplied: options.lineReferencePrices } : {}),
+    });
+    const capturedAt = new Date();
+
     const businessId = await this.generateBusinessId(em);
     const rfq = em.create(QuoteRequest, {
       ...(businessId ? { businessId } : {}),
       organizationId: ctx.organizationId,
       customerAccountId: ctx.customerAccountId,
-      salesChannelId: raisedOnChannelId(),
+      salesChannelId,
       status: 'Pending' satisfies QuoteRequestStatus,
       headerNote: input.headerNote ?? null,
       submittedAt: new Date(),
@@ -305,7 +364,7 @@ export class RfqService {
     await em.persistAndFlush(rfq);
 
     const items: QuoteRequestItem[] = [];
-    for (const lineInput of input.items) {
+    for (const [index, lineInput] of input.items.entries()) {
       const product = productById.get(lineInput.productId)!;
       // Feature 043 — append the packaging-unit name to the snapshot name so
       // RFQ views show "<name> (Paleta)", and persist the structured snapshot.
@@ -330,6 +389,7 @@ export class RfqService {
           lineInput.desiredUnitPrice !== undefined ? lineInput.desiredUnitPrice.toFixed(2) : null,
         lineNote: lineInput.lineNote ?? null,
         lineCurrency: 'PLN',
+        ...referenceColumns(references[index] ?? null, capturedAt),
       });
       items.push(item);
     }
@@ -393,61 +453,131 @@ export class RfqService {
       throw new HttpError(409, ERROR_CODES.RFQ_NOT_DRAFT, 'Quote Request is not editable.');
     }
 
-    // Reject if any modify event has been written by an admin user — the
-    // customer must use accept-revision/reject-revision instead.
-    const adminTouched = await em.findOne(QuoteRequestEvent, {
-      quoteRequestId: rfq.id,
-      eventType: 'modified',
-    });
-    if (adminTouched) {
-      throw new HttpError(
-        409,
-        ERROR_CODES.RFQ_NOT_DRAFT,
-        'Quote Request is in admin review; resubmit instead of editing.',
-      );
-    }
+    // FR-038 / research R15 — a cheap refusal before anything else is read;
+    // repeated inside the row lock below, which is the check that counts.
+    await assertDraftOpenForCustomer(em, rfq.id, rfq.awaitingCustomerRevisionAcceptance);
 
     if (expectedVersion !== null && rfq.version !== expectedVersion) {
       throw new HttpError(409, ERROR_CODES.VERSION_CONFLICT, 'Quote Request was updated concurrently.');
     }
 
+    // FR-022 — a cheap refusal before the line rewrite is priced, so a refused
+    // edit costs no call into `price_lists`. A display-style read in the
+    // caller's scope, so it writes no escape-hatch row; repeated, authoritative
+    // and audited, inside the row lock below, which is the check that counts.
+    await this.deps.negotiationPolicy.precheckProposalsAllowed(rfq.customerAccountId, body.items, em);
+
+    // Everything the line rewrite needs is read and priced before the row is
+    // taken: the reference is a call into `price_lists`, and the lock is held
+    // for the row's own write only. What was read here is what is rewritten —
+    // every write to a request bumps its `version`, and `underRowLock` refuses
+    // the change if the version it locks is not the one read here.
+    let rewrite: { existing: QuoteRequestItem[]; lines: QuoteRequestItemDraft[] } | null = null;
+    if (body.items) {
+      const productById = await this.#acquirableProductsById(
+        body.items.map((it) => it.productId),
+        ctx,
+      );
+      if (productById.size !== new Set(body.items.map((it) => it.productId)).size) {
+        // Issues #227 and #259 — see `createForCustomer`. A revision may not
+        // add a line the original submission could not have carried, on either
+        // axis.
+        throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'One or more products do not exist.');
+      }
+      const existing = await em.find(
+        QuoteRequestItem,
+        { quoteRequestId: rfq.id },
+        { orderBy: { createdAt: 'asc', id: 'asc' } },
+      );
+      // Research R5.3 — pair by product, variant, packaging name, position.
+      const { paired } = pairLines(
+        existing,
+        body.items.map((line) => ({
+          productId: line.productId,
+          variantId: line.variantId ?? null,
+          packagingUnitName: line.packagingUnitName ?? null,
+        })),
+        'customer',
+      );
+
+      // A paired line whose product, variant, quantity and packaging unit are
+      // unchanged keeps its stored reference; every other line is priced
+      // afresh — for the request's **owner**, on the channel it was raised on,
+      // never for the acting user (an organization administrator editing a
+      // colleague's draft prices it as the colleague would pay).
+      const keeps = body.items.map((line, index) => {
+        const row = paired[index] ?? null;
+        return row !== null && referenceInputsUnchanged(row, line);
+      });
+      const toResolve = body.items.filter((_, index) => !keeps[index]);
+      const resolved = await resolveReferencePrices(this.deps.buyerLinePrices, {
+        owner: { customerAccountId: rfq.customerAccountId, organizationId: rfq.organizationId },
+        salesChannelId: rfq.salesChannelId ?? null,
+        lines: toResolve,
+      });
+      const capturedAt = new Date();
+      let next = 0;
+      const references: ReferenceColumns[] = body.items.map((_, index) =>
+        keeps[index]
+          ? storedReferenceColumns(paired[index]!)
+          : referenceColumns(resolved[next++] ?? null, capturedAt),
+      );
+
+      const lines = body.items.map((lineInput, index): QuoteRequestItemDraft => {
+        const product = productById.get(lineInput.productId)!;
+        const row = paired[index] ?? null;
+        // FR-035 — packaging stored as sent, with the name suffix
+        // `createForCustomer` writes.
+        const baseName = anyLocaleValue(product.name);
+        return {
+          quoteRequestId: rfq.id,
+          productId: product.id,
+          productName: lineInput.packagingUnitName
+            ? `${baseName} (${lineInput.packagingUnitName})`
+            : baseName,
+          productSlug: product.slug,
+          variantId: lineInput.variantId ?? null,
+          variantLabel:
+            row !== null && (row.variantId ?? null) === (lineInput.variantId ?? null)
+              ? (row.variantLabel ?? null)
+              : null,
+          quantity: lineInput.quantity,
+          packagingUnitName: lineInput.packagingUnitName ?? null,
+          packagingUnitBaseQuantity: lineInput.packagingUnitBaseQuantity ?? null,
+          // Threat model T5 — an omitted proposal on a paired line is kept.
+          desiredUnitPrice: carriedProposal(lineInput.desiredUnitPrice, row),
+          lineNote: lineInput.lineNote ?? null,
+          lineCurrency: 'PLN',
+          ...references[index]!,
+        };
+      });
+      rewrite = { existing, lines };
+    }
+
     await underRowLock(em, rfq, async () => {
+      // Threat model T3 — the version check passed, so this is the row that was
+      // read; but an admin `modify` commits its revision and lines before it
+      // appends its event, so the guard is asked again, of what is committed
+      // now, while the row is held.
+      const [current] = await em.execute<Array<{ awaiting: boolean }>>(
+        `select "awaiting_customer_revision_acceptance" as "awaiting" from "quote_requests" where "id" = ?`,
+        [rfq.id],
+      );
+      await assertDraftOpenForCustomer(em, rfq.id, current?.awaiting === true);
+
+      // FR-022 / FR-037 — the lock of the request's **owner**, not of whoever
+      // is editing (an organization administrator editing a colleague's draft
+      // is held to the colleague's value). Asked of the body as sent: the
+      // rewrite's lines also carry the stored proposals an edit omits (T5),
+      // which are not a proposal being made. Inside the row lock, after the
+      // version and guard checks and before any line is written (T4).
+      await this.deps.negotiationPolicy.assertProposalsAllowed(rfq.customerAccountId, body.items, em);
+
       if (body.headerNote !== undefined) rfq.headerNote = body.headerNote ?? null;
 
-      if (body.items) {
-        const productById = await this.#acquirableProductsById(
-          body.items.map((it) => it.productId),
-          ctx,
-        );
-        if (productById.size !== new Set(body.items.map((it) => it.productId)).size) {
-          // Issues #227 and #259 — see `createForCustomer`. A revision may not
-          // add a line the original submission could not have carried, on either
-          // axis.
-          throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'One or more products do not exist.');
-        }
-        const existingItems = await em.find(QuoteRequestItem, { quoteRequestId: rfq.id });
-        await em.removeAndFlush(existingItems);
-
-        const items: QuoteRequestItem[] = [];
-        for (const lineInput of body.items) {
-          const product = productById.get(lineInput.productId)!;
-          items.push(
-            em.create(QuoteRequestItem, {
-              quoteRequestId: rfq.id,
-              productId: product.id,
-              productName: anyLocaleValue(product.name),
-              productSlug: product.slug,
-              variantId: lineInput.variantId ?? null,
-              quantity: lineInput.quantity,
-              desiredUnitPrice:
-                lineInput.desiredUnitPrice !== undefined
-                  ? lineInput.desiredUnitPrice.toFixed(2)
-                  : null,
-              lineNote: lineInput.lineNote ?? null,
-              lineCurrency: 'PLN',
-            }),
-          );
-        }
+      if (rewrite) {
+        await em.removeAndFlush(rewrite.existing);
+        const items = rewrite.lines.map((line) => em.create(QuoteRequestItem, line));
         await em.persistAndFlush(items);
       }
 
@@ -528,13 +658,23 @@ export class RfqService {
       throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'One or more products do not exist.');
     }
 
+    // The resubmit is its own request, so it is raised on the channel *this*
+    // request resolved to — not the one the source RFQ carries. A buyer who
+    // asks again from a different storefront asked from there. Its references
+    // are resolved afresh on that channel, for the caller, who is its owner
+    // (FR-001; spec Assumptions).
+    const salesChannelId = raisedOnChannelId();
+    const references = await resolveReferencePrices(this.deps.buyerLinePrices, {
+      owner: { customerAccountId: ctx.customerAccountId, organizationId: ctx.organizationId },
+      salesChannelId,
+      lines: sourceItems,
+    });
+    const capturedAt = new Date();
+
     const newRfq = em.create(QuoteRequest, {
       organizationId: ctx.organizationId,
       customerAccountId: ctx.customerAccountId,
-      // The resubmit is its own request, so it is raised on the channel *this*
-      // request resolved to — not the one the source RFQ carries. A buyer who
-      // asks again from a different storefront asked from there.
-      salesChannelId: raisedOnChannelId(),
+      salesChannelId,
       status: 'Pending' satisfies QuoteRequestStatus,
       headerNote: body.headerNote ?? null,
       submittedAt: new Date(),
@@ -543,7 +683,7 @@ export class RfqService {
     });
     await em.persistAndFlush(newRfq);
 
-    const newItems: QuoteRequestItem[] = sourceItems.map((src) =>
+    const newItems: QuoteRequestItem[] = sourceItems.map((src, index) =>
       em.create(QuoteRequestItem, {
         quoteRequestId: newRfq.id,
         productId: src.productId,
@@ -554,6 +694,7 @@ export class RfqService {
         desiredUnitPrice: null,
         lineNote: src.lineNote ?? null,
         lineCurrency: src.lineCurrency,
+        ...referenceColumns(references[index] ?? null, capturedAt),
       }),
     );
     this.#audit(em, 'quote_request.resubmit', newRfq.id, null, {
@@ -963,6 +1104,10 @@ export class RfqService {
       { quoteRequestId: rfq.id },
       { orderBy: { createdAt: 'asc' } },
     );
+    const forAdmin = includeFullActorIdentity;
+    const submittedProposals = forAdmin
+      ? await submissionRecordProposals(em, items, events)
+      : new Map<string, number | null>();
 
     let comparison: RfqComparisonAgainstLastSeen | null = null;
     if (rfq.awaitingCustomerRevisionAcceptance) {
@@ -997,8 +1142,11 @@ export class RfqService {
       customerAccountId: rfq.customerAccountId,
       // Administrator identifiers are the admin surface's to answer. A customer
       // reply carries none of them — not as `null` either: the key is absent.
+      // Feature 146: so is the channel, which only the admin screen's
+      // current-price probe reads.
       ...(includeFullActorIdentity
         ? {
+            salesChannelId: rfq.salesChannelId ?? null,
             createdByAdminUserId: rfq.createdByAdminUserId ?? null,
             assignedAdminUserId: rfq.assignedAdminUserId ?? null,
           }
@@ -1010,31 +1158,59 @@ export class RfqService {
       headerNote: rfq.headerNote ?? null,
       cancellationReason: rfq.cancellationReason ?? null,
       customFieldValues: await this.customFieldValuesFor(rfq, includeFullActorIdentity),
-      items: items.map((it) => ({
-        id: it.id,
-        productId: it.productId,
-        productName: it.productName,
-        productSlug: it.productSlug ?? null,
-        variantId: it.variantId ?? null,
-        variantLabel: it.variantLabel ?? null,
-        quantity: it.quantity,
-        desiredUnitPrice: it.desiredUnitPrice != null ? Number(it.desiredUnitPrice) : null,
-        agreedUnitPrice: it.agreedUnitPrice != null ? Number(it.agreedUnitPrice) : null,
-        lineNote: it.lineNote ?? null,
-        lineCurrency: it.lineCurrency,
-        discountPercent: it.discountPercent != null ? Number(it.discountPercent) : null,
-        taxRate,
-      })),
-      events: events.map((e) => ({
-        id: e.id,
-        eventType: e.eventType,
-        ...(includeFullActorIdentity ? { actorAdminUserId: e.actorAdminUserId ?? null } : {}),
-        actorCustomerAccountId: e.actorCustomerAccountId ?? null,
-        actorRoleLabel: e.actorRoleLabel ?? null,
-        payload: e.payload,
-        revisionId: e.revisionId ?? null,
-        createdAt: e.createdAt.toISOString(),
-      })),
+      // Feature 146 (threat model T7): the customer reply is built from an
+      // explicit allow-list of item, event and payload keys — a key added to
+      // the admin projection, or one that reaches a stored payload, never
+      // reaches the customer by default.
+      items: items.map((it) => {
+        const item = {
+          id: it.id,
+          productId: it.productId,
+          productName: it.productName,
+          productSlug: it.productSlug ?? null,
+          variantId: it.variantId ?? null,
+          variantLabel: it.variantLabel ?? null,
+          quantity: it.quantity,
+          desiredUnitPrice: it.desiredUnitPrice != null ? Number(it.desiredUnitPrice) : null,
+          agreedUnitPrice: it.agreedUnitPrice != null ? Number(it.agreedUnitPrice) : null,
+          lineNote: it.lineNote ?? null,
+          lineCurrency: it.lineCurrency,
+          discountPercent: it.discountPercent != null ? Number(it.discountPercent) : null,
+          taxRate,
+          packagingUnitName: it.packagingUnitName ?? null,
+          packagingUnitBaseQuantity: it.packagingUnitBaseQuantity ?? null,
+        };
+        if (!forAdmin) return pickKeys(item, CUSTOMER_ITEM_KEYS);
+        return {
+          ...item,
+          referencePrice:
+            it.referenceUnitPrice != null && it.referenceCurrency != null && it.referenceCapturedAt != null
+              ? {
+                  amount: Number(it.referenceUnitPrice),
+                  currency: it.referenceCurrency,
+                  capturedAt: it.referenceCapturedAt.toISOString(),
+                }
+              : null,
+          customerProposedUnitPrice:
+            item.desiredUnitPrice ?? submittedProposals.get(it.id) ?? null,
+        };
+      }),
+      events: events.map((e) => {
+        const event = {
+          id: e.id,
+          eventType: e.eventType,
+          actorCustomerAccountId: e.actorCustomerAccountId ?? null,
+          actorRoleLabel: e.actorRoleLabel ?? null,
+          payload: e.payload,
+          revisionId: e.revisionId ?? null,
+          createdAt: e.createdAt.toISOString(),
+        };
+        if (forAdmin) return { ...event, actorAdminUserId: e.actorAdminUserId ?? null };
+        return {
+          ...pickKeys(event, CUSTOMER_EVENT_KEYS),
+          payload: customerEventPayload(e.payload),
+        };
+      }),
       comparisonAgainstLastSeen: comparison,
       submittedAt: rfq.submittedAt?.toISOString() ?? null,
       approvedAt: rfq.approvedAt?.toISOString() ?? null,
@@ -1111,42 +1287,23 @@ function customerDisplayName(c: CustomerAccountRecord): string {
   return [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email;
 }
 
-function summarize(
-  rfq: QuoteRequest,
-  items: QuoteRequestItem[],
-  extras: { requesterDisplayName?: string | null; taxRate?: number },
-): QuoteRequestSummary {
-  const totalAtCustomerPrice = items.reduce((sum, it) => {
-    const desired = it.desiredUnitPrice != null ? Number(it.desiredUnitPrice) : null;
-    return desired != null ? sum + desired * it.quantity : sum;
-  }, 0);
-  const totalAtAgreedPrice = items.every((it) => it.agreedUnitPrice != null)
-    ? items.reduce((sum, it) => sum + Number(it.agreedUnitPrice ?? 0) * it.quantity, 0)
-    : null;
-  const currency = items[0]?.lineCurrency ?? 'PLN';
-  return {
-    id: rfq.id,
-    businessId: rfq.businessId,
-    organizationId: rfq.organizationId,
-    customerAccountId: rfq.customerAccountId,
-    status: rfq.status,
-    awaitingCustomerRevisionAcceptance: rfq.awaitingCustomerRevisionAcceptance,
-    lineCount: items.length,
-    totalAtCustomerPrice: items.length > 0 ? totalAtCustomerPrice : null,
-    totalAtAgreedPrice,
-    taxRate: extras.taxRate ?? 0,
-    currency,
-    submittedAt: rfq.submittedAt?.toISOString() ?? null,
-    expiresAt: rfq.expiresAt?.toISOString() ?? null,
-    createdAt: rfq.createdAt.toISOString(),
-    updatedAt: rfq.updatedAt.toISOString(),
-    version: rfq.version,
-    originalRequester: {
-      customerAccountId: rfq.customerAccountId,
-      displayName: extras.requesterDisplayName ?? null,
-    },
-  };
-}
+/** The columns of a quote line a rewrite creates. */
+type QuoteRequestItemDraft = Pick<
+  QuoteRequestItem,
+  | 'quoteRequestId'
+  | 'productId'
+  | 'productName'
+  | 'productSlug'
+  | 'variantId'
+  | 'variantLabel'
+  | 'quantity'
+  | 'packagingUnitName'
+  | 'packagingUnitBaseQuantity'
+  | 'desiredUnitPrice'
+  | 'lineNote'
+  | 'lineCurrency'
+> &
+  ReferenceColumns;
 
 function groupBy<T, K>(arr: T[], key: (t: T) => K): Map<K, T[]> {
   const out = new Map<K, T[]>();

@@ -110,6 +110,12 @@ export const manifest = defineModuleManifest({
   // counter into (feature 075, D-87). The registry is ungated and its owner is
   // non-deactivatable, so the declaration buys install and migration order
   // rather than a flip-time refusal.
+  //
+  // `price_lists` since feature 146: every customer write stores each line's
+  // reference price, resolved through `buyerLinePricePort`
+  // (`specs/146-quote-request-pricing-history/research.md` R2). `price_lists`
+  // is `nonDeactivatable` and does not reach back to this module, so the edge
+  // closes no cycle and makes no activation control a dead switch.
   dependencies: [
     'admin_roles',
     'admin_users',
@@ -118,6 +124,7 @@ export const manifest = defineModuleManifest({
     'custom_fields',
     'customer_accounts',
     'organizations',
+    'price_lists',
     'sales_channels',
     'settings',
     'taxes',
@@ -178,14 +185,22 @@ export const manifest = defineModuleManifest({
   // Feature 073 (Constitution XVII) — the operator's activation control.
   activation: { settingCode: 'quote_requests.enabled', default: true },
   /**
-   * The nine error codes this module owns — feature 090 Phase 3
+   * The ten error codes this module owns — feature 090 Phase 3
    * (`specs/090-module-owned-error-codes/contracts/error-code-declaration.md`
    * §1.1). This is where the sentence for each is looked up from: `errors.<CODE>`
-   * in this module's own `i18n/{en,pl}.json`, which holds all nine in both
-   * languages and no tenth. None of them is a `check-error-translations.ts`
+   * in this module's own `i18n/{en,pl}.json`, which holds all ten in both
+   * languages and no eleventh. None of them is a `check-error-translations.ts`
    * `UNTRANSLATED_ERROR_CODES` entry.
    *
-   * The list is answer-preserving, not a judgement (§6.2 and §6.5), and it was
+   * **Nine came from the capture and one was minted.**
+   * `RFQ_PRICE_PROPOSAL_NOT_ALLOWED` was created by feature 146
+   * (`specs/146-quote-request-pricing-history/`, FR-022) after the prefix chain
+   * was deleted, so the capture below cannot hold it; its owner and reason are
+   * recorded in `backend/test/fixtures/error-code-routing/reference-ledgers.ts`
+   * `MINTED_ERROR_CODES` instead. Everything said below about "the nine" is
+   * about the captured ones.
+   *
+   * The captured list is answer-preserving, not a judgement (§6.2 and §6.5), and it was
    * not written by hand: it is the verbatim output of the runbook's step-1
    * derivation over the frozen capture at
    * `backend/test/fixtures/error-code-routing/chain-answers.ts`, which records
@@ -252,7 +267,7 @@ export const manifest = defineModuleManifest({
    * codes was enumerated over `packages` and `backend/src` rather than over
    * this package alone (runbook §5), and not one passes a fourth argument at
    * all; the codes nothing raises reach no token by construction. The
-   * bundle agrees from the other direction: nine `errors.<CODE>` keys in each
+   * bundle agrees from the other direction: ten `errors.<CODE>` keys in each
    * language and not one `errors.<CODE>.<token>`.
    */
   errorCodes: [
@@ -265,6 +280,7 @@ export const manifest = defineModuleManifest({
     { code: 'RFQ_NOT_DRAFT' },
     { code: 'RFQ_NOT_NEW' },
     { code: 'RFQ_NOT_QUOTED' },
+    { code: 'RFQ_PRICE_PROPOSAL_NOT_ALLOWED' },
   ],
   /**
    * `rfqs:handle` is declared in the core `PERMISSION_CATALOGUE`, which carries
@@ -286,10 +302,14 @@ export const manifest = defineModuleManifest({
    *
    * That sentence was in a ruling, a route comment and a seed, and in nothing
    * an operator could read. It is here now. It is advisory only: the screen's
-   * fallback stays, no upsert is refused, and this is **not** a `dependencies`
-   * entry — `price_lists` is not this module's lifecycle dependency and making
-   * it one would put a locked module's schema in the way of switching quote
-   * requests off.
+   * fallback stays and no upsert is refused.
+   *
+   * Feature 146 made `price_lists` a real lifecycle dependency of this module,
+   * for a different reason: the server-side reference price every customer
+   * write stores per line comes from its `buyerLinePricePort` (research R2).
+   * That edge is about the port, read in-process with no permission at all; it
+   * does not change this entry, which stays about the admin UI probe and stays
+   * advisory.
    */
   permissions: [
     { code: 'rfqs:handle', label: 'Handle quote requests', requires: ['price_lists:read'] },

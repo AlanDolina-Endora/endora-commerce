@@ -85,6 +85,9 @@ export const ERROR_CODES = {
   RFQ_NOT_NEW: 'RFQ_NOT_NEW',
   RFQ_ALREADY_CLAIMED: 'RFQ_ALREADY_CLAIMED',
   RFQ_EXPIRED: 'RFQ_EXPIRED',
+  // Feature 146 (FR-022) — a customer whose effective price-negotiation value
+  // is "not allowed" sent a line carrying a proposed unit price.
+  RFQ_PRICE_PROPOSAL_NOT_ALLOWED: 'RFQ_PRICE_PROPOSAL_NOT_ALLOWED',
   QUOTE_INCOMPLETE: 'QUOTE_INCOMPLETE',
   QUOTE_VALIDITY_ENDED: 'QUOTE_VALIDITY_ENDED',
 

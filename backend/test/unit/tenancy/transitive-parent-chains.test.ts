@@ -93,11 +93,26 @@ describe('the committed platform’s transitive tenancy chains', () => {
     // scoped through `CrmOpportunity`, which carries the organization column.
     // One hop each, parent and children owned by the same module, so none of
     // them repeats the dependant-owned-parent defect recorded above.
+    // **One more since `specs/146-quote-request-pricing-history/`**:
+    // `QuoteRequestAccountPolicy` -> `CustomerAccount`, a cross-module hop to a
+    // parent owned by `customer_accounts`, which `quote_requests` declares in
+    // its manifest `dependencies` — so the closure rule of
+    // `transitive-parent-module-ownership.test.ts` holds. The row follows the
+    // account rather than copying an organization id that would go stale when
+    // the account moves (research R10).
     expect(transitive.map((meta) => meta.className).sort()).toEqual([
       ...CRM_OPPORTUNITY_CHILDREN,
       'Invoice',
       'InvoiceExternalAttachment',
+      'QuoteRequestAccountPolicy',
     ]);
+    const accountPolicy = transitive.find((meta) => meta.className === 'QuoteRequestAccountPolicy');
+    expect(accountPolicy).toMatchObject({ parentClassName: 'CustomerAccount', fk: 'customerAccountId' });
+    expect(resolveTransitiveParent(accountPolicy!)).toMatchObject({
+      className: 'CustomerAccount',
+      scope: 'org',
+      key: 'organizationId',
+    });
     for (const className of CRM_OPPORTUNITY_CHILDREN) {
       const child = transitive.find((meta) => meta.className === className);
       expect(child, className).toMatchObject({

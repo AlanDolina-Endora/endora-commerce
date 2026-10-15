@@ -10,7 +10,10 @@ import { CustomerAccount } from '../../helpers/package-entities.js';
 
 import { AddressReadService } from '../../../../packages/modules/addresses/src/backend/services/address-ports.js';
 
-import { CustomerAccountReadService } from '../../../../packages/modules/customer_accounts/src/backend/services/customer-account-ports.js';
+// `dist`, not `src` (feature 146): see `test/helpers/customer-account-ports.ts` —
+// a source-evaluated `CustomerAccount` makes `QuoteRequestAccountPolicy`'s
+// transitive parent ambiguous and the ORM refuses to initialise.
+import { CustomerAccountReadService } from '../../../../packages/modules/customer_accounts/dist/backend/services/customer-account-ports.js';
 import { twoFactorEnrolmentsFor } from '../../helpers/two-factor-enrolments.js';
 import { seedAdHocOrganization } from '../../helpers/seed-organizations.js';
 

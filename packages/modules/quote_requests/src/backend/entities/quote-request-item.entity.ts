@@ -25,7 +25,10 @@ export class QuoteRequestItem {
     | 'agreedUnitPrice'
     | 'discountPercent'
     | 'packagingUnitName'
-    | 'packagingUnitBaseQuantity';
+    | 'packagingUnitBaseQuantity'
+    | 'referenceUnitPrice'
+    | 'referenceCurrency'
+    | 'referenceCapturedAt';
 
   @PrimaryKey({ type: 'uuid' })
   id: string = randomUUID();
@@ -76,6 +79,23 @@ export class QuoteRequestItem {
 
   @Property({ type: 'string', length: 3 })
   lineCurrency!: string;
+
+  /**
+   * Feature 146 (research R1) — the net unit price the request's owner would
+   * have paid for this line on the request's channel when it was captured, or
+   * the cart line's unit price on conversion. Always per base piece (the
+   * line's quantity unit). The three reference columns are all-or-none (check
+   * constraint `quote_request_items_reference_all_or_none`); all `null` means
+   * no stored reference. Admin-only: never on the customer reply.
+   */
+  @Property({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  referenceUnitPrice?: string | null;
+
+  @Property({ type: 'string', length: 3, nullable: true })
+  referenceCurrency?: string | null;
+
+  @Property({ type: 'datetime', nullable: true })
+  referenceCapturedAt?: Date | null;
 
   @Property({ type: 'datetime', onCreate: () => new Date() })
   createdAt: Date = new Date();

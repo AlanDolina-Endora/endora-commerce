@@ -1,7 +1,10 @@
 /**
- * `quote_requests`' admin surface — three routes and one sidebar entry,
- * declared by the module that owns them (feature 091, Phase 4, batch 12;
+ * `quote_requests`' admin surface — three routes, one sidebar entry and two
+ * zone contributions, declared by the module that owns them (feature 091,
+ * Phase 4, batch 12;
  * `specs/091-module-owned-admin-surfaces/contracts/admin-contribution.md`).
+ * The two zones are feature 146's price-negotiation lock, one on each of the
+ * organization and customer detail screens (US4, FR-020).
  *
  * **Its drain is zero, re-derived on this branch before anything moved.** No
  * shard in `backend/scripts/ledgers/cross-module-imports/`, no key in
@@ -21,7 +24,10 @@
  * **This entry exports data and nothing else** (R2); every component is a
  * dynamic-import factory (R6).
  */
-import type { AdminContributions } from '@endora-commerce/admin-kit/contributions';
+import {
+  zoneComponent,
+  type AdminContributions,
+} from '@endora-commerce/admin-kit/contributions';
 
 /** The module's landing route: the quote desk. */
 const ROUTE_PATH = '/quote-requests';
@@ -38,6 +44,19 @@ const ROUTE_PATH = '/quote-requests';
  * declares.
  */
 const HANDLE_PERMISSION = 'rfqs:handle';
+
+/**
+ * The code the two negotiation panels are contributed under (feature 146,
+ * FR-027; coordinator decision D-3J, plan I3).
+ *
+ * The panels' `GET` routes accept `customers:read` or `customers:manage`, the
+ * `PUT` routes `customers:manage` only. The contribution carries the **read**
+ * code, and each panel disables its control without `customers:manage`, so a
+ * read-only operator sees the value rather than nothing. The cost, documented
+ * on the module page: a role holding `customers:manage` without
+ * `customers:read` sees no panel.
+ */
+const NEGOTIATION_READ_PERMISSION = 'customers:read';
 
 export const contributions: AdminContributions = {
   routes: [
@@ -78,5 +97,20 @@ export const contributions: AdminContributions = {
       weight: 400,
       requiredPermission: HANDLE_PERMISSION,
     },
+  ],
+  zones: [
+    // Weight 500: after the organization detail's four earlier contributors
+    // (`sales_channels` 100, `price_lists` 200, `quick_order` 300, `carts`
+    // 400). No `match` — one host, one mount (Z13).
+    zoneComponent(
+      'organization.detail.after',
+      () => import('./zones/OrganizationPriceNegotiation.js'),
+      { weight: 500, requiredPermission: NEGOTIATION_READ_PERMISSION },
+    ),
+    // Weight 200: after `quick_order`'s ordering defaults (100).
+    zoneComponent('customer.detail.after', () => import('./zones/CustomerPriceNegotiation.js'), {
+      weight: 200,
+      requiredPermission: NEGOTIATION_READ_PERMISSION,
+    }),
   ],
 };

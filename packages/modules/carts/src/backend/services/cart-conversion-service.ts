@@ -104,24 +104,32 @@ export class CartConversionService {
       throw new HttpError(422, ERROR_CODES.CART_EMPTY, 'cart_empty');
     }
 
-    const rfq = await this.rfqService.createForCustomer(ctx, {
-      ...(note !== undefined ? { headerNote: note } : {}),
-      items: items.map((it) => ({
-        productId: it.productId,
-        ...(it.variantId ? { variantId: it.variantId } : {}),
-        quantity: it.quantity,
-        // Feature 043 — carry the packaging-unit snapshot so the RFQ line
-        // shows "<name> (Paleta)" like the cart did.
-        ...(it.packagingUnitName ? { packagingUnitName: it.packagingUnitName } : {}),
-        ...(it.packagingUnitBaseQuantity != null
-          ? { packagingUnitBaseQuantity: it.packagingUnitBaseQuantity }
-          : {}),
-        // Carry the buyer's currently-snapshotted unit price as the
-        // reference price on the QR line — sales sees what the cart
-        // would have cost without negotiation.
-        desiredUnitPrice: Number(it.unitPrice),
-      })),
-    });
+    const rfq = await this.rfqService.createForCustomer(
+      ctx,
+      {
+        ...(note !== undefined ? { headerNote: note } : {}),
+        items: items.map((it) => ({
+          productId: it.productId,
+          ...(it.variantId ? { variantId: it.variantId } : {}),
+          quantity: it.quantity,
+          // Feature 043 — carry the packaging-unit snapshot so the RFQ line
+          // shows "<name> (Paleta)" like the cart did.
+          ...(it.packagingUnitName ? { packagingUnitName: it.packagingUnitName } : {}),
+          ...(it.packagingUnitBaseQuantity != null
+            ? { packagingUnitBaseQuantity: it.packagingUnitBaseQuantity }
+            : {}),
+          // No `desiredUnitPrice`: the cart price is not something the buyer
+          // proposed (feature 146, FR-008).
+        })),
+      },
+      {
+        // Feature 146 (FR-008, research R3) — the cart's own snapshot is the
+        // line's reference ("price at request"): what sales sees the cart
+        // would have cost without negotiation. `unitPrice` is the net price
+        // per base piece, the basis every quote price is compared on (T12).
+        lineReferencePrices: items.map((it) => ({ amount: it.unitPrice, currency: it.currency })),
+      },
+    );
 
     // Flip the source cart to `completed` + record the conversion
     // lineage. Reload on this service's own EM fork before mutating —

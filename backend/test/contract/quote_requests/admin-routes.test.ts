@@ -206,4 +206,110 @@ describe('Admin Quote Requests routes (US2)', () => {
     expect(res.statusCode).toBe(409);
     expect((res.json() as { error: { code: string } }).error.code).toBe('RFQ_NOT_QUOTED');
   });
+  /**
+   * Feature 146, T042 — the admin detail carries what the rep's screen needs:
+   * the stored at-request reference, the customer's proposal (with the
+   * submission-record fallback of research R4 for a row a pre-146 revision
+   * stripped), the packaging snapshot, and the request's sales channel.
+   */
+  describe('146 — reference price, proposal, packaging and channel on the admin detail', () => {
+    const admin = { b2b_session: 'stub-admin-session' };
+
+    async function createProposed(desiredUnitPrice: number): Promise<{ id: string; version: number }> {
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/v1/quote-requests',
+        cookies: { b2b_session: 'stub-customer-session' },
+        payload: { items: [{ productId: SEED_PRODUCT_101_ID, quantity: 5, desiredUnitPrice }] },
+      });
+      expect(res.statusCode, res.body).toBe(201);
+      return (res.json() as { data: { id: string; version: number } }).data;
+    }
+
+    async function adminDetail(id: string): Promise<{
+      salesChannelId?: unknown;
+      items: Array<Record<string, unknown>>;
+    }> {
+      const res = await h.app.inject({
+        method: 'GET',
+        url: `/api/v1/admin/quote-requests/${id}`,
+        cookies: admin,
+      });
+      expect(res.statusCode, res.body).toBe(200);
+      return (res.json() as { data: { items: Array<Record<string, unknown>> } }).data;
+    }
+
+    it('answers the stored reference, the proposal, the packaging keys and salesChannelId', async () => {
+      const created = await createProposed(8);
+      const capturedAt = '2026-10-01T10:00:00.000Z';
+      await h
+        .em()
+        .getConnection()
+        .execute(
+          `update "quote_request_items" set reference_unit_price = ?, reference_currency = ?, ` +
+            `reference_captured_at = ?, packaging_unit_name = ?, packaging_unit_base_quantity = ? ` +
+            `where quote_request_id = ?`,
+          ['10.00', 'PLN', capturedAt, 'Box of 10', 10, created.id],
+        );
+
+      const detail = await adminDetail(created.id);
+      expect(detail).toHaveProperty('salesChannelId');
+      expect(detail.salesChannelId === null || typeof detail.salesChannelId === 'string').toBe(true);
+      expect(detail.items[0]).toMatchObject({
+        referencePrice: { amount: 10, currency: 'PLN', capturedAt },
+        customerProposedUnitPrice: 8,
+        desiredUnitPrice: 8,
+        packagingUnitName: 'Box of 10',
+        packagingUnitBaseQuantity: 10,
+      });
+    });
+
+    it('answers referencePrice null and customerProposedUnitPrice null when neither is stored', async () => {
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/v1/quote-requests',
+        cookies: { b2b_session: 'stub-customer-session' },
+        payload: { items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }] },
+      });
+      expect(res.statusCode, res.body).toBe(201);
+      const id = (res.json() as { data: { id: string } }).data.id;
+      await h
+        .em()
+        .getConnection()
+        .execute(
+          `update "quote_request_items" set reference_unit_price = null, reference_currency = null, ` +
+            `reference_captured_at = null where quote_request_id = ?`,
+          [id],
+        );
+      const [item] = (await adminDetail(id)).items;
+      expect(item).toHaveProperty('referencePrice', null);
+      expect(item).toHaveProperty('customerProposedUnitPrice', null);
+      expect(item).toHaveProperty('packagingUnitName', null);
+      expect(item).toHaveProperty('packagingUnitBaseQuantity', null);
+    });
+
+    it('falls back to the submission record for a revised line whose row lost the proposal (R4, US1 #4)', async () => {
+      const created = await createProposed(8);
+      const modified = await h.app.inject({
+        method: 'PATCH',
+        url: `/api/v1/admin/quote-requests/${created.id}`,
+        cookies: admin,
+        headers: { 'if-match': `"${created.version}"` },
+        payload: { items: [{ productId: SEED_PRODUCT_101_ID, quantity: 5, agreedUnitPrice: 9 }] },
+      });
+      expect(modified.statusCode, modified.body).toBe(200);
+      // A revision written before feature 146 rewrote the row without the proposal.
+      await h
+        .em()
+        .getConnection()
+        .execute(`update "quote_request_items" set desired_unit_price = null where quote_request_id = ?`, [
+          created.id,
+        ]);
+
+      const [item] = (await adminDetail(created.id)).items;
+      expect(item?.['desiredUnitPrice']).toBeNull();
+      expect(item?.['agreedUnitPrice']).toBe(9);
+      expect(item?.['customerProposedUnitPrice']).toBe(8);
+    });
+  });
 });

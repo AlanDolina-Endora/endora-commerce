@@ -30,6 +30,8 @@ import type { Promotion as PromotionRow } from '../../../packages/modules/promot
 import type { QuoteRequest as QuoteRequestRow } from '../../../packages/modules/quote_requests/src/backend/entities/quote-request.entity.js';
 import type { QuoteRequestItem as QuoteRequestItemRow } from '../../../packages/modules/quote_requests/src/backend/entities/quote-request-item.entity.js';
 import type { QuoteRequestRevision as QuoteRequestRevisionRow } from '../../../packages/modules/quote_requests/src/backend/entities/quote-request-revision.entity.js';
+import type { QuoteRequestOrgPolicy as QuoteRequestOrgPolicyRow } from '../../../packages/modules/quote_requests/src/backend/entities/quote-request-org-policy.entity.js';
+import type { QuoteRequestAccountPolicy as QuoteRequestAccountPolicyRow } from '../../../packages/modules/quote_requests/src/backend/entities/quote-request-account-policy.entity.js';
 import type { Shipment as ShipmentRow } from '../../../packages/modules/shipments/src/backend/entities/shipment.entity.js';
 import type { AdminNotification as AdminNotificationRow } from '../../../packages/modules/admin_notifications/src/backend/entities/admin-notification.entity.js';
 import type { ApiKey as ApiKeyRow } from '../../../packages/modules/api_keys/src/backend/entities/api-key.entity.js';
@@ -233,6 +235,16 @@ export const QuoteRequestRevision = classNamed<QuoteRequestRevisionRow>(
   installedModuleEntities,
   'quote_requests',
   'QuoteRequestRevision',
+);
+export const QuoteRequestOrgPolicy = classNamed<QuoteRequestOrgPolicyRow>(
+  installedModuleEntities,
+  'quote_requests',
+  'QuoteRequestOrgPolicy',
+);
+export const QuoteRequestAccountPolicy = classNamed<QuoteRequestAccountPolicyRow>(
+  installedModuleEntities,
+  'quote_requests',
+  'QuoteRequestAccountPolicy',
 );
 export const GaCustomEvent = classNamed<GaCustomEventRow>(
   installedModuleEntities,

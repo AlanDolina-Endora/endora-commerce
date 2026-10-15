@@ -11,12 +11,12 @@
  * invisible because a workspace member is not an installed package and the
  * committed host registry names each class directly.
  *
- * **Six classes, and the order in this array is not the order they run in.**
+ * **Nine classes, and the order in this array is not the order they run in.**
  * They are listed here in ascending timestamp, which is the order
  * `backend/src/db/migration-order.ts` computes *within* a module — and within a
  * module only. Where this module's block sits relative to every other module's
  * is decided by the manifest `dependencies` graph, not by a timestamp and not by
- * this file (feature 081). Two of these six share nothing but their day:
+ * this file (feature 081). Two of these share nothing but their day:
  * `…T140415_…_qr_item_packaging` and `…T140417_…_business_id` are two minutes
  * apart and both depend on the `…T141344_…_workflow` rewrite above them, which
  * is exactly what "a timestamp orders a module's own migrations" buys.
@@ -49,6 +49,8 @@ import { Migration20260611T140417QuoteRequestsBusinessId } from './20260611T1404
 import { Migration20260617T095510QuoteRequestsBackfillAdminCreatedAwaiting } from './20260617T095510_quote_requests_backfill_admin_created_awaiting.js';
 import { Migration20260718T200342QuoteRequestsQuoteRequestCustomFieldValues } from './20260718T200342_quote_requests_quote_request_custom_field_values.js';
 import { Migration20260912T125614QuoteRequestsQuoteRequestChannelAttribution } from './20260912T125614_quote_requests_quote_request_channel_attribution.js';
+import { Migration20261014T115049QuoteRequestsItemReferencePrice } from './20261014T115049_quote_requests_item_reference_price.js';
+import { Migration20261014T115053QuoteRequestsNegotiationPolicies } from './20261014T115053_quote_requests_negotiation_policies.js';
 
 export const migrations = [
   Migration20260424T190112QuoteRequestsInit,
@@ -58,6 +60,8 @@ export const migrations = [
   Migration20260617T095510QuoteRequestsBackfillAdminCreatedAwaiting,
   Migration20260718T200342QuoteRequestsQuoteRequestCustomFieldValues,
   Migration20260912T125614QuoteRequestsQuoteRequestChannelAttribution,
+  Migration20261014T115049QuoteRequestsItemReferencePrice,
+  Migration20261014T115053QuoteRequestsNegotiationPolicies,
 ];
 
 export {
@@ -68,4 +72,6 @@ export {
   Migration20260617T095510QuoteRequestsBackfillAdminCreatedAwaiting,
   Migration20260718T200342QuoteRequestsQuoteRequestCustomFieldValues,
   Migration20260912T125614QuoteRequestsQuoteRequestChannelAttribution,
+  Migration20261014T115049QuoteRequestsItemReferencePrice,
+  Migration20261014T115053QuoteRequestsNegotiationPolicies,
 };

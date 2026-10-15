@@ -232,6 +232,13 @@ export async function setupTestServer(): Promise<FastifyInstance> {
 
 export interface BackendServerOptions {
   seed?: 'us1-catalog' | 'none';
+  /**
+   * Register `@fastify/rate-limit` for this run. Off by default — the harness
+   * boots with `disableRateLimit: true` so one file's burst can never 429
+   * another's — and turned on only by a test whose subject is a route's own
+   * `config.rateLimit` (feature 146, the customer draft-edit limit).
+   */
+  enableRateLimit?: boolean;
   extraModules?: ModulePlugin[];
   /** When set, injected into `organizationsModule` so tests can assert outbound mail (verification + invitations). */
   organizationsMailer?: Mailer;
@@ -2430,11 +2437,19 @@ export async function setupBackendServer(
           const role = adminUser?.adminRoleId
             ? await ports.adminRolePort.getById(adminUser.adminRoleId)
             : null;
+          // The production answer (`quote_requests`' own resolver): only the
+          // `platform_admin` role skips the sales-rep visibility rule. This read
+          // `|| true` until feature 146, which made every admin a platform
+          // administrator here and left the C1 refusal untestable.
           return {
             adminUserId,
-            isPlatformAdmin: role?.code === 'platform_admin' || true,
+            isPlatformAdmin: role?.code === 'platform_admin',
             roleLabel:
-              role?.code === 'platform_admin' ? 'Platform administrator' : 'Sales representative',
+              role?.code === 'platform_admin'
+                ? 'Platform administrator'
+                : role?.code === 'sales_representative'
+                  ? 'Sales representative'
+                  : (role?.name ?? 'Administrator'),
           };
         },
         // `rfqTaxRateResolver` was contributed here and is `quote_requests`'
@@ -2724,6 +2739,7 @@ export async function setupBackendServer(
       await assertErrorTranslationsInstalled(adminI18nCradle.adminI18nService);
     },
     server: {
+      ...(options.enableRateLimit === true ? { disableRateLimit: false } : {}),
       openApi: {
         title: 'B2B Platform API (test)',
         version: 'test',

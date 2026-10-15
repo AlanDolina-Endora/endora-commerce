@@ -50,6 +50,29 @@ export const quoteRequestItemSchema = z.object({
    * Organization is VAT-exempt / reverse-charge or no tax rule applies.
    */
   taxRate: z.number().finite().nonnegative().default(0),
+  /**
+   * Feature 146 — **admin replies only**; a customer reply does not carry the
+   * key. The at-request reference unit price (net, per base piece) stored when
+   * the line was created; `null` = none stored.
+   */
+  referencePrice: z
+    .object({
+      amount: z.number().finite(),
+      currency: z.string().length(3),
+      capturedAt: isoDateTimeSchema,
+    })
+    .nullable()
+    .optional(),
+  /**
+   * Feature 146 — **admin replies only**. The customer's proposal for this
+   * line: the line's own `desiredUnitPrice`, or — for a line of a request
+   * revised before feature 146 — the value from the submission record.
+   * `null` = the customer proposed nothing.
+   */
+  customerProposedUnitPrice: z.number().finite().nullable().optional(),
+  /** Feature 043 packaging-unit snapshot, already stored on the row; both replies. */
+  packagingUnitName: z.string().nullable().optional(),
+  packagingUnitBaseQuantity: z.number().int().positive().nullable().optional(),
 });
 export type QuoteRequestItem = z.infer<typeof quoteRequestItemSchema>;
 
@@ -84,6 +107,153 @@ export const quoteRequestEventSchema = z.object({
   createdAt: isoDateTimeSchema,
 });
 export type QuoteRequestEvent = z.infer<typeof quoteRequestEventSchema>;
+
+// ---------------------------------------------------------------------------
+// Readable history (feature 146) — `GET /api/v1/admin/quote-requests/:id/history`
+// ---------------------------------------------------------------------------
+
+/** A line as a history change names it. */
+export const quoteRequestHistoryLineRefSchema = z.object({
+  productId: uuidSchema,
+  variantId: uuidSchema.nullable(),
+  /** Snapshot name, packaging suffix included. */
+  productName: z.string(),
+  /** Resolved on read; `null` when the variant is gone. */
+  variantLabel: z.string().nullable(),
+});
+export type QuoteRequestHistoryLineRef = z.infer<typeof quoteRequestHistoryLineRefSchema>;
+
+/**
+ * One change of a `modified` entry. Packaging-unit and custom-field changes
+ * are never listed. The UI maps every `kind` to a bundle key.
+ */
+export const quoteRequestHistoryChangeSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('line_added'),
+    line: quoteRequestHistoryLineRefSchema,
+    quantity: z.number().int().positive(),
+    agreedUnitPrice: z.number().nullable(),
+    currency: z.string().length(3),
+  }),
+  z.object({ kind: z.literal('line_removed'), line: quoteRequestHistoryLineRefSchema }),
+  z.object({
+    kind: z.literal('line_quantity'),
+    line: quoteRequestHistoryLineRefSchema,
+    before: z.number().int(),
+    after: z.number().int(),
+  }),
+  z.object({
+    kind: z.literal('line_agreed_unit_price'),
+    line: quoteRequestHistoryLineRefSchema,
+    before: z.number().nullable(),
+    after: z.number().nullable(),
+    currency: z.string().length(3),
+  }),
+  z.object({
+    kind: z.literal('line_proposed_unit_price'),
+    line: quoteRequestHistoryLineRefSchema,
+    before: z.number().nullable(),
+    after: z.number().nullable(),
+    currency: z.string().length(3),
+  }),
+  z.object({
+    kind: z.literal('line_note'),
+    line: quoteRequestHistoryLineRefSchema,
+    before: z.string().nullable(),
+    after: z.string().nullable(),
+  }),
+  z.object({
+    kind: z.literal('header_note'),
+    before: z.string().nullable(),
+    after: z.string().nullable(),
+  }),
+  z.object({
+    kind: z.literal('validity'),
+    before: isoDateTimeSchema.nullable(),
+    after: isoDateTimeSchema.nullable(),
+  }),
+]);
+export type QuoteRequestHistoryChange = z.infer<typeof quoteRequestHistoryChangeSchema>;
+
+/**
+ * Who an entry is attributed to. An administrator is named by first and last
+ * name only — the admin arm has **no e-mail key** — and `name: null` means an
+ * unknown user.
+ */
+export const quoteRequestHistoryActorSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('admin'),
+    adminUserId: uuidSchema,
+    name: z.string().nullable(),
+    /** The stored `actorRoleLabel`. */
+    recordedRole: z.string().nullable(),
+  }),
+  z.object({
+    kind: z.literal('customer'),
+    customerAccountId: uuidSchema,
+    name: z.string().nullable(),
+    email: z.string().nullable(),
+    recordedRole: z.string().nullable(),
+  }),
+  z.object({ kind: z.literal('system') }),
+  z.object({ kind: z.literal('unknown'), recordedRole: z.string().nullable() }),
+]);
+export type QuoteRequestHistoryActor = z.infer<typeof quoteRequestHistoryActorSchema>;
+
+export const quoteRequestHistoryEntryKindSchema = z.enum([
+  'submitted',
+  'resubmitted',
+  'created_by_admin',
+  'created',
+  'modified',
+  'approved',
+  'accepted_by_customer',
+  'rejected_by_customer',
+  'canceled',
+  'expired',
+  'completed',
+  'note_added',
+]);
+export type QuoteRequestHistoryEntryKind = z.infer<typeof quoteRequestHistoryEntryKindSchema>;
+
+export const quoteRequestHistoryEntrySchema = z.object({
+  /** Id of the first merged event. */
+  id: uuidSchema,
+  eventIds: z.array(uuidSchema).min(1).max(2),
+  kind: quoteRequestHistoryEntryKindSchema,
+  occurredAt: isoDateTimeSchema,
+  actor: quoteRequestHistoryActorSchema,
+  revisionNumber: z.number().int().positive().nullable(),
+  /** Approval note or standalone note — never the automatic creation note. */
+  note: z.string().nullable(),
+  /** Cancellation or rejection reason. */
+  reason: z.string().nullable(),
+  /** `modified` entries only; `[]` = a modification that changed nothing listable. */
+  changes: z.array(quoteRequestHistoryChangeSchema).nullable(),
+  /** Resubmission source. */
+  relatedQuoteRequestId: uuidSchema.nullable(),
+  /** Completion. */
+  orderId: uuidSchema.nullable(),
+});
+export type QuoteRequestHistoryEntry = z.infer<typeof quoteRequestHistoryEntrySchema>;
+
+/**
+ * How many of a quote request's most recent events its history is built from
+ * (threat model T9). Shared so the admin's truncation notice states the number
+ * the server applies, rather than a copy of it.
+ */
+export const QUOTE_REQUEST_HISTORY_EVENT_WINDOW = 100;
+
+/**
+ * The history response body's `data`: entries oldest first, built from the
+ * most recent {@link QUOTE_REQUEST_HISTORY_EVENT_WINDOW} events; `truncated` is
+ * `true` when older ones exist.
+ */
+export const quoteRequestHistorySchema = z.object({
+  entries: z.array(quoteRequestHistoryEntrySchema),
+  truncated: z.boolean(),
+});
+export type QuoteRequestHistory = z.infer<typeof quoteRequestHistorySchema>;
 
 // ---------------------------------------------------------------------------
 // Comparison view (rendered when awaitingCustomerRevisionAcceptance is true)
@@ -146,6 +316,12 @@ export const quoteRequestSchema = z.object({
   businessId: z.string(),
   organizationId: uuidSchema,
   customerAccountId: uuidSchema,
+  /**
+   * Feature 146 — the sales channel the request was raised on. **Admin
+   * replies only**, so the admin screen can ask for a current price on that
+   * channel; `null` = raised before channel attribution (system default).
+   */
+  salesChannelId: uuidSchema.nullable().optional(),
   /**
    * The administrator who created the quote on the customer's behalf, and the
    * one it is assigned to. **Admin replies only** — a customer reply carries
@@ -255,16 +431,21 @@ export const createQuoteRequestLineSchema = z.object({
 });
 export type CreateQuoteRequestLine = z.infer<typeof createQuoteRequestLineSchema>;
 
+/**
+ * Customer-facing: **not strict**, deliberately — an unknown key (a body
+ * `lineReferencePrices`, a per-line `referenceUnitPrice`) is stripped, never
+ * refused, and never reaches the service.
+ */
 export const createQuoteRequestSchema = z.object({
   headerNote: z.string().max(2000).optional(),
-  items: z.array(createQuoteRequestLineSchema).min(1),
+  items: z.array(createQuoteRequestLineSchema).min(1).max(200),
 });
 export type CreateQuoteRequest = z.infer<typeof createQuoteRequestSchema>;
 
 export const patchQuoteRequestSchema = z
   .object({
     headerNote: z.string().max(2000).nullable().optional(),
-    items: z.array(createQuoteRequestLineSchema).min(1).optional(),
+    items: z.array(createQuoteRequestLineSchema).min(1).max(200).optional(),
   })
   .strict();
 export type PatchQuoteRequest = z.infer<typeof patchQuoteRequestSchema>;
@@ -385,6 +566,57 @@ export const storefrontQuoteRequestSettingsSchema = z.object({
 export type StorefrontQuoteRequestSettings = z.infer<typeof storefrontQuoteRequestSettingsSchema>;
 
 // ---------------------------------------------------------------------------
+// Price negotiation lock (feature 146)
+// ---------------------------------------------------------------------------
+
+/** `GET|PUT /api/v1/admin/organizations/:id/quote-price-negotiation` answer. */
+export const quoteRequestOrgNegotiationSchema = z.object({
+  organizationId: uuidSchema,
+  priceProposalsAllowed: z.boolean(),
+  /** `null` when no row exists yet (the default applies). */
+  updatedAt: isoDateTimeSchema.nullable(),
+});
+export type QuoteRequestOrgNegotiation = z.infer<typeof quoteRequestOrgNegotiationSchema>;
+
+/** Admin body — strict. */
+export const setQuoteRequestOrgNegotiationSchema = z
+  .object({ priceProposalsAllowed: z.boolean() })
+  .strict();
+export type SetQuoteRequestOrgNegotiation = z.infer<typeof setQuoteRequestOrgNegotiationSchema>;
+
+export const quoteRequestNegotiationOverrideSchema = z.enum(['inherit', 'allowed', 'not_allowed']);
+export type QuoteRequestNegotiationOverride = z.infer<typeof quoteRequestNegotiationOverrideSchema>;
+
+/** `GET|PUT /api/v1/admin/customers/:id/quote-price-negotiation` answer. */
+export const quoteRequestAccountNegotiationSchema = z.object({
+  customerAccountId: uuidSchema,
+  /** The account's current organization. */
+  organizationId: uuidSchema,
+  override: quoteRequestNegotiationOverrideSchema,
+  organizationPriceProposalsAllowed: z.boolean(),
+  /** The resulting value and where it comes from. */
+  effectivePriceProposalsAllowed: z.boolean(),
+  effectiveSource: z.enum(['account', 'organization', 'default']),
+  updatedAt: isoDateTimeSchema.nullable(),
+});
+export type QuoteRequestAccountNegotiation = z.infer<typeof quoteRequestAccountNegotiationSchema>;
+
+/** Admin body — strict. */
+export const setQuoteRequestAccountNegotiationSchema = z
+  .object({ override: quoteRequestNegotiationOverrideSchema })
+  .strict();
+export type SetQuoteRequestAccountNegotiation = z.infer<typeof setQuoteRequestAccountNegotiationSchema>;
+
+/**
+ * `GET /api/v1/quote-requests/price-negotiation` — the signed-in customer's
+ * effective value and nothing else: no id, no organization value, no override.
+ */
+export const storefrontQuoteRequestNegotiationSchema = z.object({
+  priceProposalsAllowed: z.boolean(),
+});
+export type StorefrontQuoteRequestNegotiation = z.infer<typeof storefrontQuoteRequestNegotiationSchema>;
+
+// ---------------------------------------------------------------------------
 // --- ports -----------------------------------------------------------------
 //
 // The in-process surface `quote_requests` publishes to the six modules that
@@ -453,12 +685,13 @@ export interface QuoteRequestRecord {
 
 /**
  * One quote-request line, as the module that converts one back into a cart
- * reads it (feature 075, `carts`' cut).
+ * reads it (feature 075, `carts`' cut), and as the ERP export readers read it.
  *
  * Narrower than the row on purpose: the conversion re-resolves every price
- * against the buyer's current price list (FR-017), so the money columns are
- * deliberately absent — a caller that cannot see `desiredUnitPrice` cannot
- * accidentally carry it over, which is the rule the conversion exists to obey.
+ * against the buyer's current price list (FR-017 of feature 075), so it ignores
+ * every money field here — the quote → cart conversion never carries a price
+ * over. The money fields (`lineCurrency`, `agreedUnitPrice`, `desiredUnitPrice`,
+ * `referenceUnitPrice`, `referenceCurrency`) are for export readers.
  * `productName` travels because a dropped line is reported by name.
  */
 export interface QuoteRequestLineRecord {
@@ -474,6 +707,16 @@ export interface QuoteRequestLineRecord {
   lineCurrency: string;
   agreedUnitPrice: string | null;
   desiredUnitPrice: string | null;
+  /**
+   * Feature 146 — the stored at-request reference unit price (net, per base
+   * piece), decimal string; `null` when none is stored. For a cart-converted
+   * line this is the cart's unit price — read it here, not from
+   * `desiredUnitPrice`, which is `null` on those lines. Optional, so every
+   * structural stub of the port written before it still compiles.
+   */
+  referenceUnitPrice?: string | null;
+  /** Currency of `referenceUnitPrice`; `null` exactly when it is `null`. */
+  referenceCurrency?: string | null;
 }
 
 /**
@@ -547,8 +790,37 @@ export interface RfqCustomerContext {
  * `activation` to say, not this line's: a module declaring
  * `nonDeactivatable` never enters one.
  */
+/**
+ * Feature 146 — the optional third argument of
+ * `RfqCustomerPort.createForCustomer`.
+ */
+export interface CreateForCustomerOptions {
+  /**
+   * Server-side reference prices, index-aligned with `input.items`. Set only by
+   * an in-process caller that holds a snapshot the buyer could not have forged —
+   * `carts`' conversion, whose cart line price is the reference. Unreachable
+   * from HTTP: the route parses its body with `createQuoteRequestSchema`, which
+   * has no such field and strips it. `null` at an index = resolve that line.
+   *
+   * Validated before any write; each violation is a programming error and
+   * throws:
+   * - the array length equals `input.items.length`;
+   * - each non-`null` entry's `amount` is a finite decimal string ≥ 0 with at
+   *   most two decimals, and its `currency` matches `/^[A-Z]{3}$/`.
+   */
+  lineReferencePrices?: ReadonlyArray<{ amount: string; currency: string } | null>;
+}
+
 export interface RfqCustomerPort {
-  createForCustomer(ctx: RfqCustomerContext, input: CreateQuoteRequest): Promise<QuoteRequest>;
+  /**
+   * `options` is optional and trailing, so every existing caller and every
+   * two-argument implementation stays valid.
+   */
+  createForCustomer(
+    ctx: RfqCustomerContext,
+    input: CreateQuoteRequest,
+    options?: CreateForCustomerOptions,
+  ): Promise<QuoteRequest>;
   listForCustomer(ctx: RfqCustomerContext): Promise<QuoteRequestSummary[]>;
 }
 

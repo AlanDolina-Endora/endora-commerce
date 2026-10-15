@@ -9,6 +9,7 @@ import type {
   Actor,
   AdminRolePort,
   AdminUserReadPort,
+  BuyerLinePricePort,
   CartWritePort,
   CatalogProductReadPort,
   CustomerAccountReadPort,
@@ -24,6 +25,7 @@ import type {
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
 import type { Redis } from 'ioredis';
 import { QuoteRequestReadService } from './services/quote-request-read-port.js';
+import { NegotiationPolicyService } from './services/negotiation-policy-service.js';
 import { startRfqExpirySweep } from './workers/rfq-expiry-sweep-worker.js';
 import { registerQuoteRequestSalesChannelAttributions } from './services/sales-channel-attributions.js';
 import {
@@ -33,7 +35,8 @@ import {
   SettingNotRegistered,
   SettingOutOfScopeForChannel,
 } from '@endora-commerce/platform/kernel';
-import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
+import type { RequireAdminAnyFactory, RequireAdminFactory } from '@endora-commerce/platform/kernel';
+import type { CommandBus } from '@endora-commerce/platform/commands';
 import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
 import type { SettingsReadPort } from '@endora-commerce/platform/kernel';
 import { QUOTE_REQUESTS_SETTING_CODES } from '../manifest.js';
@@ -43,6 +46,8 @@ import { QuoteRequestEvent } from './entities/quote-request-event.entity.js';
 import { QuoteRequestItem } from './entities/quote-request-item.entity.js';
 import { QuoteRequestNotificationEvent } from './entities/quote-request-notification-event.entity.js';
 import { QuoteRequestRevision } from './entities/quote-request-revision.entity.js';
+import { QuoteRequestOrgPolicy } from './entities/quote-request-org-policy.entity.js';
+import { QuoteRequestAccountPolicy } from './entities/quote-request-account-policy.entity.js';
 
 /**
  * `quote_requests` — four settings resolvers that belonged to the module
@@ -78,6 +83,10 @@ export interface QuoteRequestsCradle {
   readonly eventBus: EventBus;
   readonly auditLogService: AuditPort;
   readonly requireAdmin: RequireAdminFactory;
+  /** Feature 146, US4 — the policy reads open to `customers:read` or `customers:manage`. */
+  readonly requireAdminAny: RequireAdminAnyFactory;
+  /** Feature 146, US4 — the two price-negotiation writes run as Commands (Principle XIII). */
+  readonly commandBus: CommandBus;
   readonly requireCustomer: QuoteRequestsModuleOptions['requireCustomer'];
   readonly settingsReadPort: SettingsReadPort;
   /**
@@ -127,6 +136,12 @@ export interface QuoteRequestsCradle {
    */
   readonly moduleQueueRedis: Redis | undefined;
   readonly quoteRequests: ReturnType<typeof quoteRequestsModule>;
+  /**
+   * Feature 146, US4 — the request owner's price-negotiation lock (research
+   * R11). This module's own; resolved per call by `RfqService`, so the one
+   * instance is what the routes of Phase 10b and the enforcement both read.
+   */
+  readonly quoteRequestNegotiationPolicyService: NegotiationPolicyService;
   readonly rfqService: ReturnType<typeof quoteRequestsModule>['handle'] extends () => infer H
     ? H extends { rfqService: infer S }
       ? S
@@ -301,8 +316,20 @@ export function registerModule(ctx: ModuleContext): void {
   registerActorResolvers(ctx);
   registerTaxRateResolver(ctx);
   ctx.di.register({
+    quoteRequestNegotiationPolicyService: ctx
+      .asFunction(
+        () =>
+          new NegotiationPolicyService({
+            // `customer_accounts` is a binding dependency: off, the read
+            // throws and the lock fails closed (analyze M5).
+            customerAccounts: lazyPort<CustomerAccountReadPort>(ctx, 'customerAccountReadPort'),
+          }),
+      )
+      .singleton(),
+  });
+  ctx.di.register({
     quoteRequests: ctx
-      .asFunction(({ emFactory, eventBus, auditLogService }: QuoteRequestsCradle) => {
+      .asFunction(({ emFactory, eventBus, auditLogService, commandBus }: QuoteRequestsCradle) => {
         /**
          * This module's own settings, read through the port it already holds,
          * against the **resolved** sales channel.
@@ -381,6 +408,9 @@ export function registerModule(ctx: ModuleContext): void {
           ),
           requireAdmin: (permission) => async (req, reply) =>
             ctx.cradle<QuoteRequestsCradle>().requireAdmin(permission)(req, reply),
+          requireAdminAny: (permissions) => async (req, reply) =>
+            ctx.cradle<QuoteRequestsCradle>().requireAdminAny(permissions)(req, reply),
+          commandBus,
           requireCustomer: (req, reply) =>
             ctx.cradle<QuoteRequestsCradle>().requireCustomer(req, reply),
           resolveCustomerContext: (req) =>
@@ -431,6 +461,23 @@ export function registerModule(ctx: ModuleContext): void {
             }),
           isStillPresent: () => effectiveState.isPresent('quote_requests'),
           carts: lazyPort<CartWritePort>(ctx, 'cartWritePort'),
+          // Feature 146 — the reference price a customer write stores per line
+          // (FR-001). `price_lists` is a binding `dependencies` entry for it;
+          // the one tolerated failure is in `services/reference-price.ts`.
+          buyerLinePrices: lazyPort<BuyerLinePricePort>(ctx, 'buyerLinePricePort'),
+          // Feature 146, US4 — resolved at each call rather than captured, so
+          // the container's current registration is the one asked.
+          negotiationPolicy: {
+            assertProposalsAllowed: (customerAccountId, lines, em) =>
+              ctx
+                .cradle<QuoteRequestsCradle>()
+                .quoteRequestNegotiationPolicyService.assertProposalsAllowed(customerAccountId, lines, em),
+            precheckProposalsAllowed: (customerAccountId, lines, em) =>
+              ctx
+                .cradle<QuoteRequestsCradle>()
+                .quoteRequestNegotiationPolicyService.precheckProposalsAllowed(customerAccountId, lines, em),
+          },
+          negotiationDisplay: () => ctx.cradle<QuoteRequestsCradle>().quoteRequestNegotiationPolicyService,
           resolveExpiryDays: () =>
             setting(QUOTE_REQUESTS_SETTING_CODES.EXPIRY_DAYS, z.number().int().nonnegative(), 0),
           resolveBoolSetting: (key) =>
@@ -603,4 +650,6 @@ export const entities = [
   QuoteRequestItem,
   QuoteRequestNotificationEvent,
   QuoteRequestRevision,
+  QuoteRequestOrgPolicy,
+  QuoteRequestAccountPolicy,
 ];

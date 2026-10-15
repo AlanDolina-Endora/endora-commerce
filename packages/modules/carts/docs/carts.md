@@ -145,8 +145,12 @@ Reactivation: any buyer activity (touch, add/remove/qty/coupon) on an
 ## Conversions
 
 - **Cart → Quote Request**: `RfqService.createForCustomer` is reused; the
-  cart's buyer-snapshotted unit prices are carried over as
-  `desired_unit_price` so sales sees the cart's reference price. The source
+  cart's buyer-snapshotted unit prices are passed as each line's **reference
+  price** (`options.lineReferencePrices`, stored in the quote line's
+  `reference_unit_price` / `reference_currency`), not as a customer proposal:
+  the resulting lines carry `desired_unit_price = null`, so the conversion also
+  works for a customer who may not propose prices. Sales sees the cart price as
+  the line's *price at request* on the admin quote-request screen. The source
   cart's items are deleted and the cart flips to `'completed'` with
   `converted_to_quote_request_id` set.
 - **Quote Request → Cart**: iterates the QR's items through

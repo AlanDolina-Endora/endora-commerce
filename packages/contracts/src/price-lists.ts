@@ -696,6 +696,69 @@ export interface OrgLinePricePort extends LinePricePort {
   listBracketMinQuantities(productId: string, currencyCode: string): Promise<number[]>;
 }
 
+/** One line of a {@link BuyerLinePriceQuery}. */
+export interface BuyerLinePriceLine {
+  /** Caller's correlation key, echoed back. */
+  key: string;
+  productId: string;
+  variantId?: string | null;
+  /**
+   * In base pieces, the unit every quote line's quantity is in. The caller
+   * never multiplies by a packaging unit's base quantity.
+   */
+  quantity: number;
+}
+
+/** "What does this buyer pay for these lines on this channel, now?" */
+export interface BuyerLinePriceQuery {
+  buyer: { customerAccountId: string | null; organizationId: string | null };
+  /** `null` = the system-default channel (requests raised before channel attribution). */
+  salesChannelId: string | null;
+  /** Absent = the channel's default currency. */
+  currencyCode?: string;
+  lines: readonly BuyerLinePriceLine[];
+}
+
+/** The answer for one line, keyed by the caller's `key`. */
+export interface BuyerLinePriceAnswer {
+  key: string;
+  /** `null` = nothing applies ("no price"), the resolver's own documented answer. */
+  price: { amount: string; currency: string; isSale: boolean; priceListId: string } | null;
+}
+
+/**
+ * Container name: `buyerLinePricePort`. Owner: `price_lists`.
+ *
+ * The net unit price a buyer would pay for each line on a normal order, on a
+ * given channel, now — the question the admin resolved-price probe answers for
+ * one product, asked for many. One implementation serves both, so a quote's
+ * "price at request" and its "current price" are the same question at two
+ * moments (feature 146). Customer group precedence: the account's
+ * `customerGroupId`, else the organization's.
+ *
+ * A product that does not exist answers `price: null` for its line rather than
+ * throwing; an unknown `salesChannelId` throws `HttpError(400, VALIDATION_FAILED)`.
+ * The implementation resolves in bounded chunks, and callers send lines in
+ * chunks.
+ *
+ * **No authority check**: the caller passes the owner of a quote request it
+ * has already authorised. The HTTP probe, which serves arbitrary admin input,
+ * carries the sales-representative scope check itself. When both
+ * `buyer.customerAccountId` and `buyer.organizationId` are given, the account
+ * must belong to that organization, else `HttpError(400, VALIDATION_FAILED)`.
+ *
+ * A separate port rather than a widening of {@link LinePricePort}, for the
+ * reason {@link OrgLinePricePort} states: widening would break every
+ * structural stub of the old one.
+ *
+ * **Owner off:** `price_lists` is `nonDeactivatable`; the gate is still the
+ * registration, so a change to that throws `ModuleDisabledError` at the call
+ * site.
+ */
+export interface BuyerLinePricePort {
+  resolveForBuyer(query: BuyerLinePriceQuery): Promise<BuyerLinePriceAnswer[]>;
+}
+
 // --- Settings keys (also exposed via the settings manifest) -----------------
 
 export const PRICING_SETTING_CODES = {

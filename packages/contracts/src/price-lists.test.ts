@@ -6,6 +6,15 @@ import {
   bulkAddPriceListProductsResultSchema,
   priceListIdParamsSchema,
 } from './price-lists.js';
+import type {
+  BuyerLinePriceAnswer,
+  BuyerLinePriceLine,
+  BuyerLinePricePort,
+  BuyerLinePriceQuery,
+  LinePricePort,
+  LinePriceResult,
+  OrgLinePricePort,
+} from './price-lists.js';
 
 /** A distinct, valid v4-shaped uuid per index. */
 function uuid(i: number): string {
@@ -83,5 +92,84 @@ describe('priceListIdParamsSchema', () => {
   it('accepts a uuid id and rejects anything else', () => {
     expect(priceListIdParamsSchema.parse({ id: uuid(1) })).toEqual({ id: uuid(1) });
     expect(priceListIdParamsSchema.safeParse({ id: 'default' }).success).toBe(false);
+  });
+});
+
+
+/**
+ * Feature 146 — `buyerLinePricePort`, the batch "what does this buyer pay on
+ * this channel" question. The assertions are mostly type-level: a structural
+ * stub must compile against the new port, and the existing `LinePricePort` /
+ * `OrgLinePricePort` stubs must compile unchanged, because the new port is
+ * separate rather than a widening of either.
+ */
+
+const ID = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+describe('BuyerLinePricePort', () => {
+  it('a structural stub compiles and echoes the caller keys in order', async () => {
+    const port: BuyerLinePricePort = {
+      resolveForBuyer: async (query: BuyerLinePriceQuery): Promise<BuyerLinePriceAnswer[]> =>
+        query.lines.map((l: BuyerLinePriceLine) => ({
+          key: l.key,
+          price:
+            l.variantId === null
+              ? null
+              : { amount: '12.50', currency: query.currencyCode ?? 'PLN', isSale: false, priceListId: ID(9) },
+        })),
+    };
+
+    const query: BuyerLinePriceQuery = {
+      buyer: { customerAccountId: ID(1), organizationId: ID(2) },
+      salesChannelId: null,
+      lines: [
+        { key: 'a', productId: ID(3), quantity: 10 },
+        { key: 'b', productId: ID(4), variantId: null, quantity: 1 },
+      ],
+    };
+
+    const answers = await port.resolveForBuyer(query);
+    expect(answers.map((a) => a.key)).toEqual(['a', 'b']);
+    expect(answers[0]!.price).toEqual({ amount: '12.50', currency: 'PLN', isSale: false, priceListId: ID(9) });
+    expect(answers[1]!.price).toBeNull();
+  });
+
+  it('an anonymous buyer on a named channel with an explicit currency is a valid query', () => {
+    const query: BuyerLinePriceQuery = {
+      buyer: { customerAccountId: null, organizationId: null },
+      salesChannelId: ID(5),
+      currencyCode: 'EUR',
+      lines: [],
+    };
+    expect(query.lines).toHaveLength(0);
+  });
+});
+
+describe('LinePricePort and OrgLinePricePort are unchanged', () => {
+  const RESULT: LinePriceResult = {
+    amount: '1.00',
+    currency: 'PLN',
+    priceListId: ID(9),
+    isSale: false,
+    bracketStartQuantity: 1,
+    displayMode: 'net_only',
+  };
+
+  it('a LinePricePort stub written before this feature still compiles', async () => {
+    const port: LinePricePort = { resolveLinePrice: async () => RESULT };
+    expect(
+      await port.resolveLinePrice({
+        product: { id: ID(3), attributeValues: {} },
+        context: { quantity: 1, salesChannel: { id: ID(5), defaultCurrency: 'PLN' } },
+      }),
+    ).toBe(RESULT);
+  });
+
+  it('an OrgLinePricePort stub written before this feature still compiles', async () => {
+    const port: OrgLinePricePort = {
+      resolveLinePrice: async () => null,
+      listBracketMinQuantities: async () => [1, 10],
+    };
+    expect(await port.listBracketMinQuantities(ID(3), 'PLN')).toEqual([1, 10]);
   });
 });

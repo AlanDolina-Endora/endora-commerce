@@ -17,6 +17,20 @@ import { CustomFieldValuesPanel, ProductPicker } from '@endora-commerce/admin-ki
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { AdminZone } from '@endora-commerce/admin-kit/zones';
 import { deadlineForDays, isValidityDaysInvalid, rfqValidity } from '../validity.js';
+import { useRfqNumberFormat } from '../number-format.js';
+import type { ReferenceAmount } from '../reference-difference.js';
+import {
+  DifferenceCell,
+  ReferenceCell,
+  probeCustomerPrice,
+  proposalOf,
+  referencePriceOf,
+  referenceViewOf,
+  useCurrentPrices,
+  type CurrentPrices,
+  type ReferenceView,
+} from '../reference-view.js';
+import { RfqHistory } from './RfqHistory.js';
 
 /**
  * Admin Quote Request detail (feature 008 / T043). Restructured to mirror the
@@ -42,6 +56,7 @@ interface AdminRfqItem {
   productId: string;
   productName: string;
   productSlug: string | null;
+  variantId?: string | null;
   variantLabel: string | null;
   quantity: number;
   desiredUnitPrice: number | null;
@@ -50,6 +65,16 @@ interface AdminRfqItem {
   lineCurrency: string;
   discountPercent: number | null;
   taxRate?: number;
+  /**
+   * Feature 146 — the reference unit price stored when the line was created
+   * ("price at request"); `null` = none stored, so the screen asks for the
+   * customer's current price instead (FR-006).
+   */
+  referencePrice?: { amount: number; currency: string; capturedAt: string } | null;
+  /** Feature 146 — the customer's proposal, surviving admin revisions (FR-002). */
+  customerProposedUnitPrice?: number | null;
+  packagingUnitName?: string | null;
+  packagingUnitBaseQuantity?: number | null;
 }
 
 interface AdminRfqEvent {
@@ -82,6 +107,8 @@ interface AdminRfqDetail {
   businessId?: string;
   organizationId: string;
   customerAccountId: string;
+  /** Feature 146 — the channel the request was raised on; `null` = system default. */
+  salesChannelId?: string | null;
   organization?: RfqOrganization | null;
   customer?: RfqCustomer | null;
   createdByAdminUserId: string | null;
@@ -133,6 +160,7 @@ const STATUS_VARIANT: Record<
 
 export function RfqDetail(): ReactNode {
   const t = useTranslation('core');
+  const format = useRfqNumberFormat();
   const { id } = useParams<{ id: string }>();
   const [rfq, setRfq] = useState<AdminRfqDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -157,7 +185,10 @@ export function RfqDetail(): ReactNode {
       );
       setRfq(res.data);
     } catch (err) {
-      setError(err instanceof ApiError ? err.envelope.error.message : t('rfq.detail.error.load'));
+      // An unknown id and an out-of-scope request both answer 404 (feature
+      // 146, C1); either is "not found" here, in the operator's language.
+      if (err instanceof ApiError && err.status === 404) setError(t('rfq.detail.notFound'));
+      else setError(err instanceof ApiError ? err.envelope.error.message : t('rfq.detail.error.load'));
     } finally {
       setLoading(false);
     }
@@ -166,6 +197,11 @@ export function RfqDetail(): ReactNode {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Feature 146 (FR-006) — the customer's current price for every line with no
+  // stored reference, read by both Overview and Modify.
+  const currentPrices = useCurrentPrices(rfq);
+
 
   const approve = async (): Promise<void> => {
     if (!rfq) return;
@@ -533,7 +569,9 @@ export function RfqDetail(): ReactNode {
                     <TableRow>
                       <TableHead>{t('rfq.detail.column.product')}</TableHead>
                       <TableHead>{t('rfq.detail.column.qty')}</TableHead>
-                      <TableHead>{t('rfq.detail.column.desired')}</TableHead>
+                      <TableHead>{t('rfq.detail.reference.column.reference')}</TableHead>
+                      <TableHead>{t('rfq.detail.reference.column.proposed')}</TableHead>
+                      <TableHead>{t('rfq.detail.reference.column.difference')}</TableHead>
                       <TableHead>{t('rfq.detail.column.agreed')}</TableHead>
                       <TableHead className="text-right">{t('rfq.detail.column.lineTotal')}</TableHead>
                     </TableRow>
@@ -546,6 +584,8 @@ export function RfqDetail(): ReactNode {
                           : it.desiredUnitPrice !== null
                             ? it.desiredUnitPrice * it.quantity
                             : null;
+                      const reference = referenceViewOf(it, currentPrices);
+                      const proposal = proposalOf(it);
                       return (
                         <TableRow key={it.id}>
                           <TableCell>
@@ -556,15 +596,25 @@ export function RfqDetail(): ReactNode {
                             ) : null}
                           </TableCell>
                           <TableCell>{it.quantity}</TableCell>
-                          <TableCell className="tabular-nums">
-                            {it.desiredUnitPrice !== null ? it.desiredUnitPrice.toFixed(2) : '—'}
+                          <TableCell>
+                            <ReferenceCell view={reference} perBaseUnit={Boolean(it.packagingUnitName)} />
                           </TableCell>
                           <TableCell className="tabular-nums">
-                            {it.agreedUnitPrice !== null ? it.agreedUnitPrice.toFixed(2) : '—'}
+                            {proposal !== null ? format.amount(proposal) : '—'}
+                          </TableCell>
+                          <TableCell>
+                            <DifferenceCell
+                              price={proposal}
+                              currency={it.lineCurrency}
+                              reference={referencePriceOf(reference)}
+                            />
+                          </TableCell>
+                          <TableCell className="tabular-nums">
+                            {it.agreedUnitPrice !== null ? format.amount(it.agreedUnitPrice) : '—'}
                           </TableCell>
                           <TableCell className="tabular-nums text-right">
                             {lineTotal !== null
-                              ? `${lineTotal.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} ${it.lineCurrency}`
+                              ? format.money(lineTotal, it.lineCurrency)
                               : '—'}
                           </TableCell>
                         </TableRow>
@@ -576,33 +626,29 @@ export function RfqDetail(): ReactNode {
                       {taxRate > 0 ? (
                         <>
                           <tr>
-                            <th colSpan={4} className="text-right">
+                            <th colSpan={6} className="text-right">
                               {t('rfq.detail.netLabel')}
                             </th>
                             <td className="tabular-nums text-right">
-                              {total.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} {currency}
+                              {format.money(total, currency)}
                             </td>
                           </tr>
                           <tr>
-                            <th colSpan={4} className="text-right">
+                            <th colSpan={6} className="text-right">
                               {t('rfq.detail.taxLabel', { rate: (taxRate * 100).toFixed(0) })}
                             </th>
                             <td className="tabular-nums text-right">
-                              {(taxTotal ?? 0).toLocaleString('pl-PL', { minimumFractionDigits: 2 })}{' '}
-                              {currency}
+                              {format.money(taxTotal ?? 0, currency)}
                             </td>
                           </tr>
                         </>
                       ) : null}
                       <tr>
-                        <th colSpan={4} className="text-right font-semibold">
+                        <th colSpan={6} className="text-right font-semibold">
                           {taxRate > 0 ? t('rfq.detail.grossLabel') : t('rfq.detail.totalLabel')}
                         </th>
                         <td className="tabular-nums text-right font-semibold">
-                          {(grossTotal ?? total).toLocaleString('pl-PL', {
-                            minimumFractionDigits: 2,
-                          })}{' '}
-                          {currency}
+                          {format.money(grossTotal ?? total, currency)}
                         </td>
                       </tr>
                     </tfoot>
@@ -630,6 +676,7 @@ export function RfqDetail(): ReactNode {
           {tab === 'modify' && !isTerminal ? (
             <ModifyCard
               rfq={rfq}
+              currentPrices={currentPrices}
               onSaved={refresh}
               setError={setError}
               setInfo={setInfo}
@@ -639,21 +686,7 @@ export function RfqDetail(): ReactNode {
 
           {tab === 'history' ? (
             <Section title={t('rfq.detail.history.title')}>
-              {rfq.events.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t('rfq.detail.history.empty')}</p>
-              ) : (
-                <ul className="space-y-2">
-                  {rfq.events.map((e) => (
-                    <li key={e.id} className="rounded-md border p-3 text-sm">
-                      <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{formatDateTime(e.createdAt)}</span>
-                        {e.actorRoleLabel ? <span>· {e.actorRoleLabel}</span> : null}
-                      </div>
-                      <p className="font-medium">{e.eventType}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <RfqHistory quoteRequestId={rfq.id} />
             </Section>
           ) : null}
         </CardContent>
@@ -746,45 +779,37 @@ function TabBtn(props: {
 }
 
 interface ModifyLineDraft {
+  /**
+   * The stored line this draft line is (feature 146, FR-034). Sent back so the
+   * server keeps what the operator did not change — packaging unit, proposal,
+   * stored reference. Absent on a line the operator added, and dropped when
+   * the operator switches the line to another product.
+   */
+  id?: string | undefined;
   productId: string;
+  variantId: string | null;
+  lineNote: string | null;
   quantity: string;
   agreedUnitPrice: string;
-}
-
-/**
- * Resolves a product's current price-list unit price (sale price preferred,
- * else base) via the canonical resolver. Used to prefill the agreed unit price
- * so the operator starts from the price-list value and only edits the
- * negotiated delta. Returns null when no price is published for the product.
- */
-async function resolvePriceListPrice(productId: string): Promise<number | null> {
-  try {
-    const res = await apiClient.get<{
-      data: {
-        resolvedPrice: {
-          basePrice: { amount: string } | null;
-          salePrice: { amount: string } | null;
-        };
-      };
-    }>(`/api/v1/storefront/products/${productId}/resolved-price`);
-    const resolved = res.data.resolvedPrice;
-    const raw = resolved.salePrice?.amount ?? resolved.basePrice?.amount ?? null;
-    if (raw === null) return null;
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : null;
-  } catch {
-    return null;
-  }
+  /**
+   * The customer's current price for a line that is not a kept stored line
+   * (added, or switched to another product), as the prefill probe answered it;
+   * `undefined` until it answers, `null` = no price.
+   */
+  currentPrice?: ReferenceAmount | null | undefined;
 }
 
 function ModifyCard({
   rfq,
+  currentPrices,
   onSaved,
   setError,
   setInfo,
   focusValidityNonce,
 }: {
   rfq: AdminRfqDetail;
+  /** The current prices `RfqDetail` asked for the lines with no stored reference. */
+  currentPrices: CurrentPrices;
   onSaved: () => Promise<void>;
   setError: (msg: string | null) => void;
   setInfo: (msg: string | null) => void;
@@ -792,6 +817,7 @@ function ModifyCard({
   focusValidityNonce: number;
 }): ReactNode {
   const t = useTranslation('core');
+  const format = useRfqNumberFormat();
   const [headerNote, setHeaderNote] = useState(rfq.headerNote ?? '');
   // Blank means "leave the deadline where it is" — that is `expiresInDays`
   // being absent from the PATCH, which is what the contract reads as "do not
@@ -808,7 +834,10 @@ function ModifyCard({
       // modification is a delta on the existing offer, not a blank slate.
       const definedPrice = it.agreedUnitPrice ?? it.desiredUnitPrice;
       return {
+        id: it.id,
         productId: it.productId,
+        variantId: it.variantId ?? null,
+        lineNote: it.lineNote,
         quantity: String(it.quantity),
         agreedUnitPrice: definedPrice !== null ? definedPrice.toFixed(2) : '',
       };
@@ -816,30 +845,40 @@ function ModifyCard({
   );
   const [busy, setBusy] = useState(false);
 
-  // Prefill an empty "agreed unit price" with the product's price-list price so
-  // the operator starts from the catalogue value and only edits the negotiated
-  // delta. Never clobbers a value already present (an existing agreed price, or
-  // one the operator just typed).
-  const prefillAgreed = useCallback((idx: number, productId: string): void => {
-    void resolvePriceListPrice(productId).then((price) => {
-      if (price === null) return;
-      setLines((prev) =>
-        prev.map((l, i) =>
-          i === idx && l.productId === productId && l.agreedUnitPrice.trim() === ''
-            ? { ...l, agreedUnitPrice: price.toFixed(2) }
-            : l,
-        ),
-      );
-    });
-  }, []);
+  // Prefill an empty agreed unit price with the price the request's customer
+  // would pay on the request's channel (FR-007) — never the operator's own
+  // storefront price — so the operator starts from that customer's price and
+  // only edits the negotiated delta. Never clobbers a value already present (an
+  // existing agreed price, or one the operator just typed). A failed probe
+  // leaves the input empty (L2).
+  const prefillAgreed = useCallback(
+    (idx: number, line: { productId: string; variantId: string | null; quantity: number }): void => {
+      void probeCustomerPrice(rfq, line).then((price) => {
+        setLines((prev) =>
+          prev.map((l, i) =>
+            i === idx && l.productId === line.productId
+              ? {
+                  ...l,
+                  currentPrice: price,
+                  ...(price !== null && l.agreedUnitPrice.trim() === ''
+                    ? { agreedUnitPrice: price.amount.toFixed(2) }
+                    : {}),
+                }
+              : l,
+          ),
+        );
+      });
+    },
+    [rfq],
+  );
 
-  // On mount, fall back to the catalogue price only for lines where the request
-  // itself defines no price (neither agreed nor desired). Lines that already
-  // carry a request-defined price keep it as the modification's starting point.
+  // On mount, prefill only the lines where the request itself defines no price
+  // (neither agreed nor proposed). Lines that already carry a request-defined
+  // price keep it as the modification's starting point.
   useEffect(() => {
     rfq.items.forEach((it, idx) => {
       if (it.productId && it.agreedUnitPrice === null && it.desiredUnitPrice === null) {
-        prefillAgreed(idx, it.productId);
+        prefillAgreed(idx, { productId: it.productId, variantId: it.variantId ?? null, quantity: it.quantity });
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -860,7 +899,12 @@ function ModifyCard({
       const items = lines
         .filter((l) => l.productId.trim().length > 0 && Number(l.quantity) > 0)
         .map((l) => ({
+          // A kept line names its stored row and restates its variant and note,
+          // so the revision keeps them (FR-034). `variantId` is not nullable in
+          // the contract: a line without a variant omits the key.
+          ...(l.id ? { id: l.id, lineNote: l.lineNote } : {}),
           productId: l.productId.trim(),
+          ...(l.variantId ? { variantId: l.variantId } : {}),
           quantity: Number(l.quantity),
           ...(l.agreedUnitPrice.trim().length > 0
             ? { agreedUnitPrice: Number(l.agreedUnitPrice) }
@@ -906,20 +950,19 @@ function ModifyCard({
     setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
   };
 
-  // Reference data from the current revision: the customer's desired unit price
-  // and the line currency, keyed by product so each modify row can show a price
-  // even before an agreed price is typed.
-  const originalByProduct = new Map(rfq.items.map((it) => [it.productId, it]));
+  // The stored lines by id: a kept draft line reads its reference and the
+  // customer's proposal from the line it is, not from whichever line happens
+  // to share its product.
+  const originalById = new Map(rfq.items.map((it) => [it.id, it]));
   const currency = rfq.items[0]?.lineCurrency ?? 'PLN';
-  const fmt = (n: number): string =>
-    `${n.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} ${currency}`;
 
   // A plain grid (not <Table>, which wraps in an overflow-auto container that
   // would clip the product dropdown) so the picker's options overlay outside
   // the row instead of being trapped inside it. The fixed-width columns only
   // engage at md+ (where the header is visible); on narrower widths the row
   // stacks so the trailing actions column can't overflow and break the layout.
-  const gridCols = 'md:grid-cols-[minmax(200px,1fr)_96px_140px_130px_140px_auto]';
+  const gridCols =
+    'md:grid-cols-[minmax(180px,1fr)_80px_120px_130px_100px_120px_130px_auto]';
 
   // The deadline field's answers, all about the same date: what saving would
   // set, or — while the field is blank — what leaving it blank keeps. "Blank"
@@ -999,24 +1042,40 @@ function ModifyCard({
             <span>{t('rfq.detail.modify.productId')}</span>
             <span>{t('rfq.detail.modify.quantity')}</span>
             <span>{t('rfq.detail.modify.agreedUnitPrice')}</span>
-            <span>{t('rfq.detail.modify.desiredPrice')}</span>
+            <span>{t('rfq.detail.reference.column.reference')}</span>
+            <span>{t('rfq.detail.reference.column.proposed')}</span>
+            <span>{t('rfq.detail.reference.column.difference')}</span>
             <span>{t('rfq.detail.modify.lineTotal')}</span>
             <span />
           </div>
           {lines.map((l, i) => {
-            const orig = l.productId ? originalByProduct.get(l.productId) : undefined;
-            const desired = orig?.desiredUnitPrice ?? null;
+            const stored = l.id ? originalById.get(l.id) : undefined;
+            const orig = stored && stored.productId === l.productId ? stored : undefined;
+            const desired = orig ? proposalOf(orig) : null;
+            const reference: ReferenceView = orig
+              ? referenceViewOf(orig, currentPrices)
+              : l.currentPrice === undefined
+                ? { kind: 'pending' }
+                : l.currentPrice === null
+                  ? { kind: 'none' }
+                  : { kind: 'current', price: l.currentPrice };
             const qtyNum = Number(l.quantity);
             const agreedNum = Number(l.agreedUnitPrice);
+            const typedAgreed =
+              l.agreedUnitPrice.trim().length > 0 && Number.isFinite(agreedNum) ? agreedNum : null;
             const lineTotal =
-              l.agreedUnitPrice.trim().length > 0 && Number.isFinite(agreedNum) && qtyNum > 0
-                ? agreedNum * qtyNum
+              typedAgreed !== null && qtyNum > 0
+                ? typedAgreed * qtyNum
                 : desired !== null && qtyNum > 0
                   ? desired * qtyNum
                   : null;
             return (
               <div
                 key={i}
+                role="group"
+                // A new or switched line has no stored name yet; it is still a
+                // named group, by its position (review fix N7).
+                aria-label={orig?.productName ?? t('rfq.detail.modify.lineGroup', { number: i + 1 })}
                 className={cn('grid grid-cols-1 items-center gap-3', gridCols)}
               >
                 <ProductPicker
@@ -1025,8 +1084,16 @@ function ModifyCard({
                   onChange={(v): void => {
                     // Switching products invalidates any prior agreed price; clear
                     // it and let the price-list value prefill for the new product.
-                    updateLine(i, { productId: v ?? '', agreedUnitPrice: '' });
-                    if (v) prefillAgreed(i, v);
+                    // The line is no longer the stored row it was: drop its id
+                    // and variant so the server treats it as a new line.
+                    updateLine(i, {
+                      id: undefined,
+                      productId: v ?? '',
+                      variantId: null,
+                      agreedUnitPrice: '',
+                      currentPrice: undefined,
+                    });
+                    if (v) prefillAgreed(i, { productId: v, variantId: null, quantity: qtyNum });
                   }}
                 />
                 <Input
@@ -1046,11 +1113,21 @@ function ModifyCard({
                   onChange={(e): void => updateLine(i, { agreedUnitPrice: e.target.value })}
                   className="tabular-nums"
                 />
+                <div className="self-center text-sm">
+                  <ReferenceCell view={reference} perBaseUnit={Boolean(orig?.packagingUnitName)} />
+                </div>
                 <span className="self-center text-sm tabular-nums text-muted-foreground">
-                  {desired !== null ? fmt(desired) : '—'}
+                  {desired !== null ? format.money(desired, currency) : '—'}
                 </span>
+                <div className="self-center text-sm">
+                  <DifferenceCell
+                    price={typedAgreed}
+                    currency={orig?.lineCurrency ?? currency}
+                    reference={referencePriceOf(reference)}
+                  />
+                </div>
                 <span className="self-center text-sm font-medium tabular-nums">
-                  {lineTotal !== null ? fmt(lineTotal) : '—'}
+                  {lineTotal !== null ? format.money(lineTotal, currency) : '—'}
                 </span>
                 <Button
                   variant="ghost"
@@ -1068,7 +1145,10 @@ function ModifyCard({
             variant="outline"
             size="sm"
             onClick={(): void =>
-              setLines((prev) => [...prev, { productId: '', quantity: '1', agreedUnitPrice: '' }])
+              setLines((prev) => [
+                ...prev,
+                { productId: '', variantId: null, lineNote: null, quantity: '1', agreedUnitPrice: '' },
+              ])
             }
           >
             {t('rfq.detail.modify.addLine')}

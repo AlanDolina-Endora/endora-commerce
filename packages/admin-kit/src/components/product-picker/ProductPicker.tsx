@@ -232,27 +232,52 @@ function ProductPickerBody(
 
   // Warm the cache for ids in `value` that the user hasn't searched yet —
   // common when the picker is mounted with an existing selection.
-  const fetchedRef = useRef<Set<string>>(new Set());
+  //
+  // An id is never marked "done" before its answer arrives (feature 146, T099).
+  // It used to be: under `<StrictMode>` the first effect run marked the id, its
+  // simulated cleanup discarded the answer, and the second run saw nothing
+  // missing — so a preselected product stayed blank until a search loaded it.
+  // Instead the request in flight is kept per id and every effect run awaits
+  // it, applying the answer only while that run is still current. The second
+  // StrictMode run, and the rerun every search result triggers through the
+  // `productCache` dependency, re-await the same request rather than firing a
+  // new one. Only a failed lookup is remembered, so it is not re-asked on every
+  // rerun.
+  const inFlightRef = useRef<Map<string, Promise<AdminProductSummary | null>>>(new Map());
+  const failedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const valueIds =
       props.mode === 'select' ? (props.value ? [props.value] : []) : props.value;
     const missing = valueIds.filter(
-      (vid) => !productCache.has(vid) && !fetchedRef.current.has(vid),
+      (vid) => !productCache.has(vid) && !failedRef.current.has(vid),
     );
     if (missing.length === 0) return;
-    for (const vid of missing) fetchedRef.current.add(vid);
+    const lookups = missing.map((vid) => {
+      const pending = inFlightRef.current.get(vid);
+      if (pending) return pending;
+      const lookup = apiClient
+        .get<{ data: AdminProductSummary }>(`/api/v1/admin/catalog/products/${vid}`)
+        .then(
+          (res): AdminProductSummary => res.data,
+          (): null => {
+            failedRef.current.add(vid);
+            return null;
+          },
+        )
+        .finally(() => {
+          inFlightRef.current.delete(vid);
+        });
+      inFlightRef.current.set(vid, lookup);
+      return lookup;
+    });
     let alive = true;
-    void Promise.allSettled(
-      missing.map((vid) =>
-        apiClient.get<{ data: AdminProductSummary }>(`/api/v1/admin/catalog/products/${vid}`),
-      ),
-    ).then((results) => {
+    void Promise.all(lookups).then((found) => {
       if (!alive) return;
+      const products = found.filter((p): p is AdminProductSummary => p !== null);
+      if (products.length === 0) return;
       setProductCache((prev) => {
         const next = new Map(prev);
-        for (const r of results) {
-          if (r.status === 'fulfilled') next.set(r.value.data.id, r.value.data);
-        }
+        for (const p of products) next.set(p.id, p);
         return next;
       });
     });

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ReactElement, ReactNode } from 'react';
+import { StrictMode, type ReactElement, type ReactNode } from 'react';
 import { AppLanguageContext } from '../../../packages/admin-shell/src/i18n/app-language-context';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -285,5 +285,76 @@ describe('ProductPicker — rules, alreadyAddedIds, onPickProduct', () => {
       CORE,
     );
     expect((screen.getByRole('combobox') as HTMLInputElement).disabled).toBe(false);
+  });
+});
+
+/**
+ * Feature 146, T099 owner finding — a preselected product must show without any
+ * interaction, under `<StrictMode>` as the admin runs it (`AdminRoot.tsx`).
+ *
+ * The warm-up effect used to mark an id as fetched before its answer arrived;
+ * StrictMode's simulated unmount discarded that answer, and the remount saw
+ * nothing missing — so the field stayed empty until the popup's search happened
+ * to load the product.
+ */
+describe('ProductPicker — preselected value under StrictMode', () => {
+  const PRODUCT = {
+    id: 'p-kept',
+    sku: 'KEPT-1',
+    slug: 'kept',
+    name: { 'en-US': 'Kept widget' },
+    status: 'active',
+    type: 'simple',
+  };
+
+  /**
+   * Mounts `ui` inside `<StrictMode>` on an **update** of an already-mounted
+   * tree — the way the Modify tab mounts its pickers when the tab is opened.
+   * That is the commit on which StrictMode's simulated unmount/remount of the
+   * picker's effects was observed to run; returns a re-render for the same tree.
+   */
+  function mountLater(ui: ReactElement): (next: ReactElement) => void {
+    const { rerender } = renderWithI18n(<StrictMode>{null}</StrictMode>);
+    const again = (next: ReactElement): void => rerender(<StrictMode>{next}</StrictMode>);
+    again(ui);
+    return again;
+  }
+
+  function answerById(): void {
+    getSpy.mockImplementation((url: string) =>
+      url === `/api/v1/admin/catalog/products/${PRODUCT.id}`
+        ? Promise.resolve({ data: PRODUCT })
+        : Promise.resolve({ data: [] }),
+    );
+  }
+
+  it('select: shows the preselected product\'s name without opening the popup', async () => {
+    answerById();
+    mountLater(<ProductPicker mode="select" value={PRODUCT.id} onChange={vi.fn()} />);
+    const input = screen.getByRole('combobox') as HTMLInputElement;
+    await waitFor(() => expect(input.value).toBe('Kept widget'));
+    // The remount re-awaits the request in flight rather than firing another.
+    expect(getSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('multiselect: shows the preselected chip\'s name and SKU without opening the popup', async () => {
+    answerById();
+    mountLater(<ProductPicker mode="multiselect" value={[PRODUCT.id]} onChange={vi.fn()} />);
+    const chip = await screen.findByRole('listitem');
+    await waitFor(() => expect(chip.textContent).toContain('Kept widget'));
+    expect(chip.textContent).toContain('KEPT-1');
+  });
+
+  it('does not re-ask an id whose lookup failed on every re-render', async () => {
+    getSpy.mockRejectedValue(new Error('gone'));
+    const rerender = mountLater(
+      <ProductPicker mode="select" value={PRODUCT.id} onChange={vi.fn()} />,
+    );
+    await waitFor(() => expect(getSpy).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    const asked = getSpy.mock.calls.length;
+    rerender(<ProductPicker mode="select" value={PRODUCT.id} onChange={vi.fn()} />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(getSpy.mock.calls.length).toBe(asked);
   });
 });

@@ -297,6 +297,8 @@ import { Migration20260611T140417QuoteRequestsBusinessId } from '@endora-commerc
 import { Migration20260617T095510QuoteRequestsBackfillAdminCreatedAwaiting } from '@endora-commerce/mod-quote-requests/migrations';
 import { Migration20260718T200342QuoteRequestsQuoteRequestCustomFieldValues } from '@endora-commerce/mod-quote-requests/migrations';
 import { Migration20260912T125614QuoteRequestsQuoteRequestChannelAttribution } from '@endora-commerce/mod-quote-requests/migrations';
+import { Migration20261014T115049QuoteRequestsItemReferencePrice } from '@endora-commerce/mod-quote-requests/migrations';
+import { Migration20261014T115053QuoteRequestsNegotiationPolicies } from '@endora-commerce/mod-quote-requests/migrations';
 
 // ── returns ─────────────────────────────────────────────────────────────────
 import { Migration20260625T144227ReturnsInit } from '@endora-commerce/mod-returns/migrations';
@@ -602,6 +604,8 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('quote_requests', Migration20260617T095510QuoteRequestsBackfillAdminCreatedAwaiting),
   migration('quote_requests', Migration20260718T200342QuoteRequestsQuoteRequestCustomFieldValues),
   migration('quote_requests', Migration20260912T125614QuoteRequestsQuoteRequestChannelAttribution),
+  migration('quote_requests', Migration20261014T115049QuoteRequestsItemReferencePrice),
+  migration('quote_requests', Migration20261014T115053QuoteRequestsNegotiationPolicies),
 
   // ── returns ─────────────────────────────────────────────────────────────────
   migration('returns', Migration20260625T144227ReturnsInit),

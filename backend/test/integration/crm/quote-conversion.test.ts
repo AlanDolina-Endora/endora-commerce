@@ -6,7 +6,13 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
-import { CUSTOMER_COOKIES, TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
+import {
+  CUSTOMER_COOKIES,
+  OTHER_TEST_CUSTOMER_ID,
+  TEST_CUSTOMER_ID,
+  TEST_ORGANIZATION_ID,
+} from '../../helpers/test-actors.js';
+import { seedOtherTestCustomer } from '../../helpers/seed-organizations.js';
 import { Cart, Order, QuoteRequest } from '../../helpers/package-entities.js';
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
 import { CRM_SETTING_CODES } from '../../../../packages/modules/crm/src/manifest.js';
@@ -242,9 +248,10 @@ describe('crm — an order placed from a linked quote request (the real road)', 
   it('a basket pointed at another Organization’s linked request links nothing across the tenant', async () => {
     // Another Organization, its buyer, its Opportunity and its own accepted request.
     const otherOrganizationId = await seedCrmOrganization(h.em(), 'quote-source');
+    await seedOtherTestCustomer(h.em(), otherOrganizationId);
     const otherBuyer = `stub-crm-quote-source-${randomUUID().slice(0, 8)}`;
     CUSTOMER_COOKIES[otherBuyer] = {
-      customerAccountId: '00000000-0000-4000-8000-0000000000a7',
+      customerAccountId: OTHER_TEST_CUSTOMER_ID,
       organizationId: otherOrganizationId,
     };
     const foreignOpportunity = await createCrmOpportunity(h, {
