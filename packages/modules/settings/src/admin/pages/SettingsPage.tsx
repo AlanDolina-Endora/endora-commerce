@@ -76,17 +76,24 @@ export function SettingsPage(): ReactNode {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, SettingDraft>>({});
   const [channelContext, setChannelContext] = useState<string | null>(null);
+  // The context selected *now*, for a response to read when it lands (issue
+  // #271). `refresh` used to close over `channelContext`, so a list request
+  // still in flight when "Editing for" changed re-baselined every non-dirty
+  // row with the previous context's values — one channel's text under another
+  // channel's heading, ready to be edited and saved there. The list itself
+  // carries every channel's values, so the answer is still good; only the
+  // context it is read in has to be the current one. Written where the state
+  // is set, in `switchChannelContext`.
+  const channelContextRef = useRef<string | null>(channelContext);
 
   const refresh = useCallback(
-    async (contextOverride?: string | null): Promise<void> => {
-      const contextForRefresh =
-        contextOverride === undefined ? channelContext : contextOverride;
+    async (): Promise<void> => {
       setLoading(true);
       setError(null);
       try {
         const list = await settingsClient.list();
         setGroups(list.groups);
-        setDrafts((prev) => mergeDrafts(prev, list.groups, contextForRefresh));
+        setDrafts((prev) => mergeDrafts(prev, list.groups, channelContextRef.current));
         // Fetch sales channels separately so a permission/connectivity issue
         // here surfaces in the UI instead of silently emptying the dropdown.
         try {
@@ -108,7 +115,7 @@ export function SettingsPage(): ReactNode {
         setLoading(false);
       }
     },
-    [channelContext],
+    [],
   );
 
   useEffect(() => {
@@ -273,6 +280,7 @@ export function SettingsPage(): ReactNode {
         const ok = window.confirm(t('context.discardOnSwitch'));
         if (!ok) return;
       }
+      channelContextRef.current = next;
       setChannelContext(next);
       setConflicts({});
       // Re-baseline every draft for the new context.
