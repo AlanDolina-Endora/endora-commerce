@@ -472,6 +472,10 @@ export function registerModule(ctx: ModuleContext): void {
               ctx
                 .cradle<QuoteRequestsCradle>()
                 .quoteRequestNegotiationPolicyService.assertProposalsAllowed(customerAccountId, lines, em),
+            precheckProposalsAllowed: (customerAccountId, lines, em) =>
+              ctx
+                .cradle<QuoteRequestsCradle>()
+                .quoteRequestNegotiationPolicyService.precheckProposalsAllowed(customerAccountId, lines, em),
           },
           negotiationDisplay: () => ctx.cradle<QuoteRequestsCradle>().quoteRequestNegotiationPolicyService,
           resolveExpiryDays: () =>

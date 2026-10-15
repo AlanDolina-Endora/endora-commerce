@@ -19,7 +19,7 @@ import {
   QuoteRequestItem,
   QuoteRequestOrgPolicy,
 } from '../../helpers/package-entities.js';
-import { withSystemScope } from '../../../src/tenancy/escape-hatch.js';
+import { setEscapeHatchAuditSink, withSystemScope } from '../../../src/tenancy/escape-hatch.js';
 import { runWithTenantContext, type TenantContext } from '../../../src/tenancy/tenant-context.js';
 
 /**
@@ -361,6 +361,26 @@ describe('146 — price-negotiation lock enforcement [integration]', () => {
       } finally {
         h.container.register('buyerLinePricePort', original);
       }
+    });
+
+    it('an accepted edit carrying a proposal opens the lock’s system scope once — one escape-hatch row (review fix round 1, part B)', async () => {
+      const id = await createOk(colleagueAllowed, [{ productId: SEED_PRODUCT_101_ID, quantity: 2 }]);
+      const lockReads: string[] = [];
+      const previous = setEscapeHatchAuditSink((record) => {
+        if (record.reason.startsWith('quote_requests: negotiation lock')) lockReads.push(record.reason);
+        previous(record);
+      });
+      try {
+        const res = await patch(colleagueAllowed, id, {
+          items: [{ productId: SEED_PRODUCT_101_ID, quantity: 3, desiredUnitPrice: 9 }],
+        });
+        expect(res.statusCode, res.body).toBe(200);
+      } finally {
+        setEscapeHatchAuditSink(previous);
+      }
+      // The pre-check before pricing is a display read in the caller's scope;
+      // only the authoritative check inside the row lock opens the system scope.
+      expect(lockReads).toHaveLength(1);
     });
 
     it('existing proposals are untouched by a lock, and an edit omitting them keeps them (US4 #5, T5, FR-024)', async () => {

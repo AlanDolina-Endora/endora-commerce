@@ -147,7 +147,7 @@ export interface RfqServiceDeps {
    * (FR-022, FR-037; research R11). Asked on create and draft edit only; a body
    * with no proposal reads nothing.
    */
-  negotiationPolicy: Pick<NegotiationPolicyService, 'assertProposalsAllowed'>;
+  negotiationPolicy: Pick<NegotiationPolicyService, 'assertProposalsAllowed' | 'precheckProposalsAllowed'>;
   /**
    * Generates the customer-facing business Quote Request ID. Optional so
    * legacy/test compositions that don't wire it fall back to the entity's
@@ -462,9 +462,10 @@ export class RfqService {
     }
 
     // FR-022 — a cheap refusal before the line rewrite is priced, so a refused
-    // edit costs no call into `price_lists`. Repeated inside the row lock
-    // below, after the version and guard checks, which is the check that counts.
-    await this.deps.negotiationPolicy.assertProposalsAllowed(rfq.customerAccountId, body.items, em);
+    // edit costs no call into `price_lists`. A display-style read in the
+    // caller's scope, so it writes no escape-hatch row; repeated, authoritative
+    // and audited, inside the row lock below, which is the check that counts.
+    await this.deps.negotiationPolicy.precheckProposalsAllowed(rfq.customerAccountId, body.items, em);
 
     // Everything the line rewrite needs is read and priced before the row is
     // taken: the reference is a call into `price_lists`, and the lock is held

@@ -200,6 +200,56 @@ describe('NegotiationPolicyService.assertProposalsAllowed (T062)', () => {
   });
 });
 
+describe('NegotiationPolicyService.precheckProposalsAllowed (review fix round 1, part B)', () => {
+  it('reads nothing when no line carries a proposal', async () => {
+    const { em, findOne } = fakeEm({ organization: false });
+    const accounts = accountsPort();
+    const service = new NegotiationPolicyService({ customerAccounts: accounts.port });
+    await expect(service.precheckProposalsAllowed(ACCOUNT, [{}], em)).resolves.toBeUndefined();
+    expect(findOne).not.toHaveBeenCalled();
+    expect(accounts.findById).not.toHaveBeenCalled();
+  });
+
+  it('refuses a locked owner with the same 422 the authoritative check gives', async () => {
+    const service = new NegotiationPolicyService({ customerAccounts: accountsPort().port });
+    await expect(
+      service.precheckProposalsAllowed(ACCOUNT, [{ desiredUnitPrice: 0 }], fakeEm({ organization: false }).em),
+    ).rejects.toMatchObject({ statusCode: 422, code: 'RFQ_PRICE_PROPOSAL_NOT_ALLOWED' });
+    await expect(
+      service.precheckProposalsAllowed(ACCOUNT, [{ desiredUnitPrice: 3 }], fakeEm({ account: false, organization: true }).em),
+    ).rejects.toMatchObject({ statusCode: 422, code: 'RFQ_PRICE_PROPOSAL_NOT_ALLOWED' });
+  });
+
+  it('lets an allowed owner through', async () => {
+    const service = new NegotiationPolicyService({ customerAccounts: accountsPort().port });
+    await expect(
+      service.precheckProposalsAllowed(ACCOUNT, [{ desiredUnitPrice: 3 }], fakeEm({ account: true, organization: false }).em),
+    ).resolves.toBeUndefined();
+  });
+
+  it('runs in the caller’s own scope — no system scope, so no escape-hatch row', async () => {
+    const { em, reads } = fakeEm({ account: null, organization: true });
+    const accounts = accountsPort();
+    await new NegotiationPolicyService({ customerAccounts: accounts.port }).precheckProposalsAllowed(
+      ACCOUNT,
+      [{ desiredUnitPrice: 3 }],
+      em,
+    );
+    expect(reads.map((r) => [r.entity, r.where, r.mode, r.reason])).toEqual([
+      ['account', { customerAccountId: ACCOUNT }, undefined, undefined],
+      ['organization', { organizationId: ORG }, undefined, undefined],
+    ]);
+    expect(accounts.seen).toEqual([{ mode: undefined }]);
+  });
+
+  it('an account the caller cannot see passes — the in-lock effectiveFor is the check that counts', async () => {
+    const service = new NegotiationPolicyService({ customerAccounts: accountsPort(null).port });
+    await expect(
+      service.precheckProposalsAllowed(ACCOUNT, [{ desiredUnitPrice: 3 }], fakeEm({ organization: false }).em),
+    ).resolves.toBeUndefined();
+  });
+});
+
 describe('NegotiationPolicyService.displayFor (Phase 10b, coordinator ruling D-3V)', () => {
   const cases: Array<[string, Rows]> = [
     ['no rows → default', {}],

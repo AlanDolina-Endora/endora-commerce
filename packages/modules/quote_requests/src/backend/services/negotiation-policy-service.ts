@@ -137,6 +137,33 @@ export class NegotiationPolicyService {
   }
 
   /**
+   * A cheap refusal **before** a draft edit is priced, so a refused edit costs
+   * no call into `price_lists` (review fix N9). It reads like `displayFor` — by
+   * primary key in the caller's **own** scope, opening no system scope and so
+   * writing no escape-hatch audit row (review fix round 1, part B): an accepted
+   * edit then records exactly one, from the authoritative check.
+   *
+   * It is **not** the enforcement. A row the caller's tenant filter hides, or an
+   * account the caller cannot resolve, reads as "allowed" here; the
+   * `assertProposalsAllowed` call inside the row lock is the check that counts.
+   */
+  async precheckProposalsAllowed(
+    customerAccountId: string,
+    lines: ReadonlyArray<ProposalLine> | undefined,
+    em: EntityManager,
+  ): Promise<void> {
+    if (!carriesProposal(lines)) return;
+    const accountRow = await em.findOne(QuoteRequestAccountPolicy, { customerAccountId });
+    let organizationRow: QuoteRequestOrgPolicy | null = null;
+    if (accountRow?.priceProposalsAllowed == null) {
+      const account = await this.deps.customerAccounts.findById(customerAccountId);
+      if (!account) return;
+      organizationRow = await em.findOne(QuoteRequestOrgPolicy, { organizationId: account.organizationId });
+    }
+    if (!resolveEffective(accountRow, organizationRow).allowed) throw proposalNotAllowed();
+  }
+
+  /**
    * Refuse a body carrying a proposal when the owner may not propose
    * (FR-022). A body with none reads nothing, so cart conversion and resubmit
    * — which never send one — are never refused (FR-023).
@@ -148,12 +175,14 @@ export class NegotiationPolicyService {
   ): Promise<void> {
     if (!carriesProposal(lines)) return;
     const { allowed } = await this.effectiveFor(customerAccountId, em);
-    if (!allowed) {
-      throw new HttpError(
-        422,
-        ERROR_CODES.RFQ_PRICE_PROPOSAL_NOT_ALLOWED,
-        'Your account cannot propose prices on quote requests.',
-      );
-    }
+    if (!allowed) throw proposalNotAllowed();
   }
+}
+
+function proposalNotAllowed(): HttpError {
+  return new HttpError(
+    422,
+    ERROR_CODES.RFQ_PRICE_PROPOSAL_NOT_ALLOWED,
+    'Your account cannot propose prices on quote requests.',
+  );
 }
