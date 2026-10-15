@@ -240,6 +240,7 @@ failure with its output. Do not re-record a read size unless a band refuses it, 
 - [x] T071 `build:docs` and `dco`: `pnpm --filter docs run build && pnpm --filter backend run verify:docs-build`; then `node backend/scripts/dco-signoff.ts origin/master HEAD` (every commit carries `Signed-off-by:` and no AI trailer)
   - Green on the macOS host: 334 pages, 0 findings; DCO 36/36 before this record.
   - T063 re-run green on the macOS host on tip `1de3ba3ab` (typecheck 523 s, lint 118 s, 0 errors). T063 – T071 above are on tip `1de3ba3ab`, base `854f8564f`. `origin/master` advanced to `328ac4c1d` (feature 146, 50 commits) during this run; the gate above was not run against it, so a rebase means re-running T062 – T071.
+- Rebased onto 328ac4c1d (feature 146); full gate to be re-run after review.
 
 **Verification**: T062 – T071 each green, in order, on the same tip; the tip is the one pushed.
 
