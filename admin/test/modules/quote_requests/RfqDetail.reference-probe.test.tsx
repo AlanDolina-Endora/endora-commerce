@@ -113,16 +113,21 @@ describe('RfqDetail current-price probe', () => {
 
     renderRfqDetail(RfqDetail);
     await screen.findByText('Line 0');
-    for (let round = 0; round < 20 && pending.length > 0; round += 1) {
-      await act(async () => {
+    // Drain until every line is priced: each attempt answers the probes that
+    // are in flight now, and the limiter starts the next batch on its own
+    // schedule. Polling on the rendered outcome rather than counting rounds is
+    // what keeps this deterministic under load.
+    await waitFor(
+      () => {
         for (const resolve of pending.splice(0)) resolve();
-        await Promise.resolve();
-      });
-    }
-    await waitFor(() => expect(screen.getByText('9.00 PLN')).toBeInTheDocument());
-    for (let i = 0; i < 10; i += 1) {
-      expect(screen.getByText(`${i}.00 PLN`)).toBeInTheDocument();
-    }
+        expect(maxInFlight).toBeLessThanOrEqual(4);
+        for (let i = 0; i < 10; i += 1) {
+          expect(screen.getByText(`${i}.00 PLN`)).toBeInTheDocument();
+        }
+      },
+      { timeout: 5000 },
+    );
+    expect(pending).toHaveLength(0);
     expect(maxInFlight).toBeGreaterThan(0);
     expect(maxInFlight).toBeLessThanOrEqual(4);
   });
