@@ -366,7 +366,7 @@ describe('admin CMS Hooks contract (T067)', () => {
       expect(await auditRows('cms_hook.delete', system!.id)).toHaveLength(0);
     });
 
-    it('records nothing for reordering a block that was not attached', async () => {
+    it('refuses to reorder a block that was not attached with 404, and records nothing', async () => {
       const hook = await createdHook('audit.noop-reorder');
       const block = await createBlock(`audit-never-reordered-${Date.now()}`);
 
@@ -377,9 +377,9 @@ describe('admin CMS Hooks contract (T067)', () => {
         cookies: adminCookie,
         payload: JSON.stringify({ position: 5 }),
       });
-      // What the route answers here is deliberately not asserted: this case holds
-      // the audit trail only, and the status is the route's own, unchanged.
-      expect(reorder.statusCode).toBeLessThan(500);
+      // Issue #246 — this answered 200 having moved nothing.
+      expect(reorder.statusCode).toBe(404);
+      expect(reorder.json()).toMatchObject({ error: { code: 'CMS_BLOCK_NOT_FOUND' } });
 
       expect(await auditRows('cms_hook.reorder_block', hook.id)).toHaveLength(0);
     });

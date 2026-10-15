@@ -187,6 +187,21 @@ describe('CmsHookService — every write is a Command', () => {
     expect(h.outcomes[0]?.after).toEqual({ blockId: BLOCK_ID, position: 20 });
   });
 
+  it('refuses to reorder a block that is not attached, and writes nothing', async () => {
+    // Issue #246: the refusal read `rowCount` off `em.execute`'s answer to the
+    // UPDATE — a field MikroORM does not return (it says `affectedRows`), so it
+    // never fired, and the route answered 200 having moved nothing.
+    const h = harness({ attached: false });
+
+    await expect(h.service.reorderAttachment(HOOK_ID, BLOCK_ID, 20)).rejects.toMatchObject({
+      statusCode: 404,
+      code: 'CMS_BLOCK_NOT_FOUND',
+    });
+
+    expect(h.transactional.writes).toEqual([]);
+    expect(h.ambient.writes).toEqual([]);
+  });
+
   it('detaches a block as `cms_hook.detach_block`, keeping where it was', async () => {
     const h = harness();
 
