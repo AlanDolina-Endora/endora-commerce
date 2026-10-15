@@ -497,6 +497,30 @@ Code review findings, fixed on this branch; part B (the admin UI: S4, S5, S6, N3
 - [x] **N11** `getQuoteRequestNegotiation` warns on the server before failing open
   (`storefront/test/rfq/rfq-negotiation-read.test.ts`).
 
+## Review fix round 1 (part B) — admin UI, plus one backend follow-up (2026-10-15)
+
+- [x] **N9 follow-up** The pre-pricing check in `patchDraft` is
+  `NegotiationPolicyService.precheckProposalsAllowed`, a display-style read in the caller's scope
+  that opens no system scope; the in-lock `effectiveFor` stays authoritative. An accepted edit with
+  a proposal emits one escape-hatch audit record, a refused one still asks `price_lists` nothing
+  (`negotiation-enforcement` integration, unit tests).
+- [x] **S4** `useCurrentPrices` (`admin/reference-view.tsx`): at most four probes in flight, keyed
+  on the probed lines' content rather than the request object, re-asks only a changed line, keeps
+  the previous answers shown, aborts on unmount (`RfqDetail.reference-probe.test.tsx`).
+- [x] **S5** `admin/negotiation-panel.tsx` (`useNegotiationResource`, `NegotiationCard`) shared by
+  both negotiation panels; a subject change clears the previous value, *Saved.* and save error, and
+  drops a late save answer (`negotiation-zones.test.tsx`).
+- [x] **S6** Reference view moved from `RfqDetail.tsx` to `admin/reference-view.tsx` (pure move).
+- [x] **N3** `admin/number-format.ts`: every amount, signed amount and percent on the detail screen
+  (Overview, Modify, difference, History) in the admin language's `Intl` conventions; number inputs
+  keep their dot. `formatMoney` was not used: it derives the locale from the currency.
+- [x] **N4** "per base unit" is shown on a line sold in a packaging unit, in Overview and Modify
+  alike.
+- [x] **N5** `QUOTE_REQUEST_HISTORY_EVENT_WINDOW` in contracts; the truncation notice interpolates
+  `{count}` (EN + PL).
+- [x] **N6** `RfqHistory` memoizes its formatters and keys changes by kind and line.
+- [x] **N7** A Modify line with no stored product name is the group "Line {number}".
+
 ---
 
 ## Requirement coverage
