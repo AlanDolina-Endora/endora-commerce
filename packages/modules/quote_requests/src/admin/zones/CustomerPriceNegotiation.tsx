@@ -1,20 +1,12 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import type {
   AdminZoneProps,
   QuoteRequestAccountNegotiation,
   QuoteRequestNegotiationOverride,
 } from '@endora-commerce/contracts';
-import { ApiError, apiClient, useAuth } from '@endora-commerce/admin-kit/lib';
-import {
-  Alert,
-  AlertDescription,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@endora-commerce/admin-kit/ui';
+import { useAuth } from '@endora-commerce/admin-kit/lib';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
+import { NegotiationCard, useNegotiationResource } from '../negotiation-panel.js';
 
 /**
  * A customer account's price-negotiation override (feature 146, US4;
@@ -44,63 +36,13 @@ export function CustomerPriceNegotiation({ customerId }: CustomerPriceNegotiatio
   const t = useTranslation('quote_requests');
   const { hasPermission } = useAuth();
   const canManage = hasPermission('customers:manage');
-  const [state, setState] = useState<QuoteRequestAccountNegotiation | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [attempt, setAttempt] = useState(0);
+  const resource = useNegotiationResource<QuoteRequestAccountNegotiation>(routeFor(customerId));
+  const { state, loading, loadError, saving } = resource;
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setLoadError(null);
-    apiClient
-      .get<{ data: QuoteRequestAccountNegotiation }>(routeFor(customerId))
-      .then((res) => {
-        if (!cancelled) setState(res.data);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setLoadError(
-          err instanceof ApiError ? err.envelope.error.message : t('negotiation.loadError'),
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return (): void => {
-      cancelled = true;
-    };
-  }, [customerId, attempt, t]);
-
-  const handleChange = useCallback(
-    async (next: QuoteRequestNegotiationOverride): Promise<void> => {
-      if (!canManage || state === null || next === state.override) return;
-      const previous = state;
-      setSaving(true);
-      setSaveError(null);
-      setSaved(false);
-      setState({ ...state, override: next });
-      try {
-        const res = await apiClient.put<{ data: QuoteRequestAccountNegotiation }>(
-          routeFor(customerId),
-          { override: next },
-        );
-        setState(res.data);
-        setSaved(true);
-      } catch (err) {
-        setState(previous);
-        setSaveError(
-          err instanceof ApiError ? err.envelope.error.message : t('negotiation.saveError'),
-        );
-      } finally {
-        setSaving(false);
-      }
-    },
-    [canManage, customerId, state, t],
-  );
+  const handleChange = (next: QuoteRequestNegotiationOverride): void => {
+    if (!canManage || state === null || next === state.override) return;
+    void resource.save({ ...state, override: next }, { override: next });
+  };
 
   const groupName = `quote-price-negotiation-customer-${customerId}`;
   const descriptionId = `${groupName}-description`;
@@ -108,69 +50,12 @@ export function CustomerPriceNegotiation({ customerId }: CustomerPriceNegotiatio
   const effectiveId = `${groupName}-effective`;
 
   return (
-    <Card className="mb-4" aria-busy={loading || saving}>
-      <CardHeader>
-        <CardTitle>{t('negotiation.title')}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {loadError ? (
-          <Alert variant="destructive">
-            <AlertDescription className="flex flex-wrap items-center gap-3">
-              <span>{loadError}</span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={(): void => setAttempt((n) => n + 1)}
-              >
-                {t('negotiation.retry')}
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : (
-          <fieldset
-            className="space-y-2"
-            disabled={!canManage || loading || saving}
-            aria-describedby={[
-              descriptionId,
-              state === null ? null : effectiveId,
-              canManage ? null : hintId,
-            ]
-              .filter((id): id is string => id !== null)
-              .join(' ')}
-          >
-            <legend className="text-sm font-medium">{t('negotiation.customer.label')}</legend>
-            <p id={descriptionId} className="text-sm text-muted-foreground">
-              {t('negotiation.customer.description')}
-            </p>
-            <div className="flex flex-wrap gap-4">
-              {OVERRIDES.map((value) => {
-                const id = `${groupName}-${value}`;
-                return (
-                  <div key={value} className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      id={id}
-                      name={groupName}
-                      value={value}
-                      checked={state?.override === value}
-                      disabled={!canManage || loading || saving}
-                      className="h-4 w-4 accent-primary"
-                      onChange={(): void => {
-                        void handleChange(value);
-                      }}
-                    />
-                    <label htmlFor={id} className="text-sm">
-                      {t(`negotiation.override.${value}`)}
-                    </label>
-                  </div>
-                );
-              })}
-            </div>
-          </fieldset>
-        )}
-
-        {state !== null && !loadError ? (
+    <NegotiationCard
+      resource={resource}
+      canManage={canManage}
+      hintId={hintId}
+      after={
+        state !== null && !loadError ? (
           <p id={effectiveId} className="text-sm">
             {t('negotiation.effective', {
               value: state.effectivePriceProposalsAllowed
@@ -179,27 +64,48 @@ export function CustomerPriceNegotiation({ customerId }: CustomerPriceNegotiatio
               source: t(`negotiation.source.${state.effectiveSource}`),
             })}
           </p>
-        ) : null}
-
-        {!canManage ? (
-          <p id={hintId} className="text-xs text-muted-foreground">
-            {t('negotiation.readOnlyHint')}
-          </p>
-        ) : null}
-
-        <div role="status" aria-live="polite" className="text-sm">
-          {loading ? t('negotiation.loading') : null}
-          {saving ? t('negotiation.saving') : null}
-          {saved && !saving ? t('negotiation.saved') : null}
+        ) : null
+      }
+    >
+      <fieldset
+        className="space-y-2"
+        disabled={!canManage || loading || saving}
+        aria-describedby={[
+          descriptionId,
+          state === null ? null : effectiveId,
+          canManage ? null : hintId,
+        ]
+          .filter((id): id is string => id !== null)
+          .join(' ')}
+      >
+        <legend className="text-sm font-medium">{t('negotiation.customer.label')}</legend>
+        <p id={descriptionId} className="text-sm text-muted-foreground">
+          {t('negotiation.customer.description')}
+        </p>
+        <div className="flex flex-wrap gap-4">
+          {OVERRIDES.map((value) => {
+            const id = `${groupName}-${value}`;
+            return (
+              <div key={value} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  id={id}
+                  name={groupName}
+                  value={value}
+                  checked={state?.override === value}
+                  disabled={!canManage || loading || saving}
+                  className="h-4 w-4 accent-primary"
+                  onChange={(): void => handleChange(value)}
+                />
+                <label htmlFor={id} className="text-sm">
+                  {t(`negotiation.override.${value}`)}
+                </label>
+              </div>
+            );
+          })}
         </div>
-
-        {saveError ? (
-          <Alert variant="destructive">
-            <AlertDescription>{saveError}</AlertDescription>
-          </Alert>
-        ) : null}
-      </CardContent>
-    </Card>
+      </fieldset>
+    </NegotiationCard>
   );
 }
 

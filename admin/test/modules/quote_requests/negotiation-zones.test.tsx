@@ -1,8 +1,8 @@
-import { StrictMode } from 'react';
+import { StrictMode, type ReactElement } from 'react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, waitFor } from '@testing-library/react';
+import { fireEvent, waitFor, type RenderResult } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AdminZone } from '@endora-commerce/admin-kit/zones';
 import type { AdminZoneName } from '@endora-commerce/contracts';
@@ -53,6 +53,10 @@ const { manifest } = await import('@endora-commerce/mod-quote-requests');
 const ORG_ID = '00000000-0000-4000-8000-0000000000a1';
 const CUSTOMER_ID = '00000000-0000-4000-8000-0000000000c1';
 const ORG_ROUTE = `/api/v1/admin/organizations/${ORG_ID}/quote-price-negotiation`;
+const OTHER_ORG_ID = '00000000-0000-4000-8000-0000000000a2';
+const OTHER_ORG_ROUTE = `/api/v1/admin/organizations/${OTHER_ORG_ID}/quote-price-negotiation`;
+const OTHER_CUSTOMER_ID = '00000000-0000-4000-8000-0000000000c2';
+const OTHER_CUSTOMER_ROUTE = `/api/v1/admin/customers/${OTHER_CUSTOMER_ID}/quote-price-negotiation`;
 const CUSTOMER_ROUTE = `/api/v1/admin/customers/${CUSTOMER_ID}/quote-price-negotiation`;
 
 const REGISTRY = [{ moduleId: 'quote_requests', contributions: quoteRequests.contributions }];
@@ -112,13 +116,15 @@ function customerState(
   };
 }
 
-function renderZone(options: {
+interface ZoneOptions {
   readonly name: AdminZoneName;
   readonly props: Record<string, unknown>;
   readonly permissions?: readonly string[];
   readonly present?: readonly string[];
-}): HTMLElement {
-  const { container } = renderWithI18n(
+}
+
+function zoneTree(options: ZoneOptions): ReactElement {
+  return (
     <StrictMode>
       {withSession(
         <MemoryRouter initialEntries={['/x']}>
@@ -138,10 +144,16 @@ function renderZone(options: {
           contributions: REGISTRY,
         },
       )}
-    </StrictMode>,
-    { quote_requests: readBundle('en') },
+    </StrictMode>
   );
-  return container;
+}
+
+function renderZoneResult(options: ZoneOptions): RenderResult {
+  return renderWithI18n(zoneTree(options), { quote_requests: readBundle('en') });
+}
+
+function renderZone(options: ZoneOptions): HTMLElement {
+  return renderZoneResult(options).container;
 }
 
 const renderOrganization = (
@@ -263,6 +275,37 @@ describe('quote_requests contributes the price-negotiation lock to two detail zo
       fireEvent.click(retry!);
       await waitFor(() => expect(organizationToggle(container).checked).toBe(true));
     });
+
+    it('shows nothing of the previous organization while the next one loads (review fix S5)', async () => {
+      let releaseOther: (() => void) | undefined;
+      getSpy.mockImplementation(async (url: string) => {
+        if (url === ORG_ROUTE) return orgState(true);
+        if (url === OTHER_ORG_ROUTE) {
+          await new Promise<void>((resolve) => {
+            releaseOther = resolve;
+          });
+          return orgState(false);
+        }
+        throw new Error(`unexpected url ${url}`);
+      });
+      const view = renderZoneResult({ name: 'organization.detail.after', props: { organizationId: ORG_ID } });
+      const toggleOf = (id: string): HTMLInputElement | null =>
+        view.container.querySelector<HTMLInputElement>(`#quote-price-negotiation-org-${id}`);
+      await waitFor(() => expect(toggleOf(ORG_ID)?.disabled).toBe(false));
+      fireEvent.click(toggleOf(ORG_ID)!);
+      await waitFor(() => expect(view.container.textContent).toContain('Saved.'));
+
+      view.rerender(zoneTree({ name: 'organization.detail.after', props: { organizationId: OTHER_ORG_ID } }));
+      await waitFor(() => expect(getSpy).toHaveBeenCalledWith(OTHER_ORG_ROUTE));
+      const pending = toggleOf(OTHER_ORG_ID);
+      expect(pending?.checked).toBe(false);
+      expect(pending?.disabled).toBe(true);
+      expect(view.container.textContent).not.toContain('Saved.');
+
+      releaseOther?.();
+      await waitFor(() => expect(toggleOf(OTHER_ORG_ID)?.disabled).toBe(false));
+      expect(toggleOf(OTHER_ORG_ID)?.checked).toBe(false);
+    });
   });
 
   describe('customer panel', () => {
@@ -314,6 +357,35 @@ describe('quote_requests contributes the price-negotiation lock to two detail zo
       fireEvent.click(overrideRadio(container, 'not_allowed'));
       expect(putSpy).not.toHaveBeenCalled();
     });
+  });
+
+  it('the customer panel shows nothing of the previous customer while the next one loads (review fix S5)', async () => {
+    let releaseOther: (() => void) | undefined;
+    getSpy.mockImplementation(async (url: string) => {
+      if (url === CUSTOMER_ROUTE) return customerState('allowed', false);
+      if (url === OTHER_CUSTOMER_ROUTE) {
+        await new Promise<void>((resolve) => {
+          releaseOther = resolve;
+        });
+        return customerState('inherit', false);
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+    const view = renderZoneResult({ name: 'customer.detail.after', props: { customerId: CUSTOMER_ID } });
+    await waitFor(() =>
+      expect(view.container.textContent).toContain('Effective: allowed (from this customer account)'),
+    );
+
+    view.rerender(zoneTree({ name: 'customer.detail.after', props: { customerId: OTHER_CUSTOMER_ID } }));
+    await waitFor(() => expect(getSpy).toHaveBeenCalledWith(OTHER_CUSTOMER_ROUTE));
+    expect(view.container.textContent).not.toContain('Effective:');
+    expect(overrideRadio(view.container, 'allowed').checked).toBe(false);
+
+    releaseOther?.();
+    await waitFor(() =>
+      expect(view.container.textContent).toContain('Effective: not allowed (from the organization)'),
+    );
+    expect(overrideRadio(view.container, 'inherit').checked).toBe(true);
   });
 
   it('renders neither panel without customers:read, and fetches nothing', async () => {
