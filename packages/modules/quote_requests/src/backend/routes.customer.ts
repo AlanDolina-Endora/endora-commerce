@@ -35,13 +35,37 @@ const DRAFT_EDIT_RATE_LIMIT = {
   max: 30,
   timeWindow: '1 minute',
   hook: 'preHandler' as const,
-  keyGenerator: (request: FastifyRequest): string => {
-    const actor = request.actor as Actor | undefined;
-    const caller = actor?.kind === 'customer' ? actor.customerAccountId : request.ip;
-    const id = (request.params as { id?: string } | undefined)?.id ?? '';
-    return `quote-request-draft-edit:${caller}:${id}`;
-  },
+  keyGenerator: (request: FastifyRequest): string => draftEditRateLimitKey(request),
 };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The draft-edit bucket a request counts against (security review W3).
+ *
+ * Only a well-formed uuid enters the key; any other `:id` — which the route
+ * refuses anyway — shares one bucket per caller. The raw segment used to be
+ * embedded, so one caller could mint a fresh bucket per request just by
+ * varying the path. The schema cannot do this check first: the limiter runs in
+ * the guard chain, which `guards-before-validation` moves ahead of validation.
+ *
+ * The store is the one the host registers `@fastify/rate-limit` with —
+ * `packages/platform/src/http/server.ts` passes no `redis`, so it is the
+ * plugin's in-process `LocalStore`, a route-level child of which is an LRU
+ * bounded at its default 5000 entries per process (`cache` is not set). The
+ * map cannot grow without bound; what a caller minting keys can do is evict
+ * other buckets early, which is why the key space is narrowed here. A random
+ * well-formed uuid still names a bucket of its own — bounded by that LRU and by
+ * the caller having to be an authenticated customer.
+ */
+export function draftEditRateLimitKey(request: FastifyRequest): string {
+  const actor = request.actor as Actor | undefined;
+  const caller = actor?.kind === 'customer' ? actor.customerAccountId : request.ip;
+  const id = (request.params as { id?: unknown } | undefined)?.id;
+  return typeof id === 'string' && UUID.test(id)
+    ? `quote-request-draft-edit:${caller}:${id}`
+    : `quote-request-draft-edit:${caller}`;
+}
 
 export type RequireCustomerGuard = (
   req: FastifyRequest,
