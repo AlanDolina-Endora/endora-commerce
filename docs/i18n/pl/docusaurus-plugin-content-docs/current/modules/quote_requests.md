@@ -222,6 +222,10 @@ różne wartości.
 - **Gwarancją jest API.** Utworzenie lub edycja szkicu przez klienta, w której pozycje mają
   proponowaną cenę — także `0` — jest odrzucana z `422 RFQ_PRICE_PROPOSAL_NOT_ALLOWED`, z
   przetłumaczonym komunikatem, i nic nie zostaje zapisane.
+  O blokadzie decyduje to samo żądanie, które zapisuje zapytanie, i nigdy nie przepuszcza ono
+  propozycji w razie wątpliwości: jeśli wartości właściciela nie da się odczytać, żądanie z
+  propozycją kończy się błędem i niczego nie zapisuje, a żądanie bez propozycji nie potrzebuje
+  blokady i przechodzi.
 - Zamiana koszyka na zapytanie i ponowne złożenie nadal działają: nie niosą propozycji.
 
 **Blokada wiąże właściciela zapytania, a nie osobę, która działa.** Przy utworzeniu i ponownym

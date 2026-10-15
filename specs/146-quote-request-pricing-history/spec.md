@@ -2,7 +2,7 @@
 
 **Feature Branch**: `feat/146-quote-request-pricing-history`
 **Created**: 2026-10-14
-**Status**: Clarified — planned; `/speckit.analyze` run 2026-10-14 (open owner questions in the analysis report)
+**Status**: Implemented, pending manual acceptance (2026-10-15) — every phase of `tasks.md` done and the CI-equivalent gate green on the rebased tip; only T099, the manual browser walk of `quickstart.md` §1–§4, remains for the owner
 **Issues**: #279, #283, #284
 **Input**: Three open issues against the Quote Requests module:
 
@@ -705,3 +705,38 @@ In the scenarios below, "the lock is on / off for a customer" means the customer
   Answered by the product owner.
 - Q: Is FR-025's "the storefront needs only the effective value" acceptable as written? → A: Yes,
   unchanged (FR-025). Answered by the product owner.
+
+### Settled during implementation (2026-10-14 – 2026-10-15)
+
+Behaviour the requirements above did not state, decided while building and reviewing the feature. Each
+is recorded in `plan.md` or `tasks.md` and stated to consumers in a `.changeset/146-*.md` entry and the
+module documentation; none changes an FR's intent.
+
+- **Out-of-scope sales representative → `404`, not `403`.** On every admin quote-request route
+  (detail, history, approve, cancel, assign, modify) a representative outside the request's
+  organization gets the same `404 NOT_FOUND` as for an unknown id (Constitution XI; tasks.md T056
+  outcome; `.changeset/146-quote-requests-sales-rep-404.md`).
+- **Price probe checks the buyer first.** `GET /api/v1/admin/products/:id/resolved-price` answers an
+  unknown organization or customer account — and, for a sales representative, one outside their
+  organizations — with one shared `404`; an account outside the named `organizationId` is
+  `400 VALIDATION_FAILED`; it accepts `salesChannelId` (FR-006, FR-007; tasks.md T022 outcome;
+  `.changeset/146-price-lists-probe-scope.md`). The same mismatch refusal applies to
+  `buyerLinePricePort` (security review W2).
+- **Body caps and rate limit.** Customer create and draft-edit bodies accept at most 200 lines
+  (`400` beyond). The customer draft-edit route is limited to 30 edits per minute per request and
+  customer, answered `429 RATE_LIMITED` with `Retry-After` (FR-038 lifted the one-edit limit; research
+  R16; `.changeset/146-platform-rate-limit-envelope.md`).
+- **Cart-converted lines carry `desiredUnitPrice = null`** and the cart price in the new
+  `referenceUnitPrice` / `referenceCurrency` of `QuoteRequestLineRecord` for export readers (FR-008;
+  owner decision (b), plan.md).
+- **Unreadable lock fails closed.** An owner whose account does not resolve is refused
+  `404 NOT_FOUND 'Customer not found.'`; any other failure to read the lock fails the request (`5xx`).
+  Either way nothing is written, and a request without a proposal does not read the lock (Edge
+  Cases; review N2, analyze M5).
+- **"per base unit"** is shown on lines sold in a packaging unit only (review N4).
+- **Unassigned organization (owner ruling D-3W).** An organization with no assigned sales
+  representative is visible to every representative, so any representative may change its
+  organization lock; its customer-account overrides answer `404` to such a representative and stay
+  with a platform administrator. Accepted for this feature; issue #305 tracks the rule (plan.md).
+- **Line currency stays hard-coded `PLN`** (D-3K); FR-005 suppresses the difference when the
+  reference currency differs. Issue #303 tracks the fix (plan.md § Deferred defects).

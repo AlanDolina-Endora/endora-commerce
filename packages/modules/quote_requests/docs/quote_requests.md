@@ -244,6 +244,10 @@ of one organization can differ.
 - **The API is the guarantee.** A customer create or draft edit whose lines
   carry a proposed price — `0` included — is refused with
   `422 RFQ_PRICE_PROPOSAL_NOT_ALLOWED`, translated, and nothing is written.
+  The lock is decided in the same request that writes the quote request and
+  never fails open: if the owner's value cannot be read, a request carrying a
+  proposal fails and writes nothing, while one without a proposal does not
+  need the lock and goes through.
 - Converting a cart and resubmitting keep working: they carry no proposal.
 
 **The lock binds the request's owner, not the acting user.** On create and

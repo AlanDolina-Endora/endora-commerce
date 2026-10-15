@@ -138,9 +138,13 @@ porzucenia mógł ponownie wysłać powiadomienie.
 ## Zamiany
 
 - **Koszyk → zapytanie ofertowe**: korzysta z `RfqService.createForCustomer`; zapisane w koszyku ceny
-  jednostkowe kupującego są przenoszone jako `desired_unit_price`, aby dział sprzedaży widział cenę
-  z koszyka. Pozycje koszyka źródłowego są usuwane, a koszyk przechodzi w stan `'completed'` z
-  ustawionym `converted_to_quote_request_id`.
+  jednostkowe kupującego są przekazywane jako **cena referencyjna** każdej pozycji
+  (`options.lineReferencePrices`, zapisywana w polach `reference_unit_price` / `reference_currency`
+  pozycji zapytania), a nie jako propozycja klienta: pozycje powstałego zapytania mają
+  `desired_unit_price = null`, więc zamiana działa także dla klienta, który nie może proponować cen.
+  Dział sprzedaży widzi cenę z koszyka jako *cenę z dnia zapytania* pozycji na ekranie zapytania
+  ofertowego w panelu administracyjnym. Pozycje koszyka źródłowego są usuwane, a koszyk przechodzi
+  w stan `'completed'` z ustawionym `converted_to_quote_request_id`.
 - **Zapytanie ofertowe → koszyk**: przechodzi przez pozycje zapytania i wywołuje
   `CartService.addItem`, które już wyznacza ceny przez `PricingService`. `desired_unit_price` z
   zapytania jest celowo pomijane — źródłem prawdy są bieżące ceny kontraktowe kupującego. Pozycje
