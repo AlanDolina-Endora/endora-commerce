@@ -11,7 +11,7 @@ import { Input } from '../../ui/input.js';
 import { Label } from '../../ui/label.js';
 import { useTranslation } from '../../i18n/useTranslation.js';
 import { ModalDialog } from '../modal-dialog/ModalDialog.js';
-import { createSavedView, requestErrorMessage } from './saved-views-api.js';
+import { createSavedView, isConflict, requestErrorMessage } from './saved-views-api.js';
 import type { SavedViewState } from './SavedViewsControl.js';
 
 /**
@@ -20,7 +20,7 @@ import type { SavedViewState } from './SavedViewsControl.js';
  *
  * The client checks run in the contract's order and send nothing when one
  * fails; the server stays the judge (a 409 from a race lands in the same alert
- * region). The alert region is mounted empty from the first render so the
+ * region and marks the name field invalid, as an inline refusal does). The alert region is mounted empty from the first render so the
  * message that later fills it is announced, and so the input's
  * `aria-describedby` never points at a missing element.
  */
@@ -82,6 +82,12 @@ export function SaveViewDialog(props: SaveViewDialogProps): ReactNode {
       inFlight.current = false;
       setBusy(false);
       setError(requestErrorMessage(err, t('savedViews.error.save')));
+      // A name taken in a race is a fault in the field, marked like the inline
+      // check's and cleared by the next keystroke the same way.
+      if (isConflict(err)) {
+        setNameInvalid(true);
+        nameRef.current?.focus();
+      }
     }
   };
 

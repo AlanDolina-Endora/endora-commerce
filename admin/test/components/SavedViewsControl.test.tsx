@@ -225,6 +225,31 @@ describe('SavedViewsControl — save dialog', () => {
     expect(within(dialog).getByRole('button', { name: 'Save' })).toBeEnabled();
   });
 
+  it('marks the name invalid on a server 409 and clears it on the next keystroke', async () => {
+    const message = 'You already have a saved view with this name on the order list. Choose a different name.';
+    api.post.mockRejectedValue(new ApiError(409, { error: { code: ORDER_SAVED_VIEW_NAME_TAKEN, message } }));
+    const { user, dialog } = await openSaveDialog();
+    const input = within(dialog).getByLabelText('Name');
+    await user.type(input, 'Overdue{Enter}');
+    const alert = within(dialog).getByRole('alert');
+    await waitFor(() => expect(alert).toHaveTextContent(message));
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input.getAttribute('aria-describedby')).toContain(alert.id);
+    expect(input).toHaveFocus();
+    await user.type(input, 's');
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(alert).toHaveTextContent('');
+  });
+
+  it('does not mark the name invalid on a server failure that is not about the name', async () => {
+    api.post.mockRejectedValue(new ApiError(500, { error: { code: 'INTERNAL', message: 'The database is unavailable.' } }));
+    const { user, dialog } = await openSaveDialog();
+    const input = within(dialog).getByLabelText('Name');
+    await user.type(input, 'Overdue{Enter}');
+    await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveTextContent('The database is unavailable.'));
+    expect(input).not.toHaveAttribute('aria-invalid');
+  });
+
   it('is inert while the save is in flight and sends one request', async () => {
     const pending = deferred<unknown>();
     api.post.mockReturnValue(pending.promise);

@@ -44,3 +44,11 @@ export function requestErrorMessage(err: unknown, fallback: string): string {
 export function isNotFound(err: unknown): boolean {
   return err instanceof ApiError && err.status === 404;
 }
+
+/**
+ * A 409 on create: the name is taken (a race the client check could not see).
+ * By status, not code — each list mints its own `*_SAVED_VIEW_NAME_TAKEN`.
+ */
+export function isConflict(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 409;
+}
