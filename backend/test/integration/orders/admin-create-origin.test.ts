@@ -5,6 +5,7 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
 import {
   SEED_ADDRESS_BILLING_ID,
@@ -14,7 +15,11 @@ import {
 } from '../../helpers/seed-commerce.js';
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 
-const SALES_CHANNEL_ID = '00000000-0000-4000-8000-0000000000c1';
+/**
+ * A real channel: an admin-created order naming no channel is refused with 404.
+ * Set in `beforeAll`.
+ */
+let orderChannelId: string;
 const ADMIN = { b2b_session: 'stub-admin-session' };
 const CUSTOMER = { b2b_session: 'stub-customer-session' };
 
@@ -32,6 +37,7 @@ describe('orders — the origin of an admin-created order', () => {
 
   beforeAll(async () => {
     h = await setupBackendServer();
+    orderChannelId = await systemDefaultSalesChannelId(h.em());
     await h.em().execute(`update "stock_levels" set "on_hand" = 10000`);
   });
 
@@ -41,7 +47,7 @@ describe('orders — the origin of an admin-created order', () => {
 
   const body = (extra: Record<string, unknown> = {}) => ({
     customerAccountId: TEST_CUSTOMER_ID,
-    salesChannelId: SALES_CHANNEL_ID,
+    salesChannelId: orderChannelId,
     items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }],
     deliveryMethodId: SEED_DELIVERY_METHOD_ID,
     paymentMethodId: SEED_PAYMENT_METHOD_ID,

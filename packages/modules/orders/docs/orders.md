@@ -44,6 +44,18 @@ is refused with `422 VALIDATION_FAILED` and
 `requestedSalesChannelId` and `resolvedSalesChannelId`), before anything is
 written — the basket is left as it was.
 
+In admin order creation the body's `salesChannelId` has to name an existing
+channel: one that names no channel is refused with `404 NOT_FOUND` before
+anything is written, the customer's basket included. The ordered products are
+checked against **that** channel's assortment, not the one the admin request
+itself resolved — a product the chosen channel does not sell is refused with
+`404 PRODUCT_NOT_FOUND`, and one it sells is accepted even when the system
+default does not sell it. Admin creation does accept a channel that exists but
+is switched off, which the storefront refuses with `422`
+`order_sales_channel_mismatch`; and a product outside the chosen channel's
+assortment is refused only after the customer's basket has been cleared, so
+that basket is not restored.
+
 What is read from an order's channel:
 
 - at placement — the minimum order value (`orders.min_order_value`), the
@@ -64,7 +76,8 @@ order-total preview, one-click buy and "order again as a quote request". One cre
 - **The basket.** A basket is created on the system-default channel whatever
   channel the buyer is shopping, and three things are answered for the basket's
   channel rather than the order's: whether a product may be added (the
-  assortment of the channel the *adding* request resolved), the line prices,
+  assortment of the channel the *adding* request resolved — admin order
+  creation, above, is the exception), the line prices,
   and the promotions — at checkout exactly as in the cart. On a multi-channel
   instance an order can therefore be recorded on a channel that does not sell
   one of its products, at the default channel's prices, and a promotion

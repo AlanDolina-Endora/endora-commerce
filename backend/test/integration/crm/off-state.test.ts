@@ -6,6 +6,7 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 import {
   expectModuleAbsent,
   withModuleOff,
@@ -586,7 +587,7 @@ describe('crm off-state (Constitution XVII)', () => {
             cookies: admin,
             payload: {
               customerAccountId: TEST_CUSTOMER_ID,
-              salesChannelId: '00000000-0000-4000-8000-0000000000c1',
+              salesChannelId: await systemDefaultSalesChannelId(h.em()),
               items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }],
               deliveryMethodId: SEED_DELIVERY_METHOD_ID,
               paymentMethodId: SEED_PAYMENT_METHOD_ID,

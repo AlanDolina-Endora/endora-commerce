@@ -16,7 +16,7 @@ import {
   orderEmailNotSent,
   sendOrderTransactionalEmail,
 } from './transactional-email-helper.js';
-import { rethrowIfModuleDisabled } from '@endora-commerce/platform/kernel';
+import { rethrowIfModuleDisabled, SalesChannel } from '@endora-commerce/platform/kernel';
 
 /** A new address typed on the create form (vs. an existing org address id). */
 export interface AdminCreateOrderInlineAddress {
@@ -82,6 +82,18 @@ export class OrderCreationAdminService {
     }
     const organizationId = customer.organizationId;
     const customerCtx = { customerAccountId: input.customerAccountId, organizationId };
+
+    // The operator names the order's channel, so it has to be one. Placement
+    // falls back to the system default for a channel it cannot find, which is
+    // right for a storefront request that named none and wrong here: the
+    // order would land on a channel nobody chose. Refused before anything is
+    // written — the customer's basket included.
+    const channel = await em.findOne(
+      SalesChannel,
+      { id: input.salesChannelId },
+      { fields: ['id'] },
+    );
+    if (!channel) throw new HttpError(404, ERROR_CODES.NOT_FOUND, 'Sales channel not found.');
 
     // The customer's Organization allow-lists bind the operator too. Asked
     // here as well as inside `placeOrder`, because this method replaces the
@@ -160,12 +172,18 @@ export class OrderCreationAdminService {
 
       // Seed the customer's cart from the admin-entered items (current pricing
       // via CartService). Clearing first matches the platform's single-active-cart
-      // model (same approach as RfqService.convertToOrder).
+      // model (same approach as RfqService.convertToOrder). The assortment is
+      // judged on the order's channel, not on the admin request's.
       await this.cartService.clearForCustomer(customerCtx);
       for (const it of input.items) {
         await this.cartService.addItem(
           { customer: customerCtx },
-          { productId: it.productId, ...(it.variantId ? { variantId: it.variantId } : {}), quantity: it.quantity },
+          {
+            productId: it.productId,
+            ...(it.variantId ? { variantId: it.variantId } : {}),
+            quantity: it.quantity,
+            salesChannelId: input.salesChannelId,
+          },
         );
       }
 

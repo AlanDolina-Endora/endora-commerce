@@ -75,6 +75,18 @@ describe('order placement — methods must be offered in the order’s sales cha
     expect(created.statusCode).toBe(201);
     channelB = { id: (created.json() as { id: string }).id, code: 'method-gate-b' };
 
+    // The order's channel has to sell what the order contains: admin order
+    // creation judges the assortment on the channel it names. The bridge row
+    // is written the way the catalogue seed writes its own.
+    await h
+      .em()
+      .getConnection()
+      .execute(
+        'insert into sales_channel_products (sales_channel_id, product_id) values (?, ?) ' +
+          'on conflict (sales_channel_id, product_id) do nothing',
+        [channelB.id, SEED_PRODUCT_101_ID],
+      );
+
     const delivery = await h.app.inject({
       method: 'PUT',
       url: '/api/v1/admin/delivery-methods/gate_delivery_only_b',

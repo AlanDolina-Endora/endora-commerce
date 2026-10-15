@@ -686,6 +686,13 @@ export interface CartWritePort {
       variantId?: string;
       quantity: number;
       packagingUnitId?: string;
+      /**
+       * The channel whose assortment decides whether the product may be added.
+       * Absent: the request's resolved channel. Set by an operator surface that
+       * places an order on a channel it names itself (admin order creation),
+       * never by a buyer-facing route.
+       */
+      salesChannelId?: string;
     },
   ): Promise<CartWithItems>;
   clearForCustomer(ctx: CartCustomerContext): Promise<void>;
