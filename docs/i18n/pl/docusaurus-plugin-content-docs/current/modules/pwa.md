@@ -26,6 +26,9 @@ workera oraz opcjonalne powiadomienia push za warstwą niezależną od dostawcy.
 - **Powiadomienia push** — po włączeniu kupujący mogą sami zgodzić się na powiadomienia. W panelu
   administracyjnym można wysłać wiadomość do wszystkich albo do wybranych odbiorców, a zmiany statusu
   zamówienia i aktualizacje zapytań ofertowych automatycznie powiadamiają subskrybujących klientów.
+  Kupujący może ponownie wyłączyć powiadomienia na stronie profilu swojego konta, a wylogowanie
+  wyłącza je w tej przeglądarce, więc współdzielone lub przekazane dalej urządzenie nie otrzymuje
+  dalej wiadomości kierowanych do konta.
   Panel administracyjny w tej wersji nie odbiera powiadomień push.
 
 ## Dla programisty

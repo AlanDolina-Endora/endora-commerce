@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getPwaConfig, subscribeToPush } from '../../lib/api/pwa';
+import { PUSH_DISMISS_KEY, getPwaConfig, subscribeToPush } from '../../lib/api/pwa';
 
 /**
  * Push opt-in (feature 046, US4). Shown only when the channel has push enabled
@@ -10,7 +10,7 @@ import { getPwaConfig, subscribeToPush } from '../../lib/api/pwa';
  * first, so when not running standalone the control explains that instead of
  * appearing broken (iOS edge case).
  */
-const DISMISS_KEY = 'b2b:pwa:push-dismissed';
+const DISMISS_KEY = PUSH_DISMISS_KEY;
 
 function isStandalone(): boolean {
   return (

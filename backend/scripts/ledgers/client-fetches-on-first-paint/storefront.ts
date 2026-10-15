@@ -135,6 +135,14 @@ export const entries: Readonly<Record<string, ClientFetchLedgerEntry>> = {
       'in silence.',
     retiredBy: NOT_PAGE_CONTENT,
   },
+  'storefront/components/pwa/PushNotificationsToggle.tsx#state': {
+    firstPaint: false,
+    reason:
+      'Issue #258 — whether this browser holds a push subscription exists only in its own ' +
+      'push manager, so the server cannot render it. A control on the signed-in, noindex ' +
+      'account profile, not content.',
+    retiredBy: NOT_PAGE_CONTENT,
+  },
   'storefront/components/pwa/PushOptIn.tsx#iosHint': {
     firstPaint: false,
     reason:
