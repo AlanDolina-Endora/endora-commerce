@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   ERROR_CODES,
+  QUOTE_REQUEST_HISTORY_EVENT_WINDOW,
   RFQ_CREATED_BY_ADMIN_EVENT,
   type AdminCreateQuoteRequest,
   type AdminPatchQuoteRequest,
@@ -61,8 +62,11 @@ import {
  * (research §R2). Platform admins skip the predicate.
  */
 
-/** How many of the most recent events the admin History reads (threat model T9). */
-export const HISTORY_EVENT_WINDOW = 100;
+/**
+ * How many of the most recent events the admin History reads (threat model T9)
+ * — the contracts' number, which the admin's truncation notice states too.
+ */
+export const HISTORY_EVENT_WINDOW = QUOTE_REQUEST_HISTORY_EVENT_WINDOW;
 
 export interface AdminContext {
   adminUserId: string;

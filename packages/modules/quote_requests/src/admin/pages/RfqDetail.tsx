@@ -1073,7 +1073,9 @@ function ModifyCard({
               <div
                 key={i}
                 role="group"
-                aria-label={orig?.productName}
+                // A new or switched line has no stored name yet; it is still a
+                // named group, by its position (review fix N7).
+                aria-label={orig?.productName ?? t('rfq.detail.modify.lineGroup', { number: i + 1 })}
                 className={cn('grid grid-cols-1 items-center gap-3', gridCols)}
               >
                 <ProductPicker

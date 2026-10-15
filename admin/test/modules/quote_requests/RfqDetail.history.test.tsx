@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
+  QUOTE_REQUEST_HISTORY_EVENT_WINDOW,
   quoteRequestHistoryChangeSchema,
   quoteRequestHistoryEntryKindSchema,
   type QuoteRequestHistory,
@@ -366,12 +367,41 @@ describe.each<Language>(['en', 'pl'])('RfqHistory — %s', (language) => {
   it('renders the truncation notice only when truncated (T9)', async () => {
     answerHistory(FULL);
     const { unmount } = renderHistory(language);
-    expect(await screen.findByText(tr(language, 'truncated'))).toBeInTheDocument();
+    const notice = tr(language, 'truncated', { count: QUOTE_REQUEST_HISTORY_EVENT_WINDOW });
+    // Review fix N5 — the number is the server's window, interpolated, not a copy.
+    expect(ENTRIES[language]['rfq.detail.history.truncated']).toContain('{count}');
+    expect(notice).toContain(String(QUOTE_REQUEST_HISTORY_EVENT_WINDOW));
+    expect(await screen.findByText(notice)).toBeInTheDocument();
     unmount();
     answerHistory({ ...FULL, truncated: false });
     renderHistory(language);
     await screen.findAllByText(tr(language, 'entry.modified'));
-    expect(screen.queryByText(tr(language, 'truncated'))).toBeNull();
+    expect(screen.queryByText(notice)).toBeNull();
+  });
+
+  it('lists two changes of one kind on one line, each under its own key (review fix N6)', async () => {
+    const line = { productId: SOURCE_RFQ, variantId: null, productName: 'Twin', variantLabel: null };
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      answerHistory({
+        truncated: false,
+        entries: [
+          entry('modified', REP, {
+            revisionNumber: 4,
+            changes: [
+              { kind: 'line_removed', line },
+              { kind: 'line_removed', line },
+            ],
+          }),
+        ],
+      });
+      renderHistory(language);
+      const sentence = tr(language, 'change.line_removed', { line: 'Twin' });
+      expect(await screen.findAllByText(sentence)).toHaveLength(2);
+      expect(errors.mock.calls.some((call) => String(call[0]).includes('same key'))).toBe(false);
+    } finally {
+      errors.mockRestore();
+    }
   });
 
   it('renders an empty history as the empty state', async () => {

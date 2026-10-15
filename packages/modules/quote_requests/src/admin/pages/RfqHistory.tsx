@@ -1,10 +1,11 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import type {
-  QuoteRequestHistory,
-  QuoteRequestHistoryActor,
-  QuoteRequestHistoryChange,
-  QuoteRequestHistoryEntry,
-  QuoteRequestHistoryLineRef,
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  QUOTE_REQUEST_HISTORY_EVENT_WINDOW,
+  type QuoteRequestHistory,
+  type QuoteRequestHistoryActor,
+  type QuoteRequestHistoryChange,
+  type QuoteRequestHistoryEntry,
+  type QuoteRequestHistoryLineRef,
 } from '@endora-commerce/contracts';
 import { apiClient } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Button } from '@endora-commerce/admin-kit/ui';
@@ -43,21 +44,40 @@ interface Formatters {
   dateTime: (iso: string) => string;
 }
 
+/** Built once per language and translator, not on every render (review fix N6). */
 function useFormatters(): Formatters {
   const t = useTranslation('core');
   const { language } = useTranslationContext();
-  const locale = adminNumberLocale(language);
-  const numbers = rfqNumberFormat(locale);
-  const dates = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' });
-  const h: T = (key, params) => t(`rfq.detail.history.${key}`, params);
-  return {
-    t: h,
-    amount: (n) => (n === null ? h('none') : numbers.amount(n)),
-    dateTime: (iso) => {
-      const d = new Date(iso);
-      return Number.isNaN(d.getTime()) ? iso : dates.format(d);
-    },
-  };
+  return useMemo(() => {
+    const locale = adminNumberLocale(language);
+    const numbers = rfqNumberFormat(locale);
+    const dates = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' });
+    const h: T = (key, params) => t(`rfq.detail.history.${key}`, params);
+    return {
+      t: h,
+      amount: (n) => (n === null ? h('none') : numbers.amount(n)),
+      dateTime: (iso) => {
+        const d = new Date(iso);
+        return Number.isNaN(d.getTime()) ? iso : dates.format(d);
+      },
+    };
+  }, [language, t]);
+}
+
+/**
+ * A key per change that does not move when the list is re-read (review fix N6):
+ * a change carries no id, so its kind and line name it, and a repeat of the same
+ * pair — two additions of one product in two packagings — is numbered in order.
+ */
+function changeKeys(changes: readonly QuoteRequestHistoryChange[]): string[] {
+  const seen = new Map<string, number>();
+  return changes.map((change) => {
+    const line = 'line' in change ? `${change.line.productId}/${change.line.variantId ?? ''}` : '';
+    const base = `${change.kind}:${line}`;
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return n === 0 ? base : `${base}#${n}`;
+  });
 }
 
 function roleLabel(t: T, recorded: string | null): string | null {
@@ -131,6 +151,7 @@ function changeSentence(f: Formatters, change: QuoteRequestHistoryChange): strin
 
 function HistoryEntry({ entry, f }: { entry: QuoteRequestHistoryEntry; f: Formatters }): ReactNode {
   const { t } = f;
+  const keys = entry.changes === null ? [] : changeKeys(entry.changes);
   return (
     <li className="rounded-md border p-3 text-sm">
       <div className="mb-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
@@ -159,7 +180,7 @@ function HistoryEntry({ entry, f }: { entry: QuoteRequestHistoryEntry; f: Format
         ) : (
           <ul className="mt-1 list-disc space-y-0.5 pl-5">
             {entry.changes.map((change, i) => (
-              <li key={i} className="whitespace-pre-wrap break-words">
+              <li key={keys[i]} className="whitespace-pre-wrap break-words">
                 {changeSentence(f, change)}
               </li>
             ))}
@@ -214,7 +235,7 @@ export function RfqHistory({ quoteRequestId }: { quoteRequestId: string }): Reac
       ) : null}
       {history?.truncated ? (
         <Alert>
-          <AlertDescription>{t('truncated')}</AlertDescription>
+          <AlertDescription>{t('truncated', { count: QUOTE_REQUEST_HISTORY_EVENT_WINDOW })}</AlertDescription>
         </Alert>
       ) : null}
       {history !== null && history.entries.length === 0 ? (

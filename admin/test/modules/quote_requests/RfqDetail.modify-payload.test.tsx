@@ -117,6 +117,13 @@ describe('RfqDetail Modify — reference, proposal, live difference, payload', (
     expect(line).toHaveTextContent('200,00 PLN');
   });
 
+  it('names every line group — a stored line by its product, a new one generically (review fix N7)', async () => {
+    await openModify({}, 'reject');
+    expect(screen.getByRole('group', { name: 'Widget' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'rfq.detail.modify.addLine' }));
+    expect(screen.getByRole('group', { name: 'rfq.detail.modify.lineGroup' })).toBeInTheDocument();
+  });
+
   it('prefills an empty agreed price from the admin probe for the request’s customer and channel, never the storefront probe (FR-007)', async () => {
     const input = await openModify(
       { customerProposedUnitPrice: null, desiredUnitPrice: null, agreedUnitPrice: null },

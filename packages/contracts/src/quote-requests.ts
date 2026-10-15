@@ -238,8 +238,16 @@ export const quoteRequestHistoryEntrySchema = z.object({
 export type QuoteRequestHistoryEntry = z.infer<typeof quoteRequestHistoryEntrySchema>;
 
 /**
+ * How many of a quote request's most recent events its history is built from
+ * (threat model T9). Shared so the admin's truncation notice states the number
+ * the server applies, rather than a copy of it.
+ */
+export const QUOTE_REQUEST_HISTORY_EVENT_WINDOW = 100;
+
+/**
  * The history response body's `data`: entries oldest first, built from the
- * most recent 100 events; `truncated` is `true` when older ones exist.
+ * most recent {@link QUOTE_REQUEST_HISTORY_EVENT_WINDOW} events; `truncated` is
+ * `true` when older ones exist.
  */
 export const quoteRequestHistorySchema = z.object({
   entries: z.array(quoteRequestHistoryEntrySchema),
