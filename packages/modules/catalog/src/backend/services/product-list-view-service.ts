@@ -96,8 +96,8 @@ export class ProductListViewService {
         let changed = false;
         const name = patch.name?.trim();
         if (name !== undefined && name !== found.name) {
-          // Only a change of key can create a conflict; re-sending the stored
-          // name, or changing its case only, cannot.
+          // Only a change of key can create a conflict; changing a name's case
+          // only cannot.
           if (savedListViewNameKey(name) !== savedListViewNameKey(found.name)) {
             // The rule binds the view's owner, never the caller (S-04).
             await assertNameAvailable(tx, found.ownerAdminUserId, name, found.id);
