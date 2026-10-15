@@ -117,6 +117,38 @@ describe('BuyerLinePriceService.resolveForBuyer (T019)', () => {
     expect(h.calls[0]!.context.customerGroupId).toBe('cg-org');
   });
 
+  it('refuses an account that is not a member of the named organization, before any price', async () => {
+    // Security review W2: the organization named in the query used to win over
+    // the account's own, so a mismatched pair priced the account's group
+    // against a foreign organization's lists. Same refusal as the probe's.
+    const h = harness({
+      customer: { id: 'cust-1', organizationId: 'org-1', customerGroupId: 'cg-account' },
+      organization: { id: 'org-2', customerGroupId: 'cg-org' },
+    });
+    const refusal = h.service
+      .resolveForBuyer(query({ buyer: { customerAccountId: 'cust-1', organizationId: 'org-2' } }))
+      .catch((error: unknown) => error);
+    const error = await refusal;
+    expect(error).toBeInstanceOf(HttpError);
+    expect(error).toMatchObject({
+      statusCode: 400,
+      code: 'VALIDATION_FAILED',
+      message: 'The customer account is not a member of the organization.',
+    });
+    expect(h.calls).toHaveLength(0);
+    expect(h.spies.findOrganization).not.toHaveBeenCalled();
+    expect(h.spies.findByIds).not.toHaveBeenCalled();
+  });
+
+  it('prices an account named without its organization, and one whose lookup finds nothing, as before', async () => {
+    const h = harness({ customer: null, organization: { id: 'org-2', customerGroupId: 'cg-org' } });
+    const answers = await h.service.resolveForBuyer(
+      query({ buyer: { customerAccountId: 'cust-gone', organizationId: 'org-2' } }),
+    );
+    expect(answers[0]!.price).not.toBeNull();
+    expect(h.calls[0]!.context.customerGroupId).toBe('cg-org');
+  });
+
   it('resolves on the named channel, and on the system default when the channel is null', async () => {
     const h = harness();
     const onA = await h.service.resolveForBuyer(query({ salesChannelId: CHANNEL_A.id }));

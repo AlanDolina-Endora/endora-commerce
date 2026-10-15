@@ -743,7 +743,9 @@ export interface BuyerLinePriceAnswer {
  *
  * **No authority check**: the caller passes the owner of a quote request it
  * has already authorised. The HTTP probe, which serves arbitrary admin input,
- * carries the sales-representative scope check itself.
+ * carries the sales-representative scope check itself. When both
+ * `buyer.customerAccountId` and `buyer.organizationId` are given, the account
+ * must belong to that organization, else `HttpError(400, VALIDATION_FAILED)`.
  *
  * A separate port rather than a widening of {@link LinePricePort}, for the
  * reason {@link OrgLinePricePort} states: widening would break every

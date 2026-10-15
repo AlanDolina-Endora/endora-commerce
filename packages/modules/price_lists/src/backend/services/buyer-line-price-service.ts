@@ -70,7 +70,9 @@ function unknownChannel(): HttpError {
  *
  * **No authority check.** The HTTP probe, which serves arbitrary admin input,
  * scopes the organization before it calls this; the port's one caller passes
- * the owner of a quote request it already authorised.
+ * the owner of a quote request it already authorised. What it does check is
+ * consistency: an account named with an organization it does not belong to is
+ * refused `400 VALIDATION_FAILED`, the probe's own answer for that mismatch.
  */
 export class BuyerLinePriceService implements BuyerLinePricePort {
   constructor(private readonly deps: BuyerLinePriceServiceDeps) {}
@@ -88,6 +90,22 @@ export class BuyerLinePriceService implements BuyerLinePricePort {
     const customer = query.buyer.customerAccountId
       ? await this.deps.customerAccountRead.findById(query.buyer.customerAccountId)
       : null;
+    // An account and an organization named together must be one pair: the
+    // organization's lists would otherwise price the account's customer group
+    // on another tenant's terms. The probe refuses the same mismatch before it
+    // calls this (`authorizeBuyer`); here it holds for the port's callers too
+    // (security review W2).
+    if (
+      customer &&
+      query.buyer.organizationId !== null &&
+      customer.organizationId !== query.buyer.organizationId
+    ) {
+      throw new HttpError(
+        400,
+        ERROR_CODES.VALIDATION_FAILED,
+        'The customer account is not a member of the organization.',
+      );
+    }
     const organizationId = query.buyer.organizationId ?? customer?.organizationId ?? null;
     const organization = organizationId
       ? await this.deps.organizationDetails.findById(organizationId)
