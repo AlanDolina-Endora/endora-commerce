@@ -257,16 +257,35 @@ describe('Order saved views — names, ownership and the gate (spec 147)', () =>
     await em.flush();
   }
 
+  /**
+   * Permissions of every role this file widened, as they were before it did.
+   * A role row is shared with every other file in the run (the scope keys on
+   * the `sales_representative` code), so `afterAll` puts each one back. A role
+   * this file created is left in place: the admins it seeds reference it and
+   * `admin_users_admin_role_fk` is `on delete restrict`.
+   */
+  const widenedRoles = new Map<string, string[]>();
+
   async function ensureRole(code: string, permissions: string[]): Promise<string> {
     const em = h.em();
     let role = await em.findOne(AdminRole, { code });
     if (!role) {
       role = em.create(AdminRole, { code, name: code, permissions });
     } else {
+      if (!widenedRoles.has(code)) widenedRoles.set(code, [...role.permissions]);
       role.permissions = Array.from(new Set([...role.permissions, ...permissions]));
     }
     await em.persistAndFlush(role);
     return role.id;
+  }
+
+  async function restoreWidenedRoles(): Promise<void> {
+    const em = h.em();
+    for (const [code, permissions] of widenedRoles) {
+      const role = await em.findOne(AdminRole, { code });
+      if (role) role.permissions = permissions;
+    }
+    await em.flush();
   }
 
   beforeAll(async () => {
@@ -282,6 +301,7 @@ describe('Order saved views — names, ownership and the gate (spec 147)', () =>
   });
 
   afterAll(async () => {
+    await restoreWidenedRoles();
     await teardownBackendServer(h);
   });
 
