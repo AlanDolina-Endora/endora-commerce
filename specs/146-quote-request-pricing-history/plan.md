@@ -447,6 +447,10 @@ No constitution violation. Recorded so a reviewer does not have to ask:
     helper** (`@endora-commerce/platform/tenancy`), out of scope for this feature.
   - **Owner ruling D-3W**: an organization with no assigned sales representative is visible to
     every representative (the existing unassigned-organization rule, *Visibility model* in the
-    module page), so any representative may change its price-negotiation lock and its customer
-    accounts' overrides. Accepted as is for this feature; issue #305 tracks the rule itself. The
-    module page states it in *Who sees and changes it* (EN and PL).
+    module page), so any representative may change its price-negotiation lock. Its customer
+    accounts' overrides are **not** reachable that way: account rows are `@OrgScoped`, read under
+    the assigned-organization tenant filter, so the customer-account negotiation GET and PUT answer
+    `404` for such a representative (pinned in `backend/test/integration/quote_requests/rep-scope.test.ts`,
+    "the split the platform already has"). Accepted as is for this feature; issue #305 tracks the
+    rule itself. The module page states it in *Who sees and changes it* (EN and PL). (Corrected
+    after security review W5: this bullet first said the account overrides were reachable too.)

@@ -239,8 +239,10 @@ dla ról z `customers:read`; zmiana wartości wymaga `customers:manage`, a bez n
 jest nieaktywna. Rola, która ma `customers:manage`, ale **nie** ma `customers:read`, nie widzi
 panelu. Opiekun handlowy sięga tylko do organizacji, które może widzieć; każdy inny identyfikator
 dostaje `404`. Organizacja bez przypisanego opiekuna handlowego jest widoczna dla każdego opiekuna
-(zob. *Model widoczności*), więc każdy opiekun może zmienić jej blokadę i nadpisania kont jej
-klientów; samą tę regułę opisuje zgłoszenie #305. Każda zmiana jest audytowanym zapisem, który zapisuje administratora, organizację
+(zob. *Model widoczności*), więc każdy opiekun może zmienić jej blokadę; samą tę regułę opisuje
+zgłoszenie #305. Nie dotyczy to kont jej klientów: podlegają filtrowi przypisanych
+organizacji, więc żądanie opiekuna o panel konta — odczyt lub zmiana — dostaje `404`, a nadpisania
+tych kont pozostają w gestii administratora platformy. Każda zmiana jest audytowanym zapisem, który zapisuje administratora, organizację
 lub konto oraz starą i nową wartość.
 
 **Moduł wyłączony.** Gdy ten moduł jest wyłączony, panele, cztery endpointy administracyjne, odczyt

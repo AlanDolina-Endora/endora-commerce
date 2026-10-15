@@ -478,7 +478,10 @@ Code review findings, fixed on this branch; part B (the admin UI: S4, S5, S6, N3
 
 - [x] **B1** Owner ruling D-3W on the module page (EN + PL, cache re-pinned) and in `plan.md`: an
   organization with no assigned representative is visible to every representative, so any of them
-  may change its lock; issue #305 tracks the rule.
+  may change its lock; issue #305 tracks the rule. Its customer accounts' overrides are not
+  reachable that way — the account GET/PUT answer `404` for such a representative
+  (`rep-scope.test.ts`); the page, its Polish translation and `plan.md` said otherwise until
+  security review W5 corrected them.
 - [x] **S1** One `services/admin-org-visibility.ts` for the negotiation routes and Commands; the
   `price_lists` copy is noted in `plan.md` as a platform-helper candidate.
 - [x] **S2** `services/customer-projection.ts` (customer allow-list) and `services/draft-guard.ts`
@@ -522,6 +525,22 @@ Code review findings, fixed on this branch; part B (the admin UI: S4, S5, S6, N3
   `{count}` (EN + PL).
 - [x] **N6** `RfqHistory` memoizes its formatters and keys changes by kind and line.
 - [x] **N7** A Modify line with no stored product name is the group "Line {number}".
+
+## Security review follow-ups (2026-10-15)
+
+- [x] **W2** `BuyerLinePriceService.resolveDetailed` refuses a customer account named with an
+  organization it does not belong to, `400 VALIDATION_FAILED` — the probe's answer for the same
+  mismatch (`buyer-line-price-service.test.ts`); the port contract says so.
+- [x] **W3** The draft-edit rate-limit key takes the request id only when it is a well-formed uuid,
+  else one bucket per caller (`routes.customer.test.ts`). The host's store is
+  `@fastify/rate-limit`'s in-process `LocalStore` (no `redis` in `server.ts`), an LRU of 5000
+  entries per route; a caller can still name random well-formed uuids, bounded by that LRU.
+- [x] **W4** The error envelope maps a thrown 429 to `RATE_LIMITED` only when the limiter stamped
+  the reply with `Retry-After`; a foreign 429 stays a logged `500 INTERNAL`
+  (`error-envelope-rate-limit.test.ts`).
+- [x] **W5** Module page (EN + PL, cache re-pinned), `plan.md` and B1 corrected: for an unassigned
+  organization a representative reaches the organization lock only; the customer-account
+  negotiation GET/PUT answer `404`.
 
 ---
 

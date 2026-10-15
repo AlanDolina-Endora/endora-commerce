@@ -263,8 +263,10 @@ holds `customers:manage` but **not** `customers:read` sees no panel. A sales
 representative reaches only the organizations they may see; any other id
 answers `404`. An organization with no assigned sales representative is visible
 to every representative (see *Visibility model*), so any representative may
-change its lock and the overrides of its customer accounts; issue #305 tracks
-that rule itself. Every change is an audited write that records the
+change its lock; issue #305 tracks that rule itself. Its customer accounts are
+not reachable that way: they sit behind the assigned-organization filter, so a
+representative's request for an account's panel — read or change — answers
+`404`, and its overrides stay with a platform administrator. Every change is an audited write that records the
 administrator, the organization or account and the old and new value.
 
 **Switched off.** While this module is off, the panels, the four admin routes,
