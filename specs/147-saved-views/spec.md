@@ -421,9 +421,13 @@ colleague's shared view and confirm it shows only requests the loader may see; t
 - **Known, accepted divergence — two meanings of "platform admin" on the Quote Request list**:
   saved views use the Vocabulary's definition (any role but `sales_representative`), while the
   Quote Request list's default visibility scope and its `listAll` visibility still key on the
-  literal `role.code === 'platform_admin'`
-  (`packages/modules/quote_requests/src/backend/index.ts:241`,
-  `packages/modules/quote_requests/src/admin/pages/RfqList.tsx:100`). So an admin with, say, a
+  literal `role.code === 'platform_admin'`: the admin context resolver sets
+  `isPlatformAdmin: role?.code === 'platform_admin'`
+  (`packages/modules/quote_requests/src/backend/index.ts:242`), `listAll` skips its
+  organization-visibility filter when that flag is set
+  (`packages/modules/quote_requests/src/backend/services/rfq-admin-service.ts:125-143`, the branch
+  at `:136`), and the list page picks its default scope from the same role code
+  (`packages/modules/quote_requests/src/admin/pages/RfqList.tsx:103`). So an admin with, say, a
   custom catalog-manager role may delete a colleague's shared Quote Request view yet opens the
   list on scope `mine`. This feature does not change the Quote Request list's rule; aligning
   the two is a separate decision.

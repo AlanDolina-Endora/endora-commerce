@@ -131,8 +131,8 @@ Each list page owns the mapping between its state and `SavedViewState`, and noth
 | Page | `current` | `onApply` |
 | --- | --- | --- |
 | `orders/src/admin/pages/OrdersList.tsx` | unchanged `currentView` (`:327-344`) | unchanged `applyView` (`:303-325`) |
-| `catalog/src/admin/pages/ProductsList.tsx` | `{ filters: { status, type, q } }` — only the non-default ones | set status, type and search from the view (unknown → `all` / empty); Stock chip → `all`; page and selection reset by the page's existing effects |
-| `quote_requests/src/admin/pages/RfqList.tsx` | `{ filters: { scope, organizationId?, status?, q? }, sort, visibleColumns }` | set all six; unknown status entries and column ids dropped; absent/unknown scope → the viewer's default; empty columns → `DEFAULT_VISIBLE`; page reset by the existing effect |
+| `catalog/src/admin/pages/ProductsList.tsx` | `{ filters: { status, type, q } }` — only the non-default ones | set status, type and search from the view (unknown → `all` / empty); Stock chip → `all`; **explicitly** `setPage(0)` and clear the selection (and its error) inside `applySavedView` — the page's reset effects alone fire only when a filter actually changes and, when one does, the first request still carries the old page |
+| `quote_requests/src/admin/pages/RfqList.tsx` | `{ filters: { scope, organizationId?, status?, q? }, sort, visibleColumns }` | set all six; unknown status entries and column ids dropped; absent/unknown scope → the viewer's default; empty columns → `DEFAULT_VISIBLE`; **explicitly** `setPage(0)` inside `applySavedView`, for the same reason (the list has no row selection to clear) |
 
 `orders/src/admin/components/OrderSavedViews.tsx` is deleted.
 
