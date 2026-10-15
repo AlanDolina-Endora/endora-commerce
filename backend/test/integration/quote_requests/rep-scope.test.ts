@@ -275,7 +275,10 @@ describe('146 — sales representative scope [integration]', () => {
 
     it('an account that does not exist at all is an error, never a default "allowed" (analyze M5)', async () => {
       const service = h.container.resolve(POLICY_SERVICE) as Policy;
-      await expect(service.effectiveFor(UNKNOWN_ID, h.orm.em.fork())).rejects.toThrow(/did not resolve/);
+      await expect(service.effectiveFor(UNKNOWN_ID, h.orm.em.fork())).rejects.toMatchObject({
+        statusCode: 404,
+        code: 'NOT_FOUND',
+      });
     });
   });
 });

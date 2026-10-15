@@ -126,7 +126,10 @@ describe('NegotiationPolicyService.effectiveFor (T062)', () => {
   it('an owner whose account cannot be found fails rather than reading as "allowed"', async () => {
     const { em } = fakeEm({ organization: false });
     const service = new NegotiationPolicyService({ customerAccounts: accountsPort(null).port });
-    await expect(service.effectiveFor(ACCOUNT, em)).rejects.toThrow();
+    // Review fix N2 — still fail-closed, but a typed 404, not a bare 500.
+    const refusal = await service.effectiveFor(ACCOUNT, em).catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(HttpError);
+    expect(refusal).toMatchObject({ statusCode: 404, code: 'NOT_FOUND', message: 'Customer not found.' });
   });
 
   it.each(['account', 'organization'] as const)('a %s policy read that throws propagates (M5)', async (which) => {

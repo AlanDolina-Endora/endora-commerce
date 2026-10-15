@@ -85,7 +85,7 @@ export interface NegotiationPolicyDeps {
  *
  * **There is no `catch`** (analyze M5): an unreadable lock fails the request
  * rather than letting a proposal through, and an owner whose account does not
- * resolve is an error, not a default.
+ * resolve is a `404 NOT_FOUND`, not a default.
  */
 export class NegotiationPolicyService {
   constructor(private readonly deps: NegotiationPolicyDeps) {}
@@ -101,9 +101,9 @@ export class NegotiationPolicyService {
       // history: an account moved after raising a draft follows its new one.
       const account = await this.deps.customerAccounts.findById(customerAccountId);
       if (!account) {
-        throw new Error(
-          `quote_requests: the negotiation lock cannot be read — customer account ${customerAccountId} did not resolve`,
-        );
+        // Fail closed — no default "allowed", nothing written — with the same
+        // typed refusal the negotiation routes give an unknown customer.
+        throw new HttpError(404, ERROR_CODES.NOT_FOUND, 'Customer not found.');
       }
       const organization = await em.findOne(QuoteRequestOrgPolicy, {
         organizationId: account.organizationId,
