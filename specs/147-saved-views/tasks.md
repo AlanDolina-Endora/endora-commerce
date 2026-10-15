@@ -229,11 +229,17 @@ failure with its output. Do not re-record a read size unless a band refuses it, 
   - T062 – T065 re-run green on tip `33fc6d2b2` after the rebase onto `854f8564f`.
 - [x] T066 `test:backend:unit`: `pnpm --filter backend run test:unit:fast`
   - Green on Linux (Docker `node:22.18-slim`, 2026-10-15, tip `33fc6d2b2`): 352 files / 7534 tests passed, mirroring the job's `before_script` in a `git clone` of the tip. macOS reds are host-only (BSD userland, `/private/var`). The container needs an init as PID 1 (`docker run --init`): with a bare `sleep infinity` as PID 1, orphaned group members are never reaped and `test/unit/scripts/acceptance-process-teardown.test.ts` reports 3 zombies as survivors — identically on `854f8564f`.
-- [ ] T067 `test:frontend`: `pnpm --filter '!backend' run test`
-- [ ] T068 The suites a merge-request pipeline skips (D-198), from `backend/` with `$SVC`: `pnpm exec vitest run test/contract/kernel/openapi-baseline.test.ts test/contract/orders test/contract/catalog test/contract/quote_requests test/integration/saved-list-views test/integration/quote_requests test/integration/_i18n test/unit/_i18n test/unit/db`; then, if time allows before the pull request, the complete `pnpm --filter backend run test`
-- [ ] T069 `pack-gate`: `pnpm --filter backend run pack-gate -- --no-build`
-- [ ] T070 `boot-gate`: `bash scripts/boot-gate.sh --with-negatives`
-- [ ] T071 `build:docs` and `dco`: `pnpm --filter docs run build && pnpm --filter backend run verify:docs-build`; then `node backend/scripts/dco-signoff.ts origin/master HEAD` (every commit carries `Signed-off-by:` and no AI trailer)
+- [x] T067 `test:frontend`: `pnpm --filter '!backend' run test`
+  - Green on Linux (Docker `node:22.18-slim`, 8 CPU / 8 GB VM, clone at `/builds/endora/endora-commerce`, tip `1de3ba3ab`): 67 vitest members plus the `docs` echo, exit 0, 648 s. The green run was `pnpm -r --no-bail --filter '!backend' run test` — the same verdict with every member forced to execute. The exact command went red three times on three different load-timing tests, none in a file this branch touches, each green when run alone: `packages/cli/test/dev-all.test.ts` (10 s vitest timeout around a blocking `spawnSync`), `admin` `test/modules/crm/board-card-fields.test.tsx` and `test/modules/orders/OrderCreatePage.product-browser.test.tsx` (`waitFor`), `storefront/test/seo/llms-txt-base.test.ts` (257 ms against a 250 ms budget). The macOS reds in `packages/cli` (no util-linux `script`, `blocks:generate` output) are host-only; the branch does not touch `packages/cli`.
+- [x] T068 The suites a merge-request pipeline skips (D-198), from `backend/` with `$SVC`: `pnpm exec vitest run test/contract/kernel/openapi-baseline.test.ts test/contract/orders test/contract/catalog test/contract/quote_requests test/integration/saved-list-views test/integration/quote_requests test/integration/_i18n test/unit/_i18n test/unit/db`; then, if time allows before the pull request, the complete `pnpm --filter backend run test`
+  - Green on the macOS host against Warden's services: 149 files, 1325 passed / 3 skipped, 1422 s. The optional complete run was not done.
+- [x] T069 `pack-gate`: `pnpm --filter backend run pack-gate -- --no-build`
+  - Green on Linux (GNU tar 1.34): 73 packages, 0 violations. The macOS red is host-only: `listTarball` in `backend/scripts/pack-gate.ts` parses GNU `tar -tzvf` columns, bsdtar 3.5.3 emits another layout, so every package reads as 0 files (752 violations).
+- [x] T070 `boot-gate`: `bash scripts/boot-gate.sh --with-negatives`
+  - Green on the macOS host (bash 5.3, host Docker), 494 s: the image boots, installs translations for every composed module, keeps its 9 overlays; all three negative cases red as required.
+- [x] T071 `build:docs` and `dco`: `pnpm --filter docs run build && pnpm --filter backend run verify:docs-build`; then `node backend/scripts/dco-signoff.ts origin/master HEAD` (every commit carries `Signed-off-by:` and no AI trailer)
+  - Green on the macOS host: 334 pages, 0 findings; DCO 36/36 before this record.
+  - T063 re-run green on the macOS host on tip `1de3ba3ab` (typecheck 523 s, lint 118 s, 0 errors). T063 – T071 above are on tip `1de3ba3ab`, base `854f8564f`. `origin/master` advanced to `328ac4c1d` (feature 146, 50 commits) during this run; the gate above was not run against it, so a rebase means re-running T062 – T071.
 
 **Verification**: T062 – T071 each green, in order, on the same tip; the tip is the one pushed.
 
