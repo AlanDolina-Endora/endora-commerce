@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { ERROR_CODES, savedListViewNameKey, type OrderSavedView } from '@endora-commerce/contracts';
 import type { PlatformLogger } from '@endora-commerce/platform/kernel';
@@ -91,10 +92,13 @@ export class OrderListViewService {
   }
 
   async update(id: string, actor: SavedViewActor, patch: SavedViewPatch): Promise<OrderSavedView> {
-    const view = await this.emFactory().transactional(async (tx) => {
+    const { view, changed } = await this.emFactory().transactional(async (tx) => {
       const found = await loadModifiable(tx, id, actor);
-      if (patch.name !== undefined) {
-        const name = patch.name.trim();
+      // A PATCH that changes nothing is answered as a read: no write and no
+      // trail line (security review SV-4). The gate above still applies.
+      let changed = false;
+      const name = patch.name?.trim();
+      if (name !== undefined && name !== found.name) {
         // Only a change of key can create a conflict; re-sending the stored
         // name, or changing its case only on a legacy duplicate, cannot.
         if (savedListViewNameKey(name) !== savedListViewNameKey(found.name)) {
@@ -102,18 +106,32 @@ export class OrderListViewService {
           await assertNameAvailable(tx, found.ownerAdminUserId, name, found.id);
         }
         found.name = name;
+        changed = true;
       }
-      if (patch.shared !== undefined) found.shared = patch.shared;
-      if (patch.filters !== undefined) found.filters = patch.filters;
-      if (patch.sort !== undefined) found.sort = patch.sort;
-      if (patch.visibleColumns !== undefined) found.visibleColumns = patch.visibleColumns;
+      if (patch.shared !== undefined && patch.shared !== found.shared) {
+        found.shared = patch.shared;
+        changed = true;
+      }
+      if (patch.filters !== undefined && !isDeepStrictEqual(patch.filters, found.filters)) {
+        found.filters = patch.filters;
+        changed = true;
+      }
+      if (patch.sort !== undefined && !isDeepStrictEqual(patch.sort, found.sort)) {
+        found.sort = patch.sort;
+        changed = true;
+      }
+      if (patch.visibleColumns !== undefined && !isDeepStrictEqual(patch.visibleColumns, found.visibleColumns)) {
+        found.visibleColumns = patch.visibleColumns;
+        changed = true;
+      }
+      if (!changed) return { view: found, changed };
       // command-coverage-ignore: per-admin saved list preset (filters/sort/columns
       // for the orders list) — personal UI configuration, not an order domain
       // mutation, so it is not an admin-audit target.
       await tx.flush();
-      return found;
+      return { view: found, changed };
     });
-    this.logForeignWrite('saved_view.updated', view, actor);
+    if (changed) this.logForeignWrite('saved_view.updated', view, actor);
     return toDto(view, actor);
   }
 

@@ -453,7 +453,7 @@ Na pasku narzędzi listy zamówień jest lista wyboru **Zapisane widoki**, któr
 | --- | --- |
 | `GET /api/v1/admin/orders/list-views` | `200` — własne widoki wywołującego oraz wszystkie widoki udostępnione, posortowane po nazwie |
 | `POST /api/v1/admin/orders/list-views` | `201` — utworzony widok |
-| `PATCH /api/v1/admin/orders/list-views/:id` | `200` — zmieniony widok; dowolne z `name`, `shared`, `filters`, `sort`, `visibleColumns`. Panel administracyjny go nie wywołuje |
+| `PATCH /api/v1/admin/orders/list-views/:id` | `200` — zmieniony widok; dowolne z `name`, `shared`, `filters`, `sort`, `visibleColumns`. Panel administracyjny go nie wywołuje. Treść, która niczego nie zmienia — pusta albo z wartościami takimi jak zapisane — niczego nie zapisuje ani nie loguje i zwraca bieżący widok |
 | `DELETE /api/v1/admin/orders/list-views/:id` | `200` — `{ data: { deleted: <id> } }` |
 
 - **Uprawnienie.** Wszystkie cztery trasy wymagają `orders:read`; nie ma osobnego kodu

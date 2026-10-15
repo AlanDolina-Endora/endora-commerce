@@ -371,7 +371,7 @@ and **Delete view**.
 | --- | --- |
 | `GET /api/v1/admin/quote-requests/list-views` | `200` — the caller's own views plus every shared view, ordered by name |
 | `POST /api/v1/admin/quote-requests/list-views` | `201` — the created view |
-| `PATCH /api/v1/admin/quote-requests/list-views/:id` | `200` — the modified view; any of `name`, `shared`, `filters`, `sort`, `visibleColumns`. The Admin UI does not call it |
+| `PATCH /api/v1/admin/quote-requests/list-views/:id` | `200` — the modified view; any of `name`, `shared`, `filters`, `sort`, `visibleColumns`. The Admin UI does not call it. A body that changes nothing — empty, or every value as stored — writes nothing, logs nothing and answers the current view |
 | `DELETE /api/v1/admin/quote-requests/list-views/:id` | `200` — `{ data: { deleted: <id> } }` |
 
 - **Gate.** All four routes are gated by `rfqs:handle` — the code that gates the

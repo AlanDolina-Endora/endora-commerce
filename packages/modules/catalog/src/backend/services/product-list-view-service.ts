@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { UniqueConstraintViolationException } from '@mikro-orm/core';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { ERROR_CODES, savedListViewNameKey, type SavedListView } from '@endora-commerce/contracts';
@@ -87,11 +88,14 @@ export class ProductListViewService {
   }
 
   async update(id: string, actor: ProductSavedViewActor, patch: ProductSavedViewPatch): Promise<SavedListView> {
-    const view = await refuseDuplicateKey(() =>
+    const { view, changed } = await refuseDuplicateKey(() =>
       this.emFactory().transactional(async (tx) => {
         const found = await loadModifiable(tx, id, actor);
-        if (patch.name !== undefined) {
-          const name = patch.name.trim();
+        // A PATCH that changes nothing is answered as a read: no write and no
+        // trail line (security review SV-4). The gate above still applies.
+        let changed = false;
+        const name = patch.name?.trim();
+        if (name !== undefined && name !== found.name) {
           // Only a change of key can create a conflict; re-sending the stored
           // name, or changing its case only, cannot.
           if (savedListViewNameKey(name) !== savedListViewNameKey(found.name)) {
@@ -99,16 +103,24 @@ export class ProductListViewService {
             await assertNameAvailable(tx, found.ownerAdminUserId, name, found.id);
           }
           found.name = name;
+          changed = true;
         }
-        if (patch.shared !== undefined) found.shared = patch.shared;
-        if (patch.filters !== undefined) found.filters = patch.filters;
+        if (patch.shared !== undefined && patch.shared !== found.shared) {
+          found.shared = patch.shared;
+          changed = true;
+        }
+        if (patch.filters !== undefined && !isDeepStrictEqual(patch.filters, found.filters)) {
+          found.filters = patch.filters;
+          changed = true;
+        }
+        if (!changed) return { view: found, changed };
         // command-coverage-ignore: per-admin saved list preset — personal UI
         // configuration, not a domain mutation.
         await tx.flush();
-        return found;
+        return { view: found, changed };
       }),
     );
-    this.logForeignWrite('saved_view.updated', view, actor);
+    if (changed) this.logForeignWrite('saved_view.updated', view, actor);
     return toDto(view, actor);
   }
 

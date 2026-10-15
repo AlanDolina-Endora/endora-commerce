@@ -118,7 +118,7 @@ entry is **— Select a view —**, and two buttons beside it: **Save view** and
 | --- | --- |
 | `GET /api/v1/admin/catalog/products/list-views` | `200` — the caller's own views plus every shared view, ordered by name |
 | `POST /api/v1/admin/catalog/products/list-views` | `201` — the created view |
-| `PATCH /api/v1/admin/catalog/products/list-views/:id` | `200` — the modified view; any of `name`, `shared`, `filters`. The Admin UI does not call it |
+| `PATCH /api/v1/admin/catalog/products/list-views/:id` | `200` — the modified view; any of `name`, `shared`, `filters`. The Admin UI does not call it. A body that changes nothing — empty, or every value as stored — writes nothing, logs nothing and answers the current view |
 | `DELETE /api/v1/admin/catalog/products/list-views/:id` | `200` — `{ data: { deleted: <id> } }` |
 
 - **Gate.** All four routes are gated by `catalog:read` — the code that gates

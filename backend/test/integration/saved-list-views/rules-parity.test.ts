@@ -384,7 +384,8 @@ describe('saved list views — one rule set for every list (spec 147)', () => {
       await svc.remove(own.id, colleague);
       expect(log.records).toHaveLength(0);
 
-      await svc.update(shared.id, platformAdmin, { shared: true });
+      // A real change: re-sending `shared: true` alone would be a no-op (S13).
+      await svc.update(shared.id, platformAdmin, { name: `S12 renamed ${run}` });
       await svc.remove(shared.id, platformAdmin);
       expect(log.records.map((r) => r.obj)).toEqual([
         {
@@ -402,6 +403,44 @@ describe('saved list views — one rule set for every list (spec 147)', () => {
           actorAdminUserId: platformAdmin.adminUserId,
         },
       ]);
+    });
+
+    it('S13 treats a PATCH that changes nothing as a read: no write, no log, still authorised', async () => {
+      const filters = { status: 'open', q: `s13 ${run}` };
+      const created = await svc.create(colleague, { ...input(`S13 ${run}`, true), filters, visibleColumns: ['number'] });
+      const updatedAt = async (): Promise<string> => {
+        const rows = (await h
+          .em()
+          .execute(`select updated_at::text as at from ${adapter.table} where id = ?`, [created.id])) as Array<{
+          at: string;
+        }>;
+        return rows[0]!.at;
+      };
+      const before = await updatedAt();
+      log.records.length = 0;
+
+      // An empty body, and every value re-sent as stored (the name padded,
+      // the filters' keys reordered) — answered with the current view.
+      expect(await svc.update(created.id, platformAdmin, {})).toEqual({
+        ...created,
+        ownedByCaller: false,
+        canModify: true,
+      });
+      const same = await svc.update(created.id, platformAdmin, {
+        name: `  S13 ${run} `,
+        shared: true,
+        filters: { q: `s13 ${run}`, status: 'open' },
+        sort: { field: 'placedAt', dir: 'desc' },
+        visibleColumns: ['number'],
+      });
+      expect(same.name).toBe(`S13 ${run}`);
+      expect(log.records).toHaveLength(0);
+      expect(await updatedAt()).toBe(before);
+
+      // Changing nothing does not skip the gate.
+      expect(statusOf(await rejection(svc.update(created.id, owner, {})))).toBe(403);
+      const priv = await svc.create(colleague, input(`S13 private ${run}`));
+      expect(statusOf(await rejection(svc.update(priv.id, owner, {})))).toBe(404);
     });
   });
 
