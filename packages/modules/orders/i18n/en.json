@@ -61,5 +61,11 @@
   "pendingEffects.state.queued": "queued, will run shortly",
   "pendingEffects.needsAttention": "A release has failed several times and needs attention. Check the server log for the last error.",
   "pendingEffects.module.inventory": "Inventory",
-  "pendingEffects.module.credit_limits": "Credit limits"
+  "pendingEffects.module.credit_limits": "Credit limits",
+  "adminSearch.group.label": "Orders",
+  "adminSearch.field.number": "Order number",
+  "adminSearch.field.organizationName": "Organization name",
+  "adminSearch.field.customer": "Customer name or e-mail",
+  "adminSearch.field.billingCompanyName": "Billing company name",
+  "adminSearch.field.billingTaxId": "Billing tax ID"
 }

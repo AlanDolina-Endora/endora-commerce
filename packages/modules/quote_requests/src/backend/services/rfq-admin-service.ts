@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { EntityManager } from '@mikro-orm/postgresql';
+import type { EntityManager, Knex } from '@mikro-orm/postgresql';
 import {
   ERROR_CODES,
   QUOTE_REQUEST_HISTORY_EVENT_WINDOW,
@@ -23,6 +23,11 @@ import type { EventBase, EventBus } from '@endora-commerce/platform/events';
 import { HttpError } from '@endora-commerce/platform/http';
 import { recordAuditFromContext } from '@endora-commerce/platform/commands';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
+import { orgConstraintFor } from '@endora-commerce/platform/tenancy';
+import type {
+  QuoteRequestAdminSearchQuery,
+  QuoteRequestAdminSearchRow,
+} from '../admin-search-provider.js';
 import { QuoteRequest, type QuoteRequestStatus } from '../entities/quote-request.entity.js';
 import { QuoteRequestItem } from '../entities/quote-request-item.entity.js';
 import { underRowLock } from './transition-lock.js';
@@ -230,6 +235,116 @@ export class RfqAdminService {
         customerDisplayName: customer ? customerDisplayName(customer) : null,
       };
     });
+  }
+
+  /**
+   * Global search over quote requests (`specs/150-admin-global-search/`, T032).
+   *
+   * The list's visibility, **in the statement** — not `listAll`'s shape, which
+   * loads every row and filters the organization scope in memory. Two layers,
+   * the same two the list applies:
+   *
+   *  1. the request's tenant scope (`orgConstraintFor()`), the reach
+   *     `adminTenantScopePort` derives for this admin;
+   *  2. for any role other than the platform administrator, the sales
+   *     representative rule (`canSeeOrganization`: assigned, or an organization
+   *     nobody is assigned to). It is asked of the **distinct organizations
+   *     that have a matching quote request** — a bounded set — and the page is
+   *     then read with `organization_id in (visible)`.
+   *
+   * Matching, ranking and the `limit + 1` page follow the other providers:
+   * literal `likeEscaped` patterns, exact → prefix → rest on the number, then
+   * most recent change, then id.
+   */
+  async searchForAdmin(
+    ctx: AdminContext,
+    query: QuoteRequestAdminSearchQuery,
+  ): Promise<{ rows: QuoteRequestAdminSearchRow[]; hasMore: boolean }> {
+    const fields = new Set(query.fields);
+    const contains = `%${query.likeEscaped}%`;
+    const prefix = `${query.likeEscaped}%`;
+    const [orgIds, customerIds] = await Promise.all([
+      fields.has('organizationName') ? this.deps.organizations.searchIdsByName(query.text) : [],
+      fields.has('customer') ? this.deps.customerAccounts.searchIdsByName(query.text) : [],
+    ]);
+    const matches: Array<(qb: Knex.QueryBuilder) => void> = [];
+    if (fields.has('number')) matches.push((qb) => qb.orWhereRaw('"business_id" ilike ?', [contains]));
+    if (orgIds.length > 0) matches.push((qb) => qb.orWhereIn('organization_id', orgIds));
+    if (customerIds.length > 0) matches.push((qb) => qb.orWhereIn('customer_account_id', customerIds));
+    if (fields.has('customerNote')) matches.push((qb) => qb.orWhereRaw('"header_note" ilike ?', [contains]));
+    if (query.isUuid) matches.push((qb) => qb.orWhereRaw('"id" = ?::uuid', [query.text]));
+    if (matches.length === 0) return { rows: [], hasMore: false };
+
+    const constraint = orgConstraintFor();
+    const tenantOrgIds =
+      constraint.kind === 'all'
+        ? null
+        : constraint.kind === 'set'
+          ? [...constraint.organizationIds]
+          : constraint.organizationId === null
+            ? []
+            : [constraint.organizationId];
+    if (tenantOrgIds !== null && tenantOrgIds.length === 0) return { rows: [], hasMore: false };
+
+    const em = this.deps.emFactory();
+    const knex = em.getKnex();
+    const matching = (extraOrgIds: readonly string[] | null) =>
+      knex('quote_requests').where((qb) => {
+        if (tenantOrgIds !== null) qb.whereIn('organization_id', tenantOrgIds);
+        if (extraOrgIds !== null) qb.whereIn('organization_id', [...extraOrgIds]);
+        qb.andWhere((or) => {
+          for (const match of matches) match(or);
+        });
+      });
+
+    let visibleOrgIds: string[] | null = null;
+    if (!ctx.isPlatformAdmin) {
+      const candidates = (
+        (await em.execute(matching(null).distinct('organization_id'))) as Array<{ organization_id: string }>
+      ).map((r) => r.organization_id);
+      const visible = await Promise.all(
+        candidates.map((id) => this.deps.salesRepAssignment.canSeeOrganization(ctx.adminUserId, id)),
+      );
+      visibleOrgIds = candidates.filter((_, i) => visible[i]);
+      if (visibleOrgIds.length === 0) return { rows: [], hasMore: false };
+    }
+
+    const builder = matching(visibleOrgIds).select('id');
+    const exact: string[] = [];
+    const bindings: unknown[] = [];
+    if (query.isUuid) {
+      exact.push('"id" = ?::uuid');
+      bindings.push(query.text);
+    }
+    if (fields.has('number')) {
+      exact.push('lower("business_id") = lower(?)');
+      bindings.push(query.text);
+    }
+    if (exact.length > 0) {
+      const starts = fields.has('number') ? ' when "business_id" ilike ? then 1' : '';
+      if (fields.has('number')) bindings.push(prefix);
+      builder.orderByRaw(`case when ${exact.join(' or ')} then 0${starts} else 2 end`, bindings as Knex.RawBinding[]);
+    }
+    builder.orderBy('updated_at', 'desc').orderBy('id', 'asc').limit(query.limit + 1);
+    const ids = ((await em.execute(builder)) as Array<{ id: string }>).map((r) => r.id);
+    const page = ids.slice(0, query.limit);
+    if (page.length === 0) return { rows: [], hasMore: false };
+
+    const found = await em.find(QuoteRequest, { id: { $in: page } });
+    const byId = new Map(found.map((r) => [r.id, r]));
+    const ranked = page.map((id) => byId.get(id)).filter((r): r is QuoteRequest => r !== undefined);
+    const orgs = await this.deps.organizations.findByIds([...new Set(ranked.map((r) => r.organizationId))]);
+    const orgName = new Map(orgs.map((o) => [o.id, o.name]));
+    return {
+      hasMore: ids.length > query.limit,
+      rows: ranked.map((r) => ({
+        id: r.id,
+        businessId: r.businessId,
+        organizationName: orgName.get(r.organizationId) ?? null,
+        submittedAt: (r.submittedAt ?? r.createdAt).toISOString(),
+        status: r.status,
+      })),
+    };
   }
 
   async getById(ctx: AdminContext, rfqId: string): Promise<RfqDto> {

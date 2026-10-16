@@ -117,6 +117,10 @@ export const manifest = defineModuleManifest({
   // is `nonDeactivatable` and does not reach back to this module, so the edge
   // closes no cycle and makes no activation control a dead switch.
   dependencies: [
+    // `_i18n` owns `adminI18nService`, through which global search's Quote
+    // Request provider labels a status in the admin's language
+    // (`specs/150-admin-global-search/`).
+    '_i18n',
     'admin_roles',
     'admin_users',
     'auth',
@@ -169,6 +173,17 @@ export const manifest = defineModuleManifest({
   // and nothing read back: with `webhooks` off or absent nothing is delivered
   // and nothing in this module changes, so there is no `whenAbsent` to state.
   nonBindingDependencies: [
+    {
+      moduleId: 'admin_search',
+      name: 'adminSearchProviderRegistry',
+      kind: 'contributes-to',
+      reason:
+        'A push, from this module’s contribution-only boot hook, of the Quote Request provider for ' +
+        'the admin global search, built over its own admin service. Nothing is read back: the ' +
+        'registry enumerates only providers whose module is effectively present, so an absent ' +
+        'contributor costs the host nothing and an absent host holds a table nobody walks. Not ' +
+        '`dependencies`: that would make global search a reason this module cannot be switched off.',
+    },
     {
       moduleId: 'webhooks',
       name: 'webhookEventRegistry',

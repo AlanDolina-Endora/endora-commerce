@@ -31,6 +31,7 @@ import type {
   PaymentMethodReadPort,
   QuoteRequestReadPort,
   PromptActionToolRegistryPort,
+  AdminSearchProviderRegistryPort,
   ResolvedTax,
   SalesChannelAttributionRegistryPort,
   SalesRepAssignmentPort,
@@ -97,6 +98,8 @@ import { startTransitionEffectSweep } from './workers/transition-effect-sweep-wo
 import { ORDER_CONFIRMATION_DEFAULT } from './email-templates/order-confirmation.default.js';
 import { ADMIN_CREATED_ORDER_DEFAULT, ORDER_COMMENT_DEFAULT, REORDER_CREATED_DEFAULT } from './email-templates/secondary-defaults.js';
 import { ordersPromptTools } from './prompt-tools.js';
+import { createOrderAdminSearchProvider } from './admin-search-provider.js';
+import { orgConstraintFor } from '@endora-commerce/platform/tenancy';
 import { effectiveState } from '@endora-commerce/platform/kernel';
 import type { OrderConfirmationRenderers } from './email-templates/order-confirmation.js';
 import {
@@ -1067,6 +1070,43 @@ export function registerModule(ctx: ModuleContext): void {
     registerOrderSalesChannelAttributions(
       lazyPort<SalesChannelAttributionRegistryPort>(ctx, 'salesChannelAttributionRegistry'),
       cradle().emFactory,
+    );
+  });
+
+  /**
+   * The Order record type for admin global search
+   * (`specs/150-admin-global-search/`, T029) — a **contribution** hook: it
+   * pushes an inert provider into `admin_search`'s ungated registry and does
+   * nothing else, so it carries no presence probe (D-67/D-68) and stays
+   * separate from every hook that does work. The registry drops the provider
+   * at enumeration while this module or `admin_search` is absent.
+   *
+   * The scope is the order list's own: the request's tenant context is derived
+   * by the same decision `ordersAdminScopeResolver` makes for the list (role
+   * code `sales_representative` → the assigned organizations), and the
+   * provider runs inside that request.
+   */
+  ctx.onBoot(() => {
+    lazyPort<AdminSearchProviderRegistryPort>(ctx, 'adminSearchProviderRegistry').register(
+      createOrderAdminSearchProvider({
+        search: async (query) => {
+          const service = cradle().orderListServiceAccessor();
+          if (service === null) throw new Error('orders: the order list service is not composed yet');
+          const constraint = orgConstraintFor();
+          const scope =
+            constraint.kind === 'all'
+              ? undefined
+              : {
+                  allowedOrganizationIds:
+                    constraint.kind === 'set'
+                      ? [...constraint.organizationIds]
+                      : constraint.organizationId === null
+                        ? []
+                        : [constraint.organizationId],
+                };
+          return service.searchForAdmin(query, scope);
+        },
+      }),
     );
   });
 
