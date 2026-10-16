@@ -36,7 +36,7 @@ Do tego flagi zachowania i pozycja liczbowa:
 | `isVariantAxis` | `false` | Wybór wariantu produktu konfigurowalnego |
 | `isRequired` | `false` | Walidacja zapisu produktu (tylko gdy atrybut należy do przypisanego zestawu atrybutów) |
 | `isPromoRule` | `false` | Wybór kryteriów w regułach promocji |
-| `isPriceRule` | `false` | Cenniki — czy atrybut może służyć jako reguła budowania ceny. Cenniki nie mają jeszcze reguł opartych na atrybutach, więc dziś flaga jest zapisywana i udostępniana, ale nic nie wylicza z niej cen. |
+| `isPriceRule` | `false` | Cenniki — czy atrybut może wybierać produkty w **macierzy cen** cennika (moduł `price_lists`). Kwalifikuje się tylko atrybut pojedynczego wyboru, wielokrotnego wyboru albo tak/nie, niezależny od języka i od kanału sprzedaży. Wyłączenie flagi dezaktywuje pozycje macierzy, które korzystają z atrybutu — przestają wpływać na ceny i znów obowiązują po jej ponownym włączeniu; nigdy nie powoduje to błędu wyceny. |
 | `isVisibleOnProductPage` | `false` | Zakładka „Parametry produktu” na stronie produktu |
 | `displayAsSlider` | `false` | Panel filtrów — wyświetla suwak zakresu; tylko dla `valueType ∈ ('number','price')` |
 | `filterPosition` | `0` | Klucz sortowania w panelu filtrów (rosnąco; remisy alfabetycznie według etykiety w danym języku) |

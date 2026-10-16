@@ -20,6 +20,11 @@ Owns:
   `(priceListId, productId, currencyCode, minQuantity)` carrying the
   per-currency unit price for a quantity bracket. Bracket gaps are
   allowed; the resolver falls through to the next-priority list.
+- **PriceListMatrixEntry** — a price inside a list for a *selection* of
+  products (one product, a category, an attribute value, a category and an
+  attribute value, or every product), optionally for one organization, over a
+  quantity window, at a fixed unit price or a percentage discount. See
+  *Price matrix* below.
 - **PriceDisplayModeOverride** — composite-PK row keyed
   `(scope, targetId)` overriding the resolver's display-mode chain at
   Organization / Category / Product scope. The chain root is two
@@ -113,10 +118,12 @@ Algorithm:
    - Level 5: any other matching list.
 4. Pick the winner per level via `tieBreak()` — most recent
    `modifiedAt` first, lexicographic `name` ASC second.
-5. Look up the bracket for `(productId, currencyCode, quantity)`. If
-   no bracket matches (gap), fall through to the next-priority list in
-   the same partition; the Default list is always at level 5 of the
-   Base partition and serves as the terminal floor.
+5. Look up the price the picked list charges for `(productId,
+   currencyCode, quantity)` — its own bracket, or one of its price matrix
+   entries (see *Price matrix*). If the list prices nothing (gap), fall
+   through to the next-priority list in the same partition; the Default
+   list is always at level 5 of the Base partition and serves as the
+   terminal floor.
 6. Resolve the display mode independently via
    `displayModeResolver(product, organization, customerKind)` along
    the chain Settings → Organization → Category → Product.
@@ -125,6 +132,118 @@ Determinism: same inputs → same outputs (no clock, no randomness, total
 tie-break order). The resolver is consumed by the storefront
 (`GET /api/v1/storefront/products/:id/resolved-price`) and by the cart
 + order-placement code paths.
+
+## Price matrix
+
+A price list can price **many products with one entry**. A *matrix entry*
+names:
+
+| Coordinate | Values |
+| --- | --- |
+| Applies to | one product · a category · an attribute value · a category **and** an attribute value · all products |
+| Organization | one organization, or none (*all buyers*) |
+| Quantity | from N units, optionally up to M units |
+| Price | a fixed unit price in one currency, or a discount of 0 < p ≤ 100 % (two decimals) in whatever currency the line is priced in |
+
+Example: *Fasteners × Acme Sp. z o.o. × from 500 units × 12 % off*. Acme's
+buyers ordering 600 fasteners pay 12 % less; 400 units, another organization or
+a product outside the category pay as before.
+
+The list's **application rule still decides which buyers the list serves** —
+an entry only prices a line on a list the buyer already qualifies for, on the
+request's sales channel. Entries only decide the price *within* that list.
+
+**Rules an entry must follow** (refused with a message otherwise):
+
+- A product entry needs an organization — without one it is the list's own
+  product price, which the *Products & brackets* tab already holds.
+- A fixed price needs a product, category or attribute selection.
+- Two entries with the same selection and organization may not overlap in
+  quantity in a currency they share (a percentage shares every currency) —
+  `409 PRICE_MATRIX_ENTRY_OVERLAP`, naming the conflicting entry.
+- A list holds at most **5 000** entries — `409 PRICE_MATRIX_ENTRY_LIMIT`.
+
+### Attribute selections and *Price list rules*
+
+Only attributes marked **Price list rules** on *Catalog → Attributes* may be
+used, and only those whose values are a single choice, multiple choices or
+yes/no, and that are neither per-language nor per-sales-channel
+(`400 PRICE_MATRIX_ATTRIBUTE_NOT_ELIGIBLE` with the reason otherwise). A
+single-choice value matches by equality, a multiple-choice attribute when the
+product's values include it, a yes/no attribute on *yes* or *no* — a product
+with no value matches neither. The product's own values are read, not a
+variant's and not a channel override.
+
+Clearing the flag on an attribute **deactivates** its entries: they stop
+pricing anything within the pricing refresh window, pricing never errors
+because of them, the *Price matrix* tab shows them as *Inactive* with the
+reason, and they resume when the flag is set again.
+
+### Which candidate wins
+
+On the picked list the candidates are its own product bracket and every entry
+that applies (selection, organization, quantity window, currency). The first by
+this order prices the line:
+
+| Order | Rule |
+| --- | --- |
+| 1 | Organization-specific before not organization-specific; the buyer's own organization before a nearer parent before a farther one |
+| 2 | Product, then category ∩ attribute, then attribute, then category, then all products (the list's own product bracket counts as a not organization-specific product candidate) |
+| 3 | The higher starting quantity |
+| 4 | The lower resulting price |
+| 5 | A fixed internal order (the entry id), so the outcome never depends on timing |
+
+Category selections use the product's own category assignments, not
+sub-categories — the meaning the application rule's category criterion has.
+
+### Percentages
+
+A percentage is taken off the **reference price**: the product's own bracket on
+the same list at that quantity, else its bracket on the system **Default**
+list. The result is rounded half-up to four decimals, the precision brackets are
+stored at, in integer arithmetic. A percentage with no reference prices
+nothing and the next candidate is tried; when nothing on the list prices the
+line, resolution continues with the next applicable list exactly as for a list
+without a bracket. A 100 % discount is a free line, deliberately.
+
+### Where matrix prices appear
+
+Every surface that uses the shared resolver — catalogue listing, product page,
+search, comparison, product links, cart, checkout, order intake, quote-request
+reference prices and the admin resolved-price check — returns the same matrix
+price for the same buyer, product, quantity and channel. The product page's
+quantity-tier ladder includes the entries' starting quantities, and the
+resolved-price check names the entry that produced a price (`matrixEntryId`).
+
+**Sorting and filtering the storefront catalogue by price follow matrix
+prices too.** A list carrying an entry the viewer meets at quantity 1 is
+ordered from a relation computed over its brackets and entries, by the order
+above, so the sequence matches the prices the cards show; a product priced only
+by an entry sorts by that price rather than with the unpriced products. Lists
+without such an entry keep the index-ordered path. Measured on 2 000 products
+(`backend/test/perf/price_lists/matrix-resolver.bench.ts`): a first page costs
+about 3 ms with no entry, about 40 ms with a category percentage and about 20 ms
+with an all-products percentage; a 50-product listing page costs one extra
+indexed lookup when no entry exists and at most three when entries do.
+
+**Known limitation:** a product feed pinned to a named price list reads that
+list's product brackets only; matrix entries do not reach a pinned feed. Feeds
+priced through the resolver (anonymous) do see entries that are not
+organization-specific.
+
+### Managing the matrix
+
+The **Price matrix** tab on a price list (`/price-lists/:id?tab=matrix`) lists
+entries with filters by selection and organization, paging, and add / edit /
+delete for `price_lists:write`; `price_lists:read` sees the tab read-only. Every
+change is audited as `price_list.matrix_entry_create|update|delete` on the
+list, with the entry before and after, and shows on the dashboard's *Recent
+activity* card. A sales representative sees entries that are not
+organization-specific or name one of their organizations, and cannot create one
+for another organization. Duplicating a list copies its matrix; deleting a list
+deletes it. Permanently removing a product, category or organization deletes
+the entries naming it; deleting one in the admin (recoverable) keeps them,
+marked *Deleted item*, for the operator to decide.
 
 ## Display modes
 
@@ -157,6 +276,11 @@ order-placement endpoints additionally refuse the line with
 | `GET /api/v1/admin/price-lists-engine/:id/products/:productId/brackets` | Read brackets for one product |
 | `PUT /api/v1/admin/price-lists-engine/:id/products/:productId/brackets` | Replace brackets (`{ bracketsByCurrency }`) |
 | `POST /api/v1/admin/price-lists-engine/:id/products/:productId/brackets/copy` | Identity copy of one currency to N others |
+| `GET /api/v1/admin/price-lists-engine/:id/matrix?page=&pageSize=&selectionKind=&organizationId=&productId=&categoryId=&lang=` | Price matrix entries, filtered and paged (`organizationId=none` for not organization-specific) — `price_lists:read` |
+| `GET /api/v1/admin/price-lists-engine/:id/matrix/:entryId` | One entry — `price_lists:read` |
+| `POST /api/v1/admin/price-lists-engine/:id/matrix` | Create an entry — `price_lists:write` |
+| `PATCH /api/v1/admin/price-lists-engine/:id/matrix/:entryId` | Change an entry; every rule runs on the merged result — `price_lists:write` |
+| `DELETE /api/v1/admin/price-lists-engine/:id/matrix/:entryId` | Delete an entry — `price_lists:write` |
 | `POST /api/v1/admin/price-lists-engine/internal/sweep` | Test-only worker tick |
 
 ### Adding many products at once
@@ -203,6 +327,7 @@ Refusals write nothing:
 | `GET /api/v1/admin/pricing/rule-targets/organizations?search=&limit=` | Paginated org options |
 | `GET /api/v1/admin/pricing/rule-targets/categories` | Full category tree |
 | `GET /api/v1/admin/pricing/rule-targets/currencies` | Currencies exposed by any sales channel |
+| `GET /api/v1/admin/pricing/rule-targets/attributes?lang=` | Attributes a price matrix entry may select on (flagged *Price list rules*, eligible type), with their option values |
 
 ### Display-mode admin
 
@@ -224,6 +349,8 @@ Refusals write nothing:
 | --- | --- |
 | `GET /api/v1/admin/products/:id/resolved-price?organizationId=&customerAccountId=&quantity=&currency=&variantId=&salesChannelId=` | The price a given buyer would pay for one product, as the admin quote-request screens show it. Gated by `price_lists:read` |
 
+- **`matrixEntryId`** in the answer names the price matrix entry that priced
+  the line, or `null` when a stored bracket did.
 - **`salesChannelId`** names the sales channel to resolve on; absent, the system
   default channel. An unknown or malformed id is refused with
   `400 VALIDATION_FAILED`, and the message does not repeat the id.
@@ -318,7 +445,8 @@ one currency.
 ## Admin integration
 
 - `/price-lists` (engine list) and `/price-lists/:id` (editor with
-  Details / Products & brackets / Application rule tabs).
+  Details / Products & brackets / Application rule / Price matrix tabs;
+  `?tab=matrix` opens the price matrix).
 - `/price-lists/display-modes` — overrides browser plus the two
   `pricing.*` settings keys.
 - **Products & brackets** lists the roster by name and SKU for a list of
