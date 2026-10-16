@@ -1,6 +1,7 @@
 import type {} from '@fastify/cookie';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
+  ERROR_CODES,
   mfaActivateRequestSchema,
   mfaDisableRequestSchema,
   mfaRegenerateRequestSchema,
@@ -104,7 +105,7 @@ export async function registerMfaSelfServiceRoutes(
     async (request) => {
       const body = mfaActivateRequestSchema.parse(request.body);
       const subject = subjectOf(request);
-      const res = await enrolmentService.activate(subject, body.code);
+      const res = await asSignedInRefusal(enrolmentService.activate(subject, body.code));
       await auditLogService.record({
         action: 'mfa.enabled',
         objectType: auditObjectType,
@@ -145,7 +146,7 @@ export async function registerMfaSelfServiceRoutes(
       const body = mfaRegenerateRequestSchema.parse(request.body);
       const subject = subjectOf(request);
       const verified = await opts.verifySecondFactor(subject, body.code, originOf(request));
-      if (!verified.ok) throw new HttpError(401, 'MFA_INVALID_CODE', 'The code is invalid or expired.');
+      if (!verified.ok) throw wrongCode();
       const res = await enrolmentService.regenerateRecoveryCodes(subject);
       await auditLogService.record({
         action: 'mfa.recovery_codes_regenerated',
@@ -206,6 +207,40 @@ function originOf(request: FastifyRequest): AdminAuthenticationOrigin {
   };
 }
 
+/**
+ * Issue #244 — a wrong confirmation on these routes refuses the confirmation,
+ * not the session, so it answers `403` with a typed code rather than `401`.
+ *
+ * Every route here runs behind the account's own session guard: the caller is
+ * signed in, and a `401` says otherwise. The Admin UI acts on that — any `401`
+ * is an expired session and signs the administrator out — so a typo while
+ * confirming 2FA setup, disabling it or regenerating recovery codes ended the
+ * session instead of showing the error. #215 answers `403
+ * CURRENT_PASSWORD_INVALID` for the same situation on the profile screen.
+ *
+ * Only here: the same codes answer `401` before a session exists — the login
+ * challenge and enrolment during sign-in (`routes.public.ts`) — where it is
+ * the right answer.
+ */
+function wrongCode(): HttpError {
+  return new HttpError(403, 'MFA_INVALID_CODE', 'The code is invalid or expired.');
+}
+
+/**
+ * `MfaEnrolmentService.activate` refuses a wrong code with the `401` the
+ * sign-in enrolment answers; on a signed-in route it is {@link wrongCode}.
+ */
+async function asSignedInRefusal<T>(work: Promise<T>): Promise<T> {
+  try {
+    return await work;
+  } catch (error) {
+    if (error instanceof HttpError && error.statusCode === 401 && error.code === 'MFA_INVALID_CODE') {
+      throw wrongCode();
+    }
+    throw error;
+  }
+}
+
 /** Re-auth on self-disable: a current TOTP/recovery code or the password. */
 async function reauthenticate(
   opts: MfaSelfServiceOptions,
@@ -216,7 +251,7 @@ async function reauthenticate(
   if (body.code) {
     const verified = await opts.verifySecondFactor(subject, body.code, context);
     if (verified.ok) return;
-    throw new HttpError(401, 'MFA_INVALID_CODE', 'The code is invalid or expired.');
+    throw wrongCode();
   }
   if (body.password) {
     const ok = await opts.verifyAccountPassword(
@@ -226,7 +261,10 @@ async function reauthenticate(
       context,
     );
     if (ok) return;
-    throw new HttpError(401, 'INVALID_CREDENTIALS', 'The password is incorrect.');
+    // `CURRENT_PASSWORD_INVALID`, not `INVALID_CREDENTIALS`: the latter's
+    // sentence is the sign-in form's "invalid email or password", and nobody
+    // typed an email here.
+    throw new HttpError(403, ERROR_CODES.CURRENT_PASSWORD_INVALID, 'The current password is incorrect.');
   }
   throw new HttpError(400, 'MFA_REAUTH_REQUIRED', 'A current code is required to disable 2FA.');
 }
