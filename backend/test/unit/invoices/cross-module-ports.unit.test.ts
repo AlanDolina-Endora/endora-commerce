@@ -166,6 +166,10 @@ function readPort(
       calls.push(`salesChannelIdsForCustomer:${customerAccountId}`);
       return order ? [order.salesChannelId] : [];
     },
+    findStatusDefinition: async (code) => {
+      calls.push(`findStatusDefinition:${code}`);
+      return null;
+    },
   };
   return { port, calls: () => calls };
 }

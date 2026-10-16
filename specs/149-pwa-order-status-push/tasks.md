@@ -35,27 +35,27 @@ run serially. Phases are marked **[backend]**, **[admin UI]**, **[storefront]**,
 
 ## Phase 1 — Contracts and owner read models [backend]
 
-- [ ] T001 RED Contract tests for the pwa additions: `PWA_SETTING_CODES` has
+- [X] T001 RED Contract tests for the pwa additions: `PWA_SETTING_CODES` has
   `PUSH_ORDER_STATUS_ENABLED`/`PUSH_QUOTE_STATUS_ENABLED`; `PwaPublicConfigSchema` requires
   `orderStatusPushEnabled`/`quoteStatusPushEnabled`; `PwaAdminConfigSchema` likewise;
   `UpdatePwaConfigRequestSchema` accepts both optionally; `PushPreferencesSchema`;
   `UpdatePushPreferencesRequestSchema` rejects `{}`, unknown keys and non-booleans — 
   `packages/contracts/src/pwa.test.ts` (new)
-- [ ] T002 GREEN Add the above to `packages/contracts/src/pwa.ts` (data-model §2, §4, §5)
-- [ ] T003 [P] Add `OrderStatusDefinitionRecord` and `OrderReadPort.findStatusDefinition(code)` to
+- [X] T002 GREEN Add the above to `packages/contracts/src/pwa.ts` (data-model §2, §4, §5)
+- [X] T003 [P] Add `OrderStatusDefinitionRecord` and `OrderReadPort.findStatusDefinition(code)` to
   `packages/contracts/src/orders.ts`; add `salesChannelId: string | null` to `QuoteRequestRecord` in
   `packages/contracts/src/quote-requests.ts` (data-model §3)
-- [ ] T004 RED `findStatusDefinition` answers `{ code, name, defaultName }` for a seeded status and
+- [X] T004 RED `findStatusDefinition` answers `{ code, name, defaultName }` for a seeded status and
   `null` for an unknown code; `QuoteRequestReadService.findById` carries `salesChannelId` (a uuid,
   and `null` for a channel-less request) — `backend/test/integration/pwa/owner-read-models.test.ts`
   (new; it exists for this feature's consumer, so it lives with the consumer)
-- [ ] T005 GREEN Implement `findStatusDefinition` in
+- [X] T005 GREEN Implement `findStatusDefinition` in
   `packages/modules/orders/src/backend/services/order-read-port.ts`; map `salesChannelId` in
   `toQuoteRequestRecord` (`packages/modules/quote_requests/src/backend/services/quote-request-read-port.ts`)
-- [ ] T006 Update every full-interface test double that `pnpm -r run typecheck` now reports
+- [X] T006 Update every full-interface test double that `pnpm -r run typecheck` now reports
   (known: `backend/test/unit/shipments/shipment-email-outcome.test.ts`,
   `backend/test/unit/invoices/cross-module-ports.unit.test.ts`; any `QuoteRequestRecord` literal)
-- [ ] T007 [P] Changesets: `@endora-commerce/contracts` (minor: additive schemas/port member),
+- [X] T007 [P] Changesets: `@endora-commerce/contracts` (minor: additive schemas/port member),
   `@endora-commerce/mod-orders`, `@endora-commerce/mod-quote-requests` — `.changeset/149-*.md`
 
 **Verification**: `pnpm --filter @endora-commerce/contracts run build && pnpm --filter @endora-commerce/contracts exec vitest run src/pwa.test.ts`;

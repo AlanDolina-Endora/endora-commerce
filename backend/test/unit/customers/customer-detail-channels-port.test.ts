@@ -75,6 +75,8 @@ function readPort(
     findIdsByBusinessIdLike:
       unreachable('findIdsByBusinessIdLike') as unknown as OrderReadPort['findIdsByBusinessIdLike'],
     salesChannelIdsForCustomer,
+    findStatusDefinition:
+      unreachable('findStatusDefinition') as unknown as OrderReadPort['findStatusDefinition'],
   };
 }
 

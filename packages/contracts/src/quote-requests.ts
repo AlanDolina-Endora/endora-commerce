@@ -662,6 +662,11 @@ export interface QuoteRequestRecord {
   businessId: string;
   organizationId: string;
   customerAccountId: string;
+  /**
+   * The channel the request was raised on; `null` when it was created outside
+   * a request scope (`specs/149-pwa-order-status-push/`).
+   */
+  salesChannelId: string | null;
   createdByAdminUserId: string | null;
   assignedAdminUserId: string | null;
   status: QuoteRequestStatus;

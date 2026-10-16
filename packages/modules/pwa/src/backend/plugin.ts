@@ -33,7 +33,7 @@ import {
   type AdminAuditContext,
   type SettingsWritePort,
 } from './routes.admin.js';
-import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
+import { effectiveState, type RequireAdminFactory } from '@endora-commerce/platform/kernel';
 
 const BoolSchema = z.boolean();
 
@@ -141,7 +141,9 @@ export interface PwaModuleResult {
 }
 
 export function pwaModule(options: PwaModuleOptions): PwaModuleResult {
-  const configResolver = new PwaConfigResolver(options.settings, options.emFactory);
+  const configResolver = new PwaConfigResolver(options.settings, options.emFactory, () =>
+    effectiveState.isPresent('quote_requests'),
+  );
   const iconService = new PwaIconService(options.emFactory, options.assetUpload);
   // Feature 087 Group B / D-187 — the subscription registry stamps the
   // organisation an owned device belongs to, derived from the owning account

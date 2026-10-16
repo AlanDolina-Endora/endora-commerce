@@ -20,6 +20,8 @@ const DEFAULT_CONFIG: PwaPublicConfig = {
   cachingEnabled: false,
   pushEnabled: false,
   vapidPublicKey: '',
+  orderStatusPushEnabled: false,
+  quoteStatusPushEnabled: false,
 };
 
 export async function fetchPwaConfig(channelCode?: string): Promise<PwaPublicConfig> {
