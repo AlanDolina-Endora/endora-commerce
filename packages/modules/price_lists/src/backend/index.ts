@@ -9,6 +9,7 @@ import type {
   OrganizationDetailsPort,
   PriceListAdminPort,
   PriceListReadPort,
+  ProductDisplayModePort,
   DictionaryReferenceRegistryPort,
   SalesRepAssignmentPort,
 } from '@endora-commerce/contracts';
@@ -218,6 +219,21 @@ export function registerModule(ctx: ModuleContext): void {
   // passes the owner of a quote request it has already authorised; the
   // sales-representative scope belongs to the HTTP probe, which serves
   // arbitrary admin input (threat model T8).
+  // Issue #236 — the display mode on its own, for a caller that has no list
+  // price to read it from: `carts` refusing a product sold on request only
+  // that no price list holds. The chain is `resolveDisplayMode`'s, the same the
+  // storefront's display-mode route walks.
+  ctx.di.providePort<ProductDisplayModePort>(
+    'productDisplayModePort',
+    ctx
+      .asFunction(
+        ({ priceLists }: PriceListsCradle): ProductDisplayModePort => ({
+          resolveDisplayMode: (input) => priceLists.handle.priceListService.resolveDisplayMode(input),
+        }),
+      )
+      .singleton(),
+  );
+
   ctx.di.providePort<BuyerLinePricePort>(
     'buyerLinePricePort',
     ctx

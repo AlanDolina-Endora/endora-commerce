@@ -17,7 +17,7 @@ import {
   DefaultPriceListMigrator,
   DEFAULT_PRICE_LIST_ID,
 } from '../../../../packages/modules/price_lists/src/backend/services/default-price-list-migration.js';
-import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
+import { SEED_PRODUCT_101_ID, SEED_PRODUCT_103_ID } from '../../helpers/seed-catalog.js';
 
 /**
  * Issue #86, first slice — the two refusals `CartService.addItem` raised as
@@ -52,6 +52,74 @@ describe('cart line refusals carry their own code and sentence (issue #86)', () 
 
   afterAll(async () => {
     await teardownBackendServer(h);
+  });
+
+  /**
+   * Issue #236 — the refusal does not depend on where the price comes from.
+   *
+   * The cart read the display mode off the resolved list price only, behind
+   * `resolved && resolved.displayMode === 'none'`. A product no price list
+   * holds resolves nothing — the line is priced from the catalogue attribute —
+   * so the guard was skipped and a product sold on request only went into the
+   * cart, measured as `200` (#226). The display mode is the product's, through
+   * the chain `price_lists` resolves with or without a price.
+   */
+  describe('CART_PRODUCT_QUOTE_ONLY — a product no price list holds (issue #236)', () => {
+    beforeAll(async () => {
+      const em = h.em();
+      // No list for this product: the seed catalogue is priced from the
+      // catalogue attribute in a fresh test database. Asserted, not assumed —
+      // a list price would make this the case above.
+      expect(
+        await em.findOne(PriceListPriceBracket, { productId: SEED_PRODUCT_103_ID }),
+        'the product must have no list price for this case to mean anything',
+      ).toBeNull();
+      em.create(PriceDisplayModeOverride, {
+        scope: 'product',
+        targetId: SEED_PRODUCT_103_ID,
+        mode: 'none',
+      });
+      await em.flush();
+    });
+
+    afterAll(async () => {
+      await h.em().nativeDelete(PriceDisplayModeOverride, {
+        scope: 'product',
+        targetId: SEED_PRODUCT_103_ID,
+      });
+    });
+
+    const add = (productId: string) =>
+      h.app.inject({
+        method: 'POST',
+        url: '/api/v1/cart/items',
+        payload: { productId, quantity: 1 },
+        cookies: { b2b_cart_anon: `anon-i236-${randomUUID()}` },
+        headers: { 'accept-language': 'en' },
+      });
+
+    it('refuses it with CART_PRODUCT_QUOTE_ONLY, as it refuses a listed one', async () => {
+      const res = await add(SEED_PRODUCT_103_ID);
+      expect(res.statusCode, res.body).toBe(400);
+      const error = (res.json() as ErrorBody).error;
+      expect(error.code).toBe(ERROR_CODES.CART_PRODUCT_QUOTE_ONLY);
+      expect(error.details).toEqual({ productId: SEED_PRODUCT_103_ID });
+    });
+
+    it('still adds an unlisted product that is not sold on request only', async () => {
+      await h.em().nativeDelete(PriceDisplayModeOverride, {
+        scope: 'product',
+        targetId: SEED_PRODUCT_103_ID,
+      });
+      try {
+        const res = await add(SEED_PRODUCT_103_ID);
+        expect(res.statusCode, res.body).toBe(200);
+      } finally {
+        const em = h.em();
+        em.create(PriceDisplayModeOverride, { scope: 'product', targetId: SEED_PRODUCT_103_ID, mode: 'none' });
+        await em.flush();
+      }
+    });
   });
 
   describe('CART_PRODUCT_QUOTE_ONLY — a product whose price is withheld', () => {
