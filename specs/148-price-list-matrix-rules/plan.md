@@ -115,7 +115,7 @@ packages/modules/price_lists/
 │       ├── matrix-price-resolver.test.ts    # NEW
 │       ├── matrix-decimal.ts / .test.ts     # NEW integer decimal helpers
 │       ├── matrix-entry-rules.ts / .test.ts # NEW pure validation: shape, overlap, eligibility
-│       ├── price-matrix-service.ts          # NEW admin CRUD (uses #runAudited via PriceListService)
+│       ├── price-matrix-service.ts          # NEW admin reads + write preparation (writes run in PriceListService)
 │       ├── price-bracket-resolver.ts        # PriceBracketRow.matrixEntryId?
 │       ├── pricing-service.interface.ts     # PricingLineResult.matrixEntryId?
 │       ├── pricing-service.ts               # both walks call resolveListCandidate; tier ladder; matrix-aware sort
@@ -123,7 +123,7 @@ packages/modules/price_lists/
 │       ├── price-list-service.ts            # duplicate copies entries; TargetReads type
 │       └── buyer-line-price-service.ts      # probe exposes matrixEntryId
 ├── src/migrations/<stamp>_price_lists_price_matrix_entries.ts   # NEW via migration:new
-├── src/migrations/index.ts                  # registered by composer:generate
+├── src/migrations/index.ts                  # barrel, edited by hand (composer:generate writes the backend registry)
 ├── src/admin/
 │   ├── pages/PriceListDetailPage.tsx        # + 'matrix' tab
 │   ├── components/PriceMatrixTab.tsx        # NEW

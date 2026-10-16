@@ -7,6 +7,10 @@ existing codes: **`price_lists:read`** (`readGate`) and **`price_lists:write`** 
 permission code. Bodies are validated by the Zod schemas of `packages/contracts/src/price-lists.ts`
 (data-model.md §3). Responses use the platform envelope `{ data }` / `{ error: { code, message, details? } }`.
 
+Implementation note: the three writes are `PriceListService.createMatrixEntry`,
+`patchMatrixEntry` and `removeMatrixEntry`, inside that service's audited runner;
+`PriceMatrixService` holds the reads and prepares each write on the run's `EntityManager`.
+
 Every route under `/price-lists-engine/:id/matrix` first loads the parent list and applies the
 existing list visibility rule (`ruleVisibleForScope(extractRuleOrgTargets(list.applicationRule))`);
 an invisible or missing list answers 404 `PRICE_LIST_NOT_FOUND`, exactly as
@@ -25,6 +29,7 @@ Query (`priceMatrixListQuerySchema`):
 | `selectionKind` | `product \| category_attribute \| attribute \| category \| all` | — | filter |
 | `organizationId` | uuid \| `none` | — | `none` = not organization-specific only |
 | `productId` / `categoryId` | uuid | — | filter |
+| `lang` | `en`, `pl`, `pl-PL`, … | — | the admin's language; only picks display labels |
 
 200:
 
@@ -83,8 +88,11 @@ The system Default list accepts entries; its "no application rule" invariant is 
 `PATCH /api/v1/admin/price-lists-engine/:id/matrix/:entryId` — `writeGate`
 
 Body: `priceMatrixEntryPatchSchema` — every field of the input optional, at least one present
-(`patch_body_empty`). The service merges onto the stored entry and re-runs **all** create
-validations on the merged result (an entry can be moved between selection kinds). Action
+(`patch_body_empty`). The service merges onto the stored entry and re-runs the create
+validations on the merged result (an entry can be moved between selection kinds): the shape,
+overlap and limit always; the existence of a product, category or organization, the currency and
+the attribute's eligibility when that coordinate changed — so an entry naming a soft-deleted target
+can still have its window or price corrected, which is what the *deleted item* marker invites. Action
 `price_list.matrix_entry_update`, `before`/`after` DTOs. A patch that changes nothing commits with
 `skipAudit: true` and returns 200 with the unchanged entry.
 
@@ -114,9 +122,10 @@ Reads `catalogAttributeReadPort.listByFlag('isPriceRule')` and returns only elig
 ] } }
 ```
 
-Labels resolve in the request's admin language with the attribute's `labelDefault` fallback (the
-same resolution `catalog`'s own serializer uses). Boolean option labels come from this module's
-bundle (`priceMatrix.attribute.boolean.true/false`).
+Labels resolve in the language the admin passes as `?lang=` (exact tag, then the same language
+with another region), with the attribute's `labelDefault` fallback. Boolean options carry their
+value (`true` / `false`) as the label; the admin renders this module's
+`priceMatrix.attribute.boolean.true/false` instead, so no backend string is translated.
 
 ## 7. Duplicate (existing route, behaviour extended)
 
