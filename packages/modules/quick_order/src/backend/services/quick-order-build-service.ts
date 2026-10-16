@@ -178,6 +178,7 @@ function rejectionsOf(
       reason: 'below_minimum',
       kind: outcome.kind,
       minimum: outcome.minimum,
+      ...(outcome.packagingUnitName !== undefined ? { packagingUnitName: outcome.packagingUnitName } : {}),
     });
   }
   return rejected;
