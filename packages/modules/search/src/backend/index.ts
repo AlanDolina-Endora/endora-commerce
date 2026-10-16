@@ -196,7 +196,7 @@ export function registerModule(ctx: ModuleContext): void {
   );
 
   /**
-   * The seven index-maintenance subscriptions (issue #107).
+   * The index-maintenance subscriptions (issue #107).
    *
    * They were seven bare `eventBus.on` calls inside `SearchEventSubscriber`, so
    * the Meilisearch documents kept being rewritten on every catalog write with
@@ -226,6 +226,14 @@ export function registerModule(ctx: ModuleContext): void {
   ctx.subscribe('product.deleted.v1', async (payload) => {
     const { productId } = payload as { productId: string };
     await subscriber().onProductRemoved(productId, 'product.deleted.v1');
+  });
+  // Issue #240 — a product's channels decide which indexes hold it, and the
+  // binding of a new product to the default channel happens after
+  // `product.created.v1`, so this is what indexes a created product.
+  ctx.subscribe('sales_channels.membership_changed', async (payload) => {
+    await subscriber().onSalesChannelMembershipChanged(
+      payload as { channelId: string; entityType: string; entityId: string; op: 'add' | 'remove' },
+    );
   });
   ctx.subscribe('category.updated.v1', async (payload) => {
     const { categoryId } = payload as { categoryId: string };

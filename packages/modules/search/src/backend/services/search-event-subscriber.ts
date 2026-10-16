@@ -27,6 +27,9 @@ import {
  *   - `product.created.v1`  → upsertProduct
  *   - `product.updated.v1`  → upsertProduct
  *   - `product.archived.v1` → deleteProduct
+ *   - `sales_channels.membership_changed` (a product's) → upsertProduct
+ *      (issue #240: a created product is bound to the default channel after
+ *      `product.created.v1`, so that event alone met it with no channel)
  *   - `product.deleted.v1`  → deleteProduct
  *   - `attribute.updated.v1` → refreshAttributeSettings
  *   - `category.updated.v1` → reindexCategorySubtree (feature 068: the
@@ -114,6 +117,35 @@ export class SearchEventSubscriber {
       await this.deps.indexer.upsertProduct(this.deps.emFactory(), productId);
     } catch (err) {
       this.log(err, eventName);
+    }
+  }
+
+  /**
+   * `sales_channels.membership_changed` — issue #240.
+   *
+   * Which indexes hold a product is decided by its channel memberships, so a
+   * change to them is a reason to reindex. It is also the event that indexes a
+   * product at all on creation: `catalog` binds a new product to the default
+   * channel only after its create Command has dispatched `product.created.v1`,
+   * outside that Command, so the created event meets a product with no channel
+   * and the binding is the first moment one exists.
+   *
+   * `upsertProduct` reconciles every channel index against the memberships it
+   * reads — adding where the product is a member, removing where it is not — so
+   * an `add` and a `remove` take the same call. Every other member type
+   * (CMS pages, blog posts, …) is not in this index and is ignored.
+   */
+  async onSalesChannelMembershipChanged(payload: {
+    channelId: string;
+    entityType: string;
+    entityId: string;
+    op: 'add' | 'remove';
+  }): Promise<void> {
+    if (payload.entityType !== 'product') return;
+    try {
+      await this.deps.indexer.upsertProduct(this.deps.emFactory(), payload.entityId);
+    } catch (err) {
+      this.log(err, 'sales_channels.membership_changed');
     }
   }
 
