@@ -17,6 +17,7 @@ import {
   sendOrderTransactionalEmail,
 } from './transactional-email-helper.js';
 import { rethrowIfModuleDisabled, SalesChannel } from '@endora-commerce/platform/kernel';
+import { assertBatchMeetsMinimums, assertWithinAdminOrderItemBound } from './request-minimums.js';
 
 /** A new address typed on the create form (vs. an existing org address id). */
 export interface AdminCreateOrderInlineAddress {
@@ -66,7 +67,17 @@ export class OrderCreationAdminService {
     private readonly getTransactionalEmailSender?: () => TransactionalEmailSender | undefined,
   ) {}
 
-  async create(adminUserId: string | null, input: AdminCreateOrderInput): Promise<Order> {
+  /**
+   * `options.language` names a product refused for its minimum (the request's
+   * `Accept-Language`); absent, the product record's own fallback chain.
+   */
+  async create(
+    adminUserId: string | null,
+    input: AdminCreateOrderInput,
+    options: { language?: string | undefined } = {},
+  ): Promise<Order> {
+    // Feature 148 (FR-038) — first, before anything is read or written.
+    assertWithinAdminOrderItemBound(input.items.length);
     // command-coverage-ignore: the order write is delegated to
     // OrderService.placeOrder (audited there); the only local mutation here is
     // the optional append-only OrderComment, not audited domain-state.
@@ -174,22 +185,30 @@ export class OrderCreationAdminService {
       // via CartService). Clearing first matches the platform's single-active-cart
       // model (same approach as RfqService.convertToOrder). The assortment is
       // judged on the order's channel, not on the admin request's.
+      //
+      // Feature 148 (FR-009, R8): one batch, so a product's minimum is judged
+      // on its total across the request's lines (D1). A line the customer may
+      // not see, or that the channel does not sell, is thrown before anything
+      // is written, with the unknown id's answer (FR-035); any line below a
+      // minimum refuses the whole request. Placement checks the basket again
+      // (FR-037) — this is the earlier, request-shaped answer, not the only one.
+      //
       // The basket is the one of the order's channel, the channel the operator
       // named (`specs/154-sales-channel-access/`, contracts/basket-attribution.md
       // §1), so placement below reads the basket this seeds.
       const basketCtx = { ...customerCtx, salesChannelId: input.salesChannelId };
       await this.cartService.clearForCustomer(basketCtx);
-      for (const it of input.items) {
-        await this.cartService.addItem(
-          { customer: basketCtx },
-          {
-            productId: it.productId,
-            ...(it.variantId ? { variantId: it.variantId } : {}),
-            quantity: it.quantity,
-            salesChannelId: input.salesChannelId,
-          },
-        );
-      }
+      const lines = input.items.map((it) => ({
+        productId: it.productId,
+        ...(it.variantId ? { variantId: it.variantId } : {}),
+        quantity: it.quantity,
+        salesChannelId: input.salesChannelId,
+      }));
+      const batch = await this.cartService.addItems({ customer: basketCtx }, lines, {
+        onLineError: 'throw',
+        ...(options.language ? { language: options.language } : {}),
+      });
+      assertBatchMeetsMinimums(lines, batch.outcomes);
 
       order = await this.orderService.placeOrder(
         { customerAccountId: input.customerAccountId, organizationId, impersonatorAdminUserId: adminUserId },
