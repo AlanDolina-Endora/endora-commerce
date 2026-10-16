@@ -38,6 +38,7 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | `organizations` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `sales_channels` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `settings` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `quote_requests` | no | degrades-without `quoteRequestReadPort` — Customers stop receiving push notifications about their quote requests, and the quote switch and choice are not offered; order notifications keep working |
 
 ## Permissions
 
@@ -63,6 +64,8 @@ _None._
 | `pwa.fcm_service_account` | FCM service account (JSON) | `secret` |
 | `pwa.icon_asset_id` | Icon source asset id | `string` |
 | `pwa.push_enabled` | Push notifications enabled | `boolean` |
+| `pwa.push_order_status_enabled` | Push on order status changes | `boolean` |
+| `pwa.push_quote_status_enabled` | Push on quote status changes | `boolean` |
 | `pwa.short_name` | Short name | `string` |
 | `pwa.theme_color` | Theme color | `string` |
 | `pwa.vapid_private_key` | VAPID private key | `secret` |

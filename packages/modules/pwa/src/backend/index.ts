@@ -2,11 +2,13 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import type { FastifyRequest } from 'fastify';
 import type { Redis } from 'ioredis';
 import type {
+  AdminI18nTranslatePort,
   AssetsLibraryPort,
   CustomerAccountReadPort,
   CustomerGroupReadPort,
   OrderReadPort,
   OrganizationDetailsPort,
+  QuoteRequestReadPort,
 } from '@endora-commerce/contracts';
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
 import { lazyPort } from '@endora-commerce/platform/kernel';
@@ -19,9 +21,9 @@ import {
   createAssetUrlResolver,
   createChannelCodeResolver,
   createDefaultChannelIdResolver,
-  createOrderPushTargetResolver,
   type PwaCrossModulePorts,
 } from './services/cross-module-context.js';
+import { QUOTE_STATUS_EVENTS } from './services/status-push-copy.js';
 import { PushMessageDelivery } from './entities/push-message-delivery.entity.js';
 import { PushMessage } from './entities/push-message.entity.js';
 import { PushSubscription } from './entities/push-subscription.entity.js';
@@ -58,13 +60,16 @@ import { PwaIconRendition } from './entities/pwa-icon-rendition.entity.js';
  *  - `resolveCustomerAccountId` is a read of `request.actor`, whose
  *    augmentation became the platform's at T118b; see `request-actor.ts`.
  *  - `resolveOrderTarget` is `orders`' published `orderReadPort` plus a
- *    sentence, and `orders` joins `dependencies` for it.
+ *    sentence, and `orders` joins `dependencies` for it. The sentence is
+ *    `services/status-push-composer.ts`'s since
+ *    `specs/149-pwa-order-status-push/`.
  *  - `resolveChannelIdByCode` was **called by nothing** and is deleted rather
  *    than drained; see the note in `routes.storefront.ts`.
  *
- * What is left of the coupling is {@link PwaCrossModulePorts} — three published
+ * What is left of the coupling is {@link PwaCrossModulePorts} — two published
  * ports and no closure, resolved here and mapped in
- * `services/cross-module-context.ts`.
+ * `services/cross-module-context.ts` — plus the ports the status pushes read,
+ * passed as `statusPush`.
  *
  * `vapidSubject` comes from the environment, read here rather than threaded
  * from a root — a packaged module reads its own configuration.
@@ -110,14 +115,13 @@ export function registerModule(ctx: ModuleContext): void {
   ctx.di.register({
     pwa: ctx
       .asFunction(({ emFactory, redis, pwaRunWorkers }: PwaCradle): PwaModuleResult => {
-        // T118c — the three ports that replace `PwaBridge`. Each is a `lazyPort`
+        // T118c — the two ports that replace `PwaBridge`. Each is a `lazyPort`
         // proxy, so it resolves per call and nothing here captures a
         // registration: a switched-off owner refuses at the call site rather
         // than through a gate frozen when this singleton was built.
         const ports: PwaCrossModulePorts = {
           assets: lazyPort<AssetsLibraryPort>(ctx, 'assetsLibraryPort'),
           channels: lazyPort<SalesChannelResolutionPort>(ctx, 'salesChannelResolutionPort'),
-          orders: lazyPort<OrderReadPort>(ctx, 'orderReadPort'),
         };
         return pwaModule({
           emFactory,
@@ -152,22 +156,32 @@ export function registerModule(ctx: ModuleContext): void {
           // a deployment that supplies its own still wins.
           resolveAuditContext: (request: FastifyRequest) =>
             ctx.cradle<PwaCradle>().adminAuditActorResolver(request),
-          resolveOrderTarget: createOrderPushTargetResolver(ports.orders),
-          // `resolveQuoteTarget` is passed by nobody and never has been — see
-          // `PwaModuleOptions`, where the measurement is written down.
+          // `specs/149-pwa-order-status-push/` — what the status pushes read.
+          // `quoteRequestReadPort` is a `degrades-without` edge (manifest
+          // `nonBindingDependencies`): the composer asks `isPresent` first.
+          statusPush: {
+            orders: lazyPort<OrderReadPort>(ctx, 'orderReadPort'),
+            quotes: lazyPort<QuoteRequestReadPort>(ctx, 'quoteRequestReadPort'),
+            channels: ports.channels,
+            translate: lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService'),
+          },
         });
       })
       .singleton(),
   });
 
   /**
-   * The two FR-024 auto-triggers (issue #107).
+   * The automatic status pushes (issue #107, `specs/149-pwa-order-status-push/`).
    *
    * They were bare `eventBus.on` calls inside `pwaModule`, so an order reaching
-   * its status or a quote request being updated still wrote a `push_messages`
-   * row and still pushed to the customer's device with `pwa` switched off — the
-   * module's own admin and storefront surfaces refused at the same time, which
-   * is what made it invisible. `ctx.subscribe` gates both.
+   * its status still wrote a `push_messages` row and still pushed to the
+   * customer's device with `pwa` switched off — the module's own admin and
+   * storefront surfaces refused at the same time, which is what made it
+   * invisible. `ctx.subscribe` gates every one.
+   *
+   * The quote half used to subscribe to an event name no module emits. It listens to the five events `quote_requests` really emits
+   * now, one subscription each and by literal name; `rfq.created.v1` — the
+   * customer's own submission — is deliberately not among them (FR-008).
    */
   const handlers = (): PwaModuleResult['handle']['pushEventHandlers'] =>
     ctx.cradle<PwaCradle>().pwa.handle.pushEventHandlers;
@@ -176,8 +190,24 @@ export function registerModule(ctx: ModuleContext): void {
     await handlers().onOrderStatusChanged(payload);
   });
 
-  ctx.subscribe('quote_request.updated.v1', async (payload) => {
-    await handlers().onQuoteRequestUpdated(payload);
+  ctx.subscribe('rfq.created_by_admin.v1', async (payload) => {
+    await handlers().onQuoteStatusEvent(QUOTE_STATUS_EVENTS['rfq.created_by_admin.v1'])(payload);
+  });
+
+  ctx.subscribe('rfq.modified.v1', async (payload) => {
+    await handlers().onQuoteStatusEvent(QUOTE_STATUS_EVENTS['rfq.modified.v1'])(payload);
+  });
+
+  ctx.subscribe('rfq.approved.v1', async (payload) => {
+    await handlers().onQuoteStatusEvent(QUOTE_STATUS_EVENTS['rfq.approved.v1'])(payload);
+  });
+
+  ctx.subscribe('rfq.canceled.v1', async (payload) => {
+    await handlers().onQuoteStatusEvent(QUOTE_STATUS_EVENTS['rfq.canceled.v1'])(payload);
+  });
+
+  ctx.subscribe('rfq.expired.v1', async (payload) => {
+    await handlers().onQuoteStatusEvent(QUOTE_STATUS_EVENTS['rfq.expired.v1'])(payload);
   });
 
   ctx.routes(async (app) => {

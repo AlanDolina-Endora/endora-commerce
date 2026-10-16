@@ -2,7 +2,8 @@ import {
   ModuleDisabledError,
   type PlatformLogger,
 } from '@endora-commerce/platform/kernel';
-import type { PushMessageService } from './push-message-service.js';
+import type { StatusPushComposer } from './status-push-composer.js';
+import type { QuoteStatusPushKind } from './status-push-copy.js';
 
 /**
  * Where a skipped or failed auto-trigger push is written down.
@@ -12,36 +13,18 @@ import type { PushMessageService } from './push-message-service.js';
  * exist and the line has to carry its own context. The alias is kept because it
  * names this module's role for the field; the shape is the platform's.
  */
-export type PushEventLogger = PlatformLogger;
-
-/**
- * Target resolved for an auto-triggered push. Returning null (or no customer)
- * means "no push" — anonymous orders / unsubscribed customers are skipped.
- */
-export interface PushEventTarget {
-  salesChannelId: string;
-  customerAccountId: string;
-  title: string;
-  body: string;
-  url?: string;
-}
+export type PushEventLogger = PlatformLogger & {
+  /**
+   * Present on the application's logger (`app.log`), absent on the pre-route
+   * fallback. Used for the one deliberately quiet line — a push the customer
+   * opted out of (`specs/149-pwa-order-status-push/`) — which is routine, not
+   * news, and must not land at `info` once per status change.
+   */
+  debug?(obj: object, msg: string): void;
+};
 
 export interface PushEventSubscriberDeps {
-  messageService: PushMessageService;
-  /** Resolve an order-status event into a push target (channel + customer + copy). */
-  resolveOrderTarget?: (payload: {
-    orderId: string;
-    salesChannelId: string;
-    from: string;
-    to: string;
-  }) => Promise<PushEventTarget | null>;
-  /** Resolve a quote-request event into a push target. */
-  resolveQuoteTarget?: (payload: {
-    quoteRequestId: string;
-    sourceEventId: string;
-  }) => Promise<PushEventTarget | null>;
-  /** Gate: is push enabled for this channel? */
-  isPushEnabled: (salesChannelId: string) => Promise<boolean>;
+  composer: StatusPushComposer;
   /**
    * Read per line rather than captured, because the logger these handlers
    * should be writing to does not exist yet when they are built: composition
@@ -53,14 +36,28 @@ export interface PushEventSubscriberDeps {
   log: () => PushEventLogger;
 }
 
+type PushTriggerName = 'order_status' | 'quote_request';
+
+/** A non-empty string field of an untyped payload, or `null`. */
+function stringField(payload: unknown, field: string): string | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const value = (payload as Record<string, unknown>)[field];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
 /**
- * The two auto-trigger handlers (FR-024). One push message per event,
- * idempotent on the event id; producer only — nothing is sent inline
- * (Principle X), and every handler absorbs its own failure so a push problem
- * never breaks the business transaction that announced itself.
+ * The automatic status-push handlers (FR-024 of feature 046, reshaped by
+ * `specs/149-pwa-order-status-push/`): one for `order.status_changed.v1` and
+ * one per consumed `rfq.*` event. Each reads its payload defensively — the bus
+ * hands it over untyped, and a payload missing what the composer needs is
+ * dropped — and hands the rest to the {@link StatusPushComposer}, which owns
+ * the gates. One push message per event, idempotent on the event id; producer
+ * only — nothing is sent inline (Principle X), and every handler absorbs its
+ * own failure so a push problem never breaks the business transaction that
+ * announced itself.
  *
- * The subscriptions live in this module's `backend.ts` and go through
- * `ctx.subscribe` (issue #107). They were two bare `eventBus.on` calls here, so
+ * The subscriptions live in this module's `backend/index.ts` and go through
+ * `ctx.subscribe` (issue #107). They were bare `eventBus.on` calls here, so
  * a switched-off `pwa` still wrote a `push_messages` row and still delivered a
  * notification to a customer's device — the most visible of the writes that
  * survived their module.
@@ -88,94 +85,48 @@ export interface PushEventSubscriberDeps {
  */
 export function createPushEventHandlers(deps: PushEventSubscriberDeps): {
   onOrderStatusChanged: (payload: unknown) => Promise<void>;
-  onQuoteRequestUpdated: (payload: unknown) => Promise<void>;
+  onQuoteStatusEvent: (what: QuoteStatusPushKind) => (payload: unknown) => Promise<void>;
 } {
-  const { messageService } = deps;
+  async function absorb(
+    trigger: PushTriggerName,
+    eventId: string,
+    produce: () => Promise<unknown>,
+  ): Promise<void> {
+    try {
+      await produce();
+    } catch (err) {
+      // Decided at the site, not delegated: the identifier below is the whole
+      // of what tells an operator's switch from an incident, and a helper
+      // holding it would let a later edit lose the distinction silently.
+      if (err instanceof ModuleDisabledError) {
+        deps.log().warn(
+          { module: err.moduleId, trigger, eventId },
+          'pwa.push_skipped_module_disabled',
+        );
+        return;
+      }
+      deps.log().error({ err, trigger, eventId }, 'pwa.push_enqueue_failed');
+    }
+  }
 
   return {
     // order.status_changed.v1 (orders, feature 038)
     async onOrderStatusChanged(raw: unknown): Promise<void> {
-      const payload = raw as {
-        eventId: string;
-        orderId: string;
-        salesChannelId: string;
-        from: string;
-        to: string;
-      };
-      try {
-        if (!deps.resolveOrderTarget) return;
-        if (!(await deps.isPushEnabled(payload.salesChannelId))) return;
-        const target = await deps.resolveOrderTarget(payload);
-        if (!target) return;
-        await messageService.createAndEnqueue({
-          salesChannelId: target.salesChannelId,
-          title: target.title,
-          body: target.body,
-          ...(target.url ? { url: target.url } : {}),
-          audience: { kind: 'customers', customerAccountIds: [target.customerAccountId] },
-          trigger: 'order_status',
-          sourceEventId: payload.eventId,
-        });
-      } catch (err) {
-        // Decided at the site, not delegated: the identifier below is the whole
-        // of what tells an operator's switch from an incident, and a helper
-        // holding it would let a later edit lose the distinction silently.
-        if (err instanceof ModuleDisabledError) {
-          deps.log().warn(
-            { module: err.moduleId, trigger: 'order_status', eventId: payload.eventId },
-            'pwa.push_skipped_module_disabled',
-          );
-          return;
-        }
-        deps
-          .log()
-          .error(
-            { err, trigger: 'order_status', eventId: payload.eventId },
-            'pwa.push_enqueue_failed',
-          );
-      }
+      const eventId = stringField(raw, 'eventId');
+      const orderId = stringField(raw, 'orderId');
+      const to = stringField(raw, 'to');
+      if (!eventId || !orderId || !to) return;
+      await absorb('order_status', eventId, () => deps.composer.order({ eventId, orderId, to }));
     },
 
-    // quote-request update events (quote_requests, feature 008)
-    async onQuoteRequestUpdated(raw: unknown): Promise<void> {
-      const payload = raw as {
-        eventId: string;
-        quoteRequestId: string;
-        salesChannelId?: string;
+    // rfq.created_by_admin / modified / approved / canceled / expired (quote_requests)
+    onQuoteStatusEvent(what: QuoteStatusPushKind) {
+      return async (raw: unknown): Promise<void> => {
+        const eventId = stringField(raw, 'eventId');
+        const rfqId = stringField(raw, 'rfqId');
+        if (!eventId || !rfqId) return;
+        await absorb('quote_request', eventId, () => deps.composer.quote({ eventId, rfqId, what }));
       };
-      try {
-        if (!deps.resolveQuoteTarget) return;
-        const target = await deps.resolveQuoteTarget({
-          quoteRequestId: payload.quoteRequestId,
-          sourceEventId: payload.eventId,
-        });
-        if (!target) return;
-        if (!(await deps.isPushEnabled(target.salesChannelId))) return;
-        await messageService.createAndEnqueue({
-          salesChannelId: target.salesChannelId,
-          title: target.title,
-          body: target.body,
-          ...(target.url ? { url: target.url } : {}),
-          audience: { kind: 'customers', customerAccountIds: [target.customerAccountId] },
-          trigger: 'quote_request',
-          sourceEventId: payload.eventId,
-        });
-      } catch (err) {
-        // See the order-status twin above — same decision, same two sentences.
-        if (err instanceof ModuleDisabledError) {
-          deps.log().warn(
-            { module: err.moduleId, trigger: 'quote_request', eventId: payload.eventId },
-            'pwa.push_skipped_module_disabled',
-          );
-          return;
-        }
-        deps
-          .log()
-          .error(
-            { err, trigger: 'quote_request', eventId: payload.eventId },
-            'pwa.push_enqueue_failed',
-          );
-      }
     },
   };
 }

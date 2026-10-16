@@ -66,45 +66,45 @@ run serially. Phases are marked **[backend]**, **[admin UI]**, **[storefront]**,
 
 ## Phase 2 — Operator switches and working, localised status pushes (US1 + US2, P1) [backend]
 
-- [ ] T008 RED [US2] Copy rules, pure: language pick (`pl-PL`→`pl`, `en-US`→`en`, `de-DE`→`en`);
+- [X] T008 RED [US2] Copy rules, pure: language pick (`pl-PL`→`pl`, `en-US`→`en`, `de-DE`→`en`);
   order label fallback `name[lang]` → `defaultName` → code; key per quote `what`; params
   (`orderNumber`/`quoteNumber`, `status`); url `/orders/<id>` / `/quote-requests/<id>` —
   `packages/modules/pwa/src/backend/services/status-push-copy.test.ts`
-- [ ] T009 GREEN [US2] `packages/modules/pwa/src/backend/services/status-push-copy.ts`; add the
+- [X] T009 GREEN [US2] `packages/modules/pwa/src/backend/services/status-push-copy.ts`; add the
   `notification.*` keys to `packages/modules/pwa/i18n/en.json` and `pl.json` (data-model §8)
-- [ ] T010 RED [US1][US2] Composer over stub ports, one case per gate in R-11 order: guest order /
+- [X] T010 RED [US1][US2] Composer over stub ports, one case per gate in R-11 order: guest order /
   unknown id → nothing; `push_enabled` off → nothing; category setting off → nothing (order and
   quote independently, per channel); account missing/deleted/anonymised → nothing; quote with
   `quote_requests` not present → port never called; channel-less quote → system default channel;
   happy path → exactly one `createAndEnqueue` with `audience.customers=[id]`, the right `trigger`,
   `sourceEventId=eventId`, translated title/body via the stub translate port —
   `packages/modules/pwa/src/backend/services/status-push-composer.test.ts`
-- [ ] T011 GREEN [US1][US2] `packages/modules/pwa/src/backend/services/status-push-composer.ts`
+- [X] T011 GREEN [US1][US2] `packages/modules/pwa/src/backend/services/status-push-composer.ts`
   (runs inside `enterSystemScope`; preference gate stubbed as "both on" until Phase 4); delete
   `createOrderPushTargetResolver` from `services/cross-module-context.ts` and its test cases in
   `cross-module-context.test.ts`
-- [ ] T012 RED [US2] Rewrite `backend/test/unit/pwa/push-event-presence.test.ts` for the new
+- [X] T012 RED [US2] Rewrite `backend/test/unit/pwa/push-event-presence.test.ts` for the new
   handler set (`onOrderStatusChanged`, `onQuoteStatusEvent(what)`): `ModuleDisabledError` →
   `pwa.push_skipped_module_disabled` naming the module; other errors →
   `pwa.push_enqueue_failed`; neither re-thrown; a payload missing `eventId`/`orderId`/`rfqId` is
   dropped without a log line at error level
-- [ ] T013 GREEN [US2] Reshape `services/push-event-subscriber.ts` onto the composer; in
+- [X] T013 GREEN [US2] Reshape `services/push-event-subscriber.ts` onto the composer; in
   `backend/index.ts` replace the `quote_request.updated.v1` subscription with the five `rfq.*`
   subscriptions (`ctx.subscribe`, literal names), resolve `quoteRequestReadPort`,
   `adminI18nService`, `customerAccountReadPort` with `lazyPort` literals; in `plugin.ts` remove
   `resolveQuoteTarget`/`resolveOrderTarget` options and wire the composer — 
   `packages/modules/pwa/src/backend/{index.ts,plugin.ts,services/push-event-subscriber.ts}`
-- [ ] T014 [US1] Manifest: two settings in `pwaSettingEntries` (hidden, default `true`), the
+- [X] T014 [US1] Manifest: two settings in `pwaSettingEntries` (hidden, default `true`), the
   `nonBindingDependencies` `degrades-without` entry for `quote_requests` (contract
   status-push-triggers §3) — `packages/modules/pwa/src/manifest.ts`
-- [ ] T015 RED [US1][US2] Integration over the composed harness: order status change → one
+- [X] T015 RED [US1][US2] Integration over the composed harness: order status change → one
   `push_messages` row with Polish copy on a `pl-PL` channel and the operator's status label;
   same event emitted twice → one row (FR-014); category off globally / on per channel (US1 #3);
   each of the five `rfq.*` events → one row with the right body and url; `rfq.created.v1` → none;
   `rfq.expired.v1` emitted with **no** ambient tenant context → one row —
   `backend/test/integration/pwa/status-push.test.ts` (new); update the order case in
   `backend/test/integration/pwa/cross-module-wiring.test.ts`
-- [ ] T016 GREEN [US1][US2] Fix whatever T015 surfaces; run the checks below until clean
+- [X] T016 GREEN [US1][US2] Fix whatever T015 surfaces; run the checks below until clean
 
 **Verification**: `pnpm --filter @endora-commerce/mod-pwa run build`;
 `pnpm --filter backend exec vitest run ../packages/modules/pwa/src/backend test/unit/pwa test/integration/pwa`;

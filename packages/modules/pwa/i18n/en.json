@@ -19,6 +19,9 @@
   "settings.field.cachingEnabled": "Enable static-asset caching",
   "settings.section.push": "Push notifications",
   "settings.field.pushEnabled": "Enable push notifications",
+  "settings.field.orderStatusPush": "Notify on order status changes",
+  "settings.field.quoteStatusPush": "Notify on quote status changes",
+  "settings.field.statusPushHint": "Sent automatically to the customer who placed the order or requested the quote, on their subscribed devices.",
   "settings.vapid.generate": "Generate VAPID keys",
   "settings.vapid.generated": "VAPID keys generated.",
   "settings.vapid.unset": "No VAPID keys configured.",
@@ -39,5 +42,15 @@
   "push.unconfigured": "Push is not configured. Generate VAPID keys and enable push first.",
   "push.subscribers": "Subscribers",
   "push.subscribers.active": "Active",
-  "push.subscribers.invalid": "Invalid"
+  "push.subscribers.invalid": "Invalid",
+  "notification.orderStatus.title": "Order update",
+  "notification.orderStatus.body": "Order {orderNumber} is now: {status}.",
+  "notification.quote.title": "Quote request update",
+  "notification.quote.body.prepared": "A quote {quoteNumber} has been prepared for you.",
+  "notification.quote.body.revised": "Quote {quoteNumber} has a revised offer waiting for you.",
+  "notification.quote.body.approved": "Quote {quoteNumber} has been approved.",
+  "notification.quote.body.canceled": "Quote {quoteNumber} has been cancelled.",
+  "notification.quote.body.expired": "Quote {quoteNumber} has expired.",
+  "actions.openSettings.label": "PWA settings",
+  "actions.openSettings.description": "App identity, caching and push notifications"
 }
