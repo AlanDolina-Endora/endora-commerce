@@ -173,6 +173,232 @@ export const replaceProductsRequestSchema = z.object({
   productIds: z.array(uuidSchema),
 });
 
+// --- Price matrix (feature 148) ---------------------------------------------
+//
+// A matrix entry prices a *selection* of products (one product, a category, an
+// attribute value, a category and an attribute value, or every product) for an
+// optional organization and a quantity window, at a fixed unit price or a
+// percentage off the reference price. It lives inside a price list: the list's
+// application rule still decides which buyers the list serves, and the entry
+// decides the price within it. Resolution semantics:
+// `specs/148-price-list-matrix-rules/contracts/pricing-resolution-matrix.md`.
+
+/** At most this many entries per price list (spec FR-007) — a product decision. */
+export const PRICE_MATRIX_MAX_ENTRIES_PER_LIST = 5000;
+
+export const priceMatrixPriceTypeSchema = z.enum(['fixed', 'discount_percent']);
+export type PriceMatrixPriceType = z.infer<typeof priceMatrixPriceTypeSchema>;
+
+/** Derived from which selection coordinates are set; never stored. */
+export const priceMatrixSelectionKindSchema = z.enum([
+  'product',
+  'category_attribute',
+  'attribute',
+  'category',
+  'all',
+]);
+export type PriceMatrixSelectionKind = z.infer<typeof priceMatrixSelectionKindSchema>;
+
+/** A percentage with at most two decimals, greater than 0 and at most 100. */
+const PRICE_MATRIX_PERCENT_SHAPE = /^\d{1,3}(\.\d{1,2})?$/;
+const PRICE_MATRIX_PERCENT = z.string().superRefine((v, ctx) => {
+  if (!PRICE_MATRIX_PERCENT_SHAPE.test(v)) {
+    ctx.addIssue({ code: 'custom', message: 'percentage with up to 2 fractional digits' });
+    return;
+  }
+  const n = Number(v);
+  if (!(n > 0 && n <= 100)) {
+    ctx.addIssue({ code: 'custom', message: 'percentage must be greater than 0 and at most 100' });
+  }
+});
+
+export const priceMatrixAttributeSchema = z.object({
+  key: z.string().min(1).max(64),
+  value: z.string().min(1).max(255),
+});
+export type PriceMatrixAttribute = z.infer<typeof priceMatrixAttributeSchema>;
+
+export const priceMatrixPriceSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('fixed'), amount: DECIMAL_STRING, currencyCode: CURRENCY }),
+  z.object({ type: z.literal('discount_percent'), percent: PRICE_MATRIX_PERCENT }),
+]);
+export type PriceMatrixPrice = z.infer<typeof priceMatrixPriceSchema>;
+
+/** The coordinates of an entry, after defaults — what the shape rules read. */
+export interface PriceMatrixEntryShape {
+  productId: string | null;
+  categoryId: string | null;
+  attribute: PriceMatrixAttribute | null;
+  organizationId: string | null;
+  minQuantity: number;
+  maxQuantity: number | null;
+  price: PriceMatrixPrice;
+}
+
+/** `selectionKind` of an entry, from which selection coordinates are set. */
+export function priceMatrixSelectionKind(entry: {
+  productId: string | null;
+  categoryId: string | null;
+  attribute: { key: string; value: string } | null;
+}): PriceMatrixSelectionKind {
+  if (entry.productId !== null) return 'product';
+  if (entry.categoryId !== null && entry.attribute !== null) return 'category_attribute';
+  if (entry.attribute !== null) return 'attribute';
+  if (entry.categoryId !== null) return 'category';
+  return 'all';
+}
+
+/**
+ * The cross-field rules of an entry — the CHECK constraints of
+ * `price_list_matrix_entries` that a single field cannot express (data-model
+ * §1). One function so the create schema and the service's merge-then-validate
+ * of a PATCH apply exactly the same rules.
+ */
+export function priceMatrixEntryShapeIssues(
+  entry: PriceMatrixEntryShape,
+): Array<{ path: Array<string>; message: string }> {
+  const out: Array<{ path: Array<string>; message: string }> = [];
+  if (entry.productId !== null && (entry.categoryId !== null || entry.attribute !== null)) {
+    out.push({
+      path: ['productId'],
+      message: 'A product selection cannot be combined with a category or an attribute.',
+    });
+  }
+  if (entry.productId !== null && entry.organizationId === null) {
+    out.push({
+      path: ['organizationId'],
+      message:
+        "A product selection needs an organization — without one it is the list's own product price.",
+    });
+  }
+  if (entry.maxQuantity !== null && entry.maxQuantity < entry.minQuantity) {
+    out.push({ path: ['maxQuantity'], message: 'maxQuantity must be at least minQuantity.' });
+  }
+  if (
+    entry.price.type === 'fixed' &&
+    entry.productId === null &&
+    entry.categoryId === null &&
+    entry.attribute === null
+  ) {
+    out.push({
+      path: ['price', 'type'],
+      message: 'A fixed price needs a product, category or attribute selection.',
+    });
+  }
+  return out;
+}
+
+const priceMatrixEntryFields = {
+  productId: uuidSchema.nullable().default(null),
+  categoryId: uuidSchema.nullable().default(null),
+  attribute: priceMatrixAttributeSchema.nullable().default(null),
+  organizationId: uuidSchema.nullable().default(null),
+  minQuantity: POSITIVE_INT,
+  maxQuantity: POSITIVE_INT.nullable().default(null),
+  price: priceMatrixPriceSchema,
+};
+
+/** Body of `POST /api/v1/admin/price-lists-engine/:id/matrix`. */
+export const priceMatrixEntryInputSchema = z
+  .object(priceMatrixEntryFields)
+  .superRefine((value, ctx) => {
+    for (const issue of priceMatrixEntryShapeIssues(value)) {
+      ctx.addIssue({ code: 'custom', path: issue.path, message: issue.message });
+    }
+  });
+export type PriceMatrixEntryInput = z.infer<typeof priceMatrixEntryInputSchema>;
+
+/**
+ * Body of `PATCH …/matrix/:entryId` — every field optional, at least one
+ * present. The cross-field rules run on the merged entry in the service.
+ */
+export const priceMatrixEntryPatchSchema = z
+  .object({
+    productId: uuidSchema.nullable().optional(),
+    categoryId: uuidSchema.nullable().optional(),
+    attribute: priceMatrixAttributeSchema.nullable().optional(),
+    organizationId: uuidSchema.nullable().optional(),
+    minQuantity: POSITIVE_INT.optional(),
+    maxQuantity: POSITIVE_INT.nullable().optional(),
+    price: priceMatrixPriceSchema.optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: 'patch_body_empty' });
+export type PriceMatrixEntryPatch = z.infer<typeof priceMatrixEntryPatchSchema>;
+
+/** Query of `GET …/matrix`. `organizationId = 'none'` lists not organization-specific entries. */
+export const priceMatrixListQuerySchema = z.object({
+  page: z.coerce.number().int().min(0).default(0),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50),
+  selectionKind: priceMatrixSelectionKindSchema.optional(),
+  organizationId: z.union([uuidSchema, z.literal('none')]).optional(),
+  productId: uuidSchema.optional(),
+  categoryId: uuidSchema.optional(),
+});
+export type PriceMatrixListQuery = z.infer<typeof priceMatrixListQuerySchema>;
+
+/** Why an attribute entry does not price anything right now (spec FR-010). */
+export const priceMatrixInactiveReasonSchema = z.enum([
+  'attribute_not_flagged',
+  'attribute_not_found',
+  'attribute_language_scoped',
+  'attribute_channel_scoped',
+  'attribute_value_type',
+]);
+export type PriceMatrixInactiveReason = z.infer<typeof priceMatrixInactiveReasonSchema>;
+
+export const priceMatrixEntrySchema = z.object({
+  id: uuidSchema,
+  priceListId: uuidSchema,
+  selectionKind: priceMatrixSelectionKindSchema,
+  productId: uuidSchema.nullable(),
+  categoryId: uuidSchema.nullable(),
+  attribute: priceMatrixAttributeSchema.nullable(),
+  organizationId: uuidSchema.nullable(),
+  minQuantity: POSITIVE_INT,
+  maxQuantity: POSITIVE_INT.nullable(),
+  price: priceMatrixPriceSchema,
+  /** `false` ⇒ the attribute is no longer eligible; always `true` for non-attribute entries. */
+  active: z.boolean(),
+  inactiveReason: priceMatrixInactiveReasonSchema.nullable(),
+  /**
+   * `true` when the named product, category or organization no longer resolves
+   * as live (soft-deleted — the foreign-key cascade only fires on a purge).
+   */
+  targetDeleted: z.boolean(),
+  /** Display labels resolved server-side, so the table needs no request per row. */
+  labels: z.object({
+    product: z.object({ sku: z.string(), name: z.string() }).nullable(),
+    category: z.string().nullable(),
+    attribute: z.object({ label: z.string(), valueLabel: z.string() }).nullable(),
+    organization: z.string().nullable(),
+  }),
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+});
+export type PriceMatrixEntry = z.infer<typeof priceMatrixEntrySchema>;
+
+export const priceMatrixListResponseSchema = z.object({
+  data: z.object({
+    items: z.array(priceMatrixEntrySchema),
+    total: z.number().int().min(0),
+    page: z.number().int().min(0),
+    pageSize: z.number().int().min(1),
+    limit: z.number().int().min(1),
+  }),
+});
+export type PriceMatrixListResponse = z.infer<typeof priceMatrixListResponseSchema>;
+
+export const priceMatrixEntryResponseSchema = z.object({ data: priceMatrixEntrySchema });
+
+/** One item of `GET /api/v1/admin/pricing/rule-targets/attributes`. */
+export const priceMatrixAttributeTargetSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  valueType: z.enum(['select', 'enum', 'multiselect', 'boolean']),
+  options: z.array(z.object({ value: z.string(), label: z.string() })),
+});
+export type PriceMatrixAttributeTarget = z.infer<typeof priceMatrixAttributeTargetSchema>;
+
 /** Route params of every `/api/v1/admin/price-lists-engine/:id/...` route. */
 export const priceListIdParamsSchema = z.object({ id: uuidSchema });
 export type PriceListIdParams = z.infer<typeof priceListIdParamsSchema>;
