@@ -1,10 +1,19 @@
 import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
 import { getSessionCookie } from '../../../lib/session';
+import { getServerContext } from '../../../lib/server-context';
 import { getMe } from '../../../lib/api/account';
 import { getMyCreditLimit } from '../../../lib/api/credit-limit';
+import {
+  fetchPwaConfig,
+  getPushPreferences,
+  updatePushPreferences,
+} from '../../../lib/api/pwa-server';
 import { CreditLimitWidget } from '../../../components/CreditLimitWidget';
-import { PushNotificationsToggle } from '../../../components/pwa/PushNotificationsToggle';
+import {
+  PushNotificationsSection,
+  pushPreferencesPatch,
+} from '../../../components/pwa/PushPreferencesForm';
 import type { Metadata } from 'next';
 
 /**
@@ -19,10 +28,24 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
  * their organization role. Profile-edit is intentionally out of scope for
  * MVP — buyers update their name via support to keep audit trails simple.
  */
-export default async function AccountProfilePage(): Promise<ReactNode> {
+export default async function AccountProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ pushSaved?: string; pushError?: string }>;
+}): Promise<ReactNode> {
   const session = await getSessionCookie();
   if (!session) redirect('/login');
-  const [me, creditLimit] = await Promise.all([getMe(session), getMyCreditLimit(session)]);
+  const sp = await searchParams;
+  const { locale, ctx } = await getServerContext();
+  // The push section (`specs/149-pwa-order-status-push/`) is read beside the
+  // profile: the public config says what the channel offers, the preferences
+  // what this customer chose. Either failing hides the section.
+  const [me, creditLimit, pwaConfig, pushPreferences] = await Promise.all([
+    getMe(session),
+    getMyCreditLimit(session),
+    fetchPwaConfig(ctx.salesChannelCode),
+    getPushPreferences(session, ctx),
+  ]);
 
   return (
     <>
@@ -65,7 +88,31 @@ export default async function AccountProfilePage(): Promise<ReactNode> {
           </tr>
         </tbody>
       </table>
-      <PushNotificationsToggle />
+      <PushNotificationsSection
+        config={pwaConfig}
+        preferences={pushPreferences}
+        locale={locale}
+        saveAction={savePushPreferencesAction}
+        saved={sp.pushSaved === '1'}
+        failed={sp.pushError === '1'}
+      />
     </>
   );
+}
+
+async function savePushPreferencesAction(formData: FormData): Promise<void> {
+  'use server';
+  const session = await getSessionCookie();
+  if (!session) redirect('/login');
+  const patch = pushPreferencesPatch(formData);
+  if (!patch) redirect('/account');
+  const { ctx } = await getServerContext();
+  let saved = true;
+  try {
+    await updatePushPreferences(session, ctx, patch);
+  } catch {
+    saved = false;
+  }
+  // Outside the `try`: `redirect` throws by design.
+  redirect(saved ? '/account?pushSaved=1' : '/account?pushError=1');
 }

@@ -195,6 +195,23 @@ export type MessageKey =
   | 'account.socialLinks.remove'
   | 'account.socialLinks.lastCredential'
   | 'account.socialLinks.setPassword'
+  // `specs/149-pwa-order-status-push/` — the account profile's push section:
+  // the per-browser control (issue #258, its copy moved here) and the
+  // account-wide choices that apply to every subscribed device.
+  | 'account.push.heading'
+  | 'account.push.device.heading'
+  | 'account.push.device.on'
+  | 'account.push.device.off'
+  | 'account.push.device.blocked'
+  | 'account.push.device.turnOn'
+  | 'account.push.device.turnOff'
+  | 'account.push.preferences.heading'
+  | 'account.push.preferences.hint'
+  | 'account.push.preferences.orderStatus'
+  | 'account.push.preferences.quoteStatus'
+  | 'account.push.preferences.save'
+  | 'account.push.preferences.saved'
+  | 'account.push.preferences.error'
   // The shared comparison. Sender and recipient legitimately see different
   // numbers and, where the sender restricted a product, different rows — so
   // the view says whose prices these are and that something is missing,
@@ -423,6 +440,21 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'account.socialLinks.lastCredential':
       'This is the last sign-in identity linked to your account, and your account has no password on record — removing it now could lock you out for good. Set a password first, then you can remove it.',
     'account.socialLinks.setPassword': 'Set a password',
+    'account.push.heading': 'Push notifications',
+    'account.push.device.heading': 'Notifications on this device',
+    'account.push.device.on': 'Notifications about your orders and quotes are on for this browser.',
+    'account.push.device.off': 'Notifications are off for this browser.',
+    'account.push.device.blocked': 'Notifications are blocked in this browser’s site settings.',
+    'account.push.device.turnOn': 'Turn on notifications',
+    'account.push.device.turnOff': 'Turn off notifications',
+    'account.push.preferences.heading': 'What to notify me about',
+    'account.push.preferences.hint':
+      'These choices apply to every device on which you have turned notifications on.',
+    'account.push.preferences.orderStatus': 'Order status updates',
+    'account.push.preferences.quoteStatus': 'Quote updates',
+    'account.push.preferences.save': 'Save choices',
+    'account.push.preferences.saved': 'Your choices have been saved.',
+    'account.push.preferences.error': 'We could not save your choices. Please try again.',
     'compare.shared.pricesYours': 'Prices shown are your organisation’s.',
     'compare.shared.pricesChannel':
       'Prices shown are this store’s standard prices. Sign in to see the prices agreed for your organisation.',
@@ -637,6 +669,22 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'account.socialLinks.lastCredential':
       'To ostatnia tożsamość logowania powiązana z Twoim kontem, a konto nie ma zapisanego hasła — usunięcie jej teraz mogłoby trwale odciąć Ci dostęp. Najpierw ustaw hasło, a potem będziesz móc usunąć to powiązanie.',
     'account.socialLinks.setPassword': 'Ustaw hasło',
+    'account.push.heading': 'Powiadomienia push',
+    'account.push.device.heading': 'Powiadomienia na tym urządzeniu',
+    'account.push.device.on':
+      'Powiadomienia o Twoich zamówieniach i zapytaniach ofertowych są włączone w tej przeglądarce.',
+    'account.push.device.off': 'Powiadomienia są wyłączone w tej przeglądarce.',
+    'account.push.device.blocked': 'Powiadomienia są zablokowane w ustawieniach witryny tej przeglądarki.',
+    'account.push.device.turnOn': 'Włącz powiadomienia',
+    'account.push.device.turnOff': 'Wyłącz powiadomienia',
+    'account.push.preferences.heading': 'O czym mamy Cię powiadamiać',
+    'account.push.preferences.hint':
+      'Te ustawienia dotyczą wszystkich urządzeń, na których włączono powiadomienia.',
+    'account.push.preferences.orderStatus': 'Zmiany statusu zamówień',
+    'account.push.preferences.quoteStatus': 'Aktualizacje zapytań ofertowych',
+    'account.push.preferences.save': 'Zapisz ustawienia',
+    'account.push.preferences.saved': 'Twoje ustawienia zostały zapisane.',
+    'account.push.preferences.error': 'Nie udało się zapisać ustawień. Spróbuj ponownie.',
     'compare.shared.pricesYours': 'Pokazane ceny dotyczą Twojej organizacji.',
     'compare.shared.pricesChannel':
       'Pokazane ceny to ceny standardowe tego sklepu. Zaloguj się, aby zobaczyć ceny uzgodnione dla Twojej organizacji.',

@@ -176,16 +176,16 @@ run serially. Phases are marked **[backend]**, **[admin UI]**, **[storefront]**,
 
 ## Phase 5 — Customer preference on the storefront (US3) [storefront]
 
-- [ ] T030 [P] [US3] `account.push.*` keys in `storefront/lib/i18n/messages.ts` (`en-US` and
+- [X] T030 [P] [US3] `account.push.*` keys in `storefront/lib/i18n/messages.ts` (`en-US` and
   `pl-PL`; the `Record` is total, so a missing Polish key fails `tsc`)
-- [ ] T031 RED [US3] Section rendering rules (contract storefront-push-preferences §Public config):
+- [X] T031 RED [US3] Section rendering rules (contract storefront-push-preferences §Public config):
   absent when push off or the preferences read fails; each checkbox per its flag; form absent when
   neither checkbox shows; server action sends `false` only for rendered-and-unchecked boxes —
   `storefront/test/pwa/push-preferences.test.tsx` (new)
-- [ ] T032 GREEN [US3] `storefront/lib/api/pwa-server.ts` (`getPushPreferences`,
+- [X] T032 GREEN [US3] `storefront/lib/api/pwa-server.ts` (`getPushPreferences`,
   `updatePushPreferences`, `DEFAULT_CONFIG` fields), `storefront/components/pwa/PushPreferencesForm.tsx`,
   server action and section in `storefront/app/(account)/account/page.tsx`
-- [ ] T033 [US3] Move `PushNotificationsToggle.tsx`'s literals to `messages.ts` (it receives the
+- [X] T033 [US3] Move `PushNotificationsToggle.tsx`'s literals to `messages.ts` (it receives the
   resolved strings or the locale from the page); existing `storefront/test/pwa-push-release.test.tsx`
   stays green
 

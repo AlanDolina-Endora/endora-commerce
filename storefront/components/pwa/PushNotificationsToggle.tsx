@@ -21,8 +21,26 @@ import {
  *
  * Rendered from the server as nothing: whether this browser is subscribed is
  * known only in the browser.
+ *
+ * Its copy arrives resolved from the page (`account.push.device.*` in
+ * `lib/i18n/messages.ts`, `specs/149-pwa-order-status-push/` FR-023): the
+ * locale is a server-side fact, and a client component reaching for it would
+ * be a second resolution of it.
  */
-export function PushNotificationsToggle(): React.ReactElement | null {
+export interface PushNotificationsToggleMessages {
+  heading: string;
+  on: string;
+  off: string;
+  blocked: string;
+  turnOn: string;
+  turnOff: string;
+}
+
+export function PushNotificationsToggle({
+  messages,
+}: {
+  messages: PushNotificationsToggleMessages;
+}): React.ReactElement | null {
   const [state, setState] = useState<PushToggleState>('hidden');
   const [vapidKey, setVapidKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -68,21 +86,17 @@ export function PushNotificationsToggle(): React.ReactElement | null {
 
   return (
     <section aria-labelledby="push-notifications-heading" data-testid="pwa-push-toggle">
-      <h3 id="push-notifications-heading">Notifications on this device</h3>
+      <h4 id="push-notifications-heading">{messages.heading}</h4>
       <p role="status" aria-live="polite">
-        {state === 'on'
-          ? 'Notifications about your orders and quotes are on for this browser.'
-          : state === 'blocked'
-            ? 'Notifications are blocked in this browser’s site settings.'
-            : 'Notifications are off for this browser.'}
+        {state === 'on' ? messages.on : state === 'blocked' ? messages.blocked : messages.off}
       </p>
       {state === 'on' ? (
         <button type="button" className="underline" disabled={busy} onClick={() => void turnOff()}>
-          Turn off notifications
+          {messages.turnOff}
         </button>
       ) : state === 'off' ? (
         <button type="button" className="underline" disabled={busy} onClick={() => void turnOn()}>
-          Turn on notifications
+          {messages.turnOn}
         </button>
       ) : null}
     </section>
