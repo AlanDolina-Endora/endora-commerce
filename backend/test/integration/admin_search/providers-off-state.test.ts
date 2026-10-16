@@ -60,16 +60,20 @@ describe('admin global search — record types follow their module’s presence 
     return (res.json() as { data: { entityTypes: Array<{ entityType: string }> } }).data.entityTypes.map((e) => e.entityType);
   }
 
-  it.each([
-    ['crm', 'crm.opportunity'],
-    ['quote_requests', 'quote_requests.quote_request'],
-    ['customers', 'customers.customer'],
-  ])('%s off: no %s group or capability entry; back on: both return', async (moduleId, entityType) => {
+  /**
+   * On, off while the platform still offers the module, on again. `switchOff`
+   * names the module literally at each call so `check:off-state-coverage` can
+   * read which module each case proves.
+   */
+  async function expectGroupFollowsPresence(
+    entityType: string,
+    switchOff: (body: () => Promise<void>) => Promise<void>,
+  ): Promise<void> {
     // Positive control: present, alongside the organization that matches too.
     expect(await groupTypes()).toEqual(expect.arrayContaining([entityType, 'organizations.organization']));
     expect(await offered()).toContain(entityType);
 
-    await withModuleOff(moduleId, 'deactivated', async () => {
+    await switchOff(async () => {
       const types = await groupTypes();
       expect(types).not.toContain(entityType);
       expect(types).toContain('organizations.organization');
@@ -78,5 +82,19 @@ describe('admin global search — record types follow their module’s presence 
 
     expect(await groupTypes()).toContain(entityType);
     expect(await offered()).toContain(entityType);
+  }
+
+  it('crm off: no Sales Opportunities group or capability entry; back on: both return', async () => {
+    await expectGroupFollowsPresence('crm.opportunity', (body) => withModuleOff('crm', 'deactivated', body));
+  });
+
+  it('quote_requests off: no Quote Requests group or capability entry; back on: both return', async () => {
+    await expectGroupFollowsPresence('quote_requests.quote_request', (body) =>
+      withModuleOff('quote_requests', 'deactivated', body),
+    );
+  });
+
+  it('customers off: no Customers group or capability entry; back on: both return', async () => {
+    await expectGroupFollowsPresence('customers.customer', (body) => withModuleOff('customers', 'deactivated', body));
   });
 });
