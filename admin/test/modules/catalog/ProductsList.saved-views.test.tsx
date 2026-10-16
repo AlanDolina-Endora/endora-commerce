@@ -179,6 +179,13 @@ function listRequests(): string[] {
     .filter((path): path is string => typeof path === 'string' && path.startsWith(LIST));
 }
 
+/** Waits until the debounced search for `q` has reached the list endpoint. */
+async function waitForSearch(q: string): Promise<void> {
+  await waitFor(() =>
+    expect(listRequests().some((p) => new URLSearchParams(p.slice(LIST.length)).get('q') === q)).toBe(true),
+  );
+}
+
 describe('ProductsList — saved views (feature 147, #289)', () => {
   it("mounts the kit's control against the product list's endpoint for a catalog:read admin", async () => {
     await renderList();
@@ -218,8 +225,14 @@ describe('ProductsList — saved views (feature 147, #289)', () => {
     const user = await renderList();
 
     await user.type(searchBox(), 'desk');
+    // Let the typed search's own debounced request land first: left pending, it
+    // fires whenever the runner is slow enough and would sit where the load's
+    // request is expected, attributing the typing's request to the load.
+    await waitForSearch('desk');
     await user.click(screen.getByRole('button', { name: /Next/ }));
-    await waitFor(() => expect(listRequests().some((p) => p.includes('page=1'))).toBe(true));
+    await waitFor(() =>
+      expect(listRequests().some((p) => p.includes('q=desk') && p.includes('page=1'))).toBe(true),
+    );
     await user.click(screen.getByRole('button', { name: 'Stock' }));
     expect(screen.getByRole('button', { name: 'Low stock' })).toBeInTheDocument();
 
@@ -261,6 +274,7 @@ describe('ProductsList — saved views (feature 147, #289)', () => {
     await user.click(tab('Active'));
     await user.click(screen.getByRole('button', { name: 'Type' }));
     await user.type(searchBox(), 'desk');
+    await waitForSearch('desk');
 
     const before = listRequests().length;
     await user.selectOptions(savedViewsSelect(), STALE.id);
