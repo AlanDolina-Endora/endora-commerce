@@ -173,7 +173,7 @@ dependency or alters baseline resource use updates them in the same pull request
 | OS | Linux (Ubuntu 22.04+ / Debian 12+ / Arch / Fedora), macOS 13+, Windows 11 + WSL2 | Linux |
 | Docker | Docker Engine 24+ with Docker Compose v2 | — |
 | Node.js | 22.x LTS (see `.nvmrc`) — minimum **22.18** (MikroORM 7 needs 22.17; unflagged type stripping needs 22.18) | — |
-| pnpm | 9.x | — |
+| pnpm | 9.15.0, pinned by `packageManager` — any pnpm ≥ 9.7, or `corepack enable`, switches to it on its own | — |
 
 Approximate resident usage with everything running (`pnpm run dev` + Docker stack + Vitest in
 watch mode): PostgreSQL 16 ~150 MB, Redis 7 ~50 MB, Meilisearch 1.11 ~300 MB (larger with the
@@ -220,23 +220,46 @@ monorepo:
 
 ### Set up
 
+You need Node.js ≥ 22.18 (`nvm use` reads `.nvmrc`), Docker with Compose v2, and pnpm. Which pnpm
+you have installed matters little: the root `package.json` pins `pnpm@9.15.0` in
+`packageManager`, and pnpm 9.7 or later — or `corepack enable` — runs that version inside this
+checkout by itself (`pnpm -v` there prints `9.15.0`). Without pnpm at all,
+`npx --yes pnpm@9.15.0 <command>` does the same.
+
 ```bash
 git clone https://github.com/endora-commerce/endora-commerce.git
 cd endora-commerce
 pnpm install
-pnpm run build:packages          # every package resolves through its built ./dist
 
 cp backend/.env.example    backend/.env
 cp storefront/.env.example storefront/.env
 cp admin/.env.example      admin/.env
 
 pnpm run dev:infra               # PostgreSQL, Redis, Meilisearch and Mailpit in Docker
-pnpm run setup                   # recreate the development database, install every module
+pnpm run setup                   # build the packages, recreate the development database, install every module
+pnpm --filter backend run admin:create -- --email=… --password=… --first-name=… --last-name=…
 ```
 
-`pnpm run build:packages` is a precondition rather than an optimisation: re-run it after editing
-anything under `packages/`. `pnpm run setup` **drops and recreates the development database**
-named in `backend/.env` — run it for a fresh start, not over data you want to keep.
+`pnpm run setup` runs `pnpm run build:packages` first. That build is a precondition rather than
+an optimisation — every package resolves through its built `./dist` — so re-run
+`pnpm run build:packages` after editing anything under `packages/`. `pnpm run setup` **drops and
+recreates the development database** named in `backend/.env`: run it for a fresh start, not over
+data you want to keep. It creates no administrator; `admin:create` does, and that account signs in
+to the admin at `http://localhost:3002`.
+
+**`pnpm install` leaves `git status` clean.** If it rewrites `packageManager` in `package.json`,
+adds an `allowBuilds:` block to `pnpm-workspace.yaml` or regenerates `pnpm-lock.yaml`, a pnpm
+other than the pinned one ran — almost always because `pnpm self-update` was run inside the
+checkout, which rewrites the pinned version to the new one, or because
+`manage-package-manager-versions` is turned off. Do not commit those changes; restore the three
+files and install again, confirming when pnpm offers to recreate `node_modules`:
+
+```bash
+git checkout -- package.json pnpm-workspace.yaml pnpm-lock.yaml
+pnpm install --frozen-lockfile
+```
+
+Run `pnpm self-update` from outside the checkout.
 
 ### Environment variables
 
