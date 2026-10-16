@@ -65,11 +65,11 @@ describe('search — archiving then reactivating a product leaves it indexed', (
     });
     expect(created.statusCode, created.body).toBe(201);
     const id = (created.json() as { data: { id: string } }).data.id;
-    // A product is bound to the default channel *after* its create Command has
-    // dispatched `product.created.v1`, so the indexer meets it unlinked and
-    // leaves it out; the first update is what indexes it. The audited update
-    // waits for its subscribers, so the product is indexed when this returns —
-    // the control for everything below.
+    // Creation indexes the product through the default-channel binding's
+    // `sales_channels.membership_changed` (issue #240), but nothing waits for
+    // that subscriber. The audited update does wait for its own, so the
+    // product is certainly indexed when this returns — the control for
+    // everything below.
     const touched = await h.app.inject({
       method: 'PATCH',
       url: `/api/v1/admin/catalog/products/${id}`,
