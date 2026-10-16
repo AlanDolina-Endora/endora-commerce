@@ -227,7 +227,7 @@ entry's starting quantity.
 - **FR-026**: A change to matrix entries MUST be reflected in prices within the existing pricing refresh window (immediately on the process that wrote it, within 60 seconds elsewhere).
 - **FR-027**: All new screen text, messages and error sentences MUST ship in English and Polish.
 - **FR-028**: The module documentation MUST describe the matrix, its precedence and its limitations in English and Polish; the catalogue documentation MUST stop saying that price lists have no attribute-based rule.
-- **FR-029**: The storefront catalogue's sort and filter by price (feature 086) MUST order and filter by the same effective unit price the listing card shows for that buyer at quantity 1, matrix entries included: a product priced only by a matrix entry is ordered by that price (not with the unpriced tail), and an entry that undercuts a bracket price moves the product accordingly. The added cost MUST stay bounded per page (no per-product statement): one indexed lookup of the candidate lists' entries when none applies to the viewer, and the matrix work only on the lists that carry one.
+- **FR-029**: The storefront catalogue's sort and filter by price (feature 086) MUST order and filter by the same effective unit price the listing card shows for that buyer at quantity 1, matrix entries included: a product priced only by a matrix entry is ordered by that price (not with the unpriced tail), and an entry that undercuts a bracket price moves the product accordingly. The added cost MUST stay bounded per page (no per-product statement): no extra statement for a viewer whose candidate lists carry no entry, and the matrix work only on the lists that carry one.
 
 ### Key Entities
 
@@ -242,7 +242,7 @@ entry's starting quantity.
 
 - **SC-001**: An administrator can express "organization X gets N% off category Y from Q units" as **one** entry, where today it takes one bracket row per product in the category.
 - **SC-002**: For every acceptance scenario of US1–US3, the cart line, the catalogue listing and the admin resolved-price check return the identical amount (0 disagreements in the identity test).
-- **SC-003**: A 50-product catalogue page resolves with at most 3 additional database round trips compared with today when its applicable lists carry matrix entries, and with exactly 1 when they carry none.
+- **SC-003**: A 50-product catalogue page resolves with at most 3 additional database round trips compared with today when its applicable lists carry matrix entries, and with none extra when they carry none (amended during implementation: whether a list carries entries is probed inside the statement that loads the lists).
 - **SC-004**: Clearing the *Price list rules* flag on an attribute stops every entry on it from affecting prices within 60 seconds, with zero pricing errors.
 - **SC-005**: A scoped administrator cannot observe, by any status code or message, the existence of an entry naming an out-of-scope organization.
 - **SC-006**: Every new user-facing string exists in both English and Polish (0 missing keys reported by the bundle checks).

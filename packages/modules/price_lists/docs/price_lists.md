@@ -223,8 +223,8 @@ by an entry sorts by that price rather than with the unpriced products. Lists
 without such an entry keep the index-ordered path. Measured on 2 000 products
 (`backend/test/perf/price_lists/matrix-resolver.bench.ts`): a first page costs
 about 3 ms with no entry, about 40 ms with a category percentage and about 20 ms
-with an all-products percentage; a 50-product listing page costs one extra
-indexed lookup when no entry exists and at most three when entries do.
+with an all-products percentage; a 50-product listing page costs no extra
+statement when its lists carry no entry and at most three when they do.
 
 **Known limitation:** a product feed pinned to a named price list reads that
 list's product brackets only; matrix entries do not reach a pinned feed. Feeds

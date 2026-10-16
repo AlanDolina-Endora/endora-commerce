@@ -202,8 +202,8 @@ cenom na kartach produktów; produkt wyceniony wyłącznie pozycją macierzy jes
 ceny, a nie razem z produktami bez ceny. Cenniki bez takiej pozycji zachowują ścieżkę opartą na
 indeksie. Pomiar na 2 000 produktów (`backend/test/perf/price_lists/matrix-resolver.bench.ts`):
 pierwsza strona kosztuje ok. 3 ms bez pozycji, ok. 40 ms z rabatem na kategorię i ok. 20 ms z rabatem
-na wszystkie produkty; strona listy z 50 produktami kosztuje jedno dodatkowe zapytanie po indeksie,
-gdy pozycji nie ma, i najwyżej trzy, gdy są.
+na wszystkie produkty; strona listy z 50 produktami nie kosztuje żadnego dodatkowego zapytania,
+gdy jej cenniki nie mają pozycji, i najwyżej trzy, gdy mają.
 
 **Znane ograniczenie:** plik produktowy przypięty do wskazanego cennika odczytuje wyłącznie progi
 produktów tego cennika; pozycje macierzy do niego nie trafiają. Pliki wyceniane przez mechanizm

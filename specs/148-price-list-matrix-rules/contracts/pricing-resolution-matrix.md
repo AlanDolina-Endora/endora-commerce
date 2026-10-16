@@ -107,16 +107,18 @@ Per resolution (single product) or per wave (batch), additional statements over 
 | eligible attributes (port) | a prefetched entry names an attribute |
 | Default-list reference brackets | a product returned `needs_reference` |
 
-So a wave costs **exactly one** extra statement when no picked list carries an entry, and at most
-three otherwise (SC-003). A normal listing page is one wave. The budget is asserted by a
+So a resolution costs **no** extra statement when no matched list carries an entry — whether one
+does is the `PriceList.hasMatrixEntries` `exists` probe inside the statement that loads the lists —
+and at most three otherwise (SC-003). A normal listing page is one wave. The budget is asserted by a
 statement-counting integration test
 (`backend/test/integration/price_lists/matrix-statement-budget.test.ts`, the counting approach of
 `listing-prices-batch.test.ts`) and timed by `backend/test/perf/price_lists/matrix-resolver.bench.ts`
 beside the existing `resolver.bench.ts`.
 
-A per-process memo of "lists that have entries" would remove the one unconditional statement; it is
-rejected for now because it is a second cache needing its own invalidation, for one indexed
-zero-row read.
+A per-process memo of "lists that have entries" was rejected (a second cache needing its own
+invalidation); the `exists` probe in the lists' own statement answers the same question with
+no cache and no extra round trip. The table row "matrix prefetch … always" above therefore reads
+"when a matched list carries an entry".
 
 ## 8. Tier ladder (`listBracketMinQuantities`)
 

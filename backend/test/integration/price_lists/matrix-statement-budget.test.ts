@@ -24,13 +24,13 @@ import { neighbourReadPorts } from '../../helpers/price-list-neighbour-ports.js'
  * Feature 148 / SC-003 — what the price matrix costs a 50-product catalogue
  * page, in statements.
  *
- * The baseline is the same page with the matrix read taken out: a page whose
- * lists carry no entry pays **exactly one** extra statement — the prefetch,
- * an index range scan answering zero rows — and a page whose lists carry
- * category, attribute and percentage entries pays **at most three**: the
- * prefetch, the eligible attributes (only because an entry names one) and the
- * Default-list reference brackets (only because a percentage has no own-list
- * reference). Nothing scales with the page.
+ * A page whose lists carry no entry pays **nothing**: whether a list carries
+ * one is an `exists` probe in the statement that loads the lists
+ * (`PriceList.hasMatrixEntries`), so the entries are never read. A page whose
+ * lists carry category, attribute and percentage entries pays **at most
+ * three** more: the entries, the eligible attributes (only because an entry
+ * names one) and the Default-list reference brackets (only because a
+ * percentage has no own-list reference). Nothing scales with the page.
  */
 
 async function countStatements<T>(
@@ -51,7 +51,9 @@ async function countStatements<T>(
     return {
       result,
       total: sql.length,
-      matrix: sql.filter((s) => s.includes('price_list_matrix_entries')).length,
+      // The read of the entries themselves; the lists' own statement carries an
+      // `exists` probe (`hasMatrixEntries`) that is not a statement of its own.
+      matrix: sql.filter((s) => s.includes('from "price_list_matrix_entries" as')).length,
       sql,
     };
   } finally {
@@ -140,17 +142,17 @@ describe('price matrix — statement budget of a listing page (SC-003)', () => {
     salesChannel: { id: channel.id, defaultCurrency: channel.defaultCurrency },
   });
 
-  it('costs exactly one extra statement when no list carries an entry', async () => {
+  it('costs no extra statement when no list carries an entry', async () => {
     const pricing = new PricingService(h.em, undefined, undefined, neighbourReadPorts(h.em, h.catalogAttributeRead));
     const run = await countStatements(h, () => pricing.resolveListingPrices({ products: page, context: context() }));
     expect(run.result.size).toBe(50);
-    expect(run.matrix).toBe(1);
+    expect(run.matrix).toBe(0);
   });
 
   it('costs at most three extra statements with category, attribute and percentage entries', async () => {
     const pricing = new PricingService(h.em, undefined, undefined, neighbourReadPorts(h.em, h.catalogAttributeRead));
     const without = await countStatements(h, () => pricing.resolveListingPrices({ products: page, context: context() }));
-    const baseline = without.total - without.matrix;
+    const baseline = without.total;
 
     const em = h.em();
     for (const entry of [

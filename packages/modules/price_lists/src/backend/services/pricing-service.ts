@@ -224,13 +224,13 @@ export class PricingService implements PricingServiceContract {
    * Feature 148 — the matrix entries a resolution can meet, in **one**
    * statement (contract §7): entries on the matched lists that name no product
    * or one of these products, and no organization or one in the buyer's chain.
-   * Zero rows when the matrix is unused, which is the one unconditional extra
-   * statement a resolution pays. The eligible attributes are read only when an
-   * entry names one.
+   * Only lists whose `hasMatrixEntries` probe (read with the lists) is true are
+   * asked about, so a resolution whose lists carry no entry pays no statement
+   * at all. The eligible attributes are read only when an entry names one.
    */
   async #matrixContext(
     em: EntityManager,
-    listIds: readonly string[],
+    lists: readonly PriceList[],
     products: ReadonlyMap<string, { categoryIds: ReadonlySet<string>; attributeValues: Record<string, unknown> }>,
     organizationChain: readonly string[],
   ): Promise<MatrixContext> {
@@ -242,9 +242,12 @@ export class PricingService implements PricingServiceContract {
       products,
       defaultBrackets: new Map(),
     };
+    // Only lists that carry an entry are read — `hasMatrixEntries` came with
+    // the list rows, so a resolution whose lists carry none pays nothing.
+    const listIds = [...new Set(lists.filter((l) => l.hasMatrixEntries).map((l) => l.id))];
     if (listIds.length === 0 || products.size === 0) return context;
     const rows = await em.find(PriceListMatrixEntry, {
-      priceListId: { $in: [...listIds] },
+      priceListId: { $in: listIds },
       $and: [
         { $or: [{ productId: null }, { productId: { $in: [...products.keys()] } }] },
         organizationChain.length > 0
@@ -455,7 +458,7 @@ export class PricingService implements PricingServiceContract {
     // partitions.
     const matrix = await this.#matrixContext(
       em,
-      [...baseMatches, ...saleMatches].map((m) => m.list.id),
+      [...baseMatches, ...saleMatches].map((m) => m.list),
       new Map([
         [product.id, { categoryIds: productCategoryIds, attributeValues: product.attributeValues ?? {} }],
       ]),
@@ -691,13 +694,13 @@ export class PricingService implements PricingServiceContract {
     }
 
     // Feature 148 — one matrix read for the page, shared by both partitions.
-    const matchedListIds = new Set<string>();
+    const matchedLists = new Map<string, PriceList>();
     for (const matches of [...baseMatches.values(), ...saleMatches.values()]) {
-      for (const m of matches) matchedListIds.add(m.list.id);
+      for (const m of matches) matchedLists.set(m.list.id, m.list);
     }
     const matrix = await this.#matrixContext(
       em,
-      [...matchedListIds],
+      [...matchedLists.values()],
       new Map(
         pending.map((p) => [
           p.id,
@@ -1022,7 +1025,14 @@ export class PricingService implements PricingServiceContract {
         productIds: ids === null ? null : [...ids],
       });
     }
-    await this.#attachMatrix(em, streams, organizationChain, currencyCode, categoryProducts);
+    const withMatrix = new Set(activeLists.filter((l) => l.hasMatrixEntries).map((l) => l.id));
+    await this.#attachMatrix(
+      em,
+      streams.filter((s) => withMatrix.has(s.priceListId)),
+      organizationChain,
+      currencyCode,
+      categoryProducts,
+    );
     return streams;
   }
 
@@ -1035,8 +1045,9 @@ export class PricingService implements PricingServiceContract {
    * resolver ignores them; each remaining selection is resolved to product ids
    * through `catalog`'s ports — the categories this method already reads, an
    * attribute value through `listProductIdsByAttributeValue` — and a stream
-   * whose list carries any becomes a matrix stream. A viewer whose lists carry
-   * none pays the one lookup and nothing else.
+   * whose list carries any becomes a matrix stream. Only streams whose list
+   * carries an entry at all (`hasMatrixEntries`, read with the lists) are
+   * passed in, so a viewer whose lists carry none pays nothing.
    */
   async #attachMatrix(
     em: EntityManager,
