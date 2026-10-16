@@ -180,8 +180,8 @@ Sales Opportunities groups for a platform admin; a sales representative sees onl
 
 ## Phase 7: User Story 1 — Category focus in the catalog tree (Priority: P1) — admin UI
 
-- [ ] T061 [P] [US1] Failing test `admin/test/modules/catalog/CategoriesTree.focus.test.tsx`: `?focus=<id>` of a nested category expands its ancestors, marks the row `aria-current="true"`, scrolls it into view and focuses it once; an unknown id changes nothing
-- [ ] T062 [US1] Implement the `focus` parameter in `packages/modules/catalog/src/admin/pages/CategoriesTree.tsx` (contracts/admin-ui.md §5); rebuild `catalog`; T061 green
+- [X] T061 [P] [US1] Failing test `admin/test/modules/catalog/CategoriesTree.focus.test.tsx`: `?focus=<id>` of a nested category expands its ancestors, marks the row `aria-current="true"`, scrolls it into view and focuses it once; an unknown id changes nothing
+- [X] T062 [US1] Implement the `focus` parameter in `packages/modules/catalog/src/admin/pages/CategoriesTree.tsx` (contracts/admin-ui.md §5); rebuild `catalog`; T061 green
 
 **Checkpoint**: User Story 1 complete — the MVP. Walk quickstart.md § 2 by hand.
 

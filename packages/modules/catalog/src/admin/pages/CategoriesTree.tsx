@@ -1,7 +1,7 @@
-import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Pencil, Trash2, Eye, EyeOff, FileText } from 'lucide-react';
-import { ApiError, apiClient } from '@endora-commerce/admin-kit/lib';
+import { ApiError, apiClient, cn } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Badge, Button, Card, CardContent, Input, Label, PageHeader, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@endora-commerce/admin-kit/ui';
 import { AssetPicker, adminLanguageToLocale, buildCategoryTree, flattenCategoryTree, pickCategoryDisplayName } from '@endora-commerce/admin-kit/components';
 import type { CategoryTreePickerCategory } from '@endora-commerce/admin-kit/components';
@@ -49,6 +49,23 @@ export function CategoriesTree(): ReactNode {
   const [info, setInfo] = useState<string | null>(null);
   const [createUnderId, setCreateUnderId] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  // `?focus=<id>` — where a global-search Category result lands
+  // (`specs/150-admin-global-search/` research R-15). The tree has no collapsed
+  // state, so the category's ancestors are always shown; the row is marked
+  // `aria-current`, scrolled into view and focused **once**, after the list
+  // has loaded. An id the tree does not hold is ignored.
+  const [searchParams] = useSearchParams();
+  const focusId = searchParams.get('focus');
+  const focusedOnce = useRef<string | null>(null);
+  const focusRow = useCallback(
+    (row: HTMLTableRowElement | null): void => {
+      if (row === null || focusId === null || focusedOnce.current === focusId) return;
+      focusedOnce.current = focusId;
+      row.scrollIntoView({ block: 'center' });
+      row.focus({ preventScroll: true });
+    },
+    [focusId],
+  );
 
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -223,7 +240,15 @@ export function CategoriesTree(): ReactNode {
                   const isActive = record?.isActive ?? true;
                   return (
                   <Fragment key={c.id}>
-                    <TableRow className={isActive ? undefined : 'opacity-60'}>
+                    <TableRow
+                      className={cn(
+                        isActive ? undefined : 'opacity-60',
+                        focusId === c.id && 'bg-muted ring-2 ring-inset ring-ring focus-visible:outline-none',
+                      )}
+                      {...(focusId === c.id
+                        ? { 'aria-current': 'true' as const, tabIndex: -1, ref: focusRow }
+                        : {})}
+                    >
                       <TableCell style={{ paddingLeft: depth * 24 + 8 }}>
                         {editing === c.id ? (
                           <EditForm
