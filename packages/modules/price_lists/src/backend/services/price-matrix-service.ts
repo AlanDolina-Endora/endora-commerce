@@ -18,7 +18,6 @@ import { SalesChannel } from '@endora-commerce/platform/kernel';
 import { isOrgInScope, orgConstraintFor, ruleVisibleForScope } from '@endora-commerce/platform/tenancy';
 import { PriceList } from '../entities/price-list.entity.js';
 import { PriceListMatrixEntry } from '../entities/price-list-matrix-entry.entity.js';
-import type { PriceListsAuditContext } from '../plugin.js';
 import {
   entryShapeFromRow,
   findOverlappingEntry,
@@ -39,11 +38,12 @@ import { extractRuleOrgTargets } from './rule-org-targets.js';
  * The admin side of the price matrix (feature 148,
  * `specs/148-price-list-matrix-rules/contracts/admin-price-matrix-api.md`).
  *
- * Every write runs through `PriceListService`'s audited runner — one Command Bus
- * path for the whole module (Constitution XIII), with `objectType:
+ * Every write runs in `PriceListService`, through its audited runner — one
+ * Command Bus path for the whole module (Constitution XIII), with `objectType:
  * 'price_list'` and the list as the object, so the audit reference resolver
  * already links a matrix write to its list. The pricing cache is invalidated
- * inside the same run, as for a bracket write.
+ * inside the same run, as for a bracket write. This service reads, and
+ * prepares each write on the run's `EntityManager`.
  *
  * **Tenant scope** (Constitution XI, spec FR-024). The parent list's
  * visibility is the list routes' own rule; an entry's organization coordinate
@@ -53,23 +53,8 @@ import { extractRuleOrgTargets } from './rule-org-targets.js';
  * unknown organization.
  */
 
-/** The audited runner `PriceListService` lends this service. */
-export type AuditedRunner = <T>(
-  action: string,
-  objectId: string,
-  auditCtx: PriceListsAuditContext | undefined,
-  write: (em: EntityManager) => Promise<{
-    result: T;
-    row: { id: string; name: string; code?: string };
-    before: Record<string, unknown> | null;
-    after: Record<string, unknown> | null;
-    skipAudit?: boolean;
-  }>,
-) => Promise<T>;
-
 export interface PriceMatrixServiceDeps {
   emFactory: () => EntityManager;
-  runAudited: AuditedRunner;
   targets: () => PriceListTargetReads;
 }
 
@@ -231,86 +216,89 @@ export class PriceMatrixService {
       .sort((a, b) => a.label.localeCompare(b.label));
   }
 
-  // ---- writes ---------------------------------------------------------------
+  // ---- write preparation ----------------------------------------------------
+  //
+  // The writes themselves live in `PriceListService` (`createMatrixEntry`,
+  // `patchMatrixEntry`, `removeMatrixEntry`), inside its audited Command Bus
+  // runner — one write path for the whole module (Constitution XIII). These
+  // methods do everything that comes before the write, on the run's own
+  // transactional `EntityManager`: lock the parent list, check scope, the limit,
+  // the shape, the targets, eligibility and overlap.
 
-  /** `POST …/matrix` — contract §3. */
-  async create(
+  /** `POST …/matrix` — contract §3: the list (locked) and the validated columns. */
+  async prepareCreate(
+    em: EntityManager,
     priceListId: string,
     input: PriceMatrixEntryInput,
-    auditCtx?: PriceListsAuditContext,
-  ): Promise<PriceMatrixEntry> {
-    return this.deps.runAudited('price_list.matrix_entry_create', priceListId, auditCtx, async (em) => {
-      const list = await this.#lockVisibleList(em, priceListId);
-      const count = await em.count(PriceListMatrixEntry, { priceListId });
-      if (isAtMatrixLimit(count)) {
-        throw new HttpError(
-          409,
-          ERROR_CODES.PRICE_MATRIX_ENTRY_LIMIT,
-          `A price list holds at most ${PRICE_MATRIX_MAX_ENTRIES_PER_LIST} matrix entries.`,
-          { limit: PRICE_MATRIX_MAX_ENTRIES_PER_LIST },
-        );
-      }
-      await this.#validate(em, priceListId, input, null);
-      const entity = em.create(PriceListMatrixEntry, { priceListId, ...rowFieldsFromShape(input) });
-      em.persist(entity);
-      const dto = await this.#dtoFor(entity);
-      return { result: dto, row: list, before: null, after: dto as unknown as Record<string, unknown> };
-    });
-  }
-
-  /** `PATCH …/matrix/:entryId` — contract §4. A patch that changes nothing is not audited. */
-  async patch(
-    priceListId: string,
-    entryId: string,
-    patch: PriceMatrixEntryPatch,
-    auditCtx?: PriceListsAuditContext,
-  ): Promise<PriceMatrixEntry> {
-    return this.deps.runAudited('price_list.matrix_entry_update', priceListId, auditCtx, async (em) => {
-      const list = await this.#lockVisibleList(em, priceListId);
-      const entity = await this.#visibleEntry(em, priceListId, entryId);
-      const current = entryShapeFromRow(toRow(entity));
-      const merged = mergeEntryPatch(current, patch);
-      const before = await this.#dtoFor(entity);
-      if (sameShape(current, merged)) {
-        return { result: before, row: list, before: null, after: null, skipAudit: true };
-      }
-      await this.#validate(em, priceListId, merged, current, entryId);
-      Object.assign(entity, rowFieldsFromShape(merged));
-      entity.updatedAt = new Date();
-      const after = await this.#dtoFor(entity);
-      return {
-        result: after,
-        row: list,
-        before: before as unknown as Record<string, unknown>,
-        after: after as unknown as Record<string, unknown>,
-      };
-    });
-  }
-
-  /** `DELETE …/matrix/:entryId` — contract §5. */
-  async remove(priceListId: string, entryId: string, auditCtx?: PriceListsAuditContext): Promise<void> {
-    await this.deps.runAudited('price_list.matrix_entry_delete', priceListId, auditCtx, async (em) => {
-      const list = await this.#lockVisibleList(em, priceListId);
-      const entity = await this.#visibleEntry(em, priceListId, entryId);
-      const before = await this.#dtoFor(entity);
-      em.remove(entity);
-      return { result: undefined, row: list, before: before as unknown as Record<string, unknown>, after: null };
-    });
+  ): Promise<{ list: PriceList; fields: Omit<MatrixEntryRow, 'id' | 'priceListId'> }> {
+    const list = await this.#lockVisibleList(em, priceListId);
+    const count = await em.count(PriceListMatrixEntry, { priceListId });
+    if (isAtMatrixLimit(count)) {
+      throw new HttpError(
+        409,
+        ERROR_CODES.PRICE_MATRIX_ENTRY_LIMIT,
+        `A price list holds at most ${PRICE_MATRIX_MAX_ENTRIES_PER_LIST} matrix entries.`,
+        { limit: PRICE_MATRIX_MAX_ENTRIES_PER_LIST },
+      );
+    }
+    await this.#validate(em, priceListId, input, null);
+    return { list, fields: rowFieldsFromShape(input) };
   }
 
   /**
-   * Copy every entry of one list onto another inside the caller's run — the
-   * duplicate path (contract §7). New ids, same coordinates and prices.
+   * `PATCH …/matrix/:entryId` — contract §4: the stored entry, its DTO before the
+   * change, and the merged columns — `null` when the patch changes nothing.
    */
-  static async copyEntries(em: EntityManager, fromListId: string, toListId: string): Promise<number> {
-    const entries = await em.find(PriceListMatrixEntry, { priceListId: fromListId });
-    for (const entry of entries) {
+  async preparePatch(
+    em: EntityManager,
+    priceListId: string,
+    entryId: string,
+    patch: PriceMatrixEntryPatch,
+  ): Promise<{
+    list: PriceList;
+    entity: PriceListMatrixEntry;
+    before: PriceMatrixEntry;
+    fields: Omit<MatrixEntryRow, 'id' | 'priceListId'> | null;
+  }> {
+    const list = await this.#lockVisibleList(em, priceListId);
+    const entity = await this.#visibleEntry(em, priceListId, entryId);
+    const current = entryShapeFromRow(toRow(entity));
+    const merged = mergeEntryPatch(current, patch);
+    const before = await this.dtoFor(entity);
+    if (sameShape(current, merged)) return { list, entity, before, fields: null };
+    await this.#validate(em, priceListId, merged, current, entryId);
+    return { list, entity, before, fields: rowFieldsFromShape(merged) };
+  }
+
+  /** `DELETE …/matrix/:entryId` — contract §5: the entry and its DTO. */
+  async prepareRemove(
+    em: EntityManager,
+    priceListId: string,
+    entryId: string,
+  ): Promise<{ list: PriceList; entity: PriceListMatrixEntry; before: PriceMatrixEntry }> {
+    const list = await this.#lockVisibleList(em, priceListId);
+    const entity = await this.#visibleEntry(em, priceListId, entryId);
+    return { list, entity, before: await this.dtoFor(entity) };
+  }
+
+  /** The columns of every entry on a list, for the duplicate path (contract §7). */
+  static async entryFieldsOf(
+    em: EntityManager,
+    priceListId: string,
+  ): Promise<Array<Omit<MatrixEntryRow, 'id' | 'priceListId'>>> {
+    const entries = await em.find(PriceListMatrixEntry, { priceListId });
+    return entries.map((entry) => {
       const { id: _id, priceListId: _list, ...fields } = toRow(entry);
       void _id;
       void _list;
-      em.create(PriceListMatrixEntry, { priceListId: toListId, ...fields });
-    }
-    return entries.length;
+      return fields;
+    });
+  }
+
+  /** The DTO of one entry, labels resolved. */
+  async dtoFor(entity: PriceListMatrixEntry): Promise<PriceMatrixEntry> {
+    const row = toRow(entity);
+    return this.#toDto(row, entity, await this.#labelContext([row], null));
   }
 
   // ---- internals ------------------------------------------------------------
@@ -468,11 +456,6 @@ export class PriceMatrixService {
     if (ids.length === 0) return new Map();
     const rows = await em.find(PriceListMatrixEntry, { id: { $in: [...ids] } });
     return new Map(rows.map((r) => [r.id, r]));
-  }
-
-  async #dtoFor(entity: PriceListMatrixEntry): Promise<PriceMatrixEntry> {
-    const row = toRow(entity);
-    return this.#toDto(row, entity, await this.#labelContext([row], null));
   }
 
   /**

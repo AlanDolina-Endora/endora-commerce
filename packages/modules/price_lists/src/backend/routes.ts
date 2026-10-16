@@ -429,7 +429,7 @@ export async function registerPricingRoutes(
     },
     async (request, reply) => {
       const body = priceMatrixEntryInputSchema.parse(request.body);
-      const entry = await priceListService.matrix.create(
+      const entry = await priceListService.createMatrixEntry(
         request.params.id,
         body,
         buildAuditCtx(request, deps.resolveAdminAuditContext),
@@ -444,7 +444,7 @@ export async function registerPricingRoutes(
     { preHandler: writeGate, schema: { body: priceMatrixEntryPatchSchema } },
     async (request) => {
       const body = priceMatrixEntryPatchSchema.parse(request.body);
-      const entry = await priceListService.matrix.patch(
+      const entry = await priceListService.patchMatrixEntry(
         request.params.id,
         request.params.entryId,
         body,
@@ -458,7 +458,7 @@ export async function registerPricingRoutes(
     '/api/v1/admin/price-lists-engine/:id/matrix/:entryId',
     { preHandler: writeGate },
     async (request, reply) => {
-      await priceListService.matrix.remove(
+      await priceListService.removeMatrixEntry(
         request.params.id,
         request.params.entryId,
         buildAuditCtx(request, deps.resolveAdminAuditContext),

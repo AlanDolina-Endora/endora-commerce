@@ -142,7 +142,7 @@ export function PriceMatrixTab({ priceListId }: PriceMatrixTabProps): ReactNode 
         <label className="b2b-col" style={{ gap: 4 }}>
           <span className="b2b-label">{t('priceMatrix.filter.kind')}</span>
           <select
-            className="b2b-input"
+            className="b2b-field"
             value={kind}
             onChange={(e): void => {
               setKind(e.target.value as PriceMatrixSelectionKind | '');
@@ -159,7 +159,7 @@ export function PriceMatrixTab({ priceListId }: PriceMatrixTabProps): ReactNode 
         <label className="b2b-col" style={{ gap: 4 }}>
           <span className="b2b-label">{t('priceMatrix.filter.organization')}</span>
           <select
-            className="b2b-input"
+            className="b2b-field"
             value={organizationFilter}
             onChange={(e): void => {
               setOrganizationFilter(e.target.value);
@@ -254,7 +254,7 @@ export function PriceMatrixTab({ priceListId }: PriceMatrixTabProps): ReactNode 
                       <span className="b2b-badge b2b-badge--success">{t('priceMatrix.status.active')}</span>
                     ) : (
                       <span className="b2b-col" style={{ gap: 2 }}>
-                        <span className="b2b-badge b2b-badge--muted">{t('priceMatrix.status.inactive')}</span>
+                        <span className="b2b-badge b2b-badge--outline">{t('priceMatrix.status.inactive')}</span>
                         {entry.inactiveReason ? (
                           <span className="b2b-muted" style={{ fontSize: 11 }}>
                             {t(`priceMatrix.inactive.${entry.inactiveReason}`)}

@@ -291,7 +291,7 @@ export function PriceMatrixEntryDialog(props: PriceMatrixEntryDialogProps): Reac
             </label>
             <select
               id={ids.category}
-              className="b2b-input"
+              className="b2b-field"
               value={categoryId}
               required
               onChange={(e): void => setCategoryId(e.target.value)}
@@ -319,7 +319,7 @@ export function PriceMatrixEntryDialog(props: PriceMatrixEntryDialogProps): Reac
                 </label>
                 <select
                   id={ids.attribute}
-                  className="b2b-input"
+                  className="b2b-field"
                   value={attributeKey}
                   required
                   onChange={(e): void => {
@@ -341,7 +341,7 @@ export function PriceMatrixEntryDialog(props: PriceMatrixEntryDialogProps): Reac
                 </label>
                 <select
                   id={ids.value}
-                  className="b2b-input"
+                  className="b2b-field"
                   value={attributeValue}
                   required
                   disabled={!selectedAttribute}
@@ -367,7 +367,7 @@ export function PriceMatrixEntryDialog(props: PriceMatrixEntryDialogProps): Reac
           </label>
           <input
             id={ids.organizationSearch}
-            className="b2b-input"
+            className="b2b-field"
             type="search"
             value={organizationSearch}
             onChange={(e): void => setOrganizationSearch(e.target.value)}
@@ -377,7 +377,7 @@ export function PriceMatrixEntryDialog(props: PriceMatrixEntryDialogProps): Reac
           </label>
           <select
             id={ids.organization}
-            className="b2b-input"
+            className="b2b-field"
             value={organizationId}
             required={selection === 'product'}
             onChange={(e): void => setOrganizationId(e.target.value)}
@@ -399,7 +399,7 @@ export function PriceMatrixEntryDialog(props: PriceMatrixEntryDialogProps): Reac
             </label>
             <input
               id={ids.from}
-              className="b2b-input"
+              className="b2b-field"
               type="number"
               min={1}
               step={1}
@@ -414,7 +414,7 @@ export function PriceMatrixEntryDialog(props: PriceMatrixEntryDialogProps): Reac
             </label>
             <input
               id={ids.to}
-              className="b2b-input"
+              className="b2b-field"
               type="number"
               min={Number(minQuantity) || 1}
               step={1}
@@ -460,7 +460,7 @@ export function PriceMatrixEntryDialog(props: PriceMatrixEntryDialogProps): Reac
                 </label>
                 <input
                   id={ids.amount}
-                  className="b2b-input"
+                  className="b2b-field"
                   inputMode="decimal"
                   required
                   value={amount}
@@ -473,7 +473,7 @@ export function PriceMatrixEntryDialog(props: PriceMatrixEntryDialogProps): Reac
                 </label>
                 <select
                   id={ids.currency}
-                  className="b2b-input"
+                  className="b2b-field"
                   required
                   value={currencyCode}
                   onChange={(e): void => setCurrencyCode(e.target.value)}
@@ -493,7 +493,7 @@ export function PriceMatrixEntryDialog(props: PriceMatrixEntryDialogProps): Reac
               </label>
               <input
                 id={ids.percent}
-                className="b2b-input"
+                className="b2b-field"
                 inputMode="decimal"
                 required
                 value={percent}

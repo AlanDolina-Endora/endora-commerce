@@ -49,7 +49,7 @@ describe('Admin resolved-price endpoint', () => {
       .em()
       .getConnection()
       .execute(
-        `truncate table "price_list_matrix_entries", "price_list_price_brackets", "price_list_products", "price_lists" cascade`,
+        `truncate table "price_list_price_brackets", "price_list_products", "price_lists" cascade`,
       );
     await new DefaultPriceListMigrator(h.em).seedDefault();
     const svc = new PriceListService(h.em, undefined, undefined, undefined, neighbourReadPorts(h.em));

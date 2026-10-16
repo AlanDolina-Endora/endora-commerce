@@ -1,7 +1,8 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   Organization,
+  PriceList,
   PriceListMatrixEntry,
   Product,
   type ProductRow,
@@ -138,19 +139,9 @@ describe('price matrix — resolution (feature 148)', () => {
       async (orgId) => (orgId === acme.id ? [acme.id, holding.id] : [orgId]),
       reads,
     );
-  }, 5 * 60_000);
-
-  afterAll(async () => {
-    await teardownBackendServer(h);
-  });
-
-  beforeEach(async () => {
-    await h
-      .em()
-      .getConnection()
-      .execute(
-        `truncate table "price_list_matrix_entries", "price_list_price_brackets", "price_list_products", "price_lists" cascade`,
-      );
+    // `setupBackendServer` has just emptied the price tables (`price_lists` is a
+    // seeded table, truncated with cascade); every case below adds its own list
+    // and removes it again, so nothing here wipes a table.
     await new DefaultPriceListMigrator(h.em).seedDefault();
     for (const product of [p101, p102, p103]) {
       await lists.addProduct(DEFAULT_PRICE_LIST_ID, product.id);
@@ -158,6 +149,18 @@ describe('price matrix — resolution (feature 148)', () => {
         PLN: [{ minQuantity: 1, maxQuantity: null, amount: '100' }],
       });
     }
+  }, 5 * 60_000);
+
+  afterEach(async () => {
+    // The list's entries, roster and brackets go with it (foreign-key cascade).
+    await h.em().nativeDelete(PriceList, { id: listId });
+  });
+
+  afterAll(async () => {
+    await teardownBackendServer(h);
+  });
+
+  beforeEach(async () => {
     const list = await lists.create({
       name: `Matrix list ${Date.now()}`,
       type: 'base',
