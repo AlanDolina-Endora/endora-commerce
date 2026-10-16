@@ -869,5 +869,10 @@
   "events.error.spans_days": "Wydarzenie zaczyna się i kończy tego samego dnia. Spotkanie przez północ dodaj jako dwa wydarzenia.",
   "events.error.not_whole_day": "Wydarzenie całodniowe obejmuje dokładnie jeden pełny dzień.",
   "events.error.unknown_time_zone": "Nie rozpoznano strefy czasowej tej przeglądarki. Sprawdź ustawienia daty i godziny urządzenia.",
-  "events.error.reminder_in_past": "Czas przypomnienia musi być w przyszłości."
+  "events.error.reminder_in_past": "Czas przypomnienia musi być w przyszłości.",
+  "adminSearch.group.label": "Szanse sprzedażowe",
+  "adminSearch.field.number": "Numer szansy sprzedażowej",
+  "adminSearch.field.title": "Tytuł",
+  "adminSearch.field.organizationName": "Nazwa organizacji",
+  "adminSearch.field.description": "Opis"
 }

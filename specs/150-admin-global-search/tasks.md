@@ -113,10 +113,10 @@ Sales Opportunities groups for a platform admin; a sales representative sees onl
 
 ### Sales Opportunities
 
-- [ ] T034 [P] [US1] Failing unit test `packages/modules/crm/src/backend/admin-search-provider.test.ts` (descriptor `crm.opportunity`, `crm:read`, weight 300, `CircleDollarSign`; fields; labels; mapping to `/crm/opportunities/<id>` with the status name)
-- [ ] T035 [P] [US1] Failing integration test `backend/test/integration/admin_search/crm-provider.test.ts` (as T027)
-- [ ] T036 [US1] Add `searchForAdmin(query)` to `packages/modules/crm/src/backend/services/opportunity-service.ts`, reusing the `q` branch's escaping and organization lookup (line ~486) with field selection
-- [ ] T037 [US1] Create `packages/modules/crm/src/backend/admin-search-provider.ts`; contribution-only boot hook in `packages/modules/crm/src/backend/index.ts`; manifest `contributes-to`; bundle keys; rebuild; T034, T035 green
+- [X] T034 [P] [US1] Failing unit test `packages/modules/crm/src/backend/admin-search-provider.test.ts` (descriptor `crm.opportunity`, `crm:read`, weight 300, `CircleDollarSign`; fields; labels; mapping to `/crm/opportunities/<id>` with the status name)
+- [X] T035 [P] [US1] Failing integration test `backend/test/integration/admin_search/crm-provider.test.ts` (as T027)
+- [X] T036 [US1] Add `searchForAdmin(query)` to `packages/modules/crm/src/backend/services/opportunity-service.ts`, reusing the `q` branch's escaping and organization lookup (line ~486) with field selection
+- [X] T037 [US1] Create `packages/modules/crm/src/backend/admin-search-provider.ts`; contribution-only boot hook in `packages/modules/crm/src/backend/index.ts`; manifest `contributes-to`; bundle keys; rebuild; T034, T035 green
 
 **Checkpoint**: three record types searchable through the API.
 

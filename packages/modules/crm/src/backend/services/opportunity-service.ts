@@ -48,6 +48,7 @@ import { CrmOpportunityTag } from '../entities/crm-opportunity-tag.entity.js';
 import { boardFieldFilterConditions, salesChannelName } from '../domain/board-card-fields.js';
 import { effectiveOpportunityValue, effectiveOpportunityValueSql } from '../domain/effective-value.js';
 import { tellAfterCommit } from './crm-notifier.js';
+import type { OpportunityAdminSearchQuery, OpportunityAdminSearchRow } from '../admin-search-provider.js';
 import { newlyMentioned, type MentionService, type SavedMentions } from './mention-service.js';
 import { loadOpportunity } from './opportunity-access.js';
 import {
@@ -465,6 +466,77 @@ export class OpportunityService {
         };
         return { eventName: CRM_EVENTS.CREATED, payload };
       },
+    };
+  }
+
+  /**
+   * Global search over opportunities (`specs/150-admin-global-search/`, T036).
+   *
+   * The list's read: `em.find` under the request's tenant context, so the
+   * `@OrgScoped` filter applies exactly as it does to `list`, and the same
+   * organization-name lookup its `q` uses. Only the selected fields are
+   * matched, literally (`likeEscaped`); the number ranks exact → prefix → the
+   * rest, then most recent change, then id. `limit + 1` rows, no count.
+   */
+  async searchForAdmin(
+    query: OpportunityAdminSearchQuery,
+    language: string,
+  ): Promise<{ rows: OpportunityAdminSearchRow[]; hasMore: boolean }> {
+    const fields = new Set(query.fields);
+    const like = `%${query.likeEscaped}%`;
+    const organizationIds = fields.has('organizationName')
+      ? await this.deps.organizations.searchIdsByName(query.text)
+      : [];
+    const or: FilterQuery<CrmOpportunity>[] = [];
+    if (fields.has('number')) or.push({ number: { $ilike: like } });
+    if (fields.has('title')) or.push({ title: { $ilike: like } });
+    if (organizationIds.length > 0) or.push({ organizationId: { $in: organizationIds } });
+    if (fields.has('description')) or.push({ description: { $ilike: like } });
+    if (query.isUuid) or.push({ id: query.text });
+    if (or.length === 0) return { rows: [], hasMore: false };
+
+    const em = this.deps.emFactory();
+    const rank: string[] = [];
+    const params: string[] = [];
+    if (query.isUuid) {
+      rank.push(`when ??.id::text = ? then 0`);
+      params.push(query.text.toLowerCase());
+    }
+    if (fields.has('number')) {
+      rank.push(`when lower(??.number) = lower(?) then 0`, `when ??.number ilike ? then 1`);
+      params.push(query.text, `${query.likeEscaped}%`);
+    }
+    const orderBy: Array<Record<string, QueryOrder>> = [];
+    if (rank.length > 0) {
+      orderBy.push({
+        [raw((alias) => `case ${rank.join(' ').replace(/\?\?/g, alias)} else 2 end`, params)]: QueryOrder.ASC,
+      });
+    }
+    orderBy.push({ updatedAt: QueryOrder.DESC }, { id: QueryOrder.ASC });
+    const found = await em.find(CrmOpportunity, { $or: or }, { orderBy: orderBy as never, limit: query.limit + 1 });
+    const hasMore = found.length > query.limit;
+    const page = found.slice(0, query.limit);
+    if (page.length === 0) return { rows: [], hasMore: false };
+
+    const [graph, organizations] = await Promise.all([
+      this.deps.workflowRead.loadGraph(em),
+      this.deps.organizations.findByIds([...new Set(page.map((o) => o.organizationId))]),
+    ]);
+    const statusByCode = new Map(graph.statuses.map((status) => [status.code, status]));
+    const organizationName = new Map(organizations.map((o) => [o.id, o.name]));
+    return {
+      hasMore,
+      rows: page.map((opportunity) => {
+        const status = statusByCode.get(opportunity.statusCode);
+        return {
+          id: opportunity.id,
+          number: opportunity.number,
+          title: opportunity.title,
+          organizationName: organizationName.get(opportunity.organizationId) ?? null,
+          statusCode: opportunity.statusCode,
+          statusName: status ? resolveOpportunityStatusName(status, language) : opportunity.statusCode,
+        };
+      }),
     };
   }
 
