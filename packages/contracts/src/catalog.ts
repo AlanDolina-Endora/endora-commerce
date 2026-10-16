@@ -2176,6 +2176,29 @@ export interface CatalogProductReadPort {
   listValueOverridesByProductIds(
     productIds: readonly string[],
   ): Promise<CatalogProductValueOverrideRecord[]>;
+
+  /**
+   * The ids of products whose own attribute value selects `value` — feature
+   * 148 (owner decision Q1): the price matrix selects products by attribute
+   * value, and a price-ordered listing has to know which products a selection
+   * covers without reading this module's table. The attribute counterpart of
+   * `CatalogCategoryReadPort.listProductIdsInCategory`, and **structural** like
+   * it: soft-deleted and inactive products are included, the caller intersects.
+   *
+   * `match` is the value type's rule: `scalar` — the stored value equals
+   * `value` (single choice); `array` — the stored list contains it (multiple
+   * choice); `boolean` — the stored boolean is `value === 'true'`, so a
+   * missing value matches neither. Channel overrides and variant values are not
+   * consulted.
+   */
+  listProductIdsByAttributeValue(query: CatalogAttributeValueQuery): Promise<string[]>;
+}
+
+/** {@link CatalogProductReadPort.listProductIdsByAttributeValue}'s question. */
+export interface CatalogAttributeValueQuery {
+  key: string;
+  value: string;
+  match: 'scalar' | 'array' | 'boolean';
 }
 
 /**
