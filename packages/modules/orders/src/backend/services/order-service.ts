@@ -139,6 +139,7 @@ import type {
   DeliveryMethodReadPort,
   DeliveryMethodRecord,
   EmailMailerPort,
+  OrderStatusActor,
   OrderStatusRegistry,
   OrganizationDetailsPort,
   OrganizationRecord,
@@ -177,7 +178,21 @@ export interface OrderEvents extends Record<string, EventBase> {
     to: string;
     businessId?: string | null;
   };
-  'order.cancelled.v1': EventBase & { orderId: string };
+  /**
+   * An order moved to `cancelled`, announced after the cancelling write
+   * committed, whichever path made it (issue #242). In-process only: outbound
+   * webhooks deliver a cancellation as `order.status_changed.v1`.
+   */
+  'order.cancelled.v1': EventBase & {
+    orderId: string;
+    organizationId: string;
+    salesChannelId: string;
+    /** The status the order was cancelled from. */
+    from: string;
+    actor: OrderStatusActor;
+    reason: string | null;
+    businessId?: string | null;
+  };
   // Feature 045 (T092) — fired post-commit per finalized promotion redemption.
   'promotion.used.v1': EventBase & {
     orderId: string;

@@ -16,7 +16,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import type { OrderStatusActor } from '@endora-commerce/contracts';
+import { ORDER_STATUS_CANCELLED, type OrderStatusActor } from '@endora-commerce/contracts';
 import type { EventBase, EventBus } from '@endora-commerce/platform/events';
 
 export type OrderStatusEventKind = 'fromToBefore' | 'fromBefore' | 'fromToAfter' | 'toAfter';
@@ -73,7 +73,8 @@ export function orderStatusAfterEventNames(from: string, to: string): string[] {
 
 /**
  * Emit the post-commit status events for a transition X→Y: the coarse
- * `order.status_changed.v1` plus the two templated `.after` events. Used by
+ * `order.status_changed.v1`, `order.cancelled.v1` when Y is `cancelled`, and
+ * the two templated `.after` events. Used by
  * `OrderTransitionService` (admin/manual transitions) and by the payment /
  * shipment receive-handlers for system-driven auto-transitions (which are
  * authoritative and bypass the graph's before-guards). No-op when from === to.
@@ -119,6 +120,26 @@ export function emitOrderStatusAfter(
     to: p.to,
     ...(p.businessId != null ? { businessId: p.businessId } : {}),
   } as OrderStatusEvent);
+  // Issue #242 — `order.cancelled.v1` was declared in `OrderEvents` and
+  // documented, and emitted by nothing, so a subscriber written against it never
+  // ran. Every committed status change is announced here — the transition
+  // service, and `payments` / `shipments` through `orderStatusAnnouncePort` — so
+  // this is the one place a cancellation can be announced whichever path made
+  // it. In-process only: outbound webhooks deliver a cancellation as
+  // `order.status_changed.v1` with `to: 'cancelled'`.
+  if (p.to === ORDER_STATUS_CANCELLED) {
+    events.emit('order.cancelled.v1', {
+      eventId: randomUUID(),
+      occurredAt: base.occurredAt,
+      orderId: p.orderId,
+      organizationId: p.organizationId,
+      salesChannelId: p.salesChannelId,
+      from: p.from,
+      actor: p.actor,
+      reason: p.reason ?? null,
+      ...(p.businessId != null ? { businessId: p.businessId } : {}),
+    } as never);
+  }
   for (const name of orderStatusAfterEventNames(p.from, p.to)) {
     events.emit(name, event);
   }

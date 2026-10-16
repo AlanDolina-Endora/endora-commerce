@@ -68,8 +68,10 @@ const EVENT_TYPES_PATH = '/api/v1/admin/webhooks/event-types';
 const BUILT_IN: string[] = [...WEBHOOK_BUILT_IN_EVENT_TYPES];
 
 /**
- * The eleven names the form offered while nothing delivered them. Five are
- * still emitted by nothing. The other six — the catalogue, quote and credit
+ * The eleven names the form offered while nothing delivered them. Four are
+ * still emitted by nothing; `order.cancelled.v1` is emitted since issue #242,
+ * on the in-process bus only, and is still not delivered to a webhook. The
+ * other six — the catalogue, quote and credit
  * events — are delivered now, and are offered only when the module that owns
  * them contributes them: with nothing contributed the form offers none.
  */
