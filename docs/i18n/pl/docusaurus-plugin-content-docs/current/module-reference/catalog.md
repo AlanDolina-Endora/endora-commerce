@@ -38,6 +38,7 @@ Strona wygenerowana z manifestu modułu, bez żadnych ręcznych zmian. Co moduł
 | `organizations` | tylko bramkowanie | rozwiązuje `organizationDetailsPort`; pominięty w `dependencies`, bo kolejność instalacji nie może nieść tej krawędzi |
 | `price_lists` | tylko bramkowanie | rozwiązuje `pricingService`; pominięty w `dependencies`, bo kolejność instalacji nie może nieść tej krawędzi |
 | `admin_notifications` | nie | degrades-without `adminNotificationRecordPort` — masowe edycje i ponowne indeksowanie wyszukiwarki nadal działają i raportują postęp na stronie Bulk actions; brakuje tylko powiadomienia w panelu — e-mail o zakończeniu nadal trafia do administratora |
+| `admin_search` | nie | contributes-to `adminSearchProviderRegistry` |
 | `api_keys` | nie | degrades-without `requireApiKey` — zewnętrzne API katalogu przestaje przyjmować wywołania od systemów zewnętrznych |
 | `api_keys` | nie | degrades-without `requireBoundApiKey` — zewnętrzne API katalogu przestaje przyjmować wywołania od systemów zewnętrznych |
 | `inventory` | nie | degrades-without `inventoryAvailabilityPort` — listy produktów i zewnętrzne API katalogu przestają podawać przedział dostępności |
@@ -52,6 +53,7 @@ Strona wygenerowana z manifestu modułu, bez żadnych ręcznych zmian. Co moduł
 
 | Kod | Etykieta | Wymaga też |
 | --- | --- | --- |
+| `_i18n` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `catalog:write` | Edit catalog | `catalog:read` |
 
 ## Paleta poleceń

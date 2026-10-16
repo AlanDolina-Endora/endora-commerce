@@ -739,3 +739,16 @@ contributed — no such module, the module switched off, or a person without the
 panel's permission — the zone renders nothing and the screen is exactly the one
 without it. The CRM module contributes the opportunity a quote request is
 linked to.
+
+## Global search
+
+The admin's global search (the command palette, ⌘K / Ctrl+K) finds quote requests. This module offers the fields below; which of them are used is chosen on the Global search configuration screen.
+
+| Field | Searched by default |
+| --- | --- |
+| Quote Request number | yes |
+| Organization name | yes |
+| Customer name or e-mail | yes |
+| Customer's note | no |
+
+A result shows the number, the organization, the date submitted and the status, and opens the quote request. Quote requests appear for a role holding `rfqs:handle`, with the same organization visibility as the Quote Requests list.

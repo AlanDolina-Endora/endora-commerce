@@ -45,6 +45,7 @@ Strona wygenerowana z manifestu modułu, bez żadnych ręcznych zmian. Co moduł
 | `carts` | tylko bramkowanie | rozwiązuje `cartPlacementApplyPort`; pominięty w `dependencies`, bo kolejność instalacji nie może nieść tej krawędzi |
 | `carts` | tylko bramkowanie | rozwiązuje `cartReadPort`; pominięty w `dependencies`, bo kolejność instalacji nie może nieść tej krawędzi |
 | `carts` | tylko bramkowanie | rozwiązuje `cartWritePort`; pominięty w `dependencies`, bo kolejność instalacji nie może nieść tej krawędzi |
+| `admin_search` | nie | contributes-to `adminSearchProviderRegistry` |
 | `credit_limits` | nie | degrades-without `creditLimitReadPort` — polecenie naprawy zamówień nie widzi, które zamówienia nadal trzymają limit, i informuje o tym, zamiast je wypisać |
 | `credit_limits` | nie | refuses-without `creditLimitService` — nie można złożyć zamówienia w ramach limitu kredytowego; zamówienie, które z niego skorzystało, nadal można anulować albo oznaczyć jako opłacone, a jego rezerwacja zostanie zwolniona po ponownym włączeniu modułu |
 | `delivery_methods` | nie | degrades-without `deliveryMethodReadPort` — podgląd tworzenia zamówienia w panelu administracyjnym nie wycenia dostawy, bo nie ma katalogu metod, z którego można by pobrać cenę |

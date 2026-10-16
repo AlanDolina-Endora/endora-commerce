@@ -118,7 +118,6 @@ export const manifest = defineModuleManifest({
       weight: 900,
     },
   ],
-  // The page lands with the screens it documents (tasks.md T075).
-  docs: false,
+  docs: { dir: 'docs' },
   demo: false,
 });

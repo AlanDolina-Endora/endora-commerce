@@ -24,6 +24,7 @@ platformy, a nie tego, co akurat zostało opisane.
 | [Akcje palety poleceń w panelu administracyjnym](./admin-actions.md) | Rejestr akcji dodawanych przez moduły do palety poleceń w panelu administracyjnym (⌘K, grupa Actions) | @endora-commerce/mod-admin-actions |
 | `admin_notifications` | _brak strony_ | @endora-commerce/mod-admin-notifications |
 | [admin_roles](./admin_roles.md) | Role administratorów i uprawnienia poszczególnych modułów | @endora-commerce/mod-admin-roles |
+| [admin_search](./admin-search.md) | Wyszukiwanie globalne w panelu administracyjnym — znajdowanie organizacji, klientów, zamówień, zapytań ofertowych, szans sprzedażowych, produktów i kategorii z palety poleceń, z konfigurowalnymi polami wyszukiwania | @endora-commerce/mod-admin-search |
 | [admin_users](./admin_users.md) | Konta administratorów platformy i logowanie jako klient | @endora-commerce/mod-admin-users |
 | [analytics](./analytics.md) | Zbieranie zdarzeń ze storefrontu, zestawienia w panelu administracyjnym i opcjonalne przekazywanie do GA4 | @endora-commerce/mod-analytics |
 | [api_keys](./api_keys.md) | Dane uwierzytelniające integracji w postaci tokenu bearer | @endora-commerce/mod-api-keys |

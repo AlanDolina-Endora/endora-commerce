@@ -320,3 +320,15 @@ This means:
 Company (B2B) organizations are unaffected — the single-member invariant
 (`assertMembershipAllowed`) only rejects adding a second member to a
 personal org.
+
+## Global search
+
+The admin's global search (the command palette, ⌘K / Ctrl+K) finds organizations. This module offers the fields below; which of them are used is chosen on the Global search configuration screen.
+
+| Field | Searched by default |
+| --- | --- |
+| Name | yes |
+| Tax ID | yes |
+| Legal name | no |
+
+Names are matched without regard to Polish diacritics, so `lodz` finds *Łódź*. Results are the organizations the Organizations list shows the admin — business organizations that are not deleted — for a role holding `customers:read` or `customers:manage`. For a sales representative the organizations assigned to them are listed first, then the others.
