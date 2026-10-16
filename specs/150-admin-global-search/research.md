@@ -433,3 +433,55 @@ in `specs/143-crm-sales-opportunities/research.md` N-5). The only change to anot
 published contract is additive: two optional fields on `CustomerAccountAdminSearchCriteria`
 (R-9). Field selection for orders, quote requests, opportunities, products and categories is
 internal to each owner's own services.
+
+## Implementation notes (2026-10-16)
+
+What the implementation settled that the plan left open, or did differently, and why.
+
+- **Configuration version (FR-026).** `settings` publishes no read of a row's optimistic-lock
+  version across its boundary (`SettingsAdminPort` is write-only), so the configuration's `version`
+  is a digest of the stored value in canonical key order (`configurationVersion`,
+  `configuration-service.ts`), checked before the write and refused with Settings' own
+  `VERSION_CONFLICT` (409). It changes exactly when the value changes. The write itself goes through
+  `settingsAdminService.setValueForAllChannels` as planned (audit row with before/after, cache drop).
+- **Organizations (owner Q2).** The provider applies the Organizations list's rows
+  (`is_personal = false`, `deleted_at is null`) with no scope clause and orders
+  `id in (assigned)` first for an `allowed-set` context, then tax ID exact → prefix → rest, then
+  `updated_at desc`, then `id`. `orgScopeWhere` is not on the published tenancy barrel;
+  `orgConstraintFor` is what every provider reads.
+- **Quote Requests scope (T032).** In the statement: the tenant scope as `organization_id in`, and —
+  for any role other than the platform administrator, as `listAll` decides — the
+  sales-representative rule (`canSeeOrganization`) asked of the **distinct organizations that have a
+  matching quote request**, then the page read with `organization_id in (visible)`. The provider and
+  the list's routes now share one `rfqAdminContextFor` (`quote_requests/src/backend/index.ts`).
+- **Scope source for orders, opportunities and customers.** Providers run inside the admin request,
+  so the tenant context the host derived (`adminTenantScopePort`: role `sales_representative` → the
+  assigned organizations) is the same decision `ordersAdminScopeResolver` and the customer list's
+  moderation actor make; `customers` reuses its moderation actor (refactored into
+  `moderationActorFor`) for the searching admin. The integration tests prove equality with each list.
+- **Status labels.** Quote Requests, Organizations, Customers and Products label statuses from their
+  own bundles through `adminI18nService`, so those four modules now declare `_i18n` in
+  `dependencies` (non-deactivatable, no cycle; `test/unit/db/module-graph.test.ts` green). Orders and
+  Opportunities already carry per-language status names in their data.
+- **Product and category names** match one *value* of the per-language map
+  (`jsonb_each_text(name)`), not the serialised JSON, so a language key never matches.
+- **The registry's enumeration policy** is stated in `check-port-dependencies.ts`
+  `CONTRIBUTION_POLICY_STATED` as `'admin_search:adminSearchProviderRegistry': 'skip'`.
+- **Wildcard permission.** A full-access role's permission list is `['*']`; the registry treats it as
+  holding every code, as `PermissionService.hasPermission` does.
+- **Configuration screen.** Save and *Discard changes* are two kit `Button`s rather than
+  `SaveButtonGroup` (whose secondary action is *Save and exit*, not discard). Leaving with unsaved
+  changes uses the kit's existing `useUnsavedChangesPrompt` (Constitution IX), which asks through the
+  browser's confirm; the version-conflict dialog is a kit `ModalDialog` as planned. A themed
+  leave-guard would need a data router's `useBlocker`, which the admin's router is not.
+- **Category focus.** The category tree has no collapsed state — every level is rendered — so the
+  focused category's ancestors are always shown; the row is marked `aria-current`, highlighted,
+  scrolled to and focused once.
+- **Package skeleton.** The README stays the `manifests:generate` rendering; `src/migrations/index.ts`
+  exports an empty array, as `crm`'s skeleton did.
+- **Performance (SC-002), measured.** `backend/test/perf/admin_search/fan-out.bench.ts` at the
+  reference volume on a 16-core dev box, Postgres 16 in Docker: p95 of the full seven-type fan-out
+  255 ms (identifier fragment), 291 ms (name fragment), 240 ms (no match) against the 800 ms budget.
+  Slowest provider alone: orders, 196 ms (sequential scan of 100 000 rows). No index is added.
+- **Manual walk (T080) not done here.** The flows of quickstart §§ 2–4 are covered end to end by the
+  contract, integration and admin tests; a walk in a browser as the three roles is owed before merge.

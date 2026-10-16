@@ -1,4 +1,4 @@
-// perf-weight: slow — about 2 min locally at the reference volume (2026-10-16, mostly the corpus); not yet timed on the CI runner.
+// perf-weight: heavy — about 2 min locally at the reference volume (2026-10-16, mostly the 250 000-row corpus); not yet timed on the CI runner.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { AdminSearchProvider } from '@endora-commerce/contracts';
 import {

@@ -27,7 +27,10 @@ import type {
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
 import type { Redis } from 'ioredis';
 import { QuoteRequestReadService } from './services/quote-request-read-port.js';
-import { createQuoteRequestAdminSearchProvider } from './admin-search-provider.js';
+import {
+  createQuoteRequestAdminSearchProvider,
+  type QuoteRequestAdminSearchProviderDeps,
+} from './admin-search-provider.js';
 import type { AdminContext } from './services/rfq-admin-service.js';
 import { NegotiationPolicyService } from './services/negotiation-policy-service.js';
 import { startRfqExpirySweep } from './workers/rfq-expiry-sweep-worker.js';
@@ -619,18 +622,8 @@ export function registerModule(ctx: ModuleContext): void {
    * visibility.
    */
   ctx.onBoot(() => {
-    const admins = lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort');
-    const roles = lazyPort<AdminRolePort>(ctx, 'adminRolePort');
-    const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
     lazyPort<AdminSearchProviderRegistryPort>(ctx, 'adminSearchProviderRegistry').register(
-      createQuoteRequestAdminSearchProvider({
-        search: async (query, adminUserId) =>
-          ctx
-            .cradle<QuoteRequestsCradle>()
-            .quoteRequests.handle()
-            .adminService.searchForAdmin(await rfqAdminContextFor(admins, roles, adminUserId), query),
-        translate: (key, language) => i18n.translate('quote_requests', key, language),
-      }),
+      createQuoteRequestAdminSearchProvider(quoteRequestAdminSearchDeps(ctx)),
     );
   });
 
@@ -704,6 +697,26 @@ export const entities = [
   QuoteRequestOrgPolicy,
   QuoteRequestAccountPolicy,
 ];
+
+/**
+ * What global search's Quote Request provider reads through: this module's own
+ * admin service, asked with the same admin context the list's routes resolve,
+ * and this module's bundle for status labels. Built outside the boot hook so
+ * the hook only registers — the closures run per search, never at boot.
+ */
+function quoteRequestAdminSearchDeps(ctx: ModuleContext): QuoteRequestAdminSearchProviderDeps {
+  const admins = lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort');
+  const roles = lazyPort<AdminRolePort>(ctx, 'adminRolePort');
+  const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
+  return {
+    search: async (query, adminUserId) =>
+      ctx
+        .cradle<QuoteRequestsCradle>()
+        .quoteRequests.handle()
+        .adminService.searchForAdmin(await rfqAdminContextFor(admins, roles, adminUserId), query),
+    translate: (key, language) => i18n.translate('quote_requests', key, language),
+  };
+}
 
 /**
  * Who is administering, as the quote request list's routes and global search

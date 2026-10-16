@@ -43,7 +43,7 @@ describe('admin global search — Organization provider (spec 150, owner Q2)', (
       await seed('legal', { name: `Plain ${T}`, legalName: `LEGAL${T} Spółka z o.o.` });
       await seed('personal', { name: `PERS${T}`, isPersonal: true });
       await seed('deleted', { name: `DEL${T}` });
-      await em.nativeUpdate(Organization, { id: ids['deleted'] }, { deletedAt: new Date() });
+      await em.nativeUpdate(Organization, { id: ids['deleted']! }, { deletedAt: new Date() });
       // Owner Q2 — created oldest first: `assigned`, then `other1` and
       // `other2`, which are then given the same change time so only the id
       // can order them.

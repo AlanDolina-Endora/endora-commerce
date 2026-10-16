@@ -65,7 +65,7 @@ describe('admin global search — Product and Category providers (spec 150)', ()
     await product('draft', { sku: `ST${T}-draft`, status: 'draft' });
     await product('inactive', { sku: `ST${T}-inactive`, status: 'inactive' });
     await product('deleted', { sku: `ST${T}-deleted` });
-    await em.nativeUpdate(Product, { id: ids['deleted'] }, { deletedAt: new Date() });
+    await em.nativeUpdate(Product, { id: ids['deleted']! }, { deletedAt: new Date() });
     await product('exact', { sku: `RK${T}` });
     await product('prefix', { sku: `RK${T}-2` });
     await product('contains', { sku: `X-RK${T}` });
@@ -82,7 +82,7 @@ describe('admin global search — Product and Category providers (spec 150)', ()
     await category('leaf', { 'en-US': `Chairs CAT${T}`, 'pl-PL': `Krzesła CAT${T}` }, `chairs-${T}`, ids['mid']);
     await category('slugged', { 'en-US': 'Tables' }, `tables${T}`);
     await category('gone', { 'en-US': `GONE${T}` }, `gone-${T}`);
-    await em.nativeUpdate(Category, { id: ids['gone'] }, { deletedAt: new Date() });
+    await em.nativeUpdate(Category, { id: ids['gone']! }, { deletedAt: new Date() });
   });
 
   afterAll(async () => {

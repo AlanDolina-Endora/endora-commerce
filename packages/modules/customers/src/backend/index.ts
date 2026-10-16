@@ -33,7 +33,11 @@ import type {
   SalesRepAssignmentPort,
   VatValidator,
 } from '@endora-commerce/contracts';
-import { createCustomerAdminSearchProvider, searchCustomersForAdmin } from './admin-search-provider.js';
+import {
+  createCustomerAdminSearchProvider,
+  searchCustomersForAdmin,
+  type CustomerAdminSearchProviderDeps,
+} from './admin-search-provider.js';
 import { CustomerAddressReadService } from './services/customer-address-read-port.js';
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
 import { lazyPort } from '@endora-commerce/platform/kernel';
@@ -178,6 +182,31 @@ async function moderationActorFor(
     ? []
     : await ports.salesRepScope.listAssignedOrganizationIds(adminUserId);
   return { adminUserId, isPlatformAdmin, allowedOrganizationIds };
+}
+
+/**
+ * What global search's Customer provider reads through: `customer_accounts`'
+ * admin search with the customer list's own scope — the moderation actor its
+ * route resolves, asked for the searching admin — and this module's bundle for
+ * status labels. Built outside the boot hook so the hook only registers.
+ */
+function customerAdminSearchDeps(ctx: ModuleContext): CustomerAdminSearchProviderDeps {
+  const scopePorts = {
+    admins: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+    roles: lazyPort<AdminRolePort>(ctx, 'adminRolePort'),
+    salesRepScope: lazyPort<SalesRepAssignmentPort>(ctx, 'organizationSalesRepScopePort'),
+  };
+  const searchDeps = {
+    accountSearch: lazyPort<CustomerAccountAdminSearchPort>(ctx, 'customerAccountAdminSearchPort'),
+    accounts: lazyPort<CustomerAccountReadPort>(ctx, 'customerAccountReadPort'),
+    organizations: lazyPort<OrganizationDetailsPort>(ctx, 'organizationDetailsPort'),
+  };
+  const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
+  return {
+    search: async (query, adminUserId) =>
+      searchCustomersForAdmin(searchDeps, query, await moderationActorFor(scopePorts, adminUserId)),
+    translate: (key, language) => i18n.translate('customers', key, language),
+  };
 }
 
 export function registerModule(ctx: ModuleContext): void {
@@ -370,23 +399,8 @@ export function registerModule(ctx: ModuleContext): void {
    * resolves, asked for the searching admin.
    */
   ctx.onBoot(() => {
-    const scopePorts = {
-      admins: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
-      roles: lazyPort<AdminRolePort>(ctx, 'adminRolePort'),
-      salesRepScope: lazyPort<SalesRepAssignmentPort>(ctx, 'organizationSalesRepScopePort'),
-    };
-    const searchDeps = {
-      accountSearch: lazyPort<CustomerAccountAdminSearchPort>(ctx, 'customerAccountAdminSearchPort'),
-      accounts: lazyPort<CustomerAccountReadPort>(ctx, 'customerAccountReadPort'),
-      organizations: lazyPort<OrganizationDetailsPort>(ctx, 'organizationDetailsPort'),
-    };
-    const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
     lazyPort<AdminSearchProviderRegistryPort>(ctx, 'adminSearchProviderRegistry').register(
-      createCustomerAdminSearchProvider({
-        search: async (query, adminUserId) =>
-          searchCustomersForAdmin(searchDeps, query, await moderationActorFor(scopePorts, adminUserId)),
-        translate: (key, language) => i18n.translate('customers', key, language),
-      }),
+      createCustomerAdminSearchProvider(customerAdminSearchDeps(ctx)),
     );
   });
 }
