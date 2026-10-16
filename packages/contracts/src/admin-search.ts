@@ -300,6 +300,8 @@ export interface AdminSearchProvider {
 }
 
 /**
+ * Container name: `adminSearchProviderRegistry`. Owner: `admin_search`.
+ *
  * The contribution shape: the host keeps the class, a contributor names this
  * interface. Deliberately **not** a gated port — a contributor pushes from its
  * own boot hook whatever the host's effective state is, and the host answers

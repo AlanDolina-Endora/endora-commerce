@@ -32,6 +32,44 @@ const settings = defineModuleSettingsManifest({
       valueType: 'boolean',
       defaultValue: true,
     },
+    {
+      // FR-002 / FR-028 — below it the palette searches screens and actions only.
+      // Range 2–10, enforced by this module's settings write validator.
+      code: 'admin_search.minimum_query_length',
+      name: 'Minimum search length',
+      description:
+        'How many characters an administrator has to type in the command palette before records are searched (2 to 10). Shorter texts match too many records to be useful; order numbers, tax IDs and SKUs are all longer than the default of 3.',
+      groupCode: 'admin_search',
+      valueType: 'number',
+      defaultValue: 3,
+    },
+    {
+      // FR-004 / FR-028 — the palette's per-type limit. Range 1–10, enforced by
+      // this module's settings write validator. The results page shows up to 20
+      // per type whatever this says.
+      code: 'admin_search.results_per_entity',
+      name: 'Results per record type',
+      description:
+        'How many records of each type the command palette shows (1 to 10). When more match, the palette says so and offers the full results page, which shows up to 20 of each type.',
+      groupCode: 'admin_search',
+      valueType: 'number',
+      defaultValue: 5,
+    },
+    {
+      // FR-018 – FR-023 — which fields each record type is searched by, and
+      // whether it takes part. Hidden: it is edited on the Global search
+      // configuration screen, which shows the offered fields with their labels;
+      // a JSON text box is the wrong editor for a checklist (research R-5).
+      // An empty `entities` map means every record type uses its defaults.
+      code: 'admin_search.entity_fields',
+      name: 'Searchable fields',
+      description:
+        'Which fields each record type is searched by, and whether it takes part in global search. Edited on the Global search configuration screen.',
+      groupCode: 'admin_search',
+      valueType: 'json',
+      defaultValue: { version: 1, entities: {} },
+      hidden: true,
+    },
   ],
 });
 
@@ -49,6 +87,7 @@ export const manifest = defineModuleManifest({
   settings,
   // Constitution XVII — the operator's activation control.
   activation: { settingCode: 'admin_search.enabled', default: true },
+  // The page lands with the screens it documents (tasks.md T075).
   docs: false,
   demo: false,
 });

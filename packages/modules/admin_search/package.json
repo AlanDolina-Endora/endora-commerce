@@ -53,7 +53,8 @@
   "peerDependencies": {
     "@endora-commerce/admin-kit": "workspace:*",
     "@endora-commerce/contracts": "workspace:*",
-    "@endora-commerce/platform": "workspace:*"
+    "@endora-commerce/platform": "workspace:*",
+    "fastify": "^5.11.0"
   },
   "peerDependenciesMeta": {
     "@endora-commerce/admin-kit": {
@@ -65,6 +66,7 @@
     "@endora-commerce/contracts": "workspace:*",
     "@endora-commerce/platform": "workspace:*",
     "@types/node": "^22.9.0",
+    "fastify": "^5.12.5",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11"
   }
