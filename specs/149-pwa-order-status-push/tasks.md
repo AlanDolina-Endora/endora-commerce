@@ -195,18 +195,18 @@ run serially. Phases are marked **[backend]**, **[admin UI]**, **[storefront]**,
 
 ## Phase 6 — Off-state and documentation [backend + docs]
 
-- [ ] T034 RED [US1][US2][US3] Extend `backend/test/integration/pwa/off-state.test.ts`: with `pwa`
+- [X] T034 RED [US1][US2][US3] Extend `backend/test/integration/pwa/off-state.test.ts`: with `pwa`
   deactivated while platform-available, an order status change and an `rfq.approved.v1` write no
   `push_messages` row, `GET/PUT …/pwa/preferences` answer 503 `MODULE_DISABLED`; after
   reactivation the saved switches and preference are unchanged and the next status change produces
   one row. With `quote_requests` deactivated: order push still produced, public config
   `quoteStatusPushEnabled=false` (FR-024, FR-025, SC-006)
-- [ ] T035 GREEN Fix whatever T034 surfaces (expected: nothing beyond Phases 2–4)
-- [ ] T036 [P] [docs] Update `packages/modules/pwa/docs/pwa.md` (Product Owner section: the two
+- [X] T035 GREEN Fix whatever T034 surfaces (expected: nothing beyond Phases 2–4)
+- [X] T036 [P] [docs] Update `packages/modules/pwa/docs/pwa.md` (Product Owner section: the two
   switches, the account choices, the languages; developer table: the two settings, the
   preference table, the five quote events and the `degrades-without` edge; correct the deep links)
   and its Polish mirror `docs/i18n/pl/docusaurus-plugin-content-docs/current/modules/pwa.md`
-- [ ] T037 [docs] `pnpm --filter backend run composer:generate` to regenerate
+- [X] T037 [docs] `pnpm --filter backend run composer:generate` to regenerate
   `docs/docs/module-reference/pwa.md` and its Polish mirror (settings, action, non-binding
   dependency); refresh the translation cache as `0bfab6980` did; changeset for
   `@endora-commerce/mod-pwa` describing the behaviour change for shops with push on (quote pushes

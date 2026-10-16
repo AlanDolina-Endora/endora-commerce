@@ -38,6 +38,7 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | `organizations` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `sales_channels` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `settings` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `quote_requests` | nie | degrades-without `quoteRequestReadPort` — klienci przestają otrzymywać powiadomienia push o swoich zapytaniach ofertowych, a przełącznik i wybór dla zapytań nie są oferowane; powiadomienia o zamówieniach działają dalej |
 
 ## Uprawnienia
 
@@ -49,7 +50,9 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 
 ## Paleta poleceń
 
-_Brak._
+| Akcja | Otwiera | Uprawnienie |
+| --- | --- | --- |
+| `open-settings` | `/settings/pwa` | `pwa:read` |
 
 ## Ustawienia
 
@@ -63,6 +66,8 @@ _Brak._
 | `pwa.fcm_service_account` | FCM service account (JSON) | `secret` |
 | `pwa.icon_asset_id` | Icon source asset id | `string` |
 | `pwa.push_enabled` | Push notifications enabled | `boolean` |
+| `pwa.push_order_status_enabled` | Push on order status changes | `boolean` |
+| `pwa.push_quote_status_enabled` | Push on quote status changes | `boolean` |
 | `pwa.short_name` | Short name | `string` |
 | `pwa.theme_color` | Theme color | `string` |
 | `pwa.vapid_private_key` | VAPID private key | `secret` |

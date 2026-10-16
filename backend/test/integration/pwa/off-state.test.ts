@@ -1,11 +1,15 @@
-import { afterAll, beforeAll, describe, it } from 'vitest';
-import { PWA_SETTING_CODES } from '@endora-commerce/contracts';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { PWA_SETTING_CODES, PwaPublicConfigSchema } from '@endora-commerce/contracts';
 import {
   setupBackendServer,
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
-import { expectModuleAbsent } from '../../helpers/off-state.js';
+import { expectModuleAbsent, withModuleOff } from '../../helpers/off-state.js';
+import { TEST_CUSTOMER_ID } from '../../helpers/test-actors.js';
+import { seedShippedOrder, RFQ_SHIPPED_ORDER_ID } from '../../helpers/seed-commerce.js';
+import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
 
 /**
  * `pwa` off-state — Constitution XVII item 6.
@@ -45,10 +49,18 @@ import { expectModuleAbsent } from '../../helpers/off-state.js';
  * harness drives, and it is the one an operator creates: withdrawing the
  * installable-app capability from `/platform/modules` never touches the
  * lifecycle registry.
+ *
+ * `specs/149-pwa-order-status-push/` adds the customer's push preferences to
+ * the storefront surfaces, and two behavioural cases the route harness cannot
+ * express: a status change while `pwa` is off queues nothing and stores
+ * nothing, with every saved switch and choice intact when it comes back
+ * (FR-024, SC-006); and `quote_requests` off withdraws the quote category and
+ * nothing else (FR-025).
  */
 describe('pwa off-state (Constitution XVII)', () => {
   let h: BackendServerHandle;
   const admin = { b2b_session: 'stub-admin-session' };
+  const customer = { b2b_session: 'stub-customer-session' };
   const channel = { 'x-sales-channel': 'default' };
 
   beforeAll(async () => {
@@ -71,6 +83,16 @@ describe('pwa off-state (Constitution XVII)', () => {
           headers: channel,
           payload: {},
         },
+        { url: '/api/v1/storefront/pwa/preferences', headers: channel, cookies: customer },
+        {
+          method: 'PUT',
+          url: '/api/v1/storefront/pwa/preferences',
+          headers: channel,
+          cookies: customer,
+          // The harness replays every probe once the module is restored, so
+          // this one writes the default rather than leaving a choice behind.
+          payload: { orderStatus: true },
+        },
       ],
       adminPresence: { cookies: admin },
       settingWrite: {
@@ -78,6 +100,177 @@ describe('pwa off-state (Constitution XVII)', () => {
         value: '#123456',
         cookies: admin,
       },
+    });
+  });
+
+  describe('status pushes (specs/149-pwa-order-status-push/)', () => {
+    let quoteId: string;
+    const sql = <T>(query: string, params: unknown[] = []): Promise<T[]> =>
+      h.em().getConnection().execute(query, params) as Promise<T[]>;
+    const settle = (ms = 50): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+    async function rowsFor(eventId: string): Promise<number> {
+      const rows = await sql<{ n: number }>(
+        `select count(*)::int as n from push_messages where source_event_id = ?`,
+        [eventId],
+      );
+      return rows[0]!.n;
+    }
+
+    async function awaitRow(eventId: string): Promise<number> {
+      for (let i = 0; i < 40; i += 1) {
+        const n = await rowsFor(eventId);
+        if (n > 0) return n;
+        await settle();
+      }
+      return rowsFor(eventId);
+    }
+
+    function emitOrderStatus(eventId: string): void {
+      h.eventBus.emit('order.status_changed.v1' as never, {
+        eventId,
+        occurredAt: new Date().toISOString(),
+        orderId: RFQ_SHIPPED_ORDER_ID,
+        organizationId: '00000000-0000-4000-8000-0000000000aa',
+        salesChannelId: '00000000-0000-4000-8000-0000000000c1',
+        from: 'pending',
+        to: 'shipment_sent',
+        actor: { kind: 'admin' as const },
+      } as never);
+    }
+
+    function emitQuoteApproved(eventId: string): void {
+      h.eventBus.emit('rfq.approved.v1' as never, {
+        eventId,
+        occurredAt: new Date().toISOString(),
+        rfqId: quoteId,
+      } as never);
+    }
+
+    beforeAll(async () => {
+      await seedShippedOrder(h.em());
+      const add = await h.app.inject({
+        method: 'POST',
+        url: '/api/v1/cart/items',
+        cookies: customer,
+        payload: { productId: SEED_PRODUCT_101_ID, quantity: 1 },
+      });
+      expect(add.statusCode, add.body).toBe(200);
+      const convert = await h.app.inject({
+        method: 'POST',
+        url: '/api/v1/cart/convert-to-quote-request',
+        cookies: customer,
+        payload: {},
+      });
+      expect(convert.statusCode, convert.body).toBe(200);
+      quoteId = (convert.json() as { data: { quoteRequestId: string } }).data.quoteRequestId;
+
+      const actor = { actorAdminUserId: null };
+      await h.settings.adminService.setValueForAllChannels(PWA_SETTING_CODES.PUSH_ENABLED, true, null, actor);
+      await h.settings.adminService.setValueForAllChannels(
+        PWA_SETTING_CODES.VAPID_PUBLIC_KEY,
+        'BPUB',
+        null,
+        actor,
+      );
+      await settle();
+    });
+
+    afterAll(async () => {
+      await sql(`delete from push_notification_preferences where customer_account_id = ?`, [
+        TEST_CUSTOMER_ID,
+      ]);
+      const actor = { actorAdminUserId: null };
+      await h.settings.adminService.setValueForAllChannels(
+        PWA_SETTING_CODES.PUSH_QUOTE_STATUS_ENABLED,
+        true,
+        null,
+        actor,
+      );
+    });
+
+    it('queues and stores nothing while pwa is off, and resumes with every choice intact', async () => {
+      // Saved before the flip: a switch and a customer choice, both off the default.
+      await sql(`delete from push_notification_preferences where customer_account_id = ?`, [
+        TEST_CUSTOMER_ID,
+      ]);
+      const actor = { actorAdminUserId: null };
+      await h.settings.adminService.setValueForAllChannels(
+        PWA_SETTING_CODES.PUSH_QUOTE_STATUS_ENABLED,
+        false,
+        null,
+        actor,
+      );
+      const put = await h.app.inject({
+        method: 'PUT',
+        url: '/api/v1/storefront/pwa/preferences',
+        headers: channel,
+        cookies: customer,
+        payload: { quoteStatus: false },
+      });
+      expect(put.statusCode, put.body).toBe(200);
+      await settle();
+
+      const order = `evt-${randomUUID()}`;
+      const quote = `evt-${randomUUID()}`;
+      await withModuleOff('pwa', 'deactivated', async () => {
+        emitOrderStatus(order);
+        emitQuoteApproved(quote);
+        await settle(400);
+        expect(await rowsFor(order)).toBe(0);
+        expect(await rowsFor(quote)).toBe(0);
+      });
+
+      // Back on: nothing was deleted, nothing was reset.
+      const prefs = await h.app.inject({
+        method: 'GET',
+        url: '/api/v1/storefront/pwa/preferences',
+        headers: channel,
+        cookies: customer,
+      });
+      expect(prefs.json()).toEqual({ data: { orderStatus: true, quoteStatus: false } });
+      const config = await h.app.inject({
+        method: 'GET',
+        url: '/api/v1/admin/pwa/config',
+        cookies: admin,
+      });
+      expect(config.json()).toMatchObject({ orderStatusPushEnabled: true, quoteStatusPushEnabled: false });
+
+      // And the first status change after the flip notifies as configured.
+      const next = `evt-${randomUUID()}`;
+      emitOrderStatus(next);
+      expect(await awaitRow(next)).toBe(1);
+    });
+
+    it('withdraws only the quote category while quote_requests is off', async () => {
+      await sql(`delete from push_notification_preferences where customer_account_id = ?`, [
+        TEST_CUSTOMER_ID,
+      ]);
+      const actor = { actorAdminUserId: null };
+      await h.settings.adminService.setValueForAllChannels(
+        PWA_SETTING_CODES.PUSH_QUOTE_STATUS_ENABLED,
+        true,
+        null,
+        actor,
+      );
+      await settle();
+
+      await withModuleOff('quote_requests', 'deactivated', async () => {
+        const order = `evt-${randomUUID()}`;
+        emitOrderStatus(order);
+        expect(await awaitRow(order)).toBe(1);
+
+        const config = PwaPublicConfigSchema.parse(
+          (
+            await h.app.inject({
+              method: 'GET',
+              url: '/api/v1/storefront/pwa/config',
+              headers: channel,
+            })
+          ).json(),
+        );
+        expect(config).toMatchObject({ orderStatusPushEnabled: true, quoteStatusPushEnabled: false });
+      });
     });
   });
 });
