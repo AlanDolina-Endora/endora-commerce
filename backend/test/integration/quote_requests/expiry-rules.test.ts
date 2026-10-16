@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { EntityManager } from '@mikro-orm/postgresql';
+import { SalesChannel } from '@endora-commerce/platform/kernel';
 import {
   setupBackendServer,
   teardownBackendServer,
@@ -254,6 +255,117 @@ describe('quote_requests expiry sweep — which requests are due, and who wins a
   });
 
   // --- the clock --------------------------------------------------------------
+
+  describe("each request is held to its own sales channel's expiry_days (issue #239)", () => {
+    // The sweep read `expiry_days` for the default channel and applied it to
+    // requests of every channel: a channel set to 0 was not exempt, and a
+    // channel with its own number of days was held to the default's.
+    let otherChannel: { id: string; code: string };
+    const ACTOR = { actorAdminUserId: null };
+
+    /** `expiry_days` for every channel, then `other` for the second one alone. */
+    const configure = async (all: number, other: number): Promise<void> => {
+      await h.settings.adminService.setValueForAllChannels(QUOTE_REQUESTS_SETTING_CODES.EXPIRY_DAYS, all, null, ACTOR);
+      await h.settings.adminService.setValueForSubset(
+        QUOTE_REQUESTS_SETTING_CODES.EXPIRY_DAYS,
+        [otherChannel.code],
+        other,
+        null,
+        ACTOR,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    };
+
+    /** A submitted request, moved to `channelId` — `null` for a request raised with no channel. */
+    const submittedOn = async (channelId: string | null): Promise<string> => {
+      const id = await submitted();
+      await h.em().execute(`update "quote_requests" set "sales_channel_id" = ? where "id" = ?`, [channelId, id]);
+      return id;
+    };
+
+    beforeAll(async () => {
+      const em = h.em();
+      const channel = em.create(SalesChannel, {
+        code: `qr-expiry-${Date.now()}`,
+        name: { 'en-US': 'QR expiry probe' },
+        isPublic: true,
+        defaultLanguage: 'en-US',
+        defaultCurrency: 'PLN',
+        languages: ['en-US'],
+        currencies: ['PLN'],
+      });
+      await em.persistAndFlush(channel);
+      otherChannel = { id: channel.id, code: channel.code };
+    });
+
+    afterAll(async () => {
+      await h.settings.adminService.resetValues(QUOTE_REQUESTS_SETTING_CODES.EXPIRY_DAYS, [otherChannel.code], ACTOR);
+      await h.settings.adminService.setValueForAllChannels(
+        QUOTE_REQUESTS_SETTING_CODES.EXPIRY_DAYS,
+        EXPIRY_DAYS,
+        null,
+        ACTOR,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+
+    it('a channel set to 0 is exempt, while the default channel expires at its own value', async () => {
+      await configure(EXPIRY_DAYS, 0);
+      const exempt = await submittedOn(otherChannel.id);
+      await quietFor(exempt, EXPIRY_DAYS + 1);
+
+      expect(await worker().hasExpirable(), 'only the exempt channel holds a quiet request').toBe(false);
+      expect(await worker().sweep()).toMatchObject({ expiredCount: 0 });
+      expect(await statusOf(exempt)).toBe('Pending');
+
+      const onDefault = await submitted();
+      await quietFor(onDefault, EXPIRY_DAYS + 1);
+      expect(await worker().hasExpirable()).toBe(true);
+      expect(await worker().sweep()).toMatchObject({ expiredCount: 1 });
+      expect(await statusOf(onDefault)).toBe('Expired');
+      expect(await statusOf(exempt)).toBe('Pending');
+    });
+
+    it("a channel's own number of days applies even where the default channel never expires", async () => {
+      await configure(0, EXPIRY_DAYS);
+      const id = await submittedOn(otherChannel.id);
+      await quietFor(id, EXPIRY_DAYS + 1);
+
+      expect(await worker().hasExpirable()).toBe(true);
+      expect(await worker().sweep()).toMatchObject({ expiredCount: 1 });
+      expect(await statusOf(id)).toBe('Expired');
+
+      const expired = await h
+        .em()
+        .execute<Array<{ payload: { expiryDaysAtTime?: number } }>>(
+          `select "payload" from "quote_request_events" where "quote_request_id" = ? and "event_type" = 'expired'`,
+          [id],
+        );
+      expect(expired[0]?.payload.expiryDaysAtTime, 'the history records the value that applied').toBe(EXPIRY_DAYS);
+    });
+
+    it("a channel's shorter value expires a request the default channel's value would still keep", async () => {
+      await configure(EXPIRY_DAYS * 4, EXPIRY_DAYS);
+      const onOther = await submittedOn(otherChannel.id);
+      const onDefault = await submitted();
+      await quietFor(onOther, EXPIRY_DAYS + 1);
+      await quietFor(onDefault, EXPIRY_DAYS + 1);
+
+      expect(await worker().sweep()).toMatchObject({ expiredCount: 1 });
+      expect(await statusOf(onOther)).toBe('Expired');
+      expect(await statusOf(onDefault)).toBe('Pending');
+    });
+
+    it("a request raised with no channel is held to the default channel's value", async () => {
+      await configure(EXPIRY_DAYS, 0);
+      const id = await submittedOn(null);
+      await quietFor(id, EXPIRY_DAYS + 1);
+
+      expect(await worker().hasExpirable()).toBe(true);
+      expect(await worker().sweep()).toMatchObject({ expiredCount: 1 });
+      expect(await statusOf(id)).toBe('Expired');
+    });
+  });
 
   describe('what restarts the clock', () => {
     it('the buyer opening the request does not — it marks the revision as seen and says nothing to anybody', async () => {

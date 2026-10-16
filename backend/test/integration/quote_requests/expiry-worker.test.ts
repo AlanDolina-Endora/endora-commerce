@@ -11,6 +11,7 @@ import { RfqEventService } from '../../../../packages/modules/quote_requests/src
 import { RfqNotificationService } from '../../../../packages/modules/quote_requests/src/backend/services/rfq-notification-service.js';
 import { SalesRepAssignmentService } from '../../../../packages/modules/organizations/src/backend/services/sales-rep-assignment-service.js';
 import { EventBus } from '@endora-commerce/platform/events';
+import { SalesChannel } from '@endora-commerce/platform/kernel';
 import type { AdminUserReadPort } from '@endora-commerce/contracts';
 
 /**
@@ -31,7 +32,17 @@ describe('RfqExpiryWorker (US7 / T074)', () => {
     await teardownBackendServer(h);
   });
 
+  /**
+   * `expiryDays` for every channel and for a request with none — what this file
+   * has always meant by one number. Per-channel values are `expiry-rules.test.ts`'s
+   * subject (issue #239).
+   */
   function buildWorker(resolveExpiryDays: () => Promise<number>): RfqExpiryWorker {
+    const resolveExpiryRule = async () => {
+      const days = await resolveExpiryDays();
+      const channels = await h.em().find(SalesChannel, {});
+      return { byChannel: new Map(channels.map((channel) => [channel.id, days])), withoutChannel: days };
+    };
     return new RfqExpiryWorker({
       emFactory: () => h.em(),
       events: new EventBus() as unknown as RfqExpiryWorker['deps' & 'events'] extends never ? never : never,
@@ -42,7 +53,7 @@ describe('RfqExpiryWorker (US7 / T074)', () => {
       // `admin_users`' published port instead of `em.find(AdminUser, {})`.
       adminUsers: (h.container.cradle as never as { adminUserReadPort: AdminUserReadPort })
         .adminUserReadPort,
-      resolveExpiryDays,
+      resolveExpiryRule,
     } as never);
   }
 

@@ -38,7 +38,7 @@ import {
 import type { RequireAdminAnyFactory, RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
-import type { SettingsReadPort } from '@endora-commerce/platform/kernel';
+import type { SalesChannelResolutionPort, SettingsReadPort } from '@endora-commerce/platform/kernel';
 import { QUOTE_REQUESTS_SETTING_CODES } from '../manifest.js';
 import { quoteRequestsModule, type QuoteRequestsModuleOptions } from './plugin.js';
 import { QuoteRequest } from './entities/quote-request.entity.js';
@@ -54,7 +54,8 @@ import { QuoteRequestAccountPolicy } from './entities/quote-request-account-poli
  * `quote_requests` — four settings resolvers that belonged to the module
  * (feature 072, wave 3, T132).
  *
- * `resolveExpiryDays`, `resolveBoolSetting`, `resolveBusinessIdPrefix` and
+ * `resolveExpiryRule` (`resolveExpiryDays` until issue #239 made it per channel),
+ * `resolveBoolSetting`, `resolveBusinessIdPrefix` and
  * `resolveBusinessIdSuffix` each read a `quote_requests.*` setting and fall back
  * to this module's own default. All four were written out in a composition root
  * — twice, once per root, with the same try/catch — so that the module "isn't
@@ -97,6 +98,12 @@ export interface QuoteRequestsCradle {
    * `inventory` and others under this same name.
    */
   readonly settingsChannelResolver: () => Promise<string | null>;
+  /**
+   * Every sales channel, for the expiry sweep's per-channel `expiry_days`
+   * (issue #239). A kernel port; channel configuration is platform data, so the
+   * sweep's tenant-free probe may read it.
+   */
+  readonly salesChannelResolutionPort: SalesChannelResolutionPort;
   readonly customFieldValueService: NonNullable<
     QuoteRequestsModuleOptions['customFieldValues']
   >;
@@ -363,8 +370,17 @@ export function registerModule(ctx: ModuleContext): void {
           schema: z.ZodType<T>,
           fallback: T,
         ): Promise<T> => {
+          const channelId = await ctx.cradle<QuoteRequestsCradle>().settingsChannelResolver();
+          return settingFor(code, schema, fallback, channelId);
+        };
+        /** {@link setting} for a named channel — the expiry sweep reads every channel's (issue #239). */
+        const settingFor = async <T>(
+          code: string,
+          schema: z.ZodType<T>,
+          fallback: T,
+          channelId: string | null,
+        ): Promise<T> => {
           const cradle = ctx.cradle<QuoteRequestsCradle>();
-          const channelId = await cradle.settingsChannelResolver();
           if (channelId === null || !UUID_PATTERN.test(channelId)) {
             // Both roots answer this resolver with the system-default channel's
             // id, falling back to `ORGANIZATIONS_SETTINGS_CHANNEL_ID` — an env
@@ -480,8 +496,19 @@ export function registerModule(ctx: ModuleContext): void {
                 .quoteRequestNegotiationPolicyService.precheckProposalsAllowed(customerAccountId, lines, em),
           },
           negotiationDisplay: () => ctx.cradle<QuoteRequestsCradle>().quoteRequestNegotiationPolicyService,
-          resolveExpiryDays: () =>
-            setting(QUOTE_REQUESTS_SETTING_CODES.EXPIRY_DAYS, z.number().int().nonnegative(), 0),
+          // Issue #239 — the sweep holds each request to its own channel's
+          // value; it used to read the default channel's alone and apply it to
+          // every channel. A request with no channel keeps the default's.
+          resolveExpiryRule: async () => {
+            const schema = z.number().int().nonnegative();
+            const code = QUOTE_REQUESTS_SETTING_CODES.EXPIRY_DAYS;
+            const channels = await ctx.cradle<QuoteRequestsCradle>().salesChannelResolutionPort.listAll();
+            const byChannel = new Map<string, number>();
+            for (const channel of channels) {
+              byChannel.set(channel.id, await settingFor(code, schema, 0, channel.id));
+            }
+            return { byChannel, withoutChannel: await setting(code, schema, 0) };
+          },
           resolveBoolSetting: (key) =>
             setting(
               key === 'show_add_to_quote_on_card'
