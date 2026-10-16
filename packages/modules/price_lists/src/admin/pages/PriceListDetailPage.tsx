@@ -13,6 +13,7 @@ import {
   Cog,
   Copy,
   Filter,
+  Grid3x3,
   Layers,
   Lock,
   Save,
@@ -32,6 +33,7 @@ import {
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { BracketGrid, type BracketsByCurrency } from '../components/BracketGrid.js';
 import { ApplicationRuleBuilder } from '../components/ApplicationRuleBuilder.js';
+import { PriceMatrixTab } from '../components/PriceMatrixTab.js';
 import {
   createRosterNameResolver,
   type RosterNameResolver,
@@ -60,7 +62,7 @@ const STATUS_BADGE_CLASS: Record<PriceListStatus, string> = {
   expired: 'b2b-badge b2b-badge--muted',
 };
 
-type Tab = 'details' | 'products' | 'rule';
+type Tab = 'details' | 'products' | 'rule' | 'matrix';
 
 /**
  * Price list editor (feature 011 engine shape).
@@ -78,6 +80,8 @@ type Tab = 'details' | 'products' | 'rule';
  */
 export function PriceListDetailPage(): ReactNode {
   const t = useTranslation('core');
+  // Feature 148 — the price matrix tab's strings are this module's own.
+  const tm = useTranslation('price_lists');
   const STATUS_LABEL: Record<PriceListStatus, string> = {
     draft: t('priceLists.status.draft'),
     active: t('priceLists.status.active'),
@@ -97,7 +101,10 @@ export function PriceListDetailPage(): ReactNode {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>(focusProductId ? 'products' : 'details');
+  // `?tab=matrix` deep-links the price matrix (feature 148); `?focus=` the roster.
+  const [tab, setTab] = useState<Tab>(
+    searchParams.get('tab') === 'matrix' ? 'matrix' : focusProductId ? 'products' : 'details',
+  );
 
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -322,6 +329,7 @@ export function PriceListDetailPage(): ReactNode {
               <TabBtn id="details" label={t('priceLists.detail.tab.details')} icon={<Cog size={14} />} active={tab} onChange={setTab} />
               <TabBtn id="products" label={t('priceLists.detail.tab.products')} icon={<Layers size={14} />} active={tab} onChange={setTab} />
               <TabBtn id="rule" label={t('priceLists.detail.tab.rule')} icon={<Filter size={14} />} active={tab} onChange={setTab} />
+              <TabBtn id="matrix" label={tm('priceMatrix.tab')} icon={<Grid3x3 size={14} />} active={tab} onChange={setTab} />
             </div>
           </div>
         </div>
@@ -337,6 +345,7 @@ export function PriceListDetailPage(): ReactNode {
               focusProductId={focusProductId}
             />
           ) : null}
+          {tab === 'matrix' ? <PriceMatrixTab priceListId={list.id} /> : null}
           {tab === 'rule' ? (
             <ApplicationRulePanel
               rule={list.applicationRule}
