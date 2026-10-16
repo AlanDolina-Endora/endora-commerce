@@ -91,6 +91,7 @@ export const MIGRATED_MODULES: readonly string[] = [
   'erp_connector',
   'comarch_xl',
   'crm',
+  'admin_search',
 ];
 
 /**

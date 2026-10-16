@@ -24,6 +24,7 @@ of the platform, not of what happens to be written.
 | [Admin Command Palette Actions](./admin-actions.md) | Module-contributed action registry surfaced in the Admin Command Palette (⌘K Actions group) | @endora-commerce/mod-admin-actions |
 | `admin_notifications` | _no page yet_ | @endora-commerce/mod-admin-notifications |
 | [admin_roles](./admin_roles.md) | Admin role definitions + per-module Permissions | @endora-commerce/mod-admin-roles |
+| `admin_search` | _no page yet_ | @endora-commerce/mod-admin-search |
 | [admin_users](./admin_users.md) | Platform Administrator accounts + impersonation | @endora-commerce/mod-admin-users |
 | [analytics](./analytics.md) | Storefront event ingest + admin aggregation + optional GA4 forwarder | @endora-commerce/mod-analytics |
 | [api_keys](./api_keys.md) | Bearer-token integration credentials | @endora-commerce/mod-api-keys |

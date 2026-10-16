@@ -120,6 +120,7 @@
     "@endora-commerce/mod-admin-actions": "workspace:*",
     "@endora-commerce/mod-admin-notifications": "workspace:*",
     "@endora-commerce/mod-admin-roles": "workspace:*",
+    "@endora-commerce/mod-admin-search": "workspace:*",
     "@endora-commerce/mod-admin-users": "workspace:*",
     "@endora-commerce/mod-analytics": "workspace:*",
     "@endora-commerce/mod-api-keys": "workspace:*",
