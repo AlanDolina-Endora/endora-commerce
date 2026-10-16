@@ -26,12 +26,14 @@ import { Migration20260426T075235PriceListsPricingInit } from './20260426T075235
 import { Migration20260504T125655PriceListsEngine } from './20260504T125655_price_lists_engine.js';
 import { Migration20260817T055457PriceListsSingleSystemPriceList } from './20260817T055457_price_lists_single_system_price_list.js';
 import { Migration20260821T135907PriceListsUnitPriceAmountIndex } from './20260821T135907_price_lists_unit_price_amount_index.js';
+import { Migration20261016T131148PriceListsPriceMatrixEntries } from './20261016T131148_price_lists_price_matrix_entries.js';
 
 export const migrations = [
   Migration20260426T075235PriceListsPricingInit,
   Migration20260504T125655PriceListsEngine,
   Migration20260817T055457PriceListsSingleSystemPriceList,
   Migration20260821T135907PriceListsUnitPriceAmountIndex,
+  Migration20261016T131148PriceListsPriceMatrixEntries,
 ];
 
 export {
@@ -39,4 +41,5 @@ export {
   Migration20260504T125655PriceListsEngine,
   Migration20260817T055457PriceListsSingleSystemPriceList,
   Migration20260821T135907PriceListsUnitPriceAmountIndex,
+  Migration20261016T131148PriceListsPriceMatrixEntries,
 };

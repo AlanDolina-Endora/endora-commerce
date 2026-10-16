@@ -38,7 +38,7 @@ Plus the behavioural flags and a numeric position:
 | `isVariantAxis` | `false` | Configurable-product variant picker |
 | `isRequired` | `false` | Product-save validator (only when the attribute is in the assigned Attribute Set) |
 | `isPromoRule` | `false` | Promotion Rule criterion picker |
-| `isPriceRule` | `false` | Price Lists — whether the attribute may be used as a price-building rule. Price Lists have no attribute-based rule yet, so today the flag is recorded and published, and nothing prices from it. |
+| `isPriceRule` | `false` | Price Lists — whether the attribute may select products in a price list's **price matrix** (the `price_lists` module). Only a single-choice, multiple-choice or yes/no attribute that is neither per-language nor per-channel qualifies. Clearing the flag deactivates the matrix entries that use the attribute — they stop affecting prices and resume when the flag is set again; it never causes a pricing error. |
 | `isVisibleOnProductPage` | `false` | PDP "Parametry produktu" tab |
 | `displayAsSlider` | `false` | Storefront sidebar — renders a range slider; only valid for `valueType ∈ ('number','price')` |
 | `filterPosition` | `0` | Storefront sidebar sort key (ascending; ties broken alphabetically by the resolved label) |

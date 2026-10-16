@@ -5,6 +5,7 @@ import {
   type BulkAddPriceListProductsResult,
 } from '@endora-commerce/contracts';
 import type {
+  CatalogAttributeReadPort,
   CatalogCategoryReadPort,
   CatalogProductReadPort,
   CustomerGroupReadPort,
@@ -24,6 +25,13 @@ import {
   type DisplayModeCategoryCandidate,
 } from './display-mode-resolver.js';
 import { partitionBulkAdd } from './bulk-add-partition.js';
+import { PriceMatrixService } from './price-matrix-service.js';
+import { PriceListMatrixEntry } from '../entities/price-list-matrix-entry.entity.js';
+import type {
+  PriceMatrixEntry,
+  PriceMatrixEntryInput,
+  PriceMatrixEntryPatch,
+} from '@endora-commerce/contracts';
 import { randomUUID } from 'crypto';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { Command, CommandBus } from '@endora-commerce/platform/commands';
@@ -93,6 +101,13 @@ export interface PriceListTargetReads {
    * organisations and categories.
    */
   customerGroupRead: CustomerGroupReadPort;
+  /**
+   * Feature 148 — `catalog`'s attribute read model. The price matrix may select
+   * products by an attribute value, and only attributes flagged *Price list
+   * rules* (`isPriceRule`) qualify; both the write-time eligibility check and
+   * the resolver's "is this entry still active" question read the flag here.
+   */
+  catalogAttributeRead: CatalogAttributeReadPort;
 }
 
 /**
@@ -146,6 +161,76 @@ export class PriceListService {
       );
     }
     return this.targetReads;
+  }
+
+  #matrix: PriceMatrixService | undefined;
+
+  /**
+   * Feature 148 — the price matrix's reads and write preparation. The writes are
+   * the three methods below, through this service's audited runner, so a matrix
+   * write and a bracket write take the same Command Bus path and invalidate the
+   * same cache.
+   */
+  get matrix(): PriceMatrixService {
+    this.#matrix ??= new PriceMatrixService({
+      emFactory: this.emFactory,
+      targets: () => this.targets(),
+    });
+    return this.#matrix;
+  }
+
+  /** Feature 148 — create a price matrix entry (contract §3). */
+  async createMatrixEntry(
+    priceListId: string,
+    input: PriceMatrixEntryInput,
+    auditCtx?: PriceListsAuditContext,
+  ): Promise<PriceMatrixEntry> {
+    return this.#runAudited('price_list.matrix_entry_create', priceListId, auditCtx, async (em) => {
+      const { list, fields } = await this.matrix.prepareCreate(em, priceListId, input);
+      const entity = em.create(PriceListMatrixEntry, { priceListId, ...fields });
+      em.persist(entity);
+      const after = await this.matrix.dtoFor(entity);
+      return { result: after, row: list, before: null, after: { ...after } };
+    });
+  }
+
+  /**
+   * Feature 148 — change a price matrix entry (contract §4). Every create rule
+   * runs on the merged entry; a patch that changes nothing is not audited.
+   */
+  async patchMatrixEntry(
+    priceListId: string,
+    entryId: string,
+    patch: PriceMatrixEntryPatch,
+    auditCtx?: PriceListsAuditContext,
+  ): Promise<PriceMatrixEntry> {
+    return this.#runAudited('price_list.matrix_entry_update', priceListId, auditCtx, async (em) => {
+      const { list, entity, before, fields } = await this.matrix.preparePatch(
+        em,
+        priceListId,
+        entryId,
+        patch,
+      );
+      if (fields === null) return { result: before, row: list, before: null, after: null, skipAudit: true };
+      Object.assign(entity, fields);
+      entity.updatedAt = new Date();
+      em.persist(entity);
+      const after = await this.matrix.dtoFor(entity);
+      return { result: after, row: list, before: { ...before }, after: { ...after } };
+    });
+  }
+
+  /** Feature 148 — delete a price matrix entry (contract §5). */
+  async removeMatrixEntry(
+    priceListId: string,
+    entryId: string,
+    auditCtx?: PriceListsAuditContext,
+  ): Promise<void> {
+    await this.#runAudited('price_list.matrix_entry_delete', priceListId, auditCtx, async (em) => {
+      const { list, entity, before } = await this.matrix.prepareRemove(em, priceListId, entryId);
+      em.remove(entity);
+      return { result: undefined, row: list, before: { ...before }, after: null };
+    });
   }
 
   private invalidatePricingCache(): void {
@@ -600,6 +685,13 @@ export class PriceListService {
         });
       }
 
+      // Feature 148 — the matrix travels with the list (FR-025), in this run.
+      const matrixEntries = await PriceMatrixService.entryFieldsOf(em, source.id);
+      for (const fields of matrixEntries) {
+        em.create(PriceListMatrixEntry, { priceListId: dup.id, ...fields });
+      }
+      const matrixEntryCount = matrixEntries.length;
+
       return {
         result: dup,
         row: dup,
@@ -608,6 +700,7 @@ export class PriceListService {
           name: dup.name,
           sourcePriceListId: source.id,
           sourceName: source.name,
+          matrixEntryCount,
         },
       };
     });

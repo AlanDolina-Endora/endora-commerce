@@ -187,6 +187,7 @@ const catalogProductsStub: CatalogProductReadPort = {
   findPackagingUnitInProduct: async () => null,
   listLinksBySourceIds: async () => [],
   listValueOverridesByProductIds: async () => [],
+  listProductIdsByAttributeValue: async () => [],
 };
 
 /**

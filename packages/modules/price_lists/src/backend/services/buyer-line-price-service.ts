@@ -45,6 +45,12 @@ export interface BuyerLinePriceServiceDeps {
 /** One answer plus whether its product exists — the probe needs the second half for its 404. */
 export interface BuyerLinePriceDetailedAnswer extends BuyerLinePriceAnswer {
   productFound: boolean;
+  /**
+   * Feature 148 / FR-020 — the price matrix entry that priced the line, or
+   * `null`. The admin probe's explanation only: `resolveForBuyer` strips it, so
+   * the published `BuyerLinePriceAnswer` is not widened (D-77).
+   */
+  matrixEntryId: string | null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -125,7 +131,7 @@ export class BuyerLinePriceService implements BuyerLinePricePort {
       for (const line of chunk) {
         const product = byId.get(line.productId);
         if (!product) {
-          answers.push({ key: line.key, price: null, productFound: false });
+          answers.push({ key: line.key, price: null, productFound: false, matrixEntryId: null });
           continue;
         }
         const resolved = await this.deps.pricingService.resolveLinePrice({
@@ -150,6 +156,7 @@ export class BuyerLinePriceService implements BuyerLinePricePort {
               }
             : null,
           productFound: true,
+          matrixEntryId: resolved?.matrixEntryId ?? null,
         });
       }
     }

@@ -33,6 +33,7 @@ const NEIGHBOUR_READS: Pick<
     catalogCategoryRead: refusingPort('catalogCategoryReadPort'),
     organizationDetails: refusingPort('organizationDetailsPort'),
     customerGroupRead: refusingPort('customerGroupReadPort'),
+    catalogAttributeRead: refusingPort('catalogAttributeReadPort'),
   },
   customerAccountRead: refusingPort('customerAccountReadPort'),
   salesRepScope: refusingPort('organizationSalesRepScopePort'),

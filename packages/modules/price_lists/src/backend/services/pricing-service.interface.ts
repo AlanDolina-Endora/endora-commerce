@@ -82,6 +82,12 @@ export interface PricingLineResult {
   isSale: boolean;
   bracketStartQuantity: number;
   displayMode: DisplayMode;
+  /**
+   * Feature 148 — the price matrix entry that priced the line, when one did.
+   * Absent for a line priced by a stored bracket. Internal to this module's
+   * contract: the published `LinePriceResult` is deliberately not widened (D-77).
+   */
+  matrixEntryId?: string | null;
 }
 
 /**

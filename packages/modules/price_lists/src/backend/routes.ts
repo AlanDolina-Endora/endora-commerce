@@ -6,13 +6,16 @@ import {
   replaceBracketsRequestSchema,
   replaceProductsRequestSchema,
   priceListIdParamsSchema,
+  priceMatrixEntryInputSchema,
+  priceMatrixEntryPatchSchema,
+  priceMatrixListQuerySchema,
   ERROR_CODES,
 } from '@endora-commerce/contracts';
 import { z } from 'zod';
 import { HttpError } from '@endora-commerce/platform/http';
-import type { ApplicationRule } from '@endora-commerce/contracts';
 import { orgConstraintFor, ruleVisibleForScope } from '@endora-commerce/platform/tenancy';
 import type { PriceListService } from './services/price-list-service.js';
+import { extractRuleOrgTargets } from './services/rule-org-targets.js';
 import type { PriceList } from './entities/price-list.entity.js';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
@@ -89,23 +92,6 @@ function buildAuditCtx(
         : null,
     requestId: request.id,
   };
-}
-
-/**
- * Feature 050 — price_lists is rule-scoped: its org targeting lives in the
- * applicationRule AST, not a column. Collect the org ids a rule targets so a
- * scoped admin only sees lists targeting one of their orgs (or global lists).
- */
-function extractRuleOrgTargets(rule: ApplicationRule | null | undefined): string[] {
-  if (!rule) return [];
-  switch (rule.kind) {
-    case 'all':
-      return [];
-    case 'criterion':
-      return rule.type === 'organization' ? [...rule.values] : [];
-    case 'group':
-      return rule.children.flatMap(extractRuleOrgTargets);
-  }
 }
 
 export async function registerPricingRoutes(
@@ -402,7 +388,100 @@ export async function registerPricingRoutes(
     },
   );
 
+  // ---- Price matrix (feature 148) -------------------------------------
+  //
+  // `specs/148-price-list-matrix-rules/contracts/admin-price-matrix-api.md`.
+  // Reads behind `price_lists:read`, writes behind `price_lists:write`, every
+  // write through the module's one audited Command Bus path. `lang` is the
+  // admin UI's language, used only to pick display labels.
+
+  app.get<{ Params: { id: string }; Querystring: Record<string, string | undefined> }>(
+    '/api/v1/admin/price-lists-engine/:id/matrix',
+    { preHandler: readGate, schema: { params: priceListIdParamsSchema } },
+    async (request) => {
+      const query = priceMatrixListQuerySchema.parse(request.query);
+      const data = await priceListService.matrix.list(
+        request.params.id,
+        query,
+        labelLanguage(request.query['lang']),
+      );
+      return { data };
+    },
+  );
+
+  app.get<{ Params: { id: string; entryId: string }; Querystring: { lang?: string } }>(
+    '/api/v1/admin/price-lists-engine/:id/matrix/:entryId',
+    { preHandler: readGate },
+    async (request) => ({
+      data: await priceListService.matrix.get(
+        request.params.id,
+        request.params.entryId,
+        labelLanguage(request.query.lang),
+      ),
+    }),
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/admin/price-lists-engine/:id/matrix',
+    {
+      preHandler: writeGate,
+      schema: { params: priceListIdParamsSchema, body: priceMatrixEntryInputSchema },
+    },
+    async (request, reply) => {
+      const body = priceMatrixEntryInputSchema.parse(request.body);
+      const entry = await priceListService.createMatrixEntry(
+        request.params.id,
+        body,
+        buildAuditCtx(request, deps.resolveAdminAuditContext),
+      );
+      reply.status(201);
+      return { data: entry };
+    },
+  );
+
+  app.patch<{ Params: { id: string; entryId: string } }>(
+    '/api/v1/admin/price-lists-engine/:id/matrix/:entryId',
+    { preHandler: writeGate, schema: { body: priceMatrixEntryPatchSchema } },
+    async (request) => {
+      const body = priceMatrixEntryPatchSchema.parse(request.body);
+      const entry = await priceListService.patchMatrixEntry(
+        request.params.id,
+        request.params.entryId,
+        body,
+        buildAuditCtx(request, deps.resolveAdminAuditContext),
+      );
+      return { data: entry };
+    },
+  );
+
+  app.delete<{ Params: { id: string; entryId: string } }>(
+    '/api/v1/admin/price-lists-engine/:id/matrix/:entryId',
+    { preHandler: writeGate },
+    async (request, reply) => {
+      await priceListService.removeMatrixEntry(
+        request.params.id,
+        request.params.entryId,
+        buildAuditCtx(request, deps.resolveAdminAuditContext),
+      );
+      return reply.status(204).send();
+    },
+  );
+
   // ---- Rule-builder pickers (US4) -----------------------------------
+
+  /**
+   * Feature 148 — the attributes a price matrix entry may select on: flagged
+   * *Price list rules*, a choice or yes/no value, neither per-language nor
+   * per-channel. A sibling of the pickers below so a pricing role needs no
+   * catalogue permission to build an entry (the issue #180 pattern).
+   */
+  app.get<{ Querystring: { lang?: string } }>(
+    '/api/v1/admin/pricing/rule-targets/attributes',
+    { preHandler: readGate },
+    async (request) => ({
+      data: { items: await priceListService.matrix.attributeTargets(labelLanguage(request.query.lang)) },
+    }),
+  );
 
   app.get(
     '/api/v1/admin/pricing/rule-targets/sales-channels',
@@ -704,7 +783,13 @@ export async function registerPricingRoutes(
           .send({ error: { code: 'NOT_FOUND', message: 'Product not found.' } });
       }
 
-      return { data: { resolvedPrice: answer.price } };
+      // Feature 148 / FR-020 — the probe names the matrix entry that priced the
+      // line (additive; `null` for a stored bracket).
+      return {
+        data: {
+          resolvedPrice: answer.price ? { ...answer.price, matrixEntryId: answer.matrixEntryId } : null,
+        },
+      };
     },
   );
 
@@ -766,6 +851,11 @@ export async function registerPricingRoutes(
     }
     return { organizationId, customerAccountId: asked.customerAccountId };
   }
+}
+
+/** A short language tag the admin UI sends to choose display labels, or `null`. */
+function labelLanguage(value: string | undefined): string | null {
+  return typeof value === 'string' && /^[a-z]{2}(-[A-Za-z]{2})?$/.test(value) ? value : null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

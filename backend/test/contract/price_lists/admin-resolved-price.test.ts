@@ -76,6 +76,44 @@ describe('Admin resolved-price endpoint', () => {
     expect(body.data.resolvedPrice?.currency).toBe('PLN');
   });
 
+  /**
+   * Feature 148 / FR-020 — the probe names the matrix entry that priced the
+   * line, and `null` for a line a stored bracket priced.
+   */
+  it('names the matrix entry that priced the line, and null for a bracket price', async () => {
+    const probe = async () => {
+      const res = await h.app.inject({
+        method: 'GET',
+        url:
+          `/api/v1/admin/products/${SEED_PRODUCT_101_ID}/resolved-price` +
+          `?organizationId=${TEST_ORGANIZATION_ID}&quantity=1`,
+        cookies: ADMIN_COOKIE,
+      });
+      expect(res.statusCode).toBe(200);
+      return (res.json() as {
+        data: { resolvedPrice: { amount: string; priceListId: string; matrixEntryId: string | null } };
+      }).data.resolvedPrice;
+    };
+    expect((await probe()).matrixEntryId).toBeNull();
+
+    const created = await h.app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/price-lists-engine/${DEFAULT_PRICE_LIST_ID}/matrix`,
+      cookies: ADMIN_COOKIE,
+      payload: {
+        organizationId: TEST_ORGANIZATION_ID,
+        minQuantity: 1,
+        price: { type: 'discount_percent', percent: '10' },
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const entryId = (created.json() as { data: { id: string } }).data.id;
+    const priced = await probe();
+    expect(priced.matrixEntryId).toBe(entryId);
+    expect(Number(priced.amount)).toBeCloseTo(179.1, 4);
+    expect(priced.priceListId).toBe(DEFAULT_PRICE_LIST_ID);
+  });
+
   it('returns 404 for an unknown product', async () => {
     const res = await h.app.inject({
       method: 'GET',

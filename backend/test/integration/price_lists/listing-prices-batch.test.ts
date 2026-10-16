@@ -15,7 +15,8 @@ import {
   SEED_PRODUCT_102_ID,
   SEED_PRODUCT_103_ID,
 } from '../../helpers/seed-catalog.js';
-import { Product } from '../../helpers/package-entities.js';
+import { PriceListMatrixEntry, Product } from '../../helpers/package-entities.js';
+import { findAttributeExtensionByKey } from '../../helpers/seed-catalog.js';
 import { CustomerGroup } from '../../helpers/package-entities.js';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
 import { PriceListService } from '../../../../packages/modules/price_lists/src/backend/services/price-list-service.js';
@@ -82,6 +83,9 @@ describe('price_lists — batched listing price resolution', () => {
   let customerGroup: CustomerGroup;
   let products: ProductRow[];
   let childCategoryId: string;
+  let orgListId: string;
+  let catListId: string;
+  let draftListId: string;
   const overrideTargets: Array<{ scope: 'product' | 'category' | 'organization'; targetId: string }> =
     [];
 
@@ -170,6 +174,7 @@ describe('price_lists — batched listing price resolution', () => {
       PLN: [{ minQuantity: 5, maxQuantity: null, amount: '70' }],
     });
     await lists.activate(orgList.id);
+    orgListId = orgList.id;
 
     // Category rule — matches p101 and p102 through their shared category.
     const catList = await lists.create({
@@ -187,6 +192,7 @@ describe('price_lists — batched listing price resolution', () => {
       });
     }
     await lists.activate(catList.id);
+    catListId = catList.id;
 
     // Sale partition, on the customer group the org belongs to.
     const saleList = await lists.create({
@@ -210,6 +216,7 @@ describe('price_lists — batched listing price resolution', () => {
     await lists.replaceBrackets(draftList.id, p101.id, {
       PLN: [{ minQuantity: 1, maxQuantity: null, amount: '1' }],
     });
+    draftListId = draftList.id;
 
     // Display-mode overrides across all three scopes.
     for (const [scope, targetId, mode] of [
@@ -370,5 +377,100 @@ describe('price_lists — batched listing price resolution', () => {
     for (const product of products) {
       expect(second.get(product.id)).toEqual(first.get(product.id));
     }
+  });
+
+  /**
+   * Feature 148 — the same identity, with a price matrix on the lists the walk
+   * visits. Declared last so the cases above see the fixture without entries.
+   * The fixture: an organization category entry that beats the category list's
+   * own bracket, an organization all-products percentage on the org list whose
+   * reference must come from the Default list (that list has no quantity-1
+   * bracket), an attribute entry for every buyer, and an entry on the draft list
+   * that must never be read.
+   */
+  describe('with a price matrix (feature 148)', () => {
+    beforeAll(async () => {
+      const em = h.em();
+      const material = await findAttributeExtensionByKey(em, 'material');
+      material!.isPriceRule = true;
+      await em.flush();
+      for (const entry of [
+        { priceListId: catListId, categoryId: childCategoryId, organizationId: organization.id, discountPercent: '10' },
+        { priceListId: orgListId, organizationId: organization.id, discountPercent: '5' },
+        {
+          priceListId: orgListId,
+          attributeKey: 'material',
+          attributeValue: 'plastic',
+          priceType: 'fixed' as const,
+          amount: '33',
+          currencyCode: 'PLN',
+          discountPercent: null,
+        },
+        { priceListId: draftListId, categoryId: childCategoryId, discountPercent: '99' },
+      ]) {
+        em.create(PriceListMatrixEntry, { minQuantity: 1, priceType: 'discount_percent', ...entry });
+      }
+      await em.flush();
+    });
+
+    afterAll(async () => {
+      await h.em().nativeDelete(PriceListMatrixEntry, {
+        priceListId: { $in: [catListId, orgListId, draftListId] },
+      });
+    });
+
+    for (const viewer of viewers) {
+      it(`answers exactly what the per-product path answers — ${viewer.label}`, async () => {
+        const pricing = new PricingService(
+          h.em,
+          undefined,
+          undefined,
+          neighbourReadPorts(h.em, h.catalogAttributeRead),
+        );
+        const org = viewer.organization === 'org' ? organization : null;
+        const groupId = viewer.customerGroupId === 'cg' ? customerGroup.id : null;
+        const context = {
+          organization: org,
+          customerGroupId: groupId,
+          salesChannel: { id: salesChannel.id, defaultCurrency: salesChannel.defaultCurrency },
+        };
+        const batched = await pricing.resolveListingPrices({ products, context });
+        for (const product of products) {
+          const line = await pricing.resolveLinePrice({
+            product,
+            variantId: null,
+            context: { quantity: 1, ...context, currencyCode: salesChannel.defaultCurrency.toUpperCase() },
+          });
+          expect(batched.get(product.id)).toEqual(
+            listingPriceFrom(line, product, salesChannel.defaultCurrency, salesChannel.defaultCurrency),
+          );
+        }
+      });
+    }
+
+    it('prices the fixture through the matrix', async () => {
+      const pricing = new PricingService(
+        h.em,
+        undefined,
+        undefined,
+        neighbourReadPorts(h.em, h.catalogAttributeRead),
+      );
+      const out = await pricing.resolveListingPrices({
+        products,
+        context: {
+          organization,
+          salesChannel: { id: salesChannel.id, defaultCurrency: salesChannel.defaultCurrency },
+        },
+      });
+      // The org list leads; its 5% all-products entry is priced off the
+      // Default list's 100.00 (its own bracket starts at 5 units).
+      expect(out.get(SEED_PRODUCT_101_ID)).toMatchObject({ source: 'price_list', amount: '95.0000' });
+      expect(out.get(SEED_PRODUCT_102_ID)).toMatchObject({ source: 'price_list', amount: '104.5000' });
+      // Sale still wins on p103 over the attribute entry's 33.00.
+      expect(out.get(SEED_PRODUCT_103_ID)).toMatchObject({ source: 'price_list', isSale: true, amount: '60.0000' });
+      // No Default reference for the product priced only by its attribute: the
+      // percentage is skipped and the chain falls through as before.
+      expect(out.get(products[3]!.id)).toEqual({ source: 'product', amount: '55.50', currency: 'PLN' });
+    });
   });
 });

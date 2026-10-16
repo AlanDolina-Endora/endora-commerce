@@ -19,6 +19,12 @@ export interface PriceBracketRow {
   minQuantity: number;
   maxQuantity: number | null;
   amount: string;
+  /**
+   * Feature 148 — set when the row is synthesised from a price matrix entry
+   * rather than read from `price_list_price_brackets`: the entry that priced
+   * the line. Absent on every stored bracket.
+   */
+  matrixEntryId?: string;
 }
 
 export function resolvePriceBracket(

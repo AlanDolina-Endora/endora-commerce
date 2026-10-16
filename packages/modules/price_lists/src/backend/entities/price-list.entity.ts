@@ -1,4 +1,4 @@
-import { Entity, Index, OptionalProps, PrimaryKey, Property, Unique } from '@mikro-orm/core';
+import { Entity, Formula, Index, OptionalProps, PrimaryKey, Property, Unique } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
 import type { ApplicationRule } from '@endora-commerce/contracts';
 import { RuleScoped } from '@endora-commerce/platform/tenancy';
@@ -31,7 +31,8 @@ export class PriceList {
     | 'status'
     | 'startsAt'
     | 'endsAt'
-    | 'applicationRule';
+    | 'applicationRule'
+    | 'hasMatrixEntries';
 
   @PrimaryKey({ type: 'uuid' })
   id: string = randomUUID();
@@ -78,6 +79,19 @@ export class PriceList {
 
   @Property({ type: 'datetime' })
   modifiedAt: Date = new Date();
+
+  /**
+   * Feature 148 — whether the list carries any price matrix entry. Computed in
+   * the statement that loads the list (an index probe on
+   * `price_list_matrix_entries (price_list_id, …)`), never stored, so the
+   * resolver and the price-ordered listing skip the matrix read entirely for a
+   * viewer whose lists carry none instead of paying one statement to learn it.
+   */
+  @Formula(
+    (alias) =>
+      `exists(select 1 from "price_list_matrix_entries" pme where pme."price_list_id" = ${alias}."id")`,
+  )
+  hasMatrixEntries?: boolean;
 
   // ----- Timestamps -------------------------------------------------------
 

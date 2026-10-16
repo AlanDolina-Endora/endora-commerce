@@ -192,7 +192,17 @@ export const manifest = defineModuleManifest({
    * condition, and nothing raises it. It stays with the platform (`d129-sweep.md`
    * §2.4).
    */
-  errorCodes: [{ code: 'PRICE_LIST_NOT_FOUND' }],
+  errorCodes: [
+    { code: 'PRICE_LIST_NOT_FOUND' },
+    // Feature 148 — the price matrix. The noun is a matrix entry of a price
+    // list, this module's own entity (D-121 T1). Each carries a sentence in
+    // both bundles; `details` (conflicting entry, reason, limit) is for the
+    // admin UI's placement, not interpolated into the sentence.
+    { code: 'PRICE_MATRIX_ENTRY_NOT_FOUND' },
+    { code: 'PRICE_MATRIX_ENTRY_OVERLAP' },
+    { code: 'PRICE_MATRIX_ATTRIBUTE_NOT_ELIGIBLE' },
+    { code: 'PRICE_MATRIX_ENTRY_LIMIT' },
+  ],
 });
 
 /** Legacy export retained for backward compatibility. */
@@ -241,6 +251,22 @@ export const recentActivity = defineModuleRecentActivity({
       action: 'price_list.bracket_update',
       icon: 'CircleDollarSign',
       labelKey: 'activity.verb.price_list.bracket_update',
+    },
+    // Feature 148 — the price matrix.
+    {
+      action: 'price_list.matrix_entry_create',
+      icon: 'Plus',
+      labelKey: 'activity.verb.price_list.matrix_entry_create',
+    },
+    {
+      action: 'price_list.matrix_entry_update',
+      icon: 'Edit',
+      labelKey: 'activity.verb.price_list.matrix_entry_update',
+    },
+    {
+      action: 'price_list.matrix_entry_delete',
+      icon: 'Archive',
+      labelKey: 'activity.verb.price_list.matrix_entry_delete',
     },
   ],
 });

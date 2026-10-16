@@ -17,6 +17,10 @@ Mechanizm cen — przebudowany na pierwotnych podstawach wyznaczania cen. Obejmu
   `(priceListId, productId, currencyCode, minQuantity)`, zawierający cenę jednostkową w danej walucie
   dla progu ilościowego. Luki między progami są dozwolone; mechanizm wyznaczania przechodzi wtedy do
   cennika o następnym priorytecie.
+- **PriceListMatrixEntry** — cena w cenniku dla *wybranych* produktów (jednego produktu, kategorii,
+  wartości atrybutu, kategorii i wartości atrybutu albo wszystkich produktów), opcjonalnie dla jednej
+  organizacji, w przedziale ilości, jako stała cena jednostkowa albo rabat procentowy. Zob.
+  *Macierz cen* poniżej.
 - **PriceDisplayModeOverride** — wiersz ze złożonym kluczem głównym `(scope, targetId)`, który
   nadpisuje łańcuch trybu wyświetlania cen na poziomie organizacji, kategorii lub produktu. Początkiem
   łańcucha są dwa klucze ustawień (`pricing.default_display_mode`,
@@ -103,9 +107,10 @@ Algorytm:
    - Poziom 5: każdy inny pasujący cennik.
 4. Na każdym poziomie wybierz zwycięzcę przez `tieBreak()` — najpierw najnowsze `modifiedAt`, potem
    `name` rosnąco.
-5. Znajdź próg dla `(productId, currencyCode, quantity)`. Jeśli progu nie ma (luka), przejdź do
-   cennika o następnym priorytecie w tej samej grupie; cennik Default jest zawsze na poziomie 5 grupy
-   Base i stanowi ostateczne minimum.
+5. Znajdź cenę, jaką wybrany cennik nalicza dla `(productId, currencyCode, quantity)` — jego własny
+   próg albo jedną z pozycji macierzy cen (zob. *Macierz cen*). Jeśli cennik nie wyznacza żadnej ceny
+   (luka), przejdź do cennika o następnym priorytecie w tej samej grupie; cennik Default jest zawsze
+   na poziomie 5 grupy Base i stanowi ostateczne minimum.
 6. Niezależnie wyznacz tryb wyświetlania przez
    `displayModeResolver(product, organization, customerKind)` w łańcuchu ustawienia → organizacja →
    kategoria → produkt.
@@ -113,6 +118,109 @@ Algorytm:
 Determinizm: te same dane wejściowe → ten sam wynik (bez zegara, bez losowości, pełny porządek przy
 remisach). Z mechanizmu korzysta storefront (`GET /api/v1/storefront/products/:id/resolved-price`)
 oraz koszyk i składanie zamówienia.
+
+## Macierz cen
+
+Cennik może wyznaczać cenę **wielu produktów jedną pozycją**. *Pozycja macierzy* określa:
+
+| Współrzędna | Wartości |
+| --- | --- |
+| Dotyczy | jeden produkt · kategoria · wartość atrybutu · kategoria **i** wartość atrybutu · wszystkie produkty |
+| Organizacja | jedna organizacja albo żadna (*wszyscy nabywcy*) |
+| Ilość | od N sztuk, opcjonalnie do M sztuk |
+| Cena | stała cena jednostkowa w jednej walucie albo rabat 0 < p ≤ 100 % (dwa miejsca po przecinku) w walucie, w której wyceniana jest pozycja |
+
+Przykład: *Elementy złączne × Acme Sp. z o.o. × od 500 sztuk × 12 % rabatu*. Kupujący z Acme,
+zamawiając 600 elementów złącznych, płacą o 12 % mniej; przy 400 sztukach, dla innej organizacji albo
+dla produktu spoza kategorii cena się nie zmienia.
+
+**O tym, których kupujących obsługuje cennik, nadal decyduje jego reguła stosowania** — pozycja
+wyznacza cenę tylko w cenniku, do którego kupujący już się kwalifikuje, w kanale sprzedaży
+żądania. Pozycje decydują wyłącznie o cenie *wewnątrz* tego cennika.
+
+**Zasady, których musi przestrzegać pozycja** (inaczej zostaje odrzucona z komunikatem):
+
+- Pozycja dla produktu wymaga organizacji — bez niej jest to zwykła cena produktu w cenniku,
+  którą obsługuje już zakładka *Produkty i progi*.
+- Stała cena wymaga wyboru produktu, kategorii lub atrybutu.
+- Dwie pozycje o tym samym wyborze i organizacji nie mogą nakładać się zakresem ilości we wspólnej
+  walucie (rabat procentowy dotyczy każdej waluty) — `409 PRICE_MATRIX_ENTRY_OVERLAP` ze wskazaniem
+  kolidującej pozycji.
+- Cennik może mieć najwyżej **5 000** pozycji — `409 PRICE_MATRIX_ENTRY_LIMIT`.
+
+### Wybór według atrybutu i „Reguły cennika”
+
+Można używać tylko atrybutów oznaczonych jako **Reguły cennika** w *Katalog → Atrybuty*, i tylko
+takich, których wartością jest pojedynczy wybór, wiele wyborów albo tak/nie, i które nie są zależne
+od języka ani od kanału sprzedaży (w przeciwnym razie `400 PRICE_MATRIX_ATTRIBUTE_NOT_ELIGIBLE` z
+powodem). Wartość pojedynczego wyboru pasuje, gdy jest równa, atrybut wielokrotnego wyboru — gdy
+wartości produktu ją zawierają, atrybut tak/nie — przy *tak* albo *nie*; produkt bez wartości nie
+pasuje do żadnej. Odczytywane są własne wartości produktu, nie wariantu i nie nadpisania kanału.
+
+Wyłączenie oznaczenia atrybutu **dezaktywuje** jego pozycje: w oknie odświeżania cen przestają
+wyznaczać jakiekolwiek ceny, nigdy nie powodują błędu wyceny, zakładka *Macierz cen* pokazuje je jako
+*Nieaktywne* z powodem, a po ponownym włączeniu oznaczenia znów obowiązują.
+
+### Która pozycja wygrywa
+
+W wybranym cenniku kandydatami są jego własny próg produktu i każda pozycja, która ma zastosowanie
+(wybór, organizacja, przedział ilości, waluta). Cenę wyznacza pierwszy kandydat w tej kolejności:
+
+| Kolejność | Zasada |
+| --- | --- |
+| 1 | Pozycja dla organizacji przed pozycją bez organizacji; własna organizacja kupującego przed bliższą organizacją nadrzędną, a ta przed dalszą |
+| 2 | Produkt, potem kategoria ∩ atrybut, potem atrybut, potem kategoria, potem wszystkie produkty (własny próg produktu w cenniku liczy się jako kandydat produktowy bez organizacji) |
+| 3 | Wyższa ilość początkowa |
+| 4 | Niższa wynikowa cena |
+| 5 | Stała kolejność wewnętrzna (identyfikator pozycji), więc wynik nigdy nie zależy od czasu |
+
+Wybór kategorii korzysta z własnych przypisań produktu do kategorii, bez podkategorii — tak samo jak
+kryterium kategorii w regule stosowania.
+
+### Rabaty procentowe
+
+Rabat jest liczony od **ceny referencyjnej**: własnego progu produktu w tym samym cenniku przy tej
+ilości, a jeśli go nie ma — progu produktu w systemowym cenniku **Default**. Wynik jest zaokrąglany
+połówkowo w górę do czterech miejsc po przecinku, z dokładnością, z jaką zapisywane są progi, w
+arytmetyce całkowitoliczbowej. Rabat bez ceny referencyjnej nie wyznacza ceny i sprawdzany jest
+następny kandydat; gdy nic w cenniku nie wyznacza ceny pozycji, wyznaczanie przechodzi do następnego
+pasującego cennika, dokładnie jak przy cenniku bez progu. Rabat 100 % oznacza celowo darmową pozycję.
+
+### Gdzie pojawiają się ceny z macierzy
+
+Każde miejsce korzystające ze wspólnego mechanizmu wyznaczania cen — lista katalogu, strona
+produktu, wyszukiwanie, porównanie, powiązane produkty, koszyk, finalizacja zamówienia, przyjmowanie
+zamówień, ceny referencyjne zapytań ofertowych i sprawdzenie ceny w panelu administracyjnym — zwraca
+tę samą cenę z macierzy dla tego samego kupującego, produktu, ilości i kanału. Progi ilościowe na
+stronie produktu obejmują ilości początkowe pozycji, a sprawdzenie ceny wskazuje pozycję, która ją
+wyznaczyła (`matrixEntryId`).
+
+**Sortowanie i filtrowanie katalogu w storefroncie według ceny również uwzględnia ceny z
+macierzy.** Cennik z pozycją, która dotyczy oglądającego przy ilości 1, jest porządkowany według
+relacji wyliczanej z jego progów i pozycji, w opisanej wyżej kolejności, więc kolejność odpowiada
+cenom na kartach produktów; produkt wyceniony wyłącznie pozycją macierzy jest sortowany według tej
+ceny, a nie razem z produktami bez ceny. Cenniki bez takiej pozycji zachowują ścieżkę opartą na
+indeksie. Pomiar na 2 000 produktów (`backend/test/perf/price_lists/matrix-resolver.bench.ts`):
+pierwsza strona kosztuje ok. 3 ms bez pozycji, ok. 40 ms z rabatem na kategorię i ok. 20 ms z rabatem
+na wszystkie produkty; strona listy z 50 produktami nie kosztuje żadnego dodatkowego zapytania,
+gdy jej cenniki nie mają pozycji, i najwyżej trzy, gdy mają.
+
+**Znane ograniczenie:** plik produktowy przypięty do wskazanego cennika odczytuje wyłącznie progi
+produktów tego cennika; pozycje macierzy do niego nie trafiają. Pliki wyceniane przez mechanizm
+wyznaczania cen (anonimowo) uwzględniają pozycje bez organizacji.
+
+### Zarządzanie macierzą
+
+Zakładka **Macierz cen** w cenniku (`/price-lists/:id?tab=matrix`) wyświetla pozycje z filtrami
+według wyboru i organizacji, stronicowaniem oraz dodawaniem, edycją i usuwaniem dla
+`price_lists:write`; z `price_lists:read` zakładka jest tylko do odczytu. Każda zmiana jest zapisywana
+w dzienniku zdarzeń jako `price_list.matrix_entry_create|update|delete` na cenniku, z pozycją przed i
+po zmianie, i widać ją na karcie *Ostatnia aktywność* pulpitu. Przedstawiciel handlowy widzi pozycje
+bez organizacji albo wskazujące jedną z jego organizacji i nie może utworzyć pozycji dla innej
+organizacji. Duplikowanie cennika kopiuje jego macierz; usunięcie cennika usuwa ją. Trwałe usunięcie
+produktu, kategorii lub organizacji usuwa wskazujące je pozycje; usunięcie w panelu
+administracyjnym (odwracalne) je zachowuje, oznaczone jako *Usunięty element*, żeby operator mógł
+zdecydować.
 
 ## Tryby wyświetlania
 
@@ -143,6 +251,11 @@ i składania zamówienia dodatkowo odrzucają pozycję z `400 CART_PRODUCT_QUOTE
 | `GET /api/v1/admin/price-lists-engine/:id/products/:productId/brackets` | Odczyt progów jednego produktu |
 | `PUT /api/v1/admin/price-lists-engine/:id/products/:productId/brackets` | Zamiana progów (`{ bracketsByCurrency }`) |
 | `POST /api/v1/admin/price-lists-engine/:id/products/:productId/brackets/copy` | Skopiowanie progów jednej waluty bez zmian do N innych |
+| `GET /api/v1/admin/price-lists-engine/:id/matrix?page=&pageSize=&selectionKind=&organizationId=&productId=&categoryId=&lang=` | Pozycje macierzy cen, z filtrami i stronicowaniem (`organizationId=none` — pozycje bez organizacji) — `price_lists:read` |
+| `GET /api/v1/admin/price-lists-engine/:id/matrix/:entryId` | Jedna pozycja — `price_lists:read` |
+| `POST /api/v1/admin/price-lists-engine/:id/matrix` | Utworzenie pozycji — `price_lists:write` |
+| `PATCH /api/v1/admin/price-lists-engine/:id/matrix/:entryId` | Zmiana pozycji; wszystkie zasady sprawdzane są na wyniku po scaleniu — `price_lists:write` |
+| `DELETE /api/v1/admin/price-lists-engine/:id/matrix/:entryId` | Usunięcie pozycji — `price_lists:write` |
 | `POST /api/v1/admin/price-lists-engine/internal/sweep` | Jeden przebieg workera, tylko na potrzeby testów |
 
 ### Dodawanie wielu produktów naraz
@@ -186,6 +299,7 @@ Odmowy niczego nie zapisują:
 | `GET /api/v1/admin/pricing/rule-targets/organizations?search=&limit=` | Stronicowana lista organizacji |
 | `GET /api/v1/admin/pricing/rule-targets/categories` | Pełne drzewo kategorii |
 | `GET /api/v1/admin/pricing/rule-targets/currencies` | Waluty dostępne w którymkolwiek kanale sprzedaży |
+| `GET /api/v1/admin/pricing/rule-targets/attributes?lang=` | Atrybuty, według których pozycja macierzy cen może wybierać produkty (oznaczone jako „Reguły cennika”, odpowiedniego typu), z ich wartościami |
 
 ### Tryby wyświetlania (panel administracyjny)
 
@@ -207,6 +321,8 @@ Odmowy niczego nie zapisują:
 | --- | --- |
 | `GET /api/v1/admin/products/:id/resolved-price?organizationId=&customerAccountId=&quantity=&currency=&variantId=&salesChannelId=` | Cena, jaką dany kupujący zapłaciłby za jeden produkt, tak jak pokazują ją ekrany zapytań ofertowych w panelu administracyjnym. Chronione przez `price_lists:read` |
 
+- **`matrixEntryId`** w odpowiedzi wskazuje pozycję macierzy cen, która wyznaczyła cenę, albo `null`,
+  gdy wyznaczył ją zapisany próg.
 - **`salesChannelId`** wskazuje kanał sprzedaży, w którym wyznaczana jest cena; bez niego —
   domyślny kanał systemowy. Nieznany albo błędny identyfikator jest odrzucany z
   `400 VALIDATION_FAILED`, a komunikat go nie powtarza.
@@ -288,7 +404,7 @@ którego pojedyncza dawna cena została skopiowana do więcej niż jednej waluty
 ## Panel administracyjny
 
 - `/price-lists` (lista cenników) i `/price-lists/:id` (edytor z zakładkami Details / Products &
-  brackets / Application rule).
+  brackets / Application rule / Macierz cen; `?tab=matrix` otwiera macierz cen).
 - `/price-lists/display-modes` — przegląd nadpisań oraz dwa klucze ustawień `pricing.*`.
 - **Produkty i widełki** pokazuje listę produktów cennika z nazwą i SKU przy dowolnej jej długości —
   nazwy są pobierane przez `POST /api/v1/admin/catalog/products/batch-by-id` z katalogu, po 500

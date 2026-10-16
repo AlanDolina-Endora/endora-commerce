@@ -1,5 +1,6 @@
 import type { EntityManager, FilterQuery } from '@mikro-orm/postgresql';
 import type {
+  CatalogAttributeValueQuery,
   CatalogPackagingUnitRecord,
   CatalogProductLinkRow,
   CatalogProductLookupOptions,
@@ -159,6 +160,32 @@ export class CatalogProductReadService implements CatalogProductReadPort {
       productId: { $in: [...productIds] },
     });
     return overrides.map(toCatalogProductValueOverrideRecord);
+  }
+
+  /**
+   * Feature 148 — the products an attribute value selects, structurally (see
+   * the port). One statement over the product's own JSONB; the `jsonb` forms
+   * keep a stored string `"true"` from matching a boolean selection and a
+   * scalar from matching an array one.
+   */
+  async listProductIdsByAttributeValue(query: CatalogAttributeValueQuery): Promise<string[]> {
+    const predicate =
+      query.match === 'array'
+        ? `jsonb_typeof(p.attribute_values -> ?) = 'array' and (p.attribute_values -> ?) @> jsonb_build_array(?::text)`
+        : query.match === 'boolean'
+          ? `(p.attribute_values -> ?) = to_jsonb(?::boolean) and (p.attribute_values -> ?) is not null`
+          : `(p.attribute_values -> ?) = to_jsonb(?::text) and (p.attribute_values -> ?) is not null`;
+    const params =
+      query.match === 'array'
+        ? [query.key, query.key, query.value]
+        : query.match === 'boolean'
+          ? [query.key, query.value === 'true', query.key]
+          : [query.key, query.value, query.key];
+    const rows = await this.emFactory().execute<Array<{ id: string }>>(
+      `select p.id from products p where ${predicate}`,
+      params,
+    );
+    return rows.map((row) => row.id);
   }
 }
 

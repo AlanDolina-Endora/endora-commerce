@@ -173,6 +173,7 @@ describe('comparisons — catalog rows arrive over catalogProductReadPort', () =
       findPackagingUnitInProduct: async () => null,
       listLinksBySourceIds: async () => [],
       listValueOverridesByProductIds: async () => [],
+      listProductIdsByAttributeValue: async () => [],
     };
 
     const service = new ComparisonService(
@@ -210,6 +211,7 @@ describe('comparisons — catalog rows arrive over catalogProductReadPort', () =
       findPackagingUnitInProduct: async () => null,
       listLinksBySourceIds: async () => [],
       listValueOverridesByProductIds: async () => [],
+      listProductIdsByAttributeValue: async () => [],
     };
 
     const service = new ComparisonService(

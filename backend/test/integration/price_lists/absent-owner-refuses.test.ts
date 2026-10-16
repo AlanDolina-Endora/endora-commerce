@@ -7,6 +7,14 @@ import {
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
 import { registryCache } from '../../../src/kernel/lifecycle/registry-cache.js';
 import { REGISTERED_MANIFESTS } from '../../../src/lifecycle/registered-manifests.js';
+import { PriceListMatrixEntry, Product } from '../../helpers/package-entities.js';
+import { SalesChannel } from '@endora-commerce/platform/kernel';
+import { PricingService } from '../../../../packages/modules/price_lists/src/backend/services/pricing-service.js';
+import {
+  DefaultPriceListMigrator,
+  DEFAULT_PRICE_LIST_ID,
+} from '../../../../packages/modules/price_lists/src/backend/services/default-price-list-migration.js';
+import { neighbourReadPorts } from '../../helpers/price-list-neighbour-ports.js';
 
 /**
  * Issue #124, the price half — an absent `price_lists` must refuse, not price
@@ -88,5 +96,43 @@ describe('price_lists — an absent owner refuses to price a cart line [integrat
     const res = await addItem();
 
     expect(res.statusCode).toBe(200);
+  });
+
+  /**
+   * Feature 148 — a price matrix entry that selects by attribute asks `catalog`
+   * which attributes carry *Price list rules*. With no attribute read port the
+   * engine refuses the line; it never treats "cannot ask" as "no attribute is
+   * eligible", which would price the line as though the entry did not exist.
+   */
+  it('refuses a line a matrix attribute entry could price when the attribute read port is absent', async () => {
+    await new DefaultPriceListMigrator(h.em).seedDefault();
+    const em = h.em();
+    const entry = em.create(PriceListMatrixEntry, {
+      priceListId: DEFAULT_PRICE_LIST_ID,
+      attributeKey: 'material',
+      attributeValue: 'steel',
+      minQuantity: 1,
+      priceType: 'discount_percent',
+      discountPercent: '10',
+    });
+    await em.persistAndFlush(entry);
+    try {
+      const channel = await em.findOneOrFail(SalesChannel, { code: 'pl_retail' });
+      const product = await em.findOneOrFail(Product, { id: SEED_PRODUCT_101_ID });
+      // `neighbourReadPorts` without an attribute read is the unwired port.
+      const pricing = new PricingService(h.em, undefined, undefined, neighbourReadPorts(h.em));
+      await expect(
+        pricing.resolveLinePrice({
+          product,
+          context: {
+            quantity: 1,
+            organization: null,
+            salesChannel: { id: channel.id, defaultCurrency: channel.defaultCurrency },
+          },
+        }),
+      ).rejects.toThrow(/catalogAttributeRead/);
+    } finally {
+      await h.em().nativeDelete(PriceListMatrixEntry, { id: entry.id });
+    }
   });
 });

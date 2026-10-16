@@ -1,4 +1,5 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
+import type { CatalogAttributeReadPort } from '@endora-commerce/contracts';
 import { CatalogCategoryReadService } from '../../../packages/modules/catalog/src/backend/services/catalog-category-read.service.js';
 import { CatalogProductReadService } from '../../../packages/modules/catalog/src/backend/services/catalog-product-read.service.js';
 import { CustomerGroupReadService } from '../../../packages/modules/customer_accounts/src/backend/services/customer-group-read-port.js';
@@ -23,11 +24,37 @@ import type { PriceListTargetReads } from '../../../packages/modules/price_lists
  * (`TestDb.beginTx`), so a port on any other fork would not see the rows they
  * have just written.
  */
-export function neighbourReadPorts(emFactory: () => EntityManager): PriceListTargetReads {
+export function neighbourReadPorts(
+  emFactory: () => EntityManager,
+  /**
+   * Feature 148 — `catalog`'s attribute read model. It composes `custom_fields`'
+   * definition cache, so it cannot be built from an `EntityManager` alone; a
+   * suite that prices attribute matrix entries passes the harness's own
+   * (`h.catalogAttributeRead`). Absent, every read refuses — the fail-closed
+   * shape of an unwired port, never "no attribute is eligible".
+   */
+  catalogAttributeRead: CatalogAttributeReadPort = refusingAttributeRead(),
+): PriceListTargetReads {
   return {
     catalogProductRead: new CatalogProductReadService(emFactory),
     catalogCategoryRead: new CatalogCategoryReadService(emFactory),
     organizationDetails: new OrganizationDetailsService(emFactory),
     customerGroupRead: new CustomerGroupReadService(emFactory),
+    catalogAttributeRead,
+  };
+}
+
+function refusingAttributeRead(): CatalogAttributeReadPort {
+  const refuse = (): never => {
+    throw new Error(
+      'neighbourReadPorts: this suite did not pass a catalogAttributeRead, and a price matrix ' +
+        'entry asked about an attribute.',
+    );
+  };
+  return {
+    listAll: async () => refuse(),
+    getByIdOrKey: async () => refuse(),
+    listByFlag: async () => refuse(),
+    optionLabelIndex: async () => refuse(),
   };
 }

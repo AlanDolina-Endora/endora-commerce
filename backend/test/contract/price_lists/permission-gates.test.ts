@@ -210,4 +210,52 @@ describe('price_lists admin permission gates (issue #219)', () => {
     const res = await h.app.inject({ method: 'GET', url: '/api/v1/admin/price-lists-engine' });
     expect([401, 403]).toContain(res.statusCode);
   });
+
+  /**
+   * Feature 148 — the price matrix reuses the module's two codes: reading the
+   * matrix and the attribute picker is `price_lists:read`, every write is
+   * `price_lists:write`, and a refused write answers 403 before its body is
+   * validated (an empty body would otherwise be a 400).
+   */
+  it('gates the price matrix on the pricing read and write codes', async () => {
+    const created = await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/price-lists-engine',
+      ...PRICING_EDITOR,
+      payload: { name: 'Matrix gate list (148)', type: 'base' },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = (created.json() as { data: { id: string } }).data.id;
+    const matrix = `/api/v1/admin/price-lists-engine/${id}/matrix`;
+    const entryUrl = `${matrix}/00000000-0000-4000-8000-00000000e148`;
+
+    for (const url of [matrix, entryUrl, '/api/v1/admin/pricing/rule-targets/attributes']) {
+      const refused = await h.app.inject({ method: 'GET', url, ...CATALOG_EDITOR });
+      expect(refused.statusCode, url).toBe(403);
+    }
+    const viewerList = await h.app.inject({ method: 'GET', url: matrix, ...PRICING_VIEWER });
+    expect(viewerList.statusCode).toBe(200);
+    const viewerPicker = await h.app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/pricing/rule-targets/attributes',
+      ...PRICING_VIEWER,
+    });
+    expect(viewerPicker.statusCode).toBe(200);
+
+    for (const [method, url] of [
+      ['POST', matrix],
+      ['PATCH', entryUrl],
+      ['DELETE', entryUrl],
+    ] as const) {
+      const refused = await h.app.inject({ method, url, ...PRICING_VIEWER, payload: {} });
+      expect(refused.statusCode, `${method} ${url}`).toBe(403);
+    }
+    const editorPost = await h.app.inject({
+      method: 'POST',
+      url: matrix,
+      ...PRICING_EDITOR,
+      payload: { minQuantity: 1, price: { type: 'discount_percent', percent: '1' } },
+    });
+    expect(editorPost.statusCode).toBe(201);
+  });
 });

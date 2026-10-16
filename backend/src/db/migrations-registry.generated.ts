@@ -264,6 +264,7 @@ import { Migration20260426T075235PriceListsPricingInit } from '@endora-commerce/
 import { Migration20260504T125655PriceListsEngine } from '@endora-commerce/mod-price-lists/migrations';
 import { Migration20260817T055457PriceListsSingleSystemPriceList } from '@endora-commerce/mod-price-lists/migrations';
 import { Migration20260821T135907PriceListsUnitPriceAmountIndex } from '@endora-commerce/mod-price-lists/migrations';
+import { Migration20261016T131148PriceListsPriceMatrixEntries } from '@endora-commerce/mod-price-lists/migrations';
 
 // ── product_feeds ───────────────────────────────────────────────────────────
 import { Migration20260802T073547ProductFeedsInit } from '@endora-commerce/mod-product-feeds/migrations';
@@ -573,6 +574,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('price_lists', Migration20260504T125655PriceListsEngine),
   migration('price_lists', Migration20260817T055457PriceListsSingleSystemPriceList),
   migration('price_lists', Migration20260821T135907PriceListsUnitPriceAmountIndex),
+  migration('price_lists', Migration20261016T131148PriceListsPriceMatrixEntries),
 
   // ── product_feeds ───────────────────────────────────────────────────────────
   migration('product_feeds', Migration20260802T073547ProductFeedsInit),
