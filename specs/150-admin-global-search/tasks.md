@@ -49,7 +49,7 @@ failing test it turns green; § *Requirement → test* maps every FR and SC.
 - [X] T004 [P] Write failing schema tests `packages/contracts/src/admin-search.test.ts`: accept/reject cases for `AdminSearchEntityTypeSchema`, `AdminSearchFieldCodeSchema`, `AdminSearchQuerySchema` (q > 100 refused; `entityTypes` CSV split), `AdminSearchHitSchema.targetRoute` (relative path with optional query accepted; `https://…` and `//host` refused), `AdminSearchResponseSchema`, `AdminSearchCapabilitySchema`, `AdminSearchConfigurationViewSchema`, `UpdateAdminSearchConfigurationRequestSchema`, `AdminSearchStoredConfigurationSchema` (version literal 1; > 20 fields refused)
 - [X] T005 Implement `packages/contracts/src/admin-search.ts` — every schema of `contracts/admin-search-api.md` and every interface of `contracts/provider-contract.md` §1 **without** the `Container name:` marker (added in T021, when the name is registered — `check:port-shape`); `export * from './admin-search.js'` in `packages/contracts/src/index.ts`; T004 green; `pnpm --filter @endora-commerce/contracts run build`
 - [X] T006 [P] Add `'admin_search'` to `MIGRATED_MODULES` in `backend/scripts/check-command-coverage.ts` (research R-13)
-- [ ] T007 Phase gate: `pnpm run build:packages`, `pnpm -r run typecheck`, `pnpm -r run lint`, `pnpm --filter backend run test:unit:fast`, `pnpm --filter '!backend' run test --workspace-concurrency=1`, `pnpm run check:naming`
+- [X] T007 Phase gate: `pnpm run build:packages`, `pnpm -r run typecheck`, `pnpm -r run lint`, `pnpm --filter backend run test:unit:fast`, `pnpm --filter '!backend' run test --workspace-concurrency=1`, `pnpm run check:naming`
 
 **Checkpoint**: the workspace installs and builds with an empty, registered `admin_search`.
 
@@ -84,7 +84,7 @@ search routes, the settings and their validator, and the off-state proof. No pro
 - [X] T022 [P] *(Done: the README stays the `manifests:generate` rendering — the package's description carries what it is; the provider contract and the no-table note live in the module docs page, T075. `check:test-ownership` reports 0 findings.)* Add `packages/modules/admin_search/README.md` content (what the package is, that it owns no table, the provider contract it hosts, a pointer to the module docs page) and confirm `check:test-ownership` reports no `admin_search` file under `backend/test` that is harness-free
 - [X] T023 [P] *(Folded into T075: the page is written once, with every surface it documents; the manifest declared `docs: false` until then.)* Write `packages/modules/admin_search/docs/admin-search.md` (front matter `title` + one-sentence `description`; *What it does*, *Switching it on and off*, *Settings*, placeholders for *Configuring searchable fields* and *Permissions*) and its Polish copy per `docs/docs/contributing/documentation-i18n.md`; no relative link to a sibling module or the site tree
 - [ ] T024 Run `composer:generate`, `manifests:generate`, `pnpm install --lockfile-only`; T014 green; `pnpm --filter backend run check:off-state-coverage`, `check:port-dependencies`, `check:port-shape`, `check:port-catches`, `check:entry-presence`, `check:container-imports`, `check:module-docs`, `check:docs-translations`, `check:test-ownership`
-- [ ] T025 Phase gate: quickstart.md § 6 block; report every result with its output
+- [X] T025 Phase gate: quickstart.md § 6 block; report every result with its output
 
 **Checkpoint**: `admin_search` is installed, toggleable, absent when off, and searches nothing yet.
 
@@ -228,8 +228,8 @@ Sales Opportunities groups for a platform admin; a sales representative sees onl
 - [X] T076 [P] Add a short *Global search* section (which fields this module's record type offers, and its default) to `packages/modules/{orders,quote_requests,crm,organizations,customers,catalog}/docs/*.md` and their Polish copies; refer to global search by name, never by a relative link (module-documentation.md 1a)
 - [X] T077 Run `composer:generate`, `check:module-docs`, `check:docs-translations`, `check:bundle-pairing`
 - [X] T078 [P] Changesets, one per meaning (`specs/conventions/release-intent.md`; `minor`, never `major` in `0.x`): new package `@endora-commerce/mod-admin-search`; new `admin-search` exports and the two optional customer-search criteria in `@endora-commerce/contracts`; palette records in `@endora-commerce/admin-shell`; record-type providers in `mod-orders`, `mod-quote-requests`, `mod-crm`, `mod-organizations`, `mod-customers`, `mod-catalog` (+ category focus), `mod-customer-accounts`; verify with `pnpm --filter backend exec tsx scripts/check-release-intent.ts --since origin/master`
-- [ ] T079 Full quickstart.md § 6 block; then `pnpm --filter backend run test` (all services, ~1 h) once on the final tip — the merge-request pipeline will not run contract/integration suites (D-198); report every failure with its output
-- [ ] T080 Manual walk of quickstart.md §§ 2–4 as platform admin, sales representative and a restricted role; record anything that deviates in `research.md` under a new *Implementation notes* heading
+- [X] T079 Full quickstart.md § 6 block; then `pnpm --filter backend run test` (all services, ~1 h) once on the final tip — the merge-request pipeline will not run contract/integration suites (D-198); report every failure with its output
+- [ ] T080 *(Not done: needs a browser walk as the three roles; the flows are covered by the contract, integration and admin tests — see research.md Implementation notes.)* Manual walk of quickstart.md §§ 2–4 as platform admin, sales representative and a restricted role; record anything that deviates in `research.md` under a new *Implementation notes* heading
 
 ---
 
