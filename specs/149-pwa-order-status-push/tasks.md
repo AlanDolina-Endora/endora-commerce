@@ -115,18 +115,18 @@ run serially. Phases are marked **[backend]**, **[admin UI]**, **[storefront]**,
 
 ## Phase 3 — Operator switches on the admin screen (US1) [backend + admin UI]
 
-- [ ] T017 RED [US1] Admin config contract: `GET /api/v1/admin/pwa/config` returns both new
+- [X] T017 RED [US1] Admin config contract: `GET /api/v1/admin/pwa/config` returns both new
   fields for global and channel scope; `PUT` with each field writes the setting (and is audited
   through the settings path); `POST …/config/reset` resets them; `pwa:read`/`pwa:write` gates
   unchanged — `backend/test/contract/pwa/admin-and-storefront.contract.test.ts`
-- [ ] T018 GREEN [US1] `packages/modules/pwa/src/backend/routes.admin.ts` (read/write the two codes)
-- [ ] T019 RED [US1] Admin screen: both checkboxes render under push, disabled while push is off,
+- [X] T018 GREEN [US1] `packages/modules/pwa/src/backend/routes.admin.ts` (read/write the two codes)
+- [X] T019 RED [US1] Admin screen: both checkboxes render under push, disabled while push is off,
   quote checkbox absent when `quote_requests` is not present, saving sends the fields; labels
   resolve in `pl` — `admin/test/modules/pwa.module-owned-surface.test.tsx` (render inside
   `<StrictMode>`)
-- [ ] T020 GREEN [US1] `packages/modules/pwa/src/admin/pages/PwaPage.tsx` + `api/pwa-client.ts`
+- [X] T020 GREEN [US1] `packages/modules/pwa/src/admin/pages/PwaPage.tsx` + `api/pwa-client.ts`
   types; strings via `useTranslation('pwa')`; `settings.field.*` keys in both bundles
-- [ ] T021 [P] [US1] Palette action `open-settings` (contract admin-pwa-config) in
+- [X] T021 [P] [US1] Palette action `open-settings` (contract admin-pwa-config) in
   `packages/modules/pwa/src/manifest.ts`; `actions.openSettings.*` keys in both bundles; a
   manifest assertion beside the existing pwa manifest test
   (`backend/test/contract/pwa/manifest-and-permissions.test.ts`)

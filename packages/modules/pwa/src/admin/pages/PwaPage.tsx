@@ -8,7 +8,8 @@ import type {
   SalesChannelListResponse,
   SalesChannelSummary,
 } from '@endora-commerce/contracts';
-import { apiClient } from '@endora-commerce/admin-kit/lib';
+import { apiClient, useModulePresence } from '@endora-commerce/admin-kit/lib';
+import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { Alert, AlertDescription, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, ColorPicker, Input, Label, PageHeader } from '@endora-commerce/admin-kit/ui';
 import { pwaClient } from '../api/pwa-client.js';
 import { PushAudienceRuleBuilder } from '../components/PushAudienceRuleBuilder.js';
@@ -47,6 +48,12 @@ function channelLabel(name: SalesChannelSummary['name'], code: string): string {
  * can be reset back to the global value with "Reset to global".
  */
 export function PwaPage(): ReactNode {
+  const t = useTranslation('pwa');
+  // `quote_requests` is a `degrades-without` owner for the quote status push
+  // (`specs/149-pwa-order-status-push/`): while it is absent the quote switch
+  // is not offered, and its stored value is left alone.
+  const { isPresent } = useModulePresence();
+  const quotesPresent = isPresent('quote_requests');
   const [config, setConfig] = useState<PwaAdminConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +118,8 @@ export function PwaPage(): ReactNode {
         displayMode: config.displayMode,
         cachingEnabled: config.cachingEnabled,
         pushEnabled: config.pushEnabled,
+        orderStatusPushEnabled: config.orderStatusPushEnabled,
+        ...(quotesPresent ? { quoteStatusPushEnabled: config.quoteStatusPushEnabled } : {}),
       });
       setInfo('Settings saved.');
       await refresh();
@@ -327,6 +336,27 @@ export function PwaPage(): ReactNode {
                 <Checkbox checked={config.pushEnabled} onChange={(e) => patch({ pushEnabled: e.target.checked })} />
                 <span>Enable push notifications</span>
               </label>
+              <div className="space-y-2 pl-6">
+                <label className="flex items-center gap-2">
+                  <Checkbox
+                    checked={config.orderStatusPushEnabled}
+                    disabled={!config.pushEnabled}
+                    onChange={(e) => patch({ orderStatusPushEnabled: e.target.checked })}
+                  />
+                  <span>{t('settings.field.orderStatusPush')}</span>
+                </label>
+                {quotesPresent ? (
+                  <label className="flex items-center gap-2">
+                    <Checkbox
+                      checked={config.quoteStatusPushEnabled}
+                      disabled={!config.pushEnabled}
+                      onChange={(e) => patch({ quoteStatusPushEnabled: e.target.checked })}
+                    />
+                    <span>{t('settings.field.quoteStatusPush')}</span>
+                  </label>
+                ) : null}
+                <p className="text-sm text-muted-foreground">{t('settings.field.statusPushHint')}</p>
+              </div>
               <div className="flex items-center gap-3 pt-1">
                 <Button type="button" variant="outline" disabled={busy} onClick={() => void generateVapid()}>
                   <KeyRound className="mr-2 h-4 w-4" /> Generate VAPID keys

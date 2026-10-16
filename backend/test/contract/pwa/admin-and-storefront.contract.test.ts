@@ -68,6 +68,13 @@ describe('PWA module — admin + storefront', () => {
     }
     await h.settings.adminService.setValueForAllChannels(PWA_SETTING_CODES.VAPID_PUBLIC_KEY, '', null, actor);
     await h.settings.adminService.setValueForAllChannels(PWA_SETTING_CODES.VAPID_PRIVATE_KEY, '', null, actor);
+    // The two status push category switches, at their shipped default (on).
+    for (const code of [
+      PWA_SETTING_CODES.PUSH_ORDER_STATUS_ENABLED,
+      PWA_SETTING_CODES.PUSH_QUOTE_STATUS_ENABLED,
+    ]) {
+      await h.settings.adminService.setValueForAllChannels(code, true, null, actor);
+    }
     await settleEvents();
   });
 
@@ -150,6 +157,92 @@ describe('PWA module — admin + storefront', () => {
       cookies: adminCookie,
     });
     expect(getAfter.json().appName).toBe('Global Store');
+  });
+
+  // ---- specs/149-pwa-order-status-push/ T017 — status push category switches ----
+  it('reads both category switches, default on, for the global and a channel scope', async () => {
+    const channelId = (await h.salesChannels.resolver.getSystemDefault()).id;
+    for (const url of ['/api/v1/admin/pwa/config', `/api/v1/admin/pwa/config?salesChannelId=${channelId}`]) {
+      const r = await h.app.inject({ method: 'GET', url, cookies: adminCookie });
+      expect(r.statusCode).toBe(200);
+      expect(r.json()).toMatchObject({ orderStatusPushEnabled: true, quoteStatusPushEnabled: true });
+    }
+  });
+
+  it('writes each switch globally and per channel through the audited settings path, and resets it', async () => {
+    // A channel other than the system default: an unscoped GET reads the
+    // system default's effective values, so an override on it would shadow
+    // the global value this case also asserts.
+    const channelId = (
+      (await h.em().getConnection().execute(
+        `select id from sales_channels where system_default = false order by code limit 1`,
+      )) as Array<{ id: string }>
+    )[0]!.id;
+    const auditCount = async (): Promise<number> => {
+      const rows = (await h.em().getConnection().execute(
+        `select count(*)::int as n from audit_log_entries
+          where action in ('setting.global_value_set', 'setting.value_set')
+            and state_after->>'settingCode' in (?, ?)`,
+        [PWA_SETTING_CODES.PUSH_ORDER_STATUS_ENABLED, PWA_SETTING_CODES.PUSH_QUOTE_STATUS_ENABLED],
+      )) as Array<{ n: number }>;
+      return rows[0]!.n;
+    };
+    const auditedBefore = await auditCount();
+
+    const putGlobal = await h.app.inject({
+      method: 'PUT',
+      url: '/api/v1/admin/pwa/config',
+      cookies: adminCookie,
+      payload: { orderStatusPushEnabled: false },
+    });
+    expect(putGlobal.statusCode).toBe(200);
+    expect(putGlobal.json()).toEqual({ updated: 1 });
+
+    const putChannel = await h.app.inject({
+      method: 'PUT',
+      url: '/api/v1/admin/pwa/config',
+      cookies: adminCookie,
+      payload: { salesChannelId: channelId, orderStatusPushEnabled: true, quoteStatusPushEnabled: false },
+    });
+    expect(putChannel.statusCode).toBe(200);
+    expect(putChannel.json()).toEqual({ updated: 2 });
+    await settleEvents();
+
+    const global = await h.app.inject({ method: 'GET', url: '/api/v1/admin/pwa/config', cookies: adminCookie });
+    expect(global.json()).toMatchObject({ orderStatusPushEnabled: false, quoteStatusPushEnabled: true });
+    const scoped = await h.app.inject({
+      method: 'GET',
+      url: `/api/v1/admin/pwa/config?salesChannelId=${channelId}`,
+      cookies: adminCookie,
+    });
+    expect(scoped.json()).toMatchObject({ orderStatusPushEnabled: true, quoteStatusPushEnabled: false });
+    expect(await auditCount()).toBeGreaterThan(auditedBefore);
+
+    // The per-channel reset iterates every pwa setting code, these two included.
+    const reset = await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/pwa/config/reset',
+      cookies: adminCookie,
+      payload: { salesChannelId: channelId },
+    });
+    expect(reset.statusCode).toBe(200);
+    await settleEvents();
+    const afterReset = await h.app.inject({
+      method: 'GET',
+      url: `/api/v1/admin/pwa/config?salesChannelId=${channelId}`,
+      cookies: adminCookie,
+    });
+    expect(afterReset.json()).toMatchObject({ orderStatusPushEnabled: false, quoteStatusPushEnabled: true });
+  });
+
+  it('refuses a non-boolean switch value', async () => {
+    const r = await h.app.inject({
+      method: 'PUT',
+      url: '/api/v1/admin/pwa/config',
+      cookies: adminCookie,
+      payload: { orderStatusPushEnabled: 'off' },
+    });
+    expect(r.statusCode).toBe(400);
   });
 
   it('rejects an unauthenticated admin config read', async () => {

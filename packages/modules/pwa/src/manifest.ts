@@ -253,4 +253,19 @@ export const manifest = defineModuleManifest({
     { code: PWA_PERMISSIONS.SEND_PUSH, label: 'Send push notifications' },
   ],
   activation: { settingCode: 'pwa.enabled', default: true },
+  // Principle XVI — the PWA screen under ⌘K (`specs/149-pwa-order-status-push/`
+  // R-16). `pwa:read` is the code every `GET /api/v1/admin/pwa/*` the screen
+  // calls on mount enforces, and the one its route and sidebar entry carry.
+  actions: [
+    {
+      id: 'open-settings',
+      labelKey: 'actions.openSettings.label',
+      descriptionKey: 'actions.openSettings.description',
+      icon: 'Smartphone',
+      targetRoute: '/settings/pwa',
+      requiredPermission: PWA_PERMISSIONS.READ,
+      keywords: ['pwa', 'push', 'notifications', 'app', 'powiadomienia', 'aplikacja'],
+      weight: 1400,
+    },
+  ],
 });

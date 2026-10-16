@@ -47,9 +47,11 @@ function sourceOf(relativePath: string): string {
  * split: the entry's destination is a route the admin declares somewhere, so a
  * later batch cannot move the screen and leave this entry pointing at nothing.
  *
- * The palette half of Principle XVII item 5 is the server's — this module
- * declares no manifest action, and `backend/test/unit/pwa/manifest-and-permissions.test.ts`
- * is where its manifest is asserted.
+ * The palette half of Principle XVII item 5 is the server's — the module's one
+ * manifest action, `open-settings` (`specs/149-pwa-order-status-push/`), is
+ * resolved against the effective enabled-set there, and
+ * `backend/test/contract/pwa/manifest-and-permissions.test.ts` is where its
+ * manifest is asserted.
  */
 
 let presentModules = new Set<string>(['pwa']);
@@ -276,8 +278,8 @@ describe('the shell no longer names pwa by hand', () => {
   it('keeps the module’s nav label in both shipped languages', () => {
     // R8: the bundle is the module's own and flat, and a key present in one
     // language only renders its raw key in the other. The palette's own
-    // shape test covers manifest actions; this module declares none, so the
-    // nav entry's label is the whole of its i18n surface.
+    // shape test covers manifest actions, this module's `open-settings`
+    // included; the nav entry's label is the one asserted here.
     for (const language of ['en', 'pl']) {
       const parsed: unknown = JSON.parse(
         sourceOf(`../packages/modules/pwa/i18n/${language}.json`),
