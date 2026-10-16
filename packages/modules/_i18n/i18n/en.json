@@ -2106,5 +2106,10 @@
   "savedViews.error.gone": "This view no longer exists.",
   "savedViews.error.load": "Saved views could not be loaded.",
   "savedViews.error.save": "The view could not be saved.",
-  "savedViews.error.delete": "The view could not be deleted."
+  "savedViews.error.delete": "The view could not be deleted.",
+  "appShell.palette.records.searching": "Searching records…",
+  "appShell.palette.records.more": "More results",
+  "appShell.palette.records.unavailable": "{label} could not be searched",
+  "appShell.palette.records.seeAll": "See all results for “{query}”",
+  "appShell.palette.records.announce": "{count} records found"
 }

@@ -43,6 +43,8 @@ import {
 import { resolveIcon } from '../lib/admin-actions/icon-map.js';
 import { getPromptCapability, listUnseenPromptRequests } from '../lib/prompt-actions/api.js';
 import { PromptModePanel } from './prompt-actions/PromptModePanel.js';
+import { useGlobalSearch } from '../lib/global-search/useGlobalSearch.js';
+import { Badge } from './ui/badge.js';
 import { SpeechToTextButton } from './SpeechToTextButton.js';
 import type { PromptActionRequestDto } from '@endora-commerce/contracts';
 
@@ -740,7 +742,21 @@ function buildCrumbs(pathname: string, composedNav: readonly NavSection[]): Crum
 }
 
 interface PaletteItem extends GatedSurface {
-  group: 'Navigate' | 'Actions' | 'Assistant';
+  /**
+   * `Records` and `SeeAll` are global search's (`specs/150-admin-global-search/`):
+   * one block per record type the server answered, then one row opening the
+   * full results page. They carry server-resolved strings (`labelMode:
+   * 'literal'`), and a record block is told apart by `groupKey`.
+   */
+  group: 'Navigate' | 'Actions' | 'Assistant' | 'Records' | 'SeeAll';
+  /** Records only: the entity type, so each record type renders its own header. */
+  groupKey?: string;
+  /** Records only: the record type's title, already in the admin's language. */
+  groupLabel?: string;
+  /** Records only: whether the record type has more matches than shown (FR-004). */
+  groupHasMore?: boolean;
+  /** Records only: the record's status, already in the admin's language. */
+  badge?: string;
   /**
    * For static Navigate items: a translation key under the `core` scope.
    * For registry-driven Actions items (feature 020): an already-resolved
@@ -1658,6 +1674,11 @@ function CommandPalette(props: CommandPaletteProps): ReactNode {
   const [initialPrompt, setInitialPrompt] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { actions: registryActions } = useAdminActions(query);
+  const { language } = useTranslationContext();
+  // Global search (`specs/150-admin-global-search/`): records of every type the
+  // admin may read, below the screens and actions. The shell names an endpoint
+  // and nothing else — no module id, no module bundle (research R-8).
+  const records = useGlobalSearch(open && mode === 'search', query, language);
 
   // Feature 043 — capability probe, only when the operator may use the
   // assistant. With the feature disabled/unconfigured (or the permission
@@ -1749,7 +1770,50 @@ function CommandPalette(props: CommandPaletteProps): ReactNode {
     ];
   }, [mayUseAssistant, assistantReady, tp]);
 
-  const items = useMemo(() => {
+  // Global search's rows. Only selectable rows enter `items`, so the one
+  // Arrow/Enter loop walks screens, actions and records as one list (FR-006);
+  // a record type that could not be searched is a note under its header, never
+  // a row the cursor stops on.
+  const recordItems = useMemo<PaletteItem[]>(() => {
+    if (!records.available || records.searchedQuery === '') return [];
+    const rows: PaletteItem[] = [];
+    for (const group of records.groups) {
+      for (const hit of group.hits) {
+        rows.push({
+          group: 'Records',
+          groupKey: group.entityType,
+          groupLabel: group.label,
+          groupHasMore: group.hasMore,
+          labelMode: 'literal',
+          label: hit.title,
+          sub: hit.subtitle ?? '',
+          ...(hit.status ? { badge: hit.status.label } : {}),
+          icon: resolveIcon(group.icon),
+          to: hit.targetRoute,
+          keywords: '',
+        });
+      }
+    }
+    return rows;
+  }, [records]);
+
+  // "See all results" — whenever record search ran for the text in the input
+  // (FR-029); it opens the full results page for the same text.
+  const seeAllItem = useMemo<PaletteItem | null>(() => {
+    const trimmed = query.trim();
+    if (!records.available || trimmed.length < records.minimumQueryLength) return null;
+    return {
+      group: 'SeeAll',
+      labelMode: 'literal',
+      label: t('appShell.palette.records.seeAll', { query: trimmed }),
+      sub: '',
+      icon: Search,
+      to: `/global-search?q=${encodeURIComponent(trimmed)}`,
+      keywords: '',
+    };
+  }, [records.available, records.minimumQueryLength, query, t]);
+
+  const itemsBeforeSeeAll = useMemo(() => {
     if (!query.trim()) return [...assistantItems, ...navigateItems, ...actionItems];
     // Folded once here, then compared against every row — see `matchesQuery`.
     const q = normalize(query);
@@ -1762,11 +1826,16 @@ function CommandPalette(props: CommandPaletteProps): ReactNode {
     const filteredNav = navigateItems.filter((i) =>
       matchesQuery(q, resolveLabel(i), resolveSub(i), i.keywords),
     );
-    return [...filteredAssistant, ...filteredNav, ...actionItems];
+    return [...filteredAssistant, ...filteredNav, ...actionItems, ...recordItems];
     // `resolveLabel` / `resolveSub` are render-scoped closures over `t`; the
     // list re-derives on every language change through the parent re-render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, actionItems, assistantItems, navigateItems]);
+  }, [query, actionItems, assistantItems, navigateItems, recordItems]);
+
+  const items = useMemo(
+    () => (seeAllItem ? [...itemsBeforeSeeAll, seeAllItem] : itemsBeforeSeeAll),
+    [itemsBeforeSeeAll, seeAllItem],
+  );
 
   // Activating the assistant row switches the palette body instead of
   // navigating (feature 043); everything else keeps the navigation path.
@@ -1868,7 +1937,40 @@ function CommandPalette(props: CommandPaletteProps): ReactNode {
     );
   }
 
+  // Which rows are global search's, and where they start in `items` — the
+  // record blocks are rendered from the server's groups so a record type that
+  // could not be searched keeps its place, with a note instead of rows.
+  const showRecords = records.available && records.searchedQuery !== '';
+  const firstRecordIndex = itemsBeforeSeeAll.length - recordItems.length;
+  const leadingItems = itemsBeforeSeeAll.slice(0, firstRecordIndex);
+  const recordsLoading = records.available && records.state === 'loading';
+  const recordCount = records.groups.reduce((sum, group) => sum + group.hits.length, 0);
+  const nothingAtAll = items.length === 0 && !recordsLoading && !records.groups.some((g) => g.status !== 'ok');
+
+  const renderRow = (it: PaletteItem, i: number): ReactNode => {
+    const Icon = it.icon;
+    const label = resolveLabel(it);
+    const sub = resolveSub(it);
+    return (
+      <div
+        key={`${it.group}-${it.groupKey ?? ''}-${it.to}-${i}`}
+        className={cn('b2b-palette__item', i === cursor && 'is-cur')}
+        onMouseEnter={(): void => setCursor(i)}
+        onClick={(): void => activate(it.to)}
+      >
+        <Icon size={16} aria-hidden="true" />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div>{label}</div>
+          {sub ? <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{sub}</div> : null}
+        </div>
+        {it.badge ? <Badge variant="secondary">{it.badge}</Badge> : null}
+        <span className="meta">{i === cursor ? <span className="b2b-kbd-sm">↵</span> : null}</span>
+      </div>
+    );
+  };
+
   let lastGroup = '';
+  let recordIndex = firstRecordIndex;
   return (
     <>
       <div className="b2b-scrim" onClick={onClose} />
@@ -1891,7 +1993,15 @@ function CommandPalette(props: CommandPaletteProps): ReactNode {
           />
           <span className="b2b-kbd-sm">esc</span>
         </div>
-        <div className="b2b-palette__list">
+        {/* FR-033 — a settled record search is announced without moving focus.
+            Mounted before it has text: a live region that arrives already
+            carrying its message is not reliably announced. */}
+        <div role="status" aria-live="polite" className="sr-only" data-testid="palette-records-status">
+          {showRecords && records.state === 'ready'
+            ? t('appShell.palette.records.announce', { count: recordCount })
+            : ''}
+        </div>
+        <div className="b2b-palette__list" aria-busy={recordsLoading}>
           {unseen.length > 0 ? (
             <div
               data-testid="prompt-unseen-notice"
@@ -1909,41 +2019,72 @@ function CommandPalette(props: CommandPaletteProps): ReactNode {
               </div>
             </div>
           ) : null}
-          {items.length === 0 ? (
+          {nothingAtAll ? (
             <div style={{ padding: 32, textAlign: 'center', color: 'var(--fg-muted)', fontSize: 13 }}>
               {t('appShell.search.noMatches')}
             </div>
           ) : (
-            items.map((it, i) => {
-              const showGroup = it.group !== lastGroup;
-              lastGroup = it.group;
-              const Icon = it.icon;
-              const groupHeader =
-                it.group === 'Navigate'
-                  ? t('appShell.palette.group.navigate')
-                  : it.group === 'Assistant'
-                    ? tp('palette.group.label')
-                    : t('appShell.palette.group.actions');
-              const label = resolveLabel(it);
-              const sub = resolveSub(it);
-              return (
-                <div key={`${it.group}-${it.label}`}>
-                  {showGroup ? <div className="b2b-palette__group">{groupHeader}</div> : null}
-                  <div
-                    className={cn('b2b-palette__item', i === cursor && 'is-cur')}
-                    onMouseEnter={(): void => setCursor(i)}
-                    onClick={(): void => activate(it.to)}
-                  >
-                    <Icon size={16} />
-                    <div>
-                      <div>{label}</div>
-                      <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{sub}</div>
-                    </div>
-                    <span className="meta">{i === cursor ? <span className="b2b-kbd-sm">↵</span> : null}</span>
+            <>
+              {leadingItems.map((it, i) => {
+                const showGroup = it.group !== lastGroup;
+                lastGroup = it.group;
+                const groupHeader =
+                  it.group === 'Navigate'
+                    ? t('appShell.palette.group.navigate')
+                    : it.group === 'Assistant'
+                      ? tp('palette.group.label')
+                      : t('appShell.palette.group.actions');
+                return (
+                  <div key={`${it.group}-${it.label}`}>
+                    {showGroup ? <div className="b2b-palette__group">{groupHeader}</div> : null}
+                    {renderRow(it, i)}
                   </div>
+                );
+              })}
+              {recordsLoading ? (
+                <div
+                  className="b2b-palette__item"
+                  aria-hidden="true"
+                  data-palette-note=""
+                  data-testid="palette-records-searching"
+                  style={{ color: 'var(--fg-muted)', cursor: 'default' }}
+                >
+                  <Search size={16} />
+                  <div>{t('appShell.palette.records.searching')}</div>
                 </div>
-              );
-            })
+              ) : null}
+              {showRecords
+                ? records.groups.map((group) => (
+                    <div key={group.entityType} data-testid={`palette-records-${group.entityType}`}>
+                      <div className="b2b-palette__group">
+                        {group.label}
+                        {group.hasMore ? (
+                          <span style={{ marginLeft: 8, fontWeight: 400 }}>
+                            · {t('appShell.palette.records.more')}
+                          </span>
+                        ) : null}
+                      </div>
+                      {group.status === 'ok' ? (
+                        group.hits.map(() => {
+                          const index = recordIndex;
+                          recordIndex += 1;
+                          const it = items[index];
+                          return it ? renderRow(it, index) : null;
+                        })
+                      ) : (
+                        <div
+                          className="b2b-palette__item"
+                          data-palette-note=""
+                          style={{ color: 'var(--fg-muted)', cursor: 'default' }}
+                        >
+                          <div>{t('appShell.palette.records.unavailable', { label: group.label })}</div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                : null}
+              {seeAllItem ? renderRow(seeAllItem, items.length - 1) : null}
+            </>
           )}
         </div>
       </div>
