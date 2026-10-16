@@ -15,6 +15,7 @@ import type {
   CatalogProductReadPort,
   CatalogProductRecord,
   LinePricePort,
+  ProductDisplayModePort,
   OrganizationDetailsPort,
 } from '@endora-commerce/contracts';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
@@ -106,6 +107,12 @@ export class CartService {
      * whole issue is about.
      */
     private readonly channelMembership: SalesChannelMembershipPort,
+    /**
+     * `price_lists`' display mode on its own (issue #236) — what `addItem`
+     * refuses a product sold on request only by when no price list holds it.
+     * Required for the reason `channelMembership` is.
+     */
+    private readonly displayModes: ProductDisplayModePort,
     private readonly approvalService?: CartApprovalService,
     private readonly auditService?: CartAuditService,
     private readonly recomputeCache?: CartRecomputeCache,
@@ -322,9 +329,19 @@ export class CartService {
         quantity: effectiveQuantity,
         variantId: input.variantId ?? null,
       });
-      // T084 — defence-in-depth: refuse the line when the resolver says
-      // this product is quote-only for the (org, channel) tuple.
-      if (resolved && resolved.displayMode === 'none') {
+      // T084 — defence-in-depth: refuse the line when the product is
+      // quote-only for the (org, channel) tuple. Issue #236: the mode is read
+      // off the list price when there is one, and asked for on its own when
+      // there is not — a product no price list holds resolved nothing, and the
+      // guard used to be skipped for it.
+      const displayMode =
+        resolved?.displayMode ??
+        (await this.#lineDisplayMode(em, {
+          productId: product.id,
+          organizationId: actor.customer?.organizationId ?? null,
+          signedIn: actor.customer !== undefined,
+        }));
+      if (displayMode === 'none') {
         // Issue #86 — its own code: raised as `VALIDATION_FAILED` it could not
         // be told from a malformed request, and the buyer read the identifier
         // `product_quote_only` in every language.
@@ -403,6 +420,27 @@ export class CartService {
    * the catalogue default. An absent `price_lists` now throws through this
    * method to the route (issue #124).
    */
+  /**
+   * The product's display mode when no list price carried one (issue #236),
+   * for the channel and buyer the line price was resolved for — the system
+   * default channel, see the constructor — so the two answers cannot disagree.
+   * `null` where there is no channel to ask about, as `#resolveLineUnitPrice`
+   * answers there.
+   */
+  async #lineDisplayMode(
+    em: EntityManager,
+    input: { productId: string; organizationId: string | null; signedIn: boolean },
+  ): Promise<DisplayMode | null> {
+    const channel = await em.findOne(SalesChannel, { systemDefault: true });
+    if (!channel) return null;
+    return this.displayModes.resolveDisplayMode({
+      productId: input.productId,
+      organizationId: input.organizationId,
+      salesChannelId: channel.id,
+      customerKind: input.signedIn ? 'signed_in' : 'guest',
+    });
+  }
+
   async #resolveLineUnitPrice(
     em: EntityManager,
     input: {

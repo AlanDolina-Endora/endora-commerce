@@ -662,6 +662,34 @@ export interface LinePricePort {
 }
 
 /**
+ * Container name: `productDisplayModePort`. Owner: `price_lists`.
+ *
+ * Whether — and how — a product's price is shown to one viewer, resolved
+ * **without** a price: the Product → Category → Organization → Settings chain
+ * the storefront's `GET /pricing/display-mode/:productId` answers with. `none`
+ * means the product is sold on request only.
+ *
+ * Published for `carts` (issue #236). A cart line read the display mode off the
+ * resolved list price, so a product no price list holds — priced from the
+ * catalogue attribute — resolved nothing, and a product sold on request only
+ * was added. `LinePricePort.resolveLinePrice` answers `null` there by design,
+ * and widening that answer would break every structural stub of it; a caller
+ * that needs the mode on its own asks for it by name.
+ *
+ * **Owner off:** the seam fails closed, like `LinePricePort`'s — resolving the
+ * port throws `ModuleDisabledError`. A cart that cannot ask must not assume the
+ * product is purchasable.
+ */
+export interface ProductDisplayModePort {
+  resolveDisplayMode(input: {
+    productId: string;
+    organizationId: string | null;
+    salesChannelId: string;
+    customerKind: 'guest' | 'signed_in';
+  }): Promise<DisplayMode>;
+}
+
+/**
  * Container name: `pricingService`. Owner: `price_lists`.
  *
  * `LinePricePort` plus the bracket ladder — the surface `catalog`'s external
