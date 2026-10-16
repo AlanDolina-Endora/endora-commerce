@@ -44,6 +44,7 @@ import { quoteRequestsModule, type QuoteRequestsModuleOptions } from './plugin.j
 import { QuoteRequest } from './entities/quote-request.entity.js';
 import { QuoteRequestEvent } from './entities/quote-request-event.entity.js';
 import { QuoteRequestItem } from './entities/quote-request-item.entity.js';
+import { QuoteRequestListSavedView } from './entities/quote-request-list-saved-view.entity.js';
 import { QuoteRequestNotificationEvent } from './entities/quote-request-notification-event.entity.js';
 import { QuoteRequestRevision } from './entities/quote-request-revision.entity.js';
 import { QuoteRequestOrgPolicy } from './entities/quote-request-org-policy.entity.js';
@@ -401,6 +402,7 @@ export function registerModule(ctx: ModuleContext): void {
         return quoteRequestsModule({
           emFactory,
           eventBus,
+          log: ctx.log,
           auditLog: auditLogService,
           customFieldValues: lazyPort<QuoteRequestsCradle['customFieldValueService']>(
             ctx,
@@ -648,6 +650,7 @@ export const entities = [
   QuoteRequest,
   QuoteRequestEvent,
   QuoteRequestItem,
+  QuoteRequestListSavedView,
   QuoteRequestNotificationEvent,
   QuoteRequestRevision,
   QuoteRequestOrgPolicy,

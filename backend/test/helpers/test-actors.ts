@@ -300,6 +300,59 @@ export const ADMIN_COOKIES: Record<string, { adminUserId: string }> = {
   'stub-inventory-seeded-sales-rep-session': {
     adminUserId: '00000000-0000-4000-8000-0000000000ee',
   },
+  // `specs/147-saved-views/` — the order list's saved views. A sales
+  // representative holding `orders:read` (role code exactly
+  // `sales_representative`, which is what confines the orders scope) proves a
+  // shared view it did not create is readable and not modifiable; an admin
+  // without `orders:read` proves the gate on all four routes; and an admin of
+  // its own reads the conflict sentence in Polish without changing the shared
+  // stub admin's language. The users, and the custom roles, are created by
+  // `test/contract/orders/list-and-views.test.ts`.
+  'stub-order-views-sales-rep-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147a1',
+  },
+  'stub-order-views-no-orders-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147a2',
+  },
+  'stub-order-views-polish-admin-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147a3',
+  },
+  // `specs/147-saved-views/` — the product list's saved views, with ids of
+  // their own rather than the order list's three, for the reason every set
+  // above has its own. A catalogue reader on a custom role (not
+  // `sales_representative`, so a platform admin for saved views — owner ruling
+  // A) saves its own views and may modify a colleague's shared one; a sales
+  // representative holding `catalog:read` reads a shared view and may not
+  // modify it; an admin without `catalog:read` proves the gate on all four
+  // routes. The users, and the custom roles, are created by
+  // `test/contract/catalog/product-list-views.test.ts`.
+  'stub-product-views-catalog-reader-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147b1',
+  },
+  'stub-product-views-sales-rep-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147b2',
+  },
+  'stub-product-views-no-catalog-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147b3',
+  },
+  // `specs/147-saved-views/` — the Quote Request list's saved views, with ids
+  // of their own for the same reason. A sales representative holding
+  // `rfqs:handle`, assigned to `TEST_ORGANIZATION_ID` only, reads a shared view
+  // it may not modify and replays views on the list (FR-016); an admin on a
+  // custom role (not `sales_representative`, so a platform admin for saved
+  // views — owner ruling A) holding `rfqs:handle` may modify a colleague's
+  // shared view; an admin without `rfqs:handle` proves the gate on all four
+  // routes. The users, the custom roles and the assignment are created by
+  // `test/contract/quote_requests/list-views.test.ts`.
+  'stub-rfq-views-sales-rep-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147c1',
+  },
+  'stub-rfq-views-handler-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147c2',
+  },
+  'stub-rfq-views-no-rfqs-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000147c3',
+  },
 };
 
 declare module 'fastify' {

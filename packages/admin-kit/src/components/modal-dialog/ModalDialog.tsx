@@ -1,19 +1,20 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
-import { useFocusTrap } from '@endora-commerce/admin-kit/components';
+import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react';
+import { useFocusTrap } from '../hooks/useFocusTrap.js';
 
 /**
  * A modal dialog: a titled panel over a scrim that holds focus until it is
  * closed.
  *
- * The kit publishes no dialog primitive — the screens that need one each draw
- * the scrim and the panel themselves (`OrderStatusConfigPage`'s delete
- * confirmation is the nearest). This one adds what those leave out: an
- * accessible name (`aria-labelledby`), a focus trap (the kit's `useFocusTrap`,
- * which also returns focus to the control that opened the dialog), and Escape
- * to close. It is module-private and a promotion candidate for the kit the
- * moment a second module wants it.
+ * Promoted from `crm` by feature 147 (`specs/147-saved-views/research.md` R-2)
+ * once a second consumer — the saved-views dialogs — wanted it. It carries what
+ * a hand-drawn scrim and panel leave out: an accessible name
+ * (`aria-labelledby`), a focus trap (the kit's `useFocusTrap`, which also
+ * returns focus to the control that opened the dialog), Escape to close, and a
+ * `busy` state that makes both Escape and the scrim inert while a request is in
+ * flight.
  */
 export interface ModalDialogProps {
+  /** Rendered as the `<h2>` that names the dialog. */
   title: ReactNode;
   onClose: () => void;
   children: ReactNode;
@@ -21,13 +22,20 @@ export interface ModalDialogProps {
   footer?: ReactNode;
   /** While `true` Escape and the scrim do not close the dialog (a save in flight). */
   busy?: boolean;
+  /** Focused on open instead of the first focusable element. */
+  initialFocusRef?: RefObject<HTMLElement | null>;
+  /**
+   * Focused after the dialog unmounts instead of the opener. Read when the
+   * dialog closes, so a ref still `null` at that moment falls back to the opener.
+   */
+  finalFocusRef?: RefObject<HTMLElement | null>;
 }
 
 export function ModalDialog(props: ModalDialogProps): ReactNode {
-  const { title, onClose, children, footer, busy = false } = props;
+  const { title, onClose, children, footer, busy = false, initialFocusRef, finalFocusRef } = props;
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(panelRef, true);
+  useFocusTrap(panelRef, true, { initialFocusRef, finalFocusRef });
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {

@@ -70,27 +70,32 @@ const BUNDLE = passthroughBundle('core', [
   'rfq.list.open',
 ]);
 
+const RFQ_LIST = {
+  data: [
+    {
+      id: '00000000-0000-4000-8000-0000000000r1',
+      organizationId: '00000000-0000-4000-8000-0000000000a1',
+      organizationName: 'Acme',
+      customerAccountId: '00000000-0000-4000-8000-0000000000c1',
+      customerDisplayName: 'Buyer',
+      status: 'Pending',
+      awaitingCustomerRevisionAcceptance: false,
+      lineCount: 2,
+      totalAtCustomerPrice: 100,
+      totalAtAgreedPrice: null,
+      currency: 'PLN',
+      updatedAt: '2026-05-22T12:00:00Z',
+    },
+  ],
+};
+
 beforeEach(() => {
   setMobileViewport(true);
   getSpy.mockReset();
-  getSpy.mockResolvedValue({
-    data: [
-      {
-        id: '00000000-0000-4000-8000-0000000000r1',
-        organizationId: '00000000-0000-4000-8000-0000000000a1',
-        organizationName: 'Acme',
-        customerAccountId: '00000000-0000-4000-8000-0000000000c1',
-        customerDisplayName: 'Buyer',
-        status: 'Pending',
-        awaitingCustomerRevisionAcceptance: false,
-        lineCount: 2,
-        totalAtCustomerPrice: 100,
-        totalAtAgreedPrice: null,
-        currency: 'PLN',
-        updatedAt: '2026-05-22T12:00:00Z',
-      },
-    ],
-  });
+  // Feature 147: the page's saved-views control asks for its views too.
+  getSpy.mockImplementation(async (path: string) =>
+    path.startsWith('/api/v1/admin/quote-requests/list-views') ? { data: [] } : RFQ_LIST,
+  );
 });
 
 describe('RfqList mobile', () => {

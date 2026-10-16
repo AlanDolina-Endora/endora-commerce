@@ -9,7 +9,7 @@ import { crmCalendarApi } from '../../../calendar-api.js';
 import { EventCalendar } from '../../../components/calendar/EventCalendar.js';
 import { useEntryWhen } from '../../../components/calendar/EventChip.js';
 import { EventDialog } from '../../../components/EventDialog.js';
-import { ModalDialog } from '../../../components/ModalDialog.js';
+import { ModalDialog } from '@endora-commerce/admin-kit/components';
 import {
   dayKeyOf,
   entryDayKey,

@@ -261,6 +261,36 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'R11). The lock and both raise sites are `quote_requests`\' own, and its `RFQ_` prefix ' +
       'names the module.',
   },
+  ORDER_SAVED_VIEW_NAME_TAKEN: {
+    to: 'orders',
+    reason:
+      'Minted for the refusal a saved view on the order list earns when its owner already holds ' +
+      'a view there whose name differs only by case or surrounding spaces ' +
+      '(`specs/147-saved-views/`, FR-022). The noun is an order-list saved view, `orders`\' own ' +
+      'row, and the one raise site is `order-list-view-service.ts`. `VALIDATION_FAILED` is not ' +
+      'reused: the request is well formed, and the sentence has to tell the admin to pick ' +
+      'another name.',
+  },
+  PRODUCT_SAVED_VIEW_NAME_TAKEN: {
+    to: 'catalog',
+    reason:
+      'Minted for the refusal a saved view on the product list earns when its owner already holds ' +
+      'a view there whose name differs only by case or surrounding spaces ' +
+      '(`specs/147-saved-views/`, FR-022). The noun is a product-list saved view, `catalog`\' own ' +
+      'row, and the one raise site is `product-list-view-service.ts`. `VALIDATION_FAILED` is not ' +
+      'reused: the request is well formed, and the sentence has to tell the admin to pick ' +
+      'another name.',
+  },
+  RFQ_SAVED_VIEW_NAME_TAKEN: {
+    to: 'quote_requests',
+    reason:
+      'Minted for the refusal a saved view on the quote request list earns when its owner already ' +
+      'holds a view there whose name differs only by case or surrounding spaces ' +
+      '(`specs/147-saved-views/`, FR-022). The noun is a quote-request-list saved view, ' +
+      '`quote_requests`\' own row, and the one raise site is `quote-request-list-view-service.ts`. ' +
+      '`VALIDATION_FAILED` is not reused: the request is well formed, and the sentence has to tell ' +
+      'the admin to pick another name.',
+  },
   CART_PRODUCT_QUOTE_ONLY: {
     to: 'carts',
     reason:

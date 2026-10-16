@@ -541,6 +541,7 @@
   "errors.PRICE_RANGE_INVALID": "Cena minimalna nie może być wyższa niż maksymalna.",
   "errors.PRODUCT_NOT_FOUND": "Błąd: product not found.",
   "errors.PRODUCT_ARCHIVED": "Produkt jest nieaktywny.",
+  "errors.PRODUCT_SAVED_VIEW_NAME_TAKEN": "Masz już zapisany widok o tej nazwie na liście produktów. Wybierz inną nazwę.",
   "errors.PRODUCT_DELETE_BLOCKED": "Nie można usunąć produktu — jest nadal powiązany z innymi rekordami.",
   "errors.SKU_ALREADY_EXISTS": "Błąd: sku already exists.",
   "errors.VARIANT_COMBINATION_EXISTS": "Błąd: variant combination exists.",

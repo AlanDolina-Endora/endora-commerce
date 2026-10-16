@@ -69,6 +69,7 @@ import { ProductAttachment } from './entities/product-attachment.entity.js';
 import { ProductAttribute } from './entities/product-attribute.entity.js';
 import { ProductEditorPreference } from './entities/product-editor-preference.entity.js';
 import { ProductLink } from './entities/product-link.entity.js';
+import { ProductListSavedView } from './entities/product-list-saved-view.entity.js';
 import { ProductPackagingUnit } from './entities/product-packaging-unit.entity.js';
 import { ProductValueOverride } from './entities/product-value-override.entity.js';
 import { ProductVariant } from './entities/product-variant.entity.js';
@@ -537,6 +538,7 @@ export function registerModule(ctx: ModuleContext): void {
             auditLogService,
             ...(moduleQueueRedis === undefined ? {} : { redis: moduleQueueRedis }),
             runBulkOperationWorker: catalogRunBulkOperationWorker,
+            log: ctx.log,
             // The lifecycle gate, threaded in rather than imported. The
             // consumer is built inside the attach function — it needs `app.log`
             // and an `onClose` hook — so `plugin.ts` has no `ModuleContext`
@@ -1132,6 +1134,7 @@ export const entities = [
   ProductAttribute,
   ProductEditorPreference,
   ProductLink,
+  ProductListSavedView,
   ProductPackagingUnit,
   ProductValueOverride,
   ProductVariant,

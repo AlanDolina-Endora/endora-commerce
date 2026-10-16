@@ -10,6 +10,13 @@ import {
 } from './common.js';
 import { customFieldValuesSchema } from './custom-fields.js';
 import { vatStatusSchema } from './organizations.js';
+import {
+  savedListViewColumnsSchema,
+  savedListViewFiltersSchema,
+  savedListViewNameSchema,
+  savedListViewSchema,
+  savedListViewSortSchema,
+} from './saved-list-views.js';
 
 /**
  * Orders module contracts — Source of truth per Principle V.
@@ -593,30 +600,23 @@ export const bulkPrintInvoicesRequestSchema = z.object({
 export type BulkPrintInvoicesRequest = z.infer<typeof bulkPrintInvoicesRequestSchema>;
 
 // --- Saved list views ------------------------------------------------------
+// Built on the shared saved-list-view schemas (`saved-list-views.ts`); the
+// orders list stores all three state fields and its views always carry a sort.
 
-export const orderSavedViewSortSchema = z.object({
-  field: z.string(),
-  dir: z.enum(['asc', 'desc']),
-});
+export const orderSavedViewSortSchema = savedListViewSortSchema;
 
-export const orderSavedViewSchema = z.object({
-  id: uuidSchema,
-  name: z.string().min(1).max(160),
-  shared: z.boolean(),
-  ownerAdminUserId: uuidSchema,
-  filters: z.record(z.string(), z.unknown()),
-  sort: orderSavedViewSortSchema,
-  /** Column-picker selection. `null` ⇒ fall back to the default-visible set. */
-  visibleColumns: z.array(z.string()).nullable().optional(),
+export const orderSavedViewSchema = savedListViewSchema.extend({
+  sort: savedListViewSortSchema,
 });
 export type OrderSavedView = z.infer<typeof orderSavedViewSchema>;
 
 export const createOrderSavedViewRequestSchema = z.object({
-  name: z.string().min(1).max(160),
+  name: savedListViewNameSchema,
   shared: z.boolean(),
-  filters: z.record(z.string(), z.unknown()),
-  sort: orderSavedViewSortSchema,
-  visibleColumns: z.array(z.string()).nullable().optional(),
+  filters: savedListViewFiltersSchema,
+  sort: savedListViewSortSchema,
+  /** Column-picker selection. `null` ⇒ fall back to the default-visible set. */
+  visibleColumns: savedListViewColumnsSchema.nullable().optional(),
 });
 export type CreateOrderSavedViewRequest = z.infer<typeof createOrderSavedViewRequestSchema>;
 

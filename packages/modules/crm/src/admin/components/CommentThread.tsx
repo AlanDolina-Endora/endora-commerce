@@ -13,7 +13,7 @@ import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { crmApi } from '../api.js';
 import { errorMessage } from '../lib/labels.js';
 import { COMMENT_MAX_LENGTH, CommentComposer } from './CommentComposer.js';
-import { ModalDialog } from './ModalDialog.js';
+import { ModalDialog } from '@endora-commerce/admin-kit/components';
 import { ReferenceText } from './ReferenceText.js';
 import { ReferenceField } from './ReferenceField.js';
 

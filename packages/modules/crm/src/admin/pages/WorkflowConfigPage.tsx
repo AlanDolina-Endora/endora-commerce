@@ -18,13 +18,13 @@ import {
   PageHeader,
 } from '@endora-commerce/admin-kit/ui';
 import {
+  ModalDialog,
   StatusTransitionGraph,
   type StatusTransitionGraphStatus,
 } from '@endora-commerce/admin-kit/components';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { crmApi, type OrderStatusOption } from '../api.js';
 import { BoardCardFieldsEditor } from '../components/BoardCardFieldsEditor.js';
-import { ModalDialog } from '../components/ModalDialog.js';
 import { errorMessage, workflowStatusLabel } from '../lib/labels.js';
 import { OrderStatusMappings } from './workflow/OrderStatusMappings.js';
 import { StatusDialog, type StatusDialogSubmit } from './workflow/StatusDialog.js';

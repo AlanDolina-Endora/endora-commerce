@@ -56,6 +56,7 @@ import { ProductLinkService } from './services/product-link.service.js';
 import { GroupedService } from './services/grouped.service.js';
 import { BundleService } from './services/bundle.service.js';
 import { ProductEditorPreferencesService } from './services/product-editor-preferences.service.js';
+import { ProductListViewService } from './services/product-list-view-service.js';
 import { ProductOverridesService } from './services/product-overrides.service.js';
 import { ProductScopeContextService } from './services/product-scope-context.service.js';
 import { ProductValueResolverService } from './services/product-value-resolver.service.js';
@@ -206,6 +207,11 @@ export interface CatalogModuleOptions {
    * argument is the same gate reached the sanctioned way.
    */
   registerWorker: (worker: Worker, options?: { logger?: PlatformLogger }) => void;
+  /**
+   * The module's logger. The saved-view service writes its actor-≠-owner trail
+   * through it (`specs/147-saved-views/` research R-18, S-11).
+   */
+  log?: PlatformLogger;
   /**
    * Runs a full Meilisearch reindex (the `search:reindex` CLI equivalent).
    * When provided, flipping an attribute's `searchable` flag enqueues a
@@ -458,6 +464,8 @@ export function catalogModule(options: CatalogModuleOptions) {
     const editorPreferencesService = new ProductEditorPreferencesService(
       options.emFactory,
     );
+    // `specs/147-saved-views/` (US2) — the product list's saved views.
+    const listViewService = new ProductListViewService(options.emFactory, options.log);
     const valueResolverService = options.languageService
       ? new ProductValueResolverService(
           options.emFactory,
@@ -506,6 +514,7 @@ export function catalogModule(options: CatalogModuleOptions) {
       ...(options.auditLogService ? { auditLogService: options.auditLogService } : {}),
       ...(scopeContextService ? { productScopeContextService: scopeContextService } : {}),
       productEditorPreferencesService: editorPreferencesService,
+      productListViewService: listViewService,
       ...(valueResolverService ? { productValueResolverService: valueResolverService } : {}),
       ...(overridesService ? { productOverridesService: overridesService } : {}),
     });

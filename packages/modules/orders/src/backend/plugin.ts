@@ -565,7 +565,7 @@ export function commerceModule(options: OrdersModuleOptions) {
       options.customerAccountRead,
     );
     if (options.exposeOrderListService) options.exposeOrderListService(orderListService);
-    const orderListViewService = new OrderListViewService(options.emFactory);
+    const orderListViewService = new OrderListViewService(options.emFactory, options.log);
     const orderExportService = new OrderExportService(orderListService);
     const orderCommentService = new OrderCommentService(
       options.emFactory,

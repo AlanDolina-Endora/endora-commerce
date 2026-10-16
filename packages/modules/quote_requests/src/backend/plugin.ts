@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type { EventBus } from '@endora-commerce/platform/events';
-import type { AuditPort } from '@endora-commerce/platform/kernel';
+import type { AuditPort, PlatformLogger } from '@endora-commerce/platform/kernel';
 import type {
   AdminUserReadPort,
   BuyerLinePricePort,
@@ -20,6 +20,7 @@ import { RfqEventService } from './services/rfq-event-service.js';
 import { RfqRevisionService } from './services/rfq-revision-service.js';
 import { RfqNotificationService } from './services/rfq-notification-service.js';
 import { RfqExpiryWorker } from './services/rfq-expiry-worker.js';
+import { QuoteRequestListViewService } from './services/quote-request-list-view-service.js';
 import { createOrderCompletionReactor } from './services/order-completion-reactor.js';
 import {
   registerQuoteRequestsCustomerRoutes,
@@ -142,6 +143,11 @@ export interface QuoteRequestsModuleOptions {
    * `organizations`', so it is resolved, not rebuilt.
    */
   salesRepAssignment: SalesRepAssignmentPort;
+  /**
+   * The module's logger. The saved-view service writes its actor-≠-owner trail
+   * through it (`specs/147-saved-views/` research R-18, S-11).
+   */
+  log?: PlatformLogger;
 }
 
 export interface QuoteRequestsModuleHandle {
@@ -160,6 +166,8 @@ export function quoteRequestsModule(options: QuoteRequestsModuleOptions): {
   const eventService = new RfqEventService(options.emFactory);
   const revisionService = new RfqRevisionService(options.emFactory);
   const notificationService = new RfqNotificationService(options.emFactory);
+  // `specs/147-saved-views/` (US3) — the Quote Request list's saved views.
+  const listViewService = new QuoteRequestListViewService(options.emFactory, options.log);
   const salesRepAssignment = options.salesRepAssignment;
 
   // Business Quote Request ID generator — adapts the composition-wired
@@ -245,6 +253,7 @@ export function quoteRequestsModule(options: QuoteRequestsModuleOptions): {
         adminService,
         requireAdmin: options.requireAdmin,
         resolveAdminContext: options.resolveAdminContext,
+        listViewService,
       });
       // D-166 — this module's one endpoint of the sales-rep pair, in this
       // module's own file. It used to `import()` `organizations`' route file

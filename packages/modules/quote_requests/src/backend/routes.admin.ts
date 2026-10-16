@@ -5,9 +5,13 @@ import {
   adminCancelQuoteRequestSchema,
   adminCreateQuoteRequestSchema,
   adminPatchQuoteRequestSchema,
+  createQuoteRequestSavedViewRequestSchema,
   rfqStatusSchema,
+  updateQuoteRequestSavedViewRequestSchema,
 } from '@endora-commerce/contracts';
+import { savedViewActor } from './saved-view-actor.js';
 import type { RfqAdminService, AdminContext, AdminAssignmentScope } from './services/rfq-admin-service.js';
+import type { QuoteRequestListViewService } from './services/quote-request-list-view-service.js';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 
 export interface AdminContextResolver {
@@ -18,6 +22,8 @@ export interface QuoteRequestsAdminDeps {
   adminService: RfqAdminService;
   requireAdmin: RequireAdminFactory;
   resolveAdminContext: AdminContextResolver;
+  /** `specs/147-saved-views/` (US3) — the Quote Request list's saved views. */
+  listViewService: QuoteRequestListViewService;
 }
 
 function parseIfMatch(request: FastifyRequest): number | null {
@@ -36,7 +42,7 @@ export async function registerQuoteRequestsAdminRoutes(
   app: FastifyInstance,
   deps: QuoteRequestsAdminDeps,
 ): Promise<void> {
-  const { adminService, requireAdmin, resolveAdminContext } = deps;
+  const { adminService, requireAdmin, resolveAdminContext, listViewService } = deps;
   const guard = requireAdmin('rfqs:handle');
 
   app.get('/api/v1/admin/quote-requests', { preHandler: guard }, async (request) => {
@@ -148,4 +154,47 @@ export async function registerQuoteRequestsAdminRoutes(
       return { data: rfq };
     },
   );
+
+  // -------------------------------------------------------------------------
+  // `specs/147-saved-views/` (US3) — saved views on the Quote Request list.
+  // Registered here, behind the same `guard`, so they share the list's gate
+  // and the module's presence gate (FR-015, FR-018). The static `list-views`
+  // segment outranks `quote-requests/:id` in Fastify's router (contract §2,
+  // route precedence). The actor comes from the tenant context and not from
+  // `resolveAdminContext`, whose `isPlatformAdmin` is a different predicate
+  // (research R-7).
+  // -------------------------------------------------------------------------
+
+  const VIEWS = '/api/v1/admin/quote-requests/list-views';
+
+  app.get(VIEWS, { preHandler: guard }, async () => {
+    return { data: await listViewService.listFor(savedViewActor()) };
+  });
+
+  app.post(
+    VIEWS,
+    { preHandler: guard, schema: { body: createQuoteRequestSavedViewRequestSchema } },
+    async (request, reply) => {
+      const actor = savedViewActor();
+      const body = createQuoteRequestSavedViewRequestSchema.parse(request.body);
+      const view = await listViewService.create(actor, body);
+      reply.code(201);
+      return { data: view };
+    },
+  );
+
+  app.patch<{ Params: { id: string } }>(
+    `${VIEWS}/:id`,
+    { preHandler: guard, schema: { body: updateQuoteRequestSavedViewRequestSchema } },
+    async (request) => {
+      const actor = savedViewActor();
+      const body = updateQuoteRequestSavedViewRequestSchema.parse(request.body);
+      return { data: await listViewService.update(request.params.id, actor, body) };
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(`${VIEWS}/:id`, { preHandler: guard }, async (request) => {
+    await listViewService.remove(request.params.id, savedViewActor());
+    return { data: { deleted: request.params.id } };
+  });
 }

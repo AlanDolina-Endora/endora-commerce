@@ -29,7 +29,8 @@ import {
   type ListFilterSnapshot,
 } from '../lib/resolve-product-selection.js';
 import { ApiError, apiClient, cn, useAuth, usePageSizePreference } from '@endora-commerce/admin-kit/lib';
-import { PaginationFooter } from '@endora-commerce/admin-kit/components';
+import { PaginationFooter, SavedViewsControl } from '@endora-commerce/admin-kit/components';
+import type { SavedViewState } from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 
 interface AdminProduct {
@@ -80,8 +81,12 @@ interface ProductsResponse {
 
 const STATUS_FILTERS: readonly StatusFilter[] = ['all', 'active', 'draft', 'inactive'];
 
-function isStatusFilter(value: string | null): value is StatusFilter {
-  return value !== null && (STATUS_FILTERS as readonly string[]).includes(value);
+function isStatusFilter(value: unknown): value is StatusFilter {
+  return typeof value === 'string' && (STATUS_FILTERS as readonly string[]).includes(value);
+}
+
+function isTypeFilter(value: unknown): value is TypeFilter {
+  return typeof value === 'string' && (TYPE_CYCLE as readonly string[]).includes(value);
 }
 
 export function ProductsList(): ReactNode {
@@ -171,6 +176,38 @@ export function ProductsList(): ReactNode {
     setBulkEditProductIds([]);
     setSelectionError(null);
   }, [statusFilter, typeFilter, debouncedQuery]);
+
+  // Feature 147 (#289): a saved view stores status, type and search only — the
+  // Stock chip is a client-side placeholder and Category / Channel do nothing
+  // yet, so none of them is saved (FR-010).
+  const toSavedViewState = (): SavedViewState => {
+    const trimmed = query.trim();
+    return {
+      filters: {
+        ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+        ...(typeFilter !== 'all' ? { type: typeFilter } : {}),
+        ...(trimmed ? { q: trimmed } : {}),
+      },
+    };
+  };
+
+  // A value the page no longer offers loads as *All*, and a key it never knew
+  // is ignored (FR-012). The query skips the debounce so the list reloads
+  // once, already on the view's search. Page and selection are reset here as
+  // well as by the effects above: those fire only when a filter changes, and
+  // in the same batch the first request already carries page 0 (FR-011).
+  const applySavedView = (state: SavedViewState): void => {
+    const f = state.filters;
+    const q = typeof f['q'] === 'string' ? f['q'] : '';
+    setStatusFilter(isStatusFilter(f['status']) ? f['status'] : 'all');
+    setTypeFilter(isTypeFilter(f['type']) ? f['type'] : 'all');
+    setQuery(q);
+    setDebouncedQuery(q);
+    setStockFilter('all');
+    setPage(0);
+    setSelection(emptySelection());
+    setSelectionError(null);
+  };
 
   const filterSnapshot = useCallback(
     (): ListFilterSnapshot => ({
@@ -441,6 +478,14 @@ export function ProductsList(): ReactNode {
           />
           <Chip icon={<Tag size={12} />} active={false} label={t('productsList.chip.category')} onClick={(): void => {}} />
           <Chip icon={<Store size={12} />} active={false} label={t('productsList.chip.channel')} onClick={(): void => {}} />
+          <div style={{ marginLeft: 'auto', minWidth: 0, maxWidth: '100%' }}>
+            <SavedViewsControl
+              endpoint="/api/v1/admin/catalog/products/list-views"
+              current={toSavedViewState()}
+              onApply={applySavedView}
+              onError={setError}
+            />
+          </div>
         </div>
 
         {showSelectAllBanner ? (

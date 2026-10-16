@@ -33,6 +33,7 @@ w obu przypadkach każda cena podaje swoją walutę. Niepoprawny kod jest odrzuc
 | `POST /api/v1/admin/catalog/products` | administrator | Utworzenie produktu (`type` nie można zmienić po utworzeniu; `sku` można edytować) |
 | `PATCH /api/v1/admin/catalog/products/:id` | administrator | Aktualizacja (łącznie z `sku`); zapisuje wpis audytu ze stateBefore / stateAfter; odrzuca z `409 sku_in_use`, gdy nowe SKU należy już do innego produktu |
 | `DELETE /api/v1/admin/catalog/products/:id` | administrator | Archiwizacja (usunięcie miękkie) |
+| `GET`, `POST /api/v1/admin/catalog/products/list-views`; `PATCH`, `DELETE …/list-views/:id` | administrator | Zapisane widoki listy produktów — zob. *Zapisane widoki* niżej |
 | `GET /api/v1/admin/catalog/attributes` | administrator | Lista atrybutów |
 | `GET /api/v1/admin/catalog/attributes/by-flag?flag=isPromoRule\|isComparable\|...` | administrator | Dane do listy wyboru — wszystkie atrybuty z żądaną flagą |
 | `GET /api/v1/admin/catalog/attributes/:idOrKey` | administrator | Odczyt jednego atrybutu |
@@ -54,8 +55,102 @@ w obu przypadkach każda cena podaje swoją walutę. Niepoprawny kod jest odrzuc
 
 ## Encje
 
-`Product`, `ProductVariant`, `Category`, `ProductAttribute`, `SalesChannel` oraz tabele łączące
-`product_categories`, `sales_channel_products`, `product_assets`.
+`Product`, `ProductVariant`, `Category`, `ProductAttribute`, `SalesChannel`, tabele łączące
+`product_categories`, `sales_channel_products`, `product_assets` oraz `ProductListSavedView`
+(`product_list_saved_views`, zapisane widoki listy produktów).
+
+## Zapisane widoki
+
+Zapisany widok to nazwany zestaw filtrów listy produktów, który administrator może ponownie
+zastosować jednym wyborem.
+
+### Korzystanie z zapisanych widoków
+
+Na pasku narzędzi listy produktów jest lista wyboru **Zapisane widoki**, której pierwsza pozycja to
+**— Wybierz widok —**, a obok niej dwa przyciski: **Zapisz widok** i **Usuń widok**.
+
+- **Co zapamiętuje widok.** Status, rodzaj i wyszukiwany tekst — i nic więcej. Filtry **Stan**,
+  **Kategoria** i **Kanał** nie są zapisywane. Wybranie widoku ustawia status, rodzaj i
+  wyszukiwanie na wartości z widoku (wartość, której lista już nie oferuje, wczytuje się jako
+  *Wszystkie*), przywraca filtr Stan do *Wszystkie*, odrzuca to, co zmieniono i nie zapisano,
+  czyści zaznaczenie wierszy i wraca na pierwszą stronę.
+- **Zapisywanie.** **Zapisz widok** otwiera jedno okno z polem **Nazwa** i polem wyboru
+  **Udostępnij wszystkim administratorom, którzy mają dostęp do tej listy**. Pole wyboru jest na
+  początku odznaczone, więc nowy widok jest prywatny, dopóki go nie zaznaczysz. Nazwa jest
+  wymagana, spacje na początku i na końcu są usuwane, a jej długość to najwyżej 160 znaków.
+  Problemy są pokazywane przy polu i nic nie zostaje wysłane, dopóki ich nie poprawisz; odmowa
+  serwera jest pokazywana w oknie, które pozostaje otwarte z wpisanymi danymi.
+- **Prywatny czy udostępniony.** Widok prywatny widzisz tylko ty. Widok udostępniony widzi każdy
+  administrator, który ma dostęp do listy produktów, z dopiskiem **(udostępniony)** po nazwie. Lista
+  wyboru nie pokazuje, kto zapisał udostępniony widok.
+- **Jedna nazwa na administratora.** Nie możesz mieć na tej liście dwóch widoków, których nazwy
+  różnią się tylko wielkością liter albo spacjami na początku lub końcu. Okno odpowiada
+  **Masz już widok o tej nazwie.**, zanim cokolwiek wyśle, a serwer także odrzuca taką nazwę.
+  Litery ze znakami diakrytycznymi są innymi literami: *Wózki* i *Wozki* to dwie różne nazwy. Nazwy
+  używane przez innych administratorów i nazwy z innych list się nie liczą.
+- **Usuwanie.** **Usuń widok** jest aktywny tylko wtedy, gdy wybrany widok jest jednym z tych,
+  które możesz usunąć. Prosi o potwierdzenie i podaje nazwę widoku — **Usunąć widok „…”?** — a dla
+  widoku udostępnionego dodaje, że zniknie on dla wszystkich administratorów, którzy mają dostęp do
+  tej listy. Nic nie zostaje usunięte, dopóki nie naciśniesz **Usuń**.
+- **Kto może usunąć lub zmienić udostępniony widok.** Jego właściciel albo **każdy administrator,
+  którego rola nie jest `sales_representative`** — nie tylko rola `platform_admin`: liczy się
+  także rola niestandardowa, na przykład menedżer katalogu. **Takie usunięcie lub zmiana nie zostawia śladu audytu**: zapisane
+  widoki nie trafiają do dziennika audytu. Weź to pod uwagę, przydzielając role, zanim zespół
+  zacznie polegać na udostępnionych widokach. Opiekun handlowy może usuwać tylko własne widoki, a
+  prywatnego widoku innego administratora nikt nie widzi i nikt nie może go usunąć.
+- **Tylko zapis, wczytanie i usunięcie.** Panel administracyjny nie zmienia nazwy widoku, nie
+  zmienia tego, czy jest udostępniony, i nie nadpisuje go bieżącymi filtrami; zamiast tego zapisz
+  nowy widok i usuń stary. Liczba widoków nie jest ograniczona.
+
+### API zapisanych widoków
+
+| Metoda i ścieżka | Odpowiedź |
+| --- | --- |
+| `GET /api/v1/admin/catalog/products/list-views` | `200` — własne widoki wywołującego oraz wszystkie widoki udostępnione, posortowane po nazwie |
+| `POST /api/v1/admin/catalog/products/list-views` | `201` — utworzony widok |
+| `PATCH /api/v1/admin/catalog/products/list-views/:id` | `200` — zmieniony widok; dowolne z `name`, `shared`, `filters`. Panel administracyjny go nie wywołuje. Treść, która niczego nie zmienia — pusta albo z wartościami takimi jak zapisane — niczego nie zapisuje ani nie loguje i zwraca bieżący widok |
+| `DELETE /api/v1/admin/catalog/products/list-views/:id` | `200` — `{ data: { deleted: <id> } }` |
+
+- **Uprawnienie.** Wszystkie cztery trasy wymagają `catalog:read` — kodu, który chroni odczyt
+  listy produktów; nie ma osobnego kodu uprawnienia. Żądanie bez aktora-administratora jest
+  odrzucane z `401 UNAUTHORIZED`. Statyczny segment `list-views` ma pierwszeństwo przed
+  `products/:id`.
+- **Treść żądania.** `name` (po przycięciu 1–160 znaków, bez znaków sterujących ani formatujących
+  Unicode), `shared` (wartość logiczna) i `filters` (obiekt, najwyżej 8192 bajty jako JSON
+  w UTF-8). Lista produktów nie ma sortowania ani wyboru kolumn, więc widok nie przechowuje `sort`
+  ani `visibleColumns`; te klucze są pomijane. Panel administracyjny zapisuje `filters` jako
+  `{ status?, type?, q? }`, tylko te różne od domyślnych. Wszystko poza tymi granicami to
+  `400 VALIDATION_FAILED`. Kształty to `createProductSavedViewRequestSchema` i
+  `updateProductSavedViewRequestSchema` w `@endora-commerce/contracts`.
+- **Dwie flagi zależne od wywołującego.** Każdy widok w odpowiedzi ma `ownedByCaller` i
+  `canModify` — `true`, gdy wywołujący jest właścicielem widoku albo widok jest udostępniony, a
+  wywołujący jest administratorem platformy w rozumieniu poniżej. Panel administracyjny włącza
+  **Usuń widok** na podstawie `canModify`, a przed zapisem wstępnie, w miarę możliwości, sprawdza
+  powtórzenie nazwy wśród wyświetlonych widoków z `ownedByCaller`. Rozstrzyga porównanie
+  `lower(btrim(name))` po stronie serwera: nazwa przepuszczona przez to wstępne sprawdzenie nadal
+  może zostać odrzucona z `409`.
+- **Administrator platformy, na potrzeby zapisanych widoków,** to administrator, którego kontekst
+  dzierżawy (tenant context) żądania ma `mode === 'all'` — każda rola poza `sales_representative`.
+  Listy zamówień, produktów i zapytań ofertowych wyznaczają go tak samo, a w razie wątpliwości
+  odmawiają: administrator, którego zasięgu nie da się ustalić, nie jest administratorem platformy.
+- **Odmowy.** Nieistniejący widok i prywatny widok innego administratora to `404 NOT_FOUND` —
+  nie da się ich odróżnić. Udostępniony widok, którego wywołujący nie jest właścicielem i którego
+  nie może zmienić jako administrator platformy, to `403 FORBIDDEN`. Nazwa, której klucza
+  właściciel widoku już używa na tej liście, to `409 PRODUCT_SAVED_VIEW_NAME_TAKEN`, *„Masz już zapisany widok o tej nazwie na liście produktów. Wybierz inną nazwę.”*, w języku żądania.
+- **Klucz nazwy** to nazwa przycięta i zapisana małymi literami — bez usuwania znaków
+  diakrytycznych. Zasada wiąże **właściciela** widoku: administrator platformy zmieniający nazwę
+  udostępnionego widoku kolegi dostaje odmowę, gdy kolega już używa tego klucza. Utworzenie widoku
+  i zmiana klucza nazwy biorą blokadę doradczą (advisory lock) w zakresie transakcji, kluczowaną
+  właścicielem, a wspiera ją unikalny indeks na `(owner_admin_user_id, lower(name))`, więc dwa
+  równoczesne zapisy pod jedną nazwą zostawiają dokładnie jeden widok.
+- **Brak audytu.** Zapisane widoki to osobista konfiguracja interfejsu i nie przechodzą przez
+  Command Bus. Gdy administrator zmienia lub usuwa widok, którego nie jest właścicielem, usługa
+  zapisuje jeden wpis dziennika na poziomie `info`:
+  `{ event: 'saved_view.updated' | 'saved_view.deleted', list: 'product_list_saved_views', viewId, ownerAdminUserId, actorAdminUserId }`.
+  Ten wpis jest jedynym śladem.
+- **Przechowywanie.** `product_list_saved_views` (`ProductListSavedView`) jest globalna dla
+  platformy, a nie przypisana do organizacji: przechowuje wartości filtrów, nigdy wyniki listy, a
+  każdy odczyt listy po zastosowaniu widoku odbywa się w zakresie osoby, która go wczytała.
 
 ## Emitowane zdarzenia
 

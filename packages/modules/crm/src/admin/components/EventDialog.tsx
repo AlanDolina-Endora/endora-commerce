@@ -27,7 +27,7 @@ import {
   type EventFormValues,
 } from '../lib/calendar/event-form.js';
 import { errorMessage } from '../lib/labels.js';
-import { ModalDialog } from './ModalDialog.js';
+import { ModalDialog } from '@endora-commerce/admin-kit/components';
 
 const NAME_MAX_LENGTH = 200;
 const DESCRIPTION_MAX_LENGTH = 5000;

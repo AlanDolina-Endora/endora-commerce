@@ -96,6 +96,7 @@ import { Migration20260912T094623CatalogSalesChannelCategories } from '@endora-c
 import { Migration20260925T125527CatalogInventoryColumns } from '@endora-commerce/mod-catalog/migrations';
 import { Migration20261008T080839CatalogProductAttributeIsPriceRule } from '@endora-commerce/mod-catalog/migrations';
 import { Migration20261008T092714CatalogCategoryContent } from '@endora-commerce/mod-catalog/migrations';
+import { Migration20261014T170531CatalogProductListSavedViews } from '@endora-commerce/mod-catalog/migrations';
 
 // ── cms ─────────────────────────────────────────────────────────────────────
 import { Migration20260425T162418CmsPagesInit } from '@endora-commerce/mod-cms/migrations';
@@ -299,6 +300,7 @@ import { Migration20260718T200342QuoteRequestsQuoteRequestCustomFieldValues } fr
 import { Migration20260912T125614QuoteRequestsQuoteRequestChannelAttribution } from '@endora-commerce/mod-quote-requests/migrations';
 import { Migration20261014T115049QuoteRequestsItemReferencePrice } from '@endora-commerce/mod-quote-requests/migrations';
 import { Migration20261014T115053QuoteRequestsNegotiationPolicies } from '@endora-commerce/mod-quote-requests/migrations';
+import { Migration20261014T173236QuoteRequestsQuoteRequestListSavedViews } from '@endora-commerce/mod-quote-requests/migrations';
 
 // ── returns ─────────────────────────────────────────────────────────────────
 import { Migration20260625T144227ReturnsInit } from '@endora-commerce/mod-returns/migrations';
@@ -403,6 +405,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('catalog', Migration20260925T125527CatalogInventoryColumns),
   migration('catalog', Migration20261008T080839CatalogProductAttributeIsPriceRule),
   migration('catalog', Migration20261008T092714CatalogCategoryContent),
+  migration('catalog', Migration20261014T170531CatalogProductListSavedViews),
 
   // ── cms ─────────────────────────────────────────────────────────────────────
   migration('cms', Migration20260425T162418CmsPagesInit),
@@ -606,6 +609,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('quote_requests', Migration20260912T125614QuoteRequestsQuoteRequestChannelAttribution),
   migration('quote_requests', Migration20261014T115049QuoteRequestsItemReferencePrice),
   migration('quote_requests', Migration20261014T115053QuoteRequestsNegotiationPolicies),
+  migration('quote_requests', Migration20261014T173236QuoteRequestsQuoteRequestListSavedViews),
 
   // ── returns ─────────────────────────────────────────────────────────────────
   migration('returns', Migration20260625T144227ReturnsInit),

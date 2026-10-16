@@ -22,7 +22,7 @@ import {
 } from '@endora-commerce/admin-kit/ui';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { crmApi } from '../api.js';
-import { ModalDialog } from '../components/ModalDialog.js';
+import { ModalDialog } from '@endora-commerce/admin-kit/components';
 import { errorMessage } from '../lib/labels.js';
 
 /** The colour a new tag starts with — the neutral the seeded statuses use. */

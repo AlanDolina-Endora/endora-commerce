@@ -644,6 +644,7 @@ export const manifest = defineModuleManifest({
     { code: 'IDEMPOTENCY_KEY_REUSED' },
     { code: 'ORDER_NOT_CANCELLABLE' },
     { code: 'ORDER_NOT_FOUND' },
+    { code: 'ORDER_SAVED_VIEW_NAME_TAKEN' },
   ],
   settings,
   // Feature 074 (Constitution XVII), test C2 — functional base. This module had

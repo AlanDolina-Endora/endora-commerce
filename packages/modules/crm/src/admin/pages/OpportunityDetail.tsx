@@ -28,7 +28,7 @@ import {
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { crmApi, type OrderStatusOption } from '../api.js';
 import { salesChannelLabel } from '../components/LookupPickers.js';
-import { ModalDialog } from '../components/ModalDialog.js';
+import { ModalDialog } from '@endora-commerce/admin-kit/components';
 import { PropagationOutcomes } from '../components/PropagationOutcomes.js';
 import { StageBar } from '../components/StageBar.js';
 import { errorMessage } from '../lib/labels.js';

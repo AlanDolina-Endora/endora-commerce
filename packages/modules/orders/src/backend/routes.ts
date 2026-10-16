@@ -48,6 +48,7 @@ import type { OrderStatusGraphService } from './services/order-status-graph-serv
 import type { OrderTransitionService } from './services/order-transition-service.js';
 import type { OrderListService, OrderListScope } from './services/order-list-service.js';
 import type { OrderListViewService } from './services/order-list-view-service.js';
+import { savedViewActor } from './saved-view-actor.js';
 import type { OrderExportService } from './services/order-export-service.js';
 import type { OrderCommentService } from './services/order-comment-service.js';
 import type { OrderComment } from './entities/order-comment.entity.js';
@@ -506,10 +507,6 @@ export async function registerOrderRoutes(
     const scope = await deps.resolveAdminOrdersScope(request);
     return scope.allowAll ? undefined : { allowedOrganizationIds: scope.allowedOrganizationIds };
   };
-  const isPlatformAdmin = async (request: FastifyRequest): Promise<boolean> => {
-    if (!deps.resolveAdminOrdersScope) return true;
-    return (await deps.resolveAdminOrdersScope(request)).allowAll;
-  };
 
   /**
    * Load an order for an admin route that names one, through the tenant guard.
@@ -715,22 +712,26 @@ export async function registerOrderRoutes(
     },
   );
 
-  // --- Saved list views (feature 038 US2) -------------------------------
-  app.get('/api/v1/admin/orders/list-views', { preHandler: requireAdmin('orders:read') }, async (request) => {
-    const adminUserId = resolveAdminUserId(request) ?? '';
-    const views = await deps.orderListViewService.listFor(adminUserId);
-    return { data: views.map(serializeSavedView) };
+  // --- Saved list views (feature 038 US2; `specs/147-saved-views/`) ----
+  // The actor comes from the request's tenant context (`./saved-view-actor.ts`),
+  // derived exactly as the product and quote request lists derive theirs —
+  // not from `resolveAdminOrdersScope`, which answers "no restriction" when a
+  // composition does not provide it. It is read on every route, the list
+  // included, because `isPlatformAdmin` decides `canModify`.
+  app.get('/api/v1/admin/orders/list-views', { preHandler: requireAdmin('orders:read') }, async () => {
+    const views = await deps.orderListViewService.listFor(savedViewActor());
+    return { data: views };
   });
 
   app.post(
     '/api/v1/admin/orders/list-views',
     { preHandler: requireAdmin('orders:read'), schema: { body: createOrderSavedViewRequestSchema } },
     async (request, reply) => {
+      const actor = savedViewActor();
       const body = createOrderSavedViewRequestSchema.parse(request.body);
-      const adminUserId = resolveAdminUserId(request) ?? '';
-      const view = await deps.orderListViewService.create(adminUserId, body);
+      const view = await deps.orderListViewService.create(actor, body);
       reply.code(201);
-      return { data: serializeSavedView(view) };
+      return { data: view };
     },
   );
 
@@ -738,15 +739,10 @@ export async function registerOrderRoutes(
     '/api/v1/admin/orders/list-views/:id',
     { preHandler: requireAdmin('orders:read'), schema: { body: updateOrderSavedViewRequestSchema } },
     async (request) => {
+      const actor = savedViewActor();
       const body = updateOrderSavedViewRequestSchema.parse(request.body);
-      const adminUserId = resolveAdminUserId(request) ?? '';
-      const view = await deps.orderListViewService.update(
-        request.params.id,
-        adminUserId,
-        await isPlatformAdmin(request),
-        body,
-      );
-      return { data: serializeSavedView(view) };
+      const view = await deps.orderListViewService.update(request.params.id, actor, body);
+      return { data: view };
     },
   );
 
@@ -754,8 +750,8 @@ export async function registerOrderRoutes(
     '/api/v1/admin/orders/list-views/:id',
     { preHandler: requireAdmin('orders:read') },
     async (request) => {
-      const adminUserId = resolveAdminUserId(request) ?? '';
-      await deps.orderListViewService.remove(request.params.id, adminUserId, await isPlatformAdmin(request));
+      const actor = savedViewActor();
+      await deps.orderListViewService.remove(request.params.id, actor);
       return { data: { deleted: request.params.id } };
     },
   );
@@ -1340,26 +1336,6 @@ function serializeComment(c: OrderComment): Record<string, unknown> {
     isCustomerVisible: c.isCustomerVisible,
     notifyCustomer: c.notifyCustomer,
     createdAt: c.createdAt.toISOString(),
-  };
-}
-
-function serializeSavedView(v: {
-  id: string;
-  name: string;
-  shared: boolean;
-  ownerAdminUserId: string;
-  filters: Record<string, unknown>;
-  sort: { field: string; dir: 'asc' | 'desc' };
-  visibleColumns: string[] | null;
-}): Record<string, unknown> {
-  return {
-    id: v.id,
-    name: v.name,
-    shared: v.shared,
-    ownerAdminUserId: v.ownerAdminUserId,
-    filters: v.filters,
-    sort: v.sort,
-    visibleColumns: v.visibleColumns,
   };
 }
 

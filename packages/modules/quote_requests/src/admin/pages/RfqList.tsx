@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Columns3, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
 import { apiClient, ApiError, formatDateTime, normalize, useAuth, usePageSizePreference } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Badge, Button, Card, CardContent, Label, MultiSelect, PageHeader, Select, type MultiSelectOption } from '@endora-commerce/admin-kit/ui';
-import { OrganizationPicker, PaginationFooter, ResponsiveTable, type ResponsiveColumn } from '@endora-commerce/admin-kit/components';
+import { OrganizationPicker, PaginationFooter, ResponsiveTable, SavedViewsControl, type ResponsiveColumn, type SavedViewState } from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 /**
  * Admin Quote Requests list (feature 008 / T042). Restructured to mirror the
@@ -11,8 +11,8 @@ import { useTranslation } from '@endora-commerce/admin-kit/i18n';
  * + sort + a collapsible advanced-filters panel + a column picker, with
  * removable applied-filter chips) and a ResponsiveTable with a paginated
  * footer. Order-only affordances that do not apply to a Quote Request — sales
- * channel / payment / delivery columns + filters, saved views, bulk status,
- * invoice printing, CSV export — are omitted. Visibility scope + organization
+ * channel / payment / delivery columns + filters, bulk status, invoice
+ * printing, CSV export — are omitted. Visibility scope + organization
  * remain server-side filters (they bound what the caller may see); search,
  * status, sort, column visibility, and pagination are applied client-side over
  * the returned set.
@@ -79,6 +79,16 @@ const COLUMN_IDS = ['rfq', 'updated', 'org', 'customer', 'status', 'lines', 'tot
 type ColumnId = (typeof COLUMN_IDS)[number];
 const DEFAULT_VISIBLE: ColumnId[] = ['rfq', 'org', 'customer', 'status', 'lines', 'total'];
 
+// The sort select's options, and the one allowlist a saved view's sort is
+// checked against: a sort outside them loads as the first.
+const SORT_OPTIONS = [
+  { value: 'updatedAt:desc', labelKey: 'rfq.list.sort.newest' },
+  { value: 'updatedAt:asc', labelKey: 'rfq.list.sort.oldest' },
+  { value: 'total:desc', labelKey: 'rfq.list.sort.totalDesc' },
+] as const;
+const SORT_VALUES: readonly string[] = SORT_OPTIONS.map((option) => option.value);
+const DEFAULT_SORT = SORT_OPTIONS[0].value;
+
 function rowTotal(r: AdminRfqRow): number | null {
   return r.totalAtAgreedPrice ?? r.totalAtCustomerPrice;
 }
@@ -118,7 +128,7 @@ export function RfqList(): ReactNode {
     return fromUrl !== null && RFQ_STATUSES.includes(fromUrl as RfqStatus) ? [fromUrl] : [];
   });
   const [q, setQ] = useState('');
-  const [sort, setSort] = useState('updatedAt:desc');
+  const [sort, setSort] = useState<string>(DEFAULT_SORT);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [visibleColumnIds, setVisibleColumnIds] = useState<ColumnId[]>(DEFAULT_VISIBLE);
 
@@ -220,6 +230,55 @@ export function RfqList(): ReactNode {
         ]
       : []),
   ];
+
+  // Feature 147 (#290): a saved view stores scope, organization, status,
+  // search, sort and columns (FR-010) — the organization as an id only, so a
+  // view never carries a name the loader could not resolve themselves (FR-017).
+  const toSavedViewState = (): SavedViewState => {
+    const trimmed = q.trim();
+    const [field = 'updatedAt', dir] = sort.split(':');
+    return {
+      filters: {
+        scope,
+        ...(organizationId ? { organizationId } : {}),
+        ...(statusCodes.length > 0 ? { status: statusCodes } : {}),
+        ...(trimmed ? { q: trimmed } : {}),
+      },
+      sort: { field, dir: dir === 'asc' ? 'asc' : 'desc' },
+      visibleColumns: visibleColumnIds,
+    };
+  };
+
+  // Loading replaces all six parts (FR-011); what the page no longer knows is
+  // dropped and an absent scope is the viewer's own default (FR-012). The list
+  // request that follows is the loader's, so `mine` means the loader and the
+  // server narrows the rest (FR-016). The page is reset here as well as by the
+  // effect above, which fires only when one of its inputs actually changes.
+  const applySavedView = (state: SavedViewState): void => {
+    const f = state.filters;
+    const nextScope = f['scope'];
+    setScope(
+      nextScope === 'mine' || nextScope === 'unassigned' || nextScope === 'all'
+        ? nextScope
+        : isPlatformAdmin
+          ? 'all'
+          : 'mine',
+    );
+    setOrganizationId(typeof f['organizationId'] === 'string' ? f['organizationId'] : '');
+    setStatusCodes(
+      Array.isArray(f['status'])
+        ? f['status'].filter((s): s is RfqStatus => RFQ_STATUSES.includes(s as RfqStatus))
+        : [],
+    );
+    setQ(typeof f['q'] === 'string' ? f['q'] : '');
+    const nextSort = state.sort ? `${state.sort.field}:${state.sort.dir}` : '';
+    setSort(SORT_VALUES.includes(nextSort) ? nextSort : DEFAULT_SORT);
+    const columns = (state.visibleColumns ?? []).filter((c): c is ColumnId =>
+      COLUMN_IDS.includes(c as ColumnId),
+    );
+    setVisibleColumnIds(columns.length > 0 ? columns : DEFAULT_VISIBLE);
+    setPage(0);
+  };
 
   const clearAllFilters = (): void => {
     setStatusCodes([]);
@@ -337,11 +396,13 @@ export function RfqList(): ReactNode {
               onChange={(e): void => setSort(e.target.value)}
               className="w-auto"
             >
-              <option value="updatedAt:desc">{t('rfq.list.sort.newest')}</option>
-              <option value="updatedAt:asc">{t('rfq.list.sort.oldest')}</option>
-              <option value="total:desc">{t('rfq.list.sort.totalDesc')}</option>
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {t(option.labelKey)}
+                </option>
+              ))}
             </Select>
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center gap-2">
               <Button
                 type="button"
                 size="sm"
@@ -365,6 +426,12 @@ export function RfqList(): ReactNode {
                     next.filter((c): c is ColumnId => COLUMN_IDS.includes(c as ColumnId)),
                   )
                 }
+              />
+              <SavedViewsControl
+                endpoint="/api/v1/admin/quote-requests/list-views"
+                current={toSavedViewState()}
+                onApply={applySavedView}
+                onError={setError}
               />
             </div>
           </div>

@@ -51,6 +51,7 @@ dodatkowo wymagają podania `expectedRevisionNumber`.
 | `POST /api/v1/admin/quote-requests/:id/approve` | administrator | Zatwierdzenie zapytania w statusie Pending, którego każda pozycja ma uzgodnioną cenę jednostkową. |
 | `POST /api/v1/admin/quote-requests/:id/cancel` | administrator | Anulowanie z opcjonalnym powodem. |
 | `POST /api/v1/admin/quote-requests/:id/assign` | administrator | Ustawienie `assignedAdminUserId` (wyłącznie informacyjne). |
+| `GET`, `POST /api/v1/admin/quote-requests/list-views`; `PATCH`, `DELETE …/list-views/:id` | administrator | Zapisane widoki listy zapytań ofertowych — zob. *Zapisane widoki*. |
 | `GET /api/v1/admin/sales-reps/:adminUserId/organizations` | administrator | Widok odwrotny — organizacje, za które odpowiada opiekun, z liczbą otwartych zapytań w każdej z nich. |
 | `GET /api/v1/storefront/settings/quote-requests` | publiczny | Zwraca dwie flagi widoczności w storefroncie. |
 | `GET /api/v1/quote-requests/price-negotiation` | klient | Obowiązująca wartość negocjacji cen zalogowanego klienta — zob. *Blokada negocjacji cen*. |
@@ -272,6 +273,118 @@ odpowiadała `403`, co zdradzało, że zapytanie istnieje).
 Klient z rolą `org_admin` we własnej organizacji widzi każde zapytanie ofertowe tej organizacji, a
 nie tylko własne.
 
+## Zapisane widoki
+
+Zapisany widok to nazwane ustawienie listy zapytań ofertowych — jej filtrów, sortowania i kolumn —
+które administrator może ponownie zastosować jednym wyborem.
+
+### Korzystanie z zapisanych widoków
+
+Na pasku narzędzi listy zapytań ofertowych jest lista wyboru **Zapisane widoki**, której pierwsza
+pozycja to **— Wybierz widok —**, a obok niej dwa przyciski: **Zapisz widok** i **Usuń widok**.
+
+- **Co zapamiętuje widok.** Sześć rzeczy: zakres **Widoczność**, organizację, wybrane statusy,
+  wyszukiwany tekst, sortowanie i widoczne kolumny. Wybranie widoku zastępuje wszystkie sześć
+  wartościami z widoku, odrzuca to, co zmieniono i nie zapisano, i wraca na pierwszą stronę.
+  Status lub kolumna, których lista już nie zna, są pomijane; widok bez kolumn pokazuje kolumny
+  domyślne; widok bez poprawnego zakresu otwiera się w twoim domyślnym zakresie.
+- **Widok nigdy nie poszerza tego, co widzisz.** Przechowuje wartości filtrów, nigdy wyniki. Po
+  wczytaniu widoku lista jest odczytywana z *twoimi* uprawnieniami i *twoimi* organizacjami,
+  niezależnie od tego, kto widok zapisał. *Moje organizacje* oznacza organizacje przypisane do
+  ciebie, administratora, który wczytuje widok — a nie do tego, kto go zapisał — a *Wszystkie*
+  nadal pokazuje tylko to, co wolno ci widzieć. Organizacja jest zapisana jako identyfikator:
+  jeśli jest poza twoim zasięgiem, jej nazwa nie jest pokazywana, a lista jest po prostu pusta.
+- **Zapisywanie.** **Zapisz widok** otwiera jedno okno z polem **Nazwa** i polem wyboru
+  **Udostępnij wszystkim administratorom, którzy mają dostęp do tej listy**. Pole wyboru jest na
+  początku odznaczone, więc nowy widok jest prywatny, dopóki go nie zaznaczysz. Nazwa jest
+  wymagana, spacje na początku i na końcu są usuwane, a jej długość to najwyżej 160 znaków.
+  Problemy są pokazywane przy polu i nic nie zostaje wysłane, dopóki ich nie poprawisz; odmowa
+  serwera jest pokazywana w oknie, które pozostaje otwarte z wpisanymi danymi.
+- **Prywatny czy udostępniony.** Widok prywatny widzisz tylko ty. Widok udostępniony widzi każdy
+  administrator, który ma dostęp do listy zapytań ofertowych, z dopiskiem **(udostępniony)** po nazwie. Lista
+  wyboru nie pokazuje, kto zapisał udostępniony widok.
+- **Jedna nazwa na administratora.** Nie możesz mieć na tej liście dwóch widoków, których nazwy
+  różnią się tylko wielkością liter albo spacjami na początku lub końcu. Okno odpowiada
+  **Masz już widok o tej nazwie.**, zanim cokolwiek wyśle, a serwer także odrzuca taką nazwę.
+  Litery ze znakami diakrytycznymi są innymi literami: *Łódź* i *Lodz* to dwie różne nazwy. Nazwy
+  używane przez innych administratorów i nazwy z innych list się nie liczą.
+- **Usuwanie.** **Usuń widok** jest aktywny tylko wtedy, gdy wybrany widok jest jednym z tych,
+  które możesz usunąć. Prosi o potwierdzenie i podaje nazwę widoku — **Usunąć widok „…”?** — a dla
+  widoku udostępnionego dodaje, że zniknie on dla wszystkich administratorów, którzy mają dostęp do
+  tej listy. Nic nie zostaje usunięte, dopóki nie naciśniesz **Usuń**.
+- **Kto może usunąć lub zmienić udostępniony widok.** Jego właściciel albo **każdy administrator,
+  którego rola nie jest `sales_representative`** — nie tylko rola `platform_admin`: liczy się
+  także rola niestandardowa. **Takie usunięcie lub zmiana nie zostawia śladu audytu**: zapisane
+  widoki nie trafiają do dziennika audytu. Weź to pod uwagę, przydzielając role, zanim zespół
+  zacznie polegać na udostępnionych widokach. Opiekun handlowy może usuwać tylko własne widoki, a
+  prywatnego widoku innego administratora nikt nie widzi i nikt nie może go usunąć.
+- **Dwa znaczenia „administratora platformy” na tej liście.** Powyższa zasada nie jest tą, którą
+  stosuje *Model widoczności*: domyślny zakres listy i widoczność wszystkich organizacji nadal
+  zależą od dosłownej roli `platform_admin`. Administrator z rolą niestandardową może więc usunąć
+  udostępniony widok kolegi, a mimo to otwiera listę w zakresie *Moje organizacje*.
+- **Tylko zapis, wczytanie i usunięcie.** Panel administracyjny nie zmienia nazwy widoku, nie
+  zmienia tego, czy jest udostępniony, i nie nadpisuje go bieżącym ustawieniem; zamiast tego zapisz
+  nowy widok i usuń stary. Liczba widoków nie jest ograniczona.
+- **Gdy zapytania ofertowe są wyłączone,** zapisane widoki znikają razem z resztą modułu, ale nie są
+  usuwane. Po ponownym włączeniu modułu każdy widok jest taki, jak był.
+
+### API zapisanych widoków
+
+| Metoda i ścieżka | Odpowiedź |
+| --- | --- |
+| `GET /api/v1/admin/quote-requests/list-views` | `200` — własne widoki wywołującego oraz wszystkie widoki udostępnione, posortowane po nazwie |
+| `POST /api/v1/admin/quote-requests/list-views` | `201` — utworzony widok |
+| `PATCH /api/v1/admin/quote-requests/list-views/:id` | `200` — zmieniony widok; dowolne z `name`, `shared`, `filters`, `sort`, `visibleColumns`. Panel administracyjny go nie wywołuje. Treść, która niczego nie zmienia — pusta albo z wartościami takimi jak zapisane — niczego nie zapisuje ani nie loguje i zwraca bieżący widok |
+| `DELETE /api/v1/admin/quote-requests/list-views/:id` | `200` — `{ data: { deleted: <id> } }` |
+
+- **Uprawnienie.** Wszystkie cztery trasy wymagają `rfqs:handle` — kodu, który chroni listę — i są
+  zarejestrowane za bramką obecności modułu razem z resztą jego tras panelu. Nie ma osobnego kodu
+  uprawnienia. Żądanie bez aktora-administratora jest odrzucane z `401 UNAUTHORIZED`. Statyczny
+  segment `list-views` ma pierwszeństwo przed `quote-requests/:id`.
+- **Stan wyłączony.** Gdy `quote_requests` nie jest faktycznie obecny, wszystkie cztery odpowiadają
+  tak jak `GET /api/v1/admin/quote-requests` — `503 MODULE_DISABLED`. Wiersze w
+  `quote_request_list_saved_views` pozostają nietknięte.
+- **Treść żądania.** `name` (po przycięciu 1–160 znaków, bez znaków sterujących ani formatujących
+  Unicode), `shared` (wartość logiczna), `filters` (obiekt, najwyżej 8192 bajty jako JSON
+  w UTF-8), opcjonalne `sort` (`{ field, dir }`, `field` najwyżej 64 znaki, `dir` to `asc` albo
+  `desc`, albo `null`) oraz opcjonalne `visibleColumns` (najwyżej 64 identyfikatory po najwyżej
+  64 znaki albo `null`). Panel administracyjny zapisuje `filters` jako
+  `{ scope, organizationId?, status?, q? }`. Wszystko poza tymi granicami to
+  `400 VALIDATION_FAILED`. Kształty to `createQuoteRequestSavedViewRequestSchema` i
+  `updateQuoteRequestSavedViewRequestSchema` w `@endora-commerce/contracts`.
+- **Wczytanie to nowy odczyt listy.** Wartości widoku tylko ustawiają kontrolki listy; lista jest
+  następnie odczytywana zwykłym `GET /api/v1/admin/quote-requests` jako osoba wczytująca, więc
+  serwer stosuje jej własną widoczność, a `scope=mine` odnosi się do niej. Widok nigdy nie zawiera
+  nazwy organizacji.
+- **Dwie flagi zależne od wywołującego.** Każdy widok w odpowiedzi ma `ownedByCaller` i
+  `canModify` — `true`, gdy wywołujący jest właścicielem widoku albo widok jest udostępniony, a
+  wywołujący jest administratorem platformy w rozumieniu poniżej. Panel administracyjny włącza
+  **Usuń widok** na podstawie `canModify`, a przed zapisem wstępnie, w miarę możliwości, sprawdza
+  powtórzenie nazwy wśród wyświetlonych widoków z `ownedByCaller`. Rozstrzyga porównanie
+  `lower(btrim(name))` po stronie serwera: nazwa przepuszczona przez to wstępne sprawdzenie nadal
+  może zostać odrzucona z `409`.
+- **Administrator platformy, na potrzeby zapisanych widoków,** to administrator, którego kontekst
+  dzierżawy (tenant context) żądania ma `mode === 'all'` — każda rola poza `sales_representative`.
+  Listy zamówień, produktów i zapytań ofertowych wyznaczają go tak samo, a w razie wątpliwości
+  odmawiają: administrator, którego zasięgu nie da się ustalić, nie jest administratorem platformy.
+  To celowo nie jest własny test modułu `role.code === 'platform_admin'`, którego używa
+  widoczność listy.
+- **Odmowy.** Nieistniejący widok i prywatny widok innego administratora to `404 NOT_FOUND` —
+  nie da się ich odróżnić. Udostępniony widok, którego wywołujący nie jest właścicielem i którego
+  nie może zmienić jako administrator platformy, to `403 FORBIDDEN`. Nazwa, której klucza
+  właściciel widoku już używa na tej liście, to `409 RFQ_SAVED_VIEW_NAME_TAKEN`, *„Masz już zapisany widok o tej nazwie na liście zapytań ofertowych. Wybierz inną nazwę.”*, w języku żądania.
+- **Klucz nazwy** to nazwa przycięta i zapisana małymi literami — bez usuwania znaków
+  diakrytycznych. Zasada wiąże **właściciela** widoku: administrator platformy zmieniający nazwę
+  udostępnionego widoku kolegi dostaje odmowę, gdy kolega już używa tego klucza. Utworzenie widoku
+  i zmiana klucza nazwy biorą blokadę doradczą (advisory lock) w zakresie transakcji, kluczowaną
+  właścicielem, a wspiera ją unikalny indeks na `(owner_admin_user_id, lower(name))`, więc dwa
+  równoczesne zapisy pod jedną nazwą zostawiają dokładnie jeden widok.
+- **Brak audytu.** Zapisane widoki to osobista konfiguracja interfejsu i nie przechodzą przez
+  Command Bus. Gdy administrator zmienia lub usuwa widok, którego nie jest właścicielem, usługa
+  zapisuje jeden wpis dziennika na poziomie `info`:
+  `{ event: 'saved_view.updated' | 'saved_view.deleted', list: 'quote_request_list_saved_views', viewId, ownerAdminUserId, actorAdminUserId }`.
+  Ten wpis jest jedynym śladem.
+
 ## Ustawienia
 
 Modułem sterują trzy ustawienia — wszystkie w grupie `quote_requests`, konfigurowane przez
@@ -375,6 +488,10 @@ organizację, która ma ustawioną wartość) i `quote_request_account_policies`
 klienta z nadpisaniem; `null` = jak organizacja). Brak wiersza oznacza wartość domyślną. Usunięcie
 organizacji lub konta klienta usuwa jego wiersz i nic poza nim — żadne zapytanie ofertowe nie
 odwołuje się do żadnej z tych tabel.
+
+`quote_request_list_saved_views` przechowuje zapisane widoki listy (zob. *Zapisane widoki*). Jest
+globalna dla platformy, a nie przypisana do organizacji: przechowuje wartości filtrów, nigdy
+zapytania ofertowe, i nie jest usuwana, gdy moduł zostaje wyłączony.
 
 `organization_sales_rep_assignments` — relacja wiele-do-wielu między organizacjami a
 administratorami, z której korzysta opisany wyżej model widoczności — **nie** należy do tych tabel:
