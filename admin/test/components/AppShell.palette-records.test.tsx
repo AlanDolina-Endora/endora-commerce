@@ -41,13 +41,13 @@ vi.mock('../../../packages/admin-shell/src/lib/admin-actions/useAdminActions', (
   useAdminActions: () => ({
     actions: [
       {
-        id: 'orders.open-orders',
+        moduleId: 'orders',
+        actionId: 'open-orders',
         label: 'Open orders',
         description: 'View orders',
         icon: 'Receipt',
         targetRoute: '/orders',
         keywords: [],
-        moduleId: 'orders',
         weight: 1,
       },
     ],

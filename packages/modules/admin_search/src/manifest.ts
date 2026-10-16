@@ -93,6 +93,31 @@ export const manifest = defineModuleManifest({
   // type is checked against the code its own admin list enforces (R-4).
   permissions: [{ code: 'admin_search:configure', label: 'Configure global search' }],
   i18n: { bundlesDir: 'i18n' },
+  // Principle XVI — the results page and the configuration are reachable from
+  // ⌘K (contracts/admin-ui.md §2.3); the record groups themselves are the
+  // palette's own.
+  actions: [
+    {
+      id: 'open-global-search',
+      labelKey: 'actions.openGlobalSearch.label',
+      descriptionKey: 'actions.openGlobalSearch.description',
+      icon: 'Search',
+      targetRoute: '/global-search',
+      keywords: ['search', 'find', 'records', 'szukaj', 'wyszukaj', 'rekordy'],
+      weight: 50,
+    },
+    {
+      id: 'open-global-search-configuration',
+      labelKey: 'actions.openConfiguration.label',
+      descriptionKey: 'actions.openConfiguration.description',
+      icon: 'Settings',
+      targetRoute: '/global-search/configuration',
+      // The code the configuration routes enforce (check:action-route-permissions).
+      requiredPermission: 'admin_search:configure',
+      keywords: ['search', 'fields', 'configuration', 'pola', 'wyszukiwania', 'konfiguracja'],
+      weight: 900,
+    },
+  ],
   // The page lands with the screens it documents (tasks.md T075).
   docs: false,
   demo: false,

@@ -203,10 +203,10 @@ Sales Opportunities groups for a platform admin; a sales representative sees onl
 
 ## Phase 9: User Story 2 — Configuration screen (Priority: P2) — admin UI
 
-- [ ] T068 [P] [US2] Failing tests `admin/test/modules/admin_search/GlobalSearchConfigurationPage.test.tsx` (`<StrictMode>`): renders one card per entity with translated field labels and "default" text; toggling fields and *Include* updates the draft; an included type with no field shows the inline error and disables Save; Restore defaults; Save sends the merged request with `expectedVersion`; 409 opens the reload dialog (`ModalDialog`, no `window.confirm`); leaving with unsaved changes asks for confirmation; 403 for a role without the permission; `axe-core` 0 violations
-- [ ] T069 [P] [US2] Implement `packages/modules/admin_search/src/admin/api.ts` (configuration GET/PUT, search GET, schema-parsed)
-- [ ] T070 [US2] Implement `packages/modules/admin_search/src/admin/pages/GlobalSearchConfigurationPage.tsx` (contracts/admin-ui.md §2.2, kit primitives only); add `page.configuration.*` keys to the module's `i18n/{en,pl}.json`; T068 green
-- [ ] T071 [US2] Contribute the `/global-search/configuration` route and the `system` nav entry in `packages/modules/admin_search/src/admin/index.ts`; declare the manifest action `open-global-search-configuration` (contracts/admin-ui.md §2.3) with `actions.openConfiguration.*` keys; rebuild; `check:action-route-permissions`, `test/unit/_i18n/registered-bundles-shape.test.ts`, `check:admin-zones`, `i18n:hardcoded`
+- [X] T068 [P] [US2] Failing tests `admin/test/modules/admin_search/GlobalSearchConfigurationPage.test.tsx` (`<StrictMode>`): renders one card per entity with translated field labels and "default" text; toggling fields and *Include* updates the draft; an included type with no field shows the inline error and disables Save; Restore defaults; Save sends the merged request with `expectedVersion`; 409 opens the reload dialog (`ModalDialog`, no `window.confirm`); leaving with unsaved changes asks for confirmation; 403 for a role without the permission; `axe-core` 0 violations
+- [X] T069 [P] [US2] Implement `packages/modules/admin_search/src/admin/api.ts` (configuration GET/PUT, search GET, schema-parsed)
+- [X] T070 [US2] Implement `packages/modules/admin_search/src/admin/pages/GlobalSearchConfigurationPage.tsx` (contracts/admin-ui.md §2.2, kit primitives only); add `page.configuration.*` keys to the module's `i18n/{en,pl}.json`; T068 green
+- [X] T071 [US2] Contribute the `/global-search/configuration` route and the `system` nav entry in `packages/modules/admin_search/src/admin/index.ts`; declare the manifest action `open-global-search-configuration` (contracts/admin-ui.md §2.3) with `actions.openConfiguration.*` keys; rebuild; `check:action-route-permissions`, `test/unit/_i18n/registered-bundles-shape.test.ts`, `check:admin-zones`, `i18n:hardcoded`
 
 **Checkpoint**: User Story 2 complete. Walk quickstart.md § 3.
 
@@ -214,9 +214,9 @@ Sales Opportunities groups for a platform admin; a sales representative sees onl
 
 ## Phase 10: User Story 3 — Results page (Priority: P3) — admin UI
 
-- [ ] T072 [P] [US3] Failing tests `admin/test/modules/admin_search/GlobalSearchPage.test.tsx` (`<StrictMode>`): `q` from the URL prefills and searches with `limit=20`; typing debounces and replaces `q` in the URL; a type chip sets `type` and narrows `entityTypes`, `aria-pressed` reflects it; below-minimum hint; loading, empty and error states; links point at `targetRoute`; unavailable group note; `axe-core` 0 violations
-- [ ] T073 [US3] Implement `packages/modules/admin_search/src/admin/pages/GlobalSearchPage.tsx` (contracts/admin-ui.md §2.1); add `page.results.*` keys to `i18n/{en,pl}.json`; T072 green
-- [ ] T074 [US3] Contribute the `/global-search` route (no `requiredPermission`) in `packages/modules/admin_search/src/admin/index.ts`; declare the manifest action `open-global-search` with `actions.openGlobalSearch.*` keys; rebuild; extend `backend/test/integration/admin_search/off-state.test.ts` with admin absence of both routes and both actions while off; `check:action-route-permissions`, `registered-bundles-shape.test.ts`
+- [X] T072 [P] [US3] Failing tests `admin/test/modules/admin_search/GlobalSearchPage.test.tsx` (`<StrictMode>`): `q` from the URL prefills and searches with `limit=20`; typing debounces and replaces `q` in the URL; a type chip sets `type` and narrows `entityTypes`, `aria-pressed` reflects it; below-minimum hint; loading, empty and error states; links point at `targetRoute`; unavailable group note; `axe-core` 0 violations
+- [X] T073 [US3] Implement `packages/modules/admin_search/src/admin/pages/GlobalSearchPage.tsx` (contracts/admin-ui.md §2.1); add `page.results.*` keys to `i18n/{en,pl}.json`; T072 green
+- [X] T074 [US3] Contribute the `/global-search` route (no `requiredPermission`) in `packages/modules/admin_search/src/admin/index.ts`; declare the manifest action `open-global-search` with `actions.openGlobalSearch.*` keys; rebuild; extend `backend/test/integration/admin_search/off-state.test.ts` with admin absence of both routes and both actions while off; `check:action-route-permissions`, `registered-bundles-shape.test.ts`
 
 **Checkpoint**: User Story 3 complete. Walk quickstart.md § 4.
 
