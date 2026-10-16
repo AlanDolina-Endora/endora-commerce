@@ -142,6 +142,47 @@ describe('orderTransitionPort', () => {
    * over the same status pair — the edge is present, and the guard is what
    * refuses.
    */
+  /**
+   * Issue #242 — `order.cancelled.v1` was declared and documented, and nothing
+   * emitted it, so a subscriber written against it never ran. Every committed
+   * status change is announced by one function; a cancellation is announced
+   * there, after `order.status_changed.v1`, and a subscriber reading the order
+   * finds it cancelled.
+   */
+  it('announces a cancellation as order.cancelled.v1, after the cancelling write committed', async () => {
+    const order = await seedOrder(h.em());
+    const heard: Array<{ orderId: string; from: string; organizationId: string; statusAtDispatch: string }> = [];
+    const off = h.eventBus.on('order.cancelled.v1' as never, (async (payload: {
+      orderId: string;
+      from: string;
+      organizationId: string;
+    }) => {
+      const row = await h.em().findOneOrFail(Order, { id: payload.orderId }, { filters: false });
+      heard.push({
+        orderId: payload.orderId,
+        from: payload.from,
+        organizationId: payload.organizationId,
+        statusAtDispatch: row.status,
+      });
+    }) as never);
+
+    try {
+      await h.eventBus.run(async () => {
+        expect(await port.applyStatus({ orderId: order.id, to: 'cancelled', actor: system })).toEqual({
+          applied: true,
+          from: 'new',
+          to: 'cancelled',
+        });
+      });
+    } finally {
+      off();
+    }
+
+    expect(heard).toEqual([
+      { orderId: order.id, from: 'new', organizationId: order.organizationId, statusAtDispatch: 'cancelled' },
+    ]);
+  });
+
   it('tells a guard veto apart from a missing edge, on an edge that exists', async () => {
     const order = await seedOrder(h.em());
     await port.applyStatus({ orderId: order.id, to: 'paid', actor: system });

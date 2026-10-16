@@ -135,14 +135,17 @@ describe('webhooks — the bridged set equals the offered set', () => {
     expect(new Set(subscribed).size).toBe(subscribed.length);
   });
 
-  it('offers nothing the bridge was never subscribed to — the five names nothing emits stay out', () => {
+  it('offers nothing the bridge was never subscribed to — four names nothing emits, and one emitted in-process only', () => {
     const { subscribed } = compose();
     for (const eventType of [
       'rfq.quoted.v1',
       'rfq.accepted.v1',
-      'order.cancelled.v1',
       'payment.settled.v1',
       'credit_limit.reservation_released.v1',
+      // Emitted since issue #242, on the in-process bus only: a webhook
+      // receiver is told about a cancellation by `order.status_changed.v1`
+      // (`to: 'cancelled'`), and is not offered a second name for it.
+      'order.cancelled.v1',
     ]) {
       expect(subscribed).not.toContain(eventType);
       expect(offeredEventTypes([])).not.toContain(eventType);

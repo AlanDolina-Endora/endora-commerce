@@ -327,8 +327,13 @@ tax rate at placement so historical orders survive pricing / catalog changes.
 
 ## Events emitted
 
-`order.created.v1`, `order.status_changed.v1`. A cancellation has no event of
-its own: it is announced as `order.status_changed.v1` with the new status. Each
+`order.created.v1`, `order.status_changed.v1`, `order.cancelled.v1`. A
+cancellation is announced as `order.status_changed.v1` with the new status and,
+after it, as `order.cancelled.v1` — carrying `orderId`, `organizationId`,
+`salesChannelId`, the status it was cancelled `from`, the `actor`, the `reason`
+and the `businessId` — once the cancelling write has committed, whichever path
+cancelled the order. `order.cancelled.v1` is internal to the event bus: outbound
+webhooks deliver a cancellation as `order.status_changed.v1`. Each
 transition X→Y additionally emits four **templated** events (built by
 `events/order-status-events.ts`):
 `order.status.from_<x>_to_<y>.before`, `order.status.from_<x>.before`

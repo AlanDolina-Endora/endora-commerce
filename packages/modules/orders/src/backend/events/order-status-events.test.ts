@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import type { EventBus } from '@endora-commerce/platform/events';
 import {
+  emitOrderStatusAfter,
   orderStatusAfterEventNames,
   orderStatusBeforeEventNames,
   orderStatusEventName,
@@ -46,5 +48,73 @@ describe('order status event name groups', () => {
       'order.status.from_new_to_pending.after',
       'order.status.to_pending.after',
     ]);
+  });
+});
+
+/**
+ * Issue #242 — `order.cancelled.v1` was declared in `OrderEvents` and listed in
+ * the module's documentation, and nothing emitted it: a subscriber written
+ * against it never ran. Every committed status change is announced by
+ * `emitOrderStatusAfter` — the transition service and, through
+ * `orderStatusAnnouncePort`, `payments` and `shipments` — so a cancellation is
+ * announced there, by whichever path made it.
+ */
+describe('emitOrderStatusAfter — a cancellation', () => {
+  const change = {
+    orderId: 'order-1',
+    organizationId: 'org-1',
+    salesChannelId: 'channel-1',
+    from: 'pending',
+    to: 'cancelled',
+    actor: { kind: 'admin' as const, adminUserId: 'admin-1' },
+    reason: 'customer asked',
+    businessId: 'ORD-0001',
+  };
+
+  function recordingBus(): { bus: EventBus; emitted: Array<{ name: string; payload: Record<string, unknown> }> } {
+    const emitted: Array<{ name: string; payload: Record<string, unknown> }> = [];
+    const bus = {
+      emit: (name: string, payload: Record<string, unknown>) => {
+        emitted.push({ name, payload });
+      },
+    } as unknown as EventBus;
+    return { bus, emitted };
+  }
+
+  it('announces order.cancelled.v1 once, after order.status_changed.v1', () => {
+    const { bus, emitted } = recordingBus();
+
+    emitOrderStatusAfter(bus, change);
+
+    const names = emitted.map((e) => e.name);
+    expect(names.filter((n) => n === 'order.cancelled.v1')).toHaveLength(1);
+    expect(names.indexOf('order.status_changed.v1')).toBeLessThan(names.indexOf('order.cancelled.v1'));
+    expect(emitted.find((e) => e.name === 'order.cancelled.v1')!.payload).toMatchObject({
+      eventId: expect.any(String),
+      occurredAt: expect.any(String),
+      orderId: 'order-1',
+      organizationId: 'org-1',
+      salesChannelId: 'channel-1',
+      from: 'pending',
+      actor: { kind: 'admin', adminUserId: 'admin-1' },
+      reason: 'customer asked',
+      businessId: 'ORD-0001',
+    });
+  });
+
+  it('does not announce it for any other status', () => {
+    const { bus, emitted } = recordingBus();
+
+    emitOrderStatusAfter(bus, { ...change, to: 'completed' });
+
+    expect(emitted.map((e) => e.name)).not.toContain('order.cancelled.v1');
+  });
+
+  it('does not announce it for an order that was already cancelled', () => {
+    const { bus, emitted } = recordingBus();
+
+    emitOrderStatusAfter(bus, { ...change, from: 'cancelled' });
+
+    expect(emitted).toEqual([]);
   });
 });

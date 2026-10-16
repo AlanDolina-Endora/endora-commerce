@@ -316,8 +316,12 @@ się po zmianach cen i katalogu.
 
 ## Emitowane zdarzenia
 
-`order.created.v1`, `order.status_changed.v1`. Anulowanie nie ma własnego zdarzenia: jest ogłaszane
-jako `order.status_changed.v1` z nowym statusem. Każde przejście X→Y emituje
+`order.created.v1`, `order.status_changed.v1`, `order.cancelled.v1`. Anulowanie jest ogłaszane jako
+`order.status_changed.v1` z nowym statusem, a po nim jako `order.cancelled.v1` — z `orderId`,
+`organizationId`, `salesChannelId`, statusem, z którego zamówienie anulowano (`from`), `actor`,
+`reason` i `businessId` — gdy zapis anulujący zostanie zatwierdzony, niezależnie od ścieżki, która
+anulowała zamówienie. `order.cancelled.v1` pozostaje wewnątrz szyny zdarzeń: webhooki wychodzące
+dostarczają anulowanie jako `order.status_changed.v1`. Każde przejście X→Y emituje
 dodatkowo cztery zdarzenia **według szablonu** (budowane przez `events/order-status-events.ts`):
 `order.status.from_<x>_to_<y>.before`, `order.status.from_<x>.before` (synchroniczne, z możliwością
 zablokowania) oraz `order.status.from_<x>_to_<y>.after`, `order.status.to_<y>.after` (po
