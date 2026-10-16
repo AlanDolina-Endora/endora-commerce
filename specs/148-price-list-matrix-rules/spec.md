@@ -227,7 +227,7 @@ entry's starting quantity.
 - **FR-026**: A change to matrix entries MUST be reflected in prices within the existing pricing refresh window (immediately on the process that wrote it, within 60 seconds elsewhere).
 - **FR-027**: All new screen text, messages and error sentences MUST ship in English and Polish.
 - **FR-028**: The module documentation MUST describe the matrix, its precedence and its limitations in English and Polish; the catalogue documentation MUST stop saying that price lists have no attribute-based rule.
-- **FR-029**: The storefront catalogue's sort and filter by price (feature 086) MUST order and filter by the same effective unit price the listing card shows for that buyer at quantity 1, matrix entries included: a product priced only by a matrix entry is ordered by that price (not with the unpriced tail), and an entry that undercuts a bracket price moves the product accordingly. The added cost MUST stay bounded per page (no per-product statement) and MUST be zero for viewers whose candidate lists carry no applicable entry.
+- **FR-029**: The storefront catalogue's sort and filter by price (feature 086) MUST order and filter by the same effective unit price the listing card shows for that buyer at quantity 1, matrix entries included: a product priced only by a matrix entry is ordered by that price (not with the unpriced tail), and an entry that undercuts a bracket price moves the product accordingly. The added cost MUST stay bounded per page (no per-product statement): one indexed lookup of the candidate lists' entries when none applies to the viewer, and the matrix work only on the lists that carry one.
 
 ### Key Entities
 

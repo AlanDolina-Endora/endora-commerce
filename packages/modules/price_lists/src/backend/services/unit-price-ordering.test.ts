@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildPricedProductIdsQuery,
   buildUnitPriceMergeQuery,
   compareDecimalStrings,
   compareOrderRows,
@@ -124,3 +125,132 @@ describe('unit-price ordering query', () => {
     ).toBe(-1);
   });
 });
+
+/**
+ * Feature 148, owner decision Q1 — a candidate list carrying price matrix
+ * entries the viewer meets at quantity 1 is a *matrix stream*: its rows are a
+ * derived relation (the list's own quantity-1 brackets and one branch per
+ * entry, reduced per product by the resolver's precedence key), and "this list
+ * prices the product" — what later streams exclude against — is a predicate
+ * over the same facts. A stream without entries keeps today's shape.
+ */
+describe('unit-price ordering query — matrix streams', () => {
+  const DEFAULT_LIST = 'dddddddd-0000-4000-8000-00000000000d';
+  const matrixStream: UnitPriceStream = {
+    priceListId: 'aaaaaaaa-0000-4000-8000-000000000001',
+    isSale: false,
+    productIds: null,
+    matrix: {
+      defaultListId: DEFAULT_LIST,
+      entries: [
+        {
+          id: 'e1',
+          orgRank: 0,
+          specificity: 1,
+          productIds: ['p1', 'p2'],
+          priceType: 'discount_percent',
+          amount: null,
+          discountPercent: '12.00',
+        },
+        {
+          id: 'e2',
+          orgRank: 0,
+          specificity: 4,
+          productIds: ['p3'],
+          priceType: 'fixed',
+          amount: '9.5000',
+          discountPercent: null,
+        },
+        {
+          id: 'e3',
+          orgRank: 1,
+          specificity: 0,
+          productIds: null,
+          priceType: 'discount_percent',
+          amount: null,
+          discountPercent: '5.00',
+        },
+      ],
+    },
+  };
+  const plain: UnitPriceStream = {
+    priceListId: 'bbbbbbbb-0000-4000-8000-000000000002',
+    isSale: false,
+    productIds: null,
+  };
+
+  function buildWith(list: UnitPriceStream[], overrides: Partial<Parameters<typeof buildUnitPriceMergeQuery>[0]> = {}) {
+    return buildUnitPriceMergeQuery({
+      streams: list,
+      currencyCode: 'PLN',
+      direction: 'asc',
+      after: null,
+      perStreamLimit: 50,
+      watermark: null,
+      ...overrides,
+    });
+  }
+
+  it('leaves a stream without entries byte-identical', () => {
+    const today = buildWith([plain, { ...plain, priceListId: 'cccccccc-0000-4000-8000-000000000003' }]);
+    const withEmpty = buildWith([
+      { ...plain, matrix: undefined },
+      { ...plain, priceListId: 'cccccccc-0000-4000-8000-000000000003' },
+    ]);
+    expect(withEmpty).toEqual(today);
+  });
+
+  it('reads a matrix stream from a derived relation reduced per product by the precedence key', () => {
+    const { sql, params } = buildWith([matrixStream]);
+    const branch = sql.split('union all\n    (select')[0]!;
+    expect(branch).toContain('select distinct on (c."product_id")');
+    expect(branch).toContain('order by c."product_id", c."org_rank" asc, c."specificity" desc, c."amount" asc, c."entry_id" collate "C" asc');
+    expect(branch).toContain('c."amount" is not null');
+    // The own quantity-1 brackets are one of the candidates.
+    expect(sql).toContain('o."min_quantity" = 1');
+    // Each entry covers its selection's ids, or every referenced product for "all products".
+    expect(params).toContain('{p1,p2}');
+    expect(params).toContain('{p3}');
+    expect(params).toContain(DEFAULT_LIST);
+    // A percentage is priced off the own bracket, else the Default one,
+    // rounded half-up in integer ten-thousandths — never a float, never a
+    // numeric division.
+    expect(sql).toContain('coalesce((select own."amount" from "price_list_price_brackets" own');
+    expect(sql).not.toMatch(/left join/i);
+    expect(sql).toMatch(/div\(.*\+ 5000, 10000\) \* 0\.0001/);
+    expect(sql).not.toMatch(/\/\s*100\b/);
+  });
+
+  it('excludes a later stream against what the matrix stream prices', () => {
+    const { sql, params } = buildWith([matrixStream, plain]);
+    const later = sql.split('union all').pop()!;
+    expect(later).toContain('not (');
+    expect(later).toContain('b."product_id" = any(?::uuid[])');
+    expect(params).toContain('{p3}');
+  });
+
+  it('applies the keyset, the amount range and the watermark to the derived amount', () => {
+    const { sql } = buildWith([plain, matrixStream], {
+      after: { amount: '1.0000', productId: 'p0' },
+      amountRange: { min: '2', max: '90' },
+      watermark: '50.0000',
+    });
+    const matrixBranch = sql.split('union all').slice(-1)[0]!;
+    expect(sql).toContain('(b."amount", b."product_id") > (?::numeric, ?::uuid)');
+    expect(sql).toContain('b."amount" >= ?::numeric');
+    expect(sql).toContain('b."amount" <= ?::numeric');
+    expect(matrixBranch.length).toBeGreaterThan(0);
+  });
+
+  it('answers pricedProductIds through the same predicate, one statement', () => {
+    const { sql, params } = buildPricedProductIdsQuery({
+      streams: [matrixStream, plain],
+      currencyCode: 'PLN',
+      productIds: ['p1', 'p9'],
+    });
+    expect(sql.match(/\bselect\b/gi)!.length).toBeGreaterThan(1);
+    expect(sql).toContain('unnest(?::uuid[])');
+    expect(params).toContain('{p1,p9}');
+  });
+});
+

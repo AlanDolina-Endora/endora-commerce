@@ -1,10 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   PriceList,
+  PriceListMatrixEntry,
   PriceListPriceBracket,
   PriceListProduct,
   type ProductRow,
 } from '../../helpers/package-entities.js';
+import { findAttributeExtensionByKey } from '../../helpers/seed-catalog.js';
+import { seedOtherTestOrganization } from '../../helpers/seed-organizations.js';
 import type { ListingPriceViewerContext } from '@endora-commerce/contracts';
 import {
   setupBackendServer,
@@ -400,5 +403,118 @@ describe('orderByUnitPrice is resolveListingPrices, sorted', () => {
       restrictToProductIds: [],
     });
     expect(nothing).toEqual({ rows: [], exhausted: true, sourceRowsRead: 0 });
+  });
+
+  /**
+   * Feature 148, owner decision Q1 — the ordering is the batch, sorted, **with
+   * a price matrix**. Declared last so the cases above order the corpus without
+   * one. The matrix: organisation A takes 90% off the category on its own list
+   * (an organization-specific candidate that undercuts the list's own brackets,
+   * and that falls through where the list has no reference); organisation B
+   * takes 50% off everything on its list; every buyer gets a fixed 4.00 on two
+   * products nothing else prices, selected by an attribute value — priced only
+   * by the matrix, so they leave the unpriced tail.
+   */
+  describe('with a price matrix (feature 148, owner decision Q1)', () => {
+    const corpus = new Set(Array.from({ length: CORPUS }, (_, i) => productId(i)));
+    beforeAll(async () => {
+      const em = h.em();
+      // Organisation B's entry names it, so the row has to exist.
+      await seedOtherTestOrganization(em);
+      const material = await findAttributeExtensionByKey(em, 'material');
+      material!.isPriceRule = true;
+      await em.flush();
+      for (const i of [37, 38]) {
+        await em
+          .getConnection()
+          .execute(
+            `update products set attribute_values = attribute_values || '{"material":"steel"}'::jsonb where id = ?`,
+            [productId(i)],
+          );
+      }
+      for (const entry of [
+        { priceListId: ORG_A_LIST, categoryId: CATEGORY_ID, organizationId: TEST_ORGANIZATION_ID, discountPercent: '90' },
+        { priceListId: ORG_B_LIST, organizationId: OTHER_TEST_ORGANIZATION_ID, discountPercent: '50' },
+        {
+          priceListId: CHANNEL_LIST,
+          attributeKey: 'material',
+          attributeValue: 'steel',
+          priceType: 'fixed' as const,
+          amount: '4',
+          currencyCode: 'PLN',
+          discountPercent: null,
+        },
+      ]) {
+        em.create(PriceListMatrixEntry, { minQuantity: 1, priceType: 'discount_percent', ...entry });
+      }
+      await em.flush();
+      em.clear();
+    });
+
+    for (const [label, organization] of viewers) {
+      for (const direction of ['asc', 'desc'] as const) {
+        for (const chunk of [3, 50]) {
+          it(`lists exactly what the batch lists — ${label}, ${direction}, chunks of ${chunk}`, async () => {
+            const expected = await batchOrder(organization, direction);
+            // The attribute selection reaches the seeded catalogue's steel
+            // product too: the port orders the whole catalogue and the caller
+            // intersects (feature 086's contract), so compare on the corpus.
+            const actual = (await portOrder(organization, direction, chunk)).filter((r) => corpus.has(r.productId));
+            expect(actual.map((r) => ({ productId: r.productId, amount: r.amount }))).toEqual(expected);
+            expect(expected.length).toBeGreaterThan(20);
+          });
+        }
+      }
+    }
+
+    it('orders a product priced only by a matrix entry by that price, not in the tail', async () => {
+      const order = await portOrder(null, 'asc', 50);
+      const row = order.find((r) => r.productId === productId(37));
+      expect(row).toMatchObject({ amount: '4.0000', priceListId: CHANNEL_LIST });
+      const answered = await h.pricingService.pricedProductIds({
+        context: contextFor(null),
+        productIds: [productId(37), productId(38), productId(39)],
+      });
+      expect([...answered].sort()).toEqual([productId(37), productId(38)].sort());
+    });
+
+    it('moves a product a matrix entry undercuts', async () => {
+      // Product 0 is in the category and on A's list: 90% off its own bracket.
+      const order = await portOrder({ id: TEST_ORGANIZATION_ID }, 'asc', 50);
+      const row = order.find((r) => r.productId === productId(0));
+      const own = await h
+        .em()
+        .findOneOrFail(PriceListPriceBracket, { priceListId: ORG_A_LIST, productId: productId(0), currencyCode: 'PLN' });
+      expect(Number(row!.amount)).toBeCloseTo(Number(own.amount) * 0.1, 4);
+      expect(order.indexOf(row!)).toBeLessThan(5);
+    });
+
+    it('answers pricedProductIds for exactly the products the batch prices', async () => {
+      const em = h.em();
+      const rows = await em.find(Product, { sku: { $like: 'ORDER-IDENTITY-%' } });
+      for (const [label, organization] of viewers) {
+        const resolved = await h.pricingService.resolveListingPrices({ products: rows, context: contextFor(organization) });
+        const expected = new Set([...resolved].filter(([, p]) => p.source === 'price_list').map(([id]) => id));
+        const answered = await h.pricingService.pricedProductIds({
+          context: contextFor(organization),
+          productIds: rows.map((r) => r.id),
+        });
+        expect([...answered].sort(), label).toEqual([...expected].sort());
+      }
+    });
+
+    it('filters an amount range on the matrix price', async () => {
+      const chunk = await h.pricingService.orderByUnitPrice({
+        context: contextFor(null),
+        direction: 'asc',
+        after: null,
+        limit: 100,
+        amountRange: { min: '3.5000', max: '4.5000' },
+      });
+      expect(chunk.rows.map((r) => r.productId).filter((id) => corpus.has(id)).sort()).toEqual(
+        [productId(37), productId(38)].sort(),
+      );
+      expect(chunk.rows.every((r) => r.amount === '4.0000')).toBe(true);
+    });
   });
 });

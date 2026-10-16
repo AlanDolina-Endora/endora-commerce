@@ -2,6 +2,7 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
   CatalogAttributeReadPort,
   CatalogCategoryReadPort,
+  CatalogProductReadPort,
   DisplayMode,
   ListingPrice,
   ListingPriceOrderChunk,
@@ -15,6 +16,7 @@ import { PriceListMatrixEntry } from '../entities/price-list-matrix-entry.entity
 import { DEFAULT_PRICE_LIST_ID } from './default-price-list-migration.js';
 import {
   buildEligibleAttributes,
+  matrixEntrySpecificity,
   resolveListCandidate,
   type EligibleAttribute,
   type MatrixEntryRow,
@@ -35,9 +37,12 @@ import {
   type OrderedCandidate,
 } from './price-list-candidate-vector.js';
 import {
+  buildPricedProductIdsQuery,
   buildUnitPriceMergeQuery,
   compareOrderRows,
+  OWN_BRACKET_RANK,
   uuidArrayLiteral,
+  type UnitPriceMatrixEntry,
   type UnitPriceStream,
 } from './unit-price-ordering.js';
 import type { PriceListTargetReads } from './price-list-service.js';
@@ -892,6 +897,17 @@ export class PricingService implements PricingServiceContract {
     const streams = await this.#candidateStreams(em, input.context, currencyCode, input.productIds);
     if (streams.length === 0) return out;
 
+    // Feature 148 — a stream carrying matrix entries prices products its
+    // brackets do not name; the one-statement predicate form answers for
+    // every stream at once. Without one, the statement below is unchanged.
+    if (streams.some((stream) => stream.matrix)) {
+      const built = buildPricedProductIdsQuery({ streams, currencyCode, productIds: input.productIds });
+      for (const row of await em.execute<Array<{ product_id: string }>>(built.sql, built.params)) {
+        out.add(row.product_id);
+      }
+      return out;
+    }
+
     const params: unknown[] = [currencyCode, uuidArrayLiteral([...new Set(input.productIds)])];
     const perStream = streams.map((stream) => {
       if (stream.productIds === null) {
@@ -1006,7 +1022,116 @@ export class PricingService implements PricingServiceContract {
         productIds: ids === null ? null : [...ids],
       });
     }
+    await this.#attachMatrix(em, streams, organizationChain, currencyCode, categoryProducts);
     return streams;
+  }
+
+  /**
+   * Feature 148, owner decision Q1 — the price matrix in the price-ordered
+   * listing. The candidate lists' entries the viewer meets at quantity 1 are
+   * read in **one** statement (a window starting at 1, an organization in the
+   * chain or none, a percentage or a fixed price in the listing currency);
+   * attribute entries whose attribute is not eligible drop out, exactly as the
+   * resolver ignores them; each remaining selection is resolved to product ids
+   * through `catalog`'s ports — the categories this method already reads, an
+   * attribute value through `listProductIdsByAttributeValue` — and a stream
+   * whose list carries any becomes a matrix stream. A viewer whose lists carry
+   * none pays the one lookup and nothing else.
+   */
+  async #attachMatrix(
+    em: EntityManager,
+    streams: UnitPriceStream[],
+    organizationChain: readonly string[],
+    currencyCode: string,
+    categoryProducts: Map<string, string[]>,
+  ): Promise<void> {
+    if (streams.length === 0) return;
+    const listIds = [...new Set(streams.map((s) => s.priceListId))];
+    const rows = (
+      await em.find(PriceListMatrixEntry, {
+        priceListId: { $in: listIds },
+        minQuantity: 1,
+        $and: [
+          organizationChain.length > 0
+            ? { $or: [{ organizationId: null }, { organizationId: { $in: [...organizationChain] } }] }
+            : { organizationId: null },
+          { $or: [{ currencyCode: null }, { currencyCode }] },
+        ],
+      })
+    ).map(matrixEntryRow);
+    if (rows.length === 0) return;
+
+    let eligible: ReadonlyMap<string, EligibleAttribute> = new Map();
+    if (rows.some((r) => r.attributeKey !== null)) {
+      eligible = buildEligibleAttributes(await this.#attributeRead().listByFlag('isPriceRule'));
+    }
+    const categoryRead = rows.some((r) => r.categoryId !== null) ? this.#categoryRead() : null;
+    const attributeIds = new Map<string, string[]>();
+    const entriesByList = new Map<string, UnitPriceMatrixEntry[]>();
+    for (const row of rows) {
+      let ids: Set<string> | null = null;
+      if (row.productId !== null) ids = new Set([row.productId]);
+      if (row.categoryId !== null) {
+        let inCategory = categoryProducts.get(row.categoryId);
+        if (!inCategory) {
+          inCategory = await categoryRead!.listProductIdsInCategory(row.categoryId);
+          categoryProducts.set(row.categoryId, inCategory);
+        }
+        ids = new Set(inCategory);
+      }
+      if (row.attributeKey !== null) {
+        const attribute = eligible.get(row.attributeKey);
+        if (!attribute || row.attributeValue === null) continue;
+        const memo = `${row.attributeKey}\u0000${row.attributeValue}`;
+        let withValue = attributeIds.get(memo);
+        if (!withValue) {
+          withValue = await this.#productRead().listProductIdsByAttributeValue({
+            key: row.attributeKey,
+            value: row.attributeValue,
+            match:
+              attribute.valueType === 'multiselect'
+                ? 'array'
+                : attribute.valueType === 'boolean'
+                  ? 'boolean'
+                  : 'scalar',
+          });
+          attributeIds.set(memo, withValue);
+        }
+        ids = ids === null ? new Set(withValue) : new Set(withValue.filter((id) => ids!.has(id)));
+      }
+      const chainRank = row.organizationId === null ? -1 : organizationChain.indexOf(row.organizationId);
+      const entry: UnitPriceMatrixEntry = {
+        id: row.id,
+        orgRank: row.organizationId === null ? OWN_BRACKET_RANK : chainRank,
+        specificity: matrixEntrySpecificity(row),
+        productIds: ids === null ? null : [...ids],
+        priceType: row.priceType,
+        amount: row.amount,
+        discountPercent: row.discountPercent,
+      };
+      if (entry.productIds !== null && entry.productIds.length === 0) continue;
+      const list = entriesByList.get(row.priceListId);
+      if (list) list.push(entry);
+      else entriesByList.set(row.priceListId, [entry]);
+    }
+    for (const stream of streams) {
+      const entries = entriesByList.get(stream.priceListId);
+      if (entries && entries.length > 0) {
+        stream.matrix = { defaultListId: DEFAULT_PRICE_LIST_ID, entries };
+      }
+    }
+  }
+
+  /** `catalog`'s product read port, or the same refusal `#categoryRead` makes. */
+  #productRead(): CatalogProductReadPort {
+    const productRead = this.targetReads?.catalogProductRead;
+    if (!productRead) {
+      throw new Error(
+        'PricingService: this ordering asks `catalog` which products an attribute value selects, and ' +
+          "this composition constructed the engine without `catalog`'s product read port.",
+      );
+    }
+    return productRead;
   }
 
   /**
@@ -1081,16 +1206,30 @@ export class PricingService implements PricingServiceContract {
    */
   async listBracketMinQuantities(productId: string, currencyCode: string): Promise<number[]> {
     const em = this.emFactory();
+    // Feature 148 / FR-018 — the union with the starting quantities of matrix
+    // entries that could price this product in this currency on an active
+    // list: product-less or this product, a percentage or a fixed price in this
+    // currency. Over-inclusion is this method's contract (an entry of another
+    // organization adds a probe, never a price), so neither the organization
+    // nor the selection is narrowed here.
     const rows = await em.execute<Array<{ min_quantity: number | string }>>(
-      `select distinct b.min_quantity
+      `select b.min_quantity
          from price_list_price_brackets b
          join price_lists l on l.id = b.price_list_id
         where b.product_id = ? and b.currency_code = ? and l.status = 'active'
-        order by b.min_quantity asc`,
-      [productId, currencyCode.toUpperCase()],
+       union
+       select e.min_quantity
+         from price_list_matrix_entries e
+         join price_lists l on l.id = e.price_list_id
+        where (e.product_id is null or e.product_id = ?)
+          and (e.currency_code is null or e.currency_code = ?)
+          and l.status = 'active'
+        order by min_quantity asc`,
+      [productId, currencyCode.toUpperCase(), productId, currencyCode.toUpperCase()],
     );
     return rows.map((r) => Number(r.min_quantity));
   }
+
 
   /**
    * Walks the priority chain until a list yields a bracket for the

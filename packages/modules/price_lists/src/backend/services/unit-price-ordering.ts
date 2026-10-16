@@ -54,7 +54,41 @@ export interface UnitPriceStream {
    * categories.
    */
   productIds: readonly string[] | null;
+  /**
+   * Feature 148, owner decision Q1 — the price matrix entries of this stream's
+   * list that the viewer meets at quantity 1. Present only when there is at
+   * least one; a stream without it keeps the index-ordered bracket shape above
+   * byte for byte.
+   */
+  matrix?: UnitPriceMatrix | undefined;
 }
+
+/**
+ * One viewer-applicable quantity-1 matrix entry, with its selection already
+ * resolved to product ids by the caller (this file knows nothing about
+ * categories or attributes).
+ */
+export interface UnitPriceMatrixEntry {
+  id: string;
+  /** Nearest-first index in the viewer's organization chain; large for "all buyers". */
+  orgRank: number;
+  /** product 4, category ∩ attribute 3, attribute 2, category 1, all 0. */
+  specificity: number;
+  /** The products the selection covers, or `null` for every product. */
+  productIds: readonly string[] | null;
+  priceType: 'fixed' | 'discount_percent';
+  amount: string | null;
+  discountPercent: string | null;
+}
+
+export interface UnitPriceMatrix {
+  /** The system Default list — the percentage reference of last resort. */
+  defaultListId: string;
+  entries: readonly UnitPriceMatrixEntry[];
+}
+
+/** The rank of the list's own bracket: not organization-specific (research R8). */
+export const OWN_BRACKET_RANK = 2147483647;
 
 export interface UnitPriceQueryInput {
   streams: readonly UnitPriceStream[];
@@ -121,15 +155,23 @@ function buildStreamSelect(
   params: unknown[],
 ): string {
   const dir = input.direction === 'asc' ? 'asc' : 'desc';
-  const clauses: string[] = [
-    `b."price_list_id" = ?`,
-    `b."currency_code" = ?`,
-    // The quantity-1 equality, not a `distinct on` and not a window function:
-    // `check (min_quantity >= 1)` makes `min_quantity <= 1` mean exactly this,
-    // which is what a partial index can be built on.
-    `b."min_quantity" = 1`,
-  ];
-  params.push(stream.priceListId, input.currencyCode);
+  const clauses: string[] = [];
+  let source = `"price_list_price_brackets" b`;
+  if (stream.matrix && stream.matrix.entries.length > 0) {
+    // Feature 148 — the derived relation replaces the bracket scan. Its
+    // parameters come first because it comes first in the statement.
+    source = `${matrixRelationSql(stream, stream.matrix, input.currencyCode, params)} b`;
+  } else {
+    clauses.push(
+      `b."price_list_id" = ?`,
+      `b."currency_code" = ?`,
+      // The quantity-1 equality, not a `distinct on` and not a window function:
+      // `check (min_quantity >= 1)` makes `min_quantity <= 1` mean exactly this,
+      // which is what a partial index can be built on.
+      `b."min_quantity" = 1`,
+    );
+    params.push(stream.priceListId, input.currencyCode);
+  }
 
   if (stream.productIds !== null) {
     clauses.push(`b."product_id" = any(?::uuid[])`);
@@ -163,6 +205,12 @@ function buildStreamSelect(
   // the header.
   for (let j = 0; j < index; j += 1) {
     const earlier = input.streams[j]!;
+    if (earlier.matrix && earlier.matrix.entries.length > 0) {
+      // Feature 148 — what a matrix stream prices is a predicate, probed with
+      // the same indexed scalar subqueries as the plain exclusion.
+      clauses.push(`not (${streamPricesSql(earlier, input.currencyCode, `b."product_id"`, `x${j}`, params)})`);
+      continue;
+    }
     const alias = `x${j}`;
     const earlierClauses = [
       `${alias}."price_list_id" = ?`,
@@ -185,11 +233,191 @@ function buildStreamSelect(
   params.push(input.perStreamLimit);
   return (
     `    (select b."product_id", b."amount", ${index} as stream_index\n` +
-    `       from "price_list_price_brackets" b\n` +
-    `      where ${clauses.join('\n        and ')}\n` +
+    `       from ${source}\n` +
+    `      where ${clauses.length > 0 ? clauses.join('\n        and ') : 'true'}\n` +
     `      order by b."amount" ${dir}, b."product_id" ${dir}\n` +
     `      limit ?)`
   );
+}
+
+/**
+ * A percentage price in SQL, exactly as `applyDiscountPercent` computes it in
+ * TypeScript: the reference in ten-thousandths times the kept hundredths of a
+ * percent, plus half the divisor, integer-divided by 10 000, back to four
+ * digits by a multiplication. No numeric division and no float, so the sort
+ * and the card can never disagree by a rounding.
+ */
+function percentAmountSql(referenceSql: string, percentPlaceholder: string): string {
+  return (
+    `(div((${referenceSql}) * 10000 * (10000 - ${percentPlaceholder} * 100) + 5000, 10000) * 0.0001)`
+  );
+}
+
+/**
+ * Feature 148 — the derived relation of a matrix stream: one row per product
+ * the list prices at quantity 1, at the amount `resolveListCandidate` answers.
+ * Candidates are the own quantity-1 bracket and one branch per entry; `distinct
+ * on` keeps the first by the resolver's precedence key (organization rank,
+ * specificity, amount, entry id with the own bracket first); a percentage with
+ * no reference has no amount and drops out, as the resolver skips it.
+ */
+function matrixRelationSql(
+  stream: UnitPriceStream,
+  matrix: UnitPriceMatrix,
+  currencyCode: string,
+  params: unknown[],
+): string {
+  const branches: string[] = [];
+  branches.push(
+    `select o."product_id", o."amount", ${OWN_BRACKET_RANK}::int as "org_rank", 4::int as "specificity", ''::text as "entry_id"\n` +
+      `           from "price_list_price_brackets" o\n` +
+      `          where o."price_list_id" = ? and o."currency_code" = ? and o."min_quantity" = 1`,
+  );
+  params.push(stream.priceListId, currencyCode);
+
+  // The reference is read with two correlated scalar subqueries, never a join:
+  // a join over a freshly written, unanalysed bracket table was measured
+  // planning as a nested loop with a join *filter* — 2 000 × 2 000 rows, 800 ms
+  // — where the scalar form is an index probe per product whatever the
+  // statistics say. The same reasoning as shape 1 in this file's header.
+  const reference = (alias: string): string =>
+    `(select ${alias}."amount" from "price_list_price_brackets" ${alias}` +
+    ` where ${alias}."price_list_id" = ? and ${alias}."product_id" = s."id"` +
+    ` and ${alias}."currency_code" = ? and ${alias}."min_quantity" = 1 limit 1)`;
+
+  for (const entry of matrix.entries) {
+    if (entry.priceType === 'fixed') {
+      if (entry.productIds === null || entry.amount === null) continue; // refused by the schema
+      branches.push(
+        `select s."id" as "product_id", ?::numeric as "amount", ?::int as "org_rank", ?::int as "specificity", ?::text as "entry_id"\n` +
+          `           from unnest(?::uuid[]) as s("id")`,
+      );
+      params.push(entry.amount, entry.orgRank, entry.specificity, entry.id, uuidArrayLiteral(entry.productIds));
+      continue;
+    }
+    // A percentage: every covered product with a reference.
+    const covered =
+      entry.productIds === null
+        ? `(select distinct r."product_id" as "id" from "price_list_price_brackets" r` +
+          ` where r."price_list_id" in (?, ?) and r."currency_code" = ? and r."min_quantity" = 1)`
+        : `unnest(?::uuid[])`;
+    branches.push(
+      `select s."id" as "product_id",` +
+        ` ${percentAmountSql(`coalesce(${reference('own')}, ${reference('def')})`, '?::numeric')} as "amount",` +
+        ` ?::int as "org_rank", ?::int as "specificity", ?::text as "entry_id"\n` +
+        `           from ${covered} as s("id")`,
+    );
+    // Parameter order follows the text: the two references inside the amount
+    // expression, the percentage, the three ranking literals, the covered set.
+    params.push(stream.priceListId, currencyCode, matrix.defaultListId, currencyCode);
+    params.push(entry.discountPercent, entry.orgRank, entry.specificity, entry.id);
+    if (entry.productIds === null) params.push(stream.priceListId, matrix.defaultListId, currencyCode);
+    else params.push(uuidArrayLiteral(entry.productIds));
+  }
+
+  return (
+    `(select distinct on (c."product_id") c."product_id", c."amount"\n` +
+    `         from (\n          ${branches.join('\n          union all\n          ')}\n         ) c\n` +
+    `        where c."amount" is not null\n` +
+    `        order by c."product_id", c."org_rank" asc, c."specificity" desc, c."amount" asc, c."entry_id" collate "C" asc)`
+  );
+}
+
+/**
+ * Feature 148 — "this matrix stream prices `productSql`" as a boolean: an own
+ * quantity-1 bracket, a fixed entry covering it, or a percentage covering it
+ * that has a reference (the own bracket, already tested, or the Default
+ * list's). Restricted to the stream's own product set, as its rows are.
+ */
+function streamPricesSql(
+  stream: UnitPriceStream,
+  currencyCode: string,
+  productSql: string,
+  alias: string,
+  params: unknown[],
+): string {
+  const matrix = stream.matrix!;
+  const fixedIds = new Set<string>();
+  const percentIds = new Set<string>();
+  let percentOnAll = false;
+  for (const entry of matrix.entries) {
+    if (entry.priceType === 'fixed') {
+      for (const id of entry.productIds ?? []) fixedIds.add(id);
+    } else if (entry.productIds === null) {
+      percentOnAll = true;
+    } else {
+      for (const id of entry.productIds) percentIds.add(id);
+    }
+  }
+  const probe = (a: string, listId: string): string => {
+    params.push(listId, currencyCode);
+    return (
+      `(select 1 from "price_list_price_brackets" ${a}` +
+      ` where ${a}."price_list_id" = ? and ${a}."currency_code" = ? and ${a}."min_quantity" = 1` +
+      ` and ${a}."product_id" = ${productSql} limit 1) is not null`
+    );
+  };
+  const parts: string[] = [probe(`${alias}o`, stream.priceListId)];
+  if (fixedIds.size > 0) {
+    parts.push(`${productSql} = any(?::uuid[])`);
+    params.push(uuidArrayLiteral([...fixedIds]));
+  }
+  if (percentOnAll || percentIds.size > 0) {
+    let covered = 'true';
+    if (!percentOnAll) {
+      covered = `${productSql} = any(?::uuid[])`;
+      params.push(uuidArrayLiteral([...percentIds]));
+    }
+    parts.push(`(${covered} and ${probe(`${alias}d`, matrix.defaultListId)})`);
+  }
+  let restriction = '';
+  if (stream.productIds !== null) {
+    restriction = `${productSql} = any(?::uuid[]) and `;
+    // The restriction is written first in the text, so its parameter must lead.
+    params.splice(params.length - countPlaceholders(parts.join(' ')), 0, uuidArrayLiteral(stream.productIds));
+  }
+  return `${restriction}(${parts.join(' or ')})`;
+}
+
+function countPlaceholders(sql: string): number {
+  return (sql.match(/\?/g) ?? []).length;
+}
+
+/**
+ * Feature 148 — `pricedProductIds` as one statement over the same predicates:
+ * which of `productIds` any candidate stream prices at quantity 1, the matrix
+ * included. A set-membership answer, not a price.
+ */
+export function buildPricedProductIdsQuery(input: {
+  streams: readonly UnitPriceStream[];
+  currencyCode: string;
+  productIds: readonly string[];
+}): BuiltQuery {
+  const params: unknown[] = [uuidArrayLiteral([...new Set(input.productIds)])];
+  const perStream = input.streams.map((stream, index) => {
+    if (stream.matrix && stream.matrix.entries.length > 0) {
+      return `(${streamPricesSql(stream, input.currencyCode, 's."id"', `m${index}`, params)})`;
+    }
+    const alias = `q${index}`;
+    const clauses = [
+      `${alias}."price_list_id" = ?`,
+      `${alias}."currency_code" = ?`,
+      `${alias}."min_quantity" = 1`,
+      `${alias}."product_id" = s."id"`,
+    ];
+    params.push(stream.priceListId, input.currencyCode);
+    if (stream.productIds !== null) {
+      clauses.push(`${alias}."product_id" = any(?::uuid[])`);
+      params.push(uuidArrayLiteral(stream.productIds));
+    }
+    return `(select 1 from "price_list_price_brackets" ${alias} where ${clauses.join(' and ')} limit 1) is not null`;
+  });
+  return {
+    sql:
+      `select s."id"::text as product_id from unnest(?::uuid[]) as s("id")` +
+      ` where ${perStream.length > 0 ? perStream.join('\n    or ') : 'false'}`,
+    params,
+  };
 }
 
 /**
