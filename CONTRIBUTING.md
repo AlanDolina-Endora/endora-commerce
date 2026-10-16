@@ -98,20 +98,20 @@ nobody. If you are unsure which yours is, it is almost certainly the small one.
 
 ## Setting up
 
-```bash
-pnpm install
-pnpm run build:packages        # FIRST, and again after editing anything under packages/
-pnpm run dev:infra             # PostgreSQL, Redis, Meilisearch in Docker
-pnpm run dev                   # backend + admin + storefront
-```
+Follow [Set up](README.md#set-up) and [Run it](README.md#run-it) in the README: the toolchain,
+the `.env` files, the Docker services, `pnpm run setup` and your first administrator are stated
+there once.
 
-`pnpm run build:packages` is a **precondition**, not an optimisation: every workspace package
+`pnpm run build:packages` (which `pnpm run setup` runs for you) is a **precondition**, not an optimisation: every workspace package
 resolves through its own `exports` map at `./dist`, so an unbuilt workspace is an unresolvable
 specifier rather than a slightly stale one. A stale `dist` also means the type-checker and the
 test run are reading different files — `tsc` stays on source through `tsconfig.base.json`'s
 `paths`. Edit a package, build that package, restart the loop.
 
-Node ≥ 22.18 and pnpm 9 are required; the versions are declared in the root `package.json`.
+Node ≥ 22.18 and pnpm 9.15.0 are required; the versions are declared in the root `package.json`,
+and any pnpm ≥ 9.7 switches to the pinned one by itself. Never commit a `packageManager`,
+`pnpm-workspace.yaml` or `pnpm-lock.yaml` change that a different pnpm made — the README says how
+to undo one.
 
 ---
 
