@@ -436,7 +436,7 @@ group and are configured through the existing settings module.
 
 | Code | Type | Default | Effect |
 | --- | --- | --- | --- |
-| `quote_requests.expiry_days` | integer | `0` | Expire Pending / Created from admin requests after N days without activity, unless they carry an offer that is still valid. `0` disables. Setting it expires the existing backlog — see *Background jobs*. |
+| `quote_requests.expiry_days` | integer | `0` | Expire Pending / Created from admin requests after N days without activity, unless they carry an offer that is still valid. Per sales channel: each request is held to its own channel's value, and `0` exempts a channel. Setting it expires the existing backlog — see *Background jobs*. |
 | `quote_requests.show_add_to_quote_on_card` | boolean | `true` | Toggle the "Add to quote" button on storefront product cards. |
 | `quote_requests.show_add_to_quote_on_pdp` | boolean | `true` | Toggle the "Add to quote" button on product detail pages. |
 
@@ -449,13 +449,16 @@ is switched off, no tick runs.
 
 ### Which requests it expires
 
-Each tick reads `quote_requests.expiry_days`. `0` — the default — disables the
-sweep. Otherwise a request is moved to `Expired` when **all three** hold:
+Each tick reads `quote_requests.expiry_days` **for every sales channel**, and
+holds each request to the value of its own channel — see
+[Per sales channel](#per-sales-channel). `0` — the default — exempts a channel;
+set to `0` everywhere, the sweep does nothing. Otherwise a request is moved to
+`Expired` when **all three** hold:
 
 1. **It is still open** — `Pending` or `Created from admin`. That covers a
    request waiting for the seller's first answer and an offer waiting for the
    buyer.
-2. **Nothing has happened to it for `expiry_days`.** The clock is the request's
+2. **Nothing has happened to it for its channel's `expiry_days`.** The clock is the request's
    latest history entry — the entries both parties see on the request. What
    restarts it: the submission, an edit by the customer, a revision or a note
    by the seller. What does **not**: the customer opening the request (which
@@ -508,12 +511,22 @@ an instance that already has `expiry_days` set meets the same backlog on the
 first ticks after upgrading. Set it to `0` before the upgrade to review the
 open requests first.
 
-### One value for every sales channel
+### Per sales channel {#per-sales-channel}
 
-The sweep reads `expiry_days` once per tick, **for the default sales channel**,
-and applies it to every request whatever channel it was raised on. A different
-value set for another channel is not used by the sweep, and a channel set to
-`0` is not exempt.
+`expiry_days` can be set for all channels and overridden for one, and the sweep
+honours both: a request is held to the value resolved for the sales channel it
+was raised on. A channel set to `0` is exempt, whatever the other channels say,
+and a channel with its own number of days is held to it. A request that carries
+no channel — raised before requests recorded one, or by a tool that set none —
+is held to the default channel's value.
+
+The `expired` history entry records the value that applied to the request.
+
+Until this was fixed the sweep read one value, the default channel's, and
+applied it to every request. An instance that already set a different value for
+some channel therefore sees that value take effect on the first ticks after
+upgrading — a channel with a lower value expires its backlog of quiet requests,
+and a channel set to `0` stops expiring.
 
 ## Data model
 

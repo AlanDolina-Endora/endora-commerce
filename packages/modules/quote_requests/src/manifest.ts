@@ -47,7 +47,7 @@ const settings = defineModuleSettingsManifest({
       code: QUOTE_REQUESTS_SETTING_CODES.EXPIRY_DAYS,
       name: 'Auto-expire pending after (days)',
       description:
-        'Number of days without activity after which a Pending or Created from admin Quote Request is moved to Expired. 0 disables auto-expiry entirely. A request carrying an offer whose validity date is still ahead is never expired by this rule. Turning this on, or lowering it, expires every open request that has already been inactive that long, on the next runs of the expiry sweep (every 30 minutes). The value of the default sales channel applies to requests of every channel.',
+        'Number of days without activity after which a Pending or Created from admin Quote Request is moved to Expired. 0 disables auto-expiry entirely. A request carrying an offer whose validity date is still ahead is never expired by this rule. Turning this on, or lowering it, expires every open request that has already been inactive that long, on the next runs of the expiry sweep (every 30 minutes). Each request is held to the value of its own sales channel: a channel set to 0 is exempt, and a request with no channel follows the default channel.',
       groupCode: 'quote_requests',
       valueType: 'number',
       defaultValue: DEFAULT_QUOTE_REQUESTS_EXPIRY_DAYS,

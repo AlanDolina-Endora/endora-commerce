@@ -19,7 +19,7 @@ import { RfqAdminService } from './services/rfq-admin-service.js';
 import { RfqEventService } from './services/rfq-event-service.js';
 import { RfqRevisionService } from './services/rfq-revision-service.js';
 import { RfqNotificationService } from './services/rfq-notification-service.js';
-import { RfqExpiryWorker } from './services/rfq-expiry-worker.js';
+import { RfqExpiryWorker, type RfqExpiryRule } from './services/rfq-expiry-worker.js';
 import { QuoteRequestListViewService } from './services/quote-request-list-view-service.js';
 import { createOrderCompletionReactor } from './services/order-completion-reactor.js';
 import {
@@ -54,8 +54,8 @@ export interface QuoteRequestsModuleOptions {
   requireAdmin: RequireAdminFactory;
   resolveCustomerContext: CustomerContextResolver;
   resolveAdminContext: AdminContextResolver;
-  /** Reads the current `quote_requests.expiry_days` from the settings module. */
-  resolveExpiryDays: () => Promise<number>;
+  /** Reads `quote_requests.expiry_days` for every sales channel (issue #239). */
+  resolveExpiryRule: () => Promise<RfqExpiryRule>;
   /** Reads the storefront-visibility flags from settings. */
   resolveBoolSetting: (key: 'show_add_to_quote_on_card' | 'show_add_to_quote_on_pdp') => Promise<boolean>;
   /**
@@ -225,7 +225,7 @@ export function quoteRequestsModule(options: QuoteRequestsModuleOptions): {
     notificationService,
     salesRepAssignment,
     adminUsers: options.adminUsers,
-    resolveExpiryDays: options.resolveExpiryDays,
+    resolveExpiryRule: options.resolveExpiryRule,
   });
 
   // US5 — the `order.created.v1` reactor. `backend.ts` registers it through

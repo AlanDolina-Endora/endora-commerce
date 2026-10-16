@@ -15,14 +15,16 @@ import { anyRowExists, type WorkRows } from './scheduled-work-probe.js';
  * history row, queues the notifications and announces `rfq.expired.v1`
  * (FR-030).
  *
- * `quote_requests.expiry_days = 0` disables it entirely. Otherwise a request is
- * due when all three hold — {@link RfqExpiryWorker.dueRequests} is the one
- * statement of them, read by the probe to ask and by the pass to act:
+ * `quote_requests.expiry_days` is read **for the request's own sales channel**
+ * (issue #239) — {@link RfqExpiryRule} — and `0` exempts that channel; a
+ * request raised with no channel is held to the default channel's value. A
+ * request is due when all three hold — {@link RfqExpiryWorker.dueRequests} is
+ * the one statement of them, read by the probe to ask and by the pass to act:
  *
  *  1. **It is still open**: `Pending` or `Created from admin`. Both are named
  *     by the setting, and between them they cover a request waiting for the
  *     seller's first answer and an offer waiting for the buyer.
- *  2. **Nothing has happened to it for `expiry_days`.** The clock is the
+ *  2. **Nothing has happened to it for its channel's `expiry_days`.** The clock is the
  *     request's latest history row (`quote_request_events`), not the row's
  *     `updated_at`: a submission, an edit, a revision and a note each write
  *     one, so each restarts the clock, while a write that says nothing to
@@ -106,6 +108,14 @@ const DAY_MS = 86_400_000;
  */
 const LAST_ACTIVITY = `coalesce((select max(e."created_at") from "quote_request_events" e where e."quote_request_id" = q."id"), q."created_at")`;
 
+/**
+ * The `expiry_days` that applied to a row of `dueRequests`: its channel's, or
+ * the bound parameter — `RfqExpiryRule.withoutChannel` — for a request with
+ * none. Selected beside the row under the lock, so the notification bound and
+ * the history row record the value that actually expired it (issue #239).
+ */
+const APPLIED_EXPIRY_DAYS = `coalesce(c."expiry_days", ?::int)`;
+
 /** The statuses a Quote Request can expire from. */
 const EXPIRABLE_STATUSES = ['Pending', 'Created from admin'] as const;
 
@@ -117,6 +127,32 @@ declare module './rfq-service.js' {
       organizationId: string;
     };
   }
+}
+
+/**
+ * `quote_requests.expiry_days` as the sweep applies it: per sales channel
+ * (issue #239).
+ *
+ * The sweep used to read one value, the default channel's, and hold requests of
+ * every channel to it — a channel set to `0` was not exempt, and a channel with
+ * its own number of days was held to the default's. Channel settings are
+ * platform configuration, not an Organization's data, so the probe that runs
+ * with no tenant context may read them like the single value it read before.
+ */
+export interface RfqExpiryRule {
+  /** Sales channel id → `expiry_days` resolved for that channel. `0`, or a channel absent here, never expires. */
+  readonly byChannel: ReadonlyMap<string, number>;
+  /** `expiry_days` for a request raised with no channel: the default channel's value. */
+  readonly withoutChannel: number;
+}
+
+/** Whether the rule can expire anything at all. */
+function expiresAnything(rule: RfqExpiryRule): boolean {
+  return isExpiring(rule.withoutChannel) || [...rule.byChannel.values()].some(isExpiring);
+}
+
+function isExpiring(days: number): boolean {
+  return Number.isFinite(days) && days > 0;
 }
 
 export interface RfqExpiryWorkerDeps {
@@ -131,8 +167,8 @@ export interface RfqExpiryWorkerDeps {
    * read that module published for exactly this, and its doc comment says so.
    */
   adminUsers: AdminUserReadPort;
-  /** Resolves the current `quote_requests.expiry_days` from settings. */
-  resolveExpiryDays: () => Promise<number>;
+  /** Resolves `quote_requests.expiry_days` for every sales channel — {@link RfqExpiryRule}. */
+  resolveExpiryRule: () => Promise<RfqExpiryRule>;
   /** At most this many requests per pass. Defaults to {@link RFQ_EXPIRY_BATCH_SIZE}. */
   batchSize?: number;
   /** Defaults to {@link RFQ_EXPIRY_NOTIFICATION_GRACE_MS}. */
@@ -185,14 +221,15 @@ export class RfqExpiryWorker {
    * the one statement of this class that runs with no tenant context, and it
    * stays legitimate by learning one bit: it goes through `anyRowExists`, which
    * writes the select list itself and returns a boolean, so no row, id or count
-   * of any Organization leaves it. The setting it reads first is platform
-   * configuration, not an Organization's data. Its answer is never handed to
-   * the pass, which re-reads everything inside the scope.
+   * of any Organization leaves it. The setting it reads first — once per sales
+   * channel — and the channel list it reads it for are platform configuration,
+   * not an Organization's data. Its answer is never handed to the pass, which
+   * re-reads everything inside the scope.
    */
   async hasExpirable(now: Date = new Date()): Promise<boolean> {
-    const expiryDays = await this.deps.resolveExpiryDays();
-    if (!Number.isFinite(expiryDays) || expiryDays <= 0) return false;
-    return anyRowExists(this.deps.emFactory(), [this.dueRequests(now, expiryDays)]);
+    const rule = await this.deps.resolveExpiryRule();
+    if (!expiresAnything(rule)) return false;
+    return anyRowExists(this.deps.emFactory(), [this.dueRequests(now, rule)]);
   }
 
   /**
@@ -203,16 +240,41 @@ export class RfqExpiryWorker {
    * drift from the pass. The three conditions are the ones the file header
    * gives; the fourth leaves out what this process is backing off from.
    */
-  dueRequests(now: Date, expiryDays: number): WorkRows {
+  dueRequests(now: Date, rule: RfqExpiryRule): WorkRows {
     const backingOff = this.#backingOff(now);
+    const channels = [...rule.byChannel].filter(([, days]) => isExpiring(days));
+    // Issue #239 — each request's cutoff is its own channel's. The channels
+    // that expire anything are joined in as a values list, so a request whose
+    // channel is set to `0`, or is not listed, finds no row and is never due;
+    // a request with no channel takes `withoutChannel` instead. `c` is joined
+    // `left`, and `for update of q` locks the request alone.
+    const join =
+      channels.length > 0
+        ? ` left join (values ${channels.map(() => '(?::uuid, ?::int)').join(', ')})` +
+          ` as c("channel_id", "expiry_days") on c."channel_id" = q."sales_channel_id"`
+        : ` left join (select null::uuid as "channel_id", null::int as "expiry_days" where false)` +
+          ` as c on false`;
+    const withChannel = channels.length > 0
+      ? `(c."channel_id" is not null and ${LAST_ACTIVITY} < ?::timestamptz - c."expiry_days" * interval '1 day')`
+      : 'false';
+    const withoutChannel = isExpiring(rule.withoutChannel)
+      ? `(q."sales_channel_id" is null and ${LAST_ACTIVITY} < ?)`
+      : 'false';
     return {
       from:
-        `from "quote_requests" q` +
+        `from "quote_requests" q${join}` +
         ` where q."status" in (${EXPIRABLE_STATUSES.map(() => '?').join(', ')})` +
-        ` and ${LAST_ACTIVITY} < ?` +
+        ` and (${withChannel} or ${withoutChannel})` +
         ` and (q."expires_at" is null or q."expires_at" <= ?)` +
         (backingOff.length > 0 ? ` and q."id" not in (${backingOff.map(() => '?').join(', ')})` : ''),
-      params: [...EXPIRABLE_STATUSES, new Date(now.getTime() - expiryDays * DAY_MS), now, ...backingOff],
+      params: [
+        ...channels.flatMap(([channelId, days]) => [channelId, days]),
+        ...EXPIRABLE_STATUSES,
+        ...(channels.length > 0 ? [now] : []),
+        ...(isExpiring(rule.withoutChannel) ? [new Date(now.getTime() - rule.withoutChannel * DAY_MS)] : []),
+        now,
+        ...backingOff,
+      ],
     };
   }
 
@@ -248,11 +310,11 @@ export class RfqExpiryWorker {
    * second one here would write a second escape-hatch audit row per tick.
    */
   async sweepInScope(now: Date = new Date()): Promise<RfqExpirySweepResult> {
-    const expiryDays = await this.deps.resolveExpiryDays();
-    if (!Number.isFinite(expiryDays) || expiryDays <= 0) return NOTHING;
+    const rule = await this.deps.resolveExpiryRule();
+    if (!expiresAnything(rule)) return NOTHING;
 
     const batchSize = this.deps.batchSize ?? RFQ_EXPIRY_BATCH_SIZE;
-    const rows = this.dueRequests(now, expiryDays);
+    const rows = this.dueRequests(now, rule);
     const due = await this.deps
       .emFactory()
       .execute<Array<{ id: string }>>(
@@ -265,7 +327,7 @@ export class RfqExpiryWorker {
     let notificationsSuppressedCount = 0;
     for (const { id } of due) {
       try {
-        const outcome = await this.#expireOne(id, { now, expiryDays });
+        const outcome = await this.#expireOne(id, { now, rule });
         if (outcome === null) continue;
         expiredCount += 1;
         if (!outcome.notified) notificationsSuppressedCount += 1;
@@ -295,7 +357,7 @@ export class RfqExpiryWorker {
    */
   async #expireOne(
     id: string,
-    pass: { now: Date; expiryDays: number },
+    pass: { now: Date; rule: RfqExpiryRule },
   ): Promise<{ notified: boolean } | null> {
     // command-coverage-ignore: background expiry sweep — flips an overdue RFQ to
     // Expired on a timer, a system lifecycle job, not an operator-initiated write.
@@ -308,17 +370,21 @@ export class RfqExpiryWorker {
       // consumers sweeping at once split the requests rather than queue, and a
       // transition that holds the row (`underRowLock`) is left to finish —
       // this pass skips the request and the next one finds it as it then is.
-      const rows = this.dueRequests(pass.now, pass.expiryDays);
-      const locked = await em.execute<Array<{ last_activity_at: Date | string }>>(
-        `select ${LAST_ACTIVITY} as "last_activity_at" ${rows.from} and q."id" = ? for update of q skip locked`,
-        [...rows.params, id],
+      const rows = this.dueRequests(pass.now, pass.rule);
+      const locked = await em.execute<
+        Array<{ last_activity_at: Date | string; expiry_days: number | string }>
+      >(
+        `select ${LAST_ACTIVITY} as "last_activity_at", ${APPLIED_EXPIRY_DAYS} as "expiry_days"` +
+          ` ${rows.from} and q."id" = ? for update of q skip locked`,
+        [pass.rule.withoutChannel, ...rows.params, id],
       );
       if (locked.length === 0) return null;
+      const expiryDays = Number(locked[0]!.expiry_days);
       const rfq = await em.findOneOrFail(QuoteRequest, { id });
 
       // When this request became due. Further back than the grace period, its
       // expiry is not news any more.
-      const dueAt = new Date(locked[0]!.last_activity_at).getTime() + pass.expiryDays * DAY_MS;
+      const dueAt = new Date(locked[0]!.last_activity_at).getTime() + expiryDays * DAY_MS;
       const notify = pass.now.getTime() - dueAt <= graceMs;
 
       rfq.status = 'Expired';
@@ -331,7 +397,7 @@ export class RfqExpiryWorker {
           quoteRequestId: rfq.id,
           eventType: 'expired',
           actor: { roleLabel: 'System' },
-          payload: { type: 'expired', expiryDaysAtTime: pass.expiryDays },
+          payload: { type: 'expired', expiryDaysAtTime: expiryDays },
         },
         em,
       );

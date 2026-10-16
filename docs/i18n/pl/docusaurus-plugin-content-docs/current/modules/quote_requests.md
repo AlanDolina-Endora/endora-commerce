@@ -392,7 +392,7 @@ istniejący moduł ustawień.
 
 | Kod | Typ | Wartość domyślna | Działanie |
 | --- | --- | --- | --- |
-| `quote_requests.expiry_days` | integer | `0` | Wygaszanie zapytań w statusie Pending lub Created from admin po N dniach bez aktywności, o ile nie niosą oferty, która jest jeszcze ważna. `0` wyłącza. Ustawienie wartości wygasza istniejące zaległości — zobacz *Zadania w tle*. |
+| `quote_requests.expiry_days` | integer | `0` | Wygaszanie zapytań w statusie Pending lub Created from admin po N dniach bez aktywności, o ile nie niosą oferty, która jest jeszcze ważna. Osobno dla każdego kanału sprzedaży: każde zapytanie podlega wartości swojego kanału, a `0` wyłącza kanał z wygaszania. Ustawienie wartości wygasza istniejące zaległości — zobacz *Zadania w tle*. |
 | `quote_requests.show_add_to_quote_on_card` | boolean | `true` | Pokazuje lub ukrywa przycisk „Add to quote” na kartach produktów w storefroncie. |
 | `quote_requests.show_add_to_quote_on_pdp` | boolean | `true` | Pokazuje lub ukrywa przycisk „Add to quote” na stronach produktów. |
 
@@ -405,13 +405,15 @@ uruchomienie się nie wykonuje.
 
 ### Które zapytania wygasza
 
-Każde uruchomienie odczytuje `quote_requests.expiry_days`. `0` — wartość domyślna — wyłącza
-wygaszanie. W przeciwnym razie zapytanie przechodzi do statusu `Expired`, gdy spełnione są
+Każde uruchomienie odczytuje `quote_requests.expiry_days` **dla każdego kanału sprzedaży** i
+stosuje do zapytania wartość jego własnego kanału — zobacz
+[Osobno dla każdego kanału sprzedaży](#per-sales-channel). `0` — wartość domyślna — wyłącza kanał
+z wygaszania; przy `0` wszędzie zadanie nic nie robi. W przeciwnym razie zapytanie przechodzi do statusu `Expired`, gdy spełnione są
 **wszystkie trzy** warunki:
 
 1. **Jest nadal otwarte** — `Pending` albo `Created from admin`. Obejmuje to zapytanie czekające
    na pierwszą odpowiedź sprzedawcy i ofertę czekającą na kupującego.
-2. **Nic się z nim nie działo przez `expiry_days`.** Zegarem jest najnowszy wpis w historii
+2. **Nic się z nim nie działo przez `expiry_days` jego kanału.** Zegarem jest najnowszy wpis w historii
    zapytania — wpisy, które widzą obie strony. Zegar uruchamiają na nowo: złożenie zapytania,
    edycja przez klienta, rewizja albo notatka sprzedawcy. **Nie** uruchamiają go: otwarcie
    zapytania przez klienta (które jedynie oznacza rewizję jako widzianą), przypisanie do innego
@@ -461,12 +463,20 @@ której `expiry_days` jest już ustawione, trafi na te same zaległości przy pi
 uruchomieniach po aktualizacji. Ustaw `0` przed aktualizacją, aby najpierw przejrzeć otwarte
 zapytania.
 
-### Jedna wartość dla wszystkich kanałów sprzedaży
+### Osobno dla każdego kanału sprzedaży {#per-sales-channel}
 
-Zadanie odczytuje `expiry_days` raz na uruchomienie, **dla domyślnego kanału sprzedaży**, i stosuje
-tę wartość do każdego zapytania, bez względu na kanał, w którym je złożono. Inna wartość ustawiona
-dla innego kanału nie jest przez zadanie używana, a kanał z wartością `0` nie jest wyłączony z
-wygaszania.
+`expiry_days` można ustawić dla wszystkich kanałów i nadpisać dla jednego, a zadanie respektuje
+jedno i drugie: zapytanie podlega wartości ustalonej dla kanału sprzedaży, w którym je złożono.
+Kanał ustawiony na `0` jest wyłączony z wygaszania, niezależnie od innych kanałów, a kanał z
+własną liczbą dni podlega właśnie jej. Zapytanie bez kanału — złożone, zanim zapytania zaczęły go
+zapisywać, albo przez narzędzie, które go nie ustawiło — podlega wartości kanału domyślnego.
+
+Wpis `expired` w historii zapisuje wartość, która miała zastosowanie do zapytania.
+
+Do czasu tej poprawki zadanie odczytywało jedną wartość, kanału domyślnego, i stosowało ją do
+każdego zapytania. Instancja, która miała już inną wartość ustawioną dla jakiegoś kanału, zobaczy
+więc jej działanie przy pierwszych uruchomieniach po aktualizacji — kanał z niższą wartością
+wygasi swoje zaległe, nieaktywne zapytania, a kanał ustawiony na `0` przestanie wygaszać.
 
 ## Model danych
 
