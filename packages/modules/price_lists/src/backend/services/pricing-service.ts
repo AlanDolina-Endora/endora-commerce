@@ -1,5 +1,6 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
+  CatalogAttributeReadPort,
   CatalogCategoryReadPort,
   DisplayMode,
   ListingPrice,
@@ -10,6 +11,14 @@ import type {
 } from '@endora-commerce/contracts';
 import { PriceList } from '../entities/price-list.entity.js';
 import { PriceListPriceBracket } from '../entities/price-list-price-bracket.entity.js';
+import { PriceListMatrixEntry } from '../entities/price-list-matrix-entry.entity.js';
+import { DEFAULT_PRICE_LIST_ID } from './default-price-list-migration.js';
+import {
+  buildEligibleAttributes,
+  resolveListCandidate,
+  type EligibleAttribute,
+  type MatrixEntryRow,
+} from './matrix-price-resolver.js';
 import {
   evaluateApplicationRule,
   type ResolutionContext,
@@ -18,10 +27,7 @@ import {
   pickPriorityChain,
   type PriceListCandidate,
 } from './price-list-resolver.js';
-import {
-  resolvePriceBracket,
-  type PriceBracketRow,
-} from './price-bracket-resolver.js';
+import type { PriceBracketRow } from './price-bracket-resolver.js';
 import { listingPriceFrom } from './listing-price-chain.js';
 import {
   buildCandidateVector,
@@ -83,6 +89,7 @@ export function lineFromEngine(out: PricingEngineResult): PricingLineResult | nu
       isSale: true,
       bracketStartQuantity: out.sale.bracket.minQuantity,
       displayMode: out.displayMode,
+      ...(out.sale.bracket.matrixEntryId ? { matrixEntryId: out.sale.bracket.matrixEntryId } : {}),
     };
   }
   if (!out.base.bracket) return null;
@@ -93,6 +100,55 @@ export function lineFromEngine(out: PricingEngineResult): PricingLineResult | nu
     isSale: false,
     bracketStartQuantity: out.base.bracket.minQuantity,
     displayMode: out.displayMode,
+    ...(out.base.bracket.matrixEntryId ? { matrixEntryId: out.base.bracket.matrixEntryId } : {}),
+  };
+}
+
+/**
+ * Feature 148 — what a resolution knows about the price matrix, read once per
+ * resolution (per page, for the batched path) and shared by both partitions'
+ * walks.
+ *
+ * `defaultBrackets` is a memo, not a prefetch: the Default list's brackets are
+ * read only for products whose best candidate is a percentage with no
+ * own-list reference (`needs_reference`), and a product read once is never
+ * read again by the other partition or a later wave.
+ */
+interface MatrixContext {
+  entriesByList: ReadonlyMap<string, MatrixEntryRow[]>;
+  eligibleAttributes: ReadonlyMap<string, EligibleAttribute> | null;
+  organizationChain: readonly string[];
+  /** The product facts the selections read — categories and attribute values. */
+  products: ReadonlyMap<string, { categoryIds: ReadonlySet<string>; attributeValues: Record<string, unknown> }>;
+  defaultBrackets: Map<string, PriceBracketRow[]>;
+}
+
+function bracketRow(b: PriceListPriceBracket): PriceBracketRow {
+  return {
+    priceListId: b.priceListId,
+    productId: b.productId,
+    currencyCode: b.currencyCode,
+    minQuantity: b.minQuantity,
+    maxQuantity: b.maxQuantity ?? null,
+    amount: b.amount,
+  };
+}
+
+function matrixEntryRow(e: PriceListMatrixEntry): MatrixEntryRow {
+  return {
+    id: e.id,
+    priceListId: e.priceListId,
+    productId: e.productId ?? null,
+    categoryId: e.categoryId ?? null,
+    attributeKey: e.attributeKey ?? null,
+    attributeValue: e.attributeValue ?? null,
+    organizationId: e.organizationId ?? null,
+    minQuantity: e.minQuantity,
+    maxQuantity: e.maxQuantity ?? null,
+    priceType: e.priceType,
+    amount: e.amount ?? null,
+    currencyCode: e.currencyCode ?? null,
+    discountPercent: e.discountPercent ?? null,
   };
 }
 
@@ -139,6 +195,121 @@ export class PricingService implements PricingServiceContract {
       );
     }
     return categoryRead;
+  }
+
+  /**
+   * `catalog`'s attribute read port, or a refusal — feature 148. Asked only when
+   * a price matrix entry the resolution reads names an attribute, and asked
+   * once per resolution. Unwired, it refuses rather than answering "no
+   * attribute is eligible", which would price the line as though the entry did
+   * not exist.
+   */
+  #attributeRead(): CatalogAttributeReadPort {
+    const attributeRead = this.targetReads?.catalogAttributeRead;
+    if (!attributeRead) {
+      throw new Error(
+        'PricingService: this resolution reads a price matrix entry that selects by attribute, and ' +
+          "this composition constructed the engine without `catalog`'s attribute read port.",
+      );
+    }
+    return attributeRead;
+  }
+
+  /**
+   * Feature 148 — the matrix entries a resolution can meet, in **one**
+   * statement (contract §7): entries on the matched lists that name no product
+   * or one of these products, and no organization or one in the buyer's chain.
+   * Zero rows when the matrix is unused, which is the one unconditional extra
+   * statement a resolution pays. The eligible attributes are read only when an
+   * entry names one.
+   */
+  async #matrixContext(
+    em: EntityManager,
+    listIds: readonly string[],
+    products: ReadonlyMap<string, { categoryIds: ReadonlySet<string>; attributeValues: Record<string, unknown> }>,
+    organizationChain: readonly string[],
+  ): Promise<MatrixContext> {
+    const entriesByList = new Map<string, MatrixEntryRow[]>();
+    const context: MatrixContext = {
+      entriesByList,
+      eligibleAttributes: null,
+      organizationChain,
+      products,
+      defaultBrackets: new Map(),
+    };
+    if (listIds.length === 0 || products.size === 0) return context;
+    const rows = await em.find(PriceListMatrixEntry, {
+      priceListId: { $in: [...listIds] },
+      $and: [
+        { $or: [{ productId: null }, { productId: { $in: [...products.keys()] } }] },
+        organizationChain.length > 0
+          ? { $or: [{ organizationId: null }, { organizationId: { $in: [...organizationChain] } }] }
+          : { organizationId: null },
+      ],
+    });
+    let namesAttribute = false;
+    for (const row of rows) {
+      const entry = matrixEntryRow(row);
+      if (entry.attributeKey !== null) namesAttribute = true;
+      const list = entriesByList.get(entry.priceListId);
+      if (list) list.push(entry);
+      else entriesByList.set(entry.priceListId, [entry]);
+    }
+    if (namesAttribute) {
+      context.eligibleAttributes = buildEligibleAttributes(
+        await this.#attributeRead().listByFlag('isPriceRule'),
+      );
+    }
+    return context;
+  }
+
+  /**
+   * The Default list's brackets for the products not yet in the memo, in one
+   * statement — the percentage reference of last resort (research R5).
+   */
+  async #loadDefaultBrackets(
+    em: EntityManager,
+    context: MatrixContext,
+    productIds: readonly string[],
+  ): Promise<void> {
+    const wanted = productIds.filter((id) => !context.defaultBrackets.has(id));
+    if (wanted.length === 0) return;
+    for (const id of wanted) context.defaultBrackets.set(id, []);
+    const rows = await em.find(PriceListPriceBracket, {
+      priceListId: DEFAULT_PRICE_LIST_ID,
+      productId: { $in: wanted },
+    });
+    for (const row of rows) context.defaultBrackets.get(row.productId)?.push(bracketRow(row));
+  }
+
+  /** `resolveListCandidate` for one (list, product) with what the context holds. */
+  #candidateFor(
+    context: MatrixContext,
+    list: PriceList,
+    productId: string,
+    ownBrackets: readonly PriceBracketRow[],
+    currencyCode: string,
+    quantity: number,
+  ): ReturnType<typeof resolveListCandidate> {
+    const facts = context.products.get(productId);
+    const entries = (context.entriesByList.get(list.id) ?? []).filter(
+      (e) => e.productId === null || e.productId === productId,
+    );
+    return resolveListCandidate({
+      list: { id: list.id, isSystem: list.isSystem },
+      product: {
+        id: productId,
+        categoryIds: facts?.categoryIds ?? new Set<string>(),
+        attributeValues: facts?.attributeValues ?? {},
+      },
+      organizationChain: context.organizationChain,
+      currencyCode,
+      quantity,
+      ownBrackets,
+      entries,
+      defaultBrackets: context.defaultBrackets.get(productId) ?? null,
+      eligibleAttributes: context.eligibleAttributes,
+    });
   }
 
   /**
@@ -275,6 +446,17 @@ export class PricingService implements PricingServiceContract {
       else baseMatches.push({ list, candidate });
     }
 
+    // Feature 148 — the price matrix of every matched list, read once for both
+    // partitions.
+    const matrix = await this.#matrixContext(
+      em,
+      [...baseMatches, ...saleMatches].map((m) => m.list.id),
+      new Map([
+        [product.id, { categoryIds: productCategoryIds, attributeValues: product.attributeValues ?? {} }],
+      ]),
+      organizationChain,
+    );
+
     // For each partition: walk the priority chain, do bracket lookup, and
     // fall through if the picked list has no usable bracket (FR-031).
     const baseResult = await this.pickAndResolveBracket(
@@ -283,6 +465,7 @@ export class PricingService implements PricingServiceContract {
       product.id,
       currencyCode,
       context.quantity,
+      matrix,
     );
     const saleResult = await this.pickAndResolveBracket(
       em,
@@ -290,6 +473,7 @@ export class PricingService implements PricingServiceContract {
       product.id,
       currencyCode,
       context.quantity,
+      matrix,
     );
 
     // Display mode (US7): walk the override chain via the price-list service
@@ -368,6 +552,7 @@ export class PricingService implements PricingServiceContract {
     isSale: boolean;
     bracketStartQuantity: number;
     displayMode: DisplayMode;
+    matrixEntryId?: string | null;
   } | null> {
     return lineFromEngine(await this.resolveEngine(input));
   }
@@ -500,8 +685,28 @@ export class PricingService implements PricingServiceContract {
       saleMatches.set(product.id, sale);
     }
 
-    const baseResults = await this.pickAndResolveBracketsForSet(em, baseMatches, currencyCode, 1);
-    const saleResults = await this.pickAndResolveBracketsForSet(em, saleMatches, currencyCode, 1);
+    // Feature 148 — one matrix read for the page, shared by both partitions.
+    const matchedListIds = new Set<string>();
+    for (const matches of [...baseMatches.values(), ...saleMatches.values()]) {
+      for (const m of matches) matchedListIds.add(m.list.id);
+    }
+    const matrix = await this.#matrixContext(
+      em,
+      [...matchedListIds],
+      new Map(
+        pending.map((p) => [
+          p.id,
+          {
+            categoryIds: categoryIdsByProduct.get(p.id) ?? new Set<string>(),
+            attributeValues: p.attributeValues ?? {},
+          },
+        ]),
+      ),
+      organizationChain,
+    );
+
+    const baseResults = await this.pickAndResolveBracketsForSet(em, baseMatches, currencyCode, 1, matrix);
+    const saleResults = await this.pickAndResolveBracketsForSet(em, saleMatches, currencyCode, 1, matrix);
 
     // Same lazy construction as `resolveEngine`, for the same reason: it keeps
     // `PriceListService` out of this class's constructor signature.
@@ -915,6 +1120,7 @@ export class PricingService implements PricingServiceContract {
     matchesByProduct: ReadonlyMap<string, MatchedList[]>,
     currencyCode: string,
     quantity: number,
+    matrix: MatrixContext,
   ): Promise<Map<string, { list: PriceList | null; bracket: PriceBracketRow | null }>> {
     const out = new Map<string, { list: PriceList | null; bracket: PriceBracketRow | null }>();
     const remaining = new Map<string, MatchedList[]>();
@@ -945,24 +1151,40 @@ export class PricingService implements PricingServiceContract {
       for (const b of brackets) {
         const key = `${b.priceListId}|${b.productId}`;
         const rows = rowsByPair.get(key);
-        const row: PriceBracketRow = {
-          priceListId: b.priceListId,
-          productId: b.productId,
-          currencyCode: b.currencyCode,
-          minQuantity: b.minQuantity,
-          maxQuantity: b.maxQuantity ?? null,
-          amount: b.amount,
-        };
+        const row = bracketRow(b);
         if (rows) rows.push(row);
         else rowsByPair.set(key, [row]);
       }
 
-      for (const [productId, list] of picks) {
-        const bracket = resolvePriceBracket(
+      // Feature 148 — the list's own bracket and its matrix entries compete
+      // (`resolveListCandidate`). A product whose best candidate is a
+      // percentage with no own-list reference is collected, the Default list's
+      // brackets are read for all of them in one statement, and they are
+      // answered again — never one read per product.
+      const answers = new Map<string, ReturnType<typeof resolveListCandidate>>();
+      const needReference: string[] = [];
+      const answer = (productId: string, list: PriceList) =>
+        this.#candidateFor(
+          matrix,
+          list,
+          productId,
           rowsByPair.get(`${list.id}|${productId}`) ?? [],
           currencyCode,
           quantity,
         );
+      for (const [productId, list] of picks) {
+        const result = answer(productId, list);
+        if (result.kind === 'needs_reference') needReference.push(productId);
+        else answers.set(productId, result);
+      }
+      if (needReference.length > 0) {
+        await this.#loadDefaultBrackets(em, matrix, needReference);
+        for (const productId of needReference) answers.set(productId, answer(productId, picks.get(productId)!));
+      }
+
+      for (const [productId, list] of picks) {
+        const result = answers.get(productId);
+        const bracket = result?.kind === 'price' ? result.row : null;
         if (bracket) {
           out.set(productId, { list, bracket });
           remaining.delete(productId);
@@ -987,6 +1209,7 @@ export class PricingService implements PricingServiceContract {
     productId: string,
     currencyCode: string,
     quantity: number,
+    matrix: MatrixContext,
   ): Promise<{ list: PriceList | null; bracket: PriceBracketRow | null }> {
     if (matches.length === 0) return { list: null, bracket: null };
     const remaining = [...matches];
@@ -998,16 +1221,14 @@ export class PricingService implements PricingServiceContract {
         priceListId: list.id,
         productId,
       });
-      const rows: PriceBracketRow[] = brackets.map((b) => ({
-        priceListId: b.priceListId,
-        productId: b.productId,
-        currencyCode: b.currencyCode,
-        minQuantity: b.minQuantity,
-        maxQuantity: b.maxQuantity ?? null,
-        amount: b.amount,
-      }));
-      const bracket = resolvePriceBracket(rows, currencyCode, quantity);
-      if (bracket) return { list, bracket };
+      const rows: PriceBracketRow[] = brackets.map(bracketRow);
+      // Feature 148 — the same `resolveListCandidate` the batched walk calls.
+      let result = this.#candidateFor(matrix, list, productId, rows, currencyCode, quantity);
+      if (result.kind === 'needs_reference') {
+        await this.#loadDefaultBrackets(em, matrix, [productId]);
+        result = this.#candidateFor(matrix, list, productId, rows, currencyCode, quantity);
+      }
+      if (result.kind === 'price') return { list, bracket: result.row };
       // Fall through: drop the picked list from `remaining` and retry.
       const idx = remaining.findIndex((m) => m.list.id === list.id);
       if (idx >= 0) remaining.splice(idx, 1);

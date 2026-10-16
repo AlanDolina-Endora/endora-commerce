@@ -123,6 +123,7 @@ import type { OrganizationSalesRepAssignment as OrganizationSalesRepAssignmentRo
 import type { PriceList as PriceListRow } from '../../../packages/modules/price_lists/src/backend/entities/price-list.entity.js';
 import type { PriceListProduct as PriceListProductRow } from '../../../packages/modules/price_lists/src/backend/entities/price-list-product.entity.js';
 import type { PriceListPriceBracket as PriceListPriceBracketRow } from '../../../packages/modules/price_lists/src/backend/entities/price-list-price-bracket.entity.js';
+import type { PriceListMatrixEntry as PriceListMatrixEntryRow } from '../../../packages/modules/price_lists/src/backend/entities/price-list-matrix-entry.entity.js';
 import type { PriceDisplayModeOverride as PriceDisplayModeOverrideRow } from '../../../packages/modules/price_lists/src/backend/entities/price-display-mode-override.entity.js';
 import type { Order as OrderRow } from '../../../packages/modules/orders/src/backend/entities/order.entity.js';
 import type { OrderItem as OrderItemRow } from '../../../packages/modules/orders/src/backend/entities/order-item.entity.js';
@@ -996,6 +997,11 @@ export const PriceListPriceBracket = classNamed<PriceListPriceBracketRow>(
   'price_lists',
   'PriceListPriceBracket',
 );
+export const PriceListMatrixEntry = classNamed<PriceListMatrixEntryRow>(
+  installedModuleEntities,
+  'price_lists',
+  'PriceListMatrixEntry',
+);
 export const PriceDisplayModeOverride = classNamed<PriceDisplayModeOverrideRow>(
   installedModuleEntities,
   'price_lists',
@@ -1025,6 +1031,7 @@ export type OrganizationSalesRepAssignment = OrganizationSalesRepAssignmentRow;
 export type PriceList = PriceListRow;
 export type PriceListProduct = PriceListProductRow;
 export type PriceListPriceBracket = PriceListPriceBracketRow;
+export type PriceListMatrixEntry = PriceListMatrixEntryRow;
 export type PriceDisplayModeOverride = PriceDisplayModeOverrideRow;
 export type CustomerAccount = CustomerAccountRow;
 export type CustomerGroup = CustomerGroupRow;

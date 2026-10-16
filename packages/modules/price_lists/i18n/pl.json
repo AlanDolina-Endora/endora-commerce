@@ -1,15 +1,21 @@
 {
+  "actions.openPriceLists.description": "Reguły cenowe + przypisania",
+  "actions.openPriceLists.label": "Cenniki",
   "activity.verb.price_list.activate": "aktywował(a) cennik",
   "activity.verb.price_list.bracket_update": "zaktualizował(a) próg cenowy na",
   "activity.verb.price_list.create": "utworzył(a) cennik",
   "activity.verb.price_list.draftify": "przeniósł(esła) cennik do wersji roboczej",
   "activity.verb.price_list.duplicate": "zduplikował(a) cennik",
   "activity.verb.price_list.expire": "zakończył(a) cennik",
+  "activity.verb.price_list.matrix_entry_create": "dodał(a) pozycję macierzy cen do",
+  "activity.verb.price_list.matrix_entry_delete": "usunął(-ęła) pozycję macierzy cen z",
+  "activity.verb.price_list.matrix_entry_update": "zmienił(a) pozycję macierzy cen w",
   "activity.verb.price_list.products_add": "dodał(a) produkty do cennika",
   "activity.verb.price_list.products_replace": "zaktualizował(a) produkty na cenniku",
   "activity.verb.price_list.update": "zaktualizował(a) cennik",
-
-  "nav.priceLists.label": "Cenniki",
-  "actions.openPriceLists.label": "Cenniki",
-  "actions.openPriceLists.description": "Reguły cenowe + przypisania"
+  "errors.PRICE_MATRIX_ATTRIBUTE_NOT_ELIGIBLE": "Tego atrybutu nie można użyć do wyboru cen. Użyj atrybutu wyboru lub tak/nie, który nie jest zależny od języka ani kanału sprzedaży i ma włączoną opcję „Reguły cennika”.",
+  "errors.PRICE_MATRIX_ENTRY_LIMIT": "Ten cennik ma już maksymalną liczbę pozycji macierzy cen.",
+  "errors.PRICE_MATRIX_ENTRY_NOT_FOUND": "Ta pozycja macierzy cen nie istnieje lub nie jest dla Ciebie dostępna.",
+  "errors.PRICE_MATRIX_ENTRY_OVERLAP": "Inna pozycja o tym samym zakresie produktów, organizacji i walucie obejmuje już część tego przedziału ilości.",
+  "nav.priceLists.label": "Cenniki"
 }

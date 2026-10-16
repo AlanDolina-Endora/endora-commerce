@@ -2,6 +2,7 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import type { FastifyRequest } from 'fastify';
 import type {
   BuyerLinePricePort,
+  CatalogAttributeReadPort,
   CatalogCategoryReadPort,
   CatalogProductReadPort,
   CustomerAccountReadPort,
@@ -25,6 +26,7 @@ import { PriceListReadService, toPriceListRecord } from './services/price-list-r
 import type { PricingServiceContract } from './services/pricing-service.interface.js';
 import { registerPriceListCurrencyReferences } from './services/price-list-currency-reference.js';
 import { PriceDisplayModeOverride } from './entities/price-display-mode-override.entity.js';
+import { PriceListMatrixEntry } from './entities/price-list-matrix-entry.entity.js';
 import { PriceListPriceBracket } from './entities/price-list-price-bracket.entity.js';
 import { PriceListProduct } from './entities/price-list-product.entity.js';
 import { PriceList } from './entities/price-list.entity.js';
@@ -154,6 +156,13 @@ export function registerModule(ctx: ModuleContext): void {
               // Feature 076 (D-79). This module used to *publish* this port;
               // customer groups belong to the customer, so it reads it now.
               customerGroupRead: lazyPort<CustomerGroupReadPort>(ctx, 'customerGroupReadPort'),
+              // Feature 148 — the price matrix's attribute selections read the
+              // `isPriceRule` flag here. `catalog` is already a declared
+              // dependency; the read fails closed like the other three.
+              catalogAttributeRead: lazyPort<CatalogAttributeReadPort>(
+                ctx,
+                'catalogAttributeReadPort',
+              ),
             },
             // Feature 076 (D-79) — the admin resolved-price probe's customer
             // read, which was the one entry in this module's ledger shard. It
@@ -319,6 +328,7 @@ export function registerModule(ctx: ModuleContext): void {
  */
 export const entities = [
   PriceDisplayModeOverride,
+  PriceListMatrixEntry,
   PriceListPriceBracket,
   PriceListProduct,
   PriceList,

@@ -222,4 +222,57 @@ describe('PriceListService — audit emissions for lifecycle + content events', 
     const counts = after['bracketCountByCurrency'] as Record<string, number>;
     expect(counts['PLN']).toBe(2);
   });
+
+  /**
+   * Feature 148 — each price matrix write is one Command Bus audit row on the
+   * list, with the entry DTO as before/after; a patch that changes nothing
+   * writes none.
+   */
+  it('writes price_list.matrix_entry_create|update|delete with before/after entries', async () => {
+    const id = await createList('Audit Matrix List');
+    const url = `/api/v1/admin/price-lists-engine/${id}/matrix`;
+    const created = await h.app.inject({
+      method: 'POST',
+      url,
+      cookies: adminCookie,
+      payload: { minQuantity: 10, price: { type: 'discount_percent', percent: '7' } },
+    });
+    expect(created.statusCode).toBe(201);
+    const entryId = (created.json() as { data: { id: string } }).data.id;
+
+    const rows = async (action: string) =>
+      h.em().find(AuditLogEntry, { action, objectId: id, objectType: 'price_list' });
+
+    const createRows = await rows('price_list.matrix_entry_create');
+    expect(createRows.length).toBe(1);
+    expect(createRows[0]!.stateBefore ?? null).toBeNull();
+    expect(createRows[0]!.stateAfter).toMatchObject({ id: entryId, minQuantity: 10 });
+
+    const patched = await h.app.inject({
+      method: 'PATCH',
+      url: `${url}/${entryId}`,
+      cookies: adminCookie,
+      payload: { minQuantity: 20 },
+    });
+    expect(patched.statusCode).toBe(200);
+    const noop = await h.app.inject({
+      method: 'PATCH',
+      url: `${url}/${entryId}`,
+      cookies: adminCookie,
+      payload: { minQuantity: 20 },
+    });
+    expect(noop.statusCode).toBe(200);
+    const updateRows = await rows('price_list.matrix_entry_update');
+    expect(updateRows.length).toBe(1);
+    expect(updateRows[0]!.stateBefore).toMatchObject({ minQuantity: 10 });
+    expect(updateRows[0]!.stateAfter).toMatchObject({ minQuantity: 20 });
+
+    const removed = await h.app.inject({ method: 'DELETE', url: `${url}/${entryId}`, cookies: adminCookie });
+    expect(removed.statusCode).toBe(204);
+    const deleteRows = await rows('price_list.matrix_entry_delete');
+    expect(deleteRows.length).toBe(1);
+    expect(deleteRows[0]!.stateBefore).toMatchObject({ id: entryId, minQuantity: 20 });
+    expect(deleteRows[0]!.stateAfter ?? null).toBeNull();
+    expect(deleteRows[0]!.actorAdminUserId).toBeTruthy();
+  });
 });

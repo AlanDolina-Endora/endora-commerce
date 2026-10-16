@@ -109,4 +109,48 @@ describe('Rule-target picker endpoints (feature 011 US4)', () => {
     });
     expect([401, 403]).toContain(res.statusCode);
   });
+
+  /**
+   * Feature 148 — the price matrix's attribute picker: only attributes flagged
+   * *Price list rules* that can select prices (a choice or yes/no value, not
+   * per-language, not per-channel), with their option values.
+   */
+  it('GET /attributes lists only flagged, eligible attributes with their options', async () => {
+    const patch = (key: string, isPriceRule: boolean) =>
+      h.app.inject({
+        method: 'PATCH',
+        url: `/api/v1/admin/catalog/attributes/${key}`,
+        cookies: ADMIN_COOKIE,
+        payload: { isPriceRule },
+      });
+    expect((await patch('material', true)).statusCode).toBe(200);
+    // Flagged, but free text: never offered.
+    expect((await patch('internal_sku_notes', true)).statusCode).toBe(200);
+    try {
+      const res = await h.app.inject({
+        method: 'GET',
+        url: '/api/v1/admin/pricing/rule-targets/attributes',
+        cookies: ADMIN_COOKIE,
+      });
+      expect(res.statusCode).toBe(200);
+      const items = (res.json() as {
+        data: { items: Array<{ key: string; label: string; valueType: string; options: Array<{ value: string; label: string }> }> };
+      }).data.items;
+      const keys = items.map((i) => i.key);
+      expect(keys).toContain('material');
+      expect(keys).not.toContain('color');
+      expect(keys).not.toContain('internal_sku_notes');
+      const material = items.find((i) => i.key === 'material')!;
+      expect(material.label).toBe('Material');
+      expect(material.options.map((o) => o.value).sort()).toEqual(['aluminium', 'plastic', 'steel']);
+    } finally {
+      await patch('material', false);
+      await patch('internal_sku_notes', false);
+    }
+  });
+
+  it('GET /attributes requires a session', async () => {
+    const res = await h.app.inject({ method: 'GET', url: '/api/v1/admin/pricing/rule-targets/attributes' });
+    expect(res.statusCode).toBe(401);
+  });
 });

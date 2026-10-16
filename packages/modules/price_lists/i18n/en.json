@@ -1,15 +1,21 @@
 {
+  "actions.openPriceLists.description": "Pricing rules + assignments",
+  "actions.openPriceLists.label": "Price lists",
   "activity.verb.price_list.activate": "activated price list",
   "activity.verb.price_list.bracket_update": "updated price bracket on",
   "activity.verb.price_list.create": "created price list",
   "activity.verb.price_list.draftify": "moved price list to draft",
   "activity.verb.price_list.duplicate": "duplicated price list",
   "activity.verb.price_list.expire": "expired price list",
+  "activity.verb.price_list.matrix_entry_create": "added a price matrix entry to",
+  "activity.verb.price_list.matrix_entry_delete": "removed a price matrix entry from",
+  "activity.verb.price_list.matrix_entry_update": "changed a price matrix entry on",
   "activity.verb.price_list.products_add": "added products to price list",
   "activity.verb.price_list.products_replace": "replaced products on price list",
   "activity.verb.price_list.update": "updated price list",
-
-  "nav.priceLists.label": "Price lists",
-  "actions.openPriceLists.label": "Price lists",
-  "actions.openPriceLists.description": "Pricing rules + assignments"
+  "errors.PRICE_MATRIX_ATTRIBUTE_NOT_ELIGIBLE": "This attribute cannot select prices. Use a choice or yes/no attribute that is not per-language or per-channel and has \"Price list rules\" enabled.",
+  "errors.PRICE_MATRIX_ENTRY_LIMIT": "This price list already holds the maximum number of matrix entries.",
+  "errors.PRICE_MATRIX_ENTRY_NOT_FOUND": "This price matrix entry does not exist or is not available to you.",
+  "errors.PRICE_MATRIX_ENTRY_OVERLAP": "Another entry with the same selection, organization and currency already covers part of this quantity range.",
+  "nav.priceLists.label": "Price lists"
 }

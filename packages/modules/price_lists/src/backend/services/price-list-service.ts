@@ -5,6 +5,7 @@ import {
   type BulkAddPriceListProductsResult,
 } from '@endora-commerce/contracts';
 import type {
+  CatalogAttributeReadPort,
   CatalogCategoryReadPort,
   CatalogProductReadPort,
   CustomerGroupReadPort,
@@ -24,6 +25,7 @@ import {
   type DisplayModeCategoryCandidate,
 } from './display-mode-resolver.js';
 import { partitionBulkAdd } from './bulk-add-partition.js';
+import { PriceMatrixService } from './price-matrix-service.js';
 import { randomUUID } from 'crypto';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { Command, CommandBus } from '@endora-commerce/platform/commands';
@@ -93,6 +95,13 @@ export interface PriceListTargetReads {
    * organisations and categories.
    */
   customerGroupRead: CustomerGroupReadPort;
+  /**
+   * Feature 148 — `catalog`'s attribute read model. The price matrix may select
+   * products by an attribute value, and only attributes flagged *Price list
+   * rules* (`isPriceRule`) qualify; both the write-time eligibility check and
+   * the resolver's "is this entry still active" question read the flag here.
+   */
+  catalogAttributeRead: CatalogAttributeReadPort;
 }
 
 /**
@@ -146,6 +155,23 @@ export class PriceListService {
       );
     }
     return this.targetReads;
+  }
+
+  #matrix: PriceMatrixService | undefined;
+
+  /**
+   * Feature 148 — the price matrix's admin service. It writes through this
+   * service's audited runner, so a matrix write and a bracket write take the
+   * same Command Bus path and invalidate the same cache.
+   */
+  get matrix(): PriceMatrixService {
+    this.#matrix ??= new PriceMatrixService({
+      emFactory: this.emFactory,
+      runAudited: (action, objectId, auditCtx, write) =>
+        this.#runAudited(action, objectId, auditCtx, write),
+      targets: () => this.targets(),
+    });
+    return this.#matrix;
   }
 
   private invalidatePricingCache(): void {
@@ -600,6 +626,9 @@ export class PriceListService {
         });
       }
 
+      // Feature 148 — the matrix travels with the list (FR-025), in this run.
+      const matrixEntryCount = await PriceMatrixService.copyEntries(em, source.id, dup.id);
+
       return {
         result: dup,
         row: dup,
@@ -608,6 +637,7 @@ export class PriceListService {
           name: dup.name,
           sourcePriceListId: source.id,
           sourceName: source.name,
+          matrixEntryCount,
         },
       };
     });
