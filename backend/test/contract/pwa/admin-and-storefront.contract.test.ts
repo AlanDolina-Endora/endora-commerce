@@ -14,6 +14,7 @@ import {
 import {
   OTHER_TEST_ORGANIZATION_ID,
   TEST_CUSTOMER_ID,
+  TEST_CUSTOMER_RFQ_ID,
   TEST_ORGANIZATION_ID,
 } from '../../helpers/test-actors.js';
 import { seedShippedOrder, RFQ_SHIPPED_ORDER_ID } from '../../helpers/seed-commerce.js';
@@ -277,7 +278,13 @@ describe('PWA module — admin + storefront', () => {
 
     // A stored opt-out would silently skip the order-trigger case further down.
     const clear = async (): Promise<void> => {
-      await h.em().getConnection().execute(`delete from push_notification_preferences`);
+      await h
+        .em()
+        .getConnection()
+        .execute(
+          `delete from push_notification_preferences where customer_account_id in (?, ?)`,
+          [TEST_CUSTOMER_ID, TEST_CUSTOMER_RFQ_ID],
+        );
     };
     beforeEach(clear);
     afterAll(clear);
@@ -292,7 +299,8 @@ describe('PWA module — admin + storefront', () => {
       expect(r.statusCode, r.body).toBe(200);
       expect(r.json()).toEqual({ data: { orderStatus: true, quoteStatus: true } });
       const rows = (await h.em().getConnection().execute(
-        `select count(*)::int as n from push_notification_preferences`,
+        `select count(*)::int as n from push_notification_preferences where customer_account_id = ?`,
+        [TEST_CUSTOMER_ID],
       )) as Array<{ n: number }>;
       expect(rows[0]!.n).toBe(0);
     });

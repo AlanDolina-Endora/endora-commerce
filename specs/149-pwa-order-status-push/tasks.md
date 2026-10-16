@@ -219,12 +219,17 @@ run serially. Phases are marked **[backend]**, **[admin UI]**, **[storefront]**,
 
 ## Phase 7 — Gate [gate]
 
-- [ ] T038 `pnpm -r run typecheck && pnpm -r run lint`
-- [ ] T039 `pnpm --filter backend run test:unit:fast` and `pnpm --filter '!backend' run test`
-- [ ] T040 `pnpm --filter backend exec vitest run test/contract/pwa test/integration/pwa test/integration/quote_requests/off-state.test.ts test/contract/admin_users/permission-inventory.test.ts test/contract/kernel/harness-parity.test.ts`
-- [ ] T041 `pnpm run check:naming && pnpm run check:language && pnpm --filter backend run check:bundle-pairing && pnpm --filter backend run check:default-language-prose`
+- [X] T038 `pnpm -r run typecheck && pnpm -r run lint`
+- [X] T039 `pnpm --filter backend run test:unit:fast` and `pnpm --filter '!backend' run test`
+- [X] T040 `pnpm --filter backend exec vitest run test/contract/pwa test/integration/pwa test/integration/quote_requests/off-state.test.ts test/contract/admin_users/permission-inventory.test.ts test/contract/kernel/harness-parity.test.ts`
+- [X] T041 `pnpm run check:naming && pnpm run check:language && pnpm --filter backend run check:bundle-pairing && pnpm --filter backend run check:default-language-prose`
 - [ ] T042 Walk [quickstart.md](./quickstart.md) §1–§4 on a dev stack; attach the `push_messages`
   query output to the MR
+  — **open**: needs a browser with a service worker over a secure origin and a subscribed device,
+  which an unattended implementation run does not have. §2 – §4's server-side observable (the
+  `push_messages` rows, their copy, links and the off-state) is asserted end to end by
+  `backend/test/integration/pwa/status-push.test.ts` and `off-state.test.ts`; the walk and the
+  attached query output are for the merge request's author.
 
 ---
 
