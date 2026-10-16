@@ -29,6 +29,7 @@ Rendered from the module's own manifest, and from nothing written by hand. What 
 
 | Module | Binding | What it means |
 | --- | --- | --- |
+| `_i18n` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `admin_roles` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `admin_users` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `custom_fields` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
@@ -44,6 +45,7 @@ Rendered from the module's own manifest, and from nothing written by hand. What 
 | `customer_accounts` | gating only | resolves `passwordResetService`; withheld from `dependencies` because the install order cannot carry the edge |
 | `price_lists` | gating only | resolves `priceListReadPort`; withheld from `dependencies` because the install order cannot carry the edge |
 | `admin_notifications` | no | refuses-without `adminNotificationRecordPort` — nobody is told a new organisation has registered: the bell entry refuses, and that refusal stops the new-registration e-mails too — the registration itself still completes |
+| `admin_search` | no | contributes-to `adminSearchProviderRegistry` |
 | `credit_limits` | no | refuses-without `creditLimitReadPort` — the ancestor-chain lookup for who holds a credit limit refuses — no screen reaches it, because its only caller is that module's own service |
 
 ## Permissions

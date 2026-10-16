@@ -87,6 +87,12 @@ export const manifest = defineModuleManifest({
   settings,
   // Constitution XVII — the operator's activation control.
   activation: { settingCode: 'admin_search.enabled', default: true },
+  // `admin_search:configure` gates the searchable-fields configuration — its
+  // read and its write, the screen, its sidebar entry and its palette action
+  // (research R-20). Searching itself needs no code of its own: each record
+  // type is checked against the code its own admin list enforces (R-4).
+  permissions: [{ code: 'admin_search:configure', label: 'Configure global search' }],
+  i18n: { bundlesDir: 'i18n' },
   // The page lands with the screens it documents (tasks.md T075).
   docs: false,
   demo: false,

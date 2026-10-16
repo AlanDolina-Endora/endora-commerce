@@ -45,6 +45,7 @@ Rendered from the module's own manifest, and from nothing written by hand. What 
 | `carts` | gating only | resolves `cartPlacementApplyPort`; withheld from `dependencies` because the install order cannot carry the edge |
 | `carts` | gating only | resolves `cartReadPort`; withheld from `dependencies` because the install order cannot carry the edge |
 | `carts` | gating only | resolves `cartWritePort`; withheld from `dependencies` because the install order cannot carry the edge |
+| `admin_search` | no | contributes-to `adminSearchProviderRegistry` |
 | `credit_limits` | no | degrades-without `creditLimitReadPort` — the order repair command cannot see which orders still hold credit, and says so instead of listing them |
 | `credit_limits` | no | refuses-without `creditLimitService` — no order can be placed against a credit limit; an order that drew one can still be cancelled or marked paid, and its reservation is released once the module is back on |
 | `delivery_methods` | no | degrades-without `deliveryMethodReadPort` — the admin create-order preview quotes no delivery cost, because there is no method catalogue to quote one from |

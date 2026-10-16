@@ -3,6 +3,7 @@ import type {
   AdminI18nTranslatePort,
   PermissionReadPort,
   SettingWriteValidatorRegistryPort,
+  SettingsAdminPort,
 } from '@endora-commerce/contracts';
 import {
   effectiveState,
@@ -12,6 +13,7 @@ import {
   type SettingsReadPort,
 } from '@endora-commerce/platform/kernel';
 import { AdminSearchSettings } from './admin-search-settings.js';
+import { AdminSearchConfigurationService } from './configuration-service.js';
 import { AdminSearchProviderRegistry } from './provider-registry.js';
 import { registerAdminSearchRoutes } from './routes.js';
 import { AdminSearchService } from './search-service.js';
@@ -31,6 +33,7 @@ export interface AdminSearchCradle {
   readonly adminSearchProviderRegistry: AdminSearchProviderRegistry;
   readonly adminSearchSettings: AdminSearchSettings;
   readonly adminSearchService: AdminSearchService;
+  readonly adminSearchConfigurationService: AdminSearchConfigurationService;
 }
 
 export function registerModule(ctx: ModuleContext): void {
@@ -69,12 +72,27 @@ export function registerModule(ctx: ModuleContext): void {
           }),
       )
       .singleton(),
+
+    adminSearchConfigurationService: ctx
+      .asFunction(
+        ({ adminSearchProviderRegistry, adminSearchSettings }: AdminSearchCradle) =>
+          new AdminSearchConfigurationService({
+            registry: adminSearchProviderRegistry,
+            settings: adminSearchSettings,
+            // `settings`' audited write — never a write of this module's own.
+            settingsAdmin: lazyPort<SettingsAdminPort>(ctx, 'settingsAdminService'),
+            i18n: lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService'),
+          }),
+      )
+      .singleton(),
   });
 
   ctx.routes(async (app) => {
-    const { adminSearchService, requireAdmin, adminContextResolver } = ctx.cradle<AdminSearchCradle>();
+    const { adminSearchService, adminSearchConfigurationService, requireAdmin, adminContextResolver } =
+      ctx.cradle<AdminSearchCradle>();
     await registerAdminSearchRoutes(app, {
       searchService: adminSearchService,
+      configurationService: adminSearchConfigurationService,
       requireAdmin,
       resolveAdminContext: adminContextResolver,
     });

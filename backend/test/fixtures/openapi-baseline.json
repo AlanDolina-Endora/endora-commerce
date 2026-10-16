@@ -2951,6 +2951,22 @@
         }
       }
     },
+    "/api/v1/admin/global-search/configuration": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/google-analytics/action-catalogue": {
       "get": {
         "responses": {

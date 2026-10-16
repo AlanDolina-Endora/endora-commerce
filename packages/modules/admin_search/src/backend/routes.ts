@@ -2,14 +2,18 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   AdminSearchCapabilityQuerySchema,
   AdminSearchCapabilitySchema,
+  AdminSearchConfigurationViewSchema,
   AdminSearchQuerySchema,
   AdminSearchResponseSchema,
+  UpdateAdminSearchConfigurationRequestSchema,
 } from '@endora-commerce/contracts';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
+import type { AdminSearchConfigurationService } from './configuration-service.js';
 import type { AdminSearchService } from './search-service.js';
 
 export interface AdminSearchRouteDeps {
   readonly searchService: AdminSearchService;
+  readonly configurationService: AdminSearchConfigurationService;
   readonly requireAdmin: RequireAdminFactory;
   readonly resolveAdminContext: (request: FastifyRequest) => { adminUserId: string };
 }
@@ -34,7 +38,7 @@ export async function registerAdminSearchRoutes(
   app: FastifyInstance,
   deps: AdminSearchRouteDeps,
 ): Promise<void> {
-  const { searchService, requireAdmin, resolveAdminContext } = deps;
+  const { searchService, configurationService, requireAdmin, resolveAdminContext } = deps;
 
   app.get(
     '/api/v1/admin/global-search/capability',
@@ -66,4 +70,34 @@ export async function registerAdminSearchRoutes(
     reply.header('Cache-Control', NO_STORE);
     return AdminSearchResponseSchema.parse(response);
   });
+
+  // Configuration (§3–§4). The gate is the route's `preHandler`, so a caller
+  // without the permission is answered 403 before the body is validated
+  // (module-admin-surfaces.md, Admin permissions item 3).
+  app.get(
+    '/api/v1/admin/global-search/configuration',
+    { preHandler: requireAdmin('admin_search:configure') },
+    async (request, reply) => {
+      const { language } = AdminSearchCapabilityQuerySchema.parse(request.query ?? {});
+      const data = await configurationService.view(language);
+      reply.header('Cache-Control', NO_STORE);
+      return { data: AdminSearchConfigurationViewSchema.parse(data) };
+    },
+  );
+
+  app.put(
+    '/api/v1/admin/global-search/configuration',
+    { preHandler: requireAdmin('admin_search:configure') },
+    async (request, reply) => {
+      const { language } = AdminSearchCapabilityQuerySchema.parse(request.query ?? {});
+      const body = UpdateAdminSearchConfigurationRequestSchema.parse(request.body ?? {});
+      const { adminUserId } = resolveAdminContext(request);
+      const data = await configurationService.update(body, language, {
+        actorAdminUserId: adminUserId,
+        requestId: request.id,
+      });
+      reply.header('Cache-Control', NO_STORE);
+      return { data: AdminSearchConfigurationViewSchema.parse(data) };
+    },
+  );
 }

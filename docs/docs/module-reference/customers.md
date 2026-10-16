@@ -29,6 +29,7 @@ An operator switches this module on and off on **/platform/modules**. The choice
 
 | Module | Binding | What it means |
 | --- | --- | --- |
+| `_i18n` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `addresses` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `admin_roles` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `admin_users` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
@@ -42,6 +43,7 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | `quick_order` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `quote_requests` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `settings` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `admin_search` | no | contributes-to `adminSearchProviderRegistry` |
 
 ## Permissions
 
