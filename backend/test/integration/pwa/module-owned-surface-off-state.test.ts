@@ -18,26 +18,23 @@ import { withModuleOff } from '../../helpers/off-state.js';
  * is resolved *here* — by the server, from the manifests, against the effective
  * enabled-set.
  *
- * **`pwa` declares no action, and this file says so rather than omitting the
- * assertion.** `plan.md`'s Ruling 1 is explicit that a module contributing none
- * of a surface has nothing to assert absent *there*, and that *"the batch's own
- * test names the ones it does not contribute and why, derived from the manifest
- * and the contribution set rather than asserted"*. So the derivation is the
- * assertion: the manifest is read for an `actions` array, the registry is asked
- * what it advertises for this module, and the two are required to agree in both
- * states. Whoever gives `pwa` a palette action makes this file red, which is
- * the right moment to be asked for the off-state proof that goes with it.
+ * **`pwa` declared no action until `specs/149-pwa-order-status-push/`**, and
+ * this file used to derive that absence from the manifest and require the
+ * registry to agree in both states — with a message asking whoever gave the
+ * module an action to assert its off-state here rather than delete the file.
+ * That is what this is now: the manifest declares exactly one action,
+ * `open-settings` (Principle XVI), the registry advertises it while `pwa` is
+ * on, and withdraws it while `pwa` is off.
  *
- * The positive control comes first and is deliberately about a **different**
- * module: an empty answer for `pwa` proves nothing until the registry has been
- * seen answering somebody, and asking `pwa` for its own control is impossible
- * when the expected answer is empty in both states.
+ * The positive control comes first and is about a **different** module: an
+ * absent answer for `pwa` while it is off proves nothing until the registry has
+ * been seen answering somebody in that same state.
  *
  * `pwa` is switchable — `activation: { settingCode: 'pwa.enabled', default: true }`
  * — so the operator axis is driven here for real rather than asserted to be
  * inert.
  */
-describe('pwa contributes no palette action, off or on (Principle XVII item 5)', () => {
+describe('pwa contributes its palette action only while on (Principle XVII item 5)', () => {
   let h: BackendServerHandle;
   const admin = { b2b_session: 'stub-admin-session' };
 
@@ -67,41 +64,34 @@ describe('pwa contributes no palette action, off or on (Principle XVII item 5)',
     return grouped;
   };
 
-  it('declares none in its manifest, which is what makes the absence meaningful', () => {
-    // Read from the manifest, not written down here: this is the fact the
-    // assertions below rest on, and a batch that later adds an action changes
-    // it in one place. `pwa` is one of the sixteen modules
-    // `specs/deferred-defects.md` names under *"Sixteen modules with an admin
-    // screen declare no command-palette action"* — it has an admin surface and
-    // advertises none of it in the palette — so this assertion is also where
-    // that debt is visible rather than merely deferred.
+  it('declares exactly one action in its manifest — the screen, under ⌘K', () => {
+    // Read from the manifest, not written down twice: this is the fact the
+    // assertions below rest on.
     const manifest = REGISTERED_MANIFESTS.find((entry) => entry.manifest.id === 'pwa')?.manifest;
     expect(manifest, 'pwa is not a registered module').toBeDefined();
-    expect(
-      manifest?.actions ?? [],
-      'pwa now declares a palette action — assert its off-state here rather than deleting this',
-    ).toEqual([]);
+    expect((manifest?.actions ?? []).map((action) => action.id)).toEqual(['open-settings']);
   });
 
-  it('advertises none while on, with the registry demonstrably answering', async () => {
+  it('advertises it while on', async () => {
     const grouped = await actionsByModule();
-    // The positive control. `analytics` converted in batch two and declares one
-    // action; if the registry answered nobody, `pwa`'s empty answer below would
-    // be indistinguishable from a broken endpoint.
-    expect(grouped.get('analytics'), 'the palette advertises nothing at all').toBeDefined();
-    expect(grouped.get('pwa') ?? []).toEqual([]);
+    expect(grouped.get('pwa') ?? []).toContain('open-settings');
   });
 
-  it('advertises none while deactivated either, and the flip really took', async () => {
+  it('withdraws it while deactivated, and the flip really took', async () => {
     // The operator axis — the one an operator actually creates, and the one a
     // platform-availability flip would hide. `withModuleOff` asserts the module
     // is genuinely absent before the body observes anything (issue #141).
     await withModuleOff('pwa', 'deactivated', async () => {
       const grouped = await actionsByModule();
-      expect(grouped.get('pwa') ?? []).toEqual([]);
       // Still a live registry while `pwa` is off, so the empty answer is about
-      // this module and not about the endpoint.
-      expect(grouped.get('analytics')).toBeDefined();
+      // this module and not about the endpoint. `analytics` declares one action.
+      expect(grouped.get('analytics'), 'the palette advertises nothing at all').toBeDefined();
+      expect(grouped.get('pwa') ?? []).toEqual([]);
     });
+  });
+
+  it('advertises it again once restored', async () => {
+    const grouped = await actionsByModule();
+    expect(grouped.get('pwa') ?? []).toContain('open-settings');
   });
 });

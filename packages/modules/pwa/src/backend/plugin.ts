@@ -14,6 +14,7 @@ import type {
 import { PwaConfigResolver, type SettingsReadPort } from './services/pwa-config-resolver.js';
 import { PwaIconService, type AssetUploadPort } from './services/pwa-icon-service.js';
 import { PushSubscriptionService } from './services/push-subscription-service.js';
+import { PushPreferenceService } from './services/push-preference-service.js';
 import { PushMessageService } from './services/push-message-service.js';
 import { PushProviderRegistry } from './services/push-provider-registry.js';
 import { WebPushProvider } from './services/providers/web-push-provider.js';
@@ -21,10 +22,7 @@ import {
   createPushEventHandlers,
   type PushEventLogger,
 } from './services/push-event-subscriber.js';
-import {
-  createStatusPushComposer,
-  type PushPreferenceReader,
-} from './services/status-push-composer.js';
+import { createStatusPushComposer } from './services/status-push-composer.js';
 import {
   createPushDeliveryQueue,
   createPushDeliveryWorker,
@@ -43,8 +41,10 @@ import {
   effectiveState,
   enterSystemScope,
   type RequireAdminFactory,
+  type RequireCustomerGuard,
   type SalesChannelResolutionPort,
 } from '@endora-commerce/platform/kernel';
+import type { CommandBus } from '@endora-commerce/platform/commands';
 
 const BoolSchema = z.boolean();
 
@@ -56,6 +56,13 @@ export interface PwaModuleOptions {
   settings: SettingsReadPort & { get<T>(code: string, channelId: string, schema: z.ZodType<T>): Promise<T> };
   settingsWrite: SettingsWritePort;
   requireAdmin: RequireAdminFactory;
+  /** `auth`'s storefront guard, for the customer preference routes. */
+  requireCustomer: RequireCustomerGuard;
+  /**
+   * The platform's Command Bus: the customer preference write is an audited
+   * Command (`specs/149-pwa-order-status-push/` research R-12).
+   */
+  commandBus: Pick<CommandBus, 'run'>;
   /**
    * The three rows this module reads out of other modules (feature 075,
    * Phase C). Resolved as gated ports in `backend.ts`, never captured, so a
@@ -119,6 +126,7 @@ export interface PwaModuleHandle {
   configResolver: PwaConfigResolver;
   iconService: PwaIconService;
   subscriptionService: PushSubscriptionService;
+  preferenceService: PushPreferenceService;
   messageService: PushMessageService;
   providerRegistry: PushProviderRegistry;
   deliveryQueue: Queue<PushDeliveryJobData>;
@@ -169,11 +177,12 @@ export function pwaModule(options: PwaModuleOptions): PwaModuleResult {
   // rather than a path.
   let eventLogger: PushEventLogger = options.log;
 
-  // The customer's account-wide choice. Until the preference store lands every
-  // account answers "both on", which is what an account with no row means.
-  const preferenceReader: PushPreferenceReader = {
-    read: async () => ({ orderStatus: true, quoteStatus: true }),
-  };
+  // The customer's account-wide choice; an account with no row wants both.
+  const preferenceService = new PushPreferenceService(
+    options.emFactory,
+    options.customerAccounts,
+    options.commandBus,
+  );
 
   // Automatic status pushes — producer only; enqueues, never sends inline.
   // `backend/index.ts` registers the handlers through `ctx.subscribe`, so they
@@ -191,7 +200,7 @@ export function pwaModule(options: PwaModuleOptions): PwaModuleResult {
         return false;
       }
     },
-    preferences: preferenceReader,
+    preferences: preferenceService,
     translate: options.statusPush.translate,
     messageService,
     runInSystemScope: (reason, run) => enterSystemScope(reason, run),
@@ -232,6 +241,7 @@ export function pwaModule(options: PwaModuleOptions): PwaModuleResult {
     configResolver,
     iconService,
     subscriptionService,
+    preferenceService,
     messageService,
     providerRegistry,
     deliveryQueue,
@@ -244,6 +254,8 @@ export function pwaModule(options: PwaModuleOptions): PwaModuleResult {
       iconService,
       subscriptionService,
       resolveAssetUrl: options.resolveAssetUrl,
+      preferenceService,
+      requireCustomer: options.requireCustomer,
     });
     await registerPwaAdminRoutes(app, {
       requireAdmin: options.requireAdmin,

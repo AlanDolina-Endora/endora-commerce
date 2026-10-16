@@ -14,8 +14,10 @@ import type { ModuleContext } from '@endora-commerce/platform/kernel';
 import { lazyPort } from '@endora-commerce/platform/kernel';
 import type {
   RequireAdminFactory,
+  RequireCustomerGuard,
   SalesChannelResolutionPort,
 } from '@endora-commerce/platform/kernel';
+import type { CommandBus } from '@endora-commerce/platform/commands';
 import { pwaModule, type PwaModuleOptions, type PwaModuleResult } from './plugin.js';
 import {
   createAssetUrlResolver,
@@ -26,6 +28,7 @@ import {
 import { QUOTE_STATUS_EVENTS } from './services/status-push-copy.js';
 import { PushMessageDelivery } from './entities/push-message-delivery.entity.js';
 import { PushMessage } from './entities/push-message.entity.js';
+import { PushNotificationPreference } from './entities/push-notification-preference.entity.js';
 import { PushSubscription } from './entities/push-subscription.entity.js';
 import { PwaIconRendition } from './entities/pwa-icon-rendition.entity.js';
 
@@ -95,6 +98,10 @@ export interface PwaCradle {
    */
   readonly pwaRunWorkers: boolean;
   readonly requireAdmin: RequireAdminFactory;
+  /** `auth`'s storefront guard (`specs/149-pwa-order-status-push/` preferences routes). */
+  readonly requireCustomer: RequireCustomerGuard;
+  /** The platform's Command Bus — the customer preference write is a Command. */
+  readonly commandBus: CommandBus;
   readonly settingsReadPort: PwaModuleOptions['settings'];
   readonly settingsAdminService: PwaModuleOptions['settingsWrite'];
   /**
@@ -114,7 +121,7 @@ export interface PwaCradle {
 export function registerModule(ctx: ModuleContext): void {
   ctx.di.register({
     pwa: ctx
-      .asFunction(({ emFactory, redis, pwaRunWorkers }: PwaCradle): PwaModuleResult => {
+      .asFunction(({ emFactory, redis, pwaRunWorkers, commandBus }: PwaCradle): PwaModuleResult => {
         // T118c — the two ports that replace `PwaBridge`. Each is a `lazyPort`
         // proxy, so it resolves per call and nothing here captures a
         // registration: a switched-off owner refuses at the call site rather
@@ -138,6 +145,8 @@ export function registerModule(ctx: ModuleContext): void {
           customerGroups: lazyPort<CustomerGroupReadPort>(ctx, 'customerGroupReadPort'),
           requireAdmin: (permission) => async (req, reply) =>
             ctx.cradle<PwaCradle>().requireAdmin(permission)(req, reply),
+          requireCustomer: (req) => ctx.cradle<PwaCradle>().requireCustomer(req),
+          commandBus,
           vapidSubject:
             process.env['PWA_VAPID_SUBJECT'] ?? 'mailto:admin@b2b-platform.local',
           // Pre-route fallback for the FR-024 handlers' log — see
@@ -241,6 +250,7 @@ export function registerModule(ctx: ModuleContext): void {
 export const entities = [
   PushMessageDelivery,
   PushMessage,
+  PushNotificationPreference,
   PushSubscription,
   PwaIconRendition,
 ];

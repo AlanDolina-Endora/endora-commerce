@@ -11,7 +11,7 @@ import { seedShippedOrder, RFQ_SHIPPED_ORDER_ID } from '../../helpers/seed-comme
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
 
 /**
- * `specs/149-pwa-order-status-push/` T015 — the automatic status pushes
+ * `specs/149-pwa-order-status-push/` T015 / T028 — the automatic status pushes
  * on the composed harness: the real subscriptions, the real ports, the real
  * settings store and `_i18n`, and `push_messages` as the observable.
  *
@@ -168,10 +168,21 @@ describe('149 — order and quote status pushes [integration]', () => {
       defaultChannelId,
       quoteId,
     ]);
+    await sql(`delete from push_notification_preferences where customer_account_id = ?`, [
+      TEST_CUSTOMER_ID,
+    ]);
     await settleEvents();
   });
 
   afterAll(async () => {
+    // Nothing this file changed may reach the next one: the preference table is
+    // not among the tables the harness reseeds, and an opt-out left behind
+    // would silently skip another file's order push.
+    await sql(`delete from push_notification_preferences where customer_account_id = ?`, [
+      TEST_CUSTOMER_ID,
+    ]);
+    await setGlobal(PWA_SETTING_CODES.PUSH_ORDER_STATUS_ENABLED, true);
+    await setGlobal(PWA_SETTING_CODES.PUSH_QUOTE_STATUS_ENABLED, true);
     await sql(`update order_statuses set name = ?::jsonb where code = 'shipment_sent'`, [
       originalStatusName,
     ]);
@@ -329,5 +340,45 @@ describe('149 — order and quote status pushes [integration]', () => {
     });
     expect(sent.statusCode, sent.body).toBe(202);
     expect(await sql(`select id from push_messages where title = ?`, [title])).toHaveLength(1);
+  });
+
+  it('honours the customer’s choice per category, leaving devices alone (US3, FR-019)', async () => {
+    const activeDevices = (): Promise<Array<{ n: string }>> =>
+      sql<{ n: string }>(
+        `select count(*)::text as n from push_subscriptions where customer_account_id = ? and status = 'active'`,
+        [TEST_CUSTOMER_ID],
+      );
+    const devicesBefore = await activeDevices();
+    const put = await h.app.inject({
+      method: 'PUT',
+      url: '/api/v1/storefront/pwa/preferences',
+      cookies: customer,
+      payload: { quoteStatus: false },
+    });
+    expect(put.statusCode, put.body).toBe(200);
+
+    const quote = `evt-${randomUUID()}`;
+    const order = `evt-${randomUUID()}`;
+    emitQuote('rfq.approved.v1', quote);
+    emitOrderStatus(order);
+
+    expect(await awaitRows(order)).toHaveLength(1);
+    expect(await awaitNothing(quote)).toHaveLength(0);
+    expect(await activeDevices()).toEqual(devicesBefore);
+
+    // And the reverse.
+    const flip = await h.app.inject({
+      method: 'PUT',
+      url: '/api/v1/storefront/pwa/preferences',
+      cookies: customer,
+      payload: { orderStatus: false, quoteStatus: true },
+    });
+    expect(flip.statusCode, flip.body).toBe(200);
+    const quote2 = `evt-${randomUUID()}`;
+    const order2 = `evt-${randomUUID()}`;
+    emitQuote('rfq.approved.v1', quote2);
+    emitOrderStatus(order2);
+    expect(await awaitRows(quote2)).toHaveLength(1);
+    expect(await awaitNothing(order2)).toHaveLength(0);
   });
 });

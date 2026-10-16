@@ -140,32 +140,32 @@ run serially. Phases are marked **[backend]**, **[admin UI]**, **[storefront]**,
 
 ## Phase 4 — Customer preference: storage, API, gate (US3) [backend]
 
-- [ ] T022 [US3] Entity `PushNotificationPreference` (`@CustomerScoped`, data-model §1) and add it
+- [X] T022 [US3] Entity `PushNotificationPreference` (`@CustomerScoped`, data-model §1) and add it
   to `entities` in `backend/index.ts` —
   `packages/modules/pwa/src/backend/entities/push-notification-preference.entity.ts`
-- [ ] T023 [US3] Scaffold and write the migration:
+- [X] T023 [US3] Scaffold and write the migration:
   `pnpm --filter backend run migration:new -- --module pwa --name push_notification_preferences`;
   then `pnpm --filter backend run composer:generate`; commit the generated registries
-- [ ] T024 RED [US3] Preference service over a stub Command Bus and stub account port: read with no
+- [X] T024 RED [US3] Preference service over a stub Command Bus and stub account port: read with no
   row → both true and no write; first write creates with the organisation stamped; partial patch
   keeps the other field; unresolvable account refuses; the Command carries action
   `pwa.push_preference.update`, objectType, before/after —
   `packages/modules/pwa/src/backend/services/push-preference-service.test.ts`
-- [ ] T025 GREEN [US3] `packages/modules/pwa/src/backend/services/push-preference-service.ts`
+- [X] T025 GREEN [US3] `packages/modules/pwa/src/backend/services/push-preference-service.ts`
   (resolves `commandBus` from the cradle)
-- [ ] T026 RED [US3] Storefront API contract: `GET` default both true; `PUT {quoteStatus:false}` →
+- [X] T026 RED [US3] Storefront API contract: `GET` default both true; `PUT {quoteStatus:false}` →
   200 full shape, persisted, one `audit_log_entries` row with action `pwa.push_preference.update`
   and no admin actor; `PUT {}` / unknown key → 400; anonymous → 401; another customer cannot see or
   change it; `GET /api/v1/storefront/pwa/config` carries the two effective flags (push off ⇒ both
   false; quote setting off ⇒ quote false; `quote_requests` off ⇒ quote false) —
   `backend/test/contract/pwa/admin-and-storefront.contract.test.ts`
-- [ ] T027 GREEN [US3] `routes.storefront.ts` (both routes, `requireCustomer` as `preHandler`) and
+- [X] T027 GREEN [US3] `routes.storefront.ts` (both routes, `requireCustomer` as `preHandler`) and
   `services/pwa-config-resolver.ts` (effective flags)
-- [ ] T028 RED [US3] Composer preference gate: order choice off → no order push, quote push still
+- [X] T028 RED [US3] Composer preference gate: order choice off → no order push, quote push still
   produced; quote choice off → the reverse; a device subscription is never modified — add cases to
   `status-push-composer.test.ts` and one end-to-end case to
   `backend/test/integration/pwa/status-push.test.ts`
-- [ ] T029 GREEN [US3] Replace the Phase 2 stub with the real preference read in
+- [X] T029 GREEN [US3] Replace the Phase 2 stub with the real preference read in
   `status-push-composer.ts` (debug log `pwa.push_skipped_customer_preference`)
 
 **Verification**: `pnpm --filter @endora-commerce/mod-pwa run build`;

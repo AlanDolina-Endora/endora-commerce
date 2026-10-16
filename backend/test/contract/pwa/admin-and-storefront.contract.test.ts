@@ -18,6 +18,7 @@ import {
 } from '../../helpers/test-actors.js';
 import { seedShippedOrder, RFQ_SHIPPED_ORDER_ID } from '../../helpers/seed-commerce.js';
 import { seedOtherTestOrganization } from '../../helpers/seed-organizations.js';
+import { withModuleOff } from '../../helpers/off-state.js';
 import { makePushDeliveryProcessor } from '../../../../packages/modules/pwa/src/backend/workers/push-delivery-worker.js';
 
 /**
@@ -267,6 +268,197 @@ describe('PWA module — admin + storefront', () => {
     const cfg2 = PwaPublicConfigSchema.parse(r2.json());
     expect(cfg2.pushEnabled).toBe(true);
     expect(cfg2.vapidPublicKey).toBe('BPUB');
+  });
+
+  // ---- specs/149-pwa-order-status-push/ T026 — customer push preferences ----
+  describe('customer push preferences', () => {
+    const customer = { b2b_session: 'stub-customer-session' };
+    const otherCustomer = { b2b_session: 'stub-customer-session-rfq' };
+
+    // A stored opt-out would silently skip the order-trigger case further down.
+    const clear = async (): Promise<void> => {
+      await h.em().getConnection().execute(`delete from push_notification_preferences`);
+    };
+    beforeEach(clear);
+    afterAll(clear);
+
+    it('answers both on for a customer who never chose, and writes nothing', async () => {
+      const r = await h.app.inject({
+        method: 'GET',
+        url: '/api/v1/storefront/pwa/preferences',
+        cookies: customer,
+        headers: channelHeader,
+      });
+      expect(r.statusCode, r.body).toBe(200);
+      expect(r.json()).toEqual({ data: { orderStatus: true, quoteStatus: true } });
+      const rows = (await h.em().getConnection().execute(
+        `select count(*)::int as n from push_notification_preferences`,
+      )) as Array<{ n: number }>;
+      expect(rows[0]!.n).toBe(0);
+    });
+
+    it('saves a partial change, answers the full shape, and audits it with the customer as actor', async () => {
+      const put = await h.app.inject({
+        method: 'PUT',
+        url: '/api/v1/storefront/pwa/preferences',
+        cookies: customer,
+        headers: channelHeader,
+        payload: { quoteStatus: false },
+      });
+      expect(put.statusCode, put.body).toBe(200);
+      expect(put.json()).toEqual({ data: { orderStatus: true, quoteStatus: false } });
+
+      const get = await h.app.inject({
+        method: 'GET',
+        url: '/api/v1/storefront/pwa/preferences',
+        cookies: customer,
+        headers: channelHeader,
+      });
+      expect(get.json()).toEqual({ data: { orderStatus: true, quoteStatus: false } });
+
+      const stored = (await h.em().getConnection().execute(
+        `select id, organization_id, order_status_enabled, quote_status_enabled
+           from push_notification_preferences where customer_account_id = ?`,
+        [TEST_CUSTOMER_ID],
+      )) as Array<{
+        id: string;
+        organization_id: string;
+        order_status_enabled: boolean;
+        quote_status_enabled: boolean;
+      }>;
+      expect(stored).toHaveLength(1);
+      expect(stored[0]).toMatchObject({
+        organization_id: TEST_ORGANIZATION_ID,
+        order_status_enabled: true,
+        quote_status_enabled: false,
+      });
+
+      const audit = (await h.em().getConnection().execute(
+        `select actor_admin_user_id, object_type, state_before, state_after
+           from audit_log_entries where action = 'pwa.push_preference.update' and object_id = ?`,
+        [stored[0]!.id],
+      )) as Array<{
+        actor_admin_user_id: string | null;
+        object_type: string;
+        state_before: unknown;
+        state_after: unknown;
+      }>;
+      expect(audit).toHaveLength(1);
+      expect(audit[0]).toMatchObject({
+        actor_admin_user_id: null,
+        object_type: 'push_notification_preference',
+        state_before: null,
+        state_after: { orderStatus: true, quoteStatus: false },
+      });
+    });
+
+    it.each([
+      ['an empty body', {}],
+      ['an unknown key', { orderStatus: true, email: false }],
+      ['a non-boolean', { orderStatus: 'false' }],
+    ])('refuses %s with 400', async (_label, payload) => {
+      const r = await h.app.inject({
+        method: 'PUT',
+        url: '/api/v1/storefront/pwa/preferences',
+        cookies: customer,
+        headers: channelHeader,
+        payload,
+      });
+      expect(r.statusCode).toBe(400);
+    });
+
+    it('refuses an anonymous caller with 401', async () => {
+      const get = await h.app.inject({
+        method: 'GET',
+        url: '/api/v1/storefront/pwa/preferences',
+        headers: channelHeader,
+      });
+      expect(get.statusCode).toBe(401);
+      const put = await h.app.inject({
+        method: 'PUT',
+        url: '/api/v1/storefront/pwa/preferences',
+        headers: channelHeader,
+        payload: { orderStatus: false },
+      });
+      expect(put.statusCode).toBe(401);
+    });
+
+    it('keeps one customer’s choice from another', async () => {
+      await h.app.inject({
+        method: 'PUT',
+        url: '/api/v1/storefront/pwa/preferences',
+        cookies: customer,
+        headers: channelHeader,
+        payload: { orderStatus: false, quoteStatus: false },
+      });
+      const other = await h.app.inject({
+        method: 'GET',
+        url: '/api/v1/storefront/pwa/preferences',
+        cookies: otherCustomer,
+        headers: channelHeader,
+      });
+      expect(other.json()).toEqual({ data: { orderStatus: true, quoteStatus: true } });
+
+      // The other customer's write changes their own row, never this one.
+      await h.app.inject({
+        method: 'PUT',
+        url: '/api/v1/storefront/pwa/preferences',
+        cookies: otherCustomer,
+        headers: channelHeader,
+        payload: { orderStatus: true },
+      });
+      const mine = await h.app.inject({
+        method: 'GET',
+        url: '/api/v1/storefront/pwa/preferences',
+        cookies: customer,
+        headers: channelHeader,
+      });
+      expect(mine.json()).toEqual({ data: { orderStatus: false, quoteStatus: false } });
+    });
+  });
+
+  // ---- specs/149-pwa-order-status-push/ T026 — effective flags on the public config ----
+  it('tells the storefront which categories are offered on the channel', async () => {
+    const read = async () =>
+      PwaPublicConfigSchema.parse(
+        (
+          await h.app.inject({
+            method: 'GET',
+            url: '/api/v1/storefront/pwa/config',
+            headers: channelHeader,
+          })
+        ).json(),
+      );
+
+    // Push off ⇒ neither offered.
+    let cfg = await read();
+    expect(cfg).toMatchObject({ orderStatusPushEnabled: false, quoteStatusPushEnabled: false });
+
+    await enablePush();
+    cfg = await read();
+    expect(cfg).toMatchObject({ orderStatusPushEnabled: true, quoteStatusPushEnabled: true });
+
+    await h.settings.adminService.setValueForAllChannels(
+      PWA_SETTING_CODES.PUSH_QUOTE_STATUS_ENABLED,
+      false,
+      null,
+      { actorAdminUserId: null },
+    );
+    await settleEvents();
+    cfg = await read();
+    expect(cfg).toMatchObject({ orderStatusPushEnabled: true, quoteStatusPushEnabled: false });
+
+    await h.settings.adminService.setValueForAllChannels(
+      PWA_SETTING_CODES.PUSH_QUOTE_STATUS_ENABLED,
+      true,
+      null,
+      { actorAdminUserId: null },
+    );
+    await settleEvents();
+    await withModuleOff('quote_requests', 'deactivated', async () => {
+      const off = await read();
+      expect(off).toMatchObject({ orderStatusPushEnabled: true, quoteStatusPushEnabled: false });
+    });
   });
 
   // ---- T032 subscriptions ----
