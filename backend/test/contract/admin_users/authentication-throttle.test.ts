@@ -838,9 +838,11 @@ describe('administrator authentication throttle', () => {
           payload: { code },
         });
 
+      // A refused confirmation on a signed-in route is a 403 (issue #244): a
+      // 401 would sign the administrator out of the Admin UI.
       for (let i = 0; i < 5; i += 1) {
         const res = await regenerate('000000');
-        expect(res.statusCode, res.body).toBe(401);
+        expect(res.statusCode, res.body).toBe(403);
       }
       const refused = await regenerate(totpCode(secret));
       expect(refused.statusCode, refused.body).toBe(429);
@@ -867,9 +869,10 @@ describe('administrator authentication throttle', () => {
           payload,
         });
 
+      // 403, not 401 (issue #244) — see the regenerate case above.
       for (let i = 0; i < 5; i += 1) {
         const res = await disable({ password: WRONG_PASSWORD });
-        expect(res.statusCode, res.body).toBe(401);
+        expect(res.statusCode, res.body).toBe(403);
       }
       const byPassword = await disable({ password: STUB_CUSTOMER_PASSWORD });
       expect(byPassword.statusCode, byPassword.body).toBe(429);
@@ -877,7 +880,7 @@ describe('administrator authentication throttle', () => {
 
       for (let i = 0; i < 5; i += 1) {
         const res = await disable({ code: '000000' });
-        expect(res.statusCode, res.body).toBe(401);
+        expect(res.statusCode, res.body).toBe(403);
       }
       const byCode = await disable({ code: totpCode(secret) });
       expect(byCode.statusCode, byCode.body).toBe(429);

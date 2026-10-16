@@ -127,7 +127,7 @@ describe('mfa resolves its own identity reads (T118c)', () => {
       return res.json().data.totpActive as boolean;
     }
 
-    it('refuses a wrong password with 401 INVALID_CREDENTIALS, not 400', async () => {
+    it('refuses a wrong password with 403 CURRENT_PASSWORD_INVALID, not 400', async () => {
       await enrol();
       expect(await totpActive()).toBe(true);
 
@@ -142,8 +142,10 @@ describe('mfa resolves its own identity reads (T118c)', () => {
       // through to 400 `MFA_REAUTH_REQUIRED` — a refusal that looks like a
       // refusal while telling the caller the wrong thing, and while leaving the
       // password route to disabling 2FA unavailable.
-      expect(res.statusCode).toBe(401);
-      expect((res.json() as { error: { code: string } }).error.code).toBe('INVALID_CREDENTIALS');
+      // 403 with the profile screen's code, not 401 (issue #244): the caller is
+      // signed in, and a 401 is what a front end reads as an expired session.
+      expect(res.statusCode).toBe(403);
+      expect((res.json() as { error: { code: string } }).error.code).toBe('CURRENT_PASSWORD_INVALID');
       expect(await totpActive()).toBe(true);
     });
 
