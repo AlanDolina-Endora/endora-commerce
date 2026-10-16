@@ -620,6 +620,24 @@ export type CustomerAccountLifecycleStatus = 'active' | 'blocked' | 'deleted';
 export interface CustomerAccountAdminSearchCriteria {
   /** Substring match over e-mail, first name and last name. */
   q?: string | undefined;
+  /**
+   * Which fields `q` is matched against — the admin global search's field
+   * selection (`specs/150-admin-global-search/`). `name` is the first or the
+   * last name.
+   *
+   * Absent ⇒ today's behaviour: e-mail, first name and last name, newest first.
+   * Present ⇒ only the named fields, `q` matched **literally** (`%`, `_` and
+   * `\` are not wildcards), and rows ordered by relevance: an e-mail equal to
+   * `q`, then one starting with it, then the most recently changed. An empty
+   * list matches nothing.
+   */
+  qFields?: readonly ('email' | 'name')[] | undefined;
+  /**
+   * Leave out deleted **and anonymized** accounts whatever `status` says.
+   * Absent ⇒ today's behaviour (the default view leaves out deleted accounts
+   * only).
+   */
+  excludeDeleted?: boolean | undefined;
   status?: CustomerAccountLifecycleStatus | undefined;
   organizationId?: string | undefined;
   customerGroupId?: string | undefined;

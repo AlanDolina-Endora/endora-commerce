@@ -108,6 +108,10 @@ export const manifest = defineModuleManifest({
   // alive by a presence probe that could not fire. It is a declared dependency
   // now, and the panels read the gated port directly.
   dependencies: [
+    // `_i18n` owns `adminI18nService`, through which global search's Customer
+    // provider labels a status in the admin's language
+    // (`specs/150-admin-global-search/`).
+    '_i18n',
     'addresses',
     // `specs/117-instance-bring-up/` Phase 6 — `customerModerationActorResolver`
     // is this module's own since FR-033, and it reads the moderating admin's
@@ -128,6 +132,19 @@ export const manifest = defineModuleManifest({
     'quick_order',
     'quote_requests',
     'settings',
+  ],
+  nonBindingDependencies: [
+    {
+      moduleId: 'admin_search',
+      name: 'adminSearchProviderRegistry',
+      kind: 'contributes-to',
+      reason:
+        'A push, from this module’s contribution-only boot hook, of the Customer provider for the ' +
+        'admin global search, built over the customer list’s own search and scope. Nothing is read ' +
+        'back: the registry enumerates only providers whose module is effectively present, so an ' +
+        'absent contributor costs the host nothing and an absent host holds a table nobody walks. ' +
+        'Not `dependencies`: that would make global search a reason this module cannot be switched off.',
+    },
   ],
   settings,
   i18n: { bundlesDir: 'i18n' },

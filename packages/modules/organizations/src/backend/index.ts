@@ -3,6 +3,8 @@ import type { FastifyRequest } from 'fastify';
 import type { ChannelMemberEntityType } from '@endora-commerce/contracts';
 import type {
   AddressServicePort,
+  AdminI18nTranslatePort,
+  AdminSearchProviderRegistryPort,
   AdminNotificationRecordPort,
   AdminTenantScopePort,
   AdminUserReadPort,
@@ -48,6 +50,9 @@ import {
   notificationRecipientsSchema,
 } from './schemas/settings.js';
 import { createAdminTenantScopePort } from './services/admin-tenant-scope.js';
+import { createOrganizationAdminSearchProvider } from './admin-search-provider.js';
+import { OrganizationAdminSearchService } from './services/organization-admin-search.service.js';
+import { orgConstraintFor } from '@endora-commerce/platform/tenancy';
 import { OrganizationContextService } from './services/organization-context-service.js';
 import {
   OrganizationDetailsService,
@@ -903,6 +908,30 @@ export function registerModule(ctx: ModuleContext): void {
     registerOrganizationCountryReferences(
       lazyPort<DictionaryReferenceRegistryPort>(ctx, 'countryReferenceRegistry'),
       ctx.cradle<OrganizationsCradle>().emFactory,
+    );
+  });
+
+  /**
+   * The Organization record type for admin global search
+   * (`specs/150-admin-global-search/`, T041) — a **contribution** hook: it
+   * pushes an inert provider into `admin_search`'s ungated registry and does
+   * nothing else, so it carries no presence probe (D-67/D-68).
+   *
+   * The rows are the Organizations list's; the request's scope only ranks them
+   * (owner answer to spec Q2): a scoped admin's allowed set — their assigned
+   * organizations — comes first.
+   */
+  ctx.onBoot(() => {
+    const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
+    const service = new OrganizationAdminSearchService(() => ctx.cradle<OrganizationsCradle>().emFactory());
+    lazyPort<AdminSearchProviderRegistryPort>(ctx, 'adminSearchProviderRegistry').register(
+      createOrganizationAdminSearchProvider({
+        search: (query) => {
+          const constraint = orgConstraintFor();
+          return service.search(query, constraint.kind === 'set' ? constraint.organizationIds : null);
+        },
+        translate: (key, language) => i18n.translate('organizations', key, language),
+      }),
     );
   });
 }

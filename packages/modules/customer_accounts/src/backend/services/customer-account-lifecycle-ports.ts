@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { EntityManager, FilterQuery } from '@mikro-orm/postgresql';
-import { UniqueConstraintViolationException } from '@mikro-orm/core';
+import { QueryOrder, raw, UniqueConstraintViolationException } from '@mikro-orm/core';
 import {
   ERROR_CODES,
   normalizeEmailAddress,
@@ -542,8 +542,14 @@ export class CustomerAccountAdminSearchService implements CustomerAccountAdminSe
       and.push({ organizationId: { $in: [...criteria.allowedOrganizationIds] } });
     }
 
+    if (criteria.excludeDeleted) and.push({ deletedAt: null, anonymizedAt: null });
+
     const q = criteria.q?.trim();
-    if (q) {
+    // `specs/150-admin-global-search/` — a field selection makes the match
+    // literal and the order relevance-first; without one, nothing changes.
+    const fields = criteria.qFields === undefined ? null : new Set(criteria.qFields);
+    let orderBy: unknown = { createdAt: 'desc' };
+    if (q && fields === null) {
       const like = `%${q}%`;
       and.push({
         $or: [
@@ -552,11 +558,34 @@ export class CustomerAccountAdminSearchService implements CustomerAccountAdminSe
           { lastName: { $ilike: like } },
         ],
       });
+    } else if (q && fields !== null) {
+      const escaped = q.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+      const like = `%${escaped}%`;
+      const or: FilterQuery<CustomerAccount>[] = [];
+      if (fields.has('email')) or.push({ email: { $ilike: like } });
+      if (fields.has('name')) or.push({ firstName: { $ilike: like } }, { lastName: { $ilike: like } });
+      if (or.length === 0) return { rows: [], total: 0 };
+      and.push({ $or: or });
+      orderBy = [
+        ...(fields.has('email')
+          ? [
+              {
+                [raw(
+                  (alias) =>
+                    `case when lower(${alias}.email) = lower(?) then 0 when ${alias}.email ilike ? then 1 else 2 end`,
+                  [q, `${escaped}%`],
+                )]: QueryOrder.ASC,
+              },
+            ]
+          : []),
+        { updatedAt: QueryOrder.DESC },
+        { id: QueryOrder.ASC },
+      ];
     }
 
     const where: FilterQuery<CustomerAccount> = and.length ? { $and: and } : {};
     const [rows, total] = await this.emFactory().findAndCount(CustomerAccount, where, {
-      orderBy: { createdAt: 'desc' },
+      orderBy: orderBy as never,
       limit: criteria.pageSize,
       offset: (criteria.page - 1) * criteria.pageSize,
     });
