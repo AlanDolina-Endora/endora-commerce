@@ -662,5 +662,16 @@
   "blocks.emailCategoryGrid.label": "Siatka kategorii",
   "blocks.emailCategoryGrid.description": "Siatka kategorii katalogu renderowana na potrzeby e-maila.",
   "blocks.category.catalog": "Katalog",
-  "blocks.category.content": "Treść"
+  "blocks.category.content": "Treść",
+  "adminSearch.product.group.label": "Produkty",
+  "adminSearch.product.field.sku": "SKU",
+  "adminSearch.product.field.name": "Nazwa",
+  "adminSearch.product.field.slug": "Klucz URL (slug)",
+  "adminSearch.product.field.quickSearchAttributes": "Atrybuty szybkiego wyszukiwania",
+  "adminSearch.product.status.draft": "Roboczy",
+  "adminSearch.product.status.active": "Aktywny",
+  "adminSearch.product.status.inactive": "Nieaktywny",
+  "adminSearch.category.group.label": "Kategorie",
+  "adminSearch.category.field.name": "Nazwa",
+  "adminSearch.category.field.slug": "Klucz URL (slug)"
 }

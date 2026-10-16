@@ -662,5 +662,16 @@
   "blocks.emailCategoryGrid.label": "Category grid",
   "blocks.emailCategoryGrid.description": "A grid of catalog categories, rendered for e-mail.",
   "blocks.category.catalog": "Catalog",
-  "blocks.category.content": "Content"
+  "blocks.category.content": "Content",
+  "adminSearch.product.group.label": "Products",
+  "adminSearch.product.field.sku": "SKU",
+  "adminSearch.product.field.name": "Name",
+  "adminSearch.product.field.slug": "URL key (slug)",
+  "adminSearch.product.field.quickSearchAttributes": "Quick-search attributes",
+  "adminSearch.product.status.draft": "Draft",
+  "adminSearch.product.status.active": "Active",
+  "adminSearch.product.status.inactive": "Inactive",
+  "adminSearch.category.group.label": "Categories",
+  "adminSearch.category.field.name": "Name",
+  "adminSearch.category.field.slug": "URL key (slug)"
 }

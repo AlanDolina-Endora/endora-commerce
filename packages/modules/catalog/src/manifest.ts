@@ -125,6 +125,10 @@ export const manifest = defineModuleManifest({
   // owner is non-deactivatable, so the declaration buys install and migration
   // order rather than a flip-time refusal.
   dependencies: [
+    // `_i18n` owns `adminI18nService`, through which global search's Product
+    // provider labels a status in the admin's language
+    // (`specs/150-admin-global-search/`).
+    '_i18n',
     'audit_logs',
     'admin_users',
     'assets_library',
@@ -286,6 +290,18 @@ export const manifest = defineModuleManifest({
         'take the storefront down for a capability it never required. Declared rather than ' +
         'caught: presence is decided in front of the query, and an unreachable index is an arm ' +
         'of the port\'s return type.',
+    },
+    {
+      moduleId: 'admin_search',
+      name: 'adminSearchProviderRegistry',
+      kind: 'contributes-to',
+      reason:
+        'A push, from this module’s contribution-only boot hook, of the Product and Category ' +
+        'providers for the admin global search, built over its own tables and attribute read. ' +
+        'Nothing is read back: the registry enumerates only providers whose module is ' +
+        'effectively present, so an absent contributor costs the host nothing and an absent host ' +
+        'holds a table nobody walks. Not `dependencies`: this module is non-deactivatable, so ' +
+        'that would make `admin_search.enabled` a dead switch.',
     },
     {
       moduleId: 'prompt_actions',
