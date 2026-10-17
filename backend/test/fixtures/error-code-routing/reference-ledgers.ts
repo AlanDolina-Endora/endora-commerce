@@ -474,6 +474,48 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'nor contributed by a module that is present. The noun is this module\'s `webhooks` row ' +
       'and the one raise site is its own `services/webhook-service.ts`.',
   },
+  DOCUMENT_TEMPLATE_NOT_FOUND: {
+    to: 'document_templates',
+    reason:
+      'Minted with the `document_templates` module (`specs/152-compare-pdf-template/`), which ' +
+      'did not exist when the prefix chain was deleted: the refusal of a template id that names no row, or a row whose document type is not available — the two are indistinguishable on purpose (FR-051). ' +
+      'The noun is a document template, the module\'s own row.',
+  },
+  DOCUMENT_TYPE_NOT_AVAILABLE: {
+    to: 'document_templates',
+    reason:
+      'Minted with the `document_templates` module (`specs/152-compare-pdf-template/`), which ' +
+      'did not exist when the prefix chain was deleted: the refusal of a document type no present module registers. ' +
+      'The noun is a document template, the module\'s own row.',
+  },
+  DOCUMENT_TEMPLATE_INVALID: {
+    to: 'document_templates',
+    reason:
+      'Minted with the `document_templates` module (`specs/152-compare-pdf-template/`), which ' +
+      'did not exist when the prefix chain was deleted: the refusal of a layout that breaks a limit, places a block its document type does not offer, or names a language, source template or sales channel the type cannot take. ' +
+      'The noun is a document template, the module\'s own row.',
+  },
+  DOCUMENT_TEMPLATE_IS_DEFAULT: {
+    to: 'document_templates',
+    reason:
+      'Minted with the `document_templates` module (`specs/152-compare-pdf-template/`), which ' +
+      'did not exist when the prefix chain was deleted: the refusal to delete the default template of a scope without explicit confirmation (FR-007). ' +
+      'The noun is a document template, the module\'s own row.',
+  },
+  DOCUMENT_TEMPLATE_NOT_SELECTABLE: {
+    to: 'document_templates',
+    reason:
+      'Minted with the `document_templates` module (`specs/152-compare-pdf-template/`), which ' +
+      'did not exist when the prefix chain was deleted: the render port\'s refusal of a template named for a document whose type, channel or selection rule forbids it (FR-038). ' +
+      'The noun is a document template, the module\'s own row.',
+  },
+  DOCUMENT_RENDER_FAILED: {
+    to: 'document_templates',
+    reason:
+      'Minted with the `document_templates` module (`specs/152-compare-pdf-template/`), which ' +
+      'did not exist when the prefix chain was deleted: the failure to produce a document from a template. ' +
+      'The noun is a document template, the module\'s own row.',
+  },
 };
 
 /**

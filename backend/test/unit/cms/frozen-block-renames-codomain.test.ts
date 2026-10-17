@@ -48,11 +48,38 @@ const DECLARED_OUTSIDE_THIS_REPOSITORY: ReadonlyMap<
 ]);
 
 describe('FROZEN_BLOCK_RENAMES — the codomain', () => {
-  const declared = new Set(
+  const everyDeclared = new Set(
     REGISTERED_MANIFESTS.flatMap((entry) =>
       ((entry.manifest.blocks ?? []) as BlockDefinition[]).map((block) => block.name),
     ),
   );
+  /**
+   * Blocks declared **after** the conversion, namespaced from birth: they have
+   * no pre-migration name and are no part of the population this file judges.
+   * Recorded by name, with the feature that introduced them, so the set cannot
+   * grow by accident — every entry is held below to be declared here and to be
+   * no value of the map.
+   */
+  const BORN_NAMESPACED: ReadonlyMap<string, string> = new Map([
+    ['comparisons.ComparisonHeader', 'specs/152-compare-pdf-template/'],
+    ['comparisons.ComparisonTable', 'specs/152-compare-pdf-template/'],
+    ['comparisons.ComparisonShareLink', 'specs/152-compare-pdf-template/'],
+    ['document_templates.Heading', 'specs/152-compare-pdf-template/'],
+    ['document_templates.Text', 'specs/152-compare-pdf-template/'],
+    ['document_templates.Image', 'specs/152-compare-pdf-template/'],
+    ['document_templates.Spacer', 'specs/152-compare-pdf-template/'],
+    ['document_templates.Divider', 'specs/152-compare-pdf-template/'],
+    ['document_templates.PageBreak', 'specs/152-compare-pdf-template/'],
+  ]);
+  const declared = new Set([...everyDeclared].filter((name) => !BORN_NAMESPACED.has(name)));
+
+  it('records as born namespaced only blocks declared here that the map does not name', () => {
+    const codomain = new Set(Object.values(FROZEN_BLOCK_RENAMES));
+    for (const name of BORN_NAMESPACED.keys()) {
+      expect(everyDeclared.has(name), `${name} is declared by a registered module`).toBe(true);
+      expect(codomain.has(name), `${name} is not a value of the map`).toBe(false);
+    }
+  });
 
   const registered = new Set(REGISTERED_MANIFESTS.map((entry) => entry.manifest.id));
 

@@ -27,6 +27,12 @@ export const TABLE_OWNER_OVERRIDES: Readonly<Record<string, string>> = {
   cms_page_sales_channels: 'cms',
   cms_template_sales_channels: 'cms',
 
+  // Created by `invoices`' first migration and dropped by its
+  // `drop_invoice_templates` migration (`specs/152-compare-pdf-template/`): its
+  // entity left with the table, so only this override still names the owner of
+  // the migrations that touch it.
+  invoice_templates: 'invoices',
+
   // Legacy outbound-integration table, read through the webhooks module.
   external_integrations: 'webhooks',
 
