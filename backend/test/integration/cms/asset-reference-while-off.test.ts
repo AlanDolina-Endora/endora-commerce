@@ -126,6 +126,10 @@ describe('an asset a deactivated cms still references cannot be deleted (D-68)',
       // contribution hook, and this composition has no platform to hand it one.
       // A plain collector, because the subject here is the asset scanner.
       salesChannelBridgeRegistry: { register: () => undefined },
+      // Feature 151 — `settings`' write-validator registry, which `cms` pushes
+      // its translation size-limit rule into from a fourth contribution hook.
+      // `settings` is not composed here either, so a plain collector again.
+      settingWriteValidatorRegistry: { register: () => undefined, forCode: () => [] },
     });
     const composed = composeModules([{ id: 'cms', version: '1.0.0', registerModule }], {
       container,
