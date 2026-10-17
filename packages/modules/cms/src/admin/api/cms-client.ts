@@ -22,9 +22,15 @@ import type {
   PutCmsColorPaletteRequest,
   CmsColorPaletteEntry,
   CmsReservedSegmentsResponse,
+  CmsPageBuilderTranslateRequest,
+  CmsPageBuilderTranslateResponse,
+  CmsPageBuilderTranslationCapability,
 } from '@endora-commerce/contracts';
 
 export type {
+  CmsPageBuilderTranslateRequest,
+  CmsPageBuilderTranslateResponse,
+  CmsPageBuilderTranslationCapability,
   CmsPageBuilderDescriptor,
   CmsBlockDetail,
   CmsBlockSummary,
@@ -93,6 +99,27 @@ function pageQuery(query: ListPagesQuery): string {
 }
 
 export const cmsClient = {
+  /** Feature 151 — is the Page Builder's Translate action ready, and with which model. */
+  async getTranslationCapability(): Promise<CmsPageBuilderTranslationCapability> {
+    const out = await apiClient.get<{ data: CmsPageBuilderTranslationCapability }>(
+      '/api/v1/admin/cms/page-builder/translation',
+    );
+    return out.data;
+  },
+
+  /** Feature 151 — translate a canvas; `signal` cancels the request (FR-021). */
+  async translatePageBuilder(
+    body: CmsPageBuilderTranslateRequest,
+    signal?: AbortSignal,
+  ): Promise<CmsPageBuilderTranslateResponse> {
+    const out = await apiClient.post<{ data: CmsPageBuilderTranslateResponse }>(
+      '/api/v1/admin/cms/page-builder/translate',
+      body,
+      signal ? { signal } : undefined,
+    );
+    return out.data;
+  },
+
   listPages(query: ListPagesQuery = {}): Promise<ListPagesResponse> {
     return apiClient.get<ListPagesResponse>(`/api/v1/admin/cms/pages${pageQuery(query)}`);
   },

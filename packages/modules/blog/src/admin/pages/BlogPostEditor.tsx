@@ -69,6 +69,12 @@ function pickValue(map: Record<string, string> | null | undefined, lang: string)
   return map[lang] ?? '';
 }
 
+
+/** The empty canvas — what a language with no saved content translates from. */
+function emptyCanvas(): Data {
+  return { root: { props: {} }, content: [] };
+}
+
 export function BlogPostEditor(): ReactNode {
   const t = useTranslation('blog');
   const { id } = useParams();
@@ -477,6 +483,18 @@ export function BlogPostEditor(): ReactNode {
               setDraftData(next);
               setContentDirty(true);
             }}
+            // Feature 151 — the Translate action: the post's languages, the
+            // saved content of another tab as a source, the audit subject, and
+            // the version whose change retires *Restore previous content*.
+            languages={scope.languages}
+            activeLanguage={activeLanguage}
+            onResolveLanguageContent={(language) =>
+              structuredClone(
+                language === activeLanguage && draftData ? draftData : (dataFor(post, language) ?? emptyCanvas()),
+              )
+            }
+            resource={{ type: 'blog_post', id: post.id }}
+            savedVersion={post.version}
           />
         ) : error ? (
           <></>

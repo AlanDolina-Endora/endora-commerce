@@ -470,6 +470,10 @@ export function PageEditor(): ReactNode {
           data={currentData}
           onChange={setDraftData}
           contentKey={`${id ?? 'new'}:${activeLanguage ?? ''}`}
+          // Feature 151 — the translation's audit subject, and the version whose
+          // change (a save) retires its *Restore previous content*.
+          resource={{ type: 'cms_page', id: page?.id ?? null }}
+          savedVersion={page?.version ?? null}
           pageContainer
           languages={scope.languages}
           activeLanguage={activeLanguage}

@@ -135,6 +135,10 @@ describe('cms contributes the category content editor', () => {
     // Puck seeds from `data` on mount only; the key is what re-seeds it for
     // another category or another language.
     expect(editorProps[0]?.['contentKey']).toBe(`category:${CATEGORY_ID}:pl-PL`);
+    // Feature 151, T050 — the zone knows its language, so the canvas offers
+    // Translate, and names what it belongs to for the audit entry.
+    expect(editorProps[0]?.['activeLanguage']).toBe('pl-PL');
+    expect(editorProps[0]?.['resource']).toEqual({ type: 'catalog_category', id: CATEGORY_ID });
 
     fireEvent.click(screen.getByText('canvas-edit'));
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
