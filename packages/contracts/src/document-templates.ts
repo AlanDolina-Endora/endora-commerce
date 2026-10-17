@@ -43,7 +43,7 @@ export const CORE_BLOCK_NAMES = [
 ] as const;
 export type CoreBlockName = (typeof CORE_BLOCK_NAMES)[number];
 
-/** Limits a saved template is held to (research R-20). The legacy import bypasses them. */
+/** Limits a saved template is held to (research R-20). */
 export const DOCUMENT_TEMPLATE_LIMITS = {
   maxNodesPerLanguage: 200,
   maxLanguages: 10,
@@ -288,28 +288,6 @@ export interface DocumentBlockRenderer<TData = unknown, TPrepared = unknown> {
   }): unknown;
 }
 
-/** A former host-owned template, read by the host for the one-time import (research R-24). */
-export const legacyTemplateRecordSchema = z.object({
-  id: uuidSchema,
-  name: z.string(),
-  salesChannelId: uuidSchema.nullable(),
-  languages: z.record(z.string(), z.unknown()),
-  isDefault: z.boolean(),
-  version: z.number().int().positive(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-});
-export interface LegacyTemplateRecord {
-  readonly id: string;
-  readonly name: string;
-  readonly salesChannelId: string | null;
-  readonly languages: Readonly<Record<string, unknown>>;
-  readonly isDefault: boolean;
-  readonly version: number;
-  readonly createdAt: Date;
-  readonly updatedAt: Date;
-}
-
 /** Root-prop defaults merged under stored root props, plus non-editable pdfmake styles. */
 export type DocumentPageDefaults = Partial<ResolvedDocumentRootProps> & {
   readonly styles?: Readonly<Record<string, unknown>>;
@@ -353,13 +331,6 @@ export interface DocumentTypeRegistration<TData = unknown, TPrepared = unknown> 
   /** Fictitious, JSON-serialisable sample for the editor and the preview. */
   sampleData(language: string): TData;
 
-  /** One-time import of templates from a former host-owned location. */
-  readonly legacyImport?: {
-    readonly source: string;
-    read(): Promise<readonly LegacyTemplateRecord[]>;
-    /** Runs before the import commits; a throw rolls the import back. */
-    afterImport?(): Promise<void>;
-  };
 }
 
 /** Container name: `documentTypeRegistry`. Owner: `document_templates`. Ungated. */
@@ -477,7 +448,7 @@ export const documentTemplateSummarySchema = z.object({
 export type DocumentTemplateSummary = z.infer<typeof documentTemplateSummarySchema>;
 
 export const documentTemplateDetailSchema = documentTemplateSummarySchema.extend({
-  /** Kept as stored: an imported legacy template may exceed the save-time limits. */
+  /** Kept as stored; validated per language when saved. */
   content: z.object({ schemaVersion: z.literal(1), languages: z.record(z.string(), z.unknown()) }),
 });
 export type DocumentTemplateDetail = z.infer<typeof documentTemplateDetailSchema>;

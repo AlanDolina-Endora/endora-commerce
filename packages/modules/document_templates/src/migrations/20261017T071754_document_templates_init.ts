@@ -13,12 +13,8 @@ import { Migration } from '@mikro-orm/migrations';
  * all-zero uuid so `null` takes part in it. A channel's templates go with the
  * channel (`on delete cascade` to the kernel-owned `sales_channels`).
  *
- * `document_template_imports` records that a document type's templates were
- * imported from a former host-owned location — the invoice templates — so the
- * import happens once per installation and never resurrects a template an
- * operator deleted afterwards (FR-082, research R-24). No row is seeded and no
- * other module's table is read or written here: the import runs at runtime,
- * through the host's own reader.
+ * No row is seeded: a document type's built-in layout is virtual, and is what
+ * applies until an operator sets a template as default (research R-8).
  */
 export class Migration20261017T071754DocumentTemplatesInit extends Migration {
   override async up(): Promise<void> {
@@ -51,21 +47,9 @@ export class Migration20261017T071754DocumentTemplatesInit extends Migration {
         )
         where "is_default";
     `);
-    this.addSql(`
-      create table "document_template_imports" (
-        "document_type" varchar(120) not null,
-        "source" varchar(120) not null,
-        "imported_count" integer not null,
-        "skipped_count" integer not null,
-        "report" jsonb not null,
-        "imported_at" timestamptz not null,
-        constraint "document_template_imports_pkey" primary key ("document_type", "source")
-      );
-    `);
   }
 
   override async down(): Promise<void> {
-    this.addSql(`drop table if exists "document_template_imports";`);
     this.addSql(`drop table if exists "document_templates";`);
   }
 }

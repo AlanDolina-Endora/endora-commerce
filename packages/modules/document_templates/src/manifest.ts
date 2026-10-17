@@ -49,6 +49,209 @@ export const manifest = defineModuleManifest({
   dependencies: ['settings', 'auth', 'assets_library'],
   settings,
   activation: { settingCode: 'document_templates.enabled', default: true },
+  // FR-060 — viewing (list, editor, preview) and editing are separately
+  // grantable. Invoice editors keep their access through `invoices`' one-time
+  // grant (owner answers N3, P2).
+  permissions: [
+    { code: 'document_templates:read', label: 'View document templates' },
+    {
+      code: 'document_templates:write',
+      label: 'Edit document templates',
+      requires: ['document_templates:read'],
+    },
+  ],
+  errorCodes: [
+    { code: 'DOCUMENT_TEMPLATE_NOT_FOUND' },
+    { code: 'DOCUMENT_TYPE_NOT_AVAILABLE' },
+    { code: 'DOCUMENT_TEMPLATE_INVALID' },
+    { code: 'DOCUMENT_TEMPLATE_IS_DEFAULT' },
+    { code: 'DOCUMENT_TEMPLATE_NOT_SELECTABLE' },
+    { code: 'DOCUMENT_RENDER_FAILED' },
+  ],
+  // Principle XVI — the screen is reachable from ⌘K, also by the words an
+  // operator used for the invoice templates screen it replaces (FR-062, FR-090).
+  actions: [
+    {
+      id: 'open-document-templates',
+      labelKey: 'actions.openDocumentTemplates.label',
+      descriptionKey: 'actions.openDocumentTemplates.description',
+      icon: 'FileText',
+      targetRoute: '/document-templates',
+      requiredPermission: 'document_templates:read',
+      keywords: [
+        'pdf',
+        'template',
+        'document template',
+        'comparison pdf',
+        'invoice template',
+        'szablon',
+        'szablon pdf',
+        'szablon faktury',
+        'porównanie',
+        'dokument',
+      ],
+      weight: 650,
+    },
+  ],
+  /**
+   * The six general-purpose blocks (`data-model.md` §4.1). Declared for the
+   * `document` context only, so they never reach a CMS page, an e-mail or a
+   * newsletter; a document type offers them only if it opts in (`coreBlocks`).
+   */
+  blocks: [
+    {
+      name: 'document_templates.Heading',
+      labelKey: 'blocks.heading.label',
+      descriptionKey: 'blocks.heading.description',
+      category: 'layout',
+      contexts: ['document'],
+      fields: {
+        text: { type: 'text', label: 'Text' },
+        level: {
+          type: 'select',
+          label: 'Level',
+          options: [
+            { label: 'H1', value: 1 },
+            { label: 'H2', value: 2 },
+            { label: 'H3', value: 3 },
+          ],
+        },
+        color: { type: 'text', label: 'Colour (#hex)' },
+        align: {
+          type: 'select',
+          label: 'Alignment',
+          options: [
+            { label: 'Left', value: 'left' },
+            { label: 'Centre', value: 'center' },
+            { label: 'Right', value: 'right' },
+          ],
+        },
+        marginTop: { type: 'number', label: 'Space above (pt)' },
+        marginBottom: { type: 'number', label: 'Space below (pt)' },
+      },
+      defaultProps: { text: 'Heading', level: 1, color: '#111827', align: 'left', marginTop: 0, marginBottom: 8 },
+      weight: 10,
+    },
+    {
+      name: 'document_templates.Text',
+      labelKey: 'blocks.text.label',
+      descriptionKey: 'blocks.text.description',
+      category: 'layout',
+      contexts: ['document'],
+      fields: {
+        text: { type: 'textarea', label: 'Text (merge fields: {{date}} …)' },
+        fontSize: { type: 'number', label: 'Font size' },
+        color: { type: 'text', label: 'Colour (#hex)' },
+        bold: {
+          type: 'radio',
+          label: 'Bold',
+          options: [
+            { label: 'Yes', value: 'true' },
+            { label: 'No', value: 'false' },
+          ],
+        },
+        italics: {
+          type: 'radio',
+          label: 'Italics',
+          options: [
+            { label: 'Yes', value: 'true' },
+            { label: 'No', value: 'false' },
+          ],
+        },
+        align: {
+          type: 'select',
+          label: 'Alignment',
+          options: [
+            { label: 'Left', value: 'left' },
+            { label: 'Centre', value: 'center' },
+            { label: 'Right', value: 'right' },
+          ],
+        },
+        marginTop: { type: 'number', label: 'Space above (pt)' },
+        marginBottom: { type: 'number', label: 'Space below (pt)' },
+      },
+      defaultProps: {
+        text: 'Text',
+        fontSize: 10,
+        color: '#111827',
+        bold: 'false',
+        italics: 'false',
+        align: 'left',
+        marginTop: 0,
+        marginBottom: 6,
+      },
+      weight: 20,
+    },
+    {
+      name: 'document_templates.Image',
+      labelKey: 'blocks.image.label',
+      descriptionKey: 'blocks.image.description',
+      category: 'layout',
+      contexts: ['document'],
+      fields: {
+        assetId: { type: 'uuid', label: 'Image (assets library)', refKind: 'asset' },
+        width: { type: 'number', label: 'Width (pt)' },
+        maxHeight: { type: 'number', label: 'Maximum height (pt)' },
+        align: {
+          type: 'select',
+          label: 'Alignment',
+          options: [
+            { label: 'Left', value: 'left' },
+            { label: 'Centre', value: 'center' },
+            { label: 'Right', value: 'right' },
+          ],
+        },
+        marginBottom: { type: 'number', label: 'Space below (pt)' },
+      },
+      defaultProps: { assetId: '', width: 120, maxHeight: 80, align: 'left', marginBottom: 8 },
+      weight: 30,
+    },
+    {
+      name: 'document_templates.Spacer',
+      labelKey: 'blocks.spacer.label',
+      descriptionKey: 'blocks.spacer.description',
+      category: 'layout',
+      contexts: ['document'],
+      fields: { height: { type: 'number', label: 'Height (pt)' } },
+      defaultProps: { height: 16 },
+      weight: 40,
+    },
+    {
+      name: 'document_templates.Divider',
+      labelKey: 'blocks.divider.label',
+      descriptionKey: 'blocks.divider.description',
+      category: 'layout',
+      contexts: ['document'],
+      fields: {
+        thickness: { type: 'number', label: 'Thickness (pt)' },
+        color: { type: 'text', label: 'Colour (#hex)' },
+        style: {
+          type: 'select',
+          label: 'Style',
+          options: [
+            { label: 'Solid', value: 'solid' },
+            { label: 'Dashed', value: 'dashed' },
+          ],
+        },
+        widthPercent: { type: 'number', label: 'Width (%)' },
+        marginY: { type: 'number', label: 'Space above and below (pt)' },
+      },
+      defaultProps: { thickness: 1, color: '#cbd5e1', style: 'solid', widthPercent: 100, marginY: 8 },
+      weight: 50,
+    },
+    {
+      name: 'document_templates.PageBreak',
+      labelKey: 'blocks.pageBreak.label',
+      descriptionKey: 'blocks.pageBreak.description',
+      category: 'layout',
+      contexts: ['document'],
+      fields: {},
+      weight: 60,
+    },
+  ],
+  blockCategories: [
+    { key: 'layout', titleKey: 'blocks.category.layout', contexts: ['document'], weight: 90 },
+  ],
   i18n: { bundlesDir: 'i18n' },
   docs: { dir: 'docs' },
   demo: false,

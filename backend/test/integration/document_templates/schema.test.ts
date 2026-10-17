@@ -6,8 +6,7 @@ import { setupTestDb, type TestDb } from '../../helpers/test-db.js';
  * `specs/152-compare-pdf-template/` T010 — what the schema itself holds
  * (`data-model.md` §1–§2), independent of any service: one default per
  * document type and scope (FR-005), any number of non-defaults, the type-code
- * grammar, a channel's templates going with the channel, and the import
- * marker's primary key (FR-082).
+ * grammar, and a channel's templates going with the channel.
  */
 describe('document_templates schema (152 T010)', () => {
   let db: TestDb;
@@ -44,7 +43,6 @@ describe('document_templates schema (152 T010)', () => {
   afterAll(async () => {
     const conn = db.orm.em.getConnection();
     await conn.execute(`delete from document_templates where document_type = ?`, [type]);
-    await conn.execute(`delete from document_template_imports where document_type = ?`, [type]);
     await conn.execute(`delete from sales_channels where id in (?, ?)`, [channelA, channelB]);
     await db.close();
   });
@@ -96,15 +94,4 @@ describe('document_templates schema (152 T010)', () => {
     expect(rows).toEqual([]);
   });
 
-  it('refuses a second import marker for one (document type, source)', async () => {
-    const conn = db.orm.em.getConnection();
-    const mark = (): Promise<unknown> =>
-      conn.execute(
-        `insert into document_template_imports (document_type, source, imported_count, skipped_count, report, imported_at)
-         values (?, 'legacy_table', 0, 0, '{}'::jsonb, now())`,
-        [type],
-      );
-    await mark();
-    await expect(mark()).rejects.toThrow(/document_template_imports_pkey/);
-  });
 });

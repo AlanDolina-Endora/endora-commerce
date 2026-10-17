@@ -13,7 +13,6 @@ import {
   documentTypeCodeSchema,
   documentTypeDetailSchema,
   documentTypeSummarySchema,
-  legacyTemplateRecordSchema,
   mergeFieldKeyRe,
   previewDocumentBodySchema,
   renameDocumentTemplateBodySchema,
@@ -158,23 +157,6 @@ describe('merge-field keys, selection, core blocks', () => {
     expect(documentCoreBlocksSchema.safeParse(['document_templates.Text']).success).toBe(true);
     expect(documentCoreBlocksSchema.safeParse(['comparisons.ComparisonTable']).success).toBe(false);
     expect(CORE_BLOCK_NAMES).toHaveLength(6);
-  });
-});
-
-describe('legacyTemplateRecordSchema', () => {
-  it('accepts the import record shape', () => {
-    expect(
-      legacyTemplateRecordSchema.safeParse({
-        id: '00000000-0000-4000-8000-000000000001',
-        name: 'Generic',
-        salesChannelId: null,
-        languages: { 'pl-PL': { root: { props: {} }, content: [] } },
-        isDefault: true,
-        version: 3,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }).success,
-    ).toBe(true);
   });
 });
 
