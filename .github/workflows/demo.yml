@@ -94,7 +94,7 @@ jobs:
       SALES_CHANNEL_CODE: ${{ vars.SALES_CHANNEL_CODE }}
       DEFAULT_LOCALE: ${{ vars.DEFAULT_LOCALE }}
     steps:
-      # actions/checkout v4.4.0
+      # actions/checkout v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
@@ -157,7 +157,7 @@ jobs:
       DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
     steps:
-      # actions/checkout v4.4.0
+      # actions/checkout v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           sparse-checkout: deploy
