@@ -28,10 +28,10 @@ facility** with their output unchanged (R-2, R-4). With evidence and rejected al
   section builders are the type's block renderers, the seeded generic layout is the type's built-in
   layout, and `prepareRender` carries the contributed-block data and the KSeF-number rule. PDF
   appearance need not match the old renderer (P1); behavioural tests prove the required content.
-- **Invoice data moves by a one-time pull import owned by `document_templates`**, reading through a
-  function `invoices` supplies over its own table, recorded in an import-marker table so it happens once
-  and never resurrects deletions (R-24). Role grants keep invoice-template editors able to edit (R-28,
-  N3). Old admin routes redirect; the old API is withdrawn (R-29, N4).
+- **No invoice template data is moved** (owner answer P2): the invoice type's built-in layout replaces
+  the old default template, and an `invoices`-owned migration drops `invoice_templates`. A one-time,
+  audited, idempotent grant keeps invoice editors able to edit templates (R-28, N3). Old admin routes
+  redirect; the old API is withdrawn (R-29, N4).
 - **The invoice e-mail attachment follows the template** (R-26, N1): the dispatcher renders through the
   same `documentRenderPort` call as the download, so one invoice has one layout on every path. The
   only intentional output change for invoices; announced in the invoices release note.
@@ -42,7 +42,7 @@ facility** with their output unchanged (R-2, R-4). With evidence and rejected al
 
 **Language/Version**: TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM
 **Primary Dependencies**: Fastify, MikroORM (PostgreSQL), Zod, `pdfmake` (backend); React 19 + Vite + react-router-dom 7 through `@endora-commerce/admin-kit`, `@puckeditor/core`, `@endora-commerce/page-builder-core`, `@endora-commerce/page-builder-admin` (admin); Next.js 15 App Router (storefront) — **no new runtime dependency**
-**Storage**: PostgreSQL — two new tables `document_templates` and `document_template_imports` owned by `document_templates`, one migration; `invoice_templates` kept read-only and imported at runtime; no column added elsewhere
+**Storage**: PostgreSQL — one new table `document_templates` owned by `document_templates`, one migration; `invoice_templates` dropped by an `invoices`-owned migration (owner answer P2); no column added elsewhere
 **Testing**: Vitest — co-located `*.test.ts` in `packages/modules/{document_templates,comparisons,invoices}/src/**`
 `backend/test/contract/document_templates/`, `backend/test/contract/comparisons/`,
 `backend/test/integration/{document_templates,invoices}/`; `backend/test/perf/` benches for SC-003;
@@ -237,6 +237,17 @@ R1/R2 clean).
 | Tenancy / channels | R-15 |
 | Redis cache invalidation | none needed — no cache (R-14) |
 | Module activation | facility switchable; comparisons degrade; invoices bind; import convergent |
+
+## Owner answer P2 (2026-10-17, fourth round)
+
+Nobody has custom invoice templates. The import (marker table, import Command, boot/lazy import,
+`legacyImport` registration hook, id preservation) is dropped; the invoice built-in layout replaces the
+old default; `invoice_templates` and its entity, service and routes are removed, the table dropped by an
+`invoices` migration. N3's grant becomes a one-time upgrade step in `invoices`: a presence-probed boot
+work hook that, unless a hidden `invoices` setting records it already ran, adds the document-template
+codes to every role holding the invoice codes through `adminRolePort.upsertByCode` (audited per role)
+and records the run through `settingsAdminService` (audited). Idempotent — a role already holding a code
+is not written — and once — an administrator's later removal is never undone.
 
 ## Owner answer P1 (2026-10-17, third round)
 

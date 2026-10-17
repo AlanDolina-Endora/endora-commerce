@@ -16,12 +16,12 @@ provided FR-083's required content holds.
 | `selection` | `'default_only'` |
 | `languages` | `['pl-PL']` (N5 default) |
 | `variables` | none |
-| `defaultContent()` | `{ schemaVersion: 1, languages: GENERIC_INVOICE_TEMPLATE_CONTENT.languages }` (`seeds/generic-invoice-template.ts`) |
+| `defaultContent()` | the invoice built-in layout — `{ schemaVersion: 1, languages: { 'pl-PL': <generic tree> } }` (`seeds/generic-invoice-template.ts`); it replaces the old default template (P2) |
 | `renderBuiltIn` | none (owner answer P1): the built-in layout is `defaultContent()`, the generic seed tree |
 | `pageDefaults` | `pageSize 'A4'`, `orientation 'portrait'`, margins top 40 / right 40 / bottom 48 / left 40, `baseFontSize 10`, `styles: { docTitle: { fontSize: 14, bold: true } }` |
 | `prepareRender(data, { placedBlocks, preview })` | (1) inline logo images exactly as `embedInvoiceLogoImages` does today (asset or URL, 3 s timeout, PNG/JPEG only); (2) for present contributors **placed** in the tree (or all present ones when the built-in layout will be used) call `resolve(invoice.id)`, a rejection → `null`; (3) `suppressKsefNumber` = some present contributor with `printsKsefReferenceNumber` is placed (built-in: is present) |
 | `sampleData()` | `{ invoice: sampleInvoiceDetail(), amountLocale: 'en' }` |
-| `legacyImport` | `{ source: 'invoice_templates', read, afterImport }` — §3 |
+| `legacyImport` | none (owner answer P2) |
 
 Pushed from a **contribution-only** `ctx.onBoot` in `packages/modules/invoices/src/backend/index.ts`.
 
@@ -40,7 +40,10 @@ Pushed from a **contribution-only** `ctx.onBoot` in `packages/modules/invoices/s
 `descriptor.ts`, the template routes and `ensureGenericSeed` are deleted. `invoices` declares
 `document_templates` and `admin_roles` in `dependencies` (R-27, R-28 defaults).
 
-## 3. Import (`legacyImport`)
+## 3. ~~Import (`legacyImport`)~~ — withdrawn (owner answer P2)
+
+Replaced by: an `invoices` migration dropping `invoice_templates`; and the one-time grant of research
+R-28 (revised). The earlier text follows as provenance.
 
 - `read()` — `em.find(InvoiceTemplate, {})` in `invoices`' own code, mapped per `data-model.md` §2's
   legacy table (`active` → `isDefault`, `content.languages` → `languages`).
@@ -97,7 +100,7 @@ seed tree, a channel override and the empty-tree fallback; golden 10 stays commi
 the old behaviour and is no longer an expectation. Image data URIs compare by value. A byte-level smoke
 test asserts each renders.
 
-## 6. Import tests
+## 6. ~~Import tests~~ — withdrawn (owner answer P2); replaced by the grant test (once, idempotent, audited)
 
 `backend/test/integration/invoices/template-import.test.ts`, on a database seeded through the legacy
 table (fixture SQL in the test, not a migration): global active + inactive, channel active, edited

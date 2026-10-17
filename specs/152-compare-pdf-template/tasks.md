@@ -46,7 +46,7 @@ Paths: `DT` = `packages/modules/document_templates`, `CMP` = `packages/modules/c
 ### Schema
 
 - [x] T010 Write `backend/test/integration/document_templates/schema.test.ts`: second default in one scope refused (global, same channel), accepted for another channel; any number of non-defaults; type-code check; channel delete cascades; import marker PK refuses a duplicate — red
-- [x] T011 Scaffold `migration:new -- --module document_templates --name init`, DDL per `data-model.md` §1–§2; entities `document-template.entity.ts`, `document-template-import.entity.ts` (`@GlobalEntity()`), `entities` export; `composer:generate` — T010 green; tenant classification check passes
+- [x] T011 Scaffold `migration:new -- --module document_templates --name init`, DDL per `data-model.md` §1 (the import table of §2 removed again by owner answer P2); entity `document-template.entity.ts` (`@GlobalEntity()`), `entities` export; `composer:generate` — T010 green; tenant classification check passes
 
 ### Core services
 
@@ -64,8 +64,8 @@ Paths: `DT` = `packages/modules/document_templates`, `CMP` = `packages/modules/c
 - [x] T023 Implement `document-renderer.ts`; `ctx.di.providePort('documentRenderPort', …)` — T022 green
 - [ ] T024 `DT/src/backend/commands/document-template-commands.test.ts`: seven Commands, one audit row each with digest state, none on refusal (version conflict, unavailable type, invalid content, block not offered by the type, language outside `languages`, default delete without confirm, source of another type, unknown channel); `set_default` clears the previous default in one tx; scope immutable — red
 - [ ] T025 Implement `document-template-commands.ts` and `document-template-service.ts` (no audit-writer call; channel validation via `salesChannelResolutionPort`) — T024 green; `check:command-coverage` clean
-- [ ] T026 `DT/src/backend/services/legacy-import.test.ts`: marker-first transaction; ids preserved; `on conflict (id) do nothing`; unknown-channel rows skipped and reported; oversize rows imported and flagged; `afterImport` throw rolls back marker and rows; second call no-op (process cache and marker); deleted template not resurrected; system actor in the single audit row; boot work hook probes own presence; lazy `ensureImported` before reads/renders — red
-- [ ] T027 Implement `legacy-import.ts` and the boot work hook in `DT/src/backend/index.ts` (`enterSystemScope` at boot, `withSystemScope` lazily) — T026 green; `check:entry-presence` clean
+- [ ] ~~T026~~ *Withdrawn (owner answer P2 — no import).* `DT/src/backend/services/legacy-import.test.ts`: marker-first transaction; ids preserved; `on conflict (id) do nothing`; unknown-channel rows skipped and reported; oversize rows imported and flagged; `afterImport` throw rolls back marker and rows; second call no-op (process cache and marker); deleted template not resurrected; system actor in the single audit row; boot work hook probes own presence; lazy `ensureImported` before reads/renders — red
+- [ ] ~~T027~~ *Withdrawn (owner answer P2).* Implement `legacy-import.ts` and the boot work hook in `DT/src/backend/index.ts` (`enterSystemScope` at boot, `withSystemScope` lazily) — T026 green; `check:entry-presence` clean
 - [ ] T028 [P] `DT/src/backend/services/builder-descriptor.test.ts`: components = the type's palette exactly (core blocks per `coreBlocks`; type blocks with label/fields from any present manifest declaration by name, else `describe()`), categories folded per `specs/096…/contracts/block-definition.md` §1.1, `rootFields` with type defaults — red
 - [ ] T029 Implement `builder-descriptor.ts` — T028 green
 
@@ -124,8 +124,8 @@ Paths: `DT` = `packages/modules/document_templates`, `CMP` = `packages/modules/c
 
 - [ ] T055 [US5] Write `INV/src/backend/document/invoice-document-type.test.ts` (palette = ten own + present contributed, `coreBlocks: 'none'`, `selection: 'default_only'`, `languages: ['pl-PL']`, `pageDefaults` per `invoice-document.md` §1, `prepareRender` resolves only placed contributors with rejection → `null`, `suppressKsefNumber` rule) and, replacing the golden parity of the first revision (owner answer P1), behavioural cases: through the engine an invoice carries seller/buyer data, lines, VAT summary, totals + amount in words, KSeF number exactly once (placed contributor vs header), logo by asset and URL, correction note; empty tree → the seed layout; delete `__golden__/` — red
 - [ ] T056 [US5] Implement `INV/src/backend/document/{block-renderers,invoice-document-type}.ts` over `sections.ts` and `embed-logo-images.ts` (built-in layout = the generic seed tree, no code layout — owner answer P1); push the registration from a contribution-only `ctx.onBoot` — T055 green (deep-equal to every golden)
-- [ ] T057 [P] [US5] `backend/test/integration/invoices/template-import.test.ts` per `invoice-document.md` §6 (legacy rows seeded by SQL in the test) — red
-- [ ] T058 [US5] `INV/src/backend/document/legacy-import.ts` (`read()` over its own `InvoiceTemplate`; `afterImport()` role grants via `lazyPort<AdminRolePort>(ctx, 'adminRolePort')`); manifest `dependencies` += `document_templates`, `admin_roles` — T057 green; `check:port-dependencies`, `check:module-boundary` clean
+- [ ] T057 [P] [US5] (revised, owner answer P2) `INV/src/backend/document/document-templates-grant.test.ts`: the grant adds `document_templates:read` to roles with `invoices:read`, `:read`+`:write` to roles with `invoices:write`, skips wildcard roles and roles already holding the codes, records the run in the hidden setting, and does nothing once recorded — red
+- [ ] T058 [US5] (revised, owner answer P2) `INV/src/backend/document/document-templates-grant.ts` + a presence-probed boot work hook, the hidden setting `invoices.document_templates_grant_done`; an `invoices` migration dropping `invoice_templates`; delete the `InvoiceTemplate` entity; manifest `dependencies` += `document_templates`, `admin_roles` — T057 green; `check:port-dependencies`, `check:module-boundary` clean
 - [ ] T059 [P] [US5] Rewrite `backend/test/integration/invoices/templates.test.ts` against the new API (create/save/set-default/preview of `invoices.invoice`), add `backend/test/integration/invoices/template-rendering.test.ts` (admin download, customer download and regenerate over the real composition render through the facility and carry the required content), and a channel case (an invoice of channel B uses B's default, of A the global) — red
 - [ ] T059a [P] [US5] FR-093 (owner's answer to N1): `INV/src/backend/services/invoice-email-dispatch.test.ts` — the attachment is rendered by `documentRenderPort.render` with exactly the download's input (`documentType`, the invoice's `salesChannelId`, `pl-PL`, `{ invoice, amountLocale: 'pl' }`), a render failure stays contained (`failed`, issuance not undone) while `ModuleDisabledError` is re-thrown; and in `template-rendering.test.ts` the e-mail attachment is produced from the same template as the download — red
 - [ ] T060 [US5] Re-point `routes.admin.ts` (download, regenerate), `routes.customer.ts` **and the e-mail attachment in `invoice-email-dispatch.ts`** to `documentRenderPort` per `invoice-document.md` §2 (N1) — T059 and T059a green; delete `invoice-template-service.ts`, `ensureGenericSeed` call in `plugin.ts`, `pdf-components/descriptor.ts`, the five `/api/v1/admin/invoice-templates*` routes; move descriptor fields into manifest block declarations; drop the `invoice-templates` action; relabel `invoices:write` — T059 green
@@ -171,8 +171,8 @@ Setup (T001–T003) → Foundational (T004–T029; T009 before ANY change under 
 ```
 
 - T005 before every task naming contracts types; T006 before T029, T038, T040, T063; T008 before T040, T063.
-- T011 before T020, T024, T026; T013 before T023, T029, T036, T056; T023 before T030, T034, T055.
-- T055 before T060; T058 before T059's import-dependent cases; T059a before T060.
+- T011 before T020, T024; T013 before T023, T029, T036, T056; T023 before T030, T034, T055.
+- T055 before T060;  T059a before T060.
 
 ## Requirement → test
 
@@ -201,14 +201,14 @@ Setup (T001–T003) → Foundational (T004–T029; T009 before ANY change under 
 | FR-037, FR-038, FR-039 | T020, T049, T064 |
 | FR-050, FR-051, FR-052 | T012, T022, T028, T066, T068 |
 | FR-060 | T030, T031 |
-| FR-061 | T024, T026 |
+| FR-061 | T024, T057 |
 | FR-062, FR-090 | T069 |
 | FR-063 | T039 |
 | FR-064 | T031, T038, T044, T048, T063, T069 |
 | FR-065 | T070 |
 | FR-070 | T064, T065 |
 | FR-080, FR-087 | T055, T062 |
-| FR-081, FR-082 | T026, T057 |
+| FR-081, FR-082 | withdrawn (P2) |
 | FR-083, FR-084, FR-085, FR-086 | T009, T055, T059 |
 | FR-088 | T062 |
 | FR-089 | T057 |
@@ -221,7 +221,7 @@ Setup (T001–T003) → Foundational (T004–T029; T009 before ANY change under 
 | SC-006 | T066 |
 | SC-007 | T065 |
 | SC-008 | T009, T055, T059, T059a |
-| SC-009 | T057 |
+| SC-009 | withdrawn (P2) |
 | SC-001 | T076 (manual, timed) |
 
 ## Implementation strategy

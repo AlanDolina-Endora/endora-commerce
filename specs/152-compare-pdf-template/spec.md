@@ -109,6 +109,19 @@ their behaviour unchanged, and a quote-request PDF (a later feature) will be the
   one-time import with no data loss (FR-081, FR-082), the redirects (FR-088), and the N2–N4 decisions.
   Release notes may simply say the PDF layouts can change.
 
+### Session 2026-10-17 (owner, fourth round — invoice template data)
+
+- **P2** — Must existing invoice templates be migrated? → **No.** Nobody has custom invoice templates;
+  every installation uses the default one. The invoice-template data import is **dropped** entirely —
+  no import marker table, no import Command, no boot or first-use import, no id preservation, no
+  "deleted templates must not come back" logic. The invoice type's **built-in layout** takes the place
+  of the old default template: it is used whenever no invoice template is set as default, exactly as
+  the comparison's. No rows are seeded. The legacy `invoice_templates` table, its entity, service and
+  routes are removed; the table is dropped by an `invoices`-owned migration. Still required: the
+  redirects (FR-088), N1, N2, N4, and N3 — the permission grant, now a simple one-time, audited,
+  idempotent upgrade step rather than part of a data import (FR-089). FR-081, FR-082 and SC-009 are
+  withdrawn.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 — Design the comparison PDF in the Page Builder and have buyers' downloads follow it (Priority: P1)
@@ -243,17 +256,15 @@ KSeF section), and nothing from the comparison.
 regression here touches a legal document, so it carries the strictest acceptance criteria of the
 feature.
 
-**Independent Test**: on a database holding invoice templates (a global one, a channel override, an
-edited generic template, a template placing a contributed block), upgrade; check that every template is
-in *Document templates*, that every invoice PDF — a regular invoice, a correction and an invoice of each
-channel — carries the required content from its scope's template; open the old *Invoices → Templates*
-address.
+**Independent Test**: upgrade; check that every invoice PDF — a regular invoice, a correction and an
+invoice of each channel — carries the required content from the built-in layout, then from a global and
+a channel-B default created in *Document templates*; open the old *Invoices → Templates* address.
 
 **Acceptance Scenarios**:
 
-1. **Given** invoice templates before the upgrade, **When** the platform is upgraded, **Then** each
-   appears under *Document templates → Invoice* with its name, scope and layout, and the one that was
-   in force for each scope is that scope's default.
+1. **Given** the upgrade, **When** an operator opens *Document templates → Invoice*, **Then** the
+   invoice built-in layout is listed and applies to every invoice until a template is set as default
+   (owner answer P2: former invoice templates are not migrated).
 2. **Given** the upgrade, **When** any invoice PDF is produced, **Then** it carries all the content an
    invoice requires (FR-083); its layout may differ from before (owner answer P1).
 3. **Given** an operator opens *Invoices → Templates* or an old link to one invoice template, **Then**
@@ -261,8 +272,7 @@ address.
 4. **Given** the invoice template editor, **When** the operator opens the palette, **Then** it offers
    the invoice blocks (and blocks contributed to invoices by other installed modules) and no comparison
    or general-purpose block.
-5. **Given** an operator deleted a migrated template, **When** the platform restarts or is upgraded
-   again, **Then** the template does not come back.
+5. *(Withdrawn — owner answer P2: nothing is migrated.)*
 6. **Given** administrators who could edit invoice templates before the upgrade, **When** the upgrade
    completes, **Then** they can still edit invoice templates.
 7. **Given** an invoice template is the default for an invoice's scope, **When** the invoice e-mail is
@@ -320,10 +330,8 @@ owner is switched off.
   from the template screens; nothing is deleted.
 - **A save happens while a document is being produced**: the document uses one version of the
   template in full, never a mixture.
-- **A former invoice template referenced a sales channel that no longer exists**: it could not apply
-  to anything before the upgrade; it is not migrated, and the upgrade reports it.
-- **Invoicing is switched off during the upgrade**: its templates are migrated the first time
-  invoicing is present again, with the same result.
+- **Invoicing is switched off during the upgrade**: the permission grant (FR-089) runs the first time
+  invoicing is present again.
 
 ## Requirements *(mandatory)*
 
@@ -433,12 +441,10 @@ owner is switched off.
   blocks of today (header, parties, line items, VAT summary, totals, notes, spacer, divider, logo,
   footer) plus the blocks other installed modules contribute to invoices — and **not** the
   general-purpose blocks.
-- **FR-081**: Every invoice template existing before the upgrade, including the generic template the
-  platform seeded (with any operator edits), MUST be migrated with its identity, name, scope, layout
-  and version. A template that was active for its scope MUST become that scope's default. No invoice
-  template data MUST be deleted by the upgrade.
-- **FR-082**: The migration MUST happen once per installation: re-running, restarting, or switching
-  invoicing off and on MUST NOT duplicate templates or resurrect templates deleted after migration.
+- **FR-081**: *Withdrawn (owner answer P2).* Existing invoice templates are not migrated; the invoice
+  type's built-in layout replaces the old default template, and the legacy `invoice_templates` table is
+  dropped by an `invoices`-owned migration.
+- **FR-082**: *Withdrawn (owner answer P2).*
 - **FR-083**: Every invoice PDF produced after the upgrade — administrator download, customer
   download, regeneration, preview and the e-mail attachment — MUST be produced through the invoice
   document type and MUST carry all the content an invoice requires: seller and buyer data, the line
@@ -461,7 +467,9 @@ owner is switched off.
 - **FR-089**: Administrators who could view or edit invoice templates before the upgrade MUST be able
   to do so after it without an administrator granting anything by hand: once per installation, every
   role holding `invoices:read` gains `document_templates:read` and every role holding `invoices:write`
-  gains `document_templates:write` (and `:read`), recorded in the audit log (owner answer N3).
+  gains `document_templates:write` (and `:read`), recorded in the audit log (owner answer N3). The grant
+  is a one-time, idempotent upgrade step (owner answer P2): it runs at most once per installation, so a
+  permission an administrator later removes is not given back.
 - **FR-090**: The ⌘K palette MUST keep finding invoice templates (by "invoice template", "szablon
   faktury").
 - **FR-091**: Invoice behaviour outside templates — numbering, issuing, corrections, e-mails, KSeF —
@@ -523,8 +531,7 @@ owner is switched off.
 - **Layout (per language)** — ordered blocks with their settings plus page settings, for one language.
 - **Block** — one placed element with a stable name saying which module owns it; settings kept as
   entered.
-- **Template import record** — that a document type's templates from a former location (invoice
-  templates) have been imported, when, and how many; what makes the move happen once.
+- *(Template import record — withdrawn by owner answer P2.)*
 
 ## Success Criteria *(mandatory)*
 
@@ -549,7 +556,7 @@ owner is switched off.
   downloaded, regenerated, previewed or e-mailed after the upgrade carry the required content of
   FR-083, and 100 % of e-mail attachments are produced from the same template as the download of the
   same invoice.
-- **SC-009**: Zero invoice templates lost or duplicated by the upgrade, counted per installation.
+- **SC-009**: *Withdrawn (owner answer P2).*
 
 ## Open questions
 
@@ -567,8 +574,7 @@ second session. N1 departs from the proposed default; N2–N5 take it.
 - Fonts are the platform's existing PDF fonts.
 - Creating a template no longer makes it the default automatically (invoice templates used to); the
   operator ticks *Set as default* — the owner's Q6 answer makes that the safe path.
-- The former invoice-templates storage is kept, read-only, after the move; removing it is a later
-  clean-up once every installation has migrated.
+- The former invoice-templates storage is dropped by the upgrade (owner answer P2).
 
 ## Out of scope
 

@@ -297,7 +297,13 @@ The admin list gains `applicableToChannel=<id>` (global ∪ that channel) for a 
 **Alternatives rejected**: refusing when the chosen template is gone (a sales document that cannot be
 re-printed); pinning by copying the layout onto the document (a version store nobody asked for, Q6).
 
-## R-24 — Migrating invoice template data: a pull import by the table's owner, recorded once
+## R-24 — Migrating invoice template data — **withdrawn (owner answer P2)**
+
+Nobody has custom invoice templates, so nothing is imported: the invoice built-in layout replaces the
+old default template and `invoices` drops `invoice_templates` in its own migration. The text below is
+the earlier revision's, kept as provenance.
+
+### (superseded) A pull import by the table's owner, recorded once
 
 **Decision**:
 - **Who writes**: `document_templates` — the owner of the target table — and nobody else. **Who reads
@@ -403,7 +409,13 @@ migration order puts `document_templates` before `invoices`; invoices never rend
 built-in invoice layout; operator templates apply again when document templates are back on'`,
 presence probe in front of the port, `renderBuiltIn` locally otherwise.
 
-## R-28 — Permissions continuity (N3 — owner: default)
+## R-28 — Permissions continuity (N3 — owner: default; mechanism revised by P2)
+
+**Revision (P2)**: with no import, the grant is `invoices`' own one-time upgrade step — a boot work
+hook (presence-probed) that runs only while a hidden setting `invoices.document_templates_grant_done`
+is `false`, grants through `adminRolePort.upsertByCode` (audited per role, idempotent per role) and
+then sets the flag through `settingsAdminService` (audited). The paragraph below is the earlier
+revision's.
 
 **Decision**: invoices' `legacyImport.afterImport` performs a one-time grant through
 `adminRolePort` (owner `admin_roles`, `nonDeactivatable` — added to `invoices`' dependencies): for each

@@ -27,8 +27,9 @@ pnpm run dev
 
 1. Admin → *Invoices* → *Templates* tab, and the old URL `/invoices/templates/<old id>`: both land in
    *Document templates* (FR-088).
-2. *Document templates → Invoice*: the edited generic template, "Global B" (default for all channels)
-   and "Channel B" (default for channel B), names and layouts as before (FR-081).
+2. *Document templates → Invoice*: the built-in layout is listed and no template exists (owner answer
+   P2 — former invoice templates are not migrated). Create "Global B" and "Channel B" from the built-in
+   layout and set them as defaults of their scopes.
 3. Download the three invoice PDFs again: each carries seller/buyer data, lines, VAT summary, totals,
    amount in words and its scope's layout (FR-083; the layout may differ from before — owner answer P1).
    Regenerate one: no error.
@@ -38,8 +39,8 @@ pnpm run dev
 5. Open an invoice template: palette shows only the ten invoice blocks (+ KSeF if installed), no
    general-purpose block, no language switcher (FR-080, FR-085).
 6. Sign in as the `invoices:write` admin: invoice templates are editable without any manual grant
-   (FR-089). Audit log: one import entry by the system (FR-061).
-7. Delete "Channel B", restart the backend: it does not come back (FR-082).
+   (FR-089). Audit log: the grant's role updates and its settings flag, by the system (FR-061).
+7. Remove `document_templates:write` from a role, restart the backend: it is not granted again (FR-089).
 8. ⌘K → "szablon faktury" finds *Document templates* (FR-090).
 
 ## 2. Comparison baseline (no template)

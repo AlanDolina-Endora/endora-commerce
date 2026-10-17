@@ -160,7 +160,9 @@ export interface DocumentRenderResult {
 `{{key}}`, key `^[a-z][A-Za-z0-9]*$`. Core: `date`; in root header/footer/page-number format: `page`,
 `pages`. Host: `resolveVariables`. Known-but-null → empty; unknown → verbatim. Plain text.
 
-## 6. Import execution context
+## 6. ~~Import execution context~~ — withdrawn (owner answer P2)
+
+`legacyImport`, `LegacyTemplateRecord` and `ensureImported` are removed from the contract.
 
 `ensureImported` runs the `document_template.import` Command under `enterSystemScope('document
 templates legacy import', …)` at boot and `withSystemScope('document templates legacy import', …)` when

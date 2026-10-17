@@ -48,7 +48,6 @@ layout is virtual (research R-8).
 | `document_template.set_default` | Clear `is_default` of the scope's current default (if another), set it here — one transaction | `expectedVersion` |
 | `document_template.clear_default` | `is_default=false` | `expectedVersion` |
 | `document_template.delete` | Delete; a default row requires `confirmDefault=true` (FR-007) | `expectedVersion` |
-| `document_template.import` | One run of §2's import for one `(document_type, source)`; audit `after` = counts (imported, skipped-unknown-channel, oversize-flagged) | marker PK |
 
 Every Command first asserts the type is **available** (registered by a present module) and answers
 `DOCUMENT_TYPE_NOT_AVAILABLE` otherwise — so templates of a switched-off host are neither listed nor
@@ -57,62 +56,10 @@ writable, and never deleted by this module.
 **Audit state** (R-13): `{ documentType, name, salesChannelId, isDefault, version, languages,
 contentDigest: { <lang>: sha256(canonical JSON) } }`; `save_content` adds `{ language }`.
 
-## 2. `document_template_imports` (entity `DocumentTemplateImport`, `@GlobalEntity()`)
+## 2. ~~`document_template_imports`~~ — withdrawn (owner answer P2)
 
-Records that a document type's legacy templates were imported — the "once" of FR-082.
-
-| Column | Type | Null | Notes |
-| --- | --- | --- | --- |
-| `document_type` | `varchar(120)` | no | PK part |
-| `source` | `varchar(120)` | no | PK part — the registration's `legacyImport.source`, e.g. `invoice_templates` |
-| `imported_count` | `integer` | no | |
-| `skipped_count` | `integer` | no | Rows whose channel no longer exists |
-| `report` | `jsonb` | no | `{ skipped: [{ id, salesChannelId }], oversize: [id] }` |
-| `imported_at` | `timestamptz` | no | |
-
-`primary key ("document_type", "source")`.
-
-### Import algorithm (owner: `document_templates`; reader supplied by the host)
-
-```text
-ensureImported(type):                          -- boot work hook (own presence probed) and lazily
-  if cache.has(type) or !registration(type).legacyImport: return
-  run Command document_template.import:
-    tx:
-      inserted = insert into document_template_imports (type, source, 0, 0, '{}', now())
-                 on conflict do nothing returning 1
-      if not inserted: commit; cache.add(type); return          -- another run did it
-      rows = await legacyImport.read()                          -- host reads its own table
-      for row in rows:
-        if row.salesChannelId and !salesChannelResolutionPort.getById(row.salesChannelId): skip, report
-        insert into document_templates (id, document_type, name, sales_channel_id, content,
-               is_default, version, created_at, updated_at)
-          values (row.id, type, row.name, row.salesChannelId,
-                  { schemaVersion: 1, languages: row.languages },   -- trees byte-identical
-                  row.isDefault, row.version, row.createdAt, row.updatedAt)
-          on conflict (id) do nothing
-      if legacyImport.afterImport: await legacyImport.afterImport()  -- throws → whole tx rolls back
-      update marker counts/report
-  cache.add(type)
-```
-
-Legacy rows exceeding §3's limits are imported unchanged and listed under `oversize` (operator data is
-never refused at import; the limits bind the next save).
-
-### Legacy mapping — `invoice_templates` → `document_templates` (`invoices.invoice`)
-
-| `invoice_templates` | `document_templates` |
-| --- | --- |
-| `id` | `id` |
-| `name` | `name` |
-| `sales_channel_id` | `sales_channel_id` (row skipped if the channel is gone) |
-| `content.languages` | `content.languages` (unchanged); `content.schema_version` → `schemaVersion: 1` |
-| `active` | `is_default` |
-| `version`, `created_at`, `updated_at` | same |
-| `code`, `is_system`, `languages` | dropped (meaningless or derived) |
-
-`LegacyTemplateRecord` (contracts): `{ id, name, salesChannelId, languages: Record<string, unknown>,
-isDefault, version, createdAt, updatedAt }`.
+No invoice template data is imported, so there is no import marker. `invoice_templates` (owned by
+`invoices`) is dropped by an `invoices` migration.
 
 ## 3. `content` — the per-language Page Builder envelope
 
@@ -210,8 +157,6 @@ No merge fields. Built-in: `defaultContent()` = the generic seed tree
                                        rename,    │   │
                                     save_content ─┘   ▼ delete (confirmDefault if default)
                                                    [gone] → documents fall back per FR-031 / FR-039
- legacy invoice row ── import (once per type+source) ──▶ [template] (is_default = legacy active)
 ```
 
-Host or facility switched off: rows untouched and invisible; on again: same state; pending import
-completes on first use. Channel deleted: its templates cascade.
+Host or facility switched off: rows untouched and invisible; on again: same state. Channel deleted: its templates cascade.
