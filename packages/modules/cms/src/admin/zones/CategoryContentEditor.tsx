@@ -52,6 +52,11 @@ export function CategoryContentEditor({
       // Puck seeds from `data` on mount only, so the key is what re-seeds the
       // canvas for another category or another language.
       contentKey={`category:${categoryId}:${language}`}
+      // Feature 151 — the zone knows its language, so the canvas offers the
+      // Translate action; the host owns the other languages and the save, so
+      // there is no other tab to translate from here.
+      activeLanguage={language}
+      resource={{ type: 'catalog_category', id: categoryId }}
     />
   );
 }

@@ -413,6 +413,7 @@ export function PageBuilderHeaderActions({
   currentData,
   onCopyFromLanguage,
   onClearCanvas,
+  extraActions,
   t,
 }: {
   fullscreen: boolean;
@@ -422,6 +423,12 @@ export function PageBuilderHeaderActions({
   currentData: Data | null;
   onCopyFromLanguage?: (sourceLanguage: string) => void | Promise<void>;
   onClearCanvas?: () => void;
+  /**
+   * Module-owned actions rendered first in the right-hand header group (feature
+   * 151 — `cms`' Translate). The chrome owns no copy, permission or endpoint for
+   * them; it only gives them a place.
+   */
+  extraActions?: ReactNode;
   t: Translate;
 }): ReactElement {
   const [copyOpen, setCopyOpen] = useState(false);
@@ -456,6 +463,7 @@ export function PageBuilderHeaderActions({
   return (
     <>
       <div className="cms-pb-header-actions">
+        {extraActions ?? null}
         {onCopyFromLanguage ? (
           <Button
             type="button"

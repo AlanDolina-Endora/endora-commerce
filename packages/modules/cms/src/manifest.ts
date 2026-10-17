@@ -1,4 +1,5 @@
 import {
+  CMS_TRANSLATION_DEFAULT_MAX_SOURCE_CHARACTERS,
   defineModuleManifest,
   defineModuleSettingsManifest,
   type ModuleCliCommand,
@@ -10,7 +11,18 @@ export const CMS_PAGE_BUILDER_SETTING_CODES = {
   BREAKPOINT_TABLET_MIN: 'cms.page_builder.breakpoint.tablet_min',
   BREAKPOINT_DESKTOP_MIN: 'cms.page_builder.breakpoint.desktop_min',
   COLOR_PALETTE: 'cms.page_builder.color_palette',
+  /**
+   * Feature 151 — the Page Builder's Translate action: its own switch (not the
+   * module's activation control, which stays `cms.enabled`), the LLM credential
+   * it uses, and the most source text one click may send.
+   */
+  TRANSLATION_ENABLED: 'cms.page_builder.translation.enabled',
+  TRANSLATION_LLM_CREDENTIALS: 'cms.page_builder.translation.llm_credentials',
+  TRANSLATION_MAX_SOURCE_CHARACTERS: 'cms.page_builder.translation.max_source_characters',
 } as const;
+
+/** Feature 151 — the code a role needs to use the Translate action. */
+export const CMS_TRANSLATE_PERMISSION = 'cms.translate';
 
 /**
  * The deployment's reserved first path segments
@@ -92,6 +104,37 @@ const settings = defineModuleSettingsManifest({
       valueType: 'json',
       defaultValue: [],
     },
+    // Feature 151 — the Translate action (`specs/151-page-builder-translate/`).
+    // Platform-wide like the module's other non-channel settings; read per
+    // request, so a change applies to the next click without a restart.
+    {
+      code: CMS_PAGE_BUILDER_SETTING_CODES.TRANSLATION_ENABLED,
+      name: 'Translation enabled',
+      description:
+        'Shows the Translate button in the Page Builder. When on, editors with the "Translate Page Builder content with AI" permission can translate a canvas into the language being edited. The text of the canvas is sent to the provider of the model chosen below.',
+      groupCode: 'cms_page_builder',
+      valueType: 'boolean',
+      defaultValue: false,
+    },
+    {
+      code: CMS_PAGE_BUILDER_SETTING_CODES.TRANSLATION_LLM_CREDENTIALS,
+      name: 'Translation credentials',
+      description:
+        'The LLM credential configuration (Credentials screen) whose provider, model and API key the Translate button uses. Supported providers: OpenAI, Anthropic, Google, DeepSeek and any OpenAI-compatible endpoint (through the configuration\'s Base URL). Required for the button to work.',
+      groupCode: 'cms_page_builder',
+      valueType: 'credential_ref',
+      configurationType: 'llm',
+      defaultValue: '',
+    },
+    {
+      code: CMS_PAGE_BUILDER_SETTING_CODES.TRANSLATION_MAX_SOURCE_CHARACTERS,
+      name: 'Translation size limit (characters)',
+      description:
+        'The most text, in characters, one click of Translate may send to the model (default 40 000, allowed 1 000–200 000). A higher limit lets longer pages be translated at once but costs more per click and makes the editor wait longer on a single request, which a slow provider or a proxy timeout can then cut off. Larger content is refused before anything is sent.',
+      groupCode: 'cms_page_builder',
+      valueType: 'number',
+      defaultValue: CMS_TRANSLATION_DEFAULT_MAX_SOURCE_CHARACTERS,
+    },
   ],
 });
 
@@ -161,6 +204,21 @@ export const manifest = defineModuleManifest({
   // D-87). `languages` used to ask the question itself, with a jsonb
   // containment test against `cms_pages` — this module's table.
   dependencies: ['assets_library', 'languages', 'sales_channels', 'auth', 'settings'],
+  nonBindingDependencies: [
+    {
+      moduleId: 'credentials',
+      name: 'credentialsService',
+      kind: 'degrades-without',
+      whenAbsent:
+        'Page Builder translation reports itself unavailable; every other CMS function keeps working.',
+      reason:
+        'Feature 151 (research R11). The Translate action resolves its LLM credential through this ' +
+        'port per request, after asking whether `credentials` is present, and answers ' +
+        '`unavailable` / `409 CMS_TRANSLATION_UNAVAILABLE` when it is not. Not `dependencies`: ' +
+        'the function is optional and off by default, and the edge would make `credentials` ' +
+        'a module the operator could not switch off while the CMS is on.',
+    },
+  ],
   /**
    * Error codes this module owns — feature 090, Phase 3
    * (`specs/090-module-owned-error-codes/`).
@@ -225,6 +283,18 @@ export const manifest = defineModuleManifest({
     // path would win rather than being told a slug is "invalid".
     { code: 'CMS_SLUG_RESERVED' },
     { code: 'CMS_TEMPLATE_NOT_FOUND' },
+    // Feature 151 — the Page Builder translation (`contracts/page-builder-translation-api.md` §3).
+    // `TOO_LARGE` names the configured limit through `details` → `{limit}`;
+    // `PROVIDER_FAILED` chooses its sentence by `details.code`.
+    { code: 'CMS_TRANSLATION_DISABLED' },
+    { code: 'CMS_TRANSLATION_NOT_CONFIGURED' },
+    { code: 'CMS_TRANSLATION_UNAVAILABLE' },
+    { code: 'CMS_TRANSLATION_TOO_LARGE' },
+    { code: 'CMS_TRANSLATION_SELECTION_NOT_FOUND' },
+    {
+      code: 'CMS_TRANSLATION_PROVIDER_FAILED',
+      tokens: ['credentials_rejected', 'rate_limited', 'unavailable', 'timeout', 'malformed'],
+    },
   ],
   i18n: { bundlesDir: 'i18n' },
   docs: { dir: 'docs' },
@@ -232,6 +302,7 @@ export const manifest = defineModuleManifest({
   permissions: [
     { code: 'cms.read', label: 'View CMS content' },
     { code: 'cms.write', label: 'Edit CMS content' },
+    { code: CMS_TRANSLATE_PERMISSION, label: 'Translate Page Builder content with AI' },
   ],
   actions: [
     {
@@ -286,6 +357,28 @@ export const manifest = defineModuleManifest({
       keywords: ['cms', 'hooks', 'hook', 'hooki'],
       weight: 134,
     },
+    // Feature 151 — the generic Settings screen has no per-group address, so
+    // the entry opens it under the code it is gated by (the `seo` precedent).
+    {
+      id: 'open-page-builder-translation-settings',
+      labelKey: 'actions.openPageBuilderTranslationSettings.label',
+      descriptionKey: 'actions.openPageBuilderTranslationSettings.description',
+      icon: 'Sparkles',
+      targetRoute: '/settings',
+      requiredPermission: 'settings:read',
+      keywords: [
+        'translate',
+        'translation',
+        'ai',
+        'llm',
+        'page builder',
+        'tłumacz',
+        'tłumaczenie',
+        'przetłumacz',
+        'kreator stron',
+      ],
+      weight: 135,
+    },
   ],
   // Feature 073 — the operator's activation control. A platform without a CMS
   // is a smaller platform, not a broken one: pages, blocks and hooks are
@@ -316,6 +409,7 @@ export const manifest = defineModuleManifest({
   blocks: [
     {
       name: 'cms.Row',
+      translatable: [],
       labelKey: 'blocks.row.label',
       descriptionKey: 'blocks.row.description',
       category: 'layout',
@@ -349,6 +443,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Spacer',
+      translatable: [],
       labelKey: 'blocks.spacer.label',
       descriptionKey: 'blocks.spacer.description',
       category: 'layout',
@@ -359,6 +454,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Heading',
+      translatable: [{ path: 'text' }],
       labelKey: 'blocks.heading.label',
       descriptionKey: 'blocks.heading.description',
       category: 'content',
@@ -391,6 +487,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Text',
+      translatable: [{ path: 'text' }, { path: 'tiptapContent', format: 'tiptap' }],
       labelKey: 'blocks.text.label',
       descriptionKey: 'blocks.text.description',
       category: 'content',
@@ -409,6 +506,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.RichContent',
+      translatable: [{ path: 'content', format: 'tiptap' }],
       labelKey: 'blocks.richContent.label',
       descriptionKey: 'blocks.richContent.description',
       category: 'content',
@@ -419,6 +517,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Button',
+      translatable: [{ path: 'label' }],
       labelKey: 'blocks.button.label',
       descriptionKey: 'blocks.button.description',
       category: 'content',
@@ -441,6 +540,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Image',
+      translatable: [{ path: 'alt' }],
       labelKey: 'blocks.image.label',
       descriptionKey: 'blocks.image.description',
       category: 'content',
@@ -454,6 +554,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Icons',
+      translatable: [],
       labelKey: 'blocks.icons.label',
       descriptionKey: 'blocks.icons.description',
       category: 'content',
@@ -468,6 +569,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Social',
+      translatable: [{ path: 'items[].label' }],
       labelKey: 'blocks.social.label',
       descriptionKey: 'blocks.social.description',
       category: 'content',
@@ -490,6 +592,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.FeatureList',
+      translatable: [{ path: 'items[].title' }, { path: 'items[].description' }],
       labelKey: 'blocks.featureList.label',
       descriptionKey: 'blocks.featureList.description',
       category: 'content',
@@ -501,6 +604,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Hero',
+      translatable: [{ path: 'heading' }, { path: 'subtitle' }, { path: 'buttonLabel' }],
       labelKey: 'blocks.hero.label',
       descriptionKey: 'blocks.hero.description',
       category: 'content',
@@ -511,6 +615,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.LogoStrip',
+      translatable: [{ path: 'items[].alt' }],
       labelKey: 'blocks.logoStrip.label',
       descriptionKey: 'blocks.logoStrip.description',
       category: 'content',
@@ -521,6 +626,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Testimonial',
+      translatable: [{ path: 'quote' }, { path: 'author' }, { path: 'role' }],
       labelKey: 'blocks.testimonial.label',
       descriptionKey: 'blocks.testimonial.description',
       category: 'content',
@@ -531,6 +637,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Stats',
+      translatable: [{ path: 'items[].value' }, { path: 'items[].label' }],
       labelKey: 'blocks.stats.label',
       descriptionKey: 'blocks.stats.description',
       category: 'content',
@@ -541,6 +648,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.AnnouncementBar',
+      translatable: [{ path: 'text' }],
       labelKey: 'blocks.announcementBar.label',
       descriptionKey: 'blocks.announcementBar.description',
       category: 'content',
@@ -550,6 +658,12 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.SimpleTable',
+      translatable: [
+        { path: 'columns[].label' },
+        { path: 'tableRows[].cells[].value' },
+        { path: 'headers[].label' },
+        { path: 'rows[].cells[].value' },
+      ],
       labelKey: 'blocks.simpleTable.label',
       descriptionKey: 'blocks.simpleTable.description',
       category: 'content',
@@ -560,6 +674,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Video',
+      translatable: [{ path: 'title' }],
       labelKey: 'blocks.video.label',
       descriptionKey: 'blocks.video.description',
       category: 'media',
@@ -570,6 +685,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Map',
+      translatable: [{ path: 'markers[].label' }],
       labelKey: 'blocks.map.label',
       descriptionKey: 'blocks.map.description',
       category: 'media',
@@ -589,6 +705,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.ContentSlider',
+      translatable: [],
       labelKey: 'blocks.contentSlider.label',
       descriptionKey: 'blocks.contentSlider.description',
       category: 'interactive',
@@ -599,6 +716,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.ImageSlider',
+      translatable: [{ path: 'items[].title' }],
       labelKey: 'blocks.imageSlider.label',
       descriptionKey: 'blocks.imageSlider.description',
       category: 'interactive',
@@ -609,6 +727,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Tabs',
+      translatable: [{ path: 'items[].label' }, { path: 'items[].content', format: 'html' }],
       labelKey: 'blocks.tabs.label',
       descriptionKey: 'blocks.tabs.description',
       category: 'interactive',
@@ -619,6 +738,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Accordion',
+      translatable: [{ path: 'items[].title' }, { path: 'items[].content', format: 'html' }],
       labelKey: 'blocks.accordion.label',
       descriptionKey: 'blocks.accordion.description',
       category: 'interactive',
@@ -629,6 +749,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Column',
+      translatable: [],
       labelKey: 'blocks.column.label',
       descriptionKey: 'blocks.column.description',
       category: 'internal',
@@ -639,6 +760,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Slide',
+      translatable: [],
       labelKey: 'blocks.slide.label',
       descriptionKey: 'blocks.slide.description',
       category: 'internal',
@@ -649,6 +771,12 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.NewsletterSignup',
+      translatable: [
+        { path: 'heading' },
+        { path: 'description' },
+        { path: 'placeholder' },
+        { path: 'buttonLabel' },
+      ],
       labelKey: 'blocks.newsletterSignup.label',
       descriptionKey: 'blocks.newsletterSignup.description',
       category: 'forms',
@@ -659,6 +787,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.ContactFormEmbed',
+      translatable: [{ path: 'heading' }, { path: 'description' }],
       labelKey: 'blocks.contactFormEmbed.label',
       descriptionKey: 'blocks.contactFormEmbed.description',
       category: 'forms',
@@ -669,6 +798,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.RawHtml',
+      translatable: [],
       labelKey: 'blocks.rawHtml.label',
       descriptionKey: 'blocks.rawHtml.description',
       category: 'advanced',
@@ -679,6 +809,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.RawJs',
+      translatable: [],
       labelKey: 'blocks.rawJs.label',
       descriptionKey: 'blocks.rawJs.description',
       category: 'advanced',
@@ -689,6 +820,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.InsertBlock',
+      translatable: [],
       labelKey: 'blocks.insertBlock.label',
       descriptionKey: 'blocks.insertBlock.description',
       category: 'embeds',
@@ -698,6 +830,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.InsertTemplate',
+      translatable: [],
       labelKey: 'blocks.insertTemplate.label',
       descriptionKey: 'blocks.insertTemplate.description',
       category: 'embeds',

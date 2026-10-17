@@ -634,6 +634,7 @@ export const manifest = defineModuleManifest({
   blocks: [
     {
       name: 'catalog.ProductCard',
+      translatable: [{ path: 'ctaLabel' }],
       labelKey: 'blocks.productCard.label',
       descriptionKey: 'blocks.productCard.description',
       category: 'catalog',
@@ -644,6 +645,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'catalog.ProductGrid',
+      translatable: [],
       labelKey: 'blocks.productGrid.label',
       descriptionKey: 'blocks.productGrid.description',
       category: 'catalog',
@@ -654,6 +656,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'catalog.ProductSlider',
+      translatable: [],
       labelKey: 'blocks.productSlider.label',
       descriptionKey: 'blocks.productSlider.description',
       category: 'catalog',
@@ -664,6 +667,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'catalog.CategoryList',
+      translatable: [],
       labelKey: 'blocks.categoryList.label',
       descriptionKey: 'blocks.categoryList.description',
       category: 'catalog',
@@ -674,6 +678,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'catalog.CategoryGrid',
+      translatable: [],
       labelKey: 'blocks.categoryGrid.label',
       descriptionKey: 'blocks.categoryGrid.description',
       category: 'catalog',

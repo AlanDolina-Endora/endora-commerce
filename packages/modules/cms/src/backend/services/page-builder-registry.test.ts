@@ -296,3 +296,56 @@ describe('PageBuilderRegistry — the rest of the descriptor', () => {
     expect(desc.categories).toEqual([]);
   });
 });
+
+/** Feature 151, T011 — the translatable-text declaration is kept, served and looked up. */
+describe('PageBuilderRegistry — translatable declarations', () => {
+  const DECLARING = manifest('cms', {
+    blocks: [
+      {
+        name: 'cms.Heading',
+        labelKey: 'blocks.heading.label',
+        category: 'text',
+        contexts: ['cms'],
+        fields: {},
+        translatable: [{ path: 'text' }],
+      },
+      {
+        name: 'cms.Spacer',
+        labelKey: 'blocks.spacer.label',
+        category: 'layout',
+        contexts: ['cms'],
+        fields: {},
+        translatable: [],
+      },
+    ],
+  } as Partial<ModuleManifest>);
+  const UNDECLARED = manifest('acme', {
+    blocks: [
+      { name: 'acme.Widget', labelKey: 'blocks.widget.label', category: 'text', contexts: ['cms'], fields: {} },
+    ],
+  } as Partial<ModuleManifest>);
+
+  it('serves the declaration on the descriptor and omits it when absent', async () => {
+    const registry = new PageBuilderRegistry({ manifests: [DECLARING, UNDECLARED] });
+    const { components } = await registry.describe();
+    expect(components.find((c) => c.name === 'cms.Heading')!.translatable).toEqual([{ path: 'text' }]);
+    expect(components.find((c) => c.name === 'cms.Spacer')!.translatable).toEqual([]);
+    expect(components.find((c) => c.name === 'acme.Widget')).not.toHaveProperty('translatable');
+  });
+
+  it('answers translatableFor per block', () => {
+    const registry = new PageBuilderRegistry({ manifests: [DECLARING, UNDECLARED] });
+    expect(registry.translatableFor('cms.Heading')).toEqual([{ path: 'text' }]);
+    expect(registry.translatableFor('cms.Spacer')).toEqual([]);
+    expect(registry.translatableFor('acme.Widget')).toBeUndefined();
+    expect(registry.translatableFor('nobody.Knows')).toBeUndefined();
+  });
+
+  it('treats a block whose owner is absent as unknown', () => {
+    const registry = new PageBuilderRegistry({
+      manifests: [DECLARING],
+      isModulePresent: (id) => id !== 'cms',
+    });
+    expect(registry.translatableFor('cms.Heading')).toBeUndefined();
+  });
+});

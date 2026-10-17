@@ -1,0 +1,14 @@
+{
+  // Type-check configuration; `tsconfig.build.json` is the emitting one. No `rootDir` here:
+  // `tsconfig.base.json`'s `paths` block is active, so `@endora-commerce/contracts` resolves at
+  // its source, and `rootDir` with an active `paths` block is TS6059
+  // (`specs/conventions/building-packages.md`).
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "noEmit": true,
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"]
+  },
+  "include": ["src/**/*"]
+}

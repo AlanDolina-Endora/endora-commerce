@@ -7,10 +7,12 @@ import {
   type ResolveResult,
 } from '@endora-commerce/contracts';
 import { PROMPT_ACTIONS_SETTING_CODES } from '../../../manifest.js';
-import { AnthropicAdapter } from './anthropic-adapter.js';
-import { GoogleAdapter } from './google-adapter.js';
-import { OpenAiAdapter } from './openai-adapter.js';
-import type { FetchLike, LlmProviderAdapter } from './provider.js';
+import {
+  createLlmAdapter,
+  LlmConfigurationError,
+  type FetchLike,
+  type LlmProviderAdapter,
+} from '@endora-commerce/llm-client';
 
 /**
  * Settings-driven provider factory + capability derivation (feature 043,
@@ -75,7 +77,7 @@ export class LlmProviderFactory {
   async capability(): Promise<PromptActionsCapability> {
     const cfg = await this.readConfig();
     if (!cfg.enabled) return { status: 'disabled', bulkLimit: cfg.bulkLimit };
-    if (!cfg.provider || !cfg.model || !cfg.apiKey) {
+    if (!cfg.provider || !cfg.model || !cfg.apiKey || !this.buildAdapter(cfg)) {
       return { status: 'not_configured', bulkLimit: cfg.bulkLimit };
     }
     return { status: 'ready', bulkLimit: cfg.bulkLimit };
@@ -86,14 +88,35 @@ export class LlmProviderFactory {
     const cfg = await this.readConfig();
     if (!cfg.enabled) throw new AssistantDisabled();
     if (!cfg.provider || !cfg.model || !cfg.apiKey) throw new AssistantNotConfigured();
-    const fetchImpl = this.deps.fetchImpl ?? fetch;
-    const adapter: LlmProviderAdapter =
-      cfg.provider === 'anthropic'
-        ? new AnthropicAdapter(cfg.apiKey, fetchImpl)
-        : cfg.provider === 'google'
-          ? new GoogleAdapter(cfg.apiKey, fetchImpl)
-          : new OpenAiAdapter(cfg.apiKey, fetchImpl);
+    const adapter = this.buildAdapter(cfg);
+    if (!adapter) throw new AssistantNotConfigured();
     return { adapter, provider: cfg.provider, model: cfg.model, bulkLimit: cfg.bulkLimit };
+  }
+
+  /**
+   * Feature 151 (research R21) — the adapter comes from the shared
+   * `@endora-commerce/llm-client` factory, which also decides the endpoint: the
+   * credential's Base URL for the OpenAI protocol (`openai`, `deepseek`,
+   * `openai_compatible`), the provider default otherwise. A configuration it
+   * refuses — an `openai_compatible` credential without a Base URL, or a Base
+   * URL that is not an http(s) URL — is `not_configured`, never a failed call.
+   */
+  private buildAdapter(cfg: {
+    provider: PromptActionsProvider | null;
+    apiKey: string;
+    baseUrl: string;
+  }): LlmProviderAdapter | null {
+    if (!cfg.provider) return null;
+    try {
+      return createLlmAdapter(cfg.provider, {
+        apiKey: cfg.apiKey,
+        baseUrl: cfg.baseUrl,
+        ...(this.deps.fetchImpl ? { fetchImpl: this.deps.fetchImpl } : {}),
+      });
+    } catch (error) {
+      if (error instanceof LlmConfigurationError) return null;
+      throw error;
+    }
   }
 
   async bulkLimit(): Promise<number> {
@@ -105,6 +128,7 @@ export class LlmProviderFactory {
     provider: PromptActionsProvider | null;
     model: string;
     apiKey: string;
+    baseUrl: string;
     bulkLimit: number;
   }> {
     const channelId = await this.deps.resolveChannelId();
@@ -133,13 +157,14 @@ export class LlmProviderFactory {
       provider: fromCredential?.provider ?? null,
       model: fromCredential?.model ?? '',
       apiKey: fromCredential?.apiKey ?? '',
+      baseUrl: fromCredential?.baseUrl ?? '',
       bulkLimit,
     };
   }
 
   private async resolveFromCredential(
     refCode: string,
-  ): Promise<{ provider: PromptActionsProvider; model: string; apiKey: string } | null> {
+  ): Promise<{ provider: PromptActionsProvider; model: string; apiKey: string; baseUrl: string } | null> {
     if (!this.deps.credentials || !refCode) return null;
     // Tolerated: an unresolvable reference means the assistant is not
     // configured, and reporting that is the product's answer (feature 058).
@@ -151,13 +176,15 @@ export class LlmProviderFactory {
       return null;
     });
     if (!resolved || resolved.status !== 'ok') return null;
-    // Only providers prompt_actions has an adapter for (anthropic/google/openai)
-    // are usable; any other resolved provider (e.g. deepseek) is not_configured.
+    // Only providers `@endora-commerce/llm-client` can call are usable — since
+    // feature 151 every provider of the credential `llm` type, DeepSeek and
+    // OpenAI-compatible endpoints included; an unknown code is not_configured.
     const provider = PromptActionsProviderSchema.safeParse(resolved.providerCode);
     if (!provider.success) return null;
     const model = typeof resolved.values['model'] === 'string' ? resolved.values['model'].trim() : '';
     const apiKey = typeof resolved.values['apiKey'] === 'string' ? resolved.values['apiKey'].trim() : '';
     if (!model || !apiKey) return null;
-    return { provider: provider.data, model, apiKey };
+    const baseUrl = typeof resolved.values['baseUrl'] === 'string' ? resolved.values['baseUrl'].trim() : '';
+    return { provider: provider.data, model, apiKey, baseUrl };
   }
 }

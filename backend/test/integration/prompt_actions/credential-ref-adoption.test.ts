@@ -75,8 +75,14 @@ describe('Prompt actions — credential_ref adoption [real DB]', () => {
     expect((await h.promptActions.providerFactory.capability()).status).toBe('not_configured');
   });
 
-  it('reports not_configured when the credential resolves to an unsupported provider', async () => {
-    // deepseek is a valid `llm` provider but prompt_actions has no adapter for it.
+  it('is ready with a DeepSeek credential (feature 151, FR-043)', async () => {
+    // DeepSeek used to be a valid `llm` provider the assistant had no adapter
+    // for, and this case asserted `not_configured`. Since feature 151 the
+    // assistant builds its adapters through `@endora-commerce/llm-client`, which
+    // speaks the OpenAI protocol to DeepSeek's public endpoint — the owner's
+    // decision 4 (`specs/151-page-builder-translate/spec.md`, Clarifications).
+    // The `not_configured` answer for an unusable configuration is held by the
+    // factory's unit test, because the credentials API no longer stores one.
     const created = await h.app.inject({
       method: 'POST',
       url: '/api/v1/admin/credentials',
@@ -92,6 +98,9 @@ describe('Prompt actions — credential_ref adoption [real DB]', () => {
     expect(created.statusCode).toBe(201);
     await setSetting(h, 'prompt_actions.llm_credentials', 'assistant-deepseek');
 
-    expect((await h.promptActions.providerFactory.capability()).status).toBe('not_configured');
+    expect((await h.promptActions.providerFactory.capability()).status).toBe('ready');
+    const resolved = await h.promptActions.providerFactory.resolve();
+    expect(resolved.provider).toBe('deepseek');
+    expect(resolved.model).toBe('deepseek-chat');
   });
 });

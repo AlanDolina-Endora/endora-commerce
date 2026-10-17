@@ -217,6 +217,7 @@
   },
   "devDependencies": {
     "@endora-commerce/cli": "workspace:*",
+    "@endora-commerce/llm-client": "workspace:*",
     "@endora-commerce/test-kit": "workspace:*",
     "@mikro-orm/cli": "^6.6.13",
     "@types/node": "^22.9.0",

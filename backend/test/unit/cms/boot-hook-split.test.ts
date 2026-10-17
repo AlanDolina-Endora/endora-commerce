@@ -85,6 +85,11 @@ async function composeCms(): Promise<Composed> {
     // hand it one. It is a plain collector here because the subject of this file
     // is which hooks probe presence, not what the registry does with an entry.
     salesChannelBridgeRegistry: { register: () => undefined },
+    // Feature 151 — `settings`' write-validator registry, which this module
+    // pushes the translation size-limit rule into from a fourth contribution
+    // hook. `settings` is not composed here, so the root supplies a collector,
+    // as it does for the other registries above.
+    settingWriteValidatorRegistry: { register: () => undefined, forCode: () => [] },
     // The composed manifest set, from which the Page Builder registry takes
     // every block and category declaration (feature 096, T209). A host value no
     // module defaults, so it is registered above the compose call like the

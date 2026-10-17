@@ -247,6 +247,10 @@ export function TemplateEditor(): ReactNode {
           data={currentData}
           onChange={setDraftData}
           contentKey={`${id ?? 'new'}:${activeLanguage ?? ''}`}
+          // Feature 151 — the translation's audit subject, and the version whose
+          // change (a save) retires its *Restore previous content*.
+          resource={{ type: 'cms_template', id: template?.id ?? null }}
+          savedVersion={template?.version ?? null}
           languages={scope.languages}
           activeLanguage={activeLanguage}
           onResolveLanguageContent={(language) => {

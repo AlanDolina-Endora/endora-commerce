@@ -5,6 +5,7 @@ import {
   createCmsPageRequestSchema,
   createCmsTemplateRequestSchema,
   cmsHookAttachmentRequestSchema,
+  cmsPageBuilderTranslateRequestSchema,
   patchCmsBlockRequestSchema,
   patchCmsHookRequestSchema,
   patchCmsPageRequestSchema,
@@ -19,6 +20,10 @@ import type { CmsBlockService } from './services/cms-block-service.js';
 import type { CmsHookService } from './services/cms-hook-service.js';
 import type { CmsTemplateService } from './services/cms-template-service.js';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
+import type { PageBuilderTranslationService } from './services/translation/page-builder-translation.service.js';
+
+/** Feature 151 — a canvas at the 200 000-character ceiling, with styling, stays below this. */
+const TRANSLATE_BODY_LIMIT = 5 * 1024 * 1024;
 
 export async function registerCmsAdminRoutes(
   app: FastifyInstance,
@@ -31,6 +36,7 @@ export async function registerCmsAdminRoutes(
     getColorPaletteWriter?: () => ColorPaletteWriter | null;
     resolveAdminAuditContext?: (req: FastifyRequest) => ColorPaletteAuditContext;
     requireAdmin: RequireAdminFactory;
+    translation: PageBuilderTranslationService;
   },
 ): Promise<void> {
   const requireRead = deps.requireAdmin('cms.read');
@@ -72,6 +78,30 @@ export async function registerCmsAdminRoutes(
   app.get('/api/v1/admin/cms/page-builder/config', { preHandler: requireRead }, async () => ({
     data: await deps.pageBuilderRegistry.describe(),
   }));
+
+  /**
+   * Feature 151 — the Page Builder translation
+   * (`specs/151-page-builder-translate/contracts/page-builder-translation-api.md`).
+   *
+   * Both behind their own code, `cms.translate`: sending content to a third
+   * party and spending money on it is a separate decision from editing it. The
+   * capability lets the editor show the action disabled with a reason before a
+   * click; it answers `unavailable` rather than 503 while `credentials` is off.
+   */
+  const requireTranslate = deps.requireAdmin('cms.translate');
+
+  app.get('/api/v1/admin/cms/page-builder/translation', { preHandler: requireTranslate }, async () => ({
+    data: await deps.translation.capability(),
+  }));
+
+  app.post(
+    '/api/v1/admin/cms/page-builder/translate',
+    { preHandler: requireTranslate, bodyLimit: TRANSLATE_BODY_LIMIT },
+    async (request) => {
+      const body = cmsPageBuilderTranslateRequestSchema.parse(request.body);
+      return { data: await deps.translation.translate(body) };
+    },
+  );
 
   app.put('/api/v1/admin/cms/page-builder/color-palette', { preHandler: requireWrite }, async (request) => {
     const writer = deps.getColorPaletteWriter?.();

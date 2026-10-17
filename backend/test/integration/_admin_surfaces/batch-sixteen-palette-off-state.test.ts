@@ -89,12 +89,45 @@ interface Subject {
 const SUBJECTS: readonly Subject[] = [
   {
     module: 'cms',
-    actions: ['new-page', 'open-blocks', 'open-hooks', 'open-pages', 'open-templates'],
+    actions: [
+      'new-page',
+      'open-blocks',
+      'open-hooks',
+      'open-page-builder-translation-settings',
+      'open-pages',
+      'open-templates',
+    ],
     axis: 'deactivated',
     admin: cmsAdmin,
   },
   { module: 'blog', actions: ['new-post'], axis: 'deactivated', admin: blogAdmin },
 ];
+
+/**
+ * Actions that deliberately open a screen another module owns, and the owner.
+ *
+ * Feature 151 added `cms`' entry to the Page Builder translation settings. The
+ * generic Settings screen has no per-group address, so the entry opens it —
+ * the precedent of `seo` and `google_tag_manager`. It is not the borrowed
+ * advertisement the route-ownership cases below guard against: the action is
+ * still `cms`' own and goes when `cms` does, and the screen's owner is a
+ * **binding** dependency of `cms`, so it cannot be withdrawn underneath the row.
+ * Both halves are asserted where the exemption is taken.
+ */
+const FOREIGN_TARGETS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  cms: { 'open-page-builder-translation-settings': 'settings' },
+};
+
+/** Whether `action` of `moduleId` is an exempt foreign target, asserting why. */
+function exemptForeignTarget(moduleId: string, actionId: string): boolean {
+  const owner = FOREIGN_TARGETS[moduleId]?.[actionId];
+  if (owner === undefined) return false;
+  const manifest = REGISTERED_MANIFESTS.find((entry) => entry.manifest.id === moduleId)?.manifest;
+  expect(manifest?.dependencies ?? [], `${moduleId} must depend on ${owner} to advertise its screen`).toContain(
+    owner,
+  );
+  return true;
+}
 
 describe('batch 16 contributes no palette action while off (Constitution XVII item 5)', () => {
   let h: BackendServerHandle;
@@ -150,6 +183,7 @@ describe('batch 16 contributes no palette action while off (Constitution XVII it
       const actions = manifest?.actions ?? [];
       expect(actions.map((action) => action.id).sort()).toEqual([...subject.actions]);
       for (const action of actions) {
+        if (exemptForeignTarget(subject.module, action.id)) continue;
         const target = (subject.admin.routes ?? []).find(
           (route) => route.path === action.targetRoute,
         );
@@ -258,6 +292,7 @@ describe('batch 16 contributes no palette action while off (Constitution XVII it
       )?.manifest;
       const routes = new Set((subject.admin.routes ?? []).map((route) => route.path));
       for (const action of manifest?.actions ?? []) {
+        if (exemptForeignTarget(subject.module, action.id)) continue;
         expect(routes.has(action.targetRoute), `${subject.module}: ${action.targetRoute}`).toBe(
           true,
         );

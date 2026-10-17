@@ -30,6 +30,7 @@
 import type {
   BlockCategory,
   BlockDefinition,
+  BlockTranslatableText,
   CmsFieldDescriptor,
   CmsColorPaletteEntry,
   CmsPageBuilderDescriptor,
@@ -62,6 +63,8 @@ export interface ComponentRegistration {
   responsiveFields?: string[];
   /** Sort order within the category. */
   weight?: number;
+  /** Feature 151 — the block's translatable texts, when it declared them. */
+  translatable?: BlockTranslatableText[];
 }
 
 /** One module's declaration of one palette section, kept as declared. */
@@ -164,6 +167,9 @@ export class PageBuilderRegistry {
           : {}),
         ...(block.previewIcon !== undefined ? { previewIcon: block.previewIcon } : {}),
         ...(block.weight !== undefined ? { weight: block.weight } : {}),
+        ...(block.translatable !== undefined
+          ? { translatable: block.translatable.map((entry) => ({ ...entry })) }
+          : {}),
       });
     }
     for (const category of (manifest.blockCategories ?? []) as BlockCategory[]) {
@@ -204,6 +210,20 @@ export class PageBuilderRegistry {
     return new Set(this.components.keys());
   }
 
+  /**
+   * Feature 151 — what of a block the Page Builder translation may send.
+   *
+   * `undefined` for a name nobody declared, for a block that made no
+   * declaration, **and for a block whose owner is not effectively present**:
+   * the translation then leaves the node untouched and reports it, which is
+   * the palette's presence answer applied to the one question it asks.
+   */
+  translatableFor(name: string): readonly BlockTranslatableText[] | undefined {
+    const registration = this.components.get(name);
+    if (!registration || !this.isModulePresent(registration.ownerModule)) return undefined;
+    return registration.translatable;
+  }
+
   getBreakpoints(): PageBuilderBreakpoints {
     return { ...this.breakpoints };
   }
@@ -239,6 +259,7 @@ export class PageBuilderRegistry {
           ...(reg.defaultProps !== undefined ? { defaultProps: reg.defaultProps } : {}),
           ...(reg.responsiveFields !== undefined ? { responsiveFields: reg.responsiveFields } : {}),
           ...(reg.weight !== undefined ? { weight: reg.weight } : {}),
+          ...(reg.translatable !== undefined ? { translatable: reg.translatable } : {}),
         })),
       categories: this.foldCategories(),
     };

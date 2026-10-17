@@ -153,7 +153,7 @@ import type { PromptActionsCradle } from '../../../packages/modules/prompt_actio
 import type { PromptActionToolRegistry } from '../../../packages/modules/prompt_actions/src/backend/services/tool-registry.js';
 import type { PromptRequestService } from '../../../packages/modules/prompt_actions/src/backend/services/prompt-request.service.js';
 import type { LlmProviderFactory } from '../../../packages/modules/prompt_actions/src/backend/services/llm/provider-factory.js';
-import type { FetchLike } from '../../../packages/modules/prompt_actions/src/backend/services/llm/provider.js';
+import type { FetchLike } from '@endora-commerce/llm-client';
 import type { ProductFeedsCradle } from '../../../packages/modules/product_feeds/src/backend/index.js';
 import type {
   TaxonomyFetchResult,

@@ -89,6 +89,41 @@ deklaracje według obecności modułu, odpowiadając na
 `GET /api/v1/admin/cms/page-builder/config`, więc wyłączony moduł zabiera
 swoje bloki z palety.
 
+### Teksty do tłumaczenia (`translatable`)
+
+Akcja **Przetłumacz** w Page Builderze wysyła teksty bloku do modelu językowego
+tylko wtedy, gdy blok wskazuje, które z jego właściwości są tekstem dla
+czytelnika. Deklaruje się to obok `fields`:
+
+```ts
+{
+  name: 'promotions.PromoBanner',
+  // ...
+  translatable: [
+    { path: 'headline' },
+    { path: 'items[].title' },
+    { path: 'body', format: 'tiptap' },
+  ],
+}
+```
+
+- `path` to nazwa właściwości albo nazwy połączone kropką; `name[]` oznacza
+  „każdy element tej tablicy”. Wartość, która pod ścieżką nie jest tekstem,
+  jest pomijana.
+- `format` to `plain` (domyślnie), `tiptap` dla właściwości z dokumentem TipTap
+  w JSON albo `html` dla tekstu HTML. Formatowanie i adresy linków nigdy nie
+  trafiają do modelu: tekst sformatowany przechodzi z numerowanymi
+  znacznikami, znaczniki HTML jako uporządkowane symbole zastępcze.
+- Deklaruj **wyłącznie tekst czytany przez kupującego**. Nigdy nie deklaruj
+  adresu URL, sluga, identyfikatora, kodu, koloru, nazwy ikony, odwołania do
+  zasobu, źródła HTML lub skryptu, `editorName` ani pochodnej właściwości HTML
+  obok właściwości TipTap — po tłumaczeniu odtwarza ją `resolveData` bloku.
+- Nie deklaruj właściwości slotów: bloki zagnieżdżone w slocie deklarują swoje
+  własne teksty.
+- `translatable: []` oznacza, że blok nie ma tekstu. Blok bez `translatable`
+  pozostaje nietknięty i jest zgłaszany redaktorowi jako „nie do
+  przetłumaczenia” — niezadeklarowany blok nigdy nie jest nigdzie wysyłany.
+
 ## 2. Komponenty wyświetlające
 
 Pakiet modułu sam wyświetla swoje bloki. Służą do tego najwyżej trzy

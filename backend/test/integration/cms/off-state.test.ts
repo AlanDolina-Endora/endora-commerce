@@ -67,6 +67,16 @@ describe('cms off-state (Constitution XVII)', () => {
         { method: 'POST', url: '/api/v1/admin/cms/pages', cookies: admin, payload: {} },
         { url: '/api/v1/cms/pages/by-slug?slug=home', headers: channel },
         { url: '/api/v1/cms/pages/by-channel', headers: channel },
+        // Feature 151 — the Page Builder translation goes with the module.
+        // `credentials` off and `prompt_actions` off are the other two rows of
+        // its off-state table, in `page-builder-translation.test.ts`.
+        { url: '/api/v1/admin/cms/page-builder/translation', cookies: admin },
+        {
+          method: 'POST',
+          url: '/api/v1/admin/cms/page-builder/translate',
+          cookies: admin,
+          payload: { targetLanguage: 'en-US', sourceLanguage: null, context: 'cms', data: { root: {}, content: [] } },
+        },
       ],
       adminPresence: { cookies: admin },
       settingWrite: {

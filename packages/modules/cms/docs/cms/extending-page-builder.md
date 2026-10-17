@@ -92,6 +92,39 @@ declarations by module presence when it answers
 `GET /api/v1/admin/cms/page-builder/config`, so a module that is switched off
 takes its blocks out of the palette with it.
 
+### Translatable texts (`translatable`)
+
+The Page Builder's **Translate** action sends a block's texts to a language
+model only when the block says which of its props are prose. Declare it beside
+`fields`:
+
+```ts
+{
+  name: 'promotions.PromoBanner',
+  // ...
+  translatable: [
+    { path: 'headline' },
+    { path: 'items[].title' },
+    { path: 'body', format: 'tiptap' },
+  ],
+}
+```
+
+- `path` is a prop name, or names joined by `.`; `name[]` means "every element
+  of this array". A value that is not a string at the path is skipped.
+- `format` is `plain` (the default), `tiptap` for a prop holding a TipTap JSON
+  document, or `html` for an HTML string. Formatting and link targets never
+  reach the model: rich text travels with numbered tags, HTML tags as ordered
+  placeholders.
+- Declare **only prose a shopper reads**. Never declare a URL, slug, id, code,
+  colour, icon name, asset reference, HTML or script source, `editorName`, or a
+  derived HTML prop beside a TipTap one — the block's own `resolveData`
+  regenerates that after translation.
+- Do not declare slot props: the blocks nested in a slot declare their own.
+- `translatable: []` says the block has no prose. A block with no
+  `translatable` at all is left untouched and reported to the editor as "cannot
+  be translated" — so an undeclared block is never sent anywhere.
+
 ## 2. Ship the renderers
 
 A module package draws its own blocks. It does so through up to three

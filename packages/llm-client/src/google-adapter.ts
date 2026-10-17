@@ -75,6 +75,16 @@ export class GoogleAdapter implements LlmProviderAdapter {
           })),
         },
       ],
+      ...(req.toolChoice
+        ? {
+            toolConfig: {
+              functionCallingConfig: {
+                mode: 'ANY',
+                allowedFunctionNames: [toWireName(req.toolChoice.name)],
+              },
+            },
+          }
+        : {}),
       contents: req.messages.map((m) => {
         if (m.role === 'user') return { role: 'user', parts: [{ text: m.text }] };
         if (m.role === 'assistant') {
@@ -114,6 +124,7 @@ export class GoogleAdapter implements LlmProviderAdapter {
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(req.model)}:generateContent`,
       { 'x-goog-api-key': this.apiKey },
       body,
+      req.signal,
     );
     const parsed = parseOrThrow(this.provider, ResponseSchema, json);
     const candidate = parsed.candidates[0]!;

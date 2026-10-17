@@ -95,6 +95,65 @@ The content tree is persisted in a JSONB envelope:
 
 `schema_version` is bumped only when the storage shape of a node changes. The boot-time `content-schema-upgrader` walks every saved tree and rewrites nodes in place; current components start at `schema_version=1`.
 
+## Translating content with AI
+
+The Page Builder can machine-translate a canvas into the language of the tab
+being edited, with a language model the operator chose. It is **off by
+default**.
+
+**Setting it up.** In **Settings → Page Builder**:
+
+| Setting | Meaning |
+| --- | --- |
+| `cms.page_builder.translation.enabled` | Shows the **Translate** button. Default off. |
+| `cms.page_builder.translation.llm_credentials` | The LLM configuration from the **Credentials** screen whose provider, model and API key the button uses. OpenAI, Anthropic, Google, DeepSeek and any OpenAI-compatible endpoint (through the configuration's Base URL) are supported. |
+| `cms.page_builder.translation.max_source_characters` | The most text, in characters, one click may send — default 40 000, allowed 1 000–200 000. A higher limit translates longer pages at once but costs more per click and keeps the editor waiting longer on one request, which a slow provider or a proxy timeout can cut off. |
+
+All three are platform-wide and apply to the next click without a restart. The
+command palette (⌘K / CTRL+K → "translation") opens the Settings screen. A role
+needs the permission **Translate Page Builder content with AI**
+(`cms.translate`) to see the button; editing content still needs the content's
+own write permission.
+
+**What leaves the platform.** Only the texts of the canvas — headings,
+paragraphs, button labels, list items, alternative texts and so on — are sent
+to the chosen model's provider. Links, product and category references, block
+codes, colours, custom HTML and scripts, editor-only block names and SEO fields
+are never sent and never changed. Formatting inside rich text travels as
+numbered tags and placeholders such as `{{customer.firstName}}` are checked to
+come back unchanged; a text whose answer loses either keeps its original
+wording.
+
+**Using it.** The button sits in the Page Builder toolbar beside **Copy from
+language** and names what it will translate:
+
+- **Translate all content** — nothing is selected. By default the current tab's
+  canvas is translated and its language is detected; the dialog can instead
+  take another language tab as the source (its unsaved edits included), which
+  replaces this tab's canvas.
+- **Translate component** — a block is selected: that block and every block
+  nested inside it. A block that has no translatable text disables the button.
+- **Translate selection** — text is selected in a text or rich-text field:
+  only those words. A selection that crosses formatting (part bold) or spans
+  several paragraphs is translated as whole paragraphs, and the notice says so.
+
+The result replaces the canvas as an **unsaved change**: read it, fix it and
+save as usual, or click **Restore previous content** in the notice, which is
+offered until the next save, translation or tab change. A translation can be
+cancelled while it runs; a cancelled or failed translation leaves the canvas
+unchanged.
+
+**States.** With the setting off there is no button. Switched on without
+usable credentials, or with the **Credentials** module switched off, the button
+is shown disabled with the reason. Content above the size limit is refused
+before anything is sent.
+
+**Audit.** Every request that sent text to a provider — completed, partly
+completed or failed — leaves one audit entry `cms.page_builder.translate` with
+the editor, the content (type and id), the languages, the provider and model,
+the number of texts and characters, the limit in effect, the scope and the
+outcome. The text itself is never recorded.
+
 ## Sales-channel + language scoping
 
 Every Page, Block, Template, and Hook is bound to one or more sales
@@ -155,6 +214,8 @@ page render.
 | DELETE  | `/hooks/:id`                                        | Refused with 409 when `is_system=true`.         |
 | GET / POST / PATCH / DELETE | `/hooks/:id/attachments[/:blockId]` | Attach / reorder / detach Blocks on a Hook.     |
 | GET     | `/page-builder/config`                              | Merged Page Builder descriptor (metadata only). |
+| GET     | `/page-builder/translation`                         | Translation capability: `ready` (provider, model), `disabled`, `not_configured` or `unavailable`, plus the size limit. `cms.translate`. |
+| POST    | `/page-builder/translate`                           | Translate a canvas (optionally one component or a selected text) into a language; nothing is stored. `cms.translate`. |
 
 ### Storefront (`/api/v1/cms`)
 
@@ -253,7 +314,12 @@ declaration, the three renderer layers and the block stylesheet.
 `CMS_PAGE_NOT_FOUND`, `CMS_BLOCK_NOT_FOUND`, `CMS_TEMPLATE_NOT_FOUND`,
 `CMS_HOOK_NOT_FOUND`, `CMS_SLUG_CONFLICT`, `CMS_CODE_CONFLICT`,
 `CMS_REFERENCED`, `CMS_HOOK_SYSTEM_PROTECTED`,
-`CMS_LANGUAGE_NOT_IN_CHANNEL_SCOPE`, `CMS_SCHEMA_UPGRADE_FAILED`.
+`CMS_LANGUAGE_NOT_IN_CHANNEL_SCOPE`, `CMS_SCHEMA_UPGRADE_FAILED`, and for the
+translation `CMS_TRANSLATION_DISABLED`, `CMS_TRANSLATION_NOT_CONFIGURED`,
+`CMS_TRANSLATION_UNAVAILABLE` (409), `CMS_TRANSLATION_TOO_LARGE` (413, with the
+configured `limit`), `CMS_TRANSLATION_SELECTION_NOT_FOUND` (422) and
+`CMS_TRANSLATION_PROVIDER_FAILED` (502, `details.code` one of
+`credentials_rejected`, `rate_limited`, `unavailable`, `timeout`, `malformed`).
 
 All envelopes follow the platform-wide error contract in
 `packages/contracts/src/errors.ts`.

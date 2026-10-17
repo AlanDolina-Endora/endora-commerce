@@ -36,11 +36,29 @@ vi.mock('@endora-commerce/mod-cms/admin-ui', () => ({
   PageBuilderEditor: ({
     onChange,
     contentKey,
+    languages,
+    activeLanguage,
+    resource,
+    savedVersion,
+    onResolveLanguageContent,
   }: {
     onChange: (data: unknown) => void;
     contentKey?: string;
+    languages?: string[];
+    activeLanguage?: string | null;
+    resource?: { type: string; id: string | null };
+    savedVersion?: string | number | null;
+    onResolveLanguageContent?: (language: string) => unknown;
   }): ReactElement => (
-    <div data-testid="canvas-stub" data-content-key={contentKey ?? ''}>
+    <div
+      data-testid="canvas-stub"
+      data-content-key={contentKey ?? ''}
+      data-languages={(languages ?? []).join(',')}
+      data-active-language={activeLanguage ?? ''}
+      data-resource={resource ? `${resource.type}:${resource.id ?? ''}` : ''}
+      data-saved-version={String(savedVersion ?? '')}
+      data-resolves-languages={onResolveLanguageContent ? 'yes' : 'no'}
+    >
       <button type="button" onClick={() => onChange(canvasEdit)}>
         edit canvas
       </button>
@@ -471,5 +489,25 @@ describe('the blog editor copy ships in both languages', () => {
   it('is translated, not copied', () => {
     expect(pl['validation.nameRequired']).not.toBe(en['validation.nameRequired']);
     expect(pl['common.saveAndExit']).not.toBe(en['common.saveAndExit']);
+  });
+});
+
+/**
+ * Feature 151, T051 — both blog canvases hand the Page Builder what its
+ * Translate action needs: the languages, the edited one, another tab's content
+ * as a source, the audit subject and the saved version.
+ */
+describe.each(screens)('$name — the Translate action’s inputs (feature 151)', (screenUnderTest) => {
+  it('passes languages, the active language, a source resolver, the resource and the version', async () => {
+    renderEditor(screenUnderTest, 'entity-1');
+    await loaded();
+    const stub = screen.getByTestId('canvas-stub');
+    expect(stub.dataset['languages']).toBe('en-US,pl-PL');
+    expect(stub.dataset['activeLanguage']).toBe('en-US');
+    expect(stub.dataset['resolvesLanguages']).toBe('yes');
+    expect(stub.dataset['resource']).toBe(
+      `${screenUnderTest.name === 'BlogPostEditor' ? 'blog_post' : 'blog_category'}:entity-1`,
+    );
+    expect(stub.dataset['savedVersion']).toBe('3');
   });
 });

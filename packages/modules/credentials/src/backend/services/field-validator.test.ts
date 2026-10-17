@@ -146,3 +146,44 @@ describe('maskSecrets [unit]', () => {
     expect(modelDto.value).toBe('claude-opus-4-8');
   });
 });
+
+/** Feature 151, FR-007 / research R21 — `format: 'url'`. */
+describe('buildPersistableValues — url format [unit]', () => {
+  const compatible = llmConfigurationType.providers.find((p) => p.code === 'openai_compatible')!;
+  const deepseek = llmConfigurationType.providers.find((p) => p.code === 'deepseek')!;
+  const run = (fields: FieldDefinition[], baseUrl: unknown) =>
+    buildPersistableValues({
+      fields,
+      submitted: { apiKey: 'k', model: 'm', ...(baseUrl === undefined ? {} : { baseUrl }) },
+      existing: {},
+      secretEncryptionKey: KEY,
+    });
+
+  it.each(['https://openrouter.ai/api/v1', 'http://localhost:11434/v1', 'https://api.deepseek.com'])(
+    'accepts %s',
+    (url) => {
+      const { values, errors } = run(compatible.fields, url);
+      expect(errors).toEqual([]);
+      expect(values['baseUrl']).toBe(url);
+    },
+  );
+
+  it.each(['ftp://llm.example', 'api.deepseek.com', 'not a url', 'javascript:alert(1)'])(
+    'refuses %s',
+    (url) => {
+      expect(run(deepseek.fields, url).errors).toEqual([
+        { field: 'baseUrl', message: 'must be an absolute http or https URL' },
+      ]);
+    },
+  );
+
+  it('accepts an optional url left blank or absent', () => {
+    expect(run(deepseek.fields, '').errors).toEqual([]);
+    expect(run(deepseek.fields, undefined).errors).toEqual([]);
+  });
+
+  it('requires the Base URL of an OpenAI-compatible configuration', () => {
+    expect(run(compatible.fields, undefined).errors).toEqual([{ field: 'baseUrl', message: 'is required' }]);
+    expect(run(compatible.fields, '').errors).toEqual([{ field: 'baseUrl', message: 'is required' }]);
+  });
+});

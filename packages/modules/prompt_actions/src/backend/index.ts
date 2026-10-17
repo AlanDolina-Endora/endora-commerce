@@ -19,7 +19,7 @@ import {
   type CredentialResolvePort,
   type SettingsReadPort,
 } from './services/llm/provider-factory.js';
-import type { FetchLike } from './services/llm/provider.js';
+import type { FetchLike } from '@endora-commerce/llm-client';
 import { PromptActionRequest } from './entities/prompt-action-request.entity.js';
 
 /**

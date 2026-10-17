@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { InterpreterService } from './interpreter.service.js';
 import type { PromptActionTool, ToolContext } from '@endora-commerce/contracts';
 import { PromptActionToolRegistry } from './tool-registry.js';
-import { LlmProviderError, type LlmCompletion, type LlmRequest } from './llm/provider.js';
+import { LlmProviderError, type LlmCompletion, type LlmRequest } from '@endora-commerce/llm-client';
 
 /**
  * T026 — unit tests for the interpreter loop (feature 043 US1/US3,

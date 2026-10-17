@@ -34,12 +34,14 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | `languages` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `sales_channels` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `settings` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `credentials` | nie | degrades-without `credentialsService` — tłumaczenie w Page Builderze zgłasza, że jest niedostępne; pozostałe funkcje CMS działają dalej. |
 
 ## Uprawnienia
 
 | Kod | Etykieta | Wymaga też |
 | --- | --- | --- |
 | `cms.read` | View CMS content | — |
+| `cms.translate` | Translate Page Builder content with AI | — |
 | `cms.write` | Edit CMS content | — |
 
 ## Paleta poleceń
@@ -49,6 +51,7 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | `new-page` | `/cms/pages/new` | `cms.write` |
 | `open-blocks` | `/cms/blocks` | `cms.read` |
 | `open-hooks` | `/cms/hooks` | `cms.read` |
+| `open-page-builder-translation-settings` | `/settings` | `settings:read` |
 | `open-pages` | `/cms/pages` | `cms.read` |
 | `open-templates` | `/cms/templates` | `cms.read` |
 
@@ -60,6 +63,9 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | `cms.page_builder.breakpoint.desktop_min` | Desktop breakpoint (min-width px) | `number` |
 | `cms.page_builder.breakpoint.tablet_min` | Tablet breakpoint (min-width px) | `number` |
 | `cms.page_builder.color_palette` | Page Builder color palette | `json` |
+| `cms.page_builder.translation.enabled` | Translation enabled | `boolean` |
+| `cms.page_builder.translation.llm_credentials` | Translation credentials | `credential_ref` |
+| `cms.page_builder.translation.max_source_characters` | Translation size limit (characters) | `number` |
 | `cms.reserved_slug_segments` | Reserved page-slug segments | `json` |
 
 ## Tłumaczenia

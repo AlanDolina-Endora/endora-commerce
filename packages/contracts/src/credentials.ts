@@ -37,6 +37,12 @@ export const FieldDefinitionSchema = z.object({
   secret: z.boolean(),
   options: z.array(FieldOptionSchema).optional(),
   placeholder: z.string().optional(),
+  /**
+   * A value format the core validates on write, independent of the provider
+   * (feature 151, research R21). `url` — an absolute `http:` or `https:` URL.
+   * Additive: the frozen `kind` set is unchanged.
+   */
+  format: z.enum(['url']).optional(),
 });
 export type FieldDefinition = z.infer<typeof FieldDefinitionSchema>;
 

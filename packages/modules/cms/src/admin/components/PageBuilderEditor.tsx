@@ -1,5 +1,13 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { Puck, Render, type Config, type ComponentConfig, type Data, type PuckAction } from '@puckeditor/core';
+import {
+  Puck,
+  Render,
+  resolveAllData,
+  type Config,
+  type ComponentConfig,
+  type Data,
+  type PuckAction,
+} from '@puckeditor/core';
 import '@puckeditor/core/puck.css';
 // Self-contained, prefix-isolated (`cmsc:`) stylesheet for the shared CMS components
 // (feature 041, FR-012b). This is the admin's ONLY change; it carries its own token
@@ -24,9 +32,15 @@ import {
   withPuckLegacySideBar,
 } from '@endora-commerce/page-builder-core/editor';
 import { AdminCmsAssetProvider } from './AdminCmsAssetProvider.js';
-import type { CmsPageBuilderDescriptor } from '@endora-commerce/contracts';
+import type {
+  CmsPageBuilderDescriptor,
+  CmsPageBuilderTranslateResponse,
+  CmsPageBuilderTranslationCapability,
+} from '@endora-commerce/contracts';
 import { Alert, AlertDescription } from '@endora-commerce/admin-kit/ui';
-import { cn } from '@endora-commerce/admin-kit/lib';
+import { cn, useAuth } from '@endora-commerce/admin-kit/lib';
+import { PuckPageBuilderTranslateAction } from './PageBuilderTranslateAction.js';
+import { TranslationNotice, useTranslationNotice } from './TranslationNotice.js';
 import { useTranslation, useTranslationContext } from '@endora-commerce/admin-kit/i18n';
 import { useBlockContributions } from '@endora-commerce/admin-kit/zones';
 import { cmsClient } from '../api/cms-client.js';
@@ -450,6 +464,8 @@ export function PageBuilderEditor({
   onSaveAsTemplate,
   onListTemplatesForApply,
   onResolveTemplateLayout,
+  resource,
+  savedVersion,
 }: {
   data: Data | null;
   onChange: (data: Data) => void;
@@ -481,6 +497,17 @@ export function PageBuilderEditor({
   onListTemplatesForApply?: () => Promise<Array<{ id: string; label: string }>>;
   /** Resolve a CMS content template layout to replace the canvas. */
   onResolveTemplateLayout?: (templateId: string) => Data | Promise<Data>;
+  /**
+   * Feature 151 — what this canvas belongs to, for the translation's audit
+   * entry only (`{ type: 'cms_page', id }`, `id: null` for an unsaved record).
+   */
+  resource?: { type: string; id: string | null };
+  /**
+   * Feature 151 — the saved content's version. When it changes the content was
+   * saved, and the translation notice (with its *Restore previous content*) is
+   * no longer about the stored state, so it goes (FR-019).
+   */
+  savedVersion?: string | number | null;
 }): ReactNode {
   const t = useTranslation('cms');
   // A section's `titleKey` is **module-relative** and belongs to the module
@@ -565,6 +592,35 @@ export function PageBuilderEditor({
   /** Bumped on clear / copy-from so Puck remounts (data prop is mount-only). */
   const [canvasEpoch, setCanvasEpoch] = useState(0);
   const dispatchRef = useRef<((action: PuckAction) => void) | null>(null);
+
+  /**
+   * Feature 151 — the Translate action's state. The capability is read once per
+   * editor, and only for an operator holding `cms.translate` on a canvas whose
+   * language is known; a failed read hides the action rather than breaking the
+   * editor (`contracts/admin-surfaces.md` §2).
+   */
+  const { hasPermission } = useAuth();
+  const canTranslate = hasPermission('cms.translate') && Boolean(activeLanguage);
+  const [translation, setTranslation] = useState<CmsPageBuilderTranslationCapability | null>(null);
+  const [translationNotice, setTranslationNotice] = useTranslationNotice(contentKey, savedVersion);
+  useEffect(() => {
+    if (!canTranslate) {
+      setTranslation(null);
+      return undefined;
+    }
+    let live = true;
+    cmsClient
+      .getTranslationCapability()
+      .then((capability) => {
+        if (live) setTranslation(capability);
+      })
+      .catch(() => {
+        if (live) setTranslation(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [canTranslate]);
 
   // Allow exiting fullscreen with Escape.
   useEffect(() => {
@@ -751,6 +807,26 @@ export function PageBuilderEditor({
     [onChange],
   );
 
+  const configRef = useRef(config);
+  configRef.current = config;
+
+  /**
+   * Apply a translation as an unsaved change. `resolveAllData` re-runs each
+   * block's `resolveData`, which regenerates derived props such as rich text's
+   * `html` from the translated TipTap, so the stored document stays consistent
+   * (research R6, R10). The previous canvas is kept for *Restore previous
+   * content* until the next save, translation or tab change.
+   */
+  const applyTranslation = useCallback(
+    async (response: CmsPageBuilderTranslateResponse, language: string): Promise<void> => {
+      const previous = structuredClone(lastValidDataRef.current);
+      const resolved = await resolveAllData(response.data as Data, configRef.current);
+      applyCanvasData(resolved);
+      setTranslationNotice({ kind: 'translated', report: response.report, language, previous });
+    },
+    [applyCanvasData, setTranslationNotice],
+  );
+
   const headerActionsStateRef = useRef({
     fullscreen,
     setFullscreen,
@@ -765,6 +841,10 @@ export function PageBuilderEditor({
     onApplyTemplate: null as null | ((templateId: string) => Promise<void>),
     drawerSearchPlaceholder: t('pageBuilder.drawer.searchPlaceholder'),
     drawerSearchEmpty: t('pageBuilder.drawer.searchEmpty'),
+    translate: null as null | {
+      capability: CmsPageBuilderTranslationCapability;
+      activeLanguage: string;
+    },
   });
   headerActionsStateRef.current = {
     fullscreen,
@@ -799,6 +879,30 @@ export function PageBuilderEditor({
       : null,
     drawerSearchPlaceholder: t('pageBuilder.drawer.searchPlaceholder'),
     drawerSearchEmpty: t('pageBuilder.drawer.searchEmpty'),
+    translate:
+      canTranslate && translation && activeLanguage
+        ? { capability: translation, activeLanguage }
+        : null,
+  };
+
+  const declarationOf = useCallback(
+    (blockType: string) =>
+      descriptor?.components.find((component) => component.name === blockType)?.translatable,
+    [descriptor],
+  );
+  const translateExtrasRef = useRef({
+    declarationOf,
+    resource,
+    onResolveLanguageContent,
+    applyTranslation,
+    nothing: (): void => {},
+  });
+  translateExtrasRef.current = {
+    declarationOf,
+    resource,
+    onResolveLanguageContent,
+    applyTranslation,
+    nothing: (): void => setTranslationNotice({ kind: 'nothing' }),
   };
 
   const applyRowPreset = useCallback((rowId: string, presetId: RowLayoutPresetId) => {
@@ -910,8 +1014,26 @@ export function PageBuilderEditor({
       },
       headerActions: (): ReactElement => {
         const state = headerActionsStateRef.current;
+        const extras = translateExtrasRef.current;
         return (
           <PageBuilderHeaderActions
+            {...(state.translate
+              ? {
+                  extraActions: (
+                    <PuckPageBuilderTranslateAction
+                      capability={state.translate.capability}
+                      activeLanguage={state.translate.activeLanguage}
+                      languages={state.languages}
+                      currentData={state.editorData}
+                      resource={extras.resource}
+                      onResolveLanguageContent={extras.onResolveLanguageContent}
+                      declarationOf={extras.declarationOf}
+                      onTranslated={extras.applyTranslation}
+                      onNothingToTranslate={extras.nothing}
+                    />
+                  ),
+                }
+              : {})}
             fullscreen={state.fullscreen}
             onToggleFullscreen={(): void => state.setFullscreen((f) => !f)}
             languages={state.languages}
@@ -938,6 +1060,16 @@ export function PageBuilderEditor({
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
+      ) : null}
+      {translationNotice ? (
+        <TranslationNotice
+          notice={translationNotice}
+          onRestore={(previous): void => {
+            setTranslationNotice(null);
+            applyCanvasData(structuredClone(previous));
+          }}
+          onDismiss={(): void => setTranslationNotice(null)}
+        />
       ) : null}
       {(!descriptor || contributedEditors === null) && !error ? (
         <p className="text-sm text-muted-foreground">{t('pageBuilder.loadingConfig')}</p>
