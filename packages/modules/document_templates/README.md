@@ -27,6 +27,11 @@ Everything below is a **peer** dependency, so the application resolves exactly o
 - `@endora-commerce/contracts`
 - `@endora-commerce/platform`
 
+**Third-party**
+
+- `@mikro-orm/core` ^6
+- `@mikro-orm/migrations` ^6
+
 ## What the tarball carries
 
 - `dist/` — the compiled JavaScript and its type declarations

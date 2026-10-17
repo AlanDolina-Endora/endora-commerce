@@ -1,4 +1,6 @@
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
+import { DocumentTemplateImport } from './entities/document-template-import.entity.js';
+import { DocumentTemplate } from './entities/document-template.entity.js';
 
 /**
  * `document_templates` — the document-template facility
@@ -10,4 +12,4 @@ export function registerModule(_ctx: ModuleContext): void {
 }
 
 /** The module's persisted entity classes (D-168). */
-export const entities = [];
+export const entities = [DocumentTemplate, DocumentTemplateImport];

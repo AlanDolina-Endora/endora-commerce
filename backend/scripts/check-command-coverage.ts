@@ -92,6 +92,7 @@ export const MIGRATED_MODULES: readonly string[] = [
   'comarch_xl',
   'crm',
   'admin_search',
+  'document_templates',
 ];
 
 /**
