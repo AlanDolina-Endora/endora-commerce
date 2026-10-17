@@ -86,8 +86,6 @@ their behaviour unchanged, and a quote-request PDF (a later feature) will be the
   (departs from the proposed default). The PDF attached to the invoice e-mail is produced through the
   same template resolution as the invoice download, so the same invoice yields the same layout on both
   paths (FR-093). The release note says that e-mailed invoice PDFs now follow the configured template.
-  Golden parity (SC-008) still binds the download, regeneration, customer and preview paths; for the
-  e-mail path the expected output is *identical to the download for the same invoice*.
 - **N2** — May the template facility be switched off while invoicing is on? → **No** (default):
   invoices bind the facility, and switching it off is refused until invoicing is off (FR-050).
 - **N3** — How do administrators keep access to invoice templates? → **A one-time, audited automatic
@@ -96,6 +94,20 @@ their behaviour unchanged, and a quote-request PDF (a later feature) will be the
 - **N4** — The former invoice-template administration API? → **Withdraw it now** (default), as a
   breaking (major) change of the invoices package with a release note (FR-092).
 - **N5** — Invoices stay Polish-only? → **Yes** (default) (FR-085).
+
+### Session 2026-10-17 (owner, third round — PDF appearance)
+
+- **P1** — Must invoice and comparison PDFs look exactly as before the move? → **No.** Nobody uses
+  invoice or comparison PDF templates in production yet, so backward compatibility of the PDF
+  *appearance* is not a concern. The byte- or definition-identical golden parity requirement is
+  dropped; FR-083 and SC-008 now require **behaviour**: every invoice PDF still carries all required
+  content (seller and buyer data, lines, VAT summary, totals, amount in words, the KSeF-number rule,
+  the logo) through the template path, and the e-mail attachment uses the same template as the
+  download. The invoice move may re-express invoice sections as invoice-type blocks and a built-in
+  layout on the new facility rather than wrapping the legacy renderer behind compatibility hooks — the
+  simpler design is preferred. Still required: invoice template data moved into the facility by the
+  one-time import with no data loss (FR-081, FR-082), the redirects (FR-088), and the N2–N4 decisions.
+  Release notes may simply say the PDF layouts can change.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -221,8 +233,9 @@ After the upgrade, an operator who designed invoice templates finds them under *
 Invoice*: same names, same layouts, same scopes, and the template that was in force for each scope
 is that scope's default. *Invoices → Templates* and old bookmarks lead there. Every invoice PDF —
 downloaded by an administrator, downloaded by the customer, regenerated, previewed — looks exactly as
-before, and the PDF attached to the invoice e-mail now looks exactly like the download of the same
-invoice (owner answer N1; before the move it ignored templates). The invoice editor offers exactly
+before in content (its layout may change, owner answer P1), and the PDF attached to the invoice e-mail
+now uses the same template as the download of the same invoice (owner answer N1; before the move it
+ignored templates). The invoice editor offers exactly
 the invoice blocks it offered before (including blocks other installed modules contribute, such as a
 KSeF section), and nothing from the comparison.
 
@@ -231,17 +244,18 @@ regression here touches a legal document, so it carries the strictest acceptance
 feature.
 
 **Independent Test**: on a database holding invoice templates (a global one, a channel override, an
-edited generic template, a template placing a contributed block), upgrade; compare every invoice
-PDF's content before and after for a regular invoice, a correction and an invoice of each channel;
-open the old *Invoices → Templates* address.
+edited generic template, a template placing a contributed block), upgrade; check that every template is
+in *Document templates*, that every invoice PDF — a regular invoice, a correction and an invoice of each
+channel — carries the required content from its scope's template; open the old *Invoices → Templates*
+address.
 
 **Acceptance Scenarios**:
 
 1. **Given** invoice templates before the upgrade, **When** the platform is upgraded, **Then** each
    appears under *Document templates → Invoice* with its name, scope and layout, and the one that was
    in force for each scope is that scope's default.
-2. **Given** the upgrade, **When** any invoice PDF is produced, **Then** its content is identical to the
-   PDF produced before the upgrade for the same invoice.
+2. **Given** the upgrade, **When** any invoice PDF is produced, **Then** it carries all the content an
+   invoice requires (FR-083); its layout may differ from before (owner answer P1).
 3. **Given** an operator opens *Invoices → Templates* or an old link to one invoice template, **Then**
    they land on the same templates in *Document templates*.
 4. **Given** the invoice template editor, **When** the operator opens the palette, **Then** it offers
@@ -426,8 +440,11 @@ owner is switched off.
 - **FR-082**: The migration MUST happen once per installation: re-running, restarting, or switching
   invoicing off and on MUST NOT duplicate templates or resurrect templates deleted after migration.
 - **FR-083**: Every invoice PDF produced after the upgrade — administrator download, customer
-  download, regeneration and preview — MUST have the same content as before for the same invoice and
-  the same template data. The e-mail attachment is governed by FR-093.
+  download, regeneration, preview and the e-mail attachment — MUST be produced through the invoice
+  document type and MUST carry all the content an invoice requires: seller and buyer data, the line
+  items, the VAT summary, the totals with the amount in words, the KSeF number (printed exactly once,
+  FR-087) and the logo when one is placed. Its layout MAY differ from the layout before the upgrade
+  (owner answer P1). The e-mail attachment is also governed by FR-093.
 - **FR-084**: Invoice templates MUST keep today's selection semantics: the default for the invoice's
   channel, else the default for all channels, else the built-in layout; invoices do not allow
   per-document selection.
@@ -454,8 +471,8 @@ owner is switched off.
   and announced in the release notes (owner answer N4).
 - **FR-093**: The PDF attached to the invoice e-mail MUST be produced through the same template
   resolution as the invoice download (FR-084: the default for the invoice's channel, else for all
-  channels, else the built-in layout), so that for the same invoice and the same template data its
-  content is identical to the download's. The release notes MUST say that e-mailed invoice PDFs now
+  channels, else the built-in layout), so that the same invoice is e-mailed and downloaded from the
+  same template. The release notes MUST say that e-mailed invoice PDFs now
   follow the configured template (owner answer N1).
 
 #### Availability (switching modules on and off)
@@ -529,8 +546,9 @@ owner is switched off.
 - **SC-007**: Adding the test-only document type touches no file of the facility.
 - **SC-008**: For a reference set of invoice templates and invoices (global, per-channel, edited
   generic, contributed KSeF block, correction, nothing-printable fallback), 100 % of invoice PDFs
-  downloaded, regenerated or previewed after the upgrade have content identical to those produced
-  before, and 100 % of e-mail attachments have content identical to the download of the same invoice.
+  downloaded, regenerated, previewed or e-mailed after the upgrade carry the required content of
+  FR-083, and 100 % of e-mail attachments are produced from the same template as the download of the
+  same invoice.
 - **SC-009**: Zero invoice templates lost or duplicated by the upgrade, counted per installation.
 
 ## Open questions

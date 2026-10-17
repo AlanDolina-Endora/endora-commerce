@@ -24,10 +24,10 @@ facility** with their output unchanged (R-2, R-4). With evidence and rejected al
   `default_only`; quote requests will be `per_document`.
 - **Hosts register types and pass their own data** (R-5). `comparisons` degrades without the facility
   (its fixed renderer); `invoices` binds it (R-27, N2).
-- **Invoices move without rewriting their rendering** (R-25): their ten section builders become the
-  type's block renderers; four generic hooks (`blocks()`, `prepareRender`, `renderBuiltIn`,
-  `pageDefaults`) carry the KSeF rule, contributor data, logo inlining, the built-in code layout and
-  page geometry. **Golden document definitions captured before the change prove parity.**
+- **Invoices become an ordinary document type** (R-25, revised after owner answer P1): their ten
+  section builders are the type's block renderers, the seeded generic layout is the type's built-in
+  layout, and `prepareRender` carries the contributed-block data and the KSeF-number rule. PDF
+  appearance need not match the old renderer (P1); behavioural tests prove the required content.
 - **Invoice data moves by a one-time pull import owned by `document_templates`**, reading through a
   function `invoices` supplies over its own table, recorded in an import-marker table so it happens once
   and never resurrects deletions (R-24). Role grants keep invoice-template editors able to edit (R-28,
@@ -44,7 +44,6 @@ facility** with their output unchanged (R-2, R-4). With evidence and rejected al
 **Primary Dependencies**: Fastify, MikroORM (PostgreSQL), Zod, `pdfmake` (backend); React 19 + Vite + react-router-dom 7 through `@endora-commerce/admin-kit`, `@puckeditor/core`, `@endora-commerce/page-builder-core`, `@endora-commerce/page-builder-admin` (admin); Next.js 15 App Router (storefront) — **no new runtime dependency**
 **Storage**: PostgreSQL — two new tables `document_templates` and `document_template_imports` owned by `document_templates`, one migration; `invoice_templates` kept read-only and imported at runtime; no column added elsewhere
 **Testing**: Vitest — co-located `*.test.ts` in `packages/modules/{document_templates,comparisons,invoices}/src/**`
-(invoice parity goldens under `packages/modules/invoices/src/backend/document/__golden__/`);
 `backend/test/contract/document_templates/`, `backend/test/contract/comparisons/`,
 `backend/test/integration/{document_templates,invoices}/`; `backend/test/perf/` benches for SC-003;
 `admin/test/modules/{document_templates,comparisons,invoices}/` (`<StrictMode>`, `axe-core`);
@@ -55,8 +54,8 @@ facility** with their output unchanged (R-2, R-4). With evidence and rejected al
 p95 < 3 s; invoice PDF within 10 % of today; template resolution ≤ 2 indexed reads; import check O(1)
 after the first success per process
 **Constraints**: content ≤ 512 KiB, ≤ 200 nodes/language, ≤ 10 languages, ≤ 20 core images/language
-(R-20, not applied to imported legacy rows); pdfmake URL access denied; invoice output deep-equal to
-goldens (SC-008)
+(R-20, not applied to imported legacy rows); pdfmake URL access denied; invoice PDFs carry the required
+content (SC-008, behavioural — owner answer P1)
 **Scale/Scope**: new module (2 tables, 7 Commands, 12 admin routes, 2 permissions, 1 action, 1 nav
 entry, 2 pages, 6 core blocks, 1 setting); `comparisons` (3 blocks, 1 registration, 1 route changed, 3
 admin block contributions, 1 link); `invoices` (1 registration, 3 render paths re-pointed, 10 admin
@@ -150,7 +149,6 @@ packages/modules/invoices/
 ├── src/manifest.ts                         # deps += document_templates, admin_roles; blocks gain fields; action removed
 ├── src/backend/index.ts  plugin.ts  routes.admin.ts  routes.customer.ts
 ├── src/backend/document/{invoice-document-type,legacy-import,block-renderers}.ts
-├── src/backend/document/__golden__/*.json  # parity goldens (captured first)
 ├── src/backend/services/invoice-pdf-renderer.ts  # no longer a render path (every path, e-mail included, goes through the port — N1); deleted once nothing calls it
 ├── src/backend/services/invoice-email-dispatch.ts # attachment through documentRenderPort (N1)
 ├── src/backend/services/invoice-template-service.ts   # DELETED
@@ -168,7 +166,7 @@ storefront/{lib/api/comparisons.ts, lib/i18n/messages.ts, components/ComparisonT
 backend/test/contract/document_templates/{admin-api,render-port,second-type,off-state}.test.ts
 backend/test/contract/comparisons/pdf-template-export.test.ts
 backend/test/integration/document_templates/{schema,tenancy-channel,default-race}.test.ts
-backend/test/integration/invoices/{template-import,template-parity,off-state,templates,stored-contributed-block}.test.ts
+backend/test/integration/invoices/{template-import,template-rendering,off-state,templates,stored-contributed-block}.test.ts
 backend/test/integration/_admin_surfaces/batch-twelve-palette-off-state.test.ts   # updated
 backend/test/fixtures/{openapi-baseline.json (updated), document-types/fixture-document-type.ts}
 backend/test/perf/{comparisons/pdf-export,invoices/pdf-render}.bench.ts
@@ -240,11 +238,18 @@ R1/R2 clean).
 | Redis cache invalidation | none needed — no cache (R-14) |
 | Module activation | facility switchable; comparisons degrade; invoices bind; import convergent |
 
+## Owner answer P1 (2026-10-17, third round)
+
+PDF appearance need not stay identical — nobody uses invoice or comparison templates in production.
+Golden parity (T009/T055/T059 as first written) is dropped and replaced by behavioural tests of the
+required invoice content; the invoice move may re-express sections as invoice-type blocks; the import,
+redirects and N2–N4 stay. The invoices release note says the PDF layouts can change.
+
 ## Owner answers to N1–N5 (2026-10-17)
 
 | Question | Answer | What it puts into this plan |
 | --- | --- | --- |
-| N1 | **fix it now** — the attachment uses the template (departs from the proposed default) | `invoice-email-dispatch.ts` renders through `documentRenderPort` with exactly the download's input (FR-093); `InvoicePdfRenderer` loses its last render caller. Golden case 10 is no longer "built-in, no tree": its expectation becomes *deep-equal to the download's definition for the same invoice* (T055, T059). The invoices changeset (major already, N4) says e-mailed invoice PDFs now follow the configured template |
+| N1 | **fix it now** — the attachment uses the template (departs from the proposed default) | `invoice-email-dispatch.ts` renders through `documentRenderPort` with exactly the download's input (FR-093); `InvoicePdfRenderer` loses its last render caller. Tested by asserting the attachment is rendered with exactly the download's input (T059a). The invoices changeset (major already, N4) says e-mailed invoice PDFs now follow the configured template |
 | N2 | default — refused while invoicing is on | `document_templates` in `invoices`' `dependencies`; off-state test asserts the refusal |
 | N3 | default — one-time audited grant | `legacyImport.afterImport` through `adminRolePort`; `admin_roles` in `invoices`' `dependencies` |
 | N4 | default — withdraw now | five routes removed; major changeset + release note; OpenAPI baseline updated |
@@ -259,14 +264,14 @@ No constitution violation; **no new runtime dependency**. Choices that add surfa
 | New module | XIV; three named hosts; one screen for all documents (R-3) | per-host copies |
 | `document` Page Builder context | keeps new blocks out of CMS/e-mail palettes (R-6) | a context per type grows the enum per host |
 | Runtime import + marker table | the only shape keeping both tables' ownership rules on upgrade (R-24) | cross-module migrations are refused by R1/R2; install hooks do not run on upgrade |
-| Four registration hooks | invoice parity without rewriting legal-document code (R-25) | rewriting invoice sections as generic blocks risks SC-008 |
+| Registration hooks (`prepareRender`, `renderBuiltIn`, `pageDefaults`, `blocks()`) | contributed invoice blocks and the KSeF-number rule need per-render data; page geometry is per type (R-25) | hard-coding invoice knowledge into the engine (XIV) |
 | Breaking removal of the invoice-template API | moving ownership without dual write paths (R-29) | adapters keep two management APIs alive (offered as N4's alternative) |
 
 ## Handoff summary for `endora-commerce-dev`
 
 1. Read research R-3–R-8, R-23–R-31 and all five contracts first; implement **test-first** in
-   `tasks.md` order. **Phase 2's first invoice task captures the parity goldens from today's code —
-   before any invoice file changes.**
+   `tasks.md` order. (The golden-parity capture of the first revision was dropped by owner answer P1;
+   behavioural invoice tests replace it.)
 2. Contracts first; scaffold with `migration:new`; never hand-number; regenerate and commit artefacts.
 3. Every write is a Command; the import runs as one under a system scope.
 4. `comparisons`: probe presence before `documentRenderPort`; fixed renderer output unchanged.

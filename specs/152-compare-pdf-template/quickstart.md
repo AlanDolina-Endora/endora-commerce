@@ -29,7 +29,8 @@ pnpm run dev
    *Document templates* (FR-088).
 2. *Document templates → Invoice*: the edited generic template, "Global B" (default for all channels)
    and "Channel B" (default for channel B), names and layouts as before (FR-081).
-3. Download the three invoice PDFs again and compare with the kept ones: identical content (FR-083).
+3. Download the three invoice PDFs again: each carries seller/buyer data, lines, VAT summary, totals,
+   amount in words and its scope's layout (FR-083; the layout may differ from before — owner answer P1).
    Regenerate one: no error.
 4. Resend the channel-B invoice by e-mail with the attachment mode on (dev mail catcher): the attached
    PDF now matches the download — the "Channel B" layout, not the built-in one it used to carry

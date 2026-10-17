@@ -345,7 +345,14 @@ first moment both are present converges.
   a module that may be off, and the import would then wait for the next restart.
 - *Idempotency by ids alone, no marker* — would resurrect templates the operator deleted after the move.
 
-## R-25 — Invoice rendering parity through registration hooks
+## R-25 — Invoice rendering through registration hooks (revised after owner answer P1)
+
+**Revision (owner answer P1)**: PDF appearance need not match the old renderer, so the golden parity
+test below is dropped and the invoice design simplified: the ten section builders are the invoice
+type's block renderers, the seeded generic tree is its built-in layout (`defaultContent()`, no
+`renderBuiltIn` code layout), the logo block inlines its own image when it renders, and
+`prepareRender` resolves contributed blocks and the KSeF-number rule. Behavioural tests assert the
+required content (FR-083). The text below is the first revision's, kept as provenance.
 
 **Decision**: the engine's registration grows four optional hooks, each used by invoices and generic in
 meaning:

@@ -1,8 +1,9 @@
 # Contract: the *Invoice* document type, the template import, and parity
 
 **Owner**: `invoices`. Implements `contracts/document-type-registry.md` for `invoices.invoice`.
-Normative for research R-4, R-24 to R-31. Parity (FR-083, SC-008) is the overriding requirement: where
-this contract and "cleaner" disagree, this contract wins.
+Normative for research R-4, R-24 to R-31. **Revised after owner answer P1**: PDF appearance need not
+match the old renderer; where this contract and the simpler design disagree, the simpler design wins,
+provided FR-083's required content holds.
 
 ## 1. Registration
 
@@ -16,7 +17,7 @@ this contract and "cleaner" disagree, this contract wins.
 | `languages` | `['pl-PL']` (N5 default) |
 | `variables` | none |
 | `defaultContent()` | `{ schemaVersion: 1, languages: GENERIC_INVOICE_TEMPLATE_CONTENT.languages }` (`seeds/generic-invoice-template.ts`) |
-| `renderBuiltIn(data, prepared)` | today's `builtinLayout(invoice, locale, contributed, suppressKsefNumber)` |
+| `renderBuiltIn` | none (owner answer P1): the built-in layout is `defaultContent()`, the generic seed tree |
 | `pageDefaults` | `pageSize 'A4'`, `orientation 'portrait'`, margins top 40 / right 40 / bottom 48 / left 40, `baseFontSize 10`, `styles: { docTitle: { fontSize: 14, bold: true } }` |
 | `prepareRender(data, { placedBlocks, preview })` | (1) inline logo images exactly as `embedInvoiceLogoImages` does today (asset or URL, 3 s timeout, PNG/JPEG only); (2) for present contributors **placed** in the tree (or all present ones when the built-in layout will be used) call `resolve(invoice.id)`, a rejection → `null`; (3) `suppressKsefNumber` = some present contributor with `printsKsefReferenceNumber` is placed (built-in: is present) |
 | `sampleData()` | `{ invoice: sampleInvoiceDetail(), amountLocale: 'en' }` |
@@ -69,7 +70,13 @@ Pushed from a **contribution-only** `ctx.onBoot` in `packages/modules/invoices/s
 - Withdrawn API: the five `/api/v1/admin/invoice-templates*` routes (N4 default) — major changeset for
   the invoices package; `backend/test/fixtures/openapi-baseline.json` updated.
 
-## 5. Parity test (SC-008) — golden document definitions
+## 5. ~~Parity test (SC-008) — golden document definitions~~ — dropped (owner answer P1)
+
+Replaced by behavioural tests: through the template path an invoice PDF carries seller and buyer data,
+line items, the VAT summary, totals with the amount in words, the KSeF number exactly once (placed
+contributor prints it, otherwise the header), the logo by asset and by URL, a correction note; a channel
+invoice uses its channel's default; and the e-mail attachment is rendered with exactly the download's
+input. The first revision's text follows as provenance.
 
 Before any invoice code changes (task order enforces it), capture with today's
 `InvoicePdfRenderer.content()` + its `buildDoc` the pdfmake document definition for this matrix and

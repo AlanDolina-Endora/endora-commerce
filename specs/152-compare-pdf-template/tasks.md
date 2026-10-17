@@ -11,8 +11,8 @@ contracts/ (`document-type-registry.md`, `document-templates-api.md`, `compariso
 green; a test task names the behaviour it must prove **red** first.
 
 **Organization**: by user story. MVP = US1 + US2 (comparison). US5 (invoices) is required before
-merge — the owner put it in this feature — and its golden capture (T009) is a Phase 2 task so that it
-runs **before any invoice file changes**.
+merge — the owner put it in this feature. Its golden capture (T009) ran before any invoice file
+changed; owner answer P1 later dropped golden parity for behavioural tests (T055, T059, T059a).
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -23,9 +23,9 @@ Paths: `DT` = `packages/modules/document_templates`, `CMP` = `packages/modules/c
 
 ## Phase 1: Setup
 
-- [ ] T001 Scaffold `DT/` after `packages/modules/admin_search/` (tsconfigs, vitest.config.ts, tailwind.css, README.md, CHANGELOG.md, LICENSE, `endora: { type: 'module', id: 'document_templates' }`); `package.json` body rendered by `pnpm --filter backend run manifests:generate`
-- [ ] T002 Skeleton `DT/src/manifest.ts` (id, name, version, `dependencies: ['settings','auth','assets_library']`, settings group + `document_templates.enabled`, `activation`, `i18n`, `docs`) and empty `registerModule` in `DT/src/backend/index.ts`; run `composer:generate`, `manifests:generate`, `pnpm install --lockfile-only`; commit artefacts
-- [ ] T003 [P] `DT/i18n/{en,pl}.json` (flat) and stub `DT/docs/document-templates.md`
+- [x] T001 Scaffold `DT/` after `packages/modules/admin_search/` (tsconfigs, vitest.config.ts, tailwind.css, README.md, CHANGELOG.md, LICENSE, `endora: { type: 'module', id: 'document_templates' }`); `package.json` body rendered by `pnpm --filter backend run manifests:generate`
+- [x] T002 Skeleton `DT/src/manifest.ts` (id, name, version, `dependencies: ['settings','auth','assets_library']`, settings group + `document_templates.enabled`, `activation`, `i18n`, `docs`) and empty `registerModule` in `DT/src/backend/index.ts`; run `composer:generate`, `manifests:generate`, `pnpm install --lockfile-only`; commit artefacts
+- [x] T003 [P] `DT/i18n/{en,pl}.json` (flat) and stub `DT/docs/document-templates.md`
 
 ---
 
@@ -33,35 +33,35 @@ Paths: `DT` = `packages/modules/document_templates`, `CMP` = `packages/modules/c
 
 ### Contracts
 
-- [ ] T004 [P] Write `CT/document-templates.test.ts`: type-code regex; content schema (`schemaVersion`, language keys, 1–10 languages, ≤ 200 nodes, `blockNameRe`, unknown names accepted, string ≤ 5 000, ≤ 20 core images, 512 KiB, no `zones`); `documentRootPropsSchema` ranges; merge-field key regex; `selection` enum; `coreBlocks` values; `LegacyTemplateRecord`; every DTO of `contracts/document-templates-api.md` — red
-- [ ] T005 Implement `CT/document-templates.ts` (schemas, `DocumentTypeRegistration` with `blocks()`, `coreBlocks`, `selection`, `languages`, `pageDefaults`, `prepareRender`, `renderBuiltIn`, `legacyImport`; `DocumentBlockRenderer`; ports; result incl. `source`/`requestedTemplateMissing`; DTOs), export from `CT/index.ts`, add the six `DOCUMENT_*` codes to `CT/errors.ts` — T004 green
-- [ ] T006 Widen `pageBuilderContextSchema` (`CT/cms.ts`) and `AdminBlockContributionSchema.context` (`CT/admin-contributions.ts`) with `'document'` (tests first); fix every exhaustive consumer `pnpm -r run typecheck` reports; assert in `cms`' `page-builder-registry` test that `document` blocks never reach the CMS palette
-- [ ] T007 [P] Failing cases, then `comparisonDocumentDataSchema` in `CT/comparisons.ts` and `InvoiceDocumentData` in `CT/invoices.ts`
-- [ ] T008 [P] `packages/page-builder-core/src/contributions/document-sample.test.tsx`, then `document-sample.tsx` (`DocumentSampleProvider`, `useDocumentSample`) and `DocumentBlockEditorConfig`; export on `./contributions`; `packages/admin-kit/src/zones/use-block-contributions.ts` accepts `'document'`
+- [x] T004 [P] Write `CT/document-templates.test.ts`: type-code regex; content schema (`schemaVersion`, language keys, 1–10 languages, ≤ 200 nodes, `blockNameRe`, unknown names accepted, string ≤ 5 000, ≤ 20 core images, 512 KiB, no `zones`); `documentRootPropsSchema` ranges; merge-field key regex; `selection` enum; `coreBlocks` values; `LegacyTemplateRecord`; every DTO of `contracts/document-templates-api.md` — red
+- [x] T005 Implement `CT/document-templates.ts` (schemas, `DocumentTypeRegistration` with `blocks()`, `coreBlocks`, `selection`, `languages`, `pageDefaults`, `prepareRender`, `renderBuiltIn`, `legacyImport`; `DocumentBlockRenderer`; ports; result incl. `source`/`requestedTemplateMissing`; DTOs), export from `CT/index.ts`, add the six `DOCUMENT_*` codes to `CT/errors.ts` — T004 green
+- [x] T006 Widen `pageBuilderContextSchema` (`CT/cms.ts`) and `AdminBlockContributionSchema.context` (`CT/admin-contributions.ts`) with `'document'` (tests first); fix every exhaustive consumer `pnpm -r run typecheck` reports; assert in `cms`' `page-builder-registry` test that `document` blocks never reach the CMS palette
+- [x] T007 [P] Failing cases, then `comparisonDocumentDataSchema` in `CT/comparisons.ts` and `InvoiceDocumentData` in `CT/invoices.ts`
+- [x] T008 [P] `packages/page-builder-core/src/contributions/document-sample.test.tsx`, then `document-sample.tsx` (`DocumentSampleProvider`, `useDocumentSample`) and `DocumentBlockEditorConfig`; export on `./contributions`; `packages/admin-kit/src/zones/use-block-contributions.ts` accepts `'document'`
 
-### Invoice parity baseline — before any invoice change
+### Invoice parity baseline — before any invoice change (superseded by owner answer P1)
 
-- [ ] T009 [P] Write `INV/src/backend/document/capture-goldens.test.ts` that, **against today's unmodified `InvoicePdfRenderer`**, builds the pdfmake document definitions of the ten-case matrix in `contracts/invoice-document.md` §5 and writes them to `INV/src/backend/document/__golden__/*.json` when `UPDATE_GOLDENS=1`, otherwise asserts equality; run once with the flag, commit the goldens, and keep the test (green on today's code). No other file under `INV/` may change in the commit that adds the goldens
+- [x] T009 [P] Write `INV/src/backend/document/capture-goldens.test.ts` that, **against today's unmodified `InvoicePdfRenderer`**, builds the pdfmake document definitions of the ten-case matrix in `contracts/invoice-document.md` §5 and writes them to `INV/src/backend/document/__golden__/*.json` when `UPDATE_GOLDENS=1`, otherwise asserts equality; run once with the flag, commit the goldens, and keep the test (green on today's code). No other file under `INV/` may change in the commit that adds the goldens. **Superseded (owner answer P1)**: the goldens were captured and committed, then removed when T055 replaced parity with behavioural tests
 
 ### Schema
 
-- [ ] T010 Write `backend/test/integration/document_templates/schema.test.ts`: second default in one scope refused (global, same channel), accepted for another channel; any number of non-defaults; type-code check; channel delete cascades; import marker PK refuses a duplicate — red
-- [ ] T011 Scaffold `migration:new -- --module document_templates --name init`, DDL per `data-model.md` §1–§2; entities `document-template.entity.ts`, `document-template-import.entity.ts` (`@GlobalEntity()`), `entities` export; `composer:generate` — T010 green; tenant classification check passes
+- [x] T010 Write `backend/test/integration/document_templates/schema.test.ts`: second default in one scope refused (global, same channel), accepted for another channel; any number of non-defaults; type-code check; channel delete cascades; import marker PK refuses a duplicate — red
+- [x] T011 Scaffold `migration:new -- --module document_templates --name init`, DDL per `data-model.md` §1–§2; entities `document-template.entity.ts`, `document-template-import.entity.ts` (`@GlobalEntity()`), `entities` export; `composer:generate` — T010 green; tenant classification check passes
 
 ### Core services
 
-- [ ] T012 [P] `DT/src/backend/registry/document-type-registry.test.ts` — every registration refusal and per-call block refusal of `document-type-registry.md` §3; presence filter of types and of single blocks both ways — red
-- [ ] T013 Implement the registry; plain `ctx.di.register` over `effectiveState.isPresent` — T012 green
-- [ ] T014 [P] `DT/src/backend/rendering/merge-fields.test.ts` — red
-- [ ] T015 Implement `merge-fields.ts` — T014 green
-- [ ] T016 [P] `DT/src/backend/rendering/embed-asset-images.test.ts` (PNG/JPEG inlined, others omitted, missing omitted, never throws, never fetches a URL) — red
-- [ ] T017 Implement `embed-asset-images.ts` over `assetReadPort.openAssetBytes` — T016 green
-- [ ] T018 [P] `DT/src/backend/rendering/core-blocks.test.ts` (six blocks, default and hostile props) — red
-- [ ] T019 Implement `core-blocks.ts` — T018 green
-- [ ] T020 `DT/src/backend/services/template-resolver.test.ts`: channel default → global default → `defaultContent()` → `renderBuiltIn`; non-default templates never chosen implicitly; nothing-renderable fall-through; channel-B never for A; null channel never matches a channel row; explicit `templateId`: `default_only` → `DOCUMENT_TEMPLATE_NOT_SELECTABLE`, other type/channel → refused, missing → default with `requestedTemplateMissing`; language chain; single read — red
-- [ ] T021 Implement `template-resolver.ts` — T020 green
-- [ ] T022 `DT/src/backend/rendering/document-renderer.test.ts` (definitions, not bytes): palette restriction (a block outside the type's palette is skipped), absent-owner skip with props untouched, `prepareRender` result reaches every block, `renderBuiltIn` used last, `pageDefaults` (margins, styles) under stored root props, `auto` orientation, header/footer + page numbers, throw → `DocumentRenderError`, `ModuleDisabledError` re-thrown, URL policy deny-all, byte smoke render — red
-- [ ] T023 Implement `document-renderer.ts`; `ctx.di.providePort('documentRenderPort', …)` — T022 green
+- [x] T012 [P] `DT/src/backend/registry/document-type-registry.test.ts` — every registration refusal and per-call block refusal of `document-type-registry.md` §3; presence filter of types and of single blocks both ways — red
+- [x] T013 Implement the registry; plain `ctx.di.register` over `effectiveState.isPresent` — T012 green
+- [x] T014 [P] `DT/src/backend/rendering/merge-fields.test.ts` — red
+- [x] T015 Implement `merge-fields.ts` — T014 green
+- [x] T016 [P] `DT/src/backend/rendering/embed-asset-images.test.ts` (PNG/JPEG inlined, others omitted, missing omitted, never throws, never fetches a URL) — red
+- [x] T017 Implement `embed-asset-images.ts` over `assetReadPort.openAssetBytes` — T016 green
+- [x] T018 [P] `DT/src/backend/rendering/core-blocks.test.ts` (six blocks, default and hostile props) — red
+- [x] T019 Implement `core-blocks.ts` — T018 green
+- [x] T020 `DT/src/backend/services/template-resolver.test.ts`: channel default → global default → `defaultContent()` → `renderBuiltIn`; non-default templates never chosen implicitly; nothing-renderable fall-through; channel-B never for A; null channel never matches a channel row; explicit `templateId`: `default_only` → `DOCUMENT_TEMPLATE_NOT_SELECTABLE`, other type/channel → refused, missing → default with `requestedTemplateMissing`; language chain; single read — red
+- [x] T021 Implement `template-resolver.ts` — T020 green
+- [x] T022 `DT/src/backend/rendering/document-renderer.test.ts` (definitions, not bytes): palette restriction (a block outside the type's palette is skipped), absent-owner skip with props untouched, `prepareRender` result reaches every block, `renderBuiltIn` used last, `pageDefaults` (margins, styles) under stored root props, `auto` orientation, header/footer + page numbers, throw → `DocumentRenderError`, `ModuleDisabledError` re-thrown, URL policy deny-all, byte smoke render — red
+- [x] T023 Implement `document-renderer.ts`; `ctx.di.providePort('documentRenderPort', …)` — T022 green
 - [ ] T024 `DT/src/backend/commands/document-template-commands.test.ts`: seven Commands, one audit row each with digest state, none on refusal (version conflict, unavailable type, invalid content, block not offered by the type, language outside `languages`, default delete without confirm, source of another type, unknown channel); `set_default` clears the previous default in one tx; scope immutable — red
 - [ ] T025 Implement `document-template-commands.ts` and `document-template-service.ts` (no audit-writer call; channel validation via `salesChannelResolutionPort`) — T024 green; `check:command-coverage` clean
 - [ ] T026 `DT/src/backend/services/legacy-import.test.ts`: marker-first transaction; ids preserved; `on conflict (id) do nothing`; unknown-channel rows skipped and reported; oversize rows imported and flagged; `afterImport` throw rolls back marker and rows; second call no-op (process cache and marker); deleted template not resurrected; system actor in the single audit row; boot work hook probes own presence; lazy `ensureImported` before reads/renders — red
@@ -122,12 +122,12 @@ Paths: `DT` = `packages/modules/document_templates`, `CMP` = `packages/modules/c
 
 ## Phase 7: US5 — invoice templates live in Document templates, unchanged (P2) — required before merge
 
-- [ ] T055 [US5] Write `INV/src/backend/document/invoice-document-type.test.ts` (palette = ten own + present contributed, `coreBlocks: 'none'`, `selection: 'default_only'`, `languages: ['pl-PL']`, `pageDefaults` per `invoice-document.md` §1, `prepareRender` resolves only placed contributors with rejection → `null`, `suppressKsefNumber` rule) and switch `capture-goldens.test.ts` (T009) to compare the **engine's** output for cases 1–9 against the committed goldens; golden 10 stays as the record of the old e-mail behaviour and is no longer asserted against the new code (N1, FR-093) — red
-- [ ] T056 [US5] Implement `INV/src/backend/document/{block-renderers,invoice-document-type}.ts` wrapping `sections.ts`, `tree-mapper.ts` mappers, `embed-logo-images.ts` and `builtinLayout` unchanged; push the registration from a contribution-only `ctx.onBoot` — T055 green (deep-equal to every golden)
+- [ ] T055 [US5] Write `INV/src/backend/document/invoice-document-type.test.ts` (palette = ten own + present contributed, `coreBlocks: 'none'`, `selection: 'default_only'`, `languages: ['pl-PL']`, `pageDefaults` per `invoice-document.md` §1, `prepareRender` resolves only placed contributors with rejection → `null`, `suppressKsefNumber` rule) and, replacing the golden parity of the first revision (owner answer P1), behavioural cases: through the engine an invoice carries seller/buyer data, lines, VAT summary, totals + amount in words, KSeF number exactly once (placed contributor vs header), logo by asset and URL, correction note; empty tree → the seed layout; delete `__golden__/` — red
+- [ ] T056 [US5] Implement `INV/src/backend/document/{block-renderers,invoice-document-type}.ts` over `sections.ts` and `embed-logo-images.ts` (built-in layout = the generic seed tree, no code layout — owner answer P1); push the registration from a contribution-only `ctx.onBoot` — T055 green (deep-equal to every golden)
 - [ ] T057 [P] [US5] `backend/test/integration/invoices/template-import.test.ts` per `invoice-document.md` §6 (legacy rows seeded by SQL in the test) — red
 - [ ] T058 [US5] `INV/src/backend/document/legacy-import.ts` (`read()` over its own `InvoiceTemplate`; `afterImport()` role grants via `lazyPort<AdminRolePort>(ctx, 'adminRolePort')`); manifest `dependencies` += `document_templates`, `admin_roles` — T057 green; `check:port-dependencies`, `check:module-boundary` clean
-- [ ] T059 [P] [US5] Rewrite `backend/test/integration/invoices/templates.test.ts` against the new API (create/save/set-default/preview of `invoices.invoice`), add `backend/test/integration/invoices/template-parity.test.ts` (admin download, customer download and regenerate over the real composition equal the goldens' definitions through a capture seam), and a channel case (an invoice of channel B uses B's default, of A the global) — red
-- [ ] T059a [P] [US5] FR-093 (owner's answer to N1): `INV/src/backend/services/invoice-email-dispatch.test.ts` — the attachment is rendered by `documentRenderPort.render` with exactly the download's input (`documentType`, the invoice's `salesChannelId`, `pl-PL`, `{ invoice, amountLocale: 'pl' }`), a render failure stays contained (`failed`, issuance not undone) while `ModuleDisabledError` is re-thrown; and in `template-parity.test.ts` the e-mail attachment's definition deep-equals the download's for the seed tree, a channel-B default and the empty-tree fallback — red
+- [ ] T059 [P] [US5] Rewrite `backend/test/integration/invoices/templates.test.ts` against the new API (create/save/set-default/preview of `invoices.invoice`), add `backend/test/integration/invoices/template-rendering.test.ts` (admin download, customer download and regenerate over the real composition render through the facility and carry the required content), and a channel case (an invoice of channel B uses B's default, of A the global) — red
+- [ ] T059a [P] [US5] FR-093 (owner's answer to N1): `INV/src/backend/services/invoice-email-dispatch.test.ts` — the attachment is rendered by `documentRenderPort.render` with exactly the download's input (`documentType`, the invoice's `salesChannelId`, `pl-PL`, `{ invoice, amountLocale: 'pl' }`), a render failure stays contained (`failed`, issuance not undone) while `ModuleDisabledError` is re-thrown; and in `template-rendering.test.ts` the e-mail attachment is produced from the same template as the download — red
 - [ ] T060 [US5] Re-point `routes.admin.ts` (download, regenerate), `routes.customer.ts` **and the e-mail attachment in `invoice-email-dispatch.ts`** to `documentRenderPort` per `invoice-document.md` §2 (N1) — T059 and T059a green; delete `invoice-template-service.ts`, `ensureGenericSeed` call in `plugin.ts`, `pdf-components/descriptor.ts`, the five `/api/v1/admin/invoice-templates*` routes; move descriptor fields into manifest block declarations; drop the `invoice-templates` action; relabel `invoices:write` — T059 green
 - [ ] T061 [US5] Update every test and fixture naming removed things, found by `git grep` over `backend/test/**`, `admin/test/**`, `packages/**`: `invoices/off-state.test.ts`, `invoices/stored-contributed-block.test.ts` (now through the facility; KSeF-absent behaviour unchanged), `_admin_surfaces/batch-twelve-palette-off-state.test.ts` (action removed), `issue-route-email-outcome.test.ts`, `vendor-number-hold.test.ts`, `backend/test/fixtures/openapi-baseline.json` (five routes removed, twelve added); add `document_templates.content` to `packages/modules/cms/src/backend/cli/block-names.ts` with its test case
 - [ ] T062 [P] [US5] `admin/test/modules/invoices/`: redirects (`/invoices/templates` → `/document-templates?type=invoices.invoice`, `/invoices/templates/:id` → `/document-templates/:id`), *Templates* tab target, invoice editor palette (10 + contributed stand-in, no core blocks, no language switcher, no merge fields), canvas renderers read the served sample — red
@@ -149,7 +149,7 @@ Paths: `DT` = `packages/modules/document_templates`, `CMP` = `packages/modules/c
 - [ ] T068 [P] `admin/test/modules/document_templates/off-state.test.tsx` — no nav, palette row, comparison button when absent
 - [ ] T069 Manifest action `open-document-templates` with invoice keywords; `registered-bundles-shape.test.ts` and `check:action-route-permissions` green
 - [ ] T070 [P] Docs: `DT/docs/document-templates.md` (both types, palettes per type, defaults and scopes, languages, merge fields, import note, off-states), `docs/docs/module-reference/document-templates.md`; comparisons page section; invoices pages (`INV/docs/invoices.md`, `docs/docs/module-reference/invoices.md`) point to Document templates and describe the move; Polish versions under `docs/i18n/pl/docusaurus-plugin-content-docs/current/`; refresh `docs/translation-cache/pl/` entries per `docs/docs/contributing/documentation-i18n.md`; `check:module-docs` clean
-- [ ] T071 [P] Changesets: contracts, page-builder-core, admin-kit, comparisons, **invoices (major — withdrawn API; release note also says e-mailed invoice PDFs now follow the configured template, N1)**, the new module (`specs/conventions/release-intent.md`)
+- [ ] T071 [P] Changesets: contracts, page-builder-core, admin-kit, comparisons, **invoices (major — withdrawn API; release note says e-mailed invoice PDFs now follow the configured template, N1, and that PDF layouts can change, P1)**, the new module (`specs/conventions/release-intent.md`)
 - [ ] T072 [P] Benches `backend/test/perf/comparisons/pdf-export.bench.ts` and `backend/test/perf/invoices/pdf-render.bench.ts` (SC-003); record results in research R-20
 - [ ] T073 Re-run `composer:generate`, `manifests:generate`, `pnpm install --lockfile-only`; commit
 - [ ] T074 After the deletions: re-derive `backend/test/unit/kernel/module-removal.test.ts`'s ledger if it reports; re-record a read size only if its band refuses (`specs/conventions/check-estate.md`)
@@ -172,7 +172,7 @@ Setup (T001–T003) → Foundational (T004–T029; T009 before ANY change under 
 
 - T005 before every task naming contracts types; T006 before T029, T038, T040, T063; T008 before T040, T063.
 - T011 before T020, T024, T026; T013 before T023, T029, T036, T056; T023 before T030, T034, T055.
-- T055 before T060 (goldens are the gate); T058 before T059's import-dependent cases; T059a before T060.
+- T055 before T060; T058 before T059's import-dependent cases; T059a before T060.
 
 ## Requirement → test
 
@@ -228,4 +228,4 @@ Setup (T001–T003) → Foundational (T004–T029; T009 before ANY change under 
 
 MVP = Phases 1–4 (comparison in both languages). US5 is mandatory for this feature's merge request
 (owner decision) and carries the highest regression risk; schedule it right after the MVP and do not
-merge without T009/T055/T059 green and T076 walked on an upgraded database.
+merge without T055/T057/T059/T059a green and T076 walked on an upgraded database.
