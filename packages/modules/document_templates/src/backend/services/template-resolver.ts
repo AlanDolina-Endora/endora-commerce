@@ -1,4 +1,4 @@
-import { ERROR_CODES, type DocumentTemplateContent } from '@endora-commerce/contracts';
+import { ERROR_CODES, type DocumentTemplateChoices, type DocumentTemplateContent } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 
 /**
@@ -26,6 +26,8 @@ import { HttpError } from '@endora-commerce/platform/http';
 
 export interface TemplateRow {
   readonly id: string;
+  /** Read where a selection list needs it (feature 153); the resolver ignores it. */
+  readonly name?: string;
   readonly documentType: string;
   readonly salesChannelId: string | null;
   readonly isDefault: boolean;
@@ -37,6 +39,8 @@ export interface TemplateReader {
   /** The defaults of a type for a channel and for all channels — one query. */
   findDefaults(documentType: string, salesChannelId: string | null): Promise<readonly TemplateRow[]>;
   findById(id: string): Promise<TemplateRow | null>;
+  /** Every template of a type whose scope is all channels or this channel — one query (feature 153). */
+  findApplicable(documentType: string, salesChannelId: string | null): Promise<readonly TemplateRow[]>;
 }
 
 export interface LayoutCandidate {
@@ -89,6 +93,41 @@ function candidateOf(
 
 export class TemplateResolver {
   constructor(private readonly reader: TemplateReader) {}
+
+  /**
+   * The selection list for one document (153 contract §5): global templates
+   * and those of the document's channel — channel first, then global, each by
+   * name — and the default a document without a choice would use. It names the
+   * default row; it does not apply the "renders nothing" fall-through.
+   */
+  async listChoices(input: {
+    readonly documentType: string;
+    readonly salesChannelId: string | null;
+    readonly builtIn: DocumentTemplateContent;
+  }): Promise<DocumentTemplateChoices> {
+    const rows = (await this.reader.findApplicable(input.documentType, input.salesChannelId)).filter(
+      (row) =>
+        row.documentType === input.documentType &&
+        (row.salesChannelId === null || (input.salesChannelId !== null && row.salesChannelId === input.salesChannelId)),
+    );
+    const byName = (a: TemplateRow, b: TemplateRow): number =>
+      (a.name ?? '').localeCompare(b.name ?? '') || a.id.localeCompare(b.id);
+    const ofChannel = rows.filter((row) => row.salesChannelId !== null).sort(byName);
+    const global = rows.filter((row) => row.salesChannelId === null).sort(byName);
+    const channelDefault = ofChannel.find((row) => row.isDefault);
+    const globalDefault = global.find((row) => row.isDefault);
+    return {
+      templates: [...ofChannel, ...global].map((row) => ({
+        id: row.id,
+        name: row.name ?? '',
+        salesChannelId: row.salesChannelId,
+        languages: Object.keys(row.content.languages),
+        isDefault: row.isDefault,
+      })),
+      effectiveDefaultId: channelDefault?.id ?? globalDefault?.id ?? null,
+      builtInLanguages: Object.keys(input.builtIn.languages),
+    };
+  }
 
   async resolve(input: {
     readonly documentType: string;

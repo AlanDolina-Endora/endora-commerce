@@ -72,6 +72,7 @@ export function typeDetail(over: Partial<DocumentTypeDetail> = {}): DocumentType
     sample: { view: { displayMode: 'all', products: [], comparableAttributes: [], pricedFor: 'channel' }, shareUrl: null, generatedAt: '2026-10-17T10:00:00.000Z' },
     builtInContent: { schemaVersion: 1, languages: { 'en-US': tree([]) } },
     pageDefaults: { pageSize: 'A4', orientation: 'auto' },
+    collections: [],
     ...over,
   };
 }

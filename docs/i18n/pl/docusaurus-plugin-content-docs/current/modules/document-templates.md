@@ -1,18 +1,19 @@
 ---
 title: Szablony dokumentów
-description: Projektowanie dokumentów PDF generowanych przez platformę — porównania produktów i faktury — w Page Builderze, dla każdego rodzaju dokumentu, języka i kanału sprzedaży
+description: Projektowanie dokumentów PDF generowanych przez platformę — porównania produktów, faktury i zapytania ofertowego — w Page Builderze, dla każdego rodzaju dokumentu, języka i kanału sprzedaży
 ---
 
 # Szablony dokumentów
 
 Szablony dokumentów pozwalają operatorowi zaprojektować układ dokumentów PDF generowanych przez
-platformę, w tym samym Page Builderze co strony CMS i e-maile. W tym wydaniu korzystają z nich dwa
+platformę, w tym samym Page Builderze co strony CMS i e-maile. W tym wydaniu korzystają z nich trzy
 rodzaje dokumentów — **typy dokumentów**:
 
 | Typ dokumentu | Dostarcza go | Powstaje, gdy |
 | --- | --- | --- |
 | **Porównanie produktów** | Compare Products | kupujący klika **PDF** na stronie porównania w sklepie |
 | **Faktura** | Faktury | PDF faktury pobiera administrator lub klient, jest generowany ponownie albo dołączany do e-maila z fakturą |
+| **Zapytanie ofertowe** | Zapytania ofertowe | handlowiec eksportuje zapytanie ofertowe do PDF lub wysyła je klientowi; szablon wybiera dla każdej oferty |
 
 Typ dokumentu dostarcza moduł, do którego należą dane dokumentu, dlatego jest widoczny tylko wtedy,
 gdy ten moduł jest włączony. Moduł decyduje też, jakich bloków mogą używać jego dokumenty.
@@ -20,7 +21,9 @@ gdy ten moduł jest włączony. Moduł decyduje też, jakich bloków mogą używ
 ## Gdzie to znaleźć
 
 **Treści → Szablony dokumentów** w menu bocznym albo **⌘K** / **Ctrl+K** i wpisz *pdf*, *szablon
-dokumentu*, *szablon faktury* lub *invoice template*. Przycisk **Szablon PDF** na ekranie
+dokumentu*, *szablon faktury*, *invoice template*, *szablon oferty* lub *zapytanie ofertowe pdf*.
+**Zarządzaj szablonami PDF** w oknie eksportu zapytania ofertowego otwiera kartę zapytania
+ofertowego. Przycisk **Szablon PDF** na ekranie
 **Porównania** otwiera kartę porównania produktów, a zakładka **Szablony** w **Fakturach** — kartę
 faktury.
 
@@ -33,9 +36,12 @@ Typ dokumentu może mieć dowolnie wiele **szablonów**. Każdy szablon dotyczy 
 sprzedaży** albo **jednego kanału** — to jego zakres, wybierany przy tworzeniu i potem niezmienny. W
 każdym zakresie **co najwyżej jeden szablon jest domyślny**. Dokument powstaje z:
 
-1. domyślnego szablonu kanału sprzedaży dokumentu, a w jego braku
-2. domyślnego szablonu dla wszystkich kanałów, a w jego braku
-3. układu wbudowanego.
+1. dla zapytania ofertowego — szablonu wybranego przez handlowca dla tej oferty (dla wszystkich
+   kanałów albo kanału oferty; usunięty zostaje zastąpiony szablonem domyślnym, o czym handlowiec
+   jest informowany), a w jego braku
+2. domyślnego szablonu kanału sprzedaży dokumentu, a w jego braku
+3. domyślnego szablonu dla wszystkich kanałów, a w jego braku
+4. układu wbudowanego.
 
 Szablon, którego układ nie zawiera niczego do wydrukowania, jest traktowany jak nieistniejący i
 używany jest następny w tej kolejności.
@@ -54,6 +60,7 @@ Edytor oferuje **tylko bloki typu dokumentu, do którego należy szablon**:
 | --- | --- |
 | Porównanie produktów | Nagłówek porównania, Tabela porównania, Link do udostępniania oraz bloki ogólne: Nagłówek, Tekst, Obraz (z biblioteki zasobów), Odstęp, Linia, Podział strony |
 | Faktura | Nagłówek, Strony, Pozycje, Podsumowanie VAT, Sumy, Uwagi, Odstęp, Separator, Logo, Stopka oraz bloki, które dla faktur udostępniają inne zainstalowane moduły (np. sekcja KSeF) |
+| Zapytanie ofertowe | Nagłówek oferty, Nabywca i kontakt, Uwagi do oferty, Szczegóły oferty, **Tabela pozycji** oraz bloki ogólne |
 
 Kanwa pokazuje każdy blok wypełniony **przykładowym dokumentem**; **Podgląd PDF** generuje
 prawdziwy PDF kanwy — zapisanej lub nie — z tymi samymi przykładowymi danymi i niczego nie zapisuje.
@@ -78,6 +85,43 @@ polsku, dlatego edytor faktury nie oferuje wyboru języka.
 zobaczyć zmiany. Blok, którego moduł jest wyłączony, zostaje w szablonie, jest pokazywany jako
 zastępczy i nie jest drukowany.
 
+## Tabela pozycji
+
+**Tabela pozycji** (kategoria *Dane*) drukuje pozycje dokumentu jako tabelę, której kolumny określa
+szablon. Jest oferowana typowi dokumentu, który deklaruje pozycje — w tym wydaniu zapytaniu
+ofertowemu.
+
+- **Kolumny** — od 1 do 16, w ustalonej kolejności (przyciski przesuwania w górę i w dół działają z
+  klawiatury). *Dodaj kolumnę* otwiera listę pól dokumentu, pogrupowaną (*Pozycja*, *Ceny*,
+  *Atrybuty produktu*) i z wyszukiwaniem. Dla każdej kolumny: **nagłówek** (pusty drukuje nazwę pola
+  w języku układu), **szerokość** (automatyczna, wypełnij resztę albo stała w punktach — stałe
+  szerokości szersze niż strona są zmniejszane), **wyrównanie** (automatyczne: liczby i kwoty do
+  prawej), **format** (miejsca po przecinku; dla kwot waluta jako symbol, kod albo bez waluty; dla
+  dat krótki, średni albo długi), tekst drukowany, gdy pozycja **nie ma wartości**, oraz kiedy
+  kolumna jest **pokazywana**: *Zawsze*, *Tylko gdy któraś pozycja ma wartość* albo *Nigdy* (kolumna
+  zostaje w szablonie, ale się nie drukuje). Szerokość ukrytej kolumny przypada pozostałym.
+- Pola oznaczone jako **Wewnętrzne** — w ofercie: cena katalogowa i rabaty — to wartości, których
+  klienci nie widzą w innych miejscach. Można je drukować; oznaczenie jest ostrzeżeniem.
+- Pole, które już nie istnieje (usunięty atrybut produktu), jest oznaczone jako *Nieznane pole*; jego
+  kolumna drukuje tekst dla braku wartości, a dokument nadal powstaje.
+- **Wiersz szczegółów** — opcjonalny, pod każdą pozycją: do 8 wpisów drukowanych jako „etykieta:
+  wartość”, połączonych separatorem; wpis jest domyślnie drukowany *tylko gdy ma wartość*, a pod
+  pozycją, dla której żaden wpis nie ma wartości, wiersz się nie pojawia.
+- **Sumy** — do 10 sum dokumentu, każda z etykietą, zasadą (domyślnie *tylko gdy ma wartość*) i
+  opcją *Wyróżnij*, drukowane pod tabelą, wyrównane do prawej.
+- **Grupowanie** — opcjonalnie według jednego pola: pozycje są grupowane w kolejności pierwszego
+  wystąpienia wartości, każda grupa pod nagłówkiem (pozycje bez wartości pod podaną nazwą),
+  opcjonalnie z sumą częściową jednego pola liczbowego lub kwotowego.
+- Wygląd: tło nagłówka, kolory obramowania i pasków, paski w wierszach, rozmiar czcionki, odstęp
+  poniżej oraz tekst drukowany zamiast tabeli, gdy nie ma pozycji.
+
+Tabela powtarza wiersz nagłówka na każdej stronie i nigdy nie dzieli wiersza pozycji między strony.
+Kanwa rysuje ją na przykładowych danych z tym samym formatowaniem co PDF; kolumna ukryta przez swoją
+zasadę w przykładzie jest rysowana wyblakła.
+
+Symbole w postaci `{{item.…}}` są zarezerwowane dla przyszłego bloku powtarzającego bloki dla każdej
+pozycji; do tego czasu drukują się tak, jak je wpisano.
+
 ## Uprawnienia
 
 | Uprawnienie | Pozwala |
@@ -96,25 +140,31 @@ w dzienniku audytu.
   **Szablon PDF** porównania, a API odpowiada `MODULE_DISABLED`; PDF porównania działa dalej ze stałym
   układem. Modułu nie można wyłączyć, dopóki włączone są **Faktury**, bo z niego powstaje każdy PDF
   faktury. Szablony są zachowywane i wracają bez zmian po ponownym włączeniu.
-- **Compare Products albo Faktury wyłączone** — dany typ dokumentu, jego bloki i szablony znikają z
-  ekranów i z API; nic nie jest usuwane.
+- **Compare Products, Faktury albo Zapytania ofertowe wyłączone** — dany typ dokumentu, jego bloki i
+  szablony znikają z ekranów i z API; nic nie jest usuwane. Gdy **Szablony dokumentów** są
+  wyłączone, zapytań ofertowych nie można eksportować ani wysyłać jako PDF; szablon zapamiętany dla
+  każdej oferty zostaje zachowany.
 
 ## Limity
 
 Szablon zawiera do 10 języków, do 200 bloków i 20 obrazów na język oraz do 512 KiB treści; tekst
 może mieć do 5 000 znaków. Tabela porównania drukuje od 1 do 8 produktów na tabelę i kontynuuje w
-następnej tabeli.
+następnej tabeli. Tabela pozycji ma od 1 do 16 kolumn, do 8 wpisów szczegółów i do 10 sum.
 
 ## API
 
 `/api/v1/admin/document-templates` — typy dokumentów (`/types`, `/types/:code`,
 `/types/:code/builder-config`), szablony (lista, odczyt, tworzenie lub duplikowanie, zmiana nazwy,
 zapis jednego języka, ustawianie i usuwanie oznaczenia domyślnego, usuwanie) oraz `POST /preview`.
-Kody błędów: `DOCUMENT_TEMPLATE_NOT_FOUND`, `DOCUMENT_TYPE_NOT_AVAILABLE`,
+Szczegóły typu dokumentu wymieniają jego kolekcje pozycji — pola w żądanym języku, przykładowe
+pozycje i sumy — na potrzeby edytora. Kody błędów: `DOCUMENT_TEMPLATE_NOT_FOUND`, `DOCUMENT_TYPE_NOT_AVAILABLE`,
 `DOCUMENT_TEMPLATE_INVALID`, `DOCUMENT_TEMPLATE_IS_DEFAULT`, `DOCUMENT_TEMPLATE_NOT_SELECTABLE`,
 `DOCUMENT_RENDER_FAILED`.
 
 Moduł dodaje typ dokumentu, rejestrując go — z blokami, informacją, czy korzysta z bloków ogólnych,
 polami korespondencji, przykładowymi danymi, układem wbudowanym, językami, domyślnymi ustawieniami
-strony i informacją, czy dla pojedynczego dokumentu można wybrać szablon — w `documentTypeRegistry`,
-a dokumenty generuje przez `documentRenderPort`, przekazując własne dane.
+strony, informacją, czy dla pojedynczego dokumentu można wybrać szablon, oraz **kolekcjami pozycji** —
+w `documentTypeRegistry`, a dokumenty generuje przez `documentRenderPort`, przekazując własne dane.
+Typ, który deklaruje kolekcję pozycji (jej pola, wartości pozycji i sumy), otrzymuje Tabelę pozycji
+bez pisania renderera ani edytora; typ z wyborem szablonu dla pojedynczego dokumentu pyta port
+`listChoices` o szablony, które można wybrać dla jednego dokumentu.

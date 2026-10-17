@@ -32,6 +32,8 @@ import {
   type AdminContextResolver,
 } from './routes.admin.js';
 import { registerQuoteRequestsSalesRepRoutes } from './routes.sales-reps.js';
+import { registerQuoteRequestDocumentRoutes } from './routes.document.js';
+import type { QuoteRequestDocumentService } from './document/document-service.js';
 import { registerQuoteRequestsNegotiationRoutes } from './routes.negotiation.js';
 import type { NegotiationPolicyService } from './services/negotiation-policy-service.js';
 import type { CommandBus } from '@endora-commerce/platform/commands';
@@ -143,6 +145,12 @@ export interface QuoteRequestsModuleOptions {
    * `organizations`', so it is resolved, not rebuilt.
    */
   salesRepAssignment: SalesRepAssignmentPort;
+  /**
+   * Feature 153 — the quote PDF's service (choices, remembered template,
+   * download, e-mail), resolved when the routes are mounted. Absent: the four
+   * quote PDF routes are not registered.
+   */
+  documentService?: () => QuoteRequestDocumentService;
   /**
    * The module's logger. The saved-view service writes its actor-≠-owner trail
    * through it (`specs/147-saved-views/` research R-18, S-11).
@@ -276,6 +284,13 @@ export function quoteRequestsModule(options: QuoteRequestsModuleOptions): {
         salesRepAssignment,
         negotiationPolicy: options.negotiationDisplay,
       });
+      if (options.documentService) {
+        await registerQuoteRequestDocumentRoutes(app, {
+          service: options.documentService(),
+          requireAdmin: options.requireAdmin,
+          resolveAdminContext: options.resolveAdminContext,
+        });
+      }
       await registerQuoteRequestsSalesRepRoutes(app, {
         emFactory: options.emFactory,
         requireAdmin: options.requireAdmin,

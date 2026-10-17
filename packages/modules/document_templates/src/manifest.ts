@@ -40,7 +40,7 @@ export const manifest = defineModuleManifest({
   id: 'document_templates',
   name: 'Document templates',
   description:
-    'Design the PDF documents the platform produces — the product comparison and the invoice — in the Page Builder, per document type, language and sales channel.',
+    'Design the PDF documents the platform produces — such as the product comparison, the invoice and the quote request — in the Page Builder, per document type, language and sales channel.',
   version: '1.0.0',
   // `settings` stores the activation control, `auth` owns `requireAdmin`, and
   // `assets_library` serves the bytes of the images an operator places in a
@@ -78,17 +78,21 @@ export const manifest = defineModuleManifest({
       icon: 'FileText',
       targetRoute: '/document-templates',
       requiredPermission: 'document_templates:read',
+      // At most ten (the action schema). Matched as substrings, so a generic
+      // word an entry already contains ('pdf', 'szablon') needs no entry of
+      // its own; the label and description are searched too.
       keywords: [
-        'pdf',
-        'template',
         'document template',
         'comparison pdf',
         'invoice template',
-        'szablon',
         'szablon pdf',
         'szablon faktury',
         'porównanie',
-        'dokument',
+        // Feature 153 (FR-072) — the quote request PDF templates.
+        'quote pdf',
+        'offer template',
+        'szablon oferty',
+        'zapytanie ofertowe pdf',
       ],
       weight: 650,
     },
@@ -99,6 +103,68 @@ export const manifest = defineModuleManifest({
    * newsletter; a document type offers them only if it opts in (`coreBlocks`).
    */
   blocks: [
+    /**
+     * Feature 153 — the **Line items table**
+     * (`specs/153-quote-request-pdf-template/contracts/document-collections.md` §3).
+     * Offered to a document type only when it declares a line collection. The
+     * structured settings — columns, detail row, totals, grouping — are edited
+     * through the facility's own custom fields in the admin; the descriptor
+     * declares them so the Page Builder keeps them, and the scalar style
+     * settings as ordinary fields.
+     */
+    {
+      name: 'document_templates.ItemsTable',
+      labelKey: 'blocks.itemsTable.label',
+      descriptionKey: 'blocks.itemsTable.description',
+      category: 'data',
+      contexts: ['document'],
+      fields: {
+        collection: { type: 'text', label: 'Lines' },
+        columns: { type: 'array', label: 'Columns' },
+        detailRow: { type: 'object', label: 'Detail row' },
+        totals: { type: 'array', label: 'Totals' },
+        grouping: { type: 'object', label: 'Grouping' },
+        emptyText: { type: 'text', label: 'Text when there are no lines' },
+        fontSize: { type: 'number', label: 'Font size' },
+        headerBackground: { type: 'text', label: 'Header background (#hex)' },
+        borderColor: { type: 'text', label: 'Border colour (#hex)' },
+        stripedRows: {
+          type: 'radio',
+          label: 'Striped rows',
+          options: [
+            { label: 'Yes', value: 'true' },
+            { label: 'No', value: 'false' },
+          ],
+        },
+        stripeColor: { type: 'text', label: 'Stripe colour (#hex)' },
+        marginBottom: { type: 'number', label: 'Space below (pt)' },
+      },
+      defaultProps: {
+        columns: [
+          {
+            id: 'c1',
+            field: 'row.number',
+            label: '',
+            width: 24,
+            align: 'auto',
+            format: {},
+            emptyText: '',
+            visibleWhen: { op: 'always' },
+          },
+        ],
+        detailRow: { enabled: false, entries: [], separator: ' · ', italics: true, fontSize: 8 },
+        totals: [],
+        grouping: null,
+        emptyText: '',
+        fontSize: 9,
+        headerBackground: '#f1f5f9',
+        borderColor: '#cbd5e1',
+        stripedRows: 'false',
+        stripeColor: '#f8fafc',
+        marginBottom: 12,
+      },
+      weight: 5,
+    },
     {
       name: 'document_templates.Heading',
       labelKey: 'blocks.heading.label',
@@ -250,6 +316,7 @@ export const manifest = defineModuleManifest({
     },
   ],
   blockCategories: [
+    { key: 'data', titleKey: 'blocks.category.data', contexts: ['document'], weight: 30 },
     { key: 'layout', titleKey: 'blocks.category.layout', contexts: ['document'], weight: 90 },
   ],
   i18n: { bundlesDir: 'i18n' },

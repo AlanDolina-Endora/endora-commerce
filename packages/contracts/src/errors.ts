@@ -98,6 +98,17 @@ export const ERROR_CODES = {
   RFQ_SAVED_VIEW_NAME_TAKEN: 'RFQ_SAVED_VIEW_NAME_TAKEN',
   QUOTE_INCOMPLETE: 'QUOTE_INCOMPLETE',
   QUOTE_VALIDITY_ENDED: 'QUOTE_VALIDITY_ENDED',
+  // Quote PDF by e-mail (`specs/153-quote-request-pdf-template/`, owner answer
+  // Q4, FR-097). Declared by the `quote_requests` module's manifest.
+  /** The quote PDF is larger than an e-mail may carry; `details.maxBytes` names the limit. */
+  QUOTE_REQUEST_PDF_TOO_LARGE: 'QUOTE_REQUEST_PDF_TOO_LARGE',
+  /**
+   * The *Quote request PDF* e-mail cannot be sent at all — switched off, no
+   * mail transport, or no definition; `details.code` says which.
+   */
+  QUOTE_REQUEST_PDF_EMAIL_UNAVAILABLE: 'QUOTE_REQUEST_PDF_EMAIL_UNAVAILABLE',
+  /** Every recipient's delivery failed at the mail transport. */
+  QUOTE_REQUEST_PDF_SEND_FAILED: 'QUOTE_REQUEST_PDF_SEND_FAILED',
 
   // Shopping lists
   SHOPPING_LIST_CANNOT_DELETE_DEFAULT: 'SHOPPING_LIST_CANNOT_DELETE_DEFAULT',

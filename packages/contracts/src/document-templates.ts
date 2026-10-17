@@ -1,6 +1,20 @@
 import { z } from 'zod';
 import { blockCategoryKeyRe, blockNameRe } from './cms.js';
 import { uuidSchema } from './common.js';
+import {
+  documentFieldPathRe,
+  documentItemSchema,
+  documentValueFormatSchema,
+  documentValueKindSchema,
+  documentValueSchema,
+  type DocumentAlign,
+  type DocumentItem,
+  type DocumentValue,
+  type DocumentValueFormat,
+  type DocumentValueKind,
+} from './document-values.js';
+
+export * from './document-values.js';
 
 /**
  * Document templates — operator-designed Page Builder layouts for the PDF
@@ -42,6 +56,15 @@ export const CORE_BLOCK_NAMES = [
   'document_templates.PageBreak',
 ] as const;
 export type CoreBlockName = (typeof CORE_BLOCK_NAMES)[number];
+
+/**
+ * The blocks the facility owns that bind to a **line collection** a document
+ * type declares (`specs/153-quote-request-pdf-template/contracts/document-collections.md`
+ * §2). Offered to a type if and only if it declares a collection.
+ */
+export const COLLECTION_BLOCK_NAMES = ['document_templates.ItemsTable'] as const;
+export type CollectionBlockName = (typeof COLLECTION_BLOCK_NAMES)[number];
+export const ITEMS_TABLE_BLOCK_NAME: CollectionBlockName = 'document_templates.ItemsTable';
 
 /** Limits a saved template is held to (research R-20). */
 export const DOCUMENT_TEMPLATE_LIMITS = {
@@ -227,6 +250,179 @@ export function documentContentByteSize(content: unknown): number {
   return bytes;
 }
 
+
+// ---------------------------------------------------------------------------
+// Line collections and the Line items table (feature 153)
+// ---------------------------------------------------------------------------
+
+/** A collection key a document type declares: `lines`. */
+export const documentCollectionKeyRe = /^[a-z][A-Za-z0-9]*$/;
+
+/** Limits of one Line items table (153 research R-21). */
+export const ITEMS_TABLE_LIMITS = {
+  maxColumns: 16,
+  maxDetailEntries: 8,
+  maxTotals: 10,
+  maxLabelLength: 200,
+  maxEmptyTextLength: 50,
+  maxTableEmptyTextLength: 200,
+  maxGroupEmptyLabelLength: 100,
+  maxSeparatorLength: 10,
+} as const;
+
+/** One field a collection offers (research R-4). */
+export interface DocumentFieldDefinition {
+  readonly path: string;
+  /** In the requested language. */
+  readonly label: string;
+  readonly valueKind: DocumentValueKind;
+  /** `line` | `pricing` | `product` | a host's own group key. */
+  readonly group: string;
+  /** `internal`: a value the customer does not otherwise see (153 Q7) — the editor warns. */
+  readonly audience: 'customer' | 'internal';
+  readonly defaultFormat?: DocumentValueFormat;
+  readonly defaultAlign?: DocumentAlign;
+  readonly description?: string;
+  /** What the editor's canvas and the preview show when the sample has no value. */
+  readonly sampleValue?: DocumentValue;
+}
+
+export const documentFieldDefinitionSchema = z.object({
+  path: z.string().regex(documentFieldPathRe),
+  label: z.string(),
+  valueKind: documentValueKindSchema,
+  group: z.string(),
+  audience: z.enum(['customer', 'internal']),
+  defaultFormat: documentValueFormatSchema.optional(),
+  defaultAlign: z.enum(['left', 'center', 'right']).optional(),
+  description: z.string().optional(),
+  sampleValue: documentValueSchema.optional(),
+});
+
+/**
+ * The lines of a document a Line items table can print, declared by the
+ * document type (contract §1). `fields` is async and per language because part
+ * of a catalogue is data (a shop's product attributes); `items` is synchronous
+ * and pure over the host's own data, so the facility never queries anything.
+ */
+export interface DocumentCollectionDeclaration<TData = unknown> {
+  readonly key: string;
+  /** Module-relative i18n key. */
+  readonly labelKey: string;
+  fields(language: string): Promise<readonly DocumentFieldDefinition[]>;
+  items(data: TData): readonly DocumentItem[];
+  summaryFields?(language: string): Promise<readonly DocumentFieldDefinition[]>;
+  summary?(data: TData): Readonly<Record<string, DocumentValue>>;
+}
+
+/** Puck stores what its fields edit; a number may arrive as a numeric string. */
+const numberLike = (min: number, max: number) =>
+  z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() !== '' ? Number(value) : value),
+    z.number().min(min).max(max),
+  );
+const booleanLike = z.preprocess(
+  (value) => (value === 'true' ? true : value === 'false' ? false : value),
+  z.boolean(),
+);
+const hexColor = z.string().regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/);
+const fieldPath = z.string().regex(documentFieldPathRe);
+
+/** Columns may print *always*, *only if any line has a value*, or *never* (D2). */
+export const itemsTableColumnConditionSchema = z.discriminatedUnion('op', [
+  z.object({ op: z.literal('always') }),
+  z.object({ op: z.literal('never') }),
+  z.object({ op: z.literal('any_has_value'), field: fieldPath.optional() }),
+]);
+/** Detail entries and totals rows: *always*, *only if it has a value*, *never*. */
+export const itemsTableEntryConditionSchema = z.discriminatedUnion('op', [
+  z.object({ op: z.literal('always') }),
+  z.object({ op: z.literal('never') }),
+  z.object({ op: z.literal('has_value'), field: fieldPath.optional() }),
+]);
+
+export const itemsTableColumnSchema = z.object({
+  id: z.string().regex(/^[A-Za-z0-9_-]{1,40}$/),
+  field: fieldPath,
+  label: z.string().max(ITEMS_TABLE_LIMITS.maxLabelLength).default(''),
+  width: z.union([z.literal('auto'), z.literal('fill'), numberLike(10, 400)]).default('auto'),
+  align: z.enum(['auto', 'left', 'center', 'right']).default('auto'),
+  format: documentValueFormatSchema.default({}),
+  emptyText: z.string().max(ITEMS_TABLE_LIMITS.maxEmptyTextLength).default(''),
+  visibleWhen: itemsTableColumnConditionSchema.default({ op: 'always' }),
+});
+export type ItemsTableColumn = z.infer<typeof itemsTableColumnSchema>;
+
+export const itemsTableDetailEntrySchema = z.object({
+  field: fieldPath,
+  label: z.string().max(ITEMS_TABLE_LIMITS.maxLabelLength).default(''),
+  visibleWhen: itemsTableEntryConditionSchema.default({ op: 'has_value' }),
+});
+export type ItemsTableDetailEntry = z.infer<typeof itemsTableDetailEntrySchema>;
+
+export const itemsTableDetailRowSchema = z.object({
+  enabled: booleanLike.default(false),
+  entries: z.array(itemsTableDetailEntrySchema).max(ITEMS_TABLE_LIMITS.maxDetailEntries).default([]),
+  separator: z.string().max(ITEMS_TABLE_LIMITS.maxSeparatorLength).default(' · '),
+  italics: booleanLike.default(true),
+  fontSize: numberLike(6, 14).default(8),
+});
+export type ItemsTableDetailRow = z.infer<typeof itemsTableDetailRowSchema>;
+
+export const itemsTableTotalSchema = z.object({
+  field: fieldPath,
+  label: z.string().max(ITEMS_TABLE_LIMITS.maxLabelLength).default(''),
+  visibleWhen: itemsTableEntryConditionSchema.default({ op: 'has_value' }),
+  emphasis: booleanLike.default(false),
+});
+export type ItemsTableTotal = z.infer<typeof itemsTableTotalSchema>;
+
+export const itemsTableGroupingSchema = z.object({
+  field: fieldPath,
+  emptyLabel: z.string().max(ITEMS_TABLE_LIMITS.maxGroupEmptyLabelLength).default(''),
+  subtotalField: fieldPath.nullable().default(null),
+  subtotalLabel: z.string().max(ITEMS_TABLE_LIMITS.maxLabelLength).default(''),
+});
+export type ItemsTableGrouping = z.infer<typeof itemsTableGroupingSchema>;
+
+/**
+ * The stored props of one `document_templates.ItemsTable` node
+ * (`specs/153-quote-request-pdf-template/data-model.md` §2), validated when a
+ * template is saved (FR-043). Unknown keys are kept — Puck stores its own `id`.
+ * A field path the catalogue does not offer is accepted: the catalogue is data
+ * and changes, and such a column prints its empty text (FR-037).
+ */
+export const itemsTablePropsSchema = z
+  .object({
+    collection: z.string().regex(documentCollectionKeyRe).max(60).optional(),
+    columns: z.array(itemsTableColumnSchema).min(1).max(ITEMS_TABLE_LIMITS.maxColumns),
+    detailRow: itemsTableDetailRowSchema.optional(),
+    totals: z.array(itemsTableTotalSchema).max(ITEMS_TABLE_LIMITS.maxTotals).optional(),
+    grouping: itemsTableGroupingSchema.nullable().optional(),
+    emptyText: z.string().max(ITEMS_TABLE_LIMITS.maxTableEmptyTextLength).optional(),
+    headerBackground: hexColor.optional(),
+    borderColor: hexColor.optional(),
+    fontSize: numberLike(6, 14).optional(),
+    stripedRows: booleanLike.optional(),
+    stripeColor: hexColor.optional(),
+    marginBottom: numberLike(0, 144).optional(),
+  })
+  .passthrough()
+  .superRefine((props, ctx) => {
+    const seen = new Set<string>();
+    props.columns.forEach((column, index) => {
+      if (seen.has(column.id)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['columns', index, 'id'],
+          message: 'Two columns of one table have the same id.',
+        });
+      }
+      seen.add(column.id);
+    });
+  });
+export type ItemsTableProps = z.infer<typeof itemsTablePropsSchema>;
+
 // ---------------------------------------------------------------------------
 // Document types — what a host registers (document-type-registry.md §2)
 // ---------------------------------------------------------------------------
@@ -331,6 +527,11 @@ export interface DocumentTypeRegistration<TData = unknown, TPrepared = unknown> 
   /** Fictitious, JSON-serialisable sample for the editor and the preview. */
   sampleData(language: string): TData;
 
+  /**
+   * The line collections a Line items table can print (feature 153). A type
+   * declaring at least one is offered `document_templates.ItemsTable`.
+   */
+  readonly collections?: readonly DocumentCollectionDeclaration<TData>[];
 }
 
 /** Container name: `documentTypeRegistry`. Owner: `document_templates`. Ungated. */
@@ -366,9 +567,40 @@ export interface DocumentRenderResult {
   readonly requestedTemplateMissing: boolean;
 }
 
+/**
+ * The templates a person may pick for one document (153 contract §5): global
+ * ones and those of the document's channel — channel first, then global, each
+ * by name — the one a document without a choice would use (`null` = the
+ * built-in layout), and the built-in layout's languages.
+ */
+export const documentTemplateChoiceSchema = z.object({
+  id: uuidSchema,
+  name: z.string(),
+  salesChannelId: uuidSchema.nullable(),
+  languages: z.array(z.string()),
+  isDefault: z.boolean(),
+});
+export type DocumentTemplateChoice = z.infer<typeof documentTemplateChoiceSchema>;
+
+export const documentTemplateChoicesSchema = z.object({
+  templates: z.array(documentTemplateChoiceSchema),
+  effectiveDefaultId: uuidSchema.nullable(),
+  builtInLanguages: z.array(z.string()),
+});
+export type DocumentTemplateChoices = z.infer<typeof documentTemplateChoicesSchema>;
+
 /** Container name: `documentRenderPort`. Owner: `document_templates`. Gated. */
 export interface DocumentRenderPort {
   render<TData>(input: DocumentRenderInput<TData>): Promise<DocumentRenderResult>;
+  /**
+   * The selection list of a `per_document` type for a document's channel
+   * (feature 153) — so a host can offer a picker to people who may not manage
+   * templates. A `default_only` type answers `DOCUMENT_TEMPLATE_NOT_SELECTABLE`.
+   */
+  listChoices(input: {
+    readonly documentType: string;
+    readonly salesChannelId: string | null;
+  }): Promise<DocumentTemplateChoices>;
 }
 
 // ---------------------------------------------------------------------------
@@ -393,6 +625,20 @@ export const documentVariableSchema = z.object({
 });
 export type DocumentVariable = z.infer<typeof documentVariableSchema>;
 
+/** One declared collection as the editor needs it (153 contract §4), labels in the requested language. */
+export const documentCollectionDetailSchema = z.object({
+  key: z.string().regex(documentCollectionKeyRe),
+  labelKey: z.string(),
+  ownerModule: z.string(),
+  /** `row.number` first. */
+  fields: z.array(documentFieldDefinitionSchema),
+  summaryFields: z.array(documentFieldDefinitionSchema),
+  /** The sample's items, a field's `sampleValue` filled where the sample has none. */
+  sampleItems: z.array(documentItemSchema),
+  sampleSummary: z.record(z.string(), documentValueSchema),
+});
+export type DocumentCollectionDetail = z.infer<typeof documentCollectionDetailSchema>;
+
 export const documentTypeDetailSchema = documentTypeSummarySchema.extend({
   /** `null` = every active content language. */
   languages: z.array(z.string()).nullable(),
@@ -400,6 +646,8 @@ export const documentTypeDetailSchema = documentTypeSummarySchema.extend({
   sample: z.unknown(),
   builtInContent: documentTemplateContentSchema,
   pageDefaults: documentRootPropsSchema,
+  /** Feature 153 — the type's line collections; `[]` when it declares none. */
+  collections: z.array(documentCollectionDetailSchema).default([]),
 });
 export type DocumentTypeDetail = z.infer<typeof documentTypeDetailSchema>;
 

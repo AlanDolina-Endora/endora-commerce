@@ -92,6 +92,9 @@ export const rfqEventTypeSchema = z.enum([
   'customer-rejected-revision',
   're-submitted',
   'note-added',
+  // Feature 153 (owner answer Q4) — the quote PDF was e-mailed. Admin replies
+  // only: a customer reply leaves these events out.
+  'pdf-sent',
 ]);
 export type RfqEventType = z.infer<typeof rfqEventTypeSchema>;
 
@@ -213,6 +216,8 @@ export const quoteRequestHistoryEntryKindSchema = z.enum([
   'expired',
   'completed',
   'note_added',
+  // Feature 153 (owner answer Q4).
+  'pdf_sent',
 ]);
 export type QuoteRequestHistoryEntryKind = z.infer<typeof quoteRequestHistoryEntryKindSchema>;
 
@@ -234,6 +239,19 @@ export const quoteRequestHistoryEntrySchema = z.object({
   relatedQuoteRequestId: uuidSchema.nullable(),
   /** Completion. */
   orderId: uuidSchema.nullable(),
+  /**
+   * Feature 153 — `pdf_sent` entries only: who the quote PDF was e-mailed to,
+   * with which template (`null` = the built-in layout) and in which language.
+   */
+  delivery: z
+    .object({
+      recipients: z.array(z.string()),
+      templateName: z.string().nullable(),
+      language: z.string().nullable(),
+      message: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
 });
 export type QuoteRequestHistoryEntry = z.infer<typeof quoteRequestHistoryEntrySchema>;
 
@@ -379,6 +397,12 @@ export const quoteRequestSchema = z.object({
     })
     .nullable()
     .optional(),
+  /**
+   * Feature 153 (owner answer Q2) — the PDF template remembered for this quote,
+   * `null` = none. **Admin replies only.** A stale id is kept: the export falls
+   * back to the default and says so.
+   */
+  documentTemplateId: uuidSchema.nullable().optional(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
   version: z.number().int().nonnegative(),
@@ -892,3 +916,157 @@ export const QUOTE_REQUEST_WEBHOOK_EVENT_SCHEMAS = {
   [QUOTE_REQUEST_WEBHOOK_EVENTS.CREATED]: RfqCreatedEventV1Schema,
   [QUOTE_REQUEST_WEBHOOK_EVENTS.EXPIRED]: RfqExpiredEventV1Schema,
 } as const;
+
+// ---------------------------------------------------------------------------
+// Feature 153 — the quote PDF (`specs/153-quote-request-pdf-template/`)
+// ---------------------------------------------------------------------------
+
+/** The document type `quote_requests` registers with the document-template facility. */
+export const QUOTE_REQUEST_DOCUMENT_TYPE = 'quote_requests.quote_request';
+
+/** Owner answer Q4 — what one *Send PDF to customer* may carry. */
+export const QUOTE_REQUEST_PDF_LIMITS = {
+  maxRecipients: 5,
+  maxMessageLength: 2000,
+  /** 10 MiB — larger PDFs are refused rather than handed to a mail server. */
+  maxAttachmentBytes: 10 * 1024 * 1024,
+} as const;
+
+const documentLanguageCode = z.string().regex(/^[a-z]{2,3}(-[A-Z]{2})?$/);
+
+/**
+ * The data one quote PDF prints, built for the requesting administrator
+ * (`data-model.md` §4.1). JSON-serialisable: the editor's sample is the same
+ * shape.
+ */
+export const quoteRequestDocumentDataSchema = z.object({
+  generatedAt: isoDateTimeSchema,
+  quote: z.object({
+    id: z.string(),
+    businessId: z.string(),
+    status: z.string(),
+    revisionNumber: z.number().int().nonnegative(),
+    createdAt: isoDateTimeSchema,
+    submittedAt: isoDateTimeSchema.nullable(),
+    approvedAt: isoDateTimeSchema.nullable(),
+    expiresAt: isoDateTimeSchema.nullable(),
+    headerNote: z.string().nullable(),
+    /** A fraction: `0.23`. */
+    taxRate: z.number(),
+    currency: z.string(),
+  }),
+  channel: z.object({ id: z.string(), name: z.string() }).nullable(),
+  buyer: z.object({
+    organizationName: z.string(),
+    legalName: z.string().nullable(),
+    taxId: z.string().nullable(),
+    address: z
+      .object({
+        line1: z.string(),
+        line2: z.string().nullable(),
+        postalCode: z.string(),
+        city: z.string(),
+        country: z.string(),
+      })
+      .nullable(),
+    customerName: z.string().nullable(),
+    customerEmail: z.string().nullable(),
+  }),
+  salesRep: z.object({ name: z.string(), email: z.string() }).nullable(),
+  /** The quote's custom fields whose definition customers may see, with a value. */
+  details: z.array(z.object({ label: z.string(), value: z.string() })),
+  lines: z.array(
+    z.object({
+      id: z.string(),
+      productId: z.string(),
+      productName: z.string(),
+      variantLabel: z.string().nullable(),
+      sku: z.string().nullable(),
+      quantity: z.number(),
+      packagingUnitName: z.string().nullable(),
+      packagingUnitBaseQuantity: z.number().nullable(),
+      agreedUnitPrice: z.number().nullable(),
+      proposedUnitPrice: z.number().nullable(),
+      referenceUnitPrice: z.number().nullable(),
+      referenceCurrency: z.string().nullable(),
+      lineCurrency: z.string(),
+      lineNote: z.string().nullable(),
+      /** Attribute code → display text in the export language. */
+      attributes: z.record(z.string(), z.string()),
+    }),
+  ),
+});
+export type QuoteRequestDocumentData = z.infer<typeof quoteRequestDocumentDataSchema>;
+export type QuoteRequestDocumentLine = QuoteRequestDocumentData['lines'][number];
+
+/** `GET /api/v1/admin/quote-requests/:id/document-templates` — the export and send dialogs' choices. */
+export const quoteRequestDocumentChoicesSchema = z.object({
+  templates: z.array(
+    z.object({
+      id: uuidSchema,
+      name: z.string(),
+      salesChannelId: uuidSchema.nullable(),
+      languages: z.array(z.string()),
+      isDefault: z.boolean(),
+    }),
+  ),
+  rememberedTemplateId: uuidSchema.nullable(),
+  /** The remembered id is not among `templates` (deleted or out of reach). */
+  rememberedTemplateMissing: z.boolean(),
+  /** What an export without a choice uses; `null` = the built-in layout. */
+  effectiveDefaultId: uuidSchema.nullable(),
+  builtInLanguages: z.array(z.string()),
+  /** The default language of the quote's channel (the system default channel when none). */
+  suggestedLanguage: z.string(),
+  /** Owner answer Q4 — the requesting customer's e-mail, the send dialog's preselected recipient. */
+  requesterEmail: z.string().nullable(),
+});
+export type QuoteRequestDocumentChoices = z.infer<typeof quoteRequestDocumentChoicesSchema>;
+
+/** `PUT /api/v1/admin/quote-requests/:id/document-template`. */
+export const setQuoteRequestDocumentTemplateSchema = z.object({
+  documentTemplateId: uuidSchema.nullable(),
+});
+export type SetQuoteRequestDocumentTemplate = z.infer<typeof setQuoteRequestDocumentTemplateSchema>;
+
+/** `GET /api/v1/admin/quote-requests/:id/pdf` query. */
+export const quoteRequestPdfQuerySchema = z.object({
+  templateId: uuidSchema.optional(),
+  language: documentLanguageCode.optional(),
+});
+export type QuoteRequestPdfQuery = z.infer<typeof quoteRequestPdfQuerySchema>;
+
+/**
+ * `POST /api/v1/admin/quote-requests/:id/pdf/send` (owner answer Q4). The
+ * recipients are trimmed and de-duplicated case-insensitively — the first
+ * spelling kept — before the 1–5 bound is applied.
+ */
+export const quoteRequestPdfSendRequestSchema = z.object({
+  templateId: uuidSchema.optional(),
+  language: documentLanguageCode.optional(),
+  recipients: z
+    .array(z.string().trim().max(254).email())
+    .transform((addresses) => {
+      const seen = new Set<string>();
+      return addresses.filter((address) => {
+        const key = address.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    })
+    .pipe(z.array(z.string()).min(1).max(QUOTE_REQUEST_PDF_LIMITS.maxRecipients)),
+  message: z.string().max(QUOTE_REQUEST_PDF_LIMITS.maxMessageLength).optional(),
+});
+export type QuoteRequestPdfSendRequest = z.infer<typeof quoteRequestPdfSendRequestSchema>;
+
+export const quoteRequestPdfSendResultSchema = z.object({
+  /** Addresses the e-mail was handed to. */
+  sent: z.array(z.string()),
+  /** Addresses whose delivery failed at the transport. */
+  failed: z.array(z.string()),
+  templateId: uuidSchema.nullable(),
+  templateSource: z.enum(['explicit', 'default', 'built_in', 'canvas']),
+  requestedTemplateMissing: z.boolean(),
+});
+export type QuoteRequestPdfSendResult = z.infer<typeof quoteRequestPdfSendResultSchema>;

@@ -58,6 +58,19 @@ export const CUSTOMER_PAYLOAD_KEYS = new Set([
   'validity',
 ]);
 
+/**
+ * Event types a customer reply leaves out entirely. Feature 153 (owner answer
+ * Q4): a `pdf-sent` event names the addresses a representative e-mailed the
+ * quote PDF to — possibly someone other than the requester — and is the
+ * administrators' record of the send, shown on the admin History only.
+ */
+export const ADMIN_ONLY_EVENT_TYPES: ReadonlySet<string> = new Set(['pdf-sent']);
+
+/** The stored events a customer may see. */
+export function customerEventsOf<T extends { readonly eventType: string }>(events: readonly T[]): T[] {
+  return events.filter((event) => !ADMIN_ONLY_EVENT_TYPES.has(event.eventType));
+}
+
 /** The keys of one `payload.diff` entry (`RfqDiffEntry`). */
 export const CUSTOMER_DIFF_KEYS = new Set([
   'kind',

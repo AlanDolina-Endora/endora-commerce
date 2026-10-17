@@ -235,6 +235,8 @@ function singleKind(event: HistoryEventInput): QuoteRequestHistoryEntryKind {
       return 'rejected_by_customer';
     case 'note-added':
       return 'note_added';
+    case 'pdf-sent':
+      return 'pdf_sent';
   }
 }
 
@@ -260,6 +262,26 @@ function toEntry(
         ? firstUuid(group, 'sourceRfqId')
         : null,
     orderId: kind === 'completed' ? firstUuid(group, 'orderId') : null,
+    delivery: kind === 'pdf_sent' ? deliveryOf(first) : null,
+  };
+}
+
+/**
+ * Feature 153 (owner answer Q4) — who the quote PDF was e-mailed to, with which
+ * template and in which language. Read field by field: a stored payload is
+ * untrusted, and a value of the wrong type is left out rather than echoed.
+ */
+function deliveryOf(event: HistoryEventInput): NonNullable<QuoteRequestHistoryEntry['delivery']> {
+  const payload = event.payload;
+  const text = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null);
+  const recipients = Array.isArray(payload['recipients'])
+    ? (payload['recipients'] as unknown[]).filter((value): value is string => typeof value === 'string' && value !== '')
+    : [];
+  return {
+    recipients,
+    templateName: text(payload['templateName']),
+    language: text(payload['language']),
+    message: text(payload['message']),
   };
 }
 

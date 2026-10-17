@@ -2,21 +2,26 @@ import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces.js';
 import {
   CORE_BLOCK_NAMES,
   ERROR_CODES,
+  ITEMS_TABLE_BLOCK_NAME,
+  type DocumentItem,
+  type DocumentValue,
   type CoreBlockName,
   type DocumentBlockRenderer,
   type DocumentRenderContext,
   type DocumentRenderInput,
   type DocumentRenderPort,
   type DocumentRenderResult,
+  type DocumentTemplateChoices,
   type DocumentTypeRegistration,
 } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import { rethrowIfModuleDisabled } from '@endora-commerce/platform/kernel';
-import type { DocumentTypeRegistry } from '../registry/document-type-registry.js';
+import type { CollectionCatalogue, DocumentTypeRegistry } from '../registry/document-type-registry.js';
 import type { BlockDeclarations } from '../services/block-declarations.js';
 import type { LayoutCandidate, TemplateResolver } from '../services/template-resolver.js';
 import { CORE_BLOCK_RENDERERS } from './core-blocks.js';
 import { collectImageAssetIds, loadAssetImages, type AssetBytesReader } from './embed-asset-images.js';
+import { numberItems, renderItemsTable } from './items-table.js';
 import { interpolateMergeFields, type MergeFieldValues } from './merge-fields.js';
 import { resolveRootProps, usableWidth } from './page.js';
 import { pdfBytes } from './pdfmake.js';
@@ -131,6 +136,36 @@ export class DocumentRenderer implements DocumentRenderPort {
   }
 
   /**
+   * The templates a person may pick for one document (feature 153, contract
+   * §5) — answered from the facility's own table, so a host can offer a picker
+   * to people who may not manage templates.
+   */
+  async listChoices(input: {
+    readonly documentType: string;
+    readonly salesChannelId: string | null;
+  }): Promise<DocumentTemplateChoices> {
+    const registration = this.deps.registry.get(input.documentType);
+    if (!registration) {
+      throw new HttpError(404, ERROR_CODES.DOCUMENT_TYPE_NOT_AVAILABLE, 'This document type is not available.', {
+        documentType: input.documentType,
+      });
+    }
+    if (registration.selection !== 'per_document') {
+      throw new HttpError(
+        422,
+        ERROR_CODES.DOCUMENT_TEMPLATE_NOT_SELECTABLE,
+        'This document type does not allow choosing a template for a single document.',
+        { documentType: input.documentType },
+      );
+    }
+    return this.deps.resolver.listChoices({
+      documentType: input.documentType,
+      salesChannelId: input.salesChannelId,
+      builtIn: registration.defaultContent(),
+    });
+  }
+
+  /**
    * The pdfmake document definition of a document, without producing bytes —
    * what every test of the engine asserts on, because a definition can be
    * compared and a PDF cannot.
@@ -148,7 +183,9 @@ export class DocumentRenderer implements DocumentRenderPort {
       this.deps.registry.blocks(input.documentType).map((block) => [block.name, block]),
     );
     const core = new Set<string>(this.deps.registry.coreBlocks(input.documentType));
-    const renderable = (node: PlacedNode): boolean => blocks.has(node.type) || core.has(node.type);
+    const dataBlocks = new Set<string>(this.deps.registry.collectionBlocks(input.documentType));
+    const renderable = (node: PlacedNode): boolean =>
+      blocks.has(node.type) || core.has(node.type) || dataBlocks.has(node.type);
 
     let candidates: readonly (LayoutCandidate | { source: 'canvas'; templateId: null; templateVersion: null; language: string; tree: unknown })[];
     let requestedTemplateMissing = false;
@@ -214,16 +251,54 @@ export class DocumentRenderer implements DocumentRenderPort {
 
     let content: Content[];
     if (placed) {
-      const images = await loadAssetImages(
-        collectImageAssetIds({ content: placed.filter((node) => node.type === 'document_templates.Image') }),
-        this.deps.assets,
-      );
+      // Feature 153 — the catalogue of every collection a Line items table
+      // uses, loaded once per render beside the images (contract §3.2).
+      const firstCollection = registration.collections?.[0]?.key ?? '';
+      const collectionOf = (props: Readonly<Record<string, unknown>>): string =>
+        typeof props['collection'] === 'string' && props['collection'] !== '' ? props['collection'] : firstCollection;
+      const tableKeys = [
+        ...new Set(placed.filter((node) => node.type === ITEMS_TABLE_BLOCK_NAME).map((node) => collectionOf(node.props))),
+      ];
+      const [images, catalogues] = await Promise.all([
+        loadAssetImages(
+          collectImageAssetIds({ content: placed.filter((node) => node.type === 'document_templates.Image') }),
+          this.deps.assets,
+        ),
+        Promise.all(
+          tableKeys.map(
+            async (key) => [key, await this.deps.registry.catalogue(input.documentType, key, language)] as const,
+          ),
+        ).then((entries) => new Map<string, CollectionCatalogue>(entries)),
+      ]);
+      // `items()` and `summary()` once per collection per render; a throw is
+      // the block's failure, so it is read inside `renderBlock`.
+      const lines = new Map<string, { items: DocumentItem[]; summary: Readonly<Record<string, DocumentValue>> }>();
+      const linesOf = (key: string) => {
+        let found = lines.get(key);
+        if (!found) {
+          const collection = registration.collections?.find((candidate) => candidate.key === key);
+          found = collection
+            ? { items: numberItems(collection.items(input.data)), summary: collection.summary?.(input.data) ?? {} }
+            : { items: [], summary: {} };
+          lines.set(key, found);
+        }
+        return found;
+      };
       content = [];
       for (const node of placed) {
         const props = mergeDefaults(this.deps.declarations.defaultProps(node.type), node.props);
         content.push(
           await this.renderBlock(registration, node.type, chosen, () =>
-            CORE.has(node.type)
+            node.type === ITEMS_TABLE_BLOCK_NAME
+              ? renderItemsTable({
+                  props,
+                  catalogue: catalogues.get(collectionOf(props)) ?? { fields: [], summaryFields: [] },
+                  ...linesOf(collectionOf(props)),
+                  language,
+                  context,
+                  interpolate,
+                })
+              : CORE.has(node.type)
               ? CORE_BLOCK_RENDERERS[node.type as CoreBlockName]({ props, interpolate, images, context })
               : blocks.get(node.type)!.render({
                   props,

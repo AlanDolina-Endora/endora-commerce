@@ -9,7 +9,7 @@ import {
 import { expectModuleAbsent } from '../../helpers/off-state.js';
 import { registryCache } from '../../../src/kernel/lifecycle/registry-cache.js';
 import { REGISTERED_MANIFESTS } from '../../../src/lifecycle/registered-manifests.js';
-import { registerFixtureDocumentType, FIXTURE_DOCUMENT_TYPE } from '../../fixtures/document-types/fixture-document-type.js';
+import { QUOTE_REQUEST_DOCUMENT_TYPE as DOCUMENT_TYPE } from '@endora-commerce/contracts';
 
 /**
  * `specs/152-compare-pdf-template/` T066 — the facility's off-state
@@ -39,12 +39,11 @@ describe('document_templates off-state (spec 152)', () => {
 
   beforeAll(async () => {
     h = await setupBackendServer();
-    registerFixtureDocumentType(h);
     const res = await h.app.inject({
       method: 'POST',
       url: BASE,
       cookies: ADMIN,
-      payload: { documentType: FIXTURE_DOCUMENT_TYPE, name: `Kept ${id.slice(0, 6)}`, salesChannelId: null, source: { kind: 'built_in' }, setDefault: true },
+      payload: { documentType: DOCUMENT_TYPE, name: `Kept ${id.slice(0, 6)}`, salesChannelId: null, source: { kind: 'built_in' }, setDefault: true },
     });
     expect(res.statusCode).toBe(201);
   });
@@ -68,9 +67,9 @@ describe('document_templates off-state (spec 152)', () => {
     await expectModuleAbsent(h, 'document_templates', {
       routes: [
         { url: `${BASE}/types`, cookies: ADMIN },
-        { url: `${BASE}/types/${FIXTURE_DOCUMENT_TYPE}`, cookies: ADMIN },
-        { url: `${BASE}/types/${FIXTURE_DOCUMENT_TYPE}/builder-config`, cookies: ADMIN },
-        { url: `${BASE}?type=${FIXTURE_DOCUMENT_TYPE}`, cookies: ADMIN },
+        { url: `${BASE}/types/${DOCUMENT_TYPE}`, cookies: ADMIN },
+        { url: `${BASE}/types/${DOCUMENT_TYPE}/builder-config`, cookies: ADMIN },
+        { url: `${BASE}?type=${DOCUMENT_TYPE}`, cookies: ADMIN },
         { url: `${BASE}/${anyId}`, cookies: ADMIN },
         { method: 'POST', url: BASE, cookies: ADMIN, payload: {} },
         { method: 'PATCH', url: `${BASE}/${anyId}`, cookies: ADMIN, payload: {} },

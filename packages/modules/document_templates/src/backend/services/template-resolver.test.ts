@@ -31,6 +31,9 @@ function reader(rows: TemplateRow[]): TemplateReader & { defaultsCalls: number }
       );
     }),
     findById: vi.fn(async (id: string) => rows.find((x) => x.id === id) ?? null),
+    findApplicable: vi.fn(async (type: string, channel: string | null) =>
+      rows.filter((x) => x.documentType === type && (x.salesChannelId === null || (channel !== null && x.salesChannelId === channel))),
+    ),
   };
   return r;
 }
@@ -144,5 +147,41 @@ describe('pickLanguage (FR-032)', () => {
   });
   it('answers null for no languages', () => {
     expect(pickLanguage({}, 'en-US')).toBeNull();
+  });
+});
+
+describe('TemplateResolver.listChoices (153 contract §5)', () => {
+  const choices = (rows: TemplateRow[], channel: string | null) =>
+    new TemplateResolver(reader(rows)).listChoices({ documentType: TYPE, salesChannelId: channel, builtIn });
+  const named = (id: string, name: string, over: Partial<TemplateRow> = {}) => row({ id, name, isDefault: false, ...over });
+
+  it('answers global and same-channel templates, never another channel’s — channel first, then global, by name', async () => {
+    const out = await choices(
+      [
+        named('g2', 'Zeta'),
+        named('a1', 'Beta', { salesChannelId: A }),
+        named('g1', 'Alpha'),
+        named('b1', 'Other channel', { salesChannelId: B }),
+        named('a2', 'Alpha A', { salesChannelId: A }),
+        named('x', 'Other type', { documentType: 'acme.other' }),
+      ],
+      A,
+    );
+    expect(out.templates.map((t) => t.id)).toEqual(['a2', 'a1', 'g1', 'g2']);
+    expect(out.templates[0]).toEqual({ id: 'a2', name: 'Alpha A', salesChannelId: A, languages: ['en-US'], isDefault: false });
+    expect(out.builtInLanguages).toEqual(['en-US', 'pl-PL']);
+  });
+
+  it('effectiveDefaultId: the channel default, else the global default, else null (built-in)', async () => {
+    const both = [named('g', 'G', { isDefault: true }), named('a', 'A', { salesChannelId: A, isDefault: true })];
+    expect((await choices(both, A)).effectiveDefaultId).toBe('a');
+    expect((await choices([named('g', 'G', { isDefault: true })], A)).effectiveDefaultId).toBe('g');
+    expect((await choices([named('g', 'G')], A)).effectiveDefaultId).toBeNull();
+  });
+
+  it('a null channel answers global templates only', async () => {
+    const out = await choices([named('g', 'G'), named('a', 'A', { salesChannelId: A, isDefault: true })], null);
+    expect(out.templates.map((t) => t.id)).toEqual(['g']);
+    expect(out.effectiveDefaultId).toBeNull();
   });
 });

@@ -52,7 +52,7 @@ function engine(): { renderer: DocumentRenderer; registry: DocumentTypeRegistry 
   const manifests = [comparisonsManifest, documentTemplatesManifest].map((manifest) => ({ manifest: manifest as ModuleManifest }));
   const renderer = new DocumentRenderer({
     registry,
-    resolver: new TemplateResolver({ findDefaults: async () => [], findById: async () => null }),
+    resolver: new TemplateResolver({ findDefaults: async () => [], findById: async () => null, findApplicable: async () => [] }),
     declarations: new BlockDeclarations(() => manifests),
     assets: { openAssetBytes: async () => null },
     log: () => undefined,

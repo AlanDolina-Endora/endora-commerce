@@ -132,6 +132,14 @@ export const manifest = defineModuleManifest({
     'sales_channels',
     'settings',
     'taxes',
+    // Feature 153 (owner answer Q4) — `transactional_emails` owns the sender the
+    // *Quote request PDF* e-mail goes out through and `emailDefaultsPort`, the
+    // registry its default subject and body are pushed into. It is
+    // `nonDeactivatable` and does not reach back to this module, so the edge
+    // closes no cycle and makes no activation control a dead switch (the `crm`
+    // precedent). The operator's "off" for this one e-mail is the per-e-mail
+    // switch, which refuses the send.
+    'transactional_emails',
   ],
   /**
    * Feature 075, Phase C — the two edges this module genuinely has and cannot
@@ -195,12 +203,35 @@ export const manifest = defineModuleManifest({
         'owner is not present when it is read, and `webhooks` bridges and delivers through its ' +
         'own gated subscription.',
     },
+    // Feature 153 — the quote request PDF (`specs/153-quote-request-pdf-template/`).
+    {
+      moduleId: 'document_templates',
+      name: 'documentTypeRegistry',
+      kind: 'contributes-to',
+      reason:
+        'A push, from this module\'s contribution-only boot hook, of the Quote request document ' +
+        'type — its four blocks, its line collection, built-in layout and sample. Nothing is read ' +
+        'back at push time: the registry answers a type only while its module is present, so an ' +
+        'absent contributor costs the host nothing and its templates stay stored.',
+    },
+    {
+      moduleId: 'document_templates',
+      name: 'documentRenderPort',
+      kind: 'refuses-without',
+      whenAbsent: 'quote requests cannot be exported to PDF and no PDF template can be chosen',
+      reason:
+        'The quote PDF routes — the template choices, the remembered template, the download and ' +
+        'the e-mail — resolve the port per request and never probe it, so while document ' +
+        'templates are off each answers 503 MODULE_DISABLED and the admin hides both actions. ' +
+        'Not `dependencies`: a PDF is optional for a quote, and binding would make the document ' +
+        'templates switch dead while quote requests are on.',
+    },
   ],
   settings,
   // Feature 073 (Constitution XVII) — the operator's activation control.
   activation: { settingCode: 'quote_requests.enabled', default: true },
   /**
-   * The ten error codes this module owns — feature 090 Phase 3
+   * The error codes this module owns — feature 090 Phase 3
    * (`specs/090-module-owned-error-codes/contracts/error-code-declaration.md`
    * §1.1). This is where the sentence for each is looked up from: `errors.<CODE>`
    * in this module's own `i18n/{en,pl}.json`, which holds all ten in both
@@ -297,6 +328,11 @@ export const manifest = defineModuleManifest({
     { code: 'RFQ_NOT_QUOTED' },
     { code: 'RFQ_PRICE_PROPOSAL_NOT_ALLOWED' },
     { code: 'RFQ_SAVED_VIEW_NAME_TAKEN' },
+    // Feature 153 (owner answer Q4) — sending the quote PDF by e-mail. Minted
+    // by this feature; owner and reason in `MINTED_ERROR_CODES`.
+    { code: 'QUOTE_REQUEST_PDF_TOO_LARGE' },
+    { code: 'QUOTE_REQUEST_PDF_EMAIL_UNAVAILABLE', tokens: ['deactivated', 'no_transport', 'no_definition'] },
+    { code: 'QUOTE_REQUEST_PDF_SEND_FAILED' },
   ],
   /**
    * `rfqs:handle` is declared in the core `PERMISSION_CATALOGUE`, which carries
@@ -329,6 +365,152 @@ export const manifest = defineModuleManifest({
    */
   permissions: [
     { code: 'rfqs:handle', label: 'Handle quote requests', requires: ['price_lists:read'] },
+  ],
+  /**
+   * Feature 153 — the four quote blocks of the document-template editor
+   * (`contracts/quote-request-document.md` §2). Declared for the `document`
+   * context only; the *Quote request* document type offers them. A label left
+   * empty prints in the PDF's language, so no English default is stored.
+   */
+  blocks: [
+    {
+      name: 'quote_requests.QuoteHeader',
+      labelKey: 'blocks.quoteHeader.label',
+      descriptionKey: 'blocks.quoteHeader.description',
+      category: 'quote',
+      contexts: ['document'],
+      fields: {
+        title: { type: 'text', label: 'Title' },
+        titleSize: { type: 'number', label: 'Title size' },
+        align: {
+          type: 'select',
+          label: 'Alignment',
+          options: [
+            { label: 'Left', value: 'left' },
+            { label: 'Centre', value: 'center' },
+            { label: 'Right', value: 'right' },
+          ],
+        },
+        showNumber: { type: 'radio', label: 'Show the quote number', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        numberLabel: { type: 'text', label: 'Quote number label' },
+        showIssueDate: { type: 'radio', label: 'Show the date', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        issueDateLabel: { type: 'text', label: 'Date label' },
+        showValidUntil: { type: 'radio', label: 'Show the validity date', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        validUntilLabel: { type: 'text', label: 'Validity date label' },
+        showRevision: { type: 'radio', label: 'Show the revision number', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        revisionLabel: { type: 'text', label: 'Revision label' },
+        marginBottom: { type: 'number', label: 'Space below (pt)' },
+      },
+      defaultProps: {
+        titleSize: 18,
+        align: 'left',
+        showNumber: 'true',
+        showIssueDate: 'true',
+        showValidUntil: 'true',
+        showRevision: 'true',
+        marginBottom: 12,
+      },
+      weight: 10,
+    },
+    {
+      name: 'quote_requests.QuoteParties',
+      labelKey: 'blocks.quoteParties.label',
+      descriptionKey: 'blocks.quoteParties.description',
+      category: 'quote',
+      contexts: ['document'],
+      fields: {
+        buyerHeading: { type: 'text', label: 'Buyer heading' },
+        showLegalName: { type: 'radio', label: 'Show the legal name', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        showTaxId: { type: 'radio', label: 'Show the tax ID', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        taxIdLabel: { type: 'text', label: 'Tax ID label' },
+        showAddress: { type: 'radio', label: 'Show the address', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        showCustomer: { type: 'radio', label: 'Show the contact person', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        customerHeading: { type: 'text', label: 'Contact heading' },
+        showSalesRep: { type: 'radio', label: 'Show the sales representative', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        salesRepHeading: { type: 'text', label: 'Sales representative heading' },
+        layout: {
+          type: 'select',
+          label: 'Layout',
+          options: [
+            { label: 'Side by side', value: 'columns' },
+            { label: 'One under another', value: 'stacked' },
+          ],
+        },
+        marginBottom: { type: 'number', label: 'Space below (pt)' },
+      },
+      defaultProps: {
+        showLegalName: 'true',
+        showTaxId: 'true',
+        showAddress: 'true',
+        showCustomer: 'true',
+        showSalesRep: 'true',
+        layout: 'columns',
+        marginBottom: 12,
+      },
+      weight: 20,
+    },
+    {
+      name: 'quote_requests.QuoteNotes',
+      labelKey: 'blocks.quoteNotes.label',
+      descriptionKey: 'blocks.quoteNotes.description',
+      category: 'quote',
+      contexts: ['document'],
+      fields: {
+        label: { type: 'text', label: 'Label' },
+        showWhenEmpty: { type: 'radio', label: 'Show the label when there is no note', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        italics: { type: 'radio', label: 'Italics', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        marginBottom: { type: 'number', label: 'Space below (pt)' },
+      },
+      defaultProps: { showWhenEmpty: 'false', italics: 'false', marginBottom: 12 },
+      weight: 30,
+    },
+    {
+      name: 'quote_requests.QuoteDetails',
+      labelKey: 'blocks.quoteDetails.label',
+      descriptionKey: 'blocks.quoteDetails.description',
+      category: 'quote',
+      contexts: ['document'],
+      fields: {
+        heading: { type: 'text', label: 'Heading' },
+        layout: {
+          type: 'select',
+          label: 'Layout',
+          options: [
+            { label: 'Table', value: 'table' },
+            { label: 'List', value: 'list' },
+          ],
+        },
+        marginBottom: { type: 'number', label: 'Space below (pt)' },
+      },
+      defaultProps: { layout: 'table', marginBottom: 12 },
+      weight: 40,
+    },
+  ],
+  blockCategories: [{ key: 'quote', titleKey: 'blocks.category.quote', contexts: ['document'], weight: 20 }],
+  /**
+   * Feature 153 (owner answer Q4) — the e-mail *Send PDF to customer* sends,
+   * the quote PDF attached by the sender. Its default subject and body, in
+   * Polish and English, are pushed from this module's contribution-only boot
+   * hook (`src/backend/email-templates/quote-pdf-defaults.ts`); an operator
+   * edits them, or switches the e-mail off, on the e-mail templates screen.
+   */
+  transactionalEmails: [
+    {
+      code: 'quote_request_pdf',
+      name: 'Quote request PDF',
+      group: 'quote_requests',
+      description:
+        'Sent when a sales representative uses Send PDF to customer on a quote request: the quote as a PDF attachment, with an optional personal message.',
+      variables: [
+        { key: 'quote.number', label: 'Quote number', sampleValue: 'QR-000153' },
+        { key: 'quote.validUntil', label: 'Valid until', sampleValue: 'November 16, 2026' },
+        { key: 'customer.name', label: 'Customer name', sampleValue: 'Anna Example' },
+        { key: 'salesRep.name', label: 'Sales representative name', sampleValue: 'Jan Sample' },
+        { key: 'salesRep.email', label: 'Sales representative e-mail', sampleValue: 'jan.sample@example.com' },
+        { key: 'channel.name', label: 'Sales channel', sampleValue: 'B2B store' },
+        { key: 'message', label: 'Personal message', sampleValue: 'As agreed on the phone, here is our offer.' },
+      ],
+    },
   ],
   i18n: { bundlesDir: 'i18n' },
   docs: { dir: 'docs' },

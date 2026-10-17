@@ -20,6 +20,11 @@ import {
   documentSelectionSchema,
   documentCoreBlocksSchema,
   versionedBodySchema,
+  COLLECTION_BLOCK_NAMES,
+  documentFieldPathRe,
+  documentTemplateChoicesSchema,
+  isReservedFieldPath,
+  itemsTablePropsSchema,
 } from './document-templates.js';
 import { ERROR_CODES } from './errors.js';
 
@@ -260,5 +265,155 @@ describe('error codes', () => {
     ]) {
       expect((ERROR_CODES as Record<string, string>)[code]).toBe(code);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 153 — line collections and the Line items table
+// (`specs/153-quote-request-pdf-template/contracts/document-collections.md`)
+// ---------------------------------------------------------------------------
+
+describe('field paths (153 R-4)', () => {
+  it.each(['sku', 'lineNet', 'attributes.colour', 'attributes.lead_time', 'attributes.PKWiU-2', 'row.number'])(
+    'accepts %s',
+    (path) => {
+      expect(documentFieldPathRe.test(path)).toBe(true);
+    },
+  );
+  it.each(['Sku', 'a.b.c', '1abc', 'attributes.', '.x', 'a b', `attributes.${'x'.repeat(101)}`])(
+    'refuses %s',
+    (path) => {
+      expect(documentFieldPathRe.test(path)).toBe(false);
+    },
+  );
+  it('detects the reserved families', () => {
+    expect(isReservedFieldPath('row.number')).toBe(true);
+    expect(isReservedFieldPath('item.sku')).toBe(true);
+    expect(isReservedFieldPath('item')).toBe(true);
+    expect(isReservedFieldPath('items')).toBe(false);
+    expect(isReservedFieldPath('rowNote')).toBe(false);
+  });
+});
+
+describe('itemsTablePropsSchema (153 FR-032, FR-040–FR-043)', () => {
+  const column = (over: Record<string, unknown> = {}) => ({
+    id: 'c1',
+    field: 'productName',
+    label: '',
+    width: 'auto',
+    align: 'auto',
+    format: {},
+    emptyText: '',
+    visibleWhen: { op: 'always' },
+    ...over,
+  });
+  const valid = {
+    id: 'ItemsTable-1',
+    collection: 'lines',
+    columns: [column(), column({ id: 'c2', field: 'discountPercent', visibleWhen: { op: 'any_has_value' } })],
+    detailRow: {
+      enabled: true,
+      entries: [{ field: 'lineNote', label: 'Note', visibleWhen: { op: 'has_value' } }],
+      separator: ' · ',
+      italics: true,
+      fontSize: 8,
+    },
+    totals: [{ field: 'netTotal', label: 'Net', visibleWhen: { op: 'has_value' }, emphasis: false }],
+    grouping: { field: 'attributes.brand', emptyLabel: 'Other', subtotalField: 'lineNet', subtotalLabel: 'Group total' },
+    emptyText: 'No lines',
+    headerBackground: '#f1f5f9',
+    borderColor: '#cbd5e1',
+    fontSize: 9,
+    stripedRows: false,
+    stripeColor: '#f8fafc',
+    marginBottom: 12,
+  };
+
+  it('accepts the documented shape, and a bare one with one column', () => {
+    expect(itemsTablePropsSchema.safeParse(valid).success).toBe(true);
+    expect(itemsTablePropsSchema.safeParse({ columns: [{ id: 'a', field: 'row.number' }] }).success).toBe(true);
+    expect(itemsTablePropsSchema.safeParse({ ...valid, grouping: null }).success).toBe(true);
+  });
+
+  it('accepts numbers and booleans as Puck stores them (strings)', () => {
+    expect(itemsTablePropsSchema.safeParse({ ...valid, fontSize: '10', stripedRows: 'true' }).success).toBe(true);
+  });
+
+  const refusals: [string, unknown, string][] = [
+    ['no column', { ...valid, columns: [] }, 'columns'],
+    ['17 columns', { ...valid, columns: Array.from({ length: 17 }, (_, i) => column({ id: `c${i}` })) }, 'columns'],
+    ['duplicate column ids', { ...valid, columns: [column(), column()] }, 'columns.1.id'],
+    ['a bad column id', { ...valid, columns: [column({ id: 'a b' })] }, 'columns.0.id'],
+    ['a bad field path', { ...valid, columns: [column({ field: 'a.b.c' })] }, 'columns.0.field'],
+    ['has_value on a column', { ...valid, columns: [column({ visibleWhen: { op: 'has_value' } })] }, 'columns.0.visibleWhen.op'],
+    ['an unknown op', { ...valid, columns: [column({ visibleWhen: { op: 'sometimes' } })] }, 'columns.0.visibleWhen.op'],
+    ['a width out of range', { ...valid, columns: [column({ width: 5 })] }, 'columns.0.width'],
+    ['an alignment outside the set', { ...valid, columns: [column({ align: 'justify' })] }, 'columns.0.align'],
+    ['too many decimals', { ...valid, columns: [column({ format: { decimals: 5 } })] }, 'columns.0.format.decimals'],
+    ['a long label', { ...valid, columns: [column({ label: 'x'.repeat(201) })] }, 'columns.0.label'],
+    ['a long empty text', { ...valid, columns: [column({ emptyText: 'x'.repeat(51) })] }, 'columns.0.emptyText'],
+    ['any_has_value on a detail entry', { ...valid, detailRow: { ...valid.detailRow, entries: [{ field: 'lineNote', label: '', visibleWhen: { op: 'any_has_value' } }] } }, 'detailRow.entries.0.visibleWhen.op'],
+    ['9 detail entries', { ...valid, detailRow: { ...valid.detailRow, entries: Array.from({ length: 9 }, () => ({ field: 'lineNote', label: '' })) } }, 'detailRow.entries'],
+    ['11 totals', { ...valid, totals: Array.from({ length: 11 }, () => ({ field: 'netTotal', label: '' })) }, 'totals'],
+    ['a bad grouping field', { ...valid, grouping: { ...valid.grouping, field: 'x.y.z' } }, 'grouping.field'],
+    ['a font size out of range', { ...valid, fontSize: 30 }, 'fontSize'],
+    ['a colour that is not hex', { ...valid, headerBackground: 'red' }, 'headerBackground'],
+    ['a collection key outside the grammar', { ...valid, collection: 'Lines' }, 'collection'],
+  ];
+  it.each(refusals)('refuses %s, naming the setting', (_label, props, path) => {
+    const parsed = itemsTablePropsSchema.safeParse(props);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error!.issues[0]!.path.join('.')).toBe(path);
+  });
+});
+
+describe('collections on the type detail and the selection list (153 §4, §5)', () => {
+  it('route 2 carries the collections, [] when absent', () => {
+    const base = {
+      code: 'quote_requests.quote_request',
+      moduleId: 'quote_requests',
+      labelKey: 'x',
+      selection: 'per_document',
+      templateCount: 0,
+      languages: null,
+      variables: [],
+      sample: {},
+      builtInContent: envelope({ 'en-US': tree() }),
+      pageDefaults: {},
+    };
+    expect(documentTypeDetailSchema.parse(base).collections).toEqual([]);
+    const withCollection = documentTypeDetailSchema.parse({
+      ...base,
+      collections: [
+        {
+          key: 'lines',
+          labelKey: 'documentTypes.quoteRequest.collections.lines',
+          ownerModule: 'quote_requests',
+          fields: [
+            { path: 'row.number', label: 'No.', valueKind: 'number', group: 'line', audience: 'customer' },
+            { path: 'listUnitPrice', label: 'List price', valueKind: 'money', group: 'pricing', audience: 'internal', defaultFormat: { decimals: 2 }, defaultAlign: 'right', sampleValue: { kind: 'money', amount: 1, currency: 'PLN' } },
+          ],
+          summaryFields: [],
+          sampleItems: [{ values: { 'row.number': { kind: 'number', value: 1 }, sku: null } }],
+          sampleSummary: { netTotal: null },
+        },
+      ],
+    });
+    expect(withCollection.collections[0]!.fields).toHaveLength(2);
+  });
+
+  it('the selection list', () => {
+    expect(
+      documentTemplateChoicesSchema.safeParse({
+        templates: [{ id: '00000000-0000-4000-8000-000000000001', name: 'A', salesChannelId: null, languages: ['en-US'], isDefault: true }],
+        effectiveDefaultId: '00000000-0000-4000-8000-000000000001',
+        builtInLanguages: ['en-US', 'pl-PL'],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('the Line items table is the facility’s one collection block', () => {
+    expect(COLLECTION_BLOCK_NAMES).toEqual(['document_templates.ItemsTable']);
+    expect(CORE_BLOCK_NAMES as readonly string[]).not.toContain('document_templates.ItemsTable');
   });
 });

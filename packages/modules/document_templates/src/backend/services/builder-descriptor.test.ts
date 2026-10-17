@@ -87,3 +87,38 @@ describe('buildDocumentBuilderConfig', () => {
     ]);
   });
 });
+
+describe('buildDocumentBuilderConfig — collection blocks (153)', () => {
+  it('lists type blocks, then the Line items table, then core blocks, its category from the facility', () => {
+    const withTable = [
+      ...manifests.filter((m) => m.manifest.id !== 'document_templates'),
+      manifest({
+        id: 'document_templates',
+        blocks: [
+          { name: 'document_templates.Text', labelKey: 'blocks.text.label', category: 'layout', contexts: ['document'], fields: { text: { type: 'textarea' } } },
+          { name: 'document_templates.ItemsTable', labelKey: 'blocks.itemsTable.label', category: 'data', contexts: ['document'], fields: { emptyText: { type: 'text' } }, defaultProps: { columns: [] } },
+        ],
+        blockCategories: [
+          { key: 'layout', titleKey: 'blocks.category.layout', contexts: ['document'], weight: 90 },
+          { key: 'data', titleKey: 'blocks.category.data', contexts: ['document'], weight: 30 },
+        ],
+      }),
+    ];
+    const registry = new DocumentTypeRegistry(() => true, () => undefined);
+    registry.register({
+      code: 'acme.lines',
+      moduleId: 'acme',
+      labelKey: 'x',
+      blocks: () => [{ name: 'acme.Body', moduleId: 'acme', render: () => ({}) }],
+      coreBlocks: ['document_templates.Text'],
+      selection: 'per_document',
+      defaultContent: () => ({ schemaVersion: 1, languages: { 'en-US': tree } }),
+      sampleData: () => ({}),
+      collections: [{ key: 'lines', labelKey: 'l', fields: async () => [], items: () => [] }],
+    });
+    const config = buildDocumentBuilderConfig('acme.lines', registry, new BlockDeclarations(() => withTable, () => true));
+    expect(config.components.map((c) => c.name)).toEqual(['acme.Body', 'document_templates.ItemsTable', 'document_templates.Text']);
+    expect(config.components[1]).toMatchObject({ ownerModule: 'document_templates', labelKey: 'blocks.itemsTable.label', category: 'data' });
+    expect(config.categories.map((c) => c.key)).toEqual(['acme', 'data', 'layout']);
+  });
+});

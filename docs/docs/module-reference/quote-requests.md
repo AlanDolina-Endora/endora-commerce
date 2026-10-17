@@ -41,9 +41,12 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | `sales_channels` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `settings` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `taxes` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `transactional_emails` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `carts` | gating only | resolves `cartWritePort`; withheld from `dependencies` because the install order cannot carry the edge |
 | `orders` | gating only | resolves `orderReadPort`; withheld from `dependencies` because the install order cannot carry the edge |
 | `admin_search` | no | contributes-to `adminSearchProviderRegistry` |
+| `document_templates` | no | refuses-without `documentRenderPort` — quote requests cannot be exported to PDF and no PDF template can be chosen |
+| `document_templates` | no | contributes-to `documentTypeRegistry` |
 | `webhooks` | no | contributes-to `webhookEventRegistry` |
 
 ## Permissions

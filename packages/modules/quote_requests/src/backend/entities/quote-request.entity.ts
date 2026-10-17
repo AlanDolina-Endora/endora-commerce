@@ -50,6 +50,7 @@ export class QuoteRequest {
     | 'expiresAt'
     | 'convertedOrderId'
     | 'salesChannelId'
+    | 'documentTemplateId'
     | 'version';
 
   @PrimaryKey({ type: 'uuid' })
@@ -160,6 +161,17 @@ export class QuoteRequest {
    */
   @Property({ type: 'uuid', nullable: true })
   salesChannelId?: string | null;
+
+  /**
+   * Feature 153 (owner answer Q2) — the PDF template remembered for this quote,
+   * or `null`. Written only by the Command `quote_request.set_document_template`;
+   * it is presentation, not offer content, so writing it moves neither
+   * `version` nor a revision. **No foreign key**: the template is
+   * `document_templates`' row, and a stale id falls back to the default at
+   * render rather than being cleared.
+   */
+  @Property({ type: 'uuid', nullable: true })
+  documentTemplateId?: string | null;
 
   @Property({ type: 'integer' })
   version: number = 0;

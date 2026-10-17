@@ -6,6 +6,7 @@ import {
   type CreateDocumentTemplateBody,
   type DeleteDocumentTemplateBody,
   type DocumentBuilderConfig,
+  type DocumentCollectionDetail,
   type DocumentTemplateDetail,
   type DocumentTemplateListQuery,
   type DocumentTemplateSummary,
@@ -31,6 +32,7 @@ import {
 import { DocumentTemplate } from '../entities/document-template.entity.js';
 import type { DocumentTypeRegistry } from '../registry/document-type-registry.js';
 import type { DocumentRenderer } from '../rendering/document-renderer.js';
+import { numberItems, withSampleValues } from '../rendering/items-table.js';
 import type { BlockDeclarations } from './block-declarations.js';
 import { buildDocumentBuilderConfig } from './builder-descriptor.js';
 import { assertEnvelopeLimits, assertLanguageAllowed, validateTree } from './content-validation.js';
@@ -125,13 +127,28 @@ export class DocumentTemplateService {
       { key: 'page', labelKey: 'variables.page', ownerModule: 'document_templates', scope: 'headerFooter' },
       { key: 'pages', labelKey: 'variables.pages', ownerModule: 'document_templates', scope: 'headerFooter' },
     ];
+    const sample = registration.sampleData(sampleLanguage);
+    const collections: DocumentCollectionDetail[] = [];
+    for (const collection of this.deps.registry.collections(code)) {
+      const catalogue = await this.deps.registry.catalogue(code, collection.key, sampleLanguage);
+      collections.push({
+        key: collection.key,
+        labelKey: collection.labelKey,
+        ownerModule: registration.moduleId,
+        fields: [...catalogue.fields],
+        summaryFields: [...catalogue.summaryFields],
+        sampleItems: withSampleValues(numberItems(collection.items(sample)), catalogue.fields),
+        sampleSummary: { ...(collection.summary?.(sample) ?? {}) },
+      });
+    }
     return {
       ...summary!,
       languages: registration.languages ? [...registration.languages] : null,
       variables,
-      sample: registration.sampleData(sampleLanguage),
+      sample,
       builtInContent,
       pageDefaults: { ...GENERIC_DOCUMENT_PAGE_DEFAULTS, ...pageDefaults },
+      collections,
     };
   }
 
@@ -258,6 +275,7 @@ export class DocumentTemplateService {
       palette: this.deps.registry.palette(current.documentType),
       isDeclared: (name) => this.deps.declarations.isDeclared(name),
       languages,
+      collections: this.deps.registry.collections(current.documentType).map((collection) => collection.key),
     });
     const { row } = await this.deps.commandBus.run(
       saveContentCommand({
@@ -304,6 +322,7 @@ export class DocumentTemplateService {
       palette: this.deps.registry.palette(body.documentType),
       isDeclared: (name) => this.deps.declarations.isDeclared(name),
       languages,
+      collections: this.deps.registry.collections(body.documentType).map((collection) => collection.key),
     });
     const result = await this.deps.renderer.render({
       documentType: body.documentType,
@@ -321,6 +340,7 @@ export class DocumentTemplateService {
 export function templateReaderOver(emFactory: () => EntityManager): TemplateReader {
   const toRow = (row: DocumentTemplate): TemplateRow => ({
     id: row.id,
+    name: row.name,
     documentType: row.documentType,
     salesChannelId: row.salesChannelId ?? null,
     isDefault: row.isDefault,
@@ -342,6 +362,19 @@ export function templateReaderOver(emFactory: () => EntityManager): TemplateRead
       if (!UUID_RE.test(id)) return null;
       const row = await emFactory().findOne(DocumentTemplate, { id });
       return row ? toRow(row) : null;
+    },
+    async findApplicable(documentType, salesChannelId) {
+      const rows = await emFactory().find(
+        DocumentTemplate,
+        {
+          documentType,
+          ...(salesChannelId === null
+            ? { salesChannelId: null }
+            : { $or: [{ salesChannelId: null }, { salesChannelId }] }),
+        },
+        { orderBy: { name: 'asc' } },
+      );
+      return rows.map(toRow);
     },
   };
 }

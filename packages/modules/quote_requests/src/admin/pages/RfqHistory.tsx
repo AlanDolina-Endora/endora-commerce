@@ -174,6 +174,20 @@ function HistoryEntry({ entry, f }: { entry: QuoteRequestHistoryEntry; f: Format
       {entry.orderId !== null ? (
         <p className="mt-1 text-muted-foreground">{t('order', { id: entry.orderId.slice(0, 8) })}</p>
       ) : null}
+      {entry.delivery ? (
+        <div className="mt-1 space-y-0.5 text-muted-foreground">
+          <p className="break-words">{t('pdfSent.recipients', { recipients: entry.delivery.recipients.join(', ') })}</p>
+          <p>
+            {entry.delivery.templateName !== null
+              ? t('pdfSent.template', { name: entry.delivery.templateName })
+              : t('pdfSent.builtIn')}
+          </p>
+          {entry.delivery.language !== null ? <p>{t('pdfSent.language', { language: entry.delivery.language })}</p> : null}
+          {entry.delivery.message !== null ? (
+            <p className="whitespace-pre-wrap break-words">{t('pdfSent.message', { message: entry.delivery.message })}</p>
+          ) : null}
+        </div>
+      ) : null}
       {entry.changes !== null ? (
         entry.changes.length === 0 ? (
           <p className="mt-1 text-muted-foreground">{t('noChanges')}</p>
