@@ -216,6 +216,8 @@ export type MessageKey =
   // numbers and, where the sender restricted a product, different rows — so
   // the view says whose prices these are and that something is missing,
   // rather than leaving the reader to discover it.
+  | 'compare.pdf.busy'
+  | 'compare.pdf.failed'
   | 'compare.shared.pricesYours'
   | 'compare.shared.pricesChannel'
   | 'compare.shared.hiddenProducts'
@@ -455,6 +457,8 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'account.push.preferences.save': 'Save choices',
     'account.push.preferences.saved': 'Your choices have been saved.',
     'account.push.preferences.error': 'We could not save your choices. Please try again.',
+    'compare.pdf.busy': 'Generating…',
+    'compare.pdf.failed': 'The PDF could not be generated.',
     'compare.shared.pricesYours': 'Prices shown are your organisation’s.',
     'compare.shared.pricesChannel':
       'Prices shown are this store’s standard prices. Sign in to see the prices agreed for your organisation.',
@@ -685,6 +689,8 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'account.push.preferences.save': 'Zapisz ustawienia',
     'account.push.preferences.saved': 'Twoje ustawienia zostały zapisane.',
     'account.push.preferences.error': 'Nie udało się zapisać ustawień. Spróbuj ponownie.',
+    'compare.pdf.busy': 'Generowanie…',
+    'compare.pdf.failed': 'Nie udało się wygenerować PDF.',
     'compare.shared.pricesYours': 'Pokazane ceny dotyczą Twojej organizacji.',
     'compare.shared.pricesChannel':
       'Pokazane ceny to ceny standardowe tego sklepu. Zaloguj się, aby zobaczyć ceny uzgodnione dla Twojej organizacji.',
