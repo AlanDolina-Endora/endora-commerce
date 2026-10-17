@@ -8,6 +8,7 @@
 
 import { z } from 'zod';
 import { isoDateTimeSchema, uuidSchema } from './common.js';
+import { LlmProviderSchema } from './prompt-actions.js';
 
 // ────────────────────────────────────────────────────────────────────
 // Domain primitives
@@ -338,6 +339,38 @@ export const blockCategoryKeyRe = /^[a-z][a-z0-9_]*$/;
  * cannot enforce for the reason it cannot enforce it there either: relativity
  * is a fact about a bundle, and this schema sees a string.
  */
+/**
+ * Feature 151 — the grammar of a translatable-text path (research R5): prop
+ * names joined by `.`, each optionally suffixed `[]` for "every element of this
+ * array". `items[].title`, `headers[].label`, `text`.
+ */
+export const translatablePathRe = /^[a-zA-Z][a-zA-Z0-9_]*(\[\])?(\.[a-zA-Z][a-zA-Z0-9_]*(\[\])?)*$/;
+
+/**
+ * Feature 151 — one prop of a block that a shopper reads as prose
+ * (`specs/151-page-builder-translate/contracts/block-translatable-declaration.md`).
+ * `format: 'tiptap'` marks a TipTap JSON document, `format: 'html'` an HTML
+ * string (the Accordion's and the Tabs' item content), whose tags never reach
+ * the model; absent means plain text.
+ */
+export const blockTranslatableTextSchema = z.object({
+  path: z.string().regex(translatablePathRe).max(128),
+  format: z.enum(['plain', 'tiptap', 'html']).optional(),
+});
+export type BlockTranslatableText = z.infer<typeof blockTranslatableTextSchema>;
+
+/**
+ * A block's translatable texts. `[]` is a declaration ("no prose"); an absent
+ * property means "unknown", and the Page Builder translation leaves such a
+ * block untouched and reports it.
+ */
+export const blockTranslatableSchema = z
+  .array(blockTranslatableTextSchema)
+  .max(32)
+  .refine((entries) => new Set(entries.map((e) => e.path)).size === entries.length, {
+    message: 'translatable paths must be unique',
+  });
+
 export const BlockDefinitionSchema = z.object({
   /** The persisted identifier. Permanent: written into `jsonb` and never rewritten. */
   name: z.string().regex(blockNameRe),
@@ -359,6 +392,11 @@ export const BlockDefinitionSchema = z.object({
   previewIcon: z.string().min(1).optional(),
   /** Sort order within the category. Absent sorts after everything that declares one. */
   weight: z.number().int().min(0).max(9999).optional(),
+  /**
+   * Feature 151 — which props are prose the Page Builder may machine-translate.
+   * Every first-party block offered in the `cms` context declares it.
+   */
+  translatable: blockTranslatableSchema.optional(),
 });
 export type BlockDefinition = z.infer<typeof BlockDefinitionSchema>;
 
@@ -434,6 +472,8 @@ export const cmsPageBuilderDescriptorSchema = z.object({
       defaultProps: z.record(z.string(), z.unknown()).optional(),
       responsiveFields: z.array(z.string().min(1)).optional(),
       weight: z.number().int().min(0).max(9999).optional(),
+      /** Feature 151 — the block's declaration, when it made one. */
+      translatable: blockTranslatableSchema.optional(),
     }),
   ),
   /**
@@ -818,3 +858,111 @@ export interface CmsBlockReadPort {
    */
   findLocalizedById(id: string, language: string): Promise<CmsLocalizedBlockRecord | null>;
 }
+
+// ────────────────────────────────────────────────────────────────────
+// Page Builder translation (feature 151)
+// `specs/151-page-builder-translate/contracts/page-builder-translation-api.md`
+// ────────────────────────────────────────────────────────────────────
+
+/** Bounds of the `cms.page_builder.translation.max_source_characters` setting. */
+export const CMS_TRANSLATION_MAX_SOURCE_CHARACTERS_BOUNDS = { min: 1_000, max: 200_000 } as const;
+export const CMS_TRANSLATION_DEFAULT_MAX_SOURCE_CHARACTERS = 40_000;
+
+export const cmsPageBuilderTranslationStatusSchema = z.enum([
+  'ready',
+  'disabled',
+  'not_configured',
+  'unavailable',
+]);
+export type CmsPageBuilderTranslationStatus = z.infer<typeof cmsPageBuilderTranslationStatusSchema>;
+
+/**
+ * `GET /api/v1/admin/cms/page-builder/translation`. Never carries the API key,
+ * the credential code or the Base URL.
+ */
+export const cmsPageBuilderTranslationCapabilitySchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('ready'),
+    provider: LlmProviderSchema,
+    model: z.string().min(1),
+    maxCharacters: z.number().int().positive(),
+  }),
+  z.object({
+    status: z.enum(['disabled', 'not_configured', 'unavailable']),
+    maxCharacters: z.number().int().positive(),
+  }),
+]);
+export type CmsPageBuilderTranslationCapability = z.infer<
+  typeof cmsPageBuilderTranslationCapabilitySchema
+>;
+
+const translationLanguageCodeSchema = z.string().min(2).max(35);
+
+/** A Puck document at the translation boundary — structure checked, content passed through. */
+export const cmsPuckDataSchema = z
+  .object({
+    root: z.object({ props: z.record(z.string(), z.unknown()).optional() }).passthrough(),
+    content: z.array(z.record(z.string(), z.unknown())),
+    zones: z.record(z.string(), z.array(z.record(z.string(), z.unknown()))).optional(),
+  })
+  .passthrough();
+export type CmsPuckData = z.infer<typeof cmsPuckDataSchema>;
+
+/** What part of the canvas to translate (research R22); absent = the whole canvas. */
+export const cmsPageBuilderTranslationScopeSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('component'), componentId: z.string().min(1).max(256) }),
+  z.object({
+    kind: z.literal('text'),
+    componentId: z.string().min(1).max(256).nullable(),
+    selectedText: z
+      .string()
+      .trim()
+      .min(1)
+      .max(CMS_TRANSLATION_MAX_SOURCE_CHARACTERS_BOUNDS.max),
+  }),
+]);
+export type CmsPageBuilderTranslationScope = z.infer<typeof cmsPageBuilderTranslationScopeSchema>;
+
+/** `POST /api/v1/admin/cms/page-builder/translate` body. */
+export const cmsPageBuilderTranslateRequestSchema = z
+  .object({
+    targetLanguage: translationLanguageCodeSchema,
+    /** `null` — the model detects the source language. */
+    sourceLanguage: translationLanguageCodeSchema.nullable(),
+    context: z.literal('cms'),
+    data: cmsPuckDataSchema,
+    /** Audit context only — what the canvas belongs to. */
+    resource: z
+      .object({
+        type: z.string().regex(/^[a-z][a-z0-9_]*$/).max(64),
+        id: z.string().uuid().nullable(),
+      })
+      .optional(),
+    scope: cmsPageBuilderTranslationScopeSchema.optional(),
+  })
+  .refine((r) => r.sourceLanguage !== r.targetLanguage, {
+    message: 'sourceLanguage must differ from targetLanguage',
+    path: ['sourceLanguage'],
+  });
+export type CmsPageBuilderTranslateRequest = z.infer<typeof cmsPageBuilderTranslateRequestSchema>;
+
+export const cmsPageBuilderTranslateResponseSchema = z.object({
+  data: cmsPuckDataSchema,
+  report: z.object({
+    translatedSegments: z.number().int().nonnegative(),
+    untranslatedSegments: z.number().int().nonnegative(),
+    untranslatableBlocks: z.array(
+      z.object({ name: z.string(), count: z.number().int().positive() }),
+    ),
+    characters: z.number().int().nonnegative(),
+    provider: LlmProviderSchema,
+    model: z.string(),
+    sourceLanguage: translationLanguageCodeSchema.nullable(),
+    scope: z.object({
+      kind: z.enum(['canvas', 'component', 'text']),
+      /** `true` when a text selection was widened to whole paragraph(s). */
+      widened: z.boolean(),
+    }),
+  }),
+});
+export type CmsPageBuilderTranslateResponse = z.infer<typeof cmsPageBuilderTranslateResponseSchema>;

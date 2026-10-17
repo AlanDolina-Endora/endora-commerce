@@ -30,6 +30,7 @@ Everything below is a **peer** dependency, so the application resolves exactly o
 - `@endora-commerce/admin-kit` — *optional*
 - `@endora-commerce/cms-components` — *optional*
 - `@endora-commerce/contracts`
+- `@endora-commerce/llm-client`
 - `@endora-commerce/page-builder-admin` — *optional*
 - `@endora-commerce/page-builder-core`
 - `@endora-commerce/platform`

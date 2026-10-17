@@ -316,6 +316,7 @@ export const manifest = defineModuleManifest({
   blocks: [
     {
       name: 'cms.Row',
+      translatable: [],
       labelKey: 'blocks.row.label',
       descriptionKey: 'blocks.row.description',
       category: 'layout',
@@ -349,6 +350,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Spacer',
+      translatable: [],
       labelKey: 'blocks.spacer.label',
       descriptionKey: 'blocks.spacer.description',
       category: 'layout',
@@ -359,6 +361,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Heading',
+      translatable: [{ path: 'text' }],
       labelKey: 'blocks.heading.label',
       descriptionKey: 'blocks.heading.description',
       category: 'content',
@@ -391,6 +394,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Text',
+      translatable: [{ path: 'text' }, { path: 'tiptapContent', format: 'tiptap' }],
       labelKey: 'blocks.text.label',
       descriptionKey: 'blocks.text.description',
       category: 'content',
@@ -409,6 +413,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.RichContent',
+      translatable: [{ path: 'content', format: 'tiptap' }],
       labelKey: 'blocks.richContent.label',
       descriptionKey: 'blocks.richContent.description',
       category: 'content',
@@ -419,6 +424,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Button',
+      translatable: [{ path: 'label' }],
       labelKey: 'blocks.button.label',
       descriptionKey: 'blocks.button.description',
       category: 'content',
@@ -441,6 +447,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Image',
+      translatable: [{ path: 'alt' }],
       labelKey: 'blocks.image.label',
       descriptionKey: 'blocks.image.description',
       category: 'content',
@@ -454,6 +461,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Icons',
+      translatable: [],
       labelKey: 'blocks.icons.label',
       descriptionKey: 'blocks.icons.description',
       category: 'content',
@@ -468,6 +476,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Social',
+      translatable: [{ path: 'items[].label' }],
       labelKey: 'blocks.social.label',
       descriptionKey: 'blocks.social.description',
       category: 'content',
@@ -490,6 +499,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.FeatureList',
+      translatable: [{ path: 'items[].title' }, { path: 'items[].description' }],
       labelKey: 'blocks.featureList.label',
       descriptionKey: 'blocks.featureList.description',
       category: 'content',
@@ -501,6 +511,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Hero',
+      translatable: [{ path: 'heading' }, { path: 'subtitle' }, { path: 'buttonLabel' }],
       labelKey: 'blocks.hero.label',
       descriptionKey: 'blocks.hero.description',
       category: 'content',
@@ -511,6 +522,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.LogoStrip',
+      translatable: [{ path: 'items[].alt' }],
       labelKey: 'blocks.logoStrip.label',
       descriptionKey: 'blocks.logoStrip.description',
       category: 'content',
@@ -521,6 +533,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Testimonial',
+      translatable: [{ path: 'quote' }, { path: 'author' }, { path: 'role' }],
       labelKey: 'blocks.testimonial.label',
       descriptionKey: 'blocks.testimonial.description',
       category: 'content',
@@ -531,6 +544,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Stats',
+      translatable: [{ path: 'items[].value' }, { path: 'items[].label' }],
       labelKey: 'blocks.stats.label',
       descriptionKey: 'blocks.stats.description',
       category: 'content',
@@ -541,6 +555,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.AnnouncementBar',
+      translatable: [{ path: 'text' }],
       labelKey: 'blocks.announcementBar.label',
       descriptionKey: 'blocks.announcementBar.description',
       category: 'content',
@@ -550,6 +565,12 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.SimpleTable',
+      translatable: [
+        { path: 'columns[].label' },
+        { path: 'tableRows[].cells[].value' },
+        { path: 'headers[].label' },
+        { path: 'rows[].cells[].value' },
+      ],
       labelKey: 'blocks.simpleTable.label',
       descriptionKey: 'blocks.simpleTable.description',
       category: 'content',
@@ -560,6 +581,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Video',
+      translatable: [{ path: 'title' }],
       labelKey: 'blocks.video.label',
       descriptionKey: 'blocks.video.description',
       category: 'media',
@@ -570,6 +592,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Map',
+      translatable: [{ path: 'markers[].label' }],
       labelKey: 'blocks.map.label',
       descriptionKey: 'blocks.map.description',
       category: 'media',
@@ -589,6 +612,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.ContentSlider',
+      translatable: [],
       labelKey: 'blocks.contentSlider.label',
       descriptionKey: 'blocks.contentSlider.description',
       category: 'interactive',
@@ -599,6 +623,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.ImageSlider',
+      translatable: [{ path: 'items[].title' }],
       labelKey: 'blocks.imageSlider.label',
       descriptionKey: 'blocks.imageSlider.description',
       category: 'interactive',
@@ -609,6 +634,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Tabs',
+      translatable: [{ path: 'items[].label' }, { path: 'items[].content', format: 'html' }],
       labelKey: 'blocks.tabs.label',
       descriptionKey: 'blocks.tabs.description',
       category: 'interactive',
@@ -619,6 +645,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Accordion',
+      translatable: [{ path: 'items[].title' }, { path: 'items[].content', format: 'html' }],
       labelKey: 'blocks.accordion.label',
       descriptionKey: 'blocks.accordion.description',
       category: 'interactive',
@@ -629,6 +656,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Column',
+      translatable: [],
       labelKey: 'blocks.column.label',
       descriptionKey: 'blocks.column.description',
       category: 'internal',
@@ -639,6 +667,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.Slide',
+      translatable: [],
       labelKey: 'blocks.slide.label',
       descriptionKey: 'blocks.slide.description',
       category: 'internal',
@@ -649,6 +678,12 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.NewsletterSignup',
+      translatable: [
+        { path: 'heading' },
+        { path: 'description' },
+        { path: 'placeholder' },
+        { path: 'buttonLabel' },
+      ],
       labelKey: 'blocks.newsletterSignup.label',
       descriptionKey: 'blocks.newsletterSignup.description',
       category: 'forms',
@@ -659,6 +694,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.ContactFormEmbed',
+      translatable: [{ path: 'heading' }, { path: 'description' }],
       labelKey: 'blocks.contactFormEmbed.label',
       descriptionKey: 'blocks.contactFormEmbed.description',
       category: 'forms',
@@ -669,6 +705,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.RawHtml',
+      translatable: [],
       labelKey: 'blocks.rawHtml.label',
       descriptionKey: 'blocks.rawHtml.description',
       category: 'advanced',
@@ -679,6 +716,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.RawJs',
+      translatable: [],
       labelKey: 'blocks.rawJs.label',
       descriptionKey: 'blocks.rawJs.description',
       category: 'advanced',
@@ -689,6 +727,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.InsertBlock',
+      translatable: [],
       labelKey: 'blocks.insertBlock.label',
       descriptionKey: 'blocks.insertBlock.description',
       category: 'embeds',
@@ -698,6 +737,7 @@ export const manifest = defineModuleManifest({
     },
     {
       name: 'cms.InsertTemplate',
+      translatable: [],
       labelKey: 'blocks.insertTemplate.label',
       descriptionKey: 'blocks.insertTemplate.description',
       category: 'embeds',
