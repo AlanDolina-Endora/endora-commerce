@@ -268,6 +268,12 @@ all present. pdfmake's process-global font/URL setters are set to identical valu
 **import** (R-24) bypasses the node/size limits for legacy rows that exceed them — such rows are imported
 as they are and flagged in the import report, because refusing them would lose operator data (FR-081).
 
+**Measured (T072, 2026-10-17, `backend/test/perf/document_templates/pdf-render.bench.ts`, in process,
+16-core dev box under parallel load):** a 16-product × 30-row comparison through the engine and the
+built-in layout, p95 **192 ms**, against **132 ms** for the fixed renderer (+60 ms, budget +500 ms;
+absolute budget 5 s); an invoice through the built-in invoice layout, p95 **72 ms** — recorded, not
+compared, because owner answer P1 removed the renderer it would have been compared with.
+
 ## R-21 — Defects observed and left out of scope
 
 - Hard-coded Polish texts on the storefront comparison page beyond the `PDF` button.
