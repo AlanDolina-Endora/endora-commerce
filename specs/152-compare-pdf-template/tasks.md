@@ -122,12 +122,13 @@ Paths: `DT` = `packages/modules/document_templates`, `CMP` = `packages/modules/c
 
 ## Phase 7: US5 — invoice templates live in Document templates, unchanged (P2) — required before merge
 
-- [ ] T055 [US5] Write `INV/src/backend/document/invoice-document-type.test.ts` (palette = ten own + present contributed, `coreBlocks: 'none'`, `selection: 'default_only'`, `languages: ['pl-PL']`, `pageDefaults` per `invoice-document.md` §1, `prepareRender` resolves only placed contributors with rejection → `null`, `suppressKsefNumber` rule) and switch `capture-goldens.test.ts` (T009) to compare the **engine's** output for cases 1–9 and the local built-in path for case 10 against the committed goldens — red
+- [ ] T055 [US5] Write `INV/src/backend/document/invoice-document-type.test.ts` (palette = ten own + present contributed, `coreBlocks: 'none'`, `selection: 'default_only'`, `languages: ['pl-PL']`, `pageDefaults` per `invoice-document.md` §1, `prepareRender` resolves only placed contributors with rejection → `null`, `suppressKsefNumber` rule) and switch `capture-goldens.test.ts` (T009) to compare the **engine's** output for cases 1–9 against the committed goldens; golden 10 stays as the record of the old e-mail behaviour and is no longer asserted against the new code (N1, FR-093) — red
 - [ ] T056 [US5] Implement `INV/src/backend/document/{block-renderers,invoice-document-type}.ts` wrapping `sections.ts`, `tree-mapper.ts` mappers, `embed-logo-images.ts` and `builtinLayout` unchanged; push the registration from a contribution-only `ctx.onBoot` — T055 green (deep-equal to every golden)
 - [ ] T057 [P] [US5] `backend/test/integration/invoices/template-import.test.ts` per `invoice-document.md` §6 (legacy rows seeded by SQL in the test) — red
 - [ ] T058 [US5] `INV/src/backend/document/legacy-import.ts` (`read()` over its own `InvoiceTemplate`; `afterImport()` role grants via `lazyPort<AdminRolePort>(ctx, 'adminRolePort')`); manifest `dependencies` += `document_templates`, `admin_roles` — T057 green; `check:port-dependencies`, `check:module-boundary` clean
-- [ ] T059 [P] [US5] Rewrite `backend/test/integration/invoices/templates.test.ts` against the new API (create/save/set-default/preview of `invoices.invoice`), add `backend/test/integration/invoices/template-parity.test.ts` (admin download, customer download, regenerate and e-mail attachment over the real composition equal the goldens' definitions through a capture seam), and a channel case (an invoice of channel B uses B's default, of A the global) — red
-- [ ] T060 [US5] Re-point `routes.admin.ts` (download, regenerate) and `routes.customer.ts` to `documentRenderPort` per `invoice-document.md` §2; keep the e-mail attachment on the local built-in path; delete `invoice-template-service.ts`, `ensureGenericSeed` call in `plugin.ts`, `pdf-components/descriptor.ts`, the five `/api/v1/admin/invoice-templates*` routes; move descriptor fields into manifest block declarations; drop the `invoice-templates` action; relabel `invoices:write` — T059 green
+- [ ] T059 [P] [US5] Rewrite `backend/test/integration/invoices/templates.test.ts` against the new API (create/save/set-default/preview of `invoices.invoice`), add `backend/test/integration/invoices/template-parity.test.ts` (admin download, customer download and regenerate over the real composition equal the goldens' definitions through a capture seam), and a channel case (an invoice of channel B uses B's default, of A the global) — red
+- [ ] T059a [P] [US5] FR-093 (owner's answer to N1): `INV/src/backend/services/invoice-email-dispatch.test.ts` — the attachment is rendered by `documentRenderPort.render` with exactly the download's input (`documentType`, the invoice's `salesChannelId`, `pl-PL`, `{ invoice, amountLocale: 'pl' }`), a render failure stays contained (`failed`, issuance not undone) while `ModuleDisabledError` is re-thrown; and in `template-parity.test.ts` the e-mail attachment's definition deep-equals the download's for the seed tree, a channel-B default and the empty-tree fallback — red
+- [ ] T060 [US5] Re-point `routes.admin.ts` (download, regenerate), `routes.customer.ts` **and the e-mail attachment in `invoice-email-dispatch.ts`** to `documentRenderPort` per `invoice-document.md` §2 (N1) — T059 and T059a green; delete `invoice-template-service.ts`, `ensureGenericSeed` call in `plugin.ts`, `pdf-components/descriptor.ts`, the five `/api/v1/admin/invoice-templates*` routes; move descriptor fields into manifest block declarations; drop the `invoice-templates` action; relabel `invoices:write` — T059 green
 - [ ] T061 [US5] Update every test and fixture naming removed things, found by `git grep` over `backend/test/**`, `admin/test/**`, `packages/**`: `invoices/off-state.test.ts`, `invoices/stored-contributed-block.test.ts` (now through the facility; KSeF-absent behaviour unchanged), `_admin_surfaces/batch-twelve-palette-off-state.test.ts` (action removed), `issue-route-email-outcome.test.ts`, `vendor-number-hold.test.ts`, `backend/test/fixtures/openapi-baseline.json` (five routes removed, twelve added); add `document_templates.content` to `packages/modules/cms/src/backend/cli/block-names.ts` with its test case
 - [ ] T062 [P] [US5] `admin/test/modules/invoices/`: redirects (`/invoices/templates` → `/document-templates?type=invoices.invoice`, `/invoices/templates/:id` → `/document-templates/:id`), *Templates* tab target, invoice editor palette (10 + contributed stand-in, no core blocks, no language switcher, no merge fields), canvas renderers read the served sample — red
 - [ ] T063 [US5] Move `INV/src/admin/templates/invoice-puck-config.tsx` renderers into `INV/src/admin/document-blocks/*.tsx` contributions (context `document`, `useDocumentSample`, field overrides incl. logo URL/asset); redirect routes and tab in `INV/src/admin/{index.ts,components/InvoiceSectionTabs.tsx}`; delete `InvoiceTemplatesPage.tsx`, `InvoiceTemplateEditor.tsx`, `described-blocks.tsx`, `invoice-builder-plugin.tsx`; move field labels into `INV/i18n/{en,pl}.json`; remove `invoiceTemplates.*` and `appShell.nav.invoiceTemplates` from `packages/modules/_i18n/i18n/{en,pl}.json` (and their ratchet entries) — T062 green; `admin/test/modules/invoices/InvoiceSectionTabs.test.tsx` updated
@@ -148,7 +149,7 @@ Paths: `DT` = `packages/modules/document_templates`, `CMP` = `packages/modules/c
 - [ ] T068 [P] `admin/test/modules/document_templates/off-state.test.tsx` — no nav, palette row, comparison button when absent
 - [ ] T069 Manifest action `open-document-templates` with invoice keywords; `registered-bundles-shape.test.ts` and `check:action-route-permissions` green
 - [ ] T070 [P] Docs: `DT/docs/document-templates.md` (both types, palettes per type, defaults and scopes, languages, merge fields, import note, off-states), `docs/docs/module-reference/document-templates.md`; comparisons page section; invoices pages (`INV/docs/invoices.md`, `docs/docs/module-reference/invoices.md`) point to Document templates and describe the move; Polish versions under `docs/i18n/pl/docusaurus-plugin-content-docs/current/`; refresh `docs/translation-cache/pl/` entries per `docs/docs/contributing/documentation-i18n.md`; `check:module-docs` clean
-- [ ] T071 [P] Changesets: contracts, page-builder-core, admin-kit, comparisons, **invoices (major — withdrawn API, release note)**, the new module (`specs/conventions/release-intent.md`)
+- [ ] T071 [P] Changesets: contracts, page-builder-core, admin-kit, comparisons, **invoices (major — withdrawn API; release note also says e-mailed invoice PDFs now follow the configured template, N1)**, the new module (`specs/conventions/release-intent.md`)
 - [ ] T072 [P] Benches `backend/test/perf/comparisons/pdf-export.bench.ts` and `backend/test/perf/invoices/pdf-render.bench.ts` (SC-003); record results in research R-20
 - [ ] T073 Re-run `composer:generate`, `manifests:generate`, `pnpm install --lockfile-only`; commit
 - [ ] T074 After the deletions: re-derive `backend/test/unit/kernel/module-removal.test.ts`'s ledger if it reports; re-record a read size only if its band refuses (`specs/conventions/check-estate.md`)
@@ -171,7 +172,7 @@ Setup (T001–T003) → Foundational (T004–T029; T009 before ANY change under 
 
 - T005 before every task naming contracts types; T006 before T029, T038, T040, T063; T008 before T040, T063.
 - T011 before T020, T024, T026; T013 before T023, T029, T036, T056; T023 before T030, T034, T055.
-- T055 before T060 (goldens are the gate); T058 before T059's import-dependent cases.
+- T055 before T060 (goldens are the gate); T058 before T059's import-dependent cases; T059a before T060.
 
 ## Requirement → test
 
@@ -213,12 +214,13 @@ Setup (T001–T003) → Foundational (T004–T029; T009 before ANY change under 
 | FR-089 | T057 |
 | FR-091 | T075 (`backend/test/integration/invoices/**` unchanged and green) |
 | FR-092 | T030 (old routes 404), T061, T071 |
+| FR-093 | T059a, T071 |
 | SC-002, SC-005 | T034, T049, T059 |
 | SC-003 | T072 |
 | SC-004 | T043 |
 | SC-006 | T066 |
 | SC-007 | T065 |
-| SC-008 | T009, T055, T059 |
+| SC-008 | T009, T055, T059, T059a |
 | SC-009 | T057 |
 | SC-001 | T076 (manual, timed) |
 

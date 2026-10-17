@@ -14,9 +14,9 @@
 ## Requirement Completeness
 
 - [x] No [NEEDS CLARIFICATION] markers remain — Q1–Q7 answered by the owner on 2026-10-17 (spec
-  *Clarifications*). The five new questions N1–N5 raised by the Q1 extension are recorded under *Open
-  questions* with defaults and referenced from FR-050, FR-083, FR-089, FR-092 in brackets; the plan
-  proceeds on the defaults and states what each other answer changes.
+  *Clarifications*). The five questions N1–N5 raised by the Q1 extension were answered the same day
+  (second clarification session): N1 departs from the proposed default (FR-093 added), N2–N5 take it;
+  FR-050, FR-083, FR-089 and FR-092 no longer carry bracketed open points.
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)

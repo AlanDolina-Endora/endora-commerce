@@ -2,9 +2,10 @@
 
 **Branch**: `feat/152-compare-pdf-template` | **Date**: 2026-10-17 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `specs/152-compare-pdf-template/spec.md` — clarified by the
-owner on 2026-10-17 (Q1–Q7; Q1 extended: invoice templates move in this feature). Five new questions
-(N1–N5) are open; this plan follows their recommended defaults and says below what each other answer
-changes.
+owner on 2026-10-17 (Q1–Q7; Q1 extended: invoice templates move in this feature). The five questions
+the extension raised (N1–N5) were answered the same day: **N1 — fix it now** (the invoice e-mail
+attachment uses the same template resolution as the download), N2–N5 the recommended defaults. The
+section *Owner answers to N1–N5* below records what each answer put into this plan.
 
 ## Summary
 
@@ -31,6 +32,9 @@ facility** with their output unchanged (R-2, R-4). With evidence and rejected al
   function `invoices` supplies over its own table, recorded in an import-marker table so it happens once
   and never resurrects deletions (R-24). Role grants keep invoice-template editors able to edit (R-28,
   N3). Old admin routes redirect; the old API is withdrawn (R-29, N4).
+- **The invoice e-mail attachment follows the template** (R-26, N1): the dispatcher renders through the
+  same `documentRenderPort` call as the download, so one invoice has one layout on every path. The
+  only intentional output change for invoices; announced in the invoices release note.
 - **The comparison PDF finally speaks the buyer's language** (R-9, R-18). No new runtime dependency, no
   cache, no domain event, one migration.
 
@@ -147,7 +151,8 @@ packages/modules/invoices/
 ├── src/backend/index.ts  plugin.ts  routes.admin.ts  routes.customer.ts
 ├── src/backend/document/{invoice-document-type,legacy-import,block-renderers}.ts
 ├── src/backend/document/__golden__/*.json  # parity goldens (captured first)
-├── src/backend/services/invoice-pdf-renderer.ts  # reduced to the local built-in path (e-mail)
+├── src/backend/services/invoice-pdf-renderer.ts  # no longer a render path (every path, e-mail included, goes through the port — N1); deleted once nothing calls it
+├── src/backend/services/invoice-email-dispatch.ts # attachment through documentRenderPort (N1)
 ├── src/backend/services/invoice-template-service.ts   # DELETED
 ├── src/backend/pdf-components/descriptor.ts           # DELETED (fields → manifest)
 ├── src/admin/{index.ts (redirect routes + block contributions), components/InvoiceSectionTabs.tsx}
@@ -235,15 +240,15 @@ R1/R2 clean).
 | Redis cache invalidation | none needed — no cache (R-14) |
 | Module activation | facility switchable; comparisons degrade; invoices bind; import convergent |
 
-## What changes if the owner answers N1–N5 differently
+## Owner answers to N1–N5 (2026-10-17)
 
-| Question | Other answer | Impact |
+| Question | Answer | What it puts into this plan |
 | --- | --- | --- |
-| N1 | attachment uses the template | e-mail path calls the port like the download; golden 10 changes intentionally; +1 test |
-| N2 | allow switching off under invoices | `invoices` declares `degrades-without` + presence probe + local built-in fallback; off-state test changes from refusal to fallback |
-| N3 | no automatic grant / per-type permissions | drop `afterImport` and the `admin_roles` edge (release note only); per-type would need a new non-literal gating design — not recommended |
-| N4 | keep old API one release | invoices keeps five adapter routes over a new `documentTemplateAdminPort`; minor instead of major changeset; removal task in the next release |
-| N5 | multilingual invoices | separate feature (amount in words, legal wording); here only `languages` would be lifted |
+| N1 | **fix it now** — the attachment uses the template (departs from the proposed default) | `invoice-email-dispatch.ts` renders through `documentRenderPort` with exactly the download's input (FR-093); `InvoicePdfRenderer` loses its last render caller. Golden case 10 is no longer "built-in, no tree": its expectation becomes *deep-equal to the download's definition for the same invoice* (T055, T059). The invoices changeset (major already, N4) says e-mailed invoice PDFs now follow the configured template |
+| N2 | default — refused while invoicing is on | `document_templates` in `invoices`' `dependencies`; off-state test asserts the refusal |
+| N3 | default — one-time audited grant | `legacyImport.afterImport` through `adminRolePort`; `admin_roles` in `invoices`' `dependencies` |
+| N4 | default — withdraw now | five routes removed; major changeset + release note; OpenAPI baseline updated |
+| N5 | default — Polish only | `languages: ['pl-PL']`; no language switcher in the invoice editor |
 
 ## Complexity Tracking
 
@@ -265,11 +270,11 @@ No constitution violation; **no new runtime dependency**. Choices that add surfa
 2. Contracts first; scaffold with `migration:new`; never hand-number; regenerate and commit artefacts.
 3. Every write is a Command; the import runs as one under a system scope.
 4. `comparisons`: probe presence before `documentRenderPort`; fixed renderer output unchanged.
-   `invoices`: binds the facility; section builders untouched; e-mail attachment stays on the local
-   built-in path (N1 default).
+   `invoices`: binds the facility; section builders untouched; the e-mail attachment renders through
+   the port exactly like the download (N1 — owner's answer).
 5. Deleting invoice files and routes: grep `backend/test/**`, admin tests, the OpenAPI baseline,
    `_i18n` bundles and `cms`' block-names CLI in the same MR (`AGENTS.md` traps); re-derive the
    module-removal ledger if it reports.
-6. Changesets: contracts, page-builder-core, admin-kit, comparisons, invoices (**major**), the new
-   module.
+6. Changesets: contracts, page-builder-core, admin-kit, comparisons, invoices (**major** — withdrawn
+   API, and e-mailed invoice PDFs now follow the configured template), the new module.
 7. Verify per T075; walk `quickstart.md` before merge.

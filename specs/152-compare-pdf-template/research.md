@@ -12,6 +12,10 @@ features (`007`, `047`, `096`, `134`) are provenance and resolve only in the his
 feature, and a scope holds several templates of which one is the *default*, with per-document selection
 declared per type. R-4, R-8 and R-17 are rewritten; R-23 to R-31 are new.
 
+**Second revision (owner's answers to N1–N5, 2026-10-17).** N1 departs from the proposed default: the
+invoice e-mail attachment uses the template now — R-21 and R-26 are rewritten. N2–N5 confirm the
+defaults of R-27 to R-30, which now read as decisions rather than proposals.
+
 ---
 
 ## R-1 — How the comparison PDF is produced today (facts)
@@ -267,8 +271,8 @@ as they are and flagged in the import report, because refusing them would lose o
 ## R-21 — Defects observed and left out of scope
 
 - Hard-coded Polish texts on the storefront comparison page beyond the `PDF` button.
-- The invoice e-mail attachment ignoring templates (R-2) — kept for parity unless the owner says
-  otherwise (N1, R-30).
+- ~~The invoice e-mail attachment ignoring templates (R-2)~~ — **fixed in this feature** by the
+  owner's answer to N1 (R-26).
 - `invoices.template_id` is a column nothing writes (R-2) — left alone; dropping it is invoices' own
   clean-up.
 
@@ -364,24 +368,37 @@ engine's definitions equal them after.
 **Rationale**: parity is proven on the definition, not trusted; invoice code moves behind interfaces
 instead of being rewritten.
 
-## R-26 — Invoice e-mail attachment
+## R-26 — Invoice e-mail attachment (N1 — owner: fix it now)
 
-**Decision (default for N1)**: unchanged — the dispatcher keeps rendering the built-in layout, now by
-calling invoices' own `renderBuiltIn` path locally (no template, no port). If the owner chooses to fix
-it, the change is one call: render through the port like the download (+1 task, a changed golden).
+**Decision**: the dispatcher renders the attachment through `documentRenderPort.render` with exactly
+the download's input — `{ documentType: 'invoices.invoice', salesChannelId: detail.salesChannelId,
+language: 'pl-PL', data: { invoice: detail, amountLocale: 'pl' } }` — so the same invoice yields the
+same layout by e-mail and by download (FR-093). `invoices` binds the facility (R-27), so the port is
+resolved directly, without a presence probe; the dispatcher's existing `rethrowIfModuleDisabled` +
+contained-failure policy (FR-029: issuance is never undone by a failed e-mail) is unchanged.
 
-## R-27 — Invoices bind `document_templates` (N2)
+**Consequence for parity**: golden case 10 of `contracts/invoice-document.md` §5 (captured from today's
+built-in, no-tree e-mail path) documents the *before*; after the move the e-mail expectation is
+**deep-equal to the download's definition for the same invoice and the same template data**, asserted
+for the seed tree, a channel override and the empty-tree fallback. It is the one intentional output
+change for invoices and is announced in the invoices changeset's release note.
 
-**Decision (default)**: `document_templates` joins `invoices`' manifest `dependencies`. Consequences:
+**Alternatives rejected**: keeping the built-in attachment for parity (the proposed default — the owner
+chose otherwise); a setting choosing between the two (two layouts of one legal document is the defect
+being fixed, not an option worth keeping).
+
+## R-27 — Invoices bind `document_templates` (N2 — owner: default)
+
+**Decision**: `document_templates` joins `invoices`' manifest `dependencies`. Consequences:
 switching templates off while invoicing is on is refused by the lifecycle (dependencies fail closed);
 migration order puts `document_templates` before `invoices`; invoices never render without templates.
-**Alternative (if the owner chooses a)**: `degrades-without` with `whenAbsent: 'invoices print the
+**Alternative (not chosen)**: `degrades-without` with `whenAbsent: 'invoices print the
 built-in invoice layout; operator templates apply again when document templates are back on'`,
 presence probe in front of the port, `renderBuiltIn` locally otherwise.
 
-## R-28 — Permissions continuity (N3)
+## R-28 — Permissions continuity (N3 — owner: default)
 
-**Decision (default)**: invoices' `legacyImport.afterImport` performs a one-time grant through
+**Decision**: invoices' `legacyImport.afterImport` performs a one-time grant through
 `adminRolePort` (owner `admin_roles`, `nonDeactivatable` — added to `invoices`' dependencies): for each
 role whose permissions include `invoices:read` add `document_templates:read`; `invoices:write` → add
 `document_templates:write` (and `:read`). Idempotent (a present code is not re-added); runs once because
@@ -389,9 +406,9 @@ the import marker runs once; logged with the role codes changed. The facility kn
 codes (XIV) — the host does it in its own hook. `invoices:write`'s label drops "edit templates".
 **Alternatives**: release-note instruction only; per-type permissions (rejected in R-16).
 
-## R-29 — Admin routes, redirects and the withdrawn API (N4)
+## R-29 — Admin routes, redirects and the withdrawn API (N4 — owner: default)
 
-**Decision (default)**:
+**Decision**:
 - `invoices`' admin contributions keep `/invoices/templates` and `/invoices/templates/:id` as **redirect
   routes** (`<Navigate replace>` to `/document-templates?type=invoices.invoice` and
   `/document-templates/:id` — ids preserved by the import). `InvoiceSectionTabs` points at the new list.
@@ -405,12 +422,12 @@ codes (XIV) — the host does it in its own hook. `invoices:write`'s label drops
   two-way) and the block field labels move into `invoices`' own bundles.
 - Tests naming the old routes are rewritten against the new API in the same MR (`AGENTS.md` trap:
   grep `backend/test/**` for every deleted file and route).
-**Alternative (a)**: keep the five routes one release as deprecated adapters over
+**Alternative (not chosen)**: keep the five routes one release as deprecated adapters over
 `documentTemplateService` (+1 port, +1 task).
 
-## R-30 — Invoice editor languages (N5)
+## R-30 — Invoice editor languages (N5 — owner: default)
 
-**Decision (default)**: `invoices.invoice` registers `languages: ['pl-PL']`; the editor offers Polish
+**Decision**: `invoices.invoice` registers `languages: ['pl-PL']`; the editor offers Polish
 only; documents render `pl-PL`. Legacy content holding other language keys is imported unchanged and
 simply never offered — no data dropped.
 

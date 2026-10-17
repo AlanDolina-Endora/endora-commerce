@@ -3,9 +3,9 @@
 **Feature Branch**: `feat/152-compare-pdf-template` (spec directory `specs/152-compare-pdf-template/`)
 **Created**: 2026-10-17
 **Status**: Clarified — the owner answered Q1–Q7 on 2026-10-17 (see *Clarifications*). Q1 was
-answered with an extension: invoice templates move onto the facility in this feature. Five new
-questions raised by that extension are open (see *Open questions*); the plan proceeds on their
-recommended defaults.
+answered with an extension: invoice templates move onto the facility in this feature. The five
+questions that extension raised (N1–N5) were answered the same day: N1 departs from the proposed
+default (the invoice e-mail attachment follows the template now), N2–N5 take the defaults.
 **Input**: Product-owner request, verbatim: *"Powinna być możliwość zdefiniowania szablonu PDF dla
 Porównywarki na Storefront UI. Czyli jak jestem na porównywarce (np.
 https://demo.commerce.endora.software/compare) i kliknę w przycisk `PDF`, to szablon eksportowanego
@@ -79,6 +79,23 @@ their behaviour unchanged, and a quote-request PDF (a later feature) will be the
   version history (as recommended).
 - **Q7** — Language? → **The buyer's storefront language, then the channel's default** (as
   recommended).
+
+### Session 2026-10-17 (owner, second round — N1–N5)
+
+- **N1** — Should the invoice e-mail attachment use the invoice template? → **Yes, fix it now**
+  (departs from the proposed default). The PDF attached to the invoice e-mail is produced through the
+  same template resolution as the invoice download, so the same invoice yields the same layout on both
+  paths (FR-093). The release note says that e-mailed invoice PDFs now follow the configured template.
+  Golden parity (SC-008) still binds the download, regeneration, customer and preview paths; for the
+  e-mail path the expected output is *identical to the download for the same invoice*.
+- **N2** — May the template facility be switched off while invoicing is on? → **No** (default):
+  invoices bind the facility, and switching it off is refused until invoicing is off (FR-050).
+- **N3** — How do administrators keep access to invoice templates? → **A one-time, audited automatic
+  grant** through the admin roles module (default): `invoices:read` ⇒ `document_templates:read`,
+  `invoices:write` ⇒ `document_templates:write` (FR-089).
+- **N4** — The former invoice-template administration API? → **Withdraw it now** (default), as a
+  breaking (major) change of the invoices package with a release note (FR-092).
+- **N5** — Invoices stay Polish-only? → **Yes** (default) (FR-085).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -203,10 +220,11 @@ stale editor and confirm the save is refused.
 After the upgrade, an operator who designed invoice templates finds them under *Document templates →
 Invoice*: same names, same layouts, same scopes, and the template that was in force for each scope
 is that scope's default. *Invoices → Templates* and old bookmarks lead there. Every invoice PDF —
-downloaded by an administrator, downloaded by the customer, regenerated, previewed, attached to the
-invoice e-mail — looks exactly as before. The invoice editor offers exactly the invoice blocks it
-offered before (including blocks other installed modules contribute, such as a KSeF section), and
-nothing from the comparison.
+downloaded by an administrator, downloaded by the customer, regenerated, previewed — looks exactly as
+before, and the PDF attached to the invoice e-mail now looks exactly like the download of the same
+invoice (owner answer N1; before the move it ignored templates). The invoice editor offers exactly
+the invoice blocks it offered before (including blocks other installed modules contribute, such as a
+KSeF section), and nothing from the comparison.
 
 **Why this priority**: the owner requires it in this feature; it adds no new user capability, but a
 regression here touches a legal document, so it carries the strictest acceptance criteria of the
@@ -233,6 +251,9 @@ open the old *Invoices → Templates* address.
    again, **Then** the template does not come back.
 6. **Given** administrators who could edit invoice templates before the upgrade, **When** the upgrade
    completes, **Then** they can still edit invoice templates.
+7. **Given** an invoice template is the default for an invoice's scope, **When** the invoice e-mail is
+   sent with the PDF attached, **Then** the attached PDF has the same content as the PDF downloaded for
+   that invoice (FR-093).
 
 ---
 
@@ -279,8 +300,8 @@ owner is switched off.
   then English, then the first available).
 - **A channel with channel-specific templates is deleted**: its templates go with it.
 - **The template facility is switched off**: comparison PDFs use today's fixed layout; templates are
-  kept and return when it is switched on. Whether invoices allow the facility to be switched off is
-  open question N2.
+  kept and return when it is switched on. While invoicing is on, switching the facility off is refused
+  (owner answer N2).
 - **Product comparison or invoicing is switched off**: its document type and templates disappear
   from the template screens; nothing is deleted.
 - **A save happens while a document is being produced**: the document uses one version of the
@@ -405,9 +426,8 @@ owner is switched off.
 - **FR-082**: The migration MUST happen once per installation: re-running, restarting, or switching
   invoicing off and on MUST NOT duplicate templates or resurrect templates deleted after migration.
 - **FR-083**: Every invoice PDF produced after the upgrade — administrator download, customer
-  download, regeneration, preview, and the e-mail attachment — MUST have the same content as before
-  for the same invoice and the same template data. [The e-mail attachment's current behaviour is open
-  question N1.]
+  download, regeneration and preview — MUST have the same content as before for the same invoice and
+  the same template data. The e-mail attachment is governed by FR-093.
 - **FR-084**: Invoice templates MUST keep today's selection semantics: the default for the invoice's
   channel, else the default for all channels, else the built-in layout; invoices do not allow
   per-document selection.
@@ -422,21 +442,29 @@ owner is switched off.
   corresponding place in *Document templates*; the invoices screen's *Templates* tab MUST keep leading
   to the invoice templates.
 - **FR-089**: Administrators who could view or edit invoice templates before the upgrade MUST be able
-  to do so after it without an administrator granting anything by hand. [Mechanism: open question N3.]
+  to do so after it without an administrator granting anything by hand: once per installation, every
+  role holding `invoices:read` gains `document_templates:read` and every role holding `invoices:write`
+  gains `document_templates:write` (and `:read`), recorded in the audit log (owner answer N3).
 - **FR-090**: The ⌘K palette MUST keep finding invoice templates (by "invoice template", "szablon
   faktury").
 - **FR-091**: Invoice behaviour outside templates — numbering, issuing, corrections, e-mails, KSeF —
   MUST NOT change.
-- **FR-092**: The former invoice-template administration API is withdrawn as part of the move; the
-  change MUST be announced in the release notes. [Deprecation period: open question N4.]
+- **FR-092**: The former invoice-template administration API is withdrawn as part of the move, with no
+  deprecation period; the change MUST be released as a breaking (major) change of the invoices package
+  and announced in the release notes (owner answer N4).
+- **FR-093**: The PDF attached to the invoice e-mail MUST be produced through the same template
+  resolution as the invoice download (FR-084: the default for the invoice's channel, else for all
+  channels, else the built-in layout), so that for the same invoice and the same template data its
+  content is identical to the download's. The release notes MUST say that e-mailed invoice PDFs now
+  follow the configured template (owner answer N1).
 
 #### Availability (switching modules on and off)
 
 - **FR-050**: The document-template facility MUST be switchable on the platform modules screen, on by
   default. While it is off: its screens, sidebar entry, palette entry and links to it MUST be absent,
   its API MUST refuse as for any switched-off module, the comparison PDF MUST keep working with
-  today's fixed layout, and every template MUST come back unchanged when it is switched on. [How
-  invoices behave while it is off: open question N2.]
+  today's fixed layout, and every template MUST come back unchanged when it is switched on. While
+  invoicing is on, switching the facility off MUST be refused, naming invoicing (owner answer N2).
 - **FR-051**: While the module owning a document type (comparison, invoicing) is switched off, its
   type, blocks and templates MUST NOT appear in the template screens or API, and they MUST be kept
   unchanged.
@@ -501,35 +529,14 @@ owner is switched off.
 - **SC-007**: Adding the test-only document type touches no file of the facility.
 - **SC-008**: For a reference set of invoice templates and invoices (global, per-channel, edited
   generic, contributed KSeF block, correction, nothing-printable fallback), 100 % of invoice PDFs
-  produced after the upgrade have content identical to those produced before.
+  downloaded, regenerated or previewed after the upgrade have content identical to those produced
+  before, and 100 % of e-mail attachments have content identical to the download of the same invoice.
 - **SC-009**: Zero invoice templates lost or duplicated by the upgrade, counted per installation.
 
 ## Open questions
 
-New questions raised by the owner's Q1 extension. Each has the default the design assumes.
-
-- **N1 — Should the invoice e-mail attachment use the invoice template?** Today the PDF attached to
-  the invoice e-mail ignores templates and always uses the built-in layout, while downloads use the
-  template — so a customer can receive two different-looking PDFs of one invoice. Default: **keep
-  today's behaviour** in this feature (FR-083's "output unchanged") and fix it as a follow-up.
-  Alternatives: (a) fix it now — the attachment uses the same template as the download; (b) make it a
-  setting.
-- **N2 — May the template facility be switched off while invoicing is on?** Default: **no** —
-  invoicing depends on it, so the platform refuses to switch the facility off until invoicing is off,
-  and invoice output can never change by surprise. Alternative: (a) allow it, and invoices fall back
-  to the built-in invoice layout while it is off (operator templates ignored until it is back on).
-- **N3 — How do administrators keep access to invoice templates?** Default: **a one-time automatic
-  grant at the upgrade**: every role allowed to view invoices also gets "view document templates", and
-  every role allowed to edit invoices gets "edit document templates" (audited). Alternatives: (a) no
-  automatic grant — release notes tell administrators to grant it; (b) the templates of a document
-  type are governed by that type's own permissions (invoice templates by the invoice permissions).
-- **N4 — The former invoice-template administration API.** Default: **withdraw it now**, announced as
-  a breaking change of the invoices package (the Admin UI was its only known consumer). Alternative:
-  (a) keep it working, deprecated, for one more release, delegating to the new facility.
-- **N5 — Invoices stay Polish-only.** Default: **yes** — invoice PDFs keep printing the Polish layout,
-  and the invoice editor offers only Polish (parity). Alternative: (a) print invoices in the
-  customer's language with per-language invoice layouts (a separate feature: amount in words, legal
-  wording).
+None. N1–N5, raised by the owner's Q1 extension, were answered on 2026-10-17 — see *Clarifications*,
+second session. N1 departs from the proposed default; N2–N5 take it.
 
 ## Assumptions
 
@@ -551,6 +558,6 @@ New questions raised by the owner's Q1 extension. Each has the default the desig
 - PDF export for share-link recipients; e-mailing the comparison.
 - Custom fonts, multi-column containers and nested layouts.
 - Version history, scheduled default changes, per-organisation or per-customer-group templates.
-- Invoice PDFs in languages other than Polish (N5).
+- Invoice PDFs in languages other than Polish (owner answer N5).
 - Translating other hard-coded texts of the storefront comparison page beyond the `PDF` button
   (`research.md` R-21).

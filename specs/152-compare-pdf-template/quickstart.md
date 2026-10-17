@@ -31,12 +31,15 @@ pnpm run dev
    and "Channel B" (default for channel B), names and layouts as before (FR-081).
 3. Download the three invoice PDFs again and compare with the kept ones: identical content (FR-083).
    Regenerate one: no error.
-4. Open an invoice template: palette shows only the ten invoice blocks (+ KSeF if installed), no
+4. Resend the channel-B invoice by e-mail with the attachment mode on (dev mail catcher): the attached
+   PDF now matches the download — the "Channel B" layout, not the built-in one it used to carry
+   (FR-093, owner's answer to N1).
+5. Open an invoice template: palette shows only the ten invoice blocks (+ KSeF if installed), no
    general-purpose block, no language switcher (FR-080, FR-085).
-5. Sign in as the `invoices:write` admin: invoice templates are editable without any manual grant
+6. Sign in as the `invoices:write` admin: invoice templates are editable without any manual grant
    (FR-089). Audit log: one import entry by the system (FR-061).
-6. Delete "Channel B", restart the backend: it does not come back (FR-082).
-7. ⌘K → "szablon faktury" finds *Document templates* (FR-090).
+7. Delete "Channel B", restart the backend: it does not come back (FR-082).
+8. ⌘K → "szablon faktury" finds *Document templates* (FR-090).
 
 ## 2. Comparison baseline (no template)
 

@@ -31,11 +31,11 @@ Pushed from a **contribution-only** `ctx.onBoot` in `packages/modules/invoices/s
 | `GET /api/v1/admin/invoices/:id/pdf` | `resolveTree(channel,'pl-PL')` + `render(detail,'pl',tree)` | `documentRenderPort.render({ documentType: 'invoices.invoice', salesChannelId: detail.salesChannelId, language: 'pl-PL', data: { invoice: detail, amountLocale: 'pl' } })` |
 | `POST /api/v1/admin/invoices/:id/regenerate-pdf` | same, result discarded | same call, result discarded |
 | `GET /api/v1/orders/:id/invoices/:invoiceId/pdf` (customer) | same | same call |
-| E-mail attachment (`invoice-email-dispatch.ts`) | `render(detail)` — built-in layout, no template | **unchanged**: invoices' local `renderBuiltIn` path, no port (N1 default; R-26) |
+| E-mail attachment (`invoice-email-dispatch.ts`) | `render(detail)` — built-in layout, no template | **the download's call**: `documentRenderPort.render` with the same input as `GET …/:id/pdf` (owner's answer to N1; FR-093; R-26) |
 | Preview | `/api/v1/admin/invoice-templates/:id/preview` with `'en'` | the facility's route 12 with the type's sample (`amountLocale: 'en'`) |
 | Bulk printout, legacy stub download | stub PDFs | unchanged |
 
-`InvoicePdfRenderer` shrinks to the local built-in path used by the e-mail; `InvoiceTemplateService`,
+`InvoicePdfRenderer` no longer renders on any path (the e-mail goes through the port too); `InvoiceTemplateService`,
 `descriptor.ts`, the template routes and `ensureGenericSeed` are deleted. `invoices` declares
 `document_templates` and `admin_roles` in `dependencies` (R-27, R-28 defaults).
 
@@ -80,10 +80,15 @@ block, non-default props); 4. channel override tree for an invoice of that chann
 for another channel; 5. tree placing a fake contributor with `printsKsefReferenceNumber` (present →
 number once; absent → header prints it); 6. contributor `resolve` rejecting → block rendered with
 `null`; 7. tree with no renderable node → `builtinLayout`; 8. logo by asset id and by URL (stubbed
-loader); 9. preview: sample with `'en'`; 10. e-mail attachment (built-in, no tree).
+loader); 9. preview: sample with `'en'`; 10. e-mail attachment (built-in, no tree) — captured as the record of
+the *before*.
 
-After the move, the same inputs through `documentRenderPort` (1–9) and the local path (10) MUST produce
-deep-equal definitions. Image data URIs compare by value. A byte-level smoke test asserts each renders.
+After the move, the same inputs through `documentRenderPort` (1–9) MUST produce deep-equal definitions.
+Case 10 changes intentionally (owner's answer to N1, FR-093): the e-mail attachment's definition MUST be
+deep-equal to the **download's** definition for the same invoice and template data — asserted for the
+seed tree, a channel override and the empty-tree fallback; golden 10 stays committed as the record of
+the old behaviour and is no longer an expectation. Image data URIs compare by value. A byte-level smoke
+test asserts each renders.
 
 ## 6. Import tests
 
