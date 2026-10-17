@@ -53,6 +53,9 @@ export class TranslationProviderFailedError extends Error {
   constructor(
     readonly token: ProviderFailureToken,
     readonly sent: SentStats,
+    readonly scope: { kind: 'canvas' | 'component' | 'text'; componentType?: string | undefined } = {
+      kind: 'canvas',
+    },
   ) {
     super(`The translation model could not complete the translation (${token}).`);
   }
@@ -71,6 +74,8 @@ export interface TranslateCanvasResult {
   /** What reached the provider; `null` when nothing was sent. */
   sent: SentStats | null;
   outcome: 'completed' | 'partial' | null;
+  /** The selected component's block name, when the scope named one. */
+  componentType?: string | undefined;
 }
 
 const answerSchema = z.object({
@@ -96,13 +101,20 @@ export async function translateCanvas(
   });
 
   if (extraction.segments.length === 0) {
-    return { data: input.data, report: report(0, 0, 0), sent: null, outcome: null };
+    return {
+      data: input.data,
+      report: report(0, 0, 0),
+      sent: null,
+      outcome: null,
+      componentType: extraction.componentType,
+    };
   }
   if (extraction.characters > deps.maxCharacters) {
     throw new TranslationTooLargeError(extraction.characters, deps.maxCharacters);
   }
 
   const system = systemPrompt(input);
+  const failedScope = { kind: extraction.scope.kind, componentType: extraction.componentType };
   const chunks = chunkSegments(extraction.segments, {
     maxCharacters: MAX_CHUNK_CHARACTERS,
     maxSegments: MAX_CHUNK_SEGMENTS,
@@ -166,9 +178,9 @@ export async function translateCanvas(
   };
   await Promise.all(Array.from({ length: Math.min(CHUNK_CONCURRENCY, chunks.length) }, worker));
 
-  if (failure !== null) throw new TranslationProviderFailedError(providerFailureToken(failure), sent);
+  if (failure !== null) throw new TranslationProviderFailedError(providerFailureToken(failure), sent, failedScope);
   if (answers.every((answer) => answer === 'malformed')) {
-    throw new TranslationProviderFailedError('malformed', sent);
+    throw new TranslationProviderFailedError('malformed', sent, failedScope);
   }
 
   const translations = new Map(answers.flatMap((answer) => (answer === 'malformed' ? [] : [...answer])));
@@ -178,5 +190,6 @@ export async function translateCanvas(
     report: report(result.translated, result.untranslated, sent.characters),
     sent,
     outcome: result.untranslated === 0 ? 'completed' : 'partial',
+    componentType: extraction.componentType,
   };
 }

@@ -34,12 +34,14 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | `languages` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `sales_channels` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `settings` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `credentials` | no | degrades-without `credentialsService` — Page Builder translation reports itself unavailable; every other CMS function keeps working. |
 
 ## Permissions
 
 | Code | Label | Also needs |
 | --- | --- | --- |
 | `cms.read` | View CMS content | — |
+| `cms.translate` | Translate Page Builder content with AI | — |
 | `cms.write` | Edit CMS content | — |
 
 ## Command palette
@@ -49,6 +51,7 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | `new-page` | `/cms/pages/new` | `cms.write` |
 | `open-blocks` | `/cms/blocks` | `cms.read` |
 | `open-hooks` | `/cms/hooks` | `cms.read` |
+| `open-page-builder-translation-settings` | `/settings` | `settings:read` |
 | `open-pages` | `/cms/pages` | `cms.read` |
 | `open-templates` | `/cms/templates` | `cms.read` |
 
@@ -60,6 +63,9 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | `cms.page_builder.breakpoint.desktop_min` | Desktop breakpoint (min-width px) | `number` |
 | `cms.page_builder.breakpoint.tablet_min` | Tablet breakpoint (min-width px) | `number` |
 | `cms.page_builder.color_palette` | Page Builder color palette | `json` |
+| `cms.page_builder.translation.enabled` | Translation enabled | `boolean` |
+| `cms.page_builder.translation.llm_credentials` | Translation credentials | `credential_ref` |
+| `cms.page_builder.translation.max_source_characters` | Translation size limit (characters) | `number` |
 | `cms.reserved_slug_segments` | Reserved page-slug segments | `json` |
 
 ## Translations

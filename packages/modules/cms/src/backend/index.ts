@@ -14,7 +14,15 @@ import {
   type ModuleManifest,
 } from '@endora-commerce/contracts';
 import { CMS_PAGE_BUILDER_SETTING_CODES, CMS_SETTING_CODES } from '../manifest.js';
-import type { CmsBlockReadPort, CmsPageReadPort } from '@endora-commerce/contracts';
+import type {
+  CmsBlockReadPort,
+  CmsPageReadPort,
+  CredentialsPort,
+  SettingWriteValidatorRegistryPort,
+} from '@endora-commerce/contracts';
+import type { FetchLike } from '@endora-commerce/llm-client';
+import { resolveTranslationConfig } from './services/translation/capability.js';
+import { createMaxSourceCharactersValidator } from './services/translation/max-source-characters-validator.js';
 import { CmsBlockReadService } from './services/cms-block-read-port.js';
 import { CmsBlockSeedService } from './services/cms-block-seed-port.js';
 import { storefrontTagsFor } from './services/cms-content-invalidator.js';
@@ -165,6 +173,13 @@ export interface CmsCradle {
   readonly resolvedModuleRegistry: ReadonlyArray<{ manifest: ModuleManifest }>;
   readonly cms: CmsResult;
   readonly cmsReferenceRegistry: CmsResult['handle']['referenceRegistry'];
+  /**
+   * Feature 151 — the `fetch` the Page Builder translation calls its model
+   * provider with. `undefined` (the platform's `fetch`) everywhere but a test
+   * root, which contributes a fake so no contract or integration test reaches a
+   * real provider (research R19, the `promptActionsLlmFetch` pattern).
+   */
+  readonly cmsTranslationLlmFetch: FetchLike | undefined;
 }
 
 const breakpointSchema = z.number().int().positive();
@@ -180,6 +195,9 @@ const breakpointSchema = z.number().int().positive();
  * one entry at a time, in the module that reads it.
  */
 const reservedSegmentsSchema = z.array(z.unknown());
+
+/** The translation settings are judged by `resolveTranslationConfig`, value by value. */
+const anySettingSchema = z.unknown();
 
 export function registerModule(ctx: ModuleContext): void {
   /**
@@ -257,6 +275,8 @@ export function registerModule(ctx: ModuleContext): void {
       )
       .singleton(),
 
+    cmsTranslationLlmFetch: ctx.asFunction((): FetchLike | undefined => undefined).singleton(),
+
     cms: ctx
       .asFunction(({ emFactory, commandBus, redis, resolvedModuleRegistry }: CmsCradle) => {
         const result = cmsModule({
@@ -285,6 +305,30 @@ export function registerModule(ctx: ModuleContext): void {
           // a captured guard would keep admitting requests after `auth` goes.
           requireAdmin: (permission) => async (req, reply) =>
             ctx.cradle<CmsCradle>().requireAdmin(permission)(req, reply),
+          // Feature 151 (research R11). Everything is read per request: the
+          // three settings through the store (platform-wide, D-41's `null`),
+          // presence of `credentials` before its port is touched, and the port
+          // itself through its gate — never captured — so an operator's change
+          // applies to the next click.
+          translationConfig: () => {
+            const { settingsReadPort, cmsTranslationLlmFetch } = ctx.cradle<CmsCradle>();
+            return resolveTranslationConfig({
+              readSetting: async (code) => {
+                try {
+                  return await settingsReadPort.get(code, null, anySettingSchema);
+                } catch (err) {
+                  // Unset is the normal state on a fresh platform and reads as
+                  // the default; a settings store the platform refuses to serve
+                  // is not that, and goes through.
+                  rethrowIfModuleDisabled(err);
+                  return undefined;
+                }
+              },
+              isCredentialsPresent: () => effectiveState.isPresent('credentials'),
+              resolveCredential: (code) => lazyPort<CredentialsPort>(ctx, 'credentialsService').resolve(code),
+              fetchImpl: cmsTranslationLlmFetch,
+            });
+          },
         });
 
         // Wired here, once, instead of by each composition root. Every closure
@@ -460,6 +504,19 @@ export function registerModule(ctx: ModuleContext): void {
     'cmsBlockSeedPort',
     ctx.asFunction(({ emFactory }: CmsCradle) => new CmsBlockSeedService(emFactory)).singleton(),
   );
+
+  /**
+   * Feature 151 (T073) — the size-limit setting's write rule, pushed into
+   * `settings`' validator registry so the generic Settings screen and API refuse
+   * a value outside 1 000–200 000. A **contribution** hook and unprobed, in the
+   * `admin_search` / `seo` shape: the registry itself skips a validator whose
+   * contributor is absent.
+   */
+  ctx.onBoot(() => {
+    lazyPort<SettingWriteValidatorRegistryPort>(ctx, 'settingWriteValidatorRegistry').register(
+      createMaxSourceCharactersValidator(),
+    );
+  });
 
   ctx.onBoot(async () => {
     // Presence is decided here — first, and outside anything that could catch it

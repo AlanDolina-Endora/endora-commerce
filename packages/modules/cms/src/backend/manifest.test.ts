@@ -80,6 +80,8 @@ describe('cms manifest — command palette', () => {
     expect(actions.map((a) => a.id)).toEqual([
       'new-page',
       ...NAVIGATION_ENTRIES.map((e) => e.id),
+      // Feature 151 — the translation settings entry closes the list.
+      'open-page-builder-translation-settings',
     ]);
   });
 
@@ -111,4 +113,95 @@ describe('cms manifest — command palette', () => {
       });
     });
   }
+});
+
+/** Feature 151 — the Page Builder translation's manifest surface. */
+describe('cms manifest — Page Builder translation', () => {
+  const settings = manifest.settings?.settings ?? [];
+  const setting = (code: string) => settings.find((s) => s.code === code);
+
+  it('declares the three translation settings in the Page Builder group', () => {
+    expect(setting('cms.page_builder.translation.enabled')).toMatchObject({
+      groupCode: 'cms_page_builder',
+      valueType: 'boolean',
+      defaultValue: false,
+    });
+    expect(setting('cms.page_builder.translation.llm_credentials')).toMatchObject({
+      groupCode: 'cms_page_builder',
+      valueType: 'credential_ref',
+      configurationType: 'llm',
+      defaultValue: '',
+    });
+    expect(setting('cms.page_builder.translation.max_source_characters')).toMatchObject({
+      groupCode: 'cms_page_builder',
+      valueType: 'number',
+      defaultValue: 40000,
+    });
+  });
+
+  it('names and describes each setting in English and Polish, saying content leaves the platform', () => {
+    for (const language of LANGUAGES) {
+      const messages = bundle(language);
+      for (const code of [
+        'cms.page_builder.translation.enabled',
+        'cms.page_builder.translation.llm_credentials',
+        'cms.page_builder.translation.max_source_characters',
+      ]) {
+        expect(messages[`settingLabels.${code}.name`], `${language} ${code}`).toMatch(/\S/);
+        expect(messages[`settingLabels.${code}.description`], `${language} ${code}`).toMatch(/\S/);
+      }
+    }
+    expect(setting('cms.page_builder.translation.enabled')!.description).toMatch(/sent to the provider/);
+  });
+
+  it('declares the permission, labelled in both languages', () => {
+    expect(manifest.permissions).toContainEqual({
+      code: 'cms.translate',
+      label: 'Translate Page Builder content with AI',
+    });
+    for (const language of LANGUAGES) {
+      expect(bundle(language)['adminRoles.permission.cms.translate']).toMatch(/\S/);
+    }
+  });
+
+  it('degrades without credentials instead of depending on it', () => {
+    expect(manifest.dependencies).not.toContain('credentials');
+    expect(manifest.nonBindingDependencies).toContainEqual(
+      expect.objectContaining({ moduleId: 'credentials', name: 'credentialsService', kind: 'degrades-without' }),
+    );
+  });
+
+  it('declares its error codes, with the provider-failure tokens, translated in both languages', () => {
+    const codes = manifest.errorCodes ?? [];
+    expect(codes).toContainEqual({
+      code: 'CMS_TRANSLATION_PROVIDER_FAILED',
+      tokens: ['credentials_rejected', 'rate_limited', 'unavailable', 'timeout', 'malformed'],
+    });
+    for (const code of [
+      'CMS_TRANSLATION_DISABLED',
+      'CMS_TRANSLATION_NOT_CONFIGURED',
+      'CMS_TRANSLATION_UNAVAILABLE',
+      'CMS_TRANSLATION_TOO_LARGE',
+      'CMS_TRANSLATION_SELECTION_NOT_FOUND',
+    ]) {
+      expect(codes).toContainEqual({ code });
+      for (const language of LANGUAGES) expect(bundle(language)[`errors.${code}`]).toMatch(/\S/);
+    }
+    for (const language of LANGUAGES) expect(bundle(language)['errors.CMS_TRANSLATION_TOO_LARGE']).toContain('{limit}');
+  });
+
+  it('offers a palette entry to the translation settings, findable in English and Polish', () => {
+    const action = (manifest.actions ?? []).find((a) => a.id === 'open-page-builder-translation-settings');
+    expect(action).toMatchObject({
+      targetRoute: '/settings',
+      requiredPermission: 'settings:read',
+      icon: 'Sparkles',
+      labelKey: 'actions.openPageBuilderTranslationSettings.label',
+      descriptionKey: 'actions.openPageBuilderTranslationSettings.description',
+    });
+    expect(action!.keywords).toEqual(expect.arrayContaining(['translate', 'tłumacz', 'ai', 'page builder']));
+    for (const language of LANGUAGES) {
+      expect(bundle(language)['actions.openPageBuilderTranslationSettings.label']).toMatch(/\S/);
+    }
+  });
 });

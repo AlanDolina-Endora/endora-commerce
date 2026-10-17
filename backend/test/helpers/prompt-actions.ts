@@ -79,7 +79,9 @@ export class ScriptedLlm {
 }
 
 const PROMPT_ACTIONS_TEST_LLM_CODE = 'prompt-actions-test-llm';
-const LLM_PROVIDERS = ['openai', 'google', 'anthropic', 'deepseek'];
+const LLM_PROVIDERS = ['openai', 'google', 'anthropic', 'deepseek', 'openai_compatible'];
+/** A reference no configuration answers to — what an unusable provider now looks like. */
+const DANGLING_LLM_CODE = 'prompt-actions-no-such-llm';
 
 export async function seedPromptActionsSettings(
   h: BackendServerHandle,
@@ -89,6 +91,8 @@ export async function seedPromptActionsSettings(
     model: string;
     apiKey: string;
     bulkLimit: number;
+    /** Feature 151 — the credential's Base URL (required for `openai_compatible`). */
+    baseUrl: string;
   }> = {},
 ): Promise<void> {
   const adminCookie = { b2b_session: 'stub-admin-session' };
@@ -112,9 +116,11 @@ export async function seedPromptActionsSettings(
 
   // Feature 058 — provider/model/apiKey now live in a reusable `llm` credential
   // configuration referenced by `prompt_actions.llm_credentials` (the single
-  // credential source). A blank apiKey models "not configured" (no reference);
-  // an unknown provider is mapped to `deepseek` — a valid `llm` provider that
-  // prompt_actions has no adapter for — so it resolves to `not_configured`.
+  // credential source). A blank apiKey models "not configured" (no reference).
+  // An unknown provider used to be mapped to `deepseek`, a provider the
+  // assistant had no adapter for; since feature 151 every `llm` provider is
+  // usable, so an unknown one is modelled as a reference that resolves to
+  // nothing — the remaining way a configured assistant is `not_configured`.
   //
   // Clear the reference before touching the config so a still-referenced
   // configuration is not blocked from deletion (CREDENTIAL_IN_USE).
@@ -126,8 +132,10 @@ export async function seedPromptActionsSettings(
   });
 
   let credentialCode = '';
-  if (apiKey !== '') {
-    const providerCode = LLM_PROVIDERS.includes(provider) ? provider : 'deepseek';
+  if (apiKey !== '' && !LLM_PROVIDERS.includes(provider)) {
+    credentialCode = DANGLING_LLM_CODE;
+  } else if (apiKey !== '') {
+    const providerCode = provider;
     const created = await h.app.inject({
       method: 'POST',
       url: '/api/v1/admin/credentials',
@@ -137,7 +145,7 @@ export async function seedPromptActionsSettings(
         name: 'Prompt Actions Test LLM',
         typeCode: 'llm',
         providerCode,
-        values: { apiKey, model },
+        values: { apiKey, model, ...(values.baseUrl !== undefined ? { baseUrl: values.baseUrl } : {}) },
       },
     });
     if (created.statusCode !== 201) {

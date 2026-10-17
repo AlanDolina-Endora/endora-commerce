@@ -80,6 +80,35 @@ describe('US4 — capability and governance (T054)', () => {
     expect((await capability()).status).toBe('not_configured');
   });
 
+  it('DeepSeek and OpenAI-compatible credentials make the assistant ready (feature 151, FR-043)', async () => {
+    await seedPromptActionsSettings(h, { enabled: true, provider: 'deepseek', model: 'deepseek-chat' });
+    expect((await capability()).status).toBe('ready');
+    await seedPromptActionsSettings(h, {
+      enabled: true,
+      provider: 'openai_compatible',
+      model: 'llama-3',
+      baseUrl: 'http://localhost:11434/v1',
+    });
+    expect((await capability()).status).toBe('ready');
+  });
+
+  it('an OpenAI-compatible credential without a Base URL cannot be stored (feature 151, FR-007)', async () => {
+    const r = await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/credentials',
+      cookies: adminCookie,
+      payload: {
+        code: 'prompt-actions-compatible-without-url',
+        name: 'No URL',
+        typeCode: 'llm',
+        providerCode: 'openai_compatible',
+        values: { apiKey: 'k', model: 'm' },
+      },
+    });
+    expect(r.statusCode).toBeGreaterThanOrEqual(400);
+    expect(r.statusCode).toBeLessThan(500);
+  });
+
   it('configuration changes take effect without a restart (US4/AC4)', async () => {
     await seedPromptActionsSettings(h, { enabled: true, bulkLimit: 42 });
     expect(await capability()).toEqual({ status: 'ready', bulkLimit: 42 });

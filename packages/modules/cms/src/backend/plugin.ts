@@ -31,6 +31,9 @@ import { registerCmsAdminRoutes } from './routes.admin.js';
 import { registerCmsStorefrontRoutes } from './routes.storefront.js';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import type { CommandBus } from '@endora-commerce/platform/commands';
+import { CMS_TRANSLATION_DEFAULT_MAX_SOURCE_CHARACTERS } from '@endora-commerce/contracts';
+import type { TranslationConfig } from './services/translation/capability.js';
+import { PageBuilderTranslationService } from './services/translation/page-builder-translation.service.js';
 
 export interface ColorPaletteAuditContext {
   actorAdminUserId: string | null;
@@ -80,6 +83,13 @@ export interface CmsModuleOptions {
    * EventBus; a composition that passes nothing publishes nothing.
    */
   publishContentChange?: (change: CmsContentChange) => void;
+  /**
+   * Feature 151 — the Page Builder translation's configuration, resolved per
+   * request (settings, credential, model). `backend/index.ts` binds it to the
+   * settings store and the `credentials` port; a composition that passes
+   * nothing has the function switched off.
+   */
+  translationConfig?: () => Promise<TranslationConfig>;
 }
 
 export interface CmsModuleHandle {
@@ -90,6 +100,8 @@ export interface CmsModuleHandle {
   hookService: CmsHookService;
   referenceRegistry: CmsReferenceRegistry;
   storefrontResolver: StorefrontResolver;
+  /** Feature 151 — the Page Builder translation behind the two admin routes. */
+  translation: PageBuilderTranslationService;
   /** Storefront read-through cache — `undefined` when no Redis was wired. */
   cache: CmsCache | undefined;
   /** Idempotent reconciler — called by composition before HTTP starts. */
@@ -159,6 +171,14 @@ export function cmsModule(options: CmsModuleOptions): {
   );
   const hookService = new CmsHookService(options.emFactory, options.commandBus, invalidator);
   const storefrontResolver = new StorefrontResolver(options.emFactory, cache);
+  const translation = new PageBuilderTranslationService({
+    config:
+      options.translationConfig ??
+      (async () => ({ status: 'disabled', maxCharacters: CMS_TRANSLATION_DEFAULT_MAX_SOURCE_CHARACTERS })),
+    // Presence-filtered: a block whose owner is switched off is left untouched.
+    declarations: (name) => pageBuilderRegistry.translatableFor(name),
+    commandBus: options.commandBus,
+  });
 
   let colorPaletteWriter: ColorPaletteWriter | null = null;
 
@@ -170,6 +190,7 @@ export function cmsModule(options: CmsModuleOptions): {
     hookService,
     referenceRegistry,
     storefrontResolver,
+    translation,
     cache,
     reconcile: () => reconcileSeededHooks(options.emFactory),
     setPageBuilderBreakpointsResolver: (resolver) => {
@@ -199,6 +220,7 @@ export function cmsModule(options: CmsModuleOptions): {
       pageBuilderRegistry,
       getColorPaletteWriter: () => colorPaletteWriter,
       requireAdmin: options.requireAdmin,
+      translation,
     });
     await registerCmsStorefrontRoutes(app, { storefrontResolver });
   };

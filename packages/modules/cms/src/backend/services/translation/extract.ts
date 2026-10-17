@@ -50,6 +50,8 @@ export interface Extraction {
   /** Characters sent: the sum of the segments' encoded lengths. */
   characters: number;
   scope: { kind: 'canvas' | 'component' | 'text'; widened: boolean };
+  /** The selected component's block name, when the scope named one (audit metadata). */
+  componentType?: string;
 }
 
 /** The selection's block or text is not in the submitted document (research R22). */
@@ -324,10 +326,12 @@ export function extract(
   const locations: Location[] = [];
   const untranslatableBlocks = new Map<string, number>();
   let components = componentsOf(document);
+  let componentType: string | undefined;
 
   if (scope?.componentId) {
     const selected = components.find((c) => c.node.props['id'] === scope.componentId);
     if (!selected) throw new SelectionNotFoundError('component');
+    componentType = selected.node.type;
     components = components.filter((c) => isPrefix(selected.path, c.path));
   }
 
@@ -368,5 +372,6 @@ export function extract(
     untranslatableBlocks,
     characters: table.segments.reduce((sum, segment) => sum + segment.text.length, 0),
     scope: { kind: scope ? scope.kind : 'canvas', widened },
+    ...(componentType !== undefined ? { componentType } : {}),
   };
 }

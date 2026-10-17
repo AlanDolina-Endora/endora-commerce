@@ -53,7 +53,7 @@ export interface CreateLlmAdapterOptions {
   apiKey: string;
   /** The credential's Base URL; blank or absent ⇒ the provider default. Ignored by anthropic/google. */
   baseUrl?: string | null | undefined;
-  fetchImpl?: FetchLike;
+  fetchImpl?: FetchLike | undefined;
 }
 
 /**
