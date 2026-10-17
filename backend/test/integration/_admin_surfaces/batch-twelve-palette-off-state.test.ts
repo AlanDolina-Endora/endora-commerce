@@ -38,7 +38,8 @@ import { withModuleOff, type OffStateAxis } from '../../helpers/off-state.js';
  *
  * **This batch declares no new action**, which is the opposite of batches 8, 10
  * and 11 and is worth stating rather than leaving as an absence: the actions —
- * `open-invoices`, `invoice-templates` and `open-rfq-inbox` — were already in
+ * `open-invoices`, `invoice-templates` (withdrawn since by
+ * `specs/152-compare-pdf-template/`) and `open-rfq-inbox` — were already in
  * the manifests. What the batch does delete
  * is `AppShell.tsx`'s hand-written `PALETTE_ITEMS` row for `/quote-requests`,
  * and that row was a **second copy** of `open-rfq-inbox`: the same
@@ -69,7 +70,9 @@ interface Subject {
 const SUBJECTS: readonly Subject[] = [
   {
     module: 'invoices',
-    actions: ['invoice-templates', 'open-invoices'],
+    // `invoice-templates` left with `specs/152-compare-pdf-template/`: invoice
+    // templates are reached through `document_templates`' own action now.
+    actions: ['open-invoices'],
     axis: 'deactivated',
     admin: invoicesAdmin,
   },

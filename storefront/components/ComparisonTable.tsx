@@ -16,6 +16,7 @@ import {
 } from '../lib/api/comparisons';
 import { CompareAddToCartButton } from './CompareAddToCartButton';
 import { toAbsoluteAssetUrl } from '../lib/asset-url';
+import { tForLocale } from '../lib/i18n/messages';
 
 /**
  * Comparison table — feature 007 / T032, restyled to match the Industria
@@ -38,7 +39,11 @@ import { toAbsoluteAssetUrl } from '../lib/asset-url';
  * "Hide empty" is a client-only row filter — rows whose every value is
  * `null` are skipped client-side.
  */
-export function ComparisonTable(): ReactNode {
+export function ComparisonTable(props: {
+  /** The storefront's language — the PDF is printed in it (`specs/152-compare-pdf-template/` FR-032). */
+  readonly locale?: string;
+} = {}): ReactNode {
+  const locale = props.locale ?? 'en-US';
   const [view, setView] = useState<ComparisonOwnerView | null | 'loading'>('loading');
   const [error, setError] = useState<string | null>(null);
   const [hideEmpty, setHideEmpty] = useState(false);
@@ -117,7 +122,7 @@ export function ComparisonTable(): ReactNode {
           />
         </div>
         <div className="industria-compare-toolbar__right">
-          <ExportPdfButton disabled={view.products.length === 0} />
+          <ExportPdfButton disabled={view.products.length === 0} locale={locale} hideEmptyRows={hideEmpty} />
           <CopyShareLinkButton shareToken={view.shareToken} />
           <button
             type="button"
@@ -234,19 +239,21 @@ function Switch(props: {
   );
 }
 
-function ExportPdfButton(props: { disabled: boolean }): ReactNode {
+function ExportPdfButton(props: { disabled: boolean; locale: string; hideEmptyRows: boolean }): ReactNode {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const t = tForLocale(props.locale);
   const onClick = async (): Promise<void> => {
     if (busy || props.disabled) return;
     setBusy(true);
     setError(null);
     try {
-      await exportComparisonPdf();
-    } catch (err) {
-      setError(
-        err instanceof ComparisonApiError ? err.message : 'Nie udało się wygenerować PDF.',
-      );
+      // The language the page is shown in and the rows it shows (FR-020, FR-032).
+      await exportComparisonPdf({ locale: props.locale, hideEmptyRows: props.hideEmptyRows });
+    } catch {
+      // FR-035 — the existing "PDF could not be generated" message, in the
+      // buyer's language whatever the API answered in.
+      setError(t('compare.pdf.failed'));
     } finally {
       setBusy(false);
     }
@@ -259,7 +266,7 @@ function ExportPdfButton(props: { disabled: boolean }): ReactNode {
         disabled={busy || props.disabled}
         onClick={(): void => void onClick()}
       >
-        <DownloadIcon /> {busy ? 'Generowanie…' : 'PDF'}
+        <DownloadIcon /> {busy ? t('compare.pdf.busy') : 'PDF'}
       </button>
       {error ? <span className="b2b-compare__pdf-error">{error}</span> : null}
     </>

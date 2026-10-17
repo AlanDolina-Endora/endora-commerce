@@ -242,3 +242,5 @@ export * from './environment-inputs.js';
 // `/api/v1/admin/global-search*` and the provider contract an owning module
 // implements to make its records findable from the command palette.
 export * from './admin-search.js';
+// Document templates — Page Builder layouts of generated PDFs (specs/152-compare-pdf-template/).
+export * from './document-templates.js';

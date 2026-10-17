@@ -143,6 +143,20 @@ export const invoiceDetailSchema = invoiceSchema.extend({
 });
 export type InvoiceDetail = z.infer<typeof invoiceDetailSchema>;
 
+/**
+ * What `invoices` hands the document render port
+ * (`specs/152-compare-pdf-template/contracts/invoice-document.md` §1–§2).
+ *
+ * `amountLocale` is the language of the amount in words: documents print
+ * Polish, the editor preview's sample prints English — both exactly as before
+ * invoice templates moved onto the document-template facility.
+ */
+export const invoiceDocumentDataSchema = z.object({
+  invoice: invoiceDetailSchema,
+  amountLocale: z.enum(['pl', 'en']),
+});
+export type InvoiceDocumentData = z.infer<typeof invoiceDocumentDataSchema>;
+
 /** WYSIWYG (Puck) invoice PDF template metadata. */
 export const invoiceTemplateSchema = z.object({
   id: uuidSchema,

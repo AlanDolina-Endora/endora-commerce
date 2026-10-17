@@ -88,3 +88,16 @@ export interface BlockRenderEnvironment {
 export interface BlockPresence {
   readonly absent: readonly string[];
 }
+
+/**
+ * One block as the **document-template editor** draws it — the default export
+ * of an `AdminBlockContribution`'s factory for the `document` context
+ * (`specs/152-compare-pdf-template/contracts/admin-ui.md` §5).
+ *
+ * The shape of {@link PageBuilderBlockEditorConfig}, and the same rule about
+ * what comes from where: label, category, default props and the field set are
+ * the served descriptor's, `fields` here override by key. The difference is
+ * what `render` may read — `useDocumentSample()`, the document type's sample,
+ * which is what lets a canvas show the same data the PDF preview renders.
+ */
+export type DocumentBlockEditorConfig = PageBuilderBlockEditorConfig;

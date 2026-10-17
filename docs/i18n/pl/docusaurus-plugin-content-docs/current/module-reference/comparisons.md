@@ -36,6 +36,8 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | `price_lists` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `sales_channels` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `settings` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `document_templates` | nie | degrades-without `documentRenderPort` — PDF porównań powstają ze stałym układem wbudowanym i nie można ich dostosować |
+| `document_templates` | nie | contributes-to `documentTypeRegistry` |
 
 ## Uprawnienia
 

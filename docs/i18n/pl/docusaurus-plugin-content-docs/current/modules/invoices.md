@@ -91,16 +91,21 @@ można zamieniać w awarię storefrontu.
 - **E-fakturowanie** — dla KSeF, Peppol i podobnych systemów podłącz adapter wysyłki, który obsługuje
   zdarzenia `invoice.issued.v1`.
 
-## Szablony PDF (page builder)
+## Szablony PDF
 
-Trasa `/invoices/templates` w panelu administracyjnym pozwala edytować drzewo Puck z sekcjami
-faktury (`InvoiceHeader`, `InvoiceParties`, tabele pozycji i VAT, sumy, uwagi, KSeF oraz bloki
-układu: odstęp, separator, logo, stopka). Właściwości sekcji pozwalają dostosować typografię,
-widoczność kolumn i etykiety; brakujące właściwości zachowują historyczny układ domyślny.
+Układy PDF faktur projektuje się w **Szablonach dokumentów → Faktura** (otwiera je zakładka
+**Szablony** w **Fakturach**; dawne adresy `/invoices/templates` przekierowują tam). Paletę szablonu
+faktury tworzą bloki faktury — nagłówek, strony, pozycje, podsumowanie VAT, sumy, uwagi, odstęp,
+separator, logo, stopka — oraz bloki, które dla faktur udostępniają inne zainstalowane moduły (sekcja
+KSeF). Każdy PDF faktury — pobierany przez administratora i przez klienta, generowany ponownie oraz
+dołączany do e-maila z fakturą — powstaje z domyślnego szablonu faktury kanału sprzedaży faktury,
+a w jego braku z domyślnego szablonu dla wszystkich kanałów, a w jego braku z wbudowanego układu
+faktury. PDF faktur jest drukowany po polsku.
 
-- `GET /api/v1/admin/invoice-templates/:id/preview` — PDF **zapisanej** treści szablonu o danym
-  id (z przykładową fakturą).
-- `POST /api/v1/admin/invoice-templates/:id/preview` — to samo dla roboczej treści przesłanej jako
-  `{ data }`, aby autor mógł obejrzeć niezapisany stan edytora.
-- Wystawianie faktur w czasie działania nadal korzysta z `resolveTree(salesChannelId)` (aktywnego
-  szablonu kanału albo globalnego).
+Numer KSeF jest drukowany dokładnie raz: przez umieszczony blok, który go drukuje, a w przeciwnym razie
+przez nagłówek.
+
+Dawne API administracji szablonami faktur (`/api/v1/admin/invoice-templates*`) zostało wycofane;
+szablonami faktur zarządza się przez `/api/v1/admin/document-templates`. Fakturowania nie można
+włączyć bez Szablonów dokumentów, a Szablonów dokumentów nie można wyłączyć, dopóki fakturowanie jest
+włączone.

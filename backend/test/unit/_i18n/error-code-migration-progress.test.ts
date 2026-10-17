@@ -127,6 +127,10 @@ const MIGRATED_MODULES: readonly string[] = [
   // create an i18n bundle, and the only one so far whose codes arrive with a
   // sentence rather than a ledger entry.
   'custom_fields',
+  // Minted with the module (`specs/152-compare-pdf-template/`): its six
+  // `DOCUMENT_*` codes were created after the chain was deleted, so
+  // `MINTED_ERROR_CODES` accounts for them.
+  'document_templates',
   // Tier B, MR 4 — the first batch of the sweep whose receivers all already ship
   // an i18n bundle, and the first that deletes from one. `catalog`, `orders` and
   // `mfa` were on this roster from Phase 3 and simply grow; `customer_accounts`,

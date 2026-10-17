@@ -20,11 +20,11 @@ import { expectModuleAbsent } from '../../helpers/off-state.js';
  *
  * The four surfaces item 6 asks for map onto this module as follows:
  *
- *  * **API rejection** — the invoice list and the invoice-template list. The
- *    second is named separately because templates are edited through the page
- *    builder, a surface with its own configuration endpoint, and an editor
- *    that keeps loading while its module is off is the module still being
- *    observable;
+ *  * **API rejection** — the invoice list. (The invoice-template list it named
+ *    beside it left with `specs/152-compare-pdf-template/`: invoice templates
+ *    are `document_templates`' rows now, and a switched-off `invoices` makes
+ *    its document type disappear from that module's API — asserted in
+ *    `test/contract/document_templates/off-state.test.ts`.);
  *  * **storefront absence** — `GET /api/v1/orders/:id/invoices`, the buyer's
  *    own document list on the order screen. A switched-off invoices module
  *    that still lists a buyer's documents is the operator's withdrawal being
@@ -36,8 +36,7 @@ import { expectModuleAbsent } from '../../helpers/off-state.js';
  *  * **admin absence** — the presence projection both frontends gate on, plus
  *    the `/admin-roles` permission catalogue the harness sweeps unasked;
  *  * **restoration** — asserted by the harness after both axes. Off is
- *    non-destructive: issued invoices, their numbers, their PDFs and their
- *    templates all stay, and the restored probes hold the routes to it.
+ *    non-destructive: issued invoices, their numbers and their PDFs all stay, and the restored probes hold the routes to it.
  *
  * The **deactivated-while-platform-available** case is the first axis the
  * harness drives, and it is the one an operator creates: a shop that invoices
@@ -64,7 +63,6 @@ describe('invoices off-state (Constitution XVII)', () => {
     await expectModuleAbsent(h, 'invoices', {
       routes: [
         { url: '/api/v1/admin/invoices', cookies: admin },
-        { url: '/api/v1/admin/invoice-templates', cookies: admin },
         { url: `/api/v1/orders/${orderId}/invoices`, headers: channel },
       ],
       adminPresence: { cookies: admin },

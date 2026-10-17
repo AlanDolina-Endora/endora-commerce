@@ -32,7 +32,7 @@ export default async function ComparePage(): Promise<ReactNode> {
           <p>Zestawienie wybranych produktów. Różnice są podświetlone.</p>
         </div>
       </div>
-      <ComparisonTable />
+      <ComparisonTable locale={locale} />
     </div>
   );
 }

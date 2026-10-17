@@ -51,8 +51,9 @@ async function rawFetch(
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   path: string,
   body?: unknown,
+  extraHeaders: Readonly<Record<string, string>> = {},
 ): Promise<Response> {
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const headers: Record<string, string> = { Accept: 'application/json', ...extraHeaders };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   return fetch(`${apiBase}${path}`, {
     method,
@@ -124,8 +125,18 @@ export async function deleteMyComparison(): Promise<void> {
  * resulting filename is whatever the backend's Content-Disposition
  * header declared (`comparison-{shortToken}.pdf`).
  */
-export async function exportComparisonPdf(): Promise<void> {
-  const res = await rawFetch('GET', '/api/v1/comparisons/me/pdf');
+export async function exportComparisonPdf(options: {
+  /** The language the storefront is shown in — the PDF is printed in it (`specs/152-compare-pdf-template/` FR-032). */
+  readonly locale: string;
+  /** The *Hide empty rows* switch, so the PDF shows the rows the screen shows (FR-020). */
+  readonly hideEmptyRows: boolean;
+}): Promise<void> {
+  const res = await rawFetch(
+    'GET',
+    `/api/v1/comparisons/me/pdf?hideEmptyRows=${options.hideEmptyRows ? 'true' : 'false'}`,
+    undefined,
+    { 'Accept-Language': options.locale },
+  );
   if (!res.ok) {
     await throwOnError(res);
     return;

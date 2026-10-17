@@ -183,6 +183,166 @@ export const manifest = defineModuleManifest({
     },
   ],
   activation: { settingCode: 'comparisons.enabled', default: true },
+  /**
+   * The comparison PDF's template (`specs/152-compare-pdf-template/`). Neither
+   * edge binds: with document templates off or absent the PDF keeps working
+   * with this module's fixed layout, so `document_templates` must not become a
+   * reason this module cannot run.
+   */
+  nonBindingDependencies: [
+    {
+      moduleId: 'document_templates',
+      name: 'documentTypeRegistry',
+      kind: 'contributes-to',
+      reason:
+        'A push, from this module\'s contribution-only boot hook, of the Product comparison ' +
+        'document type — its blocks, built-in layout and sample. Nothing is read back at push ' +
+        'time: the registry answers a type only while its module is present, so an absent ' +
+        'contributor costs the host nothing.',
+    },
+    {
+      moduleId: 'document_templates',
+      name: 'documentRenderPort',
+      kind: 'degrades-without',
+      whenAbsent:
+        'comparison PDFs are produced with the fixed built-in layout and cannot be customised',
+      reason:
+        'The one call is the `GET /api/v1/comparisons/me/pdf` export, which asks the presence of ' +
+        '`document_templates` before resolving the port and prints the fixed layout otherwise.',
+    },
+  ],
+  /**
+   * The three comparison blocks of the document-template editor
+   * (`data-model.md` §4.2). Declared for the `document` context only; the
+   * comparison document type offers them, no other type does.
+   */
+  blocks: [
+    {
+      name: 'comparisons.ComparisonHeader',
+      labelKey: 'blocks.comparisonHeader.label',
+      descriptionKey: 'blocks.comparisonHeader.description',
+      category: 'comparison',
+      contexts: ['document'],
+      fields: {
+        title: { type: 'text', label: 'Title' },
+        titleSize: { type: 'number', label: 'Title size' },
+        titleColor: { type: 'text', label: 'Title colour (#hex)' },
+        align: {
+          type: 'select',
+          label: 'Alignment',
+          options: [
+            { label: 'Left', value: 'left' },
+            { label: 'Centre', value: 'center' },
+            { label: 'Right', value: 'right' },
+          ],
+        },
+        showDate: { type: 'radio', label: 'Show date', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        dateLabel: { type: 'text', label: 'Date label' },
+        showDisplayMode: { type: 'radio', label: 'Show display mode', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        modeLabelAll: { type: 'text', label: 'Caption: all attributes' },
+        modeLabelCommon: { type: 'text', label: 'Caption: common attributes' },
+        modeLabelDifferences: { type: 'text', label: 'Caption: differences' },
+        showPricedFor: { type: 'radio', label: 'Show whose prices', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        pricedForOrganizationText: { type: 'text', label: 'Note: organisation prices' },
+        pricedForChannelText: { type: 'text', label: 'Note: catalogue prices' },
+        marginBottom: { type: 'number', label: 'Space below (pt)' },
+      },
+      defaultProps: {
+        title: 'Product comparison',
+        titleSize: 16,
+        titleColor: '#111827',
+        align: 'left',
+        showDate: true,
+        dateLabel: 'Date:',
+        showDisplayMode: true,
+        modeLabelAll: 'All attributes',
+        modeLabelCommon: 'Common attributes only',
+        modeLabelDifferences: 'Differences only',
+        showPricedFor: true,
+        pricedForOrganizationText: 'Prices for your organisation.',
+        pricedForChannelText: 'Catalogue prices.',
+        marginBottom: 12,
+      },
+      weight: 10,
+    },
+    {
+      name: 'comparisons.ComparisonTable',
+      labelKey: 'blocks.comparisonTable.label',
+      descriptionKey: 'blocks.comparisonTable.description',
+      category: 'comparison',
+      contexts: ['document'],
+      fields: {
+        showImages: { type: 'radio', label: 'Images', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        imageSize: { type: 'number', label: 'Image size (pt)' },
+        showName: { type: 'radio', label: 'Name', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        showSku: { type: 'radio', label: 'SKU', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        showPrice: { type: 'radio', label: 'Price', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        showAvailability: { type: 'radio', label: 'Availability', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        availableText: { type: 'text', label: 'Available text' },
+        unavailableText: { type: 'text', label: 'Unavailable text' },
+        attributeColumnLabel: { type: 'text', label: 'Attribute column heading' },
+        emptyValue: { type: 'text', label: 'Missing value text' },
+        highlightRows: { type: 'radio', label: 'Highlight same / different rows', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        commonColor: { type: 'text', label: 'Same rows colour (#hex)' },
+        differentColor: { type: 'text', label: 'Different rows colour (#hex)' },
+        headerBackground: { type: 'text', label: 'Header background (#hex)' },
+        borderColor: { type: 'text', label: 'Border colour (#hex)' },
+        fontSize: { type: 'number', label: 'Font size' },
+        productsPerTable: { type: 'number', label: 'Products per table (1–8)' },
+        showHiddenNote: { type: 'radio', label: 'Note on hidden products', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        hiddenNoteText: { type: 'text', label: 'Hidden products note ({{hiddenCount}})' },
+      },
+      defaultProps: {
+        showImages: true,
+        imageSize: 80,
+        showName: true,
+        showSku: false,
+        showPrice: true,
+        showAvailability: false,
+        availableText: 'Available',
+        unavailableText: 'Unavailable',
+        attributeColumnLabel: 'Attribute',
+        emptyValue: '—',
+        highlightRows: true,
+        commonColor: '#f0fdf4',
+        differentColor: '#fef2f2',
+        headerBackground: '#f1f5f9',
+        borderColor: '#cbd5e1',
+        fontSize: 9,
+        productsPerTable: 4,
+        showHiddenNote: true,
+        hiddenNoteText: '{{hiddenCount}} product(s) of this comparison are not available to you.',
+      },
+      weight: 20,
+    },
+    {
+      name: 'comparisons.ComparisonShareLink',
+      labelKey: 'blocks.comparisonShareLink.label',
+      descriptionKey: 'blocks.comparisonShareLink.description',
+      category: 'comparison',
+      contexts: ['document'],
+      fields: {
+        label: { type: 'text', label: 'Label' },
+        showUrl: { type: 'radio', label: 'Show address', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        showQr: { type: 'radio', label: 'Show QR code', options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },
+        qrSize: { type: 'number', label: 'QR code size (pt)' },
+        align: {
+          type: 'select',
+          label: 'Alignment',
+          options: [
+            { label: 'Left', value: 'left' },
+            { label: 'Centre', value: 'center' },
+            { label: 'Right', value: 'right' },
+          ],
+        },
+      },
+      defaultProps: { label: 'View this comparison online:', showUrl: true, showQr: false, qrSize: 80, align: 'left' },
+      weight: 30,
+    },
+  ],
+  blockCategories: [
+    { key: 'comparison', titleKey: 'blocks.category.comparison', contexts: ['document'], weight: 20 },
+  ],
 });
 
 /** Legacy export retained for backward compatibility. */

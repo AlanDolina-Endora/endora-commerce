@@ -99,7 +99,6 @@ import type { InvoiceExternalAttachment as InvoiceExternalAttachmentRow } from '
 import type { Invoice as InvoiceRow } from '../../../packages/modules/invoices/src/backend/entities/invoice.entity.js';
 import type { InvoiceLine as InvoiceLineRow } from '../../../packages/modules/invoices/src/backend/entities/invoice-line.entity.js';
 import type { InvoiceNumberCounter as InvoiceNumberCounterRow } from '../../../packages/modules/invoices/src/backend/entities/invoice-number-counter.entity.js';
-import type { InvoiceTemplate as InvoiceTemplateRow } from '../../../packages/modules/invoices/src/backend/entities/invoice-template.entity.js';
 import type { FeedArtefact as FeedArtefactRow } from '../../../packages/modules/product_feeds/src/backend/entities/feed-artefact.entity.js';
 import type { FeedDelivery as FeedDeliveryRow } from '../../../packages/modules/product_feeds/src/backend/entities/feed-delivery.entity.js';
 import type { FeedDeliveryAttempt as FeedDeliveryAttemptRow } from '../../../packages/modules/product_feeds/src/backend/entities/feed-delivery-attempt.entity.js';
@@ -708,10 +707,8 @@ export type {
  * that construct a `Cart` against a stub keep their relative import into the package
  * source, which is a different object on purpose.
  *
- * `InvoiceTemplate` is here with no reaching test today. It is the fourth class of a
- * four-class package, and leaving it out would make this block a record of which tests
- * happen to exist rather than of what the package publishes — the next test to persist
- * one would otherwise reach for the source copy and find nothing telling it not to.
+ * `InvoiceTemplate` stood here with no reaching test until
+ * `specs/152-compare-pdf-template/` removed the entity and dropped its table.
  */
 export const Asset = classNamed<AssetRow>(installedModuleEntities, 'assets_library', 'Asset');
 export const AssetFolder = classNamed<AssetFolderRow>(
@@ -831,11 +828,6 @@ export const InvoiceNumberCounter = classNamed<InvoiceNumberCounterRow>(
   installedModuleEntities,
   'invoices',
   'InvoiceNumberCounter',
-);
-export const InvoiceTemplate = classNamed<InvoiceTemplateRow>(
-  installedModuleEntities,
-  'invoices',
-  'InvoiceTemplate',
 );
 
 /**

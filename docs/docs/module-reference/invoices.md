@@ -29,9 +29,11 @@ An operator switches this module on and off on **/platform/modules**. The choice
 
 | Module | Binding | What it means |
 | --- | --- | --- |
+| `admin_roles` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `assets_library` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `auth` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `customer_accounts` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `document_templates` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `orders` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `organizations` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `settings` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
@@ -43,13 +45,12 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | Code | Label | Also needs |
 | --- | --- | --- |
 | `invoices:read` | View invoices and download invoice PDFs | — |
-| `invoices:write` | Issue/correct invoices, edit templates, and configure invoicing | — |
+| `invoices:write` | Issue/correct invoices and configure invoicing | — |
 
 ## Command palette
 
 | Action | Opens | Permission |
 | --- | --- | --- |
-| `invoice-templates` | `/invoices/templates` | `invoices:read` |
 | `open-invoices` | `/invoices` | `invoices:read` |
 
 ## Settings
@@ -57,6 +58,7 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | Code | Name | Type |
 | --- | --- | --- |
 | `invoices.auto_issue.trigger_status` | Auto-issue on order status | `string` |
+| `invoices.document_templates_grant_done` | Document template access granted | `boolean` |
 | `invoices.email.delivery_mode` | Invoice email delivery mode | `string` |
 | `invoices.email.send_on_issue` | Email invoice on issue | `boolean` |
 | `invoices.enabled` | Invoices enabled | `boolean` |

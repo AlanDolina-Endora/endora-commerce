@@ -125,14 +125,6 @@ export const entries: Readonly<Record<string, string>> = {
     'Case 1, for the same reason as this module\'s prop defaults: the renderer is handed a ' +
     '`locale` and can resolve the reader\'s language when it composes the string. The repair ' +
     'is `invoices`\' own bundle, and it is one repair for both shapes.',
-  'packages/modules/invoices/src/backend/services/invoice-pdf-renderer.ts:519ec43b2dba':
-    '`Dokument korygujący do faktury pierwotnej.` — A Polish literal on a rendered invoice, ' +
-    'outside the prop mechanism entirely — the document titles, the line-table and VAT- ' +
-    'summary column headers, and the footer\'s ternary default, none of which a prop ' +
-    'accessor reaches.\n\n' +
-    'Case 1, for the same reason as this module\'s prop defaults: the renderer is handed a ' +
-    '`locale` and can resolve the reader\'s language when it composes the string. The repair ' +
-    'is `invoices`\' own bundle, and it is one repair for both shapes.',
   'packages/modules/invoices/src/backend/services/invoice-service.ts:ec70f6e132d7':
     '`Dopłata za metodę płatności` — Shape C — a **persisted** invoice line item: the ' +
     'surcharge line\'s `name` is written into the stored document and read by whoever opens ' +

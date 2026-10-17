@@ -36,6 +36,8 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | `price_lists` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `sales_channels` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `settings` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `document_templates` | no | degrades-without `documentRenderPort` — comparison PDFs are produced with the fixed built-in layout and cannot be customised |
+| `document_templates` | no | contributes-to `documentTypeRegistry` |
 
 ## Permissions
 

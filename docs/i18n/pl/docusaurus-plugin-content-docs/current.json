@@ -20,6 +20,9 @@
   "sidebar.main.category.admin_search": {
     "message": "admin_search"
   },
+  "sidebar.main.category.document_templates": {
+    "message": "document_templates"
+  },
   "sidebar.main.category.admin_users": {
     "message": "admin_users"
   },

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { scopeNoticeOf, type ComparisonAdminListItem, type ScopeNoticeCode } from '@endora-commerce/contracts';
-import { ApiError } from '@endora-commerce/admin-kit/lib';
+import { ApiError, useAuth, useModulePresence } from '@endora-commerce/admin-kit/lib';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import {
   Alert,
@@ -34,6 +34,9 @@ import { listComparisons } from '../api/comparisons-client.js';
  */
 export default function ComparisonsListPage(): ReactNode {
   const t = useTranslation('comparisons');
+  const { hasPermission } = useAuth();
+  const { isPresent } = useModulePresence();
+  const showPdfTemplate = isPresent('document_templates') && hasPermission('document_templates:read');
   const [rows, setRows] = useState<ComparisonAdminListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,6 +87,15 @@ export default function ComparisonsListPage(): ReactNode {
       <PageHeader
         title={t('list.page.title')}
         description={t('list.page.description')}
+        actions={
+          // FR-063 — the comparison PDF's template, for an administrator who may
+          // see document templates and only while that module is present.
+          showPdfTemplate ? (
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/document-templates?type=comparisons.comparison">{t('list.pdfTemplate')}</Link>
+            </Button>
+          ) : undefined
+        }
       />
 
       {error ? (

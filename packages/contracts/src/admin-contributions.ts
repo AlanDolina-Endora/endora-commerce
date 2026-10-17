@@ -903,11 +903,14 @@ export const AdminZoneContributionSchema = z.object({
  * The data half of an editor renderer for one Page Builder block in one editor
  * (`specs/141-module-block-renderers/contracts/block-renderers.md` §4).
  *
- * **Two contexts and not the four a block may declare.** `invoice` blocks are
- * drawn by `pdfmake` inside `invoices` and have no editor renderer to
- * contribute; `newsletter` is a palette the `email` context admits, rendered by
- * the same function, so a renderer contributed for `email` serves both and a
- * second spelling would be a second place to forget.
+ * **Three contexts and not the five a block may declare.** `invoice` is the
+ * context invoice blocks are *declared* in, and their editor renderers are
+ * contributed for `document` — the document-template editor of
+ * `specs/152-compare-pdf-template/` draws every document type's blocks, and
+ * which blocks a type offers is the type's registration, not the context;
+ * `newsletter` is a palette the `email` context admits, rendered by the same
+ * function, so a renderer contributed for `email` serves both and a second
+ * spelling would be a second place to forget.
  *
  * **Label, category, default props and the field set are not here.** They come
  * from the block's manifest declaration, through the descriptor the backend
@@ -918,7 +921,7 @@ export const AdminBlockContributionSchema = z.object({
   name: z
     .string()
     .regex(blockNameRe, 'Block name must be <module>.<Name>, as the manifest declares it'),
-  context: z.enum(['cms', 'email']),
+  context: z.enum(['cms', 'email', 'document']),
 });
 
 /**
@@ -958,7 +961,8 @@ export interface AdminZoneContribution extends z.infer<typeof AdminZoneContribut
  * The factory's default export depends on the context, and neither shape is
  * nameable here — `contracts` is compiled by the backend and acquires no React
  * dependency: for `cms` it is a `PageBuilderBlockEditorConfig`
- * (`@endora-commerce/page-builder-core/contributions`), for `email` an
+ * (`@endora-commerce/page-builder-core/contributions`), for `document` a
+ * `DocumentBlockEditorConfig` (the same package), for `email` an
  * `EmailBlockRenderer` (`@endora-commerce/email-components`) — the same
  * function the send path runs, so the editor's preview cannot drift from what
  * is sent.

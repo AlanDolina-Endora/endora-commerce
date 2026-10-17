@@ -76,7 +76,10 @@ const CALLERS = [
   // request that moves a caller is structurally the one that cannot see the
   // entry go stale; leaving the old key would have read as *"this editor stopped
   // rendering the shared chrome"*, which is the one claim the list makes.
-  'packages/modules/invoices/src/admin/pages/InvoiceTemplateEditor.tsx',
+  // `specs/152-compare-pdf-template/` — re-keyed again: invoice templates moved
+  // into *Document templates*, whose editor now renders the shared chrome for
+  // every document type, invoices included.
+  'packages/modules/document_templates/src/admin/pages/DocumentTemplateEditor.tsx',
   'packages/page-builder-admin/src/email/EmailEditorPane.tsx',
 ];
 

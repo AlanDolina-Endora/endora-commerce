@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type {
+  DocumentRenderPort,
   InvoiceEmailNotSentReason,
   OrderReadPort,
   OrderRecord,
@@ -11,7 +12,7 @@ import {
   SettingOutOfScopeForChannel,
 } from '@endora-commerce/platform/kernel';
 import type { InvoiceService } from './invoice-service.js';
-import type { InvoicePdfRenderer } from './invoice-pdf-renderer.js';
+import { renderInvoicePdf } from '../document/render-invoice.js';
 import type { SettingsReader } from './seller-settings.js';
 import { INVOICES_SETTING_CODES } from '../../manifest.js';
 
@@ -49,7 +50,12 @@ export interface InvoiceEmailDispatchDeps {
    */
   orderReadPort: OrderReadPort;
   invoiceService: InvoiceService;
-  pdfRenderer: InvoicePdfRenderer;
+  /**
+   * `document_templates`' render port (`specs/152-compare-pdf-template/`). The
+   * attachment is rendered with the download's input, so it follows the
+   * template the download follows (owner answer N1, FR-093).
+   */
+  documents: Pick<DocumentRenderPort, 'render'>;
   settingsService: SettingsReader;
   getSender: () => TransactionalEmailSender | undefined;
   resolveRecipientEmail: (order: OrderRecord) => Promise<string | null>;
@@ -118,7 +124,7 @@ export class InvoiceEmailDispatcher {
           ? [
               {
                 filename: `invoice-${detail.number.replace(/\W+/g, '_')}.pdf`,
-                content: await this.deps.pdfRenderer.render(detail),
+                content: await renderInvoicePdf(this.deps.documents, detail),
                 contentType: 'application/pdf',
               },
             ]

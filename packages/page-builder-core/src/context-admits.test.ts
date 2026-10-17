@@ -15,7 +15,7 @@ import type { PageBuilderContext } from './types/responsive.js';
  * a future edit that changes the rule fails here rather than in whichever of the
  * three callers a reader happens to run.
  */
-const CONTEXTS: readonly PageBuilderContext[] = ['cms', 'email', 'invoice', 'newsletter'];
+const CONTEXTS: readonly PageBuilderContext[] = ['cms', 'email', 'invoice', 'newsletter', 'document'];
 
 function subsets<T>(xs: readonly T[]): T[][] {
   return xs.reduce<T[][]>((acc, x) => [...acc, ...acc.map((s) => [...s, x])], [[]]);
@@ -56,6 +56,14 @@ describe('contextAdmits', () => {
     expect(contextAdmits(['email'], 'cms')).toBe(false);
     expect(contextAdmits(['invoice'], 'cms')).toBe(false);
     expect(contextAdmits(['cms'], 'invoice')).toBe(false);
+  });
+
+  it('keeps document blocks out of every other palette and admits nothing into it (152)', () => {
+    for (const target of ['cms', 'email', 'invoice', 'newsletter'] as const) {
+      expect(contextAdmits(['document'], target)).toBe(false);
+      expect(contextAdmits([target], 'document')).toBe(false);
+    }
+    expect(contextAdmits(['document'], 'document')).toBe(true);
   });
 
   it('admits a block declaring the target outright, including newsletter', () => {

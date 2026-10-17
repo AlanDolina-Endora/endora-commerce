@@ -24,7 +24,9 @@
  *
  * **Both palette actions were already declared** (`open-invoices`,
  * `invoice-templates`) and are untouched; this module had no hand-written
- * `PALETTE_ITEMS` row for the batch to delete.
+ * `PALETTE_ITEMS` row for the batch to delete. (`invoice-templates` left with
+ * `specs/152-compare-pdf-template/`: `document_templates`' own action finds
+ * invoice templates now.)
  *
  * **This entry exports data and nothing else** (R2); every component is a
  * dynamic-import factory (R6).
@@ -58,14 +60,16 @@ export const contributions: AdminContributions = {
       requiredPermission: READ_PERMISSION,
       index: true,
     },
+    // `specs/152-compare-pdf-template/` (FR-088): invoice templates live in
+    // *Document templates*; the two former addresses redirect there.
     {
       path: TEMPLATES_ROUTE,
-      component: () => import('./pages/InvoiceTemplatesPage.js'),
+      component: () => import('./pages/InvoiceTemplatesRedirect.js'),
       requiredPermission: READ_PERMISSION,
     },
     {
       path: `${TEMPLATES_ROUTE}/:id`,
-      component: () => import('./pages/InvoiceTemplateEditor.js'),
+      component: () => import('./pages/InvoiceTemplatesRedirect.js'),
       requiredPermission: READ_PERMISSION,
     },
     {
@@ -99,6 +103,64 @@ export const contributions: AdminContributions = {
       // `ksef` 600 — the order the hand-written table had.
       weight: 500,
       requiredPermission: READ_PERMISSION,
+    },
+  ],
+  /**
+   * The ten invoice blocks' canvas renderers in the document-template editor
+   * (`specs/152-compare-pdf-template/` R-7). A block another module contributes
+   * to invoices (`ksef.InvoiceSection`) has none and is drawn as the editor's
+   * neutral stand-in.
+   */
+  blocks: [
+    {
+      name: 'invoices.InvoiceHeader',
+      context: 'document',
+      component: () => import('./document-blocks/InvoiceHeader.js'),
+    },
+    {
+      name: 'invoices.InvoiceParties',
+      context: 'document',
+      component: () => import('./document-blocks/InvoiceParties.js'),
+    },
+    {
+      name: 'invoices.InvoiceLineItems',
+      context: 'document',
+      component: () => import('./document-blocks/InvoiceLineItems.js'),
+    },
+    {
+      name: 'invoices.InvoiceVatSummary',
+      context: 'document',
+      component: () => import('./document-blocks/InvoiceVatSummary.js'),
+    },
+    {
+      name: 'invoices.InvoiceTotals',
+      context: 'document',
+      component: () => import('./document-blocks/InvoiceTotals.js'),
+    },
+    {
+      name: 'invoices.InvoiceNotes',
+      context: 'document',
+      component: () => import('./document-blocks/InvoiceNotes.js'),
+    },
+    {
+      name: 'invoices.InvoiceSpacer',
+      context: 'document',
+      component: () => import('./document-blocks/InvoiceSpacer.js'),
+    },
+    {
+      name: 'invoices.InvoiceDivider',
+      context: 'document',
+      component: () => import('./document-blocks/InvoiceDivider.js'),
+    },
+    {
+      name: 'invoices.InvoiceLogo',
+      context: 'document',
+      component: () => import('./document-blocks/InvoiceLogo.js'),
+    },
+    {
+      name: 'invoices.InvoiceFooter',
+      context: 'document',
+      component: () => import('./document-blocks/InvoiceFooter.js'),
     },
   ],
 };

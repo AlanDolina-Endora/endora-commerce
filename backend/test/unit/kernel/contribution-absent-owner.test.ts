@@ -46,6 +46,7 @@ import { registerModule as registerCreditLimits } from '@endora-commerce/mod-cre
 // process loads from `dist`.
 import { registerModule as registerOrganizations } from '@endora-commerce/mod-organizations/backend';
 import { registerModule as registerCustomers } from '@endora-commerce/mod-customers/backend';
+import { registerModule as registerComparisons } from '@endora-commerce/mod-comparisons/backend';
 
 /**
  * **A contribution to a registry that was never registered is dropped**
@@ -237,6 +238,10 @@ const COMPOSERS: Readonly<
   // `customers` offers the Customer record type to the same registry, from its
   // only boot hook.
   customers: (withOwner, ownerNames) => compose('customers', registerCustomers, ownerNames, withOwner),
+  // `comparisons` pushes the Product comparison document type into
+  // `document_templates`' registry (`specs/152-compare-pdf-template/`), from its
+  // only boot hook.
+  comparisons: (withOwner, ownerNames) => compose('comparisons', registerComparisons, ownerNames, withOwner),
   inventory: (withOwner, ownerNames) =>
     compose('inventory', registerInventory, ownerNames, withOwner, {
       countryReferenceRegistry: { register: () => {} },

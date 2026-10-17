@@ -83,4 +83,23 @@ export const contributions: AdminContributions = {
       requiredPermission: PERMISSION,
     },
   ],
+  // `specs/152-compare-pdf-template/` — the comparison document blocks' canvas
+  // renderers in the document-template editor (`contracts/comparison-document.md` §6).
+  blocks: [
+    {
+      name: 'comparisons.ComparisonHeader',
+      context: 'document',
+      component: () => import('./document-blocks/ComparisonHeader.js'),
+    },
+    {
+      name: 'comparisons.ComparisonTable',
+      context: 'document',
+      component: () => import('./document-blocks/ComparisonTable.js'),
+    },
+    {
+      name: 'comparisons.ComparisonShareLink',
+      context: 'document',
+      component: () => import('./document-blocks/ComparisonShareLink.js'),
+    },
+  ],
 };

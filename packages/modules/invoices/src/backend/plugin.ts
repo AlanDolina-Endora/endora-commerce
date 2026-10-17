@@ -3,6 +3,7 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
   AssetReadPort,
   AssetsLibraryPort,
+  DocumentRenderPort,
   InvoiceAttachmentFetchPort,
   OrderReadPort,
   OrderRecord,
@@ -11,13 +12,10 @@ import type {
 import { InvoiceService, type InvoiceAuditRecorder } from './services/invoice-service.js';
 import type { LedgerNumberingLookup } from './services/vendor-number-hold.js';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
-import { InvoicePdfRenderer } from './services/invoice-pdf-renderer.js';
-import type { InvoicePdfBlockRegistry } from './services/invoice-pdf-block-registry.js';
 import type { LoadAssetImage } from './pdf-components/embed-logo-images.js';
 import { InvoiceNumberGenerator, createSettingsPatternResolver } from './services/invoice-number-generator.js';
 import { SellerSettingsResolver, type SettingsReader } from './services/seller-settings.js';
 import { InvoiceEmailDispatcher } from './services/invoice-email-dispatch.js';
-import { InvoiceTemplateService } from './services/invoice-template-service.js';
 import { createAutoIssueReactor } from './services/auto-issue-reactor.js';
 import { registerInvoicesAdminRoutes } from './routes.admin.js';
 import { registerInvoicesCustomerRoutes } from './routes.customer.js';
@@ -87,30 +85,30 @@ export interface InvoicesModuleOptions {
   eventBus?: InvoicesEventBus;
   /** FR-035 — audit-log recorder for issuance / correction. */
   audit?: InvoiceAuditRecorder;
-  /** Feature 054 — full audit sink for invoice-template writes (co-transactional). */
+  /** Feature 054 — the full audit sink (co-transactional). */
   auditLog?: AuditPort;
   /**
    * Load image bytes for InvoiceLogo from the Assets Library (avoids pdfmake
-   * self-fetching `/assets/file/:id` during Preview PDF).
+   * self-fetching `/assets/file/:id`). Used by the invoice document type's logo
+   * block; kept on the handle for the wiring test (D-223).
    */
   loadAssetImage: LoadAssetImage;
   /** Mode B wait. Absent ledger degrades to today's ready path. */
   ledgerRouting?: LedgerNumberingLookup;
   /**
-   * The blocks other modules render onto the PDF (`specs/134-paid-module-extraction/`
-   * T063/T126) — this module's own `invoicePdfBlockRegistry`, which contributors
-   * push into from their composition roots.
+   * `document_templates`' render port — every invoice PDF is produced through
+   * it since `specs/152-compare-pdf-template/` (the download, the regenerate,
+   * the customer download and the e-mail attachment). `invoices` binds the
+   * facility (owner answer N2), so it is resolved without a presence probe.
    */
-  pdfBlocks: InvoicePdfBlockRegistry;
+  documents: Pick<DocumentRenderPort, 'render'>;
 }
 
 export interface InvoicesModuleHandle {
   /** FR-002 reactor; `backend.ts` owns its subscription. */
   autoIssueReactor: ReturnType<typeof createAutoIssueReactor>;
   invoiceService: InvoiceService;
-  pdfRenderer: InvoicePdfRenderer;
   numberGenerator: InvoiceNumberGenerator;
-  templateService: InvoiceTemplateService;
   emailDispatcher: InvoiceEmailDispatcher;
   /**
    * The logo loader this module resolved for itself (T118c).
@@ -150,12 +148,6 @@ export function invoicesModule(options: InvoicesModuleOptions): {
     },
     options.ledgerRouting,
   );
-  const pdfRenderer = new InvoicePdfRenderer({
-    loadAssetImage: options.loadAssetImage,
-    blocks: options.pdfBlocks,
-  });
-  const templateService = new InvoiceTemplateService(options.emFactory, options.auditLog);
-
   // T118c — built unconditionally. The three inputs used to be optional bridge
   // members, so a composition that supplied two of the three got no dispatcher
   // at all and every issued invoice answered `not_sent` / `no_sender` — a
@@ -164,7 +156,7 @@ export function invoicesModule(options: InvoicesModuleOptions): {
   const emailDispatcher = new InvoiceEmailDispatcher({
     orderReadPort: options.orderReadPort,
     invoiceService,
-    pdfRenderer,
+    documents: options.documents,
     settingsService: options.settingsService,
     getSender: options.getTransactionalEmailSender,
     resolveRecipientEmail: options.resolveRecipientEmail,
@@ -186,23 +178,18 @@ export function invoicesModule(options: InvoicesModuleOptions): {
   const handle: InvoicesModuleHandle = {
     autoIssueReactor,
     invoiceService,
-    pdfRenderer,
     numberGenerator,
-    templateService,
     emailDispatcher,
     loadAssetImage: options.loadAssetImage,
   };
 
   const plugin: ModuleAttach = async (app: FastifyInstance) => {
-    // Seed the system generic template once (idempotent).
-    await templateService.ensureGenericSeed().catch(() => undefined);
     await registerInvoicesAdminRoutes(app, {
       emFactory: options.emFactory,
       orderReadPort: options.orderReadPort,
       requireAdmin: options.requireAdmin,
       invoiceService,
-      pdfRenderer,
-      templateService,
+      documents: options.documents,
       emailDispatcher,
       resolveAdminUserId: options.resolveAdminUserId,
     });
@@ -214,8 +201,7 @@ export function invoicesModule(options: InvoicesModuleOptions): {
       requireCustomer: options.requireCustomer,
       resolveCustomerContext: options.resolveCustomerContext,
       invoiceService,
-      pdfRenderer,
-      templateService,
+      documents: options.documents,
     });
   };
 

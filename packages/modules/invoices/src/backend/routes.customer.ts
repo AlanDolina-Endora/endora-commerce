@@ -4,6 +4,7 @@ import { HttpError } from '@endora-commerce/platform/http';
 import {
   ERROR_CODES,
   type AssetsLibraryPort,
+  type DocumentRenderPort,
   type InvoiceAttachmentFetchPort,
   type OrderReadPort,
   type OrderRecord,
@@ -11,8 +12,7 @@ import {
 import { InvoiceExternalAttachment } from './entities/invoice-external-attachment.entity.js';
 import { Invoice } from './entities/invoice.entity.js';
 import type { InvoiceService } from './services/invoice-service.js';
-import type { InvoicePdfRenderer } from './services/invoice-pdf-renderer.js';
-import type { InvoiceTemplateService } from './services/invoice-template-service.js';
+import { renderInvoicePdf } from './document/render-invoice.js';
 
 export interface InvoicesCustomerDeps {
   emFactory: () => EntityManager;
@@ -28,8 +28,8 @@ export interface InvoicesCustomerDeps {
   requireCustomer: (req: FastifyRequest, reply: unknown) => Promise<void>;
   resolveCustomerContext: (req: FastifyRequest) => { customerAccountId: string; organizationId: string };
   invoiceService: InvoiceService;
-  pdfRenderer: InvoicePdfRenderer;
-  templateService: InvoiceTemplateService;
+  /** `document_templates`' render port (`specs/152-compare-pdf-template/`). */
+  documents: Pick<DocumentRenderPort, 'render'>;
 }
 
 /**
@@ -49,8 +49,7 @@ export async function registerInvoicesCustomerRoutes(
     requireCustomer,
     resolveCustomerContext,
     invoiceService,
-    pdfRenderer,
-    templateService,
+    documents,
   } = deps;
 
   async function ownedOrderOr404(req: FastifyRequest, orderId: string): Promise<OrderRecord> {
@@ -104,8 +103,7 @@ export async function registerInvoicesCustomerRoutes(
       });
       if (!inv) throw new HttpError(404, ERROR_CODES.NOT_FOUND, 'Invoice not found.');
       const detail = await invoiceService.buildDetail(inv.id);
-      const tree = await templateService.resolveTree(detail.salesChannelId, 'pl-PL');
-      const pdf = await pdfRenderer.render(detail, 'pl', tree);
+      const pdf = await renderInvoicePdf(documents, detail);
       reply
         .header('content-type', 'application/pdf')
         .header('content-disposition', `attachment; filename="invoice-${detail.number.replace(/\W+/g, '_')}.pdf"`);

@@ -47,5 +47,20 @@
   "displayMode.differences": "Różnice",
   "nav.comparisons.label": "Porównania",
   "actions.openComparisons.label": "Porównania",
-  "actions.openComparisons.description": "Audyt porównań"
+  "actions.openComparisons.description": "Audyt porównań",
+  "documentTypes.comparison.label": "Porównanie produktów",
+  "documentTypes.comparison.description": "PDF pobierany przez kupującego przyciskiem PDF na stronie porównania w sklepie.",
+  "documentTypes.comparison.variables.productCount": "Liczba produktów",
+  "documentTypes.comparison.variables.channelName": "Nazwa kanału sprzedaży",
+  "documentTypes.comparison.variables.customerName": "Imię i nazwisko zalogowanego kupującego",
+  "documentTypes.comparison.variables.organizationName": "Organizacja kupującego",
+  "documentTypes.comparison.variables.shareUrl": "Adres strony udostępniania",
+  "blocks.category.comparison": "Porównanie",
+  "blocks.comparisonHeader.label": "Nagłówek porównania",
+  "blocks.comparisonHeader.description": "Tytuł, data eksportu, tryb wyświetlania i informacja, czyje ceny są pokazane.",
+  "blocks.comparisonTable.label": "Tabela porównania",
+  "blocks.comparisonTable.description": "Jedna kolumna na produkt i jeden wiersz na porównywany atrybut.",
+  "blocks.comparisonShareLink.label": "Link do udostępniania",
+  "blocks.comparisonShareLink.description": "Adres strony udostępniania porównania, opcjonalnie jako kod QR.",
+  "list.pdfTemplate": "Szablon PDF"
 }
