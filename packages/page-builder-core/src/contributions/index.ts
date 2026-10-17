@@ -6,12 +6,15 @@ export type {
   BlockPresence,
   BlockRenderFunction,
   BlockRenderEnvironment,
+  DocumentBlockEditorConfig,
   PageBuilderBlockEditorConfig,
   StorefrontBlockConfig,
   StorefrontContributions,
 } from './types.js';
 
 export { BlockRenderEnvironmentProvider, useBlockRenderEnvironment } from './environment.js';
+
+export { DocumentSampleProvider, useDocumentSample } from './document-sample.js';
 
 export {
   EVERY_BLOCK_OWNER_PRESENT,

@@ -21,10 +21,13 @@ export type HideOn = {
   desktop?: boolean;
 };
 
-/** Page Builder surface where a component may appear. */
-export type PageBuilderContext = 'cms' | 'email' | 'invoice' | 'newsletter';
+/**
+ * Page Builder surface where a component may appear. `document` is the
+ * document-template editor's (`specs/152-compare-pdf-template/`).
+ */
+export type PageBuilderContext = 'cms' | 'email' | 'invoice' | 'newsletter' | 'document';
 
-export const PAGE_BUILDER_CONTEXTS = ['cms', 'email', 'invoice', 'newsletter'] as const;
+export const PAGE_BUILDER_CONTEXTS = ['cms', 'email', 'invoice', 'newsletter', 'document'] as const;
 
 export const DEFAULT_BREAKPOINTS = {
   tabletMin: 768,

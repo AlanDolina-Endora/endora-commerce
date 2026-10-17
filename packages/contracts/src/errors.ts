@@ -571,6 +571,22 @@ export const ERROR_CODES = {
    * saved is larger than `CRAWLER_TEXT_MAX_BYTES`; `details.maxBytes` names the limit.
    */
   SEO_CRAWLER_TEXT_TOO_LARGE: 'SEO_CRAWLER_TEXT_TOO_LARGE',
+
+  // Document templates (`specs/152-compare-pdf-template/`,
+  // `contracts/document-templates-api.md` § Errors). Declared by the
+  // `document_templates` module's manifest.
+  /** No template with that id, or its document type is not available (indistinguishable, FR-051). */
+  DOCUMENT_TEMPLATE_NOT_FOUND: 'DOCUMENT_TEMPLATE_NOT_FOUND',
+  /** The document type is not registered by a present module. */
+  DOCUMENT_TYPE_NOT_AVAILABLE: 'DOCUMENT_TYPE_NOT_AVAILABLE',
+  /** A layout breaks a limit or offers a block the type does not; `details` names which. */
+  DOCUMENT_TEMPLATE_INVALID: 'DOCUMENT_TEMPLATE_INVALID',
+  /** Deleting the default template of a scope needs explicit confirmation (FR-007). */
+  DOCUMENT_TEMPLATE_IS_DEFAULT: 'DOCUMENT_TEMPLATE_IS_DEFAULT',
+  /** A template was named for a document whose type, channel or selection rule forbids it (FR-038). */
+  DOCUMENT_TEMPLATE_NOT_SELECTABLE: 'DOCUMENT_TEMPLATE_NOT_SELECTABLE',
+  /** Producing the document failed. */
+  DOCUMENT_RENDER_FAILED: 'DOCUMENT_RENDER_FAILED',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

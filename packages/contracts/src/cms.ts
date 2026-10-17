@@ -236,7 +236,13 @@ export type CmsHookAttachmentRequest = z.infer<typeof cmsHookAttachmentRequestSc
 // Page Builder config descriptor
 // ────────────────────────────────────────────────────────────────────
 
-export const pageBuilderContextSchema = z.enum(['cms', 'email', 'invoice', 'newsletter']);
+/**
+ * The surfaces a Page Builder block may be offered on. `document` is the
+ * document-template editor's (`specs/152-compare-pdf-template/`): blocks
+ * declared for it — the facility's general-purpose blocks and a host's own
+ * document blocks — never reach the CMS or e-mail palettes.
+ */
+export const pageBuilderContextSchema = z.enum(['cms', 'email', 'invoice', 'newsletter', 'document']);
 export type PageBuilderContext = z.infer<typeof pageBuilderContextSchema>;
 
 export const pageBuilderBreakpointsSchema = z.object({

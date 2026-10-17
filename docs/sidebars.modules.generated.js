@@ -228,6 +228,14 @@ const modules = [
       'module-reference/dictionaries',
     ],
   },
+  {
+    type: 'category',
+    label: 'Document templates', key: 'document_templates',
+    link: { type: 'doc', id: 'modules/document-templates' },
+    items: [
+      'module-reference/document-templates',
+    ],
+  },
   { type: 'doc', id: 'module-reference/email', label: 'email', key: 'email' },
   {
     type: 'category',

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ModuleManifest } from '@endora-commerce/contracts';
+import { contextAdmits } from '@endora-commerce/page-builder-core';
 import { PageBuilderRegistry } from './page-builder-registry.js';
 
 /**
@@ -347,5 +348,43 @@ describe('PageBuilderRegistry — translatable declarations', () => {
       isModulePresent: (id) => id !== 'cms',
     });
     expect(registry.translatableFor('cms.Heading')).toBeUndefined();
+  });
+});
+
+/**
+ * `specs/152-compare-pdf-template/` T006 — the `document` context is the
+ * document-template editor's. A block declared for it is served with that
+ * context and nothing else, so the CMS palette's admission rule keeps it out:
+ * a comparison table or a general-purpose document block never reaches a CMS
+ * page, an e-mail or a newsletter.
+ */
+describe('PageBuilderRegistry — document blocks stay out of the CMS palette (152)', () => {
+  it('serves a document block with its own context only, which the CMS palette does not admit', async () => {
+    const documents = manifest('document_templates', {
+      blocks: [
+        {
+          name: 'document_templates.Heading',
+          labelKey: 'blocks.heading.label',
+          category: 'layout',
+          contexts: ['document'],
+          fields: { text: { type: 'text' } },
+        },
+      ],
+      blockCategories: [
+        { key: 'layout', titleKey: 'blocks.category.layout', contexts: ['document'], weight: 10 },
+      ],
+    } as Partial<ModuleManifest>);
+    const desc = await new PageBuilderRegistry({ manifests: [CMS, documents] }).describe();
+    const heading = desc.components.find((c) => c.name === 'document_templates.Heading')!;
+    expect(heading.contexts).toEqual(['document']);
+    const cmsPalette = desc.components.filter((c) => contextAdmits(c.contexts ?? ['cms'], 'cms'));
+    expect(cmsPalette.map((c) => c.name)).toEqual(['cms.Row']);
+    for (const context of ['email', 'newsletter', 'invoice'] as const) {
+      expect(desc.components.filter((c) => contextAdmits(c.contexts ?? ['cms'], context))).toEqual([]);
+    }
+    // The document category is served for the document context only.
+    expect(desc.categories?.filter((c) => c.contexts.includes('cms')).map((c) => c.titleKey)).toEqual([
+      'blocks.category.layout',
+    ]);
   });
 });

@@ -1,0 +1,60 @@
+{
+  "name": "@endora-commerce/mod-document-templates",
+  "version": "0.106.0",
+  "type": "module",
+  "sideEffects": false,
+  "description": "Document templates: design the PDF documents the platform produces (product comparison, invoice) in the Page Builder, per document type, language and sales channel.",
+  "license": "MIT",
+  "endora": {
+    "type": "module",
+    "id": "document_templates"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/endora-commerce/endora-commerce.git",
+    "directory": "packages/modules/document_templates"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/manifest.d.ts",
+      "default": "./dist/manifest.js"
+    },
+    "./backend": {
+      "types": "./dist/backend/index.d.ts",
+      "default": "./dist/backend/index.js"
+    },
+    "./migrations": {
+      "types": "./dist/migrations/index.d.ts",
+      "default": "./dist/migrations/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "i18n",
+    "docs"
+  ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint src",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@endora-commerce/contracts": "workspace:*",
+    "@endora-commerce/platform": "workspace:*"
+  },
+  "devDependencies": {
+    "@endora-commerce/contracts": "workspace:*",
+    "@endora-commerce/platform": "workspace:*",
+    "@types/node": "^22.9.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

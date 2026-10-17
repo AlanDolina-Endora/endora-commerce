@@ -128,6 +128,30 @@ export const comparisonOwnerViewSchema = z.object({
 });
 export type ComparisonOwnerView = z.infer<typeof comparisonOwnerViewSchema>;
 
+/**
+ * What `comparisons` hands the document render port when a buyer exports the
+ * comparison PDF (`specs/152-compare-pdf-template/contracts/comparison-document.md` §2).
+ *
+ * Built only in the export route, under the buyer's request context, from data
+ * that route already reads — so a template can rearrange the comparison and
+ * never widen it (FR-033).
+ */
+export const comparisonDocumentDataSchema = z.object({
+  /** Exactly what `GET /api/v1/comparisons/me` returns to this viewer. */
+  view: comparisonOwnerViewSchema,
+  channelName: z.string(),
+  /** The signed-in account's display name; `null` for an anonymous buyer. */
+  customerName: z.string().nullable(),
+  /** The viewer's organisation; `null` for an anonymous buyer. */
+  organizationName: z.string().nullable(),
+  /** The comparison's share page on the channel's storefront; `null` when no storefront URL is configured. */
+  shareUrl: z.string().url().nullable(),
+  /** The storefront's *Hide empty rows* switch (FR-020). */
+  hideEmptyRows: z.boolean(),
+  generatedAt: z.string().datetime(),
+});
+export type ComparisonDocumentData = z.infer<typeof comparisonDocumentDataSchema>;
+
 export const comparisonOwnerResponseSchema = z.object({
   data: comparisonOwnerViewSchema,
 });
