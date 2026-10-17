@@ -1509,6 +1509,24 @@
         }
       }
     },
+    "/api/v1/admin/cms/page-builder/translate": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/cms/page-builder/translation": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/cms/pages": {
       "get": {
         "responses": {
@@ -8109,6 +8127,22 @@
     },
     "/api/v1/storefront/pwa/icons/{spec}": {
       "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/storefront/pwa/preferences": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
         "responses": {
           "200": {
             "description": "OK"
