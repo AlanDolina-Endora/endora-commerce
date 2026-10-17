@@ -410,3 +410,53 @@ keeps a malformed URL from ever reaching `fetch`.
 LLM from; settings reference one `configurationType`); honouring Base URL on Anthropic/Google too
 (no demand, more surface); a `url` member in the frozen `kind` set (changes a frozen enum every
 consumer switches on).
+
+## R22 — Selection-scoped translation (owner, 2026-10-17, spec Clarifications Q8)
+
+**Decision**: the request gains an optional `scope`; the server resolves it in the submitted canvas
+and runs the **same** extract → validate → inject pipeline restricted to it.
+
+```ts
+scope?:
+  | { kind: 'component'; componentId: string }
+  | { kind: 'text'; componentId: string | null; selectedText: string }
+```
+
+- **Component scope**: the node whose `props.id` equals `componentId` (found anywhere: `content`,
+  slots, legacy `zones`) and every node nested in its slots. Not found ⇒ `422
+  CMS_TRANSLATION_SELECTION_NOT_FOUND`, nothing sent. Its own declaration absent ⇒ it is counted in
+  `untranslatableBlocks` like any undeclared block (children with declarations are still translated).
+- **Text scope**: the server searches the translatable leaves of that component and its descendants
+  (or of the whole canvas when `componentId` is null) for the selected text, comparing with collapsed
+  whitespace (a browser selection turns line ends and runs of spaces into one form, a stored string
+  another). The **first** leaf, in document order, containing it is used; none ⇒ `422
+  CMS_TRANSLATION_SELECTION_NOT_FOUND`.
+  - `plain` leaf: the matched substring becomes one segment; injection replaces exactly that range,
+    so the text before and after is byte-identical.
+  - `tiptap` leaf: the block-level nodes (R6) are searched first one by one. A match inside **one text
+    node** (one uniform mark list) splits that node into before / selected / after, all with the same
+    marks, and only the middle is a segment — the narrowest safe unit. A match that crosses text nodes
+    (a formatting boundary, a link, a hard break) inside one paragraph, or that spans several
+    consecutive paragraphs, **widens to the whole paragraph(s)**, each translated as an R6 inline-tag
+    segment. Widening is reported (`report.scope.widened: true`) and the notice says so.
+- The client never sends translated, rendered or HTML content: it sends the canvas it already sends,
+  plus the block id and the raw selected text; everything else is the server's.
+- **Limits and audit**: `MAX_SOURCE_CHARACTERS` applies to the scope's segments; the audit `after`
+  gains `scope: 'canvas' | 'component' | 'text'` and `componentType` (never the selected text).
+- **Admin**: the editor tracks Puck's selected item (`appState.ui.itemSelector`) and the last
+  non-collapsed DOM text selection in the editor document and the canvas iframe (`selectionchange`),
+  attributing an iframe selection to the closest component wrapper; the selection is read when the
+  button is pressed (`pointerdown`, before focus moves). Label: *Translate all content* / *Translate
+  component* / *Translate selection*. A selected block whose type has no `translatable` declaration
+  in the descriptor ⇒ disabled with `pageBuilder.translate.selectionNotTranslatable`. The descriptor
+  (`GET …/page-builder/config`) therefore serves `translatable` (already planned in R4).
+
+**Rationale**: re-using the whole-canvas pipeline keeps every guarantee (G1–G6, placeholders, tags)
+for the scope by construction; a text match on the server is the only way to make "the rest of the
+canvas" provably untouched without trusting client offsets into a document the client renders
+differently (TipTap positions, Puck's inline editing, the iframe DOM).
+
+**Alternatives rejected**: client-computed character offsets (three different DOMs to map back to a
+TipTap JSON position; fragile); sending only the selected text and replacing it client-side (the
+client would then be writing the canvas from an untrusted answer without tag/placeholder checks);
+translating a partial formatted run (breaks marks — the owner explicitly asked for a safe fallback).

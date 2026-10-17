@@ -109,6 +109,7 @@ Full schemas in [contracts/page-builder-translation-api.md](./contracts/page-bui
 | `sourceLanguage` | `string \| null` | `null` = detect (FR-012); else `min(2) max(35)`, ≠ `targetLanguage` |
 | `context` | `'cms'` | only the CMS palette context is accepted in this version |
 | `data` | Puck `Data` | `{ root: { props?: object }, content: object[], zones?: Record<string, object[]> }`, passthrough |
+| `scope` | `{ kind: 'component', componentId } \| { kind: 'text', componentId \| null, selectedText } \| undefined` | R22; absent = whole canvas; `selectedText` ≤ 40 000 |
 | `resource` | `{ type: string; id: string \| null } \| undefined` | `type` matches `^[a-z][a-z0-9_]*$`, max 64; `id` uuid; audit only (R13) |
 
 Body size limit on the route: 2 MiB (a 40 000-character canvas with styling is far below it).
@@ -124,6 +125,7 @@ Body size limit on the route: 2 MiB (a 40 000-character canvas with styling is f
 | `report.characters` | `number` | source characters sent |
 | `report.provider`, `report.model` | `string` | what was used |
 | `report.sourceLanguage` | `string \| null` | echo of the request |
+| `report.scope` | `{ kind: 'canvas' \| 'component' \| 'text', widened: boolean }` | R22 |
 
 ## 4. Internal model (`packages/modules/cms/src/backend/services/translation/`)
 
@@ -151,7 +153,7 @@ under test: `inject(data, extract(data).locations, identity) ≡ data`.
 | `objectId` | `resource.id` or `null` |
 | `actorAdminUserId` | from TenantContext (never the body) |
 | `stateBefore` | `null` |
-| `stateAfter` | `{ targetLanguage, sourceLanguage, provider, model, segments, characters, translatedSegments, untranslatedSegments, outcome: 'completed' \| 'partial' \| 'failed', failure?: token }` |
+| `stateAfter` | `{ targetLanguage, sourceLanguage, provider, model, segments, characters, translatedSegments, untranslatedSegments, outcome: 'completed' \| 'partial' \| 'failed', failure?: token, scope: 'canvas' \| 'component' \| 'text', componentType?: string }` |
 
 No text, no prompt, no credential code, no key.
 

@@ -162,6 +162,7 @@ The owner answered every question (spec § *Clarifications*). Six follow the rec
 | 5 | **How the result lands** | Replaces the canvas as an unsaved change, with *Restore previous content* | As planned |
 | 6 | **Who may use it** | New permission `cms.translate` | As planned |
 | 7 | **Cost/size control** | Fixed 40 000 characters per click, audit entry | As planned |
+| 8 | **Selection scope** (added after the plan) | A selected text fragment or component is translated alone; no selection = whole canvas | Optional request `scope`, server-side resolution with the same pipeline, label per scope, `422 CMS_TRANSLATION_SELECTION_NOT_FOUND` (research R22, User Story 6, tasks T067–T072); about +1.5 days |
 
 ## Requirement → test
 
@@ -187,6 +188,7 @@ The owner answered every question (spec § *Clarifications*). Six follow the rec
 | FR-033 | `check:bundle-pairing`, `i18n:hardcoded` |
 | FR-034 | `check:module-docs`, `check:docs-translations` |
 | FR-040, FR-041 | extend `backend/test/integration/cms/off-state.test.ts`: cms off ⇒ 503 on both; credentials off ⇒ capability `unavailable`, translate 409, a page save still works |
+| FR-026–FR-029a | `scope.test.ts` (fragment, run split, widening, component, container, not found); contract G7 + the five scope cases; admin label/scope/disabled cases |
 | FR-042 | `prompt_actions` package tests and `backend/test/{contract,integration}/prompt_actions/*` unchanged and green; `llm-client` byte-identity tests for requests without `toolChoice` and without Base URL |
 
 ## Slices
@@ -199,6 +201,7 @@ The owner answered every question (spec § *Clarifications*). Six follow the rec
 | 3 | Translation core in `cms`: extract/inject, TipTap codec, placeholders, chunking, prompt, service with fake adapter | 1, 2 | 2.5 d |
 | 4 | Settings, capability, routes, permission, errors, audit Command, palette, bundles | 3 | 1.5 d |
 | 5 | Admin: chrome slot, `PageBuilderTranslateAction`, apply/restore/cancel, hosts | 4 | 2 d |
+| 5b | Selection scope: contracts, `scope.ts`, contract cases, admin selection tracking (R22) | 3, 5 | 1.5 d |
 | 6 | Off-state, docs en + pl, changeset, generated artefacts, full verification, manual walk | 1–5 | 1 d |
 
 Slices 1 and 2 are independent and can run in parallel.

@@ -62,6 +62,19 @@ Required states per the UX skill: default, hover, focus-visible, disabled-with-r
 error, success, empty (nothing to translate). WCAG 2.2 AA: contrast via tokens, the disabled reason
 exposed through `aria-describedby`, not only `title`.
 
+## 3a. Selection scope (research R22)
+
+| Editor state when the button is pressed | Label (`aria-label` identical) | Request `scope` |
+| --- | --- | --- |
+| a non-collapsed text selection inside the editor (fields panel or canvas iframe) | **Translate selection** | `{ kind: 'text', componentId: <selection's block or Puck's selected item>, selectedText }` |
+| a block selected in Puck, no text selection | **Translate component** | `{ kind: 'component', componentId }` |
+| nothing selected | **Translate all content** | absent |
+| the selected block's type has no `translatable` declaration in the descriptor | **Translate component**, **disabled**, description `selectionNotTranslatable` | — |
+
+The source select (US3) is offered only for the whole-canvas scope; a scoped translation always reads
+the current tab. The confirmation dialog states the scope. `422 CMS_TRANSLATION_SELECTION_NOT_FOUND`
+shows its message in the dialog.
+
 ## 4. Settings (cms manifest, group `cms_page_builder`)
 
 ```ts
@@ -121,6 +134,15 @@ the server refuses comes back in the existing `CREDENTIAL_VALIDATION_FAILED` env
 | `pageBuilder.translate.success` | Translated {count} texts into {language}. | Przetłumaczono teksty: {count}, na język {language}. |
 | `pageBuilder.translate.untranslated` | {count} texts kept their original wording. | Teksty bez tłumaczenia (pozostawione bez zmian): {count}. |
 | `pageBuilder.translate.untranslatable` | {count} blocks cannot be translated. | Bloki, których nie można przetłumaczyć: {count}. |
+| `pageBuilder.translate.scope.canvas` | Translate all content | Przetłumacz całą treść |
+| `pageBuilder.translate.scope.component` | Translate component | Przetłumacz komponent |
+| `pageBuilder.translate.scope.text` | Translate selection | Przetłumacz zaznaczenie |
+| `pageBuilder.translate.scopeDescription.canvas` | Every text on this tab's canvas will be translated. | Zostaną przetłumaczone wszystkie teksty na tej zakładce. |
+| `pageBuilder.translate.scopeDescription.component` | Only the selected component (and the components inside it) will be translated. | Zostanie przetłumaczony tylko zaznaczony komponent (wraz z komponentami w jego wnętrzu). |
+| `pageBuilder.translate.scopeDescription.text` | Only the selected text will be translated. | Zostanie przetłumaczony tylko zaznaczony tekst. |
+| `pageBuilder.translate.widened` | The selection crossed formatting, so whole paragraphs were translated. | Zaznaczenie obejmowało różne formatowanie, więc przetłumaczono całe akapity. |
+| `pageBuilder.translate.selectionNotTranslatable` | The selected component has no text that can be translated. | Zaznaczony komponent nie zawiera tekstu, który można przetłumaczyć. |
+| `errors.CMS_TRANSLATION_SELECTION_NOT_FOUND` | The selected text could not be found. Select it again and retry. | Nie znaleziono zaznaczonego tekstu. Zaznacz go ponownie i spróbuj jeszcze raz. |
 | `pageBuilder.translate.restore` | Restore previous content | Przywróć poprzednią treść |
 | `pageBuilder.translate.nothing` | There is no text to translate. | Brak tekstu do przetłumaczenia. |
 | `pageBuilder.translate.notConfigured` | Translation is switched on but no model is configured. Choose credentials in Settings → Page Builder. | Tłumaczenie jest włączone, ale nie skonfigurowano modelu. Wybierz poświadczenia w Ustawienia → Page Builder. |

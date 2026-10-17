@@ -159,6 +159,49 @@ canvas; translate, edit, save, and verify the restore action is gone.
 
 ---
 
+### User Story 6 — Translate only the selection (Priority: P2)
+
+The editor has translated a page and fixed it by hand, then pastes one more Polish paragraph into a
+rich-text block. They select that paragraph's text and click **Translate selection**: only those
+words are translated, the surrounding text and its formatting stay exactly as they were. Later they
+select an Accordion block in the canvas and click **Translate component**: the accordion's titles
+and texts — and the texts of any blocks nested inside a selected container — are translated, and
+nothing else on the canvas changes.
+
+**Why this priority**: once a page is mostly translated and reviewed, re-translating the whole canvas
+would overwrite the editor's corrections; selection-scoped translation makes the function usable for
+incremental edits. Added by the owner on 2026-10-17 (Clarifications Q8).
+
+**Independent Test**: on a canvas with three text blocks, select one block and translate; select a
+fragment of one paragraph and translate; verify that only the selected scope changed.
+
+**Acceptance Scenarios**:
+
+1. **Given** no block is selected and no text is selected, **When** the editor looks at the button,
+   **Then** it reads **Translate all content** and translates the whole canvas (User Story 1).
+2. **Given** a block is selected in the canvas, **When** the editor clicks the button (which reads
+   **Translate component**), **Then** only that block's translatable texts — and those of every block
+   nested inside it when it is a container — are translated; every other block is byte-identical.
+3. **Given** a fragment of text is selected inside a text or rich-text field of a block, **When** the
+   editor clicks the button (which reads **Translate selection**), **Then** only the selected words
+   are replaced by their translation; the text before and after the selection and its formatting are
+   unchanged.
+4. **Given** the selected fragment crosses a formatting boundary (for example half of it is bold) or
+   spans several paragraphs, **When** it is translated, **Then** the whole paragraph(s) containing the
+   selection are translated with their formatting kept — never a partial run with broken formatting —
+   and the result notice says the selection was widened to whole paragraphs.
+5. **Given** the selected block declares no translatable text (for example a block from an extension,
+   or a Spacer), **When** the editor looks at the button, **Then** it is disabled with an explanation
+   that the selected block has no text that can be translated.
+6. **Given** a selection-scoped translation, **When** it completes, **Then** the size limit, the audit
+   entry, the result notice and **Restore previous content** apply exactly as for a whole canvas, with
+   the audit entry recording the scope.
+7. **Given** the selected text can no longer be found in the block (it was edited after selecting),
+   **When** the editor translates, **Then** nothing is sent and they are told to select the text
+   again.
+
+---
+
 ### User Story 5 — Governance: who may translate, where it is found, what is recorded (Priority: P3)
 
 An administrator decides which roles may use machine translation, because it costs money and sends
@@ -292,6 +335,28 @@ endpoint's answer; perform a translation and find its record in the audit log.
 - **FR-025**: A block whose texts the platform does not know how to translate MUST be left untouched
   and reported in the result as not translated.
 
+**Selection scope** (owner, 2026-10-17, Clarifications Q8)
+
+- **FR-026**: The translation scope MUST follow the editor's selection: a **text fragment** selected
+  inside a text or rich-text field of a block ⇒ only that fragment; otherwise a **selected block** ⇒
+  that block and every block nested inside it; otherwise **the whole canvas**. Everything outside the
+  scope MUST be identical before and after.
+- **FR-027**: A fragment MUST be translated in place: the text before and after it, and the formatting
+  of every run, MUST be unchanged. When the fragment lies within one run of uniform formatting only
+  that run's selected characters are replaced; when it crosses a formatting boundary or spans several
+  paragraphs, the whole enclosing paragraph(s) MUST be translated instead (keeping formatting through
+  the inline tags of FR-016), and the result MUST say so.
+- **FR-028**: The server MUST locate the scope itself in the submitted canvas (block identifier, and
+  the selected text) and apply to it the same extraction, placeholder and tag validation and
+  re-injection as for a whole canvas; it MUST NOT accept translated or rendered content from the
+  client for any part of the canvas. A fragment that cannot be found in the scope MUST be refused
+  before anything is sent.
+- **FR-029**: The button's label and description MUST name the scope — **Translate all content**,
+  **Translate component**, **Translate selection** — in English and Polish; a selected block that
+  declares no translatable text MUST make the button disabled with an explanation.
+- **FR-029a**: The size limit (FR-023), the audit entry (FR-031, plus the scope) and *Restore previous
+  content* (FR-019) MUST apply to a scoped translation exactly as to a whole canvas.
+
 **Governance**
 
 - **FR-030**: Using the translation MUST require a dedicated permission, listed under CMS in the
@@ -405,3 +470,12 @@ No new kind of stored business record is expected.
 - **Q6 — Who may use it** → as planned: a new permission **`cms.translate`**.
 - **Q7 — Cost and size control** → as planned: a fixed limit of **40 000 characters per click**,
   plus the audit entry.
+- **Q8 — Selection-scoped translation** (added by the owner after the plan) → if the editor has
+  **selected a text fragment** inside a text or rich-text field, or **selected a component** in the
+  canvas, *Translate* translates **only that fragment / that component** (with its nested children
+  when it is a container); with no selection, the whole canvas as before. The server receives an
+  optional scope (block id, selected text) and does the extraction and re-injection itself with the
+  same validation; a fragment crossing formatting boundaries falls back to its whole paragraph(s);
+  the button names the scope (en + pl); the size limit, the audit entry and *Restore previous
+  content* apply to the scope; a selected block with no `translatable` declaration disables the
+  button with an explanation (User Story 6, FR-026–FR-029a, research R22).

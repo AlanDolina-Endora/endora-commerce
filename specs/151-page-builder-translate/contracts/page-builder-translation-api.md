@@ -61,6 +61,15 @@ export const cmsPageBuilderTranslateRequestSchema = z.object({
     type: z.string().regex(/^[a-z][a-z0-9_]*$/).max(64),
     id: z.string().uuid().nullable(),
   }).optional(),
+  /** Selection scope (research R22); absent = the whole canvas. */
+  scope: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('component'), componentId: z.string().min(1).max(256) }),
+    z.object({
+      kind: z.literal('text'),
+      componentId: z.string().min(1).max(256).nullable(),
+      selectedText: z.string().trim().min(1).max(40_000),
+    }),
+  ]).optional(),
 }).refine((r) => r.sourceLanguage !== r.targetLanguage, {
   message: 'sourceLanguage must differ from targetLanguage',
   path: ['sourceLanguage'],
@@ -80,6 +89,12 @@ export const cmsPageBuilderTranslateResponseSchema = z.object({
     provider: LlmProviderSchema,
     model: z.string(),
     sourceLanguage: languageCodeSchema.nullable(),
+    /** Echo of the scope actually translated (R22). */
+    scope: z.object({
+      kind: z.enum(['canvas', 'component', 'text']),
+      /** true when a text selection was widened to whole paragraph(s). */
+      widened: z.boolean(),
+    }),
   }),
 });
 ```
@@ -99,6 +114,9 @@ Guarantees (each one a test, see `plan.md` § *Requirement → test*):
 - **G5 — undeclared blocks**: props of a block with no `translatable` declaration are deep-equal in
   request and response, and the block appears in `untranslatableBlocks` (FR-025).
 - **G6 — idempotent shape**: `data.root`, `zones` keys and every component `props.id` are preserved.
+- **G7 — scope**: with a `scope`, every string leaf outside it is byte-identical in request and
+  response; with a text scope, the characters before and after the selected range in its leaf, and
+  every mark list of a non-widened run, are unchanged (FR-026–FR-028).
 
 ## 3. Errors
 
@@ -114,6 +132,7 @@ tokens).
 | 409 | `CMS_TRANSLATION_NOT_CONFIGURED` | — | capability `not_configured` |
 | 409 | `CMS_TRANSLATION_UNAVAILABLE` | — | `credentials` absent |
 | 413 | `CMS_TRANSLATION_TOO_LARGE` | `{ limit, characters }` | above `MAX_SOURCE_CHARACTERS` — nothing sent |
+| 422 | `CMS_TRANSLATION_SELECTION_NOT_FOUND` | — | the scope's block or selected text is not in the submitted canvas — nothing sent (R22) |
 | 502 | `CMS_TRANSLATION_PROVIDER_FAILED` | `{ code: 'credentials_rejected' \| 'rate_limited' \| 'unavailable' \| 'timeout' \| 'malformed' }` | a chunk failed at the provider, or every chunk's answer was unusable |
 
 Manifest declaration:

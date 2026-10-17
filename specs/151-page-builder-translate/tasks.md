@@ -136,6 +136,19 @@ read the capability; no content involved.
 
 ---
 
+## Phase 7b: User Story 6 — translate only the selection (P2, owner addition, research R22)
+
+**Independent test**: spec US6; contract G7.
+
+- [ ] T067 [US6] Extend the failing contract tests in `packages/contracts/src/cms-translation.test.ts`: request `scope` (component / text, `selectedText` trimmed non-empty, ≤ 40 000), response `report.scope`; implement in `packages/contracts/src/cms.ts`
+- [ ] T068 [US6] Write failing `packages/modules/cms/src/backend/services/translation/scope.test.ts`: component scope picks the node by `props.id` in `content`, slots and `zones` and includes nested children; text scope in a `plain` leaf yields one segment for exactly the matched range (whitespace-collapsed match); in a `tiptap` leaf a match inside one text node splits it into before/selected/after with identical marks; a match crossing marks or paragraphs widens to whole paragraph(s); not found ⇒ `SelectionNotFound`; an undeclared selected block counts in `untranslatableBlocks`
+- [ ] T069 [US6] Implement `scope.ts` and thread the scope through `extract.ts` / `inject.ts` / `translation.service.ts` (limits and report on the scope)
+- [ ] T070 [US6] Contract cases in `backend/test/contract/cms/page-builder-translation.contract.test.ts`: fragment-only, component-only, container with children, no scope = whole canvas, non-translatable selected block, `422 CMS_TRANSLATION_SELECTION_NOT_FOUND`; G7; audit `scope`
+- [ ] T071 [US6] Admin: failing cases in `admin/test/modules/cms/page-builder-translate-action.test.tsx` (label per scope, request `scope`, disabled for an undeclared selected block, source select only for the whole canvas), then selection tracking in `PageBuilderEditor.tsx` / `PageBuilderTranslateAction.tsx`; `translatable` read from the descriptor
+- [ ] T072 [US6] i18n keys of `contracts/admin-surfaces.md` §7 (scope labels, `widened`, `selectionNotTranslatable`, `errors.CMS_TRANSLATION_SELECTION_NOT_FOUND`) en + pl; docs en + pl describe the scope rules
+
+---
+
 ## Phase 8: Polish & cross-cutting
 
 - [ ] T052 Extend `backend/test/integration/cms/off-state.test.ts`: `cms` off ⇒ both routes `503 MODULE_DISABLED`; `credentials` off ⇒ capability `unavailable`, translate `409 CMS_TRANSLATION_UNAVAILABLE`, page save unaffected; `prompt_actions` off ⇒ translation unaffected; run `check:off-state-coverage` if present
@@ -154,7 +167,7 @@ read the capability; no content involved.
 - **Phase 1b** depends on T003 (the moved adapters); T029–T030 depend on T059 and T062.
 - T013–T026 depend on T010 and T012 (schemas and registry); T025–T026 also on T006 (adapter API).
 - **US2 (Phase 3)** depends on Phase 2. **US1 (Phase 4)** depends on US2 (capability, permission).
-- **US3, US4** depend on T042. **US5** T048–T049 can follow T032. T050–T051 depend on T042.
+- **US3, US4** depend on T042. **US6** (T067–T072) depends on T026 (core) and T042 (admin). **US5** T048–T049 can follow T032. T050–T051 depend on T042.
 - **Polish** last; T057 is the gate.
 
 ```text
