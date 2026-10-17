@@ -24,7 +24,16 @@ import {
   type QuoteRequestSummary,
   type RfqCustomerContext,
   type RfqCustomerPort,
+  QUOTE_REQUEST_DOCUMENT_TYPE,
+  QUOTE_REQUEST_PDF_LIMITS,
+  quoteRequestDocumentChoicesSchema,
+  quoteRequestDocumentDataSchema,
+  quoteRequestPdfSendRequestSchema,
+  quoteRequestPdfSendResultSchema,
+  rfqEventTypeSchema,
+  setQuoteRequestDocumentTemplateSchema,
 } from './quote-requests.js';
+import { ERROR_CODES } from './errors.js';
 
 /**
  * Feature 146 — the contract additions for the at-request reference price, the
@@ -219,7 +228,7 @@ describe('quote request history — entries and response', () => {
     for (const kind of quoteRequestHistoryEntryKindSchema.options) {
       expect(quoteRequestHistoryEntrySchema.parse({ ...ENTRY, kind }).kind).toBe(kind);
     }
-    expect(quoteRequestHistoryEntryKindSchema.options).toHaveLength(12);
+    expect(quoteRequestHistoryEntryKindSchema.options).toHaveLength(13);
   });
 
   it('refuses an unknown entry kind', () => {
@@ -393,5 +402,130 @@ describe('in-process ports (type level)', () => {
       listForCustomer: async () => [],
     };
     expect(await legacy.listForCustomer(ctx)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 153 — the quote PDF (`specs/153-quote-request-pdf-template/`)
+// ---------------------------------------------------------------------------
+
+describe('quote PDF — the remembered template and the choices (T020)', () => {
+  it('names the document type', () => {
+    expect(QUOTE_REQUEST_DOCUMENT_TYPE).toBe('quote_requests.quote_request');
+  });
+
+  it('the admin reply may carry documentTemplateId; older replies without it still parse', () => {
+    const base = quoteRequestSchema.shape.documentTemplateId;
+    expect(base.safeParse(undefined).success).toBe(true);
+    expect(base.safeParse(null).success).toBe(true);
+    expect(base.safeParse(ID(9)).success).toBe(true);
+    expect(base.safeParse('nope').success).toBe(false);
+  });
+
+  it('the remember body is a uuid or null', () => {
+    expect(setQuoteRequestDocumentTemplateSchema.parse({ documentTemplateId: null })).toEqual({ documentTemplateId: null });
+    expect(setQuoteRequestDocumentTemplateSchema.safeParse({ documentTemplateId: 'x' }).success).toBe(false);
+    expect(setQuoteRequestDocumentTemplateSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('the choices answer', () => {
+    const choices = {
+      templates: [{ id: ID(1), name: 'A', salesChannelId: ID(2), languages: ['pl-PL'], isDefault: false }],
+      rememberedTemplateId: ID(3),
+      rememberedTemplateMissing: true,
+      effectiveDefaultId: null,
+      builtInLanguages: ['en-US', 'pl-PL'],
+      suggestedLanguage: 'pl-PL',
+      requesterEmail: 'buyer@example.com',
+    };
+    expect(quoteRequestDocumentChoicesSchema.parse(choices)).toEqual(choices);
+    expect(quoteRequestDocumentChoicesSchema.safeParse({ ...choices, requesterEmail: null }).success).toBe(true);
+  });
+
+  it('the document data is JSON-serialisable and nullable where the quote may lack a value', () => {
+    const data = {
+      generatedAt: AT,
+      quote: {
+        id: ID(1), businessId: 'QR-1', status: 'pending', revisionNumber: 1, createdAt: AT, submittedAt: null,
+        approvedAt: null, expiresAt: null, headerNote: null, taxRate: 0.23, currency: 'PLN',
+      },
+      channel: null,
+      buyer: { organizationName: 'Acme', legalName: null, taxId: '123', address: null, customerName: null, customerEmail: null },
+      salesRep: null,
+      details: [],
+      lines: [
+        {
+          id: ID(2), productId: ID(3), productName: 'Bolt', variantLabel: null, sku: null, quantity: 3,
+          packagingUnitName: null, packagingUnitBaseQuantity: null, agreedUnitPrice: null, proposedUnitPrice: null,
+          referenceUnitPrice: null, referenceCurrency: null, lineCurrency: 'PLN', lineNote: null, attributes: {},
+        },
+      ],
+    };
+    expect(quoteRequestDocumentDataSchema.parse(JSON.parse(JSON.stringify(data)))).toEqual(data);
+  });
+});
+
+describe('quote PDF — sending (T055, owner answer Q4)', () => {
+  it('the limits', () => {
+    expect(QUOTE_REQUEST_PDF_LIMITS).toEqual({ maxRecipients: 5, maxMessageLength: 2000, maxAttachmentBytes: 10 * 1024 * 1024 });
+  });
+
+  it('trims and de-duplicates the recipients case-insensitively, keeping the first spelling', () => {
+    const parsed = quoteRequestPdfSendRequestSchema.parse({
+      recipients: [' Buyer@Example.com ', 'buyer@example.com', 'two@example.com'],
+    });
+    expect(parsed.recipients).toEqual(['Buyer@Example.com', 'two@example.com']);
+  });
+
+  it.each([
+    ['no recipient', { recipients: [] }],
+    ['a malformed address', { recipients: ['not-an-address'] }],
+    ['six recipients', { recipients: ['a@x.pl', 'b@x.pl', 'c@x.pl', 'd@x.pl', 'e@x.pl', 'f@x.pl'] }],
+    ['an over-long message', { recipients: ['a@x.pl'], message: 'x'.repeat(2001) }],
+    ['a template id that is no uuid', { recipients: ['a@x.pl'], templateId: 'x' }],
+    ['a language outside the grammar', { recipients: ['a@x.pl'], language: 'polish' }],
+  ])('refuses %s', (_label, body) => {
+    expect(quoteRequestPdfSendRequestSchema.safeParse(body).success).toBe(false);
+  });
+
+  it('five distinct recipients, a message, a template and a language are accepted', () => {
+    expect(
+      quoteRequestPdfSendRequestSchema.safeParse({
+        recipients: ['a@x.pl', 'b@x.pl', 'c@x.pl', 'd@x.pl', 'e@x.pl', 'A@x.pl'],
+        message: 'Hello',
+        templateId: ID(1),
+        language: 'pl-PL',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('the result', () => {
+    const result = { sent: ['a@x.pl'], failed: [], templateId: null, templateSource: 'built_in', requestedTemplateMissing: false };
+    expect(quoteRequestPdfSendResultSchema.parse(result)).toEqual(result);
+  });
+
+  it('a pdf-sent event and a pdf_sent history entry with its delivery', () => {
+    expect(rfqEventTypeSchema.parse('pdf-sent')).toBe('pdf-sent');
+    const entry = quoteRequestHistoryEntrySchema.parse({
+      id: ID(30),
+      eventIds: [ID(30)],
+      kind: 'pdf_sent',
+      occurredAt: AT,
+      actor: { kind: 'admin', adminUserId: ID(5), name: 'Rep', recordedRole: null },
+      revisionNumber: null,
+      note: null,
+      reason: null,
+      changes: null,
+      relatedQuoteRequestId: null,
+      orderId: null,
+      delivery: { recipients: ['a@x.pl'], templateName: null, language: 'pl-PL', message: null },
+    });
+    expect(entry.delivery?.recipients).toEqual(['a@x.pl']);
+  });
+
+  it('declares the three error codes', () => {
+    for (const code of ['QUOTE_REQUEST_PDF_TOO_LARGE', 'QUOTE_REQUEST_PDF_EMAIL_UNAVAILABLE', 'QUOTE_REQUEST_PDF_SEND_FAILED']) {
+      expect((ERROR_CODES as Record<string, string>)[code]).toBe(code);
+    }
   });
 });
