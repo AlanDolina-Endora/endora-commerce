@@ -347,6 +347,48 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'shown, because a root catch-all is Next\'s lowest-priority match. The noun is a CMS ' +
       'page slug, which `cms` owns along with the rest of the `CMS_*` family.',
   },
+  CMS_TRANSLATION_DISABLED: {
+    to: 'cms',
+    reason:
+      'Minted by feature 151 (`specs/151-page-builder-translate/`) for the Page Builder ' +
+      'translation: the 409 a translate request meets while the function\'s own switch is off. The noun is the Page Builder canvas, which `cms` owns along with the ' +
+      'rest of the `CMS_*` family.',
+  },
+  CMS_TRANSLATION_NOT_CONFIGURED: {
+    to: 'cms',
+    reason:
+      'Minted by feature 151 (`specs/151-page-builder-translate/`) for the Page Builder ' +
+      'translation: the 409 a translate request meets while no usable LLM credential is chosen. The noun is the Page Builder canvas, which `cms` owns along with the ' +
+      'rest of the `CMS_*` family.',
+  },
+  CMS_TRANSLATION_UNAVAILABLE: {
+    to: 'cms',
+    reason:
+      'Minted by feature 151 (`specs/151-page-builder-translate/`) for the Page Builder ' +
+      'translation: the 409 a translate request meets while the credentials module is switched off. The noun is the Page Builder canvas, which `cms` owns along with the ' +
+      'rest of the `CMS_*` family.',
+  },
+  CMS_TRANSLATION_TOO_LARGE: {
+    to: 'cms',
+    reason:
+      'Minted by feature 151 (`specs/151-page-builder-translate/`) for the Page Builder ' +
+      'translation: the 413 for content above the configured source-character limit, refused before anything is sent. The noun is the Page Builder canvas, which `cms` owns along with the ' +
+      'rest of the `CMS_*` family.',
+  },
+  CMS_TRANSLATION_SELECTION_NOT_FOUND: {
+    to: 'cms',
+    reason:
+      'Minted by feature 151 (`specs/151-page-builder-translate/`) for the Page Builder ' +
+      'translation: the 422 for a selected component or text that is not in the submitted canvas. The noun is the Page Builder canvas, which `cms` owns along with the ' +
+      'rest of the `CMS_*` family.',
+  },
+  CMS_TRANSLATION_PROVIDER_FAILED: {
+    to: 'cms',
+    reason:
+      'Minted by feature 151 (`specs/151-page-builder-translate/`) for the Page Builder ' +
+      'translation: the 502 for a model provider that failed or answered unusably, with a token per cause. The noun is the Page Builder canvas, which `cms` owns along with the ' +
+      'rest of the `CMS_*` family.',
+  },
   PAYMENT_NOT_DUE: {
     to: 'payments',
     reason:

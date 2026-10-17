@@ -32,9 +32,13 @@ export interface EditorTextSelection {
   componentId: string | null;
 }
 
+/**
+ * The block selected in Puck. `blockType` rather than `type`: an object with
+ * `type` and `props` reads as a stored node, which is not what this is.
+ */
 export interface SelectedComponent {
   id: string;
-  type: string;
+  blockType: string;
   props: Record<string, unknown>;
 }
 
@@ -72,7 +76,7 @@ export function translationScopeOf(input: {
     };
   }
   if (selected) {
-    const declaration = input.declarationOf(selected.type);
+    const declaration = input.declarationOf(selected.blockType);
     const blocked =
       declaration === undefined ? !hasChildComponents(selected.props) : declaration.length === 0 && !hasChildComponents(selected.props);
     return { kind: 'component', componentId: selected.id, blocked };
@@ -394,7 +398,11 @@ export function PuckPageBuilderTranslateAction(
   const textSelection = useEditorTextSelection();
   const selected: SelectedComponent | null =
     selectedItem && typeof selectedItem.props?.id === 'string'
-      ? { id: selectedItem.props.id, type: String(selectedItem.type), props: selectedItem.props as Record<string, unknown> }
+      ? {
+          id: selectedItem.props.id,
+          blockType: String(selectedItem.type),
+          props: selectedItem.props as Record<string, unknown>,
+        }
       : null;
   const scope = translationScopeOf({ textSelection, selected, declarationOf });
   return <PageBuilderTranslateAction {...rest} scope={scope} />;

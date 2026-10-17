@@ -250,7 +250,7 @@ describe('translationScopeOf (research R22)', () => {
     type === 'cms.Heading' ? [{ path: 'text' }] : type === 'cms.Spacer' || type === 'cms.Row' ? [] : undefined;
 
   it('prefers a text selection, then the selected block, then the canvas', () => {
-    const selected = { id: 'h1', type: 'cms.Heading', props: { id: 'h1' } };
+    const selected = { id: 'h1', blockType: 'cms.Heading', props: { id: 'h1' } };
     expect(translationScopeOf({ textSelection: { text: 'Wit', componentId: null }, selected, declarationOf })).toEqual({
       kind: 'text',
       componentId: 'h1',
@@ -267,9 +267,9 @@ describe('translationScopeOf (research R22)', () => {
   });
 
   it('blocks a selected block with nothing translatable, but not a container with children', () => {
-    const spacer = { id: 's', type: 'cms.Spacer', props: { id: 's' } };
-    const widget = { id: 'w', type: 'acme.Widget', props: { id: 'w' } };
-    const row = { id: 'r', type: 'cms.Row', props: { id: 'r', content: [{ type: 'cms.Heading', props: { id: 'x' } }] } };
+    const spacer = { id: 's', blockType: 'cms.Spacer', props: { id: 's' } };
+    const widget = { id: 'w', blockType: 'acme.Widget', props: { id: 'w' } };
+    const row = { id: 'r', blockType: 'cms.Row', props: { id: 'r', content: [{ type: 'cms.Heading', props: { id: 'x' } }] } };
     expect(translationScopeOf({ textSelection: null, selected: spacer, declarationOf })).toMatchObject({ blocked: true });
     expect(translationScopeOf({ textSelection: null, selected: widget, declarationOf })).toMatchObject({ blocked: true });
     expect(translationScopeOf({ textSelection: null, selected: row, declarationOf })).toMatchObject({ blocked: false });
