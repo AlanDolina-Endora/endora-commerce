@@ -57,6 +57,23 @@ function declaredColumns(): MigrationColumn[] {
   return [...out.values()];
 }
 
+/**
+ * Tables a later migration's `up()` drops — read off the migrations for the
+ * same reason the columns are. A column the rename once rewrote stays in the
+ * population above (the migration still names it), but its table is no longer
+ * there at head: `invoice_templates` went with `specs/152-compare-pdf-template/`.
+ */
+function droppedTables(): Set<string> {
+  const files = globSync('../../../../packages/modules/*/src/migrations/*.ts', { cwd: import.meta.dirname });
+  const out = new Set<string>();
+  for (const file of files) {
+    const source = readFileSync(new URL(file, `file://${import.meta.dirname}/`), 'utf8');
+    const up = /async up\(\)[\s\S]*?(?=async down\(\)|$)/.exec(source)?.[0] ?? '';
+    for (const match of up.matchAll(/drop table (?:if exists )?"?([a-z_]+)"?/g)) out.add(match[1]!);
+  }
+  return out;
+}
+
 /** A pre-migration CMS tree carrying every shape §3 says the walk must handle. */
 function preMigrationEnvelope(): unknown {
   return {
@@ -277,8 +294,17 @@ describe('block-name migration (feature 096, T401)', () => {
     const jsonb = new Set(
       rows.filter((r) => r.data_type === 'jsonb').map((r) => `${r.table_name}.${r.column_name}`),
     );
+    const dropped = droppedTables();
+    const tables = new Set(rows.map((r) => r.table_name));
     for (const { table, column } of columns) {
+      if (dropped.has(table)) {
+        expect(tables.has(table), `${table} was dropped by a later migration`).toBe(false);
+        continue;
+      }
       expect(jsonb.has(`${table}.${column}`), `${table}.${column} is a jsonb column`).toBe(true);
     }
+    // Only the one table that has gone, so the exemption cannot swallow a column
+    // whose table a migration forgot.
+    expect(columns.filter(({ table }) => dropped.has(table)).map(({ table }) => table)).toEqual(['invoice_templates']);
   });
 });
