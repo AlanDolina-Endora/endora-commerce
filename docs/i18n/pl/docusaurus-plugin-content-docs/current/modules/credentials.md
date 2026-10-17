@@ -22,8 +22,15 @@ dzienniku audytu**. Każde utworzenie, zmiana i usunięcie jest audytowane przez
 Konfiguracja to nazwana instancja **typu konfiguracji**, z własnym kodem. Od razu dostępne są dwa
 typy:
 
-- **LLM** — dostawcy **GPT** (OpenAI), **Gemini** (Google), **Claude** (Anthropic) i **DeepSeek**.
-  Pola: **API Key** (sekret, wymagane), **Model** (wymagane), **Base URL** (opcjonalne).
+- **LLM** — dostawcy **GPT** (OpenAI), **Gemini** (Google), **Claude** (Anthropic), **DeepSeek** i
+  **OpenAI-compatible (custom endpoint)** — dowolny punkt końcowy zgodny z OpenAI. Pola: **API Key**
+  (sekret, wymagane), **Model** (wymagane), **Base URL** (opcjonalne; **wymagane** dla dostawcy
+  zgodnego z OpenAI). Base URL musi być bezwzględnym adresem `http://` albo `https://` — każda inna
+  wartość jest odrzucana przy zapisie. To główny adres API, pod który trafia żądanie
+  (`<Base URL>/chat/completions`), np. `https://api.deepseek.com`, `https://openrouter.ai/api/v1`
+  albo samodzielnie hostowany `http://localhost:11434/v1`. Jest używany w konfiguracjach OpenAI,
+  DeepSeek i zgodnych z OpenAI (gdy jest pusty — publiczny adres OpenAI albo
+  `https://api.deepseek.com`); Anthropic i Google zawsze używają swoich publicznych adresów.
 - **Email adapter** — dostawcy **SMTP**, **Amazon SES** i **SendGrid**. Każdy dostawca ma własny
   zestaw pól z dokładnie jednym sekretem (SMTP `password`, SES `secretAccessKey`, SendGrid `apiKey`).
 

@@ -25,8 +25,16 @@ A configuration is a named, coded instance of a **configuration type**. Two
 types ship out of the box:
 
 - **LLM** — providers **GPT** (OpenAI), **Gemini** (Google), **Claude**
-  (Anthropic), and **DeepSeek**. Fields: **API Key** (secret, required),
-  **Model** (required), **Base URL** (optional).
+  (Anthropic), **DeepSeek**, and **OpenAI-compatible (custom endpoint)**.
+  Fields: **API Key** (secret, required), **Model** (required), **Base URL**
+  (optional; **required** for OpenAI-compatible). The Base URL must be an
+  absolute `http://` or `https://` address — anything else is refused when you
+  save. It is the API root the request is sent under (`<Base URL>/chat/completions`),
+  for example `https://api.deepseek.com`, `https://openrouter.ai/api/v1` or a
+  self-hosted `http://localhost:11434/v1`. It is used for OpenAI, DeepSeek and
+  OpenAI-compatible configurations (OpenAI's own endpoint and
+  `https://api.deepseek.com` when left empty); Anthropic and Google always use
+  their public endpoints.
 - **Email adapter** — providers **SMTP**, **Amazon SES**, and **SendGrid**.
   Each provider has its own field set with exactly one secret field
   (SMTP `password`, SES `secretAccessKey`, SendGrid `apiKey`).

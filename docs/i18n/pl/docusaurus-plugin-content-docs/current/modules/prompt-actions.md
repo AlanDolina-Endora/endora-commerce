@@ -60,11 +60,15 @@ Ustawienia → grupa **Prompt actions (AI assistant)**:
 | `prompt_actions.bulk_limit` | `500` | Największa liczba rekordów, które może zmienić jedno polecenie; większe plany są blokowane już na etapie podglądu. |
 
 Aby skonfigurować asystenta, utwórz na ekranie Poświadczenia konfigurację danych uwierzytelniających
-typu **LLM** — dostawca `anthropic` (Claude), `google` (Gemini) albo `openai` (GPT), identyfikator
-modelu i klucz API — a następnie wybierz ją w ustawieniu `prompt_actions.llm_credentials` i włącz
-`prompt_actions.enabled`. Klucz API jest sekretem tylko do zapisu: szyfrowany w bazie i nigdy nie
-zwracany po zapisaniu. Ekran Poświadczenia oferuje też dostawców, dla których asystent nie ma
-adaptera; odwołanie do takiej konfiguracji pozostawia asystenta nieskonfigurowanego.
+typu **LLM** — dostawca `anthropic` (Claude), `google` (Gemini), `openai` (GPT), `deepseek`
+(DeepSeek) albo `openai_compatible` (dowolny punkt końcowy zgodny z protokołem chat completions
+OpenAI, z jego **Base URL**), identyfikator modelu i klucz API — a następnie wybierz ją w ustawieniu
+`prompt_actions.llm_credentials` i włącz `prompt_actions.enabled`. Konfiguracja OpenAI lub DeepSeek
+może też mieć Base URL, który zastępuje wtedy publiczny adres dostawcy (serwer pośredniczący lub
+bramka); dla Anthropic i Google Base URL jest pomijany. Klucz API jest sekretem tylko do zapisu:
+szyfrowany w bazie i nigdy nie zwracany po zapisaniu. Odwołanie, które nie prowadzi do użytecznej
+konfiguracji — nieznany dostawca albo konfiguracja zgodna z OpenAI bez poprawnego Base URL —
+pozostawia asystenta nieskonfigurowanego.
 
 Pozycja **Ask the assistant…** jest dostępna tylko wtedy, gdy spełnione są wszystkie trzy warunki:
 asystent jest włączony, odwołanie wskazuje obsługiwanego dostawcę z modelem i kluczem, a Ty masz

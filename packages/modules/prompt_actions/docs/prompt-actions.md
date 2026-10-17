@@ -66,12 +66,17 @@ Settings → group **Prompt actions (AI assistant)**:
 | `prompt_actions.bulk_limit` | `500` | Maximum records one prompt may affect; larger plans are blocked at preview. |
 
 To configure the assistant, create a credential configuration of type **LLM**
-on the Credentials screen — provider `anthropic` (Claude), `google` (Gemini) or
-`openai` (GPT), a model ID and the API key — then select it in
-`prompt_actions.llm_credentials` and switch `prompt_actions.enabled` on. The
-API key is a write-only secret: encrypted at rest and never returned after
-saving. The Credentials screen also offers providers the assistant has no
-adapter for; a reference to one of those leaves the assistant not configured.
+on the Credentials screen — provider `anthropic` (Claude), `google` (Gemini),
+`openai` (GPT), `deepseek` (DeepSeek) or `openai_compatible` (any endpoint that
+speaks the OpenAI chat-completions protocol, with its **Base URL**), a model ID
+and the API key — then select it in `prompt_actions.llm_credentials` and switch
+`prompt_actions.enabled` on. An OpenAI or DeepSeek configuration may also carry
+a Base URL, which then replaces the provider's public endpoint (a proxy or
+gateway); the Base URL is ignored for Anthropic and Google. The API key is a
+write-only secret: encrypted at rest and never returned after saving. A
+reference that resolves to no usable configuration — an unknown provider, an
+OpenAI-compatible configuration without a valid Base URL — leaves the assistant
+not configured.
 
 **Ask the assistant…** is offered only while all three hold: the assistant is
 enabled, the reference resolves to a supported provider with a model and a key,

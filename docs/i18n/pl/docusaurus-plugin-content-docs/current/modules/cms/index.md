@@ -105,6 +105,66 @@ Drzewo treści jest zapisywane w strukturze JSONB:
 `content-schema-upgrader` przy starcie przechodzi przez każde zapisane drzewo i przepisuje węzły na
 miejscu; obecne komponenty zaczynają od `schema_version=1`.
 
+## Tłumaczenie treści przez AI
+
+Page Builder potrafi przetłumaczyć maszynowo zawartość na język edytowanej
+zakładki, za pomocą modelu językowego wybranego przez operatora. Funkcja jest
+**domyślnie wyłączona**.
+
+**Konfiguracja.** W **Ustawienia → Page Builder**:
+
+| Ustawienie | Znaczenie |
+| --- | --- |
+| `cms.page_builder.translation.enabled` | Pokazuje przycisk **Przetłumacz**. Domyślnie wyłączone. |
+| `cms.page_builder.translation.llm_credentials` | Konfiguracja LLM z ekranu **Poświadczenia**, której dostawcy, modelu i klucza API używa przycisk. Obsługiwani są OpenAI, Anthropic, Google, DeepSeek oraz dowolny punkt końcowy zgodny z OpenAI (przez Base URL konfiguracji). |
+| `cms.page_builder.translation.max_source_characters` | Największa liczba znaków tekstu, jaką może wysłać jedno kliknięcie — domyślnie 40 000, dozwolone 1 000–200 000. Wyższy limit pozwala tłumaczyć dłuższe strony naraz, ale zwiększa koszt kliknięcia i wydłuża oczekiwanie na jedno żądanie, które wolny dostawca albo limit czasu serwera pośredniczącego może przerwać. |
+
+Wszystkie trzy obowiązują na całej platformie i działają od następnego
+kliknięcia, bez restartu. Paleta poleceń (⌘K / CTRL+K → „tłumaczenie”) otwiera
+ekran Ustawień. Aby widzieć przycisk, rola potrzebuje uprawnienia
+**Tłumaczenie treści Page Buildera przez AI** (`cms.translate`); do edycji
+treści nadal potrzebne jest uprawnienie zapisu tej treści.
+
+**Co opuszcza platformę.** Do dostawcy wybranego modelu trafiają wyłącznie
+teksty z zawartości — nagłówki, akapity, etykiety przycisków, elementy list,
+teksty alternatywne itd. Linki, odwołania do produktów i kategorii, kody
+bloków, kolory, własny HTML i skrypty, nazwy bloków widoczne tylko w edytorze
+oraz pola SEO nie są nigdy wysyłane ani zmieniane. Formatowanie w tekście
+sformatowanym przechodzi jako numerowane znaczniki, a zmienne takie jak
+`{{customer.firstName}}` są sprawdzane po powrocie; tekst, którego odpowiedź
+gubi jedno albo drugie, zachowuje pierwotne brzmienie.
+
+**Użycie.** Przycisk znajduje się na pasku narzędzi Page Buildera obok
+**Kopiuj z języka** i mówi, co przetłumaczy:
+
+- **Przetłumacz całą treść** — nic nie jest zaznaczone. Domyślnie tłumaczona
+  jest zawartość bieżącej zakładki, a jej język jest wykrywany automatycznie;
+  w oknie można zamiast tego wybrać jako źródło inną zakładkę językową (razem z
+  jej niezapisanymi zmianami), która zastąpi zawartość tej zakładki.
+- **Przetłumacz komponent** — zaznaczony jest blok: ten blok i wszystkie bloki
+  zagnieżdżone w nim. Blok bez tekstu do przetłumaczenia wyłącza przycisk.
+- **Przetłumacz zaznaczenie** — zaznaczony jest tekst w polu tekstowym lub
+  sformatowanym: tylko te słowa. Zaznaczenie obejmujące różne formatowanie
+  (np. częściowo pogrubione) albo kilka akapitów jest tłumaczone całymi
+  akapitami, o czym informuje komunikat.
+
+Wynik zastępuje zawartość jako **niezapisana zmiana**: można go przeczytać,
+poprawić i zapisać jak zwykle albo kliknąć w komunikacie **Przywróć poprzednią
+treść**, dostępne do następnego zapisu, tłumaczenia lub zmiany zakładki.
+Trwające tłumaczenie można anulować; anulowane lub nieudane tłumaczenie nie
+zmienia zawartości.
+
+**Stany.** Gdy ustawienie jest wyłączone, przycisku nie ma. Gdy jest włączone,
+ale bez użytecznych poświadczeń albo przy wyłączonym module **Poświadczenia**,
+przycisk jest nieaktywny i pokazuje powód. Treść większa niż limit jest
+odrzucana, zanim cokolwiek zostanie wysłane.
+
+**Audyt.** Każde żądanie, które wysłało tekst do dostawcy — zakończone, częściowo
+zakończone lub nieudane — zostawia jeden wpis audytu
+`cms.page_builder.translate` z redaktorem, treścią (typ i id), językami,
+dostawcą i modelem, liczbą tekstów i znaków, obowiązującym limitem, zakresem i
+wynikiem. Sam tekst nigdy nie jest zapisywany.
+
 ## Zakres: kanał sprzedaży i język
 
 Każda strona, blok, szablon i hook jest przypisany do jednego lub kilku kanałów sprzedaży (relacja
@@ -160,6 +220,8 @@ albo nieudane pobranie nic nie wyświetla — hooki nie mogą zepsuć wyświetla
 | DELETE  | `/hooks/:id`                                        | Odrzucane z 409, gdy `is_system=true`.              |
 | GET / POST / PATCH / DELETE | `/hooks/:id/attachments[/:blockId]` | Przypinanie, zmiana kolejności i odpinanie bloków w hooku.     |
 | GET     | `/page-builder/config`                              | Połączony opis Page Buildera (tylko metadane).|
+| GET     | `/page-builder/translation`                         | Stan tłumaczenia: `ready` (dostawca, model), `disabled`, `not_configured` albo `unavailable`, oraz limit rozmiaru. `cms.translate`. |
+| POST    | `/page-builder/translate`                           | Tłumaczy zawartość (opcjonalnie jeden komponent albo zaznaczony tekst) na język; nic nie jest zapisywane. `cms.translate`. |
 
 ### Storefront (`/api/v1/cms`)
 
@@ -253,7 +315,12 @@ manifeście, trzy warstwy i arkusz stylów bloków.
 
 `CMS_PAGE_NOT_FOUND`, `CMS_BLOCK_NOT_FOUND`, `CMS_TEMPLATE_NOT_FOUND`, `CMS_HOOK_NOT_FOUND`,
 `CMS_SLUG_CONFLICT`, `CMS_CODE_CONFLICT`, `CMS_REFERENCED`, `CMS_HOOK_SYSTEM_PROTECTED`,
-`CMS_LANGUAGE_NOT_IN_CHANNEL_SCOPE`, `CMS_SCHEMA_UPGRADE_FAILED`.
+`CMS_LANGUAGE_NOT_IN_CHANNEL_SCOPE`, `CMS_SCHEMA_UPGRADE_FAILED`, a dla
+tłumaczenia `CMS_TRANSLATION_DISABLED`, `CMS_TRANSLATION_NOT_CONFIGURED`,
+`CMS_TRANSLATION_UNAVAILABLE` (409), `CMS_TRANSLATION_TOO_LARGE` (413, z
+ustawionym `limit`), `CMS_TRANSLATION_SELECTION_NOT_FOUND` (422) oraz
+`CMS_TRANSLATION_PROVIDER_FAILED` (502, `details.code` jedno z
+`credentials_rejected`, `rate_limited`, `unavailable`, `timeout`, `malformed`).
 
 Wszystkie odpowiedzi z błędem mają strukturę zgodną z kontraktem błędów platformy w
 `packages/contracts/src/errors.ts`.
