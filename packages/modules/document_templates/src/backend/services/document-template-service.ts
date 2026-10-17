@@ -154,7 +154,7 @@ export class DocumentTemplateService {
       id: row.id,
       documentType: row.documentType,
       name: row.name,
-      salesChannelId: row.salesChannelId,
+      salesChannelId: row.salesChannelId ?? null,
       salesChannelName: row.salesChannelId ? (names.get(row.salesChannelId) ?? null) : null,
       languages: Object.keys(row.content.languages),
       isDefault: row.isDefault,
@@ -322,7 +322,7 @@ export function templateReaderOver(emFactory: () => EntityManager): TemplateRead
   const toRow = (row: DocumentTemplate): TemplateRow => ({
     id: row.id,
     documentType: row.documentType,
-    salesChannelId: row.salesChannelId,
+    salesChannelId: row.salesChannelId ?? null,
     isDefault: row.isDefault,
     version: row.version,
     content: row.content,

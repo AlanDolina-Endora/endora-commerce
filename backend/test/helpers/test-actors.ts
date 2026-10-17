@@ -369,6 +369,16 @@ export const ADMIN_COOKIES: Record<string, { adminUserId: string }> = {
   'stub-global-search-no-configure-session': {
     adminUserId: '00000000-0000-4000-8000-0000000150a3',
   },
+  // `specs/152-compare-pdf-template/` — document templates. An admin holding
+  // `document_templates:read` only (preview and read, no write), and an admin
+  // holding neither code. Users and roles are created by the files under
+  // `test/contract/document_templates/`.
+  'stub-document-templates-reader-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000152a1',
+  },
+  'stub-document-templates-none-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000152a2',
+  },
 };
 
 declare module 'fastify' {

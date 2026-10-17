@@ -48,7 +48,7 @@ export function auditStateOf(row: DocumentTemplate): AuditState {
   return {
     documentType: row.documentType,
     name: row.name,
-    salesChannelId: row.salesChannelId,
+    salesChannelId: row.salesChannelId ?? null,
     isDefault: row.isDefault,
     version: row.version,
     languages: Object.keys(row.content.languages),
@@ -209,13 +209,13 @@ export function setDefaultCommand(input: {
     async run(ctx) {
       const probe = await ctx.em.findOne(DocumentTemplate, { id: input.id });
       if (!probe) throw notFound(input.id);
-      await lockScope(ctx.em, probe.documentType, probe.salesChannelId);
+      await lockScope(ctx.em, probe.documentType, probe.salesChannelId ?? null);
       // Re-read under the lock: a concurrent set-default may have committed.
       await ctx.em.refresh(probe);
       const row = await loadVersioned(ctx, input.id, input.expectedVersion);
       const before = auditStateOf(row);
       if (row.isDefault) return { result: { row }, skipAudit: true };
-      const previousDefault = await clearScopeDefault(ctx.em, row.documentType, row.salesChannelId, row.id);
+      const previousDefault = await clearScopeDefault(ctx.em, row.documentType, row.salesChannelId ?? null, row.id);
       row.isDefault = true;
       row.version += 1;
       await ctx.em.flush();
