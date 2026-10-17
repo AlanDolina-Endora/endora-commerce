@@ -1,7 +1,7 @@
-# Specification Quality Checklist: Editable PDF template for the storefront product comparison
+# Specification Quality Checklist: Document templates — comparison PDF template, invoice templates moved
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-10-17
+**Created**: 2026-10-17 (revised after the owner's answers, same day)
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -13,10 +13,10 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain — **three remain by design** (Q2 on FR-036, Q3 on
-  FR-031, Q4 on FR-023), awaiting the product owner; Q1, Q5, Q6, Q7 are recorded as assumptions with
-  defaults. The plan proceeds on every default and states, per question, what changes otherwise
-  (plan.md § *What changes if the owner answers differently*).
+- [x] No [NEEDS CLARIFICATION] markers remain — Q1–Q7 answered by the owner on 2026-10-17 (spec
+  *Clarifications*). The five new questions N1–N5 raised by the Q1 extension are recorded under *Open
+  questions* with defaults and referenced from FR-050, FR-083, FR-089, FR-092 in brackets; the plan
+  proceeds on the defaults and states what each other answer changes.
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -34,9 +34,11 @@
 
 ## Notes
 
-- FR-050 and FR-051 speak of "its API" and the platform modules screen deliberately: Principle XVII's
+- FR-050/FR-051 speak of "its API" and the platform modules screen deliberately: Principle XVII's
   off-state obligation is stated in those terms in every switchable module's spec.
-- FR-033 names "the assets library" as the only image source: a product decision with a security
-  reason (research R-12), kept in the spec because an operator sees it.
-- Validation iterations: 1 — the first draft named `pdfmake` and Puck in FR-010/FR-013; reworded to
-  user terms.
+- FR-033 names "the assets library" as the image source of new blocks: a product decision with a
+  security reason (research R-12); FR-086 keeps the invoice logo's existing options for parity.
+- FR-092 says the former invoice-template administration API is withdrawn — an operator- and
+  integrator-visible fact, so it is a requirement and not only a plan detail.
+- Validation iterations: 2 — revision 2 replaced "active" by "default", added US5/US6, FR-037–FR-039,
+  FR-080–FR-092, SC-008/SC-009.

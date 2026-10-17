@@ -9,7 +9,12 @@
 | `code` | `comparisons.comparison` |
 | `moduleId` | `comparisons` |
 | `labelKey` / `descriptionKey` | `documentTypes.comparison.label` / `.description` (comparisons' bundles) |
-| `blocks` | `comparisons.ComparisonHeader`, `comparisons.ComparisonTable`, `comparisons.ComparisonShareLink` |
+| `blocks()` | `comparisons.ComparisonHeader`, `comparisons.ComparisonTable`, `comparisons.ComparisonShareLink` (all `moduleId: 'comparisons'`) |
+| `coreBlocks` | `'all'` — the palette is these three plus the six core blocks, nothing else (owner Q1) |
+| `selection` | `'default_only'` — the buyer never chooses; a `templateId` is never passed (owner Q2) |
+| `languages` | absent — every active content language |
+| `pageDefaults` | generic defaults (`data-model.md` §3.1) |
+| `renderBuiltIn` / `prepareRender` / `legacyImport` | absent |
 | `variables` | `productCount`, `channelName`, `customerName`, `organizationName`, `shareUrl` (labels `documentTypes.comparison.variables.<key>`) |
 | `suggestOrientation` | `pickOrientation(view.products.length)` — landscape from 3 products (unchanged rule) |
 | `defaultContent()` | `en-US` and `pl-PL` trees reproducing today's layout: `ComparisonHeader` (title, mode caption, priced-for note) + `ComparisonTable` (images, name, price) — the literals live in one per-language map in `src/backend/document/built-in-layout.ts` |
@@ -37,7 +42,7 @@ Built only in the export route, under the buyer's request context, from data the
 `comparisons`' dependencies) and `settingsReadPort` for `sales_channels.storefront_url` at the
 resolved channel. Nothing else enters a render (FR-033).
 
-## 3. Block semantics (pdfmake output; props in `data-model.md` §3.2)
+## 3. Block semantics (pdfmake output; props in `data-model.md` §4.2)
 
 - **Rows** (`ComparisonTable`): `filterRowsByMode(view.comparableAttributes, view.displayMode)`, then,
   when `hideEmptyRows`, drop rows whose every value is `null` — the screen's rule.
@@ -81,7 +86,7 @@ re-throws `ModuleDisabledError` first (`check:port-catches`).
 ## 5. Manifest additions (`packages/modules/comparisons/src/manifest.ts`)
 
 - `blocks`: the three names, `category: 'comparison'`, `contexts: ['document']`, `fields` per
-  `data-model.md` §3.2 (labels as plain English strings — the admin contribution overrides them with
+  `data-model.md` §4.2 (labels as plain English strings — the admin contribution overrides them with
   translated, richer fields), `defaultProps` = the English defaults, weights 10/20/30.
 - `blockCategories`: `{ key: 'comparison', titleKey: 'blocks.category.comparison', contexts:
   ['document'], weight: 20 }`.
@@ -111,6 +116,7 @@ number ranges, translated labels). `ComparisonsListPage` adds the *PDF template*
 Unit (co-located): each block's document definition for props × data edge cases (no images, 16
 products → 4 chunks, hidden note, null price, unavailable, share URL null → nothing, Polish names and
 formats); built-in layout validates and renders for both languages; `buildComparisonDocumentData`.
-Contract: `/me/pdf` with templates on / off / active channel template / Polish header / hideEmptyRows;
+Contract: `/me/pdf` with templates on / off / channel default template / non-default templates ignored /
+Polish header / hideEmptyRows;
 cross-organisation (A never gets B's prices or restricted products through the template path);
 cross-channel (channel-B template never used for A). Storefront unit: header + query sent.

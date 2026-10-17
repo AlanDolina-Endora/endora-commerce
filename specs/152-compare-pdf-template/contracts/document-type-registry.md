@@ -1,105 +1,115 @@
-# Contract: document types, blocks and the render port
+# Contract: document types, their blocks, and the render port
 
 **Normative for**: `document_templates` (host of the facility) and every module contributing a document
-type — in this feature `comparisons`; later `quote_requests` (research R-22).
+type — in this feature `comparisons` and `invoices`; later `quote_requests` (research R-22).
 **Types live in**: `packages/contracts/src/document-templates.ts` (Principle II — before any route).
 **Container names**: `documentTypeRegistry` (ungated contribution registry), `documentRenderPort`
 (gated port). Owner of both: `document_templates`.
 
 ## 1. Vocabulary
 
-- **Document type code** — `<moduleId>.<snake_name>`, regex `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`,
-  ≤ 120 chars. The owner segment MUST be the registering module's id. Permanent: persisted in
-  `document_templates.document_type`.
-- **Core block** — a block owned by `document_templates`, offered to every document type.
-- **Host block** — a block owned by the module that registers the document type, offered only to the
-  types that list it.
+- **Document type code** — `<moduleId>.<snake_name>`, `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`, ≤ 120
+  chars; owner segment = the registering module. Permanent (persisted).
+- **Core block** — owned by `document_templates`: `document_templates.{Heading,Text,Image,Spacer,
+  Divider,PageBreak}`. Offered only to types that opt in.
+- **Type block** — a block the type offers: the host's own, or one another module contributes to the
+  host's type through a host-owned seam (invoices' `invoicePdfBlockRegistry`). **A type's palette is
+  exactly its type blocks plus the core blocks it opts into** (owner Q1).
 
 ## 2. `DocumentTypeRegistration<TData>`
 
 ```ts
-export interface DocumentTypeRegistration<TData = unknown> {
-  /** `<moduleId>.<snake_name>` — permanent. */
+export type CoreBlockName =
+  'document_templates.Heading' | 'document_templates.Text' | 'document_templates.Image' |
+  'document_templates.Spacer' | 'document_templates.Divider' | 'document_templates.PageBreak';
+
+export interface DocumentTypeRegistration<TData = unknown, TPrepared = unknown> {
   readonly code: string;
-  /** The registering module. While it is not present, the type is invisible and unrenderable. */
   readonly moduleId: string;
-  /** Module-relative i18n keys, resolved in `moduleId`'s namespace. */
-  readonly labelKey: string;
+  readonly labelKey: string;                 // module-relative i18n key
   readonly descriptionKey?: string;
 
-  /** Host blocks this type offers, in palette order. Each name MUST be declared in `moduleId`'s
-   *  manifest `blocks` with `contexts` containing `'document'`. */
-  readonly blocks: readonly DocumentBlockRenderer<TData>[];
+  /** The type's blocks at this moment (called per read/render — contributors come and go). */
+  blocks(): readonly DocumentBlockRenderer<TData, TPrepared>[];
+  /** Which core blocks the type offers. */
+  readonly coreBlocks: 'all' | 'none' | readonly CoreBlockName[];
 
-  /** Merge fields beyond the core ones (§5). Keys: `^[a-z][A-Za-z0-9]*$`. */
+  /** Per-document selection (owner Q2). */
+  readonly selection: 'default_only' | 'per_document';
+  /** Languages a template of this type may hold; absent = every active content language. */
+  readonly languages?: readonly string[];
+
   readonly variables?: readonly { readonly key: string; readonly labelKey: string }[];
   resolveVariables?(data: TData, context: DocumentRenderContext): Readonly<Record<string, string | null>>;
 
-  /** The built-in layout: per-language trees (at least `en-US`, and `pl-PL` for first-party types).
-   *  MUST validate against `documentTemplateContentSchema`. Returned fresh on every call. */
+  /** Built-in layout tree, per language. Validated at registration. Fresh object per call. */
   defaultContent(): DocumentTemplateContent;
+  /** Code layout used when no candidate tree renders anything. Absent = an empty document is refused. */
+  renderBuiltIn?(data: TData, prepared: TPrepared, context: DocumentRenderContext): unknown[];
 
-  /** Sample data for the editor canvas and the preview. JSON-serialisable; MUST contain no real
-   *  customer, organisation or product data. */
-  sampleData(language: string): TData;
-
-  /** Orientation when the root prop is `'auto'`. Defaults to `'portrait'`. */
+  /** Root-prop defaults merged under stored root props, plus non-editable pdfmake styles. */
+  readonly pageDefaults?: Partial<DocumentRootProps> & { readonly styles?: Readonly<Record<string, unknown>> };
   suggestOrientation?(data: TData): 'portrait' | 'landscape';
+
+  /** Per-render precomputation handed to every block (images, contributor data, flags). */
+  prepareRender?(data: TData, input: { readonly placedBlocks: ReadonlySet<string> | null;
+                                       readonly preview: boolean }): Promise<TPrepared>;
+
+  sampleData(language: string): TData;      // JSON-serialisable, fictitious
+
+  /** One-time import of templates from a former host-owned location (research R-24). */
+  readonly legacyImport?: {
+    readonly source: string;                 // e.g. 'invoice_templates'
+    read(): Promise<readonly LegacyTemplateRecord[]>;
+    afterImport?(): Promise<void>;           // runs before the import commits; a throw rolls it back
+  };
 }
 
-export interface DocumentBlockRenderer<TData = unknown> {
-  /** `<moduleId>.<LocalName>`, `blockNameRe`, owner segment = registration `moduleId`. */
-  readonly name: string;
-  /**
-   * One pdfmake content node (typed `unknown` here: `contracts` acquires no pdfmake dependency).
-   * `props` are the stored props merged over the manifest's `defaultProps`; untrusted — coerce.
-   * MAY be async (images). MUST NOT read anything but its arguments and the host's own services.
-   */
+export interface DocumentBlockRenderer<TData = unknown, TPrepared = unknown> {
+  readonly name: string;                     // blockNameRe; owner segment = moduleId
+  readonly moduleId: string;                 // presence-filtered by this id on every call
+  /** Label + fields when no present manifest declares `name` (contributed invoice blocks). */
+  describe?(): { readonly label: string; readonly fields: Readonly<Record<string, unknown>> };
   render(input: {
-    readonly props: Readonly<Record<string, unknown>>;
+    readonly props: Readonly<Record<string, unknown>>;  // stored props over declared defaultProps; untrusted
     readonly data: TData;
+    readonly prepared: TPrepared;
     readonly language: string;
     readonly context: DocumentRenderContext;
-    /** Interpolates `{{key}}` with the render's merge fields (§5). */
     readonly interpolate: (text: string) => string;
-  }): unknown | Promise<unknown>;
+  }): unknown | Promise<unknown>;            // one pdfmake content node
 }
 
 export interface DocumentRenderContext {
   readonly documentType: string;
-  readonly language: string;          // the tree's language actually used
+  readonly language: string;                 // tree language actually used
   readonly salesChannelId: string | null;
-  readonly preview: boolean;          // true for the admin preview with sample data
-  readonly pageWidth: number;         // usable width in pt after margins and orientation
+  readonly preview: boolean;
+  readonly pageWidth: number;                // usable pt after margins and orientation
+}
+
+export interface LegacyTemplateRecord {
+  readonly id: string; readonly name: string; readonly salesChannelId: string | null;
+  readonly languages: Readonly<Record<string, unknown>>;
+  readonly isDefault: boolean; readonly version: number;
+  readonly createdAt: Date; readonly updatedAt: Date;
 }
 ```
 
 ## 3. `DocumentTypeRegistryPort` (`documentTypeRegistry`)
 
 ```ts
-export interface DocumentTypeRegistryPort {
-  register(registration: DocumentTypeRegistration): void;
-}
+export interface DocumentTypeRegistryPort { register(registration: DocumentTypeRegistration): void; }
 ```
 
-Rules, each enforced by the registry with a thrown error at boot (a registration bug is a deploy bug):
+Refused at registration (boot error): `code` owner ≠ `moduleId`; `moduleId === 'document_templates'`; a
+second, different registration for one `code`; an invalid `defaultContent()`; `coreBlocks` naming a
+non-core block. Refused **per call** of `blocks()` (block dropped, logged once): a block whose owner
+segment ≠ its `moduleId`, a core block name, two blocks with one name.
 
-1. `code`'s owner segment and every host block name's owner segment equal `moduleId`.
-2. `moduleId !== 'document_templates'`; core block names are not contributable.
-3. A second registration of one `code` from a different object is refused
-   (`DocumentTypeConflictError`); the identical object twice is accepted.
-4. `defaultContent()` is validated once at registration.
-
-Behaviour:
-
-- **Ungated**, plain `ctx.di.register` in `document_templates` (D-39 contribution registry). A host
-  pushes from a **contribution-only** `ctx.onBoot` hook that does **not** probe presence
-  (`specs/conventions/module-activation.md` § boot hooks). If `document_templates` is not composed,
-  the platform drops the push (`packages/platform/src/kernel/contribution-sinks.ts`).
-- Every read (`list`, `find`) filters by `effectiveState.isPresent(registration.moduleId)`, on every
-  call — no restart on a flip.
-- Host manifest: `nonBindingDependencies: [{ moduleId: 'document_templates', name:
-  'documentTypeRegistry', kind: 'contributes-to', reason: '…' }]`.
+Ungated `ctx.di.register`; hosts push from a **contribution-only** boot hook without a presence probe;
+an uncomposed facility drops the push (`packages/platform/src/kernel/contribution-sinks.ts`). Reads
+filter types by `effectiveState.isPresent(moduleId)` and blocks by their own `moduleId`, on every call.
 
 ## 4. `DocumentRenderPort` (`documentRenderPort`)
 
@@ -107,62 +117,63 @@ Behaviour:
 export interface DocumentRenderPort {
   render<TData>(input: {
     readonly documentType: string;
-    readonly salesChannelId: string | null; // the request's resolved channel; null only for preview
-    readonly language: string;              // the reader's language (host-resolved)
+    readonly salesChannelId: string | null;  // the document's channel; null only for previews
+    readonly language: string;
     readonly data: TData;
+    readonly templateId?: string;            // only for selection: 'per_document'
+    readonly tree?: unknown;                 // admin preview of an unsaved canvas (facility-internal)
   }): Promise<DocumentRenderResult>;
 }
 
 export interface DocumentRenderResult {
-  readonly bytes: Uint8Array;               // application/pdf
-  readonly source: 'template' | 'built_in';
+  readonly bytes: Uint8Array;
+  readonly source: 'explicit' | 'default' | 'built_in';
   readonly templateId: string | null;
   readonly templateVersion: number | null;
-  readonly language: string;                // tree language actually used
+  readonly language: string;
+  readonly requestedTemplateMissing: boolean;
 }
 ```
 
-- **Gated**: `ctx.di.providePort('documentRenderPort', …)`; a caller with the module off gets
-  `ModuleDisabledError` (503). Hosts MUST probe `effectiveState.isPresent('document_templates')`
-  **before** resolving and take their own fallback — never `catch` it
-  (`specs/conventions/module-composition.md` item 7). Host manifest entry: `kind:
-  'degrades-without'`, `name: 'documentRenderPort'`, `whenAbsent` describing the fallback.
-- Unknown or absent `documentType` → `DocumentTypeNotAvailableError` (404 `DOCUMENT_TYPE_NOT_AVAILABLE`).
-- **Template resolution** (FR-031): active row with `sales_channel_id = salesChannelId` (skipped when
-  null) → active row with `sales_channel_id is null` → `defaultContent()`. One read, one snapshot:
-  the row is read once and rendered from that object (FR-034).
-- **Language** (FR-032): tree keys tried exact → same primary subtag → `en-US` → `en` → first key.
-- **Renderable** = a node whose `type` is a core block, or a host block listed by this type's
-  registration whose module is present. Others are skipped, props untouched. A tree with zero
-  renderable nodes → the next candidate in the resolution order (the built-in layout last).
-- **Failure**: a host `render` that throws → `DocumentRenderError` (503 `DOCUMENT_RENDER_FAILED`)
-  carrying `{ templateId, version, blockName }` for the log; `ModuleDisabledError` passes through
-  untouched. Core image failures never throw (block omitted).
+- **Gated**. Hosts that degrade probe `effectiveState.isPresent('document_templates')` first and never
+  `catch` `ModuleDisabledError` (`module-composition.md` item 7). Hosts that bind (invoices, research
+  R-27) resolve it directly.
+- Before anything: `ensureImported(documentType)` (research R-24).
+- **Explicit template** (`templateId`): type `default_only` → `DOCUMENT_TEMPLATE_NOT_SELECTABLE`; row of
+  another type, or scoped to a channel ≠ `salesChannelId` → `DOCUMENT_TEMPLATE_NOT_SELECTABLE`; missing →
+  fall through to default resolution with `requestedTemplateMissing: true`.
+- **Default resolution** (FR-031): default of `salesChannelId` (skipped when null) → global default →
+  `defaultContent()` → `renderBuiltIn()`. A candidate whose chosen-language tree has zero renderable
+  nodes is skipped. One row read, rendered from that object (FR-034).
+- **Language**: exact → same primary subtag → `en-US` → `en` → first key.
+- **Renderable node**: its `type` is in the type's palette (§1) and its owner is present. Others are
+  skipped; stored props untouched.
+- **Page**: `pageDefaults` ← stored root props; `orientation: 'auto'` → `suggestOrientation(data)`, else
+  `'portrait'`; header/footer only when non-empty; no pdfmake `info` unless the type sets it.
+- **Failure**: a block `render` throwing → `DOCUMENT_RENDER_FAILED` (503) with `{ templateId, version,
+  blockName }` logged; `ModuleDisabledError` re-thrown untouched. A type that must never fail on an
+  enrichment absorbs it in its own `prepareRender` (invoices, research R-17).
+- pdfmake URL policy: deny all. Fonts: bundled Roboto.
 
 ## 5. Merge fields
 
-- Syntax `{{key}}`, key `^[a-z][A-Za-z0-9]*$`, no whitespace inside braces, no nesting, no escaping.
-- Core keys: `date` (render date, `Intl.DateTimeFormat(language, { dateStyle: 'long' })`); in root
-  `headerText`/`footerText`/`pageNumberFormat` only: `page`, `pages`.
-- Host keys: `resolveVariables(data, context)`; `null` → empty string.
-- Unknown key → printed verbatim, braces included. Values are plain text (no markup).
+`{{key}}`, key `^[a-z][A-Za-z0-9]*$`. Core: `date`; in root header/footer/page-number format: `page`,
+`pages`. Host: `resolveVariables`. Known-but-null → empty; unknown → verbatim. Plain text.
 
-## 6. Reserved extension — blocks contributed into another host's type (not built)
+## 6. Import execution context
 
-For a future invoices adapter (KSeF block, research R-4) the port will gain, additively:
+`ensureImported` runs the `document_template.import` Command under `enterSystemScope('document
+templates legacy import', …)` at boot and `withSystemScope('document templates legacy import', …)` when
+triggered lazily inside a request — the actor is the system, never the buyer or administrator whose
+request happened to trigger it (Principle XIII, D-285).
 
-```ts
-registerBlock(block: DocumentBlockRenderer & { moduleId: string; documentTypes: readonly string[] }): void;
-```
+## 7. Tests owed
 
-with the invoice registry's rules (own namespace, conflict refused, skipped while its contributor is
-absent). Nothing in §2–§5 may be changed in a way that prevents this.
-
-## 7. Tests owed by this contract
-
-- Registry: rules 1–4, presence filter both ways, identical-object idempotence (`document-type-registry.test.ts`).
-- Port: resolution order incl. "nothing renderable" fall-through, language chain, skip of absent
-  owner's block with props preserved, throw → `DOCUMENT_RENDER_FAILED`, `ModuleDisabledError`
-  re-thrown, single-snapshot read, channel-B template never used for channel A, null channel never
-  matches a channel row.
-- A fixture document type registered by a test-only module, end to end (US5, SC-007).
+- Registry: every refusal of §3; presence filter of types and of individual blocks both ways.
+- Port: explicit-template rules (not selectable / wrong type / wrong channel / missing → fallback);
+  default resolution incl. nothing-renderable fall-through to `renderBuiltIn`; language chain; skip of
+  absent-owner blocks with props preserved; palette restriction (a block of another type is skipped at
+  render and refused at save); failure policy; single snapshot; channel-B never used for A.
+- Import: once (marker), concurrent runs, deleted template not resurrected, unknown channel skipped and
+  reported, `afterImport` failure rolls back and retries, system actor in the audit row.
+- A fixture type with `selection: 'per_document'` registered by a test-only module (US6, SC-007).

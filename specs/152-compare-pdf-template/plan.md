@@ -1,81 +1,89 @@
-# Implementation Plan: Editable PDF template for the storefront product comparison
+# Implementation Plan: Document templates — comparison PDF template, invoice templates moved
 
 **Branch**: `feat/152-compare-pdf-template` | **Date**: 2026-10-17 | **Spec**: [spec.md](./spec.md)
-**Input**: Feature specification from `specs/152-compare-pdf-template/spec.md` (Draft — Q1–Q7 open;
-this plan proceeds on the recommended default of each and says below what changes if an answer
-differs).
+**Input**: Feature specification from `specs/152-compare-pdf-template/spec.md` — clarified by the
+owner on 2026-10-17 (Q1–Q7; Q1 extended: invoice templates move in this feature). Five new questions
+(N1–N5) are open; this plan follows their recommended defaults and says below what each other answer
+changes.
 
 ## Summary
 
-The storefront comparison PDF — today a hard-coded, English-only `pdfmake` layout inside
-`comparisons` (research R-1) — becomes a **Page Builder template** an operator designs in the Admin
-UI. The approach, with evidence and rejected alternatives in [research.md](./research.md):
+The storefront comparison PDF — a hard-coded, English-only `pdfmake` layout inside `comparisons`
+(research R-1) — becomes a Page Builder template, and **invoice templates move onto the same
+facility** with their output unchanged (R-2, R-4). With evidence and rejected alternatives in
+[research.md](./research.md):
 
-- **A new switchable module `document_templates`** (R-3) owns the generic capability — one table,
-  six Commands, the admin API and screens, the Puck→pdfmake render engine, six general-purpose blocks
-  — as Principle XIV's entity-agnostic core. **Invoices are not touched** (R-4).
-- **Hosts contribute document types** through an ungated, presence-filtered registry
-  (`documentTypeRegistry`, `contributes-to`) and render through a gated port (`documentRenderPort`,
-  `degrades-without`) to which they **pass their own data** (R-5). The core never reads host data for
-  meaning, so tenant scoping stays where it is.
-- **`comparisons` registers `comparisons.comparison`** with three blocks (header, table, share link),
-  five merge fields, a sample and a built-in layout in `en-US` and `pl-PL`; its export route calls the
-  port when `document_templates` is present and keeps today's renderer otherwise (R-11).
-- **Page Builder reuse**: a new block context `document` (R-6); the editor reuses the invoice editor's
-  chrome and feature 141's block-contribution path, with the canvas sample served by the backend so
-  canvas and PDF preview agree (R-7).
-- **Template model**: one active template per type and scope (all channels / one channel),
-  channel → global → built-in resolution, the built-in layout virtual rather than seeded, scope
-  immutable (R-8); per-language trees with the catalogue's language fallback (R-9).
-- **The PDF finally speaks the buyer's language** — the storefront sends its locale (R-18).
-- **No new runtime dependency, no cache, no domain event, one migration** (R-14, R-19).
+- **A new switchable module `document_templates`** (R-3): two tables (templates; import markers), seven
+  Commands, the admin API and screens, the Puck→pdfmake engine, six general-purpose blocks.
+- **Each document type has its own blocks** (R-6): a type's palette is exactly its own blocks, the blocks
+  contributed to it through its host, and the general-purpose blocks only if it opts in. The comparison
+  opts in; invoices do not.
+- **Several templates per type and scope, one default; per-document selection declared per type**
+  (R-8, R-23). The render port takes an optional `templateId`; comparison and invoice are
+  `default_only`; quote requests will be `per_document`.
+- **Hosts register types and pass their own data** (R-5). `comparisons` degrades without the facility
+  (its fixed renderer); `invoices` binds it (R-27, N2).
+- **Invoices move without rewriting their rendering** (R-25): their ten section builders become the
+  type's block renderers; four generic hooks (`blocks()`, `prepareRender`, `renderBuiltIn`,
+  `pageDefaults`) carry the KSeF rule, contributor data, logo inlining, the built-in code layout and
+  page geometry. **Golden document definitions captured before the change prove parity.**
+- **Invoice data moves by a one-time pull import owned by `document_templates`**, reading through a
+  function `invoices` supplies over its own table, recorded in an import-marker table so it happens once
+  and never resurrects deletions (R-24). Role grants keep invoice-template editors able to edit (R-28,
+  N3). Old admin routes redirect; the old API is withdrawn (R-29, N4).
+- **The comparison PDF finally speaks the buyer's language** (R-9, R-18). No new runtime dependency, no
+  cache, no domain event, one migration.
 
 ## Technical Context
 
 **Language/Version**: TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM
 **Primary Dependencies**: Fastify, MikroORM (PostgreSQL), Zod, `pdfmake` (backend); React 19 + Vite + react-router-dom 7 through `@endora-commerce/admin-kit`, `@puckeditor/core`, `@endora-commerce/page-builder-core`, `@endora-commerce/page-builder-admin` (admin); Next.js 15 App Router (storefront) — **no new runtime dependency**
-**Storage**: PostgreSQL — one new table `document_templates` owned by `document_templates`, one migration; no column added elsewhere
-**Testing**: Vitest — co-located `*.test.ts` in `packages/modules/document_templates/src/**` and
-`packages/modules/comparisons/src/**`; `backend/test/contract/document_templates/`,
-`backend/test/contract/comparisons/`, `backend/test/integration/document_templates/` (off-state,
-tenancy, channel); `backend/test/perf/comparisons/pdf-export.bench.ts` (SC-003);
-`admin/test/modules/document_templates/` and `admin/test/modules/comparisons/` (`<StrictMode>`,
-`axe-core`); `storefront/test/` for the export call
+**Storage**: PostgreSQL — two new tables `document_templates` and `document_template_imports` owned by `document_templates`, one migration; `invoice_templates` kept read-only and imported at runtime; no column added elsewhere
+**Testing**: Vitest — co-located `*.test.ts` in `packages/modules/{document_templates,comparisons,invoices}/src/**`
+(invoice parity goldens under `packages/modules/invoices/src/backend/document/__golden__/`);
+`backend/test/contract/document_templates/`, `backend/test/contract/comparisons/`,
+`backend/test/integration/{document_templates,invoices}/`; `backend/test/perf/` benches for SC-003;
+`admin/test/modules/{document_templates,comparisons,invoices}/` (`<StrictMode>`, `axe-core`);
+`storefront/test/`
 **Target Platform**: Linux server; admin SPA and storefront in evergreen browsers
 **Project Type**: web application — monorepo (`backend/`, `admin/`, `storefront/`, `packages/`)
-**Performance Goals**: 16-product export p95 < 5 s and ≤ +0.5 s versus today; preview of the
-built-in layout p95 < 3 s; template resolution ≤ 2 indexed reads (SC-003)
-**Constraints**: content ≤ 512 KiB, ≤ 200 nodes/language, ≤ 10 languages, ≤ 20 images/language
-(R-20); pdfmake URL access denied; images from the assets library only (R-12)
-**Scale/Scope**: 1 new module (1 table, 6 Commands, 12 admin routes, 2 permissions, 1 palette action,
-1 nav entry, 2 admin pages, 6 core blocks, 1 setting); `comparisons`: 3 blocks, 1 registration, 1
-route changed, 3 admin block contributions, 1 link; contracts: 1 new file, 2 enum widenings, 1 schema
-added to `comparisons.ts`; `page-builder-core`: 1 context, 1 type; storefront: 3 files; docs: 2 pages
-× 2 languages + comparisons page update
+**Performance Goals**: 16-product comparison export p95 < 5 s and ≤ +0.5 s vs today; built-in preview
+p95 < 3 s; invoice PDF within 10 % of today; template resolution ≤ 2 indexed reads; import check O(1)
+after the first success per process
+**Constraints**: content ≤ 512 KiB, ≤ 200 nodes/language, ≤ 10 languages, ≤ 20 core images/language
+(R-20, not applied to imported legacy rows); pdfmake URL access denied; invoice output deep-equal to
+goldens (SC-008)
+**Scale/Scope**: new module (2 tables, 7 Commands, 12 admin routes, 2 permissions, 1 action, 1 nav
+entry, 2 pages, 6 core blocks, 1 setting); `comparisons` (3 blocks, 1 registration, 1 route changed, 3
+admin block contributions, 1 link); `invoices` (1 registration, 3 render paths re-pointed, 10 admin
+block contributions moved, 2 redirect routes, 5 API routes and 2 pages removed, manifest blocks gain
+fields, 1 action removed, 2 dependencies added); contracts (1 new file, 2 enum widenings, 2 data
+schemas); page-builder-core (1 context, 1 type); storefront (3 files); `_i18n` (~29 keys removed); docs
+(new module page × 2 languages; comparisons and invoices pages × 2 languages)
 
 ## Constitution Check
 
-*GATE: passed before Phase 0; re-checked after Phase 1 design — same verdict.*
+*GATE: passed before Phase 0; re-checked after Phase 1 design (revision 2) — same verdict.*
 
 | Principle | Verdict | How the design meets it |
 | --- | --- | --- |
-| **I. Modular architecture (NN)** | Pass | `document_templates` owns its table, Commands, routes, screens, engine and core blocks; `comparisons` owns its blocks, data, sample, built-in layout and the export route. The only seams are contracts-typed: the `documentTypeRegistry` push and the `documentRenderPort` call (both `nonBindingDependencies`), plus `assetReadPort` (binding, owner `nonDeactivatable`) and the kernel's `salesChannelResolutionPort` and `resolvedModuleRegistry`. No foreign table read; no internals imported. Either module detaches cleanly (contribution sinks drop the push; the presence probe takes the fixed renderer). |
-| **II. API-first** | Pass | `packages/contracts/src/document-templates.ts` (+ test) and `comparisonDocumentDataSchema` land in Phase 2 before any route; the two enum widenings (`pageBuilderContextSchema`, `AdminBlockContributionSchema.context`) are additive — consumers that switch exhaustively on them are found by `pnpm -r run typecheck` and listed in T006. |
-| **III. TDD (NN)** | Pass | Every implementation task in [tasks.md](./tasks.md) follows the failing test it turns green; § *Requirement → test* there maps every FR and SC. |
-| **IV. YAGNI, minimal dependencies** | Pass | No dependency (QR via pdfmake's native node), no cache, no event, no seeded rows, no version history, no reversible Commands, no manifest field. The third-module block seam is reserved, not built (contract §6). |
-| **V. TypeScript everywhere** | Pass | Zod on every new HTTP boundary and on stored content; registration and port types in contracts. |
-| **VI. Naming (NN)** | Pass | Module id `document_templates` (plural snake), table `document_templates`, routes kebab-case (`/document-templates`), JSON camelCase, block names `<module>.<PascalCase>`, permissions `document_templates:read|write`, Commands `document_template.<verb>`. `check:naming` run in T061. |
-| **VII. SEO, performance** | Pass | Storefront page stays SSR; only a client fetch gains a header and a query flag. Perf budget is a test (T060). |
-| **VIII. English (NN)** | Pass | Code, comments, specs, docs in English; Polish only in bundles, the Polish docs tree and the per-language built-in layout map. |
-| **IX. UI reuse** | Pass | Editor = invoice editor chrome + `editorConfigFromDescriptor` + admin-kit primitives; no new kit component. |
-| **X. Scalable queue consumers** | N/A | Rendering is synchronous per request, as today; no repeatable work. |
-| **XI. Multi-tenant isolation (NN)** | Pass | `DocumentTemplate` is `@GlobalEntity()` (platform config). Tenant data reaches a render only as the host-built `data`, built under the buyer's request context by the unchanged `buildOwnerView`. Cross-organisation test T031. No escape hatch used. |
-| **XII. Sales-channel scoping (NN)** | Pass | The template is selected by the request's resolved channel id (`getResolvedChannel`, which throws rather than returning null); a null channel never matches a channel row; channel ids validated through the kernel port + FK. Cross-channel test T046. |
-| **XIII. Command Bus auditing (NN)** | Pass | All six writes are Commands through `CommandBus.run`; no hand-written audit (unlike `invoice-template-service.ts`); one audit row per committed write, none on refusal (T023). |
-| **XIV. Entity-agnostic extensibility** | Pass | The core stores `document_type` and `content` opaquely and never interprets host data; host behaviour lives behind the registration. The invoice template mechanism stays the untouched source of truth (R-4). |
-| **XV. Untouched core & overlay** | Pass | An overlay module can register a document type through the same registry; nothing in core needs editing to add one (US5 fixture proves it). |
-| **XVI. Command palette** | Pass | `open-document-templates` in `document_templates`' manifest; `check:action-route-permissions` in T057. |
-| **XVII. Operator-toggleable (NN)** | Pass | `document_templates.enabled` (default on). Off: routes 503, nav/palette/link absent, comparisons fall back to the fixed renderer, rows kept. Comparisons off: its type, blocks and templates invisible, rows kept. Off-state tests T054–T056 cover deactivated-while-platform-available. |
+| **I. Modular architecture (NN)** | Pass | Each table is touched only by its owner: `document_templates` writes its two tables; `invoices` reads its own `invoice_templates` inside its `legacyImport.read`; `admin_roles` writes roles through its own port. Cross-module seams are contracts-typed: the registry push, the render port, `adminRolePort`, `assetReadPort`, kernel `salesChannelResolutionPort`/`resolvedModuleRegistry`. `ksef` (external) keeps its `invoicePdfBlockRegistry` contract unchanged. |
+| **II. API-first** | Pass | `packages/contracts/src/document-templates.ts`, `comparisonDocumentDataSchema`, `InvoiceDocumentData` first. Two additive enum widenings. The withdrawal of `/api/v1/admin/invoice-templates*` is a breaking change, **versioned**: major changeset for the invoices package, OpenAPI baseline updated, release note (N4). |
+| **III. TDD (NN)** | Pass | Tests precede implementation in [tasks.md](./tasks.md); invoice goldens are captured from today's code **before** any invoice change; § *Requirement → test* maps every FR/SC. |
+| **IV. YAGNI** | Pass | No dependency, cache, event, seed rows, version history or reversible Commands. Hooks added to the registration are each required by the invoice parity (R-25), not speculative. |
+| **V. TypeScript** | Pass | Zod at every boundary and on stored content. |
+| **VI. Naming (NN)** | Pass | `document_templates`, `document_template_imports`, `/document-templates`, `document_templates:read|write`, `document_template.<verb>`, block names `<module>.<PascalCase>`, JSON camelCase. |
+| **VII. SEO, performance** | Pass | Storefront stays SSR; perf budgets are tests. |
+| **VIII. English (NN)** | Pass | Polish only in bundles, the Polish docs tree, and the per-language built-in layout map. |
+| **IX. UI reuse** | Pass | Editor = the invoice editor's chrome generalised; invoice canvas renderers reused as contributions. |
+| **X. Queue consumers** | N/A | Rendering and the import are request/boot-bounded; no repeatable work. |
+| **XI. Tenancy (NN)** | Pass | Both tables `@GlobalEntity()`. Host data built under the requester's context. The import runs under `enterSystemScope`/`withSystemScope` with a stated reason (D-285 surface). |
+| **XII. Channel scoping (NN)** | Pass | Default resolution by resolved channel id; null channel never matches; explicit `templateId` refused outside global/own channel. Cross-channel tests for comparison and invoice. |
+| **XIII. Command Bus (NN)** | Pass | Seven Commands incl. `document_template.import`; invoices' hand-written `recordAuditFromContext` disappears with `InvoiceTemplateService`. |
+| **XIV. Entity-agnostic extensibility** | Pass | The core stores types and content opaquely; invoice specifics (KSeF rule, amount in words, logo URLs, role codes) live in invoices' registration hooks. Invoices converge by **adapter**, not rewrite: section builders untouched. |
+| **XV. Overlay** | Pass | An overlay module can register a type; nothing in core changes (US6). |
+| **XVI. Palette** | Pass | `open-document-templates` with invoice keywords; `invoice-templates` removed with its route. |
+| **XVII. Toggleable (NN)** | Pass | Facility switchable; comparisons degrade; invoices bind (switch refused while invoicing is on — honest, N2); host off → type invisible, rows kept; import deferred and convergent; off-state tests for all three. |
 
 ## Project Structure
 
@@ -83,197 +91,185 @@ added to `comparisons.ts`; `page-builder-core`: 1 context, 1 type; storefront: 3
 
 ```text
 specs/152-compare-pdf-template/
-├── spec.md
-├── plan.md                         # this file
-├── research.md                     # R-1 … R-22
-├── data-model.md
-├── quickstart.md
-├── contracts/
-│   ├── document-type-registry.md   # cross-module: registry, port, merge fields
-│   ├── document-templates-api.md   # admin HTTP
-│   ├── comparison-document.md      # comparisons' type, data, export route, storefront
-│   └── admin-ui.md                 # screens, editor, palette, i18n keys
+├── spec.md  plan.md  research.md  data-model.md  quickstart.md  tasks.md
 ├── checklists/requirements.md
-└── tasks.md
+└── contracts/
+    ├── document-type-registry.md   # registry, port, hooks, import execution
+    ├── document-templates-api.md   # admin HTTP
+    ├── comparison-document.md      # comparisons' type, export route, storefront
+    ├── invoice-document.md         # invoices' type, import, parity, redirects
+    └── admin-ui.md                 # screens, editor, palette, i18n keys
 ```
 
 ### Source code (repository root)
 
 ```text
 packages/contracts/src/
-├── document-templates.ts                       # NEW — schemas, registration, port, DTOs
-├── document-templates.test.ts                  # NEW
-├── cms.ts                                      # pageBuilderContextSchema += 'document'
-├── admin-contributions.ts                      # AdminBlockContributionSchema.context += 'document'
-├── comparisons.ts                              # += comparisonDocumentDataSchema
-├── errors.ts                                   # += 5 DOCUMENT_* codes
-└── index.ts                                    # re-export
+├── document-templates.ts (+ .test.ts)      # NEW
+├── cms.ts                                  # pageBuilderContextSchema += 'document'
+├── admin-contributions.ts                  # AdminBlockContributionSchema.context += 'document'
+├── comparisons.ts                          # += comparisonDocumentDataSchema
+├── invoices.ts                             # += InvoiceDocumentData
+└── errors.ts                               # += 6 DOCUMENT_* codes
 
-packages/page-builder-core/src/contributions/
-├── types.ts                                    # += DocumentBlockEditorConfig
-└── document-sample.tsx                         # NEW — DocumentSampleProvider, useDocumentSample
+packages/page-builder-core/src/contributions/{types.ts, document-sample.tsx}
+packages/admin-kit/src/zones/use-block-contributions.ts
 
-packages/admin-kit/src/zones/use-block-contributions.ts   # accepts 'document'
-
-packages/modules/document_templates/            # NEW MODULE (layout as admin_search / invoices)
-├── package.json  tsconfig*.json  vitest.config.ts  tailwind.css  README.md  CHANGELOG.md  LICENSE
-├── i18n/{en,pl}.json
-├── docs/document-templates.md
+packages/modules/document_templates/        # NEW MODULE
+├── i18n/{en,pl}.json   docs/document-templates.md
 └── src/
-    ├── manifest.ts                             # settings, activation, permissions, actions, blocks, errorCodes, dependencies
-    ├── migrations/<stamp>_document_templates_init.ts   # scaffolded by migration:new
+    ├── manifest.ts
+    ├── migrations/<stamp>_document_templates_init.ts
     ├── backend/
-    │   ├── index.ts                            # registerModule: registry, service, port, routes
-    │   ├── entities/document-template.entity.ts
-    │   ├── registry/document-type-registry.ts (+ .test.ts)
-    │   ├── commands/document-template-commands.ts (+ .test.ts)
-    │   ├── services/document-template-service.ts (+ .test.ts)      # reads + Command orchestration
-    │   ├── services/template-resolver.ts (+ .test.ts)              # scope + language resolution
-    │   ├── services/builder-descriptor.ts (+ .test.ts)
-    │   ├── rendering/document-renderer.ts (+ .test.ts)             # tree → pdfmake doc definition → bytes
-    │   ├── rendering/core-blocks.ts (+ .test.ts)                   # Heading, Text, Image, Spacer, Divider, PageBreak
-    │   ├── rendering/merge-fields.ts (+ .test.ts)
-    │   ├── rendering/embed-asset-images.ts (+ .test.ts)
+    │   ├── index.ts
+    │   ├── entities/{document-template,document-template-import}.entity.ts
+    │   ├── registry/document-type-registry.ts
+    │   ├── commands/document-template-commands.ts
+    │   ├── services/{document-template-service,template-resolver,builder-descriptor,legacy-import}.ts
+    │   ├── rendering/{document-renderer,core-blocks,merge-fields,embed-asset-images}.ts
     │   └── routes.admin.ts
     └── admin/
-        ├── index.ts                            # routes + nav
-        ├── api/document-templates-client.ts
-        ├── pages/DocumentTemplatesPage.tsx
-        ├── pages/DocumentTemplateEditor.tsx
+        ├── index.ts  api/document-templates-client.ts
+        ├── pages/{DocumentTemplatesPage,DocumentTemplateEditor}.tsx
         ├── components/{NewTemplateDialog,MergeFieldsPanel,LanguageSwitcher}.tsx
-        └── blocks/core-block-editors.tsx       # canvas renderers + fields for the six core blocks
+        └── blocks/core-block-editors.tsx
 
 packages/modules/comparisons/
-├── i18n/{en,pl}.json                           # += document type, blocks, fields, link
-├── docs/comparisons.md                         # += "Designing the PDF"
-└── src/
-    ├── manifest.ts                             # += blocks, blockCategories, nonBindingDependencies
-    ├── backend/index.ts                        # += onBoot registration, port + presence in route deps
-    ├── backend/routes.public.ts                # /me/pdf per contract §4
-    ├── backend/document/comparison-document-type.ts (+ .test.ts)
-    ├── backend/document/comparison-document-data.ts (+ .test.ts)
-    ├── backend/document/built-in-layout.ts (+ .test.ts)
-    ├── backend/document/sample-comparison.ts
-    ├── backend/document/blocks/{header,table,share-link}.ts (+ .test.ts)
-    ├── backend/services/comparison-pdf-shared.ts   # helpers extracted from the fixed renderer
-    ├── backend/services/comparison-pdf-renderer.ts # unchanged output; imports the helpers
-    ├── admin/index.ts                          # += blocks contributions
-    ├── admin/document-blocks/{ComparisonHeader,ComparisonTable,ComparisonShareLink}.tsx
-    └── admin/pages/ComparisonsListPage.tsx     # += PDF template link
+├── src/manifest.ts  src/backend/{index.ts,routes.public.ts}
+├── src/backend/document/{comparison-document-type,comparison-document-data,built-in-layout,sample-comparison}.ts
+├── src/backend/document/blocks/{header,table,share-link}.ts
+├── src/backend/services/{comparison-pdf-shared.ts, comparison-pdf-renderer.ts (output unchanged)}
+├── src/admin/{index.ts, document-blocks/*.tsx, pages/ComparisonsListPage.tsx}
+└── i18n/  docs/comparisons.md
 
-storefront/
-├── lib/api/comparisons.ts                      # exportComparisonPdf({ locale, hideEmptyRows })
-├── lib/i18n/messages.ts                        # += compare.pdf.busy / compare.pdf.failed
-├── components/ComparisonTable.tsx
-└── app/compare/page.tsx
+packages/modules/invoices/
+├── src/manifest.ts                         # deps += document_templates, admin_roles; blocks gain fields; action removed
+├── src/backend/index.ts  plugin.ts  routes.admin.ts  routes.customer.ts
+├── src/backend/document/{invoice-document-type,legacy-import,block-renderers}.ts
+├── src/backend/document/__golden__/*.json  # parity goldens (captured first)
+├── src/backend/services/invoice-pdf-renderer.ts  # reduced to the local built-in path (e-mail)
+├── src/backend/services/invoice-template-service.ts   # DELETED
+├── src/backend/pdf-components/descriptor.ts           # DELETED (fields → manifest)
+├── src/admin/{index.ts (redirect routes + block contributions), components/InvoiceSectionTabs.tsx}
+├── src/admin/document-blocks/*.tsx         # canvas renderers moved from templates/invoice-puck-config.tsx
+├── src/admin/pages/{InvoiceTemplatesPage,InvoiceTemplateEditor}.tsx   # DELETED
+├── src/admin/templates/{described-blocks,invoice-builder-plugin}.tsx  # DELETED
+└── i18n/  docs/invoices.md
+packages/modules/_i18n/i18n/{en,pl}.json    # invoiceTemplates.* removed
+packages/modules/cms/src/backend/cli/block-names.ts   # += document_templates.content
 
-backend/test/contract/document_templates/{admin-api,render-port,off-state}.test.ts
+storefront/{lib/api/comparisons.ts, lib/i18n/messages.ts, components/ComparisonTable.tsx, app/compare/page.tsx}
+
+backend/test/contract/document_templates/{admin-api,render-port,second-type,off-state}.test.ts
 backend/test/contract/comparisons/pdf-template-export.test.ts
-backend/test/integration/document_templates/{tenancy-channel,activation-race}.test.ts
-backend/test/perf/comparisons/pdf-export.bench.ts
-backend/test/fixtures/document-types/fixture-document-type.ts   # US5 test-only registration
-admin/test/modules/document_templates/*.test.tsx
-admin/test/modules/comparisons/pdf-template-link.test.tsx
-docs/docs/module-reference/document-templates.md (+ pl), comparisons page (+ pl)
-.changeset/*.md                                  # contracts, page-builder-core, admin-kit, comparisons, document_templates
+backend/test/integration/document_templates/{schema,tenancy-channel,default-race}.test.ts
+backend/test/integration/invoices/{template-import,template-parity,off-state,templates,stored-contributed-block}.test.ts
+backend/test/integration/_admin_surfaces/batch-twelve-palette-off-state.test.ts   # updated
+backend/test/fixtures/{openapi-baseline.json (updated), document-types/fixture-document-type.ts}
+backend/test/perf/{comparisons/pdf-export,invoices/pdf-render}.bench.ts
+admin/test/modules/{document_templates/*, comparisons/pdf-template-link.test.tsx, invoices/*}
+docs/docs/module-reference/{document-templates,invoices,comparisons}.md (+ pl)
+.changeset/*.md
 ```
 
-Generated and committed in the same MR: `composer:generate` artefacts (manifest index, entities and
-migrations registries, docs sidebar and module map), `manifests:generate` package manifests,
-`pnpm install --lockfile-only` → `pnpm-lock.yaml` (`AGENTS.md` § traps).
+Regenerated and committed in the same MR: `composer:generate`, `manifests:generate`,
+`pnpm install --lockfile-only`.
 
-**Structure Decision**: one new module package beside the others under `packages/modules/`, an
-extension of `comparisons`, additive changes to three shared packages, and three storefront files.
+**Structure Decision**: one new module, extensions of `comparisons` and `invoices`, additive changes
+to three shared packages, three storefront files.
 
 ## Module manifest — `document_templates` (design)
 
-- `id: 'document_templates'`, `name: 'Document Templates'`, `version: '1.0.0'`.
-- `dependencies`: `settings`, `auth`, `assets_library` (binding; `nonDeactivatable`, so no dead switch).
-  The kernel's `salesChannelResolutionPort`, `resolvedModuleRegistry` and `commandBus` need no edge.
-- `settings`: group `document_templates`; `document_templates.enabled` (boolean, default `true`).
-- `activation: { settingCode: 'document_templates.enabled', default: true }` — switchable.
-- `permissions`: `document_templates:read` ("View document templates"),
-  `document_templates:write` ("Edit document templates", `requires: ['document_templates:read']`).
-- `actions`: `open-document-templates` (contract `admin-ui.md` §1).
-- `blocks` (6, `contexts: ['document']`, category `layout`) and `blockCategories: [{ key: 'layout',
-  titleKey: 'blocks.category.layout', contexts: ['document'], weight: 10 }]`.
-- `errorCodes`: the five `DOCUMENT_*` codes.
-- `i18n: { bundlesDir: 'i18n' }`, `docs: { dir: 'docs' }`.
+- `dependencies`: `settings`, `auth`, `assets_library` (`nonDeactivatable`). Kernel registrations
+  (`salesChannelResolutionPort`, `resolvedModuleRegistry`, `commandBus`) need no edge.
+- `settings`: `document_templates.enabled` (boolean, default `true`); `activation` switchable.
+- `permissions`: `document_templates:read`, `document_templates:write` (`requires: ['document_templates:read']`).
+- `actions`: `open-document-templates`. `blocks` (6, `contexts: ['document']`) + `blockCategories`.
+- `errorCodes`: six `DOCUMENT_*` codes. `i18n`, `docs`.
 
 ## Composition — `document_templates/src/backend/index.ts` (design)
 
 ```text
 ctx.di.register({
-  documentTypeRegistry:  singleton(new DocumentTypeRegistry(id => effectiveState.isPresent(id))),   // ungated
-  documentTemplateService: singleton(new DocumentTemplateService(emFactory, commandBus, registry,
-                              lazyPort(ctx,'salesChannelResolutionPort'))),
+  documentTypeRegistry:     singleton(new DocumentTypeRegistry(id => effectiveState.isPresent(id))),  // ungated
+  documentLegacyImporter:   singleton(new LegacyImporter(emFactory, commandBus, registry,
+                                       lazyPort(ctx,'salesChannelResolutionPort'))),
+  documentTemplateService:  singleton(new DocumentTemplateService(emFactory, commandBus, registry, importer, …)),
 })
-ctx.di.providePort('documentRenderPort', singleton(new DocumentRenderer(emFactory, registry,
-                              lazyPort<AssetReadPort>(ctx,'assetReadPort'), resolvedModuleRegistry)))
-ctx.routes(app => registerDocumentTemplatesAdminRoutes(app, { requireAdmin, service: lazyPort(…),
-                              renderer: lazyPort(…), registry }))
+ctx.di.providePort('documentRenderPort', singleton(new DocumentRenderer(emFactory, registry, importer,
+                                       lazyPort<AssetReadPort>(ctx,'assetReadPort'), resolvedModuleRegistry)))
+ctx.onBoot(async () => {                     // WORK hook: probes its own presence first (entry-presence rule)
+  if (!effectiveState.isPresent('document_templates')) return
+  await enterSystemScope('document templates legacy import', () => importer.importAllPending())
+})
+ctx.routes(app => registerDocumentTemplatesAdminRoutes(app, { requireAdmin, … }))
 ```
 
-No boot hook does work; nothing to probe (`check:entry-presence`).
+The boot hook is work-only (no contribution in it), so the split rule of `module-activation.md` is
+satisfied trivially; it runs after every module's contribution hook has registered (D-45: one boot
+phase — order inside it is the reason `importAllPending` also runs lazily).
 
 ## Migration plan
 
-One migration, owned by `document_templates`, scaffolded with `migration:new --module
-document_templates --name init`: `create table "document_templates"` + the two indexes + the
-`document_type` check + FK to `sales_channels` (kernel-owned, so no manifest edge and no R1/R2
-finding). Order follows the manifest graph; no other module's table is written (`check:module-boundary`
-R2). Register with `composer:generate`.
+| Step | Owner | Mechanism |
+| --- | --- | --- |
+| Create `document_templates`, `document_template_imports`, indexes, check, FK to kernel `sales_channels` | `document_templates` | one schema migration (`migration:new`) |
+| Copy invoice templates | `document_templates` writes; `invoices` reads its own table in `legacyImport.read()` | runtime import, once per `(type, source)`, boot + lazy, one audit row (research R-24) |
+| Role grants | `admin_roles` writes, called by `invoices`' `afterImport` | `adminRolePort.upsertByCode`, idempotent, inside the import's lifetime (R-28) |
+| Legacy table | `invoices` | untouched, no writer left; drop in a later release |
 
-## Cross-cutting concerns (checklist from the architect brief)
+Migration order is derived: `invoices` → depends on `document_templates`, so `document_templates`'
+migration runs first. No migration reads or writes another module's table (`check:module-boundary`
+R1/R2 clean).
+
+## Cross-cutting concerns
 
 | Concern | Design |
 | --- | --- |
-| Admin permission manifest | `document_templates:read/write` in the manifest, labels in both bundles, gates as route `preHandler` literals |
-| Command palette | `open-document-templates`; keywords cover "pdf", "comparison", Polish forms |
-| pl + en i18n | both bundles of both modules; built-in layout per language; storefront button strings; docs pl + en |
-| Settings | only the activation setting; no secret, so no `secret` value type; the share link reads the existing `sales_channels.storefront_url` |
-| Auditing | six Commands through `CommandBus.run` (R-13) |
-| Tenant scoping | `@GlobalEntity`; host data built under request context (R-15) |
-| Channel scoping | resolution by resolved channel id; fail-closed (R-15) |
+| Admin permissions | `document_templates:read/write`; invoices' role continuity by one-time grant (N3) |
+| Command palette | `open-document-templates` incl. invoice keywords; `invoice-templates` removed |
+| pl + en | both bundles of three modules; `_i18n` keys removed; comparison built-in layout per language; storefront strings; docs pl + en |
+| Settings | activation only; no secret; share link reads `sales_channels.storefront_url` |
+| Auditing | seven Commands (R-13) |
+| Tenancy / channels | R-15 |
 | Redis cache invalidation | none needed — no cache (R-14) |
-| Module activation | switchable; `degrades-without` fallback in `comparisons`; off-state tests |
+| Module activation | facility switchable; comparisons degrade; invoices bind; import convergent |
 
-## What changes if the owner answers differently
+## What changes if the owner answers N1–N5 differently
 
-| Question | Different answer | Design impact |
+| Question | Other answer | Impact |
 | --- | --- | --- |
-| Q1 | comparison-only | Drop the registry/port; templates table + editor move into `comparisons`; ~same task count, no US5 |
-| Q2 | buyer chooses among layouts | `active` becomes `published`; partial unique index dropped; a public `GET …/me/pdf/templates` list and a `templateId` query param; storefront menu |
-| Q3 | + per organisation / customer group | `scope_kind` + `scope_id` columns replace `sales_channel_id`; resolution gains two rungs; the host passes `organizationId` / group (it has them) |
-| Q4 | attribute selection in template | a `ComparisonTable.attributes` prop with an attribute picker contributed by `comparisons`' admin (catalog attribute read) |
-| Q5 | keep today's layout until activation | the built-in layout's trees reproduce today's English-only output for every language |
-| Q6 | draft/publish or history | `draft_content` column + `publish` Command, or a `document_template_versions` table + `restore` Command |
-| Q7 | channel default only | the route stops reading `Accept-Language`; storefront change reduced to `hideEmptyRows` |
+| N1 | attachment uses the template | e-mail path calls the port like the download; golden 10 changes intentionally; +1 test |
+| N2 | allow switching off under invoices | `invoices` declares `degrades-without` + presence probe + local built-in fallback; off-state test changes from refusal to fallback |
+| N3 | no automatic grant / per-type permissions | drop `afterImport` and the `admin_roles` edge (release note only); per-type would need a new non-literal gating design — not recommended |
+| N4 | keep old API one release | invoices keeps five adapter routes over a new `documentTemplateAdminPort`; minor instead of major changeset; removal task in the next release |
+| N5 | multilingual invoices | separate feature (amount in words, legal wording); here only `languages` would be lifted |
 
 ## Complexity Tracking
 
-No constitution violation to justify, and **no new runtime dependency**. Two choices that add
-surface are recorded with their simpler alternatives:
+No constitution violation; **no new runtime dependency**. Choices that add surface:
 
 | Choice | Why needed | Simpler alternative rejected because |
 | --- | --- | --- |
-| A new module rather than code in `comparisons` | Principle XIV; three named hosts; one operator screen for all documents (R-3) | Comparison-only copy would be the second of three copies of the template machinery |
-| A new Page Builder context `document` (contracts enum widening) | Block ownership/palette machinery keys on context (R-6) | Reusing `invoice` mixes palettes; a context per type grows the enum per host |
+| New module | XIV; three named hosts; one screen for all documents (R-3) | per-host copies |
+| `document` Page Builder context | keeps new blocks out of CMS/e-mail palettes (R-6) | a context per type grows the enum per host |
+| Runtime import + marker table | the only shape keeping both tables' ownership rules on upgrade (R-24) | cross-module migrations are refused by R1/R2; install hooks do not run on upgrade |
+| Four registration hooks | invoice parity without rewriting legal-document code (R-25) | rewriting invoice sections as generic blocks risks SC-008 |
+| Breaking removal of the invoice-template API | moving ownership without dual write paths (R-29) | adapters keep two management APIs alive (offered as N4's alternative) |
 
 ## Handoff summary for `endora-commerce-dev`
 
-1. Read `research.md` R-3, R-5, R-8, R-11 and all four contracts before starting; implement
-   **test-first** in the order of `tasks.md` (Setup → Foundational → US1 → US2 → US3 → US4 → US5 →
-   Polish). US1 + US2 are the MVP.
-2. Start with contracts (`document-templates.ts`, enum widenings, `comparisonDocumentDataSchema`),
-   then scaffold the module with `migration:new` and `composer:generate`; never hand-number.
-3. Every write is a Command through `CommandBus.run`; never call the audit writer.
-4. In `comparisons`, probe `effectiveState.isPresent('document_templates')` **before** resolving
-   `documentRenderPort`; the try/catch around the render re-throws `ModuleDisabledError` first.
-   The fixed renderer's output must not change (its two existing tests stay green untouched).
-5. The registration push is a contribution-only boot hook — no presence probe.
-6. Regenerate and commit `composer:generate`, `manifests:generate`, `pnpm install --lockfile-only`;
-   add changesets for every published package touched.
-7. Verify with `pnpm -r run typecheck`, `pnpm -r run lint`, `pnpm --filter backend run
-   test:unit:fast`, the targeted contract/integration files, `pnpm --filter '!backend' run test`, and
-   the checks listed in T061. Run the manual walk in `quickstart.md` before merge.
+1. Read research R-3–R-8, R-23–R-31 and all five contracts first; implement **test-first** in
+   `tasks.md` order. **Phase 2's first invoice task captures the parity goldens from today's code —
+   before any invoice file changes.**
+2. Contracts first; scaffold with `migration:new`; never hand-number; regenerate and commit artefacts.
+3. Every write is a Command; the import runs as one under a system scope.
+4. `comparisons`: probe presence before `documentRenderPort`; fixed renderer output unchanged.
+   `invoices`: binds the facility; section builders untouched; e-mail attachment stays on the local
+   built-in path (N1 default).
+5. Deleting invoice files and routes: grep `backend/test/**`, admin tests, the OpenAPI baseline,
+   `_i18n` bundles and `cms`' block-names CLI in the same MR (`AGENTS.md` traps); re-derive the
+   module-removal ledger if it reports.
+6. Changesets: contracts, page-builder-core, admin-kit, comparisons, invoices (**major**), the new
+   module.
+7. Verify per T075; walk `quickstart.md` before merge.

@@ -1,12 +1,16 @@
-# Research: Editable PDF template for the storefront product comparison
+# Research: Document templates — comparison PDF template, invoice templates moved
 
-**Feature**: `specs/152-compare-pdf-template/` | **Date**: 2026-10-17 | **Measured on**:
-`origin/master` at `c0f70efd6`
+**Feature**: `specs/152-compare-pdf-template/` | **Date**: 2026-10-17 (revised the same day after the
+owner's answers to Q1–Q7) | **Measured on**: `origin/master` at `c0f70efd6`
 
-Every decision is stated as *decision → rationale → alternatives rejected*. Facts are cited to the
-file that carries them; a citation of a pre-migration feature (`007`, `047`, `096`, `134`) is
-provenance and resolves only in the historical repository (`AGENTS.md` § *Working agreement*,
-D-247).
+Every decision is stated as *decision → rationale → alternatives rejected*. Citations of pre-migration
+features (`007`, `047`, `096`, `134`) are provenance and resolve only in the historical repository
+(`AGENTS.md` § *Working agreement*, D-247).
+
+**Revision note.** The first version of this file kept invoices untouched (old R-4) and modelled one
+*active* template per scope. The owner's answers reverse both: invoices move onto the facility in this
+feature, and a scope holds several templates of which one is the *default*, with per-document selection
+declared per type. R-4, R-8 and R-17 are rewritten; R-23 to R-31 are new.
 
 ---
 
@@ -14,376 +18,408 @@ D-247).
 
 | Fact | Where |
 | --- | --- |
-| The `PDF` button calls `exportComparisonPdf()`, which `fetch`es `GET /api/v1/comparisons/me/pdf` from the browser and saves the blob. It sends **no** `Accept-Language` and no `X-Sales-Channel` header — the browser's own `Accept-Language` reaches the backend, not the storefront's locale | `storefront/lib/api/comparisons.ts` (`rawFetch`, `exportComparisonPdf`), `storefront/components/ComparisonTable.tsx` (`ExportPdfButton`) |
-| The PDF is generated **server-side**, by the `comparisons` module, with `pdfmake` (already a dependency of `comparisons`, `invoices` and `backend`) | `packages/modules/comparisons/src/backend/routes.public.ts` (`GET /api/v1/comparisons/me/pdf`), `.../services/comparison-pdf-renderer.ts` |
-| The route resolves the owner from the session/anonymous cookie, the channel with `getResolvedChannel(request)`, and the data with `comparisonService.buildOwnerView(comparison, channelId, { kind: 'buyer', audience })` — the same view the comparison page reads, already priced for the viewer and already filtered of products the viewer may not see | `routes.public.ts` lines 173–212; `packages/contracts/src/comparisons.ts` (`comparisonOwnerViewSchema`: `products`, `comparableAttributes`, `displayMode`, `pricedFor`, `hiddenProductCount`, `shareToken`) |
-| The layout is hard-coded: an English `h1` "Product comparison", an English caption `Mode: <label>`, one table (header row = image ≤120 px, name, `"<amount> <currency>"`; body rows filtered by display mode, coloured by `rowClass`), landscape from 3 products | `comparison-pdf-renderer.ts` (`buildDocumentDefinition`, `pickOrientation`, `filterRowsByMode`, `MODE_LABELS`) |
-| Product and attribute names are always printed in **English**: `localised()` reads `value['en-US'] ?? value['en'] ?? first` regardless of the buyer's language | `comparison-pdf-renderer.ts` (`localised`) |
-| The storefront's *Hide empty rows* switch is client-only, so the PDF ignores it | `storefront/components/ComparisonTable.tsx` (component doc block) |
-| Images are pre-fetched by `AssetByteFetcher` (HTTP, `file://`, path) into data URIs with a 1×1 fallback; pdfmake's URL access is denied | `.../services/asset-byte-fetcher.ts`, `comparison-pdf-renderer.ts` constructor |
-| `hiddenProductCount` is on the view but the PDF never mentions it | `comparison-pdf-renderer.ts` |
-| Errors: `COMPARISON_EMPTY` (409) and `PDF_GENERATION_FAILED` (503) are `comparisons`' codes | `packages/modules/comparisons/src/manifest.ts` (`errorCodes`) |
+| The `PDF` button `fetch`es `GET /api/v1/comparisons/me/pdf` from the browser and saves the blob; it sends **no** `Accept-Language` and no `X-Sales-Channel` header | `storefront/lib/api/comparisons.ts` (`rawFetch`, `exportComparisonPdf`), `storefront/components/ComparisonTable.tsx` (`ExportPdfButton`) |
+| Generated **server-side** in `comparisons` with `pdfmake` | `packages/modules/comparisons/src/backend/routes.public.ts` (`/me/pdf`), `.../services/comparison-pdf-renderer.ts` |
+| Data: `comparisonService.buildOwnerView(comparison, channelId, { kind: 'buyer', audience })` — viewer-priced, audience-filtered, the same view as the page | `routes.public.ts` lines 173–212; `packages/contracts/src/comparisons.ts` (`comparisonOwnerViewSchema`) |
+| Hard-coded English layout: `h1` "Product comparison", caption `Mode: …`, one table, landscape from 3 products | `comparison-pdf-renderer.ts` (`buildDocumentDefinition`, `pickOrientation`, `filterRowsByMode`, `MODE_LABELS`) |
+| Names always English: `localised()` reads `en-US` → `en` → first | `comparison-pdf-renderer.ts` |
+| The *Hide empty rows* switch is client-only, so the PDF ignores it | `ComparisonTable.tsx` doc block |
+| Images pre-fetched by `AssetByteFetcher` with a 1×1 fallback; pdfmake URL access denied | `.../services/asset-byte-fetcher.ts` |
+| `hiddenProductCount` is never printed | `comparison-pdf-renderer.ts` |
+| Error codes `COMPARISON_EMPTY` (409), `PDF_GENERATION_FAILED` (503) | `packages/modules/comparisons/src/manifest.ts` |
 
-## R-2 — How invoice templates work (facts), and what of it is reusable
+## R-2 — How invoice templates work today (facts) — the parity baseline
 
 | Fact | Where |
 | --- | --- |
-| A template is a row in `invoice_templates` (`@GlobalEntity`): `code`, `name`, `sales_channel_id` (null = global), `content` jsonb = `{ schema_version, languages: { <lang>: <Puck Data> } }`, `languages`, `active`, `is_system`, `version`; one active per channel by a partial unique index | `packages/modules/invoices/src/backend/entities/invoice-template.entity.ts`, migration `20260629T125121_invoices_module.ts` |
-| Resolution: channel active → global active → the seeded generic row; language tree by exact key else the first | `.../services/invoice-template-service.ts` (`resolveTree`), `.../pdf-components/tree-mapper.ts` (`pickLanguageTree`) |
-| Rendering walks the top-level Puck nodes and maps each block name to a pdfmake section builder; a name nothing renders is skipped; a tree yielding nothing falls back to the built-in layout | `tree-mapper.ts` (`treeToContent`), `.../services/invoice-pdf-renderer.ts` (`content`, `builtinLayout`) |
-| Other modules contribute blocks through an ungated, presence-filtered contribution registry (`invoicePdfBlockRegistry`) — the KSeF block's seam since feature 134 | `.../services/invoice-pdf-block-registry.ts`, `packages/contracts/src/invoices.ts` (`InvoicePdfBlockRegistration`, `InvoicePdfBlockRegistryPort`) |
-| Library images are inlined as data URIs through `assetReadPort.openAssetBytes` (PNG/JPEG only) to avoid pdfmake's self-HTTP deadlock; but a free **URL** source is also fetched server-side with a 3 s timeout | `.../pdf-components/embed-logo-images.ts` |
-| The admin editor is Puck with the shared chrome: `PageBuilderHeaderActions`, `PageBuilderOverlayBridge`, `withPuckLegacySideBar`, `PageBuilderOutline`, a served descriptor merged with stored names (`withDescribedInvoiceBlocks`), Save with optimistic `version`, *Preview PDF* via `POST …/:id/preview` rendering a **sample invoice** | `packages/modules/invoices/src/admin/pages/InvoiceTemplateEditor.tsx`, `.../admin/templates/{invoice-puck-config.tsx,described-blocks.tsx,invoice-builder-plugin.tsx}` |
-| The canvas renderers mirror the PDF sections against a **frontend copy** of the sample invoice — two samples that must be kept equal by hand | `invoice-puck-config.tsx` (`sampleInvoice`) vs `.../pdf-components/sample.ts` |
-| Block labels and fields served to the editor are **English literals** in the backend descriptor; the manifest declarations carry `fields: {}` | `.../pdf-components/descriptor.ts`, `packages/modules/invoices/src/manifest.ts` (`blocks`) |
-| Writes audit through `recordAuditFromContext` by hand, not through the Command Bus | `invoice-template-service.ts` (`#audit`) |
-| The editor language is hard-coded to `pl-PL` | `InvoiceTemplateEditor.tsx` (`LANGUAGE`) |
-
-**What is worth reusing** — the *design*: a Puck envelope per language, channel → global → built-in
-resolution, a top-level block walk to pdfmake with skip-unknown and fall-back-when-empty, data-URI
-image inlining with network denied, a contribution registry for blocks a third module renders, the
-editor chrome and the sample-backed preview. **What is not** — the hand-written audit, English-only
-descriptor labels, the duplicated sample, the hard-coded editor language, and URL image sources.
+| Storage: `invoice_templates` (`@GlobalEntity`): `code`, `name`, `sales_channel_id` (null = global, **no FK**), `content` = `{ schema_version, languages: { <lang>: <Puck Data> } }`, `languages`, `active`, `is_system`, `version`, timestamps; partial unique index **one active per scope** | `.../entities/invoice-template.entity.ts`, migration `20260629T125121_invoices_module.ts` |
+| Block names were namespaced in place (`invoices.Invoice…`) by a later migration; a seed-revision migration rewrote the generic row | `20260903T101756_invoices_namespace_block_names.ts`, `20260801T111000_invoices_generic_template_reseed.ts` |
+| **Seed**: `ensureGenericSeed()` runs when the routes attach; inserts the `generic` `is_system` row, **active only if no global active exists**, and **overwrites** its content whenever `GENERIC_INVOICE_TEMPLATE_SEED_REVISION` advances | `.../services/invoice-template-service.ts`, `.../backend/plugin.ts` (`ensureGenericSeed().catch(() => undefined)`), `.../seeds/generic-invoice-template.ts` |
+| **Create = activate**: `create()` deactivates the active row of the scope and inserts the new one active. There is **no** rename, deactivate or delete | `invoice-template-service.ts` (`create`) |
+| **Resolution at render time**: channel active → global active → the `generic` row (whatever its `active`) → `null`; tree by exact language key else first. Because a global active always exists after the seed, the third rung is unreachable in practice | `invoice-template-service.ts` (`resolveTree`), `.../pdf-components/tree-mapper.ts` (`pickLanguageTree`) |
+| **No pinning**: `invoices.template_id` exists but **nothing writes it**; it is only read through to the detail DTO. An already-issued invoice re-renders with whatever template is active now | `.../entities/invoice.entity.ts`, `.../services/invoice-service.ts:409`, `invoice-read-port.ts:98` |
+| **Render paths** — admin download (`GET /api/v1/admin/invoices/:id/pdf`), admin regenerate (`POST …/:id/regenerate-pdf`, renders to validate), customer download (`GET /api/v1/orders/:id/invoices/:invoiceId/pdf`): all `resolveTree(channel, 'pl-PL')` + `render(detail, 'pl', tree)`. Preview GET/POST: `render(sampleInvoiceDetail(), 'en', tree)` | `routes.admin.ts` (`RENDER_LANGUAGE = 'pl-PL'`, lines 145, 183, 278, 290), `routes.customer.ts:107` |
+| **E-mail attachment ignores templates**: `pdfRenderer.render(detail)` — no tree, locale `'pl'` → always the built-in code layout | `.../services/invoice-email-dispatch.ts:121` |
+| Bulk "printout" and the legacy single download are stub PDFs unrelated to templates | `.../services/invoice-pdf.ts` |
+| Renderer: walks top-level nodes; ten own blocks map to `sections.ts`; other names go to the contributed-block registry; nothing renderable → `builtinLayout()` (header, parties, line items, VAT/totals in a 55/45 `columns`, correction note, every present contributor's block with `{}` props); `buildDoc`: A4, margins `[40,40,40,48]`, `fontSize 10`, `docTitle` style | `.../services/invoice-pdf-renderer.ts`, `.../pdf-components/{tree-mapper,sections}.ts` |
+| **Contributed blocks**: `invoicePdfBlockRegistry` (ungated, presence-filtered) — `describe()`, optional `resolve(invoiceId)` (failure → `null`, never fails the invoice), `render`, `printsKsefReferenceNumber` (the header suppresses the KSeF number when such a block is present **and placed**). The contributor, `ksef`, is now an **external package** | `.../services/invoice-pdf-block-registry.ts`, `packages/contracts/src/invoices.ts` (`InvoicePdfBlockRegistration`), `backend/test/integration/invoices/stored-contributed-block.test.ts` |
+| Logo block: `imageSource` `url` or `library`; images inlined before render (`embedInvoiceLogoImages`), URLs fetched with a 3 s timeout | `.../pdf-components/embed-logo-images.ts` |
+| Manifest declares the ten blocks with `contexts: ['invoice']`, `fields: {}`; fields and labels are **English literals** in the backend descriptor | `packages/modules/invoices/src/manifest.ts` (`blocks`), `.../pdf-components/descriptor.ts` |
+| Admin: `/invoices/templates` (list), `/invoices/templates/:id` (editor, hard-coded `pl-PL`, `hydrateInvoiceDefaults`, described stand-ins, Preview PDF); canvas renderers use a **frontend copy** of the sample; strings in the **shared `_i18n` bundle** (`invoiceTemplates.*`, `appShell.nav.invoiceTemplates`, ~29 keys) | `.../admin/pages/{InvoiceTemplatesPage,InvoiceTemplateEditor}.tsx`, `.../admin/templates/*`, `packages/modules/_i18n/i18n/{en,pl}.json` |
+| Navigation: no sidebar row; reached from `InvoiceSectionTabs` (`/invoices/templates`) and palette action `invoice-templates` (`invoices:read`) | `.../admin/components/InvoiceSectionTabs.tsx`, `manifest.ts` (`actions`) |
+| Permissions: list/get/config `invoices:read`; create/save/**preview** `invoices:write` | `routes.admin.ts` lines 214–296 |
+| Audit: hand-written `recordAuditFromContext`, not the Command Bus | `invoice-template-service.ts` (`#audit`) |
+| Other places naming the table or routes: `cms`' block-name maintenance CLI lists `invoice_templates.content`; the OpenAPI baseline holds the five `invoice-templates` routes; three integration tests and one admin test exercise them | `packages/modules/cms/src/backend/cli/block-names.ts`, `backend/test/fixtures/openapi-baseline.json`, `backend/test/integration/invoices/{templates,off-state,stored-contributed-block}.test.ts`, `backend/test/integration/_admin_surfaces/batch-twelve-palette-off-state.test.ts`, `admin/test/modules/invoices/InvoiceSectionTabs.test.tsx` |
 
 ## R-3 — Where the capability lives: a new module `document_templates`
 
-**Decision**: A new switchable module **`document_templates`** (`packages/modules/document_templates/`)
-owns the generic capability: the `document_templates` table, the template Commands, the admin API,
-the *Document templates* screens and editor, the render engine (Puck tree → pdfmake), the
-general-purpose blocks, and two seams — a contribution registry hosts push **document types** into,
-and a gated render port hosts call. `comparisons` contributes the *Product comparison* document type
-and calls the port. Nothing about comparisons is stored or interpreted in `document_templates`.
+**Decision** (confirmed by the owner, Q1): a new switchable module **`document_templates`** owns the
+generic capability — table, Commands, admin API and screens, the Puck→pdfmake engine, the
+general-purpose blocks, the import of legacy templates — and two seams: a registry hosts push
+**document types** into, and a gated render port hosts call with their data.
 
-**Rationale**: Principle XIV is written for exactly this shape — *"a capability that spans multiple
-host entity types MUST be built as an entity-agnostic core whose host-specific behaviour lives behind
-documented extension points"* — and the request names three hosts within one roadmap (comparison
-now, quote request next, invoices conceivably later). Domain ownership, not code size, justifies the
-module: "the layout of a generated document" is not a comparison concept, not an invoice concept and
-not a CMS page. As a module it gets, for free, everything a capability needs and a library does not
-have: a table with an owner, permissions, a palette entry, an activation switch, docs, i18n bundles.
+**Rationale**: Principle XIV's entity-agnostic core for a capability spanning several host entities
+(comparison, invoice, quote request). Domain ownership — "the layout of a generated document" — is no
+host's concept. As a module it gets a table owner, permissions, palette entry, activation, docs and
+bundles.
 
-**Alternatives rejected**:
-- **A comparison-only template inside `comparisons`** (copy the invoice pattern). Works for one
-  host; the quote request would make a third copy of table, Commands, routes, editor, preview and
-  language handling. The request explicitly asks for reuse.
-- **Generalise `invoices`' template machinery in place** (add a `document_type` column to
-  `invoice_templates`). Makes comparisons depend on invoicing — a switchable, potentially paid module
-  — so switching invoicing off would take comparison templates with it; and Principle XIV forbids
-  absorbing another host into an entity-specific mechanism and requires that mechanism stay
-  untouched.
-- **Put it in `cms`.** `cms` owns pages and their publication; PDF documents of other modules are not
-  its domain, and switching the CMS off would remove PDF layouts of comparisons.
-- **A library package only** (shared renderer + editor shell; each host keeps its own table, Commands,
-  routes and screens). Removes the duplicated *rendering* but keeps the duplicated *management* —
-  roughly two thirds of the work — per host, and gives operators one templates screen per module.
-  The render engine still lives in one place under R-3, inside the module that owns it.
+**Alternatives rejected**: comparison-only copy (owner rejected); generalising `invoices`' machinery
+in place (would make comparisons and quotes depend on invoicing; XIV); `cms` (pages are its domain);
+a library-only package (keeps per-host management duplication and one screen per module).
 
-## R-4 — Invoices are not migrated in this feature
+## R-4 — Invoices become a document type of the facility (replaces "invoices untouched")
 
-**Decision**: `invoices` and `invoice_templates` are not touched (FR-071). The contracts are shaped so
-that a later adapter can register an `invoices.invoice` document type without changing
-`document_templates`' schema; the one missing piece for that adapter — blocks contributed by a
-*third* module into another host's document type (the KSeF case) — is designed as an additive
-`registerBlock` on the same registry (contract `document-type-registry.md` §6) and **not built**.
+**Decision**: `invoices` registers the document type **`invoices.invoice`** and stops owning template
+storage, CRUD, screens and resolution. It keeps everything invoice-specific: its ten blocks and their
+pdfmake section builders, its built-in code layout, its sample invoice, its contributed-block registry
+(`invoicePdfBlockRegistry`, unchanged for `ksef`), the KSeF-number rule, the logo image handling, and
+every render path. Template rows move to `document_templates` by a one-time import (R-24). Rendering
+moves to the shared engine through registration hooks designed for parity (R-25).
 
-**Rationale**: Principle XIV — *"generalize the design, not the code … any later convergence is an
-adapter, not a rewrite"*. The invoice PDF is a legal document with numbering, KSeF interplay and
-existing operator templates; migrating stored invoice templates is a separate, owner-approved change
-with its own data migration and regression surface.
+**Rationale**: the owner's decision. Principle XIV's "any later convergence is an adapter, not a
+rewrite" is honoured literally: invoices' *render code* is not rewritten — it is adapted behind
+`DocumentBlockRenderer`s and two hooks — and invoices remain the source of truth for invoice data.
+What converges is storage and management, which were generic all along.
 
-**Alternatives rejected**: migrate invoices now (scope and risk, and nobody asked); extract shared
-helpers (`embed-logo-images.ts`, font setup) out of `invoices` into the new module and make
-`invoices` import them (a cross-module code dependency from a legal-document module onto a switchable
-one, for ~100 lines).
+**Alternatives rejected**: (a) leave invoices and migrate later — the owner wants it now; (b) migrate
+storage only and keep invoices' own editor — two template screens, the duplication the facility exists
+to remove; (c) rewrite invoice sections as generic blocks — risks the output parity the owner requires
+for a legal document.
 
-## R-5 — The host seam: a contribution registry plus a gated render port
+## R-5 — The host seams: registry + gated render port
 
-**Decision**: Two seams, both typed in `packages/contracts/src/document-templates.ts`:
+**Decision**: typed in `packages/contracts/src/document-templates.ts`:
 
-1. **`documentTypeRegistry`** — an ungated contribution registry (`AdminSearchProviderRegistryPort`
-   idiom): a host calls `register(registration)` from its contribution-only boot hook; the registry
-   filters by the registering module's effective presence on every read. The registration carries
-   functions — block renderers, sample data, built-in layout, merge-field resolution, orientation hint
-   — that a manifest cannot carry.
-2. **`documentRenderPort`** — `ctx.di.providePort` (gated). `render({ documentType, salesChannelId,
-   language, data })` resolves the template, renders and returns the bytes plus which template was
-   used. The host passes its data in; the core hands it, opaque, to the host's own block renderers.
+1. **`documentTypeRegistry`** — ungated contribution registry (the `AdminSearchProviderRegistryPort`
+   idiom); hosts push from a contribution-only boot hook; reads filter by the host's presence.
+2. **`documentRenderPort`** — gated (`ctx.di.providePort`): `render({ documentType, salesChannelId,
+   language, data, templateId? })`.
 
-`comparisons` declares both in `nonBindingDependencies`: `documentTypeRegistry` as **`contributes-to`**
-and `documentRenderPort` as **`degrades-without`** (`whenAbsent`: "comparison PDFs use the fixed
-built-in layout"), probing `effectiveState.isPresent('document_templates')` in front of the port and
-calling its retained fixed renderer otherwise (the `catalog` → `inventoryAvailabilityPort` shape,
-`packages/modules/catalog/src/backend/index.ts`).
+`comparisons` declares the registry `contributes-to` and the port `degrades-without` (presence probe,
+fixed renderer otherwise). `invoices` declares `document_templates` in **`dependencies`** (R-27, N2) and
+resolves both directly.
 
-**Rationale**: the data a comparison PDF needs (viewer-priced, audience-filtered view) can only be
-produced by `comparisons`, inside the buyer's request and tenant context; letting the core *pull* it
-would require the core to know the host's identity model. Push-the-data keeps the core
-entity-agnostic (XIV) and keeps tenant scoping where it already is (XI). `degrades-without` rather
-than `dependencies` keeps `document_templates.enabled` a real switch: binding it would make switching
-templates off refuse while comparisons is on.
+**Rationale**: only the host can build its data, inside the requester's context (XI); the core never
+interprets it (XIV). The per-host choice between binding and degrading is the host's honest answer to
+"what happens when templates are off".
 
-**Alternatives rejected**: the core pulls data through a host-registered loader keyed by an id
-(needs the host's actor/audience semantics in the core's API); the host renders with a library and
-only *reads* the template tree from the core (then the admin preview needs a host route, and the
-engine is shipped in every host); a manifest-declared `documentTypes` field reconciled at boot like
-`transactionalEmails` (adds a manifest field and a reconciler for data that is code — renderers —
-anyway).
+**Alternatives rejected**: core pulls data through loaders (needs host identity semantics); host-side
+rendering with a library (engine duplicated, admin preview needs host routes); a manifest field for
+types (renderers are code anyway).
 
-## R-6 — Block vocabulary and ownership: a new Page Builder context `document`
-
-**Decision**: Add **`document`** to `pageBuilderContextSchema` (`packages/contracts/src/cms.ts`) and to
-`AdminBlockContributionSchema.context` (`packages/contracts/src/admin-contributions.ts`). Blocks are
-declared in manifests with `contexts: ['document']` (feature 096 rules, `blockNameRe`):
-`document_templates.{Heading,Text,Image,Spacer,Divider,PageBreak}` in category `layout`, and
-`comparisons.{ComparisonHeader,ComparisonTable,ComparisonShareLink}` in category `comparison`. A
-document type's registration lists which host blocks it offers; core blocks are offered to every
-type. One context for *every* document type: it never grows per type.
-
-**Rationale**: the persisted name is permanent and must say its owner (`check:block-names`); manifest
-declarations give the palette translated labels (`labelKey` in the owner's bundle — fixing R-2's
-English-only descriptor) and presence filtering through the existing manifest machinery
-(`resolvedModuleRegistry`, as `cms`' `page-builder-registry.ts` reads it). Feature 096's policy — a
-stored block of an absent owner is skipped, never rewritten — applies unchanged.
-
-**Alternatives rejected**: a context per document type (`comparison`, `quote`, …) — a contracts
-change per host and a generic block re-declared per context; reusing `invoice` — wrong palette and
-wrong owner semantics; blocks declared only in the registry (no manifest) — loses `check:block-names`,
-translated labels and the palette machinery.
-
-## R-7 — The editor: invoice editor's shape, feature 141's contributions, server preview as authority
-
-**Decision**: `document_templates` ships one generic editor (`/document-templates/:id`) built like
-`InvoiceTemplateEditor.tsx` (Puck + `@endora-commerce/page-builder-admin` chrome +
-`@endora-commerce/page-builder-core/editor` plugins). The Puck config is composed from a served
-descriptor (core + the type's host blocks, translated labels, fields, default props, categories,
-root fields) with `editorConfigFromDescriptor` (`packages/page-builder-core/src/contributions/
-descriptor-editor.tsx`): a host's **admin block contribution** for context `document` supplies the
-canvas renderer and field overrides (colour pickers, an asset picker), and a block with none gets
-the neutral, editable stand-in (FR-018). The **sample data** the canvas draws is served by the
-backend from the registration (`GET …/types/:code`), so canvas and PDF preview read the same sample
-(fixing R-2's duplicated sample). *Preview PDF* renders the canvas's current tree on the server and
-is the authority on what the PDF looks like.
-
-**Rationale**: reuse before build (IX); the 141 contribution path is exactly "a module ships the
-editor renderer for its own block"; a single sample removes a drift class.
-
-**Alternatives rejected**: an editor per host (duplication); a live PDF canvas (re-rendering a PDF on
-every keystroke is slow and loses Puck's direct manipulation); host canvas renderers that receive no
-sample (blocks drawn empty, operator designs blind).
-
-## R-8 — Template model, scope and resolution; the built-in layout is virtual
+## R-6 — Blocks belong to a document type; general-purpose blocks are opt-in
 
 **Decision**:
-- One table `document_templates`; at most one **active** row per `(document_type, scope)`, scope =
-  global (`sales_channel_id` null) or one channel — a partial unique index (`data-model.md`).
-- **Scope is immutable** after creation; *duplicate* moves a layout to another scope.
-- Resolution: channel-active → global-active → **the registration's built-in layout**. A template
-  whose tree for the chosen language has no renderable node counts as absent (invoice FR-016's rule).
-- The built-in layout is **virtual**: it is the registration's `defaultContent()`, never a seeded row.
-  The list shows it as a read-only entry; *Create* copies it.
-- Activation is one Command that deactivates the previous active row of the same scope inside the same
-  transaction, so the index never sees two and the scope is never momentarily empty.
+- A document type's palette is **exactly**: the host blocks its registration lists, the blocks other
+  modules contribute **to that type** through the host, and the general-purpose blocks **only if** the
+  registration opts in (`coreBlocks: 'all' | readonly CoreBlockName[] | 'none'`). The descriptor, the
+  editor and save-time validation (FR-019) all derive from that one list.
+- `comparisons.comparison`: its three blocks + `coreBlocks: 'all'`. `invoices.invoice`: its ten blocks +
+  present contributors' blocks + `coreBlocks: 'none'` (it has its own spacer, divider, logo, footer —
+  parity of the palette).
+- New blocks (core and comparison) declare `contexts: ['document']` — a new value of
+  `pageBuilderContextSchema` that keeps them out of the CMS and e-mail palettes. **Invoice blocks keep
+  `contexts: ['invoice']`**, and so does `ksef`'s externally declared block: the type's list, not the
+  context, decides membership, so neither manifest needs to change (FR-087).
+- Labels and fields come from the block's manifest declaration found **by name** in any present
+  manifest, else from the renderer's own `describe()` — the latter is how a contributed invoice block
+  is described today, so `ksef` keeps working unchanged.
 
-**Rationale**: a virtual default needs no boot seed, no seed-revision bookkeeping (invoices'
-`GENERIC_INVOICE_TEMPLATE_SEED_REVISION`), and — decisively — no write by `comparisons` into a table
-`document_templates` owns (`module-migrations.md` item 4a, R2 forbids it). Immutable scope removes the
-"move an active template into an occupied scope" conflict and its error code.
+**Rationale**: the owner's explicit requirement that each type has its own component set; keeping
+contexts and the contributor contract stable avoids touching an external package.
 
-**Alternatives rejected**: seeded `is_system` rows per type (above); mutable scope with
-deactivate-on-move or a 409 (surprising either way); a separate "assignment" table mapping
-`(type, scope) → template` (one more table and Command for what one boolean and an index express).
+**Alternatives rejected**: a context per document type (an enum value per host, and `ksef` would have
+to re-declare); every core block offered everywhere (violates the owner's requirement and changes the
+invoice palette).
+
+## R-7 — The editor: invoice editor's shape, feature 141 contributions, backend-served sample
+
+**Decision**: one generic editor (`/document-templates/:id`) built like `InvoiceTemplateEditor.tsx`
+(Puck + `@endora-commerce/page-builder-admin` chrome + `page-builder-core/editor` plugins), its config
+composed from the type's descriptor via `editorConfigFromDescriptor`
+(`packages/page-builder-core/src/contributions/descriptor-editor.tsx`). Canvas renderers come from the
+owning module's admin block contributions with context `document` — `comparisons` ships three new
+ones; `invoices` moves its existing canvas renderers (`invoice-puck-config.tsx`) into ten
+contributions, one per own block, reading the **backend-served** sample instead of the frontend copy.
+Blocks without a contribution (the `ksef` block) get the neutral stand-in, as today. Defaults merge
+under stored props (what `hydrateInvoiceDefaults` did). *Preview PDF* renders on the server and is the
+authority. The language switcher offers the registration's `languages` (invoices: `['pl-PL']`, FR-085;
+comparison: all active content languages).
+
+**Alternatives rejected**: an editor per host; a live-PDF canvas; keeping the frontend sample copy.
+
+## R-8 — Template model: several per scope, one default; scope immutable; built-in virtual
+
+**Decision**:
+- `document_templates` rows carry `is_default`; a partial unique index allows **one default per
+  `(document_type, scope)`**; any number of non-default templates (owner Q2).
+- Commands `set_default` (clears the previous default of the scope in the same transaction) and
+  `clear_default` replace "activate/deactivate".
+- **Scope is immutable**; *duplicate* moves a layout to another scope.
+- Resolution without an explicit template: channel default → global default → the registration's
+  built-in layout. A tree with zero renderable nodes counts as absent. The built-in layout is virtual:
+  the registration's `defaultContent()` tree, and — for a type that provides one — `renderBuiltIn()`
+  code when even that tree renders nothing (invoices' `builtinLayout`, R-25).
+
+**Rationale**: owner Q2; a virtual default needs no seed rows and no write by a host into the
+facility's table; immutable scope removes a conflict class.
+
+**Alternatives rejected**: seeded `is_system` rows per type (invoices' seed is exactly what R-24 has to
+unwind); a separate assignment table (one boolean and an index express it).
 
 ## R-9 — Languages
 
-**Decision**:
-- A template's `content` is `{ schemaVersion: 1, languages: { <content-language-code>: <tree> } }`,
-  keyed by the platform's content-language codes (`en-US`, `pl-PL`, as product names are).
-- **Render language** (FR-032), decided by the host route: the storefront's locale, which the `PDF`
-  button now sends as `Accept-Language` (R-18); else the channel's `defaultLanguage`; else `en-US`.
-  The tree is chosen exact → same primary subtag → `en-US`/`en` → first key — the order
-  `CatalogQueryService.pickLang` already uses for names, so a PDF never names a product in one
-  language and titles it in another.
-- The editor lists the platform's active content languages (`GET /api/v1/i18n/config`) and creates a
-  missing language as a copy of the current one (FR-014).
-- Printed **platform prose** (built-in titles, captions, notes) lives in the built-in layout's
-  per-language trees as block props — operator content once copied — so the backend translates by
-  choosing a tree (case 1 of `specs/conventions/module-i18n.md`); dates and money are formatted with
-  `Intl` for the render language.
+**Decision**: `content = { schemaVersion: 1, languages: { <code>: <tree> } }`. The host chooses the
+render language: comparison → storefront locale (sent as `Accept-Language`) → channel default → `en-US`
+(owner Q7); invoices → always `pl-PL` (parity, N5). The tree is chosen exact → same primary subtag →
+`en-US` → `en` → first (identical to `pickLanguageTree` for `pl-PL` content, so invoice parity holds).
+A registration may restrict the editable languages (`languages`). Comparison platform prose lives in
+its built-in layout's per-language trees; dates and money via `Intl` in the render language.
 
-**Rationale**: matches invoice templates and CMS pages; a per-language structure is what
-`check:default-language-prose` admits for Polish literals in code.
-
-**Alternatives rejected**: one tree with per-field translations (Puck has no per-field i18n; every
-text field would become a map); render-time translation of block labels through the `_i18n` port
-(adds a binding edge on `_i18n` and makes operator-edited text and platform text indistinguishable).
+**Alternatives rejected**: per-field translations in one tree; render-time `_i18n` lookups.
 
 ## R-10 — Merge fields
 
-**Decision**: Text-bearing core blocks and the page header/footer interpolate `{{key}}`. Keys come from
-two sources: core (`date`, plus `page` and `pages` in header/footer only) and the registration's
-`variables` (declared with module-relative label keys, resolved by `resolveVariables(data,
-context)`). A known key with no value prints empty; an unknown key prints verbatim (FR-023, edge
-cases). Values are inserted as text — no markup, no expressions.
+**Decision**: `{{key}}` in core text blocks and in the root header/footer; core keys `date`, `page`,
+`pages`; host keys from the registration's `variables` + `resolveVariables`. Known-but-empty → empty;
+unknown → verbatim. Plain text only. Invoices declare none (their blocks print data themselves).
 
-**Rationale**: the transactional-email templates already teach operators the `{{…}}` idiom
-(`transactionalEmails[].variables` in manifests); literal printing of typos is the cheapest
-"you misspelled it" signal and shows in the preview.
+**Alternatives rejected**: a template language (dependency, execution surface).
 
-**Alternatives rejected**: a template language (Handlebars) — new dependency and an execution surface
-for admin-authored content; dedicated "merge field" blocks only — clumsy for a sentence like
-"Prepared for {{organizationName}} on {{date}}".
-
-## R-11 — Fallbacks: module off, no template, nothing printable
-
-**Decision**: three distinct cases.
+## R-11 — Comparison fallbacks
 
 | Situation | Comparison PDF |
 | --- | --- |
-| `document_templates` absent or off | `comparisons`' **fixed renderer, unchanged** (today's layout) — the `degrades-without` branch |
-| on, no applicable template, or the applicable one prints nothing | the registration's **built-in layout** through the engine — today's layout, localised |
+| `document_templates` absent or off | `comparisons`' fixed renderer, unchanged (`degrades-without`) |
+| on, no applicable template or nothing printable | the built-in layout through the engine — today's layout, localised (owner Q5) |
 | on, applicable template | the template |
 
-The fixed renderer stays in `comparisons` and is refactored only to share pure helpers
-(`filterRowsByMode`, `pickOrientation`, table layout) with the new blocks; its output is held by its
-existing tests (`comparison-pdf-renderer.test.ts`, `…-bytes.test.ts`).
-
-**Rationale**: Principle XVII — an off module behaves as never installed, and comparisons must not
-fail because a switchable sibling is off. Keeping the fixed renderer byte-stable makes the off path
-verifiable by the existing tests.
-
-**Alternatives rejected**: make `document_templates` a binding dependency of `comparisons` and delete
-the fixed renderer (templates could not be switched off while comparisons is on); render the
-built-in layout without the engine when off (needs the engine in `comparisons` — R-3's library
-alternative again). [Q5 asks the owner whether the localised built-in layout should replace today's
-layout immediately.]
+The fixed renderer stays, refactored only to share pure helpers; its two existing test files hold its
+output.
 
 ## R-12 — Images and network access
 
-**Decision**: The core `Image` block takes an **assets-library asset id only**; bytes are read through
-`assetReadPort.openAssetBytes` and inlined as data URIs (PNG/JPEG; others skipped), with pdfmake's URL
-policy denying everything. No free-URL source. Host blocks bring their own images (comparisons keeps
-`AssetByteFetcher` for product images). `assets_library` is a binding dependency — it is
-`nonDeactivatable` (`packages/modules/assets_library/src/manifest.ts`), so the edge disables nothing.
+**Decision**: the core `Image` block takes an assets-library id only (bytes via
+`assetReadPort.openAssetBytes`, PNG/JPEG data URIs, URL access denied). **Invoices' logo block keeps
+its URL option** (FR-086, parity) inside invoices' own renderer — an existing behaviour carried, not
+extended to new blocks.
 
-**Rationale**: a free URL fetched server-side on behalf of an admin-authored template is an SSRF
-primitive (`embed-logo-images.ts`' `fetchExternalImage` is one); the assets library already serves
-every image an operator legitimately uploads.
+## R-13 — Auditing through the Command Bus
 
-**Alternatives rejected**: copy invoices' URL source (SSRF); allow-listed hosts (configuration surface
-for no stated need).
-
-## R-13 — Auditing through the Command Bus; no undo, no events
-
-**Decision**: Every write is a Command run by `CommandBus.run` (`packages/platform/src/commands/
-command-bus.ts`), `objectType: 'document_template'`: `document_template.create` (also duplicate),
-`.rename`, `.save_content`, `.activate`, `.deactivate`, `.delete`. Audit state carries identity,
-scope, version, active flag and, for content, the language and a SHA-256 of the saved tree — not the
-tree (size). No Command is reversible; no domain event is emitted. The service never calls the audit
-writer (contrast `invoice-template-service.ts`).
-
-**Rationale**: Principle XIII; content digests make "what changed" verifiable without bloating
-`audit_log_entries`. Undo of a layout save is better served by *duplicate before editing* (and, if the
-owner wants it, a version history — Q6) than by the bulk-undo machinery, which is built for
-per-record field restores.
-
-**Alternatives rejected**: full tree in audit state (hundreds of KB per save); reversible
-`save_content` (conflict model built for bulk field edits).
+**Decision**: Commands `document_template.create` (also duplicate), `.rename`, `.save_content`,
+`.set_default`, `.clear_default`, `.delete`, plus **`document_template.import`** (one audit row per
+import run, R-24). Audit state: identity, scope, `isDefault`, version, languages, per-language SHA-256
+content digest. No undo, no domain events. Invoices' hand-written audit goes away with its service.
 
 ## R-14 — Caching: none
 
-**Decision**: No cache. A render reads at most two indexed rows (`document_type`, `sales_channel_id`,
-`active`) — the cost is noise next to image fetching and pdfmake. Consequently no invalidation, no
-pub/sub channel and no event.
-
-**Rationale**: Principle IV; PDF export is a human click, not a hot path. If measurement (SC-003)
-ever says otherwise, the platform's pattern is an in-process cache dropped on a lifecycle pub/sub
-message published after the Commands commit; nothing in this design prevents adding it.
+A render reads ≤ 2 indexed rows (or 1 by id); no cache, therefore no invalidation channel. If SC-003
+ever demands one, the pattern is an in-process cache dropped on a lifecycle pub/sub message after the
+Commands commit.
 
 ## R-15 — Tenancy and channel scoping
 
-**Decision**: `DocumentTemplate` is `@GlobalEntity()` (platform-global configuration, as
-`InvoiceTemplate`). Tenant data enters a render only as the `data` the host passes in, which
-`comparisons` builds under the buyer's request context exactly as the page does (Principle XI is
-unchanged on that path). The channel is the request's resolved channel (`getResolvedChannel`, which
-throws rather than returning null); a channel-scoped template is selected only by exact channel id, so
-an unresolved channel can never match one (Principle XII: fail closed). Channel ids written by the
-admin are validated through the kernel's `salesChannelResolutionPort.getById` and protected by an
-FK to the kernel-owned `sales_channels` table with `on delete cascade`.
-
-**Required tests**: a template of channel B is never used for a channel-A export; a buyer of
-organisation A exporting never sees organisation B's prices or restricted products (existing view
-guarantees, re-asserted through the new path); a template cannot reference data outside what the host
-passed (engine unit test: blocks receive only `data`, `props`, `language`, `variables`).
+`DocumentTemplate` and `DocumentTemplateImport` are `@GlobalEntity()`. Tenant data enters only as the
+host-built `data`. Channel templates are selected by exact resolved channel id; a null channel never
+matches one; an explicit `templateId` is accepted only if global or of the document's channel
+(FR-038). Channel ids validated via the kernel `salesChannelResolutionPort.getById` and an FK to the
+kernel-owned `sales_channels` (`on delete cascade`). Tests: cross-channel (comparison and invoice),
+cross-organisation (comparison), explicit-id scope refusal.
 
 ## R-16 — Permissions, palette, navigation
 
-**Decision**: `document_templates:read` (list, type detail, builder config, template detail, preview)
-and `document_templates:write` (every Command). Palette action `open-document-templates` →
-`/document-templates` (`requiredPermission: 'document_templates:read'`, keywords include `pdf`,
-`template`, `szablon`, `comparison`, `porównanie`, `dokument`). Sidebar entry in section `content`.
-`comparisons`' admin list page shows a *PDF template* link to
-`/document-templates?type=comparisons.comparison`, rendered only when `useModulePresence()` reports
-`document_templates` present and the admin holds `document_templates:read`.
+**Decision**: `document_templates:read` / `:write` gate every facility route (literal codes —
+`module-admin-surfaces.md` item 3). Palette: `open-document-templates` with keywords including
+`invoice template`, `szablon faktury`, `pdf`, `porównanie`. **`invoices`' `invoice-templates` action is
+removed** (its target becomes a redirect) — FR-090 is met by the new action's keywords. Sidebar entry in
+`content`. Links: `comparisons` list page (*PDF template*), invoices' `InvoiceSectionTabs` *Templates*
+tab → `/document-templates?type=invoices.invoice`.
 
-**Rationale**: `requireAdmin` literals must be resolvable constants (`module-admin-surfaces.md`), so
-per-document-type permissions would have to be the *host's* codes enforced by the core's routes —
-computed, which the inventory refuses. Two module-level codes are the honest granularity.
-
-**Alternatives rejected**: reuse `comparisons:*` (the core would enforce a host's code; and
-`comparisons` has no write code); per-type codes generated from registrations (not literal).
+**Alternatives rejected**: per-type codes from registrations (not literal; scanner refuses); host codes
+enforced by the core.
 
 ## R-17 — Failure policy inside a render
 
-**Decision**: A **host block renderer that throws fails the render** (`DOCUMENT_RENDER_FAILED`, logged
-with template id, version, block name), and the comparisons route answers its existing
-`PDF_GENERATION_FAILED`. Image failures are handled inside blocks and never throw (FR-035). A
-`ModuleDisabledError` raised inside a renderer is re-thrown, never swallowed
-(`rethrowIfModuleDisabled`, `module-composition.md` item 7).
-
-**Rationale**: invoices treat contributed *enrichments* as optional because an invoice is a legal
-document that must always render; a comparison PDF silently missing its table is worse than an
-explicit, retryable error.
+**Decision**: per-type. Default (comparison): a host block's `render` throwing fails the render
+(`DOCUMENT_RENDER_FAILED`, logged with template, version, block); `ModuleDisabledError` re-thrown.
+**Invoices keep their rule**: a contributed block's `resolve` failing renders it with `null` and never
+fails the invoice — implemented inside invoices' `prepareRender` hook, so the engine's policy is
+untouched.
 
 ## R-18 — Storefront changes
 
-**Decision**: `exportComparisonPdf({ locale, hideEmptyRows })` sends `Accept-Language: <storefront
-locale>` and `?hideEmptyRows=true|false`; `app/compare/page.tsx` passes the server context's `locale`
-to `ComparisonTable`. The `PDF` button's own two Polish literals (`Generowanie…`, `Nie udało się
-wygenerować PDF.`) move to `storefront/lib/i18n/messages.ts` (en + pl), because the button is touched.
-No other storefront change; the page stays SSR-capable (VII).
-
-**Rationale**: the backend cannot know the storefront's language from a browser `fetch` otherwise
-(R-1), and the PDF must mirror the screen (FR-020).
+`exportComparisonPdf({ locale, hideEmptyRows })` sends `Accept-Language` and `?hideEmptyRows=`;
+`app/compare/page.tsx` passes the locale; the button's two Polish literals move to
+`storefront/lib/i18n/messages.ts` (en + pl).
 
 ## R-19 — No new runtime dependency
 
-`pdfmake` (with its bundled Roboto, which covers Polish diacritics, and its native `qr` node for the
-share-link QR code), `@puckeditor/core`, the page-builder packages, Zod and MikroORM are all present.
-`document_templates`' generated `package.json` peers on `pdfmake` and `@types/pdfmake` exactly as
-`comparisons` and `invoices` do. pdfmake's font and URL-policy setters are process-global; every module
-sets the same values (Roboto; deny-all), so a third setter changes nothing — recorded so nobody
-"fixes" it into a shared mutable seam.
+`pdfmake` (Roboto covers Polish; native `qr`), `@puckeditor/core`, page-builder packages, Zod, MikroORM —
+all present. pdfmake's process-global font/URL setters are set to identical values by every user.
 
 ## R-20 — Limits and performance
 
-**Decision**: per language ≤ 200 top-level nodes; serialized `content` ≤ 512 KiB; ≤ 10 languages per
-template; text props ≤ 5 000 characters; images per template ≤ 20; comparison table
-`productsPerTable` 1–8 (default 4). Enforced by Zod on write (`DOCUMENT_TEMPLATE_INVALID`, 422 with the
-path) and defensively at render (excess nodes ignored). SC-003 is a perf test at 16 products.
+≤ 200 top-level nodes per language, ≤ 512 KiB content, ≤ 10 languages, string props ≤ 5 000 chars,
+≤ 20 core images per language, `productsPerTable` 1–8. Enforced on write; defensively at render. The
+**import** (R-24) bypasses the node/size limits for legacy rows that exceed them — such rows are imported
+as they are and flagged in the import report, because refusing them would lose operator data (FR-081).
 
 ## R-21 — Defects observed and left out of scope
 
-- `storefront/app/compare/page.tsx` hard-codes Polish breadcrumbs, heading and description, and
-  `ComparisonTable.tsx` other Polish labels — Principle-VIII-compliant (string literals) but against
-  the i18n policy. Only the `PDF` button's strings are fixed here (R-18); the rest belongs to a
-  storefront i18n sweep.
-- Invoice templates' English-only descriptor labels, duplicated sample and hand-written audit
-  (R-2) — candidates for the later invoices adapter, not this feature.
+- Hard-coded Polish texts on the storefront comparison page beyond the `PDF` button.
+- The invoice e-mail attachment ignoring templates (R-2) — kept for parity unless the owner says
+  otherwise (N1, R-30).
+- `invoices.template_id` is a column nothing writes (R-2) — left alone; dropping it is invoices' own
+  clean-up.
 
 ## R-22 — Reuse path for the quote-request PDF (not built)
 
-A later feature adds, inside `quote_requests` only: block declarations with `contexts: ['document']`;
-a `quote_requests.quote` registration (blocks, sample quote, built-in layout, merge fields); admin
-block contributions for its canvas; and a `PDF` route calling `documentRenderPort` behind a presence
-probe. `document_templates` changes nothing (FR-070, SC-007 — proven now by the fixture document type
-in the test suite, `tasks.md` US5).
+`quote_requests` registers `quote_requests.quote` with `selection: 'per_document'`, stores the chosen
+template id on the quote, lists selectable templates through `GET /api/v1/admin/document-templates
+?type=quote_requests.quote&applicableToChannel=<id>`, and calls `documentRenderPort` with `templateId`.
+The facility changes nothing (FR-070, SC-007 — proven by the US6 fixture).
+
+## R-23 — Per-document selection
+
+**Decision**: registration `selection: 'default_only' | 'per_document'`. `render({ templateId })`:
+- `default_only` + `templateId` → `DOCUMENT_TEMPLATE_NOT_SELECTABLE` (422) (FR-038);
+- `per_document` + a template of the same type whose scope is global or the document's channel → used;
+- another type or another channel → `DOCUMENT_TEMPLATE_NOT_SELECTABLE`;
+- not found → FR-031's resolution, result `source: 'default'` with `requestedTemplateMissing: true`
+  (FR-039) — a quote must still print after its chosen template is deleted.
+The admin list gains `applicableToChannel=<id>` (global ∪ that channel) for a future picker.
+`comparisons` and `invoices` declare `default_only`.
+
+**Alternatives rejected**: refusing when the chosen template is gone (a sales document that cannot be
+re-printed); pinning by copying the layout onto the document (a version store nobody asked for, Q6).
+
+## R-24 — Migrating invoice template data: a pull import by the table's owner, recorded once
+
+**Decision**:
+- **Who writes**: `document_templates` — the owner of the target table — and nobody else. **Who reads
+  the legacy table**: `invoices` — its owner — through a function in its registration,
+  `legacyImport: { source: 'invoice_templates', read(): Promise<LegacyTemplateRecord[]>,
+  afterImport?(): Promise<void> }`. No migration and no service touches the other module's table
+  (`module-migrations.md` item 4a, R1/R2; `module-composition.md` item 9a's reasoning about seams).
+- **When**: (1) `document_templates`' boot **work** hook, after probing its own presence, for every
+  present type with a `legacyImport`; (2) lazily, before any read or render of such a type
+  (`ensureImported(type)`), cached per process once done — so a runtime switch-on with no restart, or
+  `invoices` being off at boot, still converges on first use (no hook on the activation axis is added).
+- **Once**: table `document_template_imports` `(document_type, source)` PK. One transaction: insert the
+  marker **first** with `on conflict do nothing`; only the inserting transaction proceeds (concurrent
+  processes serialise on the PK); rows inserted with their **original ids** (`on conflict (id) do
+  nothing`); `afterImport()` (the permission grant, R-28) runs inside the transaction's lifetime and a
+  failure rolls the marker back so the next attempt retries; the run is one `document_template.import`
+  Command (one audit row with counts). A template deleted after import never returns — the marker, not
+  the rows, decides (FR-082).
+- **Mapping** (`invoice_templates` → `document_templates`): `id`, `name`, `sales_channel_id`, `version`,
+  `created_at`, `updated_at` copied; `document_type = 'invoices.invoice'`; `is_default = active`;
+  `content = { schemaVersion: 1, languages: <legacy languages map> }` with trees byte-identical;
+  `code`, `is_system`, `languages` dropped (derived or meaningless now). The seeded `generic` row is
+  imported like any other, edits included (FR-081).
+- **Skipped**: rows whose `sales_channel_id` names no existing channel (they could never apply: the
+  legacy table had no FK; importing would violate the new FK) — counted and reported in the audit
+  state and the log. Two legacy actives in one scope cannot exist (legacy unique index).
+- **Legacy table**: kept, read-only; `invoices` stops writing it (`ensureGenericSeed` and every write
+  method removed). Dropping it is a later clean-up once every installation has imported.
+  `cms`' block-names CLI gains `document_templates.content`; `invoice_templates.content` stays listed
+  while the table exists.
+
+**Rationale**: the only shape that keeps both ownership rules: the owner of each table is the only code
+touching it, and the cross-module step is a published function in a registration, not SQL. A pull by
+the target owner also handles the off-states: nothing happens while either module is absent, and the
+first moment both are present converges.
+
+**Alternatives rejected**:
+- *A migration owned by `document_templates` reading `invoice_templates`* — R1 would require
+  `document_templates` to depend on `invoices`: the generic core depending on a host.
+- *A migration owned by `invoices` inserting into `document_templates`* — R2 forbids a write into another
+  module's table, declared or not.
+- *`invoices`' `installHook` through an `./install` surface* — install hooks do not run on upgrade of an
+  already-installed module, which is every existing installation.
+- *`invoices`' boot hook pushing rows through a gated port* — a boot hook cannot resolve a gated port of
+  a module that may be off, and the import would then wait for the next restart.
+- *Idempotency by ids alone, no marker* — would resurrect templates the operator deleted after the move.
+
+## R-25 — Invoice rendering parity through registration hooks
+
+**Decision**: the engine's registration grows four optional hooks, each used by invoices and generic in
+meaning:
+
+| Hook | Generic meaning | Invoices' implementation |
+| --- | --- | --- |
+| `prepareRender(data, { placedBlocks, preview })` → `prepared` | per-render precomputation handed to every block | resolves present contributors' `resolve(invoiceId)` (failure → `null`), computes `suppressKsefNumber`, inlines logo images (`embedInvoiceLogoImages`) |
+| `renderBuiltIn(data, prepared)` → `Content[]` | code layout used when no tree renders anything | today's `builtinLayout()` |
+| `pageDefaults` | root-prop defaults and pdfmake `styles` under stored root props | A4, margins 40/40/40/48, `fontSize 10`, `styles.docTitle`; no header/footer/info |
+| `blocks()` (a function, not an array) | the type's blocks at this moment | own ten + `invoicePdfBlockRegistry.present()` adapted |
+
+Invoices' render paths call `documentRenderPort.render({ documentType: 'invoices.invoice',
+salesChannelId: detail.salesChannelId, language: 'pl-PL', data: { invoice: detail, amountLocale: 'pl' }
+})` — the preview's sample uses `amountLocale: 'en'` as today. The **parity test** (SC-008) captures the
+pdfmake document definition produced by today's `InvoicePdfRenderer.content()/buildDoc()` for a fixture
+matrix (seed tree, edited tree, channel override, KSeF block placed/absent, correction, empty tree →
+built-in, logo by URL and by asset) **before** the change, commits it as golden files, and asserts the
+engine's definitions equal them after.
+
+**Rationale**: parity is proven on the definition, not trusted; invoice code moves behind interfaces
+instead of being rewritten.
+
+## R-26 — Invoice e-mail attachment
+
+**Decision (default for N1)**: unchanged — the dispatcher keeps rendering the built-in layout, now by
+calling invoices' own `renderBuiltIn` path locally (no template, no port). If the owner chooses to fix
+it, the change is one call: render through the port like the download (+1 task, a changed golden).
+
+## R-27 — Invoices bind `document_templates` (N2)
+
+**Decision (default)**: `document_templates` joins `invoices`' manifest `dependencies`. Consequences:
+switching templates off while invoicing is on is refused by the lifecycle (dependencies fail closed);
+migration order puts `document_templates` before `invoices`; invoices never render without templates.
+**Alternative (if the owner chooses a)**: `degrades-without` with `whenAbsent: 'invoices print the
+built-in invoice layout; operator templates apply again when document templates are back on'`,
+presence probe in front of the port, `renderBuiltIn` locally otherwise.
+
+## R-28 — Permissions continuity (N3)
+
+**Decision (default)**: invoices' `legacyImport.afterImport` performs a one-time grant through
+`adminRolePort` (owner `admin_roles`, `nonDeactivatable` — added to `invoices`' dependencies): for each
+role whose permissions include `invoices:read` add `document_templates:read`; `invoices:write` → add
+`document_templates:write` (and `:read`). Idempotent (a present code is not re-added); runs once because
+the import marker runs once; logged with the role codes changed. The facility knows nothing of invoice
+codes (XIV) — the host does it in its own hook. `invoices:write`'s label drops "edit templates".
+**Alternatives**: release-note instruction only; per-type permissions (rejected in R-16).
+
+## R-29 — Admin routes, redirects and the withdrawn API (N4)
+
+**Decision (default)**:
+- `invoices`' admin contributions keep `/invoices/templates` and `/invoices/templates/:id` as **redirect
+  routes** (`<Navigate replace>` to `/document-templates?type=invoices.invoice` and
+  `/document-templates/:id` — ids preserved by the import). `InvoiceSectionTabs` points at the new list.
+- The five `/api/v1/admin/invoice-templates*` routes are **removed**; `invoices`' changeset is a
+  breaking (major) bump with a migration note; `backend/test/fixtures/openapi-baseline.json` updated in
+  the same MR.
+- The invoice template pages, `templates/` folder and descriptor move or go: canvas renderers become
+  admin block contributions; `InvoiceTemplatesPage.tsx`, `InvoiceTemplateEditor.tsx`,
+  `described-blocks.tsx`, `invoice-builder-plugin.tsx`, `descriptor.ts`, `invoice-template-service.ts`
+  are deleted; the ~29 `invoiceTemplates.*` keys leave the shared `_i18n` bundles (their ratchets are
+  two-way) and the block field labels move into `invoices`' own bundles.
+- Tests naming the old routes are rewritten against the new API in the same MR (`AGENTS.md` trap:
+  grep `backend/test/**` for every deleted file and route).
+**Alternative (a)**: keep the five routes one release as deprecated adapters over
+`documentTemplateService` (+1 port, +1 task).
+
+## R-30 — Invoice editor languages (N5)
+
+**Decision (default)**: `invoices.invoice` registers `languages: ['pl-PL']`; the editor offers Polish
+only; documents render `pl-PL`. Legacy content holding other language keys is imported unchanged and
+simply never offered — no data dropped.
+
+## R-31 — Invoices' off-state and the generic one
+
+- `invoices` off: its type, blocks and templates invisible in the facility; rows kept; import deferred if
+  not yet done. On again: back, import completes if pending.
+- `document_templates` off: refused while `invoices` is on (R-27 default). With `invoices` off too: both
+  surfaces gone; on again: everything back.
+- Tests: `backend/test/integration/invoices/off-state.test.ts` and
+  `_admin_surfaces/batch-twelve-palette-off-state.test.ts` are updated (the `invoice-templates` action is
+  gone), plus a new refusal test for switching templates off under invoices.

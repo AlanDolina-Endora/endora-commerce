@@ -1,10 +1,11 @@
-# Feature Specification: Editable PDF template for the storefront product comparison
+# Feature Specification: Document templates — an editable PDF template for the storefront product comparison, with invoice templates moved onto the same facility
 
 **Feature Branch**: `feat/152-compare-pdf-template` (spec directory `specs/152-compare-pdf-template/`)
 **Created**: 2026-10-17
-**Status**: Draft — seven open questions for the product owner (see *Open questions*). The plan
-proceeds on the recommended default of each; three of them are marked `[NEEDS CLARIFICATION]`
-where they bind a requirement.
+**Status**: Clarified — the owner answered Q1–Q7 on 2026-10-17 (see *Clarifications*). Q1 was
+answered with an extension: invoice templates move onto the facility in this feature. Five new
+questions raised by that extension are open (see *Open questions*); the plan proceeds on their
+recommended defaults.
 **Input**: Product-owner request, verbatim: *"Powinna być możliwość zdefiniowania szablonu PDF dla
 Porównywarki na Storefront UI. Czyli jak jestem na porównywarce (np.
 https://demo.commerce.endora.software/compare) i kliknę w przycisk `PDF`, to szablon eksportowanego
@@ -16,106 +17,131 @@ the Admin UI, ideally through the Page Builder."*
 ## Background
 
 A buyer on the storefront comparison page can download the comparison as a PDF. Today that PDF has
-one fixed layout that nobody outside engineering can change: an English title ("Product
-comparison"), an English caption naming the display mode, and a table with one column per product
-(image, name, price) and one row per compared attribute. It always uses English product names, even
-for a buyer browsing in Polish, and it carries no logo, no contact details, no date, and no link
-back to the comparison.
+one fixed layout nobody outside engineering can change: an English title, an English caption naming
+the display mode, and a table with one column per product (image, name, price) and one row per
+compared attribute. It uses English product names even for a buyer browsing in Polish, and carries
+no logo, contact details, date, or link back to the comparison.
 
 The Admin UI already lets an operator design one kind of PDF visually: **invoice templates**
-(*Invoices → Templates*), built with the same Page Builder the CMS and e-mail editors use. This
-feature gives the comparison PDF the same capability — and, because the request is the first of
-several (a quote-request PDF is expected next), it introduces the template capability as a
-**reusable document-template facility** that the comparison is the first user of, rather than a
-second copy of the invoice editor.
+(*Invoices → Templates*), built with the same Page Builder as CMS pages and e-mails. This feature
+turns that capability into a **document-template facility** shared by every kind of generated
+document: the product comparison is its first new user, **invoice templates move onto it** with
+their behaviour unchanged, and a quote-request PDF (a later feature) will be the next.
 
 ## Vocabulary
 
 - **Comparison PDF** — the file a buyer downloads with the `PDF` button on the storefront comparison
-  page. Only the owner of a comparison can download it (unchanged).
-- **Document type** — one kind of document the platform can produce from a template. This feature
-  delivers exactly one: *Product comparison*. The facility is built so that further document types
-  (for example a quote request) can be added later by the part of the platform that owns them.
+  page. Only the comparison's owner can download it (unchanged).
+- **Document type** — one kind of document produced from a template. This feature delivers two:
+  *Product comparison* and *Invoice*. Further types are added by the part of the platform owning
+  their data.
 - **Document template** — an operator-designed layout for one document type, edited in the Page
-  Builder. It holds one layout per **language**.
-- **Built-in layout** — the layout the platform ships for a document type. It is used when no
-  template of that type is active, and it is the starting point of every new template.
-- **Block** — one element placed on a template: general-purpose blocks (heading, text, image,
-  spacer, divider, page break) and **comparison blocks** that print the comparison itself (header,
-  comparison table, share link).
-- **Merge field** — a placeholder such as `{{customerName}}` an operator types into a text block,
-  replaced with the real value when the PDF is produced.
-- **Scope** — where a template applies: **all sales channels** (global), or **one sales channel**
-  (an override for that channel only).
-- **Active template** — the one template of a document type that is used for a given scope. At most
-  one per document type and scope.
-- **Sample comparison** — a fixed, made-up comparison the editor and the preview use, so an operator
-  can design without a real buyer's data.
+  Builder, holding one layout per **language**.
+- **Blocks of a document type** — the Page Builder components an operator may place on a template of
+  that type. **Each document type has its own set**: blocks that print its own data (for example the
+  comparison table, or an invoice's VAT summary), plus — only if the type opts in — the
+  general-purpose blocks (heading, text, image, spacer, divider, page break).
+- **Built-in layout** — the layout the platform ships for a document type: used when no template
+  applies, and the starting point of every new template.
+- **Merge field** — a placeholder such as `{{customerName}}` typed into a text, replaced with the real
+  value when the PDF is produced.
+- **Scope** — where a template applies: **all sales channels** (global), or **one sales channel**.
+- **Default template** — the template of a document type used for a scope when nothing else is
+  chosen. A scope may hold several templates; exactly one or none of them is its default.
+- **Per-document selection** — for document types that allow it, a person picks a specific template
+  for one individual document (the default preselected). Neither type delivered here allows it: the
+  comparison and the invoice always use the default. Quote requests will.
+- **Sample document** — fixed, made-up data the editor and the preview use, so an operator can design
+  without real customer data.
+
+## Clarifications
+
+### Session 2026-10-17 (owner)
+
+- **Q1** — Reusable facility or comparison-only? → **A reusable `document_templates` facility**, with
+  the explicit requirement that **each document type has its own set of Page Builder blocks**; the
+  editor of a template offers only its type's blocks plus the general-purpose blocks the type opts
+  into. **Extended by the owner: invoice templates move onto the facility in this feature** — invoices
+  become a document type, existing invoice templates are migrated without loss, their default and
+  per-channel behaviour is preserved, the old *Invoices → Templates* address redirects, and the
+  invoice PDF output is unchanged (FR-080–FR-092).
+- **Q2** — One layout or several? → **Several templates per document type and scope, one marked
+  default.** A document type declares whether per-document selection is allowed; producing a document
+  may name a template explicitly. The comparison uses the default only (the buyer just clicks `PDF`);
+  invoices keep today's semantics (default only); quote requests (later) will allow a per-quote choice
+  with the default preselected (FR-005, FR-037–FR-039).
+- **Q3** — Scope? → **All channels with an optional per-channel override** (as recommended).
+- **Q4** — Blocks and merge fields? → **The recommended set** (FR-012, FR-013, FR-023); the attribute
+  rows follow the buyer's display mode.
+- **Q5** — No template? → **The built-in layout in the buyer's language**; today's fixed English layout
+  only while the facility is switched off (as recommended).
+- **Q6** — Draft/publish? → **Edit live**; *duplicate → edit → set as default* is the safe path; no
+  version history (as recommended).
+- **Q7** — Language? → **The buyer's storefront language, then the channel's default** (as
+  recommended).
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 — Design the comparison PDF in the Page Builder and have buyers' downloads follow it (Priority: P1)
 
-An operator opens *Document templates* in the Admin UI (from the sidebar, the ⌘K palette, or a
-*PDF template* button on the *Comparisons* screen), picks *Product comparison*, creates a template
-from the built-in layout, and edits it in the Page Builder: adds the company logo, changes the
-title, chooses which product details the comparison table shows (image, SKU, price, availability)
-and how differing rows are highlighted, and adds a footer with contact details and page numbers.
-They preview the result as a real PDF filled with a sample comparison, save it and make it active.
-The next buyer who clicks `PDF` on the storefront comparison page receives a PDF laid out exactly
-like the preview, filled with their own comparison.
+An operator opens *Document templates* in the Admin UI (from the sidebar, the ⌘K palette, or a *PDF
+template* button on the *Comparisons* screen), picks *Product comparison*, creates a template from
+the built-in layout, and edits it: adds the company logo, changes the title, chooses which product
+details the comparison table shows (image, SKU, price, availability) and how differing rows are
+highlighted, and adds a footer with contact details and page numbers. The palette offers only blocks
+that make sense for a comparison. They preview a real PDF filled with a sample comparison, save, and
+set the template as default. The next buyer who clicks `PDF` receives a PDF laid out like the
+preview, filled with their own comparison.
 
-**Why this priority**: this is the request. Without it nothing the product owner asked for exists.
+**Why this priority**: this is the request.
 
-**Independent Test**: with one active template that adds a logo, a custom title and a footer, export
-a two-product comparison from the storefront as its owner, and confirm the PDF carries the logo, the
-title, the footer and both products' rows, while a comparison exported before activation used the
-built-in layout.
+**Independent Test**: with one default template that adds a logo, a custom title and a footer, export
+a two-product comparison as its owner and confirm the PDF carries the logo, title, footer and both
+products' rows, while an export made before the template became default used the built-in layout.
 
 **Acceptance Scenarios**:
 
-1. **Given** no comparison template exists, **When** a buyer exports their comparison, **Then** the
-   PDF uses the built-in layout, in the buyer's language.
-2. **Given** an operator with permission to edit document templates, **When** they create a
-   comparison template, **Then** it starts as a copy of the built-in layout, is not active, and
-   buyers' exports are unchanged.
-3. **Given** a template being edited, **When** the operator clicks *Preview PDF*, **Then** they get a
+1. **Given** no comparison template exists, **When** a buyer exports, **Then** the PDF uses the
+   built-in layout, in the buyer's language.
+2. **Given** an operator with permission to edit document templates, **When** they create a comparison
+   template, **Then** it starts as a copy of the built-in layout, is not the default, and buyers'
+   exports are unchanged.
+3. **Given** the comparison template editor, **When** the operator opens the block palette, **Then** it
+   lists the comparison blocks and the general-purpose blocks — and no invoice block.
+4. **Given** a template being edited, **When** the operator clicks *Preview PDF*, **Then** they get a
    PDF of the unsaved layout filled with the sample comparison, and nothing is saved.
-4. **Given** a saved template, **When** the operator activates it, **Then** the next comparison PDF
-   any buyer exports uses it, with that buyer's products, prices, attributes and display mode.
-5. **Given** an active template whose comparison table hides product images and shows SKUs, **When**
-   a buyer exports, **Then** the PDF's table has no images and does show each product's SKU.
-6. **Given** an active template, **When** the operator deactivates it, **Then** exports go back to
-   the built-in layout.
-7. **Given** a buyer whose comparison is in *differences only* mode (and who hides empty rows on
-   screen), **When** they export, **Then** the PDF shows the same rows as their screen.
+5. **Given** a saved template, **When** the operator sets it as default, **Then** the next comparison
+   PDF any buyer exports uses it, with that buyer's products, prices, attributes and display mode.
+6. **Given** a default template whose table hides images and shows SKUs, **When** a buyer exports,
+   **Then** the table has no images and shows each product's SKU.
+7. **Given** a default template, **When** the operator clears its default flag, **Then** exports go back
+   to the built-in layout.
+8. **Given** a buyer in *differences only* mode who hides empty rows on screen, **When** they export,
+   **Then** the PDF shows the same rows as their screen.
 
 ---
 
-### User Story 2 — The PDF speaks the buyer's language (Priority: P1)
+### User Story 2 — The comparison PDF speaks the buyer's language (Priority: P1)
 
 A template carries one layout per language. The operator edits the Polish and English versions
-separately (texts, labels, even block order), starting each new language from an existing one. A
-buyer browsing the storefront in Polish gets the Polish version, with Polish product and attribute
-names, Polish date format and Polish money format; a buyer browsing in English gets the English
-one.
+separately, starting a new language from an existing one. A buyer browsing in Polish gets the Polish
+version with Polish product and attribute names, date and money formats; a buyer browsing in English
+gets the English one.
 
-**Why this priority**: every user-facing output of the platform ships in Polish and English; a PDF
-that is English-only for a Polish buyer — today's behaviour — is a defect this feature must not carry
-into the new layouts.
+**Why this priority**: every user-facing output ships in Polish and English; today's English-only PDF
+for a Polish buyer is a defect the new layouts must not carry.
 
 **Independent Test**: with a template whose Polish title is "Porównanie" and English title is
-"Comparison", export the same comparison with the storefront set to Polish and then to English, and
-compare titles, product names, date and price formats.
+"Comparison", export the same comparison with the storefront in Polish and then in English.
 
 **Acceptance Scenarios**:
 
 1. **Given** a template with Polish and English layouts, **When** a buyer browsing in Polish exports,
-   **Then** the PDF uses the Polish layout and Polish product names, dates and money formats.
+   **Then** the PDF uses the Polish layout, Polish names, dates and money formats.
 2. **Given** a template with only an English layout, **When** a buyer browsing in Polish exports,
-   **Then** the PDF uses the English layout, with Polish product names where the catalogue has them.
-3. **Given** the operator adds a language to a template, **When** the editor opens it, **Then** the
-   new language starts as a copy of an existing language's layout rather than empty.
+   **Then** the English layout is used, with Polish product names where the catalogue has them.
+3. **Given** the operator adds a language to a template, **When** the editor opens it, **Then** it
+   starts as a copy of an existing language's layout.
 4. **Given** no template exists, **When** a buyer browsing in Polish exports, **Then** the built-in
    layout is printed in Polish.
 
@@ -123,116 +149,146 @@ compare titles, product names, date and price formats.
 
 ### User Story 3 — A different layout for one sales channel (Priority: P2)
 
-A deployment serves several sales channels (for example two brands). The operator creates a
-template that applies only to one channel — with that brand's logo and footer — while every other
-channel keeps the template that applies to all channels.
+The operator creates a comparison template for one sales channel only — another brand's logo and
+footer — while every other channel keeps the template that applies to all channels.
 
-**Why this priority**: multi-channel deployments brand each storefront separately; without this a
-second brand prints the first brand's logo. It is P2 because a single-channel deployment does not
-need it.
+**Why this priority**: multi-brand deployments; a single-channel deployment does not need it.
 
-**Independent Test**: activate a global template and a channel-B template; export from channel A and
-from channel B; each PDF carries its own layout.
+**Independent Test**: set a global default and a channel-B default; export from channel A and from
+channel B; each PDF carries its own layout.
 
 **Acceptance Scenarios**:
 
-1. **Given** an active global template and an active template for channel B, **When** a buyer on
-   channel B exports, **Then** the channel-B template is used.
-2. **Given** the same templates, **When** a buyer on channel A exports, **Then** the global template
-   is used — never channel B's.
-3. **Given** only a channel-B template is active, **When** a buyer on channel A exports, **Then** the
-   built-in layout is used.
+1. **Given** a global default and a channel-B default, **When** a buyer on channel B exports, **Then**
+   the channel-B template is used.
+2. **Given** the same, **When** a buyer on channel A exports, **Then** the global default is used —
+   never channel B's.
+3. **Given** only a channel-B default, **When** a buyer on channel A exports, **Then** the built-in
+   layout is used.
 
 ---
 
 ### User Story 4 — Manage templates safely (Priority: P2)
 
-The operator keeps several comparison templates (for example a seasonal one), sees which one is
-active in which scope, duplicates one to experiment without touching what buyers receive, renames,
-deletes unused ones, and is protected from overwriting a colleague's simultaneous edit. Every change
-is recorded in the audit log.
+The operator keeps several templates per type and scope, sees which is default where, duplicates one
+to experiment without touching what customers receive, renames, deletes unused ones, and is protected
+from overwriting a colleague's simultaneous edit. Every change is in the audit log.
 
-**Why this priority**: editing the active template changes what buyers receive on the next export;
-operators need a safe way to prepare changes. P2 because a single template with careful editing
+**Why this priority**: editing the default template changes the next document produced; operators
+need the duplicate → edit → set-as-default path. P2 because careful editing of a single template
 already delivers US1.
 
-**Independent Test**: duplicate the active template, edit the copy, confirm exports are unchanged,
-activate the copy, confirm exports switch and the original is no longer active; then save a stale
-copy of the editor and confirm the save is refused.
+**Independent Test**: duplicate the default template, edit the copy, confirm exports are unchanged,
+set the copy as default, confirm exports switch and the original is no longer default; then save a
+stale editor and confirm the save is refused.
 
 **Acceptance Scenarios**:
 
-1. **Given** an active template, **When** the operator duplicates it, **Then** the copy is inactive
-   and exports are unchanged.
-2. **Given** two templates in the same scope, **When** the operator activates the second, **Then** the
-   first stops being active in the same step — there is never more than one active template per
-   document type and scope, and never a moment with none if one was active before.
-3. **Given** two operators editing the same template, **When** the second saves after the first,
-   **Then** the second save is refused with a message saying the template changed, and nothing is
-   overwritten.
-4. **Given** any create, rename, save, activate, deactivate or delete, **When** it succeeds, **Then**
-   the audit log records who did it, when, and to which template.
-5. **Given** an operator who may view but not edit document templates, **When** they open the
-   editor, **Then** they can preview but every saving or activating control is unavailable.
+1. **Given** a default template, **When** the operator duplicates it, **Then** the copy is not default
+   and documents are unchanged.
+2. **Given** two templates in one scope, **When** the operator sets the second as default, **Then** the
+   first stops being default in the same step — never two defaults, and never a moment with none if
+   there was one.
+3. **Given** two operators editing one template, **When** the second saves after the first, **Then**
+   the second save is refused with a message, and nothing is overwritten.
+4. **Given** any create, rename, save, set-default, clear-default or delete, **When** it succeeds,
+   **Then** the audit log records who, when, and which template.
+5. **Given** an operator who may view but not edit document templates, **When** they open the editor,
+   **Then** they can preview but every saving or default-setting control is unavailable.
 
 ---
 
-### User Story 5 — The same facility serves the next document type (Priority: P3)
+### User Story 5 — Invoice templates live in Document templates, unchanged (Priority: P2)
 
-A later feature adds a quote-request PDF. Its owner adds a *Quote request* document type with its own
-blocks and sample data, and operators design it on the same *Document templates* screen with the same
-general-purpose blocks — without any change to the template facility itself.
+After the upgrade, an operator who designed invoice templates finds them under *Document templates →
+Invoice*: same names, same layouts, same scopes, and the template that was in force for each scope
+is that scope's default. *Invoices → Templates* and old bookmarks lead there. Every invoice PDF —
+downloaded by an administrator, downloaded by the customer, regenerated, previewed, attached to the
+invoice e-mail — looks exactly as before. The invoice editor offers exactly the invoice blocks it
+offered before (including blocks other installed modules contribute, such as a KSeF section), and
+nothing from the comparison.
 
-**Why this priority**: it is the reason the capability is built as a facility rather than inside the
-comparison feature, but it delivers no user value in this release on its own.
+**Why this priority**: the owner requires it in this feature; it adds no new user capability, but a
+regression here touches a legal document, so it carries the strictest acceptance criteria of the
+feature.
 
-**Independent Test**: in the test suite, a fixture document type registered by a test module appears
-on the document templates screen, can be edited and previewed, and renders with its own blocks; when
-the test module is switched off it disappears, and its stored templates are untouched.
+**Independent Test**: on a database holding invoice templates (a global one, a channel override, an
+edited generic template, a template placing a contributed block), upgrade; compare every invoice
+PDF's content before and after for a regular invoice, a correction and an invoice of each channel;
+open the old *Invoices → Templates* address.
 
 **Acceptance Scenarios**:
 
-1. **Given** a second document type contributed by another part of the platform, **When** an
-   operator opens *Document templates*, **Then** both document types are listed with their own
-   blocks and sample data.
-2. **Given** the part of the platform owning a document type is switched off, **When** an operator
-   opens *Document templates*, **Then** that document type and its templates are not shown, and
-   switching it back on restores them unchanged.
+1. **Given** invoice templates before the upgrade, **When** the platform is upgraded, **Then** each
+   appears under *Document templates → Invoice* with its name, scope and layout, and the one that was
+   in force for each scope is that scope's default.
+2. **Given** the upgrade, **When** any invoice PDF is produced, **Then** its content is identical to the
+   PDF produced before the upgrade for the same invoice.
+3. **Given** an operator opens *Invoices → Templates* or an old link to one invoice template, **Then**
+   they land on the same templates in *Document templates*.
+4. **Given** the invoice template editor, **When** the operator opens the palette, **Then** it offers
+   the invoice blocks (and blocks contributed to invoices by other installed modules) and no comparison
+   or general-purpose block.
+5. **Given** an operator deleted a migrated template, **When** the platform restarts or is upgraded
+   again, **Then** the template does not come back.
+6. **Given** administrators who could edit invoice templates before the upgrade, **When** the upgrade
+   completes, **Then** they can still edit invoice templates.
+
+---
+
+### User Story 6 — The facility serves the next document type, including per-document choice (Priority: P3)
+
+A later feature adds a quote-request PDF whose sales representative may pick a template for each
+quote, with the default preselected. Its owner adds a *Quote request* document type declaring its
+blocks, sample data, built-in layout and that per-document selection is allowed — with no change to
+the template facility.
+
+**Why this priority**: the reason the capability is a facility; no user value in this release by
+itself.
+
+**Independent Test**: in the test suite, a test-only document type that allows per-document selection
+appears on the screen, renders with its default, renders with an explicitly chosen template, falls
+back to the default when the chosen template was deleted, and disappears (rows untouched) when its
+owner is switched off.
+
+**Acceptance Scenarios**:
+
+1. **Given** a document type allowing per-document selection, **When** a document is produced naming
+   one of its templates for the document's scope, **Then** that template is used.
+2. **Given** a document type that does not allow it (the comparison, the invoice), **When** a document
+   is produced naming a template, **Then** the request is refused.
+3. **Given** a named template that was deleted since it was chosen, **When** the document is produced,
+   **Then** the default for its scope is used, and the result says so.
 
 ---
 
 ### Edge Cases
 
-- **A template places no block that prints anything** (for example everything deleted): the export
-  uses the built-in layout rather than producing an empty PDF.
-- **A template contains a block whose owner is switched off or no longer installed**: that block is
-  skipped in the PDF, the rest prints, and the block's stored settings are kept for when the owner
-  returns.
-- **The comparison has many products** (up to the configured maximum of 16): the comparison table
-  splits the products across as many tables (and pages) as needed, with the attribute names repeated
-  on each; landscape orientation is chosen automatically for three or more products unless the
-  template fixes the orientation.
-- **A product image cannot be loaded**: the cell prints without the image; the export does not fail
-  (unchanged).
-- **A logo image is deleted from the assets library** after being placed: the PDF prints without the
-  logo; the editor shows the block as missing its image.
-- **A merge field has no value** (for example `{{organizationName}}` for a buyer who is not signed in):
-  it prints as empty; a misspelled merge field prints literally so the operator notices it in the
-  preview.
-- **Some products are hidden from this buyer** (restricted to another organisation): the PDF says how
-  many are hidden, as the screen does, and never names them.
-- **The template's language is missing** for the buyer's language: the closest language is used (same
-  base language, then English, then the first one the template has).
-- **The sales channel of a channel-specific template is deleted**: its templates go with it; buyers
-  of the remaining channels are unaffected.
-- **The template facility is switched off** on the platform modules screen: comparison PDFs keep
-  working with today's fixed layout; templates are kept and come back when it is switched on.
-- **Product comparison is switched off**: its document type and templates disappear from the
-  template screens, nothing is deleted.
-- **An operator saves while a buyer is exporting**: the buyer gets either the previous or the new
-  layout in full, never a mixture.
-- **The rendered PDF would be unreasonably large** (an operator places hundreds of blocks): the
-  editor refuses to save beyond the stated limits instead of producing exports that time out.
+- **A template places nothing printable**: the next layout in the order of FR-031 is used rather
+  than an empty PDF.
+- **A template contains a block whose owner is switched off or uninstalled**: the block is skipped in
+  the PDF, the rest prints, and its stored settings are kept.
+- **A block of another document type is pasted into a template** (for example through the
+  clipboard): saving is refused, naming the block.
+- **Many products** (up to the maximum of 16): the comparison table splits products across tables and
+  pages, repeating the attribute names; orientation is landscape from three products unless fixed.
+- **A product image or a logo cannot be loaded**: printed without it; the document does not fail.
+- **A merge field has no value**: prints empty; a misspelled one prints literally.
+- **Some products are hidden from this buyer**: the PDF can say how many; it never names them.
+- **The template lacks the buyer's language**: the closest language is used (same base language,
+  then English, then the first available).
+- **A channel with channel-specific templates is deleted**: its templates go with it.
+- **The template facility is switched off**: comparison PDFs use today's fixed layout; templates are
+  kept and return when it is switched on. Whether invoices allow the facility to be switched off is
+  open question N2.
+- **Product comparison or invoicing is switched off**: its document type and templates disappear
+  from the template screens; nothing is deleted.
+- **A save happens while a document is being produced**: the document uses one version of the
+  template in full, never a mixture.
+- **A former invoice template referenced a sales channel that no longer exists**: it could not apply
+  to anything before the upgrade; it is not migrated, and the upgrade reports it.
+- **Invoicing is switched off during the upgrade**: its templates are migrated the first time
+  invoicing is present again, with the same result.
 
 ## Requirements *(mandatory)*
 
@@ -241,240 +297,260 @@ the test module is switched off it disappears, and its stored templates are unto
 #### Templates and their management
 
 - **FR-001**: The Admin UI MUST provide a *Document templates* screen listing every available
-  document type — in this release *Product comparison* — and, per type, its templates with name,
-  scope (all channels or one named channel), languages, whether it is active, and when it last
-  changed.
+  document type — in this release *Product comparison* and *Invoice* — and, per type, its templates
+  with name, scope, languages, whether it is the default of its scope, and last change.
 - **FR-002**: For each document type the screen MUST show the **built-in layout** as a non-editable
   entry that can be previewed and used as the starting point of a new template.
 - **FR-003**: An operator with edit permission MUST be able to create a template for a document type,
-  giving it a name and a scope, starting from the built-in layout or from a copy of an existing
-  template of the same type. A new template MUST be inactive unless the operator asks to activate it
+  naming it and choosing its scope, starting from the built-in layout or a copy of an existing
+  template of the same type. A new template MUST NOT be the default unless the operator asks for it
   on creation.
-- **FR-004**: An operator with edit permission MUST be able to rename, duplicate (into the same or a
-  different scope), activate, deactivate and delete templates. A template's scope MUST NOT change
-  after creation; duplicating is the way to move a layout to another scope.
-- **FR-005**: For each document type and scope there MUST be at most one active template.
-  Activating a template MUST deactivate the previously active one of the same type and scope in the
-  same step.
-- **FR-006**: Saving a template MUST be refused, without overwriting, when the template changed since
-  the operator loaded it; the operator MUST be told so.
-- **FR-007**: Deleting an active template MUST be allowed only after confirmation that says exports
-  in that scope will fall back to the next applicable layout (FR-031).
-- **FR-008**: The system MUST refuse to save a layout larger than the published limits (number of
-  blocks per language, total template size) with a message naming the limit. [Limits stated in the
-  plan.]
+- **FR-004**: An operator with edit permission MUST be able to rename, duplicate (into the same or
+  another scope), set as default, clear the default flag of, and delete templates. A template's scope
+  MUST NOT change after creation.
+- **FR-005**: A document type and scope MAY hold several templates; at most one of them MUST be the
+  default. Setting a template as default MUST clear the previous default of the same type and scope
+  in the same step.
+- **FR-006**: Saving MUST be refused, without overwriting, when the template changed since the
+  operator loaded it.
+- **FR-007**: Deleting a default template MUST require confirmation stating what will apply instead.
+- **FR-008**: Layouts beyond the published limits (blocks per language, total size) MUST be refused
+  with a message naming the limit.
 
 #### Editing in the Page Builder
 
-- **FR-010**: Templates MUST be edited in the Admin UI Page Builder — the same editor experience as
-  invoice templates and CMS pages: a palette of blocks grouped in sections, a canvas, per-block
-  settings, an outline, undo/redo, full-screen mode, and an explicit *Save*.
-- **FR-011**: The palette for the comparison document type MUST offer these **general-purpose
-  blocks**: heading, text (with merge fields), image from the assets library, spacer, divider and
-  page break.
-- **FR-012**: The palette MUST offer these **comparison blocks**:
-  - **Comparison header** — title, optional date of export, optional caption naming the display mode
-    (with editable wording for each mode), optional note saying whose prices are shown (the buyer's
-    organisation's or the channel's public prices).
-  - **Comparison table** — one column per product and one row per compared attribute, with
-    switchable product image (and its size), product name, SKU, price and availability; an editable
-    heading for the attribute column; the text printed for a missing value; highlighting of rows that
-    are the same or differ, with colours; header and border colours; font size; how many products
-    one table holds before the products continue in the next table; and the wording of the note
-    about hidden products.
-  - **Share link** — the address of the comparison's share page as text and, optionally, as a QR
-    code, with an editable label. Shown only when the storefront address of the channel is
-    configured.
-- **FR-013**: The document as a whole MUST have settings for page size (A4 or Letter), orientation
-  (automatic, portrait, landscape), margins, base font size, an optional repeating header and footer
-  text on every page (with merge fields), and optional page numbers.
-- **FR-014**: The editor MUST let the operator choose the language being edited among the platform's
-  active content languages, and adding a language MUST start it as a copy of an existing language's
-  layout.
-- **FR-015**: The editor MUST offer *Preview PDF*, producing the real PDF of the layout currently on
-  the canvas (saved or not), in the language being edited, filled with the sample comparison. It MUST
-  NOT save anything.
-- **FR-016**: The canvas MUST show each comparison block filled with the same sample comparison the
-  preview uses, so the canvas and the preview do not disagree about content.
-- **FR-017**: The editor MUST list the merge fields available for the document type, with a short
-  description of each, so the operator does not have to guess their spelling.
-- **FR-018**: A block the editor cannot draw (its owner is switched off or unknown) MUST stay in the
-  template, be shown as a neutral placeholder naming it, and keep its settings.
+- **FR-010**: Templates MUST be edited in the Admin UI Page Builder with the editor experience of
+  invoice templates and CMS pages: palette, canvas, per-block settings, outline, undo/redo,
+  full-screen, explicit *Save*.
+- **FR-011**: **Each document type MUST have its own set of blocks**, and the editor of a template
+  MUST offer only the blocks of the template's document type, plus the general-purpose blocks if —
+  and only if — the type opts into them. Blocks other installed modules contribute to a specific
+  document type (for example a KSeF section on invoices) MUST be offered for that type only.
+- **FR-012**: The *Product comparison* type MUST opt into all general-purpose blocks — heading, text
+  (with merge fields), image from the assets library, spacer, divider, page break — and offer these
+  comparison blocks:
+  - **Comparison header** — title, optional export date, optional display-mode caption (wording per
+    mode), optional note on whose prices are shown.
+  - **Comparison table** — one column per product, one row per compared attribute; switchable image
+    (and size), name, SKU, price, availability; editable attribute-column heading and missing-value
+    text; highlighting of same/different rows with colours; header and border colours; font size;
+    products per table before continuing in the next; hidden-products note wording.
+  - **Share link** — the comparison's share-page address as text and optionally as a QR code, shown
+    only when the channel's storefront address is configured.
+- **FR-013**: A document MUST have page settings — page size (A4, Letter), orientation (automatic,
+  portrait, landscape), margins, base font size, optional repeating header and footer text with merge
+  fields, optional page numbers — with defaults set by the document type.
+- **FR-014**: The editor MUST let the operator choose the language being edited among the languages
+  the document type supports (all active content languages for the comparison), and a new language
+  MUST start as a copy of an existing one.
+- **FR-015**: *Preview PDF* MUST produce the real PDF of the canvas (saved or not) in the edited
+  language, filled with the type's sample document, and MUST NOT save anything.
+- **FR-016**: The canvas MUST show the type's blocks filled with the same sample the preview uses.
+- **FR-017**: The editor MUST list the type's merge fields with a description of each.
+- **FR-018**: A block the editor cannot draw (owner off or unknown) MUST stay in the template as a
+  neutral placeholder naming it, with its settings kept.
+- **FR-019**: Saving a template containing a block that a present module declares but that the
+  template's document type does not offer MUST be refused, naming the block.
 
 #### What the comparison PDF contains
 
-- **FR-020**: The comparison PDF MUST contain the buyer's own comparison exactly as the comparison
-  page shows it to them: the same products, in the same order, with the same prices (theirs or the
-  channel's), availability and attribute values, and the same rows for the active display mode and
-  the *hide empty rows* switch.
-- **FR-021**: Products the buyer may not see MUST NOT appear in the PDF in any form; when some are
-  hidden the PDF MUST be able to say how many (the comparison table's hidden-products note).
-- **FR-022**: Product names, attribute names, dates and amounts MUST be printed in the PDF's
-  language: names in that language when the catalogue has them, dates and money in that language's
-  format.
-- **FR-023**: The comparison document type MUST offer at least these merge fields: export date,
-  number of products compared, sales channel name, the signed-in buyer's name, their organisation's
-  name, the share-page address, and — in the page header and footer — the current page number and
-  page count. A merge field with no value for this export MUST print as empty.
-  [NEEDS CLARIFICATION: Q4 — is this the right set of blocks and merge fields for the first release,
-  and should the template be able to choose or reorder the compared attributes rather than follow the
-  buyer's display mode?]
+- **FR-020**: The comparison PDF MUST contain the buyer's comparison exactly as their comparison page
+  shows it: same products in the same order, same prices (theirs or the channel's), availability and
+  values, and the same rows for the display mode and the *hide empty rows* switch.
+- **FR-021**: Products the buyer may not see MUST NOT appear in any form; the table MAY say how many
+  are hidden.
+- **FR-022**: Product names, attribute names, dates and amounts MUST be printed in the PDF's language.
+- **FR-023**: The comparison type MUST offer merge fields for: export date, number of products, sales
+  channel name, signed-in buyer's name, their organisation's name, share-page address, and — in the
+  page header and footer — page number and page count. A merge field without a value prints empty.
 
-#### Producing the PDF
+#### Producing documents
 
-- **FR-030**: Clicking `PDF` on the storefront comparison page MUST produce the PDF from the template
-  that applies to the buyer's sales channel and language, determined at the moment of export.
-- **FR-031**: The template applied MUST be, in order: the active template for the buyer's sales
-  channel; else the active template for all channels; else the built-in layout. A template that
-  applies but places nothing printable MUST be treated as absent for this purpose.
-  [NEEDS CLARIFICATION: Q3 — is "all channels, with optional per-channel override" the right scope,
-  or are per-organisation / per-customer-group templates needed?]
-- **FR-032**: Within the applied template the language used MUST be, in order: the buyer's language
-  on the storefront; a language with the same base language; English; the first language the template
-  has. The buyer's language MUST be the language the storefront is displayed in, falling back to the
-  channel's default language.
-- **FR-033**: Only the template's settings MAY change the PDF's layout; the PDF's data MUST come only
-  from the buyer's comparison and the platform data the comparison page itself uses. A template MUST
-  NOT be able to make the PDF include another buyer's data, another channel's data, or any file or
-  address the operator did not choose from the assets library.
-- **FR-034**: A buyer MUST receive a PDF rendered entirely from one version of the template, even if
-  the template is being saved at the same moment.
-- **FR-035**: When producing the PDF fails, the buyer MUST see the existing "PDF could not be
-  generated" message in their language, and the failure MUST be logged with the template and block
-  responsible. A failure of one product image MUST NOT fail the export (unchanged).
-- **FR-036**: The file name, the owner-only access and the "empty comparison cannot be exported"
-  behaviour of the export MUST stay as they are today.
-  [NEEDS CLARIFICATION: Q2 — one active layout per scope as specified, or should the buyer choose
-  between several published layouts (for example "with prices" / "without prices") when clicking
-  `PDF`?]
+- **FR-030**: Clicking `PDF` on the comparison page MUST produce the PDF from the template that
+  applies to the buyer's sales channel and language at the moment of export.
+- **FR-031**: Unless a template is explicitly chosen (FR-037), the layout applied MUST be, in order:
+  the default template of the document's sales channel; else the default template for all channels;
+  else the built-in layout. A layout placing nothing printable counts as absent.
+- **FR-032**: The comparison PDF's language MUST be, in order: the buyer's storefront language, a
+  language with the same base language, English, the first the template has; the buyer's storefront
+  language is the one the storefront is displayed in, falling back to the channel's default language.
+- **FR-033**: A template MUST change only the layout. A document's data MUST come only from the part
+  of the platform producing it (the buyer's comparison; the invoice); a template MUST NOT make a
+  document include another customer's or another channel's data, or any file or address not chosen
+  from the assets library (the invoice logo keeps its existing image options, FR-086).
+- **FR-034**: A document MUST be produced entirely from one version of a template.
+- **FR-035**: When producing the comparison PDF fails, the buyer MUST see the existing "PDF could not
+  be generated" message in their language, and the failure MUST be logged with the template and
+  block responsible. One failed image MUST NOT fail the document.
+- **FR-036**: The comparison export's file name, owner-only access and the refusal of an empty
+  comparison MUST stay as today.
+- **FR-037**: A document type MUST declare whether per-document selection is allowed. When it is, the
+  part of the platform producing a document MAY name one template of that type whose scope is all
+  channels or the document's channel, and that template MUST be used.
+- **FR-038**: Naming a template for a document type that does not allow selection, or a template of
+  another type or another channel, MUST be refused.
+- **FR-039**: A named template that no longer exists MUST be replaced by the layout FR-031 selects,
+  and the outcome MUST say the replacement happened.
+
+#### Invoices moved onto the facility
+
+- **FR-080**: *Invoice* MUST be a document type of the facility, offering exactly the ten invoice
+  blocks of today (header, parties, line items, VAT summary, totals, notes, spacer, divider, logo,
+  footer) plus the blocks other installed modules contribute to invoices — and **not** the
+  general-purpose blocks.
+- **FR-081**: Every invoice template existing before the upgrade, including the generic template the
+  platform seeded (with any operator edits), MUST be migrated with its identity, name, scope, layout
+  and version. A template that was active for its scope MUST become that scope's default. No invoice
+  template data MUST be deleted by the upgrade.
+- **FR-082**: The migration MUST happen once per installation: re-running, restarting, or switching
+  invoicing off and on MUST NOT duplicate templates or resurrect templates deleted after migration.
+- **FR-083**: Every invoice PDF produced after the upgrade — administrator download, customer
+  download, regeneration, preview, and the e-mail attachment — MUST have the same content as before
+  for the same invoice and the same template data. [The e-mail attachment's current behaviour is open
+  question N1.]
+- **FR-084**: Invoice templates MUST keep today's selection semantics: the default for the invoice's
+  channel, else the default for all channels, else the built-in layout; invoices do not allow
+  per-document selection.
+- **FR-085**: Invoice PDFs MUST keep today's language (the Polish layout and Polish amount in words for
+  documents; the preview's amount in words in English), and the invoice editor MUST offer only the
+  languages invoice templates are printed in.
+- **FR-086**: The invoice logo block MUST keep its image options (assets library or address).
+- **FR-087**: Blocks other modules contribute to invoices (KSeF) MUST keep rendering, being described
+  in the editor, and printing the KSeF number exactly once, as today — with no change required of the
+  contributing module.
+- **FR-088**: *Invoices → Templates* and the address of each former invoice template MUST lead to the
+  corresponding place in *Document templates*; the invoices screen's *Templates* tab MUST keep leading
+  to the invoice templates.
+- **FR-089**: Administrators who could view or edit invoice templates before the upgrade MUST be able
+  to do so after it without an administrator granting anything by hand. [Mechanism: open question N3.]
+- **FR-090**: The ⌘K palette MUST keep finding invoice templates (by "invoice template", "szablon
+  faktury").
+- **FR-091**: Invoice behaviour outside templates — numbering, issuing, corrections, e-mails, KSeF —
+  MUST NOT change.
+- **FR-092**: The former invoice-template administration API is withdrawn as part of the move; the
+  change MUST be announced in the release notes. [Deprecation period: open question N4.]
 
 #### Availability (switching modules on and off)
 
-- **FR-050**: The document-template facility MUST be switchable on the platform modules screen,
-  on by default. While it is off: its screens, sidebar entry, palette entry and the *PDF template*
-  button on the *Comparisons* screen MUST be absent, its API MUST refuse as for any switched-off
-  module, and the comparison PDF MUST keep working with today's fixed layout. Switching it on again
-  MUST restore every template unchanged.
-- **FR-051**: While product comparison is switched off, its document type, its blocks and its
-  templates MUST NOT appear anywhere in the document-template screens or API, and its templates MUST
-  be kept unchanged for when it returns.
-- **FR-052**: A block of a switched-off owner placed in any template MUST be skipped when the PDF is
-  produced and kept in storage (FR-018).
+- **FR-050**: The document-template facility MUST be switchable on the platform modules screen, on by
+  default. While it is off: its screens, sidebar entry, palette entry and links to it MUST be absent,
+  its API MUST refuse as for any switched-off module, the comparison PDF MUST keep working with
+  today's fixed layout, and every template MUST come back unchanged when it is switched on. [How
+  invoices behave while it is off: open question N2.]
+- **FR-051**: While the module owning a document type (comparison, invoicing) is switched off, its
+  type, blocks and templates MUST NOT appear in the template screens or API, and they MUST be kept
+  unchanged.
+- **FR-052**: A placed block of a switched-off owner MUST be skipped when producing a document and
+  kept in storage.
 
 #### Permissions, auditing, discoverability, languages
 
-- **FR-060**: Viewing document templates (list, editor, preview) and editing them (create, save,
-  rename, duplicate, activate, deactivate, delete) MUST be two separately grantable permissions,
-  listed on the admin roles screen with Polish and English labels.
-- **FR-061**: Every change to a template (create, rename, save, activate, deactivate, delete) MUST be
-  recorded in the audit log with the acting administrator, the template and the change, and a failed
-  change MUST leave no audit entry.
-- **FR-062**: *Document templates* MUST be reachable from the ⌘K / Ctrl+K command palette (also by
-  searching "PDF", "comparison" or their Polish equivalents) and from the sidebar.
+- **FR-060**: Viewing document templates (list, editor, preview) and editing them MUST be two
+  separately grantable permissions, labelled in Polish and English on the admin roles screen.
+- **FR-061**: Every template change MUST be recorded in the audit log with the acting administrator,
+  the template and the change; a failed change MUST leave no entry. The invoice migration MUST be
+  recorded.
+- **FR-062**: *Document templates* MUST be reachable from the ⌘K palette (also by "PDF",
+  "comparison", "invoice template" and their Polish equivalents) and from the sidebar.
 - **FR-063**: The *Comparisons* admin screen MUST offer a *PDF template* button leading to the
-  comparison templates, shown only to administrators allowed to view document templates and only
-  while the facility is on.
+  comparison templates, only for administrators allowed to view document templates and only while
+  the facility is on.
 - **FR-064**: Every new text in the Admin UI and the storefront, every block and merge-field label,
-  every error message and the built-in layout's printed texts MUST exist in Polish and English.
-- **FR-065**: The end-user documentation MUST describe designing the comparison PDF, in Polish and
+  every error message and the comparison built-in layout's printed texts MUST exist in Polish and
   English.
+- **FR-065**: The end-user documentation MUST describe designing comparison and invoice templates in
+  *Document templates*, in Polish and English, and the invoice documentation MUST point there.
 
 #### Reuse
 
-- **FR-070**: Adding a further document type (for example a quote request) MUST require no change to
-  the template facility: its owner supplies the document type's name, blocks, merge fields, sample
-  data and built-in layout, and gets the list, editor, preview, scopes, languages, auditing and
-  permissions of this feature.
-- **FR-071**: Existing invoice templates MUST keep working exactly as they do today; this feature
-  does not change them.
+- **FR-070**: Adding a further document type MUST require no change to the facility: its owner
+  supplies the type's name, blocks, whether it opts into general-purpose blocks, merge fields, sample
+  data, built-in layout, supported languages, page defaults, and whether per-document selection is
+  allowed.
 
 ### Key Entities
 
-- **Document type** — a kind of document the platform can produce from a template. Identified by a
-  stable code (for example *product comparison*); supplied by the part of the platform that owns the
-  document's data, together with its blocks, merge fields, sample data and built-in layout. Not
-  stored by operators.
-- **Document template** — an operator's layout for one document type: a name, a scope (all channels
-  or one sales channel), whether it is active, a version used to detect concurrent edits, and one
-  layout per language. At most one active per document type and scope.
-- **Layout (per language)** — the ordered blocks with their settings plus the document's page
-  settings, for one language.
-- **Block** — one placed element, identified by a stable name that says which part of the platform
-  owns it; its settings are kept as entered.
+- **Document type** — a kind of document produced from a template; supplied by the module owning the
+  document's data with its blocks, general-purpose-block opt-in, merge fields, sample, built-in
+  layout, supported languages, page defaults and selection rule. Not stored by operators.
+- **Document template** — an operator layout for one document type: name, scope, whether it is the
+  default of its scope, a version for concurrent-edit detection, and one layout per language.
+- **Layout (per language)** — ordered blocks with their settings plus page settings, for one language.
+- **Block** — one placed element with a stable name saying which module owns it; settings kept as
+  entered.
+- **Template import record** — that a document type's templates from a former location (invoice
+  templates) have been imported, when, and how many; what makes the move happen once.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: An operator who has never used the feature can create a comparison template with a
-  logo, a new title and a footer, preview it and activate it in under 10 minutes, without help.
-- **SC-002**: After activation, 100 % of comparison PDFs exported in the template's scope use it —
-  verified by exporting from each channel and language combination the deployment serves.
-- **SC-003**: A comparison of 16 products with images exports in under 5 seconds at the 95th
-  percentile, and a preview of the built-in layout with the sample comparison appears in under
-  3 seconds — no slower than today's export of the same comparison by more than 0.5 s.
-- **SC-004**: A buyer browsing in Polish receives a PDF with no English text that comes from the
-  platform (titles, captions, labels, notes) when the template has a Polish layout or no template
-  exists.
-- **SC-005**: Zero PDFs contain a product, price or name the exporting buyer cannot see on their
-  comparison page — verified by the cross-organisation and cross-channel tests.
-- **SC-006**: Switching the template facility off and on, or product comparison off and on, loses no
-  template and changes no stored layout.
-- **SC-007**: Adding the test-only second document type in the test suite touches no file of the
-  template facility.
+- **SC-001**: An operator new to the feature creates a comparison template with a logo, a new title
+  and a footer, previews it and sets it as default in under 10 minutes, without help.
+- **SC-002**: After a template becomes default, 100 % of comparison PDFs exported in its scope use it
+  — verified per channel and language combination.
+- **SC-003**: A 16-product comparison with images exports in under 5 seconds at the 95th percentile,
+  no more than 0.5 s slower than today; a built-in-layout preview appears in under 3 seconds; invoice
+  PDF production time stays within 10 % of today's.
+- **SC-004**: A buyer browsing in Polish receives a comparison PDF with no English platform text when
+  the template has a Polish layout or no template exists.
+- **SC-005**: Zero documents contain data the requesting customer cannot see on screen — verified by
+  the cross-organisation and cross-channel tests.
+- **SC-006**: Switching the facility, comparison or invoicing off and on loses no template and changes
+  no stored layout.
+- **SC-007**: Adding the test-only document type touches no file of the facility.
+- **SC-008**: For a reference set of invoice templates and invoices (global, per-channel, edited
+  generic, contributed KSeF block, correction, nothing-printable fallback), 100 % of invoice PDFs
+  produced after the upgrade have content identical to those produced before.
+- **SC-009**: Zero invoice templates lost or duplicated by the upgrade, counted per installation.
 
 ## Open questions
 
-Each question has the default the design assumes. Q2, Q3 and Q4 are marked in the requirements
-above; the others are recorded as assumptions.
+New questions raised by the owner's Q1 extension. Each has the default the design assumes.
 
-- **Q1 — Build a reusable "Document templates" facility now, or a comparison-only template?**
-  Default: a reusable facility with its own *Document templates* screen (comparison first; quote
-  request next; invoices may move onto it later). Alternatives: (a) a comparison-only template inside
-  the *Comparisons* section, copying the invoice editor; (b) extend the invoice template screen to
-  host other documents.
-- **Q2 — One active layout per scope, or several the buyer chooses from?** Default: one active per
-  scope; the buyer just clicks `PDF`. Alternatives: (a) the buyer picks among published layouts in a
-  small menu; (b) the layout depends on whether the buyer is signed in (for example no prices for
-  anonymous visitors).
-- **Q3 — Which scopes?** Default: all channels with an optional per-channel override. Alternatives:
-  (a) all channels only; (b) additionally per organisation or customer group.
-- **Q4 — Which blocks and merge fields in the first release; may the template control the attribute
-  list?** Default: the set in FR-011–FR-013 and FR-023; the attribute rows always follow the buyer's
-  display mode. Alternatives: (a) a smaller set (table, text, logo); (b) add product descriptions or
-  a product-detail page per product; (c) let the template pick, order or exclude attributes.
-- **Q5 — What when no template is active?** Default: the built-in layout, now in the buyer's
-  language (and today's fixed English layout only while the facility is switched off). Alternatives:
-  (a) keep today's English-only layout until an operator activates a template; (b) hide the `PDF`
-  button until a template is active.
-- **Q6 — Draft and publish, or edit live?** Default: edit live (saving the active template changes
-  the next export) with *duplicate → edit → activate* as the safe path; no version history.
-  Alternatives: (a) each template has a draft and a published version; (b) keep a version history
-  with restore.
-- **Q7 — Which language does the PDF use?** Default: the language the buyer has the storefront in,
-  then the channel's default. Alternatives: (a) always the channel's default language; (b) let the
-  buyer choose at export.
+- **N1 — Should the invoice e-mail attachment use the invoice template?** Today the PDF attached to
+  the invoice e-mail ignores templates and always uses the built-in layout, while downloads use the
+  template — so a customer can receive two different-looking PDFs of one invoice. Default: **keep
+  today's behaviour** in this feature (FR-083's "output unchanged") and fix it as a follow-up.
+  Alternatives: (a) fix it now — the attachment uses the same template as the download; (b) make it a
+  setting.
+- **N2 — May the template facility be switched off while invoicing is on?** Default: **no** —
+  invoicing depends on it, so the platform refuses to switch the facility off until invoicing is off,
+  and invoice output can never change by surprise. Alternative: (a) allow it, and invoices fall back
+  to the built-in invoice layout while it is off (operator templates ignored until it is back on).
+- **N3 — How do administrators keep access to invoice templates?** Default: **a one-time automatic
+  grant at the upgrade**: every role allowed to view invoices also gets "view document templates", and
+  every role allowed to edit invoices gets "edit document templates" (audited). Alternatives: (a) no
+  automatic grant — release notes tell administrators to grant it; (b) the templates of a document
+  type are governed by that type's own permissions (invoice templates by the invoice permissions).
+- **N4 — The former invoice-template administration API.** Default: **withdraw it now**, announced as
+  a breaking change of the invoices package (the Admin UI was its only known consumer). Alternative:
+  (a) keep it working, deprecated, for one more release, delegating to the new facility.
+- **N5 — Invoices stay Polish-only.** Default: **yes** — invoice PDFs keep printing the Polish layout,
+  and the invoice editor offers only Polish (parity). Alternative: (a) print invoices in the
+  customer's language with per-language invoice layouts (a separate feature: amount in words, legal
+  wording).
 
 ## Assumptions
 
-- The PDF remains available only to the comparison's owner from the comparison page; recipients of a
-  share link do not get a `PDF` button (unchanged; out of scope).
-- Templates are shop configuration shared by all organisations; they are not per-organisation data.
-- The storefront address used by the share-link block is the existing per-channel *storefront URL*
-  setting; when it is not set the block prints nothing.
-- Images placed by operators come from the assets library only; free image addresses are not
-  offered (they would let the server fetch arbitrary addresses).
-- Fonts are the platform's existing PDF fonts; custom fonts are out of scope.
-- Invoice templates are untouched in this release (FR-071); moving them onto the facility is a
-  possible later feature.
+- The comparison PDF stays available only to the comparison's owner; share-link recipients get no
+  `PDF` button.
+- Templates are shop configuration shared by all organisations.
+- The share-link block uses the existing per-channel *storefront URL* setting; unset → nothing
+  printed.
+- New images placed by operators in general-purpose blocks come from the assets library only.
+- Fonts are the platform's existing PDF fonts.
+- Creating a template no longer makes it the default automatically (invoice templates used to); the
+  operator ticks *Set as default* — the owner's Q6 answer makes that the safe path.
+- The former invoice-templates storage is kept, read-only, after the move; removing it is a later
+  clean-up once every installation has migrated.
 
 ## Out of scope
 
-- A quote-request (RFQ) PDF and its template — only the facility's readiness for it (US5).
-- Moving invoice templates onto the facility.
-- PDF export for share-link recipients, e-mailing the PDF, or attaching it anywhere.
-- Custom fonts, multi-column layouts and nested containers in the first release.
-- Version history, scheduled activation, and per-organisation or per-customer-group templates (see
-  Q3, Q6).
-- Translating the other hard-coded Polish texts of the storefront comparison page beyond the `PDF`
-  button's own states (recorded as a separate defect in `research.md` R-21).
+- The quote-request PDF and its per-quote template choice — only the facility's readiness (US6).
+- PDF export for share-link recipients; e-mailing the comparison.
+- Custom fonts, multi-column containers and nested layouts.
+- Version history, scheduled default changes, per-organisation or per-customer-group templates.
+- Invoice PDFs in languages other than Polish (N5).
+- Translating other hard-coded texts of the storefront comparison page beyond the `PDF` button
+  (`research.md` R-21).

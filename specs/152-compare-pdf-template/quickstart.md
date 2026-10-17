@@ -1,88 +1,101 @@
-# Quickstart: Editable PDF template for the storefront product comparison
+# Quickstart: Document templates — comparison PDF template, invoice templates moved
 
-A manual walk that exercises every user story end to end. Run it before merge (T062) and tick each
-section in the merge-request description.
+A manual walk exercising every user story. Run it before merge (T076) on a database **upgraded from
+`origin/master`** that already holds invoice templates, and tick each section in the MR description.
 
 ## 0. Prerequisites
 
 ```bash
 source ~/.nvm/nvm.sh && nvm use 22
-pnpm run build:packages
-pnpm run dev:infra
-pnpm run setup          # db:fresh THEN module:install --all
+# On origin/master first: build, run setup, then in the admin create invoice templates:
+#  - edit the generic template (change a label), create "Global B" (becomes active),
+#  - create "Channel B" for channel B, save a tree placing ksef.InvoiceSection if available.
+# Issue two invoices (channel A and B) and one correction; download their PDFs and keep them.
+git switch feat/152-compare-pdf-template
+pnpm install && pnpm run build:packages
+pnpm --filter backend run db:migrate      # or the instance's upgrade path — not db:fresh
 pnpm run dev
 ```
 
-- An admin with a role holding `document_templates:read` and `document_templates:write`, and a
-  second admin with `document_templates:read` only.
-- Two sales channels (A, B), the storefront running against channel A, `sales_channels.storefront_url`
-  set for A. A logo PNG uploaded to the assets library.
-- A buyer account in an organisation with its own price list; three products with images and
-  comparable attributes, one restricted to another organisation.
+- An admin whose role holds `invoices:write` (and nothing about document templates), an admin with
+  `document_templates:read` only, and a platform administrator.
+- Two sales channels (A, B), `sales_channels.storefront_url` set for A, a logo PNG in the assets
+  library, a buyer in an organisation with its own price list, three products with images, one
+  restricted to another organisation.
 
-## 1. Baseline (no template)
+## 1. Invoice templates moved (US5) — do this first
 
-1. Storefront (Polish): add three products to the comparison, open `/compare`, click `PDF`.
-2. Expect: landscape PDF, Polish title and caption, Polish product names, Polish date and money
-   format, the restricted product absent and a note saying one product is hidden — the **built-in
-   layout** (FR-031, FR-022, FR-021).
+1. Admin → *Invoices* → *Templates* tab, and the old URL `/invoices/templates/<old id>`: both land in
+   *Document templates* (FR-088).
+2. *Document templates → Invoice*: the edited generic template, "Global B" (default for all channels)
+   and "Channel B" (default for channel B), names and layouts as before (FR-081).
+3. Download the three invoice PDFs again and compare with the kept ones: identical content (FR-083).
+   Regenerate one: no error.
+4. Open an invoice template: palette shows only the ten invoice blocks (+ KSeF if installed), no
+   general-purpose block, no language switcher (FR-080, FR-085).
+5. Sign in as the `invoices:write` admin: invoice templates are editable without any manual grant
+   (FR-089). Audit log: one import entry by the system (FR-061).
+6. Delete "Channel B", restart the backend: it does not come back (FR-082).
+7. ⌘K → "szablon faktury" finds *Document templates* (FR-090).
 
-## 2. Create and edit (US1)
+## 2. Comparison baseline (no template)
 
-1. Admin: ⌘K → type `pdf` → *Document templates* (FR-062). Also: *Comparisons* → *PDF template*
-   opens the same screen with *Product comparison* expanded (FR-063).
-2. *Product comparison* → *Built-in layout* → *Create from this*; name "Brand A", scope *All
-   channels*; leave *Activate now* unchecked. Expect an inactive template (FR-003).
-3. Editor: drag *Image* to the top and pick the logo; change the header title; in *Comparison table*
-   switch on *SKU* and *Availability*, set *Products per table* to 2; set the footer to
-   `{{channelName}} · {{date}}` and switch on page numbers (FR-011–FR-013, FR-017).
-4. *Preview PDF*: the sample comparison in the new layout, nothing saved (FR-015). The canvas shows
-   the same sample products as the preview (FR-016).
-5. *Save*.
+Storefront in Polish: three products in the comparison, `/compare`, `PDF`. Expect the built-in layout
+in Polish: landscape, Polish title, names, date and money, restricted product absent, "1 hidden" note
+(FR-031, FR-022, FR-021).
 
-## 3. Activate and export (US1)
+## 3. Create and edit (US1)
 
-1. Before activating, export from the storefront: still the built-in layout (FR-003).
-2. *Activate*. Export again: logo, new title, SKU/availability, two products per table, footer with
-   page numbers, the buyer's own prices (FR-030, FR-020).
-3. Toggle *Show only differences* and *Hide empty rows* on the storefront, export: same rows as the
-   screen (FR-020).
+1. ⌘K → `pdf` → *Document templates*; also *Comparisons* → *PDF template* opens the comparison card.
+2. *Product comparison → Built-in layout → Create from this*, "Brand A", all channels, *Set as
+   default* unticked (FR-003).
+3. Palette: comparison blocks + general-purpose blocks, no invoice block (FR-011).
+4. Add the logo *Image*, change the header title, table: SKU and availability on, 2 products per
+   table; footer `{{channelName}} · {{date}}`, page numbers on.
+5. *Preview PDF*: sample comparison in the new layout; canvas shows the same sample (FR-015, FR-016).
+   *Save*.
 
-## 4. Per-language layouts (US2)
+## 4. Set as default and export (US1)
 
-1. Editor: switch language to `en-US` (absent) → *Start from pl-PL*; change the English title; *Save*.
-2. Storefront in English → export: English layout and title, English names. Storefront in Polish:
-   Polish layout (FR-032).
+1. Export before: built-in. *Set as default*; export again: logo, title, SKU/availability, two per table,
+   footer with page numbers, the buyer's prices (FR-030, FR-020).
+2. Toggle *differences only* and *hide empty rows*, export: same rows as the screen.
 
-## 5. Channel override (US3)
+## 5. Languages (US2)
 
-1. Duplicate "Brand A" into scope *Channel B* as "Brand B", change the logo, *Activate*.
-2. Export from channel B: Brand B. From channel A: Brand A — never Brand B (FR-031).
+Editor → language `en-US` → *Start from pl-PL*; change the English title; *Save*. Storefront in English:
+English layout; in Polish: Polish layout (FR-032).
 
-## 6. Safe management (US4)
+## 6. Channel override (US3)
 
-1. Open "Brand A" in two browser tabs; save in the first, then in the second: *the template changed*
-   dialog, nothing overwritten (FR-006).
-2. Duplicate "Brand A" → activate the copy: the original becomes inactive in the same step (FR-005).
-3. Delete the active copy: the confirmation names the fallback; channel-A exports now use the
-   built-in layout, since "Brand A" was deactivated in step 2 (FR-007, FR-031).
-4. Sign in as the read-only admin: list and editor open, preview works, no save/activate/delete
-   controls (FR-060).
-5. *Audit log*: one entry per create, rename, save, activate, deactivate, delete; none for the refused
-   save (FR-061).
+Duplicate "Brand A" into channel B as "Brand B" with another logo; *Set as default*. Channel B export →
+Brand B; channel A → Brand A, never Brand B.
 
-## 7. Switching modules off and on (FR-050–FR-052)
+## 7. Safe management (US4)
 
-1. `/platform/modules` → switch **Document templates** off. Admin: sidebar entry, palette row and the
-   *PDF template* link gone; `/api/v1/admin/document-templates/types` answers 503. Storefront export
-   still works — today's fixed English layout.
-2. Switch it on: every template, with its active flag, is back unchanged.
-3. Switch **Compare Products** off: *Product comparison* disappears from *Document templates*.
-   Switch it on: it returns with its templates.
+1. Two tabs, save in both: second gets *template changed*, nothing overwritten (FR-006).
+2. Duplicate "Brand A", set the copy as default: the original is no longer default (FR-005).
+3. Delete the default copy: confirmation names the fallback; channel A now gets the built-in layout
+   (FR-007, FR-031).
+4. Read-only admin: preview works, no save/default/delete controls (FR-060).
+5. Audit log: one entry per change; none for the refused save (FR-061).
 
-## 8. Limits and failure
+## 8. Switching modules (FR-050–FR-052, N2)
 
-1. Paste a tree with more than 200 blocks (dev tools → PUT): 422 `DOCUMENT_TEMPLATE_INVALID` naming the
-   limit (FR-008).
-2. Delete the logo asset in the assets library; export: PDF without the logo, no error.
-3. Time a 16-product export (SC-003) and record it in the MR.
+1. `/platform/modules` → switch **Document templates** off while **Invoices** is on: refused, naming
+   Invoices.
+2. Switch **Invoices** off, then **Document templates** off: sidebar entry, palette row, comparison
+   button gone; the API answers 503; the comparison PDF still works (fixed English layout).
+3. Switch both on: every template and default flag back unchanged.
+4. Switch **Compare Products** off: its card disappears; on: back with its templates.
+
+## 9. Limits and failures
+
+1. A tree of > 200 blocks (dev tools → PUT): 422 naming the limit (FR-008).
+2. Paste a `comparisons.ComparisonTable` node into an invoice template and save: 422 naming the block
+   (FR-019).
+3. Delete the logo asset; export: no logo, no error.
+
+## 10. Timing
+
+Time a 16-product comparison export and an invoice download; record both against SC-003 in the MR.

@@ -1,172 +1,217 @@
-# Data Model: Editable PDF template for the storefront product comparison
+# Data Model: Document templates — comparison PDF template, invoice templates moved
 
-**Feature**: `specs/152-compare-pdf-template/` | **Date**: 2026-10-17
+**Feature**: `specs/152-compare-pdf-template/` | **Date**: 2026-10-17 (revised after the owner's answers)
 
-One new table, owned by the new module `document_templates`. No column is added to any existing
-table; `comparisons` gains no table. The migration is scaffolded with
-`pnpm --filter backend run migration:new -- --module document_templates --name init` (no number is
-chosen by hand — `specs/conventions/module-migrations.md`); its position follows from the manifest
-`dependencies` of `document_templates`.
+Two new tables, both owned by the new module `document_templates`, created by one migration scaffolded
+with `pnpm --filter backend run migration:new -- --module document_templates --name init` (no number
+is chosen by hand — `specs/conventions/module-migrations.md`). No column is added to any existing
+table. `invoice_templates` (owned by `invoices`) is **not altered and not dropped**; after the import it
+is read-only (research R-24). No migration writes another module's table.
 
 ## 1. `document_templates` (entity `DocumentTemplate`, `@GlobalEntity()`)
 
-Platform-global configuration (Principle XI classification: *platform-global*), like
-`invoice_templates`. It holds no organisation's or customer's data.
+Platform-global configuration (Principle XI: *platform-global*).
 
 | Column | Type | Null | Default | Notes |
 | --- | --- | --- | --- | --- |
-| `id` | `uuid` | no | `randomUUID()` (app) | PK |
-| `document_type` | `varchar(120)` | no | — | `<moduleId>.<snake_name>`, e.g. `comparisons.comparison`. `check (document_type ~ '^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$')`. Opaque to this module: never interpreted, only matched against registrations |
-| `name` | `varchar(200)` | no | — | Operator label; trimmed, 1–200 chars |
-| `sales_channel_id` | `uuid` | yes | `null` | `null` = all channels. FK → `sales_channels(id)` **on delete cascade** (kernel-owned table, so no manifest edge). **Immutable** after insert (R-8) |
-| `content` | `jsonb` | no | — | `{ "schemaVersion": 1, "languages": { "<lang>": <tree> } }` — see §2 |
-| `active` | `boolean` | no | `false` | At most one `true` per `(document_type, scope)` |
-| `version` | `integer` | no | `1` | Optimistic-concurrency counter; +1 on every Command that changes the row |
-| `created_at` | `timestamptz` | no | `now()` | |
+| `id` | `uuid` | no | `randomUUID()` (app) | PK. Imported invoice templates keep their legacy id |
+| `document_type` | `varchar(120)` | no | — | `<moduleId>.<snake_name>` — `comparisons.comparison`, `invoices.invoice`. `check (document_type ~ '^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$')`. Opaque: only matched against registrations |
+| `name` | `varchar(200)` | no | — | Trimmed, 1–200 chars |
+| `sales_channel_id` | `uuid` | yes | `null` | `null` = all channels. FK → `sales_channels(id)` **on delete cascade** (kernel-owned table, no manifest edge). **Immutable** |
+| `content` | `jsonb` | no | — | `{ "schemaVersion": 1, "languages": { "<lang>": <tree> } }` — §3 |
+| `is_default` | `boolean` | no | `false` | At most one `true` per `(document_type, scope)` |
+| `version` | `integer` | no | `1` | Optimistic concurrency; +1 on every Command changing the row; imported rows keep theirs |
+| `created_at` | `timestamptz` | no | `now()` | Imported rows keep theirs |
 | `updated_at` | `timestamptz` | no | `now()` | `onUpdate` |
-
-**Indexes and constraints**
 
 ```sql
 create index "document_templates_type_scope_idx"
   on "document_templates" ("document_type", "sales_channel_id");
 
--- One active template per document type and scope; the global scope is the all-zero key.
-create unique index "document_templates_one_active_per_scope_uq"
+-- One default per document type and scope; the global scope is the all-zero key.
+create unique index "document_templates_one_default_per_scope_uq"
   on "document_templates" ("document_type",
      coalesce("sales_channel_id", '00000000-0000-0000-0000-000000000000'::uuid))
-  where "active";
+  where "is_default";
 ```
 
-No `languages` column (unlike `invoice_templates`): the languages are the keys of
-`content.languages`, derived on read, so the two can never disagree. No `is_system` / `code` columns:
-the built-in layout is virtual (R-8).
+No `languages`, `code` or `is_system` column: languages are `content.languages`' keys; the built-in
+layout is virtual (research R-8).
 
-**Write rules** (each enforced by the Command named; all run through `CommandBus.run`)
+### Write rules — every row change is a Command run by `CommandBus.run`
 
-| Command (`action`) | Effect | Version check |
+| Command (`action`) | Effect | Concurrency |
 | --- | --- | --- |
-| `document_template.create` | Insert, `active=false` unless `activate=true` (then as `.activate` in the same tx). `content` copied from the registration's `defaultContent()` or from a source template of the **same** `document_type` | — |
+| `document_template.create` | Insert, `is_default=false` unless `setDefault=true` (then as `.set_default`, same tx). `content` from `defaultContent()` or a source template of the **same** type | — |
 | `document_template.rename` | `name` | `expectedVersion` |
-| `document_template.save_content` | Replace one language's tree (add the language if new) | `expectedVersion` |
-| `document_template.activate` | `active=false` on the currently active row of the same type+scope (if any, other than this), then `active=true` here — one transaction | `expectedVersion` |
-| `document_template.deactivate` | `active=false` | `expectedVersion` |
-| `document_template.delete` | Delete the row (an active row requires `confirmActive=true`, FR-007) | `expectedVersion` |
+| `document_template.save_content` | Replace one language's tree (adds the language); refuses blocks a present module declares that the type does not offer (FR-019) and languages outside the registration's `languages` | `expectedVersion` |
+| `document_template.set_default` | Clear `is_default` of the scope's current default (if another), set it here — one transaction | `expectedVersion` |
+| `document_template.clear_default` | `is_default=false` | `expectedVersion` |
+| `document_template.delete` | Delete; a default row requires `confirmDefault=true` (FR-007) | `expectedVersion` |
+| `document_template.import` | One run of §2's import for one `(document_type, source)`; audit `after` = counts (imported, skipped-unknown-channel, oversize-flagged) | marker PK |
 
-Every Command first asserts that `document_type` is **available** — registered by a present module —
-and answers `DOCUMENT_TYPE_NOT_AVAILABLE` (404) otherwise, so templates of a switched-off host are
-neither listed nor writable (FR-051), and are never deleted by this module.
+Every Command first asserts the type is **available** (registered by a present module) and answers
+`DOCUMENT_TYPE_NOT_AVAILABLE` otherwise — so templates of a switched-off host are neither listed nor
+writable, and never deleted by this module.
 
-**Audit state** (R-13): `before`/`after` = `{ documentType, name, salesChannelId, active, version,
-languages, contentDigest }` where `contentDigest` is `{ <lang>: sha256(canonical JSON of tree) }`.
-`save_content` adds `{ language }`.
+**Audit state** (R-13): `{ documentType, name, salesChannelId, isDefault, version, languages,
+contentDigest: { <lang>: sha256(canonical JSON) } }`; `save_content` adds `{ language }`.
 
-## 2. `content` — the per-language Page Builder envelope
+## 2. `document_template_imports` (entity `DocumentTemplateImport`, `@GlobalEntity()`)
 
-Validated on every write by `documentTemplateContentSchema` (`packages/contracts/src/
-document-templates.ts`); stored props are otherwise opaque to the database.
+Records that a document type's legacy templates were imported — the "once" of FR-082.
+
+| Column | Type | Null | Notes |
+| --- | --- | --- | --- |
+| `document_type` | `varchar(120)` | no | PK part |
+| `source` | `varchar(120)` | no | PK part — the registration's `legacyImport.source`, e.g. `invoice_templates` |
+| `imported_count` | `integer` | no | |
+| `skipped_count` | `integer` | no | Rows whose channel no longer exists |
+| `report` | `jsonb` | no | `{ skipped: [{ id, salesChannelId }], oversize: [id] }` |
+| `imported_at` | `timestamptz` | no | |
+
+`primary key ("document_type", "source")`.
+
+### Import algorithm (owner: `document_templates`; reader supplied by the host)
+
+```text
+ensureImported(type):                          -- boot work hook (own presence probed) and lazily
+  if cache.has(type) or !registration(type).legacyImport: return
+  run Command document_template.import:
+    tx:
+      inserted = insert into document_template_imports (type, source, 0, 0, '{}', now())
+                 on conflict do nothing returning 1
+      if not inserted: commit; cache.add(type); return          -- another run did it
+      rows = await legacyImport.read()                          -- host reads its own table
+      for row in rows:
+        if row.salesChannelId and !salesChannelResolutionPort.getById(row.salesChannelId): skip, report
+        insert into document_templates (id, document_type, name, sales_channel_id, content,
+               is_default, version, created_at, updated_at)
+          values (row.id, type, row.name, row.salesChannelId,
+                  { schemaVersion: 1, languages: row.languages },   -- trees byte-identical
+                  row.isDefault, row.version, row.createdAt, row.updatedAt)
+          on conflict (id) do nothing
+      if legacyImport.afterImport: await legacyImport.afterImport()  -- throws → whole tx rolls back
+      update marker counts/report
+  cache.add(type)
+```
+
+Legacy rows exceeding §3's limits are imported unchanged and listed under `oversize` (operator data is
+never refused at import; the limits bind the next save).
+
+### Legacy mapping — `invoice_templates` → `document_templates` (`invoices.invoice`)
+
+| `invoice_templates` | `document_templates` |
+| --- | --- |
+| `id` | `id` |
+| `name` | `name` |
+| `sales_channel_id` | `sales_channel_id` (row skipped if the channel is gone) |
+| `content.languages` | `content.languages` (unchanged); `content.schema_version` → `schemaVersion: 1` |
+| `active` | `is_default` |
+| `version`, `created_at`, `updated_at` | same |
+| `code`, `is_system`, `languages` | dropped (meaningless or derived) |
+
+`LegacyTemplateRecord` (contracts): `{ id, name, salesChannelId, languages: Record<string, unknown>,
+isDefault, version, createdAt, updatedAt }`.
+
+## 3. `content` — the per-language Page Builder envelope
+
+Validated by `documentTemplateContentSchema` (`packages/contracts/src/document-templates.ts`).
 
 ```jsonc
 {
   "schemaVersion": 1,
   "languages": {
     "pl-PL": {
-      "root": { "props": {                       // documentRootProps — §2.1
-        "pageSize": "A4", "orientation": "auto",
-        "marginTop": 40, "marginRight": 32, "marginBottom": 40, "marginLeft": 32,
-        "baseFontSize": 10,
-        "headerText": "", "footerText": "{{channelName}} · {{date}}",
-        "showPageNumbers": true, "pageNumberFormat": "{{page}} / {{pages}}"
-      } },
-      "content": [                                // top-level blocks, rendered in order
-        { "type": "document_templates.Image", "props": { "id": "…", "assetId": "<uuid>", "width": 120, "align": "left" } },
-        { "type": "comparisons.ComparisonHeader", "props": { "id": "…", "title": "Porównanie produktów", "showDate": true } },
-        { "type": "comparisons.ComparisonTable", "props": { "id": "…", "showImages": true, "showSku": true } }
+      "root": { "props": { "pageSize": "A4", "orientation": "auto", "footerText": "{{channelName}} · {{date}}", "showPageNumbers": true } },
+      "content": [
+        { "type": "document_templates.Image", "props": { "id": "…", "assetId": "<uuid>", "width": 120 } },
+        { "type": "comparisons.ComparisonHeader", "props": { "id": "…", "title": "Porównanie produktów" } },
+        { "type": "comparisons.ComparisonTable", "props": { "id": "…", "showSku": true } }
       ]
-    },
-    "en-US": { "root": { "props": { } }, "content": [ ] }
+    }
   }
 }
 ```
 
-**Validation rules** (`DOCUMENT_TEMPLATE_INVALID`, 422, with the failing path)
-
-| Rule | Limit |
+| Rule (`DOCUMENT_TEMPLATE_INVALID`, 422, with path) | Limit |
 | --- | --- |
 | `schemaVersion` | literal `1` |
-| language keys | `^[a-z]{2,3}(-[A-Z]{2})?$`, ≤ 10 per template, ≥ 1 |
-| `content` per language | array, ≤ 200 nodes; Puck `zones` / slots are not accepted in v1 |
-| node `type` | matches `blockNameRe` (`packages/contracts/src/cms.ts`); **unknown names are accepted and stored** (feature 096 skip policy) |
-| node `props` | object; string values ≤ 5 000 chars |
-| `document_templates.Image` nodes | ≤ 20 per language; `assetId` a uuid or empty |
+| language keys | `^[a-z]{2,3}(-[A-Z]{2})?$`, 1–10, and within the registration's `languages` when it sets one |
+| nodes per language | ≤ 200; Puck `zones`/slots not accepted |
+| node `type` | `blockNameRe`; a name declared by a present module but **not offered by this type** → refused (FR-019); unknown names (absent owner) accepted and kept |
+| node `props` | object; strings ≤ 5 000 chars |
+| `document_templates.Image` nodes | ≤ 20 per language |
 | serialized `content` | ≤ 512 KiB |
-| root props | §2.1; unknown root props are dropped on write |
+| root props | §3.1 |
 
-### 2.1 Root (document) props — `documentRootPropsSchema`
+### 3.1 Root props — `documentRootPropsSchema`; defaults come from the type's `pageDefaults`
 
-| Prop | Type | Default | Range |
+| Prop | Type | Generic default | `invoices.invoice` default (parity) |
 | --- | --- | --- | --- |
-| `pageSize` | `'A4' \| 'LETTER'` | `'A4'` | |
-| `orientation` | `'auto' \| 'portrait' \| 'landscape'` | `'auto'` | `auto` asks the registration's `suggestOrientation(data)` |
-| `marginTop`, `marginRight`, `marginBottom`, `marginLeft` | number (pt) | 40 / 32 / 40 / 32 | 0–144 |
-| `baseFontSize` | number (pt) | 10 | 6–18 |
-| `headerText`, `footerText` | string, merge fields | `''` | ≤ 500 |
-| `showPageNumbers` | boolean | `false` | |
-| `pageNumberFormat` | string with `{{page}}`, `{{pages}}` | `'{{page}} / {{pages}}'` | ≤ 50 |
+| `pageSize` | `'A4' \| 'LETTER'` | `'A4'` | `'A4'` |
+| `orientation` | `'auto' \| 'portrait' \| 'landscape'` | `'auto'` | `'portrait'` |
+| `marginTop/Right/Bottom/Left` (pt, 0–144) | number | 40 / 32 / 40 / 32 | 40 / 40 / 48 / 40 |
+| `baseFontSize` (6–18) | number | 10 | 10 |
+| `headerText`, `footerText` (≤ 500, merge fields) | string | `''` | `''` |
+| `showPageNumbers` | boolean | `false` | `false` |
+| `pageNumberFormat` (≤ 50) | string | `'{{page}} / {{pages}}'` | same |
 
-## 3. Blocks (declared, not stored separately)
+Plus non-editable `pageDefaults.styles` (invoices: `{ docTitle: { fontSize: 14, bold: true } }`). Stored
+legacy invoice trees carry `root.props: {}`, so they render with the invoice defaults — parity.
 
-Declared in manifests with `contexts: ['document']`; their props live inside `content`.
+## 4. Blocks per document type (declared; props live in `content`)
 
-### 3.1 Core blocks — owner `document_templates`, category `layout`
+### 4.1 Core blocks — owner `document_templates`, `contexts: ['document']`, category `layout`
 
-| Name | Props (defaults) |
+Offered only to types that opt in (`coreBlocks`). Props:
+`Heading` (`text`, `level` 1–3, `color`, `align`, `marginTop`, `marginBottom`); `Text` (`text` with merge
+fields, `fontSize`, `color`, `bold`, `italics`, `align`, margins); `Image` (`assetId`, `width`,
+`maxHeight`, `align`, `marginBottom`); `Spacer` (`height`); `Divider` (`thickness`, `color`, `style`,
+`widthPercent`, `marginY`); `PageBreak`.
+
+### 4.2 `comparisons.comparison` — `coreBlocks: 'all'`, `selection: 'default_only'`, languages: all active
+
+| Block (`contexts: ['document']`, category `comparison`) | Props (English defaults; per-language texts in the built-in layout) |
 | --- | --- |
-| `document_templates.Heading` | `text` (''), `level` (1–3, 1), `color` ('#111111'), `align` (left), `marginTop` (0), `marginBottom` (8) |
-| `document_templates.Text` | `text` ('', merge fields), `fontSize` (inherit), `color`, `bold` (false), `italics` (false), `align` (left), `marginTop`, `marginBottom` |
-| `document_templates.Image` | `assetId` (''), `width` (120), `maxHeight` (80), `align` (left), `marginBottom` (8) |
-| `document_templates.Spacer` | `height` (16) |
-| `document_templates.Divider` | `thickness` (1), `color` ('#CCCCCC'), `style` (solid\|dashed), `widthPercent` (100), `marginY` (8) |
-| `document_templates.PageBreak` | — |
+| `comparisons.ComparisonHeader` | `title`, `titleSize` (16), `titleColor`, `align`, `showDate`, `dateLabel`, `showDisplayMode`, `modeLabelAll`, `modeLabelCommon`, `modeLabelDifferences`, `showPricedFor`, `pricedForOrganizationText`, `pricedForChannelText`, `marginBottom` |
+| `comparisons.ComparisonTable` | `showImages`, `imageSize` (40–200), `showName`, `showSku`, `showPrice`, `showAvailability`, `availableText`, `unavailableText`, `attributeColumnLabel`, `emptyValue` ('—'), `highlightRows`, `commonColor`, `differentColor`, `headerBackground`, `borderColor`, `fontSize`, `productsPerTable` (1–8, 4), `showHiddenNote`, `hiddenNoteText` (`{{hiddenCount}}`) |
+| `comparisons.ComparisonShareLink` | `label`, `showUrl`, `showQr`, `qrSize` (40–200), `align` |
 
-### 3.2 Comparison blocks — owner `comparisons`, category `comparison`
+Merge fields: `date`, `productCount`, `channelName`, `customerName`, `organizationName`, `shareUrl`;
+`page`, `pages` (header/footer); `hiddenCount` (inside `hiddenNoteText`).
 
-| Name | Props (defaults; text defaults differ per language in the built-in layout) |
+### 4.3 `invoices.invoice` — `coreBlocks: 'none'`, `selection: 'default_only'`, `languages: ['pl-PL']`
+
+| Blocks | Notes |
 | --- | --- |
-| `comparisons.ComparisonHeader` | `title` ('Product comparison'), `titleSize` (16), `titleColor`, `align` (left), `showDate` (true), `dateLabel` ('Date'), `showDisplayMode` (true), `modeLabelAll` ('All attributes'), `modeLabelCommon` ('Common attributes only'), `modeLabelDifferences` ('Differences only'), `showPricedFor` (true), `pricedForOrganizationText` ('Prices for your organisation'), `pricedForChannelText` ('Public prices'), `marginBottom` (12) |
-| `comparisons.ComparisonTable` | `showImages` (true), `imageSize` (120, 40–200), `showName` (true), `showSku` (false), `showPrice` (true), `showAvailability` (false), `availableText` ('Available'), `unavailableText` ('Unavailable'), `attributeColumnLabel` (''), `emptyValue` ('—'), `highlightRows` (true), `commonColor` ('#155724'), `differentColor` ('#721C24'), `headerBackground` ('#F5F5F5'), `borderColor` ('#CCCCCC'), `fontSize` (10), `productsPerTable` (4, 1–8), `showHiddenNote` (true), `hiddenNoteText` ('{{hiddenCount}} product(s) in this comparison are not available to you.') |
-| `comparisons.ComparisonShareLink` | `label` ('View this comparison online'), `showUrl` (true), `showQr` (true), `qrSize` (80, 40–200), `align` (left) |
+| `invoices.InvoiceHeader`, `InvoiceParties`, `InvoiceLineItems`, `InvoiceVatSummary`, `InvoiceTotals`, `InvoiceNotes`, `InvoiceSpacer`, `InvoiceDivider`, `InvoiceLogo`, `InvoiceFooter` | Unchanged names, props and section builders; manifest declarations keep `contexts: ['invoice']` and gain their real `fields`/`defaultProps` (moved from `pdf-components/descriptor.ts`) |
+| every present `invoicePdfBlockRegistry` contribution (e.g. `ksef.InvoiceSection`) | Described by its own `describe()`; presence-filtered per call; contributor unchanged |
 
-### 3.3 Comparison merge fields (registration `variables`)
+No merge fields. Built-in: `defaultContent()` = the generic seed tree
+(`seeds/generic-invoice-template.ts`), `renderBuiltIn()` = today's `builtinLayout()`.
 
-`date` (core), `productCount`, `channelName`, `customerName`, `organizationName`, `shareUrl`;
-`page`, `pages` (core, header/footer only); `hiddenCount` (inside `hiddenNoteText` only).
+## 5. Non-persisted shapes (contracts)
 
-## 4. Non-persisted shapes (contracts)
-
-| Shape | Owner / file | Purpose |
+| Shape | File | Purpose |
 | --- | --- | --- |
-| `DocumentTypeRegistration<TData>` | `packages/contracts/src/document-templates.ts` | What a host registers (`contracts/document-type-registry.md` §2) |
-| `DocumentRenderPort` | same | `render({ documentType, salesChannelId, language, data })` (§4 of that contract) |
-| `ComparisonDocumentData` (`comparisonDocumentDataSchema`) | `packages/contracts/src/comparisons.ts` | The data `comparisons` passes and its sample: `{ view: ComparisonOwnerView, channelName, customerName \| null, organizationName \| null, shareUrl \| null, hideEmptyRows, generatedAt }` |
+| `DocumentTypeRegistration<TData>`, `DocumentBlockRenderer`, `DocumentRenderContext`, `LegacyTemplateRecord` | `packages/contracts/src/document-templates.ts` | `contracts/document-type-registry.md` |
+| `DocumentRenderPort`, `DocumentRenderResult` | same | render with optional `templateId` |
+| `ComparisonDocumentData` | `packages/contracts/src/comparisons.ts` | `{ view, channelName, customerName, organizationName, shareUrl, hideEmptyRows, generatedAt }` |
+| `InvoiceDocumentData` | `packages/contracts/src/invoices.ts` | `{ invoice: InvoiceDetail, amountLocale: 'pl' \| 'en' }` |
 | Admin DTOs | `packages/contracts/src/document-templates.ts` | `contracts/document-templates-api.md` |
 
-## 5. State and lifecycle
+## 6. State and lifecycle
 
 ```text
-          create (active=false)                 activate
- [none] ─────────────────────────▶ [inactive] ─────────────▶ [active]
-                                    ▲    │  ◀───────────────   │
-                                    │    │    deactivate /     │
-                                    │    │    another template │
-                                    │    │    activated in     │
-                                    │    │    the same scope   │
-                                    │    ▼                     ▼
-                                    │  delete              delete (confirmActive)
-                                    │    ▼                     ▼
-                                    │  [gone]               [gone] → exports fall back (FR-031)
-                                    └── rename / save_content keep the state
+            create (is_default=false, or setDefault)          set_default
+ [none] ──────────────────────────────────────▶ [template] ─────────────▶ [default of its scope]
+                                                  ▲   │   ◀── clear_default / another set_default
+                                       rename,    │   │
+                                    save_content ─┘   ▼ delete (confirmDefault if default)
+                                                   [gone] → documents fall back per FR-031 / FR-039
+ legacy invoice row ── import (once per type+source) ──▶ [template] (is_default = legacy active)
 ```
 
-Module switched off (either `document_templates` or the type's host): rows untouched, invisible;
-on again: visible, same state. Channel deleted: its templates are deleted by the FK cascade.
+Host or facility switched off: rows untouched and invisible; on again: same state; pending import
+completes on first use. Channel deleted: its templates cascade.
