@@ -1,4 +1,4 @@
-// perf-weight: light — about 20 s locally (2026-10-17); no service needed.
+// perf-weight: fast — about 20 s locally (2026-10-17); no service needed.
 import { describe, expect, it } from 'vitest';
 import type { ModuleManifest } from '@endora-commerce/contracts';
 import { DocumentTypeRegistry } from '../../../../packages/modules/document_templates/src/backend/registry/document-type-registry.js';
