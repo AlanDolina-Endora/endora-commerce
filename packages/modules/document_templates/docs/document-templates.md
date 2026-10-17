@@ -1,18 +1,19 @@
 ---
 title: Document templates
-description: Design the PDF documents the platform produces — the product comparison and the invoice — in the Page Builder, per document type, language and sales channel
+description: Design the PDF documents the platform produces — the product comparison, the invoice and the quote request — in the Page Builder, per document type, language and sales channel
 ---
 
 # Document templates
 
 Document templates let an operator design the layout of the PDF documents the
-platform produces, in the same Page Builder as CMS pages and e-mails. Two kinds
-of document — **document types** — use them in this release:
+platform produces, in the same Page Builder as CMS pages and e-mails. Three
+kinds of document — **document types** — use them in this release:
 
 | Document type | Provided by | Produced when |
 | --- | --- | --- |
 | **Product comparison** | Compare Products | a buyer clicks **PDF** on the storefront comparison page |
 | **Invoice** | Invoices | an invoice PDF is downloaded by an administrator or a customer, regenerated, or attached to the invoice e-mail |
+| **Quote request** | Quote requests | a sales representative exports a quote request to PDF or sends it to the customer; the representative chooses the template per quote |
 
 A document type is contributed by the module that owns the document's data, so
 it is listed only while that module is switched on. The module also decides
@@ -21,7 +22,9 @@ which blocks its documents may use.
 ## Where to find it
 
 **Content → Document templates** in the sidebar, or press **⌘K** / **Ctrl+K**
-and type *pdf*, *document template*, *invoice template* or *szablon faktury*.
+and type *pdf*, *document template*, *invoice template*, *szablon faktury*,
+*quote pdf*, *offer template* or *szablon oferty*. **Manage PDF templates** in a
+quote request's export dialog opens the quote request card.
 The **PDF template** button on the **Comparisons** screen opens the product
 comparison card, and the **Templates** tab of **Invoices** opens the invoice
 card.
@@ -36,9 +39,12 @@ A document type can hold any number of **templates**. Each template applies to
 is created and fixed afterwards. In each scope **at most one template is the
 default**. A document is produced with:
 
-1. the default template of the document's sales channel, else
-2. the default template for all sales channels, else
-3. the built-in layout.
+1. for a quote request, the template a representative chose for that quote
+   (global or of the quote's channel; a deleted one is replaced by the default
+   and the representative is told), else
+2. the default template of the document's sales channel, else
+3. the default template for all sales channels, else
+4. the built-in layout.
 
 A template whose layout places nothing printable counts as absent, and the
 next one in that order is used.
@@ -57,6 +63,7 @@ The editor offers **only the blocks of the template's document type**:
 | --- | --- |
 | Product comparison | Comparison header, Comparison table, Share link, and the general blocks: Heading, Text, Image (from the assets library), Spacer, Divider, Page break |
 | Invoice | Header, Parties, Line items, VAT summary, Totals, Notes, Spacer, Divider, Logo, Footer, and blocks other installed modules contribute to invoices (for example a KSeF section) |
+| Quote request | Quote header, Buyer and contact, Quote notes, Quote details, **Line items table**, and the general blocks |
 
 The canvas shows each block filled with a **sample document**; **Preview PDF**
 produces the real PDF of the canvas — saved or not — with the same sample, and
@@ -85,6 +92,50 @@ Polish only, so the invoice editor offers no language choice.
 reload to see their changes. A block whose module is switched off is kept in the
 template, shown as a placeholder and left out of the PDF.
 
+## Line items table
+
+The **Line items table** (category *Data*) prints a document's lines as a
+table whose columns the template defines. It is offered to a document type
+that declares lines — the quote request in this release.
+
+- **Columns** — 1 to 16, in an order you set (the move up / move down buttons
+  work from the keyboard). *Add column* opens the list of the document's
+  fields, grouped (*Line*, *Pricing*, *Product attributes*) and searchable.
+  Per column: the **header** (empty prints the field's name in the layout's
+  language), the **width** (automatic, fill the rest, or fixed in points —
+  fixed widths wider than the page are scaled down), the **alignment**
+  (automatic: numbers and amounts right), the **format** (decimal places; for
+  amounts the currency as a symbol, a code or not at all; for dates short,
+  medium or long), the text printed when a line has **no value**, and when it
+  is **shown**: *Always*, *Only if any line has a value*, or *Never* (the
+  column is kept but not printed). A hidden column's width goes to the others.
+- Fields marked **Internal** — for a quote: list price and the discounts —
+  are values customers do not otherwise see. They may be printed; the badge is
+  the warning.
+- A field that no longer exists (a deleted product attribute) is flagged
+  *Unknown field*; its column prints its empty text and the document still
+  renders.
+- **Detail row** — optional, under each line: up to 8 entries printed as
+  "label: value", joined by a separator; an entry is printed *Only if it has a
+  value* by default, and no row is printed for a line where no entry has one.
+- **Totals** — up to 10 of the document's totals, each with a label, a rule
+  (*Only if it has a value* by default) and *Emphasise*, printed right-aligned
+  under the table.
+- **Grouping** — optionally by one field: lines are grouped in the order the
+  values first appear, each group under a heading (lines without a value under
+  the name you give), optionally followed by a subtotal of one numeric or
+  amount field.
+- Style: header background, border and stripe colours, striped rows, font size,
+  space below, and the text printed instead of the table when there are no
+  lines.
+
+The table repeats its header row on every page and never splits a line's row
+across pages. The canvas draws it over the sample with the same formatting as
+the PDF; a column hidden by its rule on the sample is drawn faded.
+
+Placeholders of the form `{{item.…}}` are reserved for a future block that
+repeats blocks once per line; until then they print as typed.
+
 ## Permissions
 
 | Permission | Allows |
@@ -105,27 +156,36 @@ back. Every template change is recorded in the audit log.
   cannot be switched off while **Invoices** is on, because every invoice PDF is
   produced from it. Templates are kept and return unchanged when it is switched
   back on.
-- **Compare Products or Invoices off** — that document type, its blocks and its
-  templates leave the screens and the API; nothing is deleted.
+- **Compare Products, Invoices or Quote requests off** — that document type,
+  its blocks and its templates leave the screens and the API; nothing is
+  deleted. With **Document templates** off, quote requests cannot be exported
+  or sent as PDF; the template each quote remembers is kept.
 
 ## Limits
 
 A template holds up to 10 languages, 200 blocks and 20 images per language, and
 512 KiB of content; a text holds up to 5 000 characters. The comparison table
-prints 1 to 8 products per table and continues in the next table.
+prints 1 to 8 products per table and continues in the next table. A line items
+table holds 1 to 16 columns, 8 detail entries and 10 totals.
 
 ## API
 
 `/api/v1/admin/document-templates` — the document types (`/types`,
 `/types/:code`, `/types/:code/builder-config`), the templates (list, read,
 create or duplicate, rename, save one language, set and clear the default,
-delete) and `POST /preview`. Error codes: `DOCUMENT_TEMPLATE_NOT_FOUND`,
+delete) and `POST /preview`. A document type's detail lists its line
+collections — their fields in the asked language, sample lines and totals —
+for the editor. Error codes: `DOCUMENT_TEMPLATE_NOT_FOUND`,
 `DOCUMENT_TYPE_NOT_AVAILABLE`, `DOCUMENT_TEMPLATE_INVALID`,
 `DOCUMENT_TEMPLATE_IS_DEFAULT`, `DOCUMENT_TEMPLATE_NOT_SELECTABLE`,
 `DOCUMENT_RENDER_FAILED`.
 
 A module adds a document type by pushing a registration — its blocks, whether it
 opts into the general blocks, merge fields, sample data, built-in layout,
-languages, page defaults and whether one template may be chosen per document —
-into the `documentTypeRegistry`, and produces documents through the
-`documentRenderPort` with its own data.
+languages, page defaults, whether one template may be chosen per document and
+its **line collections** — into the `documentTypeRegistry`, and produces
+documents through the `documentRenderPort` with its own data. A type that
+declares a line collection (its fields, its lines' values and its totals) gets
+the Line items table without writing a renderer or an editor; a type with
+per-document selection asks the port's `listChoices` for the templates a
+person may pick for one document.

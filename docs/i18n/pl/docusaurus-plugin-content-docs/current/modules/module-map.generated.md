@@ -45,7 +45,7 @@ platformy, a nie tego, co akurat zostało opisane.
 | [customers](./customers.md) | Cykl życia klienta na bazie `customer_accounts` — organizacje firmowe i prywatne, przypisanie handlowca i obsługa klientów w panelu administracyjnym | @endora-commerce/mod-customers |
 | [delivery_methods](./delivery_methods.md) | Skonfigurowane metody dostawy | @endora-commerce/mod-delivery-methods |
 | [Słowniki](./dictionaries/index.md) | Dane słownikowe tworzone przy instalacji — kraje, waluty, języki — z możliwością zmiany kolejności w panelu | @endora-commerce/mod-dictionaries |
-| [Szablony dokumentów](./document-templates.md) | Projektowanie dokumentów PDF generowanych przez platformę — porównania produktów i faktury — w Page Builderze, dla każdego rodzaju dokumentu, języka i kanału sprzedaży | @endora-commerce/mod-document-templates |
+| [Szablony dokumentów](./document-templates.md) | Projektowanie dokumentów PDF generowanych przez platformę — porównania produktów, faktury i zapytania ofertowego — w Page Builderze, dla każdego rodzaju dokumentu, języka i kanału sprzedaży | @endora-commerce/mod-document-templates |
 | `email` | _brak strony_ | @endora-commerce/mod-email |
 | `erp_connector` | _brak strony_ | @endora-commerce/mod-erp-connector |
 | [Google Analytics](./google-analytics.md) | Google Analytics 4 dla storefrontu — Measurement ID dla każdego kanału, Enhanced Ecommerce, kreator zdarzeń własnych i opcjonalne tagowanie po stronie serwera | @endora-commerce/mod-google-analytics |

@@ -429,6 +429,116 @@ and **Delete view**.
   `{ event: 'saved_view.updated' | 'saved_view.deleted', list: 'quote_request_list_saved_views', viewId, ownerAdminUserId, actorAdminUserId }`.
   That log line is the only trace.
 
+## Quote PDF: export and send to the customer
+
+A sales representative turns a quote request into a PDF from its admin screen,
+in **every state** of the quote. Two buttons in the page header open the same
+dialog:
+
+- **Export PDF** downloads the PDF, named after the quote's number.
+- **Send PDF to customer** e-mails it.
+
+Both appear only while the **Document templates** module is switched on (the
+send also needs the transactional e-mails, which cannot be switched off), and
+both need the `rfqs:handle` permission and the quote's organisation in the
+representative's reach — exactly as opening the quote does. No new permission
+is involved.
+
+**Template.** The dialog offers the *Quote request* templates designed in
+**Document templates** that apply to the quote's sales channel — templates for
+all channels and templates of that channel, never another channel's. The
+template **remembered** for this quote is preselected, else the default of the
+quote's channel, else the default for all channels; when none exists only the
+**built-in layout** is offered. Choosing a different template and exporting or
+sending remembers it for the quote — for every representative — and the
+change is recorded in the audit log; keeping the preselected default remembers
+nothing, so a later change of the default still reaches the quote. A
+remembered template that was deleted is never cleared automatically: the
+dialog says so and the default is used. Remembering a template does not change
+the offer, its revision or its version, so it never conflicts with a
+colleague's edit. **Manage PDF templates** in the dialog leads to the quote
+templates for a representative who may view document templates.
+
+**Language.** The dialog offers the languages the chosen template holds,
+preselected with the default language of the quote's sales channel (the system
+default channel's for a quote without one). Every printed text, number, amount
+and date follows it, and so does the e-mail.
+
+**What the PDF prints.** The quote's **current** lines and prices, built for
+the requesting representative: the header (number, date, validity date,
+revision), the buyer organisation with its tax ID and address, the requesting
+customer and the assigned representative, the quote's note, the line items
+table, the quote's custom fields that customers may see, and any text and logo
+the template adds. Lines without an agreed price print an empty price, and the
+totals that need every price are left out — the same rule as the quote
+screens.
+
+The line items table offers these fields per line: position, product name,
+variant, SKU, quantity, packaging unit, quantity in packaging units, **list
+price**, the customer's proposed price, price after discount, gross unit price,
+**discount %**, **unit discount**, **line discount**, **value at list price**,
+net value, VAT rate, VAT, gross value, the line note, and one field per product
+attribute shown on the product page (a shop's *lead time* attribute, for
+example). Totals: total at list prices, discounts, total net, VAT rate, VAT,
+total gross.
+
+- **List price** is the price recorded when the line was requested (see
+  *Reference price*). A **discount** exists only where the agreed price is
+  lower than the list price in the same currency; otherwise the discount fields
+  have no value, so a column shown *only if any line has a value* disappears
+  when nobody got a discount.
+- The fields in bold are **internal**: customers do not otherwise see them. A
+  template may print them, and the editor marks every column, detail entry and
+  total that does.
+- **VAT** is computed from the net total at the quote's one VAT rate and
+  `gross = net + VAT`, as on the quote screens; a line's own VAT column is
+  rounded per line and may differ from the VAT total by a cent.
+- SKU and attributes are read from the catalogue when the PDF is produced; a
+  product deleted since prints its stored name and no SKU or attributes.
+
+The built-in layout prints position, product, SKU, quantity, packaging unit,
+list price and discount % (both only when a line is discounted), price after
+discount, VAT rate, net and gross, the line note under its line, and the
+totals, in English and Polish.
+
+**Sending.** *Send PDF to customer* preselects the requesting customer's e-mail
+address. The representative may remove it and add other addresses — any
+well-formed address, at most **5**, duplicates merged — and an optional personal
+message of up to 2 000 characters. Each address receives its own e-mail
+**Quote request PDF**, with the PDF attached, in the chosen language. The
+e-mail's subject and body are edited, per language and sales channel, or the
+e-mail switched off, under **E-mail templates**; its variables are
+`quote.number`, `quote.validUntil`, `customer.name`, `salesRep.name`,
+`salesRep.email`, `channel.name` and `message`.
+
+A successful send adds a **PDF sent** entry to the quote's **History** (who
+sent it, to which addresses, with which template, in which language, and the
+message) and one `quote_request.send_document` row to the audit log — never the
+PDF itself. Customers do not see it in their own history. When the mail server
+refuses one address and accepts another, the PDF stays sent to the accepted
+ones, the dialog names the refused ones, and only the accepted ones are
+recorded. A send is refused, with nothing recorded, when:
+
+| Situation | Answer |
+| --- | --- |
+| The *Quote request PDF* e-mail is switched off, no mail server is configured, or the e-mail is not set up | `409 QUOTE_REQUEST_PDF_EMAIL_UNAVAILABLE` (`details.code`: `deactivated`, `no_transport`, `no_definition`) |
+| The PDF is larger than 10 MiB | `422 QUOTE_REQUEST_PDF_TOO_LARGE` |
+| The mail server refused every address | `502 QUOTE_REQUEST_PDF_SEND_FAILED` |
+| More than 10 sends by one administrator within a minute | `429 RATE_LIMITED` |
+
+**API** (all behind `rfqs:handle` and the quote's visibility; `503
+MODULE_DISABLED` while document templates are off):
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/v1/admin/quote-requests/:id/document-templates` | the templates, the remembered one, the default, the languages, the suggested language and the requester's e-mail |
+| `PUT /api/v1/admin/quote-requests/:id/document-template` | remember a template (`{ documentTemplateId }`, `null` forgets) |
+| `GET /api/v1/admin/quote-requests/:id/pdf?templateId=&language=` | the PDF; headers `X-Document-Template-Id`, `-Version`, `-Source`, `-Missing` |
+| `POST /api/v1/admin/quote-requests/:id/pdf/send` | `{ recipients, templateId?, language?, message? }` → `{ sent, failed, templateId, templateSource, requestedTemplateMissing }` |
+
+Templates themselves are designed in **Document templates**; see that module's
+page for the editor and the line items table.
+
 ## Settings
 
 Three settings drive the module — all live under the `quote_requests`
@@ -551,6 +661,14 @@ A missing row means the default. Deleting the organization or the customer
 account deletes its row and nothing else — no quote request refers to either
 table.
 
+`quote_requests.document_template_id` holds the PDF template remembered for the
+quote (see *Quote PDF*), or `null`. It has no foreign key: the template belongs
+to the document templates module, and a deleted template leaves the id in
+place, so the export falls back to the default and says so. Writing it moves
+`updated_at` but not `version`. A `quote_request_events` row of type
+`pdf-sent` records each delivered *Send PDF to customer*; it is shown on the
+admin History only.
+
 `quote_request_list_saved_views` holds the list's saved views (see *Saved
 views*). It is platform-global, not organization-scoped: it stores filter
 values, never quote requests, and is not removed when the module is switched
@@ -603,7 +721,10 @@ row per (transition, recipient, channel).
 
 **Nothing delivers these rows yet.** No worker reads the table, so no e-mail
 and no in-account notification is sent for any quote-request transition; the
-rows stay `queued`. They are the record a delivery worker would work from.
+rows stay `queued`. They are the record a delivery worker would work from. The
+one e-mail this module does send is the explicit *Send PDF to customer* (see
+*Quote PDF*), delivered while the representative waits and recorded on the
+quote's History.
 
 ## Conversion to order
 

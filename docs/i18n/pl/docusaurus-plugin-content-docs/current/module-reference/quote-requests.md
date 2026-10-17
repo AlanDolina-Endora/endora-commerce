@@ -29,6 +29,7 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 
 | Moduł | Wiążąca | Co to oznacza |
 | --- | --- | --- |
+| `_i18n` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `admin_roles` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `admin_users` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `auth` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
@@ -40,9 +41,12 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | `sales_channels` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `settings` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `taxes` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `transactional_emails` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `carts` | tylko bramkowanie | rozwiązuje `cartWritePort`; pominięty w `dependencies`, bo kolejność instalacji nie może nieść tej krawędzi |
 | `orders` | tylko bramkowanie | rozwiązuje `orderReadPort`; pominięty w `dependencies`, bo kolejność instalacji nie może nieść tej krawędzi |
 | `admin_search` | nie | contributes-to `adminSearchProviderRegistry` |
+| `document_templates` | nie | refuses-without `documentRenderPort` — zapytań ofertowych nie można eksportować do PDF ani wybrać dla nich szablonu PDF |
+| `document_templates` | nie | contributes-to `documentTypeRegistry` |
 | `webhooks` | nie | contributes-to `webhookEventRegistry` |
 
 ## Uprawnienia

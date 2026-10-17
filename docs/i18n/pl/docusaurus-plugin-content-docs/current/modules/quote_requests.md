@@ -385,6 +385,101 @@ pozycja to **— Wybierz widok —**, a obok niej dwa przyciski: **Zapisz widok*
   `{ event: 'saved_view.updated' | 'saved_view.deleted', list: 'quote_request_list_saved_views', viewId, ownerAdminUserId, actorAdminUserId }`.
   Ten wpis jest jedynym śladem.
 
+## PDF oferty: eksport i wysyłka do klienta
+
+Handlowiec zamienia zapytanie ofertowe w PDF na jego ekranie w panelu administracyjnym, w **każdym
+statusie** oferty. Dwa przyciski w nagłówku strony otwierają to samo okno:
+
+- **Eksportuj PDF** pobiera PDF, nazwany numerem oferty.
+- **Wyślij PDF do klienta** wysyła go e-mailem.
+
+Oba są widoczne tylko wtedy, gdy włączony jest moduł **Szablony dokumentów** (wysyłka wymaga też
+e-maili transakcyjnych, których nie można wyłączyć), i oba wymagają uprawnienia `rfqs:handle` oraz
+dostępu handlowca do organizacji oferty — tak samo jak otwarcie oferty. Nie dochodzi żadne nowe
+uprawnienie.
+
+**Szablon.** Okno oferuje szablony typu *Zapytanie ofertowe* zaprojektowane w **Szablonach
+dokumentów**, które dotyczą kanału sprzedaży oferty — szablony dla wszystkich kanałów i szablony tego
+kanału, nigdy innego. Zaznaczony jest szablon **zapamiętany** dla tej oferty, a w jego braku szablon
+domyślny kanału oferty, potem szablon domyślny dla wszystkich kanałów; gdy żadnego nie ma, oferowany
+jest tylko **układ wbudowany**. Wybranie innego szablonu i wyeksportowanie lub wysłanie PDF
+zapamiętuje go dla oferty — dla każdego handlowca — a zmiana jest zapisywana w dzienniku audytu;
+pozostawienie zaznaczonego szablonu domyślnego niczego nie zapamiętuje, więc późniejsza zmiana
+szablonu domyślnego obejmie także tę ofertę. Zapamiętany szablon, który usunięto, nigdy nie jest
+czyszczony automatycznie: okno o tym informuje i używany jest szablon domyślny. Zapamiętanie szablonu
+nie zmienia oferty, jej wersji ani numeru wersji, więc nigdy nie koliduje ze zmianą wprowadzaną
+przez współpracownika. **Zarządzaj szablonami PDF** w oknie prowadzi do szablonów ofert, jeśli
+handlowiec może przeglądać szablony dokumentów.
+
+**Język.** Okno oferuje języki, które ma wybrany szablon, z zaznaczonym domyślnym językiem kanału
+sprzedaży oferty (dla oferty bez kanału — językiem domyślnego kanału systemowego). Według niego
+drukowane są wszystkie teksty, liczby, kwoty i daty; w nim powstaje też e-mail.
+
+**Co drukuje PDF.** **Bieżące** pozycje i ceny oferty, przygotowane dla handlowca, który o PDF prosi:
+nagłówek (numer, data, data ważności, wersja), organizację nabywcy z NIP i adresem, klienta
+składającego zapytanie i przypisanego opiekuna handlowego, uwagi do oferty, tabelę pozycji, pola
+dodatkowe oferty widoczne dla klientów oraz teksty i logo dodane w szablonie. Pozycje bez
+uzgodnionej ceny drukują pustą cenę, a sumy wymagające wszystkich cen są pomijane — według tej samej
+zasady co ekrany oferty.
+
+Tabela pozycji oferuje dla każdej pozycji pola: liczba porządkowa, nazwa produktu, wariant, SKU,
+ilość, opakowanie, ilość w opakowaniach, **cena katalogowa**, cena proponowana przez klienta, cena
+po rabacie, cena jednostkowa brutto, **rabat %**, **rabat na sztuce**, **rabat pozycji**,
+**wartość wg cennika**, wartość netto, stawka VAT, VAT, wartość brutto, uwagi do pozycji oraz po
+jednym polu dla każdego atrybutu produktu widocznego na stronie produktu (np. atrybutu *czas
+realizacji* sklepu). Sumy: razem wg cennika, rabaty, razem netto, stawka VAT, VAT, razem brutto.
+
+- **Cena katalogowa** to cena zapisana przy składaniu pozycji (zob. *Cena referencyjna*). **Rabat**
+  istnieje tylko wtedy, gdy uzgodniona cena jest niższa od ceny katalogowej w tej samej walucie; w
+  przeciwnym razie pola rabatu nie mają wartości, więc kolumna pokazywana *tylko gdy któraś pozycja
+  ma wartość* znika, gdy nikt nie dostał rabatu.
+- Pola wyróżnione pogrubieniem są **wewnętrzne**: klienci nie widzą ich w innych miejscach. Szablon
+  może je drukować, a edytor oznacza każdą kolumnę, wpis szczegółów i sumę, która to robi.
+- **VAT** jest liczony od sumy netto według jednej stawki VAT oferty, a `brutto = netto + VAT`, jak
+  na ekranach oferty; kolumna VAT pozycji jest zaokrąglana dla każdej pozycji osobno i może różnić
+  się od sumy VAT o grosz.
+- SKU i atrybuty są odczytywane z katalogu w chwili tworzenia PDF; produkt usunięty w międzyczasie
+  drukuje zapisaną nazwę bez SKU i atrybutów.
+
+Układ wbudowany drukuje liczbę porządkową, produkt, SKU, ilość, opakowanie, cenę katalogową i rabat %
+(obie tylko wtedy, gdy któraś pozycja ma rabat), cenę po rabacie, stawkę VAT, wartość netto i
+brutto, uwagi pod pozycją oraz sumy — po angielsku i po polsku.
+
+**Wysyłka.** *Wyślij PDF do klienta* podpowiada adres e-mail klienta, który złożył zapytanie.
+Handlowiec może go usunąć i dodać inne adresy — dowolne poprawne adresy, najwyżej **5**, powtórzenia
+są łączone — oraz opcjonalną wiadomość osobistą do 2 000 znaków. Każdy adres otrzymuje osobny e-mail
+**PDF zapytania ofertowego** z PDF w załączniku, w wybranym języku. Temat i treść e-maila edytuje
+się — dla każdego języka i kanału sprzedaży — albo wyłącza e-mail w **Szablonach e-maili**; jego
+zmienne to `quote.number`, `quote.validUntil`, `customer.name`, `salesRep.name`, `salesRep.email`,
+`channel.name` i `message`.
+
+Udana wysyłka dodaje do **Historii** oferty wpis **Wysłano PDF** (kto wysłał, na jakie adresy, z
+jakim szablonem, w jakim języku i z jaką wiadomością) oraz jeden wiersz
+`quote_request.send_document` w dzienniku audytu — nigdy sam PDF. Klienci nie widzą go we własnej
+historii. Gdy serwer poczty odrzuci jeden adres, a przyjmie inny, PDF pozostaje wysłany na
+przyjęte adresy, okno wymienia odrzucone, a zapisywane są tylko przyjęte. Wysyłka jest odrzucana,
+bez żadnego zapisu, gdy:
+
+| Sytuacja | Odpowiedź |
+| --- | --- |
+| E-mail *PDF zapytania ofertowego* jest wyłączony, nie skonfigurowano serwera poczty albo e-mail nie jest skonfigurowany | `409 QUOTE_REQUEST_PDF_EMAIL_UNAVAILABLE` (`details.code`: `deactivated`, `no_transport`, `no_definition`) |
+| PDF jest większy niż 10 MiB | `422 QUOTE_REQUEST_PDF_TOO_LARGE` |
+| Serwer poczty odrzucił wszystkie adresy | `502 QUOTE_REQUEST_PDF_SEND_FAILED` |
+| Ponad 10 wysyłek jednego administratora w ciągu minuty | `429 RATE_LIMITED` |
+
+**API** (wszystkie trasy wymagają `rfqs:handle` i dostępu do oferty; `503 MODULE_DISABLED`, gdy
+szablony dokumentów są wyłączone):
+
+| Trasa | Cel |
+| --- | --- |
+| `GET /api/v1/admin/quote-requests/:id/document-templates` | szablony, zapamiętany szablon, szablon domyślny, języki, podpowiadany język i e-mail klienta |
+| `PUT /api/v1/admin/quote-requests/:id/document-template` | zapamiętanie szablonu (`{ documentTemplateId }`, `null` usuwa wybór) |
+| `GET /api/v1/admin/quote-requests/:id/pdf?templateId=&language=` | PDF; nagłówki `X-Document-Template-Id`, `-Version`, `-Source`, `-Missing` |
+| `POST /api/v1/admin/quote-requests/:id/pdf/send` | `{ recipients, templateId?, language?, message? }` → `{ sent, failed, templateId, templateSource, requestedTemplateMissing }` |
+
+Same szablony projektuje się w **Szablonach dokumentów**; edytor i tabelę pozycji opisuje strona
+tego modułu.
+
 ## Ustawienia
 
 Modułem sterują trzy ustawienia — wszystkie w grupie `quote_requests`, konfigurowane przez
@@ -499,6 +594,13 @@ klienta z nadpisaniem; `null` = jak organizacja). Brak wiersza oznacza wartość
 organizacji lub konta klienta usuwa jego wiersz i nic poza nim — żadne zapytanie ofertowe nie
 odwołuje się do żadnej z tych tabel.
 
+`quote_requests.document_template_id` przechowuje szablon PDF zapamiętany dla oferty (zob. *PDF
+oferty*) albo `null`. Nie ma klucza obcego: szablon należy do modułu szablonów dokumentów, a usunięty
+szablon zostawia identyfikator na miejscu, więc eksport wraca do szablonu domyślnego i o tym
+informuje. Zapis zmienia `updated_at`, ale nie `version`. Wiersz `quote_request_events` typu
+`pdf-sent` zapisuje każdą udaną wysyłkę *Wyślij PDF do klienta*; jest widoczny tylko w historii w
+panelu administracyjnym.
+
 `quote_request_list_saved_views` przechowuje zapisane widoki listy (zob. *Zapisane widoki*). Jest
 globalna dla platformy, a nie przypisana do organizacji: przechowuje wartości filtrów, nigdy
 zapytania ofertowe, i nie jest usuwana, gdy moduł zostaje wyłączony.
@@ -542,7 +644,9 @@ tabeli pilnuje, by na każdą trójkę (przejście, odbiorca, kanał) przypadał
 
 **Tych wierszy na razie nic nie doręcza.** Żaden proces nie odczytuje tej tabeli, więc dla żadnego
 przejścia zapytania ofertowego nie jest wysyłany e-mail ani powiadomienie na koncie; wiersze
-pozostają w statusie `queued`. Są zapisem, z którego korzystałby proces doręczający.
+pozostają w statusie `queued`. Są zapisem, z którego korzystałby proces doręczający. Jedyny e-mail,
+który ten moduł wysyła, to jawna akcja *Wyślij PDF do klienta* (zob. *PDF oferty*), doręczana, gdy
+handlowiec czeka, i zapisywana w historii oferty.
 
 ## Zamiana na zamówienie
 
