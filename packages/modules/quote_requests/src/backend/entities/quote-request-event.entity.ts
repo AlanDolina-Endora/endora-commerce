@@ -22,7 +22,10 @@ export type QuoteRequestEventType =
   | 'customer-accepted-revision'
   | 'customer-rejected-revision'
   | 're-submitted'
-  | 'note-added';
+  | 'note-added'
+  // Feature 153 (owner answer Q4) — the quote PDF was e-mailed. Admin-only:
+  // the customer reply leaves it out.
+  | 'pdf-sent';
 
 @GlobalEntity()
 @Entity({ tableName: 'quote_request_events' })

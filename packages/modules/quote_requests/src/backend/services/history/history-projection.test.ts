@@ -396,3 +396,45 @@ describe('variant labels and bounded revision reads', () => {
     expect(predecessorsToRead(events, loaded.filter((r) => r.id !== REV3))).toEqual({ ids: [LINKED], numbers: [3] });
   });
 });
+
+describe('feature 153 — the quote PDF sent by e-mail (owner answer Q4)', () => {
+  it('a pdf-sent event is one pdf_sent entry with its delivery; every other entry carries none', () => {
+    const entries = projectHistory(
+      [
+        event('note-added', { admin: ADMIN }, { note: 'call back' }),
+        event('pdf-sent', { admin: ADMIN }, {
+          recipients: ['buyer@example.com', 'two@example.com'],
+          templateId: 'f0000000-0000-4000-8000-0000000000aa',
+          templateName: 'With discounts',
+          language: 'pl-PL',
+          message: 'Please see the offer.',
+        }),
+      ],
+      [],
+      directory(),
+    );
+    expect(entries.map((e) => e.kind)).toEqual(['note_added', 'pdf_sent']);
+    expect(entries[0]!.delivery).toBeNull();
+    expect(entries[1]).toMatchObject({
+      kind: 'pdf_sent',
+      actor: { kind: 'admin', adminUserId: ADMIN },
+      note: null,
+      delivery: {
+        recipients: ['buyer@example.com', 'two@example.com'],
+        templateName: 'With discounts',
+        language: 'pl-PL',
+        message: 'Please see the offer.',
+      },
+    });
+    expect(quoteRequestHistoryEntrySchema.safeParse(entries[1]).success).toBe(true);
+  });
+
+  it('a hostile payload keeps what is readable', () => {
+    const [entry] = projectHistory(
+      [event('pdf-sent', { admin: ADMIN }, { recipients: ['ok@example.com', 7, null], templateName: 3, language: '', message: { x: 1 } })],
+      [],
+      directory(),
+    );
+    expect(entry!.delivery).toEqual({ recipients: ['ok@example.com'], templateName: null, language: null, message: null });
+  });
+});

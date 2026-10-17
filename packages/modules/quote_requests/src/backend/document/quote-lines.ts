@@ -1,0 +1,220 @@
+import type {
+  CatalogAttributeView,
+  DocumentCollectionDeclaration,
+  DocumentFieldDefinition,
+  DocumentItem,
+  DocumentValue,
+  DocumentValueKind,
+  QuoteRequestDocumentData,
+} from '@endora-commerce/contracts';
+import { localized, quoteDocumentTexts } from './texts.js';
+
+/**
+ * The quote's **line collection** `lines` — the field catalogue a Line items
+ * table chooses its columns from, and every value derived from the quote's own
+ * data (`specs/153-quote-request-pdf-template/research.md` R-11,
+ * `data-model.md` §4.2).
+ *
+ * Pure: the items and the totals are functions of `QuoteRequestDocumentData`,
+ * which the data builder assembled under the requesting administrator's
+ * visibility; nothing here reads anything.
+ *
+ * - **List price** is feature 146's reference price — the customer's price
+ *   captured when the line was requested. A **discount** exists only where the
+ *   agreed price is lower than the list price in the same currency; otherwise
+ *   the discount fields have **no value** (never `0`), so a column shown "only
+ *   if any line has a value" disappears when nobody got one (owner's example).
+ * - **Totals** follow the quote screens' rule: computed only when every line
+ *   has an agreed price; VAT from the net total at the quote's one rate; gross
+ *   = net + VAT. Lines in different currencies have no money total.
+ * - List price and the discount fields are **internal** (owner answer Q7): the
+ *   editor warns on a column that prints one.
+ */
+
+export const QUOTE_LINES_COLLECTION = 'lines';
+
+const round2 = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
+const money = (amount: number, currency: string): DocumentValue => ({ kind: 'money', amount: round2(amount), currency });
+const text = (value: string | null | undefined): DocumentValue =>
+  typeof value === 'string' && value.trim() !== '' ? { kind: 'text', value } : null;
+
+interface StaticField {
+  readonly path: string;
+  readonly kind: DocumentValueKind;
+  readonly group: 'line' | 'pricing';
+  readonly internal?: boolean;
+  readonly decimals?: number;
+}
+
+const LINE_FIELDS: readonly StaticField[] = [
+  { path: 'productName', kind: 'text', group: 'line' },
+  { path: 'variant', kind: 'text', group: 'line' },
+  { path: 'sku', kind: 'text', group: 'line' },
+  { path: 'quantity', kind: 'number', group: 'line', decimals: 0 },
+  { path: 'packagingUnit', kind: 'text', group: 'line' },
+  { path: 'packagingQuantity', kind: 'number', group: 'line' },
+  { path: 'listUnitPrice', kind: 'money', group: 'pricing', internal: true, decimals: 2 },
+  { path: 'proposedUnitPrice', kind: 'money', group: 'pricing', decimals: 2 },
+  { path: 'unitPrice', kind: 'money', group: 'pricing', decimals: 2 },
+  { path: 'unitGrossPrice', kind: 'money', group: 'pricing', decimals: 2 },
+  { path: 'discountPercent', kind: 'percent', group: 'pricing', internal: true, decimals: 1 },
+  { path: 'unitDiscount', kind: 'money', group: 'pricing', internal: true, decimals: 2 },
+  { path: 'lineDiscount', kind: 'money', group: 'pricing', internal: true, decimals: 2 },
+  { path: 'lineListValue', kind: 'money', group: 'pricing', internal: true, decimals: 2 },
+  { path: 'lineNet', kind: 'money', group: 'pricing', decimals: 2 },
+  { path: 'vatRate', kind: 'percent', group: 'pricing', decimals: 0 },
+  { path: 'lineVat', kind: 'money', group: 'pricing', decimals: 2 },
+  { path: 'lineGross', kind: 'money', group: 'pricing', decimals: 2 },
+  { path: 'lineNote', kind: 'text', group: 'line' },
+];
+
+const SUMMARY_FIELDS: readonly StaticField[] = [
+  { path: 'listTotal', kind: 'money', group: 'pricing', internal: true, decimals: 2 },
+  { path: 'discountTotal', kind: 'money', group: 'pricing', internal: true, decimals: 2 },
+  { path: 'netTotal', kind: 'money', group: 'pricing', decimals: 2 },
+  { path: 'vatRate', kind: 'percent', group: 'pricing', decimals: 0 },
+  { path: 'vatTotal', kind: 'money', group: 'pricing', decimals: 2 },
+  { path: 'grossTotal', kind: 'money', group: 'pricing', decimals: 2 },
+];
+
+function definitionOf(field: StaticField, label: string): DocumentFieldDefinition {
+  return {
+    path: field.path,
+    label,
+    valueKind: field.kind,
+    group: field.group,
+    audience: field.internal ? 'internal' : 'customer',
+    ...(field.decimals !== undefined ? { defaultFormat: { decimals: field.decimals } } : {}),
+  };
+}
+
+type Line = QuoteRequestDocumentData['lines'][number];
+
+/** The per-unit discount of a line, or `null` when it has none (R-11). */
+function unitDiscountOf(line: Line): number | null {
+  const list = line.referenceUnitPrice;
+  const agreed = line.agreedUnitPrice;
+  if (list === null || agreed === null || list <= 0) return null;
+  if (line.referenceCurrency !== line.lineCurrency) return null;
+  return agreed < list ? list - agreed : null;
+}
+
+/** The values of every line, by field path. */
+export function quoteLineItems(data: QuoteRequestDocumentData): DocumentItem[] {
+  const rate = Number.isFinite(data.quote.taxRate) ? data.quote.taxRate : 0;
+  return data.lines.map((line) => {
+    const currency = line.lineCurrency;
+    const agreed = line.agreedUnitPrice;
+    const list = line.referenceUnitPrice;
+    const unitDiscount = unitDiscountOf(line);
+    const net = agreed !== null ? round2(agreed * line.quantity) : null;
+    const vat = net !== null ? round2(net * rate) : null;
+    const values: Record<string, DocumentValue> = {
+      productName: text(line.productName),
+      variant: text(line.variantLabel),
+      sku: text(line.sku),
+      quantity: { kind: 'number', value: line.quantity },
+      packagingUnit: text(line.packagingUnitName),
+      packagingQuantity:
+        line.packagingUnitName && line.packagingUnitBaseQuantity && line.packagingUnitBaseQuantity > 0
+          ? { kind: 'number', value: line.quantity / line.packagingUnitBaseQuantity }
+          : null,
+      listUnitPrice: list !== null && line.referenceCurrency ? money(list, line.referenceCurrency) : null,
+      proposedUnitPrice: line.proposedUnitPrice !== null ? money(line.proposedUnitPrice, currency) : null,
+      unitPrice: agreed !== null ? money(agreed, currency) : null,
+      unitGrossPrice: agreed !== null ? money(agreed * (1 + rate), currency) : null,
+      discountPercent:
+        unitDiscount !== null && list !== null
+          ? { kind: 'percent', value: round2((unitDiscount / list) * 100) }
+          : null,
+      unitDiscount: unitDiscount !== null ? money(unitDiscount, currency) : null,
+      lineDiscount: unitDiscount !== null ? money(unitDiscount * line.quantity, currency) : null,
+      lineListValue: list !== null && line.referenceCurrency ? money(list * line.quantity, line.referenceCurrency) : null,
+      lineNet: net !== null ? money(net, currency) : null,
+      vatRate: { kind: 'percent', value: round2(rate * 100) },
+      lineVat: vat !== null ? money(vat, currency) : null,
+      lineGross: net !== null && vat !== null ? money(net + vat, currency) : null,
+      lineNote: text(line.lineNote),
+    };
+    for (const [code, value] of Object.entries(line.attributes ?? {})) {
+      values[`attributes.${code}`] = text(value);
+    }
+    return { values };
+  });
+}
+
+/** The quote's totals — every line or none (R-11). */
+export function quoteSummary(data: QuoteRequestDocumentData): Record<string, DocumentValue> {
+  const rate = Number.isFinite(data.quote.taxRate) ? data.quote.taxRate : 0;
+  const lines = data.lines;
+  const vatRate: DocumentValue = { kind: 'percent', value: round2(rate * 100) };
+  const currencies = new Set(lines.map((line) => line.lineCurrency));
+  const none = { listTotal: null, discountTotal: null, netTotal: null, vatRate, vatTotal: null, grossTotal: null };
+  if (currencies.size > 1) return none;
+  const currency = lines[0]?.lineCurrency ?? data.quote.currency;
+
+  const everyPriced = lines.every((line) => line.agreedUnitPrice !== null);
+  const net = everyPriced ? round2(lines.reduce((sum, line) => sum + (line.agreedUnitPrice ?? 0) * line.quantity, 0)) : null;
+  const vat = net !== null ? round2(net * rate) : null;
+
+  const everyListed =
+    lines.length > 0 &&
+    lines.every((line) => line.referenceUnitPrice !== null && line.referenceCurrency === line.lineCurrency);
+  const list = everyListed
+    ? lines.reduce((sum, line) => sum + (line.referenceUnitPrice ?? 0) * line.quantity, 0)
+    : null;
+
+  const discounts = lines
+    .map((line) => {
+      const unit = unitDiscountOf(line);
+      return unit !== null ? round2(unit * line.quantity) : null;
+    })
+    .filter((value): value is number => value !== null);
+
+  return {
+    listTotal: list !== null ? money(list, currency) : null,
+    discountTotal: discounts.length > 0 ? money(discounts.reduce((sum, value) => sum + value, 0), currency) : null,
+    netTotal: net !== null ? money(net, currency) : null,
+    vatRate,
+    vatTotal: vat !== null ? money(vat, currency) : null,
+    grossTotal: net !== null && vat !== null ? money(net + vat, currency) : null,
+  };
+}
+
+export interface QuoteLinesCollectionDeps {
+  /** The attributes shown on the product page — read once per catalogue request. */
+  readonly attributes: () => Promise<readonly CatalogAttributeView[]>;
+}
+
+/** The `lines` collection the *Quote request* document type declares. */
+export function createQuoteLinesCollection(
+  deps: QuoteLinesCollectionDeps,
+): DocumentCollectionDeclaration<QuoteRequestDocumentData> {
+  return {
+    key: QUOTE_LINES_COLLECTION,
+    labelKey: 'documentTypes.quoteRequest.collections.lines',
+    async fields(language) {
+      const texts = quoteDocumentTexts(language);
+      const out: DocumentFieldDefinition[] = LINE_FIELDS.map((field) =>
+        definitionOf(field, texts.fields[field.path] ?? field.path),
+      );
+      for (const attribute of await deps.attributes()) {
+        out.push({
+          path: `attributes.${attribute.key}`,
+          label: localized(attribute.label, language, attribute.labelDefault || attribute.key),
+          valueKind: 'text',
+          group: 'product',
+          audience: 'customer',
+          sampleValue: { kind: 'text', value: texts.attributeSample },
+        });
+      }
+      return out;
+    },
+    items: quoteLineItems,
+    async summaryFields(language) {
+      const texts = quoteDocumentTexts(language);
+      return SUMMARY_FIELDS.map((field) => definitionOf(field, texts.totals[field.path] ?? field.path));
+    },
+    summary: quoteSummary,
+  };
+}

@@ -15,16 +15,19 @@ import {
 } from '../../helpers/test-server.js';
 import { withModuleOff } from '../../helpers/off-state.js';
 import { ensureAdminWithRole } from '../../helpers/admin-search-fixtures.js';
-import {
-  FIXTURE_BLOCK,
-  FIXTURE_DOCUMENT_TYPE,
-  registerFixtureDocumentType,
-} from '../../fixtures/document-types/fixture-document-type.js';
+import { QUOTE_REQUEST_DOCUMENT_TYPE } from '@endora-commerce/contracts';
+
+/** The real per-document type (`specs/153-quote-request-pdf-template/` R-24 replaced 152's stand-in). */
+const FIXTURE_DOCUMENT_TYPE = QUOTE_REQUEST_DOCUMENT_TYPE;
+const FIXTURE_BLOCK = 'quote_requests.QuoteNotes';
+/** A block a present module declares that this type does not offer (FR-019). */
+const FOREIGN_BLOCK = 'comparisons.ComparisonTable';
 
 /**
  * `specs/152-compare-pdf-template/` T030 — the twelve admin routes of
- * `contracts/document-templates-api.md`, against a test-only document type
- * (US6's fixture): shapes, the permission gate ahead of validation, the
+ * `contracts/document-templates-api.md`, against the *Quote request* type
+ * (`specs/153-quote-request-pdf-template/`, which also adds route 2's
+ * collections, T019): shapes, the permission gate ahead of validation, the
  * error table, FR-019, the preview writing nothing, one audit row per write
  * and none for a refusal, and a switched-off host hiding its type while its
  * rows stay.
@@ -44,7 +47,6 @@ describe('document templates — admin API (spec 152)', () => {
 
   beforeAll(async () => {
     h = await setupBackendServer();
-    registerFixtureDocumentType(h);
     await ensureAdminWithRole(h, READER_ID, 'document_templates_reader', ['document_templates:read']);
     await ensureAdminWithRole(h, NONE_ID, 'document_templates_none', ['orders:read']);
   });
@@ -116,16 +118,38 @@ describe('document templates — admin API (spec 152)', () => {
       const res = await h.app.inject({ method: 'GET', url: `${BASE}/types/${FIXTURE_DOCUMENT_TYPE}`, cookies: ADMIN });
       expect(res.statusCode).toBe(200);
       const detail = documentTypeDetailSchema.parse((res.json() as { data: unknown }).data);
-      expect(detail.languages).toEqual(['en-US', 'pl-PL']);
+      expect(detail.languages).toBeNull();
       expect(detail.variables.map((v) => `${v.key}:${v.scope}`)).toEqual([
         'date:body',
-        'title:body',
+        ...[
+          'quoteNumber', 'validUntil', 'revisionNumber', 'status', 'currency', 'organizationName', 'organizationTaxId',
+          'customerName', 'customerEmail', 'salesRepName', 'salesRepEmail', 'channelName', 'netTotal', 'grossTotal',
+        ].map((key) => `${key}:body`),
         'page:headerFooter',
         'pages:headerFooter',
       ]);
-      expect(detail.sample).toEqual({ title: 'Sample note' });
-      expect(Object.keys(detail.builtInContent.languages)).toEqual(['en-US']);
-      expect(detail.pageDefaults).toMatchObject({ pageSize: 'A4', orientation: 'auto' });
+      expect(detail.sample).toMatchObject({ quote: { businessId: 'QR-000153' } });
+      expect(Object.keys(detail.builtInContent.languages)).toEqual(['en-US', 'pl-PL']);
+      expect(detail.pageDefaults).toMatchObject({ pageSize: 'A4', orientation: 'portrait', baseFontSize: 9 });
+    });
+
+    it('serves the line collection in the asked language: position first, sample items and totals (153 T019)', async () => {
+      const res = await h.app.inject({ method: 'GET', url: `${BASE}/types/${FIXTURE_DOCUMENT_TYPE}?language=pl-PL`, cookies: ADMIN });
+      const detail = documentTypeDetailSchema.parse((res.json() as { data: unknown }).data);
+      expect(detail.collections).toHaveLength(1);
+      const [lines] = detail.collections;
+      expect(lines).toMatchObject({ key: 'lines', labelKey: 'documentTypes.quoteRequest.collections.lines', ownerModule: 'quote_requests' });
+      expect(lines!.fields[0]).toMatchObject({ path: 'row.number', label: 'Lp.' });
+      expect(lines!.fields.find((f) => f.path === 'unitPrice')?.label).toBe('Cena po rabacie');
+      expect(lines!.fields.find((f) => f.path === 'listUnitPrice')?.audience).toBe('internal');
+      expect(lines!.summaryFields.map((f) => f.path)).toEqual(['listTotal', 'discountTotal', 'netTotal', 'vatRate', 'vatTotal', 'grossTotal']);
+      expect(lines!.sampleItems).toHaveLength(5);
+      expect(lines!.sampleItems[0]!.values['row.number']).toEqual({ kind: 'number', value: 1 });
+      expect(lines!.sampleSummary['netTotal']).toMatchObject({ kind: 'money', currency: 'PLN' });
+      const comparison = documentTypeDetailSchema.parse(
+        ((await h.app.inject({ method: 'GET', url: `${BASE}/types/comparisons.comparison`, cookies: ADMIN })).json() as { data: unknown }).data,
+      );
+      expect(comparison.collections).toEqual([]);
     });
 
     it("serves the type's palette and nothing else", async () => {
@@ -135,8 +159,20 @@ describe('document templates — admin API (spec 152)', () => {
         cookies: ADMIN,
       });
       const config = documentBuilderConfigSchema.parse((res.json() as { data: unknown }).data);
-      expect(config.components.map((c) => c.name)).toEqual([FIXTURE_BLOCK, 'document_templates.Text']);
-      expect(config.categories.map((c) => c.key)).toEqual(['layout']);
+      expect(config.components.map((c) => c.name)).toEqual([
+        'quote_requests.QuoteHeader',
+        'quote_requests.QuoteParties',
+        'quote_requests.QuoteNotes',
+        'quote_requests.QuoteDetails',
+        'document_templates.ItemsTable',
+        'document_templates.Heading',
+        'document_templates.Text',
+        'document_templates.Image',
+        'document_templates.Spacer',
+        'document_templates.Divider',
+        'document_templates.PageBreak',
+      ]);
+      expect(config.categories.map((c) => c.key)).toEqual(['quote', 'data', 'layout']);
     });
 
     it('answers DOCUMENT_TYPE_NOT_AVAILABLE for an unknown type', async () => {
@@ -151,13 +187,13 @@ describe('document templates — admin API (spec 152)', () => {
       const res = await create();
       expect(res.statusCode).toBe(201);
       const summary = documentTemplateSummarySchema.parse((res.json() as { data: unknown }).data);
-      expect(summary).toMatchObject({ isDefault: false, version: 1, languages: ['en-US'], salesChannelId: null });
+      expect(summary).toMatchObject({ isDefault: false, version: 1, languages: ['en-US', 'pl-PL'], salesChannelId: null });
       const rows = await auditRows(summary.id);
       expect(rows.map((r) => r.action)).toEqual(['document_template.create']);
       const detail = documentTemplateDetailSchema.parse(
         ((await h.app.inject({ method: 'GET', url: `${BASE}/${summary.id}`, cookies: ADMIN })).json() as { data: unknown }).data,
       );
-      expect((detail.content.languages['en-US'] as { content: { type: string }[] }).content[0]!.type).toBe(FIXTURE_BLOCK);
+      expect((detail.content.languages['en-US'] as { content: { type: string }[] }).content[0]!.type).toBe('quote_requests.QuoteHeader');
     });
 
     it('duplicates a template, and refuses a source of another type or an unknown channel', async () => {
@@ -171,7 +207,7 @@ describe('document templates — admin API (spec 152)', () => {
       expect(channel.statusCode).toBe(422);
     });
 
-    it('saves a language; refuses a stale version, a block of another type, a language the type does not print, an oversize tree', async () => {
+    it('saves a language; refuses a stale version, a block of another type, invalid table settings, an oversize tree', async () => {
       const { data } = (await create()).json() as { data: { id: string; version: number } };
       const put = (language: string, payload: unknown) =>
         h.app.inject({ method: 'PUT', url: `${BASE}/${data.id}/content/${language}`, cookies: ADMIN, payload: payload as Record<string, unknown> });
@@ -179,7 +215,7 @@ describe('document templates — admin API (spec 152)', () => {
       const saved = await put('pl-PL', {
         expectedVersion: 1,
         tree: tree([
-          { type: FIXTURE_BLOCK, props: { id: 'a', caption: 'Notatka' } },
+          { type: FIXTURE_BLOCK, props: { id: 'a', label: 'Notatka' } },
           { type: 'gone.Block', props: { id: 'g', keep: { deep: true } } },
         ]),
       });
@@ -201,14 +237,20 @@ describe('document templates — admin API (spec 152)', () => {
       expect(stale.statusCode).toBe(409);
       expect((stale.json() as { error: { code: string } }).error.code).toBe('VERSION_CONFLICT');
 
-      const foreign = await put('pl-PL', { expectedVersion: 2, tree: tree([{ type: 'document_templates.Heading', props: {} }]) });
+      const foreign = await put('pl-PL', { expectedVersion: 2, tree: tree([{ type: FOREIGN_BLOCK, props: {} }]) });
       expect(foreign.statusCode).toBe(422);
-      expect((foreign.json() as { error: { details: { blockName: string } } }).error.details.blockName).toBe(
-        'document_templates.Heading',
-      );
+      expect((foreign.json() as { error: { details: { blockName: string } } }).error.details.blockName).toBe(FOREIGN_BLOCK);
 
-      const language = await put('de-DE', { expectedVersion: 2, tree: tree([]) });
-      expect(language.statusCode).toBe(422);
+      // 153 FR-043 — the Line items table's settings, refused with the setting's path.
+      const table = await put('pl-PL', {
+        expectedVersion: 2,
+        tree: tree([{ type: 'document_templates.ItemsTable', props: { id: 't', columns: [{ id: 'c1', field: 'a.b.c' }] } }]),
+      });
+      expect(table.statusCode).toBe(422);
+      expect((table.json() as { error: { details: Record<string, unknown> } }).error.details).toMatchObject({
+        path: 'content.0.props.columns.0.field',
+        blockName: 'document_templates.ItemsTable',
+      });
 
       const oversize = await put('en-US', {
         expectedVersion: 2,
@@ -275,7 +317,10 @@ describe('document templates — admin API (spec 152)', () => {
         payload: {
           documentType: FIXTURE_DOCUMENT_TYPE,
           language: 'en-US',
-          tree: tree([{ type: 'document_templates.Text', props: { text: 'Hello {{title}}' } }]),
+          tree: tree([
+            { type: 'document_templates.Text', props: { text: 'Hello {{quoteNumber}} {{item.sku}}' } },
+            { type: 'document_templates.ItemsTable', props: { id: 't', columns: [{ id: 'c1', field: 'attributes.colour' }] } },
+          ]),
         },
       });
       expect(res.statusCode).toBe(200);
@@ -289,7 +334,7 @@ describe('document templates — admin API (spec 152)', () => {
         method: 'POST',
         url: `${BASE}/preview`,
         cookies: ADMIN,
-        payload: { documentType: FIXTURE_DOCUMENT_TYPE, language: 'en-US', tree: tree([{ type: 'document_templates.Image', props: {} }]) },
+        payload: { documentType: FIXTURE_DOCUMENT_TYPE, language: 'en-US', tree: tree([{ type: FOREIGN_BLOCK, props: {} }]) },
       });
       expect(res.statusCode).toBe(422);
     });

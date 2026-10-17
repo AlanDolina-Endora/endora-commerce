@@ -3,7 +3,7 @@ import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { EventBus } from '@endora-commerce/platform/events';
-import { ERROR_CODES, QUOTE_REQUEST_WEBHOOK_EVENT_TYPES } from '@endora-commerce/contracts';
+import { ERROR_CODES, QUOTE_REQUEST_PDF_LIMITS, QUOTE_REQUEST_WEBHOOK_EVENT_TYPES } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import type {
   Actor,
@@ -13,15 +13,22 @@ import type {
   AdminUserReadPort,
   BuyerLinePricePort,
   CartWritePort,
+  CatalogAttributeReadPort,
   CatalogProductReadPort,
   CustomerAccountReadPort,
+  CustomFieldDefinitionReadPort,
+  DocumentRenderPort,
+  DocumentTypeRegistryPort,
+  EmailDefaultsRegistryPort,
   OrderReadPort,
   OrganizationDetailsPort,
   OrganizationTaxProfilePort,
   QuoteRequestReadPort,
   RfqCustomerPort,
   SalesChannelAttributionRegistryPort,
+  SalesRepAssignmentPort,
   TaxServicePort,
+  TransactionalEmailSender,
   WebhookEventRegistryPort,
 } from '@endora-commerce/contracts';
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
@@ -56,6 +63,11 @@ import { QuoteRequestNotificationEvent } from './entities/quote-request-notifica
 import { QuoteRequestRevision } from './entities/quote-request-revision.entity.js';
 import { QuoteRequestOrgPolicy } from './entities/quote-request-org-policy.entity.js';
 import { QuoteRequestAccountPolicy } from './entities/quote-request-account-policy.entity.js';
+import { QuoteDocumentDataBuilder } from './document/data-builder.js';
+import { QuoteRequestDocumentService } from './document/document-service.js';
+import { createQuoteRequestDocumentType } from './document/quote-request-document-type.js';
+import { QUOTE_REQUEST_PDF_EMAIL_CODE } from './commands/document-template-commands.js';
+import { QUOTE_REQUEST_PDF_EMAIL_DEFAULT } from './email-templates/quote-pdf-defaults.js';
 
 /**
  * `quote_requests` — four settings resolvers that belonged to the module
@@ -157,6 +169,14 @@ export interface QuoteRequestsCradle {
    * instance is what the routes of Phase 10b and the enforcement both read.
    */
   readonly quoteRequestNegotiationPolicyService: NegotiationPolicyService;
+  /**
+   * Feature 153 — the quote PDF: choices, remembered template, download and
+   * the e-mail (`specs/153-quote-request-pdf-template/`).
+   */
+  readonly quoteRequestDocumentService: QuoteRequestDocumentService;
+  readonly quoteRequestPdfMaxAttachmentBytes: number;
+  /** `transactional_emails`' sender, read per send (the `crm` and `returns` precedent). */
+  readonly transactionalEmailSenderAccessor: () => TransactionalEmailSender | undefined;
   readonly rfqService: ReturnType<typeof quoteRequestsModule>['handle'] extends () => infer H
     ? H extends { rfqService: infer S }
       ? S
@@ -517,6 +537,9 @@ export function registerModule(ctx: ModuleContext): void {
             setting(QUOTE_REQUESTS_SETTING_CODES.BUSINESS_ID_PREFIX, z.string(), ''),
           resolveBusinessIdSuffix: () =>
             setting(QUOTE_REQUESTS_SETTING_CODES.BUSINESS_ID_SUFFIX, z.string(), ''),
+          // Feature 153 — the quote PDF routes' service, resolved when the
+          // routes are mounted.
+          documentService: () => ctx.cradle<QuoteRequestsCradle>().quoteRequestDocumentService,
         });
       })
       .singleton(),
@@ -624,6 +647,75 @@ export function registerModule(ctx: ModuleContext): void {
   ctx.onBoot(() => {
     lazyPort<AdminSearchProviderRegistryPort>(ctx, 'adminSearchProviderRegistry').register(
       createQuoteRequestAdminSearchProvider(quoteRequestAdminSearchDeps(ctx)),
+    );
+  });
+
+  // ---------------------------------------------------------------------------
+  // Feature 153 — the quote PDF (`specs/153-quote-request-pdf-template/`)
+  // ---------------------------------------------------------------------------
+  ctx.di.register({
+    /**
+     * The largest PDF the send attaches (owner answer Q4, FR-097). A
+     * registration rather than a constant so a composition — and the contract
+     * suite — can lower it without producing a 10 MiB document.
+     */
+    quoteRequestPdfMaxAttachmentBytes: ctx.asValue<number>(QUOTE_REQUEST_PDF_LIMITS.maxAttachmentBytes),
+    quoteRequestDocumentService: ctx
+      .asFunction(
+        ({ emFactory, commandBus }: QuoteRequestsCradle) =>
+          new QuoteRequestDocumentService({
+            emFactory,
+            commandBus,
+            salesRepScope: lazyPort<SalesRepAssignmentPort>(ctx, 'organizationSalesRepScopePort'),
+            // `refuses-without`: resolved per call and never probed, so while
+            // document templates are off every quote PDF route answers 503.
+            renderPort: () => lazyPort<DocumentRenderPort>(ctx, 'documentRenderPort'),
+            builder: new QuoteDocumentDataBuilder({
+              catalogProducts: lazyPort<CatalogProductReadPort>(ctx, 'catalogProductReadPort'),
+              attributes: lazyPort<CatalogAttributeReadPort>(ctx, 'catalogAttributeReadPort'),
+              customFieldDefinitions: lazyPort<CustomFieldDefinitionReadPort>(ctx, 'customFieldDefinitionReadPort'),
+              organizations: lazyPort<OrganizationDetailsPort>(ctx, 'organizationDetailsPort'),
+              customerAccounts: lazyPort<CustomerAccountReadPort>(ctx, 'customerAccountReadPort'),
+              adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+              // A kernel registration: no module edge.
+              salesChannels: lazyPort<SalesChannelResolutionPort>(ctx, 'salesChannelResolutionPort'),
+              taxRate: (organizationId) => ctx.cradle<QuoteRequestsCradle>().rfqTaxRateResolver(organizationId),
+            }),
+            customerAccounts: lazyPort<CustomerAccountReadPort>(ctx, 'customerAccountReadPort'),
+            // A function announced late; `lazyPort` forwards method calls only,
+            // so it is read off the cradle per send (the `crm` precedent).
+            sender: () => ctx.cradle<QuoteRequestsCradle>().transactionalEmailSenderAccessor(),
+            log: (message, context) => ctx.log.warn(context, message),
+            maxAttachmentBytes: () => ctx.cradle<QuoteRequestsCradle>().quoteRequestPdfMaxAttachmentBytes,
+          }),
+      )
+      .singleton(),
+  });
+
+  /**
+   * The *Quote request* document type — a **contribution** hook: it pushes an
+   * inert registration into `document_templates`' ungated registry and carries
+   * no presence probe (`specs/conventions/module-activation.md`). The registry
+   * answers the type only while this module is present, so switching it off
+   * hides the type and its templates and deletes nothing.
+   */
+  ctx.onBoot(() => {
+    const attributes = lazyPort<CatalogAttributeReadPort>(ctx, 'catalogAttributeReadPort');
+    lazyPort<DocumentTypeRegistryPort>(ctx, 'documentTypeRegistry').register(
+      createQuoteRequestDocumentType({ attributes: () => attributes.listByFlag('isVisibleOnProductPage') }),
+    );
+  });
+
+  /**
+   * The *Quote request PDF* e-mail's default subject and body (owner answer
+   * Q4) — a **contribution** hook into `emailDefaultsPort`, the ungated
+   * registry `transactional_emails` reads once at boot; no presence probe.
+   */
+  ctx.onBoot(() => {
+    lazyPort<EmailDefaultsRegistryPort>(ctx, 'emailDefaultsPort').register(
+      QUOTE_REQUEST_PDF_EMAIL_CODE,
+      QUOTE_REQUEST_PDF_EMAIL_DEFAULT,
+      'quote_requests',
     );
   });
 

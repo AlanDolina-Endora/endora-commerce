@@ -4,7 +4,7 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
-import { FIXTURE_DOCUMENT_TYPE, registerFixtureDocumentType } from '../../fixtures/document-types/fixture-document-type.js';
+import { QUOTE_REQUEST_DOCUMENT_TYPE as DOCUMENT_TYPE } from '@endora-commerce/contracts';
 
 /**
  * `specs/152-compare-pdf-template/` T051 — FR-005: concurrent *Set as default*
@@ -20,12 +20,11 @@ describe('document templates — set-default race (spec 152)', () => {
 
   beforeAll(async () => {
     h = await setupBackendServer();
-    registerFixtureDocumentType(h);
-    await h.em().getConnection().execute(`delete from document_templates where document_type = ?`, [FIXTURE_DOCUMENT_TYPE]);
+    await h.em().getConnection().execute(`delete from document_templates where document_type = ?`, [DOCUMENT_TYPE]);
   });
 
   afterAll(async () => {
-    await h.em().getConnection().execute(`delete from document_templates where document_type = ?`, [FIXTURE_DOCUMENT_TYPE]);
+    await h.em().getConnection().execute(`delete from document_templates where document_type = ?`, [DOCUMENT_TYPE]);
     await teardownBackendServer(h);
   });
 
@@ -36,7 +35,7 @@ describe('document templates — set-default race (spec 152)', () => {
           method: 'POST',
           url: API,
           cookies: ADMIN,
-          payload: { documentType: FIXTURE_DOCUMENT_TYPE, name: `Race ${n}`, salesChannelId: null, source: { kind: 'built_in' } },
+          payload: { documentType: DOCUMENT_TYPE, name: `Race ${n}`, salesChannelId: null, source: { kind: 'built_in' } },
         });
         return (res.json() as { data: { id: string } }).data.id;
       }),
@@ -47,7 +46,7 @@ describe('document templates — set-default race (spec 152)', () => {
     expect(results.map((r) => r.statusCode)).toEqual([200, 200, 200, 200]);
     const rows = (await h.em().getConnection().execute(
       `select count(*)::int as n from document_templates where document_type = ? and is_default and sales_channel_id is null`,
-      [FIXTURE_DOCUMENT_TYPE],
+      [DOCUMENT_TYPE],
     )) as { n: number }[];
     expect(rows[0]!.n).toBe(1);
   });

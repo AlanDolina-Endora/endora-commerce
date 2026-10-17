@@ -56,6 +56,7 @@ import {
   CUSTOMER_EVENT_KEYS,
   CUSTOMER_ITEM_KEYS,
   customerEventPayload,
+  customerEventsOf,
   pickKeys,
 } from './customer-projection.js';
 import { assertDraftOpenForCustomer, submissionRecordProposals } from './draft-guard.js';
@@ -1195,7 +1196,7 @@ export class RfqService {
             item.desiredUnitPrice ?? submittedProposals.get(it.id) ?? null,
         };
       }),
-      events: events.map((e) => {
+      events: (forAdmin ? events : customerEventsOf(events)).map((e) => {
         const event = {
           id: e.id,
           eventType: e.eventType,
@@ -1220,6 +1221,9 @@ export class RfqService {
       expiresAt: rfq.expiresAt?.toISOString() ?? null,
       convertedOrderId: rfq.convertedOrderId ?? null,
       taxRate,
+      // Feature 153 (owner answer Q2) — the remembered PDF template, admin
+      // replies only; the customer reply carries no key.
+      ...(includeFullActorIdentity ? { documentTemplateId: rfq.documentTemplateId ?? null } : {}),
       createdAt: rfq.createdAt.toISOString(),
       updatedAt: rfq.updatedAt.toISOString(),
       version: rfq.version,

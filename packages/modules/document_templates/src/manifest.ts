@@ -78,24 +78,20 @@ export const manifest = defineModuleManifest({
       icon: 'FileText',
       targetRoute: '/document-templates',
       requiredPermission: 'document_templates:read',
+      // At most ten (the action schema). Matched as substrings, so a generic
+      // word an entry already contains ('pdf', 'szablon') needs no entry of
+      // its own; the label and description are searched too.
       keywords: [
-        'pdf',
-        'template',
         'document template',
         'comparison pdf',
         'invoice template',
-        'szablon',
         'szablon pdf',
         'szablon faktury',
         'porównanie',
-        'dokument',
         // Feature 153 (FR-072) — the quote request PDF templates.
         'quote pdf',
         'offer template',
-        'quote template',
         'szablon oferty',
-        'oferta pdf',
-        'zapytanie ofertowe',
         'zapytanie ofertowe pdf',
       ],
       weight: 650,

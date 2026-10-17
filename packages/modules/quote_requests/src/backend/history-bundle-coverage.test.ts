@@ -78,7 +78,7 @@ const REQUIRED = [
 
 describe('quote request history — bundle coverage (T058)', () => {
   it('iterates the full schema enums', () => {
-    expect(ENTRY_KINDS).toHaveLength(12);
+    expect(ENTRY_KINDS).toHaveLength(13);
     expect(CHANGE_KINDS).toHaveLength(8);
   });
 
