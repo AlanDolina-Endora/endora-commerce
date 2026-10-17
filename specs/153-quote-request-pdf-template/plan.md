@@ -2,9 +2,9 @@
 
 **Branch**: `feat/153-quote-request-pdf-template` | **Date**: 2026-10-17 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `specs/153-quote-request-pdf-template/spec.md` — owner decisions
-D1–D3 fixed; open questions Q1–Q7 carry recommended defaults adopted provisionally (each marked in the
-spec). The section *What each open question changes* says exactly which part of this plan moves if the
-owner answers differently.
+D1–D3 fixed; the owner answered Q1–Q7 on 2026-10-17 (spec *Clarifications*): the recommended defaults
+for Q1–Q3 and Q5–Q7, and for Q4 a *Send PDF to customer* action (research R-27). The section *Owner
+answers and what they changed* records the effect of each.
 
 ## Summary
 
@@ -34,20 +34,23 @@ chosen language. Quote templates are designed in *Document templates* — the fa
 - **`refuses-without`** edge: while document templates are off, export is unavailable and hidden (R-16).
 - **The repeater is parked, its prerequisites are not** (R-23): collections, field paths, scoped
   conditions and the reserved `{{item.<path>}}` grammar.
+- **Send PDF to customer** (owner answer Q4, R-27): route Q4 renders as the export does and sends the
+  operator-editable transactional e-mail `quote_request_pdf` with the PDF attached to 1–5 recipients
+  through an audited Command `quote_request.send_document`, recorded as a `pdf-sent` history event.
 - The 152 test-only stand-in is replaced by the real type (R-24). No new runtime dependency, no cache,
-  no event; one migration.
+  no domain event; two migrations (the remembered template column, the `pdf-sent` event type).
 
 ## Technical Context
 
 **Language/Version**: TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM
 **Primary Dependencies**: Fastify, MikroORM (PostgreSQL), Zod, `pdfmake` (backend); React 19 + Vite through `@endora-commerce/admin-kit`, `@puckeditor/core`, `@endora-commerce/page-builder-core` (admin) — **no new runtime dependency**
-**Storage**: PostgreSQL — one nullable column `quote_requests.document_template_id` owned by `quote_requests` (one migration, no FK); Line items table settings inside the existing `document_templates.content` jsonb
+**Storage**: PostgreSQL — one nullable column `quote_requests.document_template_id` owned by `quote_requests` (one migration, no FK); `qre_event_type_check` widened by `pdf-sent` (one migration); Line items table settings inside the existing `document_templates.content` jsonb
 **Testing**: Vitest — co-located `*.test.ts` in `packages/contracts/src`, `packages/modules/{document_templates,quote_requests}/src/**`; `backend/test/contract/{document_templates,quote_requests}/`; `backend/test/integration/quote_requests/`; `backend/test/perf/quote_requests/pdf-export.bench.ts`; `admin/test/modules/{document_templates,quote_requests}/` (`<StrictMode>`, `axe-core`)
 **Target Platform**: Linux server; admin SPA in evergreen browsers
 **Project Type**: web application — monorepo (`backend/`, `admin/`, `packages/`)
 **Performance Goals**: 200-line quote export p95 < 5 s; dialog data (route Q1) p95 < 300 ms; render reads ≤ 2 indexed template rows + one read per data port
-**Constraints**: ItemsTable 1–16 columns, ≤ 8 detail entries, ≤ 10 totals; 152 content limits unchanged; pdfmake URL access denied; quote data built under the requesting admin's visibility
-**Scale/Scope**: `document_templates` (1 block, 1 category, registration member `collections`, port member `listChoices`, route 2 extended, ~6 new source files, 1 admin custom-field set); `quote_requests` (1 document type, 4 blocks, 1 collection, 1 Command, 3 routes, 1 migration, 1 dialog, 4 canvas renderers); contracts (2 files extended); docs (2 module pages × 2 languages); tests replaced: 1 fixture
+**Constraints**: send: 1–5 recipients, message ≤ 2000, PDF ≤ 10 MiB, 10 sends / admin / minute; ItemsTable 1–16 columns, ≤ 8 detail entries, ≤ 10 totals; 152 content limits unchanged; pdfmake URL access denied; quote data built under the requesting admin's visibility
+**Scale/Scope**: `document_templates` (1 block, 1 category, registration member `collections`, port member `listChoices`, route 2 extended, ~6 new source files, 1 admin custom-field set); `quote_requests` (1 document type, 4 blocks, 1 collection, 2 Commands, 4 routes, 2 migrations, 1 transactional e-mail, 1 dialog in two modes, 4 canvas renderers); contracts (2 files extended); docs (2 module pages × 2 languages); tests replaced: 1 fixture
 
 ## Constitution Check
 
@@ -67,11 +70,11 @@ chosen language. Quote templates are designed in *Document templates* — the fa
 | **X. Queue consumers** | N/A | Export is request-bounded; nothing repeatable. |
 | **XI. Tenancy (NN)** | Pass | Column on the `@OrgScoped` quote row; data built under the admin's visibility (sales-rep scope); templates stay `@GlobalEntity` configuration. Cross-organisation tests. |
 | **XII. Channel scoping (NN)** | Pass | `listChoices`, the Command and `render` accept global or same-channel templates only; null channel → global only. Cross-channel tests. |
-| **XIII. Command Bus (NN)** | Pass | Remembering is `quote_request.set_document_template` with before/after audit and `skipAudit` on no change; template writes stay the facility's Commands; export is a read (Q6). |
+| **XIII. Command Bus (NN)** | Pass | Remembering is `quote_request.set_document_template` with before/after audit and `skipAudit` on no change; sending is `quote_request.send_document` (audit: template, language, recipients — no bytes); template writes stay the facility's Commands; a download is a read (Q6). |
 | **XIV. Entity-agnostic extensibility** | Pass | The facility stays opaque to host data: it formats typed values a host declares; product attributes reach the PDF as catalogue fields, not bespoke columns. |
 | **XV. Overlay** | Pass | An overlay module can declare a collection on its own type and get the table (SC-007). |
 | **XVI. Palette** | Pass | `open-document-templates` gains quote keywords; the quote surface keeps `open-rfq-inbox`. |
-| **XVII. Toggleable (NN)** | Pass | `refuses-without` for the render port (export hidden and refused while the facility is off, choices kept); `contributes-to` for the registry (type invisible while quotes are off, rows kept); off-state tests for both directions. |
+| **XVII. Toggleable (NN)** | Pass | `refuses-without` for the render port (export and send hidden and refused while the facility is off, choices kept); `contributes-to` for the registry (type invisible while quotes are off, rows kept); `transactional_emails` is a binding dependency but `nonDeactivatable`, so it makes no switch dead — its per-e-mail switch refuses the send (409); off-state tests for every direction. |
 
 ## Project Structure
 
@@ -115,15 +118,19 @@ packages/modules/quote_requests/
 ├── src/backend/index.ts                 # contribution hook, builder, routes
 ├── src/backend/document/{quote-request-document-type,quote-lines,data-builder,texts,built-in-layout,sample}.ts (+ tests)   # NEW
 ├── src/backend/document/blocks/{header,parties,notes,details}.ts (+ test)               # NEW
-├── src/backend/commands/document-template-commands.ts (+ test)                          # NEW
-├── src/backend/routes.admin.ts          # Q1–Q3
+├── src/backend/commands/document-template-commands.ts (+ test)                          # NEW — remember + send
+├── src/backend/email-templates/quote-pdf-defaults.ts                                   # NEW — e-mail defaults en/pl
+├── src/migrations/<stamp>_quote_requests_quote_request_event_pdf_sent.ts               # via migration:new
+├── src/backend/services/history/history-projection.ts   # pdf_sent kind
+├── src/backend/routes.admin.ts          # Q1–Q4
 ├── src/backend/services/rfq-service.ts  # admin reply documentTemplateId
-├── src/admin/components/QuoteRequestPdfDialog.tsx   src/admin/pages/RfqDetail.tsx
+├── src/admin/components/QuoteRequestPdfDialog.tsx   src/admin/pages/RfqDetail.tsx   src/admin/pages/RfqHistory.tsx
 ├── src/admin/document-blocks/{QuoteHeader,QuoteParties,QuoteNotes,QuoteDetails,canvas}.tsx   # NEW
 ├── src/admin/index.ts                   # block contributions (context 'document')
 ├── i18n/{en,pl}.json   docs/quote_requests.md
 
 backend/test/contract/quote_requests/pdf-export.test.ts                         # NEW
+backend/test/contract/quote_requests/pdf-send.test.ts                           # NEW (Q4)
 backend/test/contract/document_templates/{second-type,admin-api,off-state}.test.ts   # re-targeted
 backend/test/fixtures/document-types/fixture-document-type.ts                   # DELETED (R-24)
 backend/test/integration/quote_requests/document-template-column.test.ts        # NEW (schema, tenancy)
@@ -145,6 +152,7 @@ if any `package.json` body changes, `pnpm install --lockfile-only` beside it.
 | Step | Owner | Mechanism |
 | --- | --- | --- |
 | `alter table quote_requests add column document_template_id uuid null` | `quote_requests` | `pnpm --filter backend run migration:new -- --module quote_requests --name quote_request_document_template`; `composer:generate` |
+| widen `qre_event_type_check` by `pdf-sent` | `quote_requests` | `migration:new -- --module quote_requests --name quote_request_event_pdf_sent`; `composer:generate` |
 
 No migration in `document_templates` (settings live in jsonb). No cross-module FK, read or write
 (`check:module-boundary` R1/R2 clean). Order derived from `dependencies` as usual.
@@ -172,26 +180,27 @@ it; it never joins a work hook.
 
 | Concern | Design |
 | --- | --- |
-| Admin permissions | none new; `rfqs:handle` + visibility for Q1–Q3; `document_templates:read/write` unchanged |
+| Admin permissions | none new; `rfqs:handle` + visibility for Q1–Q4; `document_templates:read/write` unchanged |
+| Transactional e-mail | `quote_request_pdf` declared in the manifest, defaults en + pl via `emailDefaultsPort` (contribution-only boot hook) |
 | Command palette | `open-document-templates` keywords += quote words (FR-072) |
 | pl + en | both bundles of both modules; `texts.ts` maps; built-in layout per language; docs pl + en |
 | Settings | none (no secret, no knob) |
-| Auditing | `quote_request.set_document_template`; facility Commands unchanged |
+| Auditing | `quote_request.set_document_template`, `quote_request.send_document`; facility Commands unchanged |
 | Tenancy / channels | R-19 |
 | Redis cache invalidation | none needed — no cache (R-25) |
 | Module activation | `refuses-without` + `contributes-to`; off-state tests (R-16) |
 
-## What each open question changes
+## Owner answers and what they changed
 
-| Q | Default adopted | If answered otherwise |
+| Q | Owner answer (2026-10-17) | Effect on this plan |
 | --- | --- | --- |
-| Q1 storefront export | admin only | add a customer route under `quote_requests`' customer routes rendering with the remembered template and a new render input `audience: 'customer'`; the facility blanks `internal` fields (R-26); storefront button + i18n; customer-visibility tests |
-| Q2 remember choice | stored on the quote | drop the column, migration, Command, Q2 route and FR-005; dialog preselects the default every time |
-| Q3 exportable states | all | add a state guard in Q3 (and hide the button) — no design change elsewhere |
-| Q4 e-mail attachment | no | a `quote_requests` notification path rendering through the port with the remembered template; touches `transactional_emails` attachment support |
-| Q5 language | chosen in the dialog | remove the language select; always `suggestedLanguage` |
-| Q6 export recorded | no | an `audit` entry per export (a read-side audit write — needs an owner ruling on Principle XIII's scope) or an RFQ event (customer-visible filtering applies) |
-| Q7 internal fields | allowed with warning | remove `internal` fields from the quote catalogue, or gate them on a new permission checked at save |
+| Q1 storefront export | admin only (recommended) | none — no customer route, no `audience` render input (R-26 stays a design note) |
+| Q2 remember choice | stored, audited, preselected (recommended) | none — column, Command `set_document_template`, route Q2 as designed |
+| Q3 exportable states | every state (recommended) | none — no state guard |
+| Q4 e-mail | **changed**: a *Send PDF to customer* action | R-27: route Q4, Command `send_document`, transactional e-mail `quote_request_pdf`, `pdf-sent` event type + migration, history kind `pdf_sent`, `requesterEmail` on the choices, dialog send mode, `transactional_emails` dependency, three error codes, US8 / FR-090–FR-099 / SC-009, tasks T055–T066 |
+| Q5 language | chosen in the dialog (recommended) | none — the send uses the same language for the e-mail |
+| Q6 export recorded | no audit for a download (recommended) | none — sending is audited (Q4), a download is not |
+| Q7 internal fields | allowed with warning (recommended) | none |
 
 ## Requirement → test
 
@@ -211,6 +220,7 @@ it; it never joins a work hook.
 | FR-061, SC-006 | `backend/test/contract/document_templates/off-state.test.ts`, `pdf-export.test.ts` |
 | FR-026, FR-032 (editor) | `admin/test/modules/document_templates/items-table-editor.test.tsx` |
 | SC-003 | `backend/test/perf/quote_requests/pdf-export.bench.ts` |
+| FR-090–FR-099, SC-009 | `backend/test/contract/quote_requests/pdf-send.test.ts`, `QR/src/backend/commands/document-template-commands.test.ts`, `QR/src/backend/services/history/history-projection.test.ts`, `admin/test/modules/quote_requests/pdf-dialog.test.tsx` |
 
 ## Complexity Tracking
 
@@ -222,6 +232,7 @@ No constitution violation; **no new runtime dependency**. Choices that add surfa
 | Pure formatter/condition functions in `contracts` | one behaviour for PDF and canvas (R-5) | two implementations disagree |
 | `listChoices` on the render port | representatives pick without template-management rights (R-14) | requiring `document_templates:read` couples permission domains |
 | `document_template_id` column without FK | D1 + Q2; survives template deletion (R-13) | a FK cascades or blocks deletes across modules |
+| Synchronous send inside the request (≤ 5 e-mails) | Q4: the representative needs an honest, immediate answer (R-27) | a queue would need the PDF stored between request and worker and hides failures |
 
 ## Handoff summary for `endora-commerce-dev`
 
@@ -238,5 +249,5 @@ No constitution violation; **no new runtime dependency**. Choices that add surfa
    (`AGENTS.md` traps).
 7. Changesets: contracts (minor), document_templates (minor), quote_requests (minor). Re-record the
    OpenAPI baseline.
-8. Verify per the final task; walk `quickstart.md` before merge. Do not implement Q1/Q4/Q6
-   alternatives unless the owner answers so.
+8. Verify per the final task; walk `quickstart.md` before merge. Q1 and Q6 alternatives are not built
+   (owner answers); Q4 is built as *Send PDF to customer* (R-27).

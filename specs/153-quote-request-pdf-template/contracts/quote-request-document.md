@@ -64,7 +64,7 @@ core `Text` with "Prices are net unless stated otherwise." / "Ceny netto, o ile 
 Root: footer `{{quoteNumber}} · {{date}}`, page numbers on.
 
 Note: the built-in layout prints internal columns (list price, discount %) **only when a line has a
-discount** — the owner's example. Q7 decides whether that default stays.
+discount** — the owner's example; the owner confirmed internal fields may print (Q7).
 
 ## 6. Admin routes (`QR/src/backend/routes.admin.ts`, `ctx.routes`)
 
@@ -78,6 +78,7 @@ Each resolves `documentRenderPort` through `lazyPort` **without** a presence pro
 | Q1 | `GET /api/v1/admin/quote-requests/:id/document-templates` | — | `{ data: QuoteRequestDocumentChoices }` |
 | Q2 | `PUT /api/v1/admin/quote-requests/:id/document-template` | `{ documentTemplateId: uuid \| null }` | `{ data: { documentTemplateId } }`; runs §7 |
 | Q3 | `GET /api/v1/admin/quote-requests/:id/pdf` | `templateId?: uuid`, `language?: lang` | `application/pdf`, headers below |
+| Q4 | `POST /api/v1/admin/quote-requests/:id/pdf/send` | `QuoteRequestPdfSendRequest` (`data-model.md` §4.5) | `{ data: QuoteRequestPdfSendResult }`; runs §7b — owner answer Q4 |
 
 ```ts
 // CT/quote-requests.ts
@@ -88,6 +89,7 @@ QuoteRequestDocumentChoices = {
   effectiveDefaultId: uuid | null;           // null = built-in layout
   builtInLanguages: string[];
   suggestedLanguage: string;                 // channel default language (system default channel when none)
+  requesterEmail: string | null;             // the requesting customer's e-mail — Q4's preselected recipient
 }
 ```
 
@@ -102,12 +104,37 @@ Q3:
    `X-Document-Template-Missing: true|false`. Render failure → the facility's 503
    `DOCUMENT_RENDER_FAILED` envelope, logged with `{ quoteRequestId, templateId, blockName }`.
 
+Q4 (owner answer Q4, research R-27): body validated (`QuoteRequestPdfSendRequest`; 400 before
+anything is read); per-admin rate limit 10 / minute (429); steps 1–3 of Q3; a PDF over
+`QUOTE_REQUEST_PDF_MAX_ATTACHMENT_BYTES` → 422 `QUOTE_REQUEST_PDF_TOO_LARGE` (`details.maxBytes`),
+nothing sent; then §7b. Answer `{ data: { sent, failed, templateId, templateSource,
+requestedTemplateMissing } }`.
+
 ## 7. Command `quote_request.set_document_template`
 
 `QR/src/backend/commands/document-template-commands.ts`, the 146 idiom
 (`negotiation-policy-commands.ts`): authority step inside `run` (visibility, 404), validation through
 `listChoices` (422), find → assign → flush in the unit of work, `skipAudit` when unchanged, audit
 `before/after { documentTemplateId }`. `version` untouched (FR-010).
+
+## 7b. Command `quote_request.send_document` (owner answer Q4)
+
+Same file. Authority step inside `run` (visibility, 404). For each recipient, in order:
+`transactionalEmailSenderAccessor()?.send({ code: 'quote_request_pdf', salesChannelId, language, to,
+variables, messageId: 'quote-request-pdf:<sendId>:<n>', attachments: [{ filename, content,
+contentType: 'application/pdf' }], document: { type: 'quote_request', id } })`. No sender, or an
+outcome `deactivated` / `no_transport` / `no_definition` → 409 `QUOTE_REQUEST_PDF_EMAIL_UNAVAILABLE`
+with `details.code` the outcome (the sender answers the same for every recipient, so the loop stops).
+A throw is that recipient's failure; the loop continues. `sent` and `logged` are delivered. None
+delivered → 502 `QUOTE_REQUEST_PDF_SEND_FAILED`. Otherwise one `pdf-sent` event (`data-model.md`
+§1a) and the audit `after`. The quote row, `version` and revisions are untouched.
+
+**E-mail** `quote_request_pdf` (`transactionalEmails` in the manifest; defaults pushed from the
+contribution-only boot hook through `emailDefaultsPort`): variables `quote.number`, `quote.validUntil`
+(formatted in the language, empty when unset), `customer.name`, `salesRep.name`, `salesRep.email`,
+`channel.name`, `message` (empty when none). Default subject `Quote {{var quote.number}}` /
+`Oferta {{var quote.number}}`; body: greeting, the message, "the quote is attached", the
+representative's name and e-mail.
 
 ## 8. Manifest (`QR/src/manifest.ts`) — additions
 
@@ -117,13 +144,19 @@ Q3:
   chosen', reason }`.
 - `blocks` (4, §2) + `blockCategories: [{ key: 'quote', titleKey: 'blocks.category.quote', contexts:
   ['document'], weight: 20 }]`.
-- No new permission, error code, setting or palette action (research R-17).
+- `dependencies` += `transactional_emails` (non-deactivatable; the sender accessor and
+  `emailDefaultsPort`, research R-27).
+- `transactionalEmails` += `quote_request_pdf` (§7b).
+- `errorCodes` += `QUOTE_REQUEST_PDF_TOO_LARGE`, `QUOTE_REQUEST_PDF_EMAIL_UNAVAILABLE` (tokens
+  `deactivated`, `no_transport`, `no_definition`), `QUOTE_REQUEST_PDF_SEND_FAILED` — en + pl sentences.
+- No new permission, setting or palette action (research R-17).
 
 ## 9. Off-states
 
 | Off | Behaviour |
 | --- | --- |
-| `document_templates` | Q1–Q3 → 503 `MODULE_DISABLED`; *Export PDF* hidden; `document_template_id` values kept |
+| `document_templates` | Q1–Q4 → 503 `MODULE_DISABLED`; *Export PDF* and *Send PDF to customer* hidden; `document_template_id` values kept |
+| the `quote_request_pdf` e-mail (operator switch) | Q4 → 409 `QUOTE_REQUEST_PDF_EMAIL_UNAVAILABLE` (`deactivated`), nothing recorded; export unaffected |
 | `quote_requests` | its routes 503 (module gate); type, blocks and templates invisible in the facility; rows kept; the contribution hook still pushes (no probe) and the registry filters by presence |
 | both on again | remembered choices and templates work unchanged |
 
@@ -141,5 +174,13 @@ Q3:
   validation), visibility 404, remembered → explicit → default → built-in resolution (SC-004), stale
   remembered id fallback with header, headers and file name, cross-organisation (sales rep) and
   cross-channel refusals (SC-005), off-state of both modules (SC-006).
+- Send (`backend/test/contract/quote_requests/pdf-send.test.ts`): 401/403 before validation; 400 on
+  malformed / too many / no recipients and an over-long message; visibility 404; delivered to every
+  recipient with the PDF attached and the language's subject (captured transport); remembered template
+  updated on a differing choice; history `pdf_sent` entry and one audit row; e-mail switched off → 409
+  and nothing recorded; transport failure for one recipient → partial result; for all → 502; PDF over
+  the limit → 422; rate limit → 429; document templates off → 503; `version` unchanged.
+- Command unit test: authority before sending; outcome mapping; event and audit content; no PDF bytes
+  in the audit.
 - Replaced fixture (research R-24): `second-type.test.ts` and `admin-api.test.ts` off-state cases on
   `quote_requests.quote_request`.

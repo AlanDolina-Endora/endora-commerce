@@ -2,10 +2,10 @@
 
 **Feature**: `specs/153-quote-request-pdf-template/` | **Date**: 2026-10-17
 
-One schema change, owned by `quote_requests`. No new table. `document_templates` stores the new
+Two schema changes, both owned by `quote_requests`. No new table. `document_templates` stores the new
 block's settings inside its existing `content` jsonb (152 `data-model.md` §3) — no migration there.
 
-## 1. `quote_requests.document_template_id` (owner `quote_requests`) — provisional on Q2
+## 1. `quote_requests.document_template_id` (owner `quote_requests`) — owner answer Q2
 
 | Column | Type | Null | Default | Notes |
 | --- | --- | --- | --- | --- |
@@ -23,6 +23,27 @@ block's settings inside its existing `content` jsonb (152 `data-model.md` §3) �
   the docs.
 - Admin reply (`quoteRequestSchema`) gains `documentTemplateId: uuidSchema.nullable().optional()` —
   admin replies only, absent from the customer reply (`customer-projection.ts` allow-list unchanged).
+
+## 1a. `quote_request_events.event_type` gains `pdf-sent` (owner `quote_requests`) — owner answer Q4
+
+- Scaffolded with `pnpm --filter backend run migration:new -- --module quote_requests --name
+  quote_request_event_pdf_sent`: drops and re-creates `qre_event_type_check` with the eleven existing
+  values plus `pdf-sent`. `down()` restores the eleven (and fails if a `pdf-sent` row exists — the
+  constraint would; accepted, as for every check widening).
+- `QuoteRequestEventType` gains `'pdf-sent'`. Payload (validated by the Command before the write):
+
+  ```jsonc
+  {
+    "recipients": ["buyer@example.com"],   // delivered addresses only, 1–5
+    "templateId": "…" ,                   // uuid, or null for the built-in layout
+    "templateName": "With discounts",     // as rendered; null for the built-in layout
+    "language": "pl-PL",
+    "message": "…"                        // the personal message, or null
+  }
+  ```
+- Written only by the Command `quote_request.send_document` (§4.4), actor = the sending
+  administrator, `revisionId` = null. Read only by the admin History (`kind: 'pdf_sent'`,
+  `delivery: { recipients, templateName, language, message }`).
 
 ## 2. Line items table settings — stored inside a template's tree
 
@@ -214,6 +235,36 @@ Summary fields: `listTotal` (internal), `discountTotal` (internal), `netTotal`, 
 | Effect | `quote.documentTemplateId = id`; `version` untouched |
 | Audit | `before: { documentTemplateId }`, `after: { documentTemplateId }`; `skipAudit: true` when equal |
 
+### 4.4 Command `quote_request.send_document` (owner answer Q4)
+
+| | |
+| --- | --- |
+| Input | `{ quoteRequestId, pdf: { bytes, fileName, templateId, templateName }, language, recipients: string[1..5], message: string \| null, variables }` — the PDF is rendered by the route before the Command runs |
+| Authority (inside the Command) | quote visible to the actor — else 404 |
+| Effect | one `TransactionalEmailSender.send` per recipient (code `quote_request_pdf`, attachment, `document`); then, if at least one was delivered, one `pdf-sent` event |
+| Refusals | 409 `QUOTE_REQUEST_PDF_EMAIL_UNAVAILABLE` (`details.code`: `deactivated` \| `no_transport` \| `no_definition`); 502 `QUOTE_REQUEST_PDF_SEND_FAILED` when none delivered; nothing recorded in both |
+| Audit | `after: { templateId, language, recipients, failedRecipients }` (no `before`); never the PDF bytes or the message |
+| Answer | `{ sent: string[], failed: string[] }` |
+
+### 4.5 `QuoteRequestPdfSendRequest` / `QuoteRequestPdfSendResult` (`CT/quote-requests.ts`)
+
+```ts
+QuoteRequestPdfSendRequest = {
+  templateId?: uuid;            // same meaning as Q3's query parameter
+  language?: string;            // 2–12
+  recipients: string[];         // 1–5 e-mails (≤ 254 each), trimmed, case-insensitively de-duplicated
+  message?: string;             // ≤ 2000
+}
+QuoteRequestPdfSendResult = {
+  sent: string[]; failed: string[];
+  templateId: uuid | null; templateSource: 'requested' | 'remembered' | 'default' | 'built_in' …;
+  requestedTemplateMissing: boolean;
+}
+// QuoteRequestDocumentChoices += requesterEmail: string | null
+// QUOTE_REQUEST_PDF_MAX_RECIPIENTS = 5; QUOTE_REQUEST_PDF_MESSAGE_MAX = 2000;
+// QUOTE_REQUEST_PDF_MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+```
+
 ## 5. State
 
 ```text
@@ -224,3 +275,5 @@ Summary fields: `listTotal` (internal), `discountTotal` (internal), `netTotal`, 
 ```
 
 Facility or quote requests switched off: nothing changes in either table; on again, the same state.
+A refused send writes nothing; a delivered send appends one `pdf-sent` event and never changes the
+quote row.

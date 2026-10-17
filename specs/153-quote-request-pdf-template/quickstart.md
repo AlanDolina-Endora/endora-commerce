@@ -90,3 +90,17 @@ Create three quote requests:
 ## 8. Reserved placeholder (FR-045)
 
 Add a *Text* block with `{{item.sku}}` → the PDF prints `{{item.sku}}` literally.
+
+## 9. Send PDF to customer (US8, FR-090–FR-099, owner answer Q4)
+
+1. QA-1 → *Send PDF to customer*: template and language preselected as for the export; the requester's
+   e-mail is the only recipient. Add `buyer2@example.com` and a short message → *Send*. Both addresses
+   receive one e-mail each (dev: the console mail driver logs them; with SMTP: the inbox) with
+   `<QA-1 number>.pdf` attached and the message in the body (FR-093).
+2. QA-1 → *History*: one *PDF sent* entry naming both addresses, the template and the language;
+   *Audit log*: one `quote_request.send_document` entry without the PDF (FR-096).
+3. Try `not-an-address` and a sixth recipient: the dialog refuses before sending (FR-092).
+4. *E-mail templates* → *Quote request PDF*: edit the Polish subject; send again in Polish → the new
+   subject is used (FR-094). Switch the e-mail off → *Send* answers that the e-mail is switched off;
+   nothing new on the History (FR-097).
+5. Switch *Document templates* off → neither *Export PDF* nor *Send PDF to customer* is shown (FR-099).

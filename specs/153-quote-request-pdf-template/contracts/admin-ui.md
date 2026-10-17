@@ -35,6 +35,23 @@ component states). Reuse: `@endora-commerce/admin-kit` (`ModalDialog`, `Select`,
 - States: loading (skeleton rows), empty (only the built-in layout — still exportable), error (retry),
   conflict impossible (no versioned write).
 
+## 1a. Quote detail — *Send PDF to customer* (owner answer Q4)
+
+- A secondary button *Send PDF to customer* (icon `Send`) beside *Export PDF*, under the same
+  conditions plus `isPresent('transactional_emails')`.
+- Opens the same `QuoteRequestPdfDialog` in **send** mode: the template select, language select,
+  missing-template warning, remembered hint and *Manage PDF templates* link of §1, then:
+  - **Recipients** — a list of e-mail inputs, the first preselected with `requesterEmail` (none when
+    `null`); *Add recipient* (disabled at 5 with the reason as visible text), *Remove* per row; each
+    input validated on blur and on submit (`errors` shown under the input, `aria-invalid`,
+    `aria-describedby`); duplicates flagged.
+  - **Personal message** — optional textarea, counter `n / 2000`.
+  - **Primary** *Send* → route Q4 with the same `templateId` rule as the download (the built-in /
+    Q2-`null` rule too). Busy state disables the buttons and shows "Sending…". Success: toast "PDF sent
+    to N recipient(s)", dialog closes, the History is refreshed. Partial: warning toast naming the
+    failed addresses, dialog closes. Failure: the dialog stays open with the translated
+    `errors.<CODE>[.<token>]` sentence.
+
 ## 2. Line items table editor (`DT/src/admin/blocks/items-table/`)
 
 Supplied by the facility's `coreBlockCanvas` for `document_templates.ItemsTable`: a canvas renderer and
@@ -94,7 +111,11 @@ fontSize, stripedRows, stripeColor, emptyText), `itemsTable.canvas.hiddenInSampl
 `documentTypes.quoteRequest.collections.lines`, `blocks.quoteHeader|quoteParties|quoteNotes|quoteDetails
 .label/.description`, `blocks.category.quote`, `pdf.export`, `pdf.dialog.title`, `.template`,
 `.builtIn`, `.default`, `.allChannels`, `.language`, `.remembered`, `.rememberedMissing`, `.manage`,
-`.download`, `.downloading`, `.error`, `.fallbackUsed`.
+`.download`, `.downloading`, `.error`, `.fallbackUsed`; owner answer Q4: `pdf.send`,
+`pdf.sendDialog.title`, `.recipients`, `.recipientsHint`, `.addRecipient`, `.removeRecipient`,
+`.recipientLimit`, `.recipientInvalid`, `.recipientDuplicate`, `.recipientRequired`, `.message`,
+`.messageCounter`, `.send`, `.sending`, `.sent`, `.partial`; history `history.kind.pdf_sent`,
+`history.pdfSent.recipients`, `.template`, `.builtIn`, `.language`, `.message`.
 
 Backend-printed texts (catalogue names, built-in layout, block defaults, status labels on the PDF) live in
 `QR/src/backend/document/texts.ts` (research R-20), not in the bundles.
@@ -104,6 +125,9 @@ Backend-printed texts (catalogue names, built-in layout, block defaults, status 
 - Dialog: hidden while the facility is absent; preselection rules (remembered / missing → default /
   built-in); language list follows the template; download calls Q3 with `templateId` only when needed;
   error and busy states; *Manage PDF templates* only with the permission; no axe violations.
+- Send mode: hidden while either module is absent; requester preselected; invalid / duplicate /
+  sixth recipient refused in the UI; message counter; Q4 body (`recipients`, `message`, `templateId`
+  rule); success, partial and error states; no axe violations.
 - Columns field: add from the grouped picker, reorder by keyboard with announcement, edit and remove,
   limit message, unknown-field and Internal badges; detail/totals/grouping fields write the props shape of
   `data-model.md` §2; canvas hides `never` and `any_has_value`-without-value columns as the PDF would.

@@ -13,9 +13,8 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain — **seven remain by design (Q1–Q7)**, each with a
-  recommended default the spec and plan adopt provisionally; `plan.md` § *What each open question
-  changes* states the delta of every alternative. Owner decisions D1–D3 are fixed.
+- [x] No [NEEDS CLARIFICATION] markers remain — the owner answered Q1–Q7 on 2026-10-17 (spec
+  *Clarifications*); Q4 added *Send PDF to customer* (US8). Owner decisions D1–D3 are fixed.
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -40,4 +39,4 @@
   D2 places the machinery there; they stay user-observable (palette contents, printed table, editor).
 - FR-045 (reserved `{{item.…}}` placeholder) is the one observable trace of D3 and is tested.
 - "Internal field" (Q7) reuses feature 146's classification of admin-only quote data.
-- Validation iterations: 1.
+- Validation iterations: 2 (the second after the owner's answers to Q1–Q7).

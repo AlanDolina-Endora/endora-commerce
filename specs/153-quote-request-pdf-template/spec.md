@@ -2,9 +2,9 @@
 
 **Feature Branch**: `feat/153-quote-request-pdf-template` (spec directory `specs/153-quote-request-pdf-template/`)
 **Created**: 2026-10-17
-**Status**: Draft — owner decisions D1–D3 (below) are fixed; the open questions Q1–Q7 carry a
-recommended default that this specification and the plan adopt provisionally, each marked
-`[NEEDS CLARIFICATION]` where it changes a requirement.
+**Status**: Ready for implementation — owner decisions D1–D3 (below) are fixed and the owner answered
+the open questions Q1–Q7 on 2026-10-17 (*Clarifications*). Q4 was answered differently from the
+recommendation: a *Send PDF to customer* action is in scope (User Story 8, FR-090–FR-099).
 **Input**: Product-owner request, verbatim: *"Dodać możliwość eksportu Zapytania Ofertowego do PDF z
 możliwością wyboru szablonu PDF dla Zapytania Ofertowego. Idealnie byłoby, gdyby wygląd szablonu PDF
 dla Zapytania Ofertowego można było tworzyć z wykorzystaniem Page Builder, na podobnej zasadzie jak
@@ -44,7 +44,7 @@ only on the admin and storefront screens.
 - **Quote template** — a document template of the *Quote request* document type (`specs/152-…`
   vocabulary: scope, default, built-in layout, language layouts).
 - **Chosen template** — the quote template a representative picked for one quote; remembered on that
-  quote (provisional, Q2).
+  quote (Q2).
 - **Line items table** — a block that prints a document's lines as a table whose columns the template
   defines.
 - **Line field** — one piece of information about a line the table can show (product name, quantity,
@@ -59,35 +59,36 @@ only on the admin and storefront screens.
 
 ## Clarifications
 
-### Open questions — recommended defaults adopted provisionally
+### Session 2026-10-17 — owner answers to Q1–Q7
 
-- **Q1 — Who may export?** `[NEEDS CLARIFICATION]` Recommended: **administrators only** in this
-  release (a representative with access to the quote). Alternatives: (a) also the customer from the
-  storefront quote page, with the chosen template and internal fields left blank; (b) the customer
-  only after the quote is approved.
-- **Q2 — Is the chosen template stored on the quote?** `[NEEDS CLARIFICATION]` Recommended: **yes** —
-  the last template a representative exported with is remembered on the quote, audited, and
-  preselected next time for everybody. Alternatives: (a) not stored, the default is preselected every
-  time; (b) stored and also printed on the quote's history timeline.
-- **Q3 — In which states may a quote be exported?** `[NEEDS CLARIFICATION]` Recommended: **every
-  state**; lines without an agreed price print an empty price and the totals are left out.
-  Alternatives: (a) only when every line has an agreed price (as for accepting); (b) only *Created from
-  admin*, *Approved* and *Completed*.
-- **Q4 — Is the PDF attached to the quote e-mail?** `[NEEDS CLARIFICATION]` Recommended: **no** in
-  this release; the representative downloads and sends it. Alternatives: (a) attach it to the e-mail
-  telling the customer about a new offer revision, using the chosen template; (b) a *Send PDF to
-  customer* action.
-- **Q5 — Which language?** `[NEEDS CLARIFICATION]` Recommended: the representative **picks the
-  language in the export dialog**, preselected with the default language of the quote's sales channel.
-  Alternatives: (a) always the channel's default language, no choice; (b) the representative's admin
-  language.
-- **Q6 — Is an export recorded?** `[NEEDS CLARIFICATION]` Recommended: **no** — producing a PDF is a
-  read; only changing the chosen template is audited. Alternatives: (a) an audit-log entry per export
-  naming the template and its version; (b) a history-timeline entry visible to the representative.
-- **Q7 — May a template print internal fields?** `[NEEDS CLARIFICATION]` Recommended: **yes, with a
-  visible warning in the editor** on every column, detail entry or totals row that prints one.
-  Alternatives: (a) internal fields are not offered at all; (b) offered only to administrators holding
-  an extra permission.
+- **Q1 — Who may export?** → **Administrators only** in this release: a representative holding the
+  quote-handling permission who can see the quote's organisation. No storefront export.
+- **Q2 — Is the chosen template stored on the quote?** → **Yes.** The template a representative picks
+  is remembered on the quote, the change is audited, and it is preselected next time for everybody.
+- **Q3 — In which states may a quote be exported?** → **Every state.** Lines without an agreed price
+  print an empty price, and totals that need every price are left out.
+- **Q4 — Is the PDF sent by e-mail?** → **Changed from the recommendation: yes, through a dedicated
+  *Send PDF to customer* action** on the admin quote request screen (User Story 8). The dialog offers
+  the export choices (template, preselected per Q2; language, per Q5) plus the recipients — the quote's
+  requesting customer's e-mail preselected, further addresses may be added — and an optional personal
+  message. The e-mail is a transactional e-mail whose subject and body the operator edits like every
+  other one (Polish and English defaults), with the rendered PDF attached. Sending is an audited
+  action recorded on the quote's history. Design decisions taken under this answer:
+  - **Recipients**: arbitrary, well-formed addresses are allowed (a buyer often forwards an offer to a
+    colleague in purchasing) — at most **5** per send after removing duplicates (case-insensitive);
+    the requester's address is preselected but removable. Every address is recorded in the audit
+    entry and on the history.
+  - **Personal message**: optional plain text, at most 2 000 characters, printed in the e-mail body.
+  - **Limits**: the PDF attached may not exceed **10 MiB**; one administrator may send at most **10**
+    quote PDFs a minute; a send that cannot be performed answers a translated error and records
+    nothing.
+- **Q5 — Which language?** → The representative **picks the language** in the export and send dialogs,
+  preselected with the default language of the quote's sales channel. The e-mail is written in the
+  same language as the PDF.
+- **Q6 — Is an export recorded?** → **No** for a plain download (it is a read). Only changing the
+  remembered template and *Send PDF to customer* are audited.
+- **Q7 — May a template print internal fields?** → **Yes, with a visible warning in the editor** on
+  every column, detail entry or totals row that prints one.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -270,6 +271,49 @@ facility; the visibility rules are evaluated by one function that already accept
 
 ---
 
+### User Story 8 — Send the quote PDF to the customer by e-mail (Priority: P2)
+
+On a quote request's admin screen a sales representative clicks *Send PDF to customer*. The dialog
+offers the same template and language choices as *Export PDF*, the recipients — the requesting
+customer's e-mail already filled in — and an optional personal message. They click *Send*: every
+recipient receives the operator-editable *Quote request PDF* e-mail with the quote's PDF attached, the
+quote's history shows who sent it to whom, with which template and in which language, and the audit
+log records the same.
+
+**Why this priority**: owner answer Q4 — handing the offer to the customer without leaving the
+platform. A representative can already download and forward the PDF (US1), so it is not MVP.
+
+**Independent Test**: with a quote whose requester has an e-mail, send the PDF with the remembered
+template and a message to the requester and one extra address; both receive an e-mail with the PDF
+attached and the message in the body; the history shows one *PDF sent* entry naming both addresses;
+the audit log has one entry; switching the e-mail off in *E-mail templates* makes the next send fail
+with a clear message and record nothing.
+
+**Acceptance Scenarios**:
+
+1. **Given** the quote's requester has an e-mail address, **When** the representative opens *Send PDF
+   to customer*, **Then** the template and language are preselected as for the export and the
+   requester's address is the only recipient.
+2. **Given** the representative adds a second, well-formed address and a message and sends, **Then**
+   each recipient receives one e-mail in the chosen language with the PDF named after the quote's
+   number attached and the message in the body.
+3. **Given** a malformed address, more than 5 recipients, or no recipient, **When** they try to send,
+   **Then** the dialog says what is wrong and nothing is sent.
+4. **Given** a successful send, **Then** the quote's history shows a *PDF sent* entry with the acting
+   representative, the recipients, the template and the language, and the audit log records the same
+   without the PDF.
+5. **Given** a template other than the remembered one, **When** the representative sends with it,
+   **Then** it is remembered as for an export (Q2).
+6. **Given** the *Quote request PDF* e-mail is switched off, or no mail transport is configured,
+   **When** they send, **Then** they are told the e-mail cannot be sent and why, and nothing is
+   recorded.
+7. **Given** document templates are switched off, **Then** *Send PDF to customer* is absent and the
+   send API refuses.
+8. **Given** a representative who may not see the quote's organisation, **Then** sending is refused
+   exactly as opening the quote is.
+
+---
+
 ### Edge Cases
 
 - **A quote with no agreed prices** (*Pending*): price, net, VAT and gross cells are empty; totals that
@@ -294,6 +338,13 @@ facility; the visibility rules are evaluated by one function that already accept
 - **Quote requests switched off**: the *Quote request* document type and its templates disappear from
   the template screens; nothing is deleted.
 - **A save while a quote is being exported**: the PDF uses one version of the template in full.
+- **Sending: the PDF is larger than 10 MiB**: nothing is sent; the dialog says the PDF is too large
+  to e-mail and suggests downloading it.
+- **Sending: one recipient's delivery fails, another's succeeds**: the e-mail stays sent to the
+  successful ones; the dialog names the failed addresses; the history and audit list only the
+  addresses the e-mail was handed to.
+- **Sending: the requester has no e-mail address** (a deleted customer account): no recipient is
+  preselected; the representative types one.
 
 ## Requirements *(mandatory)*
 
@@ -417,6 +468,40 @@ facility; the visibility rules are evaluated by one function that already accept
 - **FR-051**: Per-document selection MUST obey 152 FR-037–FR-039: only templates of the type, global or
   of the document's channel; a missing one replaced by the default and reported.
 
+#### Sending the quote PDF by e-mail (owner answer Q4)
+
+- **FR-090**: The admin quote request screen MUST offer *Send PDF to customer* under the same
+  conditions as *Export PDF* (FR-001, FR-060), in every quote state (Q3).
+- **FR-091**: *Send PDF to customer* MUST open a dialog offering the template and language choices of
+  FR-002, FR-003 and FR-007, plus the recipients and an optional personal message (at most 2 000
+  characters).
+- **FR-092**: The recipients MUST be preselected with the requesting customer's e-mail address when
+  it has one; the representative MAY remove it and add other addresses. Every address MUST be a
+  well-formed e-mail address; duplicates (case-insensitive) MUST be merged; at least 1 and at most 5
+  recipients MUST be sent to. Arbitrary addresses are allowed.
+- **FR-093**: Sending MUST render the quote PDF exactly as the export would with the same choices
+  (FR-004, FR-006, FR-007) and deliver it to every recipient as a separate e-mail of the
+  transactional e-mail *Quote request PDF*, written in the PDF's language, with the PDF attached under
+  the export's file name.
+- **FR-094**: The *Quote request PDF* e-mail MUST be editable and switchable off like every other
+  transactional e-mail, ship default subjects and bodies in Polish and English, and offer the
+  variables quote number, validity date, customer name, sales representative name and e-mail, sales
+  channel name and the personal message.
+- **FR-095**: A send whose template differs from the remembered one MUST remember it, exactly as an
+  export does (FR-005).
+- **FR-096**: A successful send MUST be recorded as one audited action naming the acting
+  administrator, the template, the language and the recipients the e-mail was handed to — never the
+  PDF itself — and MUST add one *PDF sent* entry with the same facts to the quote's admin history.
+  It MUST NOT change the quote's offer, revision or version.
+- **FR-097**: A send MUST be refused, with a translated message and nothing recorded, when the PDF
+  exceeds 10 MiB, when the *Quote request PDF* e-mail is switched off, when no mail transport is
+  configured, or when every recipient's delivery fails; when only some deliveries fail, the dialog
+  MUST name the failed addresses and only the delivered ones are recorded.
+- **FR-098**: One administrator MUST NOT be able to send more than 10 quote PDFs a minute; the excess
+  is refused with a translated message.
+- **FR-099**: Sending MUST require the quote-handling permission and the quote's organisation
+  visibility (FR-070); while document templates are off it MUST be absent and refused (FR-060).
+
 #### Availability
 
 - **FR-060**: While document templates are off: *Export PDF* and the dialog MUST be absent, the quote
@@ -426,16 +511,17 @@ facility; the visibility rules are evaluated by one function that already accept
 
 #### Permissions, auditing, discoverability, languages, documentation
 
-- **FR-070**: Exporting and remembering a template MUST require the existing quote-handling permission
-  and the quote's organisation visibility; no new permission.
-- **FR-071**: Remembering a template MUST be audited (FR-005); template design changes are audited by
-  the facility (FR-050). Producing a PDF is not recorded (Q6).
+- **FR-070**: Exporting, sending and remembering a template MUST require the existing quote-handling
+  permission and the quote's organisation visibility; no new permission.
+- **FR-071**: Remembering a template (FR-005) and sending the PDF (FR-096) MUST be audited; template
+  design changes are audited by the facility (FR-050). Producing a PDF for download is not recorded
+  (Q6).
 - **FR-072**: The ⌘K palette MUST find document templates also by "quote PDF", "offer template",
   "szablon oferty", "zapytanie ofertowe PDF".
 - **FR-073**: Every new admin text, block and field name, merge-field description, error message and
   built-in printed text MUST exist in Polish and English.
-- **FR-074**: The end-user documentation MUST describe exporting a quote to PDF and designing quote
-  templates, including the Line items table, in Polish and English.
+- **FR-074**: The end-user documentation MUST describe exporting a quote to PDF, sending it to the
+  customer, and designing quote templates, including the Line items table, in Polish and English.
 
 #### Reuse
 
@@ -453,6 +539,8 @@ facility; the visibility rules are evaluated by one function that already accept
 - **Line items table settings** (stored inside a template's layout) — columns, detail row, totals rows,
   grouping, style.
 - **Visibility rule** (stored inside those settings) — always, never, has a value, any line has a value.
+- **PDF delivery** (a quote history event) — who sent the quote PDF, to which addresses, with which
+  template and in which language.
 
 ## Success Criteria *(mandatory)*
 
@@ -472,6 +560,9 @@ facility; the visibility rules are evaluated by one function that already accept
   touches no file of the facility.
 - **SC-008**: For a reference set of quotes (discounted / not, priced / unpriced, packaging units,
   notes, attributes, 1 and 120 lines), 100 % of PDFs print totals that equal the quote screen's.
+- **SC-009**: A representative sends a quote PDF to the requester from the quote screen in under 30
+  seconds; 100 % of successful sends appear on the quote's history and in the audit log, and 0 refused
+  sends do.
 
 ## Assumptions
 
@@ -486,8 +577,10 @@ facility; the visibility rules are evaluated by one function that already accept
 
 ## Out of scope
 
-- The storefront export (Q1 alternative), e-mail attachment (Q4 alternative), export audit entries
-  (Q6 alternative).
+- The storefront export (Q1 alternative) and export audit entries (Q6 alternative).
+- Attaching the PDF to the automatic quote e-mails (new offer revision and the like): the PDF is sent
+  only by the explicit *Send PDF to customer* action (Q4).
+- Scheduled or bulk sending; carbon copies; attachments other than the quote PDF.
 - Product images in table cells; per-line custom fields (none exist in the platform).
 - Adopting the Line items table in invoices or the comparison (FR-080).
 - The repeater block (D3) — only its prerequisites (FR-044, FR-045).

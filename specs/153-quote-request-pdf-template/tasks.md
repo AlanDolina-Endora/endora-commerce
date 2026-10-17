@@ -10,8 +10,8 @@ contracts/ (`document-collections.md`, `quote-request-document.md`, `admin-ui.md
 green; a test task names the behaviour it must prove **red** first.
 
 **Organization**: facility first (the generic machinery is proven by a test-only type before the quote
-type exists), then by user story. MVP = US1 + US2 + US3. Open questions Q1–Q7 are implemented with their
-recommended defaults; do not build an alternative unless the owner answers so.
+type exists), then by user story. MVP = US1 + US2 + US3. The owner answered Q1–Q7 on 2026-10-17: the
+recommended defaults hold except Q4, which adds *Send PDF to customer* (US8, Phase 5b).
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -120,6 +120,23 @@ without `quote_requests`.
 
 ---
 
+## Phase 5b: User Story 8 — Send PDF to customer (P2, owner answer Q4)
+
+- [ ] T055 [P] [US8] Extend `CT/quote-requests.test.ts` — red: `quoteRequestPdfSendRequestSchema` (1–5 recipients, e-mail format, trimmed and case-insensitively de-duplicated, message ≤ 2000, optional `templateId`/`language`), `QuoteRequestPdfSendResult`, `requesterEmail` on the choices, history entry `pdf_sent` kind with nullable `delivery` — then implement in `CT/quote-requests.ts`; the three error codes in `CT/errors.ts` — green
+- [ ] T056 [US8] Write `backend/test/integration/quote_requests/pdf-sent-event.test.ts` — red: a `pdf-sent` row is accepted by `qre_event_type_check`; scaffold `migration:new -- --module quote_requests --name quote_request_event_pdf_sent`, widen the constraint, `QuoteRequestEventType += 'pdf-sent'`, `composer:generate` — green
+- [ ] T057 [P] [US8] Extend `QR/src/backend/services/history/history-projection.test.ts` — red: a `pdf-sent` event projects to `kind: 'pdf_sent'` with `delivery` (recipients, templateName, language, message), hostile payload → `delivery` with what is readable; every other kind has `delivery: null` — then implement — green
+- [ ] T058 [US8] `QR/src/backend/email-templates/quote-pdf-defaults.ts` (en-US + pl-PL subject and body via `simpleEmailBodyTree`), manifest `transactionalEmails` entry `quote_request_pdf`, `dependencies += transactional_emails`, `emailDefaultsPort` push in the contribution-only boot hook; `errorCodes` += the three codes with en + pl sentences (and tokens); minted-code ledger entries; run `test/unit/db/module-graph.test.ts`, the i18n bundle shape test and `check:error-translations`
+- [ ] T059 [P] [US8] Extend `QR/src/backend/commands/document-template-commands.test.ts` — red: send Command authority before sending (invisible → 404, sender never called); one send per recipient with the attachment, `document`, language and channel; outcomes `deactivated`/`no_transport`/`no_definition`/no sender → 409 with `details.code`, nothing recorded; one throw → partial, recorded recipients = delivered; all throw → 502, nothing recorded; event payload and audit `after` (no bytes, no message); `version` untouched
+- [ ] T060 [US8] Implement `quote_request.send_document` in `document-template-commands.ts` — T059 green
+- [ ] T061 [US8] Write `backend/test/contract/quote_requests/pdf-send.test.ts` — red: 401/403 before validation; 400 (no / malformed / six recipients, long message); 404 invisible; delivered with a PDF attachment in the chosen language (captured transport); remembered template updated; History `pdf_sent` entry; one audit row; e-mail switched off → 409 and nothing recorded; PDF over the limit → 422 (limit injected); rate limit → 429; `document_templates` off → 503; `version` unchanged; Q1 `requesterEmail`
+- [ ] T062 [US8] Implement route Q4 in `QR/src/backend/routes.admin.ts` (shared render step with Q3, rate limit, size limit) and `requesterEmail` on Q1 — T061 green; re-record the OpenAPI baseline (T040)
+- [ ] T063 [P] [US8] Extend `admin/test/modules/quote_requests/pdf-dialog.test.tsx` — red: send mode per `admin-ui.md` §1a (hidden without either module; requester preselected; invalid / duplicate / sixth recipient refused; counter; body; success / partial / error; axe)
+- [ ] T064 [US8] Implement send mode in `QuoteRequestPdfDialog.tsx`, the *Send PDF to customer* button in `RfqDetail.tsx`, the `pdf_sent` entry in `RfqHistory.tsx`; bundle keys (en + pl) — T063 green; `i18n:hardcoded`
+- [ ] T065 [P] [US8] Docs: sending the PDF, the *Quote request PDF* e-mail and its variables, the limits, in `QR/docs/quote_requests.md` and its Polish page
+- [ ] T066 [US8] Changeset body for `quote_requests` mentions the send action
+
+---
+
 ## Phase 6: User Story 4 — detail row, totals, grouping (P2)
 
 - [ ] T043 [US4] Extend `DT/src/backend/rendering/items-table.test.ts` — red: detail row entries by rule over the item, `label: value` joined by separator, no row when nothing prints, `colSpan`; totals rows by rule over the summary, labels, emphasis, separate right-aligned unbreakable table; grouping in first-appearance order, empty-value label, header rows, subtotals with `sumDocumentValues` (money of one currency; mixed → empty), `row.number` not restarted per group
@@ -147,7 +164,7 @@ without `quote_requests`.
 - [ ] T050 [P] Bench `backend/test/perf/quote_requests/pdf-export.bench.ts` — 200-line quote p95 < 5 s (SC-003); declare its tier as the 152 bench does
 - [ ] T051 Changesets: `@endora-commerce/contracts` (minor), `document_templates` (minor), `quote_requests` (minor) — bodies checked against `specs/conventions/commercial-data.md`
 - [ ] T052 Regenerate and commit: `pnpm --filter backend run composer:generate`, `manifests:generate` if a `package.json` body changed, `pnpm install --lockfile-only`
-- [ ] T053 Verification: `pnpm run build:packages`; `pnpm -r run typecheck`; `pnpm -r run lint`; `pnpm --filter backend run test:unit:fast`; `pnpm --filter backend exec vitest run test/contract/document_templates test/contract/quote_requests test/integration/quote_requests test/contract/admin_users/permission-inventory.test.ts test/unit/_i18n/registered-bundles-shape.test.ts`; `pnpm --filter '!backend' run test`; `pnpm run check:naming && pnpm run check:language`; `pnpm --filter backend run check:module-boundary`, `check:port-dependencies`, `check:port-catches`, `check:entry-presence`, `check:action-route-permissions`, `i18n:hardcoded`; grep `backend/test/**` for the deleted fixture once more
+- [ ] T053 Verification: `pnpm run build:packages`; `pnpm -r run typecheck`; `pnpm -r run lint`; `pnpm --filter backend run test:unit:fast`; `pnpm --filter backend exec vitest run test/contract/document_templates test/contract/quote_requests test/contract/transactional_emails test/integration/quote_requests test/contract/admin_users/permission-inventory.test.ts test/unit/_i18n/registered-bundles-shape.test.ts`; `pnpm --filter '!backend' run test`; `pnpm run check:naming && pnpm run check:language`; `pnpm --filter backend run check:module-boundary`, `check:port-dependencies`, `check:port-catches`, `check:entry-presence`, `check:action-route-permissions`, `i18n:hardcoded`; grep `backend/test/**` for the deleted fixture once more
 - [ ] T054 Walk `quickstart.md` §0–§8 and record the result in the MR
 
 ---
@@ -158,11 +175,12 @@ without `quote_requests`.
 - Phase 3 (US3) backend T020–T022 needs Phase 2; the admin editor T023–T024 needs T005 and T019.
 - Phase 4 (US2) needs T022 (catalogue) and Phase 2; T031 needs T029.
 - Phase 5 (US1) needs Phase 4 (the type must exist to render); T038 needs T033, T035, T037.
+- Phase 5b (US8) needs Phase 5 (route Q3's render step, the remember Command).
 - Phases 6–8 need Phase 5. Phase 9 last.
 
 ## Parallel opportunities
 
-T003 ∥ T004; T008 ∥ T010; T020 ∥ T021 ∥ T023; T025 ∥ T030; T034 ∥ T036 ∥ T041; T046 ∥ T047; T049 ∥ T050.
+T003 ∥ T004; T008 ∥ T010; T020 ∥ T021 ∥ T023; T025 ∥ T030; T034 ∥ T036 ∥ T041; T055 ∥ T057 ∥ T059 ∥ T063; T046 ∥ T047; T049 ∥ T050.
 
 ## Implementation strategy
 

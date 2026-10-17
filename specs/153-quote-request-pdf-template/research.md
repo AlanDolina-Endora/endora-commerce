@@ -325,7 +325,7 @@ the ones a customer can already see.
 **Alternatives rejected**: all attributes (internal attributes on a customer document); the comparable
 attributes flag (a comparison concept).
 
-## R-13 — The chosen template is remembered on the quote (provisional: Q2)
+## R-13 — The chosen template is remembered on the quote (owner answer Q2)
 
 **Decision**: a nullable `document_template_id uuid` column on `quote_requests`, written by one Command
 `quote_request.set_document_template` (audit before/after `{ documentTemplateId }`, `skipAudit` when
@@ -343,8 +343,8 @@ print with. A column on the org-scoped row inherits the tenant filter.
 
 **Alternatives rejected**: a separate `quote_request_document_settings` table (a second org-scoped
 entity for one value); a foreign key to `document_templates` (cross-module FK; would make deleting a
-template fail or cascade into quotes); bumping `version` (above). If the owner answers Q2 "not stored",
-the column, the Command and FR-005 drop out and nothing else changes.
+template fail or cascade into quotes); bumping `version` (above). The owner confirmed Q2 ("stored, audited,
+preselected next time") on 2026-10-17.
 
 ## R-14 — The picker's list for sales representatives
 
@@ -414,7 +414,8 @@ second renderer to maintain for an off-state nobody needs).
 ## R-18 — Auditing
 
 Template design: the facility's six Commands, unchanged. Remembering a template: one `quote_requests`
-Command (R-13). Producing a PDF: a read, not audited (Q6). The audit row of the remember Command records
+Command (R-13). Sending the PDF by e-mail: one `quote_requests` Command (R-27). Producing a PDF for
+download: a read, not audited (owner answer Q6). The audit row of the remember Command records
 the template id; the export response headers carry the template id and version actually used.
 
 ## R-19 — Tenancy and channel scoping
@@ -485,8 +486,80 @@ and touch reordering of columns) are all in place. No Redis cache (a render read
 
 ## R-26 — Audience of fields and the storefront question (Q1)
 
-v1 (admin-only export) uses `audience` for the editor warning (Q7). If Q1 is answered "customers may
-export too", the storefront route passes `audience: 'customer'` to the port, and the facility blanks
+v1 (admin-only export, owner answer Q1) uses `audience` for the editor warning (Q7). If a later feature
+lets customers export too, the storefront route passes `audience: 'customer'` to the port, and the facility blanks
 every `internal` field in columns, detail entries, totals and grouping before formatting — one rule in
 one place, not per host. The design is ready for it; the render input member is added only with that
 answer (Principle IV).
+
+## R-27 — *Send PDF to customer* (owner answer Q4)
+
+**Facts.** `quote_requests` sends **no** e-mail today: every transition writes
+`quote_request_notification_events` rows with status `queued` (`RfqNotificationService`), and nothing
+delivers them (`QR/docs/quote_requests.md` § *Notifications*). The platform's e-mail machinery is
+`transactional_emails`: a module declares an e-mail in its manifest (`transactionalEmails`), pushes its
+default subject and body per language into `emailDefaultsPort` from a contribution-only boot hook, and
+sends through `transactionalEmailSenderAccessor()` → `TransactionalEmailSender.send`, which already
+takes `attachments` and `document` (`CT/transactional-emails.ts`; invoices and `crm`'s event reminder
+are the precedents — `crm/src/backend/email-templates/event-reminder-defaults.ts`). The sender answers
+`sent | logged | deactivated | no_transport | no_definition`; a transport failure **throws**
+(`email/src/backend/services/recording-mailer.ts`), after the delivery record is written.
+`transactional_emails` and `email` are `nonDeactivatable`; the operator's "off" for one e-mail is the
+per-e-mail `active` switch (issue #89). The quote's admin History is built from `quote_request_events`
+(`services/history/history-projection.ts`), read only by the admin service — customers never see it.
+
+**Decision.**
+
+1. **A new transactional e-mail `quote_request_pdf`** declared in `QR/src/manifest.ts`
+   (`transactionalEmails`, group `quote_requests`), defaults in `en-US` and `pl-PL` built with
+   `simpleEmailBodyTree` (`QR/src/backend/email-templates/quote-pdf-defaults.ts`), pushed from the
+   module's contribution-only boot hook. Variables: `quote.number`, `quote.validUntil`,
+   `customer.name`, `salesRep.name`, `salesRep.email`, `channel.name`, `message`. The operator edits
+   it, per language and channel, or switches it off, on the *E-mail templates* screen like every other.
+   `transactional_emails` joins `quote_requests`' `dependencies` (non-deactivatable, no cycle — the
+   `crm` precedent).
+2. **Route Q4** `POST /api/v1/admin/quote-requests/:id/pdf/send` under `rfqs:handle` and visibility,
+   body `{ templateId?: uuid, language?: lang, recipients: email[1..5], message?: string ≤ 2000 }`,
+   per-admin rate limit 10/minute (`config.rateLimit`, the `routes.customer.ts` precedent). It runs
+   the remember Command when `templateId` differs from the remembered one (as Q3), renders through
+   `documentRenderPort` exactly as Q3, refuses a PDF over **10 MiB** (422
+   `QUOTE_REQUEST_PDF_TOO_LARGE`, `details.maxBytes`), then runs the Command below.
+3. **Command `quote_request.send_document`** (`QR/src/backend/commands/document-template-commands.ts`):
+   authority (visibility) first; sends one e-mail per recipient through the sender with the PDF
+   attached (`<businessId>.pdf`, `application/pdf`), `document: { type: 'quote_request', id }`,
+   `messageId` `quote-request-pdf:<sendId>:<n>`, the quote's channel and the PDF's language. Outcomes:
+   - the first answer `deactivated` / `no_transport` / `no_definition` → 409
+     `QUOTE_REQUEST_PDF_EMAIL_UNAVAILABLE` (`details.code` = the outcome, the envelope's refusal token),
+     nothing recorded — the answer is the same for every recipient, so it stops at the first;
+   - a thrown transport error for one recipient is collected; the others are still tried;
+   - none delivered → 502 `QUOTE_REQUEST_PDF_SEND_FAILED`, nothing recorded;
+   - some delivered → one `quote_request_events` row `pdf-sent` with payload
+     `{ recipients, templateId, templateName, language, message }` (delivered addresses only) and the
+     audit `after: { templateId, language, recipients, failedRecipients }` — never the PDF bytes.
+   The Command does not touch `version`, revisions or offer content (FR-096).
+4. **History**: event type `pdf-sent` (one migration widening `qre_event_type_check`), projected as the
+   admin History kind `pdf_sent` with `delivery: { recipients, templateName, language, message }`
+   (`quoteRequestHistoryEntrySchema` gains `delivery`, nullable). Admin-only by construction.
+5. **Choices**: route Q1's `QuoteRequestDocumentChoices` gains `requesterEmail: string | null` (the
+   requesting customer account's e-mail, read through `customerAccountReadPort` already in use), the
+   dialog's preselected recipient.
+6. **Admin**: one dialog component in two modes — *Export PDF* (download) and *Send PDF to customer*
+   (send: recipients editor with format validation and the limit, message textarea, *Send*). Both
+   buttons appear only while `document_templates` and `transactional_emails` are present.
+
+**Rationale.** The e-mail must be editable "like other transactional e-mails" (owner); declaring it is
+the one mechanism that gives the operator the editor, per-channel content, languages and the switch.
+Sending inside the request (≤ 5 messages) gives the representative an immediate, honest answer — the
+queue-backed `quote_request_notification_events` path delivers nothing today and would hide failures.
+Separate e-mails per recipient keep one delivery record per address (the sender's `to` is single) and
+avoid disclosing one recipient's address to another. Stopping at the first *configuration* outcome but
+continuing past a *transport* failure distinguishes "nothing can be sent" from "this address
+bounced". Allowing arbitrary addresses (bounded at 5) matches how B2B offers travel — to a purchasing
+colleague — while the audit and history keep every address visible.
+
+**Alternatives rejected**: queueing the e-mail through BullMQ (no immediate failure report, and the
+attachment would need storage between request and worker); one e-mail with every recipient in `To`
+(discloses addresses; the sender takes one `to`); only the requester's address (the owner asked for
+editing and adding recipients); attaching the PDF to the automatic revision e-mails (not asked; those
+e-mails do not exist yet); recording the event on `quote_request_notification_events` (that table is
+an undelivered queue keyed by recipient account ids, not addresses).
