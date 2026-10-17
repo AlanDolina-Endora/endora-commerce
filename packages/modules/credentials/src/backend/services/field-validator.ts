@@ -160,8 +160,25 @@ function validateNonSecretValue(field: FieldDefinition, value: unknown): string 
     case 'string':
     default:
       if (typeof value !== 'string') return 'must be a string';
-      if (field.required && value.length === 0) return 'is required';
+      if (field.required && value.trim().length === 0) return 'is required';
+      if (field.format === 'url' && value.trim().length > 0 && !isHttpUrl(value.trim())) {
+        return 'must be an absolute http or https URL';
+      }
       return null;
+  }
+}
+
+/**
+ * Feature 151 (research R21) — the `url` format: an absolute `http:` or
+ * `https:` URL. The same rule `@endora-commerce/llm-client` applies before a
+ * call, so a value stored here is one a consumer will accept.
+ */
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
   }
 }
 

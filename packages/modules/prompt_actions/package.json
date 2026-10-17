@@ -48,6 +48,7 @@
   },
   "peerDependencies": {
     "@endora-commerce/contracts": "workspace:*",
+    "@endora-commerce/llm-client": "workspace:*",
     "@endora-commerce/platform": "workspace:*",
     "@mikro-orm/core": "^6",
     "@mikro-orm/migrations": "^6",
@@ -57,6 +58,7 @@
   },
   "devDependencies": {
     "@endora-commerce/contracts": "workspace:*",
+    "@endora-commerce/llm-client": "workspace:*",
     "@endora-commerce/platform": "workspace:*",
     "@mikro-orm/core": "^6.6.13",
     "@mikro-orm/migrations": "^6.6.13",

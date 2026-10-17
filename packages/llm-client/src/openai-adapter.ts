@@ -40,19 +40,44 @@ const ResponseSchema = z.object({
     .min(1),
 });
 
+/** The providers that speak this protocol (feature 151, research R21). */
+export type OpenAiProtocolProvider = 'openai' | 'deepseek' | 'openai_compatible';
+
+export interface OpenAiAdapterOptions {
+  /** Whose endpoint this is; named in errors and `provider`. Default `openai`. */
+  provider?: OpenAiProtocolProvider | undefined;
+  /**
+   * The API root the request is posted under, as `<baseUrl>/chat/completions`.
+   * Default: OpenAI's public endpoint. Validated by `createLlmAdapter`, not here.
+   */
+  baseUrl?: string | undefined;
+}
+
+const OPENAI_BASE_URL = 'https://api.openai.com/v1';
+
 export class OpenAiAdapter implements LlmProviderAdapter {
-  readonly provider = 'openai' as const;
+  readonly provider: OpenAiProtocolProvider;
+  private readonly endpoint: string;
 
   constructor(
     private readonly apiKey: string,
     private readonly fetchImpl: FetchLike = fetch,
-  ) {}
+    options: OpenAiAdapterOptions = {},
+  ) {
+    this.provider = options.provider ?? 'openai';
+    this.endpoint = `${(options.baseUrl ?? OPENAI_BASE_URL).replace(/\/+$/, '')}/chat/completions`;
+  }
 
   async complete(req: LlmRequest): Promise<LlmCompletion> {
     const names = wireNameMap(req.tools);
     const body = {
       model: req.model,
-      max_completion_tokens: req.maxTokens,
+      // OpenAI renamed the cap; DeepSeek and the compatible servers (vLLM,
+      // Ollama, OpenRouter, …) take the original name. `openai` keeps the
+      // field it has always sent.
+      ...(this.provider === 'openai'
+        ? { max_completion_tokens: req.maxTokens }
+        : { max_tokens: req.maxTokens }),
       messages: [
         { role: 'system', content: req.system },
         ...req.messages.map((m) => {
@@ -82,14 +107,18 @@ export class OpenAiAdapter implements LlmProviderAdapter {
         type: 'function',
         function: { name: toWireName(t.name), description: t.description, parameters: t.inputSchema },
       })),
+      ...(req.toolChoice
+        ? { tool_choice: { type: 'function', function: { name: toWireName(req.toolChoice.name) } } }
+        : {}),
     };
 
     const json = await postJson(
       this.provider,
       this.fetchImpl,
-      'https://api.openai.com/v1/chat/completions',
+      this.endpoint,
       { authorization: `Bearer ${this.apiKey}` },
       body,
+      req.signal,
     );
     const parsed = parseOrThrow(this.provider, ResponseSchema, json);
     const choice = parsed.choices[0]!;
@@ -102,7 +131,7 @@ export class OpenAiAdapter implements LlmProviderAdapter {
         throw new LlmProviderError(
           this.provider,
           'malformed',
-          `openai tool call "${c.function.name}" carried non-JSON arguments.`,
+          `${this.provider} tool call "${c.function.name}" carried non-JSON arguments.`,
         );
       }
       return { id: c.id, name: fromWireName(c.function.name, names), arguments: args };

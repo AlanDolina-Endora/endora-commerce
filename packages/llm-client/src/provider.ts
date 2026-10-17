@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { LlmToolDefinition, PromptActionsProvider } from '@endora-commerce/contracts';
+import type { LlmProvider, LlmToolDefinition } from '@endora-commerce/contracts';
 
 /**
  * Provider-neutral LLM adapter contract (feature 043, research §R2).
@@ -10,7 +10,7 @@ import type { LlmToolDefinition, PromptActionsProvider } from '@endora-commerce/
  * responses are Zod-validated at the boundary (Principle V).
  */
 
-export type { LlmToolDefinition };
+export type { LlmProvider, LlmToolDefinition };
 
 export type LlmMessage =
   | { role: 'user'; text: string }
@@ -30,6 +30,15 @@ export interface LlmRequest {
   messages: LlmMessage[];
   tools: LlmToolDefinition[];
   maxTokens: number;
+  /**
+   * Feature 151 (research R3) — forces the model to answer by calling this
+   * tool, mapped to each provider's native option. Absent ⇒ the provider's
+   * default (the model chooses), and the request body is exactly what it was
+   * before the option existed.
+   */
+  toolChoice?: { name: string };
+  /** Feature 151 — passed to `fetch`, so a caller can impose a timeout or cancel. */
+  signal?: AbortSignal;
 }
 
 export interface LlmCompletion {
@@ -39,17 +48,19 @@ export interface LlmCompletion {
 }
 
 export interface LlmProviderAdapter {
-  readonly provider: PromptActionsProvider;
+  readonly provider: LlmProvider;
   complete(req: LlmRequest): Promise<LlmCompletion>;
 }
 
 export class LlmProviderError extends Error {
   override readonly name = 'LlmProviderError';
   constructor(
-    public readonly provider: PromptActionsProvider,
+    public readonly provider: LlmProvider,
     public readonly kind: 'http' | 'network' | 'malformed',
     message: string,
     public readonly status?: number,
+    /** Feature 151 — `true` when a `network` failure was the request's `AbortSignal` firing. */
+    public readonly aborted: boolean = false,
   ) {
     super(message);
   }
@@ -79,11 +90,12 @@ export function fromWireName(wire: string, map: Map<string, string>): string {
 
 /** Shared POST + JSON helper with uniform error mapping. */
 export async function postJson(
-  provider: PromptActionsProvider,
+  provider: LlmProvider,
   fetchImpl: FetchLike,
   url: string,
   headers: Record<string, string>,
   body: unknown,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   let response: Response;
   try {
@@ -91,12 +103,16 @@ export async function postJson(
       method: 'POST',
       headers: { 'content-type': 'application/json', ...headers },
       body: JSON.stringify(body),
+      // Only when given, so a request without one is the same `init` as before.
+      ...(signal ? { signal } : {}),
     });
   } catch (err) {
     throw new LlmProviderError(
       provider,
       'network',
       `Could not reach the ${provider} API: ${(err as Error).message}`,
+      undefined,
+      signal?.aborted === true,
     );
   }
   let json: unknown = null;
@@ -119,7 +135,7 @@ export async function postJson(
   return json;
 }
 
-export function malformed(provider: PromptActionsProvider, issues: unknown): LlmProviderError {
+export function malformed(provider: LlmProvider, issues: unknown): LlmProviderError {
   return new LlmProviderError(
     provider,
     'malformed',
@@ -129,7 +145,7 @@ export function malformed(provider: PromptActionsProvider, issues: unknown): Llm
 
 /** Boundary guard reused by adapters. */
 export function parseOrThrow<T>(
-  provider: PromptActionsProvider,
+  provider: LlmProvider,
   schema: z.ZodType<T>,
   value: unknown,
 ): T {

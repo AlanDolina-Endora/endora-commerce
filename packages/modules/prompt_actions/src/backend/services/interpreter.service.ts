@@ -16,7 +16,7 @@ import {
   LlmProviderError,
   type LlmMessage,
   type LlmToolDefinition,
-} from './llm/provider.js';
+} from '@endora-commerce/llm-client';
 
 /**
  * InterpreterService — feature 043 US1/US3 (research §R1, §R8).

@@ -1,0 +1,14 @@
+{
+  // Emit configuration — see `packages/contracts/tsconfig.build.json` for why the type-check
+  // config and the emit config are two files. Clearing `paths` makes the emit read the
+  // `contracts` sibling's `dist` rather than its source.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {},
+    "rootDir": "./src",
+    "noEmit": false,
+    "noEmitOnError": true
+  },
+  // Tests type-check but are not published.
+  "exclude": ["**/*.test.ts", "**/*.spec.ts"]
+}

@@ -50,6 +50,7 @@ export class AnthropicAdapter implements LlmProviderAdapter {
         description: t.description,
         input_schema: t.inputSchema,
       })),
+      ...(req.toolChoice ? { tool_choice: { type: 'tool', name: toWireName(req.toolChoice.name) } } : {}),
       messages: req.messages.map((m) => {
         if (m.role === 'user') {
           return { role: 'user', content: [{ type: 'text', text: m.text }] };
@@ -83,6 +84,7 @@ export class AnthropicAdapter implements LlmProviderAdapter {
       'https://api.anthropic.com/v1/messages',
       { 'x-api-key': this.apiKey, 'anthropic-version': '2023-06-01' },
       body,
+      req.signal,
     );
     const parsed = parseOrThrow(this.provider, ResponseSchema, json);
 

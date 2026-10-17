@@ -25,6 +25,7 @@ Everything below is a **peer** dependency, so the application resolves exactly o
 **Endora packages**
 
 - `@endora-commerce/contracts`
+- `@endora-commerce/llm-client`
 - `@endora-commerce/platform`
 
 **Third-party**

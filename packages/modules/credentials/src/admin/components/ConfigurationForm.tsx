@@ -226,7 +226,8 @@ function renderField(
   return (
     <Input
       id={opts.fieldId}
-      type={field.kind === 'number' ? 'number' : 'text'}
+      type={field.kind === 'number' ? 'number' : field.format === 'url' ? 'url' : 'text'}
+      {...(field.format === 'url' ? { inputMode: 'url' as const } : {})}
       value={value}
       placeholder={field.placeholder ?? ''}
       onChange={(e) => onChange(e.target.value)}

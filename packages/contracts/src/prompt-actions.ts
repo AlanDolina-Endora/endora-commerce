@@ -31,8 +31,26 @@ export const PROMPT_ACTION_STATUSES = [
 export const PromptActionStatusSchema = z.enum(PROMPT_ACTION_STATUSES);
 export type PromptActionStatus = z.infer<typeof PromptActionStatusSchema>;
 
-export const PromptActionsProviderSchema = z.enum(['anthropic', 'google', 'openai']);
-export type PromptActionsProvider = z.infer<typeof PromptActionsProviderSchema>;
+/**
+ * The LLM provider codes the platform can call (feature 151, research R21) —
+ * exactly the provider codes of the `credentials` module's `llm` configuration
+ * type. Declared once here and read by `@endora-commerce/llm-client`, the
+ * assistant and the Page Builder translation, so the three cannot drift.
+ * `openai`, `deepseek` and `openai_compatible` speak the OpenAI chat-completions
+ * protocol; the last one has no default endpoint and needs a Base URL.
+ */
+export const LlmProviderSchema = z.enum([
+  'anthropic',
+  'google',
+  'openai',
+  'deepseek',
+  'openai_compatible',
+]);
+export type LlmProvider = z.infer<typeof LlmProviderSchema>;
+
+/** The assistant's provider set — the platform's, since feature 151. */
+export const PromptActionsProviderSchema = LlmProviderSchema;
+export type PromptActionsProvider = LlmProvider;
 
 /** Minutes a plan stays confirmable after interpretation (lazy expiry). */
 export const PROMPT_ACTION_PLAN_TTL_MINUTES = 10;

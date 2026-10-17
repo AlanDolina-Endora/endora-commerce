@@ -18,10 +18,10 @@
  * | | recorded | re-derived when T012 landed | now |
  * | --- | --- | --- | --- |
  * | host bindings into `../../src/` | 7 | **7** | 7 — and they stay: they are what the inversion hands the kit |
- * | module-typed `BackendServerOptions` members | 12 | **12** | **5** |
+ * | module-typed `BackendServerOptions` members | 12 | **12** | **4** |
  * | module-typed `BackendServerHandle` members | 29 | **29** | **25** |
  * | module-owned table names in the wipe list | 21 | **20** | **0** |
- * | module-package specifiers (the premise carried no number) | — | **59** | **49** |
+ * | module-package specifiers (the premise carried no number) | — | **59** | **48** |
  *
  * **The wipe list holds no table a module package owns**, and no kind of
  * reference into one of those packages survives in that file either — specifier,
@@ -90,7 +90,6 @@ export const LEDGERED_MODULE_SPECIFIERS: readonly string[] = [
   '../../../packages/modules/product_feeds/src/backend/services/taxonomy-source-fetcher.interface.js',
   '../../../packages/modules/prompt_actions/src/backend/index.js',
   '../../../packages/modules/prompt_actions/src/backend/services/llm/provider-factory.js',
-  '../../../packages/modules/prompt_actions/src/backend/services/llm/provider.js',
   '../../../packages/modules/prompt_actions/src/backend/services/prompt-request.service.js',
   '../../../packages/modules/prompt_actions/src/backend/services/tool-registry.js',
   '../../../packages/modules/pwa/src/backend/index.js',
@@ -145,7 +144,6 @@ export const LEDGERED_MODULE_TYPE_REFERENCES: readonly string[] = [
   'BackendServerOptions.feedDeliveryAdapters',
   'BackendServerOptions.invoiceLedgerPresence',
   'BackendServerOptions.organizationsMailer',
-  'BackendServerOptions.promptActionsLlmFetch',
   'BackendServerOptions.taxonomySourceFetcher',
 ];
 
