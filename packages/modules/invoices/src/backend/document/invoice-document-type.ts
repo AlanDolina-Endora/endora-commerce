@@ -61,7 +61,7 @@ export function createInvoiceDocumentType(deps: {
         let effective: Record<string, unknown> = { ...props };
         if (name === 'invoices.InvoiceLogo') {
           const embedded = (await embedInvoiceLogoImages(
-            { content: [{ type: name, props: effective }] },
+            { content: [{ type: 'invoices.InvoiceLogo', props: effective }] },
             deps.loadAssetImage,
           )) as { content: { props: Record<string, unknown> }[] };
           effective = embedded.content[0]?.props ?? effective;
