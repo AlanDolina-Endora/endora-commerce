@@ -1,7 +1,7 @@
 {
   "nav.documentTemplates.label": "Szablony dokumentów",
   "actions.openDocumentTemplates.label": "Otwórz szablony dokumentów",
-  "actions.openDocumentTemplates.description": "Projektuj układ PDF porównań produktów i faktur",
+  "actions.openDocumentTemplates.description": "Projektuj układ PDF porównań produktów, faktur i zapytań ofertowych",
   "adminRoles.permission.document_templates:read": "Przeglądanie szablonów dokumentów",
   "adminRoles.permission.document_templates:write": "Edycja szablonów dokumentów",
   "blocks.category.layout": "Ogólne",
@@ -87,5 +87,8 @@
   "editor.conflict.title": "Szablon się zmienił",
   "editor.conflict.body": "Ktoś inny zapisał ten szablon po jego otwarciu. Wczytaj go ponownie, aby zobaczyć zmiany; Twoje niezapisane zmiany zostaną utracone.",
   "editor.conflict.reload": "Wczytaj ponownie",
-  "editor.conflict.keepEditing": "Edytuj dalej"
+  "editor.conflict.keepEditing": "Edytuj dalej",
+  "blocks.category.data": "Dane",
+  "blocks.itemsTable.label": "Tabela pozycji",
+  "blocks.itemsTable.description": "Pozycje dokumentu w tabeli o wybranych kolumnach, z opcjonalnym wierszem szczegółów, sumami i grupowaniem."
 }

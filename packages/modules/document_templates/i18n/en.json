@@ -1,7 +1,7 @@
 {
   "nav.documentTemplates.label": "Document templates",
   "actions.openDocumentTemplates.label": "Open document templates",
-  "actions.openDocumentTemplates.description": "Design the PDF layouts of product comparisons and invoices",
+  "actions.openDocumentTemplates.description": "Design the PDF layouts of product comparisons, invoices and quote requests",
   "adminRoles.permission.document_templates:read": "View document templates",
   "adminRoles.permission.document_templates:write": "Edit document templates",
   "blocks.category.layout": "General",
@@ -87,5 +87,8 @@
   "editor.conflict.title": "The template changed",
   "editor.conflict.body": "Someone else saved this template after you opened it. Reload it to see their changes; your unsaved changes will be lost.",
   "editor.conflict.reload": "Reload",
-  "editor.conflict.keepEditing": "Keep editing"
+  "editor.conflict.keepEditing": "Keep editing",
+  "blocks.category.data": "Data",
+  "blocks.itemsTable.label": "Line items table",
+  "blocks.itemsTable.description": "The document's lines as a table whose columns you choose, with an optional detail row, totals and grouping."
 }

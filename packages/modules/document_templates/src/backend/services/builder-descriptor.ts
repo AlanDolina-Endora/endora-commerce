@@ -12,7 +12,8 @@ import type { BlockDeclarations } from './block-declarations.js';
  * (`specs/152-compare-pdf-template/contracts/document-templates-api.md` route 3).
  *
  * Its components are exactly the type's palette (owner Q1): the type's own and
- * contributed blocks, then the core blocks it opts into. Each is described by
+ * contributed blocks, then the Line items table when the type declares a line
+ * collection (feature 153), then the core blocks it opts into. Each is described by
  * its declaring module's manifest — label key, category, default props and
  * fields — and, where no present manifest declares the block's fields, by the
  * renderer's own `describe()`, which is how a block another module contributes
@@ -86,6 +87,10 @@ export function buildDocumentBuilderConfig(
 
   for (const block of registry.blocks(code)) {
     components.push(describe(block.name, block.moduleId, block.describe?.()));
+  }
+  // Feature 153 — the facility's data-bound blocks, offered iff the type declares a collection.
+  for (const name of registry.collectionBlocks(code)) {
+    components.push(describe(name, 'document_templates'));
   }
   for (const name of registry.coreBlocks(code)) {
     components.push(describe(name, 'document_templates'));

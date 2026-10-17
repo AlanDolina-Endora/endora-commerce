@@ -29,3 +29,12 @@ describe('interpolateMergeFields', () => {
     expect(mergeFieldKeysIn('{{a}} {{ b }} {{a}} {{C}}')).toEqual(['a', 'b']);
   });
 });
+
+describe('reserved item-level placeholders (153 FR-045)', () => {
+  it('{{item.…}} and {{row.number}} print verbatim, even beside known keys', () => {
+    const values = { quoteNumber: 'Q-1', item: 'never used', row: 'never used' };
+    expect(interpolateMergeFields('{{quoteNumber}} {{item.sku}}', values)).toBe('Q-1 {{item.sku}}');
+    expect(interpolateMergeFields('{{item.attributes.colour}}', values)).toBe('{{item.attributes.colour}}');
+    expect(interpolateMergeFields('{{ row.number }}', values)).toBe('{{ row.number }}');
+  });
+});

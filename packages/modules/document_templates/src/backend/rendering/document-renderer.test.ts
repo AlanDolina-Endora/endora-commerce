@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type {
   DocumentBlockRenderer,
+  DocumentFieldDefinition,
+  DocumentItem,
   DocumentTypeRegistration,
   ModuleManifest,
 } from '@endora-commerce/contracts';
@@ -62,6 +64,8 @@ function setup(opts: {
     findDefaults: async (type, channel) =>
       rows.filter((r) => r.documentType === type && r.isDefault && (r.salesChannelId === null || r.salesChannelId === channel)),
     findById: async (id) => rows.find((r) => r.id === id) ?? null,
+    findApplicable: async (type, channel) =>
+      rows.filter((r) => r.documentType === type && (r.salesChannelId === null || r.salesChannelId === channel)),
   });
   const manifests = opts.manifests ?? [
     {
@@ -288,5 +292,143 @@ describe('DocumentRenderer — images and preview', () => {
     const result = await renderer.render(input());
     expect(Buffer.from(result.bytes.subarray(0, 5)).toString('utf8')).toBe('%PDF-');
     expect(result).toMatchObject({ source: 'default', templateId: 't1', templateVersion: 4, language: 'en-US', requestedTemplateMissing: false });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 153 — the Line items table through the engine (T012, SC-007)
+// ---------------------------------------------------------------------------
+
+describe('DocumentRenderer — a type declaring a line collection (153)', () => {
+  interface LinesData {
+    readonly lines: readonly { readonly name: string; readonly qty: number }[];
+  }
+
+  /** A test-only type, under a test-only module id — it adopts the table by declaring data alone (SC-007). */
+  function linesSetup(over: { fields?: () => Promise<DocumentFieldDefinition[]>; items?: (data: LinesData) => DocumentItem[]; tables?: unknown[] } = {}) {
+    const isPresent = (id: string) => id === 'fixturemod' || id === 'document_templates';
+    const registry = new DocumentTypeRegistry(isPresent, () => undefined);
+    const fields = vi.fn(over.fields ?? (async () => [
+      { path: 'name', label: 'Name', valueKind: 'text' as const, group: 'line', audience: 'customer' as const },
+      { path: 'qty', label: 'Qty', valueKind: 'number' as const, group: 'line', audience: 'customer' as const },
+    ]));
+    const items = vi.fn(over.items ?? ((data: LinesData) => data.lines.map((l) => ({ values: { name: { kind: 'text' as const, value: l.name }, qty: { kind: 'number' as const, value: l.qty } } }))));
+    const tableNode = (cols: string[], extra: Record<string, unknown> = {}) =>
+      node('document_templates.ItemsTable', { columns: cols.map((f, i) => ({ id: `c${i}`, field: f })), ...extra });
+    registry.register({
+      code: 'fixturemod.lines_doc',
+      moduleId: 'fixturemod',
+      labelKey: 'x',
+      blocks: () => [],
+      coreBlocks: 'none',
+      selection: 'default_only',
+      defaultContent: () => ({
+        schemaVersion: 1,
+        languages: { 'en-US': tree((over.tables as never[]) ?? [tableNode(['row.number', 'name', 'qty'])]) },
+      }),
+      sampleData: () => ({ lines: [{ name: 'Sample', qty: 1 }] }),
+      collections: [
+        {
+          key: 'lines',
+          labelKey: 'l',
+          fields,
+          items,
+          summaryFields: async () => [{ path: 'count', label: 'Count', valueKind: 'number', group: 'total', audience: 'customer' }],
+          summary: (data: LinesData) => ({ count: { kind: 'number', value: data.lines.length } }),
+        },
+      ],
+    } as DocumentTypeRegistration<LinesData>);
+    const log = vi.fn();
+    const renderer = new DocumentRenderer({
+      registry,
+      resolver: new TemplateResolver({ findDefaults: async () => [], findById: async () => null, findApplicable: async () => [] }),
+      declarations: new BlockDeclarations(() => [], isPresent),
+      assets: { openAssetBytes: vi.fn() },
+      now: () => new Date('2026-10-17T10:00:00.000Z'),
+      log,
+    });
+    return { renderer, fields, items, log, tableNode };
+  }
+
+  const linesInput = { documentType: 'fixturemod.lines_doc', salesChannelId: null, language: 'en-US', data: { lines: [{ name: 'Bolt', qty: 3 }, { name: 'Nut', qty: 5 }] } };
+  const bodyOf = (definition: { content: unknown }) =>
+    ((definition.content as { stack: { table: { body: { text: string }[][] } }[] }[])[0]!.stack[0]!.table.body).map((row) => row.map((c) => c.text));
+
+  it('prints the type’s own lines through the facility block, numbered', async () => {
+    const { renderer } = linesSetup();
+    const built = await renderer.buildDefinition(linesInput);
+    expect(bodyOf(built.definition)).toEqual([
+      ['No.', 'Name', 'Qty'],
+      ['1', 'Bolt', '3'],
+      ['2', 'Nut', '5'],
+    ]);
+  });
+
+  it('loads the catalogue and the items once per collection per render, however many tables use it', async () => {
+    const s = linesSetup();
+    const twice = linesSetup({ tables: [s.tableNode(['name']), s.tableNode(['qty'], { totals: [{ field: 'count', label: 'n' }] })] });
+    await twice.renderer.buildDefinition(linesInput);
+    expect(twice.fields).toHaveBeenCalledTimes(1);
+    expect(twice.items).toHaveBeenCalledTimes(1);
+  });
+
+  it('a catalogue that rejects prints the columns empty, logged, and the document still renders', async () => {
+    const { renderer } = linesSetup({ fields: async () => { throw new Error('attributes down'); } });
+    const built = await renderer.buildDefinition(linesInput);
+    expect(bodyOf(built.definition)).toEqual([
+      ['No.', '', ''],
+      ['1', '', ''],
+      ['2', '', ''],
+    ]);
+  });
+
+  it('items() throwing fails the document naming the block', async () => {
+    const { renderer, log } = linesSetup({ items: () => { throw new Error('bad data'); } });
+    await expect(renderer.buildDefinition(linesInput)).rejects.toMatchObject({ code: 'DOCUMENT_RENDER_FAILED' });
+    expect(log).toHaveBeenCalledWith(
+      '[document_templates] a block failed to render',
+      expect.objectContaining({ blockName: 'document_templates.ItemsTable' }),
+    );
+  });
+
+  it('skips the table in a type that declares no collection', async () => {
+    const { renderer } = setup({
+      rows: [row('t1', tree([node('document_templates.ItemsTable', { columns: [{ id: 'a', field: 'name' }] }), node('acme.Body', { text: 'kept' })]))],
+    });
+    const built = await renderer.buildDefinition(input());
+    expect(texts(built.definition)).toEqual(['kept|Real|-|calm']);
+  });
+
+  it('produces PDF bytes with a long table (smoke)', async () => {
+    const { renderer } = linesSetup();
+    const lines = Array.from({ length: 120 }, (_, i) => ({ name: `Line ${i + 1}`, qty: i }));
+    const result = await renderer.render({ ...linesInput, data: { lines } });
+    expect(Buffer.from(result.bytes.subarray(0, 5)).toString('utf8')).toBe('%PDF-');
+  });
+});
+
+describe('DocumentRenderer.listChoices (153 contract §5)', () => {
+  it('answers the selection list of a per_document type', async () => {
+    const { renderer } = setup({ rows: [row('t1', tree([node('acme.Body')]), { name: 'Main' } as never)] });
+    const choices = await renderer.listChoices({ documentType: 'acme.note', salesChannelId: A });
+    expect(choices).toEqual({
+      templates: [{ id: 't1', name: 'Main', salesChannelId: null, languages: ['en-US'], isDefault: true }],
+      effectiveDefaultId: 't1',
+      builtInLanguages: ['en-US'],
+    });
+  });
+
+  it('refuses a default_only type and an unavailable one', async () => {
+    const defaultOnly = setup({ registration: { selection: 'default_only' } });
+    await expect(defaultOnly.renderer.listChoices({ documentType: 'acme.note', salesChannelId: null })).rejects.toMatchObject({
+      code: 'DOCUMENT_TEMPLATE_NOT_SELECTABLE',
+      statusCode: 422,
+    });
+    const absent = setup({});
+    absent.present.delete('acme');
+    await expect(absent.renderer.listChoices({ documentType: 'acme.note', salesChannelId: null })).rejects.toMatchObject({
+      code: 'DOCUMENT_TYPE_NOT_AVAILABLE',
+      statusCode: 404,
+    });
   });
 });
