@@ -15,7 +15,7 @@ const ADAPTER_CODES = ['local', 's3', 'gcs'] as const;
 
 export function createSettingsView(
   emFactory: () => EntityManager,
-): AdapterSettingsView {
+): AdapterSettingsView & { softDeleteRetentionDays(): Promise<number> } {
   async function readString(code: string): Promise<string> {
     const em = emFactory();
     const setting = await em.findOne(Setting, { code });
@@ -34,12 +34,16 @@ export function createSettingsView(
     const setting = await em.findOne(Setting, { code });
     if (!setting) return fallback;
     const override = await em.findOne(SettingValue, { setting: setting });
-    const raw = override ? override.value : setting.defaultValue;
+    const raw = override ? override.value : setting.globalValue ?? setting.defaultValue;
     const n = typeof raw === 'number' ? raw : Number(raw);
     return Number.isFinite(n) ? n : fallback;
   }
 
   return {
+    async softDeleteRetentionDays() {
+      const days = await readNumber('assets.soft_delete_retention_days', 30);
+      return days >= 0 ? days : 30;
+    },
     async activeAdapter() {
       const v = (await readString('assets.storage.adapter')).trim();
       if ((ADAPTER_CODES as readonly string[]).includes(v)) {

@@ -73,6 +73,10 @@ Deletes go through a two-step lifecycle:
    `purgeAfterAt = now + assets.soft_delete_retention_days` (default 30).
    The asset disappears from listings and pickers but remains recoverable
    via `POST /api/v1/admin/assets/:id/restore`.
+   Recursive folder deletion uses the same retention setting. The value is read
+   when an asset is deleted; changing it does not reschedule assets already
+   soft-deleted. Negative or non-finite values fall back to 30 days. A value of
+   `0` makes an asset eligible for hard deletion on the next sweep.
 2. The repeating `HardDeleteAssetWorker` finalises after `purgeAfterAt`:
    removes the row and asks the adapter to delete the underlying file.
    If the backend cannot remove the file (read-only mount, revoked
