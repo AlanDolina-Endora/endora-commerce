@@ -128,6 +128,8 @@ export function DocumentTemplateEditor(): ReactNode {
   const [languages, setLanguages] = useState<string[]>([]);
   const [language, setLanguage] = useState<string>('');
   const [draft, setDraft] = useState<Data>(EMPTY);
+  /** The language `draft` was loaded for — behind `language` until the effect below has run. */
+  const [draftOf, setDraftOf] = useState<string | null>(null);
   const [epoch, setEpoch] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -223,6 +225,7 @@ export function DocumentTemplateEditor(): ReactNode {
     if (!template || !language) return;
     const tree = template.content.languages[language] as Data | undefined;
     setDraft(tree ? hydrate(tree, declaredDefaults) : EMPTY);
+    setDraftOf(language);
     setEpoch((n) => n + 1);
   }, [template, language, declaredDefaults]);
 
@@ -343,12 +346,15 @@ export function DocumentTemplateEditor(): ReactNode {
 
   const selectLanguage = useCallback(
     (target: string): void => {
-      if (template && !template.content.languages[target] && template.content.languages[language]) {
-        setCopyFrom({ language, tree: draft });
+      const stored = template?.content.languages[language] as Data | undefined;
+      if (template && !template.content.languages[target] && stored) {
+        // A switch made before the edited language's canvas has loaded copies
+        // what is stored rather than the empty canvas it would otherwise see.
+        setCopyFrom({ language, tree: draftOf === language ? draft : hydrate(stored, declaredDefaults) });
       }
       setLanguage(target);
     },
-    [template, language, draft],
+    [template, language, draft, draftOf, declaredDefaults],
   );
 
   const startLanguage = useCallback(
