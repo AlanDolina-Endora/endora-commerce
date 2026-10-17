@@ -3,7 +3,7 @@ import { ITEMS_TABLE_LIMITS, type DocumentFieldDefinition } from '@endora-commer
 import { Button, Input, Label, Select } from '@endora-commerce/admin-kit/ui';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { InternalBadge, FieldPicker } from './FieldPicker.js';
-import { newColumnId, useCollection } from './collections-context.js';
+import { newColumnId, NO_FIELDS, useCollection } from './collections-context.js';
 import { asList, asRecord, FieldName, opOf, text, useListReorder, type Entry } from './shared.js';
 
 /**
@@ -35,7 +35,7 @@ function visibilityKey(rule: unknown): string {
 export function ColumnsField({ value, onChange, readOnly = false }: ColumnsFieldProps): ReactNode {
   const t = useTranslation('document_templates');
   const collection = useCollection();
-  const fields = collection?.fields ?? [];
+  const fields = collection?.fields ?? NO_FIELDS;
   const byPath = useMemo(() => new Map(fields.map((field) => [field.path, field])), [fields]);
   const columns = asList(value);
   const [editing, setEditing] = useState<number | null>(null);

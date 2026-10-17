@@ -4,7 +4,7 @@ import { Button, Checkbox, Input, Label, Select } from '@endora-commerce/admin-k
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { InternalBadge } from './FieldPicker.js';
 import { ENTRY_VISIBILITY, ENTRY_VISIBILITY_KEY } from './DetailRowField.js';
-import { useCollection } from './collections-context.js';
+import { NO_FIELDS, useCollection } from './collections-context.js';
 import { asList, FieldName, opOf, text, useListReorder, type Entry } from './shared.js';
 
 /**
@@ -22,7 +22,7 @@ export function TotalsField({ value, onChange, readOnly = false }: TotalsFieldPr
   const t = useTranslation('document_templates');
   const base = useId();
   const collection = useCollection();
-  const summaryFields = collection?.summaryFields ?? [];
+  const summaryFields = collection?.summaryFields ?? NO_FIELDS;
   const byPath = useMemo(() => new Map(summaryFields.map((field) => [field.path, field])), [summaryFields]);
   const totals = asList(value);
   const nameOf = useCallback(

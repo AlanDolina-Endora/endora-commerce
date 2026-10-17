@@ -3,7 +3,7 @@ import { ITEMS_TABLE_LIMITS } from '@endora-commerce/contracts';
 import { Button, Checkbox, Input, Label, Select } from '@endora-commerce/admin-kit/ui';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { FieldPicker, InternalBadge } from './FieldPicker.js';
-import { useCollection } from './collections-context.js';
+import { NO_FIELDS, useCollection } from './collections-context.js';
 import { asList, asRecord, FieldName, opOf, text, useListReorder, type Entry } from './shared.js';
 
 /**
@@ -28,7 +28,7 @@ export function DetailRowField({ value, onChange, readOnly = false }: DetailRowF
   const t = useTranslation('document_templates');
   const base = useId();
   const collection = useCollection();
-  const fields = collection?.fields ?? [];
+  const fields = collection?.fields ?? NO_FIELDS;
   const byPath = useMemo(() => new Map(fields.map((field) => [field.path, field])), [fields]);
   const row = asRecord(value);
   const enabled = row['enabled'] === true || row['enabled'] === 'true';

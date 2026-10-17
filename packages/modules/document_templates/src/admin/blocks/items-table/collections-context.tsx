@@ -53,6 +53,9 @@ export function useDocumentLanguage(): string {
   return useContext(DocumentCollectionsContext).language;
 }
 
+/** A stable empty catalogue, so a hook's dependencies do not change on every render. */
+export const NO_FIELDS: readonly DocumentFieldDefinition[] = [];
+
 /** A collection by key, else the first one. */
 export function useCollection(key?: unknown): CollectionView | undefined {
   const collections = useDocumentCollections();
