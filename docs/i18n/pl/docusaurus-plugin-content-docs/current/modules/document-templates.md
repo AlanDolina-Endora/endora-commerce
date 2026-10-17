@@ -1,0 +1,120 @@
+---
+title: Szablony dokumentów
+description: Projektowanie dokumentów PDF generowanych przez platformę — porównania produktów i faktury — w Page Builderze, dla każdego rodzaju dokumentu, języka i kanału sprzedaży
+---
+
+# Szablony dokumentów
+
+Szablony dokumentów pozwalają operatorowi zaprojektować układ dokumentów PDF generowanych przez
+platformę, w tym samym Page Builderze co strony CMS i e-maile. W tym wydaniu korzystają z nich dwa
+rodzaje dokumentów — **typy dokumentów**:
+
+| Typ dokumentu | Dostarcza go | Powstaje, gdy |
+| --- | --- | --- |
+| **Porównanie produktów** | Compare Products | kupujący klika **PDF** na stronie porównania w sklepie |
+| **Faktura** | Faktury | PDF faktury pobiera administrator lub klient, jest generowany ponownie albo dołączany do e-maila z fakturą |
+
+Typ dokumentu dostarcza moduł, do którego należą dane dokumentu, dlatego jest widoczny tylko wtedy,
+gdy ten moduł jest włączony. Moduł decyduje też, jakich bloków mogą używać jego dokumenty.
+
+## Gdzie to znaleźć
+
+**Treści → Szablony dokumentów** w menu bocznym albo **⌘K** / **Ctrl+K** i wpisz *pdf*, *szablon
+dokumentu*, *szablon faktury* lub *invoice template*. Przycisk **Szablon PDF** na ekranie
+**Porównania** otwiera kartę porównania produktów, a zakładka **Szablony** w **Fakturach** — kartę
+faktury.
+
+## Układ wbudowany, szablony i szablon domyślny
+
+Każdy typ dokumentu ma **układ wbudowany**: układ dostarczany przez platformę. Jest używany zawsze,
+gdy nie ma pasującego szablonu, i od niego zaczyna się każdy nowy szablon.
+
+Typ dokumentu może mieć dowolnie wiele **szablonów**. Każdy szablon dotyczy **wszystkich kanałów
+sprzedaży** albo **jednego kanału** — to jego zakres, wybierany przy tworzeniu i potem niezmienny. W
+każdym zakresie **co najwyżej jeden szablon jest domyślny**. Dokument powstaje z:
+
+1. domyślnego szablonu kanału sprzedaży dokumentu, a w jego braku
+2. domyślnego szablonu dla wszystkich kanałów, a w jego braku
+3. układu wbudowanego.
+
+Szablon, którego układ nie zawiera niczego do wydrukowania, jest traktowany jak nieistniejący i
+używany jest następny w tej kolejności.
+
+Utworzenie szablonu nie zmienia żadnego dokumentu: nowy szablon nie jest domyślny, chyba że zaznaczono
+**Ustaw jako domyślny**. Bezpieczny sposób zmiany tego, co otrzymują klienci, to *duplikuj → edytuj →
+ustaw jako domyślny*. Ustawienie szablonu jako domyślnego zastępuje w tym samym kroku poprzedni
+szablon domyślny jego zakresu; usunięcie szablonu domyślnego wymaga potwierdzenia, które mówi, co
+zostanie użyte zamiast niego.
+
+## Edycja szablonu
+
+Edytor oferuje **tylko bloki typu dokumentu, do którego należy szablon**:
+
+| Typ dokumentu | Bloki |
+| --- | --- |
+| Porównanie produktów | Nagłówek porównania, Tabela porównania, Link do udostępniania oraz bloki ogólne: Nagłówek, Tekst, Obraz (z biblioteki zasobów), Odstęp, Linia, Podział strony |
+| Faktura | Nagłówek, Strony, Pozycje, Podsumowanie VAT, Sumy, Uwagi, Odstęp, Separator, Logo, Stopka oraz bloki, które dla faktur udostępniają inne zainstalowane moduły (np. sekcja KSeF) |
+
+Kanwa pokazuje każdy blok wypełniony **przykładowym dokumentem**; **Podgląd PDF** generuje
+prawdziwy PDF kanwy — zapisanej lub nie — z tymi samymi przykładowymi danymi i niczego nie zapisuje.
+
+**Ustawienia strony** (korzeń drzewa) określają rozmiar strony (A4 lub Letter), orientację
+(automatyczną — poziomą od trzech porównywanych produktów — pionową lub poziomą), marginesy, bazowy
+rozmiar czcionki, opcjonalny powtarzany tekst nagłówka i stopki oraz numery stron.
+
+**Pola korespondencji** to symbole wpisywane w tekst, np. `{{date}}` albo `{{customerName}}`,
+zastępowane podczas generowania PDF. Edytor wyświetla pola korespondencji danego typu dokumentu;
+`{{page}}` i `{{pages}}` działają tylko w nagłówku, stopce i formacie numeru strony. Pole bez
+wartości drukuje się jako puste; pole z literówką drukuje się tak, jak je wpisano.
+
+**Języki.** Szablon zawiera jeden układ na każdy język. Porównanie produktów może zawierać każdy
+aktywny język treści: kupujący otrzymuje układ w języku, w którym wyświetlany jest sklep, a w jego
+braku w języku o tym samym języku bazowym, a potem po angielsku lub w pierwszym języku szablonu;
+nazwy produktów i atrybutów, daty i ceny są drukowane w tym języku. Wybór języka, którego szablon
+jeszcze nie ma, pozwala zacząć go od kopii edytowanego języka. Faktury są drukowane wyłącznie po
+polsku, dlatego edytor faktury nie oferuje wyboru języka.
+
+**Zapis** jest odrzucany, jeśli ktoś inny zapisał szablon po jego otwarciu; wczytaj go ponownie, aby
+zobaczyć zmiany. Blok, którego moduł jest wyłączony, zostaje w szablonie, jest pokazywany jako
+zastępczy i nie jest drukowany.
+
+## Uprawnienia
+
+| Uprawnienie | Pozwala |
+| --- | --- |
+| `document_templates:read` | na listę, edytor (tylko odczyt) i **Podgląd PDF** |
+| `document_templates:write` | na tworzenie, zmianę nazwy, zapis, ustawianie i usuwanie oznaczenia domyślnego, duplikowanie i usuwanie |
+
+Gdy szablony faktur zostały tu przeniesione, każda rola mogąca przeglądać faktury otrzymała
+`document_templates:read`, a każda rola mogąca edytować faktury także `document_templates:write` —
+jednorazowo; uprawnienie odebrane później nie jest przywracane. Każda zmiana szablonu jest zapisywana
+w dzienniku audytu.
+
+## Wyłączanie modułów
+
+- **Szablony dokumentów wyłączone** — znikają ekrany, pozycja w menu, akcja palety i przycisk
+  **Szablon PDF** porównania, a API odpowiada `MODULE_DISABLED`; PDF porównania działa dalej ze stałym
+  układem. Modułu nie można wyłączyć, dopóki włączone są **Faktury**, bo z niego powstaje każdy PDF
+  faktury. Szablony są zachowywane i wracają bez zmian po ponownym włączeniu.
+- **Compare Products albo Faktury wyłączone** — dany typ dokumentu, jego bloki i szablony znikają z
+  ekranów i z API; nic nie jest usuwane.
+
+## Limity
+
+Szablon zawiera do 10 języków, do 200 bloków i 20 obrazów na język oraz do 512 KiB treści; tekst
+może mieć do 5 000 znaków. Tabela porównania drukuje od 1 do 8 produktów na tabelę i kontynuuje w
+następnej tabeli.
+
+## API
+
+`/api/v1/admin/document-templates` — typy dokumentów (`/types`, `/types/:code`,
+`/types/:code/builder-config`), szablony (lista, odczyt, tworzenie lub duplikowanie, zmiana nazwy,
+zapis jednego języka, ustawianie i usuwanie oznaczenia domyślnego, usuwanie) oraz `POST /preview`.
+Kody błędów: `DOCUMENT_TEMPLATE_NOT_FOUND`, `DOCUMENT_TYPE_NOT_AVAILABLE`,
+`DOCUMENT_TEMPLATE_INVALID`, `DOCUMENT_TEMPLATE_IS_DEFAULT`, `DOCUMENT_TEMPLATE_NOT_SELECTABLE`,
+`DOCUMENT_RENDER_FAILED`.
+
+Moduł dodaje typ dokumentu, rejestrując go — z blokami, informacją, czy korzysta z bloków ogólnych,
+polami korespondencji, przykładowymi danymi, układem wbudowanym, językami, domyślnymi ustawieniami
+strony i informacją, czy dla pojedynczego dokumentu można wybrać szablon — w `documentTypeRegistry`,
+a dokumenty generuje przez `documentRenderPort`, przekazując własne dane.

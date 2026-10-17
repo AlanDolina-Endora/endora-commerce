@@ -101,6 +101,15 @@ a new file with the new mode.
 PDFs of three or more products land in landscape orientation; one or
 two products land in portrait.
 
+The PDF is printed in the language the storefront is shown in, with the
+rows the screen shows — including the **Hide empty rows** switch. Its
+layout is the **Product comparison** document template: an operator
+designs it in **Document templates** (the **PDF template** button on the
+**Comparisons** screen opens it), with a comparison header, the comparison
+table, a share link and general blocks such as a logo or a footer. Until a
+template is set as default, the built-in layout is used. While Document
+templates is switched off, the PDF keeps a fixed English layout.
+
 ### 7. Tidy up
 
 When you're done, click **Delete comparison**. The set is cleared and
@@ -162,6 +171,7 @@ disappears from the admin list on the next refresh.
 | --- | --- |
 | **Catalog → Attributes**, the `Comparable` checkbox | Picks which attributes appear as rows on the comparison page. Independent of `Searchable` / `Filterable`. |
 | **Settings → Compare**, the `compare.max_products` setting | The per-channel cap on how many products a single comparison can hold. |
+| **Document templates → Product comparison** | The layout of the comparison PDF, per language and optionally per sales channel. |
 
 ## Why this exists
 
@@ -182,7 +192,7 @@ tickets that quote a shared link.
 | `DELETE /api/v1/comparisons/me/products/:productId` | storefront | Remove a product; `404 PRODUCT_NOT_IN_COMPARISON` if absent |
 | `PATCH /api/v1/comparisons/me` | storefront | Update the persisted display mode (`all` / `common` / `differences`) |
 | `DELETE /api/v1/comparisons/me` | storefront | Hard-delete the Comparison; the share token stops resolving for everyone |
-| `GET /api/v1/comparisons/me/pdf` | storefront (owner only) | Owner PDF export; PDF mirrors the active mode and embeds product base images; `409 COMPARISON_EMPTY` for a zero-product comparison |
+| `GET /api/v1/comparisons/me/pdf` | storefront (owner only) | Owner PDF export; PDF mirrors the active mode and embeds product base images; `Accept-Language` picks the PDF's language and `?hideEmptyRows=true` drops rows with no value; laid out by the Product comparison document template; `409 COMPARISON_EMPTY` for a zero-product comparison |
 | `GET /api/v1/comparisons/share/:token` | public, no auth | Recipient view; same shape as the owner read minus `maxProducts`, plus `meta.viewerIsOwner`; priced and filtered for the *recipient* (`data.pricedFor`, `data.hiddenProductCount`); `404 COMPARISON_NOT_FOUND` for a deleted/never-existed token |
 | `GET /api/v1/admin/comparisons` | admin (`comparisons:read`) | List every Comparison with filters (channel, owner kind, time range) and cursor pagination |
 | `GET /api/v1/admin/comparisons/:id` | admin (`comparisons:read`) | Read-only detail; rendered through the comparison's recorded sales channel so the view matches what the customer reported |

@@ -85,6 +85,14 @@ każdym razem od nowa; zmiana widoku i ponowny eksport daje nowy plik z nowym wi
 
 PDF z trzema lub więcej produktami ma orientację poziomą, a z jednym lub dwoma — pionową.
 
+PDF jest drukowany w języku, w którym wyświetlany jest sklep, z tymi samymi wierszami co na ekranie —
+łącznie z przełącznikiem **Hide empty rows**. Jego układ to szablon dokumentu **Porównanie
+produktów**: operator projektuje go w **Szablonach dokumentów** (otwiera je przycisk **Szablon PDF**
+na ekranie **Porównania**), z nagłówkiem porównania, tabelą porównania, linkiem do udostępniania i
+blokami ogólnymi, takimi jak logo czy stopka. Dopóki żaden szablon nie jest ustawiony jako domyślny,
+używany jest układ wbudowany. Gdy moduł Szablony dokumentów jest wyłączony, PDF ma stały układ po
+angielsku.
+
 ### 7. Zakończ
 
 Po zakończeniu kliknij **Delete comparison**. Zestaw zostaje wyczyszczony, a wysłane linki przestają
@@ -136,6 +144,7 @@ Gdy klient usunie porównanie w storefroncie, wiersz znika z listy w panelu po n
 | --- | --- |
 | **Catalog → Attributes**, pole `Comparable` | Wybór atrybutów, które są wierszami na stronie porównania. Niezależne od `Searchable` / `Filterable`. |
 | **Settings → Compare**, ustawienie `compare.max_products` | Limit liczby produktów w jednym porównaniu, osobno dla każdego kanału. |
+| **Szablony dokumentów → Porównanie produktów** | Układ PDF porównania, dla każdego języka i opcjonalnie dla kanału sprzedaży. |
 
 ## Po co to jest
 
@@ -155,7 +164,7 @@ w których klienci podają udostępniony link.
 | `DELETE /api/v1/comparisons/me/products/:productId` | storefront | Usunięcie produktu; `404 PRODUCT_NOT_IN_COMPARISON`, gdy go nie ma |
 | `PATCH /api/v1/comparisons/me` | storefront | Zmiana zapisanego widoku (`all` / `common` / `differences`) |
 | `DELETE /api/v1/comparisons/me` | storefront | Trwałe usunięcie porównania; token udostępnienia przestaje działać dla wszystkich |
-| `GET /api/v1/comparisons/me/pdf` | storefront (tylko właściciel) | Eksport do PDF dla właściciela; PDF odzwierciedla aktywny widok i zawiera główne zdjęcia produktów; `409 COMPARISON_EMPTY` dla porównania bez produktów |
+| `GET /api/v1/comparisons/me/pdf` | storefront (tylko właściciel) | Eksport do PDF dla właściciela; PDF odzwierciedla aktywny widok i zawiera główne zdjęcia produktów; `Accept-Language` wybiera język PDF, a `?hideEmptyRows=true` pomija wiersze bez wartości; układ wyznacza szablon dokumentu Porównanie produktów; `409 COMPARISON_EMPTY` dla porównania bez produktów |
 | `GET /api/v1/comparisons/share/:token` | publiczny, bez uwierzytelniania | Widok dla odbiorcy; ta sama postać co odczyt właściciela, bez `maxProducts`, z `meta.viewerIsOwner`; ceny i filtrowanie dla *odbiorcy* (`data.pricedFor`, `data.hiddenProductCount`); `404 COMPARISON_NOT_FOUND` dla usuniętego lub nigdy nieistniejącego tokenu |
 | `GET /api/v1/admin/comparisons` | administrator (`comparisons:read`) | Lista wszystkich porównań z filtrami (kanał, rodzaj właściciela, okres) i stronicowaniem kursorowym |
 | `GET /api/v1/admin/comparisons/:id` | administrator (`comparisons:read`) | Szczegóły tylko do odczytu; pokazywane w kontekście kanału sprzedaży zapisanego w porównaniu, aby widok odpowiadał temu, co zgłosił klient |

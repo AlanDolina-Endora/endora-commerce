@@ -97,17 +97,24 @@ misconfiguration must not become a storefront outage.
 - **e-invoicing** — for KSeF / Peppol / similar, plug a sender adapter
   that consumes `invoice.issued.v1` events.
 
-## PDF templates (page builder)
+## PDF templates
 
-Admin route `/invoices/templates` edits a Puck tree of invoice sections
-(`InvoiceHeader`, `InvoiceParties`, line/VAT tables, totals, notes, KSeF,
-plus layout blocks: spacer, divider, logo, footer). Section props
-personalize typography, column visibility, and labels; missing props keep
-the historical default layout.
+Invoice PDF layouts are designed in **Document templates → Invoice** (the
+**Templates** tab of **Invoices** opens it; the former `/invoices/templates`
+addresses redirect there). The invoice blocks — header, parties, line items,
+VAT summary, totals, notes, spacer, divider, logo, footer — plus blocks other
+installed modules contribute to invoices (a KSeF section) are the invoice
+template's palette. Every invoice PDF — the administrator and customer
+downloads, the regenerate, and the PDF attached to the invoice e-mail — is
+produced from the default invoice template of the invoice's sales channel,
+else the default for all channels, else the built-in invoice layout. Invoice
+PDFs are printed in Polish.
 
-- `GET /api/v1/admin/invoice-templates/:id/preview` — PDF of the **saved**
-  template content for that id (sample invoice fixture).
-- `POST /api/v1/admin/invoice-templates/:id/preview` — same, with a draft
-  `{ data }` body so authors can preview unsaved canvas state.
-- Runtime issue path still uses `resolveTree(salesChannelId)` (active
-  channel/global template).
+The KSeF number is printed exactly once: by a placed block that prints it, or
+otherwise by the header.
+
+The former invoice-template administration API (`/api/v1/admin/invoice-templates*`)
+is withdrawn; invoice templates are managed through
+`/api/v1/admin/document-templates`. Invoicing cannot be switched on without
+Document templates, and Document templates cannot be switched off while
+invoicing is on.

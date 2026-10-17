@@ -24,14 +24,13 @@ Generates, numbers, renders, corrects, and emails invoices for orders.
   (`link` mode). Idempotent, best-effort.
 - **Customer access** — `GET /api/v1/orders/:id/invoices` and `.../:invoiceId/pdf`
   (ownership-guarded); surfaced on the storefront order page.
-- **WYSIWYG templates (US6)** — a seeded global generic template + optional
-  per-channel templates, authored in a dedicated Puck editor in the admin
-  (`/invoices/templates`). The PDF renderer maps the template's Puck tree to
-  pdfmake sections (`InvoiceHeader`, `InvoiceParties`, `InvoiceLineItems`,
-  `InvoiceVatSummary`, `InvoiceTotals`, `InvoiceNotes`, `InvoiceKsef`), falling
-  back to the built-in layout when no valid template applies (FR-016). Endpoints
-  under `/api/v1/admin/invoice-templates` (list/get/create, `PUT content/:lang`,
-  `GET .../preview`, page-builder config).
+- **PDF layouts** — designed in *Document templates* (`document_templates`):
+  this module registers the `invoices.invoice` document type — its ten blocks
+  over the pdfmake section builders, the blocks other modules contribute through
+  `invoicePdfBlockRegistry`, and the generic layout as its built-in layout — and
+  produces every invoice PDF (downloads, regenerate, e-mail attachment) through
+  `documentRenderPort`. The former `/api/v1/admin/invoice-templates` API and the
+  `invoice_templates` table are gone (`specs/152-compare-pdf-template/`).
 - **Settings** — seller VAT/NIP + company data (JSON), numbering patterns,
   auto-issue trigger, email toggle + delivery mode, storefront base URL — all
   global + per-channel.

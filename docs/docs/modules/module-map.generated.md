@@ -45,7 +45,7 @@ of the platform, not of what happens to be written.
 | [customers](./customers.md) | Customer lifecycle over `customer_accounts` — company and personal Organizations, sales-rep assignment and the admin customer surface | @endora-commerce/mod-customers |
 | [delivery_methods](./delivery_methods.md) | Configured delivery options | @endora-commerce/mod-delivery-methods |
 | [Dictionary](./dictionaries/index.md) | Seeded reference data — Countries, Currencies, Languages — with admin reordering | @endora-commerce/mod-dictionaries |
-| [Document templates](./document-templates.md) | Design the PDF documents the platform produces — the product comparison and the invoice — in the Page Builder | @endora-commerce/mod-document-templates |
+| [Document templates](./document-templates.md) | Design the PDF documents the platform produces — the product comparison and the invoice — in the Page Builder, per document type, language and sales channel | @endora-commerce/mod-document-templates |
 | `email` | _no page yet_ | @endora-commerce/mod-email |
 | `erp_connector` | _no page yet_ | @endora-commerce/mod-erp-connector |
 | [Google Analytics](./google-analytics.md) | Google Analytics 4 for the storefront — per-channel Measurement ID, Enhanced Ecommerce, a custom-events builder and optional server-side tagging | @endora-commerce/mod-google-analytics |

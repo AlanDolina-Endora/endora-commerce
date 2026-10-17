@@ -29,9 +29,11 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 
 | Moduł | Wiążąca | Co to oznacza |
 | --- | --- | --- |
+| `admin_roles` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `assets_library` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `auth` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `customer_accounts` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `document_templates` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `orders` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `organizations` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `settings` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
@@ -43,13 +45,12 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | Kod | Etykieta | Wymaga też |
 | --- | --- | --- |
 | `invoices:read` | View invoices and download invoice PDFs | — |
-| `invoices:write` | Issue/correct invoices, edit templates, and configure invoicing | — |
+| `invoices:write` | Issue/correct invoices and configure invoicing | — |
 
 ## Paleta poleceń
 
 | Akcja | Otwiera | Uprawnienie |
 | --- | --- | --- |
-| `invoice-templates` | `/invoices/templates` | `invoices:read` |
 | `open-invoices` | `/invoices` | `invoices:read` |
 
 ## Ustawienia
@@ -57,6 +58,7 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | Kod | Nazwa | Typ |
 | --- | --- | --- |
 | `invoices.auto_issue.trigger_status` | Auto-issue on order status | `string` |
+| `invoices.document_templates_grant_done` | Document template access granted | `boolean` |
 | `invoices.email.delivery_mode` | Invoice email delivery mode | `string` |
 | `invoices.email.send_on_issue` | Email invoice on issue | `boolean` |
 | `invoices.enabled` | Invoices enabled | `boolean` |
