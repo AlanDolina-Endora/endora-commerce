@@ -28,6 +28,8 @@ export interface AssetsLibraryServiceDeps {
   referenceRegistry: AssetReferenceRegistry;
   /** Upload-policy provider — reads `assets.allowed_file_types` + max-size. */
   loadUploadPolicy: () => Promise<UploadPolicy>;
+  /** Live retention setting; omitted by standalone consumers to keep the 30-day default. */
+  loadRetentionDays?: () => Promise<number>;
   /** Feature 054 — audits asset writes co-transactionally when provided. */
   auditLog?: AuditPort;
 }
@@ -236,7 +238,7 @@ export class AssetsLibraryService {
         })),
       );
     }
-    const retentionDays = 30; // assets.soft_delete_retention_days; reads inline in US2.
+    const retentionDays = this.deps.loadRetentionDays ? await this.deps.loadRetentionDays() : 30;
     const now = new Date();
     a.deletedAt = now;
     a.purgeAfterAt = new Date(now.getTime() + retentionDays * 24 * 60 * 60 * 1000);

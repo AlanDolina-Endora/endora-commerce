@@ -18,6 +18,7 @@ export class FoldersService {
     private readonly emFactory: () => EntityManager,
     private readonly referenceRegistry: AssetReferenceRegistry,
     private readonly auditLog?: AuditPort,
+    private readonly loadRetentionDays: () => Promise<number> = async () => 30,
   ) {}
 
   #audit(
@@ -202,8 +203,8 @@ export class FoldersService {
         }
       }
       // Soft-delete all assets in subtree.
+      const retentionDays = await this.loadRetentionDays();
       const now = new Date();
-      const retentionDays = 30;
       const purgeAt = new Date(now.getTime() + retentionDays * 24 * 60 * 60 * 1000);
       for (const aid of subtreeIds) {
         const a = await em.findOneOrFail(Asset, { id: aid });

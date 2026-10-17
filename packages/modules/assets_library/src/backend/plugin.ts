@@ -80,8 +80,10 @@ export function assetsLibraryModule(options: AssetsLibraryModuleOptions): {
   handle: AssetsLibraryModuleHandle;
 } {
   let cachedSigner: HmacSigner | undefined = options.signer;
+  const settings = createSettingsView(options.emFactory);
+  const loadRetentionDays = () => settings.softDeleteRetentionDays();
   const adapters = new AdapterRegistry({
-    settings: createSettingsView(options.emFactory),
+    settings,
     publicApiBaseUrl: options.publicApiBaseUrl,
     signer: () => {
       if (!cachedSigner) cachedSigner = HmacSigner.fromEnv();
@@ -94,9 +96,12 @@ export function assetsLibraryModule(options: AssetsLibraryModuleOptions): {
     adapters,
     referenceRegistry,
     loadUploadPolicy: () => loadUploadPolicy(options.emFactory),
+    loadRetentionDays,
     ...(options.auditLog ? { auditLog: options.auditLog } : {}),
   });
-  const folders = new FoldersService(options.emFactory, referenceRegistry, options.auditLog);
+  const folders = new FoldersService(
+    options.emFactory, referenceRegistry, options.auditLog, loadRetentionDays,
+  );
 
   const requireAdmin = options.requireAdmin;
 

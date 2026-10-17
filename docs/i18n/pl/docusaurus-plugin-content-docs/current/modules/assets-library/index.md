@@ -67,6 +67,10 @@ Usuwanie przebiega w dwóch etapach:
 1. `DELETE /api/v1/admin/assets/:id` → usunięcie miękkie. Ustawia `deletedAt` i
    `purgeAfterAt = now + assets.soft_delete_retention_days` (domyślnie 30). Plik znika z list i list
    wyboru, ale można go przywrócić przez `POST /api/v1/admin/assets/:id/restore`.
+   Rekurencyjne usuwanie folderu korzysta z tego samego ustawienia okresu przechowywania.
+   Wartość jest odczytywana w chwili usuwania pliku; jej zmiana nie przesuwa terminów
+   plików już usuniętych miękko. Wartości ujemne lub nieskończone zastępuje domyślne
+   30 dni. Wartość `0` pozwala trwale usunąć plik przy następnym przebiegu zadania.
 2. Powtarzające się zadanie `HardDeleteAssetWorker` kończy usuwanie po `purgeAfterAt`: usuwa wiersz i
    prosi adapter o usunięcie pliku źródłowego. Gdy backend nie może usunąć pliku (zasób tylko do
    odczytu, unieważnione dane uwierzytelniające, problem z siecią), wiersz zostaje, `pendingCleanup`
