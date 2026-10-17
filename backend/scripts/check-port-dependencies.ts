@@ -989,6 +989,12 @@ export const CONTRIBUTION_POLICY_STATED: Readonly<Record<string, 'skip' | 'honou
   // offered on the configuration screen; `all()` stays presence-blind for
   // diagnostics (`specs/150-admin-global-search/`).
   'admin_search:adminSearchProviderRegistry': 'skip',
+  // Skipped: a surface. `DocumentTypeRegistry.get` / `list` / `blocks` answer a
+  // document type — and each contributed block — only while its recorded module
+  // is effectively present, so a switched-off host's type, blocks and templates
+  // leave every template screen, the API and every render, and come back with
+  // the module; nothing is deleted (`specs/152-compare-pdf-template/`).
+  'document_templates:documentTypeRegistry': 'skip',
   // Skipped: folding progress reads the contributor's own tables through the
   // contributor's own services, so a module that is off must not be read
   // through. Nothing is dropped with the resolver — the absent behaviour was

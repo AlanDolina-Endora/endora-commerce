@@ -47,5 +47,20 @@
   "displayMode.differences": "Differences",
   "nav.comparisons.label": "Comparisons",
   "actions.openComparisons.label": "Comparisons",
-  "actions.openComparisons.description": "Compare-feature audit"
+  "actions.openComparisons.description": "Compare-feature audit",
+  "documentTypes.comparison.label": "Product comparison",
+  "documentTypes.comparison.description": "The PDF a buyer downloads with the PDF button on the storefront comparison page.",
+  "documentTypes.comparison.variables.productCount": "Number of products",
+  "documentTypes.comparison.variables.channelName": "Sales channel name",
+  "documentTypes.comparison.variables.customerName": "Signed-in buyer's name",
+  "documentTypes.comparison.variables.organizationName": "Buyer's organisation",
+  "documentTypes.comparison.variables.shareUrl": "Share page address",
+  "blocks.category.comparison": "Comparison",
+  "blocks.comparisonHeader.label": "Comparison header",
+  "blocks.comparisonHeader.description": "Title, export date, display mode and whose prices are shown.",
+  "blocks.comparisonTable.label": "Comparison table",
+  "blocks.comparisonTable.description": "One column per product and one row per compared attribute.",
+  "blocks.comparisonShareLink.label": "Share link",
+  "blocks.comparisonShareLink.description": "The comparison's share page address, optionally as a QR code.",
+  "list.pdfTemplate": "PDF template"
 }

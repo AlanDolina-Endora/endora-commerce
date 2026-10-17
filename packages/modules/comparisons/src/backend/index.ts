@@ -1,5 +1,7 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
+  DocumentRenderPort,
+  DocumentTypeRegistryPort,
   CatalogAttributeReadPort,
   CatalogGalleryPort,
   CatalogProductReadPort,
@@ -8,7 +10,7 @@ import type {
   OrganizationDetailsPort,
 } from '@endora-commerce/contracts';
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
-import { lazyPort } from '@endora-commerce/platform/kernel';
+import { effectiveState, lazyPort } from '@endora-commerce/platform/kernel';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
 import type { SettingsReadPort } from '@endora-commerce/platform/kernel';
@@ -18,6 +20,7 @@ import { ComparableAttributeProjection } from './services/comparable-attribute-p
 import { ShareTokenGenerator } from './services/share-token-generator.js';
 import { ComparisonPdfRenderer } from './services/comparison-pdf-renderer.js';
 import { registerComparisonsPublicRoutes } from './routes.public.js';
+import { createComparisonDocumentType } from './document/comparison-document-type.js';
 import { registerComparisonsShareRoutes } from './routes.share.js';
 import { registerComparisonsAdminRoutes } from './routes.admin.js';
 import { ComparisonProduct } from './entities/comparison-product.entity.js';
@@ -166,12 +169,41 @@ export function registerModule(ctx: ModuleContext): void {
       comparisonService,
       tokens: comparisonShareTokens,
       pdfRenderer: new ComparisonPdfRenderer(),
+      // `specs/152-compare-pdf-template/` — the template path of the export.
+      // `degrades-without`: the route asks presence first and prints the fixed
+      // layout while document templates are off (R-11).
+      documentTemplates: {
+        isPresent: () => effectiveState.isPresent('document_templates'),
+        render: (input) => lazyPort<DocumentRenderPort>(ctx, 'documentRenderPort').render(input),
+      },
+      documentContext: {
+        customerAccounts: lazyPort<CustomerAccountReadPort>(ctx, 'customerAccountReadPort'),
+        organizations: lazyPort<OrganizationDetailsPort>(ctx, 'organizationDetailsPort'),
+        settings: lazyPort<SettingsReadPort>(ctx, 'settingsReadPort'),
+      },
     });
     await registerComparisonsShareRoutes(app, { comparisonService });
     await registerComparisonsAdminRoutes(app, {
       adminService: lazyPort<ComparisonAdminService>(ctx, 'comparisonAdminService'),
       requireAdmin,
     });
+  });
+
+  registerComparisonDocumentType(ctx);
+}
+
+/**
+ * The Product comparison document type, pushed into `document_templates`'
+ * registry (`specs/152-compare-pdf-template/contracts/comparison-document.md`
+ * §1). A **contribution-only** hook and deliberately without a presence
+ * probe: the registry answers a type only while its module is present, so a
+ * type not pushed because a probe returned early would stay missing after an
+ * operator switched this module back on, until the next restart. An
+ * uncomposed registry drops the push (`contribution-sinks.ts`).
+ */
+function registerComparisonDocumentType(ctx: ModuleContext): void {
+  ctx.onBoot(() => {
+    lazyPort<DocumentTypeRegistryPort>(ctx, 'documentTypeRegistry').register(createComparisonDocumentType());
   });
 }
 

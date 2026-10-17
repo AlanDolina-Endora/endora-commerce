@@ -1,13 +1,25 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { z } from 'zod';
+import { z } from 'zod';
 import {
   ERROR_CODES,
+  type CustomerAccountReadPort,
+  type DocumentRenderInput,
+  type DocumentRenderResult,
+  type OrganizationDetailsPort,
   comparisonAddProductInputSchema,
   comparisonSetDisplayModeInputSchema,
 } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import { productAudienceOf } from '@endora-commerce/platform/http';
-import { getResolvedChannel } from '@endora-commerce/platform/kernel';
+import {
+  getResolvedChannel,
+  rethrowIfModuleDisabled,
+  SettingNotRegistered,
+  SettingOutOfScopeForChannel,
+  type SettingsReadPort,
+} from '@endora-commerce/platform/kernel';
+import { buildComparisonDocumentData } from './document/comparison-document-data.js';
+import { COMPARISON_DOCUMENT_TYPE } from './document/comparison-document-type.js';
 import {
   ComparisonFullError,
   ComparisonNotFoundError,
@@ -51,6 +63,59 @@ export interface ComparisonsPublicDeps {
   tokens: ShareTokenGenerator;
   /** Optional — when omitted, `GET /me/pdf` is not mounted (foundation tests). */
   pdfRenderer?: ComparisonPdfRenderer;
+  /**
+   * `specs/152-compare-pdf-template/` — the document-template path of the
+   * export. Absent, or `isPresent()` false: the fixed layout (R-11).
+   */
+  documentTemplates?: {
+    isPresent(): boolean;
+    render(input: DocumentRenderInput): Promise<DocumentRenderResult>;
+  };
+  /** What the template path reads to fill its merge fields and share link. */
+  documentContext?: {
+    customerAccounts: Pick<CustomerAccountReadPort, 'findById'>;
+    organizations: Pick<OrganizationDetailsPort, 'findById'>;
+    settings: SettingsReadPort;
+  };
+}
+
+/** `?hideEmptyRows=` — the storefront's *Hide empty rows* switch (FR-020). */
+const pdfQuerySchema = z.object({
+  hideEmptyRows: z.enum(['true', 'false']).optional(),
+});
+
+/**
+ * The PDF's language: the first `Accept-Language` tag the channel offers
+ * (exactly, or by its primary subtag), else the channel's default language,
+ * else `en-US` (FR-032, owner Q7).
+ */
+export function pickExportLanguage(
+  acceptLanguage: string | undefined,
+  channel: { defaultLanguage?: string | null; languages?: readonly string[] },
+): string {
+  const offered = [...new Set([...(channel.languages ?? []), ...(channel.defaultLanguage ? [channel.defaultLanguage] : [])])];
+  const tags = (acceptLanguage ?? '')
+    .split(',')
+    .map((part) => part.split(';')[0]?.trim() ?? '')
+    .filter((tag) => tag !== '' && tag !== '*');
+  for (const tag of tags) {
+    const exact = offered.find((code) => code.toLowerCase() === tag.toLowerCase());
+    if (exact) return exact;
+    const primary = tag.split('-')[0]?.toLowerCase();
+    const sameBase = offered.find((code) => code.split('-')[0]?.toLowerCase() === primary);
+    if (sameBase) return sameBase;
+  }
+  return channel.defaultLanguage || 'en-US';
+}
+
+async function storefrontUrlOf(settings: SettingsReadPort, channelId: string): Promise<string | null> {
+  try {
+    return await settings.get('sales_channels.storefront_url', channelId, z.string());
+  } catch (error) {
+    // The two conditions that mean "not configured here", and no others.
+    if (error instanceof SettingNotRegistered || error instanceof SettingOutOfScopeForChannel) return null;
+    throw error;
+  }
 }
 
 export async function registerComparisonsPublicRoutes(
@@ -192,15 +257,50 @@ export async function registerComparisonsPublicRoutes(
           'Cannot export an empty comparison.',
         );
       }
-      let bytes: Buffer;
-      try {
-        bytes = await pdfRenderer.render(view);
-      } catch {
-        throw new HttpError(
-          503,
-          ERROR_CODES.PDF_GENERATION_FAILED,
-          'PDF generation failed.',
-        );
+      const { hideEmptyRows } = pdfQuerySchema.parse(request.query ?? {});
+      const templates = deps.documentTemplates;
+      let bytes: Buffer | Uint8Array;
+      if (templates && deps.documentContext && templates.isPresent()) {
+        // The template path (FR-030). Presence is asked before the port is
+        // resolved, and the only `catch` re-throws a switched-off module first.
+        const language = pickExportLanguage(request.headers['accept-language'], channel);
+        const context = deps.documentContext;
+        const customer = customerActor(request);
+        const account = customer ? await context.customerAccounts.findById(customer.customerAccountId) : null;
+        const organization = account ? await context.organizations.findById(account.organizationId) : null;
+        const data = buildComparisonDocumentData({
+          view,
+          channelName: channel.name[language] ?? channel.name['en-US'] ?? Object.values(channel.name)[0] ?? channel.code,
+          customerName: account ? `${account.firstName} ${account.lastName}`.trim() || account.email : null,
+          organizationName: organization?.name ?? null,
+          storefrontUrl: await storefrontUrlOf(context.settings, channel.id),
+          hideEmptyRows: hideEmptyRows === 'true',
+          now: new Date(),
+        });
+        try {
+          const result = await templates.render({
+            documentType: COMPARISON_DOCUMENT_TYPE,
+            salesChannelId: channel.id,
+            language,
+            data,
+          });
+          bytes = result.bytes;
+          reply.header('content-language', result.language);
+        } catch (error) {
+          rethrowIfModuleDisabled(error);
+          request.log.error({ err: error, comparisonId: comparison.id }, 'comparison PDF template render failed');
+          throw new HttpError(503, ERROR_CODES.PDF_GENERATION_FAILED, 'PDF generation failed.');
+        }
+      } else {
+        try {
+          bytes = await pdfRenderer.render(view);
+        } catch {
+          throw new HttpError(
+            503,
+            ERROR_CODES.PDF_GENERATION_FAILED,
+            'PDF generation failed.',
+          );
+        }
       }
       const shortToken = comparison.shareToken.slice(0, 8);
       reply.header('content-type', 'application/pdf');
@@ -209,7 +309,7 @@ export async function registerComparisonsPublicRoutes(
         `attachment; filename="comparison-${shortToken}.pdf"`,
       );
       reply.header('cache-control', 'no-store');
-      return reply.send(bytes);
+      return reply.send(Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes));
     });
   }
 

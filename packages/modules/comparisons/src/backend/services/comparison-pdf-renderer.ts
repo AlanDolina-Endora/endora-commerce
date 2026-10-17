@@ -32,6 +32,7 @@ import type {
   ComparisonProductSummary,
 } from '@endora-commerce/contracts';
 import { AssetByteFetcher } from './asset-byte-fetcher.js';
+import { filterRowsByMode, imageDataUri, pickOrientation } from './comparison-pdf-shared.js';
 
 /**
  * `ComparisonPdfRenderer` — feature 007 / US4 / T055.
@@ -178,19 +179,10 @@ const MODE_LABELS: Record<ComparisonDisplayMode, string> = {
   differences: 'Differences only',
 };
 
-/** Spec edge case "PDF on very wide comparisons": ≥3 products → landscape. */
-export function pickOrientation(productCount: number): 'landscape' | 'portrait' {
-  return productCount >= 3 ? 'landscape' : 'portrait';
-}
-
-export function filterRowsByMode(
-  rows: ComparisonAttributeRow[],
-  mode: ComparisonDisplayMode,
-): ComparisonAttributeRow[] {
-  if (mode === 'all') return rows;
-  if (mode === 'common') return rows.filter((r) => r.rowClass === 'common');
-  return rows.filter((r) => r.rowClass === 'different');
-}
+// `pickOrientation` and `filterRowsByMode` live in `comparison-pdf-shared.ts`
+// since feature 152 — the template engine's comparison blocks use them too —
+// and are re-exported here for this renderer's existing callers.
+export { filterRowsByMode, pickOrientation };
 
 function buildHeaderRow(
   products: ComparisonProductSummary[],
@@ -230,11 +222,6 @@ function localised(value: Record<string, string>): string {
   return value['en-US'] ?? value['en'] ?? Object.values(value)[0] ?? '';
 }
 
-function imageDataUri(bytes: Buffer): string {
-  // pdfmake recognises PNG and JPEG bytes by header. We pass it as a data
-  // URI so it is treated as inline image regardless of source URL.
-  return `data:image/png;base64,${bytes.toString('base64')}`;
-}
 
 /**
  * Resolves the bundled Roboto font set that ships with `pdfmake` so we
