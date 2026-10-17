@@ -38,11 +38,12 @@ import { withModuleOff, type OffStateAxis } from '../../helpers/off-state.js';
  * 7 and 8's shape. That is the opposite of batch 9's `assets_library`, which
  * advertised nothing and had nothing invented for it.
  *
- * `settings` and `credentials` already declared theirs, and `pwa` declares
+ * `settings` and `credentials` already declared theirs, and `pwa` declared
  * **none** — asserted rather than skipped, because a module with no action has
  * nothing to advertise and the honest test is that the registry answers nothing
  * for it in both states, which also fails if somebody adds one without adding
- * it to this table. So what the drain adds for the three is the proof that the
+ * it to this table. `specs/149-pwa-order-status-push/` added `pwa`'s one,
+ * `open-settings`, and added it here. So what the drain adds for the three is the proof that the
  * advertisement goes when the module does — and the pairing below, which
  * nothing else in the estate makes:
  * `check:action-route-permissions` holds a declared `requiredPermission` to the
@@ -96,13 +97,13 @@ const SUBJECTS: readonly Subject[] = [
     admin: credentialsAdmin,
   },
   {
-    // Declares **no** action, and this batch does not invent one: choosing a
-    // landing action for a screen is a product decision, not a file move — the
-    // reasoning batch 9 recorded for `assets_library`. The empty answer is
-    // driven in both states below, so an action added later without a proof
-    // fails here. It is a Principle XVI entry the register still owes.
+    // Declared **no** action in this batch, which did not invent one: choosing
+    // a landing action for a screen is a product decision, not a file move —
+    // the reasoning batch 9 recorded for `assets_library`. That decision was
+    // `specs/149-pwa-order-status-push/`'s (R-16), which paid the Principle XVI
+    // entry the register owed with `open-settings`, driven in both states below.
     module: 'pwa',
-    actions: [],
+    actions: ['open-settings'],
     axis: 'deactivated',
     admin: pwaAdmin,
   },
@@ -210,14 +211,14 @@ describe('batch 10 contributes no palette action while off (Constitution XVII it
     }
   });
 
-  it('pwa’s route came with settings’ directory, and it advertises nothing', () => {
+  it('pwa’s route came with settings’ directory, and its palette action targets it', () => {
     // Batch six's split closing, asserted from the artefact rather than from
     // its own doc block. `/settings/pwa` was a host `<Route>` — ungated, so an
     // operator who switched `pwa` off still reached the screen — while this
     // module declared only the sidebar row that pointed at it. The route is the
-    // module's now. It still declares no palette action, which the table above
-    // drives in both states; this case says the screen is there and only the
-    // advertisement is missing, so the absence cannot pass vacuously.
+    // module's now, and since `specs/149-pwa-order-status-push/` its one
+    // palette action targets it; the table above drives that action in both
+    // states and pairs it with this route's code.
     expect((pwaAdmin.routes ?? []).map((route) => route.path)).toEqual(['/settings/pwa']);
     expect((pwaAdmin.nav ?? []).map((entry) => entry.to)).toEqual(['/settings/pwa']);
     expect((settingsAdmin.routes ?? []).map((route) => route.path)).not.toContain(

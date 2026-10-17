@@ -1,6 +1,12 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
-import type { OrderItemRecord, OrderReadPort, OrderRecord } from '@endora-commerce/contracts';
+import type {
+  OrderItemRecord,
+  OrderReadPort,
+  OrderRecord,
+  OrderStatusDefinitionRecord,
+} from '@endora-commerce/contracts';
 import { Order } from '../entities/order.entity.js';
+import { OrderStatus } from '../entities/order-status.entity.js';
 import { OrderItem } from '../entities/order-item.entity.js';
 
 /**
@@ -64,6 +70,16 @@ export class OrderReadService implements OrderReadPort {
       ids.push(order.salesChannelId);
     }
     return ids;
+  }
+
+  /**
+   * `order_statuses` is global configuration, so this is one unique-index
+   * lookup by code (`specs/149-pwa-order-status-push/`).
+   */
+  async findStatusDefinition(code: string): Promise<OrderStatusDefinitionRecord | null> {
+    const status = await this.emFactory().findOne(OrderStatus, { code });
+    if (!status) return null;
+    return { code: status.code, name: { ...status.name }, defaultName: status.defaultName };
   }
 
   async listItems(orderId: string): Promise<OrderItemRecord[]> {

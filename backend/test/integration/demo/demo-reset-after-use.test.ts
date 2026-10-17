@@ -861,6 +861,10 @@ describe('demo reset on a demo that has been used (issue #143)', () => {
       sales_channel_id: salesChannelId,
       status: 'active',
     });
+    await add('push_notification_preferences', {
+      organization_id: organizationId,
+      customer_account_id: customerAccountId,
+    });
 
     // ── CRM: an Opportunity an administrator opened, linked to the order ───
     const [status] = await query<{ code: string }>(

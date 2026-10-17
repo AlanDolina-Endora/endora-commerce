@@ -1,4 +1,5 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
+import { UniqueConstraintViolationException } from '@mikro-orm/core';
 import type { Queue } from 'bullmq';
 import type {
   CustomerAccountReadPort,
@@ -89,7 +90,24 @@ export class PushMessageService {
       failedCount: 0,
       createdByAdminUserId: input.createdByAdminUserId ?? null,
     });
-    await em.persistAndFlush(message);
+    try {
+      await em.persistAndFlush(message);
+    } catch (err) {
+      // Two deliveries of one announcement can both pass the look-up above;
+      // `push_messages_trigger_event_uniq` then refuses the second insert. That
+      // is the idempotency answering, not a failure (FR-014 of
+      // `specs/149-pwa-order-status-push/`), so it answers what the look-up
+      // would have — read on a fresh manager, the failed flush having left this
+      // one unusable.
+      if (input.sourceEventId && err instanceof UniqueConstraintViolationException) {
+        const dup = await this.emFactory().findOne(PushMessage, {
+          trigger: input.trigger,
+          sourceEventId: input.sourceEventId,
+        });
+        if (dup) return { messageId: dup.id, queuedDeliveries: 0 };
+      }
+      throw err;
+    }
 
     const deliveries = subscriptions.map((sub) =>
       em.create(PushMessageDelivery, {

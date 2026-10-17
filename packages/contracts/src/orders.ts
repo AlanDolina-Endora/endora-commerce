@@ -1088,6 +1088,22 @@ export interface OrderReadPort {
    * per channel keyed on that customer's latest order there.
    */
   salesChannelIdsForCustomer(customerAccountId: string): Promise<string[]>;
+  /**
+   * The configured status with this code, or `null` when no such status
+   * exists. Published for `pwa`'s status push (`specs/149-pwa-order-status-push/`),
+   * which names the status a change moved **to** the way the shop labels it.
+   * Keyed by code rather than read off the order, because by the time a
+   * subscriber runs the order may already have moved on.
+   */
+  findStatusDefinition(code: string): Promise<OrderStatusDefinitionRecord | null>;
+}
+
+/** One configured order status, as a consumer labels it. */
+export interface OrderStatusDefinitionRecord {
+  code: string;
+  /** Operator-supplied names keyed by language (`en`, `pl`, …). */
+  name: Record<string, string>;
+  defaultName: string;
 }
 
 /** The admin order list's filter set. Page and page size are required. */

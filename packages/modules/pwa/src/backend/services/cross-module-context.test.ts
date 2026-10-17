@@ -1,16 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import type { AssetDetail, OrderRecord } from '@endora-commerce/contracts';
+import type { AssetDetail } from '@endora-commerce/contracts';
 import { ModuleDisabledError } from '@endora-commerce/platform/kernel';
 import type { CachedChannel } from '@endora-commerce/platform/kernel';
 import {
   createAssetUrlResolver,
   createChannelCodeResolver,
   createDefaultChannelIdResolver,
-  createOrderPushTargetResolver,
 } from './cross-module-context.js';
 
 /**
- * The four mappings `PwaBridge` used to carry as closures in both composition
+ * The three mappings `PwaBridge` used to carry as closures in both composition
  * roots (`specs/110-instance-repository/` T118c).
  *
  * This half composes nothing: every subject is a function of a published port,
@@ -21,7 +20,7 @@ import {
  *
  * Every case here would have passed against the old root closures too — that is
  * the point. What it fixes in place is the shape, so the next edit to any of the
- * four has something to be wrong against.
+ * three has something to be wrong against.
  */
 
 function assetDetail(overrides: Partial<AssetDetail> = {}): AssetDetail {
@@ -62,14 +61,6 @@ function cachedChannel(overrides: Partial<CachedChannel> = {}): CachedChannel {
     version: 1,
     ...overrides,
   };
-}
-
-function orderRecord(overrides: Partial<OrderRecord> = {}): OrderRecord {
-  return {
-    businessId: 'ORD-2026-0007',
-    placedByCustomerAccountId: 'cust-1',
-    ...overrides,
-  } as OrderRecord;
 }
 
 describe('pwa — an asset id becomes a URL over assetsLibraryPort', () => {
@@ -153,70 +144,5 @@ describe('pwa — the channel reads go through the kernel resolver', () => {
     });
 
     expect(await resolve('chan-3')).toBe('retired');
-  });
-});
-
-describe('pwa — an order-status event becomes a push target over orderReadPort', () => {
-  it('names the placing customer, the order and the new status', async () => {
-    const asked: string[] = [];
-    const resolve = createOrderPushTargetResolver({
-      findById: async (id) => {
-        asked.push(id);
-        return orderRecord();
-      },
-    });
-
-    expect(
-      await resolve({
-        orderId: 'order-1',
-        salesChannelId: 'chan-1',
-        from: 'pending',
-        to: 'ready_for_pickup',
-      }),
-    ).toEqual({
-      salesChannelId: 'chan-1',
-      customerAccountId: 'cust-1',
-      title: 'Order update',
-      // The underscores are replaced, which is the whole of the status
-      // presentation and the one thing in this sentence that is not a
-      // substitution.
-      body: 'Order ORD-2026-0007 is now ready for pickup.',
-      url: '/account/orders/ORD-2026-0007',
-    });
-    expect(asked).toEqual(['order-1']);
-  });
-
-  it('answers null for an order that is not there', async () => {
-    const resolve = createOrderPushTargetResolver({ findById: async () => null });
-
-    expect(
-      await resolve({ orderId: 'order-x', salesChannelId: 'chan-1', from: 'a', to: 'b' }),
-    ).toBeNull();
-  });
-
-  it('answers null for a guest order, which has no account to notify', async () => {
-    const resolve = createOrderPushTargetResolver({
-      findById: async () => orderRecord({ placedByCustomerAccountId: null }),
-    });
-
-    expect(
-      await resolve({ orderId: 'order-1', salesChannelId: 'chan-1', from: 'a', to: 'b' }),
-    ).toBeNull();
-  });
-
-  it('does not absorb the owner’s refusal', async () => {
-    // No `catch` at this seam at all, which on an event handler is the
-    // assertion rather than the absence: `push-event-subscriber.ts` decides the
-    // presence answer by name, one level up, and writes a different sentence
-    // for it than for a failure.
-    const resolve = createOrderPushTargetResolver({
-      findById: async () => {
-        throw new ModuleDisabledError('orders');
-      },
-    });
-
-    await expect(
-      resolve({ orderId: 'order-1', salesChannelId: 'chan-1', from: 'a', to: 'b' }),
-    ).rejects.toBeInstanceOf(ModuleDisabledError);
   });
 });

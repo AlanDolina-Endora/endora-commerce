@@ -92,6 +92,7 @@ export function toQuoteRequestRecord(quote: QuoteRequest): QuoteRequestRecord {
     businessId: quote.businessId,
     organizationId: quote.organizationId,
     customerAccountId: quote.customerAccountId,
+    salesChannelId: quote.salesChannelId ?? null,
     createdByAdminUserId: quote.createdByAdminUserId ?? null,
     assignedAdminUserId: quote.assignedAdminUserId ?? null,
     status: quote.status,

@@ -18,7 +18,7 @@ const fakeEmFactory = () => ({ async find() { return []; } }) as never;
 
 describe('PwaConfigResolver.getPublicConfig (feature 046)', () => {
   it('falls back to defaults when settings are unregistered', async () => {
-    const resolver = new PwaConfigResolver(fakeSettings({}), fakeEmFactory);
+    const resolver = new PwaConfigResolver(fakeSettings({}), fakeEmFactory, () => true);
     const config = await resolver.getPublicConfig('channel-1');
     expect(config.appName).toBe('B2B Platform');
     expect(config.displayMode).toBe('standalone');
@@ -36,6 +36,7 @@ describe('PwaConfigResolver.getPublicConfig (feature 046)', () => {
         [PWA_SETTING_CODES.CACHING_ENABLED]: true,
       }),
       fakeEmFactory,
+      () => true,
     );
     const config = await resolver.getPublicConfig('channel-1');
     expect(config.appName).toBe('Acme Store');
@@ -48,6 +49,7 @@ describe('PwaConfigResolver.getPublicConfig (feature 046)', () => {
     const noKey = new PwaConfigResolver(
       fakeSettings({ [PWA_SETTING_CODES.PUSH_ENABLED]: true }),
       fakeEmFactory,
+      () => true,
     );
     const a = await noKey.getPublicConfig('c1');
     expect(a.pushEnabled).toBe(false);
@@ -61,10 +63,88 @@ describe('PwaConfigResolver.getPublicConfig (feature 046)', () => {
         [PWA_SETTING_CODES.VAPID_PRIVATE_KEY]: 'PRIVATE-SHOULD-NOT-LEAK',
       }),
       fakeEmFactory,
+      () => true,
     );
     const b = await withKey.getPublicConfig('c1');
     expect(b.pushEnabled).toBe(true);
     expect(b.vapidPublicKey).toBe('BPUBLIC');
     expect(JSON.stringify(b)).not.toContain('PRIVATE-SHOULD-NOT-LEAK');
+  });
+});
+
+describe('PwaConfigResolver — effective status push flags (specs/149-pwa-order-status-push/)', () => {
+  const pushOn = {
+    [PWA_SETTING_CODES.PUSH_ENABLED]: true,
+    [PWA_SETTING_CODES.VAPID_PUBLIC_KEY]: 'BPUBLIC',
+    [PWA_SETTING_CODES.PUSH_ORDER_STATUS_ENABLED]: true,
+    [PWA_SETTING_CODES.PUSH_QUOTE_STATUS_ENABLED]: true,
+  };
+
+  it('answers both on when push is on, both categories are on and quotes are present', async () => {
+    const resolver = new PwaConfigResolver(fakeSettings(pushOn), fakeEmFactory, () => true);
+    const config = await resolver.getPublicConfig('c1');
+    expect(config.orderStatusPushEnabled).toBe(true);
+    expect(config.quoteStatusPushEnabled).toBe(true);
+  });
+
+  it('answers both off while push is effectively off, whatever the categories say', async () => {
+    const noKey = new PwaConfigResolver(
+      fakeSettings({ ...pushOn, [PWA_SETTING_CODES.VAPID_PUBLIC_KEY]: '' }),
+      fakeEmFactory,
+      () => true,
+    );
+    const a = await noKey.getPublicConfig('c1');
+    expect(a.orderStatusPushEnabled).toBe(false);
+    expect(a.quoteStatusPushEnabled).toBe(false);
+
+    const off = new PwaConfigResolver(
+      fakeSettings({ ...pushOn, [PWA_SETTING_CODES.PUSH_ENABLED]: false }),
+      fakeEmFactory,
+      () => true,
+    );
+    const b = await off.getPublicConfig('c1');
+    expect(b.orderStatusPushEnabled).toBe(false);
+    expect(b.quoteStatusPushEnabled).toBe(false);
+  });
+
+  it('answers each category off independently', async () => {
+    const orderOff = new PwaConfigResolver(
+      fakeSettings({ ...pushOn, [PWA_SETTING_CODES.PUSH_ORDER_STATUS_ENABLED]: false }),
+      fakeEmFactory,
+      () => true,
+    );
+    const a = await orderOff.getPublicConfig('c1');
+    expect(a.orderStatusPushEnabled).toBe(false);
+    expect(a.quoteStatusPushEnabled).toBe(true);
+
+    const quoteOff = new PwaConfigResolver(
+      fakeSettings({ ...pushOn, [PWA_SETTING_CODES.PUSH_QUOTE_STATUS_ENABLED]: false }),
+      fakeEmFactory,
+      () => true,
+    );
+    const b = await quoteOff.getPublicConfig('c1');
+    expect(b.orderStatusPushEnabled).toBe(true);
+    expect(b.quoteStatusPushEnabled).toBe(false);
+  });
+
+  it('answers the quote flag off while quote_requests is absent', async () => {
+    const resolver = new PwaConfigResolver(fakeSettings(pushOn), fakeEmFactory, () => false);
+    const config = await resolver.getPublicConfig('c1');
+    expect(config.orderStatusPushEnabled).toBe(true);
+    expect(config.quoteStatusPushEnabled).toBe(false);
+  });
+
+  it('defaults both categories to on when their settings are unregistered (FR-002)', async () => {
+    const resolver = new PwaConfigResolver(
+      fakeSettings({
+        [PWA_SETTING_CODES.PUSH_ENABLED]: true,
+        [PWA_SETTING_CODES.VAPID_PUBLIC_KEY]: 'BPUBLIC',
+      }),
+      fakeEmFactory,
+      () => true,
+    );
+    const config = await resolver.getPublicConfig('c1');
+    expect(config.orderStatusPushEnabled).toBe(true);
+    expect(config.quoteStatusPushEnabled).toBe(true);
   });
 });

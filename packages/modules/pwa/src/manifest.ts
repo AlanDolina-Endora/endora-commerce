@@ -89,6 +89,24 @@ const pwaSettingEntries: SettingManifestEntry[] = [
       defaultValue: false,
     },
     {
+      code: PWA_SETTING_CODES.PUSH_ORDER_STATUS_ENABLED,
+      name: 'Push on order status changes',
+      description:
+        'When on (and push is enabled), the customer who placed an order is notified on their subscribed devices whenever its status changes.',
+      groupCode: 'pwa',
+      valueType: 'boolean',
+      defaultValue: true,
+    },
+    {
+      code: PWA_SETTING_CODES.PUSH_QUOTE_STATUS_ENABLED,
+      name: 'Push on quote status changes',
+      description:
+        'When on (and push is enabled), the customer who requested a quote is notified when it is prepared for them, revised, approved, cancelled or expires.',
+      groupCode: 'pwa',
+      valueType: 'boolean',
+      defaultValue: true,
+    },
+    {
       code: PWA_SETTING_CODES.VAPID_PUBLIC_KEY,
       name: 'VAPID public key',
       description: 'Public VAPID key served to the storefront subscribe flow. Generated together with the private key.',
@@ -207,6 +225,25 @@ export const manifest = defineModuleManifest({
     'customer_accounts',
     'organizations',
   ],
+  // `specs/149-pwa-order-status-push/` — the quote half of the status pushes
+  // reads the quote request it announces. A **degrading** edge, not a binding
+  // one: a shop without quotes still wants order pushes, and a binding edge
+  // would turn the quote desk's switch into a switch for push
+  // (`module-composition.md` item 4a, the `crm` precedent).
+  nonBindingDependencies: [
+    {
+      moduleId: 'quote_requests',
+      name: 'quoteRequestReadPort',
+      kind: 'degrades-without',
+      whenAbsent:
+        'Customers stop receiving push notifications about their quote requests, and the quote ' +
+        'switch and choice are not offered; order notifications keep working',
+      reason:
+        'The one call into this owner is the quote branch of the status-push composer, which asks ' +
+        '`isPresent()` in front of the gate and skips; while the owner is off it emits none of the ' +
+        "events that reach that branch. No table of that owner is referenced from this module's schema.",
+    },
+  ],
   settings,
   i18n: { bundlesDir: 'i18n' },
   docs: { dir: 'docs' },
@@ -216,4 +253,19 @@ export const manifest = defineModuleManifest({
     { code: PWA_PERMISSIONS.SEND_PUSH, label: 'Send push notifications' },
   ],
   activation: { settingCode: 'pwa.enabled', default: true },
+  // Principle XVI — the PWA screen under ⌘K (`specs/149-pwa-order-status-push/`
+  // R-16). `pwa:read` is the code every `GET /api/v1/admin/pwa/*` the screen
+  // calls on mount enforces, and the one its route and sidebar entry carry.
+  actions: [
+    {
+      id: 'open-settings',
+      labelKey: 'actions.openSettings.label',
+      descriptionKey: 'actions.openSettings.description',
+      icon: 'Smartphone',
+      targetRoute: '/settings/pwa',
+      requiredPermission: PWA_PERMISSIONS.READ,
+      keywords: ['pwa', 'push', 'notifications', 'app', 'powiadomienia', 'aplikacja'],
+      weight: 1400,
+    },
+  ],
 });

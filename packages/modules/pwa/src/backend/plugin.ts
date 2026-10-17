@@ -4,21 +4,25 @@ import type { Redis } from 'ioredis';
 import type { Queue, Worker } from 'bullmq';
 import { z } from 'zod';
 import type {
+  AdminI18nTranslatePort,
   CustomerAccountReadPort,
   CustomerGroupReadPort,
+  OrderReadPort,
   OrganizationDetailsPort,
+  QuoteRequestReadPort,
 } from '@endora-commerce/contracts';
 import { PwaConfigResolver, type SettingsReadPort } from './services/pwa-config-resolver.js';
 import { PwaIconService, type AssetUploadPort } from './services/pwa-icon-service.js';
 import { PushSubscriptionService } from './services/push-subscription-service.js';
+import { PushPreferenceService } from './services/push-preference-service.js';
 import { PushMessageService } from './services/push-message-service.js';
 import { PushProviderRegistry } from './services/push-provider-registry.js';
 import { WebPushProvider } from './services/providers/web-push-provider.js';
 import {
   createPushEventHandlers,
   type PushEventLogger,
-  type PushEventTarget,
 } from './services/push-event-subscriber.js';
+import { createStatusPushComposer } from './services/status-push-composer.js';
 import {
   createPushDeliveryQueue,
   createPushDeliveryWorker,
@@ -33,7 +37,14 @@ import {
   type AdminAuditContext,
   type SettingsWritePort,
 } from './routes.admin.js';
-import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
+import {
+  effectiveState,
+  enterSystemScope,
+  type RequireAdminFactory,
+  type RequireCustomerGuard,
+  type SalesChannelResolutionPort,
+} from '@endora-commerce/platform/kernel';
+import type { CommandBus } from '@endora-commerce/platform/commands';
 
 const BoolSchema = z.boolean();
 
@@ -45,6 +56,13 @@ export interface PwaModuleOptions {
   settings: SettingsReadPort & { get<T>(code: string, channelId: string, schema: z.ZodType<T>): Promise<T> };
   settingsWrite: SettingsWritePort;
   requireAdmin: RequireAdminFactory;
+  /** `auth`'s storefront guard, for the customer preference routes. */
+  requireCustomer: RequireCustomerGuard;
+  /**
+   * The platform's Command Bus: the customer preference write is an audited
+   * Command (`specs/149-pwa-order-status-push/` research R-12).
+   */
+  commandBus: Pick<CommandBus, 'run'>;
   /**
    * The three rows this module reads out of other modules (feature 075,
    * Phase C). Resolved as gated ports in `backend.ts`, never captured, so a
@@ -83,40 +101,23 @@ export interface PwaModuleOptions {
    */
   log: PushEventLogger;
   /**
-   * The FR-024 order-status auto-trigger, and **required** since T118c.
+   * What the automatic status pushes read (`specs/149-pwa-order-status-push/`),
+   * each a published port `backend/index.ts` resolves as a `lazyPort`:
+   * the order and its status label, the quote request (a `degrades-without`
+   * owner — the composer asks its presence before the port), the channel the
+   * subject belongs to, and `_i18n`'s translation of this module's own bundle.
    *
-   * It was optional while a composition root had to supply it, on the reasoning
-   * that a deployment which pushes on no order event has nothing to give. This
-   * module resolves `orderReadPort` itself now and declares the edge, so the
-   * absent branch is one no composition can reach — and an option nothing can
-   * omit that is nonetheless typed as omittable is a branch no test can drive.
+   * It replaces the two root-shaped target resolvers this option set used to
+   * carry. The order one composed an English sentence linking to a page that
+   * redirected to the order list; the quote one was supplied by nobody, so no
+   * quote push had ever been sent (research R-1).
    */
-  resolveOrderTarget: (payload: {
-    orderId: string;
-    salesChannelId: string;
-    from: string;
-    to: string;
-  }) => Promise<PushEventTarget | null>;
-  /**
-   * The quote-request auto-trigger, and it stays optional because **nothing
-   * supplies it**.
-   *
-   * Measured on the tree T118c drained: `resolveQuoteTarget` appears in this
-   * file, in `push-event-subscriber.ts`, in the barrel's `PwaBridge` — and in
-   * neither composition root. So `onQuoteRequestUpdated` has returned at its
-   * first line on every deployment since the option was written, the handler is
-   * registered, the subscription is gated, and the push it exists to send has
-   * never been sent by anybody.
-   *
-   * It is left optional rather than deleted or implemented: implementing it is a
-   * design act (a `quote_requests` read port this module does not declare, and a
-   * second sentence to compose), and deleting it would erase the only record
-   * that the feature was specified. The gap is in T118c's own report.
-   */
-  resolveQuoteTarget?: (payload: {
-    quoteRequestId: string;
-    sourceEventId: string;
-  }) => Promise<PushEventTarget | null>;
+  statusPush: {
+    orders: Pick<OrderReadPort, 'findById' | 'findStatusDefinition'>;
+    quotes: Pick<QuoteRequestReadPort, 'findById'>;
+    channels: Pick<SalesChannelResolutionPort, 'getById' | 'getSystemDefault'>;
+    translate: Pick<AdminI18nTranslatePort, 'translate'>;
+  };
 }
 
 export interface PwaModuleHandle {
@@ -125,6 +126,7 @@ export interface PwaModuleHandle {
   configResolver: PwaConfigResolver;
   iconService: PwaIconService;
   subscriptionService: PushSubscriptionService;
+  preferenceService: PushPreferenceService;
   messageService: PushMessageService;
   providerRegistry: PushProviderRegistry;
   deliveryQueue: Queue<PushDeliveryJobData>;
@@ -141,7 +143,9 @@ export interface PwaModuleResult {
 }
 
 export function pwaModule(options: PwaModuleOptions): PwaModuleResult {
-  const configResolver = new PwaConfigResolver(options.settings, options.emFactory);
+  const configResolver = new PwaConfigResolver(options.settings, options.emFactory, () =>
+    effectiveState.isPresent('quote_requests'),
+  );
   const iconService = new PwaIconService(options.emFactory, options.assetUpload);
   // Feature 087 Group B / D-187 — the subscription registry stamps the
   // organisation an owned device belongs to, derived from the owning account
@@ -173,21 +177,38 @@ export function pwaModule(options: PwaModuleOptions): PwaModuleResult {
   // rather than a path.
   let eventLogger: PushEventLogger = options.log;
 
-  // Auto-triggered push (FR-024) — producer only; enqueues, never sends inline.
-  // `backend.ts` registers these two through `ctx.subscribe`, so they stop with
-  // the module (issue #107).
-  const pushEventHandlers = createPushEventHandlers({
-    messageService,
-    log: () => eventLogger,
-    resolveOrderTarget: options.resolveOrderTarget,
-    ...(options.resolveQuoteTarget ? { resolveQuoteTarget: options.resolveQuoteTarget } : {}),
-    isPushEnabled: async (salesChannelId) => {
+  // The customer's account-wide choice; an account with no row wants both.
+  const preferenceService = new PushPreferenceService(
+    options.emFactory,
+    options.customerAccounts,
+    options.commandBus,
+  );
+
+  // Automatic status pushes — producer only; enqueues, never sends inline.
+  // `backend/index.ts` registers the handlers through `ctx.subscribe`, so they
+  // stop with the module (issue #107).
+  const statusPushComposer = createStatusPushComposer({
+    orders: options.statusPush.orders,
+    quotes: options.statusPush.quotes,
+    isQuoteRequestsPresent: () => effectiveState.isPresent('quote_requests'),
+    customerAccounts: options.customerAccounts,
+    channels: options.statusPush.channels,
+    isSettingOn: async (code, salesChannelId) => {
       try {
-        return await options.settings.get('pwa.push_enabled', salesChannelId, BoolSchema);
+        return await options.settings.get(code, salesChannelId, BoolSchema);
       } catch {
         return false;
       }
     },
+    preferences: preferenceService,
+    translate: options.statusPush.translate,
+    messageService,
+    runInSystemScope: (reason, run) => enterSystemScope(reason, run),
+    log: () => eventLogger,
+  });
+  const pushEventHandlers = createPushEventHandlers({
+    composer: statusPushComposer,
+    log: () => eventLogger,
   });
 
   // Push-delivery consumer (Principle X). Separable entrypoint; co-located by
@@ -220,6 +241,7 @@ export function pwaModule(options: PwaModuleOptions): PwaModuleResult {
     configResolver,
     iconService,
     subscriptionService,
+    preferenceService,
     messageService,
     providerRegistry,
     deliveryQueue,
@@ -232,6 +254,8 @@ export function pwaModule(options: PwaModuleOptions): PwaModuleResult {
       iconService,
       subscriptionService,
       resolveAssetUrl: options.resolveAssetUrl,
+      preferenceService,
+      requireCustomer: options.requireCustomer,
     });
     await registerPwaAdminRoutes(app, {
       requireAdmin: options.requireAdmin,

@@ -121,11 +121,15 @@ export async function registerPwaAdminRoutes(
       return fallback;
     }
   };
-  const safeBool = async (code: string, channelId: string | null): Promise<boolean> => {
+  const safeBool = async (
+    code: string,
+    channelId: string | null,
+    fallback = false,
+  ): Promise<boolean> => {
     try {
       return await deps.settingsRead.get(code, channelId, BoolSchema);
     } catch {
-      return false;
+      return fallback;
     }
   };
 
@@ -148,10 +152,15 @@ export async function registerPwaAdminRoutes(
           safeGet(PWA_SETTING_CODES.VAPID_PRIVATE_KEY, channelId, ''),
           safeGet(PWA_SETTING_CODES.FCM_SERVICE_ACCOUNT, channelId, ''),
         ]);
-      const [cachingEnabled, pushEnabled] = await Promise.all([
-        safeBool(PWA_SETTING_CODES.CACHING_ENABLED, channelId),
-        safeBool(PWA_SETTING_CODES.PUSH_ENABLED, channelId),
-      ]);
+      const [cachingEnabled, pushEnabled, orderStatusPushEnabled, quoteStatusPushEnabled] =
+        await Promise.all([
+          safeBool(PWA_SETTING_CODES.CACHING_ENABLED, channelId),
+          safeBool(PWA_SETTING_CODES.PUSH_ENABLED, channelId),
+          // `specs/149-pwa-order-status-push/` — the two category switches,
+          // shipped on (FR-002), so an unreadable value reads as the default.
+          safeBool(PWA_SETTING_CODES.PUSH_ORDER_STATUS_ENABLED, channelId, true),
+          safeBool(PWA_SETTING_CODES.PUSH_QUOTE_STATUS_ENABLED, channelId, true),
+        ]);
       return reply.send({
         salesChannelId,
         appName,
@@ -165,6 +174,8 @@ export async function registerPwaAdminRoutes(
         vapidPublicKey,
         vapidPrivateKeyIsSet: vapidPrivate.length > 0,
         fcmServiceAccountIsSet: fcm.length > 0,
+        orderStatusPushEnabled,
+        quoteStatusPushEnabled,
       });
     },
   );
@@ -186,6 +197,8 @@ export async function registerPwaAdminRoutes(
     if (body.vapidPublicKey !== undefined) writes.push({ code: PWA_SETTING_CODES.VAPID_PUBLIC_KEY, value: body.vapidPublicKey });
     if (body.vapidPrivateKey !== undefined) writes.push({ code: PWA_SETTING_CODES.VAPID_PRIVATE_KEY, value: body.vapidPrivateKey });
     if (body.fcmServiceAccount !== undefined) writes.push({ code: PWA_SETTING_CODES.FCM_SERVICE_ACCOUNT, value: body.fcmServiceAccount });
+    if (body.orderStatusPushEnabled !== undefined) writes.push({ code: PWA_SETTING_CODES.PUSH_ORDER_STATUS_ENABLED, value: body.orderStatusPushEnabled });
+    if (body.quoteStatusPushEnabled !== undefined) writes.push({ code: PWA_SETTING_CODES.PUSH_QUOTE_STATUS_ENABLED, value: body.quoteStatusPushEnabled });
 
     const channelCode = salesChannelId ? await deps.channelCodeForId(salesChannelId) : null;
     for (const w of writes) {

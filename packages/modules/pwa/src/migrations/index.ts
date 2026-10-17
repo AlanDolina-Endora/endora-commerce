@@ -24,13 +24,16 @@
 
 import { Migration20260625T144228PwaInit } from './20260625T144228_pwa_init.js';
 import { Migration20260830T172022PwaOrganizationAttribution } from './20260830T172022_pwa_organization_attribution.js';
+import { Migration20261016T172243PwaPushNotificationPreferences } from './20261016T172243_pwa_push_notification_preferences.js';
 
 export const migrations = [
   Migration20260625T144228PwaInit,
   Migration20260830T172022PwaOrganizationAttribution,
+  Migration20261016T172243PwaPushNotificationPreferences,
 ];
 
 export {
   Migration20260625T144228PwaInit,
   Migration20260830T172022PwaOrganizationAttribution,
+  Migration20261016T172243PwaPushNotificationPreferences,
 };

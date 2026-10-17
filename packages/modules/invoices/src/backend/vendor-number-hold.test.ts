@@ -125,6 +125,7 @@ function readPort(order: OrderRecord, items: OrderItemRecord[]): OrderReadPort {
     listItems: async () => items,
     findIdsByBusinessIdLike: async () => [order.id],
     salesChannelIdsForCustomer: async () => [order.salesChannelId],
+    findStatusDefinition: async () => null,
   };
 }
 

@@ -218,6 +218,15 @@ describe('PushNotificationsToggle', () => {
   it('renders nothing on the server, where the device state is unknown', async () => {
     const { PushNotificationsToggle } = await import('../components/pwa/PushNotificationsToggle');
 
-    expect(renderToString(<PushNotificationsToggle />)).toBe('');
+    // Its copy arrives from the page since `specs/149-pwa-order-status-push/`.
+    const messages = {
+      heading: 'h',
+      on: 'on',
+      off: 'off',
+      blocked: 'blocked',
+      turnOn: 'turn on',
+      turnOff: 'turn off',
+    };
+    expect(renderToString(<PushNotificationsToggle messages={messages} />)).toBe('');
   });
 });

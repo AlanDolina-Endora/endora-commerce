@@ -37,7 +37,8 @@ import { resolvePublicApiBaseUrl } from '../../../src/kernel/index.js';
  *    the D-223 repair that made one root stop rebasing was landed against no
  *    assertion. The first case below is also what found the admin icon-upload
  *    route answering 500 for the only body it accepts.
- *  - `resolveOrderTarget` is exercised by the T036 contract case, which counts
+ *  - `resolveOrderTarget` (now the status-push composer) is exercised by the
+ *    T036 contract case, which counts
  *    `push_messages` rows and reads none of their columns. The title, the body
  *    and the deep link a customer's device actually shows were asserted
  *    nowhere.
@@ -218,10 +219,14 @@ describe('pwa — the cross-module ports, composed', () => {
     // The order's *business* id, not its UUID — the port answers a record and
     // the sentence names the thing a customer recognises. A drain that had
     // wired the wrong field would still have produced a row, which is all the
-    // existing T036 case asserts.
+    // existing T036 case asserts. Since `specs/149-pwa-order-status-push/` the
+    // sentence is `_i18n`'s rendering of this module's bundle — English here,
+    // because the order's channel is not one the resolver knows — and the link
+    // opens the order itself rather than a page that redirects to the list.
+    // `ready_for_pickup` is configured by nobody, so the code is the label.
     expect(row!.title).toBe('Order update');
-    expect(row!.body).toBe(`Order ${businessId} is now ready for pickup.`);
-    expect(row!.url).toBe(`/account/orders/${businessId}`);
+    expect(row!.body).toBe(`Order ${businessId} is now: ready_for_pickup.`);
+    expect(row!.url).toBe(`/orders/${RFQ_SHIPPED_ORDER_ID}`);
   });
 
   it('attributes an admin send to the acting admin over adminAuditActorResolver', async () => {

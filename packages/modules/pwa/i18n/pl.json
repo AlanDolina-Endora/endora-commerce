@@ -19,6 +19,9 @@
   "settings.field.cachingEnabled": "Włącz cache zasobów statycznych",
   "settings.section.push": "Powiadomienia push",
   "settings.field.pushEnabled": "Włącz powiadomienia push",
+  "settings.field.orderStatusPush": "Powiadamiaj o zmianach statusu zamówienia",
+  "settings.field.quoteStatusPush": "Powiadamiaj o zmianach statusu zapytań ofertowych",
+  "settings.field.statusPushHint": "Wysyłane automatycznie do klienta, który złożył zamówienie lub zapytanie, na jego zasubskrybowane urządzenia.",
   "settings.vapid.generate": "Wygeneruj klucze VAPID",
   "settings.vapid.generated": "Wygenerowano klucze VAPID.",
   "settings.vapid.unset": "Brak skonfigurowanych kluczy VAPID.",
@@ -39,5 +42,15 @@
   "push.unconfigured": "Push nie jest skonfigurowany. Najpierw wygeneruj klucze VAPID i włącz push.",
   "push.subscribers": "Subskrybenci",
   "push.subscribers.active": "Aktywni",
-  "push.subscribers.invalid": "Nieaktywni"
+  "push.subscribers.invalid": "Nieaktywni",
+  "notification.orderStatus.title": "Aktualizacja zamówienia",
+  "notification.orderStatus.body": "Zamówienie {orderNumber} ma teraz status: {status}.",
+  "notification.quote.title": "Aktualizacja zapytania ofertowego",
+  "notification.quote.body.prepared": "Przygotowaliśmy dla Ciebie ofertę {quoteNumber}.",
+  "notification.quote.body.revised": "W zapytaniu ofertowym {quoteNumber} czeka na Ciebie zaktualizowana oferta.",
+  "notification.quote.body.approved": "Zapytanie ofertowe {quoteNumber} zostało zatwierdzone.",
+  "notification.quote.body.canceled": "Zapytanie ofertowe {quoteNumber} zostało anulowane.",
+  "notification.quote.body.expired": "Zapytanie ofertowe {quoteNumber} wygasło.",
+  "actions.openSettings.label": "Ustawienia PWA",
+  "actions.openSettings.description": "Tożsamość aplikacji, cache i powiadomienia push"
 }

@@ -33,6 +33,13 @@ export class PwaConfigResolver {
   constructor(
     private readonly settings: SettingsReadPort,
     private readonly emFactory: () => EntityManager,
+    /**
+     * Whether `quote_requests` is effectively present — the `degrades-without`
+     * edge's presence decision (`specs/149-pwa-order-status-push/`). Passed
+     * rather than read here, so the resolver can be tested with no lifecycle
+     * composed; `plugin.ts` supplies `effectiveState.isPresent`.
+     */
+    private readonly isQuoteRequestsPresent: () => boolean,
   ) {}
 
   private async getString(
@@ -102,6 +109,8 @@ export class PwaConfigResolver {
       pushEnabled,
       vapidPublicKey,
       icons,
+      orderStatusEnabled,
+      quoteStatusEnabled,
     ] = await Promise.all([
       this.getString(PWA_SETTING_CODES.APP_NAME, salesChannelId, 'B2B Platform'),
       this.getString(PWA_SETTING_CODES.SHORT_NAME, salesChannelId, 'B2B'),
@@ -112,7 +121,12 @@ export class PwaConfigResolver {
       this.getBool(PWA_SETTING_CODES.PUSH_ENABLED, salesChannelId, false),
       this.getString(PWA_SETTING_CODES.VAPID_PUBLIC_KEY, salesChannelId, ''),
       this.resolveIcons(salesChannelId),
+      this.getBool(PWA_SETTING_CODES.PUSH_ORDER_STATUS_ENABLED, salesChannelId, true),
+      this.getBool(PWA_SETTING_CODES.PUSH_QUOTE_STATUS_ENABLED, salesChannelId, true),
     ]);
+
+    // Push is only "on" for the client when both enabled AND a public key exists.
+    const pushEffective = pushEnabled && vapidPublicKey.length > 0;
 
     return {
       appName,
@@ -122,9 +136,14 @@ export class PwaConfigResolver {
       displayMode,
       icons,
       cachingEnabled,
-      // Push is only "on" for the client when both enabled AND a public key exists.
-      pushEnabled: pushEnabled && vapidPublicKey.length > 0,
+      pushEnabled: pushEffective,
       vapidPublicKey: pushEnabled ? vapidPublicKey : '',
+      // The effective category flags the storefront decides what to offer from
+      // (`specs/149-pwa-order-status-push/` FR-020): the storefront has no
+      // module-presence list, so the backend decides once.
+      orderStatusPushEnabled: pushEffective && orderStatusEnabled,
+      quoteStatusPushEnabled:
+        pushEffective && quoteStatusEnabled && this.isQuoteRequestsPresent(),
     };
   }
 }

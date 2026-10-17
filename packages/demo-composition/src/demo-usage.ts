@@ -568,6 +568,14 @@ export const DEMO_USAGE_SECTIONS: readonly DemoUsageSection[] = [
     ],
   },
   {
+    // `specs/149-pwa-order-status-push/` — the account-wide push choices.
+    name: 'push notification preferences of the demo organisation',
+    statements: [
+      `delete from push_notification_preferences
+        where organization_id in ${ORGANIZATIONS} or {customer_account_id in ${ACCOUNTS}}`,
+    ],
+  },
+  {
     name: 'two-factor enrolments of the demo organisation',
     statements: [
       `delete from mfa_enrolments where subject_type = 'customer' and subject_id in ${ACCOUNTS}`,

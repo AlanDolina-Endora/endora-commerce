@@ -30,6 +30,45 @@ describe('pwa manifest + permissions (feature 046)', () => {
     expect(byCode.get(PWA_SETTING_CODES.FCM_SERVICE_ACCOUNT)?.valueType).toBe('secret');
   });
 
+  it('ships both status push category switches on (specs/149-pwa-order-status-push/ FR-002)', () => {
+    const byCode = new Map(pwaSettingsManifest.settings.map((s) => [s.code, s]));
+    for (const code of [
+      PWA_SETTING_CODES.PUSH_ORDER_STATUS_ENABLED,
+      PWA_SETTING_CODES.PUSH_QUOTE_STATUS_ENABLED,
+    ]) {
+      expect(byCode.get(code)?.valueType).toBe('boolean');
+      expect(byCode.get(code)?.defaultValue).toBe(true);
+      // Managed only from the PWA screen, like every other pwa.* value.
+      expect(byCode.get(code)?.hidden).toBe(true);
+    }
+  });
+
+  it('degrades without quote_requests rather than binding to it', () => {
+    expect(manifest.dependencies).not.toContain('quote_requests');
+    expect(manifest.nonBindingDependencies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          moduleId: 'quote_requests',
+          name: 'quoteRequestReadPort',
+          kind: 'degrades-without',
+        }),
+      ]),
+    );
+  });
+
+  it('is reachable from the command palette under the code that opens its screen (Principle XVI)', () => {
+    expect(manifest.actions).toEqual([
+      expect.objectContaining({
+        id: 'open-settings',
+        labelKey: 'actions.openSettings.label',
+        descriptionKey: 'actions.openSettings.description',
+        icon: 'Smartphone',
+        targetRoute: '/settings/pwa',
+        requiredPermission: PWA_PERMISSIONS.READ,
+      }),
+    ]);
+  });
+
   it('is registered in the lifecycle manifest registry', () => {
     const ids = REGISTERED_MANIFESTS.map((e) => e.manifest.id);
     expect(ids).toContain('pwa');

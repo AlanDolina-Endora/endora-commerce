@@ -1,9 +1,8 @@
-import type { AssetsLibraryPort, OrderReadPort } from '@endora-commerce/contracts';
+import type { AssetsLibraryPort } from '@endora-commerce/contracts';
 import {
   rethrowIfModuleDisabled,
   type SalesChannelResolutionPort,
 } from '@endora-commerce/platform/kernel';
-import type { PushEventTarget } from './push-event-subscriber.js';
 
 /**
  * Everything `pwa` needs from outside itself that is not one of its own rows
@@ -13,8 +12,11 @@ import type { PushEventTarget } from './push-event-subscriber.js';
  * composition roots — so a composition had to know how an asset id becomes a
  * URL, how a channel id becomes a code and what an order-status push says, and
  * the two roots disagreed about two of the three. What is left is
- * **module-private** and holds three published ports and no closure, so there
+ * **module-private** and holds two published ports and no closure, so there
  * is nothing for a root to build and nothing for the two of them to differ on.
+ * The order-status sentence left this file with
+ * `specs/149-pwa-order-status-push/`: it is `status-push-composer.ts`'s now,
+ * localised and deep-linked.
  *
  * `backend/index.ts` supplies each one as a `lazyPort` proxy, which resolves per
  * call — nothing here captures a registration, so a switched-off owner refuses
@@ -35,8 +37,6 @@ export interface PwaCrossModulePorts {
    * nothing in this module's manifest `dependencies` (Constitution XII).
    */
   readonly channels: SalesChannelResolutionPort;
-  /** `orders`, for the FR-024 order-status auto-trigger. */
-  readonly orders: OrderReadPort;
 }
 
 /**
@@ -98,40 +98,4 @@ export function createChannelCodeResolver(
   channels: Pick<SalesChannelResolutionPort, 'getById'>,
 ): (channelId: string) => Promise<string | null> {
   return async (channelId) => (await channels.getById(channelId))?.code ?? null;
-}
-
-/**
- * What an `order.status_changed.v1` event becomes, as a push (FR-024).
- *
- * `null` means "no push": an order the platform will not read, and an order
- * placed by nobody — a guest checkout has no account to notify, and there is no
- * device to deliver to.
- *
- * The sentence is English and stays English: it is composed for a reader whose
- * language this module cannot resolve here — one event, potentially many
- * subscribed devices — which is case 2 of
- * `specs/094-translation-boundary/contracts/translation-boundary.md` § 2 and is
- * `specs/093-backend-delivered-prose/`'s subject rather than this drain's. It
- * moved from a composition root unchanged, deliberately: a repair here would be
- * a repair nobody asked for, in a merge request nobody would look for it in.
- */
-export function createOrderPushTargetResolver(
-  orders: Pick<OrderReadPort, 'findById'>,
-): (payload: {
-  orderId: string;
-  salesChannelId: string;
-  from: string;
-  to: string;
-}) => Promise<PushEventTarget | null> {
-  return async (payload) => {
-    const order = await orders.findById(payload.orderId);
-    if (!order || !order.placedByCustomerAccountId) return null;
-    return {
-      salesChannelId: payload.salesChannelId,
-      customerAccountId: order.placedByCustomerAccountId,
-      title: 'Order update',
-      body: `Order ${order.businessId} is now ${payload.to.replace(/_/g, ' ')}.`,
-      url: `/account/orders/${order.businessId}`,
-    };
-  };
 }

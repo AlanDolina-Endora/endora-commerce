@@ -26,6 +26,10 @@ export const PWA_SETTING_CODES = {
   VAPID_PUBLIC_KEY: 'pwa.vapid_public_key',
   VAPID_PRIVATE_KEY: 'pwa.vapid_private_key',
   FCM_SERVICE_ACCOUNT: 'pwa.fcm_service_account',
+  /** Automatic push on order status changes (`specs/149-pwa-order-status-push/`). */
+  PUSH_ORDER_STATUS_ENABLED: 'pwa.push_order_status_enabled',
+  /** Automatic push on quote request status events (`specs/149-pwa-order-status-push/`). */
+  PUSH_QUOTE_STATUS_ENABLED: 'pwa.push_quote_status_enabled',
 } as const;
 
 export const PWA_PERMISSIONS = {
@@ -71,6 +75,16 @@ export const PwaPublicConfigSchema = z.object({
   pushEnabled: z.boolean(),
   /** Empty string when push is disabled or VAPID is unconfigured. */
   vapidPublicKey: z.string(),
+  /**
+   * Effective for the request's channel: push effectively on and the order
+   * category switch on (`specs/149-pwa-order-status-push/`).
+   */
+  orderStatusPushEnabled: z.boolean(),
+  /**
+   * Effective for the request's channel: push effectively on, the quote
+   * category switch on, and the Quote Requests module present.
+   */
+  quoteStatusPushEnabled: z.boolean(),
 });
 export type PwaPublicConfig = z.infer<typeof PwaPublicConfigSchema>;
 
@@ -251,6 +265,10 @@ export const PwaAdminConfigSchema = z.object({
   vapidPublicKey: z.string(),
   vapidPrivateKeyIsSet: z.boolean(),
   fcmServiceAccountIsSet: z.boolean(),
+  /** Raw value of `pwa.push_order_status_enabled` for the scope. */
+  orderStatusPushEnabled: z.boolean(),
+  /** Raw value of `pwa.push_quote_status_enabled` for the scope. */
+  quoteStatusPushEnabled: z.boolean(),
 });
 export type PwaAdminConfig = z.infer<typeof PwaAdminConfigSchema>;
 
@@ -268,9 +286,34 @@ export const UpdatePwaConfigRequestSchema = z
     vapidPublicKey: z.string().optional(),
     vapidPrivateKey: z.string().optional(),
     fcmServiceAccount: z.string().optional(),
+    orderStatusPushEnabled: z.boolean().optional(),
+    quoteStatusPushEnabled: z.boolean().optional(),
   })
   .strict();
 export type UpdatePwaConfigRequest = z.infer<typeof UpdatePwaConfigRequestSchema>;
+
+// ---------------------------------------------------------------------------
+// (3b) Customer push preferences (`specs/149-pwa-order-status-push/`)
+// ---------------------------------------------------------------------------
+
+/**
+ * A customer account's account-wide choice of automatic push categories.
+ * An account that never chose answers both `true`.
+ */
+export const PushPreferencesSchema = z.object({
+  orderStatus: z.boolean(),
+  quoteStatus: z.boolean(),
+});
+export type PushPreferences = z.infer<typeof PushPreferencesSchema>;
+
+/** Partial update: an omitted choice keeps its current value. */
+export const UpdatePushPreferencesRequestSchema = z
+  .object({ orderStatus: z.boolean().optional(), quoteStatus: z.boolean().optional() })
+  .strict()
+  .refine((v) => v.orderStatus !== undefined || v.quoteStatus !== undefined, {
+    message: 'at_least_one_field',
+  });
+export type UpdatePushPreferencesRequest = z.infer<typeof UpdatePushPreferencesRequestSchema>;
 
 export const VapidKeyPairResponseSchema = z.object({
   publicKey: z.string().min(1),
