@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { StrictMode, type ReactElement } from 'react';
 import { describe, expect, it } from 'vitest';
 import { screen } from '@testing-library/react';
 import { DocumentSampleProvider } from '@endora-commerce/page-builder-core/contributions';
@@ -17,7 +17,7 @@ import { contributions } from '../../../../packages/modules/quote_requests/src/a
 
 const BUNDLE = { quote_requests: quoteRequestsEn as Record<string, string> };
 const render = (name: string, props: Record<string, unknown> = {}): HTMLElement => {
-  const component = quoteDocumentCanvas.components![name] as { render: (props: Record<string, unknown>) => JSX.Element };
+  const component = quoteDocumentCanvas.components![name] as { render: (props: Record<string, unknown>) => ReactElement };
   const Render = component.render;
   return renderWithI18n(
     <StrictMode>

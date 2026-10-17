@@ -148,6 +148,12 @@ describe('the quote request screen', () => {
     expect(screen.getByRole('button', { name: 'Send PDF to customer' })).toBeTruthy();
   });
 
+  it('offers no send while the transactional e-mails are absent, and still the export (FR-099)', async () => {
+    renderDetail(['quote_requests', 'document_templates']);
+    expect(await screen.findByRole('button', { name: 'Export PDF' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Send PDF to customer' })).toBeNull();
+  });
+
   it('offers neither while document templates are absent (FR-060)', async () => {
     renderDetail(['quote_requests', 'transactional_emails']);
     await screen.findByText(/RFQ-0146|rfq\.detail\.title/);

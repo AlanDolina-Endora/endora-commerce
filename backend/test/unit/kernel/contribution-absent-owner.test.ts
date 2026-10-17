@@ -220,11 +220,15 @@ const COMPOSERS: Readonly<
   // It has no other boot hook.
   credit_limits: (withOwner, ownerNames) => compose('credit_limits', registerCreditLimits, ownerNames, withOwner),
   // `quote_requests` offers `rfq.created.v1` and `rfq.expired.v1` to the same
-  // registry. Its other boot hook pushes into `sales_channels`' attribution
-  // registry, an owner it declares in `dependencies`.
+  // registry, and pushes the Quote request document type into
+  // `document_templates`' registry (`specs/153-quote-request-pdf-template/`).
+  // Its other boot hooks push into `sales_channels`' attribution registry and
+  // the Quote request PDF e-mail's defaults into `transactional_emails`', owners
+  // it declares in `dependencies`.
   quote_requests: (withOwner, ownerNames) =>
     compose('quote_requests', registerQuoteRequests, ownerNames, withOwner, {
       salesChannelAttributionRegistry: { register: () => {} },
+      emailDefaultsPort: { register: () => {} },
     }),
   // `organizations` offers the Organization record type to `admin_search`'s
   // registry. Its three other boot hooks push into registries of modules it

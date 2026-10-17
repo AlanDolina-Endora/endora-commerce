@@ -70,6 +70,11 @@ describe('FROZEN_BLOCK_RENAMES — the codomain', () => {
     ['document_templates.Spacer', 'specs/152-compare-pdf-template/'],
     ['document_templates.Divider', 'specs/152-compare-pdf-template/'],
     ['document_templates.PageBreak', 'specs/152-compare-pdf-template/'],
+    ['document_templates.ItemsTable', 'specs/153-quote-request-pdf-template/'],
+    ['quote_requests.QuoteHeader', 'specs/153-quote-request-pdf-template/'],
+    ['quote_requests.QuoteParties', 'specs/153-quote-request-pdf-template/'],
+    ['quote_requests.QuoteNotes', 'specs/153-quote-request-pdf-template/'],
+    ['quote_requests.QuoteDetails', 'specs/153-quote-request-pdf-template/'],
   ]);
   const declared = new Set([...everyDeclared].filter((name) => !BORN_NAMESPACED.has(name)));
 

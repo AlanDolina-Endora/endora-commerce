@@ -516,6 +516,29 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'did not exist when the prefix chain was deleted: the failure to produce a document from a template. ' +
       'The noun is a document template, the module\'s own row.',
   },
+  QUOTE_REQUEST_PDF_TOO_LARGE: {
+    to: 'quote_requests',
+    reason:
+      'Minted by feature 153 (`specs/153-quote-request-pdf-template/`, owner answer Q4, FR-097) for ' +
+      'the refusal of a Send PDF to customer whose rendered quote PDF exceeds the attachment limit. ' +
+      'The noun is the quote request PDF, `quote_requests`\' own document, and the one raise site is ' +
+      'its document service.',
+  },
+  QUOTE_REQUEST_PDF_EMAIL_UNAVAILABLE: {
+    to: 'quote_requests',
+    reason:
+      'Minted by feature 153 (`specs/153-quote-request-pdf-template/`, owner answer Q4, FR-097) for ' +
+      'a Send PDF to customer the platform cannot deliver at all — the quote request PDF e-mail ' +
+      'switched off, no mail transport, or no definition, named by the `details.code` token. The ' +
+      'e-mail is `quote_requests`\' own declaration and the one raise site is its send Command.',
+  },
+  QUOTE_REQUEST_PDF_SEND_FAILED: {
+    to: 'quote_requests',
+    reason:
+      'Minted by feature 153 (`specs/153-quote-request-pdf-template/`, owner answer Q4, FR-097) for ' +
+      'a Send PDF to customer every recipient of which the mail transport refused. The one raise ' +
+      'site is `quote_requests`\' send Command.',
+  },
 };
 
 /**
