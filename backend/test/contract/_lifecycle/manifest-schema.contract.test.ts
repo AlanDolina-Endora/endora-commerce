@@ -53,7 +53,9 @@ describe('Module manifest contract — Pass A retrofit', () => {
           // and only flag deps that point at literally nothing.
           if (!known.has(dep)) {
             // Allow any string id matching the regex — Pass B will retrofit.
-            expect(dep).toMatch(/^[a-z][a-z0-9_]*$/);
+            // A leading underscore marks a platform module (`_i18n`,
+            // `_lifecycle`), which a domain module may depend on.
+            expect(dep).toMatch(/^_?[a-z][a-z0-9_]*$/);
           } else {
             expect(known.has(dep)).toBe(true);
           }
