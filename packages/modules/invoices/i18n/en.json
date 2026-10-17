@@ -10,8 +10,6 @@
   "settings.storefrontBaseUrl.label": "Storefront base URL (invoice email links)",
   "actions.openInvoices.label": "Open invoices",
   "actions.openInvoices.description": "View and manage issued invoices and corrections",
-  "actions.invoiceTemplates.label": "Invoice templates",
-  "actions.invoiceTemplates.description": "Customize the invoice PDF layout (WYSIWYG)",
   "list.title": "Invoices",
   "errors.INVOICE_NOT_READY": "The invoice for this order is not ready yet. It becomes available once it has been issued.",
   "errors.INVOICE_NUMBER_PATTERN_COLLIDES": "This numbering pattern can produce the same document number as another sales channel. Invoice numbers must be unique across the whole platform.",
@@ -41,5 +39,7 @@
   "blocks.invoiceLogo.description": "The seller logo.",
   "blocks.invoiceFooter.label": "Footer / legal",
   "blocks.invoiceFooter.description": "The legal footer printed at the bottom of the invoice.",
-  "blocks.category.invoice": "Invoice sections"
+  "blocks.category.invoice": "Invoice sections",
+  "documentTypes.invoice.label": "Invoice",
+  "documentTypes.invoice.description": "The invoice PDF: downloaded by administrators and customers, and attached to the invoice e-mail."
 }

@@ -404,11 +404,14 @@ export interface BackendServerHandle {
     service: CredentialsService;
     configurationTypeRegistry: ConfigurationTypeRegistry;
   };
-  /** Feature 047 — invoices handle (issuance service, PDF renderer, number generator). */
+  /**
+   * Feature 047 — invoices handle (issuance service, number generator). The
+   * PDF renderer left it with `specs/152-compare-pdf-template/`: invoice PDFs
+   * are produced by `document_templates`' `documentRenderer`.
+   */
   invoices: {
     invoiceService: InvoicesCradle['invoiceService'];
     numberGenerator: InvoicesCradle['invoiceNumberGenerator'];
-    pdfRenderer: InvoicesCradle['invoicePdfRenderer'];
     /**
      * What turns the operator's logo asset into the bytes a PDF embeds —
      * projected so a test can assert the **wiring** and not only the mapping
@@ -2793,7 +2796,6 @@ export async function setupBackendServer(
     invoices: {
       invoiceService: invoicesCradle.invoiceService,
       numberGenerator: invoicesCradle.invoiceNumberGenerator,
-      pdfRenderer: invoicesCradle.invoicePdfRenderer,
       loadAssetImage: invoicesCradle.invoices.handle.loadAssetImage,
     },
     ledgerDeliveryProcessor: (registrationName: string) => (deliveryId: string) =>

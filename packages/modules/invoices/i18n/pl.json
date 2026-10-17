@@ -10,8 +10,6 @@
   "settings.storefrontBaseUrl.label": "Bazowy URL Storefront (linki w mailach z fakturą)",
   "actions.openInvoices.label": "Otwórz faktury",
   "actions.openInvoices.description": "Przeglądaj i zarządzaj wystawionymi fakturami i korektami",
-  "actions.invoiceTemplates.label": "Szablony faktur",
-  "actions.invoiceTemplates.description": "Dostosuj wygląd PDF faktury (WYSIWYG)",
   "list.title": "Faktury",
   "errors.INVOICE_NOT_READY": "Faktura do tego zamówienia nie jest jeszcze gotowa. Będzie dostępna po jej wystawieniu.",
   "errors.INVOICE_NUMBER_PATTERN_COLLIDES": "Ten wzorzec numeracji może wygenerować taki sam numer dokumentu jak inny kanał sprzedaży. Numery faktur muszą być unikalne w całej platformie.",
@@ -41,5 +39,7 @@
   "blocks.invoiceLogo.description": "Logo sprzedawcy.",
   "blocks.invoiceFooter.label": "Stopka / informacje prawne",
   "blocks.invoiceFooter.description": "Stopka prawna drukowana na dole faktury.",
-  "blocks.category.invoice": "Sekcje faktury"
+  "blocks.category.invoice": "Sekcje faktury",
+  "documentTypes.invoice.label": "Faktura",
+  "documentTypes.invoice.description": "PDF faktury: pobierany przez administratorów i klientów oraz dołączany do e-maila z fakturą."
 }

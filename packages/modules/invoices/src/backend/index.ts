@@ -2,8 +2,11 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { EventBus } from '@endora-commerce/platform/events';
 import type {
+  AdminRolePort,
   AssetReadPort,
   AssetsLibraryPort,
+  DocumentRenderPort,
+  DocumentTypeRegistryPort,
   CorrectiveInvoicePort,
   CustomerAccountReadPort,
   EmailDefaultsRegistryPort,
@@ -21,7 +24,8 @@ import type {
   TransactionalEmailSender,
 } from '@endora-commerce/contracts';
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
-import { effectiveState, lazyPort } from '@endora-commerce/platform/kernel';
+import { effectiveState, enterSystemScope, lazyPort } from '@endora-commerce/platform/kernel';
+import { z } from 'zod';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import type { FastifyRequest } from 'fastify';
 import type { InvoicePlacementApplyPort } from '../ports/index.js';
@@ -45,7 +49,8 @@ import { INVOICE_ISSUED_DEFAULT } from './email-templates/invoice-issued.default
 import { InvoiceExternalAttachment } from './entities/invoice-external-attachment.entity.js';
 import { InvoiceLine } from './entities/invoice-line.entity.js';
 import { InvoiceNumberCounter } from './entities/invoice-number-counter.entity.js';
-import { InvoiceTemplate } from './entities/invoice-template.entity.js';
+import { createInvoiceDocumentType } from './document/invoice-document-type.js';
+import { GRANT_DONE_SETTING, grantDocumentTemplatesAccess } from './document/document-templates-grant.js';
 import { Invoice } from './entities/invoice.entity.js';
 
 /**
@@ -121,7 +126,6 @@ export interface InvoicesCradle {
   readonly invoices: { handle: InvoicesModuleHandle; plugin: unknown };
   readonly invoiceService: InvoicesModuleHandle['invoiceService'];
   readonly invoiceNumberGenerator: InvoicesModuleHandle['numberGenerator'];
-  readonly invoicePdfRenderer: InvoicesModuleHandle['pdfRenderer'];
   readonly invoicesNumberingConfiguration: NumberingConfigurationService;
 }
 
@@ -178,7 +182,7 @@ export function registerModule(ctx: ModuleContext): void {
       .singleton(),
 
     invoices: ctx
-      .asFunction(({ emFactory, eventBus, auditLogService, invoicePdfBlockRegistry }: InvoicesCradle) => {
+      .asFunction(({ emFactory, eventBus, auditLogService }: InvoicesCradle) => {
         const cradle = (): InvoicesCradle => ctx.cradle<InvoicesCradle>();
         const result = invoicesModule({
           emFactory,
@@ -224,7 +228,9 @@ export function registerModule(ctx: ModuleContext): void {
           ),
           resolveLanguage: createChannelLanguageResolver(emFactory),
           loadAssetImage: createAssetImageLoader(lazyPort<AssetReadPort>(ctx, 'assetReadPort')),
-          pdfBlocks: invoicePdfBlockRegistry,
+          // `specs/152-compare-pdf-template/` — every invoice PDF is produced
+          // by `document_templates`, which this manifest binds (owner answer N2).
+          documents: lazyPort<DocumentRenderPort>(ctx, 'documentRenderPort'),
           ledgerRouting: {
             numberingModeFor: async (salesChannelId) => {
               if (!effectiveState.isPresent('invoice_ledger')) return 'endora';
@@ -326,11 +332,6 @@ export function registerModule(ctx: ModuleContext): void {
   ctx.di.providePort<InvoicePlacementApplyPort>(
     'invoicePlacementApplyPort',
     ctx.asFunction(() => new InvoicePlacementApplyService()).singleton(),
-  );
-
-  ctx.di.providePort(
-    'invoicePdfRenderer',
-    ctx.asFunction(({ invoices }: InvoicesCradle) => invoices.handle.pdfRenderer).singleton(),
   );
 
   /**
@@ -464,6 +465,51 @@ export function registerModule(ctx: ModuleContext): void {
     await ctx.cradle<InvoicesCradle>().invoicesNumberingConfiguration.reconcile();
   });
 
+  /**
+   * The *Invoice* document type (`specs/152-compare-pdf-template/`), pushed into
+   * `document_templates`' registry. A **contribution-only** hook and
+   * deliberately without a presence probe: the registry answers a type only
+   * while its module is present, so a probe that returned early would leave
+   * invoices without a document type after an operator switched them back on,
+   * until the next restart.
+   */
+  ctx.onBoot(() => {
+    const { invoicePdfBlockRegistry, invoices } = ctx.cradle<InvoicesCradle>();
+    lazyPort<DocumentTypeRegistryPort>(ctx, 'documentTypeRegistry').register(
+      createInvoiceDocumentType({
+        contributed: invoicePdfBlockRegistry,
+        loadAssetImage: invoices.handle.loadAssetImage,
+      }),
+    );
+  });
+
+  /**
+   * Owner answers N3 and P2 — the one-time grant that keeps invoice editors
+   * able to edit invoice templates in *Document templates*. A **working** hook,
+   * so it decides presence first and outside anything that could catch it
+   * (D-68): with invoicing off nothing is written, and the grant runs the first
+   * boot invoicing is present again. Once it has run, a hidden setting says so
+   * and it never runs again.
+   */
+  ctx.onBoot(async () => {
+    if (!effectiveState.isPresent('invoices')) return;
+    const settings = lazyPort<InvoicesModuleOptions['settingsService']>(ctx, 'settingsReadPort');
+    const settingsAdmin = lazyPort<SettingsAdminPort>(ctx, 'settingsAdminService');
+    await enterSystemScope('invoices: one-time document template access grant', () =>
+      grantDocumentTemplatesAccess({
+        roles: lazyPort<AdminRolePort>(ctx, 'adminRolePort'),
+        isDone: () => settings.get(GRANT_DONE_SETTING, null, z.boolean()),
+        markDone: async () => {
+          await settingsAdmin.setValueForAllChannels(GRANT_DONE_SETTING, true, null, { actorAdminUserId: null });
+        },
+      }).then((outcome) => {
+        if (outcome.status === 'granted' && outcome.roleCodes.length > 0) {
+          ctx.log.info({ roleCodes: outcome.roleCodes }, '[invoices] granted document template access to roles');
+        }
+      }),
+    );
+  });
+
 }
 
 /**
@@ -480,7 +526,6 @@ export function registerModule(ctx: ModuleContext): void {
 export const entities = [
   InvoiceLine,
   InvoiceNumberCounter,
-  InvoiceTemplate,
   InvoiceExternalAttachment,
   Invoice,
 ];

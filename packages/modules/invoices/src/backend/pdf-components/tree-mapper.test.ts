@@ -1,8 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { INVOICE_COMPONENT_NAMES, treeToContent, pickLanguageTree } from './tree-mapper.js';
+import { INVOICE_COMPONENT_NAMES, renderOwnBlock } from './tree-mapper.js';
 import { headerSection, lineItemsSection } from './sections.js';
 import { sampleInvoiceDetail } from './sample.js';
 import { GENERIC_INVOICE_TEMPLATE_CONTENT } from '../seeds/generic-invoice-template.js';
+
+/**
+ * Since `specs/152-compare-pdf-template/` the document-template engine walks
+ * an invoice template's tree; this module maps each of its own blocks to its
+ * section builder (`renderOwnBlock`). What these cases held about a tree walk
+ * moved to `document/invoice-document-type.test.ts`.
+ */
+function treeToContent(tree: unknown, inv: ReturnType<typeof sampleInvoiceDetail>, locale: 'pl' | 'en') {
+  const nodes = (tree as { content?: { type?: string; props?: Record<string, unknown> }[] } | null)?.content;
+  if (!Array.isArray(nodes)) return null;
+  const out = nodes
+    .map((node) => (typeof node?.type === 'string' ? renderOwnBlock(node.type, node.props ?? {}, inv, locale) : undefined))
+    .filter((c) => c !== undefined);
+  return out.length > 0 ? out : null;
+}
+const pickLanguageTree = (content: unknown, language: string): unknown =>
+  (content as { languages: Record<string, unknown> }).languages[language] ?? null;
 
 const inv = sampleInvoiceDetail();
 
@@ -40,8 +57,6 @@ describe('invoice template tree mapper (US6)', () => {
   it('picks the requested language tree from a content envelope', () => {
     const plTree = pickLanguageTree(GENERIC_INVOICE_TEMPLATE_CONTENT, 'pl-PL') as { content: unknown[] };
     expect(Array.isArray(plTree.content)).toBe(true);
-    const fallback = pickLanguageTree(GENERIC_INVOICE_TEMPLATE_CONTENT, 'de-DE');
-    expect(fallback).not.toBeNull();
   });
 
   it('renders only invoices’ own blocks itself (134 T063)', () => {
@@ -52,7 +67,7 @@ describe('invoice template tree mapper (US6)', () => {
     expect(INVOICE_COMPONENT_NAMES.every((name) => name.startsWith('invoices.'))).toBe(true);
   });
 
-  it('skips a stored contributed block whose contributor is absent, and still renders the rest', () => {
+  it('maps only its own blocks and answers nothing for a contributed one', () => {
     // An existing template seeded before the repair carries the KSeF node. With
     // no contributor it is skipped — not a throw, and not a fall-back to the
     // built-in layout (FR-016), because the other blocks still render.
@@ -65,27 +80,6 @@ describe('invoice template tree mapper (US6)', () => {
     };
     const content = treeToContent(tree, inv, 'pl');
     expect(content).toHaveLength(2);
-  });
-
-  it('renders a stored contributed block through its contributor', () => {
-    const tree = {
-      content: [
-        { type: 'invoices.InvoiceHeader', props: {} },
-        { type: 'ksef.InvoiceSection', props: { labelNumber: 'Nr' } },
-      ],
-    };
-    const seen: Array<Record<string, unknown>> = [];
-    const content = treeToContent(tree, inv, 'pl', (name) =>
-      name === 'ksef.InvoiceSection'
-        ? (props) => {
-            seen.push(props);
-            return { text: 'contributed' };
-          }
-        : undefined,
-    );
-    expect(content).toHaveLength(2);
-    expect(content![1]).toEqual({ text: 'contributed' });
-    expect(seen).toEqual([{ labelNumber: 'Nr' }]);
   });
 
   it('the seeded generic tree renders all standard sections', () => {

@@ -1,22 +1,14 @@
 import type { InvoiceTemplateBlockField } from '@endora-commerce/contracts';
-import type { InvoicePdfBlockRegistry } from '../services/invoice-pdf-block-registry.js';
-import { INVOICE_COMPONENT_NAMES } from './tree-mapper.js';
 
 /**
- * Page-builder descriptor for the invoice template WYSIWYG palette (US6).
- * Served to the admin editor so it can offer the bounded invoice component set.
+ * Labels and editable fields of the ten invoice blocks (feature 047, US6),
+ * moved from `pdf-components/descriptor.ts` when invoice templates moved onto
+ * the document-template facility (`specs/152-compare-pdf-template/`).
  *
  * The field shape is the published contract's, because a contributed block
  * describes its own fields (`specs/134-paid-module-extraction/` T063).
  */
 export type InvoiceComponentField = InvoiceTemplateBlockField;
-
-export interface InvoiceComponentDescriptor {
-  name: string;
-  ownerModule: string;
-  label: string;
-  fields: Record<string, InvoiceComponentField>;
-}
 
 const LABELS: Record<string, string> = {
   'invoices.InvoiceHeader': 'Header (number + dates)',
@@ -224,32 +216,12 @@ const FIELDS: Record<string, Record<string, InvoiceComponentField>> = {
 };
 
 /**
- * The descriptor `GET /api/v1/admin/invoice-templates/page-builder/config`
- * serves: this module's ten blocks, then every present contributor's.
- *
- * Built per request rather than held as a constant, because a contributor's
- * presence is read on every call — switching one off removes its block from
- * the palette description without a restart, and switching it on restores it.
+ * The label and fields of one of this module's own blocks, as the
+ * document-template editor describes it (`specs/152-compare-pdf-template/`).
+ * Served through the invoice document type's block renderers' `describe()`:
+ * the manifest declares these blocks with `fields: {}`, because the shared
+ * block-declaration schema has no colour field and no boolean options.
  */
-export function invoicePageBuilderDescriptor(blocks: InvoicePdfBlockRegistry): {
-  schemaVersion: 1;
-  components: InvoiceComponentDescriptor[];
-} {
-  return {
-    schemaVersion: 1,
-    components: [
-      ...INVOICE_COMPONENT_NAMES.map(
-        (name): InvoiceComponentDescriptor => ({
-          name,
-          ownerModule: 'invoices',
-          label: LABELS[name] ?? name,
-          fields: FIELDS[name] ?? {},
-        }),
-      ),
-      ...blocks.present().map((block): InvoiceComponentDescriptor => {
-        const { label, fields } = block.describe();
-        return { name: block.name, ownerModule: block.moduleId, label, fields: { ...fields } };
-      }),
-    ],
-  };
+export function describeOwnBlock(name: string): { label: string; fields: Record<string, InvoiceComponentField> } {
+  return { label: LABELS[name] ?? name, fields: { ...(FIELDS[name] ?? {}) } };
 }

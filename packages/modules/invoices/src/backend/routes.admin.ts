@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import {
+  type DocumentRenderPort,
   issueInvoiceRequestSchema,
   sendInvoiceEmailRequestSchema,
   type IssueInvoiceEmailOutcome,
@@ -8,13 +9,8 @@ import {
 } from '@endora-commerce/contracts';
 import { Invoice } from './entities/invoice.entity.js';
 import { isOrgInScope } from '@endora-commerce/platform/tenancy';
-import { z } from 'zod';
 import type { InvoiceService } from './services/invoice-service.js';
-import type { InvoicePdfRenderer } from './services/invoice-pdf-renderer.js';
-import type { InvoiceTemplateService } from './services/invoice-template-service.js';
-import { invoicePageBuilderDescriptor } from './pdf-components/descriptor.js';
-import { sampleInvoiceDetail } from './pdf-components/sample.js';
-import { pickLanguageTree } from './pdf-components/tree-mapper.js';
+import { renderInvoicePdf } from './document/render-invoice.js';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import type { InvoiceEmailDispatchResult } from './services/invoice-email-dispatch.js';
 
@@ -38,8 +34,8 @@ export interface InvoicesAdminDeps {
   orderReadPort: OrderReadPort;
   requireAdmin: RequireAdminFactory;
   invoiceService: InvoiceService;
-  pdfRenderer: InvoicePdfRenderer;
-  templateService: InvoiceTemplateService;
+  /** `document_templates`' render port (`specs/152-compare-pdf-template/`). */
+  documents: Pick<DocumentRenderPort, 'render'>;
   /**
    * T118c — required, both of them. Each was optional because the *bridge*
    * member behind it was, and a composition that omitted one got a route that
@@ -51,14 +47,11 @@ export interface InvoicesAdminDeps {
   resolveAdminUserId: (req: FastifyRequest) => string | null;
 }
 
-const RENDER_LANGUAGE = 'pl-PL';
-
 export async function registerInvoicesAdminRoutes(
   app: FastifyInstance,
   deps: InvoicesAdminDeps,
 ): Promise<void> {
-  const { emFactory, orderReadPort, requireAdmin, invoiceService, pdfRenderer, templateService } =
-    deps;
+  const { emFactory, orderReadPort, requireAdmin, invoiceService, documents } = deps;
 
   // List ------------------------------------------------------------------
   app.get(
@@ -142,8 +135,7 @@ export async function registerInvoicesAdminRoutes(
     { preHandler: requireAdmin('invoices:read'), config: { streamingResponse: true } },
     async (request, reply) => {
       const detail = await invoiceService.buildDetail(request.params.id);
-      const tree = await templateService.resolveTree(detail.salesChannelId, RENDER_LANGUAGE);
-      const pdf = await pdfRenderer.render(detail, 'pl', tree);
+      const pdf = await renderInvoicePdf(documents, detail);
       reply
         .header('content-type', 'application/pdf')
         .header('content-disposition', `attachment; filename="invoice-${detail.number.replace(/\W+/g, '_')}.pdf"`);
@@ -172,7 +164,7 @@ export async function registerInvoicesAdminRoutes(
   );
 
   // Regenerate PDF — the PDF is rendered on demand, so "regenerate" actually
-  // re-runs the full render pipeline (template tree + pdfmake) to validate that
+  // re-runs the full render pipeline (document template + pdfmake) to validate that
   // a fresh document can be produced and to surface any rendering error to the
   // operator instead of silently doing nothing. Returns the refreshed detail.
   app.post<{ Params: { id: string } }>(
@@ -180,8 +172,7 @@ export async function registerInvoicesAdminRoutes(
     { preHandler: requireAdmin('invoices:write') },
     async (request) => {
       const detail = await invoiceService.buildDetail(request.params.id);
-      const tree = await templateService.resolveTree(detail.salesChannelId, RENDER_LANGUAGE);
-      await pdfRenderer.render(detail, 'pl', tree);
+      await renderInvoicePdf(documents, detail);
       return { data: detail };
     },
   );
@@ -211,87 +202,9 @@ export async function registerInvoicesAdminRoutes(
     },
   );
 
-  // --- Invoice templates (US6) ------------------------------------------
-  app.get(
-    '/api/v1/admin/invoice-templates',
-    { preHandler: requireAdmin('invoices:read') },
-    async () => ({ data: await templateService.list() }),
-  );
-
-  app.get(
-    '/api/v1/admin/invoice-templates/page-builder/config',
-    { preHandler: requireAdmin('invoices:read') },
-    async () => ({ data: invoicePageBuilderDescriptor(pdfRenderer.blocks) }),
-  );
-
-  app.get<{ Params: { id: string } }>(
-    '/api/v1/admin/invoice-templates/:id',
-    { preHandler: requireAdmin('invoices:read') },
-    async (request) => ({ data: await templateService.get(request.params.id) }),
-  );
-
-  const createTemplateSchema = z.object({
-    code: z.string().min(1).max(180),
-    name: z.string().min(1).max(200),
-    salesChannelId: z.string().uuid().nullable().optional(),
-  });
-  app.post(
-    '/api/v1/admin/invoice-templates',
-    { preHandler: requireAdmin('invoices:write'), schema: { body: createTemplateSchema } },
-    async (request, reply) => {
-      const body = createTemplateSchema.parse(request.body);
-      const created = await templateService.create({
-        code: body.code,
-        name: body.name,
-        salesChannelId: body.salesChannelId ?? null,
-      });
-      reply.status(201);
-      return { data: created };
-    },
-  );
-
-  const saveContentSchema = z.object({ data: z.unknown(), version: z.number().int() });
-  app.put<{ Params: { id: string; language: string } }>(
-    '/api/v1/admin/invoice-templates/:id/content/:language',
-    { preHandler: requireAdmin('invoices:write'), schema: { body: saveContentSchema } },
-    async (request) => {
-      const body = saveContentSchema.parse(request.body);
-      return {
-        data: await templateService.saveContent(
-          request.params.id,
-          request.params.language,
-          body.data,
-          body.version,
-        ),
-      };
-    },
-  );
-
-  // Preview: sample invoice through this template's saved tree (GET) or a draft
-  // canvas tree (POST) without persisting.
-  app.get<{ Params: { id: string } }>(
-    '/api/v1/admin/invoice-templates/:id/preview',
-    { preHandler: requireAdmin('invoices:write'), config: { streamingResponse: true } },
-    async (request, reply) => {
-      const tpl = await templateService.get(request.params.id);
-      const tree = pickLanguageTree(tpl.content, RENDER_LANGUAGE);
-      const pdf = await pdfRenderer.render(sampleInvoiceDetail(), 'en', tree);
-      reply.header('content-type', 'application/pdf').header('content-disposition', 'inline; filename="preview.pdf"');
-      return reply.send(pdf);
-    },
-  );
-
-  app.post<{ Params: { id: string }; Body: unknown }>(
-    '/api/v1/admin/invoice-templates/:id/preview',
-    { preHandler: requireAdmin('invoices:write') },
-    async (request, reply) => {
-      await templateService.get(request.params.id); // 404 if missing
-      const body = z.object({ data: z.unknown() }).parse(request.body);
-      const pdf = await pdfRenderer.render(sampleInvoiceDetail(), 'en', body.data);
-      reply.header('content-type', 'application/pdf').header('content-disposition', 'inline; filename="preview.pdf"');
-      return reply.send(pdf);
-    },
-  );
+  // The invoice-template administration API (`/api/v1/admin/invoice-templates*`)
+  // was withdrawn when invoice templates moved into *Document templates*
+  // (`specs/152-compare-pdf-template/`, owner answer N4).
 }
 
 /**

@@ -8,8 +8,6 @@ import type {
   InvoicesAdminDeps,
 } from '../routes.admin.js';
 import type { InvoiceService } from './invoice-service.js';
-import type { InvoicePdfRenderer } from './invoice-pdf-renderer.js';
-import type { InvoiceTemplateService } from './invoice-template-service.js';
 
 /**
  * Issue #149 — the send-on-issue route reports what became of the e-mail.
@@ -94,8 +92,7 @@ function buildDeps(dispatcher: InvoiceEmailDispatcher): InvoicesAdminDeps {
     }),
     requireAdmin: () => async () => undefined,
     invoiceService: { issue: vi.fn(async () => DETAIL) } as unknown as InvoiceService,
-    pdfRenderer: {} as InvoicePdfRenderer,
-    templateService: {} as InvoiceTemplateService,
+    documents: { render: async () => { throw new Error('not rendered in this test'); } },
     emailDispatcher: dispatcher,
     // `specs/110-instance-repository/` T118c — required, because the module
     // resolves the platform's `adminContextResolver` itself and no composition

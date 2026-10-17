@@ -35,11 +35,16 @@ An operator switches this module on and off on **/platform/modules**. The choice
 
 ## Permissions
 
-_None._
+| Code | Label | Also needs |
+| --- | --- | --- |
+| `document_templates:read` | View document templates | — |
+| `document_templates:write` | Edit document templates | `document_templates:read` |
 
 ## Command palette
 
-_None._
+| Action | Opens | Permission |
+| --- | --- | --- |
+| `open-document-templates` | `/document-templates` | `document_templates:read` |
 
 ## Settings
 

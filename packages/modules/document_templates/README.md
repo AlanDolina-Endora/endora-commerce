@@ -32,6 +32,7 @@ Everything below is a **peer** dependency, so the application resolves exactly o
 - `@mikro-orm/core` ^6
 - `@mikro-orm/migrations` ^6
 - `@mikro-orm/postgresql` ^6
+- `@types/pdfmake` ^0
 - `fastify` ^5.11.0
 - `pdfmake` ^0
 - `zod` ^4

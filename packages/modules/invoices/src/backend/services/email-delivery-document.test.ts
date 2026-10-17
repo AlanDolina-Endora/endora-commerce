@@ -54,9 +54,9 @@ function deps(sender: TransactionalEmailSender): InvoiceEmailDispatchDeps {
         salesChannelId: null,
       }),
     } as unknown as InvoiceEmailDispatchDeps['invoiceService'],
-    pdfRenderer: {
-      render: async () => Buffer.from('%PDF-fake'),
-    } as unknown as InvoiceEmailDispatchDeps['pdfRenderer'],
+    documents: {
+      render: async () => ({ bytes: Buffer.from('%PDF-fake') }),
+    } as unknown as InvoiceEmailDispatchDeps['documents'],
     settingsService: {
       async get<T>(code: string, _channel: string | null, schema: z.ZodType<T>): Promise<T> {
         return schema.parse(PLATFORM_WIDE[code]);

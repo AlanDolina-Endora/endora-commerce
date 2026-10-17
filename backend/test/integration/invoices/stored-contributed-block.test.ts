@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { InvoiceDetail } from '@endora-commerce/contracts';
+import type { InvoiceDetail, InvoiceDocumentData } from '@endora-commerce/contracts';
 import {
   setupBackendServer,
   teardownBackendServer,
@@ -28,6 +28,10 @@ import { withSystemScope } from '../../../src/tenancy/escape-hatch.js';
  *  - its stored props survive a save-and-reload through the admin API
  *    unchanged, which is what the editor does with a node it cannot render;
  *  - the builder descriptor stops describing the block.
+ *
+ * Since `specs/152-compare-pdf-template/` an invoice template is a
+ * `document_templates` row of type `invoices.invoice`, managed through that
+ * module's API and rendered by its engine; the assertions are the same.
  *
  * **Absent by construction.** While `ksef` was composed in this repository the
  * file took it off on the platform axis, which is the axis a deployment that
@@ -72,7 +76,29 @@ interface TemplateRow {
 }
 
 interface RendererSurface {
-  content(invoice: InvoiceDetail, locale: 'pl' | 'en', tree?: unknown): Promise<unknown[]>;
+  buildDefinition(input: {
+    documentType: string;
+    salesChannelId: string | null;
+    language: string;
+    data: InvoiceDocumentData;
+    tree?: unknown;
+  }): Promise<{ definition: { content: unknown[] } }>;
+}
+
+const API = '/api/v1/admin/document-templates';
+const ADMIN = { b2b_session: 'stub-admin-session' };
+
+/** The engine's content for an invoice — the stored tree as an unsaved canvas, or the invoice's own resolution. */
+async function contentOf(h: BackendServerHandle, invoice: InvoiceDetail, tree?: unknown): Promise<unknown[]> {
+  const renderer = h.container.resolve<RendererSurface>('documentRenderer');
+  const built = await renderer.buildDefinition({
+    documentType: 'invoices.invoice',
+    salesChannelId: tree === undefined ? (invoice.salesChannelId ?? null) : null,
+    language: 'pl-PL',
+    data: { invoice, amountLocale: 'pl' },
+    ...(tree === undefined ? {} : { tree }),
+  });
+  return built.definition.content;
 }
 
 /**
@@ -102,11 +128,7 @@ describe('invoices — a stored block whose declarant is absent (134 T063)', () 
   });
 
   async function readTemplate(id: string): Promise<TemplateRow> {
-    const res = await h.app.inject({
-      method: 'GET',
-      url: `/api/v1/admin/invoice-templates/${id}`,
-      cookies: ADMIN_COOKIE,
-    });
+    const res = await h.app.inject({ method: 'GET', url: `${API}/${id}`, cookies: ADMIN });
     expect(res.statusCode).toBe(200);
     return (res.json() as { data: TemplateRow }).data;
   }
@@ -114,17 +136,22 @@ describe('invoices — a stored block whose declarant is absent (134 T063)', () 
   it('renders the other blocks, skips the node, and keeps its props through a save', async () => {
     const created = await h.app.inject({
       method: 'POST',
-      url: '/api/v1/admin/invoice-templates',
-      cookies: ADMIN_COOKIE,
-      payload: { code: `pre-t063-${Date.now()}`, name: 'Seeded before T063' },
+      url: API,
+      cookies: ADMIN,
+      payload: {
+        documentType: 'invoices.invoice',
+        name: `Seeded before T063 ${Date.now()}`,
+        salesChannelId: null,
+        source: { kind: 'built_in' },
+      },
     });
     expect(created.statusCode).toBe(201);
     const { id, version } = (created.json() as { data: TemplateRow }).data;
     const stored = await h.app.inject({
       method: 'PUT',
-      url: `/api/v1/admin/invoice-templates/${id}/content/pl-PL`,
-      cookies: ADMIN_COOKIE,
-      payload: { version, data: PRE_T063_TREE },
+      url: `${API}/${id}/content/pl-PL`,
+      cookies: ADMIN,
+      payload: { expectedVersion: version, tree: PRE_T063_TREE },
     });
     expect(stored.statusCode).toBe(200);
 
@@ -132,9 +159,10 @@ describe('invoices — a stored block whose declarant is absent (134 T063)', () 
       // The document renders — through the route an operator uses — and does
       // not throw on the node.
       const preview = await h.app.inject({
-        method: 'GET',
-        url: `/api/v1/admin/invoice-templates/${id}/preview`,
-        cookies: ADMIN_COOKIE,
+        method: 'POST',
+        url: `${API}/preview`,
+        cookies: ADMIN,
+        payload: { documentType: 'invoices.invoice', language: 'pl-PL', tree: PRE_T063_TREE },
       });
       expect(preview.statusCode).toBe(200);
       expect(preview.rawPayload.subarray(0, 5).toString('utf8')).toBe('%PDF-');
@@ -142,10 +170,9 @@ describe('invoices — a stored block whose declarant is absent (134 T063)', () 
       // Eight blocks render and the ninth is skipped: not the built-in layout
       // (FR-016), which has no footer, and no KSeF section — no verification
       // caption. The number itself is printed once, by the header (T137).
-      const renderer = h.container.resolve<RendererSurface>('invoicePdfRenderer');
-      const content = await renderer.content(
+      const content = await contentOf(
+        h,
         { ...sampleInvoiceDetail(), ksefReferenceNumber: '1234567890-20260722-ABC123-01' },
-        'pl',
         PRE_T063_TREE,
       );
       expect(content).toHaveLength(8);
@@ -157,9 +184,9 @@ describe('invoices — a stored block whose declarant is absent (134 T063)', () 
       const before = await readTemplate(id);
       const saved = await h.app.inject({
         method: 'PUT',
-        url: `/api/v1/admin/invoice-templates/${id}/content/pl-PL`,
-        cookies: ADMIN_COOKIE,
-        payload: { version: before.version, data: before.content.languages!['pl-PL'] },
+        url: `${API}/${id}/content/pl-PL`,
+        cookies: ADMIN,
+        payload: { expectedVersion: before.version, tree: before.content.languages!['pl-PL'] },
       });
       expect(saved.statusCode).toBe(200);
       const after = await readTemplate(id);
@@ -171,9 +198,10 @@ describe('invoices — a stored block whose declarant is absent (134 T063)', () 
       // And the builder descriptor no longer offers what nothing renders.
       const descriptor = await h.app.inject({
         method: 'GET',
-        url: '/api/v1/admin/invoice-templates/page-builder/config',
-        cookies: ADMIN_COOKIE,
+        url: `${API}/types/invoices.invoice/builder-config`,
+        cookies: ADMIN,
       });
+      await h.em().getConnection().execute(`delete from document_templates where id = ?`, [id]);
       const names = (descriptor.json() as { data: { components: Array<{ name: string }> } }).data.components.map(
         (c) => c.name,
       );
@@ -216,9 +244,8 @@ describe('invoices — a stored block whose declarant is absent (134 T063)', () 
       );
       expect(detail.ksefReferenceNumber).toBe(number);
 
-      const renderer = h.container.resolve<RendererSurface>('invoicePdfRenderer');
       for (const tree of [PRE_T063_TREE, undefined]) {
-        const json = JSON.stringify(await renderer.content(detail, 'pl', tree));
+        const json = JSON.stringify(await contentOf(h, detail, tree));
         expect(json.split(`Numer w KSeF: ${number}`).length - 1).toBe(1);
       }
     });

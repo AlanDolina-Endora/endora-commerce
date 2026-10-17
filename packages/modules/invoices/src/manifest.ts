@@ -133,13 +133,27 @@ export const invoicesSettingsManifest = defineModuleSettingsManifest({
       valueType: 'string',
       defaultValue: '',
     },
+    {
+      // `specs/152-compare-pdf-template/` (owner answers N3, P2) — whether the
+      // one-time grant of the document-template permissions to the roles that
+      // hold the invoice permissions has run. Written once, by the module's own
+      // boot hook; hidden because it is bookkeeping, not a control.
+      code: 'invoices.document_templates_grant_done',
+      name: 'Document template access granted',
+      description:
+        'Set by the platform once roles allowed to view or edit invoices have also been given the document template permissions, after invoice templates moved to Document templates. Not meant to be changed.',
+      groupCode: 'invoices',
+      valueType: 'boolean',
+      defaultValue: false,
+      hidden: true,
+    },
   ],
 });
 
 export const manifest = defineModuleManifest({
   id: 'invoices',
   name: 'Invoices',
-  description: 'Invoice generation, numbering, PDF templates, corrections, and email delivery.',
+  description: 'Invoice generation, numbering, corrections, and email delivery; invoice PDF layouts are designed in Document templates.',
   version: '2.0.0',
   // `auth` owns the `requireAdmin` port and the customer guard this module
   // resolves; feature 072 made both container resolutions.
@@ -157,10 +171,20 @@ export const manifest = defineModuleManifest({
   // owner for a `refuses-without` sentence to describe. That is the same answer
   // `mfa` and `product_feeds` came to and a different one from `returns`, and
   // the difference is the owners', not the consumer's.
+  //
+  // `document_templates` and `admin_roles` joined in
+  // `specs/152-compare-pdf-template/`. Every invoice PDF is produced by the
+  // document-template facility, and an invoice that cannot be printed is not
+  // a degrade worth offering, so the edge binds: the lifecycle refuses to
+  // switch document templates off while invoicing is on (owner answer N2).
+  // `admin_roles` is where the one-time grant of the document-template
+  // permissions writes (N3); it is non-deactivatable.
   dependencies: [
+    'admin_roles',
     'assets_library',
     'auth',
     'customer_accounts',
+    'document_templates',
     'orders',
     'organizations',
     'settings',
@@ -196,7 +220,7 @@ export const manifest = defineModuleManifest({
   ],
   permissions: [
     { code: 'invoices:read', label: 'View invoices and download invoice PDFs' },
-    { code: 'invoices:write', label: 'Issue/correct invoices, edit templates, and configure invoicing' },
+    { code: 'invoices:write', label: 'Issue/correct invoices and configure invoicing' },
   ],
   /**
    * The three error codes this module owns — feature 090 Phase 3
@@ -275,18 +299,6 @@ export const manifest = defineModuleManifest({
       requiredPermission: 'invoices:read',
       keywords: ['invoices', 'faktury', 'vat', 'billing'],
       weight: 240,
-    },
-    {
-      id: 'invoice-templates',
-      labelKey: 'actions.invoiceTemplates.label',
-      descriptionKey: 'actions.invoiceTemplates.description',
-      icon: 'Layers',
-      targetRoute: '/invoices/templates',
-      // `invoices:read` — `GET /api/v1/admin/invoice-templates` is read-gated,
-      // and the row is a destination rather than an operation (issue #232).
-      requiredPermission: 'invoices:read',
-      keywords: ['invoice template', 'szablon faktury', 'pdf'],
-      weight: 245,
     },
   ],
   activation: { settingCode: 'invoices.enabled', default: true },

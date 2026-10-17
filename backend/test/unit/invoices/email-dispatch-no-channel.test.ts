@@ -92,9 +92,9 @@ function deps(
         salesChannelId: null,
       }),
     } as unknown as InvoiceEmailDispatchDeps['invoiceService'],
-    pdfRenderer: {
-      render: async () => Buffer.from('%PDF-fake'),
-    } as unknown as InvoiceEmailDispatchDeps['pdfRenderer'],
+    documents: {
+      render: async () => ({ bytes: Buffer.from('%PDF-fake') }),
+    } as unknown as InvoiceEmailDispatchDeps['documents'],
     settingsService: settings,
     getSender: () => sender,
     resolveRecipientEmail: async () => 'buyer@example.com',

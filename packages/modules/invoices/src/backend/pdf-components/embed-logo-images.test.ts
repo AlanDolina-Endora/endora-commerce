@@ -5,8 +5,6 @@ import {
   toImageDataUri,
 } from './embed-logo-images.js';
 import { logoSection } from './sections.js';
-import { InvoicePdfRenderer } from '../services/invoice-pdf-renderer.js';
-import { sampleInvoiceDetail } from './sample.js';
 
 /** Minimal 1×1 PNG. */
 const PNG_1X1 = Buffer.from(
@@ -68,44 +66,10 @@ describe('embedInvoiceLogoImages', () => {
   });
 });
 
-describe('logoSection + InvoicePdfRenderer with embedded logo', () => {
+describe('logoSection with an embedded logo', () => {
   it('accepts data URI images', () => {
     const dataUri = toImageDataUri(PNG_1X1, 'image/png')!;
     const content = logoSection({ src: dataUri, width: 100, maxHeight: 40 });
     expect(content).toMatchObject({ image: dataUri });
-  });
-
-  it('renders a PDF when the template logo is an inlined data URI', async () => {
-    const dataUri = toImageDataUri(PNG_1X1, 'image/png')!;
-    const tree = {
-      content: [
-        { type: 'invoices.InvoiceLogo', props: { src: dataUri, width: 80, maxHeight: 40 } },
-        { type: 'invoices.InvoiceHeader', props: {} },
-      ],
-    };
-    const buf = await new InvoicePdfRenderer().render(sampleInvoiceDetail(), 'en', tree);
-    expect(buf.subarray(0, 5).toString('utf8')).toBe('%PDF-');
-  });
-
-  it('renders a PDF when logo bytes come from loadAssetImage', async () => {
-    const assetId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
-    const renderer = new InvoicePdfRenderer({
-      loadAssetImage: async () => ({ bytes: PNG_1X1, mimeType: 'image/png' }),
-    });
-    const tree = {
-      content: [
-        {
-          type: 'invoices.InvoiceLogo',
-          props: {
-            imageSource: 'library',
-            assetId,
-            src: `http://localhost:3001/assets/file/${assetId}`,
-          },
-        },
-        { type: 'invoices.InvoiceHeader', props: {} },
-      ],
-    };
-    const buf = await renderer.render(sampleInvoiceDetail(), 'en', tree);
-    expect(buf.subarray(0, 5).toString('utf8')).toBe('%PDF-');
   });
 });

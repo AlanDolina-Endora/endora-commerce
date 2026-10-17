@@ -12,8 +12,6 @@ import type {
   InvoicesAdminDeps,
 } from './routes.admin.js';
 import { InvoiceService } from './services/invoice-service.js';
-import type { InvoicePdfRenderer } from './services/invoice-pdf-renderer.js';
-import type { InvoiceTemplateService } from './services/invoice-template-service.js';
 
 const OWN_ENTITIES: readonly unknown[] = [Invoice, InvoiceLine];
 
@@ -288,8 +286,7 @@ describe('invoices — send-on-issue skips a pending vendor hold', () => {
       invoiceService: {
         issue: vi.fn(async () => PENDING_DETAIL),
       } as unknown as InvoicesAdminDeps['invoiceService'],
-      pdfRenderer: {} as InvoicePdfRenderer,
-      templateService: {} as InvoiceTemplateService,
+      documents: { render: async () => { throw new Error('not rendered in this test'); } },
       emailDispatcher: {
         dispatch,
         sendOnIssueEnabled,

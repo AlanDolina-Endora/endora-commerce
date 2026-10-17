@@ -40,7 +40,6 @@ import { InvoiceEmailDispatcher } from '../../../../packages/modules/invoices/di
 
 import { InvoiceService } from '../../../../packages/modules/invoices/dist/backend/services/invoice-service.js';
 
-import { InvoicePdfRenderer } from '../../../../packages/modules/invoices/dist/backend/services/invoice-pdf-renderer.js';
 
 import {
   InvoiceNumberGenerator,
@@ -103,7 +102,9 @@ audit);
     dispatcher = new InvoiceEmailDispatcher({
       orderReadPort,
       invoiceService,
-      pdfRenderer: new InvoicePdfRenderer(),
+      // `specs/152-compare-pdf-template/` — the real document-template engine,
+      // the same one the download renders through (owner answer N1).
+      documents: h.container.resolve('documentRenderer'),
       settingsService: h.settings.settingsService,
       getSender: () => sender,
       resolveRecipientEmail: async () => 'buyer@example.com',
@@ -166,7 +167,9 @@ audit);
         new InvoiceNumberGenerator(createSettingsPatternResolver(h.settings.settingsService)),
         new SellerSettingsResolver(h.settings.settingsService),
       ),
-      pdfRenderer: new InvoicePdfRenderer(),
+      // `specs/152-compare-pdf-template/` — the real document-template engine,
+      // the same one the download renders through (owner answer N1).
+      documents: h.container.resolve('documentRenderer'),
       settingsService: h.settings.settingsService,
       getSender: () => ({
         async send() {
