@@ -6,12 +6,14 @@ import {
   Check,
   ClipboardList,
   Copy,
+  FileDown,
   FileText,
   History,
   PencilLine,
+  Send,
   XCircle,
 } from 'lucide-react';
-import { apiClient, ApiError, cn, formatDateTime } from '@endora-commerce/admin-kit/lib';
+import { apiClient, ApiError, cn, formatDateTime, useModulePresence } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Badge, Button, Card, CardContent, Input, Label, PageHeader, Section, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea } from '@endora-commerce/admin-kit/ui';
 import { CustomFieldValuesPanel, ProductPicker } from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
@@ -31,6 +33,7 @@ import {
   type ReferenceView,
 } from '../reference-view.js';
 import { RfqHistory } from './RfqHistory.js';
+import { QuoteRequestPdfDialog, type QuoteRequestPdfMode } from '../components/QuoteRequestPdfDialog.js';
 
 /**
  * Admin Quote Request detail (feature 008 / T043). Restructured to mirror the
@@ -170,6 +173,12 @@ export function RfqDetail(): ReactNode {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<RfqTab>('overview');
+  // Feature 153 — the quote PDF dialog (download or send) and its outcome line.
+  const tPdf = useTranslation('quote_requests');
+  const { isPresent } = useModulePresence();
+  const [pdfMode, setPdfMode] = useState<QuoteRequestPdfMode | null>(null);
+  const [pdfNotice, setPdfNotice] = useState<{ kind: 'success' | 'warning'; message: string } | null>(null);
+  const [historyNonce, setHistoryNonce] = useState(0);
   // Bumped when the operator takes the "set a new deadline" shortcut out of the
   // lapsed banner, so the Modify tab opens with the deadline field focused
   // rather than at the top of a form the operator then has to scan.
@@ -355,6 +364,25 @@ export function RfqDetail(): ReactNode {
       </Button>,
     );
   }
+  // Feature 153 — every state of the quote (owner answer Q3); only while the
+  // document templates facility is present (FR-060), and the send only while
+  // the transactional e-mails are too (FR-099).
+  if (isPresent('document_templates')) {
+    headerActions.push(
+      <Button key="pdf-export" variant="outline" size="sm" className="bg-card" onClick={(): void => setPdfMode('download')} disabled={busy}>
+        <FileDown />
+        {tPdf('pdf.export')}
+      </Button>,
+    );
+    if (isPresent('transactional_emails')) {
+      headerActions.push(
+        <Button key="pdf-send" variant="outline" size="sm" className="bg-card" onClick={(): void => setPdfMode('send')} disabled={busy}>
+          <Send />
+          {tPdf('pdf.send')}
+        </Button>,
+      );
+    }
+  }
   if (!isTerminal) {
     headerActions.push(
       <Button
@@ -434,6 +462,22 @@ export function RfqDetail(): ReactNode {
         <Alert variant="success" className="mb-4">
           <AlertDescription>{info}</AlertDescription>
         </Alert>
+      ) : null}
+      {pdfNotice ? (
+        <Alert variant={pdfNotice.kind} className="mb-4">
+          <AlertDescription>{pdfNotice.message}</AlertDescription>
+        </Alert>
+      ) : null}
+      {pdfMode ? (
+        <QuoteRequestPdfDialog
+          quoteRequestId={rfq.id}
+          mode={pdfMode}
+          onClose={(): void => setPdfMode(null)}
+          onDone={(outcome): void => {
+            setPdfNotice(outcome);
+            if (pdfMode === 'send') setHistoryNonce((n) => n + 1);
+          }}
+        />
       ) : null}
 
       {rfq.cancellationReason ? (
@@ -686,7 +730,7 @@ export function RfqDetail(): ReactNode {
 
           {tab === 'history' ? (
             <Section title={t('rfq.detail.history.title')}>
-              <RfqHistory quoteRequestId={rfq.id} />
+              <RfqHistory key={historyNonce} quoteRequestId={rfq.id} />
             </Section>
           ) : null}
         </CardContent>

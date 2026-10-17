@@ -113,5 +113,16 @@
   "pdf.sendDialog.sending": "Wysyłanie…",
   "pdf.sendDialog.sent": "PDF oferty wysłano do odbiorców: {count}.",
   "pdf.sendDialog.partial": "PDF oferty wysłano do odbiorców: {sent}. Nie udało się go dostarczyć na adresy: {failed}.",
-  "pdf.sendDialog.error": "Nie udało się wysłać PDF oferty."
+  "pdf.sendDialog.error": "Nie udało się wysłać PDF oferty.",
+  "documentBlocks.header.title": "Oferta",
+  "documentBlocks.header.number": "Numer oferty:",
+  "documentBlocks.header.issueDate": "Data:",
+  "documentBlocks.header.validUntil": "Ważna do:",
+  "documentBlocks.header.revision": "Wersja:",
+  "documentBlocks.parties.buyer": "Nabywca",
+  "documentBlocks.parties.taxId": "NIP:",
+  "documentBlocks.parties.customer": "Osoba kontaktowa",
+  "documentBlocks.parties.salesRep": "Twój opiekun handlowy",
+  "documentBlocks.notes.label": "Uwagi",
+  "documentBlocks.details.heading": "Szczegóły"
 }

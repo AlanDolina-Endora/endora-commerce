@@ -185,6 +185,10 @@ const FULL: QuoteRequestHistory = {
     entry('expired', SYSTEM),
     entry('completed', SYSTEM, { orderId: ORDER_ID }),
     entry('note_added', UNKNOWN, { note: 'Call back on Monday' }),
+    // Feature 153 (owner answer Q4) — the quote PDF e-mailed.
+    entry('pdf_sent', REP, {
+      delivery: { recipients: ['buyer@example.com', 'two@example.com'], templateName: 'With discounts', language: 'pl-PL', message: XSS },
+    }),
   ],
 };
 
@@ -267,6 +271,17 @@ describe.each<Language>(['en', 'pl'])('RfqHistory — %s', (language) => {
       expect(text, kind).not.toContain(kind);
     }
     expect(container.innerHTML).not.toMatch(/rfq\.detail\.history|core\.rfq/);
+  });
+
+  it('prints who a quote PDF was sent to, with which template, language and message, as text (153)', async () => {
+    answerHistory(FULL);
+    const { container } = renderHistory(language);
+    await screen.findAllByText(tr(language, 'entry.pdf_sent'));
+    expect(screen.getByText(tr(language, 'pdfSent.recipients', { recipients: 'buyer@example.com, two@example.com' }))).toBeTruthy();
+    expect(screen.getByText(tr(language, 'pdfSent.template', { name: 'With discounts' }))).toBeTruthy();
+    expect(screen.getByText(tr(language, 'pdfSent.language', { language: 'pl-PL' }))).toBeTruthy();
+    expect(screen.getByText(tr(language, 'pdfSent.message', { message: XSS }))).toBeTruthy();
+    expect(container.querySelector('script, img')).toBeNull();
   });
 
   it('lists every change kind as a sentence, variants kept apart (FR-012, FR-015)', async () => {

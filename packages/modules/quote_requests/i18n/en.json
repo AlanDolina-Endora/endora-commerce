@@ -113,5 +113,16 @@
   "pdf.sendDialog.sending": "Sending…",
   "pdf.sendDialog.sent": "The quote PDF was sent to {count} recipient(s).",
   "pdf.sendDialog.partial": "The quote PDF was sent to {sent} recipient(s). It could not be delivered to: {failed}.",
-  "pdf.sendDialog.error": "The quote PDF could not be sent."
+  "pdf.sendDialog.error": "The quote PDF could not be sent.",
+  "documentBlocks.header.title": "Quote",
+  "documentBlocks.header.number": "Quote number:",
+  "documentBlocks.header.issueDate": "Date:",
+  "documentBlocks.header.validUntil": "Valid until:",
+  "documentBlocks.header.revision": "Revision:",
+  "documentBlocks.parties.buyer": "Buyer",
+  "documentBlocks.parties.taxId": "Tax ID:",
+  "documentBlocks.parties.customer": "Contact",
+  "documentBlocks.parties.salesRep": "Your sales representative",
+  "documentBlocks.notes.label": "Notes",
+  "documentBlocks.details.heading": "Details"
 }

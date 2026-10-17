@@ -98,6 +98,14 @@ export const contributions: AdminContributions = {
       requiredPermission: HANDLE_PERMISSION,
     },
   ],
+  // `specs/153-quote-request-pdf-template/` — the quote document blocks' canvas
+  // renderers in the document-template editor (`contracts/quote-request-document.md` §2).
+  blocks: [
+    { name: 'quote_requests.QuoteHeader', context: 'document', component: () => import('./document-blocks/QuoteHeader.js') },
+    { name: 'quote_requests.QuoteParties', context: 'document', component: () => import('./document-blocks/QuoteParties.js') },
+    { name: 'quote_requests.QuoteNotes', context: 'document', component: () => import('./document-blocks/QuoteNotes.js') },
+    { name: 'quote_requests.QuoteDetails', context: 'document', component: () => import('./document-blocks/QuoteDetails.js') },
+  ],
   zones: [
     // Weight 500: after the organization detail's four earlier contributors
     // (`sales_channels` 100, `price_lists` 200, `quick_order` 300, `carts`
