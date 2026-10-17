@@ -2,6 +2,7 @@ import type { CSSProperties, ReactElement } from 'react';
 import type { ComponentConfig, Config } from '@puckeditor/core';
 import { createColorField } from '@endora-commerce/page-builder-core';
 import { createImageAssetField } from '@endora-commerce/page-builder-admin';
+import { itemsTableEditor } from './items-table/index.js';
 
 /**
  * The canvas half of the six general-purpose document blocks
@@ -119,7 +120,7 @@ function PageBreak(): ReactElement {
 }
 
 /**
- * The six core blocks' canvas configs. `Config`-typed so the block-name estate
+ * The six core blocks' canvas configs, and the Line items table's. `Config`-typed so the block-name estate
  * counts them as rendered; label, category, fields and defaults are composed
  * in by the editor from the served descriptor.
  */
@@ -155,5 +156,8 @@ export const coreBlockCanvas: Config = {
       fields: { color: createColorField({ label: 'Colour' }) },
     } as ComponentConfig,
     'document_templates.PageBreak': { render: PageBreak } as ComponentConfig,
+    // Feature 153 — the Line items table: its canvas and the editors of its
+    // columns, detail row, totals and grouping.
+    'document_templates.ItemsTable': itemsTableEditor,
   },
 };

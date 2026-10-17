@@ -40,6 +40,7 @@ import {
   setDefaultTemplate,
 } from '../api.js';
 import { coreBlockCanvas } from '../blocks/core-block-editors.js';
+import { DocumentCollectionsProvider } from '../blocks/items-table/index.js';
 import { LanguageSwitcher } from '../components/LanguageSwitcher.js';
 import { MergeFieldsPanel } from '../components/MergeFieldsPanel.js';
 
@@ -447,6 +448,7 @@ export function DocumentTemplateEditor(): ReactNode {
             <div className={cn('overflow-hidden rounded-md border', fullscreen ? 'min-h-0 flex-1' : 'min-h-[560px]')}>
               {puckConfig && template && type ? (
                 <DocumentSampleProvider value={type.sample}>
+                  <DocumentCollectionsProvider value={type.collections ?? []} language={language}>
                   <Puck
                     key={`${id}:${language}:${epoch}`}
                     config={puckConfig}
@@ -475,6 +477,7 @@ export function DocumentTemplateEditor(): ReactNode {
                       ),
                     }}
                   />
+                  </DocumentCollectionsProvider>
                 </DocumentSampleProvider>
               ) : (
                 <div className="flex min-h-[560px] items-center justify-center text-sm text-muted-foreground">
