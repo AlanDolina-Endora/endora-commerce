@@ -234,3 +234,10 @@ T009–T012┘                                 ├─► US4
 - **TDD order**: the backend core, contracts, manifest, capability and contract/integration tests
   were written red first; the admin component's and the chrome slot's tests were written in the
   same step as the component and run green on first execution.
+- **Palette entry ownership** (T048): `test/integration/_admin_surfaces/batch-sixteen-palette-off-state.test.ts`
+  held every `cms` action to a route `cms`' admin layer declares. The translation settings entry
+  opens `/settings`, which `settings` owns; the test now exempts it explicitly and asserts the
+  reason (the target's owner is a binding dependency of `cms`).
+- **Assistant behaviour change** (T063): `test/integration/prompt_actions/credential-ref-adoption.test.ts`
+  asserted that a DeepSeek credential leaves the assistant `not_configured`; it now asserts `ready`,
+  as owner decision 4 requires.
