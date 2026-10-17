@@ -24,6 +24,7 @@
 @import "@endora-commerce/admin-shell/tailwind.css";
 @import "@endora-commerce/email-components/tailwind.css";
 @import "@endora-commerce/mod-admin-roles/tailwind.css";
+@import "@endora-commerce/mod-admin-search/tailwind.css";
 @import "@endora-commerce/mod-admin-users/tailwind.css";
 @import "@endora-commerce/mod-analytics/tailwind.css";
 @import "@endora-commerce/mod-api-keys/tailwind.css";

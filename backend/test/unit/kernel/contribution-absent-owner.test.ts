@@ -40,6 +40,12 @@ import { registerModule as registerCrm } from '@endora-commerce/mod-crm/backend'
 // rather than a second copy of each from source.
 import { registerModule as registerQuoteRequests } from '@endora-commerce/mod-quote-requests/backend';
 import { registerModule as registerCreditLimits } from '@endora-commerce/mod-credit-limits/backend';
+// `organizations` and `customers` by their published specifiers too: both
+// contribute a record type to `admin_search`'s registry
+// (`specs/150-admin-global-search/`), and both own entities the rest of the
+// process loads from `dist`.
+import { registerModule as registerOrganizations } from '@endora-commerce/mod-organizations/backend';
+import { registerModule as registerCustomers } from '@endora-commerce/mod-customers/backend';
 
 /**
  * **A contribution to a registry that was never registered is dropped**
@@ -219,6 +225,18 @@ const COMPOSERS: Readonly<
     compose('quote_requests', registerQuoteRequests, ownerNames, withOwner, {
       salesChannelAttributionRegistry: { register: () => {} },
     }),
+  // `organizations` offers the Organization record type to `admin_search`'s
+  // registry. Its three other boot hooks push into registries of modules it
+  // declares in `dependencies` (or is the tenancy root for).
+  organizations: (withOwner, ownerNames) =>
+    compose('organizations', registerOrganizations, ownerNames, withOwner, {
+      salesChannelBridgeRegistry: { register: () => {} },
+      emailDefaultsPort: { register: () => {} },
+      countryReferenceRegistry: { register: () => {} },
+    }),
+  // `customers` offers the Customer record type to the same registry, from its
+  // only boot hook.
+  customers: (withOwner, ownerNames) => compose('customers', registerCustomers, ownerNames, withOwner),
   inventory: (withOwner, ownerNames) =>
     compose('inventory', registerInventory, ownerNames, withOwner, {
       countryReferenceRegistry: { register: () => {} },

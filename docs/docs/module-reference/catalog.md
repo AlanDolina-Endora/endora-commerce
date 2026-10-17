@@ -29,6 +29,7 @@ Rendered from the module's own manifest, and from nothing written by hand. What 
 
 | Module | Binding | What it means |
 | --- | --- | --- |
+| `_i18n` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `admin_users` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `assets_library` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `audit_logs` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
@@ -38,6 +39,7 @@ Rendered from the module's own manifest, and from nothing written by hand. What 
 | `organizations` | gating only | resolves `organizationDetailsPort`; withheld from `dependencies` because the install order cannot carry the edge |
 | `price_lists` | gating only | resolves `pricingService`; withheld from `dependencies` because the install order cannot carry the edge |
 | `admin_notifications` | no | degrades-without `adminNotificationRecordPort` — bulk edits and search reindexes still run and still report on the Bulk actions page; only the bell entry is missing — the completion e-mail to the admin still goes out |
+| `admin_search` | no | contributes-to `adminSearchProviderRegistry` |
 | `api_keys` | no | degrades-without `requireApiKey` — the external catalog namespace stops accepting machine-to-machine callers |
 | `api_keys` | no | degrades-without `requireBoundApiKey` — the external catalog namespace stops accepting machine-to-machine callers |
 | `inventory` | no | degrades-without `inventoryAvailabilityPort` — product listings and the external catalog namespace stop carrying an availability band |

@@ -175,6 +175,24 @@ export const PERMISSIONLESS_ADMIN_ROUTES: Readonly<Record<string, Permissionless
       'The command palette list, which the service filters by the permissions the caller ' +
       'holds: each administrator is answered with what they may open and nothing more.',
   },
+  // `specs/150-admin-global-search/` research R-4, R-20 — the command palette's
+  // record search. A single code would grant a lookup into every record type
+  // regardless of the role's read permissions; instead each record type is
+  // checked against the code its own admin list enforces.
+  'GET /api/v1/admin/global-search': {
+    guard: 'session',
+    reason:
+      "Global search across record types: each type is searched only if the caller's role holds " +
+      "the permission that type's own admin list requires, and within the scope that list applies, " +
+      'so every administrator is answered with records they could already open and nothing more.',
+  },
+  'GET /api/v1/admin/global-search/capability': {
+    guard: 'session',
+    reason:
+      'What the command palette needs once per open to offer record search: the minimum length, ' +
+      'the per-type count and the record types the caller may search, already filtered by the ' +
+      "caller's permissions. It discloses no record.",
+  },
   'POST /api/v1/admin/impersonation/end': {
     guard: 'none',
     reason:

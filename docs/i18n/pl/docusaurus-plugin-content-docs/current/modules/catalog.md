@@ -319,3 +319,18 @@ powyższy endpoint zachowuje swoją postać — ale model przechowywania i włas
 Wewnętrzni odbiorcy (wyszukiwarka, szybkie zamówienie, porównywarka, masowa edycja, port promocji,
 edytor zakresu) odczytują atrybuty przez eksportowany przez katalog `CatalogAttributeReadService`,
 który łączy definicję i rozszerzenie w `CatalogAttributeView` o dawnej postaci.
+
+## Wyszukiwanie globalne
+
+Wyszukiwanie globalne w panelu administracyjnym (paleta poleceń, ⌘K / Ctrl+K) znajduje produkty i kategorie. Ten moduł udostępnia poniższe pola; to, które z nich są używane, wybiera się na ekranie konfiguracji wyszukiwania globalnego.
+
+| Pole | Przeszukiwane domyślnie |
+| --- | --- |
+| Produkt: SKU | tak |
+| Produkt: Nazwa | tak |
+| Produkt: Klucz URL (slug) | nie |
+| Produkt: Atrybuty szybkiego wyszukiwania | nie |
+| Kategoria: Nazwa | tak |
+| Kategoria: Klucz URL (slug) | tak |
+
+Nazwy są dopasowywane we wszystkich językach i wyświetlane w języku administratora. Produkty robocze i nieaktywne są znajdowane i pokazują swój status; usunięte produkty i kategorie nie są znajdowane. Wynik kategorii otwiera drzewo kategorii z wyróżnioną tą kategorią. Oba typy pojawiają się dla roli z uprawnieniem `catalog:read`.

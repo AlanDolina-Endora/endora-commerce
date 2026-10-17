@@ -368,3 +368,18 @@ promotions port, the scope editor) read attributes through the
 catalog-exported `CatalogAttributeReadService`, which composes the
 definition and the extension into the legacy-shaped
 `CatalogAttributeView`.
+
+## Global search
+
+The admin's global search (the command palette, ⌘K / Ctrl+K) finds products and categories. This module offers the fields below; which of them are used is chosen on the Global search configuration screen.
+
+| Field | Searched by default |
+| --- | --- |
+| Product: SKU | yes |
+| Product: Name | yes |
+| Product: URL key (slug) | no |
+| Product: Quick-search attributes | no |
+| Category: Name | yes |
+| Category: URL key (slug) | yes |
+
+Names match in every language and are shown in the admin's language. Drafts and inactive products are found and show their status; deleted products and categories are not. A category result opens the category tree with that category highlighted. Both appear for a role holding `catalog:read`.

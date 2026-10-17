@@ -353,6 +353,22 @@ export const ADMIN_COOKIES: Record<string, { adminUserId: string }> = {
   'stub-rfq-views-no-rfqs-session': {
     adminUserId: '00000000-0000-4000-8000-0000000147c3',
   },
+  // `specs/150-admin-global-search/` — global search. A sales representative
+  // (role code exactly `sales_representative`, which is what confines the
+  // tenant scope) assigned to `TEST_ORGANIZATION_ID` only; an admin on a custom
+  // role reading the record types one at a time (the visibility matrix); and
+  // an admin without `admin_search:configure` (the configuration gate). The
+  // users, the roles and the assignment are created by the files under
+  // `test/contract/admin_search/` and `test/integration/admin_search/`.
+  'stub-global-search-sales-rep-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000150a1',
+  },
+  'stub-global-search-restricted-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000150a2',
+  },
+  'stub-global-search-no-configure-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000150a3',
+  },
 };
 
 declare module 'fastify' {

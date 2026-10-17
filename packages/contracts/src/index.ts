@@ -218,3 +218,7 @@ export * from './email-address.js';
 // by the scaffolding commands, by `endora doctor` and by the reconciliation
 // check — three readers, one declaration, no second list (D-100).
 export * from './environment-inputs.js';
+// Admin global search (`specs/150-admin-global-search/`): the HTTP shapes of
+// `/api/v1/admin/global-search*` and the provider contract an owning module
+// implements to make its records findable from the command palette.
+export * from './admin-search.js';

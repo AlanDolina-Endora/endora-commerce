@@ -7,6 +7,8 @@ import { ERROR_CODES, QUOTE_REQUEST_WEBHOOK_EVENT_TYPES } from '@endora-commerce
 import { HttpError } from '@endora-commerce/platform/http';
 import type {
   Actor,
+  AdminI18nTranslatePort,
+  AdminSearchProviderRegistryPort,
   AdminRolePort,
   AdminUserReadPort,
   BuyerLinePricePort,
@@ -25,6 +27,11 @@ import type {
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
 import type { Redis } from 'ioredis';
 import { QuoteRequestReadService } from './services/quote-request-read-port.js';
+import {
+  createQuoteRequestAdminSearchProvider,
+  type QuoteRequestAdminSearchProviderDeps,
+} from './admin-search-provider.js';
+import type { AdminContext } from './services/rfq-admin-service.js';
 import { NegotiationPolicyService } from './services/negotiation-policy-service.js';
 import { startRfqExpirySweep } from './workers/rfq-expiry-sweep-worker.js';
 import { registerQuoteRequestSalesChannelAttributions } from './services/sales-channel-attributions.js';
@@ -257,18 +264,7 @@ function registerActorResolvers(ctx: ModuleContext): void {
           if (actor?.kind !== 'admin') {
             throw new HttpError(401, ERROR_CODES.UNAUTHORIZED, 'Admin session required.');
           }
-          const adminUser = await admins.findById(actor.adminUserId);
-          const role = adminUser?.adminRoleId ? await roles.getById(adminUser.adminRoleId) : null;
-          return {
-            adminUserId: actor.adminUserId,
-            isPlatformAdmin: role?.code === 'platform_admin',
-            roleLabel:
-              role?.code === 'platform_admin'
-                ? 'Platform administrator'
-                : role?.code === 'sales_representative'
-                  ? 'Sales representative'
-                  : (role?.name ?? 'Administrator'),
-          };
+          return rfqAdminContextFor(admins, roles, actor.adminUserId);
         };
       })
       .singleton(),
@@ -613,6 +609,24 @@ export function registerModule(ctx: ModuleContext): void {
     }
   });
 
+  /**
+   * The Quote Request record type for admin global search
+   * (`specs/150-admin-global-search/`, T033) — a **contribution** hook: it
+   * pushes an inert provider into `admin_search`'s ungated registry and does
+   * nothing else, so it carries no presence probe (D-67/D-68). The registry
+   * leaves the provider out at enumeration while this module is switched off,
+   * so switching it back on needs no restart.
+   *
+   * The provider asks the same admin context the list's routes resolve (the
+   * role decides `isPlatformAdmin`), so it applies exactly the list's
+   * visibility.
+   */
+  ctx.onBoot(() => {
+    lazyPort<AdminSearchProviderRegistryPort>(ctx, 'adminSearchProviderRegistry').register(
+      createQuoteRequestAdminSearchProvider(quoteRequestAdminSearchDeps(ctx)),
+    );
+  });
+
   ctx.routes(async (app) => {
     const cradle = ctx.cradle<QuoteRequestsCradle>();
     await cradle.quoteRequests.register(app);
@@ -683,3 +697,47 @@ export const entities = [
   QuoteRequestOrgPolicy,
   QuoteRequestAccountPolicy,
 ];
+
+/**
+ * What global search's Quote Request provider reads through: this module's own
+ * admin service, asked with the same admin context the list's routes resolve,
+ * and this module's bundle for status labels. Built outside the boot hook so
+ * the hook only registers — the closures run per search, never at boot.
+ */
+function quoteRequestAdminSearchDeps(ctx: ModuleContext): QuoteRequestAdminSearchProviderDeps {
+  const admins = lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort');
+  const roles = lazyPort<AdminRolePort>(ctx, 'adminRolePort');
+  const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
+  return {
+    search: async (query, adminUserId) =>
+      ctx
+        .cradle<QuoteRequestsCradle>()
+        .quoteRequests.handle()
+        .adminService.searchForAdmin(await rfqAdminContextFor(admins, roles, adminUserId), query),
+    translate: (key, language) => i18n.translate('quote_requests', key, language),
+  };
+}
+
+/**
+ * Who is administering, as the quote request list's routes and global search
+ * both read it: the role decides whether the sales-representative visibility
+ * rule applies (`isPlatformAdmin`) and what the event records call the actor.
+ */
+async function rfqAdminContextFor(
+  admins: AdminUserReadPort,
+  roles: AdminRolePort,
+  adminUserId: string,
+): Promise<AdminContext> {
+  const adminUser = await admins.findById(adminUserId);
+  const role = adminUser?.adminRoleId ? await roles.getById(adminUser.adminRoleId) : null;
+  return {
+    adminUserId,
+    isPlatformAdmin: role?.code === 'platform_admin',
+    roleLabel:
+      role?.code === 'platform_admin'
+        ? 'Platform administrator'
+        : role?.code === 'sales_representative'
+          ? 'Sales representative'
+          : (role?.name ?? 'Administrator'),
+  };
+}

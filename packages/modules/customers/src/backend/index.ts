@@ -7,6 +7,8 @@ import { HttpError } from '@endora-commerce/platform/http';
 import type {
   Actor,
   AddressReadPort,
+  AdminI18nTranslatePort,
+  AdminSearchProviderRegistryPort,
   AdminRolePort,
   AdminUserReadPort,
   AuthSessionPort,
@@ -31,6 +33,11 @@ import type {
   SalesRepAssignmentPort,
   VatValidator,
 } from '@endora-commerce/contracts';
+import {
+  createCustomerAdminSearchProvider,
+  searchCustomersForAdmin,
+  type CustomerAdminSearchProviderDeps,
+} from './admin-search-provider.js';
 import { CustomerAddressReadService } from './services/customer-address-read-port.js';
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
 import { lazyPort } from '@endora-commerce/platform/kernel';
@@ -143,22 +150,63 @@ function registerModerationActor(ctx: ModuleContext): void {
           if (actor?.kind !== 'admin') {
             throw new HttpError(401, ERROR_CODES.UNAUTHORIZED, 'Admin session required.');
           }
-          const adminUser = await admins.findById(actor.adminUserId);
-          // `getById` cannot 404 here: `admin_users_admin_role_fk` is
-          // `on delete restrict`, so a non-null `adminRoleId` names a row.
-          const role = adminUser?.adminRoleId ? await roles.getById(adminUser.adminRoleId) : null;
-          const isPlatformAdmin = role?.code !== 'sales_representative';
-          // Feature 056 — subtree-expanded when the rep holds
-          // `organizations:rollup`, which is `organizations`' decision and the
-          // reason this reads an assembled port rather than the tree.
-          const allowedOrganizationIds = isPlatformAdmin
-            ? []
-            : await salesRepScope.listAssignedOrganizationIds(actor.adminUserId);
-          return { adminUserId: actor.adminUserId, isPlatformAdmin, allowedOrganizationIds };
+          return moderationActorFor({ admins, roles, salesRepScope }, actor.adminUserId);
         };
       })
       .singleton(),
   });
+}
+
+/**
+ * Who is moderating, and which organizations they may act on — the customer
+ * list's scope, asked by its routes for the request's admin and by global
+ * search for the searching admin (`specs/150-admin-global-search/`).
+ */
+async function moderationActorFor(
+  ports: {
+    admins: AdminUserReadPort;
+    roles: AdminRolePort;
+    salesRepScope: SalesRepAssignmentPort;
+  },
+  adminUserId: string,
+): Promise<{ adminUserId: string; isPlatformAdmin: boolean; allowedOrganizationIds: string[] }> {
+  const adminUser = await ports.admins.findById(adminUserId);
+  // `getById` cannot 404 here: `admin_users_admin_role_fk` is
+  // `on delete restrict`, so a non-null `adminRoleId` names a row.
+  const role = adminUser?.adminRoleId ? await ports.roles.getById(adminUser.adminRoleId) : null;
+  const isPlatformAdmin = role?.code !== 'sales_representative';
+  // Feature 056 — subtree-expanded when the rep holds
+  // `organizations:rollup`, which is `organizations`' decision and the
+  // reason this reads an assembled port rather than the tree.
+  const allowedOrganizationIds = isPlatformAdmin
+    ? []
+    : await ports.salesRepScope.listAssignedOrganizationIds(adminUserId);
+  return { adminUserId, isPlatformAdmin, allowedOrganizationIds };
+}
+
+/**
+ * What global search's Customer provider reads through: `customer_accounts`'
+ * admin search with the customer list's own scope — the moderation actor its
+ * route resolves, asked for the searching admin — and this module's bundle for
+ * status labels. Built outside the boot hook so the hook only registers.
+ */
+function customerAdminSearchDeps(ctx: ModuleContext): CustomerAdminSearchProviderDeps {
+  const scopePorts = {
+    admins: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+    roles: lazyPort<AdminRolePort>(ctx, 'adminRolePort'),
+    salesRepScope: lazyPort<SalesRepAssignmentPort>(ctx, 'organizationSalesRepScopePort'),
+  };
+  const searchDeps = {
+    accountSearch: lazyPort<CustomerAccountAdminSearchPort>(ctx, 'customerAccountAdminSearchPort'),
+    accounts: lazyPort<CustomerAccountReadPort>(ctx, 'customerAccountReadPort'),
+    organizations: lazyPort<OrganizationDetailsPort>(ctx, 'organizationDetailsPort'),
+  };
+  const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
+  return {
+    search: async (query, adminUserId) =>
+      searchCustomersForAdmin(searchDeps, query, await moderationActorFor(scopePorts, adminUserId)),
+    translate: (key, language) => i18n.translate('customers', key, language),
+  };
 }
 
 export function registerModule(ctx: ModuleContext): void {
@@ -338,6 +386,22 @@ export function registerModule(ctx: ModuleContext): void {
 
   ctx.routes(async (app) => {
     await cradle().customers.plugin(app);
+  });
+
+  /**
+   * The Customer record type for admin global search
+   * (`specs/150-admin-global-search/`, T045) — a **contribution** hook: it
+   * pushes an inert provider into `admin_search`'s ungated registry and does
+   * nothing else, so it carries no presence probe (D-67/D-68). The registry
+   * leaves it out at enumeration while this module is switched off.
+   *
+   * The scope is the customer list's: the same moderation actor its route
+   * resolves, asked for the searching admin.
+   */
+  ctx.onBoot(() => {
+    lazyPort<AdminSearchProviderRegistryPort>(ctx, 'adminSearchProviderRegistry').register(
+      createCustomerAdminSearchProvider(customerAdminSearchDeps(ctx)),
+    );
   });
 }
 

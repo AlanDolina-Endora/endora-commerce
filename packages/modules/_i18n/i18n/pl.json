@@ -2106,5 +2106,10 @@
   "savedViews.error.gone": "Ten widok już nie istnieje.",
   "savedViews.error.load": "Nie udało się wczytać zapisanych widoków.",
   "savedViews.error.save": "Nie udało się zapisać widoku.",
-  "savedViews.error.delete": "Nie udało się usunąć widoku."
+  "savedViews.error.delete": "Nie udało się usunąć widoku.",
+  "appShell.palette.records.searching": "Wyszukiwanie rekordów…",
+  "appShell.palette.records.more": "Więcej wyników",
+  "appShell.palette.records.unavailable": "Nie udało się przeszukać: {label}",
+  "appShell.palette.records.seeAll": "Zobacz wszystkie wyniki dla „{query}”",
+  "appShell.palette.records.announce": "Znaleziono rekordów: {count}"
 }

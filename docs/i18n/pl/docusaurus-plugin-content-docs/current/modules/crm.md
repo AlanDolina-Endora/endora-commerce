@@ -2222,3 +2222,16 @@ szanse organizacji demonstracyjnej i tak są usuwane razem z nią — inaczej ni
 dałoby się tej organizacji usunąć — ale trzy demonstracyjne etykiety zostają,
 bo własne dane demonstracyjne modułu nie są ruszane, dopóki jest wyłączony.
 Usuwa je reset uruchomiony przy włączonym CRM.
+
+## Wyszukiwanie globalne
+
+Wyszukiwanie globalne w panelu administracyjnym (paleta poleceń, ⌘K / Ctrl+K) znajduje szanse sprzedażowe. Ten moduł udostępnia poniższe pola; to, które z nich są używane, wybiera się na ekranie konfiguracji wyszukiwania globalnego.
+
+| Pole | Przeszukiwane domyślnie |
+| --- | --- |
+| Numer szansy sprzedażowej | tak |
+| Tytuł | tak |
+| Nazwa organizacji | tak |
+| Opis | nie |
+
+Wynik pokazuje numer i tytuł, organizację oraz status, a jego wybranie otwiera szansę sprzedażową. Szanse sprzedażowe pojawiają się dla roli z uprawnieniem `crm:read`, w zakresie organizacji administratora. Gdy CRM jest wyłączony, nie są przeszukiwane ani widoczne na ekranie konfiguracji; ich konfiguracja zostaje zachowana.

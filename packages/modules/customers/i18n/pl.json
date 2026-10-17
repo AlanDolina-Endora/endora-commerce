@@ -1,16 +1,13 @@
 {
   "nav.customers.label": "Klienci",
   "nav.customersOnline.label": "Klienci online",
-
   "actions.openCustomers.label": "Klienci",
   "actions.openCustomers.description": "Przeglądaj i zarządzaj kontami klientów",
   "actions.onlineCustomers.label": "Klienci online",
   "actions.onlineCustomers.description": "Zobacz, którzy klienci są teraz online",
-
   "status.active": "Aktywne",
   "status.blocked": "Zablokowane",
   "status.deleted": "Usunięte",
-
   "list.title": "Klienci",
   "list.description": "Przeglądaj i zarządzaj kontami klientów",
   "list.error": "Nie udało się wczytać klientów.",
@@ -30,7 +27,6 @@
   "list.column.group": "Grupa klientów",
   "list.column.created": "Utworzono",
   "list.action.open": "Otwórz",
-
   "detail.title": "Klient",
   "detail.loading": "Wczytywanie…",
   "detail.error": "Nie udało się wczytać klienta.",
@@ -50,7 +46,6 @@
   "detail.action.impersonate": "Zaloguj jako klient",
   "detail.action.restore": "Przywróć",
   "detail.action.delete": "Usuń",
-
   "online.title": "Klienci online",
   "online.description": "Klienci aktywni w oknie świeżości",
   "online.error": "Nie udało się wczytać klientów online.",
@@ -61,7 +56,6 @@
   "online.autoRefresh": "Automatyczne odświeżanie",
   "online.intervalLabel": "Interwał (sekundy)",
   "online.refreshedAt": "Zaktualizowano {time}",
-
   "detail.panel.loading": "Wczytywanie…",
   "detail.panel.error": "Nie udało się wczytać tej sekcji.",
   "detail.orders.title": "Zamówienia",
@@ -72,7 +66,6 @@
   "detail.carts.items": "pozycji",
   "detail.carts.noCurrent": "Brak aktywnego koszyka.",
   "detail.carts.empty": "Brak koszyków.",
-
   "detail.org.title": "Organizacja",
   "detail.org.assignLabel": "Przypisz do organizacji",
   "detail.org.assign": "Przypisz",
@@ -90,5 +83,10 @@
   "detail.addresses.city": "Miasto",
   "detail.addresses.postal": "Kod pocztowy",
   "detail.addresses.country": "Kraj",
-  "detail.addresses.add": "Dodaj adres"
+  "detail.addresses.add": "Dodaj adres",
+  "adminSearch.group.label": "Klienci",
+  "adminSearch.field.email": "E-mail",
+  "adminSearch.field.name": "Imię i nazwisko",
+  "adminSearch.status.active": "Aktywny",
+  "adminSearch.status.blocked": "Zablokowany"
 }

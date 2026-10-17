@@ -128,6 +128,10 @@ export const manifest = defineModuleManifest({
   // expands an assignment to its subtree. Declarable rather than acknowledged —
   // `admin_roles` depends on nothing, so the edge closes no cycle.
   dependencies: [
+    // `_i18n` owns `adminI18nService`, through which global search's
+    // Organization provider labels a status in the admin's language
+    // (`specs/150-admin-global-search/`).
+    '_i18n',
     'admin_roles',
     'admin_users',
     'custom_fields',
@@ -226,6 +230,18 @@ export const manifest = defineModuleManifest({
    * to the **edge**, not to the owner, and the two consumers answer differently.
    */
   nonBindingDependencies: [
+    {
+      moduleId: 'admin_search',
+      name: 'adminSearchProviderRegistry',
+      kind: 'contributes-to',
+      reason:
+        'A push, from this module’s contribution-only boot hook, of the Organization provider ' +
+        'for the admin global search, built over its own organization read. Nothing is read ' +
+        'back: the registry enumerates only providers whose module is effectively present, so ' +
+        'an absent contributor costs the host nothing and an absent host holds a table nobody ' +
+        'walks. Not `dependencies`: this module is non-deactivatable, so that would make ' +
+        '`admin_search.enabled` a dead switch.',
+    },
     {
       moduleId: 'admin_notifications',
       name: 'adminNotificationRecordPort',

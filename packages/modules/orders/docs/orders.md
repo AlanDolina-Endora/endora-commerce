@@ -599,3 +599,17 @@ payment e-mail renderer registry (`payments/services/payment-email-renderer.ts`)
   module names no contributor. With nothing contributed — no such module, the
   module switched off, or a person without the panel's permission — the zone
   renders nothing and the screen is exactly the one without it.
+
+## Global search
+
+The admin's global search (the command palette, ⌘K / Ctrl+K) finds orders. This module offers the fields below; which of them are used is chosen on the Global search configuration screen.
+
+| Field | Searched by default |
+| --- | --- |
+| Order number | yes |
+| Organization name | yes |
+| Customer name or e-mail | yes |
+| Billing company name | no |
+| Billing tax ID | no |
+
+A result shows the order number, the organization, the date placed, the total and the status, and opens the order. An exact order number is listed first. Orders appear for a role holding `orders:read`, and a sales representative sees only the orders of the organizations assigned to them — the orders the Orders list shows them.

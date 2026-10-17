@@ -1,5 +1,6 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
+  AdminSearchProviderRegistryPort,
   AdminNotificationRecordPort,
   AdminTenantScopePort,
   AdminUserReadPort,
@@ -38,6 +39,7 @@ import {
   type RequireAdminFactory,
   type SettingsReadPort,
 } from '@endora-commerce/platform/kernel';
+import { createOpportunityAdminSearchProvider } from './admin-search-provider.js';
 import { EVENT_REMINDER_DEFAULT, EVENT_REMINDER_EMAIL_CODE } from './email-templates/event-reminder-defaults.js';
 import { registerCrmAnalyticsRoutes } from './routes/routes.analytics.js';
 import { registerCrmAssignmentRoutes } from './routes/routes.assignment.js';
@@ -1145,6 +1147,23 @@ export function registerModule(ctx: ModuleContext): void {
     });
   });
   // --- end of Events, the Calendar and reminders ---------------------------------
+
+  /**
+   * The Sales Opportunity record type for admin global search
+   * (`specs/150-admin-global-search/`, T037) — a **contribution** hook: it
+   * pushes an inert provider into `admin_search`'s ungated registry and does
+   * nothing else, so it carries no presence probe (D-67/D-68). The registry
+   * leaves it out at enumeration while this module is switched off, and
+   * switching it back on needs no restart.
+   */
+  ctx.onBoot(() => {
+    lazyPort<AdminSearchProviderRegistryPort>(ctx, 'adminSearchProviderRegistry').register(
+      createOpportunityAdminSearchProvider({
+        search: (query, language) =>
+          ctx.cradle<CrmCradle>().crmOpportunityService.searchForAdmin(query, language),
+      }),
+    );
+  });
 
   // --- Routes ----------------------------------------------------------------
   // All through `ctx.routes`, so every one of them stops with the module.

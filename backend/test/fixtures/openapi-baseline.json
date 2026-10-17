@@ -2933,6 +2933,40 @@
         }
       }
     },
+    "/api/v1/admin/global-search": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/global-search/capability": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/global-search/configuration": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/google-analytics/action-catalogue": {
       "get": {
         "responses": {
@@ -4632,6 +4666,45 @@
         }
       }
     },
+    "/api/v1/admin/price-lists-engine/{id}/matrix": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/price-lists-engine/{id}/matrix/{entryId}": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/price-lists-engine/{id}/products": {
       "get": {
         "responses": {
@@ -4716,6 +4789,15 @@
         }
       },
       "put": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/pricing/rule-targets/attributes": {
+      "get": {
         "responses": {
           "200": {
             "description": "OK"

@@ -391,6 +391,18 @@ export const manifest = defineModuleManifest({
         'adapter nobody registered — wrote a row into that off module`s table (issue #188).',
     },
     {
+      moduleId: 'admin_search',
+      name: 'adminSearchProviderRegistry',
+      kind: 'contributes-to',
+      reason:
+        'A push, from this module’s contribution-only boot hook, of the Order provider for the ' +
+        'admin global search, built over its own order list service. Nothing is read back: the ' +
+        'registry enumerates only providers whose module is effectively present, so an absent ' +
+        'contributor costs the host nothing and an absent host holds a table nobody walks. Not ' +
+        '`dependencies`: this module is non-deactivatable, so that would make ' +
+        '`admin_search.enabled` a dead switch.',
+    },
+    {
       moduleId: 'prompt_actions',
       name: 'promptActionToolRegistry',
       kind: 'contributes-to',

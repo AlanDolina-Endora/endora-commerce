@@ -33,5 +33,16 @@
   "negotiation.saving": "Zapisywanie…",
   "negotiation.saved": "Zapisano.",
   "negotiation.saveError": "Nie udało się zapisać ustawienia negocjacji cen. Zachowano poprzednią wartość.",
-  "negotiation.readOnlyHint": "Możesz przeglądać to ustawienie. Do jego zmiany potrzebne jest uprawnienie do zarządzania klientami."
+  "negotiation.readOnlyHint": "Możesz przeglądać to ustawienie. Do jego zmiany potrzebne jest uprawnienie do zarządzania klientami.",
+  "adminSearch.group.label": "Zapytania ofertowe",
+  "adminSearch.field.number": "Numer zapytania ofertowego",
+  "adminSearch.field.organizationName": "Nazwa organizacji",
+  "adminSearch.field.customer": "Imię i nazwisko lub e-mail klienta",
+  "adminSearch.field.customerNote": "Uwagi klienta",
+  "adminSearch.status.createdFromAdmin": "Utworzone przez admina",
+  "adminSearch.status.pending": "Oczekujące",
+  "adminSearch.status.canceled": "Anulowane",
+  "adminSearch.status.approved": "Zatwierdzone",
+  "adminSearch.status.completed": "Zakończone",
+  "adminSearch.status.expired": "Wygasłe"
 }

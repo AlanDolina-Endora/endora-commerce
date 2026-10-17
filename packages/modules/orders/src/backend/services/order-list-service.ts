@@ -1,8 +1,9 @@
-import type { EntityManager, FilterQuery } from '@mikro-orm/postgresql';
+import type { EntityManager, FilterQuery, Knex } from '@mikro-orm/postgresql';
 import type { CustomerAccountReadPort, OrganizationDetailsPort } from '@endora-commerce/contracts';
 import { Order } from '../entities/order.entity.js';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
 import type { OrderStatusGraphService } from './order-status-graph-service.js';
+import type { OrderAdminSearchQuery, OrderAdminSearchRow } from '../admin-search-provider.js';
 
 export interface OrderListQuery {
   status?: string[] | undefined;
@@ -187,6 +188,109 @@ export class OrderListService {
 
     const rows = await this.toRows(em, orders);
     return { rows, total, counts, paymentStatusCounts };
+  }
+
+  /**
+   * Global search over orders (`specs/150-admin-global-search/`, T028).
+   *
+   * The list's own visibility: `scope` is the organization set the list is
+   * confined to (absent ⇒ every organization), applied **in the statement**;
+   * the organization and customer name lookups go through the same owners'
+   * ports `list` uses. Only the selected fields are matched, literally
+   * (`likeEscaped`, Postgres' default `\` LIKE escape), and the identifier
+   * fields rank exact → prefix → the rest, then most recent change, then id.
+   * One page of `limit + 1` ids, then the rows — no count.
+   */
+  async searchForAdmin(
+    query: OrderAdminSearchQuery,
+    scope?: OrderListScope,
+  ): Promise<{ rows: OrderAdminSearchRow[]; hasMore: boolean }> {
+    const fields = new Set(query.fields);
+    const contains = `%${query.likeEscaped}%`;
+    const prefix = `${query.likeEscaped}%`;
+    const [orgIds, customerIds] = await Promise.all([
+      fields.has('organizationName') ? this.organizationDetails.searchIdsByName(query.text) : [],
+      fields.has('customer') ? this.customerAccountRead.searchIdsByName(query.text) : [],
+    ]);
+
+    // One predicate per selected field, OR-combined. Id sets go through
+    // `whereIn` (knex expands an array binding into a list, never an array).
+    const matches: Array<(qb: Knex.QueryBuilder) => void> = [];
+    if (fields.has('number')) matches.push((qb) => qb.orWhereRaw('"business_id" ilike ?', [contains]));
+    if (orgIds.length > 0) matches.push((qb) => qb.orWhereIn('organization_id', orgIds));
+    if (customerIds.length > 0) {
+      matches.push((qb) => qb.orWhereIn('placed_by_customer_account_id', customerIds));
+    }
+    if (fields.has('billingCompanyName')) {
+      matches.push((qb) => qb.orWhereRaw(`"billing_address"->>'companyName' ilike ?`, [contains]));
+    }
+    if (fields.has('billingTaxId')) {
+      matches.push((qb) => qb.orWhereRaw(`"billing_address"->>'taxId' ilike ?`, [contains]));
+    }
+    if (query.isUuid) matches.push((qb) => qb.orWhereRaw('"id" = ?::uuid', [query.text]));
+    if (matches.length === 0) return { rows: [], hasMore: false };
+    if (scope && scope.allowedOrganizationIds.length === 0) return { rows: [], hasMore: false };
+
+    const exact: string[] = [];
+    const starts: string[] = [];
+    const rankBindings: unknown[] = [];
+    const prefixBindings: unknown[] = [];
+    if (query.isUuid) {
+      exact.push('"id" = ?::uuid');
+      rankBindings.push(query.text);
+    }
+    if (fields.has('number')) {
+      exact.push('lower("business_id") = lower(?)');
+      rankBindings.push(query.text);
+      starts.push('"business_id" ilike ?');
+      prefixBindings.push(prefix);
+    }
+    if (fields.has('billingTaxId')) {
+      exact.push(`lower("billing_address"->>'taxId') = lower(?)`);
+      rankBindings.push(query.text);
+      starts.push(`"billing_address"->>'taxId' ilike ?`);
+      prefixBindings.push(prefix);
+    }
+    const rank =
+      exact.length === 0
+        ? null
+        : `case when ${exact.join(' or ')} then 0${starts.length > 0 ? ` when ${starts.join(' or ')} then 1` : ''} else 2 end`;
+
+    const em = this.emFactory();
+    const builder = em
+      .getKnex()('orders')
+      .select('id')
+      .where((qb) => {
+        if (scope) qb.whereIn('organization_id', scope.allowedOrganizationIds);
+        qb.andWhere((or) => {
+          for (const match of matches) match(or);
+        });
+      });
+    if (rank !== null) builder.orderByRaw(rank, [...rankBindings, ...prefixBindings] as Knex.RawBinding[]);
+    builder.orderBy('updated_at', 'desc').orderBy('id', 'asc').limit(query.limit + 1);
+    // `em.execute(builder)`, not `await builder`: a knex handle carries no
+    // transaction context (issue #207).
+    const ids = ((await em.execute(builder)) as Array<{ id: string }>).map((r) => r.id);
+    const page = ids.slice(0, query.limit);
+    if (page.length === 0) return { rows: [], hasMore: false };
+
+    const orders = await em.find(Order, { id: { $in: page } });
+    const byId = new Map(orders.map((o) => [o.id, o]));
+    const ranked = page.map((id) => byId.get(id)).filter((o): o is Order => o !== undefined);
+    const rows = await this.toRows(em, ranked);
+    return {
+      hasMore: ids.length > query.limit,
+      rows: rows.map((r) => ({
+        id: r.id,
+        businessId: r.businessId,
+        organizationName: r.organizationName,
+        placedAt: r.placedAt,
+        total: r.total,
+        currency: r.currency,
+        status: r.status,
+        statusName: r.statusName,
+      })),
+    };
   }
 
   /** Counts over `where`, grouped by one of the order's two status axes. */

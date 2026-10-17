@@ -59,6 +59,14 @@ const modules = [
   },
   {
     type: 'category',
+    label: 'admin_search', key: 'admin_search',
+    link: { type: 'doc', id: 'modules/admin-search' },
+    items: [
+      'module-reference/admin-search',
+    ],
+  },
+  {
+    type: 'category',
     label: 'admin_users', key: 'admin_users',
     link: { type: 'doc', id: 'modules/admin_users' },
     items: [

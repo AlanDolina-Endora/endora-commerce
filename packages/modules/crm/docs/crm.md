@@ -2146,3 +2146,16 @@ off, the opportunities of the demo organization are still removed with it —
 they would otherwise prevent that organization from being removed — but the
 three demo tags stay, because the module's own demo data is not touched while
 it is off. A reset run with CRM switched on removes them.
+
+## Global search
+
+The admin's global search (the command palette, ⌘K / Ctrl+K) finds sales opportunities. This module offers the fields below; which of them are used is chosen on the Global search configuration screen.
+
+| Field | Searched by default |
+| --- | --- |
+| Opportunity number | yes |
+| Title | yes |
+| Organization name | yes |
+| Description | no |
+
+A result shows the number and title, the organization and the status, and opens the opportunity. Opportunities appear for a role holding `crm:read`, within the admin's organization scope. While CRM is switched off they are not searched and are not offered on the configuration screen; their configuration is kept.

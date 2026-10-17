@@ -106,3 +106,14 @@ Admin routes are gated by `customers:read` (reads), `customers:manage`
 
 Default payment/delivery preferences reuse the `quick_order_default_preferences`
 table; no new table is introduced for them.
+
+## Global search
+
+The admin's global search (the command palette, ⌘K / Ctrl+K) finds customers. This module offers the fields below; which of them are used is chosen on the Global search configuration screen.
+
+| Field | Searched by default |
+| --- | --- |
+| E-mail | yes |
+| Name | yes |
+
+A result shows the name, the e-mail, the organization and whether the account is blocked, and opens the customer. Deleted and anonymized accounts are not found. Customers appear for a role holding `customers:read`, and a sales representative sees the customers their Customers list shows them.

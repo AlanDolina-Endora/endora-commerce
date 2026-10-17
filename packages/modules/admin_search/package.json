@@ -1,0 +1,91 @@
+{
+  "name": "@endora-commerce/mod-admin-search",
+  "version": "0.106.0",
+  "type": "module",
+  "sideEffects": false,
+  "description": "Admin global search: find organizations, customers, orders, quote requests, sales opportunities, products and categories from the command palette, with configurable searchable fields.",
+  "license": "MIT",
+  "endora": {
+    "type": "module",
+    "id": "admin_search"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/endora-commerce/endora-commerce.git",
+    "directory": "packages/modules/admin_search"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/manifest.d.ts",
+      "default": "./dist/manifest.js"
+    },
+    "./backend": {
+      "types": "./dist/backend/index.d.ts",
+      "default": "./dist/backend/index.js"
+    },
+    "./migrations": {
+      "types": "./dist/migrations/index.d.ts",
+      "default": "./dist/migrations/index.js"
+    },
+    "./admin": {
+      "types": "./dist/admin/index.d.ts",
+      "default": "./dist/admin/index.js"
+    },
+    "./tailwind.css": "./tailwind.css",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "i18n",
+    "docs",
+    "tailwind.css"
+  ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.ui.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.ui.json --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@endora-commerce/admin-kit": "workspace:*",
+    "@endora-commerce/contracts": "workspace:*",
+    "@endora-commerce/platform": "workspace:*",
+    "fastify": "^5.11.0",
+    "lucide-react": "^1",
+    "react": "^19",
+    "react-router-dom": "^7"
+  },
+  "peerDependenciesMeta": {
+    "@endora-commerce/admin-kit": {
+      "optional": true
+    },
+    "lucide-react": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-router-dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@endora-commerce/admin-kit": "workspace:*",
+    "@endora-commerce/contracts": "workspace:*",
+    "@endora-commerce/platform": "workspace:*",
+    "@types/node": "^22.9.0",
+    "@types/react": "^19.2.14",
+    "fastify": "^5.12.5",
+    "lucide-react": "^1.11.0",
+    "react": "^19.2.5",
+    "react-router-dom": "^7.18.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

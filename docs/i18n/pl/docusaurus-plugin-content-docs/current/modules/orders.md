@@ -562,3 +562,17 @@ szablon platformy.
   własnych wkładach do panelu administracyjnego; ten moduł nie wymienia żadnego z nich. Gdy nikt
   nic nie wnosi — nie ma takiego modułu, moduł jest wyłączony albo osoba nie ma uprawnienia
   wymaganego przez panel — strefa nie renderuje niczego, a ekran jest dokładnie taki jak bez niej.
+
+## Wyszukiwanie globalne
+
+Wyszukiwanie globalne w panelu administracyjnym (paleta poleceń, ⌘K / Ctrl+K) znajduje zamówienia. Ten moduł udostępnia poniższe pola; to, które z nich są używane, wybiera się na ekranie konfiguracji wyszukiwania globalnego.
+
+| Pole | Przeszukiwane domyślnie |
+| --- | --- |
+| Numer zamówienia | tak |
+| Nazwa organizacji | tak |
+| Imię i nazwisko lub e-mail klienta | tak |
+| Nazwa firmy do faktury | nie |
+| NIP do faktury | nie |
+
+Wynik pokazuje numer zamówienia, organizację, datę złożenia, wartość i status, a jego wybranie otwiera zamówienie. Dokładnie pasujący numer zamówienia jest pokazywany jako pierwszy. Zamówienia pojawiają się dla roli z uprawnieniem `orders:read`, a przedstawiciel handlowy widzi tylko zamówienia przypisanych mu organizacji — te same, które pokazuje mu lista zamówień.

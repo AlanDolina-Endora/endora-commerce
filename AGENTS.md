@@ -356,6 +356,8 @@ pointing at whichever tree it was created from; the same property issue #255 dep
 - PostgreSQL — two new platform-global tables, `product_list_saved_views` (owned by `catalog`) and `quote_request_list_saved_views` (owned by `quote_requests`); `order_list_saved_views` unchanged (147-saved-views)
 - TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite + `@endora-commerce/admin-kit` (admin) — **no new runtime dependency** (148-price-list-matrix-rules)
 - PostgreSQL — one new table `price_list_matrix_entries` owned by `price_lists`, FKs to `price_lists`, `products`, `categories`, `organizations`; no column added elsewhere (148-price-list-matrix-rules)
+- TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite + react-router-dom 7 through `@endora-commerce/admin-kit` and `@endora-commerce/admin-shell` (admin) — **no new runtime dependency** (150-admin-global-search)
+- PostgreSQL — no new table or column; three new rows in the existing `settings` store owned by `admin_search` (plus its activation row); reads of existing tables by their owners only (150-admin-global-search)
 
 - TypeScript 5.x strict on Node.js ≥ 22.17; Fastify + MikroORM (PostgreSQL) + Zod + ioredis + BullMQ + Meilisearch (backend)
 - React 19 + Vite + react-router-dom 7 + Tailwind 4 (admin); Next.js 15 App Router + React 19 + Tailwind v4 (storefront)
@@ -366,6 +368,6 @@ pointing at whichever tree it was created from; the same property issue #255 dep
 See "Repo map" above.
 
 ## Recent Changes
+- 150-admin-global-search: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite + react-router-dom 7 through `@endora-commerce/admin-kit` and `@endora-commerce/admin-shell` (admin) — **no new runtime dependency**
 - 148-price-list-matrix-rules: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite + `@endora-commerce/admin-kit` (admin) — **no new runtime dependency**
 - 147-saved-views: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite through `@endora-commerce/admin-kit` (admin) — **no new runtime dependency**; `axe-core` added as an `admin` devDependency (test-only)
-- 146-quote-request-pricing-history: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite + admin-kit zones (admin); Next.js 15 App Router server components and server actions (storefront) — **no new runtime dependency**

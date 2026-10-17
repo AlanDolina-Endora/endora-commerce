@@ -2,7 +2,6 @@
   "nav.organizations.label": "Organizacje",
   "actions.openOrganizations.label": "Organizacje",
   "actions.openOrganizations.description": "Konta klientów",
-
   "errors.CANNOT_REVOKE_LAST_ADMIN_INVITE": "To ostatnie oczekujące zaproszenie dla administratora, a organizacja nie ma aktywnego administratora, więc nie można go anulować. Najpierw wyślij kolejne zaproszenie dla administratora.",
   "errors.EMAIL_ALREADY_IN_ORGANIZATION": "Ten adres e-mail już należy do Twojej organizacji — jako członek albo jako oczekujące zaproszenie.",
   "errors.EMAIL_BELONGS_TO_ANOTHER_ORGANIZATION": "Ten adres e-mail należy do członka innej organizacji, więc nie można go tutaj zaprosić.",
@@ -14,5 +13,13 @@
   "errors.ORGANIZATION_TREE_INVALID.cycle": "Wybrana organizacja nadrzędna znajduje się w poddrzewie tej organizacji, więc przeniesienie utworzyłoby cykl. Wskaż organizację spoza tego poddrzewa.",
   "errors.ORGANIZATION_TREE_INVALID.max_depth_exceeded": "Przeniesienie przekroczyłoby maksymalną głębokość drzewa organizacji, czyli {maxDepth} poziomów. Przenieś gałąź wyżej albo najpierw ją spłaszcz.",
   "errors.ORGANIZATION_TREE_INVALID.path_unreadable": "Nie można odczytać zapisanej pozycji organizacji {organizationId} w drzewie, więc nie da się jej przenieść ani wybrać jako nadrzędnej. To błąd w rekordzie tej organizacji, a nie w Twoim wyborze; poproś administratora o jego naprawę.",
-  "errors.ORG_OWNER_DEPLETION": "To konto jest ostatnim aktywnym administratorem organizacji, więc nie można go usunąć, zablokować ani z niej wypisać. Najpierw nadaj rolę administratora innemu członkowi."
+  "errors.ORG_OWNER_DEPLETION": "To konto jest ostatnim aktywnym administratorem organizacji, więc nie można go usunąć, zablokować ani z niej wypisać. Najpierw nadaj rolę administratora innemu członkowi.",
+  "adminSearch.group.label": "Organizacje",
+  "adminSearch.field.name": "Nazwa",
+  "adminSearch.field.taxId": "NIP",
+  "adminSearch.field.legalName": "Nazwa prawna",
+  "adminSearch.status.pendingVerification": "Oczekuje na weryfikację",
+  "adminSearch.status.active": "Aktywna",
+  "adminSearch.status.blocked": "Zablokowana",
+  "adminSearch.status.rejected": "Odrzucona"
 }

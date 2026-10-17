@@ -44,12 +44,14 @@ Strona wygenerowana z manifestu modułu, bez żadnych ręcznych zmian. Co moduł
 | `customer_accounts` | tylko bramkowanie | rozwiązuje `passwordResetService`; pominięty w `dependencies`, bo kolejność instalacji nie może nieść tej krawędzi |
 | `price_lists` | tylko bramkowanie | rozwiązuje `priceListReadPort`; pominięty w `dependencies`, bo kolejność instalacji nie może nieść tej krawędzi |
 | `admin_notifications` | nie | refuses-without `adminNotificationRecordPort` — nikt nie dowiaduje się o rejestracji nowej organizacji: powiadomienie w panelu jest odrzucane, a ta odmowa wstrzymuje też e-maile o nowej rejestracji — sama rejestracja kończy się normalnie |
+| `admin_search` | nie | contributes-to `adminSearchProviderRegistry` |
 | `credit_limits` | nie | refuses-without `creditLimitReadPort` — wyszukiwanie w strukturze organizacji, która jednostka nadrzędna ma limit kredytowy, jest odrzucane — nie korzysta z niego żaden ekran, bo jedynym wywołującym jest usługa samego tego modułu |
 
 ## Uprawnienia
 
 | Kod | Etykieta | Wymaga też |
 | --- | --- | --- |
+| `_i18n` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `customers:manage` | Manage customer organizations | — |
 | `customers:read` | View customers | — |
 | `organizations:assign-sales-rep` | Assign sales representatives to organizations | — |

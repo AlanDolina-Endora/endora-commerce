@@ -98,3 +98,14 @@ Trasy administracyjne są chronione przez `customers:read` (odczyt), `customers:
 
 Domyślne preferencje płatności i dostawy korzystają z istniejącej tabeli
 `quick_order_default_preferences`; nowa tabela nie jest tworzona.
+
+## Wyszukiwanie globalne
+
+Wyszukiwanie globalne w panelu administracyjnym (paleta poleceń, ⌘K / Ctrl+K) znajduje klientów. Ten moduł udostępnia poniższe pola; to, które z nich są używane, wybiera się na ekranie konfiguracji wyszukiwania globalnego.
+
+| Pole | Przeszukiwane domyślnie |
+| --- | --- |
+| E-mail | tak |
+| Imię i nazwisko | tak |
+
+Wynik pokazuje imię i nazwisko, e-mail, organizację oraz informację, czy konto jest zablokowane, a jego wybranie otwiera klienta. Konta usunięte i zanonimizowane nie są znajdowane. Klienci pojawiają się dla roli z uprawnieniem `customers:read`, a przedstawiciel handlowy widzi tych klientów, których pokazuje mu lista klientów.

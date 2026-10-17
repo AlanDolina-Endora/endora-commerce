@@ -284,3 +284,15 @@ przy samodzielnej rejestracji i przy logowaniu przez zewnętrznego dostawcę to�
 
 Organizacje firmowe (B2B) pozostają bez zmian — reguła jednoosobowości (`assertMembershipAllowed`)
 odrzuca tylko dodanie drugiego członka do organizacji prywatnej.
+
+## Wyszukiwanie globalne
+
+Wyszukiwanie globalne w panelu administracyjnym (paleta poleceń, ⌘K / Ctrl+K) znajduje organizacje. Ten moduł udostępnia poniższe pola; to, które z nich są używane, wybiera się na ekranie konfiguracji wyszukiwania globalnego.
+
+| Pole | Przeszukiwane domyślnie |
+| --- | --- |
+| Nazwa | tak |
+| NIP | tak |
+| Nazwa prawna | nie |
+
+Nazwy są dopasowywane bez względu na polskie znaki diakrytyczne, więc `lodz` znajduje *Łódź*. Wynikami są organizacje, które administratorowi pokazuje lista organizacji — organizacje firmowe, które nie zostały usunięte — dla roli z uprawnieniem `customers:read` lub `customers:manage`. Przedstawicielowi handlowemu przypisane mu organizacje są pokazywane jako pierwsze, a pozostałe po nich.

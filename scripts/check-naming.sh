@@ -203,7 +203,9 @@ fail=0
 #   * singular-mass nouns and single named surfaces whose plural forms read
 #     worse than the singular (catalog, inventory, search, auth, example,
 #     email — service modules; quick_order, megamenu, assets_library, blog,
-#     newsletter — one named user surface rather than a collection);
+#     newsletter, admin_search — one named user surface rather than a
+#     collection; admin_search by owner decision, specs/150-admin-global-search/
+#     research.md R-16);
 #   * proper nouns — vendor product names and standard/protocol acronyms
 #     (google_tag_manager, stripe, ksef). These are never pluralised in any
 #     language, and the folder name is load-bearing (manifest ids, migration
@@ -213,7 +215,7 @@ fail=0
 # Infrastructure modules carry a leading underscore (`_i18n`, `_lifecycle`)
 # to sort first and to mark "cross-cutting, not a domain" — see AGENTS.md.
 # ──────────────────────────────────────────────────────────────────────────
-allowed_singular="^(auth|catalog|email|example|import_export|inventory|quick_order|search|seo|assets_library|blog|megamenu|newsletter)$"
+allowed_singular="^(admin_search|auth|catalog|email|example|import_export|inventory|quick_order|search|seo|assets_library|blog|megamenu|newsletter)$"
 allowed_proper_noun="^(autopay|comarch_xl|crm|dhl_parcel|erp_connector|google_tag_manager|infakt|inpost|invoice_ledger|ksef|mfa|paypal|payu|pim_akeneo|pim_connector|pim_ergonode|pim_pimcore|pim_unopim|pwa|stripe|tpay|wfirma)$"
 
 for dir in "${module_folders[@]}"; do

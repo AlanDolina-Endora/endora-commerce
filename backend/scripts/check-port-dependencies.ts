@@ -983,6 +983,12 @@ export const CONTRIBUTION_POLICY_STATED: Readonly<Record<string, 'skip' | 'honou
   // whose recorded owner is not effectively present, and `PlanExecutorService`
   // re-checks at execution.
   'prompt_actions:promptActionToolRegistry': 'skip',
+  // Skipped: a surface. `AdminSearchProviderRegistry.listPresent` /
+  // `listVisible` drop every provider whose recorded module is not effectively
+  // present, so a switched-off owner's record type is neither searched nor
+  // offered on the configuration screen; `all()` stays presence-blind for
+  // diagnostics (`specs/150-admin-global-search/`).
+  'admin_search:adminSearchProviderRegistry': 'skip',
   // Skipped: folding progress reads the contributor's own tables through the
   // contributor's own services, so a module that is off must not be read
   // through. Nothing is dropped with the resolver — the absent behaviour was

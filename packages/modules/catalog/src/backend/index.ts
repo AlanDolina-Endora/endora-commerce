@@ -12,6 +12,8 @@ import {
 } from '@endora-commerce/contracts';
 import type { AuditReferenceRegistryPort } from '@endora-commerce/contracts';
 import type {
+  AdminI18nTranslatePort,
+  AdminSearchProviderRegistryPort,
   AssetReadPort,
   AssetReferenceRegistryPort,
   AdminNotificationRecordPort,
@@ -55,6 +57,8 @@ import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
 import type { SalesChannelResolutionPort } from '@endora-commerce/platform/kernel';
 import type { SettingsReadPort } from '@endora-commerce/platform/kernel';
+import { createCategoryAdminSearchProvider, createProductAdminSearchProvider } from './admin-search-provider.js';
+import { CatalogAdminSearchService } from './services/catalog-admin-search.service.js';
 import { AttachmentType } from './entities/attachment-type.entity.js';
 import { AttributeSetAttribute } from './entities/attribute-set-attribute.entity.js';
 import { AttributeSet } from './entities/attribute-set.entity.js';
@@ -1045,6 +1049,28 @@ export function registerModule(ctx: ModuleContext): void {
       registry.register(tool);
     }
     cradle().promptActionBulkProgressRegistry.register('catalog', catalogBulkProgressReader(deps));
+  });
+
+  /**
+   * The Product and Category record types for admin global search
+   * (`specs/150-admin-global-search/`, T049) — one **contribution** hook for
+   * both: it pushes two inert providers into `admin_search`'s ungated registry
+   * and does nothing else, so it carries no presence probe (D-67/D-68).
+   */
+  ctx.onBoot(() => {
+    const service = new CatalogAdminSearchService(
+      () => cradle().emFactory(),
+      lazyPort<CatalogAttributeReadPort>(ctx, 'catalogAttributeReadPort'),
+    );
+    const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
+    const registry = lazyPort<AdminSearchProviderRegistryPort>(ctx, 'adminSearchProviderRegistry');
+    registry.register(
+      createProductAdminSearchProvider({
+        search: (query) => service.searchProducts(query),
+        translate: (key, language) => i18n.translate('catalog', key, language),
+      }),
+    );
+    registry.register(createCategoryAdminSearchProvider({ search: (query) => service.searchCategories(query) }));
   });
 
   /**

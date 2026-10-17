@@ -1,16 +1,13 @@
 {
   "nav.customers.label": "Customers",
   "nav.customersOnline.label": "Online customers",
-
   "actions.openCustomers.label": "Customers",
   "actions.openCustomers.description": "Browse and manage customer accounts",
   "actions.onlineCustomers.label": "Online customers",
   "actions.onlineCustomers.description": "See which customers are currently online",
-
   "status.active": "Active",
   "status.blocked": "Blocked",
   "status.deleted": "Deleted",
-
   "list.title": "Customers",
   "list.description": "Browse and manage customer accounts",
   "list.error": "Could not load customers.",
@@ -30,7 +27,6 @@
   "list.column.group": "Customer group",
   "list.column.created": "Created",
   "list.action.open": "Open",
-
   "detail.title": "Customer",
   "detail.loading": "Loading…",
   "detail.error": "Could not load the customer.",
@@ -50,7 +46,6 @@
   "detail.action.impersonate": "Impersonate",
   "detail.action.restore": "Restore",
   "detail.action.delete": "Delete",
-
   "online.title": "Online customers",
   "online.description": "Customers active within the freshness window",
   "online.error": "Could not load online customers.",
@@ -61,7 +56,6 @@
   "online.autoRefresh": "Auto-refresh",
   "online.intervalLabel": "Interval (seconds)",
   "online.refreshedAt": "Updated {time}",
-
   "detail.panel.loading": "Loading…",
   "detail.panel.error": "Could not load this section.",
   "detail.orders.title": "Orders",
@@ -72,7 +66,6 @@
   "detail.carts.items": "items",
   "detail.carts.noCurrent": "No active cart.",
   "detail.carts.empty": "No carts.",
-
   "detail.org.title": "Organization",
   "detail.org.assignLabel": "Assign to organization",
   "detail.org.assign": "Assign",
@@ -90,5 +83,10 @@
   "detail.addresses.city": "City",
   "detail.addresses.postal": "Postal code",
   "detail.addresses.country": "Country",
-  "detail.addresses.add": "Add address"
+  "detail.addresses.add": "Add address",
+  "adminSearch.group.label": "Customers",
+  "adminSearch.field.email": "E-mail",
+  "adminSearch.field.name": "Name",
+  "adminSearch.status.active": "Active",
+  "adminSearch.status.blocked": "Blocked"
 }

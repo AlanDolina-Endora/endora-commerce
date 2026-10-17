@@ -17,6 +17,9 @@
   "sidebar.main.category.admin_roles": {
     "message": "admin_roles"
   },
+  "sidebar.main.category.admin_search": {
+    "message": "admin_search"
+  },
   "sidebar.main.category.admin_users": {
     "message": "admin_users"
   },

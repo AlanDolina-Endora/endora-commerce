@@ -42,12 +42,14 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | `taxes` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `carts` | tylko bramkowanie | rozwiązuje `cartWritePort`; pominięty w `dependencies`, bo kolejność instalacji nie może nieść tej krawędzi |
 | `orders` | tylko bramkowanie | rozwiązuje `orderReadPort`; pominięty w `dependencies`, bo kolejność instalacji nie może nieść tej krawędzi |
+| `admin_search` | nie | contributes-to `adminSearchProviderRegistry` |
 | `webhooks` | nie | contributes-to `webhookEventRegistry` |
 
 ## Uprawnienia
 
 | Kod | Etykieta | Wymaga też |
 | --- | --- | --- |
+| `_i18n` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `rfqs:handle` | Handle quote requests | `price_lists:read` |
 
 ## Paleta poleceń
