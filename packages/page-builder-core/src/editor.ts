@@ -1,5 +1,17 @@
 'use client';
 
+/**
+ * Puck's editor component, from **this** package's copy of `@puckeditor/core`
+ * (`specs/152-compare-pdf-template/`). Every editor-side helper below reads
+ * Puck's React context — the outline, the overlay, `usePageBuilderPuck` — so
+ * the `<Puck>` they live under has to be the same copy. A module package whose
+ * install resolves its own `@puckeditor/core` to a different peer variant
+ * (a different `@types/react`, say) would otherwise mount a `<Puck>` those
+ * helpers cannot see, and fail with "usePuck must be used inside <Puck>".
+ * Types may still come from the module's own copy: they are erased.
+ */
+export { Puck } from '@puckeditor/core';
+
 export { createPageBuilderEditorPlugin } from './editor/page-builder-plugin.js';
 export {
   PUCK_LEGACY_DND,

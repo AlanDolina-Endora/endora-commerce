@@ -15,8 +15,10 @@ A module is not imported by application code. The platform discovers the extensi
 | Import | Contents |
 | --- | --- |
 | `@endora-commerce/mod-document-templates` | the module manifest — its id, version, dependencies, settings and activation |
+| `@endora-commerce/mod-document-templates/admin` | the Admin UI contribution: the screens, navigation and palette actions it adds |
 | `@endora-commerce/mod-document-templates/backend` | the composition root the platform calls, with the entities, services, routes and workers it registers |
 | `@endora-commerce/mod-document-templates/migrations` | the module’s own schema migrations, in the order the platform runs them |
+| `@endora-commerce/mod-document-templates/tailwind.css` | the Tailwind source declaration for the admin code above |
 
 ## Depends on
 
@@ -24,7 +26,10 @@ Everything below is a **peer** dependency, so the application resolves exactly o
 
 **Endora packages**
 
+- `@endora-commerce/admin-kit` — *optional*
 - `@endora-commerce/contracts`
+- `@endora-commerce/page-builder-admin` — *optional*
+- `@endora-commerce/page-builder-core` — *optional*
 - `@endora-commerce/platform`
 
 **Third-party**
@@ -32,9 +37,12 @@ Everything below is a **peer** dependency, so the application resolves exactly o
 - `@mikro-orm/core` ^6
 - `@mikro-orm/migrations` ^6
 - `@mikro-orm/postgresql` ^6
+- `@puckeditor/core` ^0 — *optional*
 - `@types/pdfmake` ^0
 - `fastify` ^5.11.0
 - `pdfmake` ^0
+- `react` ^19 — *optional*
+- `react-router-dom` ^7 — *optional*
 - `zod` ^4
 
 ## What the tarball carries
@@ -42,6 +50,7 @@ Everything below is a **peer** dependency, so the application resolves exactly o
 - `dist/` — the compiled JavaScript and its type declarations
 - `i18n/` — the translation bundles this package ships (`en`, `pl`), loaded by the platform
 - `docs/` — the package’s own pages in the Endora Commerce documentation site
+- `tailwind.css` — the Tailwind source declaration
 
 ## Install
 

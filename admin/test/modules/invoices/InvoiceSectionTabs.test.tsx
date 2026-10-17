@@ -54,7 +54,7 @@ const bundle = {
  * The one id the component asks about — it returns `null` when `invoices` is
  * absent, which is the whole of its presence behaviour.
  */
-const PRESENT_MODULES = ['invoices'];
+const PRESENT_MODULES = ['invoices', 'document_templates'];
 
 function renderTabs(path: string): void {
   renderWithI18n(
@@ -72,12 +72,12 @@ const selected = (name: string): string | null =>
   screen.getByRole('tab', { name }).getAttribute('aria-selected');
 
 describe('InvoiceSectionTabs', () => {
-  it('offers both routes', () => {
+  it('offers the invoices and the invoice templates in Document templates (152 FR-088)', () => {
     renderTabs('/invoices');
     const hrefs = [...screen.getByRole('tablist').querySelectorAll('a')].map((a) =>
       a.getAttribute('href'),
     );
-    expect(hrefs).toEqual(['/invoices', '/invoices/templates']);
+    expect(hrefs).toEqual(['/invoices', '/document-templates?type=invoices.invoice']);
   });
 
   it('marks the invoices tab on the list route', () => {
@@ -86,17 +86,17 @@ describe('InvoiceSectionTabs', () => {
     expect(selected('invoiceTabs.templates')).toBe('false');
   });
 
-  it('marks the templates tab on the templates route', () => {
-    // `/invoices` is a prefix of `/invoices/templates`; only the longest match
-    // may light up, or both tabs would read as current at once.
-    renderTabs('/invoices/templates');
-    expect(selected('invoiceTabs.templates')).toBe('true');
-    expect(selected('invoiceTabs.invoices')).toBe('false');
-  });
-
-  it('keeps the templates tab current inside the template editor', () => {
-    renderTabs('/invoices/templates/abc-123');
-    expect(selected('invoiceTabs.templates')).toBe('true');
+  it('offers no templates tab to an administrator who may not read document templates', () => {
+    renderWithI18n(
+      withSession(
+        <MemoryRouter initialEntries={['/invoices']}>
+          <InvoiceSectionTabs />
+        </MemoryRouter>,
+        { session: adminSession({ permissions: ['invoices:read'] }), presence: modulePresence({ present: PRESENT_MODULES }) },
+      ),
+      bundle,
+    );
+    expect(screen.queryByRole('tab', { name: 'invoiceTabs.templates' })).toBeNull();
   });
 
   it('treats an invoice detail route as the invoices tab', () => {

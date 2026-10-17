@@ -703,10 +703,8 @@ describe('the moved screens take no reach the package cannot resolve', () => {
   const MOVED = [
     'invoices/src/admin/components/InvoiceSectionTabs.tsx',
     'invoices/src/admin/pages/InvoiceDetail.tsx',
-    'invoices/src/admin/pages/InvoiceTemplateEditor.tsx',
-    'invoices/src/admin/pages/InvoiceTemplatesPage.tsx',
+    'invoices/src/admin/pages/InvoiceTemplatesRedirect.tsx',
     'invoices/src/admin/pages/InvoicesList.tsx',
-    'invoices/src/admin/templates/invoice-builder-plugin.tsx',
     'invoices/src/admin/templates/invoice-puck-config.tsx',
     'quote_requests/src/admin/pages/RfqCreatePage.tsx',
     'quote_requests/src/admin/pages/RfqDetail.tsx',

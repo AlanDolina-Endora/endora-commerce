@@ -136,10 +136,19 @@ export async function registerDocumentTemplatesAdminRoutes(
     return { data: await service.clearDefault(id, body) };
   });
 
-  // 11
+  // 11 — the two fields travel in the body or, for a client that sends no body
+  // with DELETE (the admin's own API client), as query parameters.
   app.delete(`${base}/:id`, { preHandler: requireAdmin(WRITE) }, async (request, reply) => {
     const { id } = idParams.parse(request.params);
-    const body = deleteDocumentTemplateBodySchema.parse(request.body ?? {});
+    const query = (request.query ?? {}) as Record<string, string | undefined>;
+    const raw =
+      request.body && typeof request.body === 'object' && Object.keys(request.body).length > 0
+        ? request.body
+        : {
+            ...(query['expectedVersion'] !== undefined ? { expectedVersion: Number(query['expectedVersion']) } : {}),
+            ...(query['confirmDefault'] !== undefined ? { confirmDefault: query['confirmDefault'] === 'true' } : {}),
+          };
+    const body = deleteDocumentTemplateBodySchema.parse(raw);
     await service.delete(id, body);
     reply.status(204);
     return null;

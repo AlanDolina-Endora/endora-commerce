@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { RouteTabs } from '@endora-commerce/admin-kit/ui';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
-import { useModulePresence } from '@endora-commerce/admin-kit/lib';
+import { useAuth, useModulePresence } from '@endora-commerce/admin-kit/lib';
 
 /**
  * The switch between invoices and the templates they are rendered with.
@@ -21,17 +21,29 @@ import { useModulePresence } from '@endora-commerce/admin-kit/lib';
  * both tabs are `/invoices*`, the presence gate asks about `invoices`, and both
  * consumers are `invoices`' own screens. There was nothing here for a mechanism
  * to do; it was a file in the wrong directory.
+ *
+ * **The templates tab leads to *Document templates*** since
+ * `specs/152-compare-pdf-template/` (FR-088): invoice templates are that
+ * module's, opened on the Invoice card. It is shown to an administrator who may
+ * read document templates; the module itself is always present while invoices
+ * are, because invoices bind it (owner answer N2).
  */
+/** The Invoice card of *Document templates*. */
+export const INVOICE_TEMPLATES_TARGET = '/document-templates?type=invoices.invoice';
+
 export function InvoiceSectionTabs(): ReactNode {
   const t = useTranslation('core');
   const { isPresent } = useModulePresence();
+  const { hasPermission } = useAuth();
   if (!isPresent('invoices')) return null;
   return (
     <RouteTabs
       className="mb-4"
       tabs={[
         { to: '/invoices', label: t('invoiceTabs.invoices') },
-        { to: '/invoices/templates', label: t('invoiceTabs.templates') },
+        ...(isPresent('document_templates') && hasPermission('document_templates:read')
+          ? [{ to: INVOICE_TEMPLATES_TARGET, label: t('invoiceTabs.templates') }]
+          : []),
       ]}
     />
   );

@@ -1090,14 +1090,13 @@ const InvoiceFooter = invoiceSection({
  * file could not express.
  *
  * **Every entry is this module's own.** A block another module declares is not
- * bound here: its binding lives with its declarant, and no page-builder
- * component contribution kind (α, F7's roadmap row) is built. The editor
- * reaches such a block through the served descriptor instead —
- * `withDescribedInvoiceBlocks` (`./described-blocks.tsx`,
- * `specs/134-paid-module-extraction/` T138) makes a present contributor's block
- * insertable and configurable with a neutral canvas stand-in, and keeps a stored
- * block nothing covers as FR-019's placeholder. The PDF — the legal document —
- * renders it through the contributor's registration on the backend.
+ * bound here: its binding lives with its declarant. Since
+ * `specs/152-compare-pdf-template/` invoice templates are edited in the
+ * document-template editor, which takes each entry below through this module's
+ * `document` block contributions (`../document-blocks/`) and draws a block
+ * another module contributes to invoices as its neutral stand-in. The PDF — the
+ * legal document — renders it through the contributor's registration on the
+ * backend.
  */
 export const invoicePuckConfig: Config = {
   components: {
@@ -1111,24 +1110,5 @@ export const invoicePuckConfig: Config = {
     'invoices.InvoiceDivider': InvoiceDivider,
     'invoices.InvoiceLogo': InvoiceLogo,
     'invoices.InvoiceFooter': InvoiceFooter,
-  },
-};
-
-/**
- * The invoice palette's one section.
- *
- * **Derived from the renderer map rather than written out** (FR-008, SC-005):
- * this file no longer holds a mapping from a category to a list of block names,
- * which is what let a section list five of another module's blocks. The
- * *authoritative* declarations are `invoices`' and `ksef`'s `blockCategories`,
- * merged and presence-filtered by
- * `GET /api/v1/admin/cms/page-builder/config`; this local derivation is what
- * the editor renders until the invoice builder reads that descriptor, and it
- * carries no name of its own.
- */
-export const invoicePuckPalette: NonNullable<Config['categories']> = {
-  invoice: {
-    title: 'Invoice sections',
-    components: Object.keys(invoicePuckConfig.components ?? {}),
   },
 };
