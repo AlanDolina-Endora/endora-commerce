@@ -41,7 +41,7 @@ export function summary(over: Partial<DocumentTemplateSummary> = {}): DocumentTe
   };
 }
 
-const tree = (content: unknown[]) => ({ root: { props: {} }, content });
+const tree = (content: { type: string; props: Record<string, unknown> }[]) => ({ root: { props: {} }, content });
 
 export function detail(over: Partial<DocumentTemplateDetail> = {}): DocumentTemplateDetail {
   return {

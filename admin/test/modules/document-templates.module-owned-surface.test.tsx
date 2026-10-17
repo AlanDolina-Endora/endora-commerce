@@ -1,23 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import type { RenderResult } from '@testing-library/react';
 import { setMobileViewport } from '../setup';
 import { renderWithI18n, passthroughBundle } from '../helpers/render-with-i18n';
 import { adminSession, modulePresence, withSession } from '../helpers/render-with-session';
 import { MODULE_ADMIN_CONTRIBUTIONS } from '../../src/modules.generated.js';
 
-/**
- * One of the admin's own source files, read as text.
- *
- * From the workspace root vitest hands this file, because `import.meta.url` is
- * an `http:` URL under jsdom and `node:fs` cannot read one.
- */
-function sourceOf(relativePath: string): string {
-  return readFileSync(resolve(process.cwd(), relativePath), 'utf8');
-}
 
 /**
  * `specs/152-compare-pdf-template/` T039, T068 — `document_templates` owns its
@@ -139,7 +128,7 @@ describe('document_templates owns its admin surface (spec 152)', () => {
     const list = renderAt('/document-templates');
     await waitFor(() => expect(notFoundIsRendered()).toBe(true));
     list.unmount();
-    const editor = renderAt('/document-templates/11111111-1111-4111-8111-111111111111');
+    renderAt('/document-templates/11111111-1111-4111-8111-111111111111');
     await waitFor(() => expect(notFoundIsRendered()).toBe(true));
   });
 

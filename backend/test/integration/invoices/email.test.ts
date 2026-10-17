@@ -2,6 +2,7 @@ import { Invoice } from '../../helpers/package-entities.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type {
+  DocumentRenderPort,
   TransactionalEmailSendInput,
   TransactionalEmailSender,
   TransactionalSendOutcome,
@@ -104,7 +105,7 @@ audit);
       invoiceService,
       // `specs/152-compare-pdf-template/` — the real document-template engine,
       // the same one the download renders through (owner answer N1).
-      documents: h.container.resolve('documentRenderer'),
+      documents: h.container.resolve<DocumentRenderPort>('documentRenderer'),
       settingsService: h.settings.settingsService,
       getSender: () => sender,
       resolveRecipientEmail: async () => 'buyer@example.com',
@@ -169,7 +170,7 @@ audit);
       ),
       // `specs/152-compare-pdf-template/` — the real document-template engine,
       // the same one the download renders through (owner answer N1).
-      documents: h.container.resolve('documentRenderer'),
+      documents: h.container.resolve<DocumentRenderPort>('documentRenderer'),
       settingsService: h.settings.settingsService,
       getSender: () => ({
         async send() {
