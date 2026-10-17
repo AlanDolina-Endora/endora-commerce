@@ -82,6 +82,7 @@ CMS_PAGE_BUILDER_SETTING_CODES = {
   …existing,
   TRANSLATION_ENABLED: 'cms.page_builder.translation.enabled',
   TRANSLATION_LLM_CREDENTIALS: 'cms.page_builder.translation.llm_credentials',
+  TRANSLATION_MAX_SOURCE_CHARACTERS: 'cms.page_builder.translation.max_source_characters',
 };
 ```
 
@@ -89,6 +90,15 @@ CMS_PAGE_BUILDER_SETTING_CODES = {
 | --- | --- | --- |
 | `…translation.enabled` | Translation enabled | Shows the Translate button in the Page Builder. When on, editors with the "Translate Page Builder content with AI" permission can translate a canvas into the language being edited. The text of the canvas is sent to the provider of the model chosen below. |
 | `…translation.llm_credentials` | Translation credentials | The LLM credential configuration (Credentials screen) whose provider, model and API key the Translate button uses. Supported providers: OpenAI, Anthropic, Google, DeepSeek and any OpenAI-compatible endpoint (through the configuration's Base URL). Required for the button to work. |
+
+| `…translation.max_source_characters` | Translation size limit (characters) | The most text, in characters, one click of Translate may send to the model (default 40 000, allowed 1 000–200 000). A higher limit lets longer pages be translated at once but costs more per click and makes the editor wait longer on a single request, which a slow provider or a proxy timeout can then cut off. Larger content is refused before anything is sent. |
+
+Polish (`settingLabels.cms.page_builder.translation.max_source_characters.*`): **Limit rozmiaru
+tłumaczenia (znaki)** / *Największa liczba znaków tekstu, jaką jedno kliknięcie „Przetłumacz” może
+wysłać do modelu (domyślnie 40 000, dozwolone 1 000–200 000). Wyższy limit pozwala przetłumaczyć
+dłuższe strony naraz, ale zwiększa koszt jednego kliknięcia i wydłuża oczekiwanie na pojedyncze
+żądanie, które wolny dostawca albo limit czasu serwera pośredniczącego może przerwać. Większa treść
+jest odrzucana, zanim cokolwiek zostanie wysłane.*
 
 ## 5. Permission
 
@@ -155,7 +165,7 @@ the server refuses comes back in the existing `CREDENTIAL_VALIDATION_FAILED` env
 | `errors.CMS_TRANSLATION_DISABLED` | Page Builder translation is switched off. | Tłumaczenie w Page Builderze jest wyłączone. |
 | `errors.CMS_TRANSLATION_NOT_CONFIGURED` | No translation model is configured for the Page Builder. | Nie skonfigurowano modelu tłumaczenia dla Page Buildera. |
 | `errors.CMS_TRANSLATION_UNAVAILABLE` | Translation is unavailable because the Credentials module is switched off. | Tłumaczenie jest niedostępne, ponieważ moduł Poświadczenia jest wyłączony. |
-| `errors.CMS_TRANSLATION_TOO_LARGE` | The content is too large to translate at once ({characters} of {limit} characters). | Treść jest zbyt duża, by przetłumaczyć ją naraz ({characters} z {limit} znaków). |
+| `errors.CMS_TRANSLATION_TOO_LARGE` | The content is too large to translate at once: {characters} characters, the limit set in Settings → Page Builder is {limit}. | Treść jest zbyt duża, by przetłumaczyć ją naraz: {characters} znaków, a limit ustawiony w Ustawienia → Page Builder to {limit}. |
 | `errors.CMS_TRANSLATION_PROVIDER_FAILED` | The translation model could not complete the translation. | Model tłumaczący nie mógł wykonać tłumaczenia. |
 | `errors.CMS_TRANSLATION_PROVIDER_FAILED.credentials_rejected` | The model provider rejected the configured credentials. | Dostawca modelu odrzucił skonfigurowane poświadczenia. |
 | `errors.CMS_TRANSLATION_PROVIDER_FAILED.rate_limited` | The model provider's limit was reached. Try again in a moment. | Osiągnięto limit dostawcy modelu. Spróbuj ponownie za chwilę. |

@@ -39,7 +39,7 @@ export const cmsPageBuilderTranslationCapabilitySchema = z.discriminatedUnion('s
 
 ## 2. `POST /api/v1/admin/cms/page-builder/translate` — translate a canvas
 
-Body limit: 2 MiB.
+Body limit: 5 MiB.
 
 **Request**
 
@@ -67,7 +67,7 @@ export const cmsPageBuilderTranslateRequestSchema = z.object({
     z.object({
       kind: z.literal('text'),
       componentId: z.string().min(1).max(256).nullable(),
-      selectedText: z.string().trim().min(1).max(40_000),
+      selectedText: z.string().trim().min(1).max(200_000),
     }),
   ]).optional(),
 }).refine((r) => r.sourceLanguage !== r.targetLanguage, {
@@ -131,7 +131,7 @@ tokens).
 | 409 | `CMS_TRANSLATION_DISABLED` | — | switch off |
 | 409 | `CMS_TRANSLATION_NOT_CONFIGURED` | — | capability `not_configured` |
 | 409 | `CMS_TRANSLATION_UNAVAILABLE` | — | `credentials` absent |
-| 413 | `CMS_TRANSLATION_TOO_LARGE` | `{ limit, characters }` | above `MAX_SOURCE_CHARACTERS` — nothing sent |
+| 413 | `CMS_TRANSLATION_TOO_LARGE` | `{ limit, characters }` | above the configured `cms.page_builder.translation.max_source_characters` (for the requested scope) — nothing sent; the message names both numbers |
 | 422 | `CMS_TRANSLATION_SELECTION_NOT_FOUND` | — | the scope's block or selected text is not in the submitted canvas — nothing sent (R22) |
 | 502 | `CMS_TRANSLATION_PROVIDER_FAILED` | `{ code: 'credentials_rejected' \| 'rate_limited' \| 'unavailable' \| 'timeout' \| 'malformed' }` | a chunk failed at the provider, or every chunk's answer was unusable |
 

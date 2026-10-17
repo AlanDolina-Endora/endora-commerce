@@ -29,7 +29,8 @@ The technical approach, with the evidence in [research.md](./research.md):
   never sent.
 - **The server extracts, translates and re-injects** (R6–R8): rich text is translated one paragraph
   at a time with numbered inline tags, marks and link targets stay on the server, placeholders and
-  tags are verified per segment, work is chunked and bounded (40 000 characters, 60 s per call).
+  tags are verified per segment, work is chunked and bounded (an operator-set size limit, default
+  40 000 characters, bounds 1 000–200 000; 60 s per call).
 - **Synchronous and stateless** (R9, R10): one request, no queue, no table, no migration; the admin
   applies the result through the editor's existing unsaved-canvas path, after `resolveAllData`
   regenerates derived HTML, with an in-memory restore.
@@ -47,7 +48,7 @@ No new runtime dependency. One new workspace library package. No migration.
 **Target Platform**: Linux server (backend), modern browsers (admin)
 **Project Type**: web application — monorepo with `backend/`, `admin/`, `packages/`
 **Performance Goals**: a typical page (≤ 5 000 characters of text) in one provider call, p95 ≤ 30 s with a healthy provider (SC-004); no added cost to opening the editor beyond one small capability read
-**Constraints**: ≤ 40 000 source characters per request; ≤ 60 s per provider call; nothing sent when the function is off, not configured, or there is nothing to translate; canvas never changed by a failed or cancelled translation; assistant behaviour unchanged (FR-042)
+**Constraints**: ≤ the configured source-character limit per request (default 40 000, 1 000–200 000); ≤ 60 s per provider call; nothing sent when the function is off, not configured, or there is nothing to translate; canvas never changed by a failed or cancelled translation; assistant behaviour unchanged (FR-042)
 **Scale/Scope**: 1 new package (~600 LOC moved + ~150 new, incl. OpenAI-compatible endpoints), 2 settings, 2 routes, 1 permission, 5 error codes, 1 Command, 1 palette action, 1 admin component, 1 chrome slot, ~30 block declarations, ~40 i18n keys × 2 languages, docs en + pl; 6 slices, about 9–11 developer-days
 
 ## Constitution Check
@@ -161,7 +162,7 @@ The owner answered every question (spec § *Clarifications*). Six follow the rec
 | 4 | **Providers** (spec FR-006) | **Changed**: OpenAI, Anthropic, Google **plus any OpenAI-compatible endpoint** (e.g. DeepSeek) through the credential's Base URL — **and the same support for the AI assistant** | Base URL and the OpenAI-compatible providers are implemented once in `@endora-commerce/llm-client`; `credentials` gains the `openai_compatible` provider, a `url` field format and its validation, the admin form a URL input; `prompt_actions` uses it through `createLlmAdapter`; docs en + pl for three modules; a `prompt_actions` and a `credentials` changeset. About +1 day (R21, T059–T066) |
 | 5 | **How the result lands** | Replaces the canvas as an unsaved change, with *Restore previous content* | As planned |
 | 6 | **Who may use it** | New permission `cms.translate` | As planned |
-| 7 | **Cost/size control** | Fixed 40 000 characters per click, audit entry | As planned |
+| 7 | **Cost/size control** | **Superseded**: an operator setting `cms.page_builder.translation.max_source_characters`, default 40 000, write-validated 1 000–200 000, read per request, recorded in the audit entry | One more setting in `cms_page_builder`, a `SettingWriteValidator` contributed to `settings`' registry (the `admin_search`/`seo` seam), `413` names the limit (research R8, tasks T073–T075); about +0.5 day |
 | 8 | **Selection scope** (added after the plan) | A selected text fragment or component is translated alone; no selection = whole canvas | Optional request `scope`, server-side resolution with the same pipeline, label per scope, `422 CMS_TRANSLATION_SELECTION_NOT_FOUND` (research R22, User Story 6, tasks T067–T072); about +1.5 days |
 
 ## Requirement → test
@@ -179,7 +180,7 @@ The owner answered every question (spec § *Clarifications*). Six follow the rec
 | FR-020 | `translation.service.test.ts`: a segment with a lost tag / placeholder / missing id is kept and counted |
 | FR-021 | admin test: cancel aborts the fetch and leaves the canvas |
 | FR-022 | contract G2 (provider fake asserts zero calls) |
-| FR-023 | contract: 41 000 characters ⇒ 413 with details; provider fake asserts zero calls |
+| FR-023, FR-023a | contract: 41 000 characters ⇒ 413 with `details.limit` = the setting, provider fake asserts zero calls; the limit changed through the settings API is honoured on the next request; `max-source-characters-validator.test.ts`: 999, 200 001, 1.5, `'40000'` refused, 1 000 and 200 000 accepted; manifest test: default 40 000 |
 | FR-024 | `provider-error-map.test.ts` table; contract: each token surfaces as `details.code` with a translated sentence |
 | FR-025 | contract G5 with an undeclared block |
 | FR-030 | contract: 403 on both routes without `cms.translate`; `permission-inventory.test.ts` (existing, picks the code up); admin test: no button without permission |
@@ -212,7 +213,7 @@ Slices 1 and 2 are independent and can run in parallel.
 | --- | --- |
 | New package not resolvable in a scaffolded instance | T008 runs `packages/cli` instance tests; `manifests:generate` renders the dependency; `pnpm install --lockfile-only` in the same MR |
 | Model breaks inline tags or placeholders | per-segment verification, segment kept as source, counted (FR-020) |
-| Long pages hit proxy timeouts | 40 000-character cap, chunking, 60 s per call, concurrency 2; measured in the manual walk |
+| Long pages hit proxy timeouts | operator-set cap (default 40 000, ceiling 200 000), chunking, 60 s per call, concurrency 2; measured in the manual walk |
 | `resolveAllData` does not regenerate derived `html` as assumed | first admin test (T041) asserts it on `cms.RichContent` and `cms.Text`; fallback: call `coerceRichContentProps` for those two blocks explicitly |
 | The adapter move silently changes the assistant | tests moved first and run unchanged; byte-identity cases; `prompt_actions` contract/integration suites |
 | A block's prose missed by its declaration | manifest test forcing a declaration on every CMS-context block; fixture test per block |

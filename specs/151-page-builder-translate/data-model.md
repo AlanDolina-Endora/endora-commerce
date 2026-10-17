@@ -11,10 +11,12 @@ shape.
 | Code | Value type | Default | Scope | Meaning |
 | --- | --- | --- | --- | --- |
 | `cms.page_builder.translation.enabled` | `boolean` | `false` | platform-wide | The function's on/off switch (FR-001). **Not** the module's activation control — that stays `cms.enabled`. |
+| `cms.page_builder.translation.max_source_characters` | `number` (integer) | `40000` | platform-wide | Source characters one request may send (FR-023a). Write-validated to 1 000–200 000 by `cms`' setting write validator; an out-of-bounds stored value is read as the default. |
 | `cms.page_builder.translation.llm_credentials` | `credential_ref`, `configurationType: 'llm'` | `''` | platform-wide | Code of one `llm` credential configuration; the only source of provider, model, API key (FR-002). |
 
-Both declared in `packages/modules/cms/src/manifest.ts` and exported in
-`CMS_PAGE_BUILDER_SETTING_CODES` as `TRANSLATION_ENABLED` and `TRANSLATION_LLM_CREDENTIALS`.
+All three declared in `packages/modules/cms/src/manifest.ts` and exported in
+`CMS_PAGE_BUILDER_SETTING_CODES` as `TRANSLATION_ENABLED`, `TRANSLATION_LLM_CREDENTIALS` and
+`TRANSLATION_MAX_SOURCE_CHARACTERS`.
 Rows are created by the manifest reconciler at boot. Names and descriptions are English in the
 manifest; the Polish text ships in `cms`' bundle under the settings-label keys the Settings screen
 resolves from the owner module's bundle (introduced by `specs/144-seo-search-engine-robots/`).
@@ -99,7 +101,7 @@ Full schemas in [contracts/page-builder-translation-api.md](./contracts/page-bui
 | `status` | `'ready' \| 'disabled' \| 'not_configured' \| 'unavailable'` | §1 |
 | `provider` | `'anthropic' \| 'google' \| 'openai' \| 'deepseek' \| 'openai_compatible'` (`LlmProviderSchema`) | only when `ready`; the Base URL is never sent |
 | `model` | `string` | only when `ready`; non-secret, shown in the confirmation (FR-013) |
-| `maxCharacters` | `number` | always; `MAX_SOURCE_CHARACTERS` |
+| `maxCharacters` | `number` | always; the effective value of `…translation.max_source_characters` |
 
 ### `CmsPageBuilderTranslateRequest`
 
@@ -109,10 +111,11 @@ Full schemas in [contracts/page-builder-translation-api.md](./contracts/page-bui
 | `sourceLanguage` | `string \| null` | `null` = detect (FR-012); else `min(2) max(35)`, ≠ `targetLanguage` |
 | `context` | `'cms'` | only the CMS palette context is accepted in this version |
 | `data` | Puck `Data` | `{ root: { props?: object }, content: object[], zones?: Record<string, object[]> }`, passthrough |
-| `scope` | `{ kind: 'component', componentId } \| { kind: 'text', componentId \| null, selectedText } \| undefined` | R22; absent = whole canvas; `selectedText` ≤ 40 000 |
+| `scope` | `{ kind: 'component', componentId } \| { kind: 'text', componentId \| null, selectedText } \| undefined` | R22; absent = whole canvas; `selectedText` ≤ 200 000 (the setting's ceiling) |
 | `resource` | `{ type: string; id: string \| null } \| undefined` | `type` matches `^[a-z][a-z0-9_]*$`, max 64; `id` uuid; audit only (R13) |
 
-Body size limit on the route: 2 MiB (a 40 000-character canvas with styling is far below it).
+Body size limit on the route: 5 MiB (a canvas at the 200 000-character ceiling, with styling, stays
+below it).
 
 ### `CmsPageBuilderTranslateResponse`
 
@@ -153,7 +156,7 @@ under test: `inject(data, extract(data).locations, identity) ≡ data`.
 | `objectId` | `resource.id` or `null` |
 | `actorAdminUserId` | from TenantContext (never the body) |
 | `stateBefore` | `null` |
-| `stateAfter` | `{ targetLanguage, sourceLanguage, provider, model, segments, characters, translatedSegments, untranslatedSegments, outcome: 'completed' \| 'partial' \| 'failed', failure?: token, scope: 'canvas' \| 'component' \| 'text', componentType?: string }` |
+| `stateAfter` | `{ targetLanguage, sourceLanguage, provider, model, segments, characters, translatedSegments, untranslatedSegments, outcome: 'completed' \| 'partial' \| 'failed', failure?: token, limit: number, scope: 'canvas' \| 'component' \| 'text', componentType?: string }` |
 
 No text, no prompt, no credential code, no key.
 

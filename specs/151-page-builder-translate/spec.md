@@ -328,7 +328,15 @@ endpoint's answer; perform a translation and find its record in the audit log.
 - **FR-022**: A canvas with no translatable text MUST NOT be sent to the model, and the editor MUST
   be told there is nothing to translate.
 - **FR-023**: Content above the size limit for one translation MUST be refused before anything is
-  sent, with a message saying the content is too large to translate at once.
+  sent, with a message saying the content is too large to translate at once **and naming the
+  configured limit**; the limit applies to the translated scope (whole canvas, component or
+  selection, FR-026).
+- **FR-023a**: The size limit MUST be an operator setting in the Page Builder settings group
+  (`cms.page_builder.translation.max_source_characters`, platform-wide), default **40 000**
+  characters, accepted only as a whole number from **1 000 to 200 000** (any other value refused on
+  write with a message naming the bounds), with an English and Polish name and description that
+  explain the cost and the waiting-time trade-off; a change MUST apply to the next request without a
+  restart, and the audit entry MUST record the limit in effect.
 - **FR-024**: A failure of the model provider MUST leave the canvas unchanged and produce a message
   that distinguishes at least: invalid credentials, quota or rate limit, provider unreachable or
   too slow, and an unusable answer.
@@ -389,8 +397,9 @@ endpoint's answer; perform a translation and find its record in the audit log.
 
 ### Key Entities
 
-- **Translation settings** — two Page Builder settings: the on/off switch and the reference to one
-  LLM credential configuration. Platform-wide, not per sales channel.
+- **Translation settings** — three Page Builder settings: the on/off switch, the reference to one
+  LLM credential configuration, and the per-request size limit. Platform-wide, not per sales
+  channel.
 - **Translation request** — what the editor sends: the canvas to translate, the target language,
   optionally the known source language, and optionally which saved content it belongs to.
 - **Translation result** — the translated canvas plus a report: texts translated, texts left
@@ -435,7 +444,8 @@ No new kind of stored business record is expected.
   this version.
 - **A7** — E-mail, newsletter and invoice template builders are out of scope; they use different
   editors with variable systems of their own.
-- **A8** — The size limit for one translation is fixed by the platform (planned: 40 000 characters of
+- **A8** — *(superseded by Clarifications Q7, second answer)* The size limit for one translation is an
+  operator setting, default 40 000 characters, bounded 1 000–200 000. Originally: fixed by the platform (planned: 40 000 characters of
   text, roughly a long landing page) rather than configured by the operator.
 
 ## Out of scope
@@ -468,8 +478,14 @@ No new kind of stored business record is expected.
 - **Q5 — How the result lands** → as planned: it replaces the canvas as an **unsaved** change with
   **Restore previous content**.
 - **Q6 — Who may use it** → as planned: a new permission **`cms.translate`**.
-- **Q7 — Cost and size control** → as planned: a fixed limit of **40 000 characters per click**,
-  plus the audit entry.
+- **Q7 — Cost and size control** → first answered "as planned: a fixed limit of 40 000 characters
+  per click, plus the audit entry"; **superseded the same day by the owner**: the per-request limit
+  is an **operator setting** in the Page Builder settings group,
+  `cms.page_builder.translation.max_source_characters` — integer, default **40 000**, platform-wide
+  like the other two translation settings, validated on write to a whole number from **1 000 to
+  200 000**, read at request time (no restart), applied to the whole canvas and to every selection
+  scope alike; the `413` refusal names the configured limit, and the audit entry records the
+  effective limit (FR-023, FR-023a).
 - **Q8 — Selection-scoped translation** (added by the owner after the plan) → if the editor has
   **selected a text fragment** inside a text or rich-text field, or **selected a component** in the
   canvas, *Translate* translates **only that fragment / that component** (with its nested children

@@ -46,6 +46,8 @@ source **Content of pl-PL** → the en-US canvas holds the translated copy; pl-P
 | Do | Expect |
 | --- | --- |
 | Settings: Translation enabled **off** | no Translate button anywhere |
+| Settings: Translation size limit set to `999` or `200001` | the Settings screen refuses it, naming 1 000–200 000 |
+| Settings: Translation size limit set to `1000`, then translate a page with more text | refused before sending, the message names 1 000; the audit log has no entry |
 | enabled on, credentials empty | button disabled, reason "no model is configured" |
 | Platform → Modules: **Credentials** off | button disabled, reason names Credentials; pages still edit and save |
 | role without `cms.translate` | no button; `POST …/translate` → 403 |

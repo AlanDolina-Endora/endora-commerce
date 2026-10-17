@@ -140,12 +140,20 @@ read the capability; no content involved.
 
 **Independent test**: spec US6; contract G7.
 
-- [ ] T067 [US6] Extend the failing contract tests in `packages/contracts/src/cms-translation.test.ts`: request `scope` (component / text, `selectedText` trimmed non-empty, ≤ 40 000), response `report.scope`; implement in `packages/contracts/src/cms.ts`
+- [ ] T067 [US6] Extend the failing contract tests in `packages/contracts/src/cms-translation.test.ts`: request `scope` (component / text, `selectedText` trimmed non-empty, ≤ 200 000), response `report.scope`; implement in `packages/contracts/src/cms.ts`
 - [ ] T068 [US6] Write failing `packages/modules/cms/src/backend/services/translation/scope.test.ts`: component scope picks the node by `props.id` in `content`, slots and `zones` and includes nested children; text scope in a `plain` leaf yields one segment for exactly the matched range (whitespace-collapsed match); in a `tiptap` leaf a match inside one text node splits it into before/selected/after with identical marks; a match crossing marks or paragraphs widens to whole paragraph(s); not found ⇒ `SelectionNotFound`; an undeclared selected block counts in `untranslatableBlocks`
 - [ ] T069 [US6] Implement `scope.ts` and thread the scope through `extract.ts` / `inject.ts` / `translation.service.ts` (limits and report on the scope)
 - [ ] T070 [US6] Contract cases in `backend/test/contract/cms/page-builder-translation.contract.test.ts`: fragment-only, component-only, container with children, no scope = whole canvas, non-translatable selected block, `422 CMS_TRANSLATION_SELECTION_NOT_FOUND`; G7; audit `scope`
 - [ ] T071 [US6] Admin: failing cases in `admin/test/modules/cms/page-builder-translate-action.test.tsx` (label per scope, request `scope`, disabled for an undeclared selected block, source select only for the whole canvas), then selection tracking in `PageBuilderEditor.tsx` / `PageBuilderTranslateAction.tsx`; `translatable` read from the descriptor
 - [ ] T072 [US6] i18n keys of `contracts/admin-surfaces.md` §7 (scope labels, `widened`, `selectionNotTranslatable`, `errors.CMS_TRANSLATION_SELECTION_NOT_FOUND`) en + pl; docs en + pl describe the scope rules
+
+---
+
+## Phase 7c: The size limit as an operator setting (owner, supersedes decision 7)
+
+- [ ] T073 Failing cases in `packages/modules/cms/src/backend/manifest.test.ts`: `cms.page_builder.translation.max_source_characters` in `cms_page_builder`, `valueType: 'number'`, default `40000`, in `CMS_PAGE_BUILDER_SETTING_CODES`; failing `packages/modules/cms/src/backend/services/translation/max-source-characters-validator.test.ts`: 1 000 and 200 000 accepted, 999, 200 001, 1.5, `'40000'`, `null` refused with `422 VALIDATION_FAILED` naming the bounds; then declare the setting (en name/description of `contracts/admin-surfaces.md` §4, pl in the bundle) and contribute the validator to `settingWriteValidatorRegistry` from a boot hook
+- [ ] T074 Read the limit per request in the capability and translation service (out-of-bounds stored value ⇒ default); `maxCharacters` and `413 details.limit` carry it; audit `after.limit`; unit cases in `capability.test.ts` / `translation.service.test.ts` (default 40 000; a changed value honoured for whole canvas and for a scope)
+- [ ] T075 Contract/integration: a value written through `PUT /api/v1/admin/settings/…` is honoured on the next translate without a restart; `999` refused by the settings API; `413` names the configured limit in en and pl
 
 ---
 
@@ -167,6 +175,7 @@ read the capability; no content involved.
 - **Phase 1b** depends on T003 (the moved adapters); T029–T030 depend on T059 and T062.
 - T013–T026 depend on T010 and T012 (schemas and registry); T025–T026 also on T006 (adapter API).
 - **US2 (Phase 3)** depends on Phase 2. **US1 (Phase 4)** depends on US2 (capability, permission).
+- **T073–T075** depend on T028–T030.
 - **US3, US4** depend on T042. **US6** (T067–T072) depends on T026 (core) and T042 (admin). **US5** T048–T049 can follow T032. T050–T051 depend on T042.
 - **Polish** last; T057 is the gate.
 

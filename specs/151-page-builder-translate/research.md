@@ -186,7 +186,8 @@ settings):
 
 | Constant | Value | Why |
 | --- | --- | --- |
-| `MAX_SOURCE_CHARACTERS` | 40 000 | one long landing page; above it the request is refused before anything is sent (`413`, FR-023) |
+| `DEFAULT_MAX_SOURCE_CHARACTERS` | 40 000 | **default of the operator setting** `cms.page_builder.translation.max_source_characters` (owner, 2026-10-17, superseding the fixed limit); one long landing page; above the configured value the request is refused before anything is sent (`413`, FR-023) |
+| `MIN_/MAX_SOURCE_CHARACTERS_BOUND` | 1 000 / 200 000 | write-time bounds of that setting. The ceiling is the synchronous-request trade-off: 200 000 characters ≈ 34 chunks ≈ 17 sequential rounds at concurrency 2, i.e. several minutes of an editor waiting on one HTTP request behind every proxy timeout on the way; above that the design would need the queue R9 rejects. The floor keeps an operator from setting a value that refuses a single long paragraph |
 | `MAX_CHUNK_CHARACTERS` | 6 000 | keeps one answer well inside every supported model's output budget |
 | `MAX_CHUNK_SEGMENTS` | 150 | bounds the JSON the model must echo ids for |
 | `CHUNK_CONCURRENCY` | 2 | bounds provider rate-limit pressure per click |
@@ -197,10 +198,21 @@ Identical source strings are translated once (deduplicated before chunking). Seg
 opaque (`s1`, `s2`, …) and are the only link between request and answer.
 
 **Rationale**: SC-004 (95% under 30 s for ~5 000 characters → one chunk, one call) and a hard upper
-bound on a single click's cost and duration (≤ 7 chunks, ≤ 4 sequential rounds, each ≤ 60 s).
+bound on a single click's cost and duration (at the default ≤ 7 chunks, ≤ 4 sequential rounds, each
+≤ 60 s; at the 200 000 ceiling ≤ 34 chunks).
 
-**Alternatives rejected**: an operator setting for the limit (YAGNI; the owner may ask for it —
-*Decisions for the owner* 7); one call for everything (output token limits).
+**The limit setting** (owner, 2026-10-17): integer, `cms_page_builder` group, platform-wide, read
+through `settingsReadPort` per request with the other two (no restart). Validated on write by a
+`SettingWriteValidator` that `cms` contributes to `settings`' `settingWriteValidatorRegistry` from a
+boot hook — the seam `admin_search`, `seo` and `invoices` already use — so the generic Settings
+screen and API refuse 999, 200 001, `1.5` or a string with `422 VALIDATION_FAILED` naming the bounds.
+A stored value outside the bounds (written before the validator existed, or by SQL) is read as the
+default rather than trusted. The capability's `maxCharacters` and the `413`'s `details.limit` are
+the effective value; the audit entry records it as `limit`.
+
+**Alternatives rejected**: one call for everything (output token limits); numeric bounds as a new
+generic setting property (a platform migration and a settings-screen change for one setting — the
+existing write-validator seam already expresses it).
 
 ## R9 — Synchronous request, not a queue job
 
@@ -343,7 +355,7 @@ bundle, en + pl):
 | `CMS_TRANSLATION_DISABLED` | 409 | the switch is off |
 | `CMS_TRANSLATION_NOT_CONFIGURED` | 409 | no/dangling reference, incomplete credentials, unsupported provider |
 | `CMS_TRANSLATION_UNAVAILABLE` | 409 | `credentials` module absent |
-| `CMS_TRANSLATION_TOO_LARGE` | 413 | source text above `MAX_SOURCE_CHARACTERS` (`details.limit`, `details.characters`) |
+| `CMS_TRANSLATION_TOO_LARGE` | 413 | source text above the configured limit (`details.limit` = the setting's effective value, `details.characters`); the sentence names both |
 | `CMS_TRANSLATION_PROVIDER_FAILED` | 502 | any chunk failed at the provider; `details.code` ∈ tokens `credentials_rejected` (401/403), `rate_limited` (429), `unavailable` (network, 5xx), `timeout`, `malformed` (every chunk unusable) |
 
 A provider failure of **any** chunk fails the whole request (canvas unchanged, FR-024); an answer
@@ -441,7 +453,7 @@ scope?:
     segment. Widening is reported (`report.scope.widened: true`) and the notice says so.
 - The client never sends translated, rendered or HTML content: it sends the canvas it already sends,
   plus the block id and the raw selected text; everything else is the server's.
-- **Limits and audit**: `MAX_SOURCE_CHARACTERS` applies to the scope's segments; the audit `after`
+- **Limits and audit**: the configured source-character limit applies to the scope's segments; the audit `after`
   gains `scope: 'canvas' | 'component' | 'text'` and `componentType` (never the selected text).
 - **Admin**: the editor tracks Puck's selected item (`appState.ui.itemSelector`) and the last
   non-collapsed DOM text selection in the editor document and the canvas iframe (`selectionchange`),
