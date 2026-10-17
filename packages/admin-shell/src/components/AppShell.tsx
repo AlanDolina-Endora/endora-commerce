@@ -1165,35 +1165,33 @@ export function AppShell(): ReactNode {
         role="navigation"
         aria-label={t('appShell.mobileMenu.title')}
       >
-        {/* The badge is the link's sibling, not its child: the link's
-            `aria-label` replaces its content as the accessible name, so a
-            version inside it would be announced by nothing. */}
-        <div
-          className={cn(
-            'b2b-sidebar__brand-row',
-            platformVersion !== null && 'b2b-sidebar__brand-row--versioned',
-          )}
+        <NavLink
+          to="/"
+          end
+          className="b2b-sidebar__brand"
+          style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+          aria-label={t('appShell.brand.dashboardLink')}
+          title={brandTooltip}
         >
-          <NavLink
-            to="/"
-            end
-            className="b2b-sidebar__brand"
-            style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-            aria-label={t('appShell.brand.dashboardLink')}
-            title={brandTooltip}
-          >
-            <span className="b2b-sidebar__brand-logo">
-              <BrandLogo label={t('appShell.brand.text')} />
+          <span className="b2b-sidebar__brand-logo">
+            <BrandLogo label={t('appShell.brand.text')} />
+          </span>
+          <span className="b2b-sidebar__brand-text">
+            {t('appShell.brand.textPrimary')}{' '}
+            <span className="b2b-sidebar__brand-text-accent">
+              {t('appShell.brand.textAccent')}
             </span>
-            <span className="b2b-sidebar__brand-text">
-              {t('appShell.brand.textPrimary')}{' '}
-              <span className="b2b-sidebar__brand-text-accent">
-                {t('appShell.brand.textAccent')}
-              </span>
-            </span>
-          </NavLink>
-          {platformVersion !== null ? <VersionBadge version={platformVersion} /> : null}
-        </div>
+          </span>
+        </NavLink>
+        {/* The release has a section of its own between the logo and the
+            search, divided from both. It is the link's sibling, not its child:
+            the link's `aria-label` replaces its content as the accessible
+            name, so a version inside it would be announced by nothing. */}
+        {platformVersion !== null ? (
+          <div className="b2b-sidebar__version">
+            <VersionBadge version={platformVersion} />
+          </div>
+        ) : null}
 
         <div className="b2b-sidebar__search">
           {railMode ? (
