@@ -123,7 +123,7 @@ describe('AppShell version badge', () => {
    * The brand link carries `aria-label`, which replaces its content as the
    * accessible name. A badge inside it would be announced by nothing.
    */
-  it('sits beside the dashboard link, not inside it', async () => {
+  it('sits in its own section after the dashboard link, not inside it', async () => {
     getPlatformInfo.mockResolvedValue({ version: '0.104.0' });
     renderShell();
 
@@ -131,9 +131,11 @@ describe('AppShell version badge', () => {
     const link = screen.getByRole('link', { name: 'Go to dashboard' });
 
     expect(link.contains(badge())).toBe(false);
-    expect(link.parentElement).toBe((badge() as HTMLElement).parentElement);
-    // The row makes room for it only when there is one to make room for.
-    expect(link.parentElement).toHaveClass('b2b-sidebar__brand-row--versioned');
+    // Its own section, right after the logo and before the search.
+    const section = (badge() as HTMLElement).parentElement as HTMLElement;
+    expect(section).toHaveClass('b2b-sidebar__version');
+    expect(link.nextElementSibling).toBe(section);
+    expect(section.nextElementSibling).toHaveClass('b2b-sidebar__search');
   });
 
   it('renders nothing while the release is being read', async () => {
@@ -162,7 +164,7 @@ describe('AppShell version badge', () => {
 
     expect(getPlatformInfo).toHaveBeenCalledTimes(1);
     expect(badge()).toBeNull();
-    expect(document.querySelector('.b2b-sidebar__brand-row--versioned')).toBeNull();
+    expect(document.querySelector('.b2b-sidebar__version')).toBeNull();
     expect(screen.getByRole('link', { name: 'Go to dashboard' })).not.toHaveAttribute('title');
     expect(document.body.textContent).not.toMatch(/0\.0\.0|\{version\}|versionLabel/);
   });

@@ -2,7 +2,7 @@ import { Badge } from './ui/badge.js';
 import { useTranslation } from '../i18n/useTranslation.js';
 
 /**
- * The release number under the wordmark.
+ * The release number, in its own sidebar section under the logo.
  *
  * The kit's `Badge`, so its shape is the one every other badge in the admin
  * has; the colours are the sidebar's own (`.b2b-sidebar__brand-version` in the
@@ -11,8 +11,7 @@ import { useTranslation } from '../i18n/useTranslation.js';
  *
  * Two texts, one meaning: sighted operators read the short form and assistive
  * technology is given the sentence instead of a bare number. There is no
- * `title` here — the badge takes no pointer events, so that the header stays
- * one click target, and the brand link's own tooltip carries the sentence.
+ * `title` here — the brand link's own tooltip carries the sentence.
  *
  * **The short form is not a translated string**, on purpose. `v0.104.0` is a
  * datum, the same in every language, and routing it through a bundle key would
