@@ -4,6 +4,7 @@ import {
   ERROR_CODES,
   QUOTE_REQUEST_DOCUMENT_TYPE,
   QUOTE_REQUEST_PDF_LIMITS,
+  slugify,
   type CustomerAccountReadPort,
   type DocumentRenderPort,
   type DocumentRenderResult,
@@ -64,10 +65,9 @@ export interface RenderedQuotePdf {
   readonly templateName: string | null;
 }
 
-/** A file name a browser and a mail client accept: the quote's number, `[A-Za-z0-9._-]` only. */
+/** A file name a browser and a mail client accept: the quote's number as the shared slug, `.pdf`. */
 export function quotePdfFileName(businessId: string): string {
-  const safe = businessId.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+/, '').slice(0, 120);
-  return `${safe === '' ? 'quote-request' : safe}.pdf`;
+  return `${slugify(businessId, { preserve: '_', maxLength: 120, fallback: 'quote-request' })}.pdf`;
 }
 
 export class QuoteRequestDocumentService {

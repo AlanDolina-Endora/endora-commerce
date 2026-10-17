@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { asValue, type Resolver } from 'awilix';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { QUOTE_REQUEST_DOCUMENT_TYPE, quoteRequestHistorySchema } from '@endora-commerce/contracts';
+import { slugify, QUOTE_REQUEST_DOCUMENT_TYPE, quoteRequestHistorySchema } from '@endora-commerce/contracts';
 import { AuditLogEntry } from '@endora-commerce/platform/kernel';
 import {
   setupBackendServer,
@@ -137,7 +137,7 @@ describe('quote request PDF — Send PDF to customer, route Q4 (spec 153, owner 
     expect(mail!.subject).toBe(`Oferta ${businessId}`);
     expect(mail!.text).toContain('As agreed on the phone.');
     expect(mail!.attachments).toHaveLength(1);
-    expect(mail!.attachments![0]!.filename).toBe(`${businessId.replace(/[^A-Za-z0-9._-]+/g, '_')}.pdf`);
+    expect(mail!.attachments![0]!.filename).toBe(`${slugify(businessId, { preserve: '_', maxLength: 120, fallback: 'quote-request' })}.pdf`);
     expect(mail!.attachments![0]!.contentType).toBe('application/pdf');
     expect(Buffer.from(mail!.attachments![0]!.content.subarray(0, 5)).toString('utf8')).toBe('%PDF-');
     expect(mail!.document).toEqual({ type: 'quote_request', id: quote });

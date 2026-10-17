@@ -35,6 +35,16 @@ export interface QuoteDocumentTexts {
   readonly emptyLines: string;
   readonly netPricesNote: string;
   readonly attributeSample: string;
+  /** The editor's sample quote — invented, in the language being edited. */
+  readonly sample: {
+    readonly headerNote: string;
+    readonly channelName: string;
+    readonly orderNumberLabel: string;
+    readonly siteLabel: string;
+    readonly siteValue: string;
+    readonly packaging: string;
+    readonly lineNote: string;
+  };
 }
 
 export const QUOTE_DOCUMENT_TEXTS: Readonly<Record<QuoteDocumentLanguage, QuoteDocumentTexts>> = {
@@ -90,6 +100,15 @@ export const QUOTE_DOCUMENT_TEXTS: Readonly<Record<QuoteDocumentLanguage, QuoteD
     emptyLines: 'This quote has no lines.',
     netPricesNote: 'Prices are net unless stated otherwise.',
     attributeSample: 'Example',
+    sample: {
+      headerNote: 'One delivery to the warehouse address. Please confirm by the end of the week.',
+      channelName: 'B2B store',
+      orderNumberLabel: 'Customer order number',
+      siteLabel: 'Delivery site',
+      siteValue: 'Main warehouse',
+      packaging: 'Box of 100',
+      lineNote: 'Cut to 0.5 m',
+    },
   },
   'pl-PL': {
     fields: {
@@ -143,6 +162,15 @@ export const QUOTE_DOCUMENT_TEXTS: Readonly<Record<QuoteDocumentLanguage, QuoteD
     emptyLines: 'Ta oferta nie ma pozycji.',
     netPricesNote: 'Ceny netto, o ile nie zaznaczono inaczej.',
     attributeSample: 'Przykład',
+    sample: {
+      headerNote: 'Dostawa jednorazowa na adres magazynu. Prosimy o potwierdzenie do końca tygodnia.',
+      channelName: 'Sklep B2B',
+      orderNumberLabel: 'Numer zamówienia klienta',
+      siteLabel: 'Miejsce dostawy',
+      siteValue: 'Magazyn główny',
+      packaging: 'Karton 100 szt.',
+      lineNote: 'Cięte na 0,5 m',
+    },
   },
 };
 

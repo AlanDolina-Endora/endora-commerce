@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   QUOTE_REQUEST_DOCUMENT_TYPE,
   quoteRequestDocumentChoicesSchema,
+  slugify,
   type QuoteRequestDocumentData,
 } from '@endora-commerce/contracts';
 import { AuditLogEntry } from '@endora-commerce/platform/kernel';
@@ -219,7 +220,7 @@ describe('quote request PDF — admin routes Q1–Q3 (spec 153)', () => {
       expect(res.headers['content-type']).toBe('application/pdf');
       expect(res.rawPayload.subarray(0, 5).toString('utf8')).toBe('%PDF-');
       const businessId = ((await h.app.inject({ method: 'GET', url: `${QR}/${quoteA}`, cookies: ADMIN })).json() as { data: { businessId: string } }).data.businessId;
-      expect(res.headers['content-disposition']).toBe(`attachment; filename="${businessId.replace(/[^A-Za-z0-9._-]+/g, '_')}.pdf"`);
+      expect(res.headers['content-disposition']).toBe(`attachment; filename="${slugify(businessId, { preserve: '_', maxLength: 120, fallback: 'quote-request' })}.pdf"`);
       expect(res.headers['cache-control']).toBe('private, no-store');
       expect(res.headers['x-document-template-source']).toBe('built_in');
       expect(res.headers['x-document-template-id']).toBe('');
