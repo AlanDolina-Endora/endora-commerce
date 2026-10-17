@@ -43,7 +43,8 @@ block's settings inside its existing `content` jsonb (152 `data-model.md` §3) �
   ```
 - Written only by the Command `quote_request.send_document` (§4.4), actor = the sending
   administrator, `revisionId` = null. Read only by the admin History (`kind: 'pdf_sent'`,
-  `delivery: { recipients, templateName, language, message }`).
+  `delivery: { recipients, templateName, language, message }`); the customer's quote reply leaves
+  `pdf-sent` events out entirely (`customer-projection.ts` `customerEventsOf`).
 
 ## 2. Line items table settings — stored inside a template's tree
 

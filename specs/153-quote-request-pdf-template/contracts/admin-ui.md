@@ -114,8 +114,9 @@ fontSize, stripedRows, stripeColor, emptyText), `itemsTable.canvas.hiddenInSampl
 `.download`, `.downloading`, `.error`, `.fallbackUsed`; owner answer Q4: `pdf.send`,
 `pdf.sendDialog.title`, `.recipients`, `.recipientsHint`, `.addRecipient`, `.removeRecipient`,
 `.recipientLimit`, `.recipientInvalid`, `.recipientDuplicate`, `.recipientRequired`, `.message`,
-`.messageCounter`, `.send`, `.sending`, `.sent`, `.partial`; history `history.kind.pdf_sent`,
-`history.pdfSent.recipients`, `.template`, `.builtIn`, `.language`, `.message`.
+`.messageCounter`, `.send`, `.sending`, `.sent`, `.partial`. The History keys live in `_i18n`'s
+bundle beside the other History keys: `rfq.detail.history.entry.pdf_sent`,
+`rfq.detail.history.pdfSent.recipients`, `.template`, `.builtIn`, `.language`, `.message`.
 
 Backend-printed texts (catalogue names, built-in layout, block defaults, status labels on the PDF) live in
 `QR/src/backend/document/texts.ts` (research R-20), not in the bundles.
