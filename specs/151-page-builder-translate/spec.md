@@ -70,8 +70,8 @@ leaves the stored page unchanged.
 
 ### User Story 2 — Switch the function on and choose its model (Priority: P1)
 
-An administrator opens **Settings**, finds the **Page Builder** group and sees two new entries:
-**Translation enabled** and **Translation credentials**. They pick one of the LLM configurations
+An administrator opens **Settings**, finds the **Page Builder** group and sees three new entries:
+**Translation enabled**, **Translation credentials** and **Translation size limit**. They pick one of the LLM configurations
 from the Credentials screen and switch the function on. From the next time an editor opens the
 Page Builder, the Translate button is there. Switching it off removes the button again; nothing
 else in the Page Builder changes, and no content is touched.

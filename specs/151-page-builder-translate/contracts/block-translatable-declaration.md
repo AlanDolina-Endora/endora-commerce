@@ -12,7 +12,7 @@ export const translatablePathRe =
 
 export const blockTranslatableTextSchema = z.object({
   path: z.string().regex(translatablePathRe).max(128),
-  format: z.enum(['plain', 'tiptap']).optional(),
+  format: z.enum(['plain', 'tiptap', 'html']).optional(),
 });
 
 // BlockDefinitionSchema gains:
@@ -68,6 +68,14 @@ block-level node's `content`; the node's own `attrs` (heading level, alignment, 
 
 `plain` leaves are sent as they are; a `plain` string containing `<` or `>` is escaped as `&lt;`/
 `&gt;` on the way out and unescaped on the way back, so the tag syntax cannot be forged by content.
+
+## 3a. Encoding of an `html` leaf (added during implementation)
+
+An HTML string prop (`cms.Accordion` and `cms.Tabs` item content) becomes one segment in which
+every tag is replaced by a self-closing `<n/>`, numbered in source order; the tags (including
+`href`s) stay on the server. A stray `<` or `>` in text is escaped. The answer must return the
+placeholders `0…n-1` **in the same order** — order is the only thing keeping an opening tag before
+its closing one — and no other angle bracket; otherwise the segment keeps its original wording.
 
 ## 4. Placeholders
 

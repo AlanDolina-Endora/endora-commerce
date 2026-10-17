@@ -44,7 +44,7 @@ additive, on each component of `cmsPageBuilderDescriptorSchema`:
 ```ts
 translatable?: Array<{
   path: string;                    // translatablePathRe — research R5
-  format?: 'plain' | 'tiptap';     // absent = 'plain'
+  format?: 'plain' | 'tiptap' | 'html';   // absent = 'plain'; 'html' added during implementation
 }>;
 ```
 
@@ -61,7 +61,7 @@ Rules:
 
 | Block | `translatable` |
 | --- | --- |
-| `cms.Row`, `cms.Column`, `cms.Slide`, `cms.Spacer`, `cms.ContentSlider`, `cms.InsertBlock`, `cms.InsertTemplate`, `cms.Video`†, `cms.Map`, `cms.Icons`, `cms.RawHtml`, `cms.RawJs` | `[]` (layout, embeds, code) |
+| `cms.Row`, `cms.Column`, `cms.Slide`, `cms.Spacer`, `cms.ContentSlider`, `cms.InsertBlock`, `cms.InsertTemplate`, `cms.Icons`, `cms.RawHtml`, `cms.RawJs` | `[]` (layout, embeds, code) |
 | `cms.Heading` | `text` |
 | `cms.Text` | `text`, `tiptapContent` (tiptap) |
 | `cms.RichContent` | `content` (tiptap) |
@@ -74,11 +74,14 @@ Rules:
 | `cms.Testimonial` | `quote`, `author`, `role` |
 | `cms.Stats` | `items[].value`‡, `items[].label` |
 | `cms.AnnouncementBar` | `text` |
-| `cms.SimpleTable` | `headers[].label`, `rows[]…` — exact shape fixed by T021/T022 (`headers`/`rows` are `string | object[]`) |
+| `cms.SimpleTable` | `columns[].label`, `tableRows[].cells[].value`, `headers[].label`, `rows[].cells[].value` (settled in T022) |
 | `cms.ImageSlider` | `items[].title` |
-| `cms.Tabs` | `items[].label`, `items[].content` |
-| `cms.Accordion` | `items[].title`, `items[].content` |
-| `cms.NewsletterSignup` | `heading`, `description`, plus its button/placeholder labels as found by T021/T022 |
+| `cms.Tabs` | `items[].label`, `items[].content` (html) |
+| `cms.Accordion` | `items[].title`, `items[].content` (html) |
+| `cms.NewsletterSignup` | `heading`, `description`, `placeholder`, `buttonLabel` |
+| `cms.ContactFormEmbed` | `heading`, `description` |
+| `cms.Map` | `markers[].label` |
+| `cms.Video` | `title` (settled in T022: the embed's accessible name) |
 
 † `cms.Video.title` is an accessibility title of the embed; included if T022 shows it is rendered as
 visible or `title=` text, otherwise `[]`.
