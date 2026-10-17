@@ -15,8 +15,10 @@ pnpm run dev
 
 ## 1. Configure (admin, as an administrator)
 
-1. **Credentials → New** — type **LLM**, provider **OpenAI** / **Anthropic** / **Google**, a model
-   (e.g. `gpt-4o-mini`, `claude-haiku-4-5`, `gemini-2.0-flash`) and an API key. Save; note its code.
+1. **Credentials → New** — type **LLM**, provider **OpenAI** / **Anthropic** / **Google** /
+   **DeepSeek** / **OpenAI-compatible (custom endpoint)**, a model (e.g. `gpt-4o-mini`,
+   `claude-haiku-4-5`, `gemini-2.0-flash`, `deepseek-chat`) and an API key; for OpenAI-compatible
+   also the Base URL (e.g. `https://openrouter.ai/api/v1`). Save; note its code.
 2. **Settings → Page Builder** — set **Translation credentials** to that configuration and switch
    **Translation enabled** on. (⌘K → "translation" finds the Settings entry.)
 3. **Admin roles** — give your role **Translate Page Builder content with AI** (`cms.translate`).
@@ -48,6 +50,8 @@ source **Content of pl-PL** → the en-US canvas holds the translated copy; pl-P
 | Platform → Modules: **Credentials** off | button disabled, reason names Credentials; pages still edit and save |
 | role without `cms.translate` | no button; `POST …/translate` → 403 |
 | credential with a wrong API key | dialog shows "provider rejected the configured credentials"; canvas unchanged |
+| OpenAI-compatible credential saved without a Base URL, or with `ftp://x` | the Credentials form refuses it |
+| the AI assistant (⌘K prompt mode) pointed at a DeepSeek or OpenAI-compatible credential | it answers, as with OpenAI |
 | Audit log | one `cms.page_builder.translate` entry per translation, with provider/model/counts, no text |
 
 ## 5. Without a real provider (what CI does)

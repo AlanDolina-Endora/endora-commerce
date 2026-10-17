@@ -25,8 +25,9 @@ resolves from the owner module's bundle (introduced by `specs/144-seo-search-eng
                  enabled = false ───────────────────────────────► disabled
 enabled = true ─┬─ credentials module absent ─────────────────────► unavailable
                 ├─ reference '' / unresolvable / status ≠ ok ────► not_configured
-                ├─ provider ∉ {anthropic, google, openai} ───────► not_configured   (see owner decision 4)
+                ├─ provider ∉ LlmProviderSchema ─────────────────► not_configured
                 ├─ model or apiKey blank ────────────────────────► not_configured
+                ├─ baseUrl invalid, or blank for openai_compatible ► not_configured   (R21)
                 └─ otherwise ────────────────────────────────────► ready (provider, model)
 ```
 
@@ -96,7 +97,7 @@ Full schemas in [contracts/page-builder-translation-api.md](./contracts/page-bui
 | Field | Type | Notes |
 | --- | --- | --- |
 | `status` | `'ready' \| 'disabled' \| 'not_configured' \| 'unavailable'` | §1 |
-| `provider` | `'anthropic' \| 'google' \| 'openai'` | only when `ready` |
+| `provider` | `'anthropic' \| 'google' \| 'openai' \| 'deepseek' \| 'openai_compatible'` (`LlmProviderSchema`) | only when `ready`; the Base URL is never sent |
 | `model` | `string` | only when `ready`; non-secret, shown in the confirmation (FR-013) |
 | `maxCharacters` | `number` | always; `MAX_SOURCE_CHARACTERS` |
 
@@ -154,7 +155,18 @@ under test: `inject(data, extract(data).locations, identity) ≡ data`.
 
 No text, no prompt, no credential code, no key.
 
-## 6. Permission
+## 6. Credential type change (owned by `credentials`, R21)
+
+| Change | Where |
+| --- | --- |
+| New `llm` provider `openai_compatible`, label "OpenAI-compatible (custom endpoint)", fields `apiKey` (secret, required), `model` (required), `baseUrl` (**required**) | `packages/modules/credentials/src/backend/types/llm.type.ts` |
+| `baseUrl` of every `llm` provider declares `format: 'url'` | same |
+| `FieldDefinitionSchema` gains optional `format: 'url'`; a value must be an absolute `http:`/`https:` URL | `packages/contracts/src/credentials.ts`, `packages/modules/credentials/src/backend/services/field-validator.ts` |
+
+No migration: provider and field definitions are code-registered descriptors; stored rows are a
+values bag.
+
+## 7. Permission
 
 | Code | Label (en) | Owner |
 | --- | --- | --- |

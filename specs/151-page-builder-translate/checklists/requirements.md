@@ -13,9 +13,8 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain — three remain by design (FR-006 providers, FR-010
-      editors in scope, FR-015 SEO / name fields); the plan proceeds on the recommended answer to
-      each and states the delta for the alternatives
+- [x] No [NEEDS CLARIFICATION] markers remain — the owner resolved FR-006, FR-010 and FR-015 on
+      2026-10-17 (spec § *Clarifications*)
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)

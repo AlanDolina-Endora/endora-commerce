@@ -75,7 +75,7 @@ CMS_PAGE_BUILDER_SETTING_CODES = {
 | Code | `name` (en) | `description` (en) |
 | --- | --- | --- |
 | `…translation.enabled` | Translation enabled | Shows the Translate button in the Page Builder. When on, editors with the "Translate Page Builder content with AI" permission can translate a canvas into the language being edited. The text of the canvas is sent to the provider of the model chosen below. |
-| `…translation.llm_credentials` | Translation credentials | The LLM credential configuration (Credentials screen) whose provider, model and API key the Translate button uses. Supported providers: OpenAI, Anthropic, Google. Required for the button to work. |
+| `…translation.llm_credentials` | Translation credentials | The LLM credential configuration (Credentials screen) whose provider, model and API key the Translate button uses. Supported providers: OpenAI, Anthropic, Google, DeepSeek and any OpenAI-compatible endpoint (through the configuration's Base URL). Required for the button to work. |
 
 ## 5. Permission
 
@@ -95,6 +95,13 @@ CMS_PAGE_BUILDER_SETTING_CODES = {
   weight: 135,
 }
 ```
+
+## 6a. Credential form (`credentials`, R21)
+
+`ConfigurationForm` renders a field whose definition carries `format: 'url'` as `<Input type="url"
+inputMode="url">`, with the definition's placeholder; the provider select gains "OpenAI-compatible
+(custom endpoint)", whose Base URL is marked required by the existing `required` asterisk. A Base URL
+the server refuses comes back in the existing `CREDENTIAL_VALIDATION_FAILED` envelope.
 
 ## 7. Strings (flat keys, `packages/modules/cms/i18n/en.json` and `pl.json`)
 

@@ -19,7 +19,7 @@ export const cmsPageBuilderTranslationStatusSchema = z.enum([
 export const cmsPageBuilderTranslationCapabilitySchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('ready'),
-    provider: z.enum(['anthropic', 'google', 'openai']),
+    provider: LlmProviderSchema, // 'anthropic' | 'google' | 'openai' | 'deepseek' | 'openai_compatible'
     model: z.string().min(1),
     maxCharacters: z.number().int().positive(),
   }),
@@ -77,7 +77,7 @@ export const cmsPageBuilderTranslateResponseSchema = z.object({
     untranslatedSegments: z.number().int().nonnegative(),
     untranslatableBlocks: z.array(z.object({ name: z.string(), count: z.number().int().positive() })),
     characters: z.number().int().nonnegative(),
-    provider: z.enum(['anthropic', 'google', 'openai']),
+    provider: LlmProviderSchema,
     model: z.string(),
     sourceLanguage: languageCodeSchema.nullable(),
   }),

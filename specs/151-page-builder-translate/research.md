@@ -313,14 +313,14 @@ language, which the editor already knows).
 
 ## R15 — Which hosts show the action
 
-**Decision (planned on the recommended answer to spec FR-010)**: every host of `cms`'
+**Decision (confirmed by the owner, 2026-10-17, spec Clarifications Q1)**: every host of `cms`'
 `PageBuilderEditor` that tells it which language is edited. `PageBuilderEditor` gains nothing new for
 this beyond `activeLanguage` (already a prop) and an optional `resource?: { type: string; id: string
 | null }` used only for the audit entry. The three CMS editors already pass `languages` and
 `activeLanguage`; the category zone passes `activeLanguage={language}`; the two blog editors pass
 `languages`, `activeLanguage` and their resource. Without `activeLanguage` the action is not rendered.
 
-**If the owner answers "CMS only"**: tasks T050–T051 are dropped; nothing else changes.
+The owner confirmed this answer; tasks T050–T051 stay in.
 
 ## R16 — Prompt
 
@@ -369,3 +369,44 @@ organisation data; the settings are platform-wide (null channel), as the existin
 settings effectively are. The Command Bus run requires the ambient admin TenantContext, which every
 admin request has. Constitution XI and XII hold trivially; this is recorded so that a reviewer does
 not have to re-derive it.
+
+## R21 — OpenAI-compatible endpoints (owner decision 4, 2026-10-17)
+
+**Decision**: implemented **once, in `@endora-commerce/llm-client`**, and used by both consumers.
+
+- **Provider codes** become the credential's five: `anthropic`, `google`, `openai`, `deepseek`,
+  `openai_compatible`. The list is declared once in `@endora-commerce/contracts`
+  (`LlmProviderSchema`, `packages/contracts/src/prompt-actions.ts`, beside `LlmToolDefinition`);
+  `PromptActionsProviderSchema` becomes an alias of it, `llm-client`'s `LlmProvider` is its type, and
+  `credentials`' `llm` type is held to the same list by a unit test — one list, three readers, no
+  drift.
+- **Protocol**: `openai`, `deepseek` and `openai_compatible` all speak OpenAI chat completions through
+  `OpenAiAdapter`; the adapter takes an optional `baseUrl` (the API root, the request goes to
+  `<baseUrl>/chat/completions`, trailing slashes trimmed). Defaults: `openai` →
+  `https://api.openai.com/v1` (byte-identical to today), `deepseek` → `https://api.deepseek.com`;
+  `openai_compatible` has **no** default and `createLlmAdapter` refuses it without a Base URL. For
+  the two non-OpenAI providers the token cap is sent as `max_tokens` (the field every compatible
+  server accepts) instead of `max_completion_tokens`; `openai` keeps `max_completion_tokens`.
+- **Anthropic and Google keep their public endpoints**; the owner's decision is about the OpenAI
+  protocol, and a Base URL on those two is documented as not used. (Their wire formats have no
+  third-party "compatible" ecosystem worth a switch here — YAGNI.)
+- **Validation**: `createLlmAdapter` validates that a Base URL is an absolute `http:`/`https:` URL
+  (`LlmConfigurationError` otherwise), so a consumer can turn a bad credential into
+  `not_configured` instead of a failed call. `credentials` refuses the same at write time: its
+  `FieldDefinition` gains an optional `format: 'url'` (additive; the frozen `kind` set is untouched,
+  the core stays type-agnostic — it validates the *format*, not provider meaning), and the `llm`
+  type's `baseUrl` declares it. The admin credential form renders a `format: 'url'` field as
+  `<input type="url">`.
+- **Credential type**: a new provider `openai_compatible` ("OpenAI-compatible (custom endpoint)")
+  whose `baseUrl` is **required**; the other four keep it optional.
+- **Consumers**: `prompt_actions`' factory and `cms`' capability both pass `baseUrl` to
+  `createLlmAdapter` and catch only `LlmConfigurationError` → `not_configured`.
+
+**Rationale**: the owner asked for exactly this; implementing it in the shared library is what the
+library exists for (R2), and validating twice (write time for the operator, call time for old rows)
+keeps a malformed URL from ever reaching `fetch`.
+
+**Alternatives rejected**: a new credential *kind* for compatible endpoints (two places to choose an
+LLM from; settings reference one `configurationType`); honouring Base URL on Anthropic/Google too
+(no demand, more surface); a `url` member in the frozen `kind` set (changes a frozen enum every
+consumer switches on).

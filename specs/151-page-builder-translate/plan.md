@@ -19,6 +19,11 @@ The technical approach, with the evidence in [research.md](./research.md):
   adapters move unchanged into a new stateless package `@endora-commerce/llm-client`, gain an optional
   forced tool choice and abort signal (R3), and are consumed by both `prompt_actions` and `cms`. No
   third-party dependency.
+- **OpenAI-compatible endpoints, once, for both consumers** (R21, owner decision 4): the OpenAI
+  adapter honours the credential's **Base URL**; `deepseek` and a new `openai_compatible` provider
+  (Base URL required) speak the OpenAI protocol through it. `credentials` gains the provider, a
+  `url` field format and its write-time validation; the admin credential form renders it as a URL
+  input. `prompt_actions` accepts the two new providers through the same factory.
 - **Block owners declare what is prose** (R4, R5): `BlockDefinition.translatable` — paths and a
   `plain | tiptap` format — on the manifest, served on the existing descriptor. Undeclared blocks are
   never sent.
@@ -43,7 +48,7 @@ No new runtime dependency. One new workspace library package. No migration.
 **Project Type**: web application — monorepo with `backend/`, `admin/`, `packages/`
 **Performance Goals**: a typical page (≤ 5 000 characters of text) in one provider call, p95 ≤ 30 s with a healthy provider (SC-004); no added cost to opening the editor beyond one small capability read
 **Constraints**: ≤ 40 000 source characters per request; ≤ 60 s per provider call; nothing sent when the function is off, not configured, or there is nothing to translate; canvas never changed by a failed or cancelled translation; assistant behaviour unchanged (FR-042)
-**Scale/Scope**: 1 new package (~600 LOC moved + ~80 new), 2 settings, 2 routes, 1 permission, 5 error codes, 1 Command, 1 palette action, 1 admin component, 1 chrome slot, ~30 block declarations, ~40 i18n keys × 2 languages, docs en + pl; 6 slices, about 9–11 developer-days
+**Scale/Scope**: 1 new package (~600 LOC moved + ~150 new, incl. OpenAI-compatible endpoints), 2 settings, 2 routes, 1 permission, 5 error codes, 1 Command, 1 palette action, 1 admin component, 1 chrome slot, ~30 block declarations, ~40 i18n keys × 2 languages, docs en + pl; 6 slices, about 9–11 developer-days
 
 ## Constitution Check
 
@@ -143,20 +148,20 @@ docs/i18n/pl/…/modules/cms/…                                          # Poli
 
 **Structure Decision**: extend `cms` (domain owner) and add one library package; no new module.
 
-## Decisions for the owner
+## Decisions for the owner — resolved 2026-10-17
 
-Planned on the **recommended** answer to each; the delta for the alternatives is stated so that a
-different answer changes tasks, not the design.
+The owner answered every question (spec § *Clarifications*). Six follow the recommendation; decision
+4 changed and adds work, recorded in research R21 and tasks T059–T066.
 
-| # | Question | Recommended (planned) | Alternatives and their delta |
+| # | Question | Answer | Effect on the plan |
 | --- | --- | --- | --- |
-| 1 | **Which editors get the button** (spec FR-010) | Every Page Builder canvas in the CMS context whose host knows the edited language: CMS pages, blocks, templates, catalogue category content, blog posts, blog categories | *CMS pages/blocks/templates only*: drop T050–T051. *Also e-mail/newsletter/invoice builders*: a separate feature (different editor, variables, contexts). |
-| 2 | **Source of the translation** (spec FR-012) | Default: the current canvas of this tab, source language auto-detected; optionally any other language tab as source | *In-place only*: drop T044–T045 (source select and tab-source path). *Other tab only (copy + translate)*: the in-place case needs Copy first. |
-| 3 | **What is translated** (spec FR-015) | Canvas texts only | *Also SEO meta (title, description, keywords) and per-language names*: add an optional `fields: Record<string,string>` to the request and response, translate them as plain segments, and have each host apply them to its own form (pages, blog posts) — about +1.5 days. *Also custom HTML blocks*: an HTML-aware codec; not recommended. |
-| 4 | **Providers** (spec FR-006) | OpenAI, Anthropic, Google — the three the assistant already supports; DeepSeek credentials report "not configured" | *Add DeepSeek and any OpenAI-compatible endpoint*: honour the credential's `baseUrl` in the OpenAI adapter, default `https://api.deepseek.com` for `deepseek` — +0.5 day, and it fixes the same gap for the assistant only if the owner wants that too. |
-| 5 | **How the result lands** | Replaces the tab's canvas as an unsaved change, with *Restore previous content* until save | *Saved immediately*: removes the review step; not recommended. *Block-by-block review*: a new screen, +3–5 days. |
-| 6 | **Who may use it** | New permission `cms.translate` | *Anyone with `cms.write`*: delete the permission; blog-only editors could not translate. |
-| 7 | **Cost/size control** | Fixed limit of 40 000 characters per click; audit trail of every send | *Operator setting for the limit*: one more `number` setting, +0.25 day. *Per-user quotas/budgets*: a separate feature. |
+| 1 | **Which editors get the button** (spec FR-010) | Every CMS Page Builder canvas: CMS pages, blocks, templates, catalogue category content, blog posts, blog categories | As planned; T050–T051 stay in |
+| 2 | **Source of the translation** (spec FR-012) | Current tab's canvas with the language detected, plus an option to pick another language tab | As planned; T044–T045 stay in |
+| 3 | **What is translated** (spec FR-015) | Canvas texts only | As planned; no `fields` extension |
+| 4 | **Providers** (spec FR-006) | **Changed**: OpenAI, Anthropic, Google **plus any OpenAI-compatible endpoint** (e.g. DeepSeek) through the credential's Base URL — **and the same support for the AI assistant** | Base URL and the OpenAI-compatible providers are implemented once in `@endora-commerce/llm-client`; `credentials` gains the `openai_compatible` provider, a `url` field format and its validation, the admin form a URL input; `prompt_actions` uses it through `createLlmAdapter`; docs en + pl for three modules; a `prompt_actions` and a `credentials` changeset. About +1 day (R21, T059–T066) |
+| 5 | **How the result lands** | Replaces the canvas as an unsaved change, with *Restore previous content* | As planned |
+| 6 | **Who may use it** | New permission `cms.translate` | As planned |
+| 7 | **Cost/size control** | Fixed 40 000 characters per click, audit entry | As planned |
 
 ## Requirement → test
 
@@ -164,7 +169,7 @@ different answer changes tasks, not the design.
 | --- | --- |
 | FR-001–FR-003 | `packages/modules/cms/src/backend/manifest.test.ts` (extend): settings declared, group, defaults, `credential_ref` + `llm`; `registered-bundles-shape` covers the `settingLabels.*` keys |
 | FR-004, FR-005 | `services/translation/capability.test.ts` — the state table of `data-model.md` §1, in order; integration: change the setting, next capability differs without restart |
-| FR-006 | `capability.test.ts`: `deepseek` ⇒ `not_configured`; `llm-client` adapter tests per provider |
+| FR-006, FR-007, FR-043 | `llm-client` adapter tests per provider incl. Base URL, `deepseek` default endpoint, `openai_compatible` without Base URL refused; `credentials` `llm.type.test.ts` + `field-validator.test.ts` (`format: 'url'`); `capability.test.ts`: `openai_compatible` without/with invalid Base URL ⇒ `not_configured`, `deepseek` ⇒ `ready`; `prompt_actions` `provider-factory.test.ts`: the same matrix for the assistant; admin `configuration-form` test: URL input |
 | FR-010, FR-011 | admin `page-builder-translate-action.test.tsx`: render matrix of `admin-surfaces.md` §2; target is the active tab |
 | FR-012, FR-013 | admin test: source select options, default, warning when replacing; request carries `sourceLanguage` |
 | FR-014, FR-016, FR-017 | `extract.test.ts` + `inject.test.ts` round-trip property; `tiptap-inline-codec.test.ts`; `placeholders.test.ts`; contract test G1, G3, G4, G6 over a fixture holding every CMS block |
@@ -182,13 +187,14 @@ different answer changes tasks, not the design.
 | FR-033 | `check:bundle-pairing`, `i18n:hardcoded` |
 | FR-034 | `check:module-docs`, `check:docs-translations` |
 | FR-040, FR-041 | extend `backend/test/integration/cms/off-state.test.ts`: cms off ⇒ 503 on both; credentials off ⇒ capability `unavailable`, translate 409, a page save still works |
-| FR-042 | `prompt_actions` package tests and `backend/test/{contract,integration}/prompt_actions/*` unchanged and green; `llm-client` byte-identity tests for requests without `toolChoice` |
+| FR-042 | `prompt_actions` package tests and `backend/test/{contract,integration}/prompt_actions/*` unchanged and green; `llm-client` byte-identity tests for requests without `toolChoice` and without Base URL |
 
 ## Slices
 
 | # | Slice | Depends on | Est. |
 | --- | --- | --- | --- |
 | 1 | `@endora-commerce/llm-client` extracted; `prompt_actions` re-pointed; `toolChoice` + `signal` | — | 1.5 d |
+| 1b | OpenAI-compatible: Base URL in the adapter, `deepseek` + `openai_compatible`, `credentials` provider + `url` format + validation + form, `prompt_actions` factory (R21) | 1 | 1 d |
 | 2 | Contracts: declaration + API schemas; registry carries `translatable`; `cms`/`catalog` declarations | — | 1.5 d |
 | 3 | Translation core in `cms`: extract/inject, TipTap codec, placeholders, chunking, prompt, service with fake adapter | 1, 2 | 2.5 d |
 | 4 | Settings, capability, routes, permission, errors, audit Command, palette, bundles | 3 | 1.5 d |
@@ -229,5 +235,4 @@ Slices 1 and 2 are independent and can run in parallel.
   `backend/test/unit/harness/harness-module-residue.ts` (l. 92–93). Both must change in the same
   merge request (T007); grep `backend/test/**` again before finishing (`AGENTS.md` § traps — a
   derived ledger is not a file you touched).
-- The decisions table above may change slices 3–5; check the spec's markers are resolved before
-  slice 5.
+- The decisions table above is resolved; decision 4 adds slice 1b (tasks T059–T066).

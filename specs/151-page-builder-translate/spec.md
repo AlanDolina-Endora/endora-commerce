@@ -2,7 +2,7 @@
 
 **Feature Branch**: `feat/151-page-builder-translate`
 **Created**: 2026-10-17
-**Status**: Draft — three questions open for the product owner (see *Open questions*)
+**Status**: Clarified — the owner answered every open question on 2026-10-17 (see *Clarifications*)
 **Input**: Product owner's request (Polish, verbatim): "Dodać dodatkowy element w Page Builder,
 który dodaje przycisk `Przetłumacz`. Kliknięcie na przycisk uruchamia tłumaczenie zawartości
 edytowanej w Page Builder na aktualnie edytowany język. Do tłumaczenia wykorzystywany jest model,
@@ -235,18 +235,24 @@ endpoint's answer; perform a translation and find its record in the audit log.
   provider it cannot use), or *unavailable* (the Credentials function is switched off), and the
   editor MUST show the button accordingly: absent when switched off, disabled with an explanation in
   the other two non-ready states.
-- **FR-006**: The function MUST support at least the LLM providers the platform's AI assistant
-  supports today (OpenAI, Anthropic, Google). [NEEDS CLARIFICATION: should DeepSeek — offered on the
-  Credentials screen but unsupported by the assistant — or any OpenAI-compatible endpoint given by a
-  custom Base URL also be supported?]
+- **FR-006**: The function MUST support the LLM providers OpenAI, Anthropic and Google, **and any
+  OpenAI-compatible endpoint** (for example DeepSeek, or a self-hosted or proxy endpoint speaking the
+  OpenAI chat-completions protocol), reached through the **Base URL** of the chosen credential
+  configuration. The platform's AI assistant MUST gain the same OpenAI-compatible support, from the
+  same implementation (FR-043).
+- **FR-007**: The Credentials screen MUST offer an **OpenAI-compatible** provider for LLM
+  configurations whose Base URL is required, and MUST refuse a Base URL that is not an absolute
+  `http` or `https` address for every LLM provider, before it is stored. A DeepSeek configuration
+  with no Base URL MUST reach DeepSeek's public endpoint; an OpenAI configuration with a Base URL
+  MUST reach that address instead of OpenAI's.
 
 **The Translate action**
 
 - **FR-010**: Every Page Builder canvas in scope MUST show a Translate action in the editor's toolbar
   when the function is ready or configured-but-not-ready, the editor holds the translation permission,
-  and the editor knows which language is being edited. [NEEDS CLARIFICATION: which canvases are in
-  scope — CMS pages, blocks and templates only, or also blog posts, blog categories and catalogue
-  category content, which use the same Page Builder?]
+  and the editor knows which language is being edited. The canvases in scope are **every CMS Page
+  Builder canvas**: CMS pages, blocks and templates, catalogue category content, blog posts and blog
+  categories.
 - **FR-011**: The target language MUST be the language of the tab being edited; the editor MUST NOT
   be able to choose another target.
 - **FR-012**: The source MUST default to the current canvas of the tab being edited, whose language
@@ -262,9 +268,8 @@ endpoint's answer; perform a translation and find its record in the audit log.
   headings, paragraphs, rich text, button labels, list and tab and accordion items, quotes and their
   attribution, statistics labels, table headers and cells, image descriptions (alternative text),
   slide titles and form labels — and MUST exclude links, addresses, codes, references, colours,
-  icon names, custom HTML, custom scripts and editor-only block names.
-  [NEEDS CLARIFICATION: should the page's SEO fields (meta title, description, keywords) and the
-  per-language name of a blog post be translated by the same click, or only the canvas?]
+  icon names, custom HTML, custom scripts and editor-only block names. **Only the canvas** is
+  translated: SEO fields (meta title, description, keywords) and per-language names are not.
 - **FR-016**: Formatting inside rich text (bold, italic, underline, links, lists, headings, quotes)
   MUST be preserved on the translated text, and link targets MUST be unchanged.
 - **FR-017**: Placeholders written inside text in double braces MUST be preserved verbatim.
@@ -310,7 +315,12 @@ endpoint's answer; perform a translation and find its record in the audit log.
   the rest of the module.
 - **FR-041**: With the Credentials module switched off, the CMS module and the Page Builder MUST keep
   working; only the translation MUST report itself unavailable (US2-5).
-- **FR-042**: The platform's AI assistant MUST behave exactly as before this feature.
+- **FR-042**: The platform's AI assistant MUST behave exactly as before this feature for every
+  credential configuration it could already use (OpenAI, Anthropic, Google without a Base URL).
+- **FR-043**: The platform's AI assistant MUST additionally accept DeepSeek and OpenAI-compatible
+  credential configurations and an OpenAI configuration's Base URL, through the same
+  implementation the translation uses; a configuration whose Base URL is missing (where required)
+  or invalid MUST make the assistant report itself not configured, as today.
 
 ### Key Entities
 
@@ -351,8 +361,9 @@ No new kind of stored business record is expected.
 - **A2** — The translation is interactive: the editor waits for it in the editor, typically seconds
   to tens of seconds. Translating many pages or a whole site in the background is out of scope.
 - **A3** — The function is platform-wide; it is not switched per sales channel or per language.
-- **A4** — Credentials, providers and models are the ones the Credentials screen already manages; this
-  feature adds no new kind of credential.
+- **A4** — Credentials, providers and models are the ones the Credentials screen manages; this
+  feature adds no new kind of credential, but adds one provider (**OpenAI-compatible**) to the
+  existing LLM kind and starts honouring its Base URL field (owner decision, Clarifications Q4).
 - **A5** — Cost control is by permission and by the per-request size limit; per-user quotas, budgets
   and usage reporting beyond the audit entry are out of scope.
 - **A6** — Glossaries, "do not translate" term lists and custom tone instructions are out of scope for
@@ -365,14 +376,32 @@ No new kind of stored business record is expected.
 ## Out of scope
 
 - Automatic translation on save, scheduled or bulk translation, and translation memory.
-- Translating content outside the Page Builder canvas, except as decided under FR-015's open question.
+- Translating content outside the Page Builder canvas (SEO fields, per-language names).
 - Translating custom HTML and custom script blocks.
 - Showing source and translation side by side, or accepting translations block by block.
 - Per-language or per-channel choice of model.
 
-## Open questions *(for the product owner)*
+## Clarifications
 
-The three `[NEEDS CLARIFICATION]` markers above (FR-006, FR-010, FR-015) are the decisions that change
-the design. The plan is written on the recommended answer to each and names what changes otherwise
-(`plan.md` § *Decisions for the owner*). Four further decisions the plan took on a recommended default
-are listed there too.
+### Session 2026-10-17 (owner)
+
+- **Q1 — Which editors get the button** (FR-010) → **every CMS Page Builder canvas**: CMS pages,
+  blocks, templates, catalogue category content, blog posts and blog categories (the recommended
+  answer; tasks T050–T051 stay in).
+- **Q2 — Source of the translation** (FR-012) → by default **the current tab's canvas** with the
+  source language detected automatically, plus an option to **pick another language tab** as the
+  source (the recommended answer).
+- **Q3 — What is translated** (FR-015) → **canvas texts only**; no SEO meta, no names (the
+  recommended answer).
+- **Q4 — Providers** (FR-006) → **changed from the recommendation.** OpenAI, Anthropic, Google
+  **plus any OpenAI-compatible endpoint** (for example DeepSeek), by honouring the credential's
+  **Base URL**. The owner explicitly wants the **same OpenAI-compatible support in the AI assistant**
+  (`prompt_actions`): since the provider adapters move into the shared
+  `@endora-commerce/llm-client` package, the option is implemented there once and both the
+  translation and the assistant use it — including the credential type's fields, the admin credential
+  form, validation, tests and documentation (FR-007, FR-043).
+- **Q5 — How the result lands** → as planned: it replaces the canvas as an **unsaved** change with
+  **Restore previous content**.
+- **Q6 — Who may use it** → as planned: a new permission **`cms.translate`**.
+- **Q7 — Cost and size control** → as planned: a fixed limit of **40 000 characters per click**,
+  plus the audit entry.
