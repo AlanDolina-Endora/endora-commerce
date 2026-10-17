@@ -1,0 +1,529 @@
+{
+  "pageSize": "A4",
+  "pageMargins": [
+    40,
+    40,
+    40,
+    48
+  ],
+  "defaultStyle": {
+    "fontSize": 10,
+    "font": "Roboto"
+  },
+  "styles": {
+    "docTitle": {
+      "fontSize": 14,
+      "bold": true
+    }
+  },
+  "content": [
+    {
+      "text": ""
+    },
+    {
+      "table": {
+        "widths": [
+          "*"
+        ],
+        "body": [
+          [
+            {
+              "text": "Faktura korygująca nr FK 3/2026",
+              "bold": true,
+              "fontSize": 14,
+              "color": "#0f172a",
+              "alignment": "left"
+            }
+          ],
+          [
+            {
+              "text": "Issue date: 2026-05-04",
+              "alignment": "left"
+            }
+          ],
+          [
+            {
+              "text": "Sale date: 2026-05-04",
+              "alignment": "left"
+            }
+          ],
+          [
+            {
+              "text": "Payment due: 2026-05-18",
+              "alignment": "left"
+            }
+          ],
+          [
+            {
+              "text": "Payment method: Przelew",
+              "alignment": "left"
+            }
+          ]
+        ]
+      },
+      "layout": "noBorders",
+      "margin": [
+        0,
+        0,
+        0,
+        12
+      ]
+    },
+    {
+      "text": "",
+      "margin": [
+        0,
+        0,
+        0,
+        8
+      ]
+    },
+    {
+      "columns": [
+        {
+          "width": "50%",
+          "stack": [
+            {
+              "text": "Seller",
+              "bold": true,
+              "fontSize": 10,
+              "margin": [
+                0,
+                0,
+                0,
+                2
+              ]
+            },
+            {
+              "text": "Example Seller Sp. z o.o.",
+              "fontSize": 10
+            },
+            {
+              "text": "ul. Przykładowa 2",
+              "fontSize": 10
+            },
+            {
+              "text": "00-001 Warszawa",
+              "fontSize": 10
+            },
+            {
+              "text": "NIP: 1234567890",
+              "fontSize": 10
+            },
+            {
+              "text": "Example Bank 00 1234",
+              "fontSize": 10
+            },
+            {
+              "text": "SWIFT: EXMPPLPW",
+              "fontSize": 10
+            }
+          ]
+        },
+        {
+          "width": 16,
+          "text": ""
+        },
+        {
+          "width": "50%",
+          "stack": [
+            {
+              "text": "Buyer",
+              "bold": true,
+              "fontSize": 10,
+              "margin": [
+                0,
+                0,
+                0,
+                2
+              ]
+            },
+            {
+              "text": "Example Buyer Sp. z o.o.",
+              "fontSize": 10
+            },
+            {
+              "text": "ul. Kupiecka 7",
+              "fontSize": 10
+            },
+            {
+              "text": "30-001 Kraków",
+              "fontSize": 10
+            },
+            {
+              "text": "NIP: 1231231230",
+              "fontSize": 10
+            }
+          ]
+        }
+      ],
+      "margin": [
+        0,
+        0,
+        0,
+        16
+      ]
+    },
+    {
+      "table": {
+        "headerRows": 1,
+        "widths": [
+          16,
+          "*",
+          28,
+          32,
+          50,
+          32,
+          56,
+          56
+        ],
+        "body": [
+          [
+            {
+              "text": "Lp",
+              "bold": true,
+              "fontSize": 8,
+              "alignment": "left"
+            },
+            {
+              "text": "Nazwa",
+              "bold": true,
+              "fontSize": 8,
+              "alignment": "left"
+            },
+            {
+              "text": "Jedn.",
+              "bold": true,
+              "fontSize": 8,
+              "alignment": "left"
+            },
+            {
+              "text": "Ilość",
+              "bold": true,
+              "fontSize": 8,
+              "alignment": "right"
+            },
+            {
+              "text": "Cena netto",
+              "bold": true,
+              "fontSize": 8,
+              "alignment": "right"
+            },
+            {
+              "text": "Stawka",
+              "bold": true,
+              "fontSize": 8,
+              "alignment": "right"
+            },
+            {
+              "text": "Wartość netto",
+              "bold": true,
+              "fontSize": 8,
+              "alignment": "right"
+            },
+            {
+              "text": "Wartość brutto",
+              "bold": true,
+              "fontSize": 8,
+              "alignment": "right"
+            }
+          ],
+          [
+            {
+              "text": "1",
+              "fontSize": 8,
+              "alignment": "left"
+            },
+            {
+              "text": "Serwer — korekta",
+              "fontSize": 8,
+              "alignment": "left"
+            },
+            {
+              "text": "szt.",
+              "fontSize": 8,
+              "alignment": "left"
+            },
+            {
+              "text": "-1",
+              "fontSize": 8,
+              "alignment": "right"
+            },
+            {
+              "text": "900,00",
+              "fontSize": 8,
+              "alignment": "right"
+            },
+            {
+              "text": "23%",
+              "fontSize": 8,
+              "alignment": "right"
+            },
+            {
+              "text": "-900,00",
+              "fontSize": 8,
+              "alignment": "right"
+            },
+            {
+              "text": "-1107,00",
+              "fontSize": 8,
+              "alignment": "right"
+            }
+          ]
+        ]
+      },
+      "layout": {
+        "hLineWidth": {
+          "$fn": "() => 0.5",
+          "$samples": [
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "vLineWidth": {
+          "$fn": "() => 0.5",
+          "$samples": [
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "hLineColor": {
+          "$fn": "() => borderColor",
+          "$samples": [
+            "#cbd5e1",
+            "#cbd5e1",
+            "#cbd5e1",
+            "#cbd5e1"
+          ]
+        },
+        "vLineColor": {
+          "$fn": "() => borderColor",
+          "$samples": [
+            "#cbd5e1",
+            "#cbd5e1",
+            "#cbd5e1",
+            "#cbd5e1"
+          ]
+        }
+      },
+      "margin": [
+        0,
+        0,
+        0,
+        12
+      ]
+    },
+    {
+      "table": {
+        "headerRows": 1,
+        "widths": [
+          "auto",
+          "auto",
+          "auto",
+          "auto"
+        ],
+        "body": [
+          [
+            {
+              "text": "Stawka VAT",
+              "bold": true,
+              "fontSize": 8,
+              "alignment": "left"
+            },
+            {
+              "text": "Wartość netto",
+              "bold": true,
+              "fontSize": 8,
+              "alignment": "right"
+            },
+            {
+              "text": "Kwota VAT",
+              "bold": true,
+              "fontSize": 8,
+              "alignment": "right"
+            },
+            {
+              "text": "Wartość brutto",
+              "bold": true,
+              "fontSize": 8,
+              "alignment": "right"
+            }
+          ],
+          [
+            {
+              "text": "23%",
+              "fontSize": 8
+            },
+            {
+              "text": "-900,00",
+              "fontSize": 8,
+              "alignment": "right"
+            },
+            {
+              "text": "-207,00",
+              "fontSize": 8,
+              "alignment": "right"
+            },
+            {
+              "text": "-1107,00",
+              "fontSize": 8,
+              "alignment": "right"
+            }
+          ],
+          [
+            {
+              "text": "Total",
+              "fontSize": 8,
+              "bold": true
+            },
+            {
+              "text": "-900,00",
+              "fontSize": 8,
+              "alignment": "right",
+              "bold": true
+            },
+            {
+              "text": "-207,00",
+              "fontSize": 8,
+              "alignment": "right",
+              "bold": true
+            },
+            {
+              "text": "-1107,00",
+              "fontSize": 8,
+              "alignment": "right",
+              "bold": true
+            }
+          ]
+        ]
+      },
+      "layout": {
+        "hLineWidth": {
+          "$fn": "() => 0.5",
+          "$samples": [
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "vLineWidth": {
+          "$fn": "() => 0.5",
+          "$samples": [
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "hLineColor": {
+          "$fn": "() => borderColor",
+          "$samples": [
+            "#cbd5e1",
+            "#cbd5e1",
+            "#cbd5e1",
+            "#cbd5e1"
+          ]
+        },
+        "vLineColor": {
+          "$fn": "() => borderColor",
+          "$samples": [
+            "#cbd5e1",
+            "#cbd5e1",
+            "#cbd5e1",
+            "#cbd5e1"
+          ]
+        }
+      },
+      "margin": [
+        0,
+        0,
+        0,
+        12
+      ]
+    },
+    {
+      "stack": [
+        {
+          "text": "Paid: 0,00 PLN",
+          "alignment": "right",
+          "fontSize": 10,
+          "color": "#0f172a"
+        },
+        {
+          "text": "Amount due: -1107,00 PLN",
+          "alignment": "right",
+          "bold": true,
+          "fontSize": 10,
+          "color": "#0f172a"
+        },
+        {
+          "text": "Total: -1107,00 PLN",
+          "alignment": "right",
+          "fontSize": 10,
+          "color": "#0f172a"
+        },
+        {
+          "text": "In words: minus tysiąc sto siedem złotych 00/100",
+          "alignment": "right",
+          "italics": true,
+          "fontSize": 10,
+          "color": "#0f172a",
+          "margin": [
+            0,
+            6,
+            0,
+            0
+          ]
+        }
+      ],
+      "margin": [
+        0,
+        0,
+        0,
+        16
+      ]
+    },
+    {
+      "stack": [
+        {
+          "canvas": [
+            {
+              "type": "line",
+              "x1": 0,
+              "y1": 0,
+              "x2": 515,
+              "y2": 0,
+              "lineWidth": 0.5,
+              "lineColor": "#e5e7eb"
+            }
+          ],
+          "margin": [
+            0,
+            0,
+            0,
+            8
+          ]
+        },
+        {
+          "text": "Thank you for your business.\nExample Seller Sp. z o.o. · Tax ID 1234567890",
+          "alignment": "center",
+          "fontSize": 9,
+          "color": "#0f172a",
+          "bold": false,
+          "italics": false
+        }
+      ],
+      "margin": [
+        0,
+        0,
+        0,
+        8
+      ]
+    }
+  ]
+}
