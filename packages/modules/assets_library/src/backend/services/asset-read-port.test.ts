@@ -47,7 +47,7 @@ function seededAsset(id: string, overrides: Partial<Asset> = {}): Asset {
   } as unknown as Asset;
 }
 
-function makeService(rows: Asset[]): {
+function makeService(rows: Asset[], loadRetentionDays?: () => Promise<number>): {
   service: AssetReadService;
   filters: Array<FilterQuery<Asset>>;
 } {
@@ -76,7 +76,10 @@ function makeService(rows: Asset[]): {
     publicApiBaseUrl: API_ORIGIN,
   });
 
-  return { service: new AssetReadService(() => em, () => adapters), filters };
+  return {
+    service: new AssetReadService(() => em, () => adapters, ...(loadRetentionDays ? [loadRetentionDays] : [])),
+    filters,
+  };
 }
 
 const PUBLIC_ID = 'aaaaaaaa-1111-2222-3333-444444444444';
@@ -247,5 +250,27 @@ describe('toAssetRecord — stable URL members (feature 156)', () => {
 
   it('answers a null permalink when none is set', () => {
     expect(toAssetRecord(seededAsset(PUBLIC_ID)).permalink).toBeNull();
+  });
+});
+
+/** specs/156-asset-stable-url/ T042a — the reported purge date follows the setting read now (P1). */
+describe('AssetRecord.purgeAfterAt (feature 156)', () => {
+  it('is deletedAt + the retention read at call time, once per batch, and null for a live asset', async () => {
+    const deletedAt = new Date('2026-10-01T12:00:00.000Z');
+    const deleted = seededAsset(PUBLIC_ID, {
+      deletedAt,
+      purgeAfterAt: new Date('2027-01-01T00:00:00.000Z'),
+    } as Partial<Asset>);
+    const live = seededAsset(PRIVATE_ID);
+    let reads = 0;
+    const { service } = makeService([deleted, live], async () => {
+      reads += 1;
+      return 7;
+    });
+    const records = await service.findByIds([PUBLIC_ID, PRIVATE_ID]);
+    const byId = Object.fromEntries(records.map((r) => [r.id, r]));
+    expect(byId[PUBLIC_ID]!.purgeAfterAt).toEqual(new Date(deletedAt.getTime() + 7 * 24 * 60 * 60 * 1000));
+    expect(byId[PRIVATE_ID]!.purgeAfterAt).toBeNull();
+    expect(reads).toBe(1);
   });
 });

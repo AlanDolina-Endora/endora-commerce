@@ -1,4 +1,5 @@
-import { AssetFolder } from '../../helpers/package-entities.js';
+import { Asset, AssetFolder } from '../../helpers/package-entities.js';
+import { overrideAssetSetting } from '../../helpers/crm-attachment-upload.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -177,5 +178,59 @@ describe('admin folder CRUD (T053)', () => {
     const childRow = await fresh.findOne(AssetFolder, { id: child });
     expect(childRow).toBeTruthy();
     expect(childRow!.parentId ?? null).toBeNull();
+  });
+
+  // specs/156-asset-stable-url/ T042 — a recursive delete gives every asset in
+  // the subtree the same window (SC-007).
+  it('gives every asset in a recursively deleted subtree the same deletion time and window', async () => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const create = async (parentId: string | null, name: string) => {
+      const r = await h.app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/assets/folders',
+        cookies: adminCookie,
+        payload: { parentId, name },
+      });
+      return (r.json() as { data: { id: string } }).data.id;
+    };
+    const parent = await create(null, `as156-tree-${Date.now()}`);
+    const child = await create(parent, `as156-leaf-${Date.now()}`);
+    const em = h.em();
+    const forge = (folderId: string) =>
+      em.create(Asset, {
+        kind: 'image',
+        filename: 'as156-tree.png',
+        mimeType: 'image/png',
+        sizeBytes: '0',
+        storageUrl: 'https://example.com/as156-tree.png',
+        storageLocator: 'https://example.com/as156-tree.png',
+        storageBackend: 'legacy',
+        visibility: 'public',
+        folderId,
+      });
+    const direct = forge(parent);
+    const nested = forge(child);
+    await em.flush();
+    const restore = await overrideAssetSetting(h, 'assets.soft_delete_retention_days', 7);
+    try {
+      const del = await h.app.inject({
+        method: 'DELETE',
+        url: `/api/v1/admin/assets/folders/${parent}`,
+        cookies: adminCookie,
+        payload: { ifNonEmpty: 'deleteRecursively' },
+      });
+      expect(del.statusCode, del.body).toBe(200);
+      const fresh = h.em().fork({ clear: true });
+      const rows = await fresh.find(Asset, { id: { $in: [direct.id, nested.id] } });
+      expect(rows).toHaveLength(2);
+      const [a, b] = rows;
+      expect(a!.deletedAt?.toISOString()).toBe(b!.deletedAt?.toISOString());
+      for (const row of rows) {
+        expect(row.purgeAfterAt!.getTime() - row.deletedAt!.getTime()).toBe(7 * DAY_MS);
+      }
+    } finally {
+      await restore();
+      await h.em().nativeDelete(Asset, { id: { $in: [direct.id, nested.id] } });
+    }
   });
 });

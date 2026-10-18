@@ -71,12 +71,18 @@ describe('soft-delete retention setting (#322)', () => {
     });
   });
 
-  it('reads changes live and preserves the deadline of an already deleted asset', async () => {
+  it('reads changes live: a repeated delete reports the current setting, the stored deadline keeps the first', async () => {
     const options = { override: 7 };
     const { handle, asset } = fixture(options);
     const first = await handle.service.softDelete(asset.id);
+    const stored = asset.purgeAfterAt;
     options.override = 90;
-    expect(await handle.service.softDelete(asset.id)).toEqual(first);
+    // specs/156-asset-stable-url/ owner ruling P1: the reported date follows
+    // the setting read now, which is what the sweep uses.
+    const repeated = await handle.service.softDelete(asset.id);
+    expect(repeated.deletedAt).toEqual(first.deletedAt);
+    expect(repeated.purgeAfterAt.getTime() - repeated.deletedAt.getTime()).toBe(90 * DAY_MS);
+    expect(asset.purgeAfterAt).toEqual(stored);
     asset.deletedAt = null;
     asset.purgeAfterAt = null;
     const second = await handle.service.softDelete(asset.id);

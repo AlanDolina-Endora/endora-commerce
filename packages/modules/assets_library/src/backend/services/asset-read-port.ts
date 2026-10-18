@@ -60,6 +60,12 @@ export class AssetReadService implements AssetReadPort {
      * permission gate that defaulted to permissive.
      */
     private readonly adapters: () => AssetStorageRegistry,
+    /**
+     * `assets.soft_delete_retention_days` as read now — the reported purge date
+     * is `deletedAt` + this (specs/156-asset-stable-url/ owner ruling P1).
+     * Optional: a standalone consumer keeps the 30-day default.
+     */
+    private readonly loadRetentionDays: () => Promise<number> = async () => 30,
   ) {}
 
   async findById(id: string, options?: { liveOnly?: boolean }): Promise<AssetRecord | null> {
@@ -67,7 +73,12 @@ export class AssetReadService implements AssetReadPort {
       id,
       ...(options?.liveOnly ? { deletedAt: null } : {}),
     });
-    return asset ? toAssetRecord(asset) : null;
+    return asset ? toAssetRecord(asset, await this.retentionFor([asset])) : null;
+  }
+
+  /** Read the retention only when a soft-deleted row needs a purge date — once per batch. */
+  private async retentionFor(assets: readonly Asset[]): Promise<number | undefined> {
+    return assets.some((a) => a.deletedAt) ? this.loadRetentionDays() : undefined;
   }
 
   async findByIds(
@@ -79,7 +90,8 @@ export class AssetReadService implements AssetReadPort {
       id: { $in: [...ids] },
       ...(options?.liveOnly ? { deletedAt: null } : {}),
     });
-    return assets.map(toAssetRecord);
+    const retentionDays = await this.retentionFor(assets);
+    return assets.map((asset) => toAssetRecord(asset, retentionDays));
   }
 
   /**
@@ -182,7 +194,12 @@ export class AssetReadService implements AssetReadPort {
   }
 }
 
-export function toAssetRecord(asset: Asset): AssetRecord {
+/**
+ * The published record. `purgeAfterAt` is `deletedAt` + `retentionDays` — the
+ * date the retention sweep uses — rather than the column stamped at deletion
+ * (owner ruling P1); 30 days when no retention is given.
+ */
+export function toAssetRecord(asset: Asset, retentionDays = 30): AssetRecord {
   return {
     id: asset.id,
     kind: asset.kind,
@@ -197,7 +214,9 @@ export function toAssetRecord(asset: Asset): AssetRecord {
     storageBackend: asset.storageBackend,
     storageLocator: asset.storageLocator,
     pendingCleanup: asset.pendingCleanup,
-    purgeAfterAt: asset.purgeAfterAt ?? null,
+    purgeAfterAt: asset.deletedAt
+      ? new Date(asset.deletedAt.getTime() + retentionDays * 24 * 60 * 60 * 1000)
+      : null,
     mimeTypeOverridden: asset.mimeTypeOverridden,
     createdAt: asset.createdAt,
     updatedAt: asset.updatedAt,

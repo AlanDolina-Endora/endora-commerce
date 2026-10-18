@@ -69,6 +69,8 @@ export interface AssetsLibraryModuleHandle {
   folders: FoldersService;
   referenceRegistry: AssetReferenceRegistry;
   adapters: AdapterRegistry;
+  /** `assets.soft_delete_retention_days` as read now (at least one day). */
+  loadRetentionDays(): Promise<number>;
   /** The retention sweep (specs/156-asset-stable-url/), as the module's clock runs it. */
   sweeper: AssetRetentionSweeper;
   /**
@@ -198,6 +200,14 @@ export function assetsLibraryModule(options: AssetsLibraryModuleOptions): {
 
   return {
     plugin,
-    handle: { service, folders, referenceRegistry, adapters, sweeper, createRetentionSweeper },
+    handle: {
+      service,
+      folders,
+      referenceRegistry,
+      adapters,
+      loadRetentionDays,
+      sweeper,
+      createRetentionSweeper,
+    },
   };
 }

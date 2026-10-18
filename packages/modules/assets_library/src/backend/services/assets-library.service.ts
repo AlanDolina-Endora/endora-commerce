@@ -295,9 +295,14 @@ export class AssetsLibraryService {
     const em = this.deps.emFactory();
     const a = await em.findOne(Asset, { id: assetId });
     if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+    const retentionDays = this.deps.loadRetentionDays ? await this.deps.loadRetentionDays() : 30;
+    const purgeAfter = (deletedAt: Date) =>
+      new Date(deletedAt.getTime() + retentionDays * 24 * 60 * 60 * 1000);
     if (a.deletedAt) {
-      // Idempotent — return current state.
-      return { deletedAt: a.deletedAt, purgeAfterAt: a.purgeAfterAt as Date };
+      // Idempotent. The date reported follows the setting as read now — what
+      // the retention sweep uses (specs/156-asset-stable-url/ owner ruling P1);
+      // the stored `purgeAfterAt` keeps the first value as a rollback snapshot.
+      return { deletedAt: a.deletedAt, purgeAfterAt: purgeAfter(a.deletedAt) };
     }
     // Reference protection (FR-030).
     const refs = await this.deps.referenceRegistry.findReferences(assetId);
@@ -312,10 +317,10 @@ export class AssetsLibraryService {
         })),
       );
     }
-    const retentionDays = this.deps.loadRetentionDays ? await this.deps.loadRetentionDays() : 30;
     const now = new Date();
     a.deletedAt = now;
-    a.purgeAfterAt = new Date(now.getTime() + retentionDays * 24 * 60 * 60 * 1000);
+    // Written at deletion for a rollback; no longer read (research R-13).
+    a.purgeAfterAt = purgeAfter(now);
     this.#audit(em, 'asset.soft_delete', a.id, { filename: a.filename }, null);
     await em.flush();
     return { deletedAt: a.deletedAt, purgeAfterAt: a.purgeAfterAt };

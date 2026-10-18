@@ -189,7 +189,11 @@ export function registerModule(ctx: ModuleContext): void {
           // The registry is read per call, never captured: it is rebuilt when
           // the active-backend setting changes, and a URL built by yesterday's
           // adapter points at a bucket this deployment no longer writes to.
-          new AssetReadService(emFactory, () => assetsLibrary.handle.adapters),
+          new AssetReadService(
+            emFactory,
+            () => assetsLibrary.handle.adapters,
+            () => assetsLibrary.handle.loadRetentionDays(),
+          ),
       )
       .singleton(),
   );
