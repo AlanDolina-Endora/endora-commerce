@@ -3,10 +3,16 @@
 // Cloud adapters (S3 / GCS) bypass this route entirely — their public URLs
 // point at the bucket directly and their private URLs are signed by the
 // vendor SDK; the storefront fetches them without touching this code path.
+// A request that reaches it for a cloud asset anyway is redirected — after
+// the same visibility check a local asset gets.
 //
 // Behaviour:
 //   public assets  → no auth, long Cache-Control
-//   private assets → require valid HMAC token (?token=&exp=)
+//   private assets → require valid HMAC token (?token=&exp=), on every backend
+//   every response → `X-Content-Type-Options: nosniff` and a restrictive
+//                    Content-Security-Policy; only displayable media (raster
+//                    images, SVG, video, audio, PDF, plain text) is served
+//                    `inline`, everything else as an `attachment`
 //   soft-deleted   → 410 ASSET_GONE (so still-live storefront caches degrade gracefully)
 //   missing file   → 404 ASSET_FILE_MISSING
 
@@ -20,6 +26,7 @@ import { LocalFsStorageAdapter } from './services/storage/local-fs-adapter.js';
 import type { AdapterRegistry } from './services/storage/adapter-registry.js';
 import type { AssetsLibraryService } from './services/assets-library.service.js';
 import type { HmacSigner } from './services/hmac.js';
+import { servingPolicyFor } from './services/content-policy.js';
 
 export interface PublicRoutesDeps {
   service: AssetsLibraryService;
@@ -49,18 +56,13 @@ export async function registerAssetsLibraryPublicRoutes(
         throw new HttpError(410, ERROR_CODES.ASSET_GONE, 'Asset has been deleted.');
       }
 
-      // This route only serves bytes from the local-FS adapter. Cloud
-      // assets are always reached via the bucket URL or signed URL — they
-      // never hit this endpoint.
-      if (a.storageBackend !== 'local') {
-        // Redirect to the resolved URL so a misconfigured client falls back
-        // to the canonical serving path.
-        const resolved = await deps.service.resolveUrl(a.id);
-        reply.redirect(resolved.url, 302);
-        return;
-      }
+      const policy = servingPolicyFor(a.mimeType);
+      reply.header('X-Content-Type-Options', 'nosniff');
+      reply.header('Content-Security-Policy', policy.contentSecurityPolicy);
 
-      // Visibility / token check.
+      // Visibility / token check — before the storage-backend branch, so a
+      // private asset is never handed on to its store's own signed URL
+      // without one.
       if (a.visibility === 'private') {
         const signer = deps.signer();
         const exp = Number(req.query.exp);
@@ -74,6 +76,17 @@ export async function registerAssetsLibraryPublicRoutes(
         if (!ok) {
           throw new HttpError(403, ERROR_CODES.ASSET_ACCESS_DENIED, 'Access denied.');
         }
+      }
+
+      // This route only serves bytes from the local-FS adapter. Cloud
+      // assets are always reached via the bucket URL or signed URL — they
+      // never hit this endpoint.
+      if (a.storageBackend !== 'local') {
+        // Redirect to the resolved URL so a misconfigured client falls back
+        // to the canonical serving path.
+        const resolved = await deps.service.resolveUrl(a.id);
+        reply.redirect(resolved.url, 302);
+        return;
       }
 
       const adapter = await deps.adapters.getForBackend('local');
@@ -126,7 +139,9 @@ export async function registerAssetsLibraryPublicRoutes(
       if (a.visibility === 'public') {
         reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
       }
-      const dispoMode = req.query.download === '1' ? 'attachment' : 'inline';
+      // Only types a browser merely displays are offered inline; anything
+      // else is a download, whatever the request asked for.
+      const dispoMode = req.query.download === '1' || !policy.inline ? 'attachment' : 'inline';
       const safeName = a.filename.replace(/[\r\n";]/g, '_');
       reply.header('Content-Disposition', `${dispoMode}; filename="${safeName}"`);
       // Fastify will pipe a Readable through to the response.
