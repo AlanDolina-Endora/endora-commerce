@@ -8400,6 +8400,15 @@
         }
       }
     },
+    "/assets/file/*": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/assets/file/{assetId}": {
       "get": {
         "responses": {

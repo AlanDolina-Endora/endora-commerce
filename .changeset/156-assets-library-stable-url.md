@@ -17,6 +17,17 @@ keep those assets lengthens the setting before upgrading. Each run writes one
 `assets_library.retention.sweep` log line, also when nothing was due, and a storage object the
 module stopped needing is retried by the sweep until it is gone.
 
+**Behaviour change for the file URL.** `GET /assets/file/<id>` answers a public local asset with
+`Cache-Control: public, no-cache` (it was `public, max-age=31536000, immutable`), so a replaced file
+is picked up on the next request; the URLs the platform embeds carry `?v=<contentVersion>` and stay
+cacheable for a year, and a `v` that is no longer current redirects (`302`, `no-store`) to the current
+one. The route also answers `GET /assets/file/<permalink>` (one or more segments, matched
+case-insensitively). A private asset is checked for a valid signature before anything else: without
+one it answers `403` by id — also when it is soft-deleted, where it used to answer `410` — and `404`
+by permalink, exactly as for a name that does not exist. Public cloud assets reached through the
+route are redirected to their stable bucket URL. Redirects and error answers carry `no-store`,
+`X-Content-Type-Options: nosniff` and a fixed content policy, whatever the stored type.
+
 **Database (one migration, owned by this module).**
 
 - Eleven new columns on `assets`: `content_version` (backfilled with a random 12-character token
