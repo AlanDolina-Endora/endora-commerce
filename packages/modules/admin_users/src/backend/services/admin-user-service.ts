@@ -3,6 +3,8 @@ import { UniqueConstraintViolationException } from '@mikro-orm/core';
 import {
   ERROR_CODES,
   normalizeEmailAddress,
+  ADMIN_PERMISSION_WILDCARD,
+  permissionsNotHeld,
   type AdminAuthenticationOrigin,
   type AdminAuthenticationThrottlePort,
   type AdminRolePort,
@@ -18,7 +20,9 @@ import type { AuditPort } from '@endora-commerce/platform/kernel';
 /**
  * AdminUserService (T193 / FR-080..FR-083). Backs the admin panel's
  * Users & Roles module. Mutations are gated by `admin_users:manage` at the
- * route layer; this service trusts the caller and focuses on data integrity:
+ * route layer, and every peer write is held to the acting administrator's own
+ * permissions here (see {@link AdminActorAuthority}); beyond that it focuses
+ * on data integrity:
  *
  *   - email uniqueness (DB partial unique enforces, mapped to 409)
  *   - an account always holds a role: creating one without, or clearing the
@@ -31,6 +35,52 @@ import type { AuditPort } from '@endora-commerce/platform/kernel';
  *     withdrawn: all of them on a peer reset, a deactivation and a delete, all
  *     but the calling one on a self-service password change
  */
+
+/**
+ * The permissions of the administrator a peer write is made by.
+ *
+ * `admin_users:manage` opens the Users screen; it does not by itself say how
+ * far its holder reaches. An administrator without the wildcard may assign
+ * only a role whose permissions they hold themselves, and may not change, set
+ * the password of, deactivate or delete an account whose role holds a
+ * permission they lack. The reach of `admin_users:manage` is thereby bounded
+ * by the rest of its holder's role.
+ */
+export interface AdminActorAuthority {
+  readonly permissions: readonly string[];
+}
+
+/**
+ * The refusal an administrator earns by assigning a role whose permissions they
+ * do not all hold. The code is `admin_roles`' — the same refusal a role write
+ * beyond the actor's permissions earns there — and is built here because a
+ * module does not import another's internals.
+ */
+function roleGrantExceededRefusal(missing: readonly string[]): HttpError {
+  const permissions = missing.join(', ');
+  return new HttpError(
+    403,
+    ERROR_CODES.ADMIN_ROLE_GRANT_EXCEEDED,
+    `Your own role does not hold these permissions, so you cannot grant them or change a role ` +
+      `that holds them: ${permissions}.`,
+    { permissions },
+  );
+}
+
+/**
+ * The refusal an administrator earns by acting on an account whose role holds
+ * permissions they lack.
+ */
+export function adminUserOutranksActorRefusal(missing: readonly string[]): HttpError {
+  const permissions = missing.join(', ');
+  return new HttpError(
+    403,
+    ERROR_CODES.ADMIN_USER_OUTRANKS_ACTOR,
+    `This account's role holds permissions your own role does not (${permissions}), so you ` +
+      `cannot change it, set its password, deactivate it or delete it.`,
+    { permissions },
+  );
+}
 
 export interface CreateAdminUserInput {
   email: string;
@@ -318,10 +368,10 @@ export class AdminUserService {
     return em.find(AdminUser, { id: { $in: unique } });
   }
 
-  async create(input: CreateAdminUserInput): Promise<AdminUser> {
+  async create(input: CreateAdminUserInput, actor: AdminActorAuthority): Promise<AdminUser> {
     const em = this.emFactory();
     if (!input.adminRoleId) throw adminUserRoleRequiredRefusal();
-    await this.#assertRoleExists(input.adminRoleId);
+    await this.#assertRoleAssignable(input.adminRoleId, actor);
     const passwordHash = await hashPassword(input.password);
     const user = em.create(AdminUser, {
       email: normalizeEmailAddress(input.email),
@@ -347,14 +397,19 @@ export class AdminUserService {
     return user;
   }
 
-  async update(id: string, input: UpdateAdminUserInput): Promise<AdminUser> {
+  async update(
+    id: string,
+    input: UpdateAdminUserInput,
+    actor: AdminActorAuthority,
+  ): Promise<AdminUser> {
     const em = this.emFactory();
     const user = await this.#getByIdOn(em, id);
+    await this.#assertWithinReach(user, actor);
     if (input.adminRoleId !== undefined) {
       // `null` used to clear the role. An account always holds one now, so the
       // only role change is one role for another.
       if (input.adminRoleId === null) throw adminUserRoleRequiredRefusal();
-      await this.#assertRoleExists(input.adminRoleId);
+      await this.#assertRoleAssignable(input.adminRoleId, actor);
       user.adminRoleId = input.adminRoleId;
     }
     if (input.firstName !== undefined) user.firstName = input.firstName;
@@ -498,9 +553,14 @@ export class AdminUserService {
    * The order is `#withdrawCredentials`'s to explain: revoking first let a
    * sign-in with the old password, between the two steps, keep a session.
    */
-  async resetPassword(id: string, newPassword: string): Promise<AdminUser> {
+  async resetPassword(
+    id: string,
+    newPassword: string,
+    actor: AdminActorAuthority,
+  ): Promise<AdminUser> {
     const em = this.emFactory();
     const user = await this.#getByIdOn(em, id);
+    await this.#assertWithinReach(user, actor);
     user.passwordHash = await hashPassword(newPassword);
     this.#audit(em, 'admin_user.change_password', user.id, null, {
       email: user.email,
@@ -551,9 +611,10 @@ export class AdminUserService {
     return this.emFactory().count(AdminUser, { adminRoleId: null, deletedAt: null });
   }
 
-  async softDelete(id: string): Promise<void> {
+  async softDelete(id: string, actor: AdminActorAuthority): Promise<void> {
     const em = this.emFactory();
     const user = await this.#getByIdOn(em, id);
+    await this.#assertWithinReach(user, actor);
     user.deletedAt = new Date();
     user.status = 'inactive';
     this.#audit(em, 'admin_user.delete', user.id, { email: user.email }, null);
@@ -589,11 +650,29 @@ export class AdminUserService {
   }
 
   /**
+   * The role exists and the actor holds every permission it grants.
+   *
    * `getById` raises the same 404 `Admin role not found.` this method used to
    * raise itself, so no `catch` is wanted and none is written: an absent
    * `admin_roles` must refuse the assignment, not let it through unvalidated.
    */
-  async #assertRoleExists(id: string): Promise<void> {
-    await this.adminRoles.getById(id);
+  async #assertRoleAssignable(id: string, actor: AdminActorAuthority): Promise<void> {
+    const role = await this.adminRoles.getById(id);
+    const missing = permissionsNotHeld(role.permissions, actor.permissions);
+    if (missing.length > 0) throw roleGrantExceededRefusal(missing);
+  }
+
+  /**
+   * The account's current role holds nothing the actor lacks. Runs before
+   * anything is assigned, so a refused write leaves the account as it was. An
+   * account with no role — one that predates the rule that every account holds
+   * one — is within everybody's reach, because assigning it a role is how it is
+   * repaired.
+   */
+  async #assertWithinReach(user: AdminUser, actor: AdminActorAuthority): Promise<void> {
+    if (!user.adminRoleId || actor.permissions.includes(ADMIN_PERMISSION_WILDCARD)) return;
+    const role = await this.adminRoles.getById(user.adminRoleId);
+    const missing = permissionsNotHeld(role.permissions, actor.permissions);
+    if (missing.length > 0) throw adminUserOutranksActorRefusal(missing);
   }
 }

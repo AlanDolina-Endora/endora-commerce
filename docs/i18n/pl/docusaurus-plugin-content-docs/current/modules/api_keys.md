@@ -40,6 +40,12 @@ Przy tworzeniu zakresy są sprawdzane względem typowanego katalogu w
 Egzekwowanie nadal sprawdza tylko obecność zakresu na liście, więc dawne, dowolnie zapisane zakresy
 w istniejących kluczach nadal są odczytywane i egzekwowane — walidacji podlega tylko tworzenie.
 
+Klucz działa z zakresami, które otrzymał, dlatego administrator może utworzyć klucz tylko z zakresami,
+które ma jego własna rola; posiadacz symbolu wieloznacznego `*` może nadać dowolny zakres.
+`integrations:manage` otwiera ekran kluczy, ale sam nie daje `catalog:write` ani `orders:*`. Zakres,
+którego tworzący nie ma, jest odrzucany z `403 API_KEY_SCOPE_NOT_HELD`, a brakujące zakresy są
+wymienione w `details.scopes`.
+
 ## Powiązanie
 
 Powiązanie obejmuje wszystkie pola albo żadne i **nie można go zmienić po utworzeniu** (token jest

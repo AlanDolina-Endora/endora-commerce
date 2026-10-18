@@ -197,6 +197,8 @@ export const ERROR_CODES = {
 
   // API keys / webhooks / integrations
   API_KEY_OUT_OF_SCOPE: 'API_KEY_OUT_OF_SCOPE',
+  /** An administrator asked for an API key scope their own role does not hold. */
+  API_KEY_SCOPE_NOT_HELD: 'API_KEY_SCOPE_NOT_HELD',
   WEBHOOK_DELIVERY_NOT_REPLAYABLE: 'WEBHOOK_DELIVERY_NOT_REPLAYABLE',
   /**
    * A webhook subscription names an event type nothing delivers — one that is
@@ -215,10 +217,20 @@ export const ERROR_CODES = {
   // Admin users / roles
   ADMIN_ROLE_CODE_TAKEN: 'ADMIN_ROLE_CODE_TAKEN',
   ADMIN_ROLE_IN_USE: 'ADMIN_ROLE_IN_USE',
+  /**
+   * A role write or a role assignment would hand out permissions the acting
+   * administrator's own role does not hold.
+   */
+  ADMIN_ROLE_GRANT_EXCEEDED: 'ADMIN_ROLE_GRANT_EXCEEDED',
   /** The acting administrator holds no role, so nothing says what they may do or reach. */
   ADMIN_ROLE_REQUIRED: 'ADMIN_ROLE_REQUIRED',
   /** A write would leave an administrator account without a role. */
   ADMIN_USER_ROLE_REQUIRED: 'ADMIN_USER_ROLE_REQUIRED',
+  /**
+   * The target account's role holds permissions the acting administrator's own
+   * role does not, so the actor may not change, reset, deactivate or delete it.
+   */
+  ADMIN_USER_OUTRANKS_ACTOR: 'ADMIN_USER_OUTRANKS_ACTOR',
   /** An administrator changing their own password chose the one they already have. */
   NEW_PASSWORD_UNCHANGED: 'NEW_PASSWORD_UNCHANGED',
   /**

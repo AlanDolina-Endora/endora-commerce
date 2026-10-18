@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'crypto';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   ERROR_CODES,
+  permissionsNotHeld,
   type ApiKeyBinding,
   type CustomerAccountReadPort,
   type OrganizationDetailsPort,
@@ -17,6 +18,8 @@ import type { AuditPort } from '@endora-commerce/platform/kernel';
  *
  * - create: generates a `sk_live_<random>` token, stores its sha256 hash, and
  *   returns the raw token + ApiKey row. Caller must show the token once.
+ *   Refuses any scope the issuing administrator's own role does not hold
+ *   (`API_KEY_SCOPE_NOT_HELD`); a holder of the wildcard may issue any.
  *   Validates the distributor binding rules B1–B5
  *   (specs/062-distributor-api/contracts/api-key-binding.md §2).
  * - revoke: marks status='revoked', sets revokedAt.
@@ -85,7 +88,23 @@ export class ApiKeyService {
     binding?: ApiKeyBinding;
     expiresAt?: Date;
     createdByAdminUserId?: string;
+    /**
+     * The issuing administrator's effective permission codes. A key acts with
+     * the scopes it is issued, so issuing one hands those scopes out — and the
+     * issuer may hand out only what their own role holds.
+     */
+    grantorPermissions: readonly string[];
   }): Promise<CreateApiKeyResult> {
+    const notHeld = permissionsNotHeld(input.scopes, input.grantorPermissions);
+    if (notHeld.length > 0) {
+      const scopes = notHeld.join(', ');
+      throw new HttpError(
+        403,
+        ERROR_CODES.API_KEY_SCOPE_NOT_HELD,
+        `You can only give an API key scopes your own role holds. Your role does not hold: ${scopes}.`,
+        { scopes },
+      );
+    }
     const em = this.emFactory();
     await this.#validateCreate(em, input);
 

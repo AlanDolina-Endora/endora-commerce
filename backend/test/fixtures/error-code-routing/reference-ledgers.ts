@@ -139,6 +139,29 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'module\'s whole subject; the raise site is the platform\'s activation write, which asks ' +
       '`mfa` through `mfaDeactivationGuardPort` and only ever raises while `mfa` is present.',
   },
+  ADMIN_USER_OUTRANKS_ACTOR: {
+    to: 'admin_users',
+    reason:
+      'Minted for the refusal an administrator earns by changing, setting the password of, ' +
+      'deactivating or deleting an account whose role holds permissions their own role lacks. ' +
+      'The noun is the admin account, `admin_users`\' own row, and every raise site is its ' +
+      'service.',
+  },
+  ADMIN_ROLE_GRANT_EXCEEDED: {
+    to: 'admin_roles',
+    reason:
+      'Minted for the refusal a role write or a role assignment earns when it would hand out ' +
+      'permissions the acting administrator\'s own role lacks. The noun is the admin role and ' +
+      'its permission set, which `admin_roles` owns; `admin_users` raises the same refusal ' +
+      'when it assigns a role to an account.',
+  },
+  API_KEY_SCOPE_NOT_HELD: {
+    to: 'api_keys',
+    reason:
+      'Minted for the refusal an administrator earns by issuing an API key with a scope their ' +
+      'own role does not hold. The noun is the API key and its scopes, columns on the row ' +
+      '`api_keys` owns, and the one raise site is its service.',
+  },
   NEW_PASSWORD_UNCHANGED: {
     to: 'admin_users',
     reason:

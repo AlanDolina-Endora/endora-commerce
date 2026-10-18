@@ -21,8 +21,9 @@ import { readIdleLogoutMinutes } from './services/idle-logout-policy.js';
 
 /**
  * Admin user + role CRUD (T193 / FR-080..FR-083). All gated by
- * `admin_users:manage`. The wildcard `*` is intentionally not exposed
- * by this surface — bootstrap-only.
+ * `admin_users:manage`, and every write is further held to the acting
+ * administrator's own permissions: only a holder of the wildcard `*` may grant
+ * it, assign a role holding it, or manage an account whose role holds it.
  */
 
 export interface AdminUsersAdminDeps {
@@ -76,6 +77,16 @@ export async function registerAdminUsersAdminRoutes(
 
   async function serializeOneAdminUser(user: AdminUser) {
     return (await serializeAdminUsers([user]))[0]!;
+  }
+
+  /**
+   * The acting administrator's permissions, which every peer write and every
+   * role write is held to: a role, or an account's role, may not hold a code
+   * the actor's own role lacks unless the actor holds the wildcard.
+   */
+  async function actorAuthority(request: FastifyRequest) {
+    const { adminUserId } = resolveAdminContext(request);
+    return { permissions: await permissionService.listPermissions(adminUserId) };
   }
 
   // --- Current admin (for the UI auth gate) ---------------------------------
@@ -194,13 +205,16 @@ export async function registerAdminUsersAdminRoutes(
     },
     async (request, reply) => {
       const body = createAdminUserRequestSchema.parse(request.body);
-      const user = await adminUserService.create({
-        email: body.email,
-        password: body.password,
-        firstName: body.firstName,
-        lastName: body.lastName,
-        ...(body.adminRoleId !== undefined ? { adminRoleId: body.adminRoleId } : {}),
-      });
+      const user = await adminUserService.create(
+        {
+          email: body.email,
+          password: body.password,
+          firstName: body.firstName,
+          lastName: body.lastName,
+          ...(body.adminRoleId !== undefined ? { adminRoleId: body.adminRoleId } : {}),
+        },
+        await actorAuthority(request),
+      );
       reply.status(201);
       return { data: await serializeOneAdminUser(user) };
     },
@@ -214,12 +228,16 @@ export async function registerAdminUsersAdminRoutes(
     },
     async (request) => {
       const body = updateAdminUserRequestSchema.parse(request.body);
-      const user = await adminUserService.update(request.params.id, {
-        ...(body.firstName !== undefined ? { firstName: body.firstName } : {}),
-        ...(body.lastName !== undefined ? { lastName: body.lastName } : {}),
-        ...(body.adminRoleId !== undefined ? { adminRoleId: body.adminRoleId } : {}),
-        ...(body.status !== undefined ? { status: body.status } : {}),
-      });
+      const user = await adminUserService.update(
+        request.params.id,
+        {
+          ...(body.firstName !== undefined ? { firstName: body.firstName } : {}),
+          ...(body.lastName !== undefined ? { lastName: body.lastName } : {}),
+          ...(body.adminRoleId !== undefined ? { adminRoleId: body.adminRoleId } : {}),
+          ...(body.status !== undefined ? { status: body.status } : {}),
+        },
+        await actorAuthority(request),
+      );
       return { data: await serializeOneAdminUser(user) };
     },
   );
@@ -233,11 +251,11 @@ export async function registerAdminUsersAdminRoutes(
   // exists today, so shipping one would leave the lockout it closes open until
   // somebody with `*` edited the roles, which is the bootstrap problem again.
   //
-  // An operator holding the code may target themselves. There is no role
-  // hierarchy here to rank a reset against, and the same code already assigns
-  // any role including the one holding `*`, so a self-target guard would close
-  // nothing — while making this route disagree with the e-mail-keyed flow that
-  // follows, which is self-targeted by construction.
+  // An operator holding the code may target themselves, and anybody whose role
+  // holds nothing the operator's own role lacks. An account whose role holds
+  // more — the full-access role above all — is out of reach
+  // (`ADMIN_USER_OUTRANKS_ACTOR`, the same ceiling the other peer writes are
+  // held to).
   //
   // Own path rather than a `password` field on the PATCH: setting a password
   // has its own audit action and revokes the target's sessions, and a request
@@ -254,7 +272,11 @@ export async function registerAdminUsersAdminRoutes(
     },
     async (request) => {
       const body = resetAdminUserPasswordRequestSchema.parse(request.body);
-      const user = await adminUserService.resetPassword(request.params.id, body.password);
+      const user = await adminUserService.resetPassword(
+        request.params.id,
+        body.password,
+        await actorAuthority(request),
+      );
       return { data: await serializeOneAdminUser(user) };
     },
   );
@@ -263,7 +285,7 @@ export async function registerAdminUsersAdminRoutes(
     '/api/v1/admin/admin-users/:id',
     { preHandler: requireAdmin('admin_users:manage') },
     async (request, reply) => {
-      await adminUserService.softDelete(request.params.id);
+      await adminUserService.softDelete(request.params.id, await actorAuthority(request));
       return reply.status(204).send();
     },
   );
@@ -286,14 +308,19 @@ export async function registerAdminUsersAdminRoutes(
     },
     async (request) => {
       const body = upsertAdminRoleRequestSchema.parse(request.body);
-      const role = await adminRolePort.upsertByCode({
-        code: request.params.code,
-        name: body.name,
-        permissions: body.permissions,
-        ...(body.requiresTwoFactor !== undefined
-          ? { requiresTwoFactor: body.requiresTwoFactor }
-          : {}),
-      });
+      // An operator write: held to the actor's own permissions, and refused
+      // on a seeded role unless the actor holds the wildcard.
+      const role = await adminRolePort.upsertByCode(
+        {
+          code: request.params.code,
+          name: body.name,
+          permissions: body.permissions,
+          ...(body.requiresTwoFactor !== undefined
+            ? { requiresTwoFactor: body.requiresTwoFactor }
+            : {}),
+        },
+        { grantor: await actorAuthority(request) },
+      );
       return { data: serializeAdminRole(role) };
     },
   );

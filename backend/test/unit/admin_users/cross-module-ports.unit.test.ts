@@ -100,6 +100,9 @@ async function makeAdmin(password: string): Promise<AdminUser> {
   } as unknown as AdminUser;
 }
 
+/** A full-access actor: these tests are about which port is asked, not about reach. */
+const FULL_ACCESS = { permissions: ['*'] };
+
 const ROLE: AdminRoleRecord = {
   id: 'r-1',
   code: 'platform_admin',
@@ -324,7 +327,7 @@ describe('admin_users — sessions, roles and the impersonation target over port
       firstName: 'Nia',
       lastName: 'Operator',
       adminRoleId: 'r-1',
-    });
+    }, FULL_ACCESS);
 
     expect(lookups()).toEqual(['r-1']);
     expect(created.email).toBe('new.operator@example.test');
@@ -341,7 +344,7 @@ describe('admin_users — sessions, roles and the impersonation target over port
         firstName: 'Nia',
         lastName: 'Operator',
         adminRoleId: 'r-missing',
-      }),
+      }, FULL_ACCESS),
     ).rejects.toThrow('Admin role not found.');
   });
 

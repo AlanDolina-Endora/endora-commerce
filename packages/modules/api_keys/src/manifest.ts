@@ -16,7 +16,9 @@ export const manifest = defineModuleManifest({
   version: '1.0.0',
   // `auth` owns the `requireAdmin` port the admin routes are gated by; feature
   // 072 made it a container resolution rather than a constructor argument.
-  dependencies: ['customer_accounts', 'organizations', 'sales_channels', 'auth'],
+  // `admin_roles` owns `permissionService`, which a key's scopes are held to:
+  // an administrator may issue a key only with scopes their own role holds.
+  dependencies: ['customer_accounts', 'organizations', 'sales_channels', 'auth', 'admin_roles'],
   settings: {
     moduleCode: 'api_keys',
     groups: [{ code: 'api_keys', name: 'API keys' }],
@@ -152,5 +154,8 @@ export const manifest = defineModuleManifest({
     { code: 'API_KEY_CHANNEL_MISMATCH' },
     { code: 'API_KEY_NOT_BOUND' },
     { code: 'API_KEY_OUT_OF_SCOPE' },
+    // Raised when an administrator asks for a scope their own role does not
+    // hold; `details.scopes` names them for the sentence.
+    { code: 'API_KEY_SCOPE_NOT_HELD' },
   ],
 });

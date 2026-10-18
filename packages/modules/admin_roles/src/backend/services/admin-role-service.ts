@@ -1,6 +1,11 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { UniqueConstraintViolationException } from '@mikro-orm/core';
-import { ERROR_CODES, type AdminUserReadPort } from '@endora-commerce/contracts';
+import {
+  ERROR_CODES,
+  permissionsNotHeld,
+  type AdminUserReadPort,
+  type UpsertAdminRoleOptions,
+} from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import { recordAuditFromContext } from '@endora-commerce/platform/commands';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
@@ -19,6 +24,13 @@ import type { PermissionCatalogueService } from './permission-catalogue.service.
  *     full access and its permission set cannot be downgraded from the UI.
  *   - the `platform_admin` role cannot be deleted at all (409), assigned or not:
  *     it is the role installation guarantees.
+ *   - a write made on an administrator's behalf (`options.grantor`) is held to
+ *     that administrator's own permissions: a grantor without `*` may neither
+ *     write a role holding a code they lack nor change a role that already
+ *     holds one, and may not change a role the platform or a module seeds
+ *     (`platform_admin` included). A write with no grantor — a module seeding
+ *     its roles, the bootstrap CLI, an upgrade step — is a platform write and
+ *     is not held to any ceiling.
  *   - a Role with assigned AdminUsers cannot be deleted (409); reassign or
  *     deactivate the users first. A **soft-deleted** admin still counts
  *     (issue #168): restoring the account restores its role, so the assignment
@@ -132,6 +144,43 @@ export function protectedRoleRefusal(code: string): HttpError {
   );
 }
 
+/**
+ * The refusal an administrator without full access earns by changing a role the
+ * platform or a module seeds.
+ *
+ * The same code as the deletion refusal, told apart by `details.code`, which
+ * keys `errors.ADMIN_ROLE_PROTECTED.modify`. A full-access administrator may
+ * still rename a seeded role or set its two-factor flag, which is why this is
+ * not raised for one: the seeders keep an operator's name and flag on purpose.
+ */
+export function protectedRoleModificationRefusal(code: string): HttpError {
+  return new HttpError(
+    409,
+    ERROR_CODES.ADMIN_ROLE_PROTECTED,
+    `The system-protected role "${code}" can only be changed by an administrator with full access.`,
+    { role: code, code: 'modify' },
+  );
+}
+
+/**
+ * The refusal a role write earns when it would hand out, or change a role
+ * holding, permissions the acting administrator's own role lacks.
+ *
+ * `details.permissions` is the missing codes as one string, so the sentence can
+ * name them. Exported because `admin_users` raises the same refusal when an
+ * administrator assigns such a role to an account.
+ */
+export function grantExceededRefusal(missing: readonly string[]): HttpError {
+  const permissions = missing.join(', ');
+  return new HttpError(
+    403,
+    ERROR_CODES.ADMIN_ROLE_GRANT_EXCEEDED,
+    `Your own role does not hold these permissions, so you cannot grant them or change a role ` +
+      `that holds them: ${permissions}.`,
+    { permissions },
+  );
+}
+
 export class AdminRoleService {
   constructor(
     private readonly emFactory: () => EntityManager,
@@ -167,7 +216,10 @@ export class AdminRoleService {
     return row;
   }
 
-  async upsertByCode(input: UpsertAdminRoleInput): Promise<AdminRole> {
+  async upsertByCode(
+    input: UpsertAdminRoleInput,
+    options: UpsertAdminRoleOptions = {},
+  ): Promise<AdminRole> {
     // The platform_admin role is always full-access; ignore any narrower
     // payload so the bootstrap super-admin can never be downgraded. Every
     // other role may opt into the wildcard or carry an explicit list.
@@ -177,6 +229,9 @@ export class AdminRoleService {
         : this.#normalizePermissions(input.permissions);
     const em = this.emFactory();
     let role = await em.findOne(AdminRole, { code: input.code });
+    if (options.grantor) {
+      this.#assertWithinGrantorCeiling(options.grantor.permissions, input.code, role, permissions);
+    }
     if (role) {
       role.name = input.name;
       role.permissions = permissions;
@@ -205,6 +260,33 @@ export class AdminRoleService {
       throw err;
     }
     return role;
+  }
+
+  /**
+   * The grant ceiling for an operator write. Nothing is assigned before it
+   * runs, so a refused write leaves the stored role exactly as it was.
+   *
+   * Checked in this order, because the first answer is the one the operator can
+   * act on: a seeded role is not theirs to change at all, a role already above
+   * them is not theirs to change either, and only then does the requested set
+   * matter.
+   */
+  #assertWithinGrantorCeiling(
+    grantorPermissions: readonly string[],
+    code: string,
+    existing: AdminRole | null,
+    requested: readonly string[],
+  ): void {
+    if (grantorPermissions.includes(WILDCARD)) return;
+    if (existing && (code === PLATFORM_ADMIN_CODE || SYSTEM_ROLE_CODES.has(code))) {
+      throw protectedRoleModificationRefusal(code);
+    }
+    const heldNow = existing ? permissionsNotHeld(existing.permissions ?? [], grantorPermissions) : [];
+    const missing = [
+      ...heldNow,
+      ...permissionsNotHeld(requested, grantorPermissions).filter((p) => !heldNow.includes(p)),
+    ];
+    if (missing.length > 0) throw grantExceededRefusal(missing);
   }
 
   async remove(id: string): Promise<void> {

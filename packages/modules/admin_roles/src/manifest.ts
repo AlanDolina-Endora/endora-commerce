@@ -196,8 +196,13 @@ export const manifest = defineModuleManifest({
    */
   errorCodes: [
     { code: 'ADMIN_ROLE_CODE_TAKEN' },
+    // A role write, or a role assignment `admin_users` makes, that would hand
+    // out permissions the acting administrator's own role lacks.
+    { code: 'ADMIN_ROLE_GRANT_EXCEEDED' },
     { code: 'ADMIN_ROLE_IN_USE', tokens: ['assigned', 'assigned_to_deleted'] },
-    { code: 'ADMIN_ROLE_PROTECTED' },
+    // The base sentence is the deletion refusal; `modify` is a change to a
+    // seeded role by an administrator without full access.
+    { code: 'ADMIN_ROLE_PROTECTED', tokens: ['modify'] },
     // An administrator acting without a role. Raised by this module's
     // permission check, and carried by `organizations`' admin tenant scope to
     // the first tenant-scoped read — one refusal, built in one place

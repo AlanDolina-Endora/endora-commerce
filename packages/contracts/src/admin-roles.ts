@@ -37,6 +37,49 @@ export interface UpsertAdminRoleInput {
 }
 
 /**
+ * Who a role write is made on behalf of.
+ *
+ * Present for an **operator** write — `PUT /api/v1/admin/admin-roles/:code` —
+ * and then the write is held to the grantor's own permissions: a grantor
+ * without the wildcard may not hand out, or edit a role holding, a code their
+ * own role lacks, and may not change a role the platform or a module seeds.
+ *
+ * Absent for a **platform** write: a module's install or boot hook seeding its
+ * roles, a one-time upgrade step, the `admin_users create` bootstrap command.
+ * Those run with no acting administrator and are not subject to the ceiling.
+ */
+export interface UpsertAdminRoleOptions {
+  grantor?: {
+    /** The acting administrator's effective permission codes. */
+    readonly permissions: readonly string[];
+  };
+}
+
+/** The wildcard permission code: a role holding it may do everything. */
+export const ADMIN_PERMISSION_WILDCARD = '*';
+
+/**
+ * The codes in `requested` that a holder of `held` may not hand out — the grant
+ * ceiling shared by role writes, role assignment and API key scopes.
+ *
+ * A holder of the wildcard may grant anything. Otherwise every requested code
+ * must be held verbatim; a requested wildcard is held only by a wildcard
+ * holder. Each missing code is named once, in the order it was requested.
+ */
+export function permissionsNotHeld(
+  requested: readonly string[],
+  held: readonly string[],
+): string[] {
+  if (held.includes(ADMIN_PERMISSION_WILDCARD)) return [];
+  const holds = new Set(held);
+  const missing: string[] = [];
+  for (const code of requested) {
+    if (!holds.has(code) && !missing.includes(code)) missing.push(code);
+  }
+  return missing;
+}
+
+/**
  * Container name: `adminRolePort`. Owner: `admin_roles`.
  *
  * (It said `adminRoleService` until issue #192. That name is registered — it is
@@ -50,7 +93,8 @@ export interface UpsertAdminRoleInput {
  * `admin_users` reads a role to render it beside its user and to enforce the
  * role's `requiresTwoFactor` at login. `remove` refuses a role whose code was
  * registered as system-protected (feature 016 FR-025), and that refusal stays
- * on this side of the port.
+ * on this side of the port. So does the grant ceiling `upsertByCode` applies
+ * when it is given a grantor — see {@link UpsertAdminRoleOptions}.
  *
  * **Owner off:** the seam fails closed — resolving this port throws
  * `ModuleDisabledError` and the call answers 503 `MODULE_DISABLED`, so nothing
@@ -62,7 +106,10 @@ export interface AdminRolePort {
   list(): Promise<AdminRoleRecord[]>;
   getById(id: string): Promise<AdminRoleRecord>;
   findByCode(code: string): Promise<AdminRoleRecord | null>;
-  upsertByCode(input: UpsertAdminRoleInput): Promise<AdminRoleRecord>;
+  upsertByCode(
+    input: UpsertAdminRoleInput,
+    options?: UpsertAdminRoleOptions,
+  ): Promise<AdminRoleRecord>;
   remove(id: string): Promise<void>;
 }
 

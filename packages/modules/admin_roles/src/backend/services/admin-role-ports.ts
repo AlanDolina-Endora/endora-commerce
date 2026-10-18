@@ -46,8 +46,8 @@ export function createAdminRolePort(
       return toAdminRoleRecord(await getService().getById(id));
     },
     findByCode: (code) => read.findByCode(code),
-    async upsertByCode(input) {
-      return toAdminRoleRecord(await getService().upsertByCode(input));
+    async upsertByCode(input, options) {
+      return toAdminRoleRecord(await getService().upsertByCode(input, options));
     },
     remove: (id) => getService().remove(id),
   };

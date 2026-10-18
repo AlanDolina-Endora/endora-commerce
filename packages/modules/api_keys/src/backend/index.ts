@@ -1,6 +1,10 @@
 import type { FastifyRequest } from 'fastify';
 import type { EntityManager } from '@mikro-orm/postgresql';
-import type { CustomerAccountReadPort, OrganizationDetailsPort } from '@endora-commerce/contracts';
+import type {
+  CustomerAccountReadPort,
+  OrganizationDetailsPort,
+  PermissionReadPort,
+} from '@endora-commerce/contracts';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
 import { lazyPort } from '@endora-commerce/platform/kernel';
@@ -61,6 +65,7 @@ export interface ApiKeysCradle {
 }
 
 export function registerModule(ctx: ModuleContext): void {
+  const permissions = lazyPort<PermissionReadPort>(ctx, 'permissionService');
   ctx.di.register({
     // One registration holds the whole graph: the two gates close over the
     // same `resolveScopedKey`, so building them separately would mean two
@@ -78,6 +83,9 @@ export function registerModule(ctx: ModuleContext): void {
               ctx.cradle<ApiKeysCradle>().requireAdmin(permission)(req, reply),
             resolveAdminUserId: (request) =>
               ctx.cradle<ApiKeysCradle>().adminContextResolver(request).adminUserId,
+            // `admin_roles`' gated permission read: a key's scopes are held to
+            // its issuer's own permissions.
+            listAdminPermissions: (adminUserId) => permissions.listPermissions(adminUserId),
             // Feature 075 (D-87) — the two owners the binding rules ask about.
             // Both were `em.getKnex().raw('select … from "organizations"')` and
             // `… from "customer_accounts"` inside the service: raw SQL naming

@@ -5,5 +5,6 @@
   "errors.ADMIN_AUTHENTICATION_THROTTLED": "Too many incorrect passwords or codes were entered for this account, so further attempts are paused. Wait a few minutes and try again.",
   "errors.ADMIN_AUTHENTICATION_UNAVAILABLE": "Sign-in is temporarily unavailable because a service it depends on is not responding. Try again in a moment; if it keeps happening, contact whoever runs this platform.",
   "errors.ADMIN_USER_ROLE_REQUIRED": "An administrator account must hold a role. Choose a role for this account.",
-  "errors.NEW_PASSWORD_UNCHANGED": "The new password is the same as the current one. Choose a different password."
+  "errors.NEW_PASSWORD_UNCHANGED": "The new password is the same as the current one. Choose a different password.",
+  "errors.ADMIN_USER_OUTRANKS_ACTOR": "This account's role holds permissions your own role does not ({permissions}), so you cannot change it, set its password, deactivate it or delete it."
 }

@@ -12,6 +12,8 @@ import { AdminUser } from '../entities/admin-user.entity.js';
 import { AdminUserService, describeAdministratorsWithoutRole } from './admin-user-service.js';
 
 const ROLE_ID = '00000000-0000-4000-8000-0000000000c1';
+/** A full-access actor: the role-required rule holds whoever acts. */
+const FULL_ACCESS = { permissions: ['*'] };
 
 function serviceOver(existing?: AdminUser): { service: AdminUserService; persisted: AdminUser[] } {
   const persisted: AdminUser[] = [];
@@ -45,7 +47,10 @@ describe('AdminUserService — a role is required', () => {
 
     for (const adminRoleId of [undefined, null]) {
       await expect(
-        service.create({ ...NEW_ADMIN, ...(adminRoleId === undefined ? {} : { adminRoleId }) }),
+        service.create(
+          { ...NEW_ADMIN, ...(adminRoleId === undefined ? {} : { adminRoleId }) },
+          FULL_ACCESS,
+        ),
       ).rejects.toMatchObject({ statusCode: 400, code: 'ADMIN_USER_ROLE_REQUIRED' });
     }
     expect(persisted).toEqual([]);
@@ -53,7 +58,7 @@ describe('AdminUserService — a role is required', () => {
 
   it('creates an administrator who is given a role', async () => {
     const { service, persisted } = serviceOver();
-    await service.create({ ...NEW_ADMIN, adminRoleId: ROLE_ID });
+    await service.create({ ...NEW_ADMIN, adminRoleId: ROLE_ID }, FULL_ACCESS);
     expect(persisted).toHaveLength(1);
     expect(persisted[0]!.adminRoleId).toBe(ROLE_ID);
   });
@@ -62,7 +67,7 @@ describe('AdminUserService — a role is required', () => {
     const existing = Object.assign(new AdminUser(), { id: 'a1', adminRoleId: ROLE_ID });
     const { service } = serviceOver(existing);
 
-    await expect(service.update('a1', { adminRoleId: null })).rejects.toMatchObject({
+    await expect(service.update('a1', { adminRoleId: null }, FULL_ACCESS)).rejects.toMatchObject({
       statusCode: 400,
       code: 'ADMIN_USER_ROLE_REQUIRED',
     });
@@ -74,9 +79,9 @@ describe('AdminUserService — a role is required', () => {
     const { service } = serviceOver(existing);
     const other = '00000000-0000-4000-8000-0000000000c2';
 
-    await service.update('a1', { firstName: 'Grace' });
+    await service.update('a1', { firstName: 'Grace' }, FULL_ACCESS);
     expect(existing.adminRoleId).toBe(ROLE_ID);
-    await service.update('a1', { adminRoleId: other });
+    await service.update('a1', { adminRoleId: other }, FULL_ACCESS);
     expect(existing.adminRoleId).toBe(other);
   });
 });
