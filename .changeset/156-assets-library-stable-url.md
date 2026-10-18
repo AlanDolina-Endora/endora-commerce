@@ -23,6 +23,32 @@ even for a private asset), `permalink`, `permalinkUrl` (on the same public base 
 `contentVersion`; `assetReadPort` records carry `contentVersion` and `permalink`. Every existing
 member keeps its value.
 
+**Replace a file in place.** `POST /api/v1/admin/assets/:id/replace` (`assets.write`, multipart, one
+`file` part, an optional `expectedContentVersion` field before it) swaps an asset's file and keeps
+everything else: the id, the folder, the label, the alternate text, the visibility, every reference
+to it, its storage key and therefore every URL already handed out. It answers the updated detail,
+with a new `contentVersion`. The write runs as the audited Command `asset.replace` (before and after:
+filename, type, size, content version).
+
+- The replacement passes the same size, type and content policy as an upload. The configured
+  maximum size now also applies to the bytes actually received — on an upload as well — so a
+  tightened limit takes effect without a restart. On an S3 asset a replacement above 5 GiB is
+  refused with `413` naming 5120 MB.
+- An asset keeps its kind: an image is replaced by an image (an SVG counts), a video by a video, a
+  PDF by a PDF, and anything else by anything else, judged by what the new bytes are rather than the
+  declared type. A mismatch is `415 ASSET_REPLACE_KIND_MISMATCH` with `details.currentKind` and
+  `details.newKind`. A certificate stays a certificate. An admin's MIME override is cleared.
+- Two replaces racing on the same version: one wins, the other gets `409 ASSET_REPLACE_CONFLICT`.
+  A soft-deleted asset answers `410`, a legacy row `409 ASSET_LEGACY_CANNOT_REPLACE`, an
+  unconfigured storage backend `503`. The asset's own backend is used, whatever the active one is.
+- The replaced file is kept as the asset's previous version under a random, private storage key; a
+  further replace discards the one before. Staging and previous objects are recorded in
+  `asset_object_cleanups` before they exist, so a failed or interrupted replace leaves nothing that
+  is not either referenced or due for cleanup.
+- A visibility change now takes the asset's row lock, as a replace does.
+- The file route's `ETag` is now `"<id>-<contentVersion>"`: it changes when the file changes and no
+  longer when only the label or folder does.
+
 **Storage.** Every storage backend can now copy one stored file over another on the server, and
 the cloud backends write two more headers on the objects they store: `Cache-Control: no-cache` and a
 `Content-Disposition` chosen by the serving policy — images, video, PDFs and plain text `inline`; SVG

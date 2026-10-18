@@ -237,9 +237,17 @@ export class UploadPipeline {
     // the persisted `sizeBytes` is accurate; the file-serving route sends this
     // value as `Content-Length`, and a wrong 0 makes browsers render an empty
     // image (broken preview in admin and missing placeholder on the storefront).
+    //
+    // The counted bytes are held to the live policy too: a multipart part
+    // declares no size, so the pre-flight above cannot see it, and the parser's
+    // own limit is the one read at boot.
+    const policyCapBytes = policy.maxFileSizeMb > 0 ? policy.maxFileSizeMb * MIB : undefined;
+    const usePolicyCap =
+      policyCapBytes !== undefined &&
+      (input.sizeCapBytes === undefined || policyCapBytes <= input.sizeCapBytes);
+    const cap = usePolicyCap ? policyCapBytes : input.sizeCapBytes;
     let observedSize = 0;
     let capExceeded = false;
-    const cap = input.sizeCapBytes;
     const countingStream = sniffedStream.pipe(
       new Transform({
         transform(chunk: Buffer, _enc, cb): void {
@@ -253,6 +261,10 @@ export class UploadPipeline {
         },
       }),
     );
+    // The cap can trip before the adapter attaches to the stream (the local
+    // adapter creates its directory first). The error stays on the stream for
+    // the adapter to read; this only keeps it from being reported as uncaught.
+    countingStream.on('error', () => undefined);
     try {
       await input.adapter.put({
         locator: input.locator,
@@ -265,7 +277,12 @@ export class UploadPipeline {
       });
     } catch (err) {
       if (capExceeded) {
-        throw tooLarge(capMb, `File exceeds the ${capMb} MB a single storage request accepts.`);
+        throw usePolicyCap
+          ? tooLarge(
+              policy.maxFileSizeMb,
+              `File exceeds the configured maximum of ${policy.maxFileSizeMb} MB.`,
+            )
+          : tooLarge(capMb, `File exceeds the ${capMb} MB a single storage request accepts.`);
       }
       const reason = err instanceof Error ? err.message : String(err);
       throw new HttpError(

@@ -7,6 +7,7 @@
 //   GET    /api/v1/admin/assets/:id         — detail with references
 //   GET    /api/v1/admin/assets/:id/url     — re-resolve URL on demand
 //   PATCH  /api/v1/admin/assets/:id         — edit metadata + visibility flip
+//   POST   /api/v1/admin/assets/:id/replace — replace the file in place (feature 156)
 //
 // Folder CRUD, soft-delete, restore, bulk move, and storage self-check
 // land in subsequent user stories.
@@ -106,6 +107,58 @@ export async function registerAssetsLibraryAdminRoutes(
       }
       reply.status(201);
       return { data: asset };
+    },
+  );
+
+  // — POST /assets/:id/replace (multipart) — feature 156 ---------------------
+  // Replace the file in place: same id, same storage key, same URLs. The
+  // optional `expectedContentVersion` field is read before the file part
+  // (specs/156-asset-stable-url/contracts/admin-api.md §2).
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/admin/assets/:id/replace',
+    { preHandler: requireAdmin('assets.write') },
+    async (req, reply) => {
+      if (!req.isMultipart()) {
+        throw new HttpError(
+          400,
+          ERROR_CODES.ASSET_UPLOAD_NO_FILE,
+          'Replace requires multipart/form-data with a `file` part.',
+        );
+      }
+      let expectedContentVersion: string | undefined;
+      let detail: Awaited<ReturnType<typeof service.replace>> | null = null;
+      for await (const part of req.parts()) {
+        if (part.type === 'file') {
+          if (detail) {
+            throw new HttpError(
+              400,
+              ERROR_CODES.ASSET_UPLOAD_NO_FILE,
+              'Only one file per request is allowed.',
+            );
+          }
+          detail = await service.replace({
+            assetId: req.params.id,
+            filename: part.filename ?? 'unknown',
+            declaredMime: part.mimetype ?? 'application/octet-stream',
+            stream: part.file,
+            // @fastify/multipart does not provide a guaranteed size.
+            declaredSize: 0,
+            ...(expectedContentVersion !== undefined ? { expectedContentVersion } : {}),
+          });
+        } else if (part.fieldname === 'expectedContentVersion') {
+          const value = String(part.value ?? '').trim();
+          expectedContentVersion = value.length > 0 ? value : undefined;
+        }
+      }
+      if (!detail) {
+        throw new HttpError(
+          400,
+          ERROR_CODES.ASSET_UPLOAD_NO_FILE,
+          'Multipart body did not include a `file` part.',
+        );
+      }
+      reply.status(200);
+      return { data: detail };
     },
   );
 

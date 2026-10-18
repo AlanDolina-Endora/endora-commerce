@@ -491,6 +491,15 @@
         }
       }
     },
+    "/api/v1/admin/assets/{id}/replace": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/assets/{id}/restore": {
       "post": {
         "responses": {

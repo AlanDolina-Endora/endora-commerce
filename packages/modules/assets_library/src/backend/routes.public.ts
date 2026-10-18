@@ -98,8 +98,10 @@ export async function registerAssetsLibraryPublicRoutes(
         );
       }
 
-      // ETag / 304 short-circuit.
-      const etag = `"${a.id}-${Math.floor(a.updatedAt.getTime() / 1000)}"`;
+      // ETag / 304 short-circuit. The tail is the content version — the
+      // identity of the bytes — so a replace changes it and a label edit does
+      // not (specs/156-asset-stable-url/ research R-7).
+      const etag = `"${a.id}-${a.contentVersion}"`;
       const ifNoneMatch = req.headers['if-none-match'];
       if (typeof ifNoneMatch === 'string' && ifNoneMatch === etag) {
         return reply.status(304).send();

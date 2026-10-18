@@ -211,6 +211,18 @@ describe('UploadPipeline.stage — size', () => {
     expect(s.puts).toHaveLength(0);
   });
 
+  it('refuses once the counted bytes pass the configured cap, which a multipart part never declares', async () => {
+    const s = stager({ allowedTypes: ['*'], maxFileSizeMb: 1 });
+    const big = Buffer.alloc(2 * 1024 * 1024);
+    TINY_PNG.copy(big);
+    await expect(s.stage('photo.png', 'image/png', Readable.from([big]))).rejects.toMatchObject({
+      statusCode: 413,
+      code: 'ASSET_UPLOAD_TOO_LARGE',
+      details: { maxFileSizeMb: 1 },
+    });
+    expect(s.puts).toHaveLength(0);
+  });
+
   it('refuses once the counted bytes pass sizeCapBytes, naming 5120 MB, and leaves no object', async () => {
     const s = stager();
     const cap = 5 * 1024 * 1024 * 1024;
