@@ -21,11 +21,14 @@ module stopped needing is retried by the sweep until it is gone.
 (what the catalogue's product, gallery, attachment and Open Graph URLs come from) and
 `assetReadPort.resolvePublicUrls` (product feeds) now carry `?v=<contentVersion>` for public
 assets, and so does the transactional e-mail logo; signed private URLs, legacy rows and `data:`
-values are unchanged. A replace changes the marker, so every embed picks up the new file and can be
+values are unchanged, and so is the stored `storageUrl` of a row with no storage key — a URL no
+adapter of this platform wrote. A replace changes the marker, so every embed picks up the new file and can be
 cached for a year. The stable, unversioned form is `fileUrl` and `GET /api/v1/admin/assets/:id/url`,
 and the new `AssetsLibraryService.resolveEmbedUrl(id)` answers the embed form. A CMS storefront page
 cached before a replace keeps serving the previous marker for up to five minutes (the CMS page
-cache's lifetime); that URL redirects to the current file, so the page never shows the old one.
+cache's lifetime); that URL redirects to the current file when it is requested. A browser that
+already holds the old `?v=` URL in its cache — it was served as immutable — can keep showing the
+previous image until the CMS page cache has turned over and the page is reloaded.
 
 **Behaviour change for the file URL.** `GET /assets/file/<id>` answers a public local asset with
 `Cache-Control: public, no-cache` (it was `public, max-age=31536000, immutable`), so a replaced file
@@ -120,5 +123,4 @@ until they are next written.
 **Error codes.** Seven new codes are declared with their English and Polish sentences:
 `ASSET_REPLACE_KIND_MISMATCH`, `ASSET_LEGACY_CANNOT_REPLACE`, `ASSET_REPLACE_CONFLICT`,
 `ASSET_NO_PREVIOUS_VERSION`, `ASSET_PERMALINK_TAKEN`, `ASSET_PERMALINK_PREVIOUSLY_USED` and
-`ASSET_PERMALINK_INVALID` (with one sentence per reason the permalink rule names). Nothing raises
-them yet.
+`ASSET_PERMALINK_INVALID` (with one sentence per reason the permalink rule names).
