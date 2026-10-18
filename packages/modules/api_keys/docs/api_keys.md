@@ -41,6 +41,12 @@ Creation validates scopes against the typed catalog in
 Enforcement stays membership-based, so legacy free-text scopes on existing
 keys remain readable and enforceable — only creation is validated.
 
+A key acts with the scopes it is issued, so an administrator may issue a key
+only with scopes their own role holds; a holder of the wildcard `*` may issue
+any. `integrations:manage` opens the screen and does not by itself grant
+`catalog:write` or `orders:*`. A scope the issuer lacks is refused with
+`403 API_KEY_SCOPE_NOT_HELD`, naming the missing scopes in `details.scopes`.
+
 ## Binding model
 
 The binding is all-or-none and **immutable post-create** (token-shown-once

@@ -28,6 +28,28 @@ User + role CRUD is gated by the `admin_users:manage` permission.
 | `POST /api/v1/admin/organizations/:id/impersonate` | Begin impersonation; writes `impersonation.start` audit row before issuing the cookie |
 | `POST /api/v1/admin/impersonation/end` | Restore the original admin session |
 
+## What `admin_users:manage` reaches
+
+`admin_users:manage` opens the Users and Roles screens; it does not make its
+holder a full-access administrator. Every write there is held to the acting
+administrator's own permissions, unless their role holds the wildcard `*`:
+
+- A role is written only with permissions the actor holds, and a role that
+  already holds a permission the actor lacks is not changed: 403
+  `ADMIN_ROLE_GRANT_EXCEEDED`, with the missing codes in `details.permissions`.
+- A role the platform or a module seeds (`platform_admin`, `blog_manager`,
+  `content_manager`) is changed — renamed, given other permissions or another
+  two-factor flag — only by a holder of `*`: 409 `ADMIN_ROLE_PROTECTED` with
+  `details.code: 'modify'`.
+- A role is assigned to an account, when it is created or edited, only if the
+  actor holds every permission the role grants: 403 `ADMIN_ROLE_GRANT_EXCEEDED`.
+- An account whose role holds a permission the actor lacks is not edited, given
+  a new password, deactivated or deleted by them: 403
+  `ADMIN_USER_OUTRANKS_ACTOR`.
+
+Writes made with no acting administrator — a module seeding its roles at boot,
+`admin_users create` — are not held to these rules.
+
 ## Every administrator holds a role
 
 An administrator's permissions and the organizations they reach are both read

@@ -28,6 +28,8 @@ import { AdminUserService } from '../../../../packages/modules/admin_users/src/b
 
 const OLD_PASSWORD = 'the-original-strong-pass';
 const NEW_PASSWORD = 'the-replacement-strong-pass';
+/** A full-access actor; the reach rule has its own tests beside the service. */
+const FULL_ACCESS = { permissions: ['*'] };
 
 interface AuditRecord {
   action: string;
@@ -98,7 +100,7 @@ describe('admin_users — peer password reset', () => {
       recordingAuditLog(entries),
     );
 
-    const updated = await service.resetPassword('a-1', NEW_PASSWORD);
+    const updated = await service.resetPassword('a-1', NEW_PASSWORD, FULL_ACCESS);
 
     expect(steps).toEqual(['flush', 'revoke:a-1']);
     expect(await verifyPassword(updated.passwordHash, NEW_PASSWORD)).toBe(true);
@@ -119,7 +121,7 @@ describe('admin_users — peer password reset', () => {
       sessions,
       recordingAuditLog(entries),
     );
-    const updated = await service.resetPassword('a-1', NEW_PASSWORD);
+    const updated = await service.resetPassword('a-1', NEW_PASSWORD, FULL_ACCESS);
 
     expect(entries).toHaveLength(1);
     const entry = entries[0]!;
@@ -153,7 +155,7 @@ describe('admin_users — peer password reset', () => {
       recordingAuditLog(entries),
     );
 
-    await expect(service.resetPassword('a-1', NEW_PASSWORD)).rejects.toThrow('MODULE_DISABLED');
+    await expect(service.resetPassword('a-1', NEW_PASSWORD, FULL_ACCESS)).rejects.toThrow('MODULE_DISABLED');
     // The new password is in force by then: the write precedes the revocation
     // on purpose, and the caller is told the reset did not complete.
     expect(admin.passwordHash).not.toBe(originalHash);
@@ -176,7 +178,7 @@ describe('admin_users — peer password reset', () => {
       recordingAuditLog([]),
     );
 
-    await expect(service.resetPassword('a-missing', NEW_PASSWORD)).rejects.toThrow(
+    await expect(service.resetPassword('a-missing', NEW_PASSWORD, FULL_ACCESS)).rejects.toThrow(
       'Admin user not found.',
     );
     expect(steps).toEqual([]);

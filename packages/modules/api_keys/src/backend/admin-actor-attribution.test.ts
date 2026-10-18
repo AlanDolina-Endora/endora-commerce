@@ -76,6 +76,7 @@ describe('POST /api/v1/admin/api-keys — the acting admin', () => {
       requireAdmin: () => async () => {},
       resolveAdminUserId: (request) =>
         (request as unknown as { actor: { adminUserId: string } }).actor.adminUserId,
+      listAdminPermissions: async () => ['*'],
     };
     await registerApiKeysAdminRoutes(app, deps);
     await app.ready();

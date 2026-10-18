@@ -28,6 +28,26 @@ Zarządzanie użytkownikami i rolami wymaga uprawnienia `admin_users:manage`.
 | `POST /api/v1/admin/organizations/:id/impersonate` | Rozpoczęcie logowania jako klient; przed wydaniem ciasteczka zapisuje wpis audytu `impersonation.start` |
 | `POST /api/v1/admin/impersonation/end` | Powrót do pierwotnej sesji administratora |
 
+## Zasięg uprawnienia `admin_users:manage`
+
+`admin_users:manage` otwiera ekrany użytkowników i ról, ale nie czyni posiadacza administratorem z
+pełnym dostępem. Każdy zapis na tych ekranach jest ograniczony do uprawnień, które ma rola działającego
+administratora, chyba że jego rola ma symbol wieloznaczny `*`:
+
+- Rolę można zapisać tylko z uprawnieniami, które ma działający administrator, a roli, która ma już
+  uprawnienie, którego on nie ma, nie można zmienić: 403 `ADMIN_ROLE_GRANT_EXCEEDED`, z brakującymi
+  kodami w `details.permissions`.
+- Rolę tworzoną przez platformę lub moduł (`platform_admin`, `blog_manager`, `content_manager`) może
+  zmienić — zmienić jej nazwę, uprawnienia albo ustawienie weryfikacji dwuetapowej — tylko posiadacz `*`:
+  409 `ADMIN_ROLE_PROTECTED` z `details.code: 'modify'`.
+- Rolę można przypisać kontu, przy tworzeniu lub edycji, tylko wtedy, gdy działający administrator ma
+  wszystkie uprawnienia tej roli: 403 `ADMIN_ROLE_GRANT_EXCEEDED`.
+- Konta, którego rola ma uprawnienie, którego działający administrator nie ma, nie może on edytować,
+  ustawić mu nowego hasła, dezaktywować ani usunąć: 403 `ADMIN_USER_OUTRANKS_ACTOR`.
+
+Zapisy wykonywane bez działającego administratora — moduł tworzący swoje role przy starcie,
+`admin_users create` — nie podlegają tym regułom.
+
 ## Każdy administrator ma rolę
 
 Uprawnienia administratora i organizacje, do których ma dostęp, wynikają z roli przypisanej do

@@ -24,13 +24,19 @@ export interface ApiKeysAdminDeps {
    * behind `requireAdmin(...)`, so the actor is an admin by the time it runs.
    */
   resolveAdminUserId: (request: FastifyRequest) => string;
+  /**
+   * The effective permission codes of an administrator — `admin_roles`'
+   * `permissionService.listPermissions`. A key may be issued only with scopes
+   * its issuer's own role holds.
+   */
+  listAdminPermissions: (adminUserId: string) => Promise<readonly string[]>;
 }
 
 export async function registerApiKeysAdminRoutes(
   app: FastifyInstance,
   deps: ApiKeysAdminDeps,
 ): Promise<void> {
-  const { apiKeyService, requireAdmin, resolveAdminUserId } = deps;
+  const { apiKeyService, requireAdmin, resolveAdminUserId, listAdminPermissions } = deps;
 
   app.get(
     '/api/v1/admin/api-keys',
@@ -49,12 +55,14 @@ export async function registerApiKeysAdminRoutes(
     },
     async (request, reply) => {
       const body = createApiKeyRequestSchema.parse(request.body);
+      const adminUserId = resolveAdminUserId(request);
       const result = await apiKeyService.create({
         name: body.name,
         scopes: body.scopes,
         ...(body.binding !== undefined ? { binding: body.binding } : {}),
         ...(body.expiresAt !== undefined ? { expiresAt: new Date(body.expiresAt) } : {}),
-        createdByAdminUserId: resolveAdminUserId(request),
+        createdByAdminUserId: adminUserId,
+        grantorPermissions: await listAdminPermissions(adminUserId),
       });
       reply.status(201);
       return {

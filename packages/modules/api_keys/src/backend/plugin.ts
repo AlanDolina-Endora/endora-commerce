@@ -33,6 +33,11 @@ export interface IntegrationsModuleOptions {
    * `request.testActor` — see `ApiKeysAdminDeps.resolveAdminUserId`.
    */
   resolveAdminUserId: (request: FastifyRequest) => string;
+  /**
+   * An administrator's effective permission codes, from `admin_roles`. The
+   * admin routes refuse to issue a key with a scope its issuer does not hold.
+   */
+  listAdminPermissions: (adminUserId: string) => Promise<readonly string[]>;
 }
 
 /**
@@ -173,6 +178,7 @@ export function integrationsModule(options: IntegrationsModuleOptions): {
         apiKeyService,
         requireAdmin: options.requireAdmin,
         resolveAdminUserId: options.resolveAdminUserId,
+        listAdminPermissions: options.listAdminPermissions,
       });
     },
   };

@@ -206,14 +206,17 @@ export const manifest = defineModuleManifest({
   ],
   permissions: [{ code: 'customers:impersonate', label: 'Impersonate customers' }],
   /**
-   * Both raised by `AdminUserService`, about this module's own row:
-   * `ADMIN_USER_ROLE_REQUIRED` when a create or an edit would leave an account
-   * without a role, `NEW_PASSWORD_UNCHANGED` when an administrator changing
-   * their own password supplies the one they already have.
+   * The last three are raised by `AdminUserService`, about this module's own
+   * row: `ADMIN_USER_ROLE_REQUIRED` when a create or an edit would leave an
+   * account without a role, `ADMIN_USER_OUTRANKS_ACTOR` when an administrator
+   * acts on an account whose role holds permissions their own lacks, and
+   * `NEW_PASSWORD_UNCHANGED` when an administrator changing their own password
+   * supplies the one they already have.
    */
   errorCodes: [
     { code: 'ADMIN_AUTHENTICATION_THROTTLED' },
     { code: 'ADMIN_AUTHENTICATION_UNAVAILABLE' },
+    { code: 'ADMIN_USER_OUTRANKS_ACTOR' },
     { code: 'ADMIN_USER_ROLE_REQUIRED' },
     { code: 'NEW_PASSWORD_UNCHANGED' },
   ],
