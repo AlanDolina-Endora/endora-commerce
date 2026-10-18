@@ -39,12 +39,12 @@ describe('sales_channels.anonymous_access migration', () => {
 
   it('is a non-null boolean defaulting to open, and re-running it is harmless', async () => {
     await runMigration();
-    const rows = await h.em().execute<
-      Array<{ data_type: string; is_nullable: string; column_default: string }>
-    >(
-      `select data_type, is_nullable, column_default from information_schema.columns
+    const rows = await h
+      .em()
+      .execute<Array<{ data_type: string; is_nullable: string; column_default: string }>>(
+        `select data_type, is_nullable, column_default from information_schema.columns
        where table_name = 'sales_channels' and column_name = 'anonymous_access'`,
-    );
+      );
     expect(rows).toEqual([{ data_type: 'boolean', is_nullable: 'NO', column_default: 'true' }]);
   });
 

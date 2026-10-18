@@ -98,7 +98,9 @@ export class PersonalOrganizationService {
     const taxId = personalTaxId(input.customerAccountId);
     const existingByTaxId = await em.findOne(Organization, { taxId });
     if (existingByTaxId) {
-      await this.channelMembership?.bindToDefaultIfEmpty('organization', existingByTaxId.id, { em });
+      await this.channelMembership?.bindToDefaultIfEmpty('organization', existingByTaxId.id, {
+        em,
+      });
       return existingByTaxId;
     }
     const org = em.create(Organization, {

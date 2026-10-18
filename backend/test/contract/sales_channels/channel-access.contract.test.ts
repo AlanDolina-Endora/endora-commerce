@@ -288,6 +288,23 @@ describe('sales-channel access step', () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it('answers a browser preflight on a closed channel, so a permitted customer is not blocked by it', async () => {
+    // A preflight carries no cookie, so it is always anonymous; refusing it
+    // would stop every cross-origin call a signed-in buyer makes on a closed store.
+    const res = await h.app.inject({
+      method: 'OPTIONS',
+      url: PROBE,
+      headers: {
+        origin: 'http://localhost:3000',
+        'access-control-request-method': 'GET',
+        'access-control-request-headers': 'x-sales-channel',
+        'x-sales-channel': 'trade',
+      },
+    });
+    expect(res.statusCode).toBe(204);
+    expect(res.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+  });
+
   it('refuses an unknown channel with 400 before any access decision', async () => {
     const res = await h.app.inject({
       method: 'GET',

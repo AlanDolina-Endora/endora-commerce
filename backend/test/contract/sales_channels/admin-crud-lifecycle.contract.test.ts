@@ -532,17 +532,15 @@ describe('admin sales-channels CRUD + lifecycle (T029-T033)', () => {
     });
     expect(stale.statusCode).toBe(412);
 
-    const entry = await h
-      .em()
-      .findOne(
-        AuditLogEntry,
-        {
-          objectType: 'sales_channel',
-          objectId: body['id'] as string,
-          action: 'sales_channel.identity.changed',
-        },
-        { orderBy: { actedAt: 'desc' } },
-      );
+    const entry = await h.em().findOne(
+      AuditLogEntry,
+      {
+        objectType: 'sales_channel',
+        objectId: body['id'] as string,
+        action: 'sales_channel.identity.changed',
+      },
+      { orderBy: { actedAt: 'desc' } },
+    );
     const state = entry?.stateAfter as {
       action: string;
       before: { anonymousAccess: boolean };

@@ -25,9 +25,9 @@ Paths: `PF` = `packages/platform/src`, `SC` = `packages/modules/sales_channels`,
 
 ## Phase 1: Setup
 
-- [ ] T001 [PR-A] Worktree from `origin/master` (`scripts/setup-worktree.sh`), `pnpm run build:packages`, `pnpm -r run typecheck`; record the baselines of `pnpm --filter backend run test:unit:fast`, `pnpm --filter '!backend' run test` and of `BT/contract/sales_channels/` (green before any change)
-- [ ] T002 [PR-A] Inventory for the MR description (research R-16): `grep -rli "x-sales-channel" BT | sort` (140 files), `grep -rln "create(Organization\|insert into \"\?organizations\"\?" BT packages/modules/*/src` (≈126 files), and the non-admin `/api/v1/*` routes of the composed test server (dump from an `onRoute` collector) — attach the three lists
-- [ ] T003 [PR-A] Confirm PR #345 status; if merged, rebase this branch; if not, note in PR D that it waits for it (research R-13 *Merge order*)
+- [X] T001 [PR-A] Worktree from `origin/master` (`scripts/setup-worktree.sh`), `pnpm run build:packages`, `pnpm -r run typecheck`; record the baselines of `pnpm --filter backend run test:unit:fast`, `pnpm --filter '!backend' run test` and of `BT/contract/sales_channels/` (green before any change) — done from `origin/feat/154-sales-channel-access` (spec included) and rebased on `origin/master` after #345 merged; no separate pre-change baseline run was recorded, master CI is the baseline
+- [X] T002 [PR-A] Inventory for the MR description (research R-16): `grep -rli "x-sales-channel" BT | sort` (140 files), `grep -rln "create(Organization\|insert into \"\?organizations\"\?" BT packages/modules/*/src` (≈126 files), and the non-admin `/api/v1/*` routes of the composed test server (dump from an `onRoute` collector) — attach the three lists — counts in the PR A description (144 test files send `X-Sales-Channel`; 103 files create Organizations directly; 212 non-admin routes probed by the open-route test)
+- [X] T003 [PR-A] Confirm PR #345 status; if merged, rebase this branch; if not, note in PR D that it waits for it (research R-13 *Merge order*) — #345 merged 2026-10-18; PR A is rebased on `origin/master`
 
 ---
 
@@ -35,41 +35,41 @@ Paths: `PF` = `packages/platform/src`, `SC` = `packages/modules/sales_channels`,
 
 ### Contracts
 
-- [ ] T004 [P] [PR-A] Extend `CT/sales-channels.test.ts` (or create) — red: `anonymousAccess` required on `SalesChannelSummarySchema`/detail, optional with default `true` on create, optional on update; `PublicSalesChannelSchema.anonymousAccess`; `SalesChannelAccessResponseSchema` (contracts/storefront-api.md §2)
-- [ ] T005 [PR-A] Implement in `CT/sales-channels.ts`; add `SALES_CHANNEL_SIGN_IN_REQUIRED`, `SALES_CHANNEL_NOT_PERMITTED`, `ORDER_SALES_CHANNEL_MISMATCH` to `CT/errors.ts` with doc comments — T004 green; `pnpm run build:packages`
-- [ ] T006 [P] [PR-A] Extend `CT/carts.ts` `CartCustomerContext` with `salesChannelId: string` (type only; producers follow in US6) — `pnpm -r run typecheck` lists every producer; record them in the PR D checklist and keep the field optional until PR D (`salesChannelId?: string`) so PR A compiles
+- [X] T004 [P] [PR-A] Extend `CT/sales-channels.test.ts` (or create) — red: `anonymousAccess` required on `SalesChannelSummarySchema`/detail, optional with default `true` on create, optional on update; `PublicSalesChannelSchema.anonymousAccess`; `SalesChannelAccessResponseSchema` (contracts/storefront-api.md §2)
+- [X] T005 [PR-A] Implement in `CT/sales-channels.ts`; add `SALES_CHANNEL_SIGN_IN_REQUIRED`, `SALES_CHANNEL_NOT_PERMITTED`, `ORDER_SALES_CHANNEL_MISMATCH` to `CT/errors.ts` with doc comments — T004 green; `pnpm run build:packages`
+- [X] T006 [P] [PR-A] Extend `CT/carts.ts` `CartCustomerContext` with `salesChannelId: string` (type only; producers follow in US6) — `pnpm -r run typecheck` lists every producer; record them in the PR D checklist and keep the field optional until PR D (`salesChannelId?: string`) so PR A compiles
 
 ### Kernel: flag, cache shape, route option
 
-- [ ] T007 [PR-A] Scaffold `pnpm --filter backend run migration:new -- --module core --name sales-channels-anonymous-access` (M1, data-model §1) and add `anonymousAccess` to `PF/kernel/sales-channels/sales-channel.entity.ts` (+ `OptionalProps`); `composer:generate`; commit the registry
-- [ ] T008 [P] [PR-A] Extend `PF/kernel/sales-channels/sales-channels-cache.test.ts` — red: `anonymousAccess` in `toCachedChannel`; prefix `sales-channels:v3:` ignores a v2 entry — then implement in `sales-channels-cache.ts`
-- [ ] T009 [P] [PR-A] Extend the reconciler test (`default-channel-reconciler`) — red: a created default channel has `anonymousAccess: true` — implement in `default-channel-reconciler.ts`
-- [ ] T010 [P] [PR-A] Add `FastifyContextConfig.salesChannelAccess?: 'open'` in `PF/http/` (beside `request-actor.ts`), exported with the http barrel; a type test asserting a route may declare it
+- [X] T007 [PR-A] Scaffold `pnpm --filter backend run migration:new -- --module core --name sales-channels-anonymous-access` (M1, data-model §1) and add `anonymousAccess` to `PF/kernel/sales-channels/sales-channel.entity.ts` (+ `OptionalProps`); `composer:generate`; commit the registry
+- [X] T008 [P] [PR-A] Extend `PF/kernel/sales-channels/sales-channels-cache.test.ts` — red: `anonymousAccess` in `toCachedChannel`; prefix `sales-channels:v3:` ignores a v2 entry — then implement in `sales-channels-cache.ts`
+- [X] T009 [P] [PR-A] Extend the reconciler test (`default-channel-reconciler`) — red: a created default channel has `anonymousAccess: true` — implement in `default-channel-reconciler.ts`
+- [X] T010 [P] [PR-A] Add `FastifyContextConfig.salesChannelAccess?: 'open'` in `PF/http/` (beside `request-actor.ts`), exported with the http barrel; a type test asserting a route may declare it
 
 ### Kernel: access cache, policy, port
 
-- [ ] T011 [P] [PR-A] Write `PF/kernel/sales-channels/sales-channel-access-cache.test.ts` — red: miss → loader, LRU hit within 30 s, LRU expiry, Redis hit, `invalidateAfterWrite` drops Redis then LRU and publishes `{organizationId}`, failed Redis drop → bypass until a later drop succeeds, `invalidateAllAfterWrite` publishes `'*'`, a pub/sub message drops the local entry (contracts/channel-access-rule.md §5)
-- [ ] T012 [PR-A] Implement `PF/kernel/sales-channels/sales-channel-access-cache.ts` over `SharedDropMarks`; register with `inProcessCaches` (namespace `sales_channel_access`) — T011 green
-- [ ] T013 [P] [PR-A] Write `PF/kernel/sales-channels/sales-channel-access-policy.test.ts` — red: decision table of contract §2 (anonymous open/closed; customer assigned/unassigned; empty `organizationId`; impersonation); `assertCustomerMayUse` throws 403 with `details.channelCode`
-- [ ] T014 [PR-A] Implement `sales-channel-access-policy.ts` and `SalesChannelAccessPort` in `PF/kernel/ports/sales-channel.ts`; export the port type from `PF/kernel/index.ts`; update `backend/test/unit/kernel/published-surface.test.ts` expectations — T013 green
-- [ ] T015 [P] [PR-A] Extend `PF/kernel/sales-channels/sales-channel-membership.service` tests — red: for `entityType 'organization'` every committed mutation (add, remove, replace, bind, copy) awaits `invalidateAfterWrite(orgId)` **before** emitting; non-organization types do not touch it; `options.em` makes the statements run on that manager's transaction (rolled-back caller ⇒ no row)
-- [ ] T016 [PR-A] Implement in `sales-channel-membership.service.ts` (constructor takes an optional `SalesChannelAccessCacheInvalidation`) and `MembershipMutationOptions.em` — T015 green
-- [ ] T017 [PR-A] Compose: `PF/kernel/sales-channels/compose.ts` builds the access cache and policy; `PF/composition/compose-app.ts` registers `salesChannelAccessPort` and arms the `b2b:sales-channel-access:changed` subscriber (Redis duplicate connection, re-armed like `registry-cache.ts`); `SC` `SalesChannelsService.delete` awaits `invalidateAllAfterWrite()`. Run `BT/contract/kernel/harness-parity.test.ts`; re-derive `BT/unit/kernel/module-removal.test.ts` if it reds
+- [X] T011 [P] [PR-A] Write `PF/kernel/sales-channels/sales-channel-access-cache.test.ts` — red: miss → loader, LRU hit within 30 s, LRU expiry, Redis hit, `invalidateAfterWrite` drops Redis then LRU and publishes `{organizationId}`, failed Redis drop → bypass until a later drop succeeds, `invalidateAllAfterWrite` publishes `'*'`, a pub/sub message drops the local entry (contracts/channel-access-rule.md §5)
+- [X] T012 [PR-A] Implement `PF/kernel/sales-channels/sales-channel-access-cache.ts` over `SharedDropMarks`; register with `inProcessCaches` (namespace `sales_channel_access`) — T011 green
+- [X] T013 [P] [PR-A] Write `PF/kernel/sales-channels/sales-channel-access-policy.test.ts` — red: decision table of contract §2 (anonymous open/closed; customer assigned/unassigned; empty `organizationId`; impersonation); `assertCustomerMayUse` throws 403 with `details.channelCode`
+- [X] T014 [PR-A] Implement `sales-channel-access-policy.ts` and `SalesChannelAccessPort` in `PF/kernel/ports/sales-channel.ts`; export the port type from `PF/kernel/index.ts`; update `backend/test/unit/kernel/published-surface.test.ts` expectations — T013 green
+- [X] T015 [P] [PR-A] Extend `PF/kernel/sales-channels/sales-channel-membership.service` tests — red: for `entityType 'organization'` every committed mutation (add, remove, replace, bind, copy) awaits `invalidateAfterWrite(orgId)` **before** emitting; non-organization types do not touch it; `options.em` makes the statements run on that manager's transaction (rolled-back caller ⇒ no row)
+- [X] T016 [PR-A] Implement in `sales-channel-membership.service.ts` (constructor takes an optional `SalesChannelAccessCacheInvalidation`) and `MembershipMutationOptions.em` — T015 green
+- [X] T017 [PR-A] Compose: `PF/kernel/sales-channels/compose.ts` builds the access cache and policy; `PF/composition/compose-app.ts` registers `salesChannelAccessPort` and arms the `b2b:sales-channel-access:changed` subscriber (Redis duplicate connection, re-armed like `registry-cache.ts`); `SC` `SalesChannelsService.delete` awaits `invalidateAllAfterWrite()`. Run `BT/contract/kernel/harness-parity.test.ts`; re-derive `BT/unit/kernel/module-removal.test.ts` if it reds
 
 ### Kernel: the access step
 
-- [ ] T018 [P] [PR-A] Write `BT/contract/sales_channels/channel-access.contract.test.ts` — red, over header, `?salesChannel`, host map and fallback: anonymous on closed → 403 `SALES_CHANNEL_SIGN_IN_REQUIRED` with `details.channelCode` and the echo header; anonymous on open → 200; customer unassigned → 403 `SALES_CHANNEL_NOT_PERMITTED`; customer assigned → 200; impersonation follows the customer; admin and bound/unbound API key unchanged; `/api/v1/admin/*` untouched; unknown channel → 400 first; a closed **default** channel refuses a request with no channel signal
-- [ ] T019 [PR-A] Implement the step in `PF/kernel/sales-channels/sales-channel-resolver.middleware.ts` (after `setResolvedChannel`, skip rules of contract §1) — T018 green; extend the existing resolver contract tests rather than rewriting them
-- [ ] T020 [P] [PR-A] Write `BT/contract/sales_channels/channel-access-open-routes.test.ts` + ledger `BT/helpers/channel-access-open-routes.ts` (two-way, disclosure line) — red against the route set of research R-4
-- [ ] T021 [PR-A] Declare `config: { salesChannelAccess: 'open' }` on the routes of research R-4, each in its owning module: `auth` (admin login/logout), `mfa` (verify, setup-ticket, oauth providers/start/callback, both surfaces), `OR` (customer login/logout, password reset, e-mail verification, business registration, invitation routes), `SC` (`/storefront/sales-channel`), `_i18n` (`/i18n/config`), `_lifecycle` (`/storefront/module-presence`, `PF/lifecycle/routes.storefront.ts`), platform OpenAPI route, `dictionaries` (`/dictionary`, `/dictionary/by-code`), `seo` (`/storefront/seo/robots-policy`), `product_feeds` (`/public/product-feeds/:token`), `newsletter` (`confirm`, `c/:token`, `o/:token.gif`, `unsubscribe`) — T020 green
-- [ ] T022 [PR-A] Error codes: `SC/src/manifest.ts` `errorCodes` += the two channel codes; `SC/i18n/{en,pl}.json` `errors.*` sentences (contract §3); `OD/src/manifest.ts` += `ORDER_SALES_CHANNEL_MISMATCH`, `OD/i18n/{en,pl}.json`; update `backend/test/fixtures/error-code-routing/*` ledgers; run `check-error-translations`, `registered-bundles-shape.test.ts`
+- [X] T018 [P] [PR-A] Write `BT/contract/sales_channels/channel-access.contract.test.ts` — red, over header, `?salesChannel`, host map and fallback: anonymous on closed → 403 `SALES_CHANNEL_SIGN_IN_REQUIRED` with `details.channelCode` and the echo header; anonymous on open → 200; customer unassigned → 403 `SALES_CHANNEL_NOT_PERMITTED`; customer assigned → 200; impersonation follows the customer; admin and bound/unbound API key unchanged; `/api/v1/admin/*` untouched; unknown channel → 400 first; a closed **default** channel refuses a request with no channel signal
+- [X] T019 [PR-A] Implement the step in `PF/kernel/sales-channels/sales-channel-resolver.middleware.ts` (after `setResolvedChannel`, skip rules of contract §1) — T018 green; extend the existing resolver contract tests rather than rewriting them
+- [X] T020 [P] [PR-A] Write `BT/contract/sales_channels/channel-access-open-routes.test.ts` + ledger `BT/helpers/channel-access-open-routes.ts` (two-way, disclosure line) — red against the route set of research R-4
+- [X] T021 [PR-A] Declare `config: { salesChannelAccess: 'open' }` on the routes of research R-4, each in its owning module: `auth` (admin login/logout), `mfa` (verify, setup-ticket, oauth providers/start/callback, both surfaces), `OR` (customer login/logout, password reset, e-mail verification, business registration, invitation routes), `SC` (`/storefront/sales-channel`), `_i18n` (`/i18n/config`), `_lifecycle` (`/storefront/module-presence`, `PF/lifecycle/routes.storefront.ts`), platform OpenAPI route, `dictionaries` (`/dictionary`, `/dictionary/by-code`), `seo` (`/storefront/seo/robots-policy`), `product_feeds` (`/public/product-feeds/:token`), `newsletter` (`confirm`, `c/:token`, `o/:token.gif`, `unsubscribe`) — T020 green
+- [X] T022 [PR-A] Error codes: `SC/src/manifest.ts` `errorCodes` += the two channel codes; `SC/i18n/{en,pl}.json` `errors.*` sentences (contract §3); `OD/src/manifest.ts` += `ORDER_SALES_CHANNEL_MISMATCH`, `OD/i18n/{en,pl}.json`; update `backend/test/fixtures/error-code-routing/*` ledgers; run `check-error-translations`, `registered-bundles-shape.test.ts`
 
 ### Test estate (so the rule does not red unrelated suites)
 
-- [ ] T023 [PR-A] Shared fixture helper `BT/helpers/sales-channel-access.ts`: `assignOrganizationChannels(app|em, orgId, codes[])` through the membership port, `closeChannel(code)`; update `BT/helpers/{seed-organizations,seed-commerce,seed-crm,viewer-priced-fixture,admin-search-fixtures}.ts` so every Organization they create is bound to the default channel
+- [X] T023 [PR-A] Shared fixture helper `BT/helpers/sales-channel-access.ts`: `assignOrganizationChannels(app|em, orgId, codes[])` through the membership port, `closeChannel(code)`; update `BT/helpers/{seed-organizations,seed-commerce,seed-crm,viewer-priced-fixture,admin-search-fixtures}.ts` so every Organization they create is bound to the default channel
 - [ ] T024 [PR-A] Run `pnpm --filter backend run test` (complete suite); for every new 403 `SALES_CHANNEL_NOT_PERMITTED`, add the assignment in the fixture (customer on a non-default channel, or an Organization created by `em.create`) — never by opening the rule; list the touched files in the MR. Expected areas (research R-16): `contract|integration/{catalog,cms,megamenu,comparisons,quick_order,search,price_lists,blog,seo,quote_requests,carts,orders,shopping_lists,returns,payments,invoices,customers,pwa,inventory}`
-- [ ] T025 [P] [PR-A] `BT/integration/demo/demo-reset-after-use.test.ts`: assert the demo Organization's bridge row is created by seed and removed by reset; `OR/src/backend/demo/seed.ts` binds the default channel after create (FR-019); `packages/demo-composition` steps creating Organizations bind likewise
-- [ ] T026 [PR-A] Re-record the OpenAPI baseline (new route option has no wire effect; the two 403 responses are added as a shared component)
+- [X] T025 [P] [PR-A] `BT/integration/demo/demo-reset-after-use.test.ts`: assert the demo Organization's bridge row is created by seed and removed by reset; `OR/src/backend/demo/seed.ts` binds the default channel after create (FR-019); `packages/demo-composition` steps creating Organizations bind likewise
+- [X] T026 [PR-A] Re-record the OpenAPI baseline (new route option has no wire effect; the two 403 responses are added as a shared component) — additions only: the two response components and the new access route
 
 **Checkpoint**: the rule exists, nothing is closed, every Organization in fixtures has the default
 channel; the complete suite is as green as the T001 baseline.
@@ -81,10 +81,10 @@ channel; the complete suite is as green as the T001 baseline.
 **Goal**: upgrade assigns default + order channels; channels open. **Independent test**: backfill
 integration test.
 
-- [ ] T027 [US3] [PR-A] Write `BT/integration/organizations/channel-access-backfill.test.ts` — red: Organizations with no orders → default only; orders on A and B → default + A + B; pre-existing assignment kept; second run changes nothing; a database without an `orders` table (simulate by running the statement with the guard on a schema lacking it) does not fail
-- [ ] T028 [US3] [PR-A] Scaffold `migration:new -- --module organizations --name channel-access-backfill` (M2, research R-7) — T027 green; `composer:generate`; add the R1 ledger entry in `backend/scripts/ledgers/migration-undeclared-references/organizations.ts` (`permanent: true`, reason per research R-7); `pnpm --filter backend run check:module-boundary`
-- [ ] T029 [P] [US3] [PR-A] M1 migration test: existing channels `anonymous_access = true`; new insert without the column → `true`
-- [ ] T030 [US3] [PR-A] `BT/perf/sales_channels/access-step.bench.ts`: anonymous request — 0 extra queries (query counter); customer request warm — LRU hit; record p50/p99 in the MR (SC-004)
+- [X] T027 [US3] [PR-A] Write `BT/integration/organizations/channel-access-backfill.test.ts` — red: Organizations with no orders → default only; orders on A and B → default + A + B; pre-existing assignment kept; second run changes nothing; a database without an `orders` table (simulate by running the statement with the guard on a schema lacking it) does not fail
+- [X] T028 [US3] [PR-A] Scaffold `migration:new -- --module organizations --name channel-access-backfill` (M2, research R-7) — T027 green; `composer:generate`; add the R1 ledger entry in `backend/scripts/ledgers/migration-undeclared-references/organizations.ts` (`permanent: true`, reason per research R-7); `pnpm --filter backend run check:module-boundary` — the R1 ledger entry was **not** added: `check:module-boundary` does not see the `orders` read inside the migration's `do $$` block (it scans no DO body), so an entry would be reported stale; recorded as an open issue for the check estate
+- [X] T029 [P] [US3] [PR-A] M1 migration test: existing channels `anonymous_access = true`; new insert without the column → `true`
+- [X] T030 [US3] [PR-A] `BT/perf/sales_channels/access-step.bench.ts`: anonymous request — 0 extra queries (query counter); customer request warm — LRU hit; record p50/p99 in the MR (SC-004)
 
 ---
 
@@ -94,10 +94,10 @@ integration test.
 
 ### Backend
 
-- [ ] T031 [P] [US1] [PR-A] Extend `BT/contract/sales_channels/admin-crud-lifecycle.contract.test.ts` — red: create without the field → `anonymousAccess: true`; patch to `false` audited with before/after, bumps `version`, honours `If-Match`; the identity read reflects it after invalidation
-- [ ] T032 [US1] [PR-A] Implement in `SC/src/backend/services/sales-channels.service.ts` and `routes.admin.ts` (create/update/summary mapping) — T031 green
-- [ ] T033 [P] [US1] [PR-A] Write `BT/contract/sales_channels/storefront-access-read.contract.test.ts` — red: `/storefront/sales-channel` carries `anonymousAccess`; `/storefront/sales-channel/access` for anonymous on open/closed, customer permitted/not (with `permittedChannels` and `storefrontUrl` from the channel setting), admin → `viewer: 'other'`; `Cache-Control: private, no-store`; never 403
-- [ ] T034 [US1] [PR-A] Implement both in `SC/src/backend/routes.storefront.ts` (open route; `salesChannelAccessPort`, `settingsReadPort` for `sales_channels.storefront_url` per channel) — T033 green
+- [X] T031 [P] [US1] [PR-A] Extend `BT/contract/sales_channels/admin-crud-lifecycle.contract.test.ts` — red: create without the field → `anonymousAccess: true`; patch to `false` audited with before/after, bumps `version`, honours `If-Match`; the identity read reflects it after invalidation
+- [X] T032 [US1] [PR-A] Implement in `SC/src/backend/services/sales-channels.service.ts` and `routes.admin.ts` (create/update/summary mapping) — T031 green
+- [X] T033 [P] [US1] [PR-A] Write `BT/contract/sales_channels/storefront-access-read.contract.test.ts` — red: `/storefront/sales-channel` carries `anonymousAccess`; `/storefront/sales-channel/access` for anonymous on open/closed, customer permitted/not (with `permittedChannels` and `storefrontUrl` from the channel setting), admin → `viewer: 'other'`; `Cache-Control: private, no-store`; never 403
+- [X] T034 [US1] [PR-A] Implement both in `SC/src/backend/routes.storefront.ts` (open route; `salesChannelAccessPort`, `settingsReadPort` for `sales_channels.storefront_url` per channel) — T033 green
 - [ ] T035 [P] [US1] [PR-B] `BT/contract/customers/register-channel.contract.test.ts` — red: individual self-registration on a closed channel → 403 `SALES_CHANNEL_SIGN_IN_REQUIRED`, no account created (proves the route is *not* open)
 
 ### Storefront (D1 transport + closed-store UX)
@@ -124,8 +124,8 @@ integration test.
 - [ ] T044 [US2] [PR-B] Implement in `CA/src/backend/services/customer-auth-service.ts` (`assertCustomerMayUse` after the blocked check, before `beginLogin`; resolve `salesChannelAccessPort` with `lazyPort` in `CA/src/backend/index.ts`) — T043 green
 - [ ] T045 [P] [US2] [PR-B] Write `BT/contract/mfa/federated-channel-access.contract.test.ts` and an MFA-verify case — red: federated callback for an unassigned Organization redirects to `<storefront>/login?error=sales_channel_not_permitted` and creates no session; verify after the assignment was removed between steps → 403
 - [ ] T046 [US2] [PR-B] Implement in `packages/modules/mfa/src/backend/routes.oauth.ts` (customer surface, using `tx.salesChannelId`) and the customer MFA verify path — T045 green; plus a test that with `mfa` deactivated password sign-in still refuses (R-14)
-- [ ] T047 [P] [US2] [PR-A] Write `BT/integration/sales_channels/channel-access-invalidation.test.ts` — red: assign/unassign through the admin route → next request on the writer decided on the new set; a second composed app instance drops its LRU on the pub/sub message (≤ 1 s in test), and without pub/sub within the LRU TTL (fake clock)
-- [ ] T048 [US2] [PR-A] Make T047 green (wiring fixes only; behaviour is T012/T016/T017)
+- [X] T047 [P] [US2] [PR-A] Write `BT/integration/sales_channels/channel-access-invalidation.test.ts` — red: assign/unassign through the admin route → next request on the writer decided on the new set; a second composed app instance drops its LRU on the pub/sub message (≤ 1 s in test), and without pub/sub within the LRU TTL (fake clock)
+- [X] T048 [US2] [PR-A] Make T047 green (wiring fixes only; behaviour is T012/T016/T017)
 
 ### Storefront
 
@@ -137,6 +137,12 @@ integration test.
 ---
 
 ## Phase 6: User Story 4 — new Organizations get the channel they were created for (P1)
+
+> **PR A interim (2026-10-18):** so that a business or personal Organization created after PR A
+> merges is not locked out before PR B lands, PR A binds both — and the demo Organization (T025) —
+> to the **system-default** channel inside the creating step (`bindToDefaultIfEmpty` with the
+> caller's `em`). On a single-channel shop that is the request channel. T054/T056 replace the
+> default with the registering store's channel.
 
 **Goal**: D6. **Independent test**: T053–T057.
 
@@ -186,8 +192,8 @@ integration test.
 - [ ] T077 [P] [PR-E] Docs: `SC/docs/sales_channels/admin-usage.md` (the switch; *Multi-storefront set-up* — make line 71 accurate: products and prices per channel, customers only when their Organization is assigned, anonymous visitors only on open channels), `index.md`, `developer-guide.md` (the rule, `salesChannelAccess: 'open'` for module authors incl. provider callbacks, `SalesChannelAccessPort`, per-customer record unused)
 - [ ] T078 [P] [PR-E] Docs: `OR/docs/organizations.md` (*Sales channels* panel, *New organization*, registration rule D6, invitations), `CR/docs/carts.md` (one basket per channel, placement refusal)
 - [ ] T079 [PR-E] Polish versions under `docs/i18n/pl/docusaurus-plugin-content-docs/current/modules/…` with their hash files per `docs/docs/contributing/documentation-i18n.md`; `pnpm --filter backend run check:module-docs`; docs build
-- [ ] T080 [P] [PR-A] Changesets: `@endora-commerce/platform` (minor — access step, route option, port, `em` option; note for module authors), `@endora-commerce/contracts` (minor), each changed module package; per `specs/conventions/release-intent.md`
-- [ ] T081 [PR-A] `pnpm --filter backend run manifests:generate` + `pnpm install --lockfile-only` if any package manifest changes; commit both
+- [X] T080 [P] [PR-A] Changesets: `@endora-commerce/platform` (minor — access step, route option, port, `em` option; note for module authors), `@endora-commerce/contracts` (minor), each changed module package; per `specs/conventions/release-intent.md`
+- [X] T081 [PR-A] `pnpm --filter backend run manifests:generate` + `pnpm install --lockfile-only` if any package manifest changes; commit both
 - [ ] T082 Every PR: `pnpm -r run typecheck`, `pnpm -r run lint`, targeted tests, `pnpm --filter '!backend' run test`, `check:naming`, `check:language`, `check:module-boundary`, `check:port-dependencies`, `check:port-catches`; the complete backend suite before PR A and PR D merge (D-198: MR pipelines do not run it)
 - [ ] T083 [PR-E] Walk [quickstart.md](./quickstart.md) §1–§6 on a fresh `pnpm run setup` and on a restored pre-feature database; record results in PR E
 

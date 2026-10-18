@@ -54,9 +54,9 @@ describe('organizations — channel-access backfill', () => {
   /** An Organization the way a pre-feature database holds it: no channel at all. */
   async function legacyOrganization(label: string): Promise<string> {
     const org = await seedAdHocOrganization(h.em(), `Backfill ${label}`);
-    await h.em().execute('delete from "sales_channel_organizations" where "organization_id" = ?', [
-      org.id,
-    ]);
+    await h
+      .em()
+      .execute('delete from "sales_channel_organizations" where "organization_id" = ?', [org.id]);
     return org.id;
   }
 
@@ -66,12 +66,29 @@ describe('organizations — channel-access backfill', () => {
       organizationId,
       placedByCustomerAccountId: TEST_CUSTOMER_ID,
       salesChannelId,
-      deliveryAddress: { recipientName: 'A', street: 'S', city: 'C', postalCode: '00-000', country: 'PL' },
-      billingAddress: { recipientName: 'A', street: 'S', city: 'C', postalCode: '00-000', country: 'PL' },
+      deliveryAddress: {
+        recipientName: 'A',
+        street: 'S',
+        city: 'C',
+        postalCode: '00-000',
+        country: 'PL',
+      },
+      billingAddress: {
+        recipientName: 'A',
+        street: 'S',
+        city: 'C',
+        postalCode: '00-000',
+        country: 'PL',
+      },
       deliveryMethodId: randomUUID(),
       deliveryMethodSnapshot: { code: 'd', name: 'd', cost: 0 },
       paymentMethodId: randomUUID(),
-      paymentMethodSnapshot: { code: 'p', name: 'P', kind: 'bank_transfer', adapter: 'bank_transfer' },
+      paymentMethodSnapshot: {
+        code: 'p',
+        name: 'P',
+        kind: 'bank_transfer',
+        adapter: 'bank_transfer',
+      },
       subtotal: '100.00',
       taxTotal: '23.00',
       deliveryTotal: '0.00',
@@ -146,7 +163,9 @@ describe('organizations — channel-access backfill', () => {
         (
           await h
             .em()
-            .execute<Array<{ n: string }>>('select count(*)::text as n from "sales_channel_organizations"')
+            .execute<Array<{ n: string }>>(
+              'select count(*)::text as n from "sales_channel_organizations"',
+            )
         )[0]!.n,
       );
     const before = await total();
@@ -166,19 +185,21 @@ describe('organizations — channel-access backfill', () => {
     const queries = migration.getQueries().map((q) => q as string);
     // One transaction, rolled back: the table is renamed out of sight for the
     // length of these statements only.
-    await em.transactional(async (tx) => {
-      await tx.execute(`set local lock_timeout = '5s'`);
-      await tx.execute('alter table "orders" rename to "orders_hidden_by_backfill_test"');
-      for (const query of queries) await tx.execute(query);
-      const rows = await tx.execute<Array<{ sales_channel_id: string }>>(
-        'select "sales_channel_id" from "sales_channel_organizations" where "organization_id" = ?',
-        [org],
-      );
-      expect(rows.map((r) => r.sales_channel_id)).toEqual([defaultId]);
-      throw new RollbackSignal();
-    }).catch((err: unknown) => {
-      if (!(err instanceof RollbackSignal)) throw err;
-    });
+    await em
+      .transactional(async (tx) => {
+        await tx.execute(`set local lock_timeout = '5s'`);
+        await tx.execute('alter table "orders" rename to "orders_hidden_by_backfill_test"');
+        for (const query of queries) await tx.execute(query);
+        const rows = await tx.execute<Array<{ sales_channel_id: string }>>(
+          'select "sales_channel_id" from "sales_channel_organizations" where "organization_id" = ?',
+          [org],
+        );
+        expect(rows.map((r) => r.sales_channel_id)).toEqual([defaultId]);
+        throw new RollbackSignal();
+      })
+      .catch((err: unknown) => {
+        if (!(err instanceof RollbackSignal)) throw err;
+      });
     const orders = await h
       .em()
       .execute<Array<{ present: string | null }>>(`select to_regclass('orders')::text as present`);

@@ -23,12 +23,12 @@ export interface OpenRouteEntry {
 const SIGN_IN = 'Signing in is how a visitor of a store closed to anonymous visitors gets in.';
 const ADMIN_SIGN_IN =
   'An operator signs in to the Admin UI anonymously; a closed default channel must not stop it.';
-const MFA =
-  'The second factor and its set-up ticket complete a sign-in before any session exists.';
+const MFA = 'The second factor and its set-up ticket complete a sign-in before any session exists.';
 const OAUTH_START = 'Federated sign-in starts before any session exists.';
 const OAUTH_CALLBACK =
   "The identity provider's redirect carries no storefront channel signal and completes a sign-in.";
-const OAUTH_PROVIDERS = 'The sign-in page lists the federated providers before anybody is signed in.';
+const OAUTH_PROVIDERS =
+  'The sign-in page lists the federated providers before anybody is signed in.';
 const ACCOUNT = 'Account recovery and verification happen before the buyer can sign in.';
 const EMAIL_LINK =
   'Opened from an e-mail with no storefront channel signal; the token is the authorisation.';
