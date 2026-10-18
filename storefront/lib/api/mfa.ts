@@ -1,5 +1,6 @@
 import { apiMutate, apiGetAuthed } from './mutations';
 import type { RequestContext } from './client';
+import { rememberKnownDevice } from '../session';
 
 function pickSessionCookie(setCookie: string[]): string | null {
   for (const header of setCookie) {
@@ -38,6 +39,8 @@ export async function completeMfaSetupTicket(
     body: { setupTicket, code },
     ...(ctx ? { ctx } : {}),
   });
+  // A completed sign-in: keep the known-device cookie the backend set with it.
+  await rememberKnownDevice(res.setCookie);
   return {
     recoveryCodes: res.data!.recoveryCodes,
     sessionCookieValue: pickSessionCookie(res.setCookie),

@@ -4,6 +4,8 @@ import {
   ERROR_CODES,
   normalizeEmailAddress,
   type AuthSessionPort,
+  type CustomerAuthenticationOrigin,
+  type CustomerAuthenticationThrottlePort,
   type MfaLoginPort,
 } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
@@ -21,7 +23,11 @@ import { retireResetTokens, withdrawCustomerCredentials } from './credential-wit
  *
  *   - request: always returns success regardless of account existence
  *     (account-enumeration defense). Issues a sha256-hashed token with a
- *     short TTL (1 hour). The raw token is returned for the email body.
+ *     short TTL (1 hour) and retires every earlier unconsumed token of the
+ *     account, so only the newest e-mail's link works. The raw token is
+ *     returned for the email body. Requests are counted per folded e-mail
+ *     address in the customer authentication throttle, known account or
+ *     not, and refused with 429 once one address has asked too often.
  *   - confirm: validates token (one-shot, expiry), rehashes the new password,
  *     marks the token and every other outstanding token of the account
  *     consumed, then ends all of the account's sessions and withdraws the
@@ -38,32 +44,66 @@ export class PasswordResetService {
     private readonly auditLog?: AuditPort,
     /** `mfa`'s login port, resolved lazily and absent while `mfa` is. */
     private readonly getMfaLoginPort?: () => MfaLoginPort | undefined,
+    /** The customer authentication throttle; reset requests are counted in it. */
+    private readonly throttle?: CustomerAuthenticationThrottlePort,
   ) {}
 
   /** Returns the raw token only when the email matched a real account. Caller emails it. */
-  async requestReset(email: string): Promise<{ rawToken: string | null }> {
-    // command-coverage-ignore: issues a short-TTL, one-shot reset token (rate-
-    // limited, account-enumeration-safe); the actual password change is audited
-    // at confirmReset (customer_account.password_reset).
-    const em = this.emFactory();
+  async requestReset(
+    email: string,
+    context: CustomerAuthenticationOrigin = {},
+  ): Promise<{ rawToken: string | null }> {
     // Folded like every other lookup on this table (see `normalizeEmailAddress`).
     // An unmatched address is indistinguishable from an unknown one here — the
     // method answers `{ rawToken: null }` to both — so a case-sensitive compare
     // silently denied a reset to exactly the accounts that most needed one.
+    const folded = normalizeEmailAddress(email);
+    if (!this.throttle) return this.issueToken(folded);
+    let issued: { rawToken: string | null; customerAccountId?: string } = { rawToken: null };
+    // Every request is counted, for an address nobody holds as much as for a
+    // real one: the check answers `ok: false` whatever it did, so the counter
+    // is never reset by a request and only its window forgets it.
+    await this.throttle.verify(
+      {
+        factor: 'password_reset',
+        account: folded,
+        ...(context.knownDevice !== undefined ? { knownDevice: context.knownDevice } : {}),
+      },
+      async () => {
+        issued = await this.issueToken(folded);
+        return issued.customerAccountId === undefined
+          ? { ok: false }
+          : { ok: false, customerAccountId: issued.customerAccountId };
+      },
+    );
+    return { rawToken: issued.rawToken };
+  }
+
+  private async issueToken(
+    folded: string,
+  ): Promise<{ rawToken: string | null; customerAccountId?: string }> {
+    // command-coverage-ignore: issues a short-TTL, one-shot reset token (rate-
+    // limited, account-enumeration-safe); the actual password change is audited
+    // at confirmReset (customer_account.password_reset).
+    const em = this.emFactory();
     const customer = await em.findOne(CustomerAccount, {
-      email: normalizeEmailAddress(email),
+      email: folded,
       deletedAt: null,
     });
     if (!customer) return { rawToken: null };
 
     const rawToken = randomBytes(32).toString('base64url');
+    // Only the newest link works: an earlier e-mail that is still sitting in
+    // the inbox stops being a way into the account the moment a new one is
+    // asked for. Retired in the same flush that writes the new token.
+    await retireResetTokens(em, customer.id);
     const token = em.create(PasswordResetToken, {
       customerAccountId: customer.id,
       tokenHash: sha256Hex(rawToken),
       expiresAt: new Date(Date.now() + TOKEN_TTL_HOURS * 60 * 60 * 1_000),
     });
     await em.persistAndFlush(token);
-    return { rawToken };
+    return { rawToken, customerAccountId: customer.id };
   }
 
   async confirmReset(rawToken: string, newPassword: string): Promise<void> {

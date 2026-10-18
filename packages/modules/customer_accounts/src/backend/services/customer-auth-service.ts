@@ -3,6 +3,7 @@ import {
   ERROR_CODES,
   normalizeEmailAddress,
   type AuthSessionPort,
+  type CustomerAuthenticationThrottlePort,
   type CustomerChangePasswordContext,
   type MfaLoginPort,
 } from '@endora-commerce/contracts';
@@ -46,6 +47,11 @@ export interface LoginResult {
   /** Value to put into the Set-Cookie header. */
   sessionCookieValue: string;
   sessionExpiresAt: Date;
+  /**
+   * The known-device cookie value to set beside the session, or `null` when
+   * none is to be set.
+   */
+  knownDevice: string | null;
 }
 
 /** Discriminated outcome of the first login step (feature 042). */
@@ -61,6 +67,13 @@ export class CustomerAuthService {
     /** Lazily resolved so composition can late-bind the MFA module. */
     private readonly getMfaLoginPort?: () => MfaLoginPort | undefined,
     private readonly auditLog?: AuditPort,
+    /**
+     * The customer authentication throttle. Every password comparison at
+     * sign-in runs inside it, keyed by the folded e-mail address — whether or
+     * not an account has it — so repeated wrong passwords are refused with 429
+     * `CUSTOMER_AUTHENTICATION_THROTTLED` before anything is looked up.
+     */
+    private readonly throttle?: CustomerAuthenticationThrottlePort,
   ) {}
 
   async login(input: {
@@ -69,19 +82,39 @@ export class CustomerAuthService {
     ip?: string;
     userAgent?: string;
     salesChannelId?: string | null;
+    knownDevice?: string;
   }): Promise<CustomerLoginOutcome> {
     const em = this.emFactory();
     // Folded, because the row is. `=` on `text` is case-sensitive in Postgres,
     // so comparing the address exactly as typed refused every account whose
     // holder had capitalised anything — with the generic error above, which
     // says nothing they or support could act on.
-    const found = await em.findOne(CustomerAccount, {
-      email: normalizeEmailAddress(input.email),
-    });
-    const customer = found !== null && !found.deletedAt ? found : null;
-    // Verified whether or not there is an account to verify against: an
-    // address nobody holds must not be refused sooner than a wrong password.
-    const ok = await verifyPasswordOrDummy(customer?.passwordHash, input.password);
+    const email = normalizeEmailAddress(input.email);
+    const lookup: { customer: CustomerAccount | null } = { customer: null };
+    const compare = async (): Promise<{ ok: boolean; customerAccountId?: string }> => {
+      const found = await em.findOne(CustomerAccount, { email });
+      const candidate = found !== null && !found.deletedAt ? found : null;
+      lookup.customer = candidate;
+      // Verified whether or not there is an account to verify against: an
+      // address nobody holds must not be refused sooner than a wrong password.
+      const matched = await verifyPasswordOrDummy(candidate?.passwordHash, input.password);
+      return candidate === null
+        ? { ok: false }
+        : { ok: matched, customerAccountId: candidate.id };
+    };
+    // An address belonging to nobody is throttled exactly like a real one, and
+    // while a delay runs neither the lookup nor the comparison happens.
+    const ok = this.throttle
+      ? await this.throttle.verify(
+          {
+            factor: 'password',
+            account: email,
+            ...(input.knownDevice !== undefined ? { knownDevice: input.knownDevice } : {}),
+          },
+          compare,
+        )
+      : (await compare()).ok;
+    const customer = lookup.customer;
     if (!customer || !ok) {
       // Generic error to avoid account enumeration.
       throw new HttpError(401, ERROR_CODES.INVALID_CREDENTIALS, 'Invalid email or password.');
@@ -134,6 +167,9 @@ export class CustomerAuthService {
       customerAccount: customer,
       sessionCookieValue: session.cookieValue,
       sessionExpiresAt: session.expiresAt,
+      // The sign-in is complete here — no second factor was asked for — so
+      // this device is now one the account has been used from.
+      knownDevice: this.throttle ? await this.throttle.issueKnownDevice(customer.id) : null,
     };
   }
 

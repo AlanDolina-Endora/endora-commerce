@@ -1,11 +1,18 @@
 import type { CartMergeOutcomePublic } from '@endora-commerce/contracts';
 import { apiMutate } from './mutations';
 import type { RequestContext } from './client';
+import { knownDeviceCookieHeader, rememberKnownDevice } from '../session';
 
 /**
  * Anonymous storefront auth flows (register / verify / login / logout /
  * password reset). These wrap the backend's `/api/v1/auth/**` and
  * `/api/v1/organizations/register` endpoints with typed payloads.
+ *
+ * The sign-in, the second step and the reset request carry the browser's
+ * known-device cookie to the backend, and the first two store the one the
+ * backend sets on a completed sign-in (see `knownDeviceCookieHeader` in
+ * `lib/session.ts`). Without it every shopper's attempt would be counted as
+ * one from a device the account has never been used on.
  */
 
 export interface RegisterOrganizationPayload {
@@ -99,8 +106,10 @@ export async function loginCustomer(
     method: 'POST',
     path: '/api/v1/auth/customer/login',
     body: payload,
+    rawCookieHeader: await knownDeviceCookieHeader(),
     ...(ctx ? { ctx } : {}),
   });
+  await rememberKnownDevice(result.setCookie);
   const data = result.data!;
   if (data.status === 'mfaRequired') {
     return { status: 'mfaRequired', challengeId: data.challengeId! };
@@ -125,8 +134,10 @@ export async function verifyCustomerMfa(
     method: 'POST',
     path: '/api/v1/auth/customer/mfa/verify',
     body: payload,
+    rawCookieHeader: await knownDeviceCookieHeader(),
     ...(ctx ? { ctx } : {}),
   });
+  await rememberKnownDevice(result.setCookie);
   return { sessionCookieValue: pickSessionCookie(result.setCookie) };
 }
 
@@ -181,6 +192,7 @@ export async function requestPasswordReset(email: string, ctx?: RequestContext):
     method: 'POST',
     path: '/api/v1/auth/password-reset/request',
     body: { email },
+    rawCookieHeader: await knownDeviceCookieHeader(),
     ...(ctx ? { ctx } : {}),
   });
 }

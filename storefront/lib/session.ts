@@ -1,5 +1,8 @@
 import { cookies } from 'next/headers';
-import { MFA_CHALLENGE_COOKIE_NAME } from '@endora-commerce/contracts';
+import {
+  CUSTOMER_KNOWN_DEVICE_COOKIE_NAME,
+  MFA_CHALLENGE_COOKIE_NAME,
+} from '@endora-commerce/contracts';
 
 /**
  * Storefront session helpers (T150–T155).
@@ -238,6 +241,68 @@ export async function readAndClearCartMergeFlash(): Promise<CartMergeFlashOutcom
   if (value === 'adopted' || value === 'merged') {
     jar.delete(CART_MERGE_FLASH_COOKIE);
     return value;
+  }
+  return null;
+}
+
+/**
+ * The known-device cookie of the customer sign-in throttle.
+ *
+ * A completed sign-in makes the backend set it, signed and `httpOnly`; an
+ * attempt that carries it back is counted against that device's own budget
+ * rather than the account's, which is what keeps a stranger who knows a
+ * shopper's e-mail address from keeping them out. The storefront signs in from
+ * a server action, so the browser never talks to the backend here: the cookie
+ * has to be carried both ways — read from the browser and forwarded with the
+ * sign-in, the second step and the reset request, and stored from the
+ * backend's `Set-Cookie`. The value is opaque and stored verbatim.
+ */
+
+/** The `Cookie` header value forwarding the browser's known-device cookie, or `null`. */
+export async function knownDeviceCookieHeader(): Promise<string | null> {
+  const jar = await cookies();
+  const value = jar.get(CUSTOMER_KNOWN_DEVICE_COOKIE_NAME)?.value;
+  return value ? `${CUSTOMER_KNOWN_DEVICE_COOKIE_NAME}=${encodeURIComponent(value)}` : null;
+}
+
+/**
+ * Store the known-device cookie the backend set on a completed sign-in, with
+ * the lifetime the backend gave it. Does nothing when the response set none.
+ */
+export async function rememberKnownDevice(setCookie: string[]): Promise<void> {
+  const cookie = pickKnownDeviceCookie(setCookie);
+  if (!cookie) return;
+  const jar = await cookies();
+  jar.set(CUSTOMER_KNOWN_DEVICE_COOKIE_NAME, cookie.value, {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env['NODE_ENV'] === 'production',
+    ...(cookie.maxAge !== undefined ? { maxAge: cookie.maxAge } : {}),
+  });
+}
+
+/** The known-device cookie in a list of `Set-Cookie` values, decoded, or `null`. */
+export function pickKnownDeviceCookie(
+  setCookie: string[],
+): { value: string; maxAge?: number } | null {
+  const prefix = `${CUSTOMER_KNOWN_DEVICE_COOKIE_NAME}=`;
+  for (const header of setCookie) {
+    const [pair = '', ...attributes] = header.split(';');
+    if (!pair.trim().startsWith(prefix)) continue;
+    const raw = pair.trim().slice(prefix.length);
+    if (!raw) return null;
+    let value: string;
+    try {
+      value = decodeURIComponent(raw);
+    } catch {
+      return null;
+    }
+    const maxAgeAttribute = attributes
+      .map((attribute) => attribute.trim())
+      .find((attribute) => attribute.toLowerCase().startsWith('max-age='));
+    const maxAge = maxAgeAttribute ? Number(maxAgeAttribute.slice('max-age='.length)) : NaN;
+    return Number.isFinite(maxAge) && maxAge > 0 ? { value, maxAge } : { value };
   }
   return null;
 }

@@ -5,6 +5,7 @@ import { ADMIN_SESSION_COOKIE_NAME, SESSION_COOKIE_NAME } from '@endora-commerce
 import type {
   AdminAuthenticationOrigin,
   AdminAuthenticationThrottlePort,
+  CustomerAuthenticationThrottlePort,
   AuthSessionPort,
   CustomerPasswordStatePort,
   MfaLoginPort,
@@ -122,6 +123,12 @@ export interface MfaModuleOptions {
    * challenges, and nothing would report the gap.
    */
   adminAuthenticationThrottle: AdminAuthenticationThrottlePort;
+  /**
+   * `customer_accounts`' throttle on repeated wrong customer credentials. Every
+   * customer second-factor check in this module runs inside it. Required for
+   * the reason the administrator one is.
+   */
+  customerAuthenticationThrottle: CustomerAuthenticationThrottlePort;
 }
 
 export interface MfaModuleHandle {
@@ -153,6 +160,7 @@ export function mfaModule(options: MfaModuleOptions): {
     ? createSecondFactorVerifier(
         (subject, code) => enrolmentService.verifySecondFactor(subject, code),
         options.adminAuthenticationThrottle,
+        options.customerAuthenticationThrottle,
       )
     : undefined;
 
@@ -184,6 +192,7 @@ export function mfaModule(options: MfaModuleOptions): {
       enrolmentService,
       auditLogService: options.auditLogService,
       adminAuthenticationThrottle: options.adminAuthenticationThrottle,
+      customerAuthenticationThrottle: options.customerAuthenticationThrottle,
     });
     // Storefront customer self-service (US1).
     await registerMfaSelfServiceRoutes(app, {

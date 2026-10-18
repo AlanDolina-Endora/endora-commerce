@@ -3,6 +3,7 @@ import type { FastifyRequest } from 'fastify';
 import type { Redis } from 'ioredis';
 import type {
   AdminAuthenticationThrottlePort,
+  CustomerAuthenticationThrottlePort,
   AdminPasswordVerificationPort,
   AdminUserReadPort,
   AuthSessionPort,
@@ -277,6 +278,11 @@ export function registerModule(ctx: ModuleContext): void {
             adminAuthenticationThrottle: lazyPort<AdminAuthenticationThrottlePort>(
               ctx,
               'adminAuthenticationThrottlePort',
+            ),
+            // `customer_accounts`' twin, on the same terms.
+            customerAuthenticationThrottle: lazyPort<CustomerAuthenticationThrottlePort>(
+              ctx,
+              'customerAuthenticationThrottlePort',
             ),
             // Spread rather than assigned: `exactOptionalPropertyTypes` makes
             // "absent" and "present as undefined" different types, and these

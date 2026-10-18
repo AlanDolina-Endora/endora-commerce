@@ -172,8 +172,10 @@ describe('customer password change and reset — sessions, reset tokens, pending
   it('a redeemed reset token ends every session and retires the other tokens', async () => {
     const first = (await login()).cookie!;
     const second = (await login()).cookie!;
-    const redeemed = await resetToken();
+    // Asked for first, so the newer request has already retired it: only the
+    // newest link works. Redeeming that one must leave none outstanding.
     const outstanding = await resetToken();
+    const redeemed = await resetToken();
 
     const confirmed = await confirmReset(redeemed);
     expect(confirmed.statusCode).toBe(200);

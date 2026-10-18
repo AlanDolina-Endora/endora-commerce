@@ -515,6 +515,7 @@ export function createCustomerAuthPort(
         ),
         sessionCookieValue: outcome.sessionCookieValue,
         sessionExpiresAt: outcome.sessionExpiresAt,
+        knownDevice: outcome.knownDevice,
       };
     },
     changePassword: (customerAccountId, currentPassword, newPassword, context) =>

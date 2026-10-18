@@ -11,6 +11,7 @@ import type {
   CustomerAccountMemberWritePort,
   CustomerAccountReadPort,
   CustomerAuthPort,
+  CustomerAuthenticationThrottlePort,
   CustomerGroupReadPort,
   CustomerPasswordResetPort,
   CustomerPasswordStatePort,
@@ -20,7 +21,7 @@ import type {
   MfaEnrolmentStatePort,
   MfaLoginPort,
 } from '@endora-commerce/contracts';
-import type { AuditPort } from '@endora-commerce/platform/kernel';
+import type { AttemptCounterStore, AuditPort } from '@endora-commerce/platform/kernel';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import { recordAuditFromContext } from '@endora-commerce/platform/commands';
 import { withSystemScope } from '@endora-commerce/platform/tenancy';
@@ -50,6 +51,7 @@ import {
   CustomerAccountLifecycleWriteService,
 } from './services/customer-account-lifecycle-ports.js';
 import { CustomerAuthService } from './services/customer-auth-service.js';
+import { CustomerAuthenticationThrottle } from './services/customer-authentication-throttle.js';
 import { CustomerGroupReadService } from './services/customer-group-read-port.js';
 import { CustomerGroupService } from './services/customer-group-service.js';
 import { CustomerRollupScopeService } from './services/customer-rollup-scope.js';
@@ -128,6 +130,8 @@ export interface CustomerAccountsCradle {
   };
   readonly emFactory: () => EntityManager;
   readonly auditLogService: AuditPort;
+  /** The host's Redis client, as far as the authentication throttle uses it. */
+  readonly redis: AttemptCounterStore;
   /** Feature 054 — the customer-group writes audit co-transactionally. */
   readonly commandBus: CommandBus;
   /** `auth`'s admin guard, for the customer-group admin routes. */
@@ -150,6 +154,7 @@ export interface CustomerAccountsCradle {
   };
   readonly customerAuthService: CustomerAuthService;
   readonly passwordResetService: PasswordResetService;
+  readonly customerAuthenticationThrottle: CustomerAuthenticationThrottle;
   readonly customerRoleService: RoleService;
   readonly customerGroupService: CustomerGroupService;
 }
@@ -370,11 +375,41 @@ export function registerModule(ctx: ModuleContext): void {
       .singleton(),
   );
 
+  /**
+   * The throttle on repeated wrong customer passwords, second-factor codes and
+   * reset requests. One instance: sign-in and the reset request use it here,
+   * and `mfa` reaches the same counters through the port below, so a code
+   * guessed on any of its routes is counted once.
+   */
+  ctx.di.register({
+    customerAuthenticationThrottle: ctx
+      .asFunction(
+        ({ emFactory, redis, auditLogService }: CustomerAccountsCradle) =>
+          new CustomerAuthenticationThrottle({
+            emFactory,
+            redis,
+            auditLog: auditLogService,
+            log: ctx.log,
+          }),
+      )
+      .singleton(),
+  });
+
+  ctx.di.providePort<CustomerAuthenticationThrottlePort>(
+    'customerAuthenticationThrottlePort',
+    ctx
+      .asFunction(
+        ({ customerAuthenticationThrottle }: CustomerAccountsCradle) =>
+          customerAuthenticationThrottle,
+      )
+      .singleton(),
+  );
+
   ctx.di.providePort(
     'customerAuthService',
     ctx
       .asFunction(
-        ({ emFactory, auditLogService }: CustomerAccountsCradle) =>
+        ({ emFactory, auditLogService, customerAuthenticationThrottle }: CustomerAccountsCradle) =>
           new CustomerAuthService(
             emFactory,
             // Feature 075, Phase C — `auth`'s **published** session surface,
@@ -391,6 +426,7 @@ export function registerModule(ctx: ModuleContext): void {
             // FR-033 — is what `undefined` selects.
             () => (effectiveState.isPresent('mfa') ? mfaLoginPort : undefined),
             auditLogService,
+            customerAuthenticationThrottle,
           ),
       )
       .singleton(),
@@ -403,7 +439,7 @@ export function registerModule(ctx: ModuleContext): void {
     'passwordResetService',
     ctx
       .asFunction(
-        ({ emFactory, auditLogService }: CustomerAccountsCradle) =>
+        ({ emFactory, auditLogService, customerAuthenticationThrottle }: CustomerAccountsCradle) =>
           new PasswordResetService(
             emFactory,
             lazyPort<AuthSessionPort>(ctx, 'authSessionPort'),
@@ -411,6 +447,7 @@ export function registerModule(ctx: ModuleContext): void {
             // Same degrade as `customerAuthService` above: decided by presence,
             // never by catching the gate.
             () => (effectiveState.isPresent('mfa') ? mfaLoginPort : undefined),
+            customerAuthenticationThrottle,
           ),
       )
       .singleton(),

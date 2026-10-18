@@ -15,7 +15,11 @@ import {
   SESSION_COOKIE_NAME,
   ADMIN_SESSION_COOKIE_NAME,
 } from '@endora-commerce/contracts';
-import type { AdminAuthenticationThrottlePort, AuthSessionPort } from '@endora-commerce/contracts';
+import type {
+  AdminAuthenticationThrottlePort,
+  AuthSessionPort,
+  CustomerAuthenticationThrottlePort,
+} from '@endora-commerce/contracts';
 import { readKnownDevice, rememberKnownDevice } from './known-device-cookie.js';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
@@ -36,10 +40,12 @@ export interface MfaPublicDeps {
   enrolmentService: MfaEnrolmentService;
   auditLogService: AuditPort;
   /**
-   * Mints the known-device cookie value once an administrator's sign-in has
-   * completed here — the second step, or the enforced enrolment.
+   * Mint the known-device cookie value once a sign-in has completed here — the
+   * second step, or the enforced enrolment — for an administrator and for a
+   * customer respectively.
    */
   adminAuthenticationThrottle: Pick<AdminAuthenticationThrottlePort, 'issueKnownDevice'>;
+  customerAuthenticationThrottle: Pick<CustomerAuthenticationThrottlePort, 'issueKnownDevice'>;
 }
 
 interface SurfaceCfg {
@@ -109,7 +115,7 @@ function registerSetupTicketRoutes(
           : { kind: 'admin', adminUserId: ticket.subjectId, ...ipUa(request) },
       );
       setSessionCookie(reply, cfg.cookieName, session.cookieValue, session.expiresAt);
-      await rememberAdminDevice(deps, reply, cfg.subjectType, ticket.subjectId);
+      await rememberDevice(deps, reply, cfg.subjectType, ticket.subjectId);
       return { data: { status: 'authenticated', recoveryCodes } };
     },
   );
@@ -135,7 +141,7 @@ function registerVerifyRoute(
   app.post(cfg.path, { schema: { body: mfaVerifyRequestSchema } }, async (request, reply) => {
     const body = mfaVerifyRequestSchema.parse(request.body);
     const objectType = cfg.subjectType === 'customer' ? 'customer_account' : 'admin_user';
-    const knownDevice = readKnownDevice(request);
+    const knownDevice = readKnownDevice(request, cfg.subjectType);
     const result = await deps.loginService.verifyChallenge(body.challengeId, body.code, {
       ...(request.ip ? { ip: request.ip } : {}),
       ...(knownDevice !== undefined ? { knownDevice } : {}),
@@ -180,24 +186,26 @@ function registerVerifyRoute(
           },
     );
     setSessionCookie(reply, cfg.cookieName, session.cookieValue, session.expiresAt);
-    await rememberAdminDevice(deps, reply, cfg.subjectType, result.subject.subjectId);
+    await rememberDevice(deps, reply, cfg.subjectType, result.subject.subjectId);
     return { data: { status: 'authenticated' } };
   });
 }
 
 /**
- * An administrator's sign-in has completed on this response: leave the
- * known-device cookie beside the session. A customer's sign-in leaves none —
- * the throttle it belongs to is the administrator one.
+ * A sign-in has completed on this response: leave the surface's known-device
+ * cookie beside the session, minted by the throttle that owns the account.
  */
-async function rememberAdminDevice(
+async function rememberDevice(
   deps: MfaPublicDeps,
   reply: FastifyReply,
   subjectType: 'customer' | 'admin',
   subjectId: string,
 ): Promise<void> {
-  if (subjectType !== 'admin') return;
-  rememberKnownDevice(reply, await deps.adminAuthenticationThrottle.issueKnownDevice(subjectId));
+  const value =
+    subjectType === 'admin'
+      ? await deps.adminAuthenticationThrottle.issueKnownDevice(subjectId)
+      : await deps.customerAuthenticationThrottle.issueKnownDevice(subjectId);
+  rememberKnownDevice(reply, value, subjectType);
 }
 
 function ipUa(request: {

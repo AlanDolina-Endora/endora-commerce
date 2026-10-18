@@ -184,6 +184,26 @@ const PUBLISHED_KERNEL_SURFACE: Readonly<Record<string, readonly string[]>> = {
   ],
   /** Rows 20 and 38. */
   'crypto/password-hasher.js': ['hashPassword', 'verifyPassword', 'verifyPasswordOrDummy'],
+  /**
+   * The credential-attempt throttle `admin_users` and `customer_accounts` each
+   * build over their own accounts. The class, its policies and the parameter
+   * and return shapes of its methods.
+   */
+  'authentication/attempt-throttle.js': [
+    'ABANDONED_AFTER_SECONDS',
+    'ACCOUNT_POLICY',
+    'ADDRESS_POLICY',
+    'AuthenticationAttemptThrottle',
+    'DEFAULT_STORE_DEADLINE_MS',
+    'addressOrigin',
+    'AttemptCounterStore',
+    'AttemptPolicy',
+    'AttemptThrottleProfile',
+    'AuthenticationAttemptThrottleOptions',
+    'ThrottledAttempt',
+    'ThrottledCheckResult',
+    'ThrottledCredentialState',
+  ],
   /** Row 9 — the singleton case (§3). */
   'sales-channels/sales-channel.entity.js': ['SalesChannel'],
   /** Row 34 — the four symbols modules take. */
