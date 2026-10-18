@@ -1,9 +1,14 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
-import type { CartCustomerContext, CartWithItems } from '@endora-commerce/contracts';
+import type {
+  CartCustomerContext,
+  CartWithItems,
+  CatalogProductReadPort,
+} from '@endora-commerce/contracts';
 import { Cart } from '../entities/cart.entity.js';
 import { CartItem } from '../entities/cart-item.entity.js';
-import type { CartPlacementApplyPort } from '../../ports/index.js';
+import type { CartLinePriceDrift, CartPlacementApplyPort } from '../../ports/index.js';
 import { toCartItemRecord, toCartRecord } from './cart-read-port.js';
+import { agreementOf, storedPriceDiffers, type CartLinePricing } from './cart-line-pricing.js';
 
 /**
  * `cartPlacementApplyPort` — the basket half of order placement, run on the
@@ -33,6 +38,13 @@ import { toCartItemRecord, toCartRecord } from './cart-read-port.js';
  * does not.
  */
 export class CartPlacementApplyService implements CartPlacementApplyPort {
+  constructor(
+    private readonly emFactory: () => EntityManager,
+    /** The same pricing chain `CartService` stores a line's price from. */
+    private readonly linePricing: CartLinePricing,
+    private readonly catalogProducts: CatalogProductReadPort,
+  ) {}
+
   async readActiveForPlacement(
     em: EntityManager,
     ctx: CartCustomerContext,
@@ -75,5 +87,75 @@ export class CartPlacementApplyService implements CartPlacementApplyPort {
     // carries the token.
     cart.anonymousCartToken = null;
     await em.flush();
+  }
+
+  async findPriceDrift(
+    em: EntityManager,
+    input: { cartId: string; organizationId: string | null },
+  ): Promise<CartLinePriceDrift[]> {
+    const lines = await this.#currentPrices(em, input);
+    return lines.filter((line) => line.differs).map((line) => line.drift);
+  }
+
+  async refreshLinePrices(input: { cartId: string; organizationId: string | null }): Promise<void> {
+    // command-coverage-ignore: brings the stored prices of the buyer's own
+    // ephemeral basket up to date after a placement refused them — derived
+    // working state, the same class as the quantity change that re-prices a
+    // line; no order exists and no domain decision is recorded.
+    const em = this.emFactory();
+    const lines = await this.#currentPrices(em, input);
+    let changed = false;
+    for (const { item, differs, drift } of lines) {
+      if (!differs || drift.currentUnitPrice === null || drift.currentCurrency === null) continue;
+      item.unitPrice = drift.currentUnitPrice;
+      item.currency = drift.currentCurrency;
+      changed = true;
+    }
+    if (changed) await em.flush();
+  }
+
+  async #currentPrices(
+    em: EntityManager,
+    input: { cartId: string; organizationId: string | null },
+  ): Promise<Array<{ item: CartItem; differs: boolean; drift: CartLinePriceDrift }>> {
+    const items = await em.find(CartItem, { cartId: input.cartId });
+    if (items.length === 0) return [];
+    // Placement is a signed-in buyer's, whoever places it.
+    const ctx = await this.linePricing.contextFor(em, {
+      organizationId: input.organizationId,
+      signedIn: true,
+    });
+    const products = await this.catalogProducts.findByIds([
+      ...new Set(items.map((it) => it.productId)),
+    ]);
+    const productById = new Map(products.map((p) => [p.id, p]));
+    const out: Array<{ item: CartItem; differs: boolean; drift: CartLinePriceDrift }> = [];
+    for (const item of items) {
+      const product = productById.get(item.productId);
+      const answer = product
+        ? await this.linePricing.orderablePrice(ctx, {
+            product,
+            variantId: item.variantId ?? null,
+            quantity: item.quantity,
+            agreed: agreementOf(item),
+          })
+        : null;
+      const current = answer?.ok ? { unitPrice: answer.unitPrice, currency: answer.currency } : null;
+      out.push({
+        item,
+        differs: storedPriceDiffers({ unitPrice: item.unitPrice, currency: item.currency }, current),
+        drift: {
+          cartItemId: item.id,
+          productId: item.productId,
+          variantId: item.variantId ?? null,
+          quantity: item.quantity,
+          storedUnitPrice: Number(item.unitPrice).toFixed(2),
+          storedCurrency: item.currency,
+          currentUnitPrice: current?.unitPrice ?? null,
+          currentCurrency: current?.currency ?? null,
+        },
+      });
+    }
+    return out;
   }
 }

@@ -98,12 +98,36 @@ Role gate: `CustomerAccount.role === 'organization_admin'` for every
 
 - `Cart` (one active per `(customer_account_id, sales_channel_id)`; partial
   unique index enforces this in PostgreSQL).
-- `CartItem` (per-line with `unit_price` snapshot at add + cached
-  `recomputed_*` columns).
+- `CartItem` (per-line `unit_price` — the price the line is ordered at —
+  cached `recomputed_*` columns, and the `agreed_*` columns of a line seeded
+  from an accepted quote).
 - `CartAuditEntry` (typed per-cart feed; indexed on `(cart_id, occurred_at
   DESC)`). Every state transition also lands a row in the existing
   `audit_log_entries` table via `AuditPort` for the platform-wide
   audit timeline.
+
+## Line prices
+
+A cart line is ordered at its stored `unit_price`, so that price is always the
+price for the line's **current** quantity:
+
+- Adding a product, adding more of a product already in the cart, changing a
+  line's quantity, merging an anonymous cart at login and seeding a basket from
+  a past order (a reorder) all store the price for the resulting quantity — a
+  quantity-tier bracket applies to the quantity actually ordered.
+- The price comes from the price list for the buyer's organization; when no
+  list applies, from the Product's own price (the `defaultPrice` attribute).
+  A product with neither is refused with `422 CART_PRODUCT_UNPRICED`; a
+  product sold on request only with `400 CART_PRODUCT_QUOTE_ONLY`.
+- A line seeded from an accepted quote keeps the agreed price only while it
+  holds the agreed quantity. At any other quantity it is priced from the list,
+  and it gets the agreed price back at the agreed quantity.
+- At order placement the Orders module asks this module whether every stored
+  price is still current. If one is not — typically a list price changed after
+  the line was added — the placement is refused with
+  `409 CART_PRICE_CHANGED` (`details.lines` names each line with its previous
+  and current unit price), the cart is brought up to date, and the buyer
+  reviews it before placing the order again.
 
 ## Settings
 
@@ -119,7 +143,8 @@ Seeded by the module-lifecycle ManifestReconciler on backend boot (see
 
 `cart-service.ts#mergeAnonymousIntoCustomer()` is invoked by the
 `organizations` module's `onLogin` hook. Conflicting line items combine
-quantities; the anonymous cart cookie is invalidated atomically. The source
+quantities, and merged and moved lines take the price the customer may order
+them at; the anonymous cart cookie is invalidated atomically. The source
 anonymous cart's `status` flips to `'completed'` (not `'abandoned'`) so the
 sweep does not later fire a stray abandonment notification for it.
 
@@ -163,9 +188,10 @@ Reactivation: any buyer activity (touch, add/remove/qty/coupon) on an
   /api/v1/quote-requests/:id/convert-to-order`, owned by the Quote Requests
   module): the cart is cleared and seeded with the quote's lines at the
   **agreed** unit prices through `CartWritePort.replaceItemsForCustomer`, and
-  remembers the quote it was seeded from in `source_quote_request_id`. The
-  mark travels with the agreed prices: adding a line, removing one or changing
-  a quantity keeps both; removing the last line, or seeding the cart again from
+  remembers the quote it was seeded from in `source_quote_request_id`. Each
+  line remembers the quantity its price was agreed for, and keeps the agreed
+  price only at that quantity (see *Line prices*). Adding a line, removing one
+  or changing a quantity keeps the mark; removing the last line, or seeding the cart again from
   another source (a reorder), clears the mark, and an order an administrator
   creates for the customer starts a new cart without it. The Orders module reads it at placement and decides whether the order
   may record the quote. The re-priced copy above sets no mark.

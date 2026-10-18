@@ -1376,6 +1376,9 @@ export class OrderService {
     // caller's own scope would be earlier than the caller asked for; emitted
     // after the commit, the events join that scope's buffer as before.
     const announce: Array<() => void> = [];
+    // The basket a placement refused for stale line prices — brought up to date
+    // once the transaction has rolled back, below.
+    let repriceCartId: string | null = null;
     const order = await em.transactional(async (tx) => {
       const org = await this.neighbours.organizationDetails.findById(ctx.organizationId);
       if (!org) throw new HttpError(404, ERROR_CODES.NOT_FOUND, 'Organization not found.');
@@ -1430,6 +1433,39 @@ export class OrderService {
       const items = basket?.items ?? [];
       if (!cart || items.length === 0) {
         throw new HttpError(409, ERROR_CODES.CART_EMPTY, 'Cart is empty.');
+      }
+
+      // A cart line is ordered at its stored unit price — copied onto the order
+      // line below, and the figure every total here is computed from. So the
+      // stored price has to be the price the line may be ordered at **now**: the
+      // price list's bracket for its current quantity, for this Organization, or
+      // the agreed price of an accepted quote at the agreed quantity. `carts`
+      // gives that answer, on this transaction, from the chain it stores prices
+      // from; a line it does not confirm refuses the placement before anything
+      // is reserved or written. The buyer is not charged a price they were not
+      // shown: the basket is brought up to date after the rollback and they
+      // review it before placing again.
+      const priceDrift = await this.neighbours.cartPlacementApply.findPriceDrift(tx, {
+        cartId: cart.id,
+        organizationId: ctx.organizationId,
+      });
+      if (priceDrift.length > 0) {
+        repriceCartId = cart.id;
+        throw new HttpError(
+          409,
+          ERROR_CODES.CART_PRICE_CHANGED,
+          'The prices in the cart have changed; review the cart and place the order again.',
+          {
+            lines: priceDrift.map((line) => ({
+              productId: line.productId,
+              variantId: line.variantId,
+              quantity: line.quantity,
+              previousUnitPrice: line.storedUnitPrice,
+              currentUnitPrice: line.currentUnitPrice,
+              currency: line.currentCurrency ?? line.storedCurrency,
+            })),
+          },
+        );
       }
 
       // Feature 038 (FR-035) — minimum order value gate (Checkout + admin
@@ -2242,6 +2278,23 @@ export class OrderService {
       }
 
       return order;
+    }).catch(async (error: unknown) => {
+      if (repriceCartId !== null) {
+        // The refusal travels whatever happens here: a basket left stale is
+        // refused again, and brought up to date again, on the next attempt.
+        try {
+          await this.neighbours.cartPlacementApply.refreshLinePrices({
+            cartId: repriceCartId,
+            organizationId: ctx.organizationId,
+          });
+        } catch (refreshError) {
+          this.log?.warn(
+            { err: refreshError, cartId: repriceCartId },
+            '[orders] could not bring the cart prices up to date after refusing the placement',
+          );
+        }
+      }
+      throw error;
     });
 
     // Post-commit: the order exists, so it can be announced.

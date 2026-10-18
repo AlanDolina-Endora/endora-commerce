@@ -28,6 +28,10 @@ import { PaymentMethodReadService } from '../../../packages/modules/payment_meth
 import { InventoryStockReadService } from '../../../packages/modules/inventory/src/backend/services/inventory-read-port.js';
 import { InventoryReservationApplyService } from '../../../packages/modules/inventory/src/backend/services/inventory-reservation-apply-port.js';
 import { CartPlacementApplyService } from '../../../packages/modules/carts/src/backend/services/cart-placement-apply-port.js';
+import { CartLinePricing } from '../../../packages/modules/carts/src/backend/services/cart-line-pricing.js';
+import { PricingService } from '../../../packages/modules/price_lists/src/backend/services/pricing-service.js';
+import { PriceListService } from '../../../packages/modules/price_lists/src/backend/services/price-list-service.js';
+import { neighbourReadPorts } from './price-list-neighbour-ports.js';
 import { CartReadService } from '../../../packages/modules/carts/src/backend/services/cart-read-port.js';
 // **`dist`, not `src`** (feature 080, T040b, batch four; D-160.6.1). This
 // specifier's target value-imports `invoices`' `Invoice` entity, so importing it
@@ -130,7 +134,27 @@ export function orderServiceNeighbours(
     // service takes the same statements the composed one does. What the
     // container adds is the effective-state gate, and a rig that wants the
     // 503 flips module state against the shared harness.
-    cartPlacementApply: new CartPlacementApplyService(),
+    // Its price check runs the engine the composed `carts` resolves, over this
+    // rig's `EntityManager`, so a hand-built placement refuses a stale line
+    // price exactly as the composed one does.
+    cartPlacementApply: new CartPlacementApplyService(
+      emFactory,
+      new CartLinePricing(
+        new PricingService(emFactory, undefined, undefined, neighbourReadPorts(emFactory)),
+        {
+          resolveDisplayMode: (input) =>
+            new PriceListService(
+              emFactory,
+              undefined,
+              undefined,
+              undefined,
+              neighbourReadPorts(emFactory),
+            ).resolveDisplayMode(input),
+        },
+        base.organizationDetails,
+      ),
+      base.catalogProductRead,
+    ),
     cartRead: new CartReadService(emFactory),
     // An accessor, because `invoices` is switchable. A rig that wants the
     // degrade returns `null` from it — the same shape `inventory` has below,

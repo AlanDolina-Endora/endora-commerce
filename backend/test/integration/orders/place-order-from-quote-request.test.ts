@@ -181,19 +181,30 @@ describe('orders — an order placed from an accepted quote request', () => {
       await addToBasket(SEED_PRODUCT_102_ID);
       expect((await activeBasket()).sourceQuoteRequestId).toBe(rfq.id);
       const agreed = await basketLineOf(SEED_PRODUCT_101_ID);
-      const changed = await h.app.inject({
-        method: 'PATCH',
-        url: `/api/v1/cart/items/${agreed.id}`,
-        cookies: CUSTOMER,
-        payload: { quantity: 5 },
-      });
-      expect(changed.statusCode, changed.body).toBe(200);
+      const setQuantity = async (quantity: number) => {
+        const changed = await h.app.inject({
+          method: 'PATCH',
+          url: `/api/v1/cart/items/${agreed.id}`,
+          cookies: CUSTOMER,
+          payload: { quantity },
+        });
+        expect(changed.statusCode, changed.body).toBe(200);
+      };
+      // Off the agreed quantity the line is priced from the list; back on it,
+      // the agreed price returns — and the source with it.
+      await setQuantity(5);
+      const storedPrice = async () => {
+        const em = h.em();
+        em.clear();
+        return Number((await em.findOneOrFail(CartItem, { id: agreed.id }, { filters: false })).unitPrice);
+      };
+      expect(await storedPrice()).not.toBe(11.25);
+      await setQuantity(7);
+      expect(await storedPrice()).toBe(11.25);
 
       const placed = await place();
       expect((await orderRow(placed.id)).sourceQuoteRequestId).toBe(rfq.id);
       const lines = await h.em().find(OrderItem, { orderId: placed.id }, { filters: false });
-      // The agreed price is what survives a changed quantity today; the source
-      // follows the same rule.
       expect(Number(lines.find((line) => line.productId === SEED_PRODUCT_101_ID)?.unitPrice)).toBe(11.25);
       await expect.poll(async () => (await quoteRow(rfq.id)).status, { timeout: 10_000 }).toBe('Completed');
     });

@@ -114,6 +114,8 @@ describe('placeOrder — the T048 apply ports, against a live transaction', () =
     const service = buildService({
       cartPlacementApply: {
         readActiveForPlacement: (em, ctx) => real.cartPlacementApply.readActiveForPlacement(em, ctx),
+        findPriceDrift: (em, input) => real.cartPlacementApply.findPriceDrift(em, input),
+        refreshLinePrices: (input) => real.cartPlacementApply.refreshLinePrices(input),
         completeForOrder: async (em, input) => {
           // Let the real completion write first: the point is that a *committed*
           // statement would survive, so the failure has to land after one.
@@ -188,6 +190,12 @@ describe('placeOrder — the T048 apply ports, against a live transaction', () =
       cartPlacementApply: {
         readActiveForPlacement: async () => {
           throw new ModuleDisabledError('carts');
+        },
+        findPriceDrift: async () => {
+          throw new Error('unreachable: the read refuses first');
+        },
+        refreshLinePrices: async () => {
+          throw new Error('unreachable: the read refuses first');
         },
         completeForOrder: async () => {
           throw new Error('unreachable: the read refuses first');
