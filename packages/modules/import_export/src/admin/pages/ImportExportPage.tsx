@@ -50,6 +50,14 @@ interface EntityConfig {
   exportHeader: string[];
   /** `null` when the entity is export-only. */
   importHeader: string[] | null;
+  /**
+   * Whether this operator's role holds the code the export and the import are
+   * gated by. The server lists an entity only when one of the two is true, and
+   * the card renders only the controls the role may use — never a button that
+   * answers 403.
+   */
+  canExport: boolean;
+  canImport: boolean;
 }
 
 export default function ImportExportPage(): ReactNode {
@@ -157,13 +165,19 @@ function EntityCard({ entity }: { entity: EntityConfig }): ReactNode {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" size="sm">
-            <a href={exportHref} download>
-              <Download />
-              {t('exportCsv')}
-            </a>
-          </Button>
-          {entity.importHeader ? (
+          {entity.canExport ? (
+            <Button asChild variant="outline" size="sm">
+              <a href={exportHref} download>
+                <Download />
+                {t('exportCsv')}
+              </a>
+            </Button>
+          ) : null}
+          {entity.importHeader === null ? (
+            <span className="text-xs text-muted-foreground">
+              {t('importNotSupported')}
+            </span>
+          ) : entity.canImport ? (
             <Button
               asChild
               size="sm"
@@ -184,14 +198,10 @@ function EntityCard({ entity }: { entity: EntityConfig }): ReactNode {
                 />
               </label>
             </Button>
-          ) : (
-            <span className="text-xs text-muted-foreground">
-              {t('importNotSupported')}
-            </span>
-          )}
+          ) : null}
         </div>
 
-        {entity.importHeader ? (
+        {entity.importHeader && entity.canImport ? (
           <p className="text-xs text-muted-foreground">
             {t('requiredHeader')}{' '}
             {/* The columns the server requires, not a copy of them kept here. */}

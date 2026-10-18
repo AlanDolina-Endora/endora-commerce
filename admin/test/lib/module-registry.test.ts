@@ -146,10 +146,20 @@ describe('the committed artefact', () => {
     expect(MODULE_ADMIN_CONTRIBUTIONS.map((entry) => entry.moduleId)).toContain('import_export');
   });
 
-  it('declares `/import-export` with the code its own API routes enforce', () => {
+  it('declares `/import-export` with the codes its own API routes enforce', () => {
+    // The centre's routes are gated by an any-of over each entity's owning
+    // code (`requireAdminAny([...])` in the module's `backend/routes.ts`), so
+    // the screen opens for a role holding any one of them.
     const route = registryRoutes(MODULE_ADMIN_CONTRIBUTIONS).find((item) => item.path === '/import-export');
     expect(route, 'no /import-export route in the registry').toBeDefined();
     expect(route!.module).toBe('import_export');
-    expect(route!.requiredPermission).toBe('catalog:write');
+    expect(route!.requiredPermission).toEqual([
+      'catalog:read',
+      'catalog:write',
+      'customers:read',
+      'inventory:read',
+      'inventory:write',
+      'orders:read',
+    ]);
   });
 });

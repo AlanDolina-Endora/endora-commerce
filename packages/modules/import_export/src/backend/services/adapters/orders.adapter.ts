@@ -14,6 +14,7 @@ export function ordersAdapter(ports: ImportExportPorts): ImportExportAdapter {
   return {
     name: 'orders',
     owners: ['orders'],
+    exportPermission: 'orders:read',
     exportHeader: [
       'id',
       'placed_at',

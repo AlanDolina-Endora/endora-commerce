@@ -46,6 +46,18 @@ export interface ImportExportAdapter {
    * organisation, so it needs both modules to answer.
    */
   owners: readonly string[];
+  /**
+   * The code a caller must hold to export this entity: the one the owning
+   * module's own list route enforces over the same rows. The centre is not a
+   * second door to them, so a role that cannot open the customers list cannot
+   * download the customers sheet either.
+   */
+  exportPermission: string;
+  /**
+   * The code a caller must hold to import this entity — the owner's write
+   * code. Present exactly when {@link importRows} is.
+   */
+  importPermission?: string;
   /** Header columns emitted on export. */
   exportHeader: readonly string[];
   /** The entity table as CSV-ready rows, read through the owners' ports. */

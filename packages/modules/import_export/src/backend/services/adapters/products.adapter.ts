@@ -24,6 +24,8 @@ export function productsAdapter(ports: ImportExportPorts): ImportExportAdapter {
   return {
     name: 'products',
     owners: ['catalog'],
+    exportPermission: 'catalog:read',
+    importPermission: 'catalog:write',
     exportHeader: [
       'id',
       'sku',

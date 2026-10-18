@@ -21,6 +21,8 @@ export function categoriesAdapter(ports: ImportExportPorts): ImportExportAdapter
   return {
     name: 'categories',
     owners: ['catalog'],
+    exportPermission: 'catalog:read',
+    importPermission: 'catalog:write',
     exportHeader: ['id', 'slug', 'parent_slug', 'sort_order', 'name_en', 'is_active'] as const,
 
     async exportRows(): Promise<string[][]> {

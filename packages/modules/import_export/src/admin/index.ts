@@ -27,20 +27,31 @@
  */
 import type { AdminContributions } from '@endora-commerce/admin-kit/contributions';
 
-/** The centre's one route. `catalog:write` is what its API routes enforce. */
+/** The centre's one route. */
 const ROUTE_PATH = '/import-export';
+
+/**
+ * The codes the centre's API routes accept, any one of which opens it: each
+ * entity is gated by its owning module's own read or write code, so an
+ * operator who may export orders and nothing else still reaches the screen and
+ * is offered the Orders card alone. Read from `requireAdminAny([...])` in
+ * `backend/routes.ts`, not copied from a neighbour.
+ */
+const REQUIRED_PERMISSION = [
+  'catalog:read',
+  'catalog:write',
+  'customers:read',
+  'inventory:read',
+  'inventory:write',
+  'orders:read',
+] as const;
 
 export const contributions: AdminContributions = {
   routes: [
     {
       path: ROUTE_PATH,
       component: () => import('./pages/ImportExportPage.js'),
-      // The code `import_export`'s own admin routes are gated by
-      // (`requireAdmin('catalog:write')`), read from the route rather than
-      // copied from a neighbour — the rule `check:action-route-permissions`
-      // already holds this module's two palette actions to, and which both of
-      // them declare identically.
-      requiredPermission: 'catalog:write',
+      requiredPermission: [...REQUIRED_PERMISSION],
       index: true,
     },
   ],
@@ -59,7 +70,7 @@ export const contributions: AdminContributions = {
       // The weight the hand-written NAV gave it by position: between
       // `credentials` and `settings` in the System section.
       weight: 700,
-      requiredPermission: 'catalog:write',
+      requiredPermission: [...REQUIRED_PERMISSION],
     },
   ],
 };

@@ -49,16 +49,65 @@ export class ImportExportService {
   }
 
   /**
-   * The entities this deployment can offer right now: the ones whose every
-   * owner is effectively present. Read per call rather than cached, because an
-   * operator flips a module while the process is running.
+   * The entities this deployment can offer right now **to this caller**: the
+   * ones whose every owner is effectively present, and of those the ones the
+   * caller may export or import. Read per call rather than cached, because an
+   * operator flips a module — or a role — while the process is running.
+   *
+   * `holds` answers whether the caller holds one permission code. The route
+   * passes the same guard it gates the export and import routes with, so the
+   * list and the routes cannot disagree about what the caller may use.
    */
-  listEntities(): ImportExportEntity[] {
-    return this.available().map((adapter) => ({
-      name: adapter.name,
-      exportHeader: [...adapter.exportHeader],
-      importHeader: adapter.importHeader ? [...adapter.importHeader] : null,
-    }));
+  async listEntities(holds: (code: string) => Promise<boolean>): Promise<ImportExportEntity[]> {
+    const entities: ImportExportEntity[] = [];
+    for (const adapter of this.available()) {
+      const canExport = await holds(adapter.exportPermission);
+      const canImport =
+        adapter.importPermission !== undefined && adapter.importRows !== undefined
+          ? await holds(adapter.importPermission)
+          : false;
+      if (!canExport && !canImport) continue;
+      entities.push({
+        name: adapter.name,
+        exportHeader: [...adapter.exportHeader],
+        importHeader: adapter.importHeader ? [...adapter.importHeader] : null,
+        canExport,
+        canImport,
+      });
+    }
+    return entities;
+  }
+
+  /**
+   * The code a caller must hold to export `entity`, or `undefined` when this
+   * deployment does not offer it (unknown slug, or an owner switched off) — the
+   * route then gates on any import/export code and the handler answers 404.
+   */
+  exportPermissionFor(entity: string): string | undefined {
+    return this.available().find((adapter) => adapter.name === entity)?.exportPermission;
+  }
+
+  /**
+   * The code a caller must hold to import `entity`. An export-only entity
+   * answers its export code, so a caller who may not read the rows is refused
+   * with 403 rather than told by a 405 how the entity behaves.
+   */
+  importPermissionFor(entity: string): string | undefined {
+    const adapter = this.available().find((candidate) => candidate.name === entity);
+    return adapter ? (adapter.importPermission ?? adapter.exportPermission) : undefined;
+  }
+
+  /**
+   * Every code some entity is gated by, whatever is present — the any-of set a
+   * caller must hold one of to use the centre at all.
+   */
+  permissionCodes(): string[] {
+    const codes = new Set<string>();
+    for (const adapter of this.adapters) {
+      codes.add(adapter.exportPermission);
+      if (adapter.importPermission !== undefined) codes.add(adapter.importPermission);
+    }
+    return [...codes].sort();
   }
 
   async exportToCsv(entity: string): Promise<string> {
