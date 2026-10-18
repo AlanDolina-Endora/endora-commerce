@@ -7,7 +7,7 @@ import {
 import { HttpError } from '@endora-commerce/platform/http';
 import type { NewsletterSubscriberService } from './services/subscriber.service.js';
 import type { NewsletterOptInService } from './services/opt-in.service.js';
-import type { NewsletterTokenHelper } from './services/token.helper.js';
+import { matchesClickDestination, type NewsletterTokenHelper } from './services/token.helper.js';
 import type { NewsletterTrackingService } from './services/tracking.service.js';
 
 /** 1×1 transparent GIF for open tracking. */
@@ -101,12 +101,21 @@ export async function registerNewsletterStorefrontRoutes(
     const { token } = request.params as { token: string };
     const { u } = request.query as { u?: string };
     const claims = deps.tokens.verify(token, 'click');
-    // Only redirect to absolute http(s) destinations (no open-redirect to other schemes).
-    const dest = u && /^https?:\/\//i.test(u) ? u : null;
-    if (claims && dest) await deps.tracking.recordClick(claims.id, claims.linkId ?? null, dest);
-    if (!dest) {
+    if (!claims) {
       return reply.status(410).send({ error: { code: 'GONE', message: 'Invalid link.' } });
     }
-    return reply.redirect(dest);
+    // Redirect only to the destination the token was minted for: `u` must be
+    // an absolute http(s) URL whose digest the token carries. A valid token
+    // that binds no destination, or a `u` that does not match its binding,
+    // lands on the storefront home page instead.
+    const dest =
+      typeof u === 'string' &&
+      /^https?:\/\//i.test(u) &&
+      claims.urlHash !== undefined &&
+      matchesClickDestination(u, claims.urlHash)
+        ? u
+        : null;
+    await deps.tracking.recordClick(claims.id, claims.linkId ?? null, dest);
+    return reply.redirect(dest ?? `${deps.storefrontBaseUrl}/`);
   });
 }

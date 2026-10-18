@@ -15,6 +15,19 @@ export interface IngestResult {
   rejected: Array<{ index: number; reason: string }>;
 }
 
+/**
+ * Who sent the batch and on which channel, as the server resolved them:
+ * identity from `request.actor`, channel from the resolved request channel.
+ * These are the only values stored on a row; the per-event `customerAccountId`,
+ * `organizationId` and `salesChannelId` a client may still send are accepted by
+ * the contract for backward compatibility and ignored here.
+ */
+export interface IngestContext {
+  salesChannelId: string | null;
+  customerAccountId: string | null;
+  organizationId: string | null;
+}
+
 export class AnalyticsIngestService {
   constructor(
     private readonly emFactory: () => EntityManager,
@@ -23,8 +36,10 @@ export class AnalyticsIngestService {
 
   async ingest(input: {
     events: IngestAnalyticsEvent[];
+    context: IngestContext;
     requestId?: string;
   }): Promise<IngestResult> {
+    const { context } = input;
     // command-coverage-ignore: telemetry/analytics ingestion — high-volume event
     // recording, not an audited domain-state mutation.
     const em = this.emFactory();
@@ -41,9 +56,9 @@ export class AnalyticsIngestService {
       const row = em.create(AnalyticsEvent, {
         type: ev.type,
         ...(ev.occurredAt ? { occurredAt: new Date(ev.occurredAt) } : { occurredAt: new Date() }),
-        ...(ev.salesChannelId !== undefined ? { salesChannelId: ev.salesChannelId } : {}),
-        ...(ev.customerAccountId !== undefined ? { customerAccountId: ev.customerAccountId } : {}),
-        ...(ev.organizationId !== undefined ? { organizationId: ev.organizationId } : {}),
+        ...(context.salesChannelId ? { salesChannelId: context.salesChannelId } : {}),
+        ...(context.customerAccountId ? { customerAccountId: context.customerAccountId } : {}),
+        ...(context.organizationId ? { organizationId: context.organizationId } : {}),
         ...(ev.sessionId !== undefined ? { sessionId: ev.sessionId } : {}),
         ...(ev.properties !== undefined ? { properties: ev.properties } : {}),
         ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),

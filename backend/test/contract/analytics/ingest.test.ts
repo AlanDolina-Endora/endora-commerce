@@ -4,6 +4,7 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
+import { SalesChannel } from '@endora-commerce/platform/kernel';
 import { AnalyticsEvent } from '../../helpers/package-entities.js';
 
 /**
@@ -62,6 +63,32 @@ describe('POST /api/v1/analytics/events', () => {
     // strict by design so storefront cannot quietly pollute the table.
     expect(res.statusCode).toBe(400);
     expect((res.json() as { error: { code: string } }).error.code).toBe('VALIDATION_FAILED');
+  });
+
+  it('stores the resolved channel and no identity for an anonymous batch, whatever the body names', async () => {
+    const named = '11111111-1111-4111-8111-111111111111';
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/analytics/events',
+      payload: {
+        events: [
+          {
+            type: 'product.viewed',
+            salesChannelId: named,
+            customerAccountId: named,
+            organizationId: named,
+          },
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(202);
+    const requestId = res.headers['x-request-id'] as string;
+    const resolvedCode = res.headers['x-sales-channel'] as string;
+    const stored = await h.em().findOneOrFail(AnalyticsEvent, { requestId });
+    const channel = await h.em().findOneOrFail(SalesChannel, { code: resolvedCode });
+    expect(stored.salesChannelId).toBe(channel.id);
+    expect(stored.customerAccountId ?? null).toBeNull();
+    expect(stored.organizationId ?? null).toBeNull();
   });
 
   it('stores requestId for cross-log correlation', async () => {

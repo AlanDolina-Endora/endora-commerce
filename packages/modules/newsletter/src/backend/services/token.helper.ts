@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
 /**
  * Signed, TTL-bounded tokens for the newsletter public surface (feature 048,
@@ -15,6 +15,12 @@ export interface NewsletterTokenClaims {
   id: string;
   /** Optional link id for click tracking. */
   linkId?: string;
+  /**
+   * Digest of a click link's destination ({@link clickDestinationHash}), signed
+   * into the token when the link is minted. The click tracker redirects to the
+   * `?u=` destination only when it hashes to this value.
+   */
+  urlHash?: string;
 }
 
 interface TokenPayload extends NewsletterTokenClaims {
@@ -24,6 +30,23 @@ interface TokenPayload extends NewsletterTokenClaims {
 
 function b64urlEncode(buf: Buffer): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * The digest a click token binds its destination with: SHA-256 of the exact
+ * URL string, truncated to 128 bits and base64url-encoded. Truncation is safe
+ * because the token's HMAC is what makes the value unforgeable; the digest only
+ * has to make two destinations distinguishable.
+ */
+export function clickDestinationHash(url: string): string {
+  return b64urlEncode(createHash('sha256').update(url, 'utf8').digest().subarray(0, 16));
+}
+
+/** Constant-time check that `url` is the destination bound by `urlHash`. */
+export function matchesClickDestination(url: string, urlHash: string): boolean {
+  const a = Buffer.from(clickDestinationHash(url));
+  const b = Buffer.from(urlHash);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 function b64urlDecode(s: string): Buffer {
@@ -57,6 +80,7 @@ export class NewsletterTokenHelper {
       exp: nowSeconds + ttlSeconds,
       id: claims.id,
       ...(claims.linkId !== undefined ? { linkId: claims.linkId } : {}),
+      ...(claims.urlHash !== undefined ? { urlHash: claims.urlHash } : {}),
     };
     const payloadJson = JSON.stringify(payload);
     const body = b64urlEncode(Buffer.from(payloadJson, 'utf8'));
@@ -100,8 +124,10 @@ export class NewsletterTokenHelper {
     if (typeof payload.exp !== 'number' || payload.exp < nowSeconds) return null;
     if (typeof payload.id !== 'string' || payload.id.length === 0) return null;
 
-    return payload.linkId !== undefined
-      ? { id: payload.id, linkId: payload.linkId }
-      : { id: payload.id };
+    return {
+      id: payload.id,
+      ...(payload.linkId !== undefined ? { linkId: payload.linkId } : {}),
+      ...(typeof payload.urlHash === 'string' ? { urlHash: payload.urlHash } : {}),
+    };
   }
 }

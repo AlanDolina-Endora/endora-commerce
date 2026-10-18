@@ -24,12 +24,20 @@ export type AnalyticsEventType = z.infer<typeof analyticsEventTypeSchema>;
 /**
  * A single inbound analytics event. The shape is intentionally permissive
  * inside `properties` — the storefront chooses what to send per event type.
+ *
+ * `salesChannelId`, `customerAccountId` and `organizationId` are accepted so
+ * existing senders keep validating, but the server ignores them: a stored event
+ * carries the channel the request resolved to and the identity of the signed-in
+ * customer, if any.
  */
 export const ingestAnalyticsEventSchema = z.object({
   type: analyticsEventTypeSchema,
   occurredAt: isoDateTimeSchema.optional(),
+  /** @deprecated Ignored; the server uses the resolved request channel. */
   salesChannelId: uuidSchema.optional(),
+  /** @deprecated Ignored; the server uses the signed-in customer, if any. */
   customerAccountId: uuidSchema.optional(),
+  /** @deprecated Ignored; the server uses the signed-in customer's organization, if any. */
   organizationId: uuidSchema.optional(),
   sessionId: z.string().min(1).max(64).optional(),
   properties: z.record(z.string(), z.unknown()).optional(),
