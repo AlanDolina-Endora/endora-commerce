@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import {
@@ -343,5 +343,60 @@ describe('retention sweep — soft-deleted assets (feature 156)', () => {
       await h.assetsLibrary.sweeper.sweep(new Date(Date.now() + 2 * DAY_MS + HOUR_MS));
       expect(await gone(asset.id)).toBe(true);
     });
+  });
+
+  // Block review A — a row on a backend this deployment cannot reach is parked,
+  // and the rest of the batch still runs (FR-032).
+  it('parks a due row on an unconfigured cloud backend and still purges the local one after it', async () => {
+    const now = new Date();
+    const id = randomUUID();
+    const em = h.em();
+    em.create(Asset, {
+      id,
+      kind: 'pdf',
+      filename: `${runName()}.pdf`,
+      mimeType: 'application/pdf',
+      sizeBytes: '1',
+      storageUrl: `https://storage.googleapis.com/unconfigured/${id}.pdf`,
+      storageLocator: `as156/${id}.pdf`,
+      storageBackend: 'gcs',
+      visibility: 'public',
+      deletedAt: new Date(now.getTime() - 30 * DAY_MS),
+    });
+    await em.flush();
+    created.push(id);
+    const local = await forgeDeleted(now, 20 * DAY_MS);
+    const restore = await overrideAssetSetting(h, 'assets.gcs.bucket', '');
+    h.assetsLibrary.adapters.invalidate();
+    try {
+      await h.assetsLibrary.sweeper.sweep(now);
+    } finally {
+      await restore();
+      h.assetsLibrary.adapters.invalidate();
+    }
+    expect(await gone(local.id)).toBe(true);
+    const parked = await h.em().fork().findOneOrFail(Asset, { id });
+    expect(parked.pendingCleanup).toBe(true);
+    expect(parked.deletedAt).not.toBeNull();
+  });
+
+  // Block review B — an object already gone counts as deleted: the row goes and
+  // its permalink is released, instead of being parked for ever.
+  it('removes a due row whose stable file is already gone, releasing its permalink', async () => {
+    const now = new Date();
+    const asset = await forgeDeleted(now, 20 * DAY_MS);
+    const permalink = `${runName()}/gone.pdf`;
+    await h.em().getConnection().execute('update assets set permalink = ? where id = ?', [permalink, asset.id]);
+    await unlink(asset.stableAbs);
+    await h.assetsLibrary.sweeper.sweep(now);
+    expect(await gone(asset.id)).toBe(true);
+    const releases = await h
+      .em()
+      .getConnection()
+      .execute<Array<{ reason: string }>>('select reason from asset_permalink_releases where permalink_lower = ?', [
+        permalink.toLowerCase(),
+      ]);
+    expect(releases).toEqual([{ reason: 'purged' }]);
+    await h.em().getConnection().execute('delete from asset_permalink_releases where permalink_lower = ?', [permalink.toLowerCase()]);
   });
 });

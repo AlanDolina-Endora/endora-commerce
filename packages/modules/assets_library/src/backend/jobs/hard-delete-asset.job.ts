@@ -150,14 +150,19 @@ export class HardDeleteAssetWorker {
         clearPreviousVersion(row);
       }
 
-      const remove = deleterOf(await this.deps.adapters.getForBackend(row.storageBackend));
       try {
+        // A backend this deployment cannot reach parks the row like a failed
+        // delete — the batch goes on, and a later tick retries it (FR-032).
+        const remove = deleterOf(await this.deps.adapters.getForBackend(row.storageBackend));
         // Legacy rows name a file this platform did not store: only the row goes.
         if (remove) await remove({ locator: row.storageLocator || row.storageUrl });
-      } catch {
-        row.pendingCleanup = true;
-        await tx.flush();
-        return { outcome: 'pending', previous };
+      } catch (err) {
+        // An object already gone is deleted; anything else is retried later.
+        if (!isObjectNotFound(err)) {
+          row.pendingCleanup = true;
+          await tx.flush();
+          return { outcome: 'pending', previous };
+        }
       }
       await this.releasePermalink(tx, row, now);
       tx.remove(row);

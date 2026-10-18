@@ -108,8 +108,11 @@ describe('hard-delete worker (T099)', () => {
 
   it('parks an asset as pendingCleanup when adapter.delete fails', async () => {
     const em = h.em();
-    // Asset row points at a missing file → adapter.delete throws → row
-    // remains, pendingCleanup flips to true.
+    // The row's locator names a directory, so `unlink` fails with something
+    // other than "not found" → the row remains and pendingCleanup flips to true.
+    // (A file that is already gone counts as deleted since feature 156's block
+    // review: the row is removed — see retention-sweep-soft-delete.test.ts.)
+    await mkdir(join(baseDir, '11/22/missing-file.png'), { recursive: true });
     const a = em.create(Asset, {
       id: '11223344-5555-6666-7777-888899990000',
       kind: 'image',
