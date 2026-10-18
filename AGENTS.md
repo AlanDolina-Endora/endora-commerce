@@ -1,6 +1,6 @@
 # Endora Commerce (b2b-platform) — Agent Instructions
 
-Last updated: 2026-10-17
+Last updated: 2026-10-18
 
 **This file is the single source of truth for every AI coding agent working in this
 repository, and since 2026-09-11 it is a *router*.** What is below is what an agent needs
@@ -366,6 +366,8 @@ pointing at whichever tree it was created from; the same property issue #255 dep
 - PostgreSQL — two new tables `document_templates` and `document_template_imports` owned by `document_templates`, one migration; `invoice_templates` kept read-only and imported at runtime; no column added elsewhere (152-compare-pdf-template)
 - TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod, `pdfmake` (backend); React 19 + Vite through `@endora-commerce/admin-kit`, `@puckeditor/core`, `@endora-commerce/page-builder-core` (admin) — **no new runtime dependency** (153-quote-request-pdf-template)
 - PostgreSQL — one nullable column `quote_requests.document_template_id` owned by `quote_requests` (one migration, no FK); Line items table settings inside the existing `document_templates.content` jsonb (153-quote-request-pdf-template)
+- TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod, ioredis (backend); React 19 + Vite through `@endora-commerce/admin-kit` (admin); Next.js 15 App Router middleware, server components and server actions (storefront) — **no new runtime dependency** (154-sales-channel-access)
+- PostgreSQL — one column `sales_channels.anonymous_access` (platform migration); data backfills of `sales_channel_organizations` (owned by `organizations`) and `carts.sales_channel_id` (owned by `carts`); Redis — one cache prefix and one pub/sub channel (154-sales-channel-access)
 
 - TypeScript 5.x strict on Node.js ≥ 22.17; Fastify + MikroORM (PostgreSQL) + Zod + ioredis + BullMQ + Meilisearch (backend)
 - React 19 + Vite + react-router-dom 7 + Tailwind 4 (admin); Next.js 15 App Router + React 19 + Tailwind v4 (storefront)
@@ -376,6 +378,6 @@ pointing at whichever tree it was created from; the same property issue #255 dep
 See "Repo map" above.
 
 ## Recent Changes
+- 154-sales-channel-access: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod, ioredis (backend); React 19 + Vite through `@endora-commerce/admin-kit` (admin); Next.js 15 App Router middleware, server components and server actions (storefront) — **no new runtime dependency**
 - 153-quote-request-pdf-template: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod, `pdfmake` (backend); React 19 + Vite through `@endora-commerce/admin-kit`, `@puckeditor/core`, `@endora-commerce/page-builder-core` (admin) — **no new runtime dependency**
 - 152-compare-pdf-template: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod, `pdfmake` (backend); React 19 + Vite + react-router-dom 7 through `@endora-commerce/admin-kit`, `@puckeditor/core`, `@endora-commerce/page-builder-core`, `@endora-commerce/page-builder-admin` (admin); Next.js 15 App Router (storefront) — **no new runtime dependency**
-- 151-page-builder-translate: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite + `@endora-commerce/admin-kit` + `@puckeditor/core` 0.23 (admin); provider HTTP over native `fetch` — **no new runtime dependency**; one new workspace library package `@endora-commerce/llm-client` (code moved from `prompt_actions`)
