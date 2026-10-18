@@ -6,6 +6,11 @@ import { Color } from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
 import Image from '@tiptap/extension-image';
 import type { RichContentProps } from '../schema/component-types.js';
+import {
+  isInertStyle,
+  sanitizeHtmlWithPolicy,
+  type HtmlSanitizePolicy,
+} from '../utils/sanitize-html.js';
 
 export const richContentExtensions = [
   StarterKit.configure({ link: { openOnClick: false, autolink: true } }),
@@ -42,30 +47,46 @@ const allowedTags = new Set([
   'mark',
 ]);
 
-const SAFE_STYLE_PROPS = /^(color|background-color)\s*:\s*[^;]+;?/gi;
+const GLOBAL_ATTRS = new Set(['class', 'style']);
 
-function sanitizeStyleAttr(style: string): string {
+const allowedAttrs: Record<string, Set<string>> = {
+  a: new Set(['href', 'title', 'target', 'rel']),
+  img: new Set(['src', 'alt', 'title', 'width', 'height']),
+  mark: new Set(['data-color']),
+};
+
+const SAFE_STYLE_VALUES: Record<string, RegExp> = {
+  color: /^[#\w\s(),.%-]+$/,
+  'background-color': /^[#\w\s(),.%-]+$/,
+  'text-align': /^(left|right|center|justify|start|end)$/i,
+};
+
+/** Keeps the declarations the rich text editor writes — colours and alignment — and nothing else. */
+function sanitizeStyleAttr(style: string): string | null {
   const kept: string[] = [];
-  for (const match of style.matchAll(SAFE_STYLE_PROPS)) {
-    kept.push(match[0].replace(/;?\s*$/, ''));
+  for (const declaration of style.split(';')) {
+    const colon = declaration.indexOf(':');
+    if (colon === -1) continue;
+    const prop = declaration.slice(0, colon).trim().toLowerCase();
+    const value = declaration.slice(colon + 1).trim();
+    const pattern = SAFE_STYLE_VALUES[prop];
+    if (!pattern || !pattern.test(value) || !isInertStyle(value)) continue;
+    kept.push(`${prop}: ${value}`);
   }
-  return kept.join('; ');
+  return kept.length > 0 ? kept.join('; ') : null;
 }
 
+const richContentPolicy: HtmlSanitizePolicy = {
+  allowTag: (tag) => allowedTags.has(tag),
+  allowAttr: (tag, attr) => GLOBAL_ATTRS.has(attr) || allowedAttrs[tag]?.has(attr) === true,
+  cleanStyle: sanitizeStyleAttr,
+  allowStyleElement: false,
+};
+
+/** Sanitises rich-content HTML. Pure and DOM-free — identical on server and client. */
 export function sanitizeRichHtml(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-    .replace(/\son\w+="[^"]*"/gi, '')
-    .replace(/\son\w+='[^']*'/gi, '')
-    .replace(/\s(href|src)=["']javascript:[^"']*["']/gi, '')
-    .replace(/\sstyle=(["'])([\s\S]*?)\1/gi, (_full, quote: string, style: string) => {
-      const cleaned = sanitizeStyleAttr(style);
-      return cleaned ? ` style=${quote}${cleaned}${quote}` : '';
-    })
-    .replace(/<\/?([a-z0-9-]+)(\s[^>]*)?>/gi, (match, tagName: string) => {
-      if (!allowedTags.has(tagName.toLowerCase())) return '';
-      return match;
-    });
+  if (typeof html !== 'string' || html === '') return '';
+  return sanitizeHtmlWithPolicy(html, richContentPolicy);
 }
 
 export function htmlFromTiptap(content: JSONContent | null): string {
