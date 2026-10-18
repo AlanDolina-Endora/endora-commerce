@@ -41,6 +41,16 @@ by permalink, exactly as for a name that does not exist. Public cloud assets rea
 route are redirected to their stable bucket URL. Redirects and error answers carry `no-store`,
 `X-Content-Type-Options: nosniff` and a fixed content policy, whatever the stored type.
 
+**Admin.** The asset detail drawer gains, all inside the drawer: the shareable link (the permalink
+URL, or else the stable file URL — never the versioned one) with a copy button and a notice when the
+asset is private; the permalink, validated as it is typed, with a confirmation before a set
+permalink is changed or removed and before a name another asset used is taken; **Replace file**,
+which accepts only the asset's own kind and confirms naming both files and how long the current one
+stays restorable; the previous version with **Restore**; and a warning before deleting an asset that
+has a permalink. Write controls need `assets.write`. The command palette (⌘K / CTRL+K) gains
+"Media library", opening the library for anyone holding `assets.read`. The storage state
+(`GET /api/v1/admin/assets/storage/state`) also reports `retentionDays`.
+
 **Database (one migration, owned by this module).**
 
 - Eleven new columns on `assets`: `content_version` (backfilled with a random 12-character token

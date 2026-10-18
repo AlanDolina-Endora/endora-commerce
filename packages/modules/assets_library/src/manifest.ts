@@ -145,6 +145,22 @@ export const manifest = defineModuleManifest({
   // name; when nobody is found the detail answers `replacedBy: null`.
   dependencies: ['auth', 'admin_users'],
   settings,
+  /**
+   * The module's landing action under ⌘K (Constitution XVI) — "Media library",
+   * the product decision `specs/156-asset-stable-url/` research R-16 records.
+   */
+  actions: [
+    {
+      id: 'open-assets-library',
+      labelKey: 'actions.openLibrary.label',
+      descriptionKey: 'actions.openLibrary.description',
+      icon: 'Image',
+      targetRoute: '/assets-library',
+      requiredPermission: 'assets.read',
+      keywords: ['assets', 'media', 'files', 'images', 'permalink', 'pliki', 'multimedia'],
+      weight: 250,
+    },
+  ],
   // Feature 074 (Constitution XVII), test C3 — platform primitive. This module
   // had no activation declaration at all, which resolved as "always activated"
   // and read as an omission. Media storage carries no independent business

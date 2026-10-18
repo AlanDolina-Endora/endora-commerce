@@ -62,7 +62,7 @@ interface Subject {
 const SUBJECTS: readonly Subject[] = [
   // Both locked: `activation.nonDeactivatable`, asserted below in the
   // manifests' own words rather than restated here.
-  { module: 'assets_library', actions: [], axis: 'platform-unavailable' },
+  { module: 'assets_library', actions: ['open-assets-library'], axis: 'platform-unavailable' },
   { module: 'custom_fields', actions: ['open-custom-fields'], axis: 'platform-unavailable' },
 ];
 
@@ -147,18 +147,21 @@ describe('batch 9 contributes no palette action while off (Constitution XVII ite
     expect(target?.requiredPermission).toBe(actions[0]?.requiredPermission);
   });
 
-  it('assets_library declares no action, and its admin layer still declares a route', () => {
-    // The absence, kept honest from both sides. A module with no action and no
-    // route would satisfy the first case vacuously; this says the screen is
-    // there and only the advertisement is missing, which is the Principle XVI
-    // debt `specs/deferred-defects.md` records rather than a defect this batch
-    // introduced.
+  it('assets_library’s action targets the route its own admin layer declares', () => {
+    // Its "Media library" action (`specs/156-asset-stable-url/` research R-16)
+    // paid the Principle XVI debt this case used to record as an absence; the
+    // pairing is now the same as custom_fields' above.
     const manifest = REGISTERED_MANIFESTS.find(
       (entry) => entry.manifest.id === 'assets_library',
     )?.manifest;
-    expect(manifest?.actions ?? []).toEqual([]);
+    const actions = manifest?.actions ?? [];
+    expect(actions.map((action) => action.id)).toEqual(['open-assets-library']);
     expect((assetsLibraryAdmin.routes ?? []).map((route) => route.path)).toEqual([
       '/assets-library',
     ]);
+    const target = (assetsLibraryAdmin.routes ?? []).find(
+      (route) => route.path === actions[0]?.targetRoute,
+    );
+    expect(target?.requiredPermission).toBe(actions[0]?.requiredPermission);
   });
 });

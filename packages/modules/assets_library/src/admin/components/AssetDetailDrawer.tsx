@@ -8,7 +8,8 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ExternalLink, Trash2 } from 'lucide-react';
 import { validateAssetPermalink } from '@endora-commerce/contracts';
 import { Alert, AlertDescription, Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Select } from '@endora-commerce/admin-kit/ui';
-import { ApiError, toAbsoluteAssetUrl, useAuth } from '@endora-commerce/admin-kit/lib';
+import { toAbsoluteAssetUrl } from '@endora-commerce/admin-kit/lib';
+import { ApiError, useAuth } from '@endora-commerce/admin-kit/lib';
 import { AssetUploader, ModalDialog } from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import {
