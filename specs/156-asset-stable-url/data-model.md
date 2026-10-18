@@ -12,7 +12,7 @@ table; other modules' rows are referenced by id only.
 
 | Column | Type | Null | Default / backfill | Meaning |
 | --- | --- | --- | --- | --- |
-| `content_version` | `varchar(32)` | not null | backfill `substr(md5(random()::text \|\| id::text), 1, 12)`; new rows set by the entity initialiser | Identity of the bytes the asset currently holds; the `v` marker and the ETag tail (research R-7). Public; no key is derived from it |
+| `content_version` | `varchar(32)` | not null | backfill `substr(md5(random()::text \|\| id::text), 1, 12)`; new rows set by the entity initialiser; column default `substr(md5(random()::text), 1, 12)` for rows written by raw SQL (the demo seed, other modules' fixtures) | Identity of the bytes the asset currently holds; the `v` marker and the ETag tail (research R-7). Public; no key is derived from it |
 | `permalink` | `varchar(200)` | null | — | Operator-chosen path served at `<base>/assets/file/<permalink>` (R-12) |
 | `previous_storage_locator` | `varchar(2048)` | null | — | Random sibling key `<dir>/<id>.prev-<32 hex>.<ext>` of the one kept previous version (R-1, R-21); private on cloud |
 | `previous_filename` | `varchar(255)` | null | — | |
