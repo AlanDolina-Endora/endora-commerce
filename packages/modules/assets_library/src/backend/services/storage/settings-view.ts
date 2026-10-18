@@ -35,7 +35,15 @@ export function createSettingsView(
     if (!setting) return fallback;
     const override = await em.findOne(SettingValue, { setting: setting });
     const raw = override ? override.value : setting.globalValue ?? setting.defaultValue;
-    const n = typeof raw === 'number' ? raw : Number(raw);
+    // Only a number, or a string that spells one, is a value: `Number('')`,
+    // `Number(null)` and `Number([])` are 0, which is not what an empty setting
+    // means (FR-035 — a missing or non-numeric value applies as the fallback).
+    const n =
+      typeof raw === 'number'
+        ? raw
+        : typeof raw === 'string' && raw.trim() !== ''
+          ? Number(raw)
+          : Number.NaN;
     return Number.isFinite(n) ? n : fallback;
   }
 

@@ -27,8 +27,16 @@ describe('softDeleteRetentionDays', () => {
     [-1, 30],
     [Infinity, 30],
     ['x', 30],
+    // Block review F: an empty or non-numeric value applies as 30, never as 0.
+    ['', 30],
+    ['   ', 30],
+    [null, 30],
+    [true, 30],
+    [[], 30],
+    [{}, 30],
+    ['7', 7],
   ] as const)('answers %s as %s', async (value, days) => {
-    expect(await viewOver(value).softDeleteRetentionDays()).toBe(days);
+    expect(await viewOver(value as unknown).softDeleteRetentionDays()).toBe(days);
   });
 
   it('answers 30 for a missing setting', async () => {
