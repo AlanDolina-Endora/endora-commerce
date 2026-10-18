@@ -134,6 +134,21 @@ async function deleteAndClear(
   return true;
 }
 
+/** What a swap tracks across its transaction, for the compensation and the cleanup after it. */
+interface SwapState {
+  /** The copy onto the stable key succeeded: a rollback must put the old bytes back. */
+  stableWritten: boolean;
+  committed: boolean;
+  /** The compensation copy, captured from the locked row before it changes. */
+  restoreTo: StorageCopyInput | null;
+  /** The previous key the swap stopped referencing, deleted after commit. */
+  superseded: string | null;
+}
+
+function newSwapState(): SwapState {
+  return { stableWritten: false, committed: false, restoreTo: null, superseded: null };
+}
+
 /**
  * Runs one replace. Answers the locked row as committed; throws the refusal or
  * the failure otherwise, with the stable object holding the bytes the row
@@ -182,11 +197,7 @@ export async function replaceAssetFile(
     { ...prevKey, reason: 'previous', assetId: current.id },
   ]);
 
-  let stableWritten = false;
-  let committed = false;
-  /** What the compensation copy needs, captured from the locked row before it changes. */
-  let restoreTo: StorageCopyInput | null = null;
-  let supersededLocator: string | null = null;
+  const state = newSwapState();
   let result: Asset;
 
   try {
@@ -227,7 +238,7 @@ export async function replaceAssetFile(
         }
 
         const oldDisposition = cloudContentDisposition(row.mimeType, row.filename);
-        restoreTo = {
+        state.restoreTo = {
           from: prevKey.locator,
           to: row.storageLocator,
           visibility: row.visibility,
@@ -253,7 +264,7 @@ export async function replaceAssetFile(
           cacheControl: 'no-cache',
           contentDisposition: cloudContentDisposition(staged.storedMime, input.filename),
         });
-        stableWritten = true;
+        state.stableWritten = true;
 
         const before = {
           filename: row.filename,
@@ -261,7 +272,7 @@ export async function replaceAssetFile(
           sizeBytes: Number(row.sizeBytes),
           contentVersion: row.contentVersion,
         };
-        supersededLocator = row.previousStorageLocator ?? null;
+        state.superseded = row.previousStorageLocator ?? null;
 
         row.previousStorageLocator = prevKey.locator;
         row.previousFilename = row.filename;
@@ -282,9 +293,9 @@ export async function replaceAssetFile(
 
         // The row references the new previous key now; the old one is released.
         await deps.ledger.clear([prevKey], em);
-        if (supersededLocator !== null) {
+        if (state.superseded !== null) {
           await deps.ledger.record(
-            [{ storageBackend: backend, locator: supersededLocator, reason: 'superseded', assetId: row.id }],
+            [{ storageBackend: backend, locator: state.superseded, reason: 'superseded', assetId: row.id }],
             em,
           );
         }
@@ -301,13 +312,13 @@ export async function replaceAssetFile(
         };
       },
     });
-    committed = true;
+    state.committed = true;
   } catch (err) {
-    if (stableWritten && restoreTo !== null) {
+    if (state.stableWritten && state.restoreTo !== null) {
       // The transaction did not commit; put the old bytes back on the stable
       // key, with the locked row's visibility as an explicit ACL.
       try {
-        await adapter.copy(restoreTo);
+        await adapter.copy(state.restoreTo);
         await deleteAndClear(adapter, deps.ledger, prevKey);
       } catch (compensationErr) {
         deps.logError?.('assets_library: replace compensation failed', {
@@ -317,7 +328,7 @@ export async function replaceAssetFile(
           error: compensationErr instanceof Error ? compensationErr.message : String(compensationErr),
         });
       }
-    } else if (!committed) {
+    } else if (!state.committed) {
       await deleteAndClear(adapter, deps.ledger, prevKey);
     }
     throw isStorageFailure(err) ? storageUnavailable(err) : err;
@@ -325,7 +336,7 @@ export async function replaceAssetFile(
     await deleteAndClear(adapter, deps.ledger, stageKey);
   }
 
-  const superseded = supersededLocator as string | null;
+  const superseded = state.superseded;
   if (superseded !== null) {
     await deleteAndClear(adapter, deps.ledger, { storageBackend: backend, locator: superseded });
   }
@@ -412,10 +423,7 @@ export async function restorePreviousVersion(
   };
   await deps.ledger.record([{ ...prevKey, reason: 'previous', assetId: current.id }]);
 
-  let stableWritten = false;
-  let committed = false;
-  let restoreTo: StorageCopyInput | null = null;
-  let supersededLocator: string | null = null;
+  const state = newSwapState();
   let result: Asset;
 
   try {
@@ -458,7 +466,7 @@ export async function restorePreviousVersion(
         };
 
         const currentDisposition = cloudContentDisposition(row.mimeType, row.filename);
-        restoreTo = {
+        state.restoreTo = {
           from: prevKey.locator,
           to: row.storageLocator,
           visibility: row.visibility,
@@ -482,7 +490,7 @@ export async function restorePreviousVersion(
           cacheControl: 'no-cache',
           contentDisposition: cloudContentDisposition(previous.mimeType, previous.filename),
         });
-        stableWritten = true;
+        state.stableWritten = true;
 
         const before = {
           filename: row.filename,
@@ -490,7 +498,7 @@ export async function restorePreviousVersion(
           sizeBytes: Number(row.sizeBytes),
           contentVersion: row.contentVersion,
         };
-        supersededLocator = previous.locator;
+        state.superseded = previous.locator;
 
         row.previousStorageLocator = prevKey.locator;
         row.previousFilename = row.filename;
@@ -529,11 +537,11 @@ export async function restorePreviousVersion(
         };
       },
     });
-    committed = true;
+    state.committed = true;
   } catch (err) {
-    if (stableWritten && restoreTo !== null) {
+    if (state.stableWritten && state.restoreTo !== null) {
       try {
-        await adapter.copy(restoreTo);
+        await adapter.copy(state.restoreTo);
         await deleteAndClear(adapter, deps.ledger, prevKey);
       } catch (compensationErr) {
         deps.logError?.('assets_library: restore compensation failed', {
@@ -543,13 +551,13 @@ export async function restorePreviousVersion(
           error: compensationErr instanceof Error ? compensationErr.message : String(compensationErr),
         });
       }
-    } else if (!committed) {
+    } else if (!state.committed) {
       await deleteAndClear(adapter, deps.ledger, prevKey);
     }
     throw isStorageFailure(err) ? storageUnavailable(err) : err;
   }
 
-  const superseded = supersededLocator as string | null;
+  const superseded = state.superseded;
   if (superseded !== null) {
     await deleteAndClear(adapter, deps.ledger, { storageBackend: backend, locator: superseded });
   }
