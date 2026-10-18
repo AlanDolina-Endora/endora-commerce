@@ -186,6 +186,48 @@ describe('public asset file (T037)', () => {
     await h.em().removeAndFlush(await h.em().findOneOrFail(Asset, { id }));
   });
 
+  it('serves an uploaded SVG as an image under a policy that runs no script', async () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1"/></svg>';
+    const { body, contentType } = buildMultipart([
+      { name: 'file', filename: 'logo.svg', mime: 'image/svg+xml', value: svg },
+    ]);
+    const up = await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/assets',
+      headers: { 'content-type': contentType },
+      cookies: adminCookie,
+      payload: body,
+    });
+    expect(up.statusCode).toBe(201);
+    const id = (up.json() as { data: { id: string } }).data.id;
+    const r = await h.app.inject({ method: 'GET', url: `/assets/file/${id}` });
+    expect(r.statusCode).toBe(200);
+    expect(r.headers['content-type']).toBe('image/svg+xml');
+    expect(r.headers['content-disposition']).toMatch(/^inline;/);
+    expect(r.headers['content-security-policy']).toBe(
+      "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+    );
+    expect(r.headers['x-content-type-options']).toBe('nosniff');
+    await h.em().removeAndFlush(await h.em().findOneOrFail(Asset, { id }));
+  });
+
+  it('refuses an HTML upload with 415 and stores nothing', async () => {
+    const before = await h.em().fork().count(Asset, {});
+    const { body, contentType } = buildMultipart([
+      { name: 'file', filename: 'page.html', mime: 'text/html', value: '<!doctype html><p>hi</p>' },
+    ]);
+    const r = await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/assets',
+      headers: { 'content-type': contentType },
+      cookies: adminCookie,
+      payload: body,
+    });
+    expect(r.statusCode).toBe(415);
+    expect(r.json()).toMatchObject({ error: { code: 'ASSET_UPLOAD_TYPE_NOT_ALLOWED' } });
+    expect(await h.em().fork().count(Asset, {})).toBe(before);
+  });
+
   it('returns 404 ASSET_NOT_FOUND for an unknown id', async () => {
     const r = await h.app.inject({
       method: 'GET',

@@ -51,6 +51,24 @@ adapter:
 - `assets.max_file_size_mb` — integer cap in MB. `0` (default) disables
   the cap.
 
+Independently of `assets.allowed_file_types`, documents a browser would run
+— HTML, XHTML, XML (including XSL stylesheets) and JavaScript — are refused
+with `415 ASSET_UPLOAD_TYPE_NOT_ALLOWED`, judged by the declared MIME type and
+by the file extension. SVG is accepted (logos, icons) and is always stored as
+`image/svg+xml`. Any other file is stored under the type sniffed from its
+content when the content is recognised, and under its declared type otherwise.
+
+## How files are served
+
+`GET /assets/file/:assetId` sends `X-Content-Type-Options: nosniff` and a
+`Content-Security-Policy` of `default-src 'none'; style-src 'unsafe-inline'; sandbox`
+on every response (PDFs get the same policy without `sandbox`, which the
+browsers' built-in PDF viewers do not run under). Only displayable media —
+raster images, SVG, video, audio, PDF and plain text — is served
+`Content-Disposition: inline`; every other stored type is served as an
+`attachment`, whatever the request asks for. An SVG opened directly therefore
+runs no script, and embedding it through `<img>` is unaffected.
+
 ## Visibility & private URLs
 
 Each asset has `visibility ∈ {public, private}`. Public URLs are stable;
@@ -64,6 +82,11 @@ outstanding private URL.
 
 For **S3** and **GCS**, private URLs are V4-signed through the vendor SDK;
 nothing in the backend needs to be configured beyond the credentials.
+`GET /assets/file/:assetId` redirects a cloud asset to its resolved URL, but
+for a `private` asset only after the same HMAC token check a local asset
+gets; without a valid token it answers `403 ASSET_ACCESS_DENIED`. Admin
+screens obtain private URLs from `GET /api/v1/admin/assets/:id/url` and are
+unaffected.
 
 ## Soft-delete & hard-delete
 

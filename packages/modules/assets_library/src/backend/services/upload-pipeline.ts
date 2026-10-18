@@ -25,6 +25,7 @@ import { recordAuditFromContext } from '@endora-commerce/platform/commands';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { AdapterRegistry } from './storage/adapter-registry.js';
 import type { AssetVisibility } from './storage/storage-adapter.js';
+import { isActiveDocument, isSvg, SVG_MIME } from './content-policy.js';
 
 export interface UploadPolicy {
   /** From `assets.allowed_file_types` setting; `['*']` ⇒ unrestricted. */
@@ -94,6 +95,34 @@ function isAllowed(allowed: string[], mime: string, ext: string): boolean {
   return false;
 }
 
+function refuseActiveDocument(): never {
+  throw new HttpError(
+    415,
+    ERROR_CODES.ASSET_UPLOAD_TYPE_NOT_ALLOWED,
+    'HTML, XHTML, XML and JavaScript files cannot be uploaded to the media library.',
+  );
+}
+
+/**
+ * The type an upload is stored and later served as.
+ *
+ * Content `file-type` recognises is stored as what it is. Text formats it
+ * cannot recognise fall back to what the request declared — except that a
+ * document a browser would run (by declared type or by file name) is refused
+ * whatever the configured policy says, and an SVG is always stored as
+ * `image/svg+xml`, the one type the file route serves it under.
+ */
+function storedMimeFor(input: UploadInput, sniffed: string | undefined): string {
+  if (sniffed) {
+    if (isActiveDocument({ filename: '', mimeType: sniffed })) refuseActiveDocument();
+    return sniffed;
+  }
+  const declared = { filename: input.filename, mimeType: input.declaredMime ?? '' };
+  if (isActiveDocument(declared)) refuseActiveDocument();
+  if (isSvg(declared)) return SVG_MIME;
+  return input.declaredMime || 'application/octet-stream';
+}
+
 export class UploadPipeline {
   constructor(private readonly deps: UploadPipelineDeps) {}
 
@@ -131,7 +160,7 @@ export class UploadPipeline {
     // The library returns a wrapped stream we consume in place of the original;
     // the wrapper replays the head bytes so the adapter still gets the full file.
     const { fileType, stream: sniffedStream } = await sniffMime(input.stream);
-    const sniffedMime = fileType?.mime ?? input.declaredMime ?? 'application/octet-stream';
+    const sniffedMime = storedMimeFor(input, fileType?.mime);
 
     // Re-check allow-list using the *sniffed* MIME (defends against spoofed
     // Content-Type) — the stricter check decides per spec edge case.

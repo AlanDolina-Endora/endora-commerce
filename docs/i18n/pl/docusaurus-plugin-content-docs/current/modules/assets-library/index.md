@@ -47,6 +47,22 @@ aktywnego adaptera:
   (file-type); plik jest odrzucany, gdy którykolwiek z nich nie pasuje.
 - `assets.max_file_size_mb` — limit rozmiaru w MB (liczba całkowita). `0` (domyślnie) wyłącza limit.
 
+Niezależnie od `assets.allowed_file_types` dokumenty, które przeglądarka wykonałaby — HTML, XHTML,
+XML (w tym arkusze XSL) i JavaScript — są odrzucane odpowiedzią `415 ASSET_UPLOAD_TYPE_NOT_ALLOWED`;
+decyduje o tym zarówno zadeklarowany typ MIME, jak i rozszerzenie pliku. SVG jest akceptowany (logo,
+ikony) i zawsze zapisywany jako `image/svg+xml`. Każdy inny plik jest zapisywany z typem wykrytym na
+podstawie zawartości, jeśli zawartość została rozpoznana, a w przeciwnym razie z typem zadeklarowanym.
+
+## Jak pliki są serwowane
+
+`GET /assets/file/:assetId` wysyła w każdej odpowiedzi `X-Content-Type-Options: nosniff` oraz
+`Content-Security-Policy` o wartości `default-src 'none'; style-src 'unsafe-inline'; sandbox`
+(pliki PDF dostają tę samą politykę bez `sandbox`, w którym wbudowane przeglądarki PDF nie działają).
+Tylko media, które przeglądarka jedynie wyświetla — obrazy rastrowe, SVG, wideo, audio, PDF i zwykły
+tekst — są serwowane z `Content-Disposition: inline`; każdy inny zapisany typ jest serwowany jako
+`attachment`, niezależnie od parametrów żądania. SVG otwarty bezpośrednio nie uruchamia więc żadnego
+skryptu, a osadzanie go przez `<img>` działa bez zmian.
+
 ## Widoczność i adresy prywatne
 
 Każdy plik ma `visibility ∈ {public, private}`. Adresy publiczne są stałe; adresy prywatne są ważne
@@ -58,7 +74,10 @@ podpisujący pochodzi ze zmiennej środowiskowej `ASSETS_LIBRARY_HMAC_KEY` (wyge
 `openssl rand -hex 32`); zmiana klucza unieważnia wszystkie jeszcze ważne adresy prywatne.
 
 W **S3** i **GCS** adresy prywatne podpisuje (V4) SDK dostawcy; backend nie potrzebuje niczego poza
-danymi uwierzytelniającymi.
+danymi uwierzytelniającymi. `GET /assets/file/:assetId` przekierowuje plik z chmury na jego
+rozwiązany adres, ale dla pliku `private` dopiero po tym samym sprawdzeniu tokenu HMAC, któremu
+podlega plik lokalny; bez ważnego tokenu odpowiada `403 ASSET_ACCESS_DENIED`. Ekrany panelu pobierają
+adresy prywatne z `GET /api/v1/admin/assets/:id/url` i działają bez zmian.
 
 ## Usuwanie miękkie i trwałe
 
