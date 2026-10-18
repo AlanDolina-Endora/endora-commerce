@@ -88,19 +88,22 @@ export async function registerNewsletterStorefrontRoutes(
   });
 
   // --- Engagement tracking (US6) -----------------------------------------
-  app.get('/api/v1/newsletter/o/:token.gif', { config: { streamingResponse: true } }, async (request, reply) => {
-    const { token } = request.params as { token: string };
-    const claims = deps.tokens.verify(token, 'open');
+  // The signed token travels in the query string: it is longer than the
+  // router's default path-parameter limit (`maxParamLength`, 100 characters),
+  // which answers 414 before a handler runs. The URLs are minted at send time
+  // by `services/engagement-tracking.ts`.
+  app.get('/api/v1/newsletter/open.gif', { config: { streamingResponse: true } }, async (request, reply) => {
+    const { token } = request.query as { token?: string };
+    const claims = typeof token === 'string' && token ? deps.tokens.verify(token, 'open') : null;
     if (claims) await deps.tracking.recordOpen(claims.id);
     reply.header('content-type', 'image/gif');
     reply.header('cache-control', 'no-store, no-cache, must-revalidate, private');
     return reply.send(TRACKING_PIXEL);
   });
 
-  app.get('/api/v1/newsletter/c/:token', async (request, reply) => {
-    const { token } = request.params as { token: string };
-    const { u } = request.query as { u?: string };
-    const claims = deps.tokens.verify(token, 'click');
+  app.get('/api/v1/newsletter/click', async (request, reply) => {
+    const { token, u } = request.query as { token?: string; u?: string };
+    const claims = typeof token === 'string' && token ? deps.tokens.verify(token, 'click') : null;
     if (!claims) {
       return reply.status(410).send({ error: { code: 'GONE', message: 'Invalid link.' } });
     }
