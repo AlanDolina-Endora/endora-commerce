@@ -198,7 +198,7 @@ describe('shopping_lists — conversion partitions by the port, and writes throu
         basketChannels.push(actor.customer!.salesChannelId);
         return {} as CartWithItems;
       },
-      // Feature 154 (R8) — the batch list → cart goes through; every line admitted.
+      // Feature 155 (R8) — the batch list → cart goes through; every line admitted.
       addItems: async (_actor: unknown, lines: ReadonlyArray<{ productId: string }>) => {
         added.push(...lines.map((line) => line.productId));
         return { cart: {}, items: [], outcomes: lines.map((_line, index) => ({ index, status: 'added' })) };
