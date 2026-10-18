@@ -13,6 +13,8 @@ import { AssetReadService } from './services/asset-read-port.js';
 import { ObjectStorageAdapter } from './services/storage/object-storage-port.js';
 import { AssetFolder } from './entities/asset-folder.entity.js';
 import { Asset } from './entities/asset.entity.js';
+import { AssetObjectCleanup } from './entities/asset-object-cleanup.entity.js';
+import { AssetPermalinkRelease } from './entities/asset-permalink-release.entity.js';
 
 /**
  * `assets_library` — the module whose permission gate defaulted to open
@@ -218,4 +220,6 @@ export function registerModule(ctx: ModuleContext): void {
 export const entities = [
   AssetFolder,
   Asset,
+  AssetPermalinkRelease,
+  AssetObjectCleanup,
 ];
