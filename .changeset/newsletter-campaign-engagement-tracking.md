@@ -3,13 +3,13 @@
 '@endora-commerce/contracts': patch
 ---
 
-Campaign e-mails carry open and click tracking. When a campaign is sent, each recipient's
-message gets an invisible 1×1 image and its absolute `http(s)` links are routed through the
-click redirect, each with a signed token bound to the recipient's send record, a link id
+Campaign e-mails can carry open and click tracking, switched on by an operator. When it is on
+and a campaign is sent, each recipient's message gets an invisible 1×1 image and its absolute
+`http(s)` links are routed through the click redirect, each with a signed token bound to the recipient's send record, a link id
 (`link-1`, `link-2`, … in document order) and the link's destination. `mailto:`, `tel:`, in-page
 anchors, relative links and the module's own unsubscribe and confirmation links are left as they
 are; the plain-text part is sent unchanged. The per-campaign opened and clicked counts and the
-per-link clicks now reflect what recipients do.
+per-link clicks reflect what recipients do while tracking is on.
 
 The two public trackers take their token in the query string, because a signed token is longer
 than the router's 100-character path-parameter limit and the path form was answered `414`
@@ -23,7 +23,8 @@ destination to the storefront home page and answers an invalid or missing token 
 
 Two new settings in the Newsletter group, `newsletter.tracking.opens_enabled` and
 `newsletter.tracking.clicks_enabled`, switch the two kinds of tracking independently. Both
-default to on, can be set per sales channel, and are labelled in English and Polish on the
+default to off, so an instance sends campaigns untracked until an operator switches them on; they
+can be set per sales channel, and are labelled in English and Polish on the
 Settings screen. A campaign with `trackingEnabled: false` is sent without either. Automation
 e-mails are not tracked. `NEWSLETTER_SETTING_CODES` in `@endora-commerce/contracts` gains
 `TRACKING_OPENS_ENABLED` and `TRACKING_CLICKS_ENABLED`.

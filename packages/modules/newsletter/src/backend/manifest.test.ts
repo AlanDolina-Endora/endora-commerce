@@ -23,12 +23,13 @@ function bundle(language: 'en' | 'pl'): Record<string, string> {
 }
 
 describe('newsletter manifest — engagement tracking switches', () => {
-  it.each(SWITCHES)('declares %s as a visible boolean in the newsletter group, on by default', (code) => {
+  it.each(SWITCHES)('declares %s as a visible boolean in the newsletter group, off by default', (code) => {
     const setting = manifest.settings?.settings.find((s) => s.code === code);
     expect(setting).toBeDefined();
     expect(setting?.groupCode).toBe('newsletter');
     expect(setting?.valueType).toBe('boolean');
-    expect(setting?.defaultValue).toBe(true);
+    // Off until an operator switches it on: nothing is tracked on an untouched instance.
+    expect(setting?.defaultValue).toBe(false);
     expect(setting?.hidden).not.toBe(true);
     expect(setting?.description?.length ?? 0).toBeGreaterThan(0);
   });

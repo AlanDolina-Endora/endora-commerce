@@ -69,8 +69,10 @@ never double-send.
 
 ## Engagement
 
-Campaign e-mails carry open and click tracking, added when each recipient's
-message is sent:
+Campaign e-mails can carry open and click tracking, added when each
+recipient's message is sent. Both kinds are **off** until an operator switches
+them on (see the settings below); an untouched instance sends campaigns without
+either.
 
 - **Opens** — an invisible 1×1 image,
   `GET /api/v1/newsletter/open.gif?token=…`, is added before the end of the
@@ -89,11 +91,12 @@ Both URLs are built on the public API base URL the unsubscribe link uses, and
 both tokens stay valid for one year. Following a tracked link also counts as an
 open, so a reader whose mail client blocks images is counted once they click.
 
-Two settings in the **Newsletter** group switch the two kinds independently,
-both **on** by default, and can be set per sales channel (a campaign with no
-sales channel reads the default sales channel's values):
+Two settings in the **Newsletter** group switch the two kinds independently.
+Both are **off** by default, so a campaign is tracked only after an operator
+switches them on on the Settings screen. Each can be set per sales channel (a
+campaign with no sales channel reads the default sales channel's values):
 
-| Setting | When off |
+| Setting | While off (the default) |
 | --- | --- |
 | `newsletter.tracking.opens_enabled` | no image is added and no opens are counted |
 | `newsletter.tracking.clicks_enabled` | links lead straight to their destination and no clicks are counted |

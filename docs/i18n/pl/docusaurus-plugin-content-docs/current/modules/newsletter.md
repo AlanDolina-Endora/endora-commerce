@@ -67,8 +67,9 @@ więcej workerach żadna wiadomość nie zostanie wysłana dwa razy.
 
 ## Zaangażowanie odbiorców
 
-E-maile kampanii zawierają śledzenie otwarć i kliknięć, dodawane w chwili wysyłki wiadomości do
-każdego odbiorcy:
+E-maile kampanii mogą zawierać śledzenie otwarć i kliknięć, dodawane w chwili wysyłki wiadomości
+do każdego odbiorcy. Oba rodzaje śledzenia są **wyłączone**, dopóki operator ich nie włączy
+(zobacz ustawienia poniżej); instancja bez zmienionych ustawień wysyła kampanie bez śledzenia.
 
 - **Otwarcia** — przed końcem treści wiadomości dodawany jest niewidoczny obrazek 1×1,
   `GET /api/v1/newsletter/open.gif?token=…`. Jego wczytanie zapisuje otwarcie w rekordzie wysyłki
@@ -88,10 +89,11 @@ a oba tokeny są ważne przez rok. Kliknięcie śledzonego linku liczy się tak�
 odbiorca, którego program pocztowy blokuje obrazki, zostaje policzony, gdy kliknie link.
 
 Dwa ustawienia w grupie **Newsletter** włączają i wyłączają oba rodzaje śledzenia niezależnie od
-siebie. Oba są domyślnie **włączone** i można je ustawić osobno dla każdego kanału sprzedaży
-(kampania bez kanału sprzedaży korzysta z wartości domyślnego kanału sprzedaży):
+siebie. Oba są domyślnie **wyłączone**, więc kampania jest śledzona dopiero wtedy, gdy operator
+włączy je na ekranie ustawień. Każde można ustawić osobno dla każdego kanału sprzedaży (kampania
+bez kanału sprzedaży korzysta z wartości domyślnego kanału sprzedaży):
 
-| Ustawienie | Po wyłączeniu |
+| Ustawienie | Gdy wyłączone (domyślnie) |
 | --- | --- |
 | `newsletter.tracking.opens_enabled` | obrazek nie jest dodawany, a otwarcia nie są liczone |
 | `newsletter.tracking.clicks_enabled` | linki prowadzą prosto do celu, a kliknięcia nie są liczone |
