@@ -14,7 +14,7 @@ import { ERROR_CODES } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { Command } from '@endora-commerce/platform/commands';
 
-import { Asset, type AssetKind } from '../entities/asset.entity.js';
+import { Asset, hasPreviousVersion, type AssetKind } from '../entities/asset.entity.js';
 import { cloudContentDisposition } from './asset-urls.js';
 import { newContentVersion } from './content-version.js';
 import type { CleanupKey, CleanupLedgerPort } from './object-cleanup-ledger.js';
@@ -318,6 +318,207 @@ export async function replaceAssetFile(
     throw isStorageFailure(err) ? storageUnavailable(err) : err;
   } finally {
     await deleteAndClear(adapter, deps.ledger, stageKey);
+  }
+
+  const superseded = supersededLocator as string | null;
+  if (superseded !== null) {
+    await deleteAndClear(adapter, deps.ledger, { storageBackend: backend, locator: superseded });
+  }
+  return result;
+}
+
+export interface RestorePreviousVersionInput {
+  assetId: string;
+  /** The current file's content version the admin saw. */
+  expectedContentVersion: string;
+  /** The previous file's content version the admin saw — the file a restore brings back. */
+  expectedPreviousContentVersion: string;
+}
+
+function noPreviousVersion(): HttpError {
+  return new HttpError(
+    409,
+    ERROR_CODES.ASSET_NO_PREVIOUS_VERSION,
+    'This asset has no previous version to restore.',
+  );
+}
+
+/**
+ * Restore the kept previous version — a swap through the replace's shape
+ * (research R-3): the current file becomes the previous version under a new
+ * random key, and the previous file is copied back onto the stable key. Both
+ * versions the admin saw are checked under the lock, so the restore brings back
+ * exactly the file the drawer showed. No kind check: the previous file passed
+ * it when it was current.
+ */
+export async function restorePreviousVersion(
+  deps: AssetReplaceDeps,
+  input: RestorePreviousVersionInput,
+): Promise<Asset> {
+  const current = await deps.emFactory().findOne(Asset, { id: input.assetId });
+  if (!current) {
+    throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${input.assetId} not found.`);
+  }
+  if (current.deletedAt) {
+    throw new HttpError(410, ERROR_CODES.ASSET_GONE, 'Restore the asset before restoring its file.');
+  }
+  if (current.storageBackend === 'legacy') {
+    throw new HttpError(
+      409,
+      ERROR_CODES.ASSET_LEGACY_CANNOT_REPLACE,
+      'This file is stored at an address the platform did not issue, so it cannot be replaced in place.',
+    );
+  }
+  if (!hasPreviousVersion(current)) throw noPreviousVersion();
+  const backend: ObjectBackend = current.storageBackend;
+
+  let adapter: Pick<StorageAdapter, 'copy' | 'delete'>;
+  try {
+    adapter = await deps.adapters.getForBackend(backend);
+  } catch (err) {
+    throw storageUnavailable(err);
+  }
+
+  const prevKey: CleanupKey = {
+    storageBackend: backend,
+    locator: siblingLocator(current.storageLocator, 'prev', current.filename, deps.random),
+  };
+  await deps.ledger.record([{ ...prevKey, reason: 'previous', assetId: current.id }]);
+
+  let stableWritten = false;
+  let committed = false;
+  let restoreTo: StorageCopyInput | null = null;
+  let supersededLocator: string | null = null;
+  let result: Asset;
+
+  try {
+    result = await deps.commandBus.run<Asset>({
+      action: 'asset.restore_previous_version',
+      objectType: 'asset',
+      objectId: current.id,
+      run: async ({ em, actor }) => {
+        const row = await em.findOne(
+          Asset,
+          { id: current.id },
+          { lockMode: LockMode.PESSIMISTIC_WRITE },
+        );
+        if (!row) {
+          throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${current.id} not found.`);
+        }
+        if (row.deletedAt) {
+          throw new HttpError(410, ERROR_CODES.ASSET_GONE, 'Restore the asset before restoring its file.');
+        }
+        if (!hasPreviousVersion(row)) throw noPreviousVersion();
+        if (
+          row.contentVersion !== input.expectedContentVersion ||
+          row.previousContentVersion !== input.expectedPreviousContentVersion
+        ) {
+          throw new HttpError(
+            409,
+            ERROR_CODES.ASSET_REPLACE_CONFLICT,
+            "Someone else changed this asset's file since you opened it.",
+          );
+        }
+        const previous = {
+          locator: row.previousStorageLocator as string,
+          filename: row.previousFilename as string,
+          mimeType: row.previousMimeType as string,
+          mimeTypeOverridden: row.previousMimeTypeOverridden ?? false,
+          kind: row.previousKind as AssetKind,
+          sizeBytes: row.previousSizeBytes as string,
+          contentVersion: row.previousContentVersion as string,
+        };
+
+        const currentDisposition = cloudContentDisposition(row.mimeType, row.filename);
+        restoreTo = {
+          from: prevKey.locator,
+          to: row.storageLocator,
+          visibility: row.visibility,
+          mimeType: row.mimeType,
+          cacheControl: 'no-cache',
+          contentDisposition: currentDisposition,
+        };
+        await storageCopy(adapter, {
+          from: row.storageLocator,
+          to: prevKey.locator,
+          visibility: 'private',
+          mimeType: row.mimeType,
+          cacheControl: 'no-cache',
+          contentDisposition: currentDisposition,
+        });
+        await storageCopy(adapter, {
+          from: previous.locator,
+          to: row.storageLocator,
+          visibility: row.visibility,
+          mimeType: previous.mimeType,
+          cacheControl: 'no-cache',
+          contentDisposition: cloudContentDisposition(previous.mimeType, previous.filename),
+        });
+        stableWritten = true;
+
+        const before = {
+          filename: row.filename,
+          mimeType: row.mimeType,
+          sizeBytes: Number(row.sizeBytes),
+          contentVersion: row.contentVersion,
+        };
+        supersededLocator = previous.locator;
+
+        row.previousStorageLocator = prevKey.locator;
+        row.previousFilename = row.filename;
+        row.previousMimeType = row.mimeType;
+        row.previousMimeTypeOverridden = row.mimeTypeOverridden;
+        row.previousKind = row.kind;
+        row.previousSizeBytes = row.sizeBytes;
+        row.previousContentVersion = row.contentVersion;
+        // A new retention period for the file this restore demotes.
+        row.previousReplacedAt = new Date();
+        row.previousReplacedBy = actor.actorAdminUserId;
+
+        row.filename = previous.filename;
+        row.mimeType = previous.mimeType;
+        row.mimeTypeOverridden = previous.mimeTypeOverridden;
+        row.kind = previous.kind;
+        row.sizeBytes = previous.sizeBytes;
+        // The restored file keeps its own content version (research R-7).
+        row.contentVersion = previous.contentVersion;
+
+        await deps.ledger.clear([prevKey], em);
+        await deps.ledger.record(
+          [{ storageBackend: backend, locator: previous.locator, reason: 'superseded', assetId: row.id }],
+          em,
+        );
+
+        return {
+          result: row,
+          before,
+          after: {
+            filename: row.filename,
+            mimeType: row.mimeType,
+            sizeBytes: Number(row.sizeBytes),
+            contentVersion: row.contentVersion,
+          },
+        };
+      },
+    });
+    committed = true;
+  } catch (err) {
+    if (stableWritten && restoreTo !== null) {
+      try {
+        await adapter.copy(restoreTo);
+        await deleteAndClear(adapter, deps.ledger, prevKey);
+      } catch (compensationErr) {
+        deps.logError?.('assets_library: restore compensation failed', {
+          assetId: current.id,
+          stable: current.storageLocator,
+          previous: prevKey.locator,
+          error: compensationErr instanceof Error ? compensationErr.message : String(compensationErr),
+        });
+      }
+    } else if (!committed) {
+      await deleteAndClear(adapter, deps.ledger, prevKey);
+    }
+    throw isStorageFailure(err) ? storageUnavailable(err) : err;
   }
 
   const superseded = supersededLocator as string | null;

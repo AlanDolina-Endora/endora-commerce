@@ -19,7 +19,13 @@ import { UploadPipeline, type UploadInput, type UploadPolicy } from './upload-pi
 import { LegacyAssetCannotHardenError } from './storage/errors.js';
 import { recordAuditFromContext } from '@endora-commerce/platform/commands';
 import { permalinkUrl } from './asset-urls.js';
-import { replaceAssetFile, type AssetReplaceDeps, type AssetReplaceInput } from './asset-replace.js';
+import {
+  replaceAssetFile,
+  restorePreviousVersion,
+  type AssetReplaceDeps,
+  type AssetReplaceInput,
+  type RestorePreviousVersionInput,
+} from './asset-replace.js';
 import { ObjectCleanupLedger } from './object-cleanup-ledger.js';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 
@@ -102,22 +108,32 @@ export class AssetsLibraryService {
    * (specs/156-asset-stable-url/ FR-001 – FR-010). Runs Command `asset.replace`.
    */
   async replace(input: AssetReplaceInput): Promise<AssetDetail> {
+    const row = await replaceAssetFile(this.#swapDeps('replace'), input);
+    return this.detail(row);
+  }
+
+  /**
+   * Bring back the kept previous version — a swap with the current file
+   * (FR-023). Runs Command `asset.restore_previous_version`.
+   */
+  async restorePreviousVersion(input: RestorePreviousVersionInput): Promise<AssetDetail> {
+    const row = await restorePreviousVersion(this.#swapDeps('restorePreviousVersion'), input);
+    return this.detail(row);
+  }
+
+  #swapDeps(method: string): AssetReplaceDeps {
     const commandBus = this.deps.commandBus;
     if (!commandBus) {
-      throw new Error('AssetsLibraryService.replace: no command bus is wired into this composition.');
+      throw new Error(`AssetsLibraryService.${method}: no command bus is wired into this composition.`);
     }
-    const row = await replaceAssetFile(
-      {
-        emFactory: this.deps.emFactory,
-        adapters: this.deps.adapters,
-        stage: (stageInput) => this.pipeline.stage(stageInput),
-        ledger: new ObjectCleanupLedger(this.deps.emFactory),
-        commandBus,
-        ...(this.deps.logError ? { logError: this.deps.logError } : {}),
-      },
-      input,
-    );
-    return this.detail(row);
+    return {
+      emFactory: this.deps.emFactory,
+      adapters: this.deps.adapters,
+      stage: (stageInput) => this.pipeline.stage(stageInput),
+      ledger: new ObjectCleanupLedger(this.deps.emFactory),
+      commandBus,
+      ...(this.deps.logError ? { logError: this.deps.logError } : {}),
+    };
   }
 
   /** Upload entry point — runs the atomic put + insert + compensating-delete pipeline. */

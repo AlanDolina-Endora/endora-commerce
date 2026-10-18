@@ -3,7 +3,12 @@ import { Readable } from 'node:stream';
 import { LockMode } from '@mikro-orm/core';
 import type { EntityManager } from '@mikro-orm/postgresql';
 
-import { replaceAssetFile, replacementKind, type AssetReplaceDeps } from './asset-replace.js';
+import {
+  replaceAssetFile,
+  replacementKind,
+  restorePreviousVersion,
+  type AssetReplaceDeps,
+} from './asset-replace.js';
 import { cloudContentDisposition } from './asset-urls.js';
 import type { Asset } from '../entities/asset.entity.js';
 import type { StageInput, StageResult } from './upload-pipeline.js';
@@ -383,5 +388,148 @@ describe('replaceAssetFile — failures', () => {
     await expect(replace(h)).resolves.toBe(h.locked);
     expect(h.log).toContain(`delete ${OLD_PREV}`);
     expect(h.log).not.toContain(`clear ${OLD_PREV}`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// specs/156-asset-stable-url/ T036 — restore is a swap through the same shape
+// (research R-3): both versions checked under the lock, no kind check.
+// ---------------------------------------------------------------------------
+
+const PREV_FROM_RESTORE = `aa/bb/${ID}.prev-${'1'.repeat(32)}.jpg`;
+const PREVIOUS_FILE = {
+  previousFilename: 'older.zip',
+  previousMimeType: 'application/zip',
+  previousMimeTypeOverridden: true,
+  previousKind: 'other',
+  previousSizeBytes: '90',
+} as Partial<Asset>;
+
+function restore(h: Harness, versions: { current?: string; previous?: string } = {}) {
+  return restorePreviousVersion(h.deps, {
+    assetId: ID,
+    expectedContentVersion: versions.current ?? OLD_CV,
+    expectedPreviousContentVersion: versions.previous ?? '0f1e2d3c4b5a',
+  });
+}
+
+describe('restorePreviousVersion — the swap', () => {
+  it('records the new previous key, copies under the lock, swaps, commits, then deletes the old previous object', async () => {
+    const h = harness({ rowOverrides: PREVIOUS_FILE });
+    await restore(h);
+    expect(h.log).toEqual([
+      'adapter local',
+      `record previous ${PREV_FROM_RESTORE}`,
+      'begin asset.restore_previous_version',
+      'lock true',
+      `copy ${STABLE} -> ${PREV_FROM_RESTORE}`,
+      `copy ${OLD_PREV} -> ${STABLE}`,
+      `clear ${PREV_FROM_RESTORE} (tx)`,
+      `record superseded ${OLD_PREV} (tx)`,
+      'commit',
+      `delete ${OLD_PREV}`,
+      `clear ${OLD_PREV}`,
+    ]);
+  });
+
+  it.each(['local', 's3'] as const)(
+    'copies the current file to a private previous key and the previous file onto the stable key with the locked visibility (%s)',
+    async (backend) => {
+      const h = harness({ rowOverrides: { ...PREVIOUS_FILE, storageBackend: backend } as Partial<Asset> });
+      await restore(h);
+      expect(h.copies).toEqual([
+        {
+          from: STABLE,
+          to: PREV_FROM_RESTORE,
+          visibility: 'private',
+          mimeType: 'image/jpeg',
+          cacheControl: 'no-cache',
+          contentDisposition: cloudContentDisposition('image/jpeg', 'old.jpg'),
+        },
+        {
+          from: OLD_PREV,
+          to: STABLE,
+          visibility: 'private',
+          mimeType: 'application/zip',
+          cacheControl: 'no-cache',
+          contentDisposition: cloudContentDisposition('application/zip', 'older.zip'),
+        },
+      ]);
+    },
+  );
+
+  it('swaps every current and previous field, performing no kind check', async () => {
+    const h = harness({ rowOverrides: PREVIOUS_FILE });
+    const result = await restore(h);
+    expect(result).toBe(h.locked);
+    expect(h.locked).toMatchObject({
+      filename: 'older.zip',
+      mimeType: 'application/zip',
+      mimeTypeOverridden: true,
+      kind: 'other',
+      sizeBytes: '90',
+      contentVersion: '0f1e2d3c4b5a',
+      storageLocator: STABLE,
+      previousStorageLocator: PREV_FROM_RESTORE,
+      previousFilename: 'old.jpg',
+      previousMimeType: 'image/jpeg',
+      previousMimeTypeOverridden: false,
+      previousKind: 'image',
+      previousSizeBytes: '100',
+      previousContentVersion: OLD_CV,
+      previousReplacedBy: 'admin-1',
+    });
+    expect(h.locked.previousReplacedAt!.getTime()).toBeGreaterThan(Date.parse('2026-10-01T00:00:00Z'));
+  });
+});
+
+describe('restorePreviousVersion — refusals', () => {
+  it.each([
+    ['a stale current version', { current: 'ffffffffffff' }],
+    ['a stale previous version', { previous: 'eeeeeeeeeeee' }],
+  ])('refuses %s with 409 before any copy and clears the new entry', async (_label, versions) => {
+    const h = harness({ rowOverrides: PREVIOUS_FILE });
+    await expect(restore(h, versions)).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'ASSET_REPLACE_CONFLICT',
+    });
+    expect(h.log.some((l) => l.startsWith('copy'))).toBe(false);
+    expect(h.log).toEqual(
+      expect.arrayContaining([`delete ${PREV_FROM_RESTORE}`, `clear ${PREV_FROM_RESTORE}`]),
+    );
+    expect(h.log).not.toContain(`delete ${OLD_PREV}`);
+    expect(h.locked.contentVersion).toBe(OLD_CV);
+  });
+
+  it('refuses an asset without a previous version with 409 ASSET_NO_PREVIOUS_VERSION and copies nothing', async () => {
+    const h = harness({
+      rowOverrides: {
+        previousStorageLocator: null,
+        previousFilename: null,
+        previousMimeType: null,
+        previousMimeTypeOverridden: null,
+        previousKind: null,
+        previousSizeBytes: null,
+        previousContentVersion: null,
+        previousReplacedAt: null,
+      } as Partial<Asset>,
+    });
+    await expect(restore(h)).rejects.toMatchObject({ statusCode: 409, code: 'ASSET_NO_PREVIOUS_VERSION' });
+    expect(h.log.some((l) => l.startsWith('copy') || l.startsWith('record'))).toBe(false);
+  });
+
+  it('copies the current bytes back when the transaction fails after the stable copy', async () => {
+    const h = harness({ rowOverrides: PREVIOUS_FILE, failCommit: true });
+    await expect(restore(h)).rejects.toThrow('commit failed');
+    expect(h.copies[2]).toEqual({
+      from: PREV_FROM_RESTORE,
+      to: STABLE,
+      visibility: 'private',
+      mimeType: 'image/jpeg',
+      cacheControl: 'no-cache',
+      contentDisposition: cloudContentDisposition('image/jpeg', 'old.jpg'),
+    });
+    expect(h.log).toContain(`delete ${PREV_FROM_RESTORE}`);
+    expect(h.log).not.toContain(`delete ${OLD_PREV}`);
   });
 });
