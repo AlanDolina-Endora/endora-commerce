@@ -527,6 +527,12 @@ export interface CartCustomerContext {
    * valid; a no-org cart falls back to platform-default prices.
    */
   organizationId: string | null;
+  /**
+   * The sales channel whose basket is meant (`specs/154-sales-channel-access/`,
+   * FR-030). Optional while the producers are migrated; it becomes required
+   * when the basket is attributed to the channel it is used on.
+   */
+  salesChannelId?: string;
 }
 
 /**

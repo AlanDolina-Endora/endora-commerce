@@ -89,7 +89,9 @@ function registerSetupTicketRoutes(
   deps: MfaPublicDeps,
   cfg: SurfaceCfg,
 ): void {
-  app.post(cfg.setupBeginPath, { schema: { body: mfaSetupTicketBeginSchema } }, async (request) => {
+  // Feature 154 — reachable whatever the sales-channel access rule decides:
+  // a second-factor set-up ticket is completed before a session exists.
+  app.post(cfg.setupBeginPath, { schema: { body: mfaSetupTicketBeginSchema }, config: { salesChannelAccess: 'open' } }, async (request) => {
     const body = mfaSetupTicketBeginSchema.parse(request.body);
     const ticket = await resolveTicket(deps, body.setupTicket, cfg.subjectType);
     return {
@@ -102,7 +104,7 @@ function registerSetupTicketRoutes(
 
   app.post(
     cfg.setupCompletePath,
-    { schema: { body: mfaSetupTicketCompleteSchema } },
+    { schema: { body: mfaSetupTicketCompleteSchema }, config: { salesChannelAccess: 'open' } },
     async (request, reply) => {
       const body = mfaSetupTicketCompleteSchema.parse(request.body);
       const ticket = await resolveTicket(deps, body.setupTicket, cfg.subjectType);
@@ -138,7 +140,9 @@ function registerVerifyRoute(
   deps: MfaPublicDeps,
   cfg: { path: string; subjectType: 'customer' | 'admin'; cookieName: string },
 ): void {
-  app.post(cfg.path, { schema: { body: mfaVerifyRequestSchema } }, async (request, reply) => {
+  // Feature 154 — reachable whatever the sales-channel access rule decides:
+  // the second factor of a sign-in is verified before a session exists.
+  app.post(cfg.path, { schema: { body: mfaVerifyRequestSchema }, config: { salesChannelAccess: 'open' } }, async (request, reply) => {
     const body = mfaVerifyRequestSchema.parse(request.body);
     const objectType = cfg.subjectType === 'customer' ? 'customer_account' : 'admin_user';
     const knownDevice = readKnownDevice(request, cfg.subjectType);

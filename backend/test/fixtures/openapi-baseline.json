@@ -1,6 +1,98 @@
 {
   "components": {
     "parameters": {},
+    "responses": {
+      "SalesChannelNotPermitted": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "error": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "properties": {
+                        "channelCode": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "channelCode"
+                      ],
+                      "type": "object"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "details"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "error"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "403 `SALES_CHANNEL_NOT_PERMITTED` — a customer request on a sales channel the customer's Organization is not assigned to. `details.channelCode` names the channel."
+      },
+      "SalesChannelSignInRequired": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "properties": {
+                "error": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "properties": {
+                        "channelCode": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "channelCode"
+                      ],
+                      "type": "object"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "details"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "error"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "403 `SALES_CHANNEL_SIGN_IN_REQUIRED` — an anonymous request on a sales channel closed to anonymous visitors. `details.channelCode` names the channel."
+      }
+    },
     "schemas": {}
   },
   "info": {
@@ -8203,6 +8295,15 @@
       }
     },
     "/api/v1/storefront/sales-channel": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/storefront/sales-channel/access": {
       "get": {
         "responses": {
           "200": {

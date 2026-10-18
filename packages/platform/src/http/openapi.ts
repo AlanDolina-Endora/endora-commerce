@@ -25,6 +25,48 @@ type HttpMethod = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'head' | 'option
 const seenRoutes = new Set<string>();
 
 /**
+ * The two refusals of the sales-channel access rule (feature 154,
+ * `specs/154-sales-channel-access/contracts/storefront-api.md` §3), as shared
+ * response components: any non-administrative route that does not declare
+ * `salesChannelAccess: 'open'` can answer either. Registered once, here, rather
+ * than on every auto-registered path, whose responses this file does not know.
+ */
+const STRING = { type: 'string' as const };
+const SALES_CHANNEL_REFUSAL_SCHEMA = {
+  type: 'object' as const,
+  required: ['error'],
+  properties: {
+    error: {
+      type: 'object' as const,
+      required: ['code', 'message', 'details'],
+      properties: {
+        code: STRING,
+        message: STRING,
+        details: {
+          type: 'object' as const,
+          required: ['channelCode'],
+          properties: { channelCode: STRING },
+        },
+        requestId: STRING,
+      },
+    },
+  },
+};
+
+openApiRegistry.registerComponent('responses', 'SalesChannelSignInRequired', {
+  description:
+    '403 `SALES_CHANNEL_SIGN_IN_REQUIRED` — an anonymous request on a sales channel closed to ' +
+    'anonymous visitors. `details.channelCode` names the channel.',
+  content: { 'application/json': { schema: SALES_CHANNEL_REFUSAL_SCHEMA } },
+});
+openApiRegistry.registerComponent('responses', 'SalesChannelNotPermitted', {
+  description:
+    "403 `SALES_CHANNEL_NOT_PERMITTED` — a customer request on a sales channel the customer's " +
+    'Organization is not assigned to. `details.channelCode` names the channel.',
+  content: { 'application/json': { schema: SALES_CHANNEL_REFUSAL_SCHEMA } },
+});
+
+/**
  * Registers an `onRoute` hook so every Fastify route auto-publishes into the OpenAPI
  * registry. Avoids per-module registerPath boilerplate while still letting a module opt
  * into a richer schema by calling `openApiRegistry.registerPath` directly.
@@ -100,7 +142,9 @@ export function registerOpenApiRoutes(app: FastifyInstance, meta: OpenApiMetadat
     return cached;
   };
 
-  app.get('/api/v1/_openapi.json', async (_req, reply) => {
+  // Feature 154 — the API description names no store, so it is reachable
+  // whatever the sales-channel access rule decides.
+  app.get('/api/v1/_openapi.json', { config: { salesChannelAccess: 'open' } }, async (_req, reply) => {
     // Return the payload rather than calling `reply.send()` and then resolving
     // the async handler with `undefined` — Fastify 5 treats the latter as a
     // second send and raises ERR_HTTP_HEADERS_SENT.
@@ -108,7 +152,7 @@ export function registerOpenApiRoutes(app: FastifyInstance, meta: OpenApiMetadat
     return getDoc();
   });
 
-  app.get('/api/v1/_docs', async (_req, reply) => {
+  app.get('/api/v1/_docs', { config: { salesChannelAccess: 'open' } }, async (_req, reply) => {
     // Minimal HTML shell rendering the spec via Swagger UI hosted on a CDN.
     // Intentionally not adding a swagger-ui dependency (Principle IV) since this is dev-only.
     reply

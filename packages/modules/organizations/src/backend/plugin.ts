@@ -23,7 +23,7 @@ import {
 import { EmailVerificationService } from './services/email-verification-service.js';
 import { InvitationService } from './services/invitation-service.js';
 import { noopOrgTemplateEmail, type OrgTemplateEmail } from './services/org-template-email.js';
-import type { AuditPort } from '@endora-commerce/platform/kernel';
+import type { AuditPort, SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
 import { registerOrganizationsPublicRoutes } from './routes.public.js';
 import { registerOrganizationsCustomerRoutes } from './routes.customer.js';
 import { registerOrganizationsStorefrontRoutes } from './routes.storefront.js';
@@ -148,6 +148,11 @@ export interface OrganizationsModuleOptions {
    * `requireAdmin`, the hierarchy admin endpoints are mounted (Principle XIII).
    */
   commandBus?: CommandBus;
+  /**
+   * Feature 154 — the kernel's channel-membership writer, which binds a
+   * registered Organization to the system-default channel.
+   */
+  salesChannelMembership?: Pick<SalesChannelMembershipPort, 'bindToDefaultIfEmpty'>;
 }
 
 export function organizationsModule(options: OrganizationsModuleOptions) {
@@ -170,6 +175,7 @@ export function organizationsModule(options: OrganizationsModuleOptions) {
       accountPorts,
       options.dictionaryValidator,
       options.auditLogService,
+      options.salesChannelMembership,
     );
     const verificationService = new EmailVerificationService(
       options.emFactory,

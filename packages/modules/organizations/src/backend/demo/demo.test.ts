@@ -36,13 +36,13 @@ function fakeEm(existing: readonly string[] = []): {
   const deletes: unknown[] = [];
   const em = {
     findOne: async (_entity: unknown, where: { taxId: string }) =>
-      rows.has(where.taxId) ? { taxId: where.taxId } : null,
+      rows.has(where.taxId) ? { id: `id-of-${where.taxId}`, taxId: where.taxId } : null,
     create: (_entity: unknown, payload: Record<string, unknown>) => {
       const taxId = payload['taxId'] as string;
       if (rows.has(taxId)) throw new Error(`duplicate key: ${taxId}`);
       rows.add(taxId);
       created.push(payload);
-      return payload;
+      return { id: `id-of-${taxId}`, ...payload };
     },
     flush: async () => undefined,
     find: async (_entity: unknown, where: { taxId: string }) =>
@@ -55,9 +55,20 @@ function fakeEm(existing: readonly string[] = []): {
   return { em: em as unknown as EntityManager, created, deletes };
 }
 
-function contextOver(em: EntityManager): ModuleDemoContext<ModuleContext> {
+function contextOver(
+  em: EntityManager,
+  binds: Array<[string, string]> = [],
+): ModuleDemoContext<ModuleContext> {
+  const salesChannelMembershipPort = {
+    bindToDefaultIfEmpty: async (entityType: string, entityId: string) => {
+      binds.push([entityType, entityId]);
+      return { changed: true };
+    },
+  };
   return {
-    ctx: { cradle: () => ({ emFactory: () => em }) } as unknown as ModuleContext,
+    ctx: {
+      cradle: () => ({ emFactory: () => em, salesChannelMembershipPort }),
+    } as unknown as ModuleContext,
   };
 }
 
@@ -68,6 +79,19 @@ describe('organizations demo data', () => {
     expect(created.map((row) => row['taxId'])).toEqual([DEMO_ORGANIZATION.taxId]);
     expect(created[0]?.['status']).toBe('active');
     expect(result.created).toEqual([{ entity: 'Organization', count: 1 }]);
+  });
+
+  it('binds the organisation to the system-default sales channel, on every run (feature 154)', async () => {
+    // An Organization with no sales channel may shop nowhere: the demo buyer
+    // would be refused on the demo storefront. The bind goes through the
+    // kernel's membership writer and is idempotent there.
+    const fresh: Array<[string, string]> = [];
+    await seedDemo(contextOver(fakeEm().em, fresh));
+    expect(fresh).toEqual([['organization', `id-of-${DEMO_ORGANIZATION.taxId}`]]);
+
+    const again: Array<[string, string]> = [];
+    await seedDemo(contextOver(fakeEm([DEMO_ORGANIZATION.taxId]).em, again));
+    expect(again).toEqual([['organization', `id-of-${DEMO_ORGANIZATION.taxId}`]]);
   });
 
   it('creates nothing on a second run and reports the same count (§2.4)', async () => {

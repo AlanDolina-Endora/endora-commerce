@@ -125,6 +125,7 @@ import { Migration20260721T011510CoreSettingsCredentialRefValueType } from '@end
 import { Migration20260816T203339CoreRetireCoreActivationSettings } from '@endora-commerce/platform/migrations';
 import { Migration20260919T101500CoreModuleRegistrationsBootConverged } from '@endora-commerce/platform/migrations';
 import { Migration20261011T135250CoreSettingsMultiline } from '@endora-commerce/platform/migrations';
+import { Migration20261018T101912CoreSalesChannelsAnonymousAccess } from '@endora-commerce/platform/migrations';
 
 // ── credentials ─────────────────────────────────────────────────────────────
 import { Migration20260721T011509CredentialsInit } from '@endora-commerce/mod-credentials/migrations';
@@ -252,6 +253,7 @@ import { Migration20260718T200340OrganizationsOrganizationCustomFieldValues } fr
 import { Migration20260720T044254OrganizationsOrgHierarchy } from '@endora-commerce/mod-organizations/migrations';
 import { Migration20260912T094646OrganizationsSalesChannelOrganizations } from '@endora-commerce/mod-organizations/migrations';
 import { Migration20261003T184802OrganizationsRepairEmptyPaths } from '@endora-commerce/mod-organizations/migrations';
+import { Migration20261018T104644OrganizationsChannelAccessBackfill } from '@endora-commerce/mod-organizations/migrations';
 
 // ── payment_methods ─────────────────────────────────────────────────────────
 import { Migration20260611T140353PaymentMethodsAdapter } from '@endora-commerce/mod-payment-methods/migrations';
@@ -443,6 +445,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('core', Migration20260816T203339CoreRetireCoreActivationSettings),
   migration('core', Migration20260919T101500CoreModuleRegistrationsBootConverged),
   migration('core', Migration20261011T135250CoreSettingsMultiline),
+  migration('core', Migration20261018T101912CoreSalesChannelsAnonymousAccess),
 
   // ── credentials ─────────────────────────────────────────────────────────────
   migration('credentials', Migration20260721T011509CredentialsInit),
@@ -570,6 +573,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('organizations', Migration20260720T044254OrganizationsOrgHierarchy),
   migration('organizations', Migration20260912T094646OrganizationsSalesChannelOrganizations),
   migration('organizations', Migration20261003T184802OrganizationsRepairEmptyPaths),
+  migration('organizations', Migration20261018T104644OrganizationsChannelAccessBackfill),
 
   // ── payment_methods ─────────────────────────────────────────────────────────
   migration('payment_methods', Migration20260611T140353PaymentMethodsAdapter),

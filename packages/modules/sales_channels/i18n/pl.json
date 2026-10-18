@@ -70,6 +70,8 @@
   "membership.action.remove": "Usuń",
   "errors.UNKNOWN_SALES_CHANNEL": "Błąd: unknown sales channel.",
   "errors.INACTIVE_SALES_CHANNEL": "Ten kanał sprzedaży jest nieaktywny. Najpierw go aktywuj.",
+  "errors.SALES_CHANNEL_SIGN_IN_REQUIRED": "Ten sklep jest dostępny tylko dla zalogowanych klientów. Zaloguj się.",
+  "errors.SALES_CHANNEL_NOT_PERMITTED": "To konto nie ma dostępu do tego sklepu.",
   "errors.MISSING_SALES_CHANNEL_CONTEXT": "Błąd: missing sales channel context.",
   "errors.DUPLICATE_SALES_CHANNEL_CODE": "Błąd: duplicate sales channel code.",
   "errors.UNKNOWN_LANGUAGE_CODE": "Błąd: unknown language code.",

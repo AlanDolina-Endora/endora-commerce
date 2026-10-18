@@ -611,6 +611,29 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'a Send PDF to customer every recipient of which the mail transport refused. The one raise ' +
       'site is `quote_requests`\' send Command.',
   },
+  SALES_CHANNEL_SIGN_IN_REQUIRED: {
+    to: 'sales_channels',
+    reason:
+      'Minted by feature 154 (`specs/154-sales-channel-access/`, FR-005) for the refusal an ' +
+      'anonymous request earns on a sales channel closed to anonymous visitors. The thrower is the ' +
+      'kernel\'s access step in the channel resolver; the noun is the sales channel, so it is ' +
+      'declared by `sales_channels`, as `INACTIVE_SALES_CHANNEL` is for the same thrower (D-95.2).',
+  },
+  SALES_CHANNEL_NOT_PERMITTED: {
+    to: 'sales_channels',
+    reason:
+      'Minted by feature 154 (`specs/154-sales-channel-access/`, FR-005) for the refusal a ' +
+      'customer request earns on a sales channel its Organization is not assigned to — by the ' +
+      'kernel\'s access step, and by the customer sign-in paths. Owned by the domain noun, as ' +
+      '`INACTIVE_SALES_CHANNEL` is (D-95.2).',
+  },
+  ORDER_SALES_CHANNEL_MISMATCH: {
+    to: 'orders',
+    reason:
+      'Minted by feature 154 (`specs/154-sales-channel-access/`, FR-033) for the refusal order ' +
+      'placement earns when the basket it is handed belongs to another sales channel. The raise ' +
+      'site is `orders`\' placement; the noun is the order.',
+  },
 };
 
 /**

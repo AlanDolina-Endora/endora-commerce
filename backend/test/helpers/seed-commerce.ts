@@ -11,6 +11,7 @@ import {
 import { SEED_PRODUCT_101_ID } from './seed-catalog.js';
 import { STUB_CUSTOMER_PASSWORD } from './seed-organizations.js';
 import { Order } from './package-entities.js';
+import { bindOrganizationsToDefaultChannelSql } from './sales-channel-access.js';
 
 /**
  * Deterministic fixture IDs referenced by the US2 contract tests.
@@ -114,6 +115,9 @@ export async function seedSuspendedOrganization(em: EntityManager): Promise<void
     },
   });
   await em.persistAndFlush(org);
+  // Feature 154 — an Organization with no sales channel may not shop anywhere;
+  // bind the default channel, as every non-storefront creation path does (FR-019).
+  await bindOrganizationsToDefaultChannelSql(em, [TEST_SUSPENDED_ORGANIZATION_ID]);
   const customer = em.create(CustomerAccount, {
     id: TEST_SUSPENDED_CUSTOMER_ID,
     organizationId: TEST_SUSPENDED_ORGANIZATION_ID,

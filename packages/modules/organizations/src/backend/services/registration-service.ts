@@ -15,7 +15,7 @@ import { HttpError } from '@endora-commerce/platform/http';
 import { Organization } from '../entities/organization.entity.js';
 import { EmailVerificationToken } from '../entities/email-verification-token.entity.js';
 import { recordAuditFromContext } from '@endora-commerce/platform/commands';
-import type { AuditPort } from '@endora-commerce/platform/kernel';
+import type { AuditPort, SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
 
 /**
  * Registration flow (T117, FR-040).
@@ -98,6 +98,13 @@ export class RegistrationService {
     private readonly accounts: RegistrationAccountPorts,
     private readonly dictionaryValidator?: DictionaryValidator,
     private readonly auditLog?: AuditPort,
+    /**
+     * Feature 154 — the kernel's audited channel-membership writer. An
+     * Organization with no sales channel may shop nowhere, so a created one is
+     * bound to the system-default channel in the creating transaction (FR-019).
+     * Optional so a unit composition without it keeps working.
+     */
+    private readonly channelMembership?: Pick<SalesChannelMembershipPort, 'bindToDefaultIfEmpty'>,
   ) {}
 
   async registerOrganization(req: RegisterOrganizationRequest): Promise<RegistrationResult> {
@@ -148,6 +155,7 @@ export class RegistrationService {
       }
       throw err;
     }
+    await this.channelMembership?.bindToDefaultIfEmpty('organization', organization.id, { em });
 
     // `create` raises the same 409 `EMAIL_ALREADY_REGISTERED` on the unique
     // index that the `catch` here used to, so the translation moved with the
