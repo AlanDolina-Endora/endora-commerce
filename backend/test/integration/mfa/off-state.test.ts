@@ -10,6 +10,7 @@ import { STUB_CUSTOMER_PASSWORD } from '../../helpers/seed-organizations.js';
 import { PasswordResetToken } from '../../helpers/package-entities.js';
 import { CustomerAccount } from '../../helpers/package-entities.js';
 import { MfaEnrolment } from '../../helpers/package-entities.js';
+import { oauthBinding } from '../../helpers/oauth-binding.js';
 
 /**
  * `mfa` off-state — Constitution XVII item 6, feature 042 FR-033, D-96.
@@ -121,6 +122,8 @@ describe('mfa off-state — login degrades to password-only (D-96, FR-033)', () 
     const callback = await h.app.inject({
       method: 'GET',
       url: `/api/v1/auth/customer/oauth/google/callback?code=${encodeURIComponent(SOCIAL_EMAIL)}&state=${encodeURIComponent(state)}`,
+      // The browser that started the transaction presents its binding cookie.
+      cookies: oauthBinding(start),
     });
     // The session that sign-in minted — the only way to speak *as* the account
     // the platform created, which is the account issue #194 is about.

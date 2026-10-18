@@ -177,9 +177,12 @@ ani przez ten limit odrzucana. Dlatego:
   uwierzytelniania dwuskładnikowego, jego włączenie ani wyłączenie ich nie
   unieważnia. Żeby wszystkie urządzenia konta stały się nieznane, zmień jego
   hasło.
-- **Plik cookie ustawia wyłącznie logowanie hasłem.** Konto, które loguje się
-  tylko przez Google lub Microsoft, nigdy go nie otrzymuje, więc jego
+- **Plik cookie ustawia wyłącznie logowanie, które zweryfikowało hasło lub
+  drugi składnik.** Konto, które loguje się tylko przez Google lub Microsoft i
+  nie ma skonfigurowanego drugiego składnika, nigdy go nie otrzymuje, więc jego
   urządzenia nigdy nie są znane i zawsze podlegają licznikowi całego konta.
+  Logowanie przez Google lub Microsoft, które przeszło do kodu weryfikacji
+  dwuetapowej, ustawia go po przyjęciu kodu, tak jak logowanie hasłem.
 - **Ochrona obejmuje wyłącznie urządzenia powracające.** Tam, gdzie każdy
   administrator loguje się z urządzenia, na którym nigdy nie używano tego konta
   — typowym przykładem jest publiczne demo ze wspólnymi danymi logowania — nikt

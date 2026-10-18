@@ -282,7 +282,7 @@ describe('the route decides which session a request runs as', () => {
         token === API_KEY
           ? { apiKeyId: 'key-1', scopes: [], organizationId: KEY_ORG, customerAccountId: null }
           : null,
-      customerOrgResolver: async () => CUSTOMER_ORG,
+      customerAccountResolver: async () => ({ organizationId: CUSTOMER_ORG, active: true }),
     });
     await registerRequestScopeHook(app, { buildTenantContext });
 

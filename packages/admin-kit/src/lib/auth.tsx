@@ -95,6 +95,32 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/**
+ * What a federated sign-in left in the address when it came back to the Admin
+ * UI: a pending second-step challenge (`#mfa-challenge=<id>`), or the sentence a
+ * refused attempt was answered with (`/login?error=<sentence>`). Both are taken
+ * out of the address bar as soon as they are read — the challenge travels in
+ * the fragment precisely because a fragment never reaches a server, and it
+ * should not outlive the moment it is moved into memory either.
+ */
+function takeFederatedHandover(): { challengeId: string | null; error: string | null } {
+  if (typeof window === 'undefined') return { challengeId: null, error: null };
+  const { hash, pathname, search } = window.location;
+  const fragment = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+  const challengeId = fragment.get('mfa-challenge') || null;
+  const query = new URLSearchParams(search);
+  const error = pathname.endsWith('/login') ? query.get('error') || null : null;
+  if (challengeId === null && error === null) return { challengeId: null, error: null };
+  if (error !== null) query.delete('error');
+  const rest = query.toString();
+  window.history.replaceState(
+    window.history.state,
+    '',
+    `${pathname}${rest ? `?${rest}` : ''}${challengeId !== null ? '' : hash}`,
+  );
+  return { challengeId, error };
+}
+
 export interface AuthProviderProps {
   /**
    * A session already in hand, which makes the provider start `authenticated`
@@ -112,13 +138,17 @@ export interface AuthProviderProps {
 }
 
 export function AuthProvider({ initial, children }: AuthProviderProps): ReactNode {
+  // Read once, on the first render: a federated sign-in hands over here.
+  const [handover] = useState(() =>
+    initial === undefined ? takeFederatedHandover() : { challengeId: null, error: null },
+  );
   const [state, setState] = useState<AuthState>(
     initial === undefined
       ? {
           status: 'loading',
           me: null,
-          lastLoginError: null,
-          mfaChallengeId: null,
+          lastLoginError: handover.error,
+          mfaChallengeId: handover.challengeId,
         }
       : {
           status: 'authenticated',
@@ -129,7 +159,7 @@ export function AuthProvider({ initial, children }: AuthProviderProps): ReactNod
   );
   // Feature 042 — holds the pending challenge id across renders so `verifyMfa`
   // never reads a stale closure.
-  const challengeRef = useRef<string | null>(null);
+  const challengeRef = useRef<string | null>(handover.challengeId);
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
@@ -137,7 +167,14 @@ export function AuthProvider({ initial, children }: AuthProviderProps): ReactNod
       setState({ status: 'authenticated', me: res.data, lastLoginError: null, mfaChallengeId: null });
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        setState({ status: 'unauthenticated', me: null, lastLoginError: null, mfaChallengeId: null });
+        // Signed out — but a second step already under way (a federated
+        // sign-in's handover) and the sentence it came back with stay.
+        setState((prev) => ({
+          status: 'unauthenticated',
+          me: null,
+          lastLoginError: prev.lastLoginError,
+          mfaChallengeId: challengeRef.current,
+        }));
         return;
       }
       // Other errors — treat as unauthenticated so the user sees the login

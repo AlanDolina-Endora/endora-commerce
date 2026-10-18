@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import { MFA_CHALLENGE_COOKIE_NAME } from '@endora-commerce/contracts';
 
 /**
  * Storefront session helpers (T150–T155).
@@ -13,7 +14,9 @@ import { cookies } from 'next/headers';
 const SESSION_COOKIE = 'b2b_session';
 const ANON_CART_COOKIE = 'b2b_cart_anon';
 const CART_MERGE_FLASH_COOKIE = 'b2b_cart_merge_flash';
-const MFA_CHALLENGE_COOKIE = 'b2b_mfa_challenge';
+// Published by the contracts package: the backend sets the same cookie when a
+// federated sign-in hands over to the second step.
+const MFA_CHALLENGE_COOKIE = MFA_CHALLENGE_COOKIE_NAME;
 
 /**
  * Feature 042 — short-lived, httpOnly cookie holding the opaque second-step

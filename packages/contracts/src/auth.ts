@@ -29,6 +29,16 @@ export const SESSION_COOKIE_NAME = 'b2b_session';
 export const ADMIN_SESSION_COOKIE_NAME = 'b2b_admin_session';
 
 /**
+ * The storefront's pending second-step cookie: the opaque challenge id between
+ * the first factor and the code screen (`/login/mfa`). Two writers, one reader:
+ * the storefront's password sign-in sets it, and so does the backend when a
+ * federated sign-in hands over to the second step — which is why the spelling
+ * is published here rather than written twice. `httpOnly`, path `/`, five
+ * minutes, never in a URL.
+ */
+export const MFA_CHALLENGE_COOKIE_NAME = 'b2b_mfa_challenge';
+
+/**
  * The cookie a completed administrator sign-in leaves on the device, so that
  * the device is recognised as one the account has been used from.
  *

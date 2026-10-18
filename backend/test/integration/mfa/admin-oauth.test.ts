@@ -4,6 +4,7 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
+import { oauthBinding } from '../../helpers/oauth-binding.js';
 import { CustomerAccount } from '../../helpers/package-entities.js';
 
 /**
@@ -22,7 +23,13 @@ async function setAdminMsEnabled(h: BackendServerHandle, enabled: boolean): Prom
   );
 }
 
-async function startAndGetState(h: BackendServerHandle): Promise<string> {
+/**
+ * Run /start → extract the opaque state and the browser-binding cookie the
+ * callback has to present.
+ */
+async function startAndGetState(
+  h: BackendServerHandle,
+): Promise<{ state: string; cookies: Record<string, string> }> {
   const res = await h.app.inject({
     method: 'GET',
     url: '/api/v1/auth/admin/oauth/microsoft/start',
@@ -30,13 +37,18 @@ async function startAndGetState(h: BackendServerHandle): Promise<string> {
   expect(res.statusCode).toBe(302);
   const location = res.headers['location'] as string;
   expect(location, `start redirected to: ${location}`).toContain('oauth.test');
-  return new URL(location).searchParams.get('state')!;
+  return { state: new URL(location).searchParams.get('state')!, cookies: oauthBinding(res) };
 }
 
-function callback(h: BackendServerHandle, code: string, state: string) {
+function callback(
+  h: BackendServerHandle,
+  code: string,
+  started: { state: string; cookies: Record<string, string> },
+) {
   return h.app.inject({
     method: 'GET',
-    url: `/api/v1/auth/admin/oauth/microsoft/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`,
+    url: `/api/v1/auth/admin/oauth/microsoft/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(started.state)}`,
+    cookies: started.cookies,
   });
 }
 

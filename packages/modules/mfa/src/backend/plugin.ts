@@ -215,6 +215,7 @@ export function mfaModule(options: MfaModuleOptions): {
         challengeStore,
         policyResolver,
         socialIdentityService,
+        loginService,
         sessionService: options.sessionService,
         backendBaseUrl: options.backendBaseUrl ?? 'http://localhost:8080',
         storefrontBaseUrl: options.storefrontBaseUrl ?? 'http://localhost:3000',

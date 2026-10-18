@@ -42,6 +42,16 @@ import type { SessionService } from './services/session-service.js';
  * from.
  */
 
+/**
+ * The account behind a customer session, as the request hook needs it.
+ * `active` is `false` for an account that is blocked or deleted; `null` stands
+ * for an account that does not exist.
+ */
+export type CustomerSessionAccount = {
+  readonly organizationId: string | null;
+  readonly active: boolean;
+} | null;
+
 export interface AuthPluginOptions {
   sessionService: SessionService;
   /** Resolves an API key bearer token to an ApiKey actor. Installed by the api_keys module. */
@@ -53,11 +63,12 @@ export interface AuthPluginOptions {
     customerAccountId?: string | null;
   } | null>;
   /**
-   * Resolves a customerAccountId to the customer's `organizationId`. Used to
-   * stamp `actor.organizationId` for customer + impersonation sessions so
-   * route handlers don't have to re-fetch the CustomerAccount per request.
+   * Resolves a customerAccountId to the account a session stands for: its
+   * `organizationId`, stamped on `actor.organizationId` for customer +
+   * impersonation sessions so route handlers don't re-fetch the account, and
+   * whether it may still act. `null` when there is no such account.
    */
-  customerOrgResolver?: (customerAccountId: string) => Promise<string | null>;
+  customerAccountResolver?: (customerAccountId: string) => Promise<CustomerSessionAccount>;
   /** Cookie name used to carry customer (storefront) sessions. */
   cookieName?: string;
   /** Cookie name used to carry admin (Admin UI) sessions. */
@@ -181,24 +192,36 @@ async function authPluginImpl(app: FastifyInstance, opts: AuthPluginOptions): Pr
       const resolved = await opts.sessionService.loadSession(raw);
       if (resolved) {
         const session = resolved.session;
+        // One read of the account per request, as before — it now answers
+        // whether the account may act as well as which organisation it is in.
+        const account =
+          (resolved.kind === 'impersonation' || resolved.kind === 'customer') &&
+          session.customerAccountId &&
+          opts.customerAccountResolver
+            ? await opts.customerAccountResolver(session.customerAccountId)
+            : undefined;
         if (resolved.kind === 'impersonation' && session.customerAccountId) {
-          const orgId = opts.customerOrgResolver
-            ? (await opts.customerOrgResolver(session.customerAccountId)) ?? ''
-            : '';
           request.actor = {
             kind: 'customer',
             customerAccountId: session.customerAccountId,
-            organizationId: orgId,
+            organizationId: account?.organizationId ?? '',
             impersonatorAdminUserId: session.impersonatorAdminUserId ?? null,
           };
-        } else if (resolved.kind === 'customer' && session.customerAccountId) {
-          const orgId = opts.customerOrgResolver
-            ? (await opts.customerOrgResolver(session.customerAccountId)) ?? ''
-            : '';
+        } else if (
+          resolved.kind === 'customer' &&
+          session.customerAccountId &&
+          // A session whose account is blocked, deleted or gone binds nobody,
+          // so `requireCustomer` answers it 401 — the customer side of the
+          // admin guard's active-account check. Every write that withdraws an
+          // account also revokes its sessions; this is the check that does not
+          // depend on each of them remembering to. An impersonation (above) is
+          // an administrator's session and is left as it was.
+          (account === undefined || account?.active === true)
+        ) {
           request.actor = {
             kind: 'customer',
             customerAccountId: session.customerAccountId,
-            organizationId: orgId,
+            organizationId: account?.organizationId ?? '',
             impersonatorAdminUserId: null,
           };
         }
@@ -211,10 +234,7 @@ async function authPluginImpl(app: FastifyInstance, opts: AuthPluginOptions): Pr
         // reflects login time, so an actively-browsing buyer ages out of the
         // freshness window and disappears. Fire-and-forget: never block or fail
         // the request on a presence write.
-        if (
-          (resolved.kind === 'customer' || resolved.kind === 'impersonation') &&
-          session.customerAccountId
-        ) {
+        if (request.actor.kind === 'customer' && session.customerAccountId) {
           void opts.sessionService.touchLastSeen(session.id).catch(() => undefined);
         }
       }

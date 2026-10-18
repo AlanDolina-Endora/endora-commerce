@@ -156,9 +156,15 @@ describe('ChallengeStore', () => {
       pkceVerifier: 'verifier',
       nonce: 'nonce',
       next: '/account',
+      browserBinding: 'digest',
     });
     const tx = await store.getOAuthTransaction(state);
-    expect(tx).toMatchObject({ provider: 'google', pkceVerifier: 'verifier', next: '/account' });
+    expect(tx).toMatchObject({
+      provider: 'google',
+      pkceVerifier: 'verifier',
+      next: '/account',
+      browserBinding: 'digest',
+    });
     await store.consumeOAuthTransaction(state);
     expect(await store.getOAuthTransaction(state)).toBeNull();
   });

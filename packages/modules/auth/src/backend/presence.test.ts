@@ -61,7 +61,7 @@ describe('auth plugin — presence', () => {
         loadSession: async (cookieValue: string) => sessions[cookieValue] ?? null,
         touchLastSeen: (sessionId: string) => touch(sessionId),
       } as unknown as SessionService,
-      customerOrgResolver: async () => 'org-1',
+      customerAccountResolver: async () => ({ organizationId: 'org-1', active: true }),
     });
     app.get('/anything', async (request) => ({ actor: request.actor.kind }));
     await app.ready();

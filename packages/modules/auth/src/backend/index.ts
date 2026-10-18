@@ -4,7 +4,7 @@ import type { AuthSessionPort, AuthSessionReadPort } from '@endora-commerce/cont
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
 import { effectiveState } from '@endora-commerce/platform/kernel';
 import type { AdminPermissionChecker } from '@endora-commerce/platform/kernel';
-import { authPlugin, promoteAdminActor } from './plugin.js';
+import { authPlugin, promoteAdminActor, type CustomerSessionAccount } from './plugin.js';
 import { createRequireAdmin, createRequireAdminAny } from './require-admin.js';
 import { createRequireCustomer } from './require-customer.js';
 import { AuthSessionReadService, createAuthSessionPort } from './services/session-port.js';
@@ -59,8 +59,14 @@ export interface AuthCradle {
         customerAccountId?: string | null;
       } | null>)
     | undefined;
-  /** Resolves a customer account to its organisation. Same late-binding story. */
-  readonly customerOrgResolver: ((customerAccountId: string) => Promise<string | null>) | undefined;
+  /**
+   * Resolves a customer account to its organisation and whether it may still
+   * act. Same late-binding story. The container name predates the second half
+   * of the answer and is kept, because manifests and the gating graph name it.
+   */
+  readonly customerOrgResolver:
+    | ((customerAccountId: string) => Promise<CustomerSessionAccount>)
+    | undefined;
 }
 
 export function registerModule(ctx: ModuleContext): void {
@@ -198,8 +204,12 @@ export function registerModule(ctx: ModuleContext): void {
           if (!effectiveState.isPresent('api_keys')) return null;
           return (await cradle.apiKeyResolver?.(token)) ?? null;
         },
-        customerOrgResolver: async (customerAccountId) =>
-          (await cradle.customerOrgResolver?.(customerAccountId)) ?? null,
+        // A composition that registers no resolver at all binds the session
+        // with no organisation, as it always has; a registered one answers.
+        customerAccountResolver: async (customerAccountId) => {
+          const resolve = cradle.customerOrgResolver;
+          return resolve ? resolve(customerAccountId) : { organizationId: null, active: true };
+        },
       });
     },
   );

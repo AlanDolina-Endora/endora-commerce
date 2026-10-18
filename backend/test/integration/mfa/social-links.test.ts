@@ -9,6 +9,7 @@ import { CustomerAccount } from '../../helpers/package-entities.js';
 import { STUB_CUSTOMER_PASSWORD } from '../../helpers/seed-organizations.js';
 import { TEST_ADMIN_ID } from '../../helpers/test-actors.js';
 import { MfaSocialIdentity, type MfaSocialIdentityRow } from '../../helpers/package-entities.js';
+import { oauthBinding } from '../../helpers/oauth-binding.js';
 
 /**
  * Issue #194 — a customer can see the identities linked to their account and
@@ -82,6 +83,8 @@ describe('MFA social identity links — list + unlink (issue #194)', () => {
     await h.app.inject({
       method: 'GET',
       url: `/api/v1/auth/customer/oauth/google/callback?code=${encodeURIComponent(CUSTOMER_EMAIL)}&state=${encodeURIComponent(state)}`,
+      // The browser that started the transaction presents its binding cookie.
+      cookies: oauthBinding(start),
     });
     const google = await h
       .em()
