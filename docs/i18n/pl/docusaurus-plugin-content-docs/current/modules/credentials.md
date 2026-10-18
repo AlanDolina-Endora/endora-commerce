@@ -51,6 +51,12 @@ Edycja działa tak samo. Przy edycji **typ i dostawca są zablokowane** (nie mo�
 utwórz nową konfigurację). Pozostawienie **pustego** pola sekretu **zachowuje zapisany sekret**;
 wpisanie nowej wartości go zastępuje.
 
+Wyjątkiem jest pole, które określa, **dokąd wysyłane są sekrety** — **Base URL** konfiguracji LLM albo
+**Host** serwera SMTP. Po jego zmianie każdy zapisany sekret konfiguracji trzeba wpisać ponownie w tym
+samym zapisie: formularz oznacza pola sekretów i o tym informuje, a zapis bez nich jest odrzucany z
+`422 CREDENTIAL_SECRET_REENTRY_REQUIRED` i niczego nie zmienia. Zapisany sekret jest wysyłany wyłącznie
+tam, dokąd miał trafiać w chwili wpisania.
+
 ### Korzystanie z konfiguracji w ustawieniu
 
 Niektóre ustawienia są typu **„credential reference”** i są ograniczone do jednego typu konfiguracji.
@@ -99,8 +105,17 @@ interface FieldDefinition {
   secret: boolean;         // secret ⇒ encrypted at rest, masked on read
   options?: { value: string; label: string }[];
   placeholder?: string;
+  format?: 'url';          // validated as an absolute http(s) URL
+  endpoint?: boolean;      // says where the secrets are sent (default: format === 'url')
 }
 ```
+
+Pole, dla którego `isCredentialEndpointField` zwraca prawdę (`endpoint` albo domyślnie pole z
+`format: 'url'`), wiąże sekrety konfiguracji ze swoją wartością: zmiana tego pola wymaga ponownego
+wpisania każdego zapisanego sekretu, inaczej zapis jest odrzucany z
+`CREDENTIAL_SECRET_REENTRY_REQUIRED` (`details.fields` wymienia klucze sekretów). Zadeklaruj
+`endpoint: true` dla pola z hostem lub adresem, które nie jest adresem URL — tak robi dostawca SMTP
+dla `host` — oraz `endpoint: false` dla pola URL, które nie określa, dokąd trafiają sekrety.
 
 Zapisana konfiguracja przechowuje `typeCode`, `providerCode` i zbiór wartości `values` (sekrety jako
 zaszyfrowane struktury AES-256-GCM, pozostałe pola jako zwykłe wartości proste) w tabeli

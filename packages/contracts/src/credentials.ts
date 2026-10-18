@@ -43,8 +43,27 @@ export const FieldDefinitionSchema = z.object({
    * Additive: the frozen `kind` set is unchanged.
    */
   format: z.enum(['url']).optional(),
+  /**
+   * The field says where the record's secrets are sent — an API base URL, a
+   * mail host. When an update changes it, every stored secret of the record
+   * must be re-entered in the same request (`CREDENTIAL_SECRET_REENTRY_REQUIRED`)
+   * rather than being carried over to the new endpoint. Defaults to `true` for
+   * a `format: 'url'` field and `false` otherwise; a descriptor states it only
+   * to say otherwise.
+   */
+  endpoint: z.boolean().optional(),
 });
 export type FieldDefinition = z.infer<typeof FieldDefinitionSchema>;
+
+/**
+ * Whether a field says where the record's secrets are sent: an explicit
+ * `endpoint` wins, otherwise a `format: 'url'` field is one. Shared by the
+ * write validator, which refuses to carry a stored secret over to a changed
+ * endpoint, and the admin form, which asks for the secret again.
+ */
+export function isCredentialEndpointField(field: FieldDefinition): boolean {
+  return field.endpoint ?? field.format === 'url';
+}
 
 export const ProviderVariantSchema = z.object({
   code: z.string().min(1),

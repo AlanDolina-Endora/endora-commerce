@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto';
 import { describe, expect, it } from 'vitest';
-import type { FieldDefinition } from '@endora-commerce/contracts';
+import { isCredentialEndpointField, type FieldDefinition } from '@endora-commerce/contracts';
 import {
   buildPersistableValues,
   maskSecrets,
@@ -185,5 +185,163 @@ describe('buildPersistableValues — url format [unit]', () => {
   it('requires the Base URL of an OpenAI-compatible configuration', () => {
     expect(run(compatible.fields, undefined).errors).toEqual([{ field: 'baseUrl', message: 'is required' }]);
     expect(run(compatible.fields, '').errors).toEqual([{ field: 'baseUrl', message: 'is required' }]);
+  });
+});
+
+/**
+ * A stored secret goes wherever the record's endpoint says. When an update
+ * changes the endpoint — an LLM Base URL, an SMTP host — every stored secret
+ * of the record has to be re-entered in the same request; it is never carried
+ * over to the new endpoint.
+ */
+describe('buildPersistableValues — a changed endpoint [unit]', () => {
+  const openai = llmConfigurationType.providers.find((p) => p.code === 'openai')!;
+  const stored = (fields: FieldDefinition[], submitted: Record<string, unknown>) =>
+    buildPersistableValues({ fields, submitted, existing: {}, secretEncryptionKey: KEY }).values;
+
+  it('asks for the API key again when the Base URL changes', () => {
+    const existing = stored(openai.fields, {
+      apiKey: 'sk-first',
+      model: 'gpt-5',
+      baseUrl: 'https://api.openai.com/v1',
+    });
+
+    const result = buildPersistableValues({
+      fields: openai.fields,
+      submitted: { baseUrl: 'https://llm.example.net/v1' },
+      existing,
+      secretEncryptionKey: KEY,
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.secretsToReenter).toEqual([
+      { field: 'apiKey', label: 'API Key', endpoints: ['Base URL'] },
+    ]);
+    expect(result.values['apiKey']).toBeUndefined();
+  });
+
+  it('treats setting, clearing and replacing an optional Base URL alike', () => {
+    const withUrl = stored(openai.fields, {
+      apiKey: 'sk-first',
+      model: 'gpt-5',
+      baseUrl: 'https://api.openai.com/v1',
+    });
+    const withoutUrl = stored(openai.fields, { apiKey: 'sk-first', model: 'gpt-5' });
+
+    for (const [existing, baseUrl] of [
+      [withUrl, ''],
+      [withoutUrl, 'https://llm.example.net/v1'],
+    ] as const) {
+      const result = buildPersistableValues({
+        fields: openai.fields,
+        submitted: { baseUrl },
+        existing,
+        secretEncryptionKey: KEY,
+      });
+      expect(result.secretsToReenter.map((s) => s.field)).toEqual(['apiKey']);
+    }
+  });
+
+  it('accepts the change when the secret is re-entered in the same request', () => {
+    const existing = stored(openai.fields, {
+      apiKey: 'sk-first',
+      model: 'gpt-5',
+      baseUrl: 'https://api.openai.com/v1',
+    });
+
+    const result = buildPersistableValues({
+      fields: openai.fields,
+      submitted: { baseUrl: 'https://llm.example.net/v1', apiKey: 'sk-for-the-new-endpoint' },
+      existing,
+      secretEncryptionKey: KEY,
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.secretsToReenter).toEqual([]);
+    expect(decryptSecretValue(result.values['apiKey'], KEY)).toBe('sk-for-the-new-endpoint');
+  });
+
+  it('keeps the stored secret while the endpoint is unchanged, even resent with other whitespace', () => {
+    const existing = stored(openai.fields, {
+      apiKey: 'sk-first',
+      model: 'gpt-5',
+      baseUrl: 'https://api.openai.com/v1',
+    });
+
+    const result = buildPersistableValues({
+      fields: openai.fields,
+      submitted: { baseUrl: ' https://api.openai.com/v1 ', model: 'gpt-5-mini', apiKey: '[redacted]' },
+      existing,
+      secretEncryptionKey: KEY,
+    });
+
+    expect(result.secretsToReenter).toEqual([]);
+    expect(result.values['apiKey']).toBe(existing['apiKey']);
+  });
+
+  it('asks for the SMTP password again when the host changes', () => {
+    const existing = stored(smtp.fields, {
+      host: 'smtp.example.com',
+      port: 587,
+      username: 'mailer',
+      password: 'smtp-secret',
+    });
+
+    const moved = buildPersistableValues({
+      fields: smtp.fields,
+      submitted: { host: 'smtp.example.org' },
+      existing,
+      secretEncryptionKey: KEY,
+    });
+    expect(moved.secretsToReenter).toEqual([
+      { field: 'password', label: 'Password', endpoints: ['Host'] },
+    ]);
+
+    const samePlace = buildPersistableValues({
+      fields: smtp.fields,
+      submitted: { port: 465, secure: true },
+      existing,
+      secretEncryptionKey: KEY,
+    });
+    expect(samePlace.secretsToReenter).toEqual([]);
+  });
+
+  it('has nothing to ask for when no secret is stored', () => {
+    const existing = stored(smtp.fields, { host: 'smtp.example.com', port: 25 });
+    const result = buildPersistableValues({
+      fields: smtp.fields,
+      submitted: { host: 'smtp.example.org' },
+      existing,
+      secretEncryptionKey: KEY,
+    });
+    expect(result.secretsToReenter).toEqual([]);
+  });
+});
+
+describe('isCredentialEndpointField [unit]', () => {
+  it('names the fields that say where every shipped type sends its secrets', () => {
+    const endpoints = [llmConfigurationType, emailAdapterConfigurationType].flatMap((type) =>
+      type.providers.map(
+        (p) => `${type.code}/${p.code}: ${p.fields.filter(isCredentialEndpointField).map((f) => f.key).join(',')}`,
+      ),
+    );
+    expect(endpoints).toEqual([
+      'llm/openai: baseUrl',
+      'llm/google: baseUrl',
+      'llm/anthropic: baseUrl',
+      'llm/deepseek: baseUrl',
+      'llm/openai_compatible: baseUrl',
+      'email_adapter/smtp: host',
+      'email_adapter/amazon_ses: ',
+      'email_adapter/sendgrid: ',
+    ]);
+  });
+
+  it('reads an explicit declaration before the url format', () => {
+    const base: FieldDefinition = { key: 'k', label: 'K', kind: 'string', required: false, secret: false };
+    expect(isCredentialEndpointField({ ...base, format: 'url' })).toBe(true);
+    expect(isCredentialEndpointField({ ...base, format: 'url', endpoint: false })).toBe(false);
+    expect(isCredentialEndpointField({ ...base, endpoint: true })).toBe(true);
+    expect(isCredentialEndpointField(base)).toBe(false);
   });
 });

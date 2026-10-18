@@ -8,13 +8,16 @@ import type {
 } from '@endora-commerce/contracts';
 import { Button, Input, Label, Select } from '@endora-commerce/admin-kit/ui';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
+import { movedEndpointLabels } from './secret-reentry.js';
 /**
  * Dynamic create/edit form for a credential configuration (feature 058 US1).
  *
  * The type + provider pickers drive which fields render (from the descriptor's
  * `FieldDefinition[]`). Secret fields are write-only password inputs showing an
- * is-Set placeholder; a blank secret on edit preserves the stored value. Type,
- * provider and code are immutable once created.
+ * is-Set placeholder; a blank secret on edit preserves the stored value —
+ * unless a field saying where the secrets are sent (a Base URL, a mail host)
+ * was changed, in which case the form asks for each stored secret again, as the
+ * server will. Type, provider and code are immutable once created.
  */
 export interface ConfigurationFormProps {
   types: ConfigurationTypeDescriptor[];
@@ -67,6 +70,12 @@ export function ConfigurationForm({
 
   const secretIsSet = (key: string): boolean =>
     existing?.fields.find((x) => x.key === key)?.isSet === true;
+
+  // Endpoints the operator has moved on this edit. A stored secret is not
+  // carried over to a new endpoint, so each one must be typed again.
+  const movedEndpoints = isEdit ? movedEndpointLabels(provider?.fields ?? [], initialValues, values) : [];
+  const mustReenter = (f: FieldDefinition): boolean =>
+    f.secret && movedEndpoints.length > 0 && secretIsSet(f.key) && !values[f.key];
 
   const setValue = (key: string, v: string): void => setValues((prev) => ({ ...prev, [key]: v }));
 
@@ -154,12 +163,19 @@ export function ConfigurationForm({
           <div key={f.key} className="space-y-1">
             <Label htmlFor={`cred-field-${f.key}`}>
               {f.label}
-              {f.required ? <span className="text-destructive"> *</span> : null}
+              {f.required || mustReenter(f) ? <span className="text-destructive"> *</span> : null}
             </Label>
             {renderField(f, values[f.key] ?? '', (v) => setValue(f.key, v), {
-              secretPlaceholder: secretIsSet(f.key) ? t('form.secretSet') : t('form.secretUnset'),
+              secretPlaceholder:
+                secretIsSet(f.key) && !mustReenter(f) ? t('form.secretSet') : t('form.secretUnset'),
               fieldId: `cred-field-${f.key}`,
+              ...(mustReenter(f) ? { describedBy: `cred-field-${f.key}-reentry` } : {}),
             })}
+            {mustReenter(f) ? (
+              <p id={`cred-field-${f.key}-reentry`} className="text-sm text-destructive">
+                {t('form.secretReentry', { endpoints: movedEndpoints.join(', ') })}
+              </p>
+            ) : null}
           </div>
         ))}
       </div>
@@ -189,7 +205,7 @@ function renderField(
   field: FieldDefinition,
   value: string,
   onChange: (v: string) => void,
-  opts: { secretPlaceholder: string; fieldId: string },
+  opts: { secretPlaceholder: string; fieldId: string; describedBy?: string },
 ): ReactNode {
   if (field.secret) {
     return (
@@ -200,6 +216,9 @@ function renderField(
         value={value}
         placeholder={opts.secretPlaceholder}
         onChange={(e) => onChange(e.target.value)}
+        {...(opts.describedBy
+          ? { 'aria-describedby': opts.describedBy, 'aria-invalid': true as const }
+          : {})}
       />
     );
   }

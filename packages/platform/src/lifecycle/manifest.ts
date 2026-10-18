@@ -51,8 +51,26 @@ export const manifest = defineModuleManifest({
    * not be made to depend on one of them. `mfa` is the most switchable module
    * in the tree — a client security policy — and the whole point of this read
    * is to inform the flip, not to refuse it.
+   *
+   * The second edge does refuse, narrowly: `mfaDeactivationGuardPort` answers
+   * whether administrators are currently *required* to use a second factor,
+   * and while they are the switch-off is refused so that requirement is turned
+   * off as its own change. Non-binding for the same reason as the count.
    */
   nonBindingDependencies: [
+    {
+      moduleId: 'mfa',
+      name: 'mfaDeactivationGuardPort',
+      kind: 'degrades-without',
+      whenAbsent:
+        'Nothing is asked: a module that is already off has no administrator requirement left ' +
+        'to protect, and switching it back on is never refused.',
+      reason:
+        'POST /api/v1/admin/modules/:id/activation refuses to switch `mfa` off while ' +
+        '`mfa.admin.totp_enforced` is on, so the administrator requirement is withdrawn as its ' +
+        'own change rather than as a side effect of the module toggle. The setting is `mfa`\'s, ' +
+        'so `mfa` answers through a port; the route asks only while `mfa` is present.',
+    },
     {
       moduleId: 'mfa',
       name: 'mfaEnrolmentCountPort',

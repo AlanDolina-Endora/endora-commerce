@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import {
+  ERROR_CODES,
+  MFA_SETTING_CODES,
   AdminModulePresenceResponseSchema,
   ModuleActivationRequestSchema,
   ModuleActivationResponseSchema,
@@ -9,6 +11,7 @@ import {
   apiInterceptorListSchema,
   type AdminModulePresenceResponse,
   type ApiInterceptorList,
+  type MfaDeactivationGuardPort,
   type MfaEnrolmentCountPort,
   type ModuleActivationResponse,
   type ModuleDeactivationImpact,
@@ -97,6 +100,44 @@ export interface ModulePresenceAdminDeps {
    * before it calls, and treats a failure as "unavailable".
    */
   mfaEnrolmentCount: MfaEnrolmentCountPort;
+  /**
+   * `mfa`'s answer to "is a second factor required of administrators right
+   * now?", asked before `mfa` is switched off. Resolved lazily like the count;
+   * unlike the count, a failed read refuses the switch-off.
+   */
+  mfaDeactivationGuard: MfaDeactivationGuardPort;
+}
+
+/**
+ * Refuse switching `mfa` off while the platform requires administrators to
+ * sign in with a second factor.
+ *
+ * Off means no second factor at all (D-96), so the switch-off would take the
+ * administrator requirement with it in one step, as a side effect of a module
+ * toggle. The requirement is a setting of its own (`mfa.admin.totp_enforced`)
+ * and is turned off first, as its own change; the switch-off then goes through
+ * exactly as before. Voluntary enrolments do not block it — the deactivation
+ * dialog shows how many there are (D-96.5).
+ *
+ * Asked only while `mfa` is present: the port is read through an open gate,
+ * and a module that is already off has no requirement left to protect. Only
+ * the switch-off is guarded; switching `mfa` back on is never refused here.
+ */
+export async function assertMfaMayBeSwitchedOff(
+  moduleId: string,
+  active: boolean,
+  guard: MfaDeactivationGuardPort,
+): Promise<void> {
+  if (moduleId !== 'mfa' || active || !effectiveState.isPresent('mfa')) return;
+  if (await guard.isAdminSecondFactorRequired()) {
+    throw new HttpError(
+      409,
+      ERROR_CODES.MFA_DEACTIVATION_BLOCKED,
+      'Two-factor authentication cannot be switched off while administrators are required to ' +
+        `use it. Turn off "${MFA_SETTING_CODES.ADMIN_TOTP_ENFORCED}" first, then switch the module off.`,
+      { moduleId, setting: MFA_SETTING_CODES.ADMIN_TOTP_ENFORCED },
+    );
+  }
 }
 
 /**
@@ -204,6 +245,7 @@ export function registerModulePresenceRoutes(
     async (request): Promise<ModuleActivationResponse> => {
       const body = ModuleActivationRequestSchema.parse(request.body);
       const moduleId = request.params.id;
+      await assertMfaMayBeSwitchedOff(moduleId, body.active, deps.mfaDeactivationGuard);
 
       // The Command's factory performs the refusals, so an invalid flip never
       // opens a transaction. `CommandBus.run` resolves the actor from the

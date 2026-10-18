@@ -58,6 +58,13 @@ Editing works the same way. On edit, the **type and provider are locked** (they
 cannot change — create a new configuration instead). Leaving a secret field
 **blank keeps the stored secret**; typing a new value replaces it.
 
+The one exception is a field that says **where the secrets are sent** — an LLM
+**Base URL**, an SMTP **Host**. When you change it, every stored secret of the
+configuration has to be typed again in the same save: the form marks the secret
+fields and says so, and a save without them is refused with
+`422 CREDENTIAL_SECRET_REENTRY_REQUIRED` and changes nothing. A stored secret is
+only ever sent where it was entered for.
+
 ### Using a configuration from a setting
 
 Some settings are of the **"credential reference"** kind, constrained to one
@@ -106,8 +113,18 @@ interface FieldDefinition {
   secret: boolean;         // secret ⇒ encrypted at rest, masked on read
   options?: { value: string; label: string }[];
   placeholder?: string;
+  format?: 'url';          // validated as an absolute http(s) URL
+  endpoint?: boolean;      // says where the secrets are sent (default: format === 'url')
 }
 ```
+
+A field for which `isCredentialEndpointField` is true (`endpoint`, or by default
+a `format: 'url'` field) binds the record's secrets to its value: an update that
+changes it must re-enter every stored secret, or it is refused with
+`CREDENTIAL_SECRET_REENTRY_REQUIRED` (`details.fields` names the secret keys).
+Declare `endpoint: true` on a host or address field that is not a URL — the SMTP
+provider does so for `host` — and `endpoint: false` on a URL field that does not
+say where secrets go.
 
 A saved configuration stores `typeCode` + `providerCode` + a `values` bag
 (secret fields hold AES-256-GCM envelopes, non-secret fields hold plain

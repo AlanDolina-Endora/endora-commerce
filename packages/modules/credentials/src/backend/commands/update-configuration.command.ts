@@ -7,15 +7,37 @@ import type { ConfigurationTypeRegistry } from '../services/configuration-type-r
 import {
   buildPersistableValues,
   redactSecretsForAudit,
+  type SecretToReenter,
 } from '../services/field-validator.js';
 import { withSecretKeyRefusal } from '../services/secret-key-refusal.js';
+
+/**
+ * The refusal an update earns by changing where the record's secrets are sent
+ * without re-entering them. Nothing is written: the operator re-enters the
+ * named secrets together with the new endpoint.
+ *
+ * `details.fields` carries the secret keys for a form to mark; `secrets` and
+ * `endpoints` are the labels the sentence names.
+ */
+export function secretReentryRequired(secrets: readonly SecretToReenter[]): HttpError {
+  const labels = secrets.map((s) => s.label).join(', ');
+  const endpoints = [...new Set(secrets.flatMap((s) => s.endpoints))].join(', ');
+  return new HttpError(
+    422,
+    ERROR_CODES.CREDENTIAL_SECRET_REENTRY_REQUIRED,
+    `${endpoints} changed, so the stored ${labels} is not kept. Enter it again to save the change.`,
+    { secrets: labels, endpoints, fields: secrets.map((s) => s.field) },
+  );
+}
 
 /**
  * `credential.update` (feature 058 US1, Principle XIII).
  *
  * Write-only secret preservation: a secret submitted blank / omitted / equal to
  * the `[redacted]` mask keeps the stored envelope; a non-empty secret is
- * re-encrypted. `typeCode`/`providerCode` are immutable (rejected upstream in
+ * re-encrypted. Changing an endpoint field (an API Base URL, a mail host) is
+ * the exception: it is refused with `CREDENTIAL_SECRET_REENTRY_REQUIRED` unless
+ * every stored secret is re-entered in the same request. `typeCode`/`providerCode` are immutable (rejected upstream in
  * the route). Honors `expectedVersion` (optimistic lock). Secrets redacted in
  * both audit states. Irreversible.
  */
@@ -92,7 +114,7 @@ export function makeUpdateConfigurationCommand(input: {
 
       const submitted = data.values;
       if (submitted !== undefined) {
-        const { values, errors } = withSecretKeyRefusal(() =>
+        const { values, errors, secretsToReenter } = withSecretKeyRefusal(() =>
           buildPersistableValues({
             fields: variant.fields,
             submitted,
@@ -108,6 +130,7 @@ export function makeUpdateConfigurationCommand(input: {
             errors.map((e) => ({ path: e.field, issue: e.message })),
           );
         }
+        if (secretsToReenter.length > 0) throw secretReentryRequired(secretsToReenter);
         entity.values = values;
       }
 

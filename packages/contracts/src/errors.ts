@@ -427,6 +427,11 @@ export const ERROR_CODES = {
   SELECTION_TOO_LARGE: 'SELECTION_TOO_LARGE',
 
   // MFA (feature 042)
+  /**
+   * `mfa` cannot be switched off while administrators are required to sign in
+   * with a second factor; the requirement is turned off first.
+   */
+  MFA_DEACTIVATION_BLOCKED: 'MFA_DEACTIVATION_BLOCKED',
   MFA_INVALID_CODE: 'MFA_INVALID_CODE',
   MFA_INVALID_CHALLENGE: 'MFA_INVALID_CHALLENGE',
   MFA_TOO_MANY_ATTEMPTS: 'MFA_TOO_MANY_ATTEMPTS',
@@ -455,6 +460,11 @@ export const ERROR_CODES = {
   CREDENTIAL_CODE_TAKEN: 'CREDENTIAL_CODE_TAKEN',
   CREDENTIAL_TYPE_UNKNOWN: 'CREDENTIAL_TYPE_UNKNOWN',
   CREDENTIAL_VALIDATION_FAILED: 'CREDENTIAL_VALIDATION_FAILED',
+  /**
+   * An update changed where a credential record's secrets are sent without
+   * re-entering them; stored secrets are not carried over to a new endpoint.
+   */
+  CREDENTIAL_SECRET_REENTRY_REQUIRED: 'CREDENTIAL_SECRET_REENTRY_REQUIRED',
   CREDENTIAL_IN_USE: 'CREDENTIAL_IN_USE',
   CREDENTIAL_TYPE_IMMUTABLE: 'CREDENTIAL_TYPE_IMMUTABLE',
 

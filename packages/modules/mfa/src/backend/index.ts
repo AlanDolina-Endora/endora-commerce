@@ -9,6 +9,7 @@ import type {
   CustomerAccountReadPort,
   CustomerPasswordStatePort,
   CustomerPasswordVerificationPort,
+  MfaDeactivationGuardPort,
   MfaEnrolmentCountPort,
   MfaEnrolmentStatePort,
   MfaLoginPort,
@@ -31,6 +32,7 @@ import {
   createOrganizationCustomerIdsResolver,
 } from './services/account-identity.js';
 import { MfaEnrolmentCountService } from './services/mfa-enrolment-count.service.js';
+import { MfaDeactivationGuardService } from './services/mfa-deactivation-guard.service.js';
 import { MfaEnrolmentStateService } from './services/mfa-enrolment-state.service.js';
 import type { SocialIdentityDeps } from './services/social-identity-service.js';
 import { mfaModule, type MfaModuleHandle } from './plugin.js';
@@ -306,6 +308,27 @@ export function registerModule(ctx: ModuleContext): void {
     'mfaEnrolmentCountPort',
     ctx
       .asFunction(({ emFactory }: MfaCradle) => new MfaEnrolmentCountService(emFactory))
+      .singleton(),
+  );
+
+  /**
+   * Whether switching this module off would withdraw a second factor the
+   * platform requires of administrators. `/platform/modules` asks before an
+   * operator switches `mfa` off and refuses while it is `true`, so the
+   * requirement is turned off as its own change first. Read while the module
+   * is still on, through an open gate, like the count above.
+   */
+  ctx.di.providePort<MfaDeactivationGuardPort>(
+    'mfaDeactivationGuardPort',
+    ctx
+      .asFunction(
+        () =>
+          // Deferred for the reason the module's own settings reader above is.
+          new MfaDeactivationGuardService({
+            get: (code, salesChannelId, schema) =>
+              ctx.cradle<MfaCradle>().settingsReadPort.get(code, salesChannelId, schema),
+          }),
+      )
       .singleton(),
   );
 

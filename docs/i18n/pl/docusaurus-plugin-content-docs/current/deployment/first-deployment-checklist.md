@@ -392,7 +392,9 @@ dla administratorów, zarejestruj drugi składnik dla każdego administratora i 
 2FA — wymuszenie przed rejestracją zablokuje wszystkich.
 
 **Weryfikacja.** Drugie logowanie prosi o kod, a konto bez zarejestrowanego drugiego składnika jest
-odrzucane po włączeniu wymuszenia.
+odrzucane po włączeniu wymuszenia. Dopóki wymuszenie jest włączone, `/platform/modules` odmawia
+też wyłączenia modułu `mfa` (`409 MFA_DEACTIVATION_BLOCKED`): jeśli moduł naprawdę ma zostać
+wyłączony, najpierw wyłącz wymuszenie.
 
 ---
 
