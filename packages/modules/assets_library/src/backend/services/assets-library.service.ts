@@ -2,16 +2,21 @@
 // patch / setVisibility / resolveUrl. US2 will fill softDelete / restore /
 // move. US3 brings cloud adapters online.
 
-import { LockMode } from '@mikro-orm/core';
+import { LockMode, UniqueConstraintViolationException } from '@mikro-orm/core';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   ERROR_CODES,
+  validateAssetPermalink,
   type AdminUserReadPort,
   type AssetDetail,
   type AssetPreviousVersion,
   type AssetSummary,
 } from '@endora-commerce/contracts';
 import { Asset } from '../entities/asset.entity.js';
+import {
+  AssetPermalinkRelease,
+  type AssetPermalinkReleaseReason,
+} from '../entities/asset-permalink-release.entity.js';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { AdapterRegistry } from './storage/adapter-registry.js';
 import type { AssetReferenceRegistry } from './reference-registry.js';
@@ -121,6 +126,155 @@ export class AssetsLibraryService {
     return this.detail(row);
   }
 
+  /**
+   * Set the asset's permalink (specs/156-asset-stable-url/ FR-014 – FR-019,
+   * research R-22). Runs Command `asset.permalink_set`; the same value again is
+   * a no-op without an audit row. A name another asset holds is refused; a name
+   * a **different** asset held last needs `confirmReuse`, and the audit row
+   * records which asset that was.
+   */
+  async setPermalink(
+    assetId: string,
+    input: { permalink: string; confirmReuse?: boolean },
+  ): Promise<AssetDetail> {
+    const verdict = validateAssetPermalink(input.permalink);
+    if (!verdict.ok) {
+      throw new HttpError(400, ERROR_CODES.ASSET_PERMALINK_INVALID, 'The permalink is not valid.', {
+        code: verdict.reason,
+      });
+    }
+    const permalink = input.permalink;
+    const lower = permalink.toLowerCase();
+    const commandBus = this.#commandBus('setPermalink');
+    let row: Asset;
+    try {
+      row = await commandBus.run<Asset>({
+        action: 'asset.permalink_set',
+        objectType: 'asset',
+        objectId: assetId,
+        run: async ({ em }) => {
+          const a = await em.findOne(Asset, { id: assetId }, { lockMode: LockMode.PESSIMISTIC_WRITE });
+          if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+          const old = a.permalink ?? null;
+          if (old === permalink) {
+            return { result: a, before: null, after: null, skipAudit: true };
+          }
+          await this.#refuseTaken(em, assetId, permalink, lower);
+
+          const release = await em.findOne(AssetPermalinkRelease, { permalinkLower: lower });
+          let reusedPermalink:
+            | { previousAssetId: string; releasedAt: string; reason: AssetPermalinkReleaseReason }
+            | null = null;
+          if (release && release.assetId !== assetId) {
+            if (!input.confirmReuse) {
+              throw new HttpError(
+                409,
+                ERROR_CODES.ASSET_PERMALINK_PREVIOUSLY_USED,
+                `The permalink "${permalink}" was used by another file before.`,
+                { permalink, releasedAt: release.releasedAt.toISOString() },
+              );
+            }
+            reusedPermalink = {
+              previousAssetId: release.assetId,
+              releasedAt: release.releasedAt.toISOString(),
+              reason: release.reason,
+            };
+          }
+          // The name is held again: it is no longer a previously used one.
+          if (release) em.remove(release);
+          if (old !== null && old.toLowerCase() !== lower) {
+            await this.#release(em, old, assetId, 'changed');
+          }
+          a.permalink = permalink;
+          await em.flush();
+          return {
+            result: a,
+            before: { permalink: old },
+            after: { permalink, ...(reusedPermalink ? { reusedPermalink } : {}) },
+          };
+        },
+      });
+    } catch (err) {
+      // Two requests passed the pre-check together: the unique index decides.
+      if (err instanceof UniqueConstraintViolationException) {
+        const holders = await this.deps.emFactory().fork().execute<Array<{ id: string }>>(
+          'select id::text as id from assets where lower(permalink) = ? and id <> ? limit 1',
+          [lower, assetId],
+        );
+        throw new HttpError(
+          409,
+          ERROR_CODES.ASSET_PERMALINK_TAKEN,
+          `The permalink "${permalink}" is already used by another asset.`,
+          { permalink, assetId: holders[0]?.id ?? null },
+        );
+      }
+      throw err;
+    }
+    return this.detail(row);
+  }
+
+  /** Remove the asset's permalink — Command `asset.permalink_remove`; none set is a no-op. */
+  async removePermalink(assetId: string): Promise<AssetDetail> {
+    const commandBus = this.#commandBus('removePermalink');
+    const row = await commandBus.run<Asset>({
+      action: 'asset.permalink_remove',
+      objectType: 'asset',
+      objectId: assetId,
+      run: async ({ em }) => {
+        const a = await em.findOne(Asset, { id: assetId }, { lockMode: LockMode.PESSIMISTIC_WRITE });
+        if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+        const old = a.permalink ?? null;
+        if (old === null) return { result: a, before: null, after: null, skipAudit: true };
+        await this.#release(em, old, assetId, 'removed');
+        a.permalink = null;
+        await em.flush();
+        return { result: a, before: { permalink: old }, after: { permalink: null } };
+      },
+    });
+    return this.detail(row);
+  }
+
+  /** Refuses a name another asset holds, compared case-insensitively. */
+  async #refuseTaken(em: EntityManager, assetId: string, permalink: string, lower: string): Promise<void> {
+    const rows = await em.execute<Array<{ id: string }>>(
+      'select id::text as id from assets where lower(permalink) = ? and id <> ? limit 1',
+      [lower, assetId],
+    );
+    const holder = rows[0];
+    if (holder) {
+      throw new HttpError(
+        409,
+        ERROR_CODES.ASSET_PERMALINK_TAKEN,
+        `The permalink "${permalink}" is already used by another asset.`,
+        { permalink, assetId: holder.id },
+      );
+    }
+  }
+
+  /** Records a name that stopped being held, naming its last holder (research R-22). */
+  async #release(
+    em: EntityManager,
+    permalink: string,
+    assetId: string,
+    reason: AssetPermalinkReleaseReason,
+  ): Promise<void> {
+    await em.upsert(AssetPermalinkRelease, {
+      permalinkLower: permalink.toLowerCase(),
+      permalink,
+      assetId,
+      releasedAt: new Date(),
+      reason,
+    });
+  }
+
+  #commandBus(method: string): NonNullable<AssetsLibraryServiceDeps['commandBus']> {
+    const commandBus = this.deps.commandBus;
+    if (!commandBus) {
+      throw new Error(`AssetsLibraryService.${method}: no command bus is wired into this composition.`);
+    }
+    return commandBus;
+  }
+
   #swapDeps(method: string): AssetReplaceDeps {
     const commandBus = this.deps.commandBus;
     if (!commandBus) {
@@ -182,6 +336,7 @@ export class AssetsLibraryService {
         $or: [
           { filename: { $ilike: `%${query.q}%` } },
           { label: { $ilike: `%${query.q}%` } },
+          { permalink: { $ilike: `%${query.q}%` } },
         ],
       });
     }

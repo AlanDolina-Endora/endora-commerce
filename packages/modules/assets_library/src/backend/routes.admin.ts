@@ -9,6 +9,8 @@
 //   PATCH  /api/v1/admin/assets/:id         — edit metadata + visibility flip
 //   POST   /api/v1/admin/assets/:id/replace — replace the file in place (feature 156)
 //   POST   /api/v1/admin/assets/:id/previous-version/restore — swap the previous version back (feature 156)
+//   PUT    /api/v1/admin/assets/:id/permalink — set the permalink (feature 156)
+//   DELETE /api/v1/admin/assets/:id/permalink — remove it (feature 156)
 //
 // Folder CRUD, soft-delete, restore, bulk move, and storage self-check
 // land in subsequent user stories.
@@ -25,6 +27,7 @@ import {
   moveAssetRequestSchema,
   moveManyAssetsRequestSchema,
   restorePreviousAssetVersionRequestSchema,
+  setAssetPermalinkRequestSchema,
 } from '@endora-commerce/contracts';
 
 import { HttpError } from '@endora-commerce/platform/http';
@@ -177,6 +180,31 @@ export async function registerAssetsLibraryAdminRoutes(
         expectedContentVersion: body.expectedContentVersion,
         expectedPreviousContentVersion: body.expectedPreviousContentVersion,
       });
+      return { data: detail };
+    },
+  );
+
+  // — PUT / DELETE /assets/:id/permalink — feature 156 ------------------------
+  // The shape is judged by `validateAssetPermalink` in the service, so the body
+  // schema only bounds it (specs/156-asset-stable-url/contracts/admin-api.md §2).
+  app.put<{ Params: { id: string } }>(
+    '/api/v1/admin/assets/:id/permalink',
+    { preHandler: requireAdmin('assets.write') },
+    async (req) => {
+      const body = setAssetPermalinkRequestSchema.parse(req.body);
+      const detail = await service.setPermalink(req.params.id, {
+        permalink: body.permalink,
+        ...(body.confirmReuse !== undefined ? { confirmReuse: body.confirmReuse } : {}),
+      });
+      return { data: detail };
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    '/api/v1/admin/assets/:id/permalink',
+    { preHandler: requireAdmin('assets.write') },
+    async (req) => {
+      const detail = await service.removePermalink(req.params.id);
       return { data: detail };
     },
   );
