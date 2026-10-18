@@ -45,6 +45,17 @@ export interface AdminRoutesDeps {
   requireAdmin: RequireAdminFactory;
 }
 
+/**
+ * One file per request (`limits.files: 1` on the multipart parser). A second
+ * file part makes the part iterator throw `FST_FILES_LIMIT` **after** the first
+ * file was already stored, so refusing then would report a write that happened
+ * as one that did not. Once the first file is through, the extra part is
+ * ignored and the answer reports what the first one did (block review I).
+ */
+function isExtraFilePart(err: unknown): boolean {
+  return (err as { code?: unknown } | null)?.code === 'FST_FILES_LIMIT';
+}
+
 export async function registerAssetsLibraryAdminRoutes(
   app: FastifyInstance,
   deps: AdminRoutesDeps,
@@ -71,36 +82,38 @@ export async function registerAssetsLibraryAdminRoutes(
       let visibility: 'public' | 'private' = 'public';
       let asset: Awaited<ReturnType<typeof service.upload>> | null = null;
 
-      for await (const part of req.parts()) {
-        if (part.type === 'file') {
-          if (asset) {
-            throw new HttpError(
-              400,
-              ERROR_CODES.ASSET_UPLOAD_NO_FILE,
-              'Only one file per request is allowed.',
-            );
+      try {
+        for await (const part of req.parts()) {
+          if (part.type === 'file') {
+            if (asset) {
+              // A later file part is ignored (see `isExtraFilePart`); drain it.
+              part.file.resume();
+              continue;
+            }
+            asset = await service.upload({
+              filename: part.filename ?? 'unknown',
+              declaredMime: part.mimetype ?? 'application/octet-stream',
+              stream: part.file,
+              // @fastify/multipart does not provide a guaranteed size.
+              declaredSize: 0,
+              folderId,
+              label,
+              visibility,
+            });
+          } else if (part.fieldname === 'folderId') {
+            folderId = (part.value as string | null) || null;
+          } else if (part.fieldname === 'label') {
+            label = (part.value as string | null) || null;
+          } else if (part.fieldname === 'visibility') {
+            const v = part.value as string;
+            if (v !== 'public' && v !== 'private') {
+              throw new HttpError(400, ERROR_CODES.VALIDATION_FAILED, `visibility must be public|private; got "${v}".`);
+            }
+            visibility = v;
           }
-          asset = await service.upload({
-            filename: part.filename ?? 'unknown',
-            declaredMime: part.mimetype ?? 'application/octet-stream',
-            stream: part.file,
-            // @fastify/multipart does not provide a guaranteed size.
-            declaredSize: 0,
-            folderId,
-            label,
-            visibility,
-          });
-        } else if (part.fieldname === 'folderId') {
-          folderId = (part.value as string | null) || null;
-        } else if (part.fieldname === 'label') {
-          label = (part.value as string | null) || null;
-        } else if (part.fieldname === 'visibility') {
-          const v = part.value as string;
-          if (v !== 'public' && v !== 'private') {
-            throw new HttpError(400, ERROR_CODES.VALIDATION_FAILED, `visibility must be public|private; got "${v}".`);
-          }
-          visibility = v;
         }
+      } catch (err) {
+        if (!(asset && isExtraFilePart(err))) throw err;
       }
 
       if (!asset) {
@@ -132,28 +145,30 @@ export async function registerAssetsLibraryAdminRoutes(
       }
       let expectedContentVersion: string | undefined;
       let detail: Awaited<ReturnType<typeof service.replace>> | null = null;
-      for await (const part of req.parts()) {
-        if (part.type === 'file') {
-          if (detail) {
-            throw new HttpError(
-              400,
-              ERROR_CODES.ASSET_UPLOAD_NO_FILE,
-              'Only one file per request is allowed.',
-            );
+      try {
+        for await (const part of req.parts()) {
+          if (part.type === 'file') {
+            if (detail) {
+              // A later file part is ignored (see `isExtraFilePart`); drain it.
+              part.file.resume();
+              continue;
+            }
+            detail = await service.replace({
+              assetId: req.params.id,
+              filename: part.filename ?? 'unknown',
+              declaredMime: part.mimetype ?? 'application/octet-stream',
+              stream: part.file,
+              // @fastify/multipart does not provide a guaranteed size.
+              declaredSize: 0,
+              ...(expectedContentVersion !== undefined ? { expectedContentVersion } : {}),
+            });
+          } else if (part.fieldname === 'expectedContentVersion') {
+            const value = String(part.value ?? '').trim();
+            expectedContentVersion = value.length > 0 ? value : undefined;
           }
-          detail = await service.replace({
-            assetId: req.params.id,
-            filename: part.filename ?? 'unknown',
-            declaredMime: part.mimetype ?? 'application/octet-stream',
-            stream: part.file,
-            // @fastify/multipart does not provide a guaranteed size.
-            declaredSize: 0,
-            ...(expectedContentVersion !== undefined ? { expectedContentVersion } : {}),
-          });
-        } else if (part.fieldname === 'expectedContentVersion') {
-          const value = String(part.value ?? '').trim();
-          expectedContentVersion = value.length > 0 ? value : undefined;
         }
+      } catch (err) {
+        if (!(detail && isExtraFilePart(err))) throw err;
       }
       if (!detail) {
         throw new HttpError(

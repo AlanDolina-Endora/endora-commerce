@@ -8,7 +8,7 @@ import {
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
 import { Asset } from '../../helpers/package-entities.js';
-import { overrideAssetSetting, useTemporaryAssetStore } from '../../helpers/crm-attachment-upload.js';
+import { multipartBody, overrideAssetSetting, useTemporaryAssetStore } from '../../helpers/crm-attachment-upload.js';
 import {
   ADMIN,
   DOCX_MIME,
@@ -377,5 +377,47 @@ describe('POST /api/v1/admin/assets/:id/replace (feature 156)', () => {
     });
     expect(res.statusCode).toBe(404);
     expect((res.json() as ErrorBody).error.code).toBe('ASSET_NOT_FOUND');
+  });
+
+  // Block review I — one file per request: a second file part is ignored, and
+  // the answer reports what the first one did (the upload route the same).
+  it('answers 200 with the replace when a second file part follows, ignoring it', async () => {
+    const asset = await upload(`${runName()}.pdf`, 'application/pdf', pdfBytes('two-parts'));
+    const first = `${runName()}-first.pdf`;
+    const { body, contentType } = multipartBody([
+      { name: 'file', filename: first, mime: 'application/pdf', value: pdfBytes('first') },
+      { name: 'file', filename: `${runName()}-second.pdf`, mime: 'application/pdf', value: pdfBytes('second') },
+    ]);
+    const res = await h.app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/assets/${asset.id}/replace`,
+      headers: { 'content-type': contentType },
+      cookies: ADMIN,
+      payload: body,
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect((res.json() as { data: AssetBody }).data.filename).toBe(first);
+    expect((await detail(asset.id)).filename).toBe(first);
+  });
+
+  it('answers 201 with one asset when an upload carries a second file part, ignoring it', async () => {
+    const first = `${runName()}-first.pdf`;
+    const second = `${runName()}-second.pdf`;
+    const { body, contentType } = multipartBody([
+      { name: 'file', filename: first, mime: 'application/pdf', value: pdfBytes('first') },
+      { name: 'file', filename: second, mime: 'application/pdf', value: pdfBytes('second') },
+    ]);
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/assets',
+      headers: { 'content-type': contentType },
+      cookies: ADMIN,
+      payload: body,
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    const id = (res.json() as { data: AssetBody }).data.id;
+    created.push(id);
+    expect((res.json() as { data: AssetBody }).data.filename).toBe(first);
+    expect(await h.em().fork().count(Asset, { filename: second })).toBe(0);
   });
 });
