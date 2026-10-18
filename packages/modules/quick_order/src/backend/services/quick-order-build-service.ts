@@ -151,7 +151,11 @@ export class QuickOrderBuildService {
     const rfq =
       options.actor === 'operator'
         ? await this.rfq.createForCustomer(rfqCtx, request, { minimums: 'warn' })
-        : await this.rfq.createForCustomer(rfqCtx, request);
+        : await this.rfq.createForCustomer(
+            rfqCtx,
+            request,
+            options.language ? { language: options.language } : undefined,
+          );
     return {
       target: 'quote_request',
       quoteRequestId: rfq.id,

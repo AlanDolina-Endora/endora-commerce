@@ -154,7 +154,7 @@ export async function registerQuoteRequestsCustomerRoutes(
       const ctx = await resolveCustomerContext(request);
       await guardCanTransact(ctx.organizationId);
       const body = createQuoteRequestSchema.parse(request.body);
-      const rfq = await rfqService.createForCustomer(ctx, body);
+      const rfq = await rfqService.createForCustomer(ctx, body, { language: await request.responseLanguage() });
       setEtag(reply, rfq.version);
       reply.code(201);
       return { data: rfq };
@@ -178,7 +178,9 @@ export async function registerQuoteRequestsCustomerRoutes(
       const ctx = await resolveCustomerContext(request);
       const body = patchQuoteRequestSchema.parse(request.body);
       const expectedVersion = parseIfMatch(request);
-      const rfq = await rfqService.patchDraft(request.params.id, ctx, body, expectedVersion);
+      const rfq = await rfqService.patchDraft(request.params.id, ctx, body, expectedVersion, {
+        language: await request.responseLanguage(),
+      });
       setEtag(reply, rfq.version);
       return { data: rfq };
     },
@@ -244,7 +246,9 @@ export async function registerQuoteRequestsCustomerRoutes(
     async (request, reply) => {
       const ctx = await resolveCustomerContext(request);
       const body = resubmitQuoteRequestSchema.parse(request.body ?? {});
-      const rfq = await rfqService.resubmit(request.params.id, ctx, body);
+      const rfq = await rfqService.resubmit(request.params.id, ctx, body, {
+        language: await request.responseLanguage(),
+      });
       setEtag(reply, rfq.version);
       reply.code(201);
       return { data: rfq };
