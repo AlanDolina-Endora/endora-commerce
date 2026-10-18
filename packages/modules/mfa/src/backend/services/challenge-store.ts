@@ -11,7 +11,8 @@ import { randomBytes } from 'crypto';
  *     taken from it are counted beside it (`mfa:chal-attempts:<id>`);
  *   - setup ticket (`mfa:setup:<id>`) — enforced-but-unenrolled subject, may
  *     only call the enrolment endpoints until activation;
- *   - OAuth transaction (`mfa:oauth:<state>`) — PKCE verifier + nonce + next.
+ *   - OAuth transaction (`mfa:oauth:<state>`) — PKCE verifier + nonce + next,
+ *     and the digest of the cookie binding it to the browser that started it.
  */
 const CHAL_PREFIX = 'mfa:chal:';
 const ATTEMPTS_PREFIX = 'mfa:chal-attempts:';
@@ -49,6 +50,12 @@ export interface OAuthTransaction {
   pkceVerifier: string;
   nonce: string;
   next: string;
+  /**
+   * SHA-256 (hex) of the browser-binding cookie `start` set. The callback
+   * completes only for a browser presenting the cookie this digest was taken
+   * of; the cookie value itself is never stored.
+   */
+  browserBinding: string;
 }
 
 /**

@@ -7,6 +7,7 @@ import {
 } from '../../helpers/test-server.js';
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import { AuditLogEntry } from '@endora-commerce/platform/kernel';
+import { oauthBinding } from '../../helpers/oauth-binding.js';
 
 /**
  * Feature 042 — audit coverage (FR-031). Exercises the security-relevant MFA
@@ -122,6 +123,8 @@ describe('MFA — audit coverage', () => {
     await h.app.inject({
       method: 'GET',
       url: `/api/v1/auth/customer/oauth/google/callback?code=${encodeURIComponent('audit-social@example.com')}&state=${encodeURIComponent(state)}`,
+      // The browser that started the transaction presents its binding cookie.
+      cookies: oauthBinding(start),
     });
 
     const recorded = await actions();
@@ -161,6 +164,8 @@ describe('MFA — audit coverage', () => {
     await h.app.inject({
       method: 'GET',
       url: `/api/v1/auth/customer/oauth/google/callback?code=${encodeURIComponent('stub-customer@example.com')}&state=${encodeURIComponent(state)}`,
+      // The browser that started the transaction presents its binding cookie.
+      cookies: oauthBinding(start),
     });
 
     const recorded = await actions();

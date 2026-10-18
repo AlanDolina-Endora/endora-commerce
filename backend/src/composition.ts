@@ -809,14 +809,18 @@ async function contributeReferenceDeployment(ctx: ComposedAppContext): Promise<v
   // gate stays live. `resolveAdminByEmail` stays a root's for now — it is the
   // same shape one module over, in `admin_users`, which has no port for it yet.
   const customerSocialLogin = (): {
-    resolveByEmail(email: string): Promise<{ id: string } | null>;
-    autoCreate(email: string): Promise<{ id: string } | null>;
+    resolveByEmail(
+      email: string,
+    ): Promise<{ id: string; organizationId: string | null; blocked: boolean } | null>;
+    autoCreate(email: string): Promise<{ id: string; organizationId: string | null } | null>;
   } =>
     (
       container.cradle as never as {
         customerSocialLoginPort: {
-          resolveByEmail(email: string): Promise<{ id: string } | null>;
-          autoCreate(email: string): Promise<{ id: string } | null>;
+          resolveByEmail(
+            email: string,
+          ): Promise<{ id: string; organizationId: string | null; blocked: boolean } | null>;
+          autoCreate(email: string): Promise<{ id: string; organizationId: string | null } | null>;
         };
       }
     ).customerSocialLoginPort;

@@ -7,6 +7,7 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
+import { oauthBinding } from '../../helpers/oauth-binding.js';
 
 /**
  * An operator created with a mixed-case e-mail must be able to sign in with the
@@ -147,6 +148,8 @@ describe('admin_users — a mixed-case e-mail can sign in', () => {
     const callback = await h.app.inject({
       method: 'GET',
       url: `/api/v1/auth/admin/oauth/microsoft/callback?code=${encodeURIComponent(claimed)}&state=${encodeURIComponent(state)}`,
+      // The browser that started the transaction presents its binding cookie.
+      cookies: oauthBinding(start),
     });
     expect(callback.statusCode).toBe(302);
     expect(

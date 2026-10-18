@@ -1175,14 +1175,18 @@ export async function setupBackendServer(
   // T143a — `customer_accounts`' social-login port, read lazily (see the note
   // on `mfaSocialAccountResolvers` below).
   const customerSocialLogin = (): {
-    resolveByEmail(email: string): Promise<{ id: string } | null>;
-    autoCreate(email: string): Promise<{ id: string } | null>;
+    resolveByEmail(
+      email: string,
+    ): Promise<{ id: string; organizationId: string | null; blocked: boolean } | null>;
+    autoCreate(email: string): Promise<{ id: string; organizationId: string | null } | null>;
   } =>
     (
       container.cradle as never as {
         customerSocialLoginPort: {
-          resolveByEmail(email: string): Promise<{ id: string } | null>;
-          autoCreate(email: string): Promise<{ id: string } | null>;
+          resolveByEmail(
+            email: string,
+          ): Promise<{ id: string; organizationId: string | null; blocked: boolean } | null>;
+          autoCreate(email: string): Promise<{ id: string; organizationId: string | null } | null>;
         };
       }
     ).customerSocialLoginPort;

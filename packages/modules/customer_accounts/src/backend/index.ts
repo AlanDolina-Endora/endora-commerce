@@ -94,7 +94,8 @@ import type { TwoFactorEnrolmentReader } from './services/two-factor-enrolments.
  *
  * `customerOrgResolver` moves here from `HOST_REGISTERED_PORTS`, where a
  * composition root stood in for this module. `auth` reads it in its request
- * hook to attach the organization to a customer session; the lookup is a plain
+ * hook to attach the organization to a customer session, and to refuse a
+ * session whose account is blocked or deleted; the lookup is a plain
  * read of this module's own table, so it belongs to this module and the root's
  * entry goes away.
  *
@@ -430,14 +431,22 @@ export function registerModule(ctx: ModuleContext): void {
     ctx
       .asFunction(
         ({ emFactory }: CustomerAccountsCradle) =>
-          async (customerAccountId: string): Promise<string | null> => {
+          async (
+            customerAccountId: string,
+          ): Promise<{ organizationId: string | null; active: boolean } | null> => {
             // Runs in the auth hook, before a tenant context exists, so the
             // read is system-scoped — identity resolution precedes tenancy.
             return withSystemScope('auth: resolve customer org', async () => {
               const customer = await emFactory().findOne(CustomerAccount, {
                 id: customerAccountId,
               });
-              return customer?.organizationId ?? null;
+              if (!customer) return null;
+              // `active` is what lets `auth` refuse a session that outlived a
+              // block or a deletion, out of the read it makes anyway.
+              return {
+                organizationId: customer.organizationId ?? null,
+                active: customer.blockedAt == null && customer.deletedAt == null,
+              };
             });
           },
       )
@@ -456,6 +465,10 @@ export function registerModule(ctx: ModuleContext): void {
    * `SocialIdentityService` reads as `registration_required`, so the policy
    * lands on the caller as a redirect to the login screen and not as a 500.
    *
+   * Both answers carry the account's organisation, which the second-factor
+   * decision after a federated sign-in resolves an organisation's enforcement
+   * from, and `resolveByEmail` says whether the account is blocked.
+   *
    * The setting is `customers.allow_registration_without_organization`, and it
    * is named here even though `customers` owns it. That module already depends
    * on this one, so a port pointing the other way would close a cycle; the
@@ -466,7 +479,11 @@ export function registerModule(ctx: ModuleContext): void {
     'customerSocialLoginPort',
     ctx
       .asFunction(({ emFactory, auditLogService }: CustomerAccountsCradle) => ({
-        async resolveByEmail(email: string): Promise<{ id: string } | null> {
+        async resolveByEmail(email: string): Promise<{
+          id: string;
+          organizationId: string | null;
+          blocked: boolean;
+        } | null> {
           return withSystemScope('mfa: resolve customer by email', async () => {
             // The address arrives from the provider's claim, in whatever case
             // that provider chose to send it; the row is folded, so the compare
@@ -477,11 +494,23 @@ export function registerModule(ctx: ModuleContext): void {
               email: normalizeEmailAddress(email),
               deletedAt: null,
             });
-            return customer ? { id: customer.id } : null;
+            // `blocked` is answered rather than filtered: a blocked account
+            // is still the account this address belongs to, so the caller
+            // refuses the sign-in — as the password sign-in does — instead of
+            // creating a second account for the same address.
+            return customer
+              ? {
+                  id: customer.id,
+                  organizationId: customer.organizationId ?? null,
+                  blocked: customer.blockedAt != null,
+                }
+              : null;
           });
         },
 
-        async autoCreate(email: string): Promise<{ id: string } | null> {
+        async autoCreate(
+          email: string,
+        ): Promise<{ id: string; organizationId: string | null } | null> {
           const cradle = ctx.cradle<CustomerAccountsCradle>();
           // The channel a global-scope read resolves against. Both roots used
           // to pass the literal `'default'` here, which is **not** a channel
@@ -572,7 +601,7 @@ export function registerModule(ctx: ModuleContext): void {
                 stateAfter: { email: account.email },
               });
               await em.flush();
-              return { id: account.id };
+              return { id: account.id, organizationId: organization.id };
             }),
           );
         },

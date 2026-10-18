@@ -171,9 +171,12 @@ by the budget of twenty that the account has for everybody else. So:
   cookies its devices already hold**. Resetting two-factor authentication,
   enrolling in it or switching it off does not revoke them. To make every
   device of an account unknown, change its password.
-- **Only a password sign-in sets the cookie.** An account that signs in only
-  through Google or Microsoft never receives one, so its devices are never
-  known and are always held to the account-wide count.
+- **Only a sign-in that verified a password or a second factor sets the
+  cookie.** An account that signs in only through Google or Microsoft, with no
+  second factor enrolled, never receives one, so its devices are never known
+  and are always held to the account-wide count. A Google or Microsoft sign-in
+  that went on to the two-step verification code sets it when the code is
+  accepted, as a password sign-in does.
 - **The protection covers returning devices only.** Where every administrator
   signs in from a device the account has never been used on — a public demo
   with shared credentials is the usual case — nobody holds the cookie, and

@@ -8,9 +8,17 @@
 // job, exactly as before.
 import type {} from '@fastify/cookie';
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { randomBytes } from 'crypto';
-import { SESSION_COOKIE_NAME, ADMIN_SESSION_COOKIE_NAME } from '@endora-commerce/contracts';
-import type { AuthSessionPort, FederatedSignInOptionsResponse } from '@endora-commerce/contracts';
+import { createHash, randomBytes, timingSafeEqual } from 'crypto';
+import {
+  SESSION_COOKIE_NAME,
+  ADMIN_SESSION_COOKIE_NAME,
+  MFA_CHALLENGE_COOKIE_NAME,
+} from '@endora-commerce/contracts';
+import type {
+  AuthSessionPort,
+  FederatedSignInOptionsResponse,
+  MfaLoginPort,
+} from '@endora-commerce/contracts';
 import { currentSalesChannel } from '@endora-commerce/platform/kernel';
 import type { ChallengeStore } from './services/challenge-store.js';
 import type { MfaPolicyResolver } from './services/mfa-policy-resolver.js';
@@ -24,14 +32,34 @@ import type {
  * Federated sign-in routes (feature 042, US4 customer / US5 admin). Per surface
  * + provider: a `start` endpoint that redirects to the IdP, and a `callback`
  * that validates the transaction, exchanges the code, resolves the account, and
- * issues a session. A social-authenticated session is granted directly — no
- * additional TOTP step (R10).
+ * then takes the **same second-factor decision the password sign-in takes**.
+ *
+ * Research note R10 of feature 042 decided the opposite — a provider sign-in
+ * issued a session directly, with no TOTP step, to keep that feature's scope
+ * bounded and avoid prompting twice; the note itself left the decision open to
+ * revisit. It is revisited here: an account holder who enrolled a second factor,
+ * or for whom the platform's settings or their organisation enforce one, expects
+ * it to apply to every way into the account, and the provider's own sign-in
+ * policy is not something this platform can see or require. So a subject with
+ * an active enrolment is handed to the second-step screen, and one under an
+ * enforced policy without an enrolment is sent back to the password sign-in,
+ * which owns the forced-setup flow. Only a subject the decision answers
+ * `proceed` for is signed in here.
+ *
+ * The transaction is also bound to the browser that began it: `start` sets a
+ * short-lived httpOnly cookie, scoped to this surface's OAuth path, whose digest
+ * is stored with the transaction; `callback` completes only when the same
+ * cookie comes back. `SameSite=Lax` is what lets it travel on the provider's
+ * redirect back here — a top-level `GET` navigation — while staying off every
+ * cross-site sub-request.
  */
 export interface MfaOAuthDeps {
   oauthProvider: OAuthProviderPort;
   challengeStore: ChallengeStore;
   policyResolver: MfaPolicyResolver;
   socialIdentityService: SocialIdentityService;
+  /** The second-factor decision the password sign-ins take after the first factor. */
+  loginService: Pick<MfaLoginPort, 'beginLogin'>;
   sessionService: AuthSessionPort;
   /** Public base URL of the backend (for the provider redirect_uri). */
   backendBaseUrl: string;
@@ -40,6 +68,53 @@ export interface MfaOAuthDeps {
 }
 
 type Surface = 'customer' | 'admin';
+
+/**
+ * The cookie binding an OAuth transaction to the browser that started it. One
+ * name for both surfaces: each is scoped to its own surface's OAuth path, so a
+ * request only ever carries the one for the surface it is addressed to.
+ */
+export const OAUTH_BINDING_COOKIE_NAME = 'b2b_oauth_binding';
+/** Seconds; the transaction it binds lives exactly as long. */
+const OAUTH_BINDING_MAX_AGE_SECONDS = 10 * 60;
+/** Seconds; the pending second-step challenge lives exactly as long. */
+const MFA_CHALLENGE_MAX_AGE_SECONDS = 5 * 60;
+
+/** The sentence the password sign-in answers a blocked customer account with. */
+const ACCOUNT_BLOCKED_MESSAGE = 'This account has been blocked. Please contact support.';
+
+/**
+ * An enforced second factor that is not set up yet. The administrator's
+ * sentence is the one the Admin UI shows after a password step; a customer is
+ * pointed at the password sign-in, which is where the storefront's forced setup
+ * begins.
+ */
+const SETUP_REQUIRED_MESSAGE: Record<Surface, string> = {
+  customer:
+    'Two-factor authentication is required for your account. Sign in with your email and password to set it up.',
+  admin:
+    'Two-factor authentication is required for your account. Please contact a platform administrator to finish setup.',
+};
+
+function oauthCookiePath(surface: Surface): string {
+  return `/api/v1/auth/${surface}/oauth`;
+}
+
+function digest(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+/** Whether the request presents the cookie whose digest the transaction holds. */
+function presentsBinding(
+  request: { cookies?: Record<string, string | undefined> },
+  expectedDigest: string | undefined,
+): boolean {
+  const presented = request.cookies?.[OAUTH_BINDING_COOKIE_NAME];
+  if (!presented || !expectedDigest) return false;
+  const actual = Buffer.from(digest(presented), 'hex');
+  const expected = Buffer.from(expectedDigest, 'hex');
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
 
 export async function registerMfaOAuthRoutes(
   app: FastifyInstance,
@@ -131,6 +206,7 @@ function registerStart(app: FastifyInstance, deps: MfaOAuthDeps, surface: Surfac
       const next = sanitiseNext(request.query.next);
       const codeVerifier = randomBytes(32).toString('base64url');
       const nonce = randomBytes(16).toString('base64url');
+      const binding = randomBytes(32).toString('base64url');
       const state = await deps.challengeStore.issueOAuthTransaction({
         surface,
         provider,
@@ -138,6 +214,15 @@ function registerStart(app: FastifyInstance, deps: MfaOAuthDeps, surface: Surfac
         pkceVerifier: codeVerifier,
         nonce,
         next,
+        browserBinding: digest(binding),
+      });
+      reply.setCookie(OAUTH_BINDING_COOKIE_NAME, binding, {
+        path: oauthCookiePath(surface),
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env['NODE_ENV'] === 'production',
+        maxAge: OAUTH_BINDING_MAX_AGE_SECONDS,
+        signed: false,
       });
       const redirectUri = `${deps.backendBaseUrl}/api/v1/auth/${surface}/oauth/${provider}/callback`;
       const url = await deps.oauthProvider.buildAuthorizationUrl(provider, {
@@ -158,11 +243,21 @@ function registerCallback(app: FastifyInstance, deps: MfaOAuthDeps, surface: Sur
   }>(`/api/v1/auth/${surface}/oauth/:provider/callback`, async (request, reply) => {
     const provider = parseProvider(request.params.provider);
     const { code, state, error } = request.query;
+    // The binding is single-use whatever the outcome: a later attempt starts
+    // again and gets a cookie of its own.
+    reply.clearCookie(OAUTH_BINDING_COOKIE_NAME, { path: oauthCookiePath(surface) });
     if (!provider || error || !code || !state) {
       return reply.redirect(loginRedirect(deps, surface, 'Sign-in was cancelled or failed.'));
     }
     const tx = await deps.challengeStore.getOAuthTransaction(state);
-    if (!tx || tx.surface !== surface || tx.provider !== provider) {
+    // A callback from a browser that did not start this transaction is refused
+    // without consuming it, so it cannot use up the attempt of the one that did.
+    if (
+      !tx ||
+      tx.surface !== surface ||
+      tx.provider !== provider ||
+      !presentsBinding(request, tx.browserBinding)
+    ) {
       return reply.redirect(loginRedirect(deps, surface, 'This sign-in attempt has expired.'));
     }
     await deps.challengeStore.consumeOAuthTransaction(state);
@@ -192,8 +287,48 @@ function registerCallback(app: FastifyInstance, deps: MfaOAuthDeps, surface: Sur
           ? 'Your provider email is not verified.'
           : result.reason === 'no_account'
             ? 'No account matches this provider. Please contact an administrator.'
-            : 'No account found. Please create an account first.';
+            : result.reason === 'blocked'
+              ? ACCOUNT_BLOCKED_MESSAGE
+              : 'No account found. Please create an account first.';
       return reply.redirect(loginRedirect(deps, surface, message));
+    }
+
+    // The second factor, decided exactly as the password sign-ins decide it.
+    // No session is issued here unless the answer is `proceed`.
+    const decision = await deps.loginService.beginLogin(
+      { subjectType: surface, subjectId: result.subjectId },
+      {
+        salesChannelId: surface === 'customer' ? tx.salesChannelId : null,
+        organizationId: surface === 'customer' ? result.organizationId : null,
+      },
+    );
+    if (decision.kind === 'challenge') {
+      if (surface === 'customer') {
+        // The storefront's code screen reads the pending challenge from this
+        // cookie — the one its own password sign-in sets — and it reaches the
+        // storefront exactly as the session cookie below would have.
+        reply.setCookie(MFA_CHALLENGE_COOKIE_NAME, decision.challengeId, {
+          path: '/',
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: process.env['NODE_ENV'] === 'production',
+          maxAge: MFA_CHALLENGE_MAX_AGE_SECONDS,
+          signed: false,
+        });
+        return reply.redirect(
+          `${deps.storefrontBaseUrl}/login/mfa?next=${encodeURIComponent(sanitiseNext(tx.next))}`,
+        );
+      }
+      // The Admin UI holds the pending challenge in memory, as after its own
+      // password step. The fragment is how it gets there: a fragment is never
+      // sent to a server or in a `Referer`, and the Admin UI removes it from
+      // the address bar as soon as it has read it.
+      return reply.redirect(
+        `${deps.adminBaseUrl}/#mfa-challenge=${encodeURIComponent(decision.challengeId)}`,
+      );
+    }
+    if (decision.kind === 'setup') {
+      return reply.redirect(loginRedirect(deps, surface, SETUP_REQUIRED_MESSAGE[surface]));
     }
 
     const session = await deps.sessionService.createSession(
