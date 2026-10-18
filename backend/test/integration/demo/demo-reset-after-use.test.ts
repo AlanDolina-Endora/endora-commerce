@@ -1082,6 +1082,8 @@ describe('demo reset on a demo that has been used (issue #143)', () => {
 let demoChannelsAfterSeed: string[];
 /** Feature 154 — its channel rows once the reset has run. */
 let demoChannelRowsAfterReset: number;
+/** The system-default channel's code after seeding. */
+let demoDefaultChannelCode: string;
   let reservedAfterReset: Record<string, number>;
   let reseeded: DemoRun;
   let orderAfterReseed: string;
@@ -1135,6 +1137,9 @@ let demoChannelRowsAfterReset: number;
     // The demo is used, and so is the instance around it.
     demoOrderId = await buyOnCredit();
     const demoIs = await demoTenant(demoOrderId);
+    demoDefaultChannelCode = (
+      await query<{ code: string }>(`select code from sales_channels where system_default`)
+    )[0]!.code;
     demoChannelsAfterSeed = (
       await query<{ code: string }>(
         `select sc.code from sales_channel_organizations sco
@@ -1468,8 +1473,9 @@ let demoChannelRowsAfterReset: number;
     expect(demoOrderId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  it('assigns the demo organisation the default sales channel when it seeds it (feature 154)', () => {
-    expect(demoChannelsAfterSeed).toEqual(['default']);
+  it('assigns the demo organisation the system-default sales channel when it seeds it (feature 154)', () => {
+    // The demo's retail store adopts the instance's system-default channel.
+    expect(demoChannelsAfterSeed).toEqual([demoDefaultChannelCode]);
   });
 
   describe.each(['orders', 'organizations', 'products'])(

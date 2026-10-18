@@ -14,7 +14,7 @@ import {
   seedCartForStubCustomer,
 } from '../../helpers/seed-commerce.js';
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
-import { TEST_CUSTOMER_ID } from '../../helpers/test-actors.js';
+import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import {
   Cart,
   OrderItem,
@@ -23,6 +23,7 @@ import {
   Warehouse,
   WarehouseChannelAssignment,
 } from '../../helpers/package-entities.js';
+import { addOrganizationChannels } from '../../helpers/sales-channel-access.js';
 
 /**
  * What follows an order's channel now that a storefront order records the
@@ -93,6 +94,8 @@ describe('order placement — what follows the resolved request channel', () => 
     });
     expect(created.statusCode).toBe(201);
     channelB = { id: (created.json() as { id: string }).id, code: 'consequences-b' };
+    // Feature 154 — the buyer shops on channel B as well as on the default.
+    await addOrganizationChannels(h, TEST_ORGANIZATION_ID, ['consequences-b']);
 
     // Channel B ships from a warehouse of its own, and only from it — so the
     // warehouse an order is allocated from says which channel's candidates

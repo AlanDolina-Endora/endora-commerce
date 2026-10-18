@@ -68,7 +68,7 @@ Paths: `PF` = `packages/platform/src`, `SC` = `packages/modules/sales_channels`,
 
 - [X] T023 [PR-A] Shared fixture helper `BT/helpers/sales-channel-access.ts`: `assignOrganizationChannels(app|em, orgId, codes[])` through the membership port, `closeChannel(code)`; update `BT/helpers/{seed-organizations,seed-commerce,seed-crm,viewer-priced-fixture,admin-search-fixtures}.ts` so every Organization they create is bound to the default channel
 - [ ] T024 [PR-A] Run `pnpm --filter backend run test` (complete suite); for every new 403 `SALES_CHANNEL_NOT_PERMITTED`, add the assignment in the fixture (customer on a non-default channel, or an Organization created by `em.create`) — never by opening the rule; list the touched files in the MR. Expected areas (research R-16): `contract|integration/{catalog,cms,megamenu,comparisons,quick_order,search,price_lists,blog,seo,quote_requests,carts,orders,shopping_lists,returns,payments,invoices,customers,pwa,inventory}`
-- [X] T025 [P] [PR-A] `BT/integration/demo/demo-reset-after-use.test.ts`: assert the demo Organization's bridge row is created by seed and removed by reset; `OR/src/backend/demo/seed.ts` binds the default channel after create (FR-019); `packages/demo-composition` steps creating Organizations bind likewise
+- [X] T025 [P] [PR-A] `BT/integration/demo/demo-reset-after-use.test.ts`: assert the demo Organization's bridge row is created by seed and removed by reset; the demo Organization is bound to the default channel by `packages/demo-composition`'s *demo buyer joins the demo organisation* step (a bridge row like the step's channel↔product ones, withdrawn on reset), so the demo writes no lasting audit row — `OR/src/backend/demo/seed.ts` is unchanged
 - [X] T026 [PR-A] Re-record the OpenAPI baseline (new route option has no wire effect; the two 403 responses are added as a shared component) — additions only: the two response components and the new access route
 
 **Checkpoint**: the rule exists, nothing is closed, every Organization in fixtures has the default
@@ -139,8 +139,7 @@ integration test.
 ## Phase 6: User Story 4 — new Organizations get the channel they were created for (P1)
 
 > **PR A interim (2026-10-18):** so that a business or personal Organization created after PR A
-> merges is not locked out before PR B lands, PR A binds both — and the demo Organization (T025) —
-> to the **system-default** channel inside the creating step (`bindToDefaultIfEmpty` with the
+> merges is not locked out before PR B lands, PR A binds both to the **system-default** channel inside the creating step (`bindToDefaultIfEmpty` with the
 > caller's `em`). On a single-channel shop that is the request channel. T054/T056 replace the
 > default with the registering store's channel.
 

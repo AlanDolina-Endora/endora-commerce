@@ -14,8 +14,9 @@ import {
   seedCartForStubCustomer,
 } from '../../helpers/seed-commerce.js';
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
-import { TEST_CUSTOMER_ID } from '../../helpers/test-actors.js';
+import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import { Cart, Order } from '../../helpers/package-entities.js';
+import { addOrganizationChannels } from '../../helpers/sales-channel-access.js';
 
 /**
  * `POST /api/v1/orders` — the order records the channel **the request resolved**.
@@ -82,6 +83,8 @@ describe('POST /api/v1/orders — the order records the resolved request channel
     });
     expect(created.statusCode).toBe(201);
     channelB = { id: (created.json() as { id: string }).id, code: 'request-channel-b' };
+    // Feature 154 — the buyer shops on channel B as well as on the default.
+    await addOrganizationChannels(h, TEST_ORGANIZATION_ID, ['request-channel-b']);
     expect(channelB.id).not.toBe(defaultChannel.id);
 
     // The order's channel has to sell what the order contains: admin order

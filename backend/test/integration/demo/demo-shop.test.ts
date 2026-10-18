@@ -328,6 +328,8 @@ const SEED_DELTA: Readonly<Record<string, number>> = {
   // 4 — the stock spread across the two warehouses
   stock_levels: 406,
   // 5 — the demo buyer joins the demo organisation
+  // (feature 154) and the demo organisation is assigned the retail store's channel
+  sales_channel_organizations: 1,
   customer_accounts: 1,
   // 6 — the product attributes: a `custom_fields` definition per `catalog` row
   custom_field_definitions: 7,

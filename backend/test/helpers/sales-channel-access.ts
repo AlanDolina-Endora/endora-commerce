@@ -63,12 +63,17 @@ export async function bindOrganizationToDefaultChannel(
 }
 
 /**
- * The same bind for a seed that has only an `EntityManager` — the harness's
- * own seeds run before the composition exists. Plain SQL against the
- * Organization bridge, idempotent; nothing is cached yet at that point, so
- * there is no cache to drop.
+ * Bind Organizations a fixture created directly to the stores the harness
+ * seeds: the system-default channel and, when the US1 catalogue was seeded,
+ * its `pl_retail` and `pl_b2b_vip` storefronts — the fixture buyer is a customer of each, as an
+ * upgraded multi-channel shop's buyer is of every store it has ordered on (D4).
+ * A channel a test creates for itself is **not** included: a test that puts a
+ * customer on its own channel assigns it, and a test about a refusal relies on
+ * that. Plain SQL against the Organization bridge, idempotent, for seeds that
+ * hold only an `EntityManager` (the harness's own run before the composition
+ * exists, so there is no cache to drop yet).
  */
-export async function bindOrganizationsToDefaultChannelSql(
+export async function bindOrganizationsToFixtureChannelsSql(
   em: EntityManager,
   organizationIds: readonly string[],
 ): Promise<void> {
@@ -76,11 +81,32 @@ export async function bindOrganizationsToDefaultChannelSql(
   await em.getConnection().execute(
     `insert into "sales_channel_organizations" ("sales_channel_id", "organization_id")
      select sc."id", o."id" from "sales_channels" sc cross join "organizations" o
-     where sc."system_default" = true and o."id" in (${organizationIds.map(() => '?').join(', ')})
+     where (sc."system_default" = true or sc."code" in (${FIXTURE_STOREFRONT_CODES.map((c) => `'${c}'`).join(', ')}))
+       and o."id" in (${organizationIds.map(() => '?').join(', ')})
      on conflict do nothing`,
     [...organizationIds],
   );
 }
+
+/**
+ * {@link bindOrganizationsToFixtureChannelsSql} for every Organization that has
+ * no channel at all — for a fixture that writes several Organizations with
+ * `em.create` and then binds them in one statement once its seeding is done.
+ */
+export async function bindUnassignedOrganizationsToFixtureChannelsSql(
+  em: EntityManager,
+): Promise<void> {
+  await em.getConnection().execute(
+    `insert into "sales_channel_organizations" ("sales_channel_id", "organization_id")
+     select sc."id", o."id" from "sales_channels" sc cross join "organizations" o
+     where (sc."system_default" = true or sc."code" in (${FIXTURE_STOREFRONT_CODES.map((c) => `'${c}'`).join(', ')}))
+       and not exists (select 1 from "sales_channel_organizations" x where x."organization_id" = o."id")
+     on conflict do nothing`,
+  );
+}
+
+/** The storefront channels `seedUs1Catalog` creates beside the default. */
+const FIXTURE_STOREFRONT_CODES = ['pl_retail', 'pl_b2b_vip'] as const;
 
 /** Open or close a channel to anonymous visitors, and drop the channel cache. */
 export async function setChannelAnonymousAccess(

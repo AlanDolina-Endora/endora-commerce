@@ -23,6 +23,7 @@ import {
 import { withSystemScope } from '../../../src/tenancy/escape-hatch.js';
 import { Order } from '../../helpers/package-entities.js';
 import { whenOrderCreatedSettled } from '../../helpers/quote-conversion.js';
+import { bindOrganizationsToFixtureChannelsSql } from '../../helpers/sales-channel-access.js';
 
 /**
  * `quote_requests` off-state — Constitution XVII item 6, from a **package**
@@ -273,6 +274,8 @@ describe('quote_requests off-state, from a package (Constitution XVII)', () => {
         });
         await em.persistAndFlush(account);
         organizationId = org.id;
+        // Feature 154 — the tenant shops on the stores the harness seeds.
+        await bindOrganizationsToFixtureChannelsSql(em, [org.id]);
         customerAccountId = account.id;
       });
       CUSTOMER_COOKIES[BUYER_SESSION] = { customerAccountId, organizationId };

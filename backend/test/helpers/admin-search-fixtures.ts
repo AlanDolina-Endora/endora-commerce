@@ -12,7 +12,7 @@ import {
 } from './package-entities.js';
 import { SEED_DELIVERY_METHOD_ID, SEED_PAYMENT_METHOD_ID } from './seed-commerce.js';
 import { withSystemScope } from '../../src/tenancy/escape-hatch.js';
-import { bindOrganizationsToDefaultChannelSql } from './sales-channel-access.js';
+import { bindOrganizationsToFixtureChannelsSql } from './sales-channel-access.js';
 
 /**
  * Fixtures for `specs/150-admin-global-search/`'s server-bound tests.
@@ -91,8 +91,8 @@ export async function seedOrganization(
   } as never);
   await em.persistAndFlush(org);
   // Feature 154 — an Organization with no sales channel may not shop anywhere;
-  // bind the default channel, as every non-storefront creation path does (FR-019).
-  await bindOrganizationsToDefaultChannelSql(em, [org.id]);
+  // bind the stores the harness seeds.
+  await bindOrganizationsToFixtureChannelsSql(em, [org.id]);
   return org;
 }
 

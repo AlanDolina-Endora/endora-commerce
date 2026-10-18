@@ -19,6 +19,7 @@ import { AuditLogEntry } from '@endora-commerce/platform/kernel';
 import { hashPassword } from '@endora-commerce/platform/kernel';
 import { PriceListService } from '../../../../packages/modules/price_lists/src/backend/services/price-list-service.js';
 import { neighbourReadPorts } from '../../helpers/price-list-neighbour-ports.js';
+import { bindOrganizationsToFixtureChannelsSql } from '../../helpers/sales-channel-access.js';
 
 /**
  * Feature 062 / T015 — bulk pricing parity (SC-001).
@@ -138,6 +139,8 @@ describe('External bulk pricing parity with cart pricing (062 / T015, SC-001)', 
       },
     });
     await em.persistAndFlush(orgB);
+    // Feature 154 — Organization B shops on the stores the harness seeds.
+    await bindOrganizationsToFixtureChannelsSql(em, [ORG_B_ID]);
     const customerB = em.create(CustomerAccount, {
       id: CUSTOMER_B_ID,
       organizationId: ORG_B_ID,
