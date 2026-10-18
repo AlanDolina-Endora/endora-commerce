@@ -134,3 +134,9 @@ until they are next written.
 `ASSET_REPLACE_KIND_MISMATCH`, `ASSET_LEGACY_CANNOT_REPLACE`, `ASSET_REPLACE_CONFLICT`,
 `ASSET_NO_PREVIOUS_VERSION`, `ASSET_PERMALINK_TAKEN`, `ASSET_PERMALINK_PREVIOUSLY_USED` and
 `ASSET_PERMALINK_INVALID` (with one sentence per reason the permalink rule names).
+
+**Documentation.** The module page, in English and Polish, now says which URLs are stable and
+when, and gains sections on replacing a file, permalinks, the previous version and its restore,
+caching (with the CMS page-cache delay after a replace), cloud storage, operating a CDN in front
+of the API or the bucket, and retention and purge; the soft-delete section now describes the
+retention period as read when the sweep runs. The module map's summary line follows the page.
