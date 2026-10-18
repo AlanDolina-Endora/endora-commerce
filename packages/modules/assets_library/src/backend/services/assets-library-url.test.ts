@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { EntityManager } from '@mikro-orm/postgresql';
 
 import { AssetsLibraryService } from './assets-library.service.js';
@@ -261,5 +261,37 @@ describe('AssetsLibraryService — the embed URL carries the content version (fe
     const service = makeService(seededAsset());
     expect(await service.resolveEmbedUrl(ASSET_ID)).toBe(`${API_ORIGIN}/assets/file/${ASSET_ID}?v=a1b2c3d4e5f6`);
     expect((await service.resolveUrl(ASSET_ID)).url).toBe(`${API_ORIGIN}/assets/file/${ASSET_ID}`);
+  });
+});
+
+/** Block review E — the permalink base is read once per list, not once per row. */
+describe('AssetsLibraryService — the permalink base is read once per call (feature 156)', () => {
+  it('reads the local public base once for a page of permalinked assets', async () => {
+    const rows = [1, 2, 3].map((n) =>
+      seededAsset({ id: `aabbccdd-1111-2222-3333-44445555666${n}`, permalink: `docs/${n}.pdf` } as Partial<Asset>),
+    );
+    const em = {
+      findOne: async (_e: unknown, where: { id: string }) => rows.find((r) => r.id === where.id) ?? null,
+      find: async () => rows,
+    } as unknown as EntityManager;
+    const settings = {
+      activeAdapter: async () => 'local' as const,
+      localBaseDir: async () => '/tmp/assets',
+      localPublicUrlBase: vi.fn(async () => ''),
+      privateUrlTtlSec: async () => 300,
+      s3Config: async () => ({ bucket: '', region: '', accessKeyId: '', secretAccessKey: '' }),
+      gcsConfig: async () => ({ bucket: '' }),
+    };
+    const adapters = new AdapterRegistry({ settings, signer: () => HmacSigner.fromEnv(KEY_HEX), publicApiBaseUrl: API_ORIGIN });
+    const spy = vi.spyOn(adapters, 'localPublicBase');
+    const service = new AssetsLibraryService({
+      emFactory: () => em,
+      adapters,
+      referenceRegistry: new AssetReferenceRegistry(),
+      loadUploadPolicy: async () => ({ allowedTypes: ['*'], maxFileSizeMb: 0 }),
+    });
+    const page = await service.listAssets({});
+    expect(page.data.map((a) => a.permalinkUrl)).toEqual(rows.map((r) => `${API_ORIGIN}/assets/file/${r.permalink}`));
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });

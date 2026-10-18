@@ -374,7 +374,9 @@ export class AssetsLibraryService {
     const overflow = rows.length > limit;
     const page = overflow ? rows.slice(0, limit) : rows;
     const nextCursor = overflow ? encodeCursor(offset + limit) : null;
-    const summaries = await Promise.all(page.map((a) => this.summary(a)));
+    // The permalink base is two settings reads: once per call, not once per row.
+    const permalinkBase = this.#permalinkBase();
+    const summaries = await Promise.all(page.map((a) => this.summary(a, permalinkBase)));
     return { data: summaries, nextCursor };
   }
 
@@ -533,7 +535,16 @@ export class AssetsLibraryService {
 
   // — Serialization helpers --------------------------------------------------
 
-  private async summary(a: Asset): Promise<AssetSummary> {
+  /** The base permalink URLs are built on — read lazily, at most once. */
+  #permalinkBase(): () => Promise<string> {
+    let base: Promise<string> | undefined;
+    return () => {
+      base ??= this.deps.adapters.localPublicBase();
+      return base;
+    };
+  }
+
+  private async summary(a: Asset, permalinkBase = this.#permalinkBase()): Promise<AssetSummary> {
     const url = await this.resolveUrl(a.id);
     const adapter = await this.deps.adapters.getForBackend(a.storageBackend);
     // The stable form: the unsigned URL of the stable key, whatever the visibility.
@@ -562,7 +573,7 @@ export class AssetsLibraryService {
       permalinkUrl:
         permalink === null
           ? null
-          : permalinkUrl(await this.deps.adapters.localPublicBase(), permalink),
+          : permalinkUrl(await permalinkBase(), permalink),
       contentVersion: a.contentVersion,
     };
   }
