@@ -10,7 +10,14 @@ import {
 } from '../../helpers/test-server.js';
 import { Asset } from '../../helpers/package-entities.js';
 import { overrideAssetSetting, useTemporaryAssetStore } from '../../helpers/crm-attachment-upload.js';
-import { ADMIN, forgetAssets, pdfBytes, runName, uploadAsset } from '../../helpers/asset-replace-fixtures.js';
+import {
+  ADMIN,
+  forgetAssets,
+  pdfBytes,
+  runName,
+  testRetentionSweeper,
+  uploadAsset,
+} from '../../helpers/asset-replace-fixtures.js';
 
 /**
  * `specs/156-asset-stable-url/` T041a — the soft-delete passes of the retention
@@ -143,7 +150,7 @@ describe('retention sweep — soft-deleted assets (feature 156)', () => {
     const second = await forgeDeleted(now, 399 * DAY_MS);
     const third = await forgeDeleted(now, 398 * DAY_MS);
     const lines: Array<Record<string, unknown>> = [];
-    const sweeper = h.assetsLibrary.createRetentionSweeper({
+    const sweeper = testRetentionSweeper(h, {
       batchSize: 2,
       log: { info: (obj: Record<string, unknown>) => void lines.push(obj) } as never,
     });
@@ -198,7 +205,7 @@ describe('retention sweep — soft-deleted assets (feature 156)', () => {
       created.push(id);
       ids.push(id);
     }
-    const result = await h.assetsLibrary.createRetentionSweeper({ batchSize: 2 }).sweep(now);
+    const result = await testRetentionSweeper(h, { batchSize: 2 }).sweep(now);
     expect(result.previousPurged).toBe(2);
     const remaining = await h.em().fork().count(Asset, { id: { $in: ids }, previousStorageLocator: { $ne: null } });
     expect(remaining).toBe(1);

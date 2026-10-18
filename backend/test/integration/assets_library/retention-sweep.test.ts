@@ -11,7 +11,7 @@ import {
 } from '../../helpers/test-server.js';
 import { Asset } from '../../helpers/package-entities.js';
 import { overrideAssetSetting, useTemporaryAssetStore } from '../../helpers/crm-attachment-upload.js';
-import { forgetAssets } from '../../helpers/asset-replace-fixtures.js';
+import { forgetAssets, testRetentionSweeper } from '../../helpers/asset-replace-fixtures.js';
 import { runAssetRetentionSweepTick } from '../../../../packages/modules/assets_library/src/backend/workers/retention-sweep-worker.js';
 
 /**
@@ -227,7 +227,7 @@ describe('retention sweep — previous versions and the cleanup ledger (feature 
   it('re-checks under the lock: a restore committed between select and claim is not purged', async () => {
     const now = new Date();
     const asset = await forgeWithPrevious(now, 20);
-    const sweeper = h.assetsLibrary.createRetentionSweeper({
+    const sweeper = testRetentionSweeper(h, {
       beforeClaim: async (id) => {
         if (id !== asset.id) return;
         // What a restore commits: a fresh replaced-at for the demoted file.
@@ -292,7 +292,7 @@ describe('retention sweep — previous versions and the cleanup ledger (feature 
       debug: vi.fn(),
     };
     await runAssetRetentionSweepTick({
-      sweeper: h.assetsLibrary.createRetentionSweeper({ log }),
+      sweeper: testRetentionSweeper(h, { log }),
       log: log as never,
       now: () => now,
     });

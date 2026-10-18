@@ -6,6 +6,11 @@ import { multipartBody, TINY_PNG, type MultipartPart } from './crm-attachment-up
 import type { BackendServerHandle } from './test-server.js';
 import { AdminRole, AdminUser } from './package-entities.js';
 import { ADMIN_COOKIES } from './test-actors.js';
+import {
+  createAssetRetentionSweeper,
+  type AssetRetentionSweeper,
+} from '../../../packages/modules/assets_library/src/backend/jobs/retention-sweeper.js';
+import type { RetentionSweepDeps } from '../../../packages/modules/assets_library/src/backend/jobs/retention-sweep-deps.js';
 
 /**
  * Fixtures for replacing a library asset's file in place
@@ -227,4 +232,23 @@ export async function createAssetsReader(
       await fresh.nativeDelete(AdminRole, { id: role.id });
     },
   };
+}
+
+/**
+ * A retention sweeper over the composed module with some seams replaced — a
+ * narrower batch, a captured log line, a hook between select and claim — built
+ * from the module's own handle, as `hard-delete-worker.test.ts` builds its
+ * worker (block review D: the production handle carries no test factory).
+ */
+export function testRetentionSweeper(
+  h: BackendServerHandle,
+  overrides: Partial<Pick<RetentionSweepDeps, 'batchSize' | 'log' | 'beforeClaim'>> = {},
+): AssetRetentionSweeper {
+  return createAssetRetentionSweeper({
+    emFactory: h.em,
+    adapters: h.assetsLibrary.adapters,
+    referenceRegistry: h.assetsLibrary.referenceRegistry,
+    loadRetentionDays: () => h.assetsLibrary.loadRetentionDays(),
+    ...overrides,
+  });
 }

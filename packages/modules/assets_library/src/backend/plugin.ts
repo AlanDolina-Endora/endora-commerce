@@ -17,7 +17,6 @@ import {
   createAssetRetentionSweeper,
   type AssetRetentionSweeper,
 } from './jobs/retention-sweeper.js';
-import type { RetentionSweepDeps } from './jobs/retention-sweep-deps.js';
 import { createSettingsView } from './services/storage/settings-view.js';
 import { Setting } from '@endora-commerce/platform/kernel';
 import { SettingValue } from '@endora-commerce/platform/kernel';
@@ -73,14 +72,6 @@ export interface AssetsLibraryModuleHandle {
   loadRetentionDays(): Promise<number>;
   /** The retention sweep (specs/156-asset-stable-url/), as the module's clock runs it. */
   sweeper: AssetRetentionSweeper;
-  /**
-   * A sweeper over the same composition with some of its seams replaced — a
-   * narrower batch, a captured log line, a hook between select and claim. For
-   * tests; production uses `sweeper`.
-   */
-  createRetentionSweeper(
-    overrides?: Partial<Pick<RetentionSweepDeps, 'batchSize' | 'log' | 'beforeClaim' | 'loadRetentionDays'>>,
-  ): AssetRetentionSweeper;
 }
 
 
@@ -185,18 +176,13 @@ export function assetsLibraryModule(options: AssetsLibraryModuleOptions): {
     });
   };
 
-  const createRetentionSweeper: AssetsLibraryModuleHandle['createRetentionSweeper'] = (
-    overrides = {},
-  ) =>
-    createAssetRetentionSweeper({
-      emFactory: options.emFactory,
-      adapters,
-      referenceRegistry,
-      loadRetentionDays,
-      ...(options.log ? { log: options.log } : {}),
-      ...overrides,
-    });
-  const sweeper = createRetentionSweeper();
+  const sweeper = createAssetRetentionSweeper({
+    emFactory: options.emFactory,
+    adapters,
+    referenceRegistry,
+    loadRetentionDays,
+    ...(options.log ? { log: options.log } : {}),
+  });
 
   return {
     plugin,
@@ -207,7 +193,6 @@ export function assetsLibraryModule(options: AssetsLibraryModuleOptions): {
       adapters,
       loadRetentionDays,
       sweeper,
-      createRetentionSweeper,
     },
   };
 }
