@@ -9,6 +9,7 @@ import type {
 } from '@endora-commerce/contracts';
 import { rethrowIfModuleDisabled } from '@endora-commerce/platform/kernel';
 import { Asset } from '../entities/asset.entity.js';
+import { versionedAssetUrl } from './asset-urls.js';
 import type { StorageResolveUrlInput, StorageResolveUrlOutput } from './storage/storage-adapter.js';
 
 /**
@@ -132,7 +133,7 @@ export class AssetReadService implements AssetReadPort {
       // visibility, changes which of the two is doing the work, and a feed that
       // published an expiring link would not fail anywhere near this line.
       if (resolved.expiresAt !== null) continue;
-      out.set(asset.id, resolved.url);
+      out.set(asset.id, versionedAssetUrl(resolved.url, asset.contentVersion, asset.storageBackend));
     }
     return out;
   }
@@ -206,7 +207,10 @@ export function toAssetRecord(asset: Asset, retentionDays = 30): AssetRecord {
     filename: asset.filename,
     mimeType: asset.mimeType,
     sizeBytes: asset.sizeBytes,
-    storageUrl: asset.storageUrl,
+    // A URL that serves the current version: the stored URL plus its marker
+    // (specs/156-asset-stable-url/ research R-8); unchanged for legacy rows and
+    // `data:` values, which `orders` reads by prefix.
+    storageUrl: versionedAssetUrl(asset.storageUrl, asset.contentVersion, asset.storageBackend),
     altText: asset.altText ?? null,
     folderId: asset.folderId ?? null,
     visibility: asset.visibility,

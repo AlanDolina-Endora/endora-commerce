@@ -17,6 +17,16 @@ keep those assets lengthens the setting before upgrading. Each run writes one
 `assets_library.retention.sweep` log line, also when nothing was due, and a storage object the
 module stopped needing is retried by the sweep until it is gone.
 
+**Behaviour change for consumers.** `AssetSummary.url` / `AssetDetail.url`, `AssetRecord.storageUrl`
+(what the catalogue's product, gallery, attachment and Open Graph URLs come from) and
+`assetReadPort.resolvePublicUrls` (product feeds) now carry `?v=<contentVersion>` for public
+assets, and so does the transactional e-mail logo; signed private URLs, legacy rows and `data:`
+values are unchanged. A replace changes the marker, so every embed picks up the new file and can be
+cached for a year. The stable, unversioned form is `fileUrl` and `GET /api/v1/admin/assets/:id/url`,
+and the new `AssetsLibraryService.resolveEmbedUrl(id)` answers the embed form. A CMS storefront page
+cached before a replace keeps serving the previous marker for up to five minutes (the CMS page
+cache's lifetime); that URL redirects to the current file, so the page never shows the old one.
+
 **Behaviour change for the file URL.** `GET /assets/file/<id>` answers a public local asset with
 `Cache-Control: public, no-cache` (it was `public, max-age=31536000, immutable`), so a replaced file
 is picked up on the next request; the URLs the platform embeds carry `?v=<contentVersion>` and stay

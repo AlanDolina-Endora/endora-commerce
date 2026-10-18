@@ -91,7 +91,8 @@ describe('AssetReadService.resolvePublicUrls', () => {
 
     const urls = await service.resolvePublicUrls([PUBLIC_ID]);
 
-    expect(urls.get(PUBLIC_ID)).toBe(`${API_ORIGIN}/assets/file/${PUBLIC_ID}`);
+    // specs/156-asset-stable-url/ T061 (deliberate, R-20): versioned.
+    expect(urls.get(PUBLIC_ID)).toBe(`${API_ORIGIN}/assets/file/${PUBLIC_ID}?v=a1b2c3d4e5f6`);
   });
 
   it('narrows the read itself to live and public rows', async () => {
@@ -245,7 +246,7 @@ describe('toAssetRecord — stable URL members (feature 156)', () => {
     );
     expect(record.contentVersion).toBe('a1b2c3d4e5f6');
     expect(record.permalink).toBe('docs/a.pdf');
-    expect(record.storageUrl).toBe(`/assets/file/${PUBLIC_ID}`);
+    expect(record.storageUrl).toBe(`/assets/file/${PUBLIC_ID}?v=a1b2c3d4e5f6`);
   });
 
   it('answers a null permalink when none is set', () => {
@@ -272,5 +273,23 @@ describe('AssetRecord.purgeAfterAt (feature 156)', () => {
     expect(byId[PUBLIC_ID]!.purgeAfterAt).toEqual(new Date(deletedAt.getTime() + 7 * 24 * 60 * 60 * 1000));
     expect(byId[PRIVATE_ID]!.purgeAfterAt).toBeNull();
     expect(reads).toBe(1);
+  });
+});
+
+/** specs/156-asset-stable-url/ T061 — `AssetRecord.storageUrl` serves the current version. */
+describe('AssetRecord.storageUrl (feature 156)', () => {
+  it.each(['local', 's3', 'gcs'] as const)('is versioned for a %s row', (backend) => {
+    const record = toAssetRecord(
+      seededAsset(PUBLIC_ID, { storageBackend: backend, storageUrl: `https://cdn.example.test/${PUBLIC_ID}.jpg` } as Partial<Asset>),
+    );
+    expect(record.storageUrl).toBe(`https://cdn.example.test/${PUBLIC_ID}.jpg?v=a1b2c3d4e5f6`);
+  });
+
+  it.each([
+    ['a legacy row', { storageBackend: 'legacy', storageUrl: 'https://old.example.test/a.jpg' }],
+    ['a data: URL', { storageUrl: 'data:application/pdf;base64,JVBERi0=' }],
+  ])('is unchanged for %s', (_label, over) => {
+    const record = toAssetRecord(seededAsset(PUBLIC_ID, over as Partial<Asset>));
+    expect(record.storageUrl).toBe(over.storageUrl);
   });
 });

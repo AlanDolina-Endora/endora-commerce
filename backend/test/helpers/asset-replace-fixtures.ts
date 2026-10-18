@@ -166,7 +166,7 @@ export function replaceAsset(
   });
 }
 
-/** Hard-deletes the given assets' rows, their attachments and their cleanup entries. */
+/** Hard-deletes the given assets' rows, their attachments, gallery items and cleanup entries. */
 export async function forgetAssets(h: BackendServerHandle, assetIds: readonly string[]): Promise<void> {
   if (assetIds.length === 0) return;
   const conn = h.em().getConnection();
@@ -174,6 +174,7 @@ export async function forgetAssets(h: BackendServerHandle, assetIds: readonly st
   const list = ids.map(() => '?').join(', ');
   await conn.execute(`delete from asset_object_cleanups where asset_id in (${list})`, ids);
   await conn.execute(`delete from product_attachments where asset_id in (${list})`, ids);
+  await conn.execute(`delete from gallery_items where asset_id in (${list})`, ids);
   await conn.execute(`delete from assets where id in (${list})`, ids);
 }
 

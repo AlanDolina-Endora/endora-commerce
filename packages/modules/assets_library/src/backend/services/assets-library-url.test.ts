@@ -55,6 +55,7 @@ function makeService(
   asset: Asset,
   localPublicUrlBase = '',
   extra: Partial<ConstructorParameters<typeof AssetsLibraryService>[0]> = {},
+  cloud: { s3?: { bucket: string; region: string; accessKeyId: string; secretAccessKey: string } } = {},
 ): AssetsLibraryService {
   const em = {
     findOne: async () => asset,
@@ -66,7 +67,7 @@ function makeService(
       localBaseDir: async () => '/tmp/assets',
       localPublicUrlBase: async () => localPublicUrlBase,
       privateUrlTtlSec: async () => 300,
-      s3Config: async () => ({ bucket: '', region: '', accessKeyId: '', secretAccessKey: '' }),
+      s3Config: async () => cloud.s3 ?? { bucket: '', region: '', accessKeyId: '', secretAccessKey: '' },
       gcsConfig: async () => ({ bucket: '' }),
     },
     signer: () => HmacSigner.fromEnv(KEY_HEX),
@@ -84,13 +85,14 @@ function makeService(
 describe('AssetsLibraryService — every URL it produces is absolute (D-223)', () => {
   it('AssetDetail.url is absolute when no public URL base is configured', async () => {
     const detail = await makeService(seededAsset()).getAsset(ASSET_ID);
-    expect(detail.url).toBe(`${API_ORIGIN}/assets/file/${ASSET_ID}`);
+    // specs/156-asset-stable-url/ T061 (deliberate, R-20): the embed form carries the marker.
+    expect(detail.url).toBe(`${API_ORIGIN}/assets/file/${ASSET_ID}?v=a1b2c3d4e5f6`);
   });
 
   it('AssetSummary.url is absolute — the list surface takes the same path', async () => {
     const page = await makeService(seededAsset()).listAssets({});
     expect(page.data).toHaveLength(1);
-    expect(page.data[0]?.url).toBe(`${API_ORIGIN}/assets/file/${ASSET_ID}`);
+    expect(page.data[0]?.url).toBe(`${API_ORIGIN}/assets/file/${ASSET_ID}?v=a1b2c3d4e5f6`);
   });
 
   it('resolveUrl signs a private asset on the same absolute origin', async () => {
@@ -120,7 +122,7 @@ describe('AssetsLibraryService — every URL it produces is absolute (D-223)', (
   it('serves an explicitly configured base rather than the API origin', async () => {
     const service = makeService(seededAsset(), 'https://cdn.example.test');
     expect((await service.getAsset(ASSET_ID)).url).toBe(
-      `https://cdn.example.test/assets/file/${ASSET_ID}`,
+      `https://cdn.example.test/assets/file/${ASSET_ID}?v=a1b2c3d4e5f6`,
     );
   });
 });
@@ -136,7 +138,7 @@ describe('AssetsLibraryService — stable URL members (feature 156)', () => {
     expect(detail.contentVersion).toBe('a1b2c3d4e5f6');
     expect(detail.permalink).toBeNull();
     expect(detail.permalinkUrl).toBeNull();
-    expect(detail.url).toBe(`${API_ORIGIN}/assets/file/${ASSET_ID}`);
+    expect(detail.url).toBe(`${API_ORIGIN}/assets/file/${ASSET_ID}?v=a1b2c3d4e5f6`);
   });
 
   it('listAssets answers the same members', async () => {
@@ -225,5 +227,39 @@ describe('AssetsLibraryService — previousVersion (feature 156)', () => {
     expect(system.previousVersion?.replacedBy).toBeNull();
     const unwired = await makeService(withPrevious(ADMIN_ID)).getAsset(ASSET_ID);
     expect(unwired.previousVersion?.replacedBy).toBeNull();
+  });
+});
+
+/** specs/156-asset-stable-url/ T061 — the embed form (research R-8, contracts/file-serving.md §3). */
+describe('AssetsLibraryService — the embed URL carries the content version (feature 156)', () => {
+  it('signs a private asset without a marker', async () => {
+    const detail = await makeService(seededAsset({ visibility: 'private' } as Partial<Asset>)).getAsset(ASSET_ID);
+    expect(detail.url).toMatch(/[?&]token=/);
+    expect(detail.url).not.toMatch(/[?&]v=/);
+  });
+
+  it('versions a public S3 row on its bucket URL', async () => {
+    const service = makeService(
+      seededAsset({ storageBackend: 's3', storageLocator: `media/${ASSET_ID}.jpg` } as Partial<Asset>),
+      '',
+      {},
+      { s3: { bucket: 'media-bucket', region: 'eu-central-1', accessKeyId: 'k', secretAccessKey: 's' } },
+    );
+    expect((await service.getAsset(ASSET_ID)).url).toBe(
+      `https://media-bucket.s3.eu-central-1.amazonaws.com/media/${ASSET_ID}.jpg?v=a1b2c3d4e5f6`,
+    );
+  });
+
+  it('leaves a legacy row unchanged', async () => {
+    const service = makeService(
+      seededAsset({ storageBackend: 'legacy', storageLocator: '', storageUrl: 'https://old.example.test/a.jpg' } as Partial<Asset>),
+    );
+    expect((await service.getAsset(ASSET_ID)).url).toBe('https://old.example.test/a.jpg');
+  });
+
+  it('resolveEmbedUrl answers the embed form, resolveUrl still the stable one', async () => {
+    const service = makeService(seededAsset());
+    expect(await service.resolveEmbedUrl(ASSET_ID)).toBe(`${API_ORIGIN}/assets/file/${ASSET_ID}?v=a1b2c3d4e5f6`);
+    expect((await service.resolveUrl(ASSET_ID)).url).toBe(`${API_ORIGIN}/assets/file/${ASSET_ID}`);
   });
 });

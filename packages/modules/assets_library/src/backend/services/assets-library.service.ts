@@ -23,7 +23,7 @@ import type { AssetReferenceRegistry } from './reference-registry.js';
 import { UploadPipeline, type UploadInput, type UploadPolicy } from './upload-pipeline.js';
 import { LegacyAssetCannotHardenError } from './storage/errors.js';
 import { recordAuditFromContext } from '@endora-commerce/platform/commands';
-import { permalinkUrl } from './asset-urls.js';
+import { permalinkUrl, versionedAssetUrl } from './asset-urls.js';
 import {
   replaceAssetFile,
   restorePreviousVersion,
@@ -297,6 +297,20 @@ export class AssetsLibraryService {
   }
 
   /** Resolve the serving URL for an asset by id (public or private). */
+  /**
+   * The embed form of an asset's URL — the stable URL plus `?v=<contentVersion>`
+   * for a public asset, the signed URL for a private one (specs/156-asset-stable-url/
+   * research R-8). What anything that *embeds* the asset should use; `resolveUrl`
+   * stays the stable form.
+   */
+  async resolveEmbedUrl(assetId: string): Promise<string> {
+    const em = this.deps.emFactory();
+    const a = await em.findOne(Asset, { id: assetId });
+    if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+    const resolved = await this.resolveUrl(assetId);
+    return versionedAssetUrl(resolved.url, a.contentVersion, a.storageBackend);
+  }
+
   async resolveUrl(
     assetId: string,
     opts: { ttlSec?: number } = {},
@@ -537,7 +551,8 @@ export class AssetsLibraryService {
       sizeBytes: Number(a.sizeBytes),
       visibility: a.visibility,
       storageBackend: a.storageBackend,
-      url: url.url,
+      // The embed form: a public URL carries the content version (R-8).
+      url: versionedAssetUrl(url.url, a.contentVersion, a.storageBackend),
       createdAt: a.createdAt.toISOString(),
       updatedAt: a.updatedAt.toISOString(),
       deletedAt: a.deletedAt ? a.deletedAt.toISOString() : null,
