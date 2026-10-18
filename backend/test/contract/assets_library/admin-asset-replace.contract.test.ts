@@ -7,8 +7,7 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
-import { AdminRole, AdminUser, Asset } from '../../helpers/package-entities.js';
-import { ADMIN_COOKIES } from '../../helpers/test-actors.js';
+import { Asset } from '../../helpers/package-entities.js';
 import { overrideAssetSetting, useTemporaryAssetStore } from '../../helpers/crm-attachment-upload.js';
 import {
   ADMIN,
@@ -18,6 +17,7 @@ import {
   TINY_SVG,
   XLSX_MIME,
   cleanupEntriesOf,
+  createAssetsReader,
   docxBytes,
   forgetAssets,
   pdfBytes,
@@ -42,32 +42,12 @@ describe('POST /api/v1/admin/assets/:id/replace (feature 156)', () => {
   let store: Awaited<ReturnType<typeof useTemporaryAssetStore>>;
   const created: string[] = [];
   const products: string[] = [];
-  const readerCookie = { b2b_session: `stub-as156-assets-reader-${randomUUID().slice(0, 8)}` };
-  let readerRoleId = '';
-  let readerUserId = '';
+  let reader: Awaited<ReturnType<typeof createAssetsReader>>;
 
   beforeAll(async () => {
     h = await setupBackendServer();
     store = await useTemporaryAssetStore(h);
-    const em = h.em();
-    const role = em.create(AdminRole, {
-      code: `${runName()}_assets_reader`,
-      name: 'Assets reader (feature 156)',
-      permissions: ['assets.read'],
-    });
-    await em.persistAndFlush(role);
-    const user = em.create(AdminUser, {
-      email: `${runName()}@assets.local`,
-      passwordHash: 'x'.repeat(60),
-      adminRoleId: role.id,
-      firstName: 'Assets',
-      lastName: 'Reader',
-      status: 'active',
-    });
-    await em.persistAndFlush(user);
-    readerRoleId = role.id;
-    readerUserId = user.id;
-    ADMIN_COOKIES[readerCookie.b2b_session] = { adminUserId: user.id };
+    reader = await createAssetsReader(h);
   }, 120_000);
 
   afterAll(async () => {
@@ -79,10 +59,7 @@ describe('POST /api/v1/admin/assets/:id/replace (feature 156)', () => {
         cookies: ADMIN,
       });
     }
-    delete ADMIN_COOKIES[readerCookie.b2b_session];
-    const em = h.em();
-    await em.nativeDelete(AdminUser, { id: readerUserId });
-    await em.nativeDelete(AdminRole, { id: readerRoleId });
+    await reader.undo();
     await store.undo();
     await teardownBackendServer(h);
   });
@@ -379,7 +356,7 @@ describe('POST /api/v1/admin/assets/:id/replace (feature 156)', () => {
       h,
       asset.id,
       { filename: `${runName()}.pdf`, mime: 'application/pdf', value: pdfBytes('reader-2') },
-      { cookies: readerCookie },
+      { cookies: reader.cookies },
     );
     expect(res.statusCode).toBe(403);
     expect((await detail(asset.id)).contentVersion).toBe(asset.contentVersion);

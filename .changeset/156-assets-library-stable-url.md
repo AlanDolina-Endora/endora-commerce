@@ -49,6 +49,21 @@ filename, type, size, content version).
 - The file route's `ETag` is now `"<id>-<contentVersion>"`: it changes when the file changes and no
   longer when only the label or folder does.
 
+**The previous version and its restore.** The asset detail now carries `previousVersion` — the
+replaced file's name, type, size, content version, when and by whom it was replaced, and
+`restorableUntil` (replaced at plus `assets.soft_delete_retention_days`) — or `null`. `POST
+/api/v1/admin/assets/:id/previous-version/restore` (`assets.write`) swaps it back: the body names
+both `expectedContentVersion` and `expectedPreviousContentVersion`, so a restore brings back
+exactly the file the admin saw, and either one being out of date answers
+`409 ASSET_REPLACE_CONFLICT`. The restored file keeps its own content version, so its old ETag and
+cached copies are valid again; the file it replaces becomes the previous version with a fresh
+retention period. Without a previous version the answer is `409 ASSET_NO_PREVIOUS_VERSION`. The
+write runs as the audited Command `asset.restore_previous_version`. `assets_library` now declares
+a dependency on `admin_users`, whose `adminUserReadPort` names the admin who replaced the file.
+
+**Retention floor.** `assets.soft_delete_retention_days` is now read as at least one day: `0`
+(or anything below one) behaves as one day, so a deletion or a replaced file is never due at once.
+
 **Storage.** Every storage backend can now copy one stored file over another on the server, and
 the cloud backends write two more headers on the objects they store: `Cache-Control: no-cache` and a
 `Content-Disposition` chosen by the serving policy — images, video, PDFs and plain text `inline`; SVG

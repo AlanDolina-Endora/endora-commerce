@@ -8,6 +8,7 @@
 //   GET    /api/v1/admin/assets/:id/url     — re-resolve URL on demand
 //   PATCH  /api/v1/admin/assets/:id         — edit metadata + visibility flip
 //   POST   /api/v1/admin/assets/:id/replace — replace the file in place (feature 156)
+//   POST   /api/v1/admin/assets/:id/previous-version/restore — swap the previous version back (feature 156)
 //
 // Folder CRUD, soft-delete, restore, bulk move, and storage self-check
 // land in subsequent user stories.
@@ -23,6 +24,7 @@ import {
   deleteFolderRequestSchema,
   moveAssetRequestSchema,
   moveManyAssetsRequestSchema,
+  restorePreviousAssetVersionRequestSchema,
 } from '@endora-commerce/contracts';
 
 import { HttpError } from '@endora-commerce/platform/http';
@@ -158,6 +160,23 @@ export async function registerAssetsLibraryAdminRoutes(
         );
       }
       reply.status(200);
+      return { data: detail };
+    },
+  );
+
+  // — POST /assets/:id/previous-version/restore — feature 156 ---------------
+  // Both versions are required: the restore names the file it replaces and the
+  // file it brings back (specs/156-asset-stable-url/contracts/admin-api.md §2).
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/admin/assets/:id/previous-version/restore',
+    { preHandler: requireAdmin('assets.write') },
+    async (req) => {
+      const body = restorePreviousAssetVersionRequestSchema.parse(req.body);
+      const detail = await service.restorePreviousVersion({
+        assetId: req.params.id,
+        expectedContentVersion: body.expectedContentVersion,
+        expectedPreviousContentVersion: body.expectedPreviousContentVersion,
+      });
       return { data: detail };
     },
   );

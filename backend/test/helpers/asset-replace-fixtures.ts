@@ -4,6 +4,8 @@ import type { LightMyRequestResponse } from 'fastify';
 
 import { multipartBody, TINY_PNG, type MultipartPart } from './crm-attachment-upload.js';
 import type { BackendServerHandle } from './test-server.js';
+import { AdminRole, AdminUser } from './package-entities.js';
+import { ADMIN_COOKIES } from './test-actors.js';
 
 /**
  * Fixtures for replacing a library asset's file in place
@@ -187,4 +189,41 @@ export async function cleanupEntriesOf(
       `select locator, reason from asset_object_cleanups where asset_id = ?`,
       [assetId],
     );
+}
+
+/**
+ * An administrator holding only `assets.read`, with a stub session of its own
+ * (`tasks.md` standing rule 7): its role and user are created here and removed
+ * by `undo`.
+ */
+export async function createAssetsReader(
+  h: BackendServerHandle,
+): Promise<{ cookies: { b2b_session: string }; undo: () => Promise<void> }> {
+  const em = h.em();
+  const role = em.create(AdminRole, {
+    code: `${runName()}_assets_reader`,
+    name: 'Assets reader (feature 156)',
+    permissions: ['assets.read'],
+  });
+  await em.persistAndFlush(role);
+  const user = em.create(AdminUser, {
+    email: `${runName()}@assets.local`,
+    passwordHash: 'x'.repeat(60),
+    adminRoleId: role.id,
+    firstName: 'Assets',
+    lastName: 'Reader',
+    status: 'active',
+  });
+  await em.persistAndFlush(user);
+  const cookie = `stub-${runName()}-assets-reader`;
+  ADMIN_COOKIES[cookie] = { adminUserId: user.id };
+  return {
+    cookies: { b2b_session: cookie },
+    undo: async () => {
+      delete ADMIN_COOKIES[cookie];
+      const fresh = h.em();
+      await fresh.nativeDelete(AdminUser, { id: user.id });
+      await fresh.nativeDelete(AdminRole, { id: role.id });
+    },
+  };
 }
