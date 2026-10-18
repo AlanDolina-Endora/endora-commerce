@@ -7300,7 +7300,7 @@
         }
       }
     },
-    "/api/v1/newsletter/c/{token}": {
+    "/api/v1/newsletter/click": {
       "get": {
         "responses": {
           "200": {
@@ -7318,7 +7318,7 @@
         }
       }
     },
-    "/api/v1/newsletter/o/{token}.gif": {
+    "/api/v1/newsletter/open.gif": {
       "get": {
         "responses": {
           "200": {

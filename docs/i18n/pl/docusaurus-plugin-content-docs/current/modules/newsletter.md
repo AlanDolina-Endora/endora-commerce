@@ -67,10 +67,43 @@ więcej workerach żadna wiadomość nie zostanie wysłana dwa razy.
 
 ## Zaangażowanie odbiorców
 
-Śledzenie otwarć korzysta z piksela 1×1; śledzenie kliknięć przepisuje linki na podpisane
-przekierowania. Liczniki wysłanych / dostarczonych / nieudanych / otwartych / klikniętych dla
-każdej kampanii (oraz kliknięcia poszczególnych linków) są sumowane z `newsletter_send_records` i
-`newsletter_engagement_events`. Śledzenie można wyłączyć w każdej kampanii.
+E-maile kampanii zawierają śledzenie otwarć i kliknięć, dodawane w chwili wysyłki wiadomości do
+każdego odbiorcy:
+
+- **Otwarcia** — przed końcem treści wiadomości dodawany jest niewidoczny obrazek 1×1,
+  `GET /api/v1/newsletter/open.gif?token=…`. Jego wczytanie zapisuje otwarcie w rekordzie wysyłki
+  odbiorcy.
+- **Kliknięcia** — każdy bezwzględny link `http(s)` jest zamieniany na
+  `GET /api/v1/newsletter/click?token=…&u=<destination>`. Token jest podpisany i powiązany z
+  rekordem wysyłki, z identyfikatorem linku numerowanym w kolejności występowania w dokumencie
+  (`link-1`, `link-2`, …) oraz z adresem docelowym, więc przekierowanie prowadzi wyłącznie do
+  linku, z którym e-mail został wysłany. Token, którego nie da się zweryfikować, daje odpowiedź
+  `410`; adres docelowy niezgodny z tokenem prowadzi na stronę główną storefrontu. Linki
+  `mailto:` i `tel:`, kotwice w obrębie strony, linki względne oraz własne linki modułu
+  (wypisanie, potwierdzenie) pozostają bez zmian. Część tekstowa wiadomości jest wysyłana bez
+  zmian.
+
+Oba adresy są budowane na publicznym bazowym adresie API, z którego korzysta link do wypisania,
+a oba tokeny są ważne przez rok. Kliknięcie śledzonego linku liczy się także jako otwarcie, więc
+odbiorca, którego program pocztowy blokuje obrazki, zostaje policzony, gdy kliknie link.
+
+Dwa ustawienia w grupie **Newsletter** włączają i wyłączają oba rodzaje śledzenia niezależnie od
+siebie. Oba są domyślnie **włączone** i można je ustawić osobno dla każdego kanału sprzedaży
+(kampania bez kanału sprzedaży korzysta z wartości domyślnego kanału sprzedaży):
+
+| Ustawienie | Po wyłączeniu |
+| --- | --- |
+| `newsletter.tracking.opens_enabled` | obrazek nie jest dodawany, a otwarcia nie są liczone |
+| `newsletter.tracking.clicks_enabled` | linki prowadzą prosto do celu, a kliknięcia nie są liczone |
+
+Kampania utworzona przez API z `trackingEnabled: false` jest wysyłana bez obu rodzajów śledzenia.
+E-maile automatyzacji nie są śledzone.
+
+Liczniki wysłanych / dostarczonych / nieudanych / otwartych / klikniętych dla każdej kampanii
+(oraz kliknięcia poszczególnych linków) są sumowane z `newsletter_send_records` i
+`newsletter_engagement_events`. Liczba otwarć jest przybliżona: program pocztowy blokujący obrazki
+nie zgłasza żadnego otwarcia, a program, który wczytuje obrazki za czytelnika, zgłasza otwarcie,
+które mogło nie nastąpić.
 
 ## Uprawnienia
 
