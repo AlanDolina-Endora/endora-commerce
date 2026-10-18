@@ -184,6 +184,7 @@ function EmbedPreviewHtml({ content }: { content: Record<string, unknown> }): Re
  * so a click still selects the block in the canvas.
  */
 function SandboxedEmailHtml({ html }: { html: string }): React.ReactElement {
+  const t = useTranslation('core');
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(0);
 
@@ -218,7 +219,7 @@ function SandboxedEmailHtml({ html }: { html: string }): React.ReactElement {
   return (
     <iframe
       ref={frameRef}
-      title="Embedded content preview"
+      title={t('pageBuilder.emailPreview.embedTitle')}
       sandbox="allow-same-origin"
       srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0}body{display:flow-root}</style></head><body>${html}</body></html>`}
       style={{ display: 'block', width: '100%', height, border: 0, pointerEvents: 'none' }}
