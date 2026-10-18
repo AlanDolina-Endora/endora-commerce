@@ -32,6 +32,7 @@ import { QuoteRequestCta } from '../../../../components/pricing/QuoteRequestCta'
 const PDP_API_BASE = publicApiBaseUrl();
 import { ParametryTab } from '../../../../components/attributes/ParametryTab';
 import { Hook } from '../../../../components/Hook';
+import { JsonLd } from '../../../../lib/seo/JsonLd';
 import { ViewItemTracker } from '../../../../components/analytics/EcommerceTrackers';
 import { getStorefrontQuoteRequestSettings } from '../../../../lib/api/rfq';
 import { getProductBySlug } from '../../../../lib/api/catalog';
@@ -496,12 +497,7 @@ export default async function ProductPage({
       ) : null}
       <Hook code="product.bottom" />
 
-      <script
-        type="application/ld+json"
-        // The backend builds the JSON-LD from the product entity, so the
-        // strings come from a typed source — no XSS risk.
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(product.structuredDataJsonLd) }}
-      />
+      <JsonLd data={product.structuredDataJsonLd} />
     </div>
   );
 }
