@@ -35,5 +35,6 @@
   and statuses are the owner's own wording of the decision (D2, D3, D7) and are what a storefront
   integrator reads; the table names identify existing records the owner referred to by name. No
   framework, language or library is named.
-- Owner decisions D1–D7 are final; remaining choices are recorded as assumptions A1–A10 rather than
-  clarification markers, and the plan repeats the ones the owner should confirm.
+- Owner decisions D1–D7 are final, and the five questions the design raised were confirmed by the
+  owner on 2026-10-18 (spec *Clarifications*, Q1–Q5). The remaining assumptions (A1, A3, A4, A7, A9,
+  A10) are recorded defaults, not open questions.

@@ -2,7 +2,7 @@
 
 **Feature Branch**: `feat/154-sales-channel-access`
 **Created**: 2026-10-18
-**Status**: Draft — owner decisions D1–D7 fixed (below); open questions are listed under *Assumptions*
+**Status**: Draft — owner decisions D1–D7 fixed and clarifications Q1–Q5 confirmed (2026-10-18)
 **Input**: Owner brief of 2026-10-18 — "Decide who may use which sales channel: anonymous visitors only
 on channels open to them, signed-in customers only on the channels assigned to their Organization;
 create and price the basket on the channel it is used on; let operators assign channels to
@@ -46,6 +46,26 @@ This feature makes channel use a stated rule and makes the basket belong to the 
   system-default channel. Invitations add a member to an existing Organization and change no channel.
 - **D7** — In scope for consistency: the basket is created and priced on the channel of the request,
   remembers that channel, and order placement refuses a basket of another channel.
+
+## Clarifications
+
+### Session 2026-10-18
+
+The owner confirmed the recommended answer to each of the five questions the design raised:
+
+- **Q1** — Is a new admin *New organization* path in scope (none existed)? → **Yes**: a minimal
+  create screen, its `POST` endpoint and a command-palette action are in scope (FR-018, FR-024).
+- **Q2** — Registration on a store closed to anonymous visitors? → **Business registration is
+  allowed** and assigns that store's channel (an application decided by moderation); **individual
+  (B2C) self-registration is refused** there (FR-016, FR-017).
+- **Q3** — Default of *open to anonymous visitors*? → New channels and the reconciler's default
+  channel are **open**; the admin create form defaults to **on** (FR-003).
+- **Q4** — Impersonation? → **Follows the customer rule** (FR-004).
+- **Q5** — Provider callbacks (payment, carrier) in modules outside this repository? → They **must
+  declare the open route option**; this is stated in the platform changeset and the developer guide
+  (FR-006, FR-037).
+
+The numbered ruling for D1–D7 (the next free number is D-286) is left unassigned.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -422,18 +442,17 @@ into a placement on B → 422 `ORDER_SALES_CHANNEL_MISMATCH`.
 
 ## Assumptions
 
+Confirmed by the owner (see *Clarifications*): impersonation follows the customer rule (Q4); new
+channels are open by default (Q3); business registration is allowed and individual
+self-registration refused on closed stores (Q2); the admin create path is added (Q1); out-of-repository
+callback routes declare the open option (Q5). Remaining assumptions:
+
 - **A1**: Codes are upper-case like every `ERROR_CODES` entry; the brief's `sales_channel_not_permitted`
   is `SALES_CHANNEL_NOT_PERMITTED`. The anonymous refusal is `SALES_CHANNEL_SIGN_IN_REQUIRED`.
-- **A2**: Impersonation follows the customer rule (it reproduces the customer's view).
 - **A3**: The per-customer record stays unused; narrowing per customer can be added later as an
   intersection with the Organization's set without changing this rule.
 - **A4**: Only orders count for the upgrade (not quote requests or baskets).
-- **A5**: New channels default to open; the reconciler-created default channel is open.
-- **A6**: A business may register on a closed store (application flow); an individual may not
-  self-register there (it would sign them in at once).
 - **A7**: Legal/CMS pages of a closed store are not reachable anonymously; the sign-in page carries the
   store's chrome and links only.
-- **A8**: No admin "create Organization" path exists today (verified: `routes.admin.ts` serves list and
-  per-id routes only); D6(a) is met by adding a minimal one.
 - **A9**: The cart-repricing change (#345) merges before the basket work of this feature (see plan).
 - **A10**: The anonymous price-visibility flag (`isPublic`) stays as it is and stays off the admin form.

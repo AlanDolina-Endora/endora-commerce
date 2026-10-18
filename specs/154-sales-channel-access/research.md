@@ -98,7 +98,7 @@ module (D-52/D-53 hold).
 declared by `sales_channels`, R-12).
 
 **Rationale**: one statement of the rule, one place; impersonation reproduces the customer's view, so
-an operator debugging "why can't they buy" sees the refusal (A2). A customer without an Organization
+an operator debugging "why can't they buy" sees the refusal (confirmed, Q4). A customer without an Organization
 is a data inconsistency (every account has one since feature 051, `CustomerAccount.organizationId!`),
 and Principle XI forbids a no-organization path, so it fails closed rather than being treated as
 anonymous.
@@ -143,7 +143,7 @@ called anonymously; without the option a closed default channel would stop opera
   under `/auth/`).
 - *Default open, opt-in closed* — fail-open by construction; contradicts D2.
 - *B2C self-registration open* — it signs the visitor in at once, so on a closed store it would be a
-  self-granted way in (A6). It stays gated; business registration is open because moderation decides.
+  self-granted way in (confirmed, Q2). It stays gated; business registration is open because moderation decides.
 
 **Note for paid/third-party modules**: a provider callback (payment gateway, carrier) is anonymous and
 carries no storefront channel; it must declare `'open'`. This goes into the developer guide (R-17) and
@@ -258,7 +258,7 @@ write). Additive change to a published port.
 
 **Registration on a channel closed to anonymous visitors** (decided): business registration is open
 and assigns that channel — under manual moderation (the default) this is an application flow, under
-automatic moderation it is a self-service trade store, and the toggle's hint says so (A6, spec edge
+automatic moderation it is a self-service trade store, and the toggle's hint says so (confirmed, Q2; spec edge
 case). Individual self-registration is refused there (`SALES_CHANNEL_SIGN_IN_REQUIRED`) because it
 signs the visitor in immediately.
 
