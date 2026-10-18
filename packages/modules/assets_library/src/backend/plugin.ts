@@ -163,6 +163,7 @@ export function assetsLibraryModule(options: AssetsLibraryModuleOptions): {
         adapters,
         emFactory: options.emFactory,
         requireAdmin,
+        loadRetentionDays,
       });
     });
     await registerAssetsLibraryPublicRoutes(app, {

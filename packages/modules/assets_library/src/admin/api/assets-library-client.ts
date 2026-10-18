@@ -4,7 +4,7 @@
 // `@endora-commerce/contracts/assets-library`. Components consume this rather than
 // touching `apiClient` directly.
 
-import { apiClient } from '@endora-commerce/admin-kit/lib';
+import { ApiError, apiBaseUrl, apiClient } from '@endora-commerce/admin-kit/lib';
 import type {
   AssetDetail,
   AssetFolder,
@@ -15,6 +15,8 @@ import type {
   ListFoldersResponse,
   PatchAssetRequest,
   PatchFolderRequest,
+  RestorePreviousAssetVersionRequest,
+  StorageStateResponse,
 } from '@endora-commerce/contracts';
 
 export type { AssetSummary, AssetDetail, AssetFolder };
@@ -83,6 +85,73 @@ export const assetsLibraryClient = {
       { folderId },
     );
     return out.data;
+  },
+
+  // — Stable URLs: replace, previous version, permalink (feature 156) ------
+
+  /**
+   * Replace the file in place. Multipart, so it goes through `fetch` over the
+   * published origin as the kit's upload does; `expectedContentVersion` is sent
+   * before the file part. A refusal is thrown as the kit's `ApiError`, so the
+   * drawer reads its code and details as it does for every other request.
+   */
+  async replaceAsset(id: string, file: File, expectedContentVersion: string): Promise<AssetDetail> {
+    const fd = new FormData();
+    fd.append('expectedContentVersion', expectedContentVersion);
+    fd.append('file', file, file.name);
+    const r = await fetch(`${apiBaseUrl.replace(/\/+$/, '')}/api/v1/admin/assets/${id}/replace`, {
+      method: 'POST',
+      credentials: 'include',
+      body: fd,
+    });
+    if (!r.ok) {
+      const text = await r.text();
+      let envelope: unknown = null;
+      try {
+        envelope = JSON.parse(text);
+      } catch {
+        envelope = null;
+      }
+      if (envelope && typeof envelope === 'object' && 'error' in envelope) {
+        throw new ApiError(r.status, envelope as ConstructorParameters<typeof ApiError>[1]);
+      }
+      throw new Error(`Replace failed (${r.status}): ${text}`);
+    }
+    return ((await r.json()) as { data: AssetDetail }).data;
+  },
+
+  async restorePreviousVersion(
+    id: string,
+    versions: RestorePreviousAssetVersionRequest,
+  ): Promise<AssetDetail> {
+    const out = await apiClient.post<{ data: AssetDetail }>(
+      `/api/v1/admin/assets/${id}/previous-version/restore`,
+      versions,
+    );
+    return out.data;
+  },
+
+  async setPermalink(
+    id: string,
+    permalink: string,
+    options?: { confirmReuse?: boolean },
+  ): Promise<AssetDetail> {
+    const out = await apiClient.put<{ data: AssetDetail }>(`/api/v1/admin/assets/${id}/permalink`, {
+      permalink,
+      ...(options?.confirmReuse ? { confirmReuse: true } : {}),
+    });
+    return out.data;
+  },
+
+  async removePermalink(id: string): Promise<AssetDetail> {
+    const out = await apiClient.delete<{ data: AssetDetail }>(`/api/v1/admin/assets/${id}/permalink`);
+    return out.data;
+  },
+
+  /** How long a replaced file stays restorable, as the retention sweep reads it. */
+  async getRetentionDays(): Promise<number> {
+    const out = await apiClient.get<StorageStateResponse>('/api/v1/admin/assets/storage/state');
+    return out.data.retentionDays;
   },
 
   // — Folders --------------------------------------------------------------

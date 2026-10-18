@@ -38,6 +38,8 @@ The permalink rule for library assets, the request shapes for setting a permalin
   `null`) and `contentVersion` (the identity of the bytes the asset currently holds).
 - `AssetRecord` gains `contentVersion: string` and `permalink: string | null`.
 
+- `storageStateResponseSchema`'s `data` gains `retentionDays` (a positive number): the retention, in days, the sweep applies — how long a deleted asset or a replaced file stays restorable.
+
 A client that only reads these shapes needs no change. Code that builds an `AssetSummary`,
 `AssetDetail` or `AssetRecord` by hand — a test fixture, a mock, an optimistic list update — must
 add the new members. `url` and `storageUrl` keep their current values in this release.
