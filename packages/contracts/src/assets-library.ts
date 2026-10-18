@@ -123,6 +123,14 @@ export const assetSummarySchema = z.object({
   updatedAt: isoDateTimeSchema,
   deletedAt: isoDateTimeSchema.nullable(),
   pendingCleanup: z.boolean(),
+  /** The stable, unversioned file URL — the same across replaces (specs/156-asset-stable-url/). */
+  fileUrl: z.string(),
+  /** Operator-chosen alias served at `<base>/assets/file/<permalink>`, or null. */
+  permalink: z.string().nullable(),
+  /** Absolute permalink URL on the local public base, or null when no permalink is set. */
+  permalinkUrl: z.string().nullable(),
+  /** Identity of the bytes the asset currently holds. */
+  contentVersion: z.string(),
 });
 export type AssetSummary = z.infer<typeof assetSummarySchema>;
 
@@ -356,6 +364,10 @@ export interface AssetRecord {
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
+  /** Identity of the bytes the asset currently holds (specs/156-asset-stable-url/). */
+  contentVersion: string;
+  /** Operator-chosen alias, or null. */
+  permalink: string | null;
 }
 
 /**

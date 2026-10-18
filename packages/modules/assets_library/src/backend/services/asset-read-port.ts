@@ -202,5 +202,7 @@ export function toAssetRecord(asset: Asset): AssetRecord {
     createdAt: asset.createdAt,
     updatedAt: asset.updatedAt,
     deletedAt: asset.deletedAt ?? null,
+    contentVersion: asset.contentVersion,
+    permalink: asset.permalink ?? null,
   };
 }

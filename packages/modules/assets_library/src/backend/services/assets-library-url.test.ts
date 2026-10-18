@@ -44,6 +44,8 @@ function seededAsset(overrides: Partial<Asset> = {}): Asset {
     deletedAt: null,
     purgeAfterAt: null,
     pendingCleanup: false,
+    contentVersion: 'a1b2c3d4e5f6',
+    permalink: null,
     ...overrides,
   } as unknown as Asset;
 }
@@ -117,5 +119,53 @@ describe('AssetsLibraryService — every URL it produces is absolute (D-223)', (
     expect((await service.getAsset(ASSET_ID)).url).toBe(
       `https://cdn.example.test/assets/file/${ASSET_ID}`,
     );
+  });
+});
+
+/**
+ * specs/156-asset-stable-url/ T010 — the stable file URL, the content version
+ * and the permalink members. `url` is deliberately unchanged here (Phase 9).
+ */
+describe('AssetsLibraryService — stable URL members (feature 156)', () => {
+  it('getAsset answers fileUrl, contentVersion and a null permalink', async () => {
+    const detail = await makeService(seededAsset()).getAsset(ASSET_ID);
+    expect(detail.fileUrl).toBe(`${API_ORIGIN}/assets/file/${ASSET_ID}`);
+    expect(detail.contentVersion).toBe('a1b2c3d4e5f6');
+    expect(detail.permalink).toBeNull();
+    expect(detail.permalinkUrl).toBeNull();
+    expect(detail.url).toBe(`${API_ORIGIN}/assets/file/${ASSET_ID}`);
+  });
+
+  it('listAssets answers the same members', async () => {
+    const page = await makeService(seededAsset()).listAssets({});
+    const row = page.data[0]!;
+    expect(row.fileUrl).toBe(`${API_ORIGIN}/assets/file/${ASSET_ID}`);
+    expect(row.contentVersion).toBe('a1b2c3d4e5f6');
+    expect(row.permalink).toBeNull();
+    expect(row.permalinkUrl).toBeNull();
+  });
+
+  it('builds permalinkUrl on the local public base', async () => {
+    const detail = await makeService(
+      seededAsset({ permalink: 'docs/a.pdf' } as Partial<Asset>),
+    ).getAsset(ASSET_ID);
+    expect(detail.permalink).toBe('docs/a.pdf');
+    expect(detail.permalinkUrl).toBe(`${API_ORIGIN}/assets/file/docs/a.pdf`);
+  });
+
+  it('builds permalinkUrl on an explicitly configured base', async () => {
+    const detail = await makeService(
+      seededAsset({ permalink: 'docs/a.pdf' } as Partial<Asset>),
+      'https://cdn.example.test',
+    ).getAsset(ASSET_ID);
+    expect(detail.permalinkUrl).toBe('https://cdn.example.test/assets/file/docs/a.pdf');
+  });
+
+  it('answers the unsigned stable fileUrl for a private asset while url stays signed', async () => {
+    const detail = await makeService(
+      seededAsset({ visibility: 'private' } as Partial<Asset>),
+    ).getAsset(ASSET_ID);
+    expect(detail.fileUrl).toBe(`${API_ORIGIN}/assets/file/${ASSET_ID}`);
+    expect(detail.url.startsWith(`${API_ORIGIN}/assets/file/${ASSET_ID}?token=`)).toBe(true);
   });
 });

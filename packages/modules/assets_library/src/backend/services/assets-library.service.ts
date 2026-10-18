@@ -11,6 +11,7 @@ import type { AssetReferenceRegistry } from './reference-registry.js';
 import { UploadPipeline, type UploadInput, type UploadPolicy } from './upload-pipeline.js';
 import { LegacyAssetCannotHardenError } from './storage/errors.js';
 import { recordAuditFromContext } from '@endora-commerce/platform/commands';
+import { permalinkUrl } from './asset-urls.js';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 
 export class NotImplementedYet extends Error {
@@ -287,6 +288,13 @@ export class AssetsLibraryService {
 
   private async summary(a: Asset): Promise<AssetSummary> {
     const url = await this.resolveUrl(a.id);
+    const adapter = await this.deps.adapters.getForBackend(a.storageBackend);
+    // The stable form: the unsigned URL of the stable key, whatever the visibility.
+    const fileUrl = await adapter.resolveUrl({
+      locator: a.storageLocator || a.storageUrl,
+      visibility: 'public',
+    });
+    const permalink = a.permalink ?? null;
     return {
       id: a.id,
       folderId: a.folderId ?? null,
@@ -301,6 +309,13 @@ export class AssetsLibraryService {
       updatedAt: a.updatedAt.toISOString(),
       deletedAt: a.deletedAt ? a.deletedAt.toISOString() : null,
       pendingCleanup: a.pendingCleanup,
+      fileUrl: fileUrl.url,
+      permalink,
+      permalinkUrl:
+        permalink === null
+          ? null
+          : permalinkUrl(await this.deps.adapters.localPublicBase(), permalink),
+      contentVersion: a.contentVersion,
     };
   }
 

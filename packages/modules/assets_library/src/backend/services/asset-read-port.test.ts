@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EntityManager, FilterQuery } from '@mikro-orm/postgresql';
 
-import { AssetReadService, type AssetStorageRegistry } from './asset-read-port.js';
+import { AssetReadService, toAssetRecord, type AssetStorageRegistry } from './asset-read-port.js';
 import { AdapterRegistry } from './storage/adapter-registry.js';
 import { HmacSigner } from './hmac.js';
 import type { Asset } from '../entities/asset.entity.js';
@@ -41,6 +41,8 @@ function seededAsset(id: string, overrides: Partial<Asset> = {}): Asset {
     purgeAfterAt: null,
     pendingCleanup: false,
     mimeTypeOverridden: false,
+    contentVersion: 'a1b2c3d4e5f6',
+    permalink: null,
     ...overrides,
   } as unknown as Asset;
 }
@@ -229,5 +231,21 @@ describe('AssetReadService.openAssetBytes', () => {
       bytes: new Uint8Array([0x68, 0x69]),
       mimeType: 'image/jpeg',
     });
+  });
+});
+
+/** specs/156-asset-stable-url/ T010 — `storageUrl` stays unchanged until Phase 9. */
+describe('toAssetRecord — stable URL members (feature 156)', () => {
+  it('carries contentVersion and permalink', () => {
+    const record = toAssetRecord(
+      seededAsset(PUBLIC_ID, { permalink: 'docs/a.pdf' } as Partial<Asset>),
+    );
+    expect(record.contentVersion).toBe('a1b2c3d4e5f6');
+    expect(record.permalink).toBe('docs/a.pdf');
+    expect(record.storageUrl).toBe(`/assets/file/${PUBLIC_ID}`);
+  });
+
+  it('answers a null permalink when none is set', () => {
+    expect(toAssetRecord(seededAsset(PUBLIC_ID)).permalink).toBeNull();
   });
 });
