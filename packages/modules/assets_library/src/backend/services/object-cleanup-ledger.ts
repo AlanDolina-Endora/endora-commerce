@@ -6,8 +6,11 @@
 // either a referenced object or an entry the retention sweep retries.
 
 import { randomUUID } from 'node:crypto';
+import type { StorageAdapter } from './storage/storage-adapter.js';
+import { isObjectNotFound } from './storage/errors.js';
 import type { EntityManager } from '@mikro-orm/postgresql';
 
+import { Asset } from '../entities/asset.entity.js';
 import {
   AssetObjectCleanup,
   type AssetObjectCleanupReason,
@@ -73,5 +76,50 @@ export class ObjectCleanupLedger implements CleanupLedgerPort {
         locator: entry.locator,
       });
     }
+  }
+
+  /**
+   * The cleanup pass of the retention sweep (contracts/storage-and-retention.md
+   * §4 pass 4): entries at least `graceMs` old, oldest first, at most `limit`.
+   * An entry whose locator a row still names is skipped and its object kept;
+   * otherwise the object is deleted — one already gone counts as deleted — and
+   * the entry removed. A failure counts an attempt and keeps the entry.
+   */
+  async sweepDue(
+    now: Date,
+    graceMs: number,
+    limit: number,
+    adapterFor: (backend: CleanupKey['storageBackend']) => Promise<Pick<StorageAdapter, 'delete'>>,
+  ): Promise<{ cleanupsDone: number }> {
+    // command-coverage-ignore: storage bookkeeping with no operator intent and
+    // nothing to undo — each entry only says an object still needs deleting.
+    const em = this.emFactory().fork();
+    const entries = await em.find(
+      AssetObjectCleanup,
+      { recordedAt: { $lte: new Date(now.getTime() - graceMs) } },
+      { orderBy: { recordedAt: 'asc' }, limit },
+    );
+    let cleanupsDone = 0;
+    for (const entry of entries) {
+      const referenced = await em.count(Asset, {
+        storageBackend: entry.storageBackend,
+        $or: [{ storageLocator: entry.locator }, { previousStorageLocator: entry.locator }],
+      });
+      if (referenced > 0) continue;
+      try {
+        const adapter = await adapterFor(entry.storageBackend);
+        await adapter.delete({ locator: entry.locator });
+      } catch (err) {
+        if (!isObjectNotFound(err)) {
+          entry.attempts += 1;
+          entry.lastError = err instanceof Error ? err.message : String(err);
+          await em.flush();
+          continue;
+        }
+      }
+      await em.nativeDelete(AssetObjectCleanup, { id: entry.id });
+      cleanupsDone += 1;
+    }
+    return { cleanupsDone };
   }
 }

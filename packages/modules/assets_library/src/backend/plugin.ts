@@ -12,6 +12,12 @@ import { HmacSigner } from './services/hmac.js';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import type { AdminUserReadPort } from '@endora-commerce/contracts';
+import type { PlatformLogger } from '@endora-commerce/platform/kernel';
+import {
+  createAssetRetentionSweeper,
+  type AssetRetentionSweeper,
+} from './jobs/retention-sweeper.js';
+import type { RetentionSweepDeps } from './jobs/retention-sweep-deps.js';
 import { createSettingsView } from './services/storage/settings-view.js';
 import { Setting } from '@endora-commerce/platform/kernel';
 import { SettingValue } from '@endora-commerce/platform/kernel';
@@ -54,6 +60,8 @@ export interface AssetsLibraryModuleOptions {
   logError?: (message: string, context: Record<string, unknown>) => void;
   /** Names who replaced an asset's previous version; `replacedBy: null` without it. */
   adminUserReadPort?: Pick<AdminUserReadPort, 'findById'>;
+  /** Where the retention sweep writes its one line per tick. */
+  log?: Pick<PlatformLogger, 'info'>;
 }
 
 export interface AssetsLibraryModuleHandle {
@@ -61,6 +69,16 @@ export interface AssetsLibraryModuleHandle {
   folders: FoldersService;
   referenceRegistry: AssetReferenceRegistry;
   adapters: AdapterRegistry;
+  /** The retention sweep (specs/156-asset-stable-url/), as the module's clock runs it. */
+  sweeper: AssetRetentionSweeper;
+  /**
+   * A sweeper over the same composition with some of its seams replaced — a
+   * narrower batch, a captured log line, a hook between select and claim. For
+   * tests; production uses `sweeper`.
+   */
+  createRetentionSweeper(
+    overrides?: Partial<Pick<RetentionSweepDeps, 'batchSize' | 'log' | 'beforeClaim' | 'loadRetentionDays'>>,
+  ): AssetRetentionSweeper;
 }
 
 
@@ -165,5 +183,21 @@ export function assetsLibraryModule(options: AssetsLibraryModuleOptions): {
     });
   };
 
-  return { plugin, handle: { service, folders, referenceRegistry, adapters } };
+  const createRetentionSweeper: AssetsLibraryModuleHandle['createRetentionSweeper'] = (
+    overrides = {},
+  ) =>
+    createAssetRetentionSweeper({
+      emFactory: options.emFactory,
+      adapters,
+      referenceRegistry,
+      loadRetentionDays,
+      ...(options.log ? { log: options.log } : {}),
+      ...overrides,
+    });
+  const sweeper = createRetentionSweeper();
+
+  return {
+    plugin,
+    handle: { service, folders, referenceRegistry, adapters, sweeper, createRetentionSweeper },
+  };
 }

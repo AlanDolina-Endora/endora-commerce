@@ -85,6 +85,7 @@ export function registerModule(ctx: ModuleContext): void {
           // R-14). Resolved per call, so a later `admin_users` composition is
           // seen; the manifest declares the edge.
           adminUserReadPort: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+          log: ctx.log,
         }),
       )
       .singleton(),
