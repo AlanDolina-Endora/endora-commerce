@@ -54,6 +54,15 @@ describe('Newsletter storefront routes (feature 048)', () => {
     expect(res.headers['content-type']).toContain('image/gif');
   });
 
+  it('answers a click link whose token does not verify 410, without redirecting', async () => {
+    const res = await h.app.inject({
+      method: 'GET',
+      url: `/api/v1/newsletter/c/garbage?u=${encodeURIComponent('https://elsewhere.example/')}`,
+    });
+    expect(res.statusCode).toBe(410);
+    expect(res.headers.location).toBeUndefined();
+  });
+
   it('seeds the predefined newsletter_consent CMS block linking to the privacy policy', async () => {
     const res = await h.app.inject({
       method: 'GET',
