@@ -17,6 +17,7 @@ export function customersAdapter(ports: ImportExportPorts): ImportExportAdapter 
   return {
     name: 'customers',
     owners: ['customer_accounts', 'organizations'],
+    exportPermission: 'customers:read',
     exportHeader: [
       'email',
       'organization_name',

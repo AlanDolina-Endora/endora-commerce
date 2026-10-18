@@ -5,7 +5,7 @@
   "actions.openCenter.label": "Open import/export center",
   "column.reason": "Reason",
   "column.rowNumber": "Row #",
-  "empty": "No entity is available right now — every module that owns one is switched off.",
+  "empty": "No entity is available to you right now — the modules that own them are switched off, or your role holds none of their codes.",
   "entity.categories": "Categories",
   "entity.customers": "Customers",
   "entity.orders": "Orders",

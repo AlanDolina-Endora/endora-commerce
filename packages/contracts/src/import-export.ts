@@ -47,11 +47,20 @@ export interface BulkImportReport {
  *
  * `importHeader` is `null` when import is unsupported for the entity, which is
  * the same fact the 405 the POST answers with states.
+ *
+ * The list is also **caller-derived**: each entity is gated by the code that
+ * protects its rows on the owning module's own routes, and an entity appears
+ * only when the caller may export or import it. `canExport` and `canImport`
+ * say which — an entity whose import is supported but not permitted carries
+ * its `importHeader` and `canImport: false`, which is a different fact from an
+ * import that does not exist.
  */
 export const importExportEntitySchema = z.object({
   name: z.string(),
   exportHeader: z.array(z.string()),
   importHeader: z.array(z.string()).nullable(),
+  canExport: z.boolean(),
+  canImport: z.boolean(),
 });
 export type ImportExportEntity = z.infer<typeof importExportEntitySchema>;
 

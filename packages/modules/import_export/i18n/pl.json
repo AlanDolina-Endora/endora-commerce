@@ -5,7 +5,7 @@
   "actions.openCenter.label": "Otwórz centrum importu/eksportu",
   "column.reason": "Powód",
   "column.rowNumber": "Nr wiersza",
-  "empty": "Brak dostępnych encji — każdy moduł, który jakąś posiada, jest wyłączony.",
+  "empty": "Brak dostępnych encji — moduły, do których należą, są wyłączone albo Twoja rola nie ma żadnego z ich uprawnień.",
   "entity.categories": "Kategorie",
   "entity.customers": "Klienci",
   "entity.orders": "Zamówienia",

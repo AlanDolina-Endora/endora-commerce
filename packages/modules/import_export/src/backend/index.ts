@@ -10,7 +10,7 @@ import type {
 } from '@endora-commerce/contracts';
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
 import { lazyPort } from '@endora-commerce/platform/kernel';
-import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
+import type { RequireAdminAnyFactory, RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import { ImportExportService } from './services/import-export-service.js';
 import { registerImportExportRoutes } from './routes.js';
 
@@ -36,6 +36,7 @@ import { registerImportExportRoutes } from './routes.js';
 
 export interface ImportExportCradle {
   readonly requireAdmin: RequireAdminFactory;
+  readonly requireAdminAny: RequireAdminAnyFactory;
   readonly importExportService: ImportExportService;
 }
 
@@ -70,7 +71,8 @@ export function registerModule(ctx: ModuleContext): void {
   });
 
   ctx.routes(async (app) => {
-    const { importExportService, requireAdmin } = ctx.cradle<ImportExportCradle>();
+    const { importExportService, requireAdmin, requireAdminAny } =
+      ctx.cradle<ImportExportCradle>();
     // A raw `text/csv` body, so `POST /admin/import/:entity` needs no multipart
     // machinery. Scoped to this module's context by `ctx.routes`.
     if (!app.hasContentTypeParser('text/csv')) {
@@ -78,7 +80,11 @@ export function registerModule(ctx: ModuleContext): void {
         done(null, body);
       });
     }
-    await registerImportExportRoutes(app, { service: importExportService, requireAdmin });
+    await registerImportExportRoutes(app, {
+      service: importExportService,
+      requireAdmin,
+      requireAdminAny,
+    });
   });
 }
 

@@ -133,6 +133,15 @@ describe('import_export owns its admin surface', () => {
     expect(sidebarHrefs()).not.toContain('/import-export');
   });
 
+  it('contributes its entry to an operator holding any one entity code, not only the catalogue ones', () => {
+    // Each entity is gated by its owning module's code, so a role that may
+    // export orders and nothing else still reaches the centre.
+    presentModules = new Set(['import_export']);
+    permissions = new Set(['orders:read']);
+    renderShell();
+    expect(sidebarHrefs()).toContain('/import-export');
+  });
+
   it('restores the entry when the module comes back, with no rebuild', () => {
     presentModules = new Set();
     permissions = new Set(['catalog:write']);

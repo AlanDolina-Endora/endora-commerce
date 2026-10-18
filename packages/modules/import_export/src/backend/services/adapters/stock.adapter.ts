@@ -17,6 +17,8 @@ export function stockAdapter(ports: ImportExportPorts): ImportExportAdapter {
   return {
     name: 'stock',
     owners: ['inventory', 'catalog'],
+    exportPermission: 'inventory:read',
+    importPermission: 'inventory:write',
     exportHeader: ['product_sku', 'variant_id', 'on_hand', 'reserved'] as const,
 
     async exportRows(): Promise<string[][]> {

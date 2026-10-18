@@ -1,19 +1,79 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { ERROR_CODES } from '@endora-commerce/contracts';
+import { HttpError } from '@endora-commerce/platform/http';
 import type { ImportExportService } from './services/import-export-service.js';
-import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
+import type { RequireAdminAnyFactory, RequireAdminFactory } from '@endora-commerce/platform/kernel';
 
 export interface ImportExportRoutesDeps {
   service: ImportExportService;
   requireAdmin: RequireAdminFactory;
+  requireAdminAny: RequireAdminAnyFactory;
 }
 
 const FILENAME_RE = /^[a-z][a-z0-9_]*$/;
+
+type EntityRequest = FastifyRequest<{ Params: { entity: string } }>;
 
 export async function registerImportExportRoutes(
   app: FastifyInstance,
   deps: ImportExportRoutesDeps,
 ): Promise<void> {
-  const { service, requireAdmin } = deps;
+  const { service, requireAdmin, requireAdminAny } = deps;
+
+  /**
+   * Holding one of the codes an entity of the centre is gated by — the owning
+   * modules' own read and write codes for the same rows — is what it takes to
+   * reach the centre at all. Which entities a caller may then use is decided
+   * per entity, by the code that adapter declares.
+   *
+   * Written as literals rather than derived from the adapters so the permission
+   * inventory reads them; `routes.test.ts` holds this list equal to the union
+   * of the adapters' codes.
+   */
+  const anyImportExportCode = requireAdminAny([
+    'catalog:read',
+    'catalog:write',
+    'customers:read',
+    'inventory:read',
+    'inventory:write',
+    'orders:read',
+  ]);
+
+  /**
+   * Whether the caller holds `code`, answered by the very guard the export and
+   * import routes are gated with — so the list a caller is offered and the
+   * routes they may call cannot disagree. Only the guard's "missing
+   * permission" refusal means no; anything else (no session, an account with
+   * no role, a permission store that is off) propagates as the routes would
+   * answer it.
+   */
+  const holds = async (request: FastifyRequest, reply: FastifyReply, code: string) => {
+    try {
+      await requireAdmin(code)(request, reply);
+      return true;
+    } catch (err) {
+      if (err instanceof HttpError && err.statusCode === 403 && err.code === ERROR_CODES.FORBIDDEN) {
+        return false;
+      }
+      throw err;
+    }
+  };
+
+  /**
+   * The per-entity gate, installed after {@link anyImportExportCode} on the
+   * export and import routes. Both run as the route's `preHandler` chain, which
+   * the platform moves ahead of validation, so the caller's authority is
+   * decided before anything about the request is answered. An entity this
+   * deployment does not offer has no code of its own: the any-of gate before it
+   * has already settled that the caller may use the centre, and the handler
+   * answers the 400 or 404 it always has.
+   */
+  const entityGate =
+    (permissionFor: (entity: string) => string | undefined) =>
+    async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      const permission = permissionFor((request as EntityRequest).params.entity);
+      if (permission !== undefined) await requireAdmin(permission)(request, reply);
+    };
 
   /**
    * The entities this deployment can offer, D-74.
@@ -27,13 +87,21 @@ export async function registerImportExportRoutes(
    */
   app.get(
     '/api/v1/admin/import-export/entities',
-    { preHandler: requireAdmin('catalog:write') },
-    async () => ({ data: { entities: service.listEntities() } }),
+    { preHandler: anyImportExportCode },
+    async (request, reply) => ({
+      data: { entities: await service.listEntities((code) => holds(request, reply, code)) },
+    }),
   );
 
   app.get<{ Params: { entity: string } }>(
     '/api/v1/admin/export/:entity.csv',
-    { preHandler: requireAdmin('catalog:write'), config: { streamingResponse: true } },
+    {
+      preHandler: [
+        anyImportExportCode,
+        entityGate((entity) => service.exportPermissionFor(entity)),
+      ],
+      config: { streamingResponse: true },
+    },
     async (request, reply) => {
       const { entity } = request.params;
       if (!FILENAME_RE.test(entity)) {
@@ -54,7 +122,10 @@ export async function registerImportExportRoutes(
   app.post<{ Params: { entity: string }; Body: string }>(
     '/api/v1/admin/import/:entity',
     {
-      preHandler: requireAdmin('catalog:write'),
+      preHandler: [
+        anyImportExportCode,
+        entityGate((entity) => service.importPermissionFor(entity)),
+      ],
       // Receive the raw CSV body — operators can `curl --data-binary @file.csv`
       // and the admin SPA can read the file as text and POST it directly.
     },
