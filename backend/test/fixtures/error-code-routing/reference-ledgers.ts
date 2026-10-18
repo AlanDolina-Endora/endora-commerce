@@ -634,6 +634,55 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'placement earns when the basket it is handed belongs to another sales channel. The raise ' +
       'site is `orders`\' placement; the noun is the order.',
   },
+  ASSET_REPLACE_KIND_MISMATCH: {
+    to: 'assets_library',
+    reason:
+      'Minted by feature 156 (`specs/156-asset-stable-url/`) for ' +
+      'the refusal of a replacement file whose kind (image, video, PDF, other) differs from the kind the asset already holds, so every page embedding it keeps rendering. ' +
+      'The noun is the asset, its file and its permalink — `assets_library`\' own row — and every raise site is in that module.',
+  },
+  ASSET_LEGACY_CANNOT_REPLACE: {
+    to: 'assets_library',
+    reason:
+      'Minted by feature 156 (`specs/156-asset-stable-url/`) for ' +
+      'the refusal to replace in place an asset whose file sits at an address the platform did not issue. ' +
+      'The noun is the asset, its file and its permalink — `assets_library`\' own row — and every raise site is in that module.',
+  },
+  ASSET_REPLACE_CONFLICT: {
+    to: 'assets_library',
+    reason:
+      'Minted by feature 156 (`specs/156-asset-stable-url/`) for ' +
+      'the refusal of a replace or a restore whose expected file versions no longer match the asset, because another write changed its file first. ' +
+      'The noun is the asset, its file and its permalink — `assets_library`\' own row — and every raise site is in that module.',
+  },
+  ASSET_NO_PREVIOUS_VERSION: {
+    to: 'assets_library',
+    reason:
+      'Minted by feature 156 (`specs/156-asset-stable-url/`) for ' +
+      'the refusal to restore a previous version of an asset that keeps none. ' +
+      'The noun is the asset, its file and its permalink — `assets_library`\' own row — and every raise site is in that module.',
+  },
+  ASSET_PERMALINK_TAKEN: {
+    to: 'assets_library',
+    reason:
+      'Minted by feature 156 (`specs/156-asset-stable-url/`) for ' +
+      'the refusal of a permalink another asset already holds. ' +
+      'The noun is the asset, its file and its permalink — `assets_library`\' own row — and every raise site is in that module.',
+  },
+  ASSET_PERMALINK_PREVIOUSLY_USED: {
+    to: 'assets_library',
+    reason:
+      'Minted by feature 156 (`specs/156-asset-stable-url/`) for ' +
+      'the refusal, until it is confirmed, of a permalink whose last holder was a different asset. ' +
+      'The noun is the asset, its file and its permalink — `assets_library`\' own row — and every raise site is in that module.',
+  },
+  ASSET_PERMALINK_INVALID: {
+    to: 'assets_library',
+    reason:
+      'Minted by feature 156 (`specs/156-asset-stable-url/`) for ' +
+      'the refusal of a permalink that breaks the shared permalink rule, the broken rule named by the `details.code` token. ' +
+      'The noun is the asset, its file and its permalink — `assets_library`\' own row — and every raise site is in that module.',
+  },
 };
 
 /**
