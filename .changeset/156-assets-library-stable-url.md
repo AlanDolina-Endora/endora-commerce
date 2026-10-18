@@ -23,6 +23,13 @@ even for a private asset), `permalink`, `permalinkUrl` (on the same public base 
 `contentVersion`; `assetReadPort` records carry `contentVersion` and `permalink`. Every existing
 member keeps its value.
 
+**Storage.** Every storage backend can now copy one stored file over another on the server, and
+the cloud backends write two more headers on the objects they store: `Cache-Control: no-cache` and a
+`Content-Disposition` chosen by the serving policy — images, video, PDFs and plain text `inline`; SVG
+and every type a browser would not just display as `attachment`. The ACL of a copied object is always
+set explicitly from the asset's visibility. Objects stored before this release keep their headers
+until they are next written.
+
 **Error codes.** Seven new codes are declared with their English and Polish sentences:
 `ASSET_REPLACE_KIND_MISMATCH`, `ASSET_LEGACY_CANNOT_REPLACE`, `ASSET_REPLACE_CONFLICT`,
 `ASSET_NO_PREVIOUS_VERSION`, `ASSET_PERMALINK_TAKEN`, `ASSET_PERMALINK_PREVIOUSLY_USED` and
