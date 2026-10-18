@@ -42,6 +42,11 @@ export interface AssetReplaceDeps {
   random?: () => string;
   /** Where a failed compensation is reported; the cleanup entries stay for the sweep. */
   logError?: (message: string, context: Record<string, unknown>) => void;
+  /**
+   * `assets.soft_delete_retention_days` as read now. A previous version is
+   * restorable until `replacedAt` + this (FR-022); without it, no expiry check.
+   */
+  loadRetentionDays?: () => Promise<number>;
 }
 
 export interface AssetReplaceInput {
@@ -343,6 +348,26 @@ function noPreviousVersion(): HttpError {
   );
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A previous version past its `restorableUntil` is refused like a missing one,
+ * even before the retention sweep has purged it (FR-022). `details` names the
+ * date it stopped being restorable.
+ */
+function refuseIfExpired(row: Asset, retentionDays: number | undefined, now: Date): void {
+  if (retentionDays === undefined || !row.previousReplacedAt) return;
+  const restorableUntil = new Date(row.previousReplacedAt.getTime() + retentionDays * DAY_MS);
+  if (restorableUntil.getTime() <= now.getTime()) {
+    throw new HttpError(
+      409,
+      ERROR_CODES.ASSET_NO_PREVIOUS_VERSION,
+      'The previous version is past its retention and can no longer be restored.',
+      { restorableUntil: restorableUntil.toISOString() },
+    );
+  }
+}
+
 /**
  * Restore the kept previous version — a swap through the replace's shape
  * (research R-3): the current file becomes the previous version under a new
@@ -370,6 +395,8 @@ export async function restorePreviousVersion(
     );
   }
   if (!hasPreviousVersion(current)) throw noPreviousVersion();
+  const retentionDays = deps.loadRetentionDays ? await deps.loadRetentionDays() : undefined;
+  refuseIfExpired(current, retentionDays, new Date());
   const backend: ObjectBackend = current.storageBackend;
 
   let adapter: Pick<StorageAdapter, 'copy' | 'delete'>;
@@ -409,6 +436,7 @@ export async function restorePreviousVersion(
           throw new HttpError(410, ERROR_CODES.ASSET_GONE, 'Restore the asset before restoring its file.');
         }
         if (!hasPreviousVersion(row)) throw noPreviousVersion();
+        refuseIfExpired(row, retentionDays, new Date());
         if (
           row.contentVersion !== input.expectedContentVersion ||
           row.previousContentVersion !== input.expectedPreviousContentVersion

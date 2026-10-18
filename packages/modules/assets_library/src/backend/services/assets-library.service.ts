@@ -287,6 +287,7 @@ export class AssetsLibraryService {
       ledger: new ObjectCleanupLedger(this.deps.emFactory),
       commandBus,
       ...(this.deps.logError ? { logError: this.deps.logError } : {}),
+      ...(this.deps.loadRetentionDays ? { loadRetentionDays: this.deps.loadRetentionDays } : {}),
     };
   }
 

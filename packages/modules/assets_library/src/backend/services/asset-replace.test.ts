@@ -533,3 +533,24 @@ describe('restorePreviousVersion — refusals', () => {
     expect(h.log).not.toContain(`delete ${OLD_PREV}`);
   });
 });
+
+// Block review G — a previous version past its restorableUntil is no longer
+// restorable, even before the sweep has purged it (FR-022).
+describe('restorePreviousVersion — past restorableUntil', () => {
+  it('refuses with 409 ASSET_NO_PREVIOUS_VERSION once the retention has passed, copying nothing', async () => {
+    const h = harness({ rowOverrides: PREVIOUS_FILE });
+    h.deps.loadRetentionDays = async () => 1;
+    await expect(restore(h)).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'ASSET_NO_PREVIOUS_VERSION',
+      details: { restorableUntil: new Date(Date.parse('2026-10-01T00:00:00Z') + 24 * 60 * 60 * 1000).toISOString() },
+    });
+    expect(h.log.some((l) => l.startsWith('copy'))).toBe(false);
+  });
+
+  it('restores while the retention has not passed', async () => {
+    const h = harness({ rowOverrides: PREVIOUS_FILE });
+    h.deps.loadRetentionDays = async () => 3650;
+    await expect(restore(h)).resolves.toBe(h.locked);
+  });
+});

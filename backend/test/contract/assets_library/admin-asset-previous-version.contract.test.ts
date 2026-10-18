@@ -232,4 +232,23 @@ describe('the previous version and its restore (feature 156)', () => {
     expect(served.rawPayload.equals(replacement)).toBe(true);
     expect(served.rawPayload.equals(original)).toBe(false);
   });
+
+  // Block review G — "restorable until" holds before the sweep purges (FR-022).
+  it('refuses a previous version past its restorableUntil with 409 ASSET_NO_PREVIOUS_VERSION', async () => {
+    const { asset, after } = await replacedAsset();
+    await h
+      .em()
+      .getConnection()
+      .execute(`update assets set previous_replaced_at = now() - interval '10 days' where id = ?`, [asset.id]);
+    const res = await restore(asset.id, {
+      expectedContentVersion: after.contentVersion,
+      expectedPreviousContentVersion: after.previousVersion!.contentVersion,
+    });
+    expect(res.statusCode, res.body).toBe(409);
+    const err = (res.json() as { error: { code: string; details?: { restorableUntil?: string } } }).error;
+    expect(err.code).toBe('ASSET_NO_PREVIOUS_VERSION');
+    expect(Date.parse(err.details!.restorableUntil!)).toBeLessThan(Date.now());
+    expect((await detail(asset.id)).contentVersion).toBe(after.contentVersion);
+    expect(await auditCount(asset.id)).toBe(0);
+  });
 });
