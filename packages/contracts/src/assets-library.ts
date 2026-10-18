@@ -191,6 +191,82 @@ export const moveManyAssetsResponseSchema = z.object({
 export type MoveManyAssetsResponse = z.infer<typeof moveManyAssetsResponseSchema>;
 
 // ────────────────────────────────────────────────────────────────────────────
+// (2) HTTP — permalinks and the previous version (specs/156-asset-stable-url/)
+// ────────────────────────────────────────────────────────────────────────────
+
+export const ASSET_PERMALINK_MAX_LENGTH = 200;
+
+export type AssetPermalinkInvalidReason =
+  | 'empty'
+  | 'too_long'
+  | 'invalid_characters'
+  | 'invalid_segment'
+  | 'uuid_shaped';
+
+const ASSET_ID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PERMALINK_CHARACTERS = /^[A-Za-z0-9._/-]+$/;
+
+/**
+ * True for the shape the file route treats as an asset id, in either case. A
+ * permalink of this shape would be unreachable, so the validator refuses it.
+ */
+export function isAssetIdShaped(segment: string): boolean {
+  return ASSET_ID_SHAPE.test(segment);
+}
+
+/**
+ * The one permalink rule for the server and the admin form. Pure; no I/O.
+ * Checks run in a fixed order so a value breaking several rules always gets
+ * the same reason.
+ */
+export function validateAssetPermalink(
+  value: string,
+): { ok: true } | { ok: false; reason: AssetPermalinkInvalidReason } {
+  if (value.length === 0) return { ok: false, reason: 'empty' };
+  if (value.length > ASSET_PERMALINK_MAX_LENGTH) return { ok: false, reason: 'too_long' };
+  if (!PERMALINK_CHARACTERS.test(value)) return { ok: false, reason: 'invalid_characters' };
+  const segments = value.split('/');
+  if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
+    return { ok: false, reason: 'invalid_segment' };
+  }
+  if (isAssetIdShaped(value)) return { ok: false, reason: 'uuid_shaped' };
+  return { ok: true };
+}
+
+/** The one kept previous version of an asset's file, as the detail panel shows it. */
+export const assetPreviousVersionSchema = z.object({
+  filename: z.string().min(1).max(255),
+  mimeType: z.string().min(1).max(127),
+  sizeBytes: z.number().int().nonnegative(),
+  contentVersion: z.string().min(1).max(32),
+  replacedAt: isoDateTimeSchema,
+  replacedBy: z.object({ id: uuidSchema, displayName: z.string() }).nullable(),
+  /** `replacedAt` + `assets.soft_delete_retention_days` as read now. */
+  restorableUntil: isoDateTimeSchema,
+});
+export type AssetPreviousVersion = z.infer<typeof assetPreviousVersionSchema>;
+
+export const setAssetPermalinkRequestSchema = z.object({
+  /** Shape judged by `validateAssetPermalink`; the bound only caps the body. */
+  permalink: z.string().max(ASSET_PERMALINK_MAX_LENGTH * 2),
+  /**
+   * Acknowledges taking a permalink whose last holder was a different asset;
+   * never needed by the asset that last held it.
+   */
+  confirmReuse: z.boolean().optional(),
+});
+export type SetAssetPermalinkRequest = z.infer<typeof setAssetPermalinkRequestSchema>;
+
+/** Both required: a restore names the current file and the previous file it brings back. */
+export const restorePreviousAssetVersionRequestSchema = z.object({
+  expectedContentVersion: z.string().min(1).max(32),
+  expectedPreviousContentVersion: z.string().min(1).max(32),
+});
+export type RestorePreviousAssetVersionRequest = z.infer<
+  typeof restorePreviousAssetVersionRequestSchema
+>;
+
+// ────────────────────────────────────────────────────────────────────────────
 // (2) HTTP — storage administration
 // ────────────────────────────────────────────────────────────────────────────
 
