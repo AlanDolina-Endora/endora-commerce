@@ -41,8 +41,10 @@ export function createSettingsView(
 
   return {
     async softDeleteRetentionDays() {
+      // At least one day (owner ruling P3, specs/156-asset-stable-url/): a zero
+      // setting must not make a deletion or a replaced file due at once.
       const days = await readNumber('assets.soft_delete_retention_days', 30);
-      return days >= 0 ? days : 30;
+      return days >= 0 ? Math.max(1, days) : 30;
     },
     async activeAdapter() {
       const v = (await readString('assets.storage.adapter')).trim();

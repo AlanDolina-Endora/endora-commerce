@@ -80,7 +80,7 @@ describe('asset retention setting (#322)', () => {
     });
     expect(reply.statusCode).toBe(200);
     const { data } = reply.json<{ data: { deletedAt: string; purgeAfterAt: string } }>();
-    expect(Date.parse(data.purgeAfterAt) - Date.parse(data.deletedAt)).toBe((days ?? 30) * DAY_MS);
+    expect(Date.parse(data.purgeAfterAt) - Date.parse(data.deletedAt)).toBe(Math.max(1, days ?? 30) * DAY_MS);
     const stored = await h.em().fork({ clear: true }).findOneOrFail(Asset, { id: asset.id });
     expect(stored.purgeAfterAt?.toISOString()).toBe(data.purgeAfterAt);
 
@@ -110,7 +110,7 @@ describe('asset retention setting (#322)', () => {
     for (const id of [direct.id, nested.id]) {
       const stored = await fresh.findOneOrFail(Asset, { id });
       expect(stored.deletedAt).toBeInstanceOf(Date);
-      expect(stored.purgeAfterAt!.getTime() - stored.deletedAt!.getTime()).toBe((days ?? 30) * DAY_MS);
+      expect(stored.purgeAfterAt!.getTime() - stored.deletedAt!.getTime()).toBe(Math.max(1, days ?? 30) * DAY_MS);
     }
   });
 });
