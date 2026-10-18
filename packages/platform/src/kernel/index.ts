@@ -157,6 +157,27 @@ export {
   verifyPasswordOrDummy,
 } from './crypto/password-hasher.js';
 
+/**
+ * The throttle on repeated wrong credentials, as a mechanism without an owner:
+ * a module that holds credentials builds one over its own accounts with a
+ * profile of its own codes, audit actions and key prefix.
+ */
+export {
+  ABANDONED_AFTER_SECONDS,
+  ACCOUNT_POLICY,
+  ADDRESS_POLICY,
+  AuthenticationAttemptThrottle,
+  DEFAULT_STORE_DEADLINE_MS,
+  addressOrigin,
+  type AttemptCounterStore,
+  type AttemptPolicy,
+  type AttemptThrottleProfile,
+  type AuthenticationAttemptThrottleOptions,
+  type ThrottledAttempt,
+  type ThrottledCheckResult,
+  type ThrottledCredentialState,
+} from './authentication/attempt-throttle.js';
+
 export { SalesChannel } from './sales-channels/sales-channel.entity.js';
 /**
  * The channel cache as a module reads it. `toCachedChannel`, `CachedChannel`

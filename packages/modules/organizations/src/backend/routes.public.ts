@@ -26,6 +26,7 @@ import {
 import { currentSalesChannel } from '@endora-commerce/platform/kernel';
 import type { RegistrationService } from './services/registration-service.js';
 import type { EmailVerificationService } from './services/email-verification-service.js';
+import { readCustomerKnownDevice, rememberCustomerKnownDevice } from './known-device-cookie.js';
 import { buildVerificationEmail } from './email-templates/verification.js';
 import type { OrgTemplateEmail } from './services/org-template-email.js';
 
@@ -151,10 +152,14 @@ export async function registerOrganizationsPublicRoutes(
     async (request, reply) => {
       const body = customerLoginRequestSchema.parse(request.body);
       const channelId = currentSalesChannel()?.id ?? null;
+      // The storefront forwards the browser's known-device cookie with the
+      // sign-in, so a shopper's own device keeps its own attempt budget.
+      const knownDevice = readCustomerKnownDevice(request);
       const result = await customerAuthService.login({
         email: body.email,
         password: body.password,
         salesChannelId: channelId,
+        ...(knownDevice !== undefined ? { knownDevice } : {}),
         ...(request.ip ? { ip: request.ip } : {}),
         ...(typeof request.headers['user-agent'] === 'string'
           ? { userAgent: request.headers['user-agent'] }
@@ -169,6 +174,7 @@ export async function registerOrganizationsPublicRoutes(
         return { data: { status: 'mfaSetupRequired', setupTicket: result.setupTicket } };
       }
       setSessionCookie(reply, result.sessionCookieValue, result.sessionExpiresAt);
+      rememberCustomerKnownDevice(reply, result.knownDevice ?? null);
       // Merge any anonymous cart the caller was carrying into the authenticated
       // cart (feature 027 R-09 / feature 037-cart-merge-on-login). The hook is
       // best-effort: a thrown error MUST NOT break login (037 FR-007/FR-008).
@@ -223,7 +229,14 @@ export async function registerOrganizationsPublicRoutes(
       // other lookup on that table does. The probe key below is the one place
       // the folded form is needed here, and it uses the same function so the
       // key cannot drift from what the lookup matched.
-      const result = await passwordResetService.requestReset(body.email);
+      // Counted per address in the customer authentication throttle; 429
+      // `CUSTOMER_AUTHENTICATION_THROTTLED` once the address has asked too
+      // often, whether or not an account has it.
+      const knownDevice = readCustomerKnownDevice(request);
+      const result = await passwordResetService.requestReset(
+        body.email,
+        knownDevice !== undefined ? { knownDevice } : {},
+      );
       if (deps.latestTokenByEmail && result.rawToken) {
         deps.latestTokenByEmail.set(`reset:${normalizeEmailAddress(body.email)}`, result.rawToken);
         deps.latestTokenByEmail.set('__latest_reset__', result.rawToken);

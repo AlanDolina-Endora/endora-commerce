@@ -348,7 +348,7 @@ describe('the platform is one copy (feature 080, the relocation)', () => {
   // than the assertion relaxed: it is the whole point of this file that the
   // count is exact, and a `toBeGreaterThan` here would make the next real
   // duplication invisible.
-  it('shares 52 values across the five published subpaths, which is every one still spelled twice', () => {
+  it('shares 56 values across the five published subpaths, which is every one still spelled twice', () => {
     // Not a target and not a floor somebody chose: it opened at **57**, the
     // number the superseded `host-package-copy.test.ts` measured as *distinct*
     // over this same population, and it is here so that the inversion is visible
@@ -386,6 +386,11 @@ describe('the platform is one copy (feature 080, the relocation)', () => {
     // the whole barrel, so the new name is comparable from its first day.
     // **51 -> 52 is the same event:** `./kernel` gained `verifyPasswordOrDummy`,
     // what a sign-in verifies with when there may be no account.
+    // **52 -> 56 is the same event again:** `./kernel` gained the credential
+    // attempt throttle `admin_users` and `customer_accounts` each build over their
+    // own accounts — `AuthenticationAttemptThrottle`, `addressOrigin`,
+    // `ADDRESS_POLICY` and `ACCOUNT_POLICY`. Its two numeric constants are
+    // primitives and carry no identity, so they are not counted.
     //
     // It is summed over the **five published** subpaths and not over every
     // comparison, which is what preserves that provenance: no host-internal
@@ -396,7 +401,7 @@ describe('the platform is one copy (feature 080, the relocation)', () => {
     const total = comparisons
       .filter((entry) => published.has(entry.subpath))
       .reduce((sum, entry) => sum + entry.shared.length, 0);
-    expect(total).toBe(52);
+    expect(total).toBe(56);
   });
 
   /**

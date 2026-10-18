@@ -55,6 +55,19 @@ export const ADMIN_KNOWN_DEVICE_COOKIE_NAME = 'b2b_admin_device';
 /** How long a device stays known after its last completed sign-in: 90 days. */
 export const ADMIN_KNOWN_DEVICE_MAX_AGE_SECONDS = 90 * 24 * 60 * 60;
 
+/**
+ * The customer twin of {@link ADMIN_KNOWN_DEVICE_COOKIE_NAME}: left on the
+ * device by a completed customer sign-in, read by the customer authentication
+ * throttle, never a session. Set **signed** and `httpOnly` like the
+ * administrator one. The storefront signs shoppers in from its own server, so
+ * it carries this cookie both ways: it forwards the browser's value to the
+ * backend and stores the value the backend sets.
+ */
+export const CUSTOMER_KNOWN_DEVICE_COOKIE_NAME = 'b2b_customer_device';
+
+/** How long a customer's device stays known after its last completed sign-in: 90 days. */
+export const CUSTOMER_KNOWN_DEVICE_MAX_AGE_SECONDS = 90 * 24 * 60 * 60;
+
 // --- ports -------------------------------------------------------------------
 
 export type AuthSessionKind = 'customer' | 'admin' | 'impersonation';

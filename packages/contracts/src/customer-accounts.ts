@@ -355,6 +355,11 @@ export interface CustomerLoginResult {
   /** Value to put into the Set-Cookie header. */
   sessionCookieValue: string;
   sessionExpiresAt: Date;
+  /**
+   * The value to set as `CUSTOMER_KNOWN_DEVICE_COOKIE_NAME`, signed and
+   * `httpOnly`, beside the session. `null` or absent sets nothing.
+   */
+  knownDevice?: string | null;
 }
 
 /** Discriminated outcome of the first login step (feature 042). */
@@ -363,12 +368,81 @@ export type CustomerLoginOutcome =
   | { status: 'mfaRequired'; challengeId: string }
   | { status: 'mfaSetupRequired'; setupTicket: string };
 
-export interface CustomerLoginInput {
+export interface CustomerLoginInput extends CustomerAuthenticationOrigin {
   email: string;
   password: string;
   ip?: string;
   userAgent?: string;
   salesChannelId?: string | null;
+}
+
+/** Where a customer's attempt came from, as far as the caller knows. */
+export interface CustomerAuthenticationOrigin {
+  /**
+   * The **verified** value of the `CUSTOMER_KNOWN_DEVICE_COOKIE_NAME` cookie —
+   * what `request.unsignCookie(...)` returned as valid — or absent. Never the
+   * raw cookie. An attempt from a device the account has completed a sign-in
+   * on is counted against that device's own budget and is not refused by the
+   * account-wide one.
+   */
+  readonly knownDevice?: string;
+}
+
+/**
+ * Which customer credential an attempt presents — or, for `password_reset`,
+ * which request is counted. Reset requests are counted per normalised e-mail
+ * address, are never "successful" and so are forgotten only when their window
+ * ends.
+ */
+export type CustomerAuthenticationFactor = 'password' | 'second_factor' | 'password_reset';
+
+/** One attempt to prove a credential of a customer account. */
+export interface CustomerAuthenticationAttempt extends CustomerAuthenticationOrigin {
+  readonly factor: CustomerAuthenticationFactor;
+  /**
+   * The normalised e-mail address for a password or a reset request — which
+   * may belong to no account at all — and the customer account id for a
+   * second factor.
+   */
+  readonly account: string;
+}
+
+/** What the credential check found. */
+export interface CustomerAuthenticationCheckResult {
+  readonly ok: boolean;
+  /** The account the attempt was made against, when there is one. */
+  readonly customerAccountId?: string;
+}
+
+/**
+ * The throttle on repeated wrong customer credentials.
+ *
+ * Container name: `customerAuthenticationThrottlePort`. Owner:
+ * `customer_accounts`.
+ *
+ * The customer twin of `AdminAuthenticationThrottlePort`, with the same
+ * `verify` semantics — 429 `CUSTOMER_AUTHENTICATION_THROTTLED` with
+ * `Retry-After` and `details.retryAfterSeconds` while a delay runs, without
+ * running `check`; 503 `CUSTOMER_AUTHENTICATION_UNAVAILABLE` when the
+ * counters cannot be reached — and one difference: **the client address is
+ * not counted**. The storefront signs shoppers in from its own server, so
+ * every attempt reaches the backend from the same address and a per-address
+ * counter would let one shopper's typos hold up every other. A stranger is
+ * held to the account counter; a known device to its own.
+ *
+ * `issueKnownDevice` mints the value of the known-device cookie after a
+ * **completed** sign-in; `null` means the account is gone or blocked. The
+ * value stops being honoured when the account's password changes.
+ *
+ * **Owner off:** the seam fails closed — resolving this port throws
+ * `ModuleDisabledError` and the call answers 503 `MODULE_DISABLED`.
+ */
+export interface CustomerAuthenticationThrottlePort {
+  verify(
+    attempt: CustomerAuthenticationAttempt,
+    check: () => Promise<CustomerAuthenticationCheckResult>,
+  ): Promise<boolean>;
+  issueKnownDevice(customerAccountId: string): Promise<string | null>;
 }
 
 /**
@@ -428,7 +502,16 @@ export interface CustomerAuthPort {
  * `nonDeactivatable` never enters one.
  */
 export interface CustomerPasswordResetPort {
-  requestReset(email: string): Promise<{ rawToken: string | null }>;
+  /**
+   * Counted per normalised e-mail address in the customer authentication
+   * throttle, whether or not an account has it: rejects with 429
+   * `CUSTOMER_AUTHENTICATION_THROTTLED` once the address has asked too often.
+   * A new token retires every earlier unconsumed one of the account.
+   */
+  requestReset(
+    email: string,
+    context?: CustomerAuthenticationOrigin,
+  ): Promise<{ rawToken: string | null }>;
   confirmReset(rawToken: string, newPassword: string): Promise<void>;
 }
 

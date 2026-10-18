@@ -187,6 +187,12 @@ export const manifest = defineModuleManifest({
     { code: 'CANNOT_DEMOTE_LAST_ADMIN' },
     { code: 'CANNOT_REMOVE_LAST_ADMIN' },
     { code: 'CUSTOMER_ALREADY_DELETED' },
+    // The customer authentication throttle's two answers: 429 while a delay
+    // runs on a password, a second-factor code or a reset request, and 503
+    // when the counters cannot be reached. Both carry a sentence, because the
+    // reader is a shopper at the sign-in form.
+    { code: 'CUSTOMER_AUTHENTICATION_THROTTLED' },
+    { code: 'CUSTOMER_AUTHENTICATION_UNAVAILABLE' },
     { code: 'CUSTOMER_NOT_DELETED' },
     { code: 'CUSTOMER_NOT_FOUND' },
     { code: 'CUSTOMER_RESTORE_WINDOW_ELAPSED' },

@@ -122,7 +122,7 @@ export async function registerMfaSelfServiceRoutes(
     async (request) => {
       const body = mfaDisableRequestSchema.parse(request.body);
       const subject = subjectOf(request);
-      await reauthenticate(opts, subject, body, originOf(request));
+      await reauthenticate(opts, subject, body, originOf(request, subjectType));
       const removed = await enrolmentService.disable(subject);
       await auditLogService.record({
         action: 'mfa.disabled',
@@ -145,7 +145,7 @@ export async function registerMfaSelfServiceRoutes(
     async (request) => {
       const body = mfaRegenerateRequestSchema.parse(request.body);
       const subject = subjectOf(request);
-      const verified = await opts.verifySecondFactor(subject, body.code, originOf(request));
+      const verified = await opts.verifySecondFactor(subject, body.code, originOf(request, subjectType));
       if (!verified.ok) throw wrongCode();
       const res = await enrolmentService.regenerateRecoveryCodes(subject);
       await auditLogService.record({
@@ -198,9 +198,15 @@ export async function registerMfaSelfServiceRoutes(
   );
 }
 
-/** Where the request came from, for the administrator authentication throttle. */
-function originOf(request: FastifyRequest): AdminAuthenticationOrigin {
-  const knownDevice = readKnownDevice(request);
+/**
+ * Where the request came from, for the account owner's authentication
+ * throttle: the verified known-device cookie of this surface.
+ */
+function originOf(
+  request: FastifyRequest,
+  subjectType: 'customer' | 'admin',
+): AdminAuthenticationOrigin {
+  const knownDevice = readKnownDevice(request, subjectType);
   return {
     ...(request.ip ? { ip: request.ip } : {}),
     ...(knownDevice !== undefined ? { knownDevice } : {}),

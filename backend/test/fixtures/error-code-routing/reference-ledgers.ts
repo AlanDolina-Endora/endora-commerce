@@ -170,6 +170,23 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'out, without changing the credential. The noun is the admin account, `admin_users`\' own ' +
       'row, and the one raise site is its service.',
   },
+  CUSTOMER_AUTHENTICATION_THROTTLED: {
+    to: 'customer_accounts',
+    reason:
+      'Minted for the refusal an attempt earns while a customer account is throttled after ' +
+      'repeated wrong passwords or second-factor codes, or after repeated password-reset ' +
+      'requests for one address. The throttle is `customer_accounts`\' own service over its own ' +
+      'rows, and `mfa` reaches it through the port that module publishes. ' +
+      '`ADMIN_AUTHENTICATION_THROTTLED` is not reused: its sentence and its audit rows are about ' +
+      'an administrator account, and the storefront reads this one.',
+  },
+  CUSTOMER_AUTHENTICATION_UNAVAILABLE: {
+    to: 'customer_accounts',
+    reason:
+      'Minted for the refusal an attempt earns when the store the customer authentication ' +
+      'throttle counts in does not answer. The attempt is refused unchecked rather than left ' +
+      'waiting or let through uncounted, and the one raise site is `customer_accounts`\' throttle.',
+  },
   CRM_OPPORTUNITY_NOT_FOUND: {
     to: 'crm',
     reason:

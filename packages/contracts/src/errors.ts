@@ -244,6 +244,19 @@ export const ERROR_CODES = {
    */
   ADMIN_AUTHENTICATION_UNAVAILABLE: 'ADMIN_AUTHENTICATION_UNAVAILABLE',
 
+  // Customer accounts
+  /**
+   * Too many wrong passwords, wrong second-factor codes or password-reset
+   * requests for one customer account; answered with 429 and `Retry-After`
+   * until the delay has passed.
+   */
+  CUSTOMER_AUTHENTICATION_THROTTLED: 'CUSTOMER_AUTHENTICATION_THROTTLED',
+  /**
+   * The store the customer authentication throttle counts in did not answer,
+   * so the attempt was refused without being checked; answered with 503.
+   */
+  CUSTOMER_AUTHENTICATION_UNAVAILABLE: 'CUSTOMER_AUTHENTICATION_UNAVAILABLE',
+
   // Settings (feature 004)
   SETTING_NOT_REGISTERED: 'SETTING_NOT_REGISTERED',
   SETTING_OUT_OF_SCOPE_FOR_CHANNEL: 'SETTING_OUT_OF_SCOPE_FOR_CHANNEL',
