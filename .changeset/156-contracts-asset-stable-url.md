@@ -30,5 +30,16 @@ The permalink rule for library assets, the request shapes for setting a permalin
   `ASSET_PERMALINK_TAKEN`, `ASSET_PERMALINK_PREVIOUSLY_USED` and `ASSET_PERMALINK_INVALID`
   (whose `details.code` carries the validator's reason).
 
-Nothing existing changes shape; the routes that use these schemas arrive with the assets library
-release that ships them.
+**New members on existing shapes — additive for a reader, required for anyone constructing one.**
+
+- `assetSummarySchema` (and so `AssetSummary`, `AssetDetail` and every response carrying them)
+  gains four required members: `fileUrl` (the stable, unversioned file URL, the same across
+  replaces), `permalink` (string or `null`), `permalinkUrl` (the absolute permalink URL, or
+  `null`) and `contentVersion` (the identity of the bytes the asset currently holds).
+- `AssetRecord` gains `contentVersion: string` and `permalink: string | null`.
+
+A client that only reads these shapes needs no change. Code that builds an `AssetSummary`,
+`AssetDetail` or `AssetRecord` by hand — a test fixture, a mock, an optimistic list update — must
+add the new members. `url` and `storageUrl` keep their current values in this release.
+
+The routes that use the request schemas arrive with the assets library release that ships them.
