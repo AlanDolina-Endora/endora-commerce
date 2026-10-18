@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { JsonLd } from '../lib/seo/JsonLd';
 
 export interface BreadcrumbCrumb {
   href: string;
@@ -44,12 +45,7 @@ export function Breadcrumbs(props: { crumbs: BreadcrumbCrumb[] }): ReactNode {
           </li>
         ))}
       </ol>
-      <script
-        type="application/ld+json"
-        // Server-rendered — no XSS risk because every label/href comes
-        // from the typed catalog API, not from user input.
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <JsonLd data={jsonLd} />
     </nav>
   );
 }
