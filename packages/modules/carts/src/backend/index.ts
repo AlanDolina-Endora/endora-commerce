@@ -29,6 +29,7 @@ import type { SettingsReadPort } from '@endora-commerce/platform/kernel';
 import { abandonmentSettingsReaders } from './services/cart-abandonment-settings.js';
 import { CartQueryService } from './services/cart-query-service.js';
 import { CartPlacementApplyService } from './services/cart-placement-apply-port.js';
+import { CartLinePricing } from './services/cart-line-pricing.js';
 import { CartReadService, createCartWritePort } from './services/cart-read-port.js';
 import { CartService } from './services/cart-service.js';
 import { CartUpsellService } from './services/cart-upsell-service.js';
@@ -295,7 +296,20 @@ export function registerModule(ctx: ModuleContext): void {
    */
   ctx.di.providePort<CartPlacementApplyPort>(
     'cartPlacementApplyPort',
-    ctx.asFunction(() => new CartPlacementApplyService()).singleton(),
+    ctx
+      .asFunction(
+        ({ emFactory }: CartsCradle) =>
+          new CartPlacementApplyService(
+            emFactory,
+            new CartLinePricing(
+              lazyPort<LinePricePort>(ctx, 'pricingService'),
+              lazyPort<ProductDisplayModePort>(ctx, 'productDisplayModePort'),
+              lazyPort<OrganizationDetailsPort>(ctx, 'organizationDetailsPort'),
+            ),
+            lazyPort<CatalogProductReadPort>(ctx, 'catalogProductReadPort'),
+          ),
+      )
+      .singleton(),
   );
 
   ctx.di.providePort<CartQueryPort>(

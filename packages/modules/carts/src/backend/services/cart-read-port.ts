@@ -91,16 +91,34 @@ export function createCartWritePort(
       const cart = await getService().getOrCreateForCustomer(ctx);
       const existing = await em.find(CartItem, { cartId: cart.id });
       if (existing.length > 0) em.remove(existing);
+      // Lines seeded from an accepted Quote Request carry their agreement: the
+      // price holds at the quantity it was agreed for and at no other
+      // (`cart-line-pricing.ts`). Any other seed — a reorder — carries none, and
+      // its lines are priced like any other line, below.
+      const agreed = Boolean(options?.sourceQuoteRequestId);
+      const created: CartItem[] = [];
       for (const line of lines) {
-        em.create(CartItem, {
+        const item = em.create(CartItem, {
           cartId: cart.id,
           productId: line.productId,
           ...(line.variantId ? { variantId: line.variantId } : {}),
           quantity: line.quantity,
           unitPrice: line.unitPrice,
           currency: line.currency,
+          ...(agreed
+            ? {
+                agreedQuantity: line.quantity,
+                agreedUnitPrice: line.unitPrice,
+                agreedCurrency: line.currency,
+              }
+            : {}),
         });
+        created.push(item);
       }
+      // A seed without an agreement (a reorder) copies prices from the past;
+      // the basket holds the prices the customer may order the lines at now,
+      // so the buyer reviews and places at what they are shown.
+      if (!agreed) await getService().repriceLinesForCustomer(em, ctx, created);
       // The basket as **this** `EntityManager` holds it. `getOrCreateForCustomer`
       // answers a row managed by the service's own, so a column set on that
       // object is flushed by nobody — which is how `lastActivityAt` below went

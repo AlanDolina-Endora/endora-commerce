@@ -338,6 +338,22 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'reaches — every request schema in front of it already refuses the same quantity as a ' +
       'malformed request.',
   },
+  CART_PRODUCT_UNPRICED: {
+    to: 'carts',
+    reason:
+      'Minted for the refusal of a cart line no price list and no price of the Product\'s own ' +
+      'applies to. Such a line used to be stored at zero, and a cart line is ordered at its ' +
+      'stored price. The noun is the cart line and the raise sites are `carts`\' ' +
+      '`CartService.addItem` and `updateItem`.',
+  },
+  CART_PRICE_CHANGED: {
+    to: 'carts',
+    reason:
+      'Minted for the refusal of an order placement whose cart holds a line whose stored unit ' +
+      'price is not the price it may be ordered at now. The noun is the cart line\'s price, so ' +
+      'the owner is `carts`, as for `CART_EMPTY`; the one raise site is `orders`\' `placeOrder`, ' +
+      'after `carts` has brought the cart up to date.',
+  },
   CMS_SLUG_RESERVED: {
     to: 'cms',
     reason:

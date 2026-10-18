@@ -4,9 +4,11 @@ import { randomUUID } from 'crypto';
 
 /**
  * A line in a Cart. Two-layer pricing snapshot (feature 027):
- *   - `unitPrice` / `currency`: the price the line was added at. Read-only
- *     after add; useful for audit / diff and for the "added at" column in
- *     cart_audit_entries metadata.
+ *   - `unitPrice` / `currency`: the price the line is ordered at — the price
+ *     for its **current** quantity. Re-resolved whenever the quantity changes
+ *     (add-merge, quantity update, login merge), and compared with a fresh
+ *     resolution at order placement, which refuses a line whose stored price
+ *     is no longer current.
  *   - `recomputedUnitPrice` / `recomputedAt` / `recomputedCurrency`: the
  *     most recent re-resolved price. The Cart-Pricing-Recompute helper
  *     refreshes these on every full-cart-view read (with a 30 s Redis
@@ -26,7 +28,10 @@ export class CartItem {
     | 'recomputedCurrency'
     | 'packagingUnitId'
     | 'packagingUnitName'
-    | 'packagingUnitBaseQuantity';
+    | 'packagingUnitBaseQuantity'
+    | 'agreedQuantity'
+    | 'agreedUnitPrice'
+    | 'agreedCurrency';
 
   @PrimaryKey({ type: 'uuid' })
   id: string = randomUUID();
@@ -44,7 +49,7 @@ export class CartItem {
   @Property({ type: 'integer' })
   quantity!: number;
 
-  /** Price snapshot at time of add — services recalculate on read. */
+  /** The unit price the line is ordered at, for its current quantity. */
   @Property({ type: 'decimal', precision: 12, scale: 2 })
   unitPrice!: string;
 
@@ -78,6 +83,23 @@ export class CartItem {
 
   @Property({ type: 'integer', nullable: true })
   packagingUnitBaseQuantity?: number | null;
+
+  /**
+   * The agreement a line seeded from an accepted Quote Request carries: the
+   * seller's unit price and the quantity it was agreed for. The line is
+   * ordered at `agreedUnitPrice` only while `quantity` equals
+   * `agreedQuantity`; at any other quantity it is priced like any other line,
+   * and returning to the agreed quantity restores the agreed price. All three
+   * are null on every other line.
+   */
+  @Property({ type: 'integer', nullable: true })
+  agreedQuantity?: number | null;
+
+  @Property({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  agreedUnitPrice?: string | null;
+
+  @Property({ type: 'string', length: 3, nullable: true })
+  agreedCurrency?: string | null;
 
   @Property({ type: 'datetime', onCreate: () => new Date() })
   createdAt: Date = new Date();

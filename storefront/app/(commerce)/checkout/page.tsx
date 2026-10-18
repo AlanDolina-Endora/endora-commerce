@@ -418,8 +418,12 @@ async function submitAction(formData: FormData): Promise<void> {
     // Feature 036 (US4) — placement failed: the transaction rolled back, so the
     // cart is intact. Send the buyer to the Failure Page with a reason-specific
     // message and a "Try again" button (rather than re-rendering checkout).
+    // `detail` is the backend's sentence in the buyer's language; `message`
+    // carries the error code in front of it for logs. A refusal for changed
+    // cart prices (`CART_PRICE_CHANGED`) reads as that sentence, and the cart
+    // the buyer goes back to already holds the current prices.
     const message =
-      err instanceof StorefrontApiError ? err.message : 'Could not place the order.';
+      err instanceof StorefrontApiError ? err.detail : 'Could not place the order.';
     redirect(`/checkout/failure?reason=${encodeURIComponent(message)}`);
   }
   // Feature 036 — a gateway method returns a redirect next-action; send the

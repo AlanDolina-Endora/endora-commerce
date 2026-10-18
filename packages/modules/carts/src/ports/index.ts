@@ -39,9 +39,10 @@ import type { CartCustomerContext, CartWithItems } from '@endora-commerce/contra
  * Container name: `cartPlacementApplyPort`. Owner: `carts`.
  *
  * The basket half of order placement, run on the **caller's** `EntityManager`
- * (D-169). `orders` is the one consumer, and it has exactly two questions: what
- * is on the basket I am turning into an order, and — once that order exists —
- * finish the basket off against it.
+ * (D-169). `orders` is the one consumer, and it has three questions: what is on
+ * the basket I am turning into an order, is every line of it still priced at
+ * what it may be ordered at, and — once that order exists — finish the basket
+ * off against it.
  *
  * **The seam is not a defect in the design, it *is* the design.**
  * `carts_completed_order_fk` (`carts.completed_order_id` -> `orders.id`, `on
@@ -106,4 +107,44 @@ export interface CartPlacementApplyPort {
     em: EntityManager,
     input: { cartId: string; orderId: string },
   ): Promise<void>;
+  /**
+   * The basket's lines whose stored unit price is not the price they may be
+   * ordered at now — empty when every line is current.
+   *
+   * A cart line is ordered at its stored price, so placement asks this before
+   * it copies that price onto the order line, on the **same** `em` the read
+   * above ran on so both answers describe one basket. "The price they may be
+   * ordered at" is this module's answer, and the one it stores when a line is
+   * added or its quantity changes: the agreed price at the agreed quantity of a
+   * line seeded from an accepted Quote Request, otherwise the price list at the
+   * line's current quantity for `organizationId`, otherwise the Product's own
+   * price. A line with none of them, or one sold on request only, is reported
+   * with `currentUnitPrice: null`.
+   */
+  findPriceDrift(
+    em: EntityManager,
+    input: { cartId: string; organizationId: string | null },
+  ): Promise<CartLinePriceDrift[]>;
+  /**
+   * Store the price each line may be ordered at now, on this module's **own**
+   * `EntityManager` — for the caller whose placement {@link findPriceDrift}
+   * refused, after that transaction rolled back, so the basket the buyer goes
+   * back to review holds the prices the next placement will accept. A line
+   * with no orderable price keeps what it holds.
+   */
+  refreshLinePrices(input: { cartId: string; organizationId: string | null }): Promise<void>;
+}
+
+/** One line {@link CartPlacementApplyPort.findPriceDrift} reports. */
+export interface CartLinePriceDrift {
+  cartItemId: string;
+  productId: string;
+  variantId: string | null;
+  quantity: number;
+  /** Decimal string — the price the line holds. */
+  storedUnitPrice: string;
+  storedCurrency: string;
+  /** Decimal string — the price it may be ordered at now; `null` when it may not be ordered. */
+  currentUnitPrice: string | null;
+  currentCurrency: string | null;
 }

@@ -94,11 +94,35 @@ Koszyki innej organizacji zwracają 404 (tak samo jak nieistniejące, by nie uja
 
 - `Cart` (jeden aktywny dla każdej pary `(customer_account_id, sales_channel_id)`; pilnuje tego w
   PostgreSQL częściowy indeks unikalny).
-- `CartItem` (pozycja z kopią `unit_price` z chwili dodania i zapamiętanymi kolumnami
-  `recomputed_*`).
+- `CartItem` (pozycja z ceną `unit_price` — ceną, po której pozycja jest zamawiana — zapamiętanymi
+  kolumnami `recomputed_*` oraz kolumnami `agreed_*` pozycji wypełnionej z zaakceptowanego zapytania
+  ofertowego).
 - `CartAuditEntry` (typowana historia zmian każdego koszyka; indeks na `(cart_id, occurred_at DESC)`).
   Każda zmiana stanu trafia też do istniejącej tabeli `audit_log_entries` przez `AuditPort`, na
   wspólną oś czasu audytu platformy.
+
+## Ceny pozycji
+
+Pozycja koszyka jest zamawiana po zapisanej cenie `unit_price`, dlatego ta cena jest zawsze ceną dla
+**bieżącej** ilości pozycji:
+
+- Dodanie produktu, dodanie kolejnych sztuk produktu, który już jest w koszyku, zmiana ilości pozycji,
+  łączenie koszyka anonimowego przy logowaniu i wypełnienie koszyka na podstawie dawnego zamówienia
+  (ponowne zamówienie) zapisują cenę dla ilości wynikowej — próg ilościowy cennika dotyczy ilości,
+  która jest faktycznie zamawiana.
+- Cena pochodzi z cennika organizacji kupującego, a gdy żaden cennik nie ma zastosowania — z ceny
+  własnej produktu (atrybut `defaultPrice`). Produkt bez żadnej z nich jest odrzucany z kodem
+  `422 CART_PRODUCT_UNPRICED`, a produkt sprzedawany wyłącznie na zapytanie — z kodem
+  `400 CART_PRODUCT_QUOTE_ONLY`.
+- Pozycja wypełniona z zaakceptowanego zapytania ofertowego zachowuje uzgodnioną cenę tylko przy
+  uzgodnionej ilości. Przy każdej innej ilości jest wyceniana z cennika, a po powrocie do uzgodnionej
+  ilości odzyskuje uzgodnioną cenę.
+- Przy składaniu zamówienia moduł zamówień pyta ten moduł, czy każda zapisana cena jest nadal
+  aktualna. Jeśli któraś nie jest — zwykle dlatego, że cena w cenniku zmieniła się po dodaniu
+  pozycji — złożenie zamówienia jest odrzucane z kodem
+  `409 CART_PRICE_CHANGED` (`details.lines` wymienia każdą taką pozycję z poprzednią i bieżącą ceną
+  jednostkową), ceny w koszyku są aktualizowane, a kupujący sprawdza koszyk przed ponownym złożeniem
+  zamówienia.
 
 ## Ustawienia
 
@@ -113,8 +137,9 @@ Ustawienia tworzy przy starcie backendu ManifestReconciler cyklu życia modułó
 ## Łączenie koszyków przy logowaniu
 
 `cart-service.ts#mergeAnonymousIntoCustomer()` jest wywoływane przez hook `onLogin` modułu
-`organizations`. Ilości powtarzających się pozycji są sumowane; ciasteczko koszyka anonimowego jest
-unieważniane w tej samej operacji. Anonimowy koszyk źródłowy dostaje `status` `'completed'` (a nie
+`organizations`. Ilości powtarzających się pozycji są sumowane, a pozycje zsumowane i przeniesione
+otrzymują cenę, po której klient może je zamówić; ciasteczko koszyka anonimowego jest unieważniane w
+tej samej operacji. Anonimowy koszyk źródłowy dostaje `status` `'completed'` (a nie
 `'abandoned'`), aby wyszukiwanie porzuconych koszyków nie wysłało później zbędnego powiadomienia.
 
 ## Wyszukiwanie porzuconych koszyków
@@ -154,8 +179,9 @@ porzucenia mógł ponownie wysłać powiadomienie.
   /api/v1/quote-requests/:id/convert-to-order`, należy do modułu zapytań ofertowych): koszyk jest
   czyszczony i wypełniany pozycjami zapytania w **uzgodnionych** cenach jednostkowych przez
   `CartWritePort.replaceItemsForCustomer`, a w `source_quote_request_id` zapamiętuje zapytanie, z
-  którego został wypełniony. Oznaczenie towarzyszy uzgodnionym cenom: dodanie pozycji, usunięcie
-  jednej z nich albo zmiana ilości zachowuje jedno i drugie; usunięcie ostatniej pozycji albo
+  którego został wypełniony. Każda pozycja pamięta ilość, dla której uzgodniono jej cenę, i zachowuje
+  uzgodnioną cenę tylko przy tej ilości (zobacz *Ceny pozycji*). Dodanie pozycji, usunięcie jednej z
+  nich albo zmiana ilości zachowuje oznaczenie; usunięcie ostatniej pozycji albo
   ponowne wypełnienie koszyka z innego źródła (ponowne zamówienie) usuwa oznaczenie, a zamówienie
   tworzone dla klienta przez administratora zaczyna nowy koszyk bez niego. Moduł zamówień odczytuje je przy składaniu zamówienia i
   rozstrzyga, czy zamówienie może zapisać to zapytanie. Opisana wyżej kopia z ponowną wyceną nie

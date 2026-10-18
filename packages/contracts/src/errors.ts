@@ -158,6 +158,14 @@ export const ERROR_CODES = {
   CART_PRODUCT_QUOTE_ONLY: 'CART_PRODUCT_QUOTE_ONLY',
   /** A cart line's quantity is below the minimum a line may hold (`details.minimum`). */
   CART_QUANTITY_INVALID: 'CART_QUANTITY_INVALID',
+  /** No price list and no price of the Product's own applies, so the line has no price to be ordered at. */
+  CART_PRODUCT_UNPRICED: 'CART_PRODUCT_UNPRICED',
+  /**
+   * Order placement: a cart line's stored unit price is not the price it may be
+   * ordered at now (`details.lines`). The cart has been brought up to date and
+   * the buyer reviews it before placing again.
+   */
+  CART_PRICE_CHANGED: 'CART_PRICE_CHANGED',
   STOCK_UNAVAILABLE: 'STOCK_UNAVAILABLE',
   PROMOTION_INVALID: 'PROMOTION_INVALID',
   ORGANIZATION_SUSPENDED: 'ORGANIZATION_SUSPENDED',

@@ -13,7 +13,6 @@ import { CartItem } from '../entities/cart-item.entity.js';
 import type {
   CatalogPackagingUnitRecord,
   CatalogProductReadPort,
-  CatalogProductRecord,
   LinePricePort,
   ProductDisplayModePort,
   OrganizationDetailsPort,
@@ -24,7 +23,12 @@ import { outOfRequestChannel } from '@endora-commerce/platform/kernel';
 import type { CartApprovalService } from './cart-approval-service.js';
 import type { CartAuditService } from './cart-audit-service.js';
 import type { CartRecomputeCache } from './cart-recompute-cache.js';
-import type { DisplayMode } from '@endora-commerce/contracts';
+import {
+  CartLinePricing,
+  agreementOf,
+  type CartLinePriceAnswer,
+  type CartPricingContext,
+} from './cart-line-pricing.js';
 
 /**
  * CartService (T125).
@@ -116,7 +120,16 @@ export class CartService {
     private readonly approvalService?: CartApprovalService,
     private readonly auditService?: CartAuditService,
     private readonly recomputeCache?: CartRecomputeCache,
-  ) {}
+  ) {
+    this.#linePricing = new CartLinePricing(
+      this.pricingService,
+      this.displayModes,
+      this.organizations,
+    );
+  }
+
+  /** What a line may cost at its current quantity — see `cart-line-pricing.ts`. */
+  readonly #linePricing: CartLinePricing;
 
   /** Invalidate the per-cart price-recompute cache on every cart-side write. */
   async #invalidateRecomputeCache(cartId: string): Promise<void> {
@@ -132,10 +145,12 @@ export class CartService {
    * A basket seeded from an accepted Quote Request stops being that request's
    * basket when its last line goes (`specs/143-crm-sales-opportunities/`,
    * FR-101). Adding to it, removing from it and changing a quantity do not
-   * touch the mark, because they do not touch the agreed unit prices on the
-   * lines that remain either — the id follows the rule the prices already
-   * follow. An emptied basket has no agreed line left, so whatever is put in
-   * it next is priced from the list and is an ordinary order.
+   * touch the mark, because they do not remove the agreement the remaining
+   * lines carry either: a line moved off its agreed quantity is priced from
+   * the list, and gets its agreed price back at the agreed quantity. Whether
+   * the order may still name the request is `orders`' judgement at placement.
+   * An emptied basket has no agreed line left, so whatever is put in it next is
+   * priced from the list and is an ordinary order.
    */
   async #forgetSourceWhenEmptied(em: EntityManager, cart: Cart): Promise<void> {
     if (!cart.sourceQuoteRequestId) return;
@@ -307,8 +322,24 @@ export class CartService {
       variantId: input.variantId ?? null,
       packagingUnitId: input.packagingUnitId ?? null,
     });
+    const pricingCtx = await this.#linePricing.contextFor(em, {
+      organizationId: actor.customer?.organizationId ?? null,
+      signedIn: actor.customer !== undefined,
+    });
     if (existing) {
-      existing.quantity += effectiveQuantity;
+      // The merged line is a line of a new quantity, so it takes the price for
+      // that quantity — a quantity-tier bracket the old quantity reached does
+      // not carry over, and an agreed price holds only at the agreed quantity.
+      const quantity = existing.quantity + effectiveQuantity;
+      const price = await this.#orderablePriceOrRefuse(pricingCtx, {
+        product,
+        variantId: existing.variantId ?? null,
+        quantity,
+        agreed: agreementOf(existing),
+      });
+      existing.quantity = quantity;
+      existing.unitPrice = price.unitPrice;
+      existing.currency = price.currency;
       cart.lastActivityAt = new Date();
       await em.flush();
     } else {
@@ -323,35 +354,14 @@ export class CartService {
           'cart_line_cap_exceeded',
         );
       }
-      const resolved = await this.#resolveLineUnitPrice(em, {
+      // T084 / issue #236 — a product sold on request only is refused, and since
+      // the price is what the order is placed at, so is a product nobody priced
+      // (it used to become a line at `0.00`).
+      const price = await this.#orderablePriceOrRefuse(pricingCtx, {
         product,
-        organizationId: actor.customer?.organizationId ?? null,
-        quantity: effectiveQuantity,
         variantId: input.variantId ?? null,
+        quantity: effectiveQuantity,
       });
-      // T084 — defence-in-depth: refuse the line when the product is
-      // quote-only for the (org, channel) tuple. Issue #236: the mode is read
-      // off the list price when there is one, and asked for on its own when
-      // there is not — a product no price list holds resolved nothing, and the
-      // guard used to be skipped for it.
-      const displayMode =
-        resolved?.displayMode ??
-        (await this.#lineDisplayMode(em, {
-          productId: product.id,
-          organizationId: actor.customer?.organizationId ?? null,
-          signedIn: actor.customer !== undefined,
-        }));
-      if (displayMode === 'none') {
-        // Issue #86 — its own code: raised as `VALIDATION_FAILED` it could not
-        // be told from a malformed request, and the buyer read the identifier
-        // `product_quote_only` in every language.
-        throw new HttpError(
-          400,
-          ERROR_CODES.CART_PRODUCT_QUOTE_ONLY,
-          'This product is sold on request only and cannot be added to the cart.',
-          { productId: product.id },
-        );
-      }
       const item = em.create(CartItem, {
         cartId: cart.id,
         productId: product.id,
@@ -364,19 +374,8 @@ export class CartService {
             }
           : {}),
         quantity: effectiveQuantity,
-        // `resolved === null` is `price_lists` answering "no list applies to
-        // this line"; the catalogue attribute is the legacy stand-in for that
-        // case and is reported as remaining debt (issue #124). What can no
-        // longer land here is an *absent* `price_lists`: resolving the port
-        // throws `MODULE_DISABLED` before this expression runs.
-        unitPrice: resolved
-          ? Number(resolved.amount).toFixed(2)
-          : (Number(
-              product.attributeValues['defaultPrice'] ??
-                product.attributeValues['price'] ??
-                0,
-            )).toFixed(2),
-        currency: resolved?.currency ?? 'PLN',
+        unitPrice: price.unitPrice,
+        currency: price.currency,
       });
       em.persist(item);
       cart.lastActivityAt = new Date();
@@ -410,72 +409,37 @@ export class CartService {
   }
 
   /**
-   * Look up the line's unit price via the resolver.
+   * The price a line may be stored at, or the refusal the buyer reads.
    *
-   * `null` means "the price-list engine answered, and nothing applies" —
-   * `resolveLinePrice`'s own documented answer — so there is no `catch` here
-   * (issue #84). There used to be one, and it made the two answers
-   * indistinguishable: a `price_lists` switched off, or a resolver bug, both
-   * came back as "this line has no price", and the cart quietly re-priced from
-   * the catalogue default. An absent `price_lists` now throws through this
-   * method to the route (issue #124).
+   * There is no `catch` around the resolution (issue #84): `null` is the
+   * price-list engine's own "nothing applies", which the chain in
+   * `cart-line-pricing.ts` answers with the Product's own price, and an absent
+   * `price_lists` throws `MODULE_DISABLED` through this method to the route
+   * (issue #124).
    */
-  /**
-   * The product's display mode when no list price carried one (issue #236),
-   * for the channel and buyer the line price was resolved for — the system
-   * default channel, see the constructor — so the two answers cannot disagree.
-   * `null` where there is no channel to ask about, as `#resolveLineUnitPrice`
-   * answers there.
-   */
-  async #lineDisplayMode(
-    em: EntityManager,
-    input: { productId: string; organizationId: string | null; signedIn: boolean },
-  ): Promise<DisplayMode | null> {
-    const channel = await em.findOne(SalesChannel, { systemDefault: true });
-    if (!channel) return null;
-    return this.displayModes.resolveDisplayMode({
-      productId: input.productId,
-      organizationId: input.organizationId,
-      salesChannelId: channel.id,
-      customerKind: input.signedIn ? 'signed_in' : 'guest',
-    });
-  }
-
-  async #resolveLineUnitPrice(
-    em: EntityManager,
-    input: {
-      product: CatalogProductRecord;
-      organizationId: string | null;
-      quantity: number;
-      variantId: string | null;
-    },
-  ): Promise<{
-    amount: string;
-    currency: string;
-    priceListId: string;
-    displayMode: DisplayMode;
-  } | null> {
-    const channel = await em.findOne(SalesChannel, { systemDefault: true });
-    if (!channel) return null;
-    const organization = input.organizationId
-      ? await this.organizations.findById(input.organizationId)
-      : null;
-    const resolved = await this.pricingService.resolveLinePrice({
-      product: input.product,
-      variantId: input.variantId,
-      context: {
-        quantity: input.quantity,
-        ...(organization ? { organization } : {}),
-        salesChannel: channel,
-      },
-    });
-    if (!resolved) return null;
-    return {
-      amount: resolved.amount,
-      currency: resolved.currency,
-      priceListId: resolved.priceListId,
-      displayMode: resolved.displayMode,
-    };
+  async #orderablePriceOrRefuse(
+    ctx: CartPricingContext,
+    line: Parameters<CartLinePricing['orderablePrice']>[1],
+  ): Promise<Extract<CartLinePriceAnswer, { ok: true }>> {
+    const answer = await this.#linePricing.orderablePrice(ctx, line);
+    if (answer.ok) return answer;
+    if (answer.reason === 'quote_only') {
+      // Issue #86 — its own code: raised as `VALIDATION_FAILED` it could not
+      // be told from a malformed request, and the buyer read the identifier
+      // `product_quote_only` in every language.
+      throw new HttpError(
+        400,
+        ERROR_CODES.CART_PRODUCT_QUOTE_ONLY,
+        'This product is sold on request only and cannot be added to the cart.',
+        { productId: line.product.id },
+      );
+    }
+    throw new HttpError(
+      422,
+      ERROR_CODES.CART_PRODUCT_UNPRICED,
+      'This product has no price and cannot be added to the cart.',
+      { productId: line.product.id },
+    );
   }
 
   async updateItem(
@@ -493,8 +457,27 @@ export class CartService {
     const oldQuantity = item.quantity;
     if (quantity <= 0) {
       em.remove(item);
-    } else {
+    } else if (quantity !== oldQuantity) {
+      // A new quantity takes the price for that quantity: a quantity-tier
+      // bracket the old quantity reached does not carry over, and an agreed
+      // price holds only at the agreed quantity.
+      const product = await this.catalogProducts.findById(item.productId);
+      if (!product) {
+        throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'Product not found.');
+      }
+      const pricingCtx = await this.#linePricing.contextFor(em, {
+        organizationId: actor.customer?.organizationId ?? cart.organizationId ?? null,
+        signedIn: actor.customer !== undefined,
+      });
+      const price = await this.#orderablePriceOrRefuse(pricingCtx, {
+        product,
+        variantId: item.variantId ?? null,
+        quantity,
+        agreed: agreementOf(item),
+      });
       item.quantity = quantity;
+      item.unitPrice = price.unitPrice;
+      item.currency = price.currency;
     }
     cart.lastActivityAt = new Date();
     await em.flush();
@@ -650,6 +633,7 @@ export class CartService {
 
     let movedLineCount = 0;
     let summedLineCount = 0;
+    const repriced: CartItem[] = [];
     const anonItems = await em.find(CartItem, { cartId: anon.id });
     for (const item of anonItems) {
       const existing = await em.findOne(CartItem, {
@@ -660,11 +644,18 @@ export class CartService {
       if (existing) {
         existing.quantity += item.quantity;
         summedLineCount += 1;
+        repriced.push(existing);
       } else {
         item.cartId = customerCart.id;
         movedLineCount += 1;
+        repriced.push(item);
       }
     }
+    // A summed line has a new quantity, and a moved line was priced for an
+    // anonymous shopper: both take the price this customer may order them at.
+    // A line that has none keeps what it holds — the login must not fail over
+    // it — and order placement refuses it until the buyer reviews the cart.
+    await this.repriceLinesForCustomer(em, ctx, repriced);
 
     // Merge complete — mark the source anonymous cart as `completed` even
     // when the merge was a noop_empty (it never produced anything down-
@@ -709,6 +700,43 @@ export class CartService {
       summedLineCount,
       destinationCartId: customerCart.id,
     };
+  }
+
+  /**
+   * Store on each line the price this customer may order it at now, without
+   * flushing — the caller's `em` manages the lines and writes them. A line with
+   * no orderable price (unpriced, sold on request only, its product gone, or a
+   * product this read cannot see) keeps what it holds; order placement refuses
+   * it until the buyer reviews the cart. Used where refusing is not an option:
+   * the login merge, and seeding a basket from a past order.
+   */
+  async repriceLinesForCustomer(
+    em: EntityManager,
+    customer: CustomerContext,
+    items: CartItem[],
+  ): Promise<void> {
+    if (items.length === 0) return;
+    const pricingCtx = await this.#linePricing.contextFor(em, {
+      organizationId: customer.organizationId,
+      signedIn: true,
+    });
+    const products = await this.catalogProducts.findByIds([
+      ...new Set(items.map((it) => it.productId)),
+    ]);
+    const productById = new Map(products.map((p) => [p.id, p]));
+    for (const item of items) {
+      const product = productById.get(item.productId);
+      if (!product) continue;
+      const answer = await this.#linePricing.orderablePrice(pricingCtx, {
+        product,
+        variantId: item.variantId ?? null,
+        quantity: item.quantity,
+        agreed: agreementOf(item),
+      });
+      if (!answer.ok) continue;
+      item.unitPrice = answer.unitPrice;
+      item.currency = answer.currency;
+    }
   }
 
   async clearForCustomer(ctx: CustomerContext): Promise<void> {

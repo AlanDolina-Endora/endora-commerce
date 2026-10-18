@@ -179,6 +179,12 @@ export const manifest = defineModuleManifest({
     // `VALIDATION_FAILED`, a code whose message the envelope never replaces.
     { code: 'CART_PRODUCT_QUOTE_ONLY' },
     { code: 'CART_QUANTITY_INVALID' },
+    // A cart line is ordered at its stored price, so a line with no price to
+    // store is refused rather than stored at zero.
+    { code: 'CART_PRODUCT_UNPRICED' },
+    // Raised by `orders` at placement, like `CART_EMPTY`: the noun is the cart
+    // line's price, and the domain noun decides the owner, never the thrower.
+    { code: 'CART_PRICE_CHANGED' },
   ],
   settings,
   // Feature 074 (Constitution XVII), test C2 — functional base. This reverses

@@ -3,6 +3,8 @@
   "errors.CART_LINE_CAP_EXCEEDED": "Osiągnięto maksymalną liczbę pozycji w koszyku.",
   "errors.CART_PRODUCT_QUOTE_ONLY": "Ten produkt jest sprzedawany wyłącznie na zapytanie, dlatego nie można dodać go do koszyka. Wyślij zapytanie ofertowe.",
   "errors.CART_QUANTITY_INVALID": "Ilość musi wynosić co najmniej {minimum}.",
+  "errors.CART_PRODUCT_UNPRICED": "Ten produkt nie ma ceny, dlatego nie można dodać go do koszyka.",
+  "errors.CART_PRICE_CHANGED": "Ceny w Twoim koszyku uległy zmianie. Sprawdź koszyk i złóż zamówienie ponownie.",
   "errors.CART_COUPON_REJECTED": "Nie udało się zastosować kodu kuponu.",
   "errors.CART_COUPON_REJECTED.invalid_code": "Nieprawidłowy kod kuponu.",
   "errors.CART_COUPON_REJECTED.expired": "Kod kuponu wygasł.",
