@@ -269,6 +269,27 @@ export interface MfaEnrolmentCountPort {
 }
 
 /**
+ * Container name: `mfaDeactivationGuardPort`. Owner: `mfa`.
+ *
+ * Whether switching this module off would withdraw a second factor the
+ * platform currently **requires** of administrators. `/platform/modules` asks
+ * it before an operator switches `mfa` off and refuses the switch-off while the
+ * answer is `true` (`MFA_DEACTIVATION_BLOCKED`): the requirement is turned off
+ * first, as its own deliberate settings change, and only then the
+ * module. Off still means no second factor (D-96); what this adds is that the
+ * one switch no longer silently takes the administrator requirement with it.
+ *
+ * Read while the module is still on, through an open gate, for the reason
+ * {@link MfaEnrolmentCountPort} gives. Unlike that count, a read that fails is
+ * **not** tolerated: an unanswered "is a second factor required?" refuses the
+ * switch-off rather than letting it through.
+ */
+export interface MfaDeactivationGuardPort {
+  /** Whether `mfa.admin.totp_enforced` is in force for the admin surface. */
+  isAdminSecondFactorRequired(): Promise<boolean>;
+}
+
+/**
  * Container name: `mfaEnrolmentStatePort`. Owner: `mfa`.
  *
  * Which of these subjects hold an **active** (confirmed) second factor, right

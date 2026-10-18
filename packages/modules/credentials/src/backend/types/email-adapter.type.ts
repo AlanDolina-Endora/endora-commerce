@@ -17,7 +17,9 @@ export const emailAdapterConfigurationType: ConfigurationTypeDescriptor = {
       code: 'smtp',
       label: 'SMTP',
       fields: [
-        { key: 'host', label: 'Host', kind: 'string', required: true, secret: false },
+        // The mail server the password is sent to: changing it asks for the
+        // password again rather than sending the stored one there.
+        { key: 'host', label: 'Host', kind: 'string', required: true, secret: false, endpoint: true },
         { key: 'port', label: 'Port', kind: 'number', required: true, secret: false },
         { key: 'secure', label: 'Use TLS', kind: 'boolean', required: false, secret: false },
         { key: 'username', label: 'Username', kind: 'string', required: false, secret: false },

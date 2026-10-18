@@ -257,6 +257,11 @@ export const manifest = defineModuleManifest({
    */
   errorCodes: [
     { code: 'MFA_ALREADY_ENROLLED' },
+    // Raised by the platform's activation write, on this module's behalf: the
+    // module cannot be switched off while administrators are required to use a
+    // second factor. Only ever raised while the module is present, so this
+    // bundle is there to translate it.
+    { code: 'MFA_DEACTIVATION_BLOCKED' },
     { code: 'MFA_INVALID_CHALLENGE' },
     { code: 'MFA_INVALID_CODE' },
     { code: 'MFA_NOT_ENABLED' },

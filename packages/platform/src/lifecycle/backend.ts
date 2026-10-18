@@ -1,4 +1,4 @@
-import type { MfaEnrolmentCountPort } from '@endora-commerce/contracts';
+import type { MfaDeactivationGuardPort, MfaEnrolmentCountPort } from '@endora-commerce/contracts';
 import type { ModuleContext } from '../kernel/index.js';
 import { lazyPort } from '../kernel/index.js';
 import type { ApiInterceptorRegistry } from '../http/interceptors/index.js';
@@ -95,6 +95,10 @@ export function registerModule(ctx: ModuleContext): void {
         // The route probes `mfa`'s presence before it calls — the count is read
         // while the module is still on, which is what the dialog is for.
         mfaEnrolmentCount: lazyPort<MfaEnrolmentCountPort>(ctx, 'mfaEnrolmentCountPort'),
+        // Asked before `mfa` is switched off: a switch-off while administrators
+        // are required to use a second factor is refused, so the requirement
+        // is turned off as its own change first.
+        mfaDeactivationGuard: lazyPort<MfaDeactivationGuardPort>(ctx, 'mfaDeactivationGuardPort'),
       });
 
       registerModulePresenceStorefrontRoutes(app);

@@ -394,7 +394,9 @@ enrol every administrator, and only then enforce it — enforcing before enrolme
 everybody out.
 
 **Verify.** A second sign-in attempt asks for the code, and an account with no enrolment is
-refused once enforcement is on.
+refused once enforcement is on. While enforcement is on, `/platform/modules` also refuses to
+switch `mfa` off (`409 MFA_DEACTIVATION_BLOCKED`): turn enforcement off first if the module
+really has to go.
 
 ---
 

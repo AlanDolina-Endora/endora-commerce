@@ -1,9 +1,10 @@
 import { z } from 'zod';
-import type {
-  ConfigurationFieldDto,
-  ConfigurationTypeDescriptor,
-  FieldDefinition,
-  ProviderVariant,
+import {
+  isCredentialEndpointField,
+  type ConfigurationFieldDto,
+  type ConfigurationTypeDescriptor,
+  type FieldDefinition,
+  type ProviderVariant,
 } from '@endora-commerce/contracts';
 import { ConfigurationTypeUnknown } from './configuration-type-registry.js';
 import { encryptSecretValue, secretValueIsSet } from './secret-value-codec.js';
@@ -16,9 +17,30 @@ export interface FieldError {
   message: string;
 }
 
+/** A stored secret the update must re-enter, because an endpoint it is sent to changed. */
+export interface SecretToReenter {
+  /** The secret field's key. */
+  field: string;
+  /** The secret field's label, for the refusal sentence. */
+  label: string;
+  /** Labels of the endpoint fields whose change requires it. */
+  endpoints: string[];
+}
+
 export interface BuildValuesResult {
   values: Record<string, unknown>;
   errors: FieldError[];
+  /**
+   * Stored secrets that were not re-entered although an endpoint field changed.
+   * They are left out of `values`; a caller persisting `values` while this is
+   * non-empty would drop them, so it refuses instead.
+   */
+  secretsToReenter: SecretToReenter[];
+}
+
+/** An endpoint value as compared: absent, `null` and blank are one value. */
+function endpointValue(value: unknown): string {
+  return value === undefined || value === null ? '' : String(value).trim();
 }
 
 /**
@@ -96,7 +118,11 @@ export function buildFieldValidator(
  *    keeps the existing envelope; a non-empty secret is re-encrypted;
  *  - a non-secret field absent from `submitted` keeps its existing value (so a
  *    partial update need not resend every field);
- *  - required fields must be present and non-empty (per-field error otherwise).
+ *  - required fields must be present and non-empty (per-field error otherwise);
+ *  - a stored secret is **not** kept when an endpoint field (see
+ *    `isCredentialEndpointField`) changes: it is reported in `secretsToReenter`
+ *    and left out of `values`, so the secret is only ever sent where it was
+ *    entered for.
  *
  * `existing` is `{}` on create. Errors are collected per field (never throws for
  * a validation problem) so the caller can surface a `CREDENTIAL_VALIDATION_FAILED`
@@ -111,6 +137,19 @@ export function buildPersistableValues(opts: {
   const { fields, submitted, existing, secretEncryptionKey } = opts;
   const values: Record<string, unknown> = {};
   const errors: FieldError[] = [];
+  const secretsToReenter: SecretToReenter[] = [];
+
+  // The endpoints this write moves: compared on the effective value, so a
+  // field left out of `submitted` keeps its stored value and moves nothing.
+  const movedEndpoints = fields
+    .filter((field) => !field.secret && isCredentialEndpointField(field))
+    .filter((field) => {
+      const next = Object.prototype.hasOwnProperty.call(submitted, field.key)
+        ? submitted[field.key]
+        : existing[field.key];
+      return endpointValue(next) !== endpointValue(existing[field.key]);
+    })
+    .map((field) => field.label);
 
   for (const field of fields) {
     if (field.secret) {
@@ -119,6 +158,10 @@ export function buildPersistableValues(opts: {
       if (providesNew) {
         values[field.key] = encryptSecretValue(raw, secretEncryptionKey);
       } else if (secretValueIsSet(existing[field.key])) {
+        if (movedEndpoints.length > 0) {
+          secretsToReenter.push({ field: field.key, label: field.label, endpoints: movedEndpoints });
+          continue;
+        }
         values[field.key] = existing[field.key];
       }
       if (field.required && !(field.key in values)) {
@@ -143,7 +186,7 @@ export function buildPersistableValues(opts: {
     values[field.key] = candidate;
   }
 
-  return { values, errors };
+  return { values, errors, secretsToReenter };
 }
 
 function validateNonSecretValue(field: FieldDefinition, value: unknown): string | null {

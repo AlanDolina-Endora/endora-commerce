@@ -105,9 +105,9 @@ export const manifest = defineModuleManifest({
    * bare `500 INTERNAL`. Re-routing any of this is out of scope (§6.5); disagreement belongs in
    * `specs/082-error-code-ownership/rulings.md` §9.
    *
-   * **All six are raised**, in both spellings (trap T12): `ERROR_CODES.<CODE>`
+   * **All seven are raised**, in both spellings (trap T12): `ERROR_CODES.<CODE>`
    * and the bare quoted literal, over `packages`, `backend/src`, `admin` and
-   * `storefront`. Every raise is inside this package — twelve `HttpError`
+   * `storefront`. Every raise is inside this package — thirteen `HttpError`
    * throws — so unlike `settings` and `invoices` this module's raise sites and
    * its package coincide. No entry for the deferred-defect register. The
    * thirteenth mention is not a throw and is worth naming, because a grep counts
@@ -122,11 +122,13 @@ export const manifest = defineModuleManifest({
    *
    * **No `tokens`, derived rather than assumed.** `refusalToken`
    * (`packages/platform/src/http/error-envelope.ts`) reads `details.code` off a
-   * free-form object and nothing else. Of the twelve throws, nine pass no
+   * free-form object and nothing else. Of the thirteen throws, nine pass no
    * fourth argument at all; the two `CREDENTIAL_VALIDATION_FAILED` raises pass
    * the Zod-style `Array<{path, issue}>`, which `refusalToken` returns `null`
-   * for by construction; and the one `CREDENTIAL_IN_USE` raise passes
-   * `{ referencedBy }`, a free-form object with no `code` member. The runbook's
+   * for by construction; the one `CREDENTIAL_IN_USE` raise passes
+   * `{ referencedBy }`, and the one `CREDENTIAL_SECRET_REENTRY_REQUIRED` raise
+   * passes `{ secrets, endpoints, fields }` — free-form objects with no `code`
+   * member. The runbook's
    * §5 raise-site scan attributes the tree's ten token-carrying codes over 41
    * sites to `core`, `invoices` and `carts`, naming none of these, and the
    * bundles hold no `errors.<CODE>.<token>` key in the other direction.
@@ -135,6 +137,8 @@ export const manifest = defineModuleManifest({
     { code: 'CREDENTIAL_CODE_TAKEN' },
     { code: 'CREDENTIAL_IN_USE' },
     { code: 'CREDENTIAL_NOT_FOUND' },
+    // An update moved an endpoint field without re-entering the stored secrets.
+    { code: 'CREDENTIAL_SECRET_REENTRY_REQUIRED' },
     { code: 'CREDENTIAL_TYPE_IMMUTABLE' },
     { code: 'CREDENTIAL_TYPE_UNKNOWN' },
     { code: 'CREDENTIAL_VALIDATION_FAILED' },

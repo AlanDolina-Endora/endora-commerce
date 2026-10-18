@@ -123,6 +123,22 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'noun is the admin account, `admin_users`\' own row, and both raise sites are in its ' +
       'service.',
   },
+  CREDENTIAL_SECRET_REENTRY_REQUIRED: {
+    to: 'credentials',
+    reason:
+      'Minted for the refusal an update earns by changing a field that says where a credential ' +
+      'record\'s secrets are sent — an API Base URL, a mail host — without re-entering them. ' +
+      'The noun is the credential configuration, `credentials`\' own row, and the one raise ' +
+      'site is its update command.',
+  },
+  MFA_DEACTIVATION_BLOCKED: {
+    to: 'mfa',
+    reason:
+      'Minted for the refusal an operator earns by switching `mfa` off while administrators are ' +
+      'required to sign in with a second factor. The noun is the second factor, which is this ' +
+      'module\'s whole subject; the raise site is the platform\'s activation write, which asks ' +
+      '`mfa` through `mfaDeactivationGuardPort` and only ever raises while `mfa` is present.',
+  },
   NEW_PASSWORD_UNCHANGED: {
     to: 'admin_users',
     reason:
