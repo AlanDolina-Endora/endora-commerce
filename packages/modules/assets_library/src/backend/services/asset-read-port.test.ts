@@ -293,3 +293,12 @@ describe('AssetRecord.storageUrl (feature 156)', () => {
     expect(record.storageUrl).toBe(over.storageUrl);
   });
 });
+
+describe('AssetRecord.storageUrl without a storage key (feature 156)', () => {
+  it('is the stored URL unchanged — no adapter of this platform wrote it', () => {
+    const record = toAssetRecord(
+      seededAsset(PUBLIC_ID, { storageLocator: '', storageUrl: 'https://cdn.example.test/a.jpg' } as Partial<Asset>),
+    );
+    expect(record.storageUrl).toBe('https://cdn.example.test/a.jpg');
+  });
+});

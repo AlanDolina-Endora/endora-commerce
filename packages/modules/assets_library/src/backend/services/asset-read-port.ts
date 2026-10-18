@@ -209,8 +209,12 @@ export function toAssetRecord(asset: Asset, retentionDays = 30): AssetRecord {
     sizeBytes: asset.sizeBytes,
     // A URL that serves the current version: the stored URL plus its marker
     // (specs/156-asset-stable-url/ research R-8); unchanged for legacy rows and
-    // `data:` values, which `orders` reads by prefix.
-    storageUrl: versionedAssetUrl(asset.storageUrl, asset.contentVersion, asset.storageBackend),
+    // `data:` values, which `orders` reads by prefix — and for a row with no
+    // storage key, whose stored URL no adapter of this platform wrote (every
+    // row the library stores has one; feature 013 backfilled the rest).
+    storageUrl: asset.storageLocator
+      ? versionedAssetUrl(asset.storageUrl, asset.contentVersion, asset.storageBackend)
+      : asset.storageUrl,
     altText: asset.altText ?? null,
     folderId: asset.folderId ?? null,
     visibility: asset.visibility,
