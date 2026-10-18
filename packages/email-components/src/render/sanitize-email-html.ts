@@ -31,33 +31,62 @@ function attrValue(attrs: string, name: string): string {
   return match?.[2] ?? match?.[3] ?? match?.[4] ?? '';
 }
 
+/** A tag at the current position: `<name ...>` or `</name ...>`. Sticky, so it never skips ahead. */
+const TAG_AT = /<\/?([a-zA-Z0-9]+)(\s[^>]*)?>/y;
+
+function rebuildTag(full: string, tag: string, attrs: string): string {
+  const name = tag.toLowerCase();
+  if (!ALLOWED_TAGS.has(name)) return '';
+  if (full.startsWith('</')) return `</${name}>`;
+  if (name === 'br') return '<br />';
+
+  if (name === 'a') {
+    const href = sanitizeHref(attrValue(attrs, 'href'));
+    if (!href) return '';
+    return `<a href="${escapeAttr(href)}" target="_blank" rel="noreferrer">`;
+  }
+
+  if (name === 'img') {
+    const src = sanitizeImgSrc(attrValue(attrs, 'src'));
+    if (!src) return '';
+    const alt = attrValue(attrs, 'alt');
+    const widthRaw = attrValue(attrs, 'width').replace(/[^\d]/g, '');
+    const width = widthRaw ? ` width="${widthRaw}"` : '';
+    return (
+      `<img src="${escapeAttr(src)}" alt="${escapeAttr(alt)}"${width} ` +
+      `style="${EMAIL_IMG_STYLE}" />`
+    );
+  }
+
+  return `<${name}>`;
+}
+
+/**
+ * One left-to-right pass: every `<` either starts a tag, which is rebuilt from the allowlist or
+ * dropped, or is written out as `&lt;`. Removing a tag can therefore never join the text around
+ * it into a new tag — the output holds no `<` the allowlist did not write.
+ */
 function stripTags(html: string): string {
-  return html.replace(/<\/?([a-zA-Z0-9]+)(\s[^>]*)?>/g, (full, tag: string, attrs = '') => {
-    const name = tag.toLowerCase();
-    if (!ALLOWED_TAGS.has(name)) return '';
-    if (full.startsWith('</')) return `</${name}>`;
-    if (name === 'br') return '<br />';
-
-    if (name === 'a') {
-      const href = sanitizeHref(attrValue(attrs, 'href'));
-      if (!href) return '';
-      return `<a href="${escapeAttr(href)}" target="_blank" rel="noreferrer">`;
+  let out = '';
+  let i = 0;
+  while (i < html.length) {
+    const lt = html.indexOf('<', i);
+    if (lt === -1) {
+      out += html.slice(i);
+      break;
     }
-
-    if (name === 'img') {
-      const src = sanitizeImgSrc(attrValue(attrs, 'src'));
-      if (!src) return '';
-      const alt = attrValue(attrs, 'alt');
-      const widthRaw = attrValue(attrs, 'width').replace(/[^\d]/g, '');
-      const width = widthRaw ? ` width="${widthRaw}"` : '';
-      return (
-        `<img src="${escapeAttr(src)}" alt="${escapeAttr(alt)}"${width} ` +
-        `style="${EMAIL_IMG_STYLE}" />`
-      );
+    out += html.slice(i, lt);
+    TAG_AT.lastIndex = lt;
+    const match = TAG_AT.exec(html);
+    if (match) {
+      out += rebuildTag(match[0], match[1]!, match[2] ?? '');
+      i = lt + match[0].length;
+    } else {
+      out += '&lt;';
+      i = lt + 1;
     }
-
-    return `<${name}>`;
-  });
+  }
+  return out;
 }
 
 function sanitizeHref(href: string): string {
@@ -98,8 +127,12 @@ function escapeAttr(value: string): string {
 /** Returns sanitized HTML fragment safe to embed in an email table cell. */
 export function sanitizeEmailHtml(html: string): string {
   if (!html || typeof html !== 'string') return '';
-  // Remove script/style blocks entirely first.
-  let out = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '');
+  // Drop comments and script/style blocks with their content first. This only removes text;
+  // stripTags below is what guarantees no tag outside the allowlist survives.
+  let out = html
+    .replace(/<!--[\s\S]*?(?:-->|$)/g, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '');
   out = stripTags(out);
   // Collapse empty paragraphs left by stripping.
   out = out.replace(/<p>\s*<\/p>/g, '');

@@ -43,6 +43,27 @@ describe('sanitizeEmailHtml', () => {
     expect(sanitizeEmailHtml('<img src="data:image/png;base64,xxx" alt="x" />')).not.toContain('<img');
   });
 
+  it.each([
+    '<<x>img src=x onerror=alert(1)>',
+    '<<x>script>alert(1)<</x>/script>',
+    '<<x>script>alert(1)</script>',
+    '<scr<script>ipt>alert(1)</script>',
+    '<img src=x onerror=alert(1)>',
+    '<a href="&#106;avascript:alert(1)">x</a>',
+    '<svg onload=alert(1)>',
+    '<!--><img src=x onerror=alert(1)>-->',
+    '<p title="x>"><img src=x onerror=alert(1)></p>',
+  ])('renders %s without any markup outside the allowlist', (payload) => {
+    const out = sanitizeEmailHtml(payload);
+    expect(out).not.toMatch(/<(?!\/?(p|br|strong|b|em|i|u|s|a|ul|ol|li|span|h1|h2|h3|img)[\s/>])/i);
+    expect(out).not.toMatch(/<[^>]*\son\w+\s*=/i);
+    expect(out).not.toMatch(/<[^>]*javascript:/i);
+  });
+
+  it('escapes a stray "<" in text rather than dropping or emitting it', () => {
+    expect(sanitizeEmailHtml('<p>a < b and <<x>c</p>')).toBe('<p>a &lt; b and &lt;c</p>');
+  });
+
   it('converts sanitized HTML to plain text without losing directives', () => {
     const text = emailHtmlToPlainText(
       '<p>Hello {{var subscriber.email}}</p><p><img src="https://x/a.png" alt="Photo" /></p><p>Bye</p>',

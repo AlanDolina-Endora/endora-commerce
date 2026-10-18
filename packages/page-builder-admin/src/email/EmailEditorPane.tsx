@@ -174,7 +174,57 @@ function EmbedPreviewHtml({ content }: { content: Record<string, unknown> }): Re
     },
     { escape: true },
   );
-  return <div dangerouslySetInnerHTML={{ __html: html }} />;
+  return <SandboxedEmailHtml html={html} />;
+}
+
+/**
+ * Draws rendered e-mail HTML inside a frame whose sandbox withholds scripts, so markup from a
+ * block or template cannot run in the editor's document. `allow-same-origin` (without
+ * `allow-scripts`) is what lets the frame be sized to its content; the frame ignores the pointer
+ * so a click still selects the block in the canvas.
+ */
+function SandboxedEmailHtml({ html }: { html: string }): React.ReactElement {
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState(0);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return undefined;
+    let observer: ResizeObserver | undefined;
+    const measure = (): void => {
+      // The body, not the root: the root is never shorter than the frame's own viewport.
+      const body = frame.contentDocument?.body;
+      if (body) setHeight(Math.ceil(body.getBoundingClientRect().height));
+    };
+    const onLoad = (): void => {
+      measure();
+      const body = frame.contentDocument?.body;
+      observer?.disconnect();
+      if (body && typeof ResizeObserver !== 'undefined') {
+        observer = new ResizeObserver(measure);
+        observer.observe(body);
+      }
+    };
+    frame.addEventListener('load', onLoad);
+    if (frame.contentDocument?.URL === 'about:srcdoc' && frame.contentDocument.readyState === 'complete') {
+      onLoad();
+    }
+    return () => {
+      frame.removeEventListener('load', onLoad);
+      observer?.disconnect();
+    };
+  }, [html]);
+
+  return (
+    <iframe
+      ref={frameRef}
+      title="Embedded content preview"
+      sandbox="allow-same-origin"
+      srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0}body{display:flow-root}</style></head><body>${html}</body></html>`}
+      style={{ display: 'block', width: '100%', height, border: 0, pointerEvents: 'none' }}
+      tabIndex={-1}
+    />
+  );
 }
 
 function previewNode(content: Record<string, unknown>): ReactNode {
@@ -575,6 +625,7 @@ function EmailHtmlPreviewModal({
         <div className="min-h-0 flex-1 overflow-auto bg-muted/30 p-4">
           <iframe
             title="Email HTML preview"
+            sandbox=""
             srcDoc={html}
             className="mx-auto block h-[min(70vh,640px)] border-0 bg-white shadow-sm"
             style={{ width, maxWidth: '100%', overflow: 'hidden' }}

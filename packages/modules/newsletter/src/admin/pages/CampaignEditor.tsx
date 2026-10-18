@@ -308,7 +308,7 @@ export function CampaignEditor(): React.ReactElement {
             <CardTitle>Preview</CardTitle>
           </CardHeader>
           <CardContent>
-            <iframe title="preview" srcDoc={preview} className="h-96 w-full rounded border" />
+            <iframe title="preview" sandbox="" srcDoc={preview} className="h-96 w-full rounded border" />
           </CardContent>
         </Card>
       ) : null}
