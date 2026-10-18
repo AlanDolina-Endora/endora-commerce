@@ -17,6 +17,8 @@ import { AssetFolder } from './entities/asset-folder.entity.js';
 import { Asset } from './entities/asset.entity.js';
 import { AssetObjectCleanup } from './entities/asset-object-cleanup.entity.js';
 import { AssetPermalinkRelease } from './entities/asset-permalink-release.entity.js';
+import { startAssetRetentionSweep } from './workers/retention-sweep-worker.js';
+import type { Redis } from 'ioredis';
 
 /**
  * `assets_library` — the module whose permission gate defaulted to open
@@ -55,6 +57,10 @@ export interface AssetsLibraryCradle {
   readonly commandBus: CommandBus;
   readonly requireAdmin: RequireAdminFactory;
   readonly assetsLibrary: AssetsLibraryResult;
+  /** Whether this process consumes queues (a `BACKEND_ROLE=worker` process does). */
+  readonly processRunsWorkers: boolean;
+  /** The connection module queues are built on, when the composition offers one. */
+  readonly moduleQueueRedis: Redis | undefined;
 }
 
 export function registerModule(ctx: ModuleContext): void {
@@ -216,7 +222,25 @@ export function registerModule(ctx: ModuleContext): void {
   );
 
   ctx.routes(async (app) => {
-    await ctx.cradle<AssetsLibraryCradle>().assetsLibrary.plugin(app);
+    const cradle = ctx.cradle<AssetsLibraryCradle>();
+    await cradle.assetsLibrary.plugin(app);
+
+    // The clock of the retention sweep (specs/156-asset-stable-url/): a Job
+    // Scheduler and its consumer. Until this call nothing ran the hard-delete
+    // worker at all — see `workers/retention-sweep-worker.ts`. `ctx.worker`
+    // stops the consumer with the module. Built only where the host says this
+    // process consumes queues and offers a connection; the shared test server
+    // says neither, and drives `sweep()` directly.
+    await startAssetRetentionSweep({
+      processRunsWorkers: cradle.processRunsWorkers,
+      moduleQueueRedis: cradle.moduleQueueRedis,
+      sweeper: cradle.assetsLibrary.handle.sweeper,
+      log: ctx.log,
+      attach: (worker) => ctx.worker(worker, { logger: app.log }),
+      onClose: (close) => {
+        app.addHook('onClose', close);
+      },
+    });
   });
 }
 
