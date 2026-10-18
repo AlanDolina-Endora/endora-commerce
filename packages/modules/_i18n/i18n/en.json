@@ -370,6 +370,7 @@
   "pageBuilder.copyLanguage.sourceLabel": "Source language",
   "pageBuilder.copyLanguage.success": "Content copied from {language}.",
   "pageBuilder.copyLanguage.title": "Copy content from another language",
+  "pageBuilder.emailPreview.embedTitle": "Embedded content preview",
   "pageBuilder.fullscreen.enter": "Fullscreen",
   "pageBuilder.fullscreen.exit": "Exit fullscreen",
   "pageBuilder.saveAsTemplate.button": "Save as template",

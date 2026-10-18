@@ -43,8 +43,29 @@ describe('sanitizeRichHtml', () => {
   });
 
   it('strips scripts and javascript urls', () => {
-    expect(sanitizeRichHtml('<p onclick="x()">x</p><script>alert(1)</script>')).not.toContain('script');
-    expect(sanitizeRichHtml('<a href="javascript:alert(1)">x</a>')).not.toContain('javascript:');
+    expect(sanitizeRichHtml('<p onclick="x()">x</p><script>alert(1)</script>')).toBe('<p>x</p>');
+    expect(sanitizeRichHtml('<a href="javascript:alert(1)">x</a>')).toBe('<a>x</a>');
+    expect(sanitizeRichHtml('<a href="&#106;avascript:alert(1)">x</a>')).toBe('<a>x</a>');
+    expect(sanitizeRichHtml('<img src=x onerror=alert(1)>')).toBe('<img src="x">');
+  });
+
+  it('keeps the markup the rich text editor produces', () => {
+    const editorHtml =
+      '<h2 style="text-align: center">Title</h2>' +
+      '<p style="text-align: right">A <strong>b</strong> <em>c</em> <u>d</u> <s>e</s> ' +
+      '<span style="color: #958DF1">f</span> ' +
+      '<mark data-color="#ffc078" style="background-color: #ffc078; color: inherit">g</mark> ' +
+      '<a target="_blank" rel="noopener noreferrer nofollow" href="https://example.com">h</a></p>' +
+      '<pre><code class="language-js">x &lt; y</code></pre><hr><ul><li><p>i</p></li></ul>' +
+      '<img src="https://cdn.example/a.png" alt="A" title="T">';
+    expect(sanitizeRichHtml(editorHtml)).toBe(editorHtml);
+  });
+
+  it('drops style declarations that load or evaluate anything', () => {
+    expect(sanitizeRichHtml('<span style="color: red; background-color: url(/x.png)">x</span>')).toBe(
+      '<span style="color: red">x</span>',
+    );
+    expect(sanitizeRichHtml('<span style="color: expression(alert(1))">x</span>')).toBe('<span>x</span>');
   });
 });
 
