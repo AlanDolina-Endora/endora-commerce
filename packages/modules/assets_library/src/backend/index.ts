@@ -1,12 +1,13 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
+  AdminUserReadPort,
   AssetReadPort,
   AssetsLibraryPort,
   ObjectStoragePort,
 } from '@endora-commerce/contracts';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { CommandBus } from '@endora-commerce/platform/commands';
-import { resolvePublicApiBaseUrl } from '@endora-commerce/platform/kernel';
+import { lazyPort, resolvePublicApiBaseUrl } from '@endora-commerce/platform/kernel';
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import { assetsLibraryModule } from './plugin.js';
@@ -80,6 +81,10 @@ export function registerModule(ctx: ModuleContext): void {
           auditLog: auditLogService,
           commandBus,
           logError: (message, context) => ctx.log.error(context, message),
+          // Who replaced an asset's previous version (feature 156, research
+          // R-14). Resolved per call, so a later `admin_users` composition is
+          // seen; the manifest declares the edge.
+          adminUserReadPort: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
         }),
       )
       .singleton(),

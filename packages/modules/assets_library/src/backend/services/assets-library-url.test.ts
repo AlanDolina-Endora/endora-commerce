@@ -6,6 +6,7 @@ import { AssetReferenceRegistry } from './reference-registry.js';
 import { AdapterRegistry } from './storage/adapter-registry.js';
 import { HmacSigner } from './hmac.js';
 import type { Asset } from '../entities/asset.entity.js';
+import type { AdminUserReadPort } from '@endora-commerce/contracts';
 
 /**
  * Every URL this module hands out is absolute — D-223, at the seam that decides
@@ -53,6 +54,7 @@ function seededAsset(overrides: Partial<Asset> = {}): Asset {
 function makeService(
   asset: Asset,
   localPublicUrlBase = '',
+  extra: Partial<ConstructorParameters<typeof AssetsLibraryService>[0]> = {},
 ): AssetsLibraryService {
   const em = {
     findOne: async () => asset,
@@ -75,6 +77,7 @@ function makeService(
     adapters,
     referenceRegistry: new AssetReferenceRegistry(),
     loadUploadPolicy: async () => ({ allowedTypes: ['*'], maxFileSizeMb: 0 }),
+    ...extra,
   });
 }
 
@@ -167,5 +170,60 @@ describe('AssetsLibraryService — stable URL members (feature 156)', () => {
     ).getAsset(ASSET_ID);
     expect(detail.fileUrl).toBe(`${API_ORIGIN}/assets/file/${ASSET_ID}`);
     expect(detail.url.startsWith(`${API_ORIGIN}/assets/file/${ASSET_ID}?token=`)).toBe(true);
+  });
+});
+
+/** specs/156-asset-stable-url/ T034 — the previous version on the detail (FR-022, FR-023). */
+describe('AssetsLibraryService — previousVersion (feature 156)', () => {
+  const REPLACED_AT = new Date('2026-10-10T08:00:00.000Z');
+  const ADMIN_ID = '0b8f3c1e-2d4a-4b6c-8e9f-1a2b3c4d5e6f';
+  const withPrevious = (replacedBy: string | null) =>
+    seededAsset({
+      previousStorageLocator: `aa/bb/${ASSET_ID}.prev-${'0'.repeat(32)}.jpg`,
+      previousFilename: 'older.jpg',
+      previousMimeType: 'image/jpeg',
+      previousMimeTypeOverridden: false,
+      previousKind: 'image',
+      previousSizeBytes: '1024',
+      previousContentVersion: '0f1e2d3c4b5a',
+      previousReplacedAt: REPLACED_AT,
+      previousReplacedBy: replacedBy,
+    } as Partial<Asset>);
+  const admins = (found: boolean) =>
+    ({
+      findById: async (id: string) =>
+        found ? { id, firstName: 'First', lastName: 'Last', email: 'first.last@example.test' } : null,
+    }) as unknown as AdminUserReadPort;
+
+  it('is null without a previous version', async () => {
+    const detail = await makeService(seededAsset()).getAsset(ASSET_ID);
+    expect(detail.previousVersion).toBeNull();
+  });
+
+  it('carries the previous file, who replaced it and until when it can be restored', async () => {
+    const detail = await makeService(withPrevious(ADMIN_ID), '', {
+      adminUsers: admins(true),
+      loadRetentionDays: async () => 7,
+    }).getAsset(ASSET_ID);
+    expect(detail.previousVersion).toEqual({
+      filename: 'older.jpg',
+      mimeType: 'image/jpeg',
+      sizeBytes: 1024,
+      contentVersion: '0f1e2d3c4b5a',
+      replacedAt: REPLACED_AT.toISOString(),
+      replacedBy: { id: ADMIN_ID, displayName: 'First Last' },
+      restorableUntil: new Date(REPLACED_AT.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+  });
+
+  it('answers replacedBy null when the admin is not found, the column is null, or no port is wired', async () => {
+    const notFound = await makeService(withPrevious(ADMIN_ID), '', {
+      adminUsers: admins(false),
+    }).getAsset(ASSET_ID);
+    expect(notFound.previousVersion?.replacedBy).toBeNull();
+    const system = await makeService(withPrevious(null), '', { adminUsers: admins(true) }).getAsset(ASSET_ID);
+    expect(system.previousVersion?.replacedBy).toBeNull();
+    const unwired = await makeService(withPrevious(ADMIN_ID)).getAsset(ASSET_ID);
+    expect(unwired.previousVersion?.replacedBy).toBeNull();
   });
 });

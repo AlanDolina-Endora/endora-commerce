@@ -138,7 +138,12 @@ export const manifest = defineModuleManifest({
   // `auth` owns the `requireAdmin` port the admin routes are gated by; the
   // edge became real with the conversion (feature 072, T092), which also made
   // the gate non-optional.
-  dependencies: ['auth'],
+  //
+  // `admin_users` publishes `adminUserReadPort`, which the asset detail reads to
+  // name who replaced the kept previous version (feature 156,
+  // `specs/156-asset-stable-url/` research R-14). The read is one display
+  // name; when nobody is found the detail answers `replacedBy: null`.
+  dependencies: ['auth', 'admin_users'],
   settings,
   // Feature 074 (Constitution XVII), test C3 — platform primitive. This module
   // had no activation declaration at all, which resolved as "always activated"

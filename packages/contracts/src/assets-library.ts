@@ -134,10 +134,25 @@ export const assetSummarySchema = z.object({
 });
 export type AssetSummary = z.infer<typeof assetSummarySchema>;
 
+/** The one kept previous version of an asset's file, as the detail panel shows it. */
+export const assetPreviousVersionSchema = z.object({
+  filename: z.string().min(1).max(255),
+  mimeType: z.string().min(1).max(127),
+  sizeBytes: z.number().int().nonnegative(),
+  contentVersion: z.string().min(1).max(32),
+  replacedAt: isoDateTimeSchema,
+  replacedBy: z.object({ id: uuidSchema, displayName: z.string() }).nullable(),
+  /** `replacedAt` + `assets.soft_delete_retention_days` as read now. */
+  restorableUntil: isoDateTimeSchema,
+});
+export type AssetPreviousVersion = z.infer<typeof assetPreviousVersionSchema>;
+
 /** Detail extends summary with multilingual alt text + the deletion-protection list. */
 export const assetDetailSchema = assetSummarySchema.extend({
   altText: multilingualStringSchema.nullable(),
   references: z.array(assetReferenceSchema),
+  /** The one kept previous version of the file, or null (specs/156-asset-stable-url/). */
+  previousVersion: assetPreviousVersionSchema.nullable(),
 });
 export type AssetDetail = z.infer<typeof assetDetailSchema>;
 
@@ -240,19 +255,6 @@ export function validateAssetPermalink(
   if (isAssetIdShaped(value)) return { ok: false, reason: 'uuid_shaped' };
   return { ok: true };
 }
-
-/** The one kept previous version of an asset's file, as the detail panel shows it. */
-export const assetPreviousVersionSchema = z.object({
-  filename: z.string().min(1).max(255),
-  mimeType: z.string().min(1).max(127),
-  sizeBytes: z.number().int().nonnegative(),
-  contentVersion: z.string().min(1).max(32),
-  replacedAt: isoDateTimeSchema,
-  replacedBy: z.object({ id: uuidSchema, displayName: z.string() }).nullable(),
-  /** `replacedAt` + `assets.soft_delete_retention_days` as read now. */
-  restorableUntil: isoDateTimeSchema,
-});
-export type AssetPreviousVersion = z.infer<typeof assetPreviousVersionSchema>;
 
 export const setAssetPermalinkRequestSchema = z.object({
   /** Shape judged by `validateAssetPermalink`; the bound only caps the body. */

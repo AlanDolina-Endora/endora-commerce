@@ -48,6 +48,7 @@ const DETAIL: AssetDetail = {
   contentVersion: 'a1b2c3d4e5f6',
   altText: null,
   references: [],
+  previousVersion: null,
 };
 
 function resolverOver(getAsset: AssetsLibraryPort['getAsset']) {

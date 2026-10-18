@@ -4,7 +4,13 @@
 
 import { LockMode } from '@mikro-orm/core';
 import type { EntityManager } from '@mikro-orm/postgresql';
-import { ERROR_CODES, type AssetSummary, type AssetDetail } from '@endora-commerce/contracts';
+import {
+  ERROR_CODES,
+  type AdminUserReadPort,
+  type AssetDetail,
+  type AssetPreviousVersion,
+  type AssetSummary,
+} from '@endora-commerce/contracts';
 import { Asset } from '../entities/asset.entity.js';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { AdapterRegistry } from './storage/adapter-registry.js';
@@ -44,6 +50,11 @@ export interface AssetsLibraryServiceDeps {
   commandBus?: AssetReplaceDeps['commandBus'];
   /** Where a failed replace compensation is reported. */
   logError?: (message: string, context: Record<string, unknown>) => void;
+  /**
+   * Names who replaced the previous version. Optional: without it the detail
+   * answers `replacedBy: null` (specs/156-asset-stable-url/ research R-14).
+   */
+  adminUsers?: Pick<AdminUserReadPort, 'findById'>;
 }
 
 export interface ListAssetsQuery {
@@ -372,6 +383,43 @@ export class AssetsLibraryService {
       ...summary,
       altText: a.altText ?? null,
       references,
+      previousVersion: await this.previousVersion(a),
+    };
+  }
+
+  /** The kept previous version as the detail panel shows it (FR-022, FR-023). */
+  private async previousVersion(a: Asset): Promise<AssetPreviousVersion | null> {
+    if (
+      !a.previousStorageLocator ||
+      !a.previousFilename ||
+      !a.previousMimeType ||
+      !a.previousContentVersion ||
+      !a.previousReplacedAt ||
+      a.previousSizeBytes == null
+    ) {
+      return null;
+    }
+    const retentionDays = this.deps.loadRetentionDays ? await this.deps.loadRetentionDays() : 30;
+    let replacedBy: AssetPreviousVersion['replacedBy'] = null;
+    if (a.previousReplacedBy && this.deps.adminUsers) {
+      const admin = await this.deps.adminUsers.findById(a.previousReplacedBy);
+      if (admin) {
+        replacedBy = {
+          id: admin.id,
+          displayName: `${admin.firstName} ${admin.lastName}`.trim() || admin.email,
+        };
+      }
+    }
+    return {
+      filename: a.previousFilename,
+      mimeType: a.previousMimeType,
+      sizeBytes: Number(a.previousSizeBytes),
+      contentVersion: a.previousContentVersion,
+      replacedAt: a.previousReplacedAt.toISOString(),
+      replacedBy,
+      restorableUntil: new Date(
+        a.previousReplacedAt.getTime() + retentionDays * 24 * 60 * 60 * 1000,
+      ).toISOString(),
     };
   }
 }

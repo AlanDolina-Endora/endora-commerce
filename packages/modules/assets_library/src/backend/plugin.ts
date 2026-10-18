@@ -11,6 +11,7 @@ import { AssetReferenceRegistry } from './services/reference-registry.js';
 import { HmacSigner } from './services/hmac.js';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { CommandBus } from '@endora-commerce/platform/commands';
+import type { AdminUserReadPort } from '@endora-commerce/contracts';
 import { createSettingsView } from './services/storage/settings-view.js';
 import { Setting } from '@endora-commerce/platform/kernel';
 import { SettingValue } from '@endora-commerce/platform/kernel';
@@ -51,6 +52,8 @@ export interface AssetsLibraryModuleOptions {
   commandBus?: CommandBus;
   /** Where a failed replace compensation is reported. */
   logError?: (message: string, context: Record<string, unknown>) => void;
+  /** Names who replaced an asset's previous version; `replacedBy: null` without it. */
+  adminUserReadPort?: Pick<AdminUserReadPort, 'findById'>;
 }
 
 export interface AssetsLibraryModuleHandle {
@@ -108,6 +111,7 @@ export function assetsLibraryModule(options: AssetsLibraryModuleOptions): {
     ...(options.auditLog ? { auditLog: options.auditLog } : {}),
     ...(options.commandBus ? { commandBus: options.commandBus } : {}),
     ...(options.logError ? { logError: options.logError } : {}),
+    ...(options.adminUserReadPort ? { adminUsers: options.adminUserReadPort } : {}),
   });
   const folders = new FoldersService(
     options.emFactory, referenceRegistry, options.auditLog, loadRetentionDays,

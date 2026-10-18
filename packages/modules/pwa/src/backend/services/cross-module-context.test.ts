@@ -44,6 +44,7 @@ function assetDetail(overrides: Partial<AssetDetail> = {}): AssetDetail {
     contentVersion: 'a1b2c3d4e5f6',
     altText: null,
     references: [],
+    previousVersion: null,
     ...overrides,
   };
 }
