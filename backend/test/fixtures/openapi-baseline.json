@@ -491,6 +491,22 @@
         }
       }
     },
+    "/api/v1/admin/assets/{id}/permalink": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/assets/{id}/previous-version/restore": {
       "post": {
         "responses": {

@@ -74,6 +74,18 @@ retention period. Without a previous version the answer is `409 ASSET_NO_PREVIOU
 write runs as the audited Command `asset.restore_previous_version`. `assets_library` now declares
 a dependency on `admin_users`, whose `adminUserReadPort` names the admin who replaced the file.
 
+**Permalinks.** `PUT /api/v1/admin/assets/:id/permalink` (`{ permalink, confirmReuse? }`) and
+`DELETE /api/v1/admin/assets/:id/permalink` (`assets.write`) set and remove an asset's
+operator-chosen permalink, as the audited Commands `asset.permalink_set` and
+`asset.permalink_remove`; setting the same value again, or removing none, writes nothing. A permalink
+is checked by the shared rule (`400 ASSET_PERMALINK_INVALID` with `details.code`) and is unique
+case-insensitively (`409 ASSET_PERMALINK_TAKEN` with the holder's id); a soft-deleted asset keeps
+its permalink. A permalink that was changed, removed or freed by a purge can be taken at once, but
+when the asset that held it last was a **different** one the request answers
+`409 ASSET_PERMALINK_PREVIOUSLY_USED` until `confirmReuse: true` is sent — links already printed with
+that name will open the new asset — and the audit entry records which asset held it. The list
+search (`q`) also matches permalinks.
+
 **Retention floor.** `assets.soft_delete_retention_days` is now read as at least one day: `0`
 (or anything below one) behaves as one day, so a deletion or a replaced file is never due at once.
 
