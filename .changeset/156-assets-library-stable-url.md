@@ -2,7 +2,20 @@
 '@endora-commerce/mod-assets-library': minor
 ---
 
-Groundwork for stable asset URLs: an asset now carries the identity of its current file, an optional permalink and a slot for one previous version.
+Stable asset URLs: an asset's file can be replaced in place and its previous version restored, and soft-deleted assets and replaced files are now purged by a scheduled retention sweep.
+
+**Behaviour change for operators.** Soft-deleted assets are now actually hard-deleted. An hourly
+sweep removes at most 500 assets per run, oldest deletion first, once
+`assets.soft_delete_retention_days` have passed since their deletion — the setting **read when the
+sweep runs**, so a changed setting applies to assets already deleted, and the purge date the API
+reports (`DELETE /api/v1/admin/assets/:id`, its repeat, and the read model's `purgeAfterAt`)
+follows the current setting. The effective period is at least one day: `0` now means one day.
+Kept previous versions are purged on the same rule, counted from when they were replaced. An
+asset something still references is skipped and stays soft-deleted. **The first runs after
+upgrading purge every asset soft-deleted longer ago than the period**; an operator who wants to
+keep those assets lengthens the setting before upgrading. Each run writes one
+`assets_library.retention.sweep` log line, also when nothing was due, and a storage object the
+module stopped needing is retried by the sweep until it is gone.
 
 **Database (one migration, owned by this module).**
 
