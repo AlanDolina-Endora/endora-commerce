@@ -133,13 +133,13 @@ describe('OneClickService.place', () => {
     });
   });
 
-  it('clears the cart, adds the product, and places the order from resolved defaults', async () => {
+  it('replaces the basket with the product in one batch, and places the order from resolved defaults', async () => {
     const clearForCustomer = vi.fn(async () => undefined);
-    const addItem = vi.fn(async () => ({ cart: {}, items: [] }));
+    const addItems = vi.fn(async () => ({ cart: {}, items: [], outcomes: [] }));
     const placeOrder = vi.fn(
       async () => ({ id: 'o-1', status: 'new', nextAction: null }) as unknown as PlacedOrderRecord,
     );
-    const cart = { clearForCustomer, addItem } as unknown as CartWritePort;
+    const cart = { clearForCustomer, addItems } as unknown as CartWritePort;
     const placement = { placeOrder } as unknown as OrderPlacementPort;
 
     const svc = new OneClickService(prefStub(FULL_DEFAULTS), cart, placement, async () => true, catalogOf());
@@ -151,15 +151,21 @@ describe('OneClickService.place', () => {
     );
 
     expect(order.id).toBe('o-1');
-    // The basket of the channel the order is placed on
-    // (`specs/154-sales-channel-access/`, contracts/basket-attribution.md §1).
-    const basketCtx = { ...ctx, salesChannelId: CHANNEL_ID };
-    expect(clearForCustomer).toHaveBeenCalledWith(basketCtx);
+    // Round C (item 1) — the basket is replaced by `addItems` itself, after every
+    // refusal it can raise, never cleared up front by this service.
+    expect(clearForCustomer).not.toHaveBeenCalled();
     // Feature 155 (D3/D4) — both refusals name the product in the response's language.
-    expect(addItem).toHaveBeenCalledWith(
-      { customer: basketCtx },
-      { productId: 'p-1', quantity: 2 },
-      { language: 'pl' },
+    // The basket is the one of the channel the order is placed on
+    // (`specs/154-sales-channel-access/`, contracts/basket-attribution.md §1).
+    expect(addItems).toHaveBeenCalledWith(
+      { customer: { ...ctx, salesChannelId: CHANNEL_ID } },
+      [{ productId: 'p-1', quantity: 2 }],
+      {
+        onLineError: 'throw',
+        onBelowMinimum: 'throw',
+        replaceExisting: true,
+        language: 'pl',
+      },
     );
     expect(placeOrder).toHaveBeenCalledWith(
       ctx,
@@ -190,8 +196,7 @@ describe('OneClickService.place', () => {
         ({ id: 'o-3', status: 'new', nextAction }) as unknown as PlacedOrderRecord,
     } as unknown as OrderPlacementPort;
     const cart = {
-      clearForCustomer: vi.fn(async () => undefined),
-      addItem: vi.fn(async () => ({ cart: {}, items: [] })),
+      addItems: vi.fn(async () => ({ cart: {}, items: [], outcomes: [] })),
     } as unknown as CartWritePort;
 
     const svc = new OneClickService(prefStub(FULL_DEFAULTS), cart, placement, async () => true, catalogOf());
@@ -211,17 +216,18 @@ describe('OneClickService.place', () => {
       async (_ctx: unknown, _req: Record<string, unknown>) =>
         ({ id: 'o-2', status: 'new', nextAction: null }) as unknown as PlacedOrderRecord,
     );
-    const addItem = vi.fn(async () => ({ cart: {}, items: [] }));
+    const addItems = vi.fn(async () => ({ cart: {}, items: [], outcomes: [] }));
     const cart = {
-      clearForCustomer: vi.fn(async () => undefined),
-      addItem,
+      addItems,
     } as unknown as CartWritePort;
     const placement = { placeOrder } as unknown as OrderPlacementPort;
 
     const svc = new OneClickService(prefStub(FULL_DEFAULTS), cart, placement, async () => true, catalogOf());
     await svc.place(ctx, { productId: 'p-1' }, CHANNEL_ID);
 
-    expect(addItem.mock.calls[0]![0]).toEqual({ customer: { ...ctx, salesChannelId: CHANNEL_ID } });
+    expect((addItems.mock.calls[0] as unknown[])[0]).toEqual({
+      customer: { ...ctx, salesChannelId: CHANNEL_ID },
+    });
     expect(placeOrder.mock.calls[0]![1]).toMatchObject({ salesChannelId: CHANNEL_ID });
   });
 
@@ -234,11 +240,8 @@ describe('OneClickService.place', () => {
       product: { id: string; type: string; minOrderQuantity: number | null } | null,
       quantity?: number,
     ): Promise<number> {
-      const addItem = vi.fn(async () => ({ cart: {}, items: [] }));
-      const cart = {
-        clearForCustomer: vi.fn(async () => undefined),
-        addItem,
-      } as unknown as CartWritePort;
+      const addItems = vi.fn(async () => ({ cart: {}, items: [], outcomes: [] }));
+      const cart = { addItems } as unknown as CartWritePort;
       const placement = {
         placeOrder: async () => ({ id: 'o-1', status: 'new', nextAction: null }) as unknown as PlacedOrderRecord,
       } as unknown as OrderPlacementPort;
@@ -254,8 +257,8 @@ describe('OneClickService.place', () => {
         { productId: product?.id ?? 'p-unknown', ...(quantity !== undefined ? { quantity } : {}) },
         CHANNEL_ID,
       );
-      const input = (addItem.mock.calls[0] as unknown as [unknown, { quantity: number }])[1];
-      return input.quantity;
+      const lines = (addItems.mock.calls[0] as unknown as [unknown, Array<{ quantity: number }>])[1];
+      return lines[0]!.quantity;
     }
 
     it('uses the minimum of a simple product', async () => {

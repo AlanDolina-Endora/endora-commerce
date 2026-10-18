@@ -110,27 +110,40 @@ export class OneClickService {
 
     // The same channel-aware read `eligibility` just made, so the methods used
     // below are the ones it vouched for — and the refusal above came before the
-    // basket is cleared.
+    // basket is touched.
     const defaults = await this.preferenceService.resolveForCustomer(
       ctx.customerAccountId,
       salesChannelId,
     );
     const customerCtx = { customerAccountId: ctx.customerAccountId, organizationId: ctx.organizationId };
-    const basketCtx = { ...customerCtx, salesChannelId };
-    // Read before the basket is cleared, so a failed read leaves it as it was.
+    // Read before the basket is touched, so a failed read leaves it as it was.
     const quantity = input.quantity ?? (await this.#defaultQuantity(input.productId));
 
-    // Clear-then-seed matches the single-active-cart model used by admin
-    // order-create and RFQ-convert.
-    await this.cartWrite.clearForCustomer(basketCtx);
-    await this.cartWrite.addItem(
-      { customer: basketCtx },
+    // The line becomes the buyer's whole basket (the single-active-cart model
+    // admin order-create and the API intake use too), and `addItems` clears the
+    // basket only once nothing is left to refuse the line for — resolution, the
+    // minimums, the price — so a refused line leaves the basket as it was.
+    // A placement refusal after the seed (stock, the organization, a method)
+    // still leaves the basket holding this one line: that is inherent to
+    // one-click, which buys through the basket, and out of scope here.
+    //
+    // The basket is the one of the channel the order is placed on
+    // (`specs/154-sales-channel-access/`, contracts/basket-attribution.md §1).
+    await this.cartWrite.addItems(
+      { customer: { ...customerCtx, salesChannelId } },
+      [
+        {
+          productId: input.productId,
+          ...(input.variantId ? { variantId: input.variantId } : {}),
+          quantity,
+        },
+      ],
       {
-        productId: input.productId,
-        ...(input.variantId ? { variantId: input.variantId } : {}),
-        quantity,
+        onLineError: 'throw',
+        onBelowMinimum: 'throw',
+        replaceExisting: true,
+        ...(options.language ? { language: options.language } : {}),
       },
-      options.language ? { language: options.language } : undefined,
     );
 
     return this.orderPlacement.placeOrder(
