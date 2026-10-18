@@ -5,6 +5,7 @@ import type {
   ObjectStoragePort,
 } from '@endora-commerce/contracts';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
+import type { CommandBus } from '@endora-commerce/platform/commands';
 import { resolvePublicApiBaseUrl } from '@endora-commerce/platform/kernel';
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
@@ -50,6 +51,7 @@ type AssetsLibraryResult = ReturnType<typeof assetsLibraryModule>;
 export interface AssetsLibraryCradle {
   readonly emFactory: () => EntityManager;
   readonly auditLogService: AuditPort;
+  readonly commandBus: CommandBus;
   readonly requireAdmin: RequireAdminFactory;
   readonly assetsLibrary: AssetsLibraryResult;
 }
@@ -57,7 +59,7 @@ export interface AssetsLibraryCradle {
 export function registerModule(ctx: ModuleContext): void {
   ctx.di.register({
     assetsLibrary: ctx
-      .asFunction(({ emFactory, auditLogService }: AssetsLibraryCradle) =>
+      .asFunction(({ emFactory, auditLogService, commandBus }: AssetsLibraryCradle) =>
         assetsLibraryModule({
           emFactory,
           // D-223 — this module resolves the deployment's public API origin
@@ -76,6 +78,8 @@ export function registerModule(ctx: ModuleContext): void {
           requireAdmin: (permission) => async (req, reply) =>
             ctx.cradle<AssetsLibraryCradle>().requireAdmin(permission)(req, reply),
           auditLog: auditLogService,
+          commandBus,
+          logError: (message, context) => ctx.log.error(context, message),
         }),
       )
       .singleton(),

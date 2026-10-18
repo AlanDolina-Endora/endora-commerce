@@ -2,6 +2,7 @@
 // patch / setVisibility / resolveUrl. US2 will fill softDelete / restore /
 // move. US3 brings cloud adapters online.
 
+import { LockMode } from '@mikro-orm/core';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { ERROR_CODES, type AssetSummary, type AssetDetail } from '@endora-commerce/contracts';
 import { Asset } from '../entities/asset.entity.js';
@@ -12,6 +13,8 @@ import { UploadPipeline, type UploadInput, type UploadPolicy } from './upload-pi
 import { LegacyAssetCannotHardenError } from './storage/errors.js';
 import { recordAuditFromContext } from '@endora-commerce/platform/commands';
 import { permalinkUrl } from './asset-urls.js';
+import { replaceAssetFile, type AssetReplaceDeps, type AssetReplaceInput } from './asset-replace.js';
+import { ObjectCleanupLedger } from './object-cleanup-ledger.js';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 
 export class NotImplementedYet extends Error {
@@ -33,6 +36,14 @@ export interface AssetsLibraryServiceDeps {
   loadRetentionDays?: () => Promise<number>;
   /** Feature 054 — audits asset writes co-transactionally when provided. */
   auditLog?: AuditPort;
+  /**
+   * Runs the Commands of feature 156 (`asset.replace`). Optional so a
+   * composition that never replaces a file needs none; `replace` refuses
+   * without it.
+   */
+  commandBus?: AssetReplaceDeps['commandBus'];
+  /** Where a failed replace compensation is reported. */
+  logError?: (message: string, context: Record<string, unknown>) => void;
 }
 
 export interface ListAssetsQuery {
@@ -73,6 +84,29 @@ export class AssetsLibraryService {
         stateAfter,
       });
     }
+  }
+
+  /**
+   * Replace the asset's file in place — same id, same storage key, same URLs
+   * (specs/156-asset-stable-url/ FR-001 – FR-010). Runs Command `asset.replace`.
+   */
+  async replace(input: AssetReplaceInput): Promise<AssetDetail> {
+    const commandBus = this.deps.commandBus;
+    if (!commandBus) {
+      throw new Error('AssetsLibraryService.replace: no command bus is wired into this composition.');
+    }
+    const row = await replaceAssetFile(
+      {
+        emFactory: this.deps.emFactory,
+        adapters: this.deps.adapters,
+        stage: (stageInput) => this.pipeline.stage(stageInput),
+        ledger: new ObjectCleanupLedger(this.deps.emFactory),
+        commandBus,
+        ...(this.deps.logError ? { logError: this.deps.logError } : {}),
+      },
+      input,
+    );
+    return this.detail(row);
   }
 
   /** Upload entry point — runs the atomic put + insert + compensating-delete pipeline. */
@@ -167,48 +201,60 @@ export class AssetsLibraryService {
     },
   ): Promise<AssetDetail> {
     const em = this.deps.emFactory();
-    const a = await em.findOne(Asset, { id: assetId });
-    if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
-
-    if (patch.filename !== undefined) a.filename = patch.filename;
-    if (patch.label !== undefined) a.label = patch.label;
-    if (patch.altText !== undefined) a.altText = patch.altText;
-    if (patch.mimeType !== undefined) {
-      a.mimeType = patch.mimeType;
-      a.mimeTypeOverridden = true;
-    }
-    if (patch.folderId !== undefined) a.folderId = patch.folderId;
-
-    if (patch.visibility !== undefined && patch.visibility !== a.visibility) {
-      // Refuse to flip a `legacy` asset to private — we cannot sign URLs we
-      // didn't issue.
-      if (a.storageBackend === 'legacy' && patch.visibility === 'private') {
-        throw new HttpError(
-          409,
-          ERROR_CODES.ASSET_LEGACY_LOCATOR_CANNOT_HARDEN,
-          'Cannot mark a `legacy` asset as private — re-upload it through the active adapter first.',
-        );
-      }
-      const adapter = await this.deps.adapters.getForBackend(
-        a.storageBackend as 'local' | 's3' | 'gcs' | 'legacy',
+    // A visibility change takes the row lock a replace takes, so the ACL a
+    // replace copies with is never stale (specs/156-asset-stable-url/ R-18).
+    // A pessimistic lock needs a transaction; the other edits do not.
+    const locking = patch.visibility !== undefined;
+    const apply = async (tx: EntityManager): Promise<Asset> => {
+      const a = await tx.findOne(
+        Asset,
+        { id: assetId },
+        locking ? { lockMode: LockMode.PESSIMISTIC_WRITE } : {},
       );
-      // Cloud adapters update object ACLs; local FS no-ops (visibility is
-      // enforced by routes.public.ts on every request).
-      if ('setVisibility' in adapter && typeof adapter.setVisibility === 'function') {
-        try {
-          await adapter.setVisibility({ locator: a.storageLocator || a.storageUrl, visibility: patch.visibility });
-        } catch (err) {
-          if (err instanceof LegacyAssetCannotHardenError) {
-            throw new HttpError(409, ERROR_CODES.ASSET_LEGACY_LOCATOR_CANNOT_HARDEN, err.message);
-          }
-          throw err;
-        }
-      }
-      a.visibility = patch.visibility;
-    }
+      if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
 
-    this.#audit(em, 'asset.update', a.id, null, { filename: a.filename, visibility: a.visibility });
-    await em.flush();
+      if (patch.filename !== undefined) a.filename = patch.filename;
+      if (patch.label !== undefined) a.label = patch.label;
+      if (patch.altText !== undefined) a.altText = patch.altText;
+      if (patch.mimeType !== undefined) {
+        a.mimeType = patch.mimeType;
+        a.mimeTypeOverridden = true;
+      }
+      if (patch.folderId !== undefined) a.folderId = patch.folderId;
+
+      if (patch.visibility !== undefined && patch.visibility !== a.visibility) {
+        // Refuse to flip a `legacy` asset to private — we cannot sign URLs we
+        // didn't issue.
+        if (a.storageBackend === 'legacy' && patch.visibility === 'private') {
+          throw new HttpError(
+            409,
+            ERROR_CODES.ASSET_LEGACY_LOCATOR_CANNOT_HARDEN,
+            'Cannot mark a `legacy` asset as private — re-upload it through the active adapter first.',
+          );
+        }
+        const adapter = await this.deps.adapters.getForBackend(
+          a.storageBackend as 'local' | 's3' | 'gcs' | 'legacy',
+        );
+        // Cloud adapters update object ACLs; local FS no-ops (visibility is
+        // enforced by routes.public.ts on every request).
+        if ('setVisibility' in adapter && typeof adapter.setVisibility === 'function') {
+          try {
+            await adapter.setVisibility({ locator: a.storageLocator || a.storageUrl, visibility: patch.visibility });
+          } catch (err) {
+            if (err instanceof LegacyAssetCannotHardenError) {
+              throw new HttpError(409, ERROR_CODES.ASSET_LEGACY_LOCATOR_CANNOT_HARDEN, err.message);
+            }
+            throw err;
+          }
+        }
+        a.visibility = patch.visibility;
+      }
+
+      this.#audit(tx, 'asset.update', a.id, null, { filename: a.filename, visibility: a.visibility });
+      await tx.flush();
+      return a;
+    };
+    const a = locking ? await em.transactional((tx) => apply(tx)) : await apply(em);
     return this.detail(a);
   }
 
