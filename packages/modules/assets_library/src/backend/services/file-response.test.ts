@@ -174,3 +174,26 @@ describe('decideFileResponse — public, local', () => {
     ).toMatchObject({ location: { url: `/assets/file/a%20b/c%3F.pdf?v=${CV}` } });
   });
 });
+
+// Block review H — RFC 9110 weak comparison for GET: a weak tag and a list match.
+describe('decideFileResponse — If-None-Match forms', () => {
+  const etag = `"${ID}-${CV}"`;
+  it.each([
+    ['the weak form', `W/${etag}`],
+    ['a list holding it', `"other", ${etag}`],
+    ['a list holding its weak form', `W/"other",W/${etag}`],
+    ['*', '*'],
+  ])('answers 304 for %s', (_label, header) => {
+    expect(decide({ ifNoneMatch: header }).status).toBe(304);
+  });
+
+  it('answers 200 for a list without it', () => {
+    expect(decide({ ifNoneMatch: `"other", W/"${ID}-ffffffffffff"` }).status).toBe(200);
+  });
+
+  it('still never answers 304 to an unsigned request on a private asset', () => {
+    const priv = row({ visibility: 'private' });
+    expect(decide({ row: priv, ifNoneMatch: `W/${etag}` }).status).toBe(403);
+    expect(decide({ row: priv, ifNoneMatch: '*', form: 'permalink' }).status).toBe(404);
+  });
+});

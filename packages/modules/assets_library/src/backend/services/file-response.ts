@@ -82,6 +82,24 @@ export function canonicalLocation(row: FileRow, form: IdentifierForm, download: 
   return `/assets/file/${path}?v=${encodeURIComponent(row.contentVersion)}${download ? '&download=1' : ''}`;
 }
 
+/** The opaque part of an entity tag, its weak prefix dropped. */
+function opaqueTag(tag: string): string {
+  const trimmed = tag.trim();
+  return trimmed.startsWith('W/') ? trimmed.slice(2) : trimmed;
+}
+
+/**
+ * `If-None-Match` against our tag, with the weak comparison RFC 9110 §13.1.2
+ * prescribes for GET: `*`, a list, and a `W/` tag — a compressing proxy weakens
+ * the tag it passes on — all match.
+ */
+export function ifNoneMatchHits(header: string | undefined, etag: string): boolean {
+  if (header === undefined) return false;
+  if (header.trim() === '*') return true;
+  const wanted = opaqueTag(etag);
+  return header.split(',').some((candidate) => opaqueTag(candidate) === wanted);
+}
+
 function serve(row: FileRow, request: FileRequest, cacheControl: string): FileDecision {
   const policy = servingPolicyFor(row.mimeType);
   const etag = fileEtag(row);
@@ -91,7 +109,7 @@ function serve(row: FileRow, request: FileRequest, cacheControl: string): FileDe
     'Cache-Control': cacheControl,
     ETag: etag,
   };
-  if (request.ifNoneMatch !== undefined && request.ifNoneMatch === etag) {
+  if (ifNoneMatchHits(request.ifNoneMatch, etag)) {
     return { status: 304, headers: shared, body: 'none' };
   }
   const download = request.query.download === '1' || !policy.inline;
