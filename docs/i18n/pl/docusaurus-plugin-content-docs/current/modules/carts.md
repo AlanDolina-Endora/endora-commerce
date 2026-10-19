@@ -15,6 +15,30 @@ droższych zamienników, trzy rodzaje zamiany (koszyk ↔ zapytanie ofertowe, li
 wgląd administratora organizacji w koszyki i akceptację koszyków, wyszukiwanie porzuconych koszyków
 oraz ekrany podglądu dla administratora platformy.
 
+## Jeden koszyk na sklep
+
+Koszyk należy do kanału sprzedaży — sklepu — w którym jest używany:
+
+- Powstaje w kanale żądania, które go tworzy, i zapamiętuje ten kanał (`salesChannelId`). Każdy
+  odczyt i zapis koszyka dotyczy koszyka kanału żądania, więc klient kupujący w dwóch sklepach ma
+  koszyk w każdym z nich; token koszyka niezalogowanego odwiedzającego wskazuje koszyk tylko w jednym
+  sklepie, a napełnianie koszyka w innym sklepie zaczyna nowy.
+- Ceny pozycji, promocje i kupony oraz to, czy produkt jest sprzedawany tylko na zapytanie, są
+  ustalane dla kanału koszyka — cena widoczna w koszyku sklepu to cena tego sklepu.
+- Łączenie przy logowaniu łączy tylko koszyk anonimowy ze sklepu, w którym klient się loguje; koszyk
+  napełniony w innym sklepie pozostaje bez zmian.
+- Złożenie zamówienia korzysta z koszyka kanału zamówienia. Koszyk innego kanału jest odrzucany z
+  `422 ORDER_SALES_CHANNEL_MISMATCH` — *„Twój koszyk należy do innego sklepu. Otwórz koszyk w tym
+  sklepie i złóż zamówienie ponownie.”* — zanim cokolwiek zostanie zarezerwowane lub zapisane;
+  koszyk zostaje zachowany i nie jest ponownie wyceniany.
+
+Gdy koszyki zaczęły zapamiętywać swój kanał, każdy koszyk bez kanału został przypisany do
+domyślnego kanału systemowego.
+
+Reguła dostępu do kanału dotyczy koszyków jak każdego wywołania storefrontu: niezalogowany
+odwiedzający nie ma koszyka w sklepie zamkniętym dla niezalogowanych odwiedzających, a klient nie ma
+go w sklepie, do którego jego organizacja nie jest przypisana.
+
 ## Cykl życia
 
 ```text
@@ -54,7 +78,7 @@ Brak akceptowania własnych koszyków: koszyk utworzony przez administratora org
 
 | Metoda i ścieżka | Przeznaczenie |
 | --- | --- |
-| `GET /api/v1/cart` | Aktywny koszyk (tworzony przy pierwszym odczycie); odpowiedź zawiera `status`, `approvalStatus`, `salesChannelId`, `grandTotal`, `discount`, `primaryCta`, `droppedLines`, `couponDroppedThisRead`, `lastActivityAt` |
+| `GET /api/v1/cart` | Aktywny koszyk kanału sprzedaży żądania (tworzony przy pierwszym odczycie); odpowiedź zawiera `status`, `approvalStatus`, `salesChannelId`, `grandTotal`, `discount`, `primaryCta`, `droppedLines`, `couponDroppedThisRead`, `lastActivityAt` |
 | `POST /api/v1/cart/items` | Dodanie pozycji (limit 200 pozycji) |
 | `PATCH /api/v1/cart/items/:itemId` | Zmiana ilości (`0` usuwa pozycję) |
 | `DELETE /api/v1/cart/items/:itemId` | Usunięcie pozycji |
