@@ -236,6 +236,9 @@ export class OrderApiIntakeService {
       customerAccountId: binding.customerAccountId,
       organizationId: binding.organizationId,
     };
+    // The basket of the channel the key is bound to, which is the channel the
+    // order is placed on (`specs/154-sales-channel-access/`).
+    const basketCtx = { ...customerCtx, salesChannelId: binding.salesChannelId };
 
     // Address sides — an existing org address id OR an inline address created
     // in the org book (so placeOrder can snapshot it); one-time addresses are
@@ -291,10 +294,10 @@ export class OrderApiIntakeService {
 
       // Seed the service account's cart (single-active-cart model) with real
       // org pricing, then run the FULL placement pipeline.
-      await this.deps.cartService.clearForCustomer(customerCtx);
+      await this.deps.cartService.clearForCustomer(basketCtx);
       for (const line of resolvedLines) {
         await this.deps.cartService.addItem(
-          { customer: customerCtx },
+          { customer: basketCtx },
           { productId: line.productId, quantity: line.quantity },
         );
       }

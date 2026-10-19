@@ -13,7 +13,7 @@ import type { Redis } from 'ioredis';
 import { buildServer, type ModulePlugin } from '@endora-commerce/platform/composition';
 import type { ApiInterceptorRegistry } from '@endora-commerce/platform/composition';
 import { publishStateChanged, registryCache } from '@endora-commerce/platform/composition';
-import { effectiveState } from '@endora-commerce/platform/kernel';
+import { effectiveState, getResolvedChannel } from '@endora-commerce/platform/kernel';
 import { type TenantContext } from '@endora-commerce/platform/tenancy';
 // Feature 072 — the generated module list, composed in one pass exactly as
 // `src/composition.ts` composes it (D-45). Issue #52 — and contributed into
@@ -2347,6 +2347,7 @@ export async function setupBackendServer(
               },
               input.shoppingListId,
               undefined,
+              input.salesChannelId,
             );
             return {
               cartId: '',
@@ -2508,6 +2509,8 @@ export async function setupBackendServer(
             ).cartService.mergeAnonymousIntoCustomer(loginCtx.anonymousCartToken, {
               customerAccountId: loginCtx.customerAccountId,
               organizationId: loginCtx.organizationId,
+              // Mirrors composition.ts: the sign-in request's channel.
+              salesChannelId: getResolvedChannel().id,
             });
             result = { cartMerge };
           }

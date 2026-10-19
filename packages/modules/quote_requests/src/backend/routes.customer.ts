@@ -16,6 +16,7 @@ import {
 } from '@endora-commerce/contracts';
 import type { RfqService, CustomerContext } from './services/rfq-service.js';
 import { HttpError } from '@endora-commerce/platform/http';
+import { getResolvedChannel } from '@endora-commerce/platform/kernel';
 
 /**
  * Draft edits per quote request per minute (research R16).
@@ -224,7 +225,13 @@ export async function registerQuoteRequestsCustomerRoutes(
     { preHandler: requireCustomer },
     async (request, reply) => {
       const ctx = await resolveCustomerContext(request);
-      const result = await rfqService.convertToOrder(request.params.id, ctx);
+      // Into the basket of the storefront the buyer converts on
+      // (`specs/154-sales-channel-access/`): a customer holds one per channel.
+      const result = await rfqService.convertToOrder(
+        request.params.id,
+        ctx,
+        getResolvedChannel(request).id,
+      );
       reply.code(200);
       return { data: result };
     },

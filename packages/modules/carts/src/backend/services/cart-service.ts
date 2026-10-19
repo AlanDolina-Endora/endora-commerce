@@ -17,7 +17,6 @@ import type {
   ProductDisplayModePort,
   OrganizationDetailsPort,
 } from '@endora-commerce/contracts';
-import { SalesChannel } from '@endora-commerce/platform/kernel';
 import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
 import { outOfRequestChannel } from '@endora-commerce/platform/kernel';
 import type { CartApprovalService } from './cart-approval-service.js';
@@ -55,6 +54,25 @@ export interface CustomerContext {
    * prices via PricingService).
    */
   organizationId: string | null;
+  /**
+   * The channel whose basket is meant (`specs/154-sales-channel-access/`,
+   * FR-030): a customer holds one active basket per channel, and every lookup
+   * and every price is that channel's.
+   */
+  salesChannelId: string;
+}
+
+/**
+ * Who a cart operation speaks for. A customer's basket is the one of
+ * `customer.salesChannelId`; an anonymous one is the basket the cookie token
+ * names **on `anonymousSalesChannelId`** — the request's channel, which the
+ * storefront route passes. A token whose basket is on another channel names no
+ * basket here (contracts/basket-attribution.md §1).
+ */
+export interface CartActor {
+  customer?: CustomerContext;
+  anonymousToken?: string;
+  anonymousSalesChannelId?: string;
 }
 
 /**
@@ -79,13 +97,12 @@ export class CartService {
    * Absence is now a `lazyPort` gate that throws `MODULE_DISABLED` at the call,
    * which nothing downstream can mistake for a price.
    *
-   * Cart entities don't currently track which sales channel they were
-   * created on (multi-channel cart attribution is a separate
-   * follow-up), so the resolver runs against the system-default
-   * channel — matching the behaviour the foundation cart already had.
-   * Lists with a `salesChannel` criterion targeting other channels
-   * therefore won't apply on the cart line until cart-side channel
-   * tracking lands.
+   * A basket belongs to the channel it is used on
+   * (`specs/154-sales-channel-access/`, User Story 6): it is created on that
+   * channel and every line is priced for it, so a list with a `salesChannel`
+   * criterion applies on the store it targets. Every basket used to be created
+   * on the system-default channel and priced there, whatever storefront it was
+   * used on.
    */
   /**
    * `approvalService` and `auditService` are optional — when wired
@@ -159,6 +176,12 @@ export class CartService {
     await em.flush();
   }
 
+  /**
+   * The customer's active basket on `ctx.salesChannelId`, created on that
+   * channel when there is none (FR-030). The unique index
+   * `carts_one_active_per_customer_per_channel` is the "one active basket per
+   * customer per channel" invariant this lookup is keyed by.
+   */
   async getOrCreateForCustomer(ctx: CustomerContext): Promise<Cart> {
     const em = this.emFactory();
     return this.#getOrCreateForCustomerOn(em, ctx);
@@ -167,6 +190,7 @@ export class CartService {
   async #getOrCreateForCustomerOn(em: EntityManager, ctx: CustomerContext): Promise<Cart> {
     let cart = await em.findOne(Cart, {
       customerAccountId: ctx.customerAccountId,
+      salesChannelId: ctx.salesChannelId,
       status: 'active',
     });
     if (!cart) {
@@ -174,20 +198,7 @@ export class CartService {
         customerAccountId: ctx.customerAccountId,
         organizationId: ctx.organizationId,
         status: 'active',
-        salesChannelId: await this.#defaultSalesChannelId(em),
-      });
-      await em.persistAndFlush(cart);
-    }
-    return cart;
-  }
-
-  async getOrCreateForAnon(em: EntityManager, token: string): Promise<Cart> {
-    let cart = await em.findOne(Cart, { anonymousCartToken: token, status: 'active' });
-    if (!cart) {
-      cart = em.create(Cart, {
-        anonymousCartToken: token,
-        status: 'active',
-        salesChannelId: await this.#defaultSalesChannelId(em),
+        salesChannelId: ctx.salesChannelId,
       });
       await em.persistAndFlush(cart);
     }
@@ -195,15 +206,60 @@ export class CartService {
   }
 
   /**
-   * Feature 052 — a cart MUST carry a resolved sales channel so promotion and
-   * pricing evaluation is channel-scoped (the promotion channel gate fails closed
-   * on a null-channel cart, FR-005). Until request-driven channel resolution is
-   * unified (spec 03), a new cart defaults to the system-default channel. Returns
-   * `null` only if no system-default channel exists (a misconfigured store).
+   * The active anonymous basket `token` names on `salesChannelId`, created on
+   * that channel when no basket holds the token — or `null` when the token
+   * already belongs to a basket that is not an active basket of this channel
+   * (typically one of **another** channel). `anonymous_cart_token` is unique
+   * across every basket, so such a token can start no basket here: the caller
+   * treats it as "no basket" on a read, and a write mints a new token first
+   * (contracts/basket-attribution.md §1). The old basket is left for the
+   * abandonment sweep.
    */
-  async #defaultSalesChannelId(em: EntityManager): Promise<string | null> {
-    const channel = await em.findOne(SalesChannel, { systemDefault: true }, { fields: ['id'] });
-    return channel?.id ?? null;
+  async getOrCreateForAnon(
+    em: EntityManager,
+    token: string,
+    salesChannelId: string,
+  ): Promise<Cart | null> {
+    const held = await em.findOne(Cart, { anonymousCartToken: token });
+    if (held) {
+      return held.status === 'active' && held.salesChannelId === salesChannelId ? held : null;
+    }
+    const cart = em.create(Cart, {
+      anonymousCartToken: token,
+      status: 'active',
+      salesChannelId,
+    });
+    await em.persistAndFlush(cart);
+    return cart;
+  }
+
+  /**
+   * Whether `token` can address a basket on `salesChannelId` — `false` when a
+   * basket that is not this channel's active one already holds it, which is
+   * when a storefront write mints a new anonymous token before it adds
+   * anything (contracts/basket-attribution.md §1).
+   */
+  async anonymousTokenUsableOn(token: string, salesChannelId: string): Promise<boolean> {
+    const em = this.emFactory();
+    const held = await em.findOne(
+      Cart,
+      { anonymousCartToken: token },
+      { fields: ['id', 'status', 'salesChannelId'] },
+    );
+    return held === null || (held.status === 'active' && held.salesChannelId === salesChannelId);
+  }
+
+  /** The channel of the basket `actor` addresses. */
+  #basketChannelOf(actor: CartActor): string {
+    const channel = actor.customer?.salesChannelId ?? actor.anonymousSalesChannelId;
+    if (!channel) {
+      throw new HttpError(
+        500,
+        ERROR_CODES.INTERNAL,
+        'Invariant violated: a cart operation names no sales channel for its basket.',
+      );
+    }
+    return channel;
   }
 
   async getItems(cartId: string): Promise<CartItem[]> {
@@ -212,7 +268,7 @@ export class CartService {
   }
 
   async addItem(
-    actor: { customer?: CustomerContext; anonymousToken?: string },
+    actor: CartActor,
     input: {
       productId: string;
       variantId?: string;
@@ -222,10 +278,11 @@ export class CartService {
     },
   ): Promise<{ cart: Cart; items: CartItem[] }> {
     const em = this.emFactory();
+    const basketChannelId = actor.customer || actor.anonymousToken ? this.#basketChannelOf(actor) : null;
     const cart = actor.customer
       ? await this.#getOrCreateForCustomerOn(em, actor.customer)
       : actor.anonymousToken
-        ? await this.getOrCreateForAnon(em, actor.anonymousToken)
+        ? await this.getOrCreateForAnon(em, actor.anonymousToken, basketChannelId!)
         : (() => {
             throw new HttpError(
               401,
@@ -233,6 +290,11 @@ export class CartService {
               'Cart requires either a customer session or an anonymous cart token.',
             );
           })();
+    if (!cart) {
+      // The route mints a new token for a token of another channel's basket
+      // before it gets here; an in-process caller that did not is told so.
+      throw new HttpError(404, ERROR_CODES.NOT_FOUND, 'Cart not found.');
+    }
 
     // Issue #86 — a refusal of its own, not `VALIDATION_FAILED`: the envelope
     // never replaces that code's message, so the sentence below was answered in
@@ -325,6 +387,7 @@ export class CartService {
     const pricingCtx = await this.#linePricing.contextFor(em, {
       organizationId: actor.customer?.organizationId ?? null,
       signedIn: actor.customer !== undefined,
+      salesChannelId: basketChannelId!,
     });
     if (existing) {
       // The merged line is a line of a new quantity, so it takes the price for
@@ -443,7 +506,7 @@ export class CartService {
   }
 
   async updateItem(
-    actor: { customer?: CustomerContext; anonymousToken?: string },
+    actor: CartActor,
     itemId: string,
     quantity: number,
   ): Promise<{ cart: Cart; items: CartItem[] }> {
@@ -468,6 +531,7 @@ export class CartService {
       const pricingCtx = await this.#linePricing.contextFor(em, {
         organizationId: actor.customer?.organizationId ?? cart.organizationId ?? null,
         signedIn: actor.customer !== undefined,
+        salesChannelId: this.#basketChannelOf(actor),
       });
       const price = await this.#orderablePriceOrRefuse(pricingCtx, {
         product,
@@ -507,7 +571,7 @@ export class CartService {
   }
 
   async removeItem(
-    actor: { customer?: CustomerContext; anonymousToken?: string },
+    actor: CartActor,
     itemId: string,
   ): Promise<{ cart: Cart; items: CartItem[] }> {
     const em = this.emFactory();
@@ -553,7 +617,7 @@ export class CartService {
    * `abandonment_notified_at` so the next abandonment cycle can notify
    * again. No-op on a missing cart.
    */
-  async touch(actor: { customer?: CustomerContext; anonymousToken?: string }): Promise<Cart | null> {
+  async touch(actor: CartActor): Promise<Cart | null> {
     // command-coverage-ignore: bumps the ephemeral cart's lastActivityAt for the
     // abandonment sweep — transient bookkeeping, not an audited domain mutation.
     const em = this.emFactory();
@@ -561,11 +625,13 @@ export class CartService {
     if (actor.customer) {
       cart = await em.findOne(Cart, {
         customerAccountId: actor.customer.customerAccountId,
+        salesChannelId: actor.customer.salesChannelId,
         status: { $in: ['active', 'abandoned'] },
       });
     } else if (actor.anonymousToken) {
       cart = await em.findOne(Cart, {
         anonymousCartToken: actor.anonymousToken,
+        salesChannelId: this.#basketChannelOf(actor),
         status: { $in: ['active', 'abandoned'] },
       });
     }
@@ -601,6 +667,11 @@ export class CartService {
    * Coupons on the source cart are NOT carried to the destination
    * (R-05 / FR-010 — the destination's existing `appliedPromotionCode`
    * is preserved verbatim).
+   *
+   * Both baskets are those of `ctx.salesChannelId`, the sign-in request's
+   * channel (`specs/154-sales-channel-access/`, contracts/basket-attribution.md
+   * §3): an anonymous basket of another channel is left alone and the outcome
+   * is `noop_no_anon`.
    */
   async mergeAnonymousIntoCustomer(
     anonymousToken: string,
@@ -611,7 +682,11 @@ export class CartService {
     // destination-cart creation. Per the spec, the diagnostic still
     // includes a destinationCartId so the storefront has a stable id to
     // re-read its cart from on next render.
-    const anon = await em.findOne(Cart, { anonymousCartToken: anonymousToken, status: 'active' });
+    const anon = await em.findOne(Cart, {
+      anonymousCartToken: anonymousToken,
+      salesChannelId: ctx.salesChannelId,
+      status: 'active',
+    });
     if (!anon) {
       const destForNoop = await this.#getOrCreateForCustomerOn(em, ctx);
       return {
@@ -627,6 +702,7 @@ export class CartService {
     // helper. If absent and the source has items, we will return `adopted`.
     const preExistingDest = await em.findOne(Cart, {
       customerAccountId: ctx.customerAccountId,
+      salesChannelId: ctx.salesChannelId,
       status: 'active',
     });
     const customerCart = preExistingDest ?? (await this.#getOrCreateForCustomerOn(em, ctx));
@@ -719,6 +795,7 @@ export class CartService {
     const pricingCtx = await this.#linePricing.contextFor(em, {
       organizationId: customer.organizationId,
       signedIn: true,
+      salesChannelId: customer.salesChannelId,
     });
     const products = await this.catalogProducts.findByIds([
       ...new Set(items.map((it) => it.productId)),
@@ -745,6 +822,7 @@ export class CartService {
     const em = this.emFactory();
     const cart = await em.findOne(Cart, {
       customerAccountId: ctx.customerAccountId,
+      salesChannelId: ctx.salesChannelId,
       status: 'active',
     });
     if (!cart) return;
@@ -753,12 +831,17 @@ export class CartService {
     await em.flush();
   }
 
-  #assertOwnership(
-    cart: Cart,
-    actor: { customer?: CustomerContext; anonymousToken?: string },
-  ): void {
-    if (actor.customer && cart.customerAccountId === actor.customer.customerAccountId) return;
-    if (actor.anonymousToken && cart.anonymousCartToken === actor.anonymousToken) return;
+  /**
+   * The line's basket is the caller's **and** the one of the channel the caller
+   * is on: a customer's basket of another store is not this store's basket, so
+   * a line of it is answered like any line the caller does not hold.
+   */
+  #assertOwnership(cart: Cart, actor: CartActor): void {
+    const owned =
+      (actor.customer !== undefined &&
+        cart.customerAccountId === actor.customer.customerAccountId) ||
+      (actor.anonymousToken !== undefined && cart.anonymousCartToken === actor.anonymousToken);
+    if (owned && cart.salesChannelId === this.#basketChannelOf(actor)) return;
     throw new HttpError(404, ERROR_CODES.NOT_FOUND, 'Cart not found.');
   }
 }
@@ -772,10 +855,7 @@ export class CartService {
  * accounts of feature 026 have none, and they are exactly the caller
  * `logged_in_only` distinguishes from the public.
  */
-function cartAudience(actor: {
-  customer?: CustomerContext;
-  anonymousToken?: string;
-}): ProductAudience {
+function cartAudience(actor: CartActor): ProductAudience {
   if (!actor.customer) return ANONYMOUS_PRODUCT_AUDIENCE;
   return { organizationId: actor.customer.organizationId, authenticated: true };
 }

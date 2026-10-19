@@ -80,10 +80,16 @@ export class OneClickService {
     return { enabled: true, reason: null };
   }
 
+  /**
+   * `salesChannelId` is required here, unlike {@link eligibility}: the order is
+   * placed from the basket of the channel it is placed on
+   * (`specs/154-sales-channel-access/`), so the basket this fills and the order
+   * it places have to name the same one.
+   */
   async place(
     ctx: OneClickContext,
     input: OneClickPlaceInput,
-    salesChannelId: string | null,
+    salesChannelId: string,
   ): Promise<PlacedOrderRecord> {
     const eligibility = await this.eligibility(ctx.customerAccountId, salesChannelId);
     if (!eligibility.enabled) {
@@ -101,12 +107,13 @@ export class OneClickService {
       salesChannelId,
     );
     const customerCtx = { customerAccountId: ctx.customerAccountId, organizationId: ctx.organizationId };
+    const basketCtx = { ...customerCtx, salesChannelId };
 
     // Clear-then-seed matches the single-active-cart model used by admin
     // order-create and RFQ-convert.
-    await this.cartWrite.clearForCustomer(customerCtx);
+    await this.cartWrite.clearForCustomer(basketCtx);
     await this.cartWrite.addItem(
-      { customer: customerCtx },
+      { customer: basketCtx },
       {
         productId: input.productId,
         ...(input.variantId ? { variantId: input.variantId } : {}),
@@ -119,7 +126,7 @@ export class OneClickService {
       billingAddressId: defaults.billingAddressId!,
       deliveryMethodId: defaults.deliveryMethodId!,
       paymentMethodId: defaults.paymentMethodId!,
-      ...(salesChannelId ? { salesChannelId } : {}),
+      salesChannelId,
       ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
     });
   }

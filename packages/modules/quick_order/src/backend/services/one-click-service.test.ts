@@ -132,8 +132,11 @@ describe('OneClickService.place', () => {
     );
 
     expect(order.id).toBe('o-1');
-    expect(clearForCustomer).toHaveBeenCalledWith(ctx);
-    expect(addItem).toHaveBeenCalledWith({ customer: ctx }, { productId: 'p-1', quantity: 2 });
+    // The basket of the channel the order is placed on
+    // (`specs/154-sales-channel-access/`, contracts/basket-attribution.md §1).
+    const basketCtx = { ...ctx, salesChannelId: CHANNEL_ID };
+    expect(clearForCustomer).toHaveBeenCalledWith(basketCtx);
+    expect(addItem).toHaveBeenCalledWith({ customer: basketCtx }, { productId: 'p-1', quantity: 2 });
     expect(placeOrder).toHaveBeenCalledWith(ctx, {
       deliveryAddressId: 'ship-1',
       billingAddressId: 'bill-1',
@@ -169,21 +172,28 @@ describe('OneClickService.place', () => {
     expect(order.nextAction).toEqual(nextAction);
   });
 
-  /** No request channel ⇒ no `salesChannelId` key at all, never an invented one. */
-  it('omits the channel entirely when there is none to record', async () => {
+  /**
+   * The basket and the order are one channel's. One-click used to take a
+   * `null` channel and place on whatever the order fell back to, while the
+   * basket it filled was the system default's whatever the request; a basket
+   * belongs to its channel now, so the channel is required and both use it.
+   */
+  it('fills the basket of the channel it places the order on', async () => {
     const placeOrder = vi.fn(
       async (_ctx: unknown, _req: Record<string, unknown>) =>
         ({ id: 'o-2', status: 'new', nextAction: null }) as unknown as PlacedOrderRecord,
     );
+    const addItem = vi.fn(async () => ({ cart: {}, items: [] }));
     const cart = {
       clearForCustomer: vi.fn(async () => undefined),
-      addItem: vi.fn(async () => ({ cart: {}, items: [] })),
+      addItem,
     } as unknown as CartWritePort;
     const placement = { placeOrder } as unknown as OrderPlacementPort;
 
     const svc = new OneClickService(prefStub(FULL_DEFAULTS), cart, placement, async () => true);
-    await svc.place(ctx, { productId: 'p-1' }, null);
+    await svc.place(ctx, { productId: 'p-1' }, CHANNEL_ID);
 
-    expect(placeOrder.mock.calls[0]![1]).not.toHaveProperty('salesChannelId');
+    expect(addItem.mock.calls[0]![0]).toEqual({ customer: { ...ctx, salesChannelId: CHANNEL_ID } });
+    expect(placeOrder.mock.calls[0]![1]).toMatchObject({ salesChannelId: CHANNEL_ID });
   });
 });

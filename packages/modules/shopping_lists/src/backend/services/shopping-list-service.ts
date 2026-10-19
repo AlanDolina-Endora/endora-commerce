@@ -308,13 +308,16 @@ export class ShoppingListService {
 
   /**
    * Adds the given items (or every item on the list when itemIds is omitted)
-   * to the customer's authenticated cart. Archived products are skipped and
+   * to the customer's authenticated cart on `salesChannelId` — the channel of
+   * the caller's request, since a customer holds one basket per channel
+   * (`specs/154-sales-channel-access/`). Archived products are skipped and
    * reported in `skipped`.
    */
   async convertToCart(
     ctx: CustomerContext,
     listId: string,
     itemIds: string[] | undefined,
+    salesChannelId: string,
   ): Promise<ConvertToCartResult> {
     const em = this.emFactory();
     const list = await this.#owned(em, ctx, listId);
@@ -324,7 +327,7 @@ export class ShoppingListService {
     let added = 0;
     for (const item of kept) {
       await this.cartService.addItem(
-        { customer: ctx },
+        { customer: { ...ctx, salesChannelId } },
         {
           productId: item.productId,
           ...(item.variantId ? { variantId: item.variantId } : {}),

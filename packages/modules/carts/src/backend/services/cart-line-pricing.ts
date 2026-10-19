@@ -35,8 +35,10 @@ import { SalesChannel } from '@endora-commerce/platform/kernel';
  * A product sold on request only (display mode `none`) is not orderable outside
  * an agreement either.
  *
- * Prices resolve against the system-default sales channel, as cart lines always
- * have — see `CartService`'s constructor note on cart-side channel tracking.
+ * Prices resolve against the basket's own sales channel — the channel it is used
+ * on (`specs/154-sales-channel-access/`, contracts/basket-attribution.md §2). They
+ * used to resolve against the system-default channel whatever the basket, so a
+ * list targeting another store never applied to its baskets.
  */
 
 export interface CartLineAgreement {
@@ -73,14 +75,20 @@ export class CartLinePricing {
     private readonly organizations: OrganizationDetailsPort,
   ) {}
 
-  /** The channel and buyer every line of one cart is priced for, resolved once. */
+  /**
+   * The channel and buyer every line of one cart is priced for, resolved once.
+   * `salesChannelId` is the basket's channel; there is no fallback to the system
+   * default, so a basket is never priced for a store it is not used on. A
+   * channel that no longer exists prices nothing from a list, which leaves the
+   * Product's own price or "unpriced" — never another channel's list.
+   */
   async contextFor(
     em: EntityManager,
-    input: { organizationId: string | null; signedIn: boolean },
+    input: { organizationId: string | null; signedIn: boolean; salesChannelId: string },
   ): Promise<CartPricingContext> {
     const channel = await em.findOne(
       SalesChannel,
-      { systemDefault: true },
+      { id: input.salesChannelId },
       { fields: ['id', 'defaultCurrency'] },
     );
     const organization = input.organizationId

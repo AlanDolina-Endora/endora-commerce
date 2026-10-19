@@ -15,6 +15,11 @@ export interface QuickOrderBuildContext {
   customerAccountId: string;
   organizationId: string | null;
   isOrgAdmin?: boolean;
+  /**
+   * The channel whose basket a `cart` build fills — the request's
+   * (`specs/154-sales-channel-access/`): a customer holds one basket per channel.
+   */
+  salesChannelId: string;
 }
 
 export interface QuickOrderBuildLineInput {
@@ -55,7 +60,11 @@ export class QuickOrderBuildService {
     ctx: QuickOrderBuildContext,
     items: QuickOrderBuildLineInput[],
   ): Promise<QuickOrderBuildResponse> {
-    const customer = { customerAccountId: ctx.customerAccountId, organizationId: ctx.organizationId };
+    const customer = {
+      customerAccountId: ctx.customerAccountId,
+      organizationId: ctx.organizationId,
+      salesChannelId: ctx.salesChannelId,
+    };
     const cart = await this.cartWrite.getOrCreateForCustomer(customer);
     for (const item of items) {
       await this.cartWrite.addItem(

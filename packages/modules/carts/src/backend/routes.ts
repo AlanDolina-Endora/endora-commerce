@@ -20,7 +20,7 @@ import {
   type CatalogProductReadPort,
   type PromotionApplication,
 } from '@endora-commerce/contracts';
-import type { CartService } from './services/cart-service.js';
+import type { CartActor, CartService } from './services/cart-service.js';
 import type { CartUpsellService } from './services/cart-upsell-service.js';
 import type { CartCouponService } from './services/cart-coupon-service.js';
 import type { CartConversionService } from './services/cart-conversion-service.js';
@@ -33,7 +33,11 @@ import type { CartItem } from './entities/cart-item.entity.js';
 
 import { HttpError } from '@endora-commerce/platform/http';
 import { productAudienceOf } from '@endora-commerce/platform/http';
-import { rethrowIfModuleDisabled, type RequireCustomerGuard } from '@endora-commerce/platform/kernel';
+import {
+  getResolvedChannel,
+  rethrowIfModuleDisabled,
+  type RequireCustomerGuard,
+} from '@endora-commerce/platform/kernel';
 
 const ANON_COOKIE = 'b2b_cart_anon';
 
@@ -105,6 +109,8 @@ export interface CartsDeps {
     customerAccountId: string;
     organizationId: string | null;
     shoppingListId: string;
+    /** The channel whose basket the lines go into — the request's. */
+    salesChannelId: string;
   }) => Promise<{
     cartId: string;
     appendedLineCount: number;
@@ -134,15 +140,52 @@ export interface CartsDeps {
 }
 
 /**
+ * The caller of a storefront cart route, on the request's channel: the basket a
+ * route addresses is always the one of the channel it is used on
+ * (`specs/154-sales-channel-access/`, contracts/basket-attribution.md §1).
+ */
+export function cartActorOnRequestChannel(
+  resolveCartActor: CartsDeps['resolveCartActor'],
+  request: FastifyRequest,
+): CartActor & { salesChannelId: string } {
+  const actor = resolveCartActor(request);
+  const salesChannelId = getResolvedChannel(request).id;
+  return {
+    ...(actor.customer ? { customer: { ...actor.customer, salesChannelId } } : {}),
+    ...(actor.anonymousToken
+      ? { anonymousToken: actor.anonymousToken, anonymousSalesChannelId: salesChannelId }
+      : {}),
+    salesChannelId,
+  };
+}
+
+/**
  * Cart routes — open to anonymous users too. The resolver picks the right
- * cart based on (authenticated session, anonymous cookie, neither).
+ * cart based on (authenticated session, anonymous cookie, neither), on the
+ * request's channel.
  *
  * Anonymous callers receive a Set-Cookie for `b2b_cart_anon` on first add so
- * later requests target the same cart.
+ * later requests target the same cart — and a new one when the cookie they hold
+ * names a basket of another channel.
  */
 export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps): Promise<void> {
-  const { cartService, resolveCartActor, emFactory } = deps;
+  const { cartService, emFactory } = deps;
   const { assertOrganizationCanTransact } = deps;
+  const resolveCartActor = (request: FastifyRequest) =>
+    cartActorOnRequestChannel(deps.resolveCartActor, request);
+
+  /**
+   * The basket a read addresses, or `null` for none: a customer's is created on
+   * first read as it always was; an anonymous token names no basket on a
+   * channel its basket is not of.
+   */
+  const basketFor = async (actor: ReturnType<typeof resolveCartActor>): Promise<Cart | null> => {
+    if (actor.customer) return cartService.getOrCreateForCustomer(actor.customer);
+    if (actor.anonymousToken) {
+      return cartService.getOrCreateForAnon(emFactory(), actor.anonymousToken, actor.salesChannelId);
+    }
+    return null;
+  };
 
   /**
    * Refuses to mutate a cart when the signed-in Customer's Organization is
@@ -175,13 +218,8 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
 
   app.get<{ Querystring: { view?: string } }>('/api/v1/cart', async (request) => {
     const actor = resolveCartActor(request);
-    const em = emFactory();
-    let cart: Cart | null = null;
-    if (actor.customer) {
-      cart = await cartService.getOrCreateForCustomer(actor.customer);
-    } else if (actor.anonymousToken) {
-      cart = await cartService.getOrCreateForAnon(em, actor.anonymousToken);
-    } else {
+    const cart = await basketFor(actor);
+    if (!cart) {
       return request.query?.view === 'mini'
         ? { data: emptyMiniCart() }
         : { data: emptyCart() };
@@ -235,7 +273,8 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
           {
             cartId: cart.id,
             organizationId: cart.organizationId ?? null,
-            salesChannelId: cart.salesChannelId ?? null,
+            // The basket was looked up on this channel, so it is the basket's.
+            salesChannelId: actor.salesChannelId,
           },
           lines,
         );
@@ -305,11 +344,22 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
     { schema: { body: addCartItemRequestSchema } },
     async (request, reply) => {
       let actor = resolveCartActor(request);
-      // If neither side identified, mint an anonymous token and echo it back.
-      if (!actor.customer && !actor.anonymousToken) {
+      // If neither side identified, mint an anonymous token and echo it back —
+      // and the same for a token whose basket is another channel's: the token is
+      // unique across baskets, so it can start none here, and the first write on
+      // this channel starts a basket under a new one (contract §1).
+      const mintAnonymousToken =
+        !actor.customer &&
+        (!actor.anonymousToken ||
+          !(await cartService.anonymousTokenUsableOn(actor.anonymousToken, actor.salesChannelId)));
+      if (mintAnonymousToken) {
         const token = `anon-${crypto.randomUUID()}`;
         reply.setCookie(ANON_COOKIE, token, { path: '/', sameSite: 'lax', httpOnly: true });
-        actor = { anonymousToken: token };
+        actor = {
+          anonymousToken: token,
+          anonymousSalesChannelId: actor.salesChannelId,
+          salesChannelId: actor.salesChannelId,
+        };
       }
       await guardOrganizationTransact(actor);
       const body = addCartItemRequestSchema.parse(request.body);
@@ -418,18 +468,18 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
     { schema: { body: applyCartCouponSchema } },
     async (request) => {
       const actor = resolveCartActor(request);
-      const em = emFactory();
-      let cart: Cart | null = null;
-      if (actor.customer) {
-        cart = await cartService.getOrCreateForCustomer(actor.customer);
-      } else if (actor.anonymousToken) {
-        cart = await cartService.getOrCreateForAnon(em, actor.anonymousToken);
-      } else {
+      if (!actor.customer && !actor.anonymousToken) {
         throw new HttpError(
           401,
           ERROR_CODES.UNAUTHORIZED,
           'Cart not found.',
         );
+      }
+      // A token of another channel's basket names no basket here: nothing to
+      // apply a code to.
+      const cart = await basketFor(actor);
+      if (!cart) {
+        throw new HttpError(422, ERROR_CODES.CART_EMPTY, 'cart_empty');
       }
       const items = await cartService.getItems(cart.id);
       if (items.length === 0) {
@@ -477,15 +527,11 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
    */
   app.delete('/api/v1/cart/coupon', async (request) => {
     const actor = resolveCartActor(request);
-    const em = emFactory();
-    let cart: Cart | null = null;
-    if (actor.customer) {
-      cart = await cartService.getOrCreateForCustomer(actor.customer);
-    } else if (actor.anonymousToken) {
-      cart = await cartService.getOrCreateForAnon(em, actor.anonymousToken);
-    } else {
+    if (!actor.customer && !actor.anonymousToken) {
       throw new HttpError(401, ERROR_CODES.UNAUTHORIZED, 'Cart not found.');
     }
+    const cart = await basketFor(actor);
+    if (!cart) return { data: emptyCart() };
     await deps.cartCouponService.clear(cart);
     const items = await cartService.getItems(cart.id);
     return { data: serializeCart(cart, items) };
@@ -572,6 +618,7 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
         customerAccountId: actor.customer.customerAccountId,
         organizationId: actor.customer.organizationId,
         shoppingListId: request.params.shoppingListId,
+        salesChannelId: actor.salesChannelId,
       });
       return { data: result };
     },
@@ -587,13 +634,7 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
       return { data: [] };
     }
     const actor = resolveCartActor(request);
-    const em = emFactory();
-    let cart: Cart | null = null;
-    if (actor.customer) {
-      cart = await cartService.getOrCreateForCustomer(actor.customer);
-    } else if (actor.anonymousToken) {
-      cart = await cartService.getOrCreateForAnon(em, actor.anonymousToken);
-    }
+    const cart = await basketFor(actor);
     if (!cart) return { data: [] };
     const parsed = cartUpsellsQuerySchema.parse(request.query ?? {});
     const limit = parsed.limit ?? 12;

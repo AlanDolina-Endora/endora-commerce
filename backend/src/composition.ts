@@ -62,6 +62,7 @@ import { MODULES } from './composition.generated.js';
 // import below) and the shape is `@endora-commerce/contracts`'; a root that reads
 // `request.actor` names neither `auth` nor any other module for it.
 import { effectiveState } from './kernel/lifecycle/effective-state.js';
+import { getResolvedChannel } from '@endora-commerce/platform/kernel';
 // Feature 072 (T138) — `organizations` owns its services, its routes and its
 // two event subscriptions. T143a — the sales-rep assignment scope too, and the
 // actor half of the orders/RFQ visibility question went with the
@@ -202,7 +203,7 @@ interface ContainerReads {
   readonly cartService: {
     mergeAnonymousIntoCustomer(
       anonymousToken: string,
-      customer: { customerAccountId: string; organizationId: string | null },
+      customer: { customerAccountId: string; organizationId: string | null; salesChannelId: string },
     ): Promise<CartMergeOutcome>;
   };
   /**
@@ -250,6 +251,7 @@ interface ShoppingListBridgeService {
     ctx: { customerAccountId: string; organizationId: string },
     listId: string,
     itemIds: string[] | undefined,
+    salesChannelId: string,
   ): Promise<{ added: number; skipped: Array<{ productId: string }> }>;
 }
 
@@ -1138,6 +1140,7 @@ async function contributeReferenceDeployment(ctx: ComposedAppContext): Promise<v
           },
           input.shoppingListId,
           undefined,
+          input.salesChannelId,
         );
         // Map ShoppingListService.convertToCart's shape onto the carts
         // module's uniform return shape across the three conversions.
@@ -1248,6 +1251,12 @@ async function contributeReferenceDeployment(ctx: ComposedAppContext): Promise<v
           {
             customerAccountId: loginCtx.customerAccountId,
             organizationId: loginCtx.organizationId,
+            // The sign-in request's channel: the anonymous basket of that store
+            // merges into the customer's basket of that store, and a basket of
+            // another store is left alone (`specs/154-sales-channel-access/`,
+            // contracts/basket-attribution.md §3). The hook runs inside the
+            // login request, so its scope carries the resolved channel.
+            salesChannelId: getResolvedChannel().id,
           },
         );
       }

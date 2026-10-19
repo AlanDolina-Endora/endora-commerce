@@ -54,9 +54,15 @@ export class CartPlacementApplyService implements CartPlacementApplyPort {
     // that has none, so a caller with no organisation must not be narrowed out
     // of its own basket. `Cart` is `@CustomerScoped`, so the tenant guard is on
     // the customer either way.
+    //
+    // The basket is the one of the channel the order is placed on
+    // (`specs/154-sales-channel-access/`, contracts/basket-attribution.md §4):
+    // a customer holds one per channel, and another store's basket is not this
+    // order's.
     const cart = await em.findOne(Cart, {
       customerAccountId: ctx.customerAccountId,
       ...(ctx.organizationId === null ? {} : { organizationId: ctx.organizationId }),
+      salesChannelId: ctx.salesChannelId,
       status: 'active',
     });
     if (!cart) return null;
@@ -120,10 +126,19 @@ export class CartPlacementApplyService implements CartPlacementApplyPort {
   ): Promise<Array<{ item: CartItem; differs: boolean; drift: CartLinePriceDrift }>> {
     const items = await em.find(CartItem, { cartId: input.cartId });
     if (items.length === 0) return [];
+    // Priced on the basket's own channel, the one it was priced on when its
+    // lines were added — never the system default (contracts/basket-attribution.md
+    // §2). The basket is read on this `em`, so the answer describes the row
+    // placement holds.
+    const cart = await em.findOneOrFail(Cart, { id: input.cartId }, { fields: ['id', 'salesChannelId'] });
+    if (!cart.salesChannelId) {
+      throw new Error(`[carts] cart ${input.cartId} records no sales channel to price it on.`);
+    }
     // Placement is a signed-in buyer's, whoever places it.
     const ctx = await this.linePricing.contextFor(em, {
       organizationId: input.organizationId,
       signedIn: true,
+      salesChannelId: cart.salesChannelId,
     });
     const products = await this.catalogProducts.findByIds([
       ...new Set(items.map((it) => it.productId)),

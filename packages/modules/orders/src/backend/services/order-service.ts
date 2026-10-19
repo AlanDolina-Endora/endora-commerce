@@ -1204,8 +1204,9 @@ export class OrderService {
     total: number;
     currency: string;
   }> {
-    // No `EntityManager` at all any more: the last thing this method used one
-    // for was the basket read below, and it is a port now (feature 080, T048).
+    // No `EntityManager` for the basket: it is read through a port now
+    // (feature 080, T048). The one read this method makes itself is the
+    // system-default channel, for a caller that names no channel.
     const org = await this.neighbours.organizationDetails.findById(ctx.organizationId);
     // The **standalone** read, through `cartReadPort` — no `EntityManager`,
     // because this method opens no transaction and a read handed one is a
@@ -1225,9 +1226,18 @@ export class OrderService {
     // `carts.organization_id` is nullable for a customer account that has none.
     // Narrowing it would be a real change of behaviour for those rows and is
     // not this conversion's to make.
+    //
+    // The basket previewed is the one of the channel previewed
+    // (`specs/154-sales-channel-access/`), resolved the way placement resolves
+    // the order's: the channel named, else the system default.
+    const basketChannelId =
+      req.salesChannelId ??
+      (await this.emFactory().findOne(SalesChannel, { systemDefault: true }, { fields: ['id'] }))?.id;
+    if (!basketChannelId) throw new NoSystemDefaultChannel();
     const basket = await this.neighbours.cartRead.findActiveForCustomer({
       customerAccountId: ctx.customerAccountId,
       organizationId: null,
+      salesChannelId: basketChannelId,
     });
     const cart = basket?.cart ?? null;
     const items = basket?.items ?? [];
@@ -1418,21 +1428,77 @@ export class OrderService {
         );
       }
 
+      // Resolve the order's sales channel once. Prefer the channel carried on
+      // the request (Checkout / admin create); otherwise the platform's
+      // **system-default** channel. Used for the basket the order is placed
+      // from, candidate warehouses, the channel-level fulfilment setting, and
+      // the stamped order channel below, so all four agree. Resolved before the
+      // basket is read, because the basket is the one of this channel
+      // (`specs/154-sales-channel-access/`).
+      //
+      // Issue #85 — the fallback used to be `findOne(SalesChannel, { status:
+      // 'active' })`: an arbitrary active row, ordered by nothing, read from
+      // the legacy `status` column rather than from the flag that actually
+      // names the default. Which channel an order recorded therefore depended
+      // on Postgres' row order, and moving the flag changed nothing. The flag
+      // is the platform's one answer to "which channel, when nobody said"
+      // (D-47), and since D-51 an operator can move it, so the lookup has to
+      // follow it. Read inside the transaction rather than through the
+      // resolver's cache so the three uses below see one consistent snapshot.
+      //
+      // The fallback is not an existence check on a named id. Admin create
+      // refuses an unknown channel upstream (`order-creation-admin-service.ts`);
+      // the storefront route and one-click pass the request's resolved channel,
+      // and the API-key intake the key's bound one. So it is reached by a
+      // caller that names no channel, or by one that resolves its channel
+      // itself.
+      const orderChannel =
+        (req.salesChannelId
+          ? await tx.findOne(SalesChannel, { id: req.salesChannelId })
+          : null) ?? (await tx.findOne(SalesChannel, { systemDefault: true }));
+      // An order records the channel it was placed through; there is no honest
+      // value for "none" in a `not null` column other code joins on. D-47's
+      // invariant says this cannot happen after boot — so say so, rather than
+      // persisting the `randomUUID()` that used to stand here (issue #85).
+      if (orderChannel === null) throw new NoSystemDefaultChannel();
+
       // The basket, read on **this** transaction through the port `carts`
       // publishes for placement (feature 080, T048). It is the same
       // `EntityManager` the completion below writes on, which is the whole
       // content of the seam: a read on a second one would put a commit boundary
       // between the totals this method quotes and the basket it clears.
+      //
+      // The basket is the customer's basket **of this order's channel**: a
+      // customer holds one per channel, created and priced on the channel it is
+      // used on (`specs/154-sales-channel-access/`, contracts/basket-attribution.md
+      // §4).
       const basket = await this.neighbours.cartPlacementApply.readActiveForPlacement(tx, {
         customerAccountId: ctx.customerAccountId,
         // `null` for the reason `previewTotal` states above: the query this
         // replaces filtered on the customer account and the status alone.
         organizationId: null,
+        salesChannelId: orderChannel.id,
       });
       const cart = basket?.cart ?? null;
       const items = basket?.items ?? [];
       if (!cart || items.length === 0) {
         throw new HttpError(409, ERROR_CODES.CART_EMPTY, 'Cart is empty.');
+      }
+      // Defence in depth: by construction the read above answers this channel's
+      // basket, so this refuses only a basket handed over from elsewhere. Its
+      // assortment, its line prices and its promotions were all answered for
+      // the channel it records; placed on another one it would carry them as
+      // they are. Refused rather than repriced — a silent price change at
+      // placement is what the price check below refuses as well — inside the
+      // transaction and before anything is reserved or written, so the basket
+      // survives.
+      if (cart.salesChannelId !== orderChannel.id) {
+        throw new HttpError(
+          422,
+          ERROR_CODES.ORDER_SALES_CHANNEL_MISMATCH,
+          'The basket belongs to a different sales channel than this order.',
+          { cartSalesChannelId: cart.salesChannelId, requestSalesChannelId: orderChannel.id },
+        );
       }
 
       // A cart line is ordered at its stored unit price — copied onto the order
@@ -1525,37 +1591,6 @@ export class OrderService {
       // Feature 035 (FR-014/FR-015) — same re-validation for the shipping method.
       await this.assertShippingMethodUsable(ctx, deliveryMethod, req.salesChannelId ?? null);
 
-      // Resolve the order's sales channel once. Prefer the channel carried on
-      // the request (Checkout / admin create); otherwise the platform's
-      // **system-default** channel. Used for candidate warehouses, the
-      // channel-level fulfilment setting, and the stamped order channel below,
-      // so all three agree.
-      //
-      // Issue #85 — the fallback used to be `findOne(SalesChannel, { status:
-      // 'active' })`: an arbitrary active row, ordered by nothing, read from
-      // the legacy `status` column rather than from the flag that actually
-      // names the default. Which channel an order recorded therefore depended
-      // on Postgres' row order, and moving the flag changed nothing. The flag
-      // is the platform's one answer to "which channel, when nobody said"
-      // (D-47), and since D-51 an operator can move it, so the lookup has to
-      // follow it. Read inside the transaction rather than through the
-      // resolver's cache so the three uses below see one consistent snapshot.
-      //
-      // The fallback is not an existence check on a named id. Admin create
-      // refuses an unknown channel upstream (`order-creation-admin-service.ts`);
-      // the storefront route and one-click pass the request's resolved channel,
-      // and the API-key intake the key's bound one. So it is reached by a
-      // caller that names no channel, or by one that resolves its channel
-      // itself.
-      const orderChannel =
-        (req.salesChannelId
-          ? await tx.findOne(SalesChannel, { id: req.salesChannelId })
-          : null) ?? (await tx.findOne(SalesChannel, { systemDefault: true }));
-      // An order records the channel it was placed through; there is no honest
-      // value for "none" in a `not null` column other code joins on. D-47's
-      // invariant says this cannot happen after boot — so say so, rather than
-      // persisting the `randomUUID()` that used to stand here (issue #85).
-      if (orderChannel === null) throw new NoSystemDefaultChannel();
 
       // Both chosen methods must be offered in the channel this order records.
       // The storefront catalogues list only such methods; this is the refusal

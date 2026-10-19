@@ -191,3 +191,44 @@ describe('storedPriceDiffers', () => {
     expect(storedPriceDiffers({ unitPrice: '1.00', currency: 'PLN' }, null)).toBe(true);
   });
 });
+
+describe('CartLinePricing.contextFor — the basket’s own channel', () => {
+  /**
+   * `specs/154-sales-channel-access/` (contracts/basket-attribution.md §2): the
+   * context is the basket's channel, looked up by id. It used to load the
+   * system-default channel whatever the basket, which is the shape this
+   * refuses: the only lookup is by the id it was given.
+   */
+  it('loads the channel it is given, by id, and nothing else', async () => {
+    const lookups: Array<Record<string, unknown>> = [];
+    const em = {
+      findOne: async (_entity: unknown, where: Record<string, unknown>) => {
+        lookups.push(where);
+        return where['id'] === 'ch-b' ? { id: 'ch-b', defaultCurrency: 'EUR' } : null;
+      },
+    } as unknown as Parameters<CartLinePricing['contextFor']>[0];
+    const pricing = new CartLinePricing(noListPrice, displayModes('both'), noOrganizations);
+
+    const context = await pricing.contextFor(em, {
+      organizationId: null,
+      signedIn: false,
+      salesChannelId: 'ch-b',
+    });
+
+    expect(context.channel).toEqual({ id: 'ch-b', defaultCurrency: 'EUR' });
+    expect(lookups).toEqual([{ id: 'ch-b' }]);
+  });
+
+  it('answers no channel for one that is gone, rather than another channel', async () => {
+    const em = { findOne: async () => null } as unknown as Parameters<
+      CartLinePricing['contextFor']
+    >[0];
+    const pricing = new CartLinePricing(noListPrice, displayModes('both'), noOrganizations);
+    const context = await pricing.contextFor(em, {
+      organizationId: null,
+      signedIn: true,
+      salesChannelId: 'ch-gone',
+    });
+    expect(context.channel).toBeNull();
+  });
+});
