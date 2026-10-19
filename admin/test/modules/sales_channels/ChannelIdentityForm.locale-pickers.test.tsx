@@ -459,6 +459,7 @@ describe('the submitted value', () => {
         currencies: ['PLN', 'EUR'],
         defaultCurrency: 'PLN',
         active: true,
+        anonymousAccess: true,
       },
     ]);
   });
