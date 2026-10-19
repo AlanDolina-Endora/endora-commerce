@@ -124,6 +124,24 @@ when the asset that held it last was a **different** one the request answers
 that name will open the new asset — and the audit entry records which asset held it. The list
 search (`q`) also matches permalinks.
 
+**Files the library did not upload (owner ruling).** A row with no storage key — a file inserted
+directly into the database, such as the demo data's inline `data:` images — is refused like a legacy
+row: replace and restore answer `409 ASSET_LEGACY_CANNOT_REPLACE` instead of `503`. The asset detail
+gains `replaceable` (false for both kinds of row), and the drawer offers no **Replace file** for them,
+saying the new file has to be uploaded as a new asset.
+
+**Folder delete names permalinked files (owner ruling).** The folder delete confirmation now says how
+many files in the folder, at any depth, have a shareable link; the library moves a deleted folder's
+files to the parent folder, so those links keep working. The count comes from the new
+`GET /api/v1/admin/assets/folders/:folderId/permalink-count` (`assets.read`), which answers
+`{ data: { permalinkedAssets } }` over live assets and `404 ASSET_FOLDER_NOT_FOUND` for an unknown
+folder.
+
+**One name: "Media library" (owner ruling).** The sidebar entry and the page title now say "Media
+library" ("Biblioteka mediów"), as the command palette does; the manifest's display name, the
+`assets.read` permission label and the module page's title follow. The module id, its routes and its
+translation keys are unchanged.
+
 **Uploads take one file.** `POST /api/v1/admin/assets` now ignores a second file part and answers
 `201` with the asset the first one created; it used to answer `400 ASSET_UPLOAD_NO_FILE`. The replace
 route does the same.

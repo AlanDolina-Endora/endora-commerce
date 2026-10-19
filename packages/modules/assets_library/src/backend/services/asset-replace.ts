@@ -66,6 +66,27 @@ export interface AssetReplaceInput {
   afterStaged?: () => Promise<void>;
 }
 
+/**
+ * Whether the file can be swapped in place: it has a storage key this platform
+ * wrote. A legacy row (a URL the platform did not issue) has none it can write
+ * to, and neither has a row inserted without one — the demo seed's `data:`
+ * images (owner ruling S3, specs/156-asset-stable-url/). Both are refused the
+ * same way, and the detail answers this as `replaceable`.
+ */
+export function isReplaceableInPlace<T extends Pick<Asset, 'storageBackend' | 'storageLocator'>>(
+  a: T,
+): a is T & { storageBackend: ObjectBackend } {
+  return a.storageBackend !== 'legacy' && (a.storageLocator ?? '') !== '';
+}
+
+function cannotReplaceInPlace(): HttpError {
+  return new HttpError(
+    409,
+    ERROR_CODES.ASSET_LEGACY_CANNOT_REPLACE,
+    'This file is stored at an address the platform did not issue, so it cannot be replaced in place.',
+  );
+}
+
 /** `certificate` is a PDF for the comparison and is kept on the row. */
 function comparableKind(kind: AssetKind): AssetKind {
   return kind === 'certificate' ? 'pdf' : kind;
@@ -163,13 +184,7 @@ export async function replaceAssetFile(
   if (current.deletedAt) {
     throw new HttpError(410, ERROR_CODES.ASSET_GONE, 'Restore the asset before replacing its file.');
   }
-  if (current.storageBackend === 'legacy') {
-    throw new HttpError(
-      409,
-      ERROR_CODES.ASSET_LEGACY_CANNOT_REPLACE,
-      'This file is stored at an address the platform did not issue, so it cannot be replaced in place.',
-    );
-  }
+  if (!isReplaceableInPlace(current)) throw cannotReplaceInPlace();
   const backend: ObjectBackend = current.storageBackend;
   const expectedVersion = input.expectedContentVersion ?? current.contentVersion;
 
@@ -397,13 +412,7 @@ export async function restorePreviousVersion(
   if (current.deletedAt) {
     throw new HttpError(410, ERROR_CODES.ASSET_GONE, 'Restore the asset before restoring its file.');
   }
-  if (current.storageBackend === 'legacy') {
-    throw new HttpError(
-      409,
-      ERROR_CODES.ASSET_LEGACY_CANNOT_REPLACE,
-      'This file is stored at an address the platform did not issue, so it cannot be replaced in place.',
-    );
-  }
+  if (!isReplaceableInPlace(current)) throw cannotReplaceInPlace();
   if (!hasPreviousVersion(current)) throw noPreviousVersion();
   const retentionDays = deps.loadRetentionDays ? await deps.loadRetentionDays() : undefined;
   refuseIfExpired(current, retentionDays, new Date());

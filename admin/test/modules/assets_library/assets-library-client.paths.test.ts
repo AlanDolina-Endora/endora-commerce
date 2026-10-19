@@ -12,7 +12,7 @@ vi.mock('@endora-commerce/admin-kit/lib', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   const record = (method: string) => async (path: string) => {
     calls.push({ method, path });
-    return { data: {} };
+    return { data: { permalinkedAssets: 0 } };
   };
   return {
     ...actual,
@@ -46,6 +46,7 @@ describe('assetsLibraryClient — ids in paths', () => {
     ],
     ['setPermalink', () => assetsLibraryClient.setPermalink(HOSTILE, 'x.pdf'), `/api/v1/admin/assets/${ENCODED}/permalink`],
     ['removePermalink', () => assetsLibraryClient.removePermalink(HOSTILE), `/api/v1/admin/assets/${ENCODED}/permalink`],
+    ['countFolderPermalinks', () => assetsLibraryClient.countFolderPermalinks(HOSTILE), `/api/v1/admin/assets/folders/${ENCODED}/permalink-count`],
     ['patchFolder', () => assetsLibraryClient.patchFolder(HOSTILE, { name: 'n' }), `/api/v1/admin/assets/folders/${ENCODED}`],
     [
       'deleteFolder',

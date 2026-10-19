@@ -108,7 +108,7 @@ const settings = defineModuleSettingsManifest({
 /** Module-lifecycle manifest (feature 018). */
 export const manifest = defineModuleManifest({
   id: 'assets_library',
-  name: 'Assets Library',
+  name: 'Media library',
   description:
     'Storage adapter registry (local / S3 / GCS), asset upload, and reference tracking.',
   version: '1.0.0',
@@ -274,7 +274,7 @@ export const manifest = defineModuleManifest({
   i18n: { bundlesDir: 'i18n' },
   docs: { dir: 'docs' },
   permissions: [
-    { code: 'assets.read', label: 'Browse assets library' },
+    { code: 'assets.read', label: 'Browse media library' },
     { code: 'assets.write', label: 'Upload and manage assets' },
   ],
 });

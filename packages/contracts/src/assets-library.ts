@@ -69,6 +69,16 @@ export const listFoldersResponseSchema = z.object({
 });
 export type ListFoldersResponse = z.infer<typeof listFoldersResponseSchema>;
 
+/**
+ * `GET /api/v1/admin/assets/folders/:folderId/permalink-count` — how many live
+ * assets in the folder's subtree have a permalink, named by the folder delete
+ * confirmation (specs/156-asset-stable-url/, owner ruling S4).
+ */
+export const folderPermalinkCountResponseSchema = z.object({
+  data: z.object({ permalinkedAssets: z.number().int().nonnegative() }),
+});
+export type FolderPermalinkCountResponse = z.infer<typeof folderPermalinkCountResponseSchema>;
+
 export const createFolderRequestSchema = z.object({
   parentId: uuidSchema.nullable(),
   name: z.string().min(1).max(160),
@@ -159,6 +169,13 @@ export const assetDetailSchema = assetSummarySchema.extend({
    * by the replace confirmation (specs/156-asset-stable-url/).
    */
   retentionDays: z.number().int().min(1),
+  /**
+   * Whether the file can be replaced in place (and a previous version
+   * restored): false for a legacy row and for a row with no storage key, which
+   * both answer `409 ASSET_LEGACY_CANNOT_REPLACE` (specs/156-asset-stable-url/,
+   * owner ruling S3).
+   */
+  replaceable: z.boolean(),
 });
 export type AssetDetail = z.infer<typeof assetDetailSchema>;
 

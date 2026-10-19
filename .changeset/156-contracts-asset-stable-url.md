@@ -39,6 +39,8 @@ The permalink rule for library assets, the request shapes for setting a permalin
 - `AssetRecord` gains `contentVersion: string` and `permalink: string | null`.
 
 - `AssetDetail` gains `retentionDays` (a whole number, at least 1): the retention, in days, the sweep applies — how long a replaced file stays restorable.
+- `AssetDetail` gains `replaceable` (boolean): whether the file can be replaced in place — false for a legacy row and for a row with no storage key.
+- New `folderPermalinkCountResponseSchema` (`{ data: { permalinkedAssets } }`) for the folder delete confirmation's count.
 
 A client that only reads these shapes needs no change. Code that builds an `AssetSummary`,
 `AssetDetail` or `AssetRecord` by hand — a test fixture, a mock, an optimistic list update — must

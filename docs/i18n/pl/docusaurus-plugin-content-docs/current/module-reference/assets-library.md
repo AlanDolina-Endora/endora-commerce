@@ -16,7 +16,7 @@ Strona wygenerowana z manifestu modułu, bez żadnych ręcznych zmian. Co moduł
 | | |
 | --- | --- |
 | Identyfikator modułu | `assets_library` |
-| Nazwa | Assets Library |
+| Nazwa | Media library |
 | Wersja | `1.0.0` |
 | Pakiet | `@endora-commerce/mod-assets-library` |
 | Licencja | `MIT` |
@@ -36,7 +36,7 @@ Strona wygenerowana z manifestu modułu, bez żadnych ręcznych zmian. Co moduł
 
 | Kod | Etykieta | Wymaga też |
 | --- | --- | --- |
-| `assets.read` | Browse assets library | — |
+| `assets.read` | Browse media library | — |
 | `assets.write` | Upload and manage assets | — |
 
 ## Paleta poleceń

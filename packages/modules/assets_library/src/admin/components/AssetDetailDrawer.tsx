@@ -552,8 +552,12 @@ function AssetDetailDrawerBody({
           {t('detail.storage')}: {detail.storageBackend} · {t('detail.size')}: {detail.sizeBytes} {t('detail.bytes')}
         </div>
 
-        {/* Replace file — same id, same links, new file (FR-001). */}
-        {canWrite ? (
+        {/* Replace file — same id, same links, new file (FR-001). A legacy row or
+            one with no storage key cannot be replaced in place (owner ruling S3). */}
+        {canWrite && detail.replaceable === false ? (
+          <p className="border-t pt-3 text-xs text-muted-foreground">{t('detail.replace.unavailable')}</p>
+        ) : null}
+        {canWrite && detail.replaceable !== false ? (
           <div className="border-t pt-3">
             <AssetUploader
               upload={stageReplace}

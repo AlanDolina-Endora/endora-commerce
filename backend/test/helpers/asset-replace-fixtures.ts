@@ -118,6 +118,8 @@ export interface AssetBody {
   altText: Record<string, string> | null;
   contentVersion: string;
   references: Array<{ kind: string; entityId: string }>;
+  /** Absent on an upload's 201 body before feature 156's detail fields were read; set on every detail. */
+  replaceable?: boolean;
 }
 
 export interface FilePart {

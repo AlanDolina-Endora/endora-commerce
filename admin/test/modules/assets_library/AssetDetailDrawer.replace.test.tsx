@@ -49,6 +49,17 @@ describe('AssetDetailDrawer — replace file', () => {
     expect(screen.queryByRole('button', { name: en('detail.replace.trigger') })).toBeNull();
   });
 
+  // Owner ruling S3: a legacy row or one with no storage key cannot be replaced
+  // in place; the drawer offers no Replace file and says why.
+  it('offers no Replace file for an asset the detail marks not replaceable, and says to upload a new one', async () => {
+    client.current!.getAsset.mockResolvedValue(detail({ replaceable: false, storageBackend: 'local' }));
+    const { container } = render();
+    await screen.findByText(en('detail.title'));
+    expect(screen.queryByRole('button', { name: en('detail.replace.trigger') })).toBeNull();
+    expect(container.querySelector('input[type="file"]')).toBeNull();
+    expect(screen.getByText(en('detail.replace.unavailable'))).toBeInTheDocument();
+  });
+
   it('accepts only the asset’s own kind, confirms naming both files and the retention, then replaces once and shows the answer', async () => {
     client.current!.getAsset.mockResolvedValue(detail({ retentionDays: 14 }));
     client.current!.replaceAsset.mockResolvedValue(

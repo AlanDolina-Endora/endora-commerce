@@ -337,6 +337,56 @@ describe('POST /api/v1/admin/assets/:id/replace (feature 156)', () => {
     expect((res.json() as ErrorBody).error.code).toBe('ASSET_LEGACY_CANNOT_REPLACE');
   });
 
+  // Owner ruling S3 (2026-10-19): a row with no storage key — the demo seed's
+  // `data:` images, inserted by raw SQL — is refused like a legacy row, never 503,
+  // and the detail says so, so the drawer can hide Replace file.
+  it('refuses a row with no storage key like a legacy row, on replace and restore, and marks it not replaceable', async () => {
+    const id = randomUUID();
+    await h.em().getConnection().execute(
+      `insert into assets (id, kind, filename, mime_type, size_bytes, storage_url, created_at, updated_at)
+       values (?, 'image', ?, 'image/svg+xml', 120, ?, now(), now())`,
+      [id, `${runName()}.svg`, 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4='],
+    );
+    created.push(id);
+    const res = await replaceAsset(h, id, { filename: `${runName()}.svg`, mime: 'image/svg+xml', value: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>') });
+    expect(res.statusCode, res.body).toBe(409);
+    expect((res.json() as ErrorBody).error.code).toBe('ASSET_LEGACY_CANNOT_REPLACE');
+    const before = await detail(id);
+    expect(before.replaceable).toBe(false);
+    const restore = await h.app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/assets/${id}/previous-version/restore`,
+      cookies: ADMIN,
+      payload: { expectedContentVersion: before.contentVersion, expectedPreviousContentVersion: 'aaaaaaaaaaaa' },
+    });
+    expect(restore.statusCode, restore.body).toBe(409);
+    expect((restore.json() as ErrorBody).error.code).toBe('ASSET_LEGACY_CANNOT_REPLACE');
+    const rows = await h.em().getConnection().execute<Array<{ storage_url: string }>>(
+      'select storage_url from assets where id = ?',
+      [id],
+    );
+    expect(rows[0]?.storage_url.startsWith('data:image/svg+xml')).toBe(true);
+  });
+
+  it('marks an uploaded asset replaceable and a legacy row not', async () => {
+    const asset = await upload(`${runName()}.pdf`, 'application/pdf', pdfBytes('replaceable'));
+    expect((await detail(asset.id)).replaceable).toBe(true);
+    const em = h.em();
+    const legacy = em.create(Asset, {
+      kind: 'pdf',
+      filename: `${runName()}.pdf`,
+      mimeType: 'application/pdf',
+      sizeBytes: '10',
+      storageUrl: 'https://legacy.example.test/sheet.pdf',
+      storageLocator: 'https://legacy.example.test/sheet.pdf',
+      storageBackend: 'legacy',
+      visibility: 'public',
+    });
+    await em.persistAndFlush(legacy);
+    created.push(legacy.id);
+    expect((await detail(legacy.id)).replaceable).toBe(false);
+  });
+
   it('refuses a soft-deleted asset with 410', async () => {
     const asset = await upload(`${runName()}.pdf`, 'application/pdf', pdfBytes('gone'));
     const del = await h.app.inject({ method: 'DELETE', url: `/api/v1/admin/assets/${asset.id}`, cookies: ADMIN });

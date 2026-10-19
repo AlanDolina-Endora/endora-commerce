@@ -1,11 +1,11 @@
 ---
-title: Assets Library
+title: Media library
 description: Central digital-asset library with pluggable storage adapters, stable file URLs and permalinks, in-place file replacement, soft-delete with a retention sweep, and reference-protection guards
 ---
 
-# Assets Library
+# Media library
 
-The Assets Library is the platform's digital-asset substrate. It owns:
+The media library (the `assets_library` module) is the platform's digital-asset substrate. It owns:
 
 - A central catalogue of files (images, video, PDFs, documents) reusable
   across Product media, Product attachments, Category main images, and CMS
@@ -209,6 +209,10 @@ is changed or removed.
   `410`; the drawer warns before deleting an asset that has one. The hard
   delete releases it. Setting or removing the permalink of a soft-deleted asset
   answers `410`; restore the asset first.
+- **Deleting a folder.** Deleting a folder in the library moves its files to
+  the parent folder, so their permalinks keep working; the confirmation names
+  how many files in the folder, at any depth, have one
+  (`GET /api/v1/admin/assets/folders/:folderId/permalink-count`).
 
 Setting and removing a permalink are the audited Commands
 `asset.permalink_set` and `asset.permalink_remove`. The list search also
@@ -401,3 +405,9 @@ a legacy asset to its stored URL when that is an `http(s)` URL and answers
 `404 ASSET_FILE_MISSING` otherwise; a legacy asset cannot be replaced
 (`409 ASSET_LEGACY_CANNOT_REPLACE`). Re-upload through the active adapter to
 upgrade.
+
+A row with no storage key — a file inserted directly into the database, such
+as the demo data's inline `data:` images — is treated the same way: replace and
+restore answer `409 ASSET_LEGACY_CANNOT_REPLACE`, and the asset detail answers
+`replaceable: false`, so the drawer offers no **Replace file**. The legacy rows
+above answer `replaceable: false` too.

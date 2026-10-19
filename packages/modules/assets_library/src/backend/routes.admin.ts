@@ -413,6 +413,15 @@ export async function registerAssetsLibraryAdminRoutes(
     },
   );
 
+  // Feature 156, owner ruling S4: named by the folder delete confirmation.
+  app.get<{ Params: { folderId: string } }>(
+    '/api/v1/admin/assets/folders/:folderId/permalink-count',
+    { preHandler: requireAdmin('assets.read') },
+    async (req) => ({
+      data: { permalinkedAssets: await folders.countPermalinkedAssets(req.params.folderId) },
+    }),
+  );
+
   app.delete<{ Params: { folderId: string } }>(
     '/api/v1/admin/assets/folders/:folderId',
     { preHandler: requireAdmin('assets.write') },

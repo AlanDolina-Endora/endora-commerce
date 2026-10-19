@@ -10,7 +10,7 @@
   "blocks.text.label": "Tekst",
   "blocks.text.description": "Akapit; pola korespondencji, np. {{date}}, są uzupełniane.",
   "blocks.image.label": "Obraz",
-  "blocks.image.description": "Obraz z biblioteki zasobów, np. logo.",
+  "blocks.image.description": "Obraz z biblioteki mediów, np. logo.",
   "blocks.spacer.label": "Odstęp",
   "blocks.spacer.description": "Pusta przestrzeń w pionie.",
   "blocks.divider.label": "Linia",

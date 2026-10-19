@@ -124,9 +124,10 @@ No relation to another module's entity.
 | Shape | Change |
 | --- | --- |
 | `AssetSummary` | `url` → embed form (versioned when public); **new** `fileUrl`, `permalink`, `permalinkUrl`, `contentVersion` |
-| `AssetDetail` | **new** `previousVersion: AssetPreviousVersion \| null`; **new** `retentionDays: number` (whole days, at least 1 — `assets.soft_delete_retention_days` as the sweep reads it; named by the replace confirmation, UI block review 2026-10-19) |
+| `AssetDetail` | **new** `previousVersion: AssetPreviousVersion \| null`; **new** `retentionDays: number` (whole days, at least 1 — `assets.soft_delete_retention_days` as the sweep reads it; named by the replace confirmation, UI block review 2026-10-19); **new** `replaceable: boolean` (false for a legacy row or one with no storage key — owner ruling S3) |
 | `AssetPreviousVersion` | **new**: `filename`, `mimeType`, `sizeBytes`, `contentVersion`, `replacedAt`, `replacedBy: { id, displayName } \| null`, `restorableUntil` |
 | `AssetRecord` | **new** `contentVersion`, `permalink`; `storageUrl` carries the marker; `purgeAfterAt` derived at read time (same type) |
+| `FolderPermalinkCountResponse` | **new** `{ data: { permalinkedAssets: number } }` — live permalinked assets in a folder subtree (owner ruling S4) |
 | Request bodies | **new** `setAssetPermalinkRequestSchema` (`permalink`, optional `confirmReuse`), `restorePreviousAssetVersionRequestSchema` (both versions required); replace is multipart |
 
 ## 5. What is not stored

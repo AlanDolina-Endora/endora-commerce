@@ -432,6 +432,15 @@
         }
       }
     },
+    "/api/v1/admin/assets/folders/{folderId}/permalink-count": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/assets/move-many": {
       "post": {
         "responses": {

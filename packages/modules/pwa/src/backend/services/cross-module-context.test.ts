@@ -46,6 +46,7 @@ function assetDetail(overrides: Partial<AssetDetail> = {}): AssetDetail {
     references: [],
     previousVersion: null,
     retentionDays: 30,
+    replaceable: true,
     ...overrides,
   };
 }

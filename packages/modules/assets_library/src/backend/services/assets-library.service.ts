@@ -25,6 +25,7 @@ import { LegacyAssetCannotHardenError } from './storage/errors.js';
 import { recordAuditFromContext } from '@endora-commerce/platform/commands';
 import { permalinkUrl, versionedAssetUrl } from './asset-urls.js';
 import {
+  isReplaceableInPlace,
   replaceAssetFile,
   restorePreviousVersion,
   type AssetReplaceDeps,
@@ -593,6 +594,7 @@ export class AssetsLibraryService {
       references,
       previousVersion: await this.previousVersion(a, retentionDays),
       retentionDays: Math.max(1, Math.floor(retentionDays)),
+      replaceable: isReplaceableInPlace(a),
     };
   }
 

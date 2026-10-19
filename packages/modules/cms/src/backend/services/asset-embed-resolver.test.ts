@@ -50,6 +50,7 @@ const DETAIL: AssetDetail = {
   references: [],
   previousVersion: null,
   retentionDays: 30,
+  replaceable: true,
 };
 
 function resolverOver(getAsset: AssetsLibraryPort['getAsset']) {

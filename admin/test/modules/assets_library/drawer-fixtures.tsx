@@ -60,6 +60,7 @@ export function detail(over: Partial<AssetDetail> = {}): AssetDetail {
     references: [],
     previousVersion: null,
     retentionDays: 30,
+    replaceable: true,
     ...over,
   };
 }

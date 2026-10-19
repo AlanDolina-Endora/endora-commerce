@@ -11,6 +11,7 @@ import type {
   AssetSummary,
   CreateFolderRequest,
   DeleteFolderRequest,
+  FolderPermalinkCountResponse,
   ListAssetsResponse,
   ListFoldersResponse,
   PatchAssetRequest,
@@ -169,6 +170,14 @@ export const assetsLibraryClient = {
       req,
     );
     return out.data;
+  },
+
+  /** How many live assets in the folder's subtree have a permalink (owner ruling S4). */
+  async countFolderPermalinks(id: string): Promise<number> {
+    const out = await apiClient.get<FolderPermalinkCountResponse>(
+      `/api/v1/admin/assets/folders/${encodeURIComponent(id)}/permalink-count`,
+    );
+    return out.data.permalinkedAssets;
   },
 
   async deleteFolder(

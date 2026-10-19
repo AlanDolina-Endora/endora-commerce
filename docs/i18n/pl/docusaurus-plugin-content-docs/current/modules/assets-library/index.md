@@ -5,7 +5,7 @@ description: Centralna biblioteka plików z wymiennymi adapterami przechowywania
 
 # Biblioteka mediów
 
-Biblioteka mediów (Assets Library) to warstwa plików cyfrowych platformy. Zapewnia:
+Biblioteka mediów (moduł `assets_library`) to warstwa plików cyfrowych platformy. Zapewnia:
 
 - Centralny katalog plików (obrazów, wideo, PDF, dokumentów) wielokrotnie używanych w mediach
   produktów, załącznikach produktów, głównych obrazach kategorii i stronach CMS.
@@ -189,6 +189,9 @@ wpisywania i prosi o potwierdzenie przed zmianą lub usunięciem ustawionego sta
 - **Usunięcie i trwałe usunięcie.** Plik usunięty miękko zachowuje stały link, który odpowiada `410`;
   panel ostrzega przed usunięciem pliku ze stałym linkiem. Trwałe usunięcie zwalnia link. Ustawienie
   lub usunięcie stałego linku pliku usuniętego miękko daje odpowiedź `410`; najpierw przywróć plik.
+- **Usuwanie folderu.** Usunięcie folderu w bibliotece przenosi jego pliki do folderu nadrzędnego,
+  więc ich stałe linki nadal działają; potwierdzenie podaje, ile plików w folderze, na dowolnej
+  głębokości, ma stały link (`GET /api/v1/admin/assets/folders/:folderId/permalink-count`).
 
 Ustawienie i usunięcie stałego linku to audytowane komendy `asset.permalink_set` i
 `asset.permalink_remove`. Wyszukiwanie na liście dopasowuje także stałe linki.
@@ -365,3 +368,9 @@ podpisywać adresów, których nie wydaliśmy), co w panelu pojawia się jako
 jest to adres `http(s)`, a w przeciwnym razie odpowiada `404 ASSET_FILE_MISSING`; starszego pliku nie
 można podmienić (`409 ASSET_LEGACY_CANNOT_REPLACE`). Aby przenieść taki plik do nowego mechanizmu,
 prześlij go ponownie przez aktywny adapter.
+
+Wiersz bez klucza w magazynie — plik wstawiony bezpośrednio do bazy danych, jak osadzone obrazy
+`data:` z danych demonstracyjnych — jest traktowany tak samo: podmiana i przywracanie odpowiadają
+`409 ASSET_LEGACY_CANNOT_REPLACE`, a szczegóły pliku podają `replaceable: false`, więc panel
+szczegółów nie oferuje przycisku **Podmień plik**. Starsze pliki opisane wyżej również podają
+`replaceable: false`.
