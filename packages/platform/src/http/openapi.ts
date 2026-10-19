@@ -131,48 +131,37 @@ function buildDocument(meta: OpenApiMetadata): OpenAPIV3_1.Document {
   return doc as unknown as OpenAPIV3_1.Document;
 }
 
-export function registerOpenApiRoutes(app: FastifyInstance, meta: OpenApiMetadata): void {
-  // Build the document lazily on first request — by then every module has registered
-  // its routes via the onRoute hook installed in attachOpenApiAutoRegistration().
+/**
+ * The API description, decorated on the root instance by `buildServer`.
+ *
+ * Building the document and serving it are two different owners' work. The
+ * document is the server's: it is generated from every route Fastify registered,
+ * under the title, version and server URL the composition root passed to
+ * `buildServer`. **Serving** it is gated — on `platform.api_description.read`,
+ * which an administrator holds through an admin role and an API key through its
+ * scopes — and a gate is `auth`'s `requireAdmin` port, which only exists once
+ * the modules have been composed. So `buildServer` provides the document here,
+ * and `_lifecycle` mounts the routes that serve it
+ * (`../lifecycle/routes.api-description.ts`; who may read it is
+ * `api-description.ts`). A composition
+ * that mounts no `_lifecycle` serves no API description at all, which is the
+ * closed end of the question rather than an open one.
+ */
+declare module 'fastify' {
+  interface FastifyInstance {
+    /** The OpenAPI document for every route this server registered. Built on first call. */
+    apiDescription: () => OpenAPIV3_1.Document;
+  }
+}
+
+export function provideApiDescription(app: FastifyInstance, meta: OpenApiMetadata): void {
+  // Built lazily on first request — by then every module has registered its
+  // routes via the onRoute hook installed in attachOpenApiAutoRegistration().
   let cached: OpenAPIV3_1.Document | undefined;
-  const getDoc = (): OpenAPIV3_1.Document => {
+  app.decorate('apiDescription', (): OpenAPIV3_1.Document => {
     if (!cached) {
       cached = buildDocument(meta);
     }
     return cached;
-  };
-
-  // Feature 154 — the API description names no store, so it is reachable
-  // whatever the sales-channel access rule decides.
-  app.get('/api/v1/_openapi.json', { config: { salesChannelAccess: 'open' } }, async (_req, reply) => {
-    // Return the payload rather than calling `reply.send()` and then resolving
-    // the async handler with `undefined` — Fastify 5 treats the latter as a
-    // second send and raises ERR_HTTP_HEADERS_SENT.
-    reply.header('Content-Type', 'application/json');
-    return getDoc();
-  });
-
-  app.get('/api/v1/_docs', { config: { salesChannelAccess: 'open' } }, async (_req, reply) => {
-    // Minimal HTML shell rendering the spec via Swagger UI hosted on a CDN.
-    // Intentionally not adding a swagger-ui dependency (Principle IV) since this is dev-only.
-    reply
-      .header('Content-Type', 'text/html; charset=utf-8')
-      .send(
-        `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <title>B2B Platform API</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist/swagger-ui.css"/>
-</head>
-<body>
-  <div id="swagger-ui"></div>
-  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist/swagger-ui-bundle.js"></script>
-  <script>
-    window.onload = () => SwaggerUIBundle({ url: '/api/v1/_openapi.json', dom_id: '#swagger-ui' });
-  </script>
-</body>
-</html>`,
-      );
   });
 }

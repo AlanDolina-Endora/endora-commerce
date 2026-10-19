@@ -18,6 +18,12 @@ export interface OpenRouteEntry {
   /** The module (or `platform`) that owns the route and declares the option. */
   readonly owner: string;
   readonly reason: string;
+  /**
+   * What the route answers an anonymous caller once the channel step has let
+   * it through, when that is not 200 — a route open to every channel can still
+   * be gated on who asks.
+   */
+  readonly anonymousStatus?: number;
 }
 
 const SIGN_IN = 'Signing in is how a visitor of a store closed to anonymous visitors gets in.';
@@ -124,11 +130,18 @@ export const CHANNEL_ACCESS_OPEN_ROUTES: Readonly<Record<string, OpenRouteEntry>
 /**
  * Declared open and absent from the OpenAPI document, which does not describe
  * itself — asked of the server separately.
+ *
+ * Open here means the **channel** rule does not apply: the API description
+ * names no store, and a closed default channel must not take it from an
+ * integration. Who may read it is a separate gate — an administrator holding
+ * `platform.api_description.read` or an API key with that scope
+ * (`packages/platform/src/http/api-description.ts`) — so an anonymous caller is
+ * answered 401 by that gate, never by the channel step.
  */
+const API_DESCRIPTION =
+  'The API description names no store; reading it is gated on platform.api_description.read.';
+
 export const CHANNEL_ACCESS_OPEN_UNDOCUMENTED_ROUTES: Readonly<Record<string, OpenRouteEntry>> = {
-  'GET /api/v1/_openapi.json': {
-    owner: 'platform',
-    reason: 'The API description names no store.',
-  },
-  'GET /api/v1/_docs': { owner: 'platform', reason: 'The API description names no store.' },
+  'GET /api/v1/_openapi.json': { owner: 'platform', reason: API_DESCRIPTION, anonymousStatus: 401 },
+  'GET /api/v1/_docs': { owner: 'platform', reason: API_DESCRIPTION, anonymousStatus: 401 },
 };

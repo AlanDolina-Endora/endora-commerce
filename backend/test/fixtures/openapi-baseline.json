@@ -350,6 +350,15 @@
         }
       }
     },
+    "/api/v1/admin/api-description": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/api-interceptors": {
       "get": {
         "responses": {

@@ -56,8 +56,14 @@ describe('channel-access open routes', () => {
   });
 
   it('the routes answering on a closed channel are exactly the ledgered ones', async () => {
-    // The document is itself an open route, so it is readable here.
-    const docRes = await h.app.inject({ method: 'GET', url: '/api/v1/_openapi.json' });
+    // The document is itself an open route, so the closed channel does not
+    // stop it; who may read it is its own gate, which the platform
+    // administrator passes.
+    const docRes = await h.app.inject({
+      method: 'GET',
+      url: '/api/v1/_openapi.json',
+      cookies: { b2b_session: 'stub-admin-session' },
+    });
     expect(docRes.statusCode).toBe(200);
     const document = docRes.json() as { paths: Record<string, Record<string, unknown>> };
 
@@ -98,7 +104,11 @@ describe('channel-access open routes', () => {
       const [method, url] = key.split(' ') as ['GET', string];
       const res = await h.app.inject({ method, url });
       expect(isRefusal(res.body), key).toBe(false);
-      expect(res.statusCode, key).toBe(200);
+      // What answers is the route itself: 200, or its own guard's refusal
+      // where the ledger says the route is gated on something else.
+      expect(res.statusCode, key).toBe(
+        CHANNEL_ACCESS_OPEN_UNDOCUMENTED_ROUTES[key]?.anonymousStatus ?? 200,
+      );
     }
   });
 

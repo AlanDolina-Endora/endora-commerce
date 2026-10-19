@@ -4,6 +4,7 @@ import { BrandLogo } from './BrandLogo.js';
 import { VersionBadge } from './VersionBadge.js';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
+  BookOpen,
   Boxes,
   ChevronDown,
   ChevronRight,
@@ -344,6 +345,16 @@ const NAV: NavSection[] = [
         labelKey: 'appShell.nav.platformModules',
         icon: Boxes,
         requiredPermission: 'platform.modules.read',
+        module: null,
+      },
+      // `module: null` for the same reason: the API description covers every
+      // module's routes, so no module's presence decides whether it is there.
+      // Gated on the code its backing route enforces.
+      {
+        to: '/api-description',
+        labelKey: 'appShell.nav.platformApiDescription',
+        icon: BookOpen,
+        requiredPermission: 'platform.api_description.read',
         module: null,
       },
       // `/admin-users`, `/admin-roles` and `/audit-log` are declared by the
