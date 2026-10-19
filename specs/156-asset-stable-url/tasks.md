@@ -695,6 +695,7 @@ T091 and T092.
   ```
   Every `RED:` line is a failure to report with its output.
   **Result (2026-10-19, host macOS, one file per invocation, each against an isolated cloned test database)**: 55 files, 403 tests, every file exit 0, no `RED:` line — the T090 list, the loop's files naming the Library, every file under `backend/test/contract/assets_library/` and `backend/test/integration/assets_library/`, every server-bound file this branch added or changed, and `test/contract/kernel/openapi-baseline.test.ts`.
+  **Final tip (2026-10-19, after the fourth rebase onto `origin/master` 3d9ca98cd)**: the same set — every contract/integration file the branch adds or changes, the library's own suites and the cross-cutting files above — ran in the fork's `fork-pg-tests` workflow against Postgres, Redis and Meilisearch service containers, one file per invocation: `files=55 failed=0 tests=411`, [run 39216066845](https://github.com/bfluks/endora-commerce/actions/runs/39216066845). Locally after the rebase: `openapi-baseline` and `error-code-ownership` (the files whose sources master moved).
 - [x] T091 `boot-gate` (host Docker; on macOS with Homebrew bash 5, without prefixing `PATH` with `/usr/local/bin`) — it boots a worker-role process, which now starts the retention consumer:
   ```bash
   bash scripts/boot-gate.sh --with-negatives
@@ -716,6 +717,7 @@ T091 and T092.
   - **S3**: a row with no storage key (the demo seed's `data:` images) is refused like a legacy row — replace and restore answer `409 ASSET_LEGACY_CANNOT_REPLACE`, not `503`; `AssetDetail` gains `replaceable` (contracts first), false for both, and the drawer shows `detail.replace.unavailable` instead of **Replace file**. Tests: two cases in `admin-asset-replace.contract.test.ts` ([PG], a raw-SQL row with `storage_locator=''`), one in `AssetDetailDrawer.replace.test.tsx`.
   - **S4**: new `GET /api/v1/admin/assets/folders/:folderId/permalink-count` (`assets.read`, `folderPermalinkCountResponseSchema`) counts live permalinked assets in the subtree; the folder delete confirmation appends `folders.permalinkNotice` with the count. The library's only folder delete moves the files to the parent, so the sentence says the links keep working rather than that they stop. Tests: `admin-folders.contract.test.ts` ([PG]) and the new `LibraryPage.folder-delete.test.tsx`. Deliberate (R-20): `backend/test/fixtures/openapi-baseline.json` re-recorded with `UPDATE_OPENAPI_BASELINE=1` for the new route.
   - **S5** (superseded the same day, see T093): the rename to a new name was reverted to master's.
+- [x] T094 Owner's manual test of the admin (quickstart §1–§5, the UI block U7) — **passed 2026-10-19, no defects**. Quickstart §6 (real S3/GCS buckets) was not part of it; the cloud paths are covered over mocked SDKs (see *Requirement → test*, **manual** rows), and the pull request names that as out of scope.
 
 **Verification**: every command block of T087 – T092 exactly as written above, in order, on the same
 tip as Phase 12; every command exits 0 and T090's loop prints no `RED:` line.
