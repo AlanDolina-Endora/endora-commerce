@@ -101,8 +101,9 @@ names and run `pnpm install`.
 ### Adding a module that is new in a release {#adding-a-new-module}
 
 The upgrade moves the packages your instance already declares. A module that first appears in the
-release is not among them, so after the upgrade it is neither installed nor listed on **Modules**.
-To have it, declare its package in the root `package.json` and run `setup`, in the root of the
+release is not among them, so after the upgrade it is neither installed nor listed on **Modules** —
+unless a module the instance installed requires it: `setup`'s first step, `endora generate`,
+declares and installs such a module itself. To have any other one, declare its package in the root `package.json` and run `setup`, in the root of the
 instance:
 
 ```bash
@@ -1594,8 +1595,8 @@ migrations — fifteen, one of them the new document templates module's. The rel
 packages that did not exist before —
 `@endora-commerce/mod-document-templates`, `@endora-commerce/mod-admin-search` and
 `@endora-commerce/llm-client` — and **one of them is not optional**: an instance that declares
-`@endora-commerce/mod-invoices` does not start until it declares
-`@endora-commerce/mod-document-templates` as well. It adds no environment variable. It adds five
+`@endora-commerce/mod-invoices` needs `@endora-commerce/mod-document-templates` as well, and the
+upgrade's `setup` step declares and installs it. It adds no environment variable. It adds five
 permissions (`platform.api_description.read`, `document_templates:read`,
 `document_templates:write`, `admin_search:configure` and `cms.translate`), and it moves the
 permissions of import and export onto the modules that own the rows.
@@ -1638,17 +1639,27 @@ Before the upgrade:
 
 The upgrade itself:
 
-4. **Run `pnpm run upgrade 0.107.0`**, then, **if the instance declares
-   `@endora-commerce/mod-invoices`**, declare the document templates module and run `setup` again —
-   whether or not the upgrade's own `setup` step finished:
+4. **Run `pnpm run upgrade 0.107.0`.** `invoices` now lists `document_templates` among its
+   manifest `dependencies`, and **if the instance declares `@endora-commerce/mod-invoices`** the
+   upgrade's `setup` step adds `@endora-commerce/mod-document-templates` to the root
+   `package.json`, at the version the platform is declared at, and installs it before anything
+   else. Its first step, `endora generate`, comes from the release just installed, and it prints
+   the line:
+
+   ```text
+   declared @endora-commerce/mod-document-templates 0.107.0 in package.json — invoices needs document_templates (dependencies)
+   ```
+
+   Commit the changed `package.json` and `pnpm-lock.yaml` with the rest of the upgrade. If the
+   `setup` step did not finish, run `pnpm run setup` again: it continues from there. Only an
+   instance whose `setup` was skipped, or that runs no `generate`, has to declare it by hand:
 
    ```bash
    pnpm add -w -E @endora-commerce/mod-document-templates@0.107.0
    pnpm run setup
    ```
 
-   `invoices` now lists `document_templates` among its manifest `dependencies`, and a deployment
-   that composes a module without the modules it depends on refuses to start, naming them:
+   Without the module a deployment that composes `invoices` refuses to start, naming it:
 
    ```text
    This deployment will not boot: it composes modules whose declarations it does not satisfy.

@@ -106,7 +106,8 @@ w ostrzeżeniu i uruchom `pnpm install`.
 
 Aktualizacja przesuwa pakiety, które Twoja instancja już deklaruje. Moduł, który pojawia się
 w wydaniu po raz pierwszy, do nich nie należy, więc po aktualizacji nie jest ani zainstalowany,
-ani widoczny na ekranie **Modules**. Żeby go mieć, zadeklaruj jego pakiet w głównym
+ani widoczny na ekranie **Modules** — chyba że wymaga go moduł zainstalowany w instancji: wtedy
+pierwszy krok `setup`, `endora generate`, sam go deklaruje i instaluje. Żeby mieć każdy inny, zadeklaruj jego pakiet w głównym
 `package.json` i uruchom `setup` — w katalogu głównym instancji:
 
 ```bash
@@ -1671,8 +1672,8 @@ storefroncie nie były wypróbowane.
 w tym jedną należącą do nowego modułu szablonów dokumentów. Wydanie przynosi trzy pakiety, których
 wcześniej nie było — `@endora-commerce/mod-document-templates`, `@endora-commerce/mod-admin-search`
 i `@endora-commerce/llm-client` — i **jeden z nich nie jest opcjonalny**: instancja, która
-deklaruje `@endora-commerce/mod-invoices`, nie uruchomi się, dopóki nie zadeklaruje także
-`@endora-commerce/mod-document-templates`. Wydanie nie dodaje żadnej zmiennej środowiskowej. Dodaje
+deklaruje `@endora-commerce/mod-invoices`, potrzebuje także
+`@endora-commerce/mod-document-templates`, a krok `setup` aktualizacji sam go deklaruje i instaluje. Wydanie nie dodaje żadnej zmiennej środowiskowej. Dodaje
 pięć uprawnień (`platform.api_description.read`, `document_templates:read`,
 `document_templates:write`, `admin_search:configure` i `cms.translate`) i przenosi uprawnienia
 importu i eksportu do modułów, do których należą dane.
@@ -1716,18 +1717,28 @@ Przed aktualizacją:
 
 Sama aktualizacja:
 
-4. **Uruchom `pnpm run upgrade 0.107.0`**, a następnie, **jeśli instancja deklaruje
-   `@endora-commerce/mod-invoices`**, zadeklaruj moduł szablonów dokumentów i uruchom `setup`
-   ponownie — niezależnie od tego, czy krok `setup` samej aktualizacji się zakończył:
+4. **Uruchom `pnpm run upgrade 0.107.0`.** `invoices` wymienia teraz `document_templates` wśród
+   `dependencies` w swoim manifeście i **jeśli instancja deklaruje `@endora-commerce/mod-invoices`**,
+   krok `setup` aktualizacji dodaje `@endora-commerce/mod-document-templates` do głównego
+   `package.json`, w wersji, w której zadeklarowana jest platforma, i instaluje go przed
+   czymkolwiek innym. Jego pierwszy krok, `endora generate`, pochodzi już z właśnie
+   zainstalowanego wydania i wypisuje wiersz:
+
+   ```text
+   declared @endora-commerce/mod-document-templates 0.107.0 in package.json — invoices needs document_templates (dependencies)
+   ```
+
+   Zatwierdź zmienione `package.json` i `pnpm-lock.yaml` razem z resztą aktualizacji. Jeśli krok
+   `setup` się nie zakończył, uruchom `pnpm run setup` ponownie — kontynuuje od tego miejsca.
+   Ręcznie musi go zadeklarować tylko instancja, w której `setup` pominięto albo która nie
+   uruchamia `generate`:
 
    ```bash
    pnpm add -w -E @endora-commerce/mod-document-templates@0.107.0
    pnpm run setup
    ```
 
-   `invoices` wymienia teraz `document_templates` wśród `dependencies` w swoim manifeście, a
-   wdrożenie, które składa moduł bez modułów, od których on zależy, odmawia uruchomienia i je
-   wymienia:
+   Bez tego modułu wdrożenie, które składa `invoices`, odmawia uruchomienia i go wymienia:
 
    ```text
    This deployment will not boot: it composes modules whose declarations it does not satisfy.
