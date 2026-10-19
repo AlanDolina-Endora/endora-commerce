@@ -26,7 +26,7 @@ export function cartActionFailure(
   if (err instanceof StorefrontApiError && err.code === 'SALES_CHANNEL_SIGN_IN_REQUIRED') {
     return tForLocale(locale ?? '')('access.signInRequired');
   }
-  if (err instanceof StorefrontApiError) return err.message;
+  if (err instanceof StorefrontApiError) return err.detail;
   // `tForLocale` answers an unknown locale in the catalogue's default.
   return tForLocale(locale ?? '')(key);
 }
