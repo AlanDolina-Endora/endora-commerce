@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest';
 /**
  * `specs/156-asset-stable-url/` owner ruling S5, revised — the module is named
  * to the operator the same way everywhere, with the name master already used:
- * the sidebar entry and the command palette say "Assets library" ("Biblioteka
- * zasobów"), and the page title says the same name (master's "Assets Library",
- * capitalised as a title).
+ * the sidebar entry and the command palette say "Assets library" (and its
+ * Polish counterpart), and the page title says the same name (master's
+ * "Assets Library", capitalised as a title).
  */
 
 function bundle(language: string): Record<string, string> {
