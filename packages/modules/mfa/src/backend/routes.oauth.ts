@@ -168,7 +168,9 @@ function loginRedirect(deps: MfaOAuthDeps, surface: Surface, message: string): s
  * closed on that — no module, no buttons.
  */
 function registerProviders(app: FastifyInstance, deps: MfaOAuthDeps, surface: Surface): void {
-  app.get(`/api/v1/auth/${surface}/oauth/providers`, async (_request, reply) => {
+  // Feature 154 — reachable whatever the sales-channel access rule decides:
+  // the sign-in page lists the providers before anybody is signed in.
+  app.get(`/api/v1/auth/${surface}/oauth/providers`, { config: { salesChannelAccess: 'open' } }, async (_request, reply) => {
     const salesChannelId = surface === 'customer' ? (currentSalesChannel()?.id ?? null) : null;
     const policy = await deps.policyResolver.resolve(
       { subjectType: surface, subjectId: '' },
@@ -186,6 +188,9 @@ function registerProviders(app: FastifyInstance, deps: MfaOAuthDeps, surface: Su
 function registerStart(app: FastifyInstance, deps: MfaOAuthDeps, surface: Surface): void {
   app.get<{ Params: { provider: string }; Querystring: { next?: string } }>(
     `/api/v1/auth/${surface}/oauth/:provider/start`,
+    // Feature 154 — reachable whatever the sales-channel access rule decides:
+    // this is how a visitor of a closed store starts signing in.
+    { config: { salesChannelAccess: 'open' } },
     async (request, reply) => {
       const provider = parseProvider(request.params.provider);
       if (!provider) return reply.redirect(loginRedirect(deps, surface, 'Unknown sign-in provider.'));
@@ -237,10 +242,12 @@ function registerStart(app: FastifyInstance, deps: MfaOAuthDeps, surface: Surfac
 }
 
 function registerCallback(app: FastifyInstance, deps: MfaOAuthDeps, surface: Surface): void {
+  // Feature 154 — reachable whatever the sales-channel access rule decides: the
+  // provider's redirect carries no storefront channel signal.
   app.get<{
     Params: { provider: string };
     Querystring: { code?: string; state?: string; error?: string };
-  }>(`/api/v1/auth/${surface}/oauth/:provider/callback`, async (request, reply) => {
+  }>(`/api/v1/auth/${surface}/oauth/:provider/callback`, { config: { salesChannelAccess: 'open' } }, async (request, reply) => {
     const provider = parseProvider(request.params.provider);
     const { code, state, error } = request.query;
     // The binding is single-use whatever the outcome: a later attempt starts

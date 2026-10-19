@@ -1013,6 +1013,10 @@ async function dropStaleCaches(redis: Redis): Promise<void> {
   for (const pattern of [
     'session:*',
     'sales-channels:*',
+    // Feature 154 — an Organization's permitted channels, keyed by an
+    // Organization id the seeds reuse in every file while the channel ids
+    // behind it are new.
+    'sales-channel-access:*',
     'settings:v1:*',
     'admin-auth-throttle:*',
   ]) {
@@ -1778,6 +1782,11 @@ export async function setupBackendServer(
         // channel-scoped stock read at all. Registering it only in production is
         // what let the missing registration survive — see the note there.
         salesChannelResolutionPort: salesChannels.resolver,
+        // Feature 154 — mirrors `compose-app.ts`: the access rule for the
+        // sign-in paths and the access read, and the permitted-channel cache a
+        // channel delete drops.
+        salesChannelAccessPort: salesChannels.accessPolicy,
+        salesChannelAccessCache: salesChannels.accessCache,
       });
 
       // Feature 014 — CMS module. Reconcile seeded Hooks once; the storefront

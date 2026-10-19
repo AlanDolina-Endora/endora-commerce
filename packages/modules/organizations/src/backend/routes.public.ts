@@ -81,7 +81,9 @@ export async function registerOrganizationsPublicRoutes(
 
   app.post(
     '/api/v1/organizations/register',
-    { schema: { body: registerOrganizationRequestSchema } },
+    // Feature 154 — reachable whatever the sales-channel access rule decides: a
+    // business may apply on a store closed to anonymous visitors (feature 154, Q2).
+    { schema: { body: registerOrganizationRequestSchema }, config: { salesChannelAccess: 'open' } },
     async (request, reply) => {
       const body = registerOrganizationRequestSchema.parse(request.body);
       const result = await registrationService.registerOrganization(body);
@@ -132,7 +134,8 @@ export async function registerOrganizationsPublicRoutes(
 
   app.post(
     '/api/v1/auth/email-verification/verify',
-    { schema: { body: emailVerificationRequestSchema } },
+    // Feature 154 — reachable whatever the sales-channel access rule decides.
+    { schema: { body: emailVerificationRequestSchema }, config: { salesChannelAccess: 'open' } },
     async (request) => {
       const body = emailVerificationRequestSchema.parse(request.body);
       const result = await verificationService.verify(body.token);
@@ -148,7 +151,9 @@ export async function registerOrganizationsPublicRoutes(
 
   app.post(
     '/api/v1/auth/customer/login',
-    { schema: { body: customerLoginRequestSchema } },
+    // Feature 154 — reachable whatever the sales-channel access rule decides:
+    // signing in is how a visitor of a closed store gets in.
+    { schema: { body: customerLoginRequestSchema }, config: { salesChannelAccess: 'open' } },
     async (request, reply) => {
       const body = customerLoginRequestSchema.parse(request.body);
       const channelId = currentSalesChannel()?.id ?? null;
@@ -222,7 +227,8 @@ export async function registerOrganizationsPublicRoutes(
 
   app.post(
     '/api/v1/auth/password-reset/request',
-    { schema: { body: passwordResetRequestSchema } },
+    // Feature 154 — reachable whatever the sales-channel access rule decides.
+    { schema: { body: passwordResetRequestSchema }, config: { salesChannelAccess: 'open' } },
     async (request, reply) => {
       const body = passwordResetRequestSchema.parse(request.body);
       // The address is handed over as typed — the port folds it, as every
@@ -248,7 +254,8 @@ export async function registerOrganizationsPublicRoutes(
 
   app.post(
     '/api/v1/auth/password-reset/confirm',
-    { schema: { body: passwordResetConfirmSchema } },
+    // Feature 154 — reachable whatever the sales-channel access rule decides.
+    { schema: { body: passwordResetConfirmSchema }, config: { salesChannelAccess: 'open' } },
     async (request, reply) => {
       const body = passwordResetConfirmSchema.parse(request.body);
       await passwordResetService.confirmReset(body.token, body.newPassword);
@@ -256,21 +263,27 @@ export async function registerOrganizationsPublicRoutes(
     },
   );
 
-  app.post('/api/v1/auth/customer/logout', async (request, reply) => {
-    const cookies = (request as { cookies?: Record<string, string | undefined> }).cookies;
-    const raw = cookies?.[SESSION_COOKIE_NAME];
-    if (raw) {
-      const dot = raw.indexOf('.');
-      if (dot !== -1) {
-        const sessionId = raw.slice(0, dot);
-        if (sessionId) {
-          await customerAuthService.logout(sessionId);
+  // Feature 154 — reachable whatever the sales-channel access rule decides:
+  // a customer may always sign out, on any store (FR-011).
+  app.post(
+    '/api/v1/auth/customer/logout',
+    { config: { salesChannelAccess: 'open' } },
+    async (request, reply) => {
+      const cookies = (request as { cookies?: Record<string, string | undefined> }).cookies;
+      const raw = cookies?.[SESSION_COOKIE_NAME];
+      if (raw) {
+        const dot = raw.indexOf('.');
+        if (dot !== -1) {
+          const sessionId = raw.slice(0, dot);
+          if (sessionId) {
+            await customerAuthService.logout(sessionId);
+          }
         }
       }
-    }
-    reply.clearCookie(SESSION_COOKIE_NAME, { path: '/' });
-    return reply.status(204).send();
-  });
+      reply.clearCookie(SESSION_COOKIE_NAME, { path: '/' });
+      return reply.status(204).send();
+    },
+  );
 
   // Test-only probe for the register→verify integration test.
   if (deps.exposeTestProbe && deps.latestTokenByEmail) {

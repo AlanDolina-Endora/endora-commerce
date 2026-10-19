@@ -70,6 +70,8 @@
   "membership.action.remove": "Remove",
   "errors.UNKNOWN_SALES_CHANNEL": "Unknown Sales Channel.",
   "errors.INACTIVE_SALES_CHANNEL": "This sales channel is inactive. Activate it first.",
+  "errors.SALES_CHANNEL_SIGN_IN_REQUIRED": "This store is available to signed-in customers only. Please sign in.",
+  "errors.SALES_CHANNEL_NOT_PERMITTED": "This account does not have access to this store.",
   "errors.MISSING_SALES_CHANNEL_CONTEXT": "Missing Sales Channel Context.",
   "errors.DUPLICATE_SALES_CHANNEL_CODE": "Duplicate Sales Channel Code.",
   "errors.UNKNOWN_LANGUAGE_CODE": "Unknown Language Code.",

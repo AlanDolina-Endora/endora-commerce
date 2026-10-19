@@ -126,7 +126,7 @@ session-expired flow).
 | `dictionaries` | `GET /api/v1/dictionary`, `GET /api/v1/dictionary/by-code` (registration form) |
 | `seo` | `GET /api/v1/storefront/seo/robots-policy` |
 | `product_feeds` | `GET /api/v1/public/product-feeds/:token` |
-| `newsletter` | `/api/v1/newsletter/confirm`, `/c/:token`, `/o/:token.gif`, `/unsubscribe` |
+| `newsletter` | `/api/v1/newsletter/confirm`, `/click`, `/open.gif`, `/unsubscribe` |
 
 Held by `backend/test/contract/sales_channels/channel-access-open-routes.test.ts`, which enumerates
 the composed test server's routes (an `onRoute` collector) and compares the set declaring `'open'`

@@ -171,6 +171,8 @@ export const ERROR_CODES = {
   ORGANIZATION_SUSPENDED: 'ORGANIZATION_SUSPENDED',
   ORDER_NOT_FOUND: 'ORDER_NOT_FOUND',
   ORDER_NOT_CANCELLABLE: 'ORDER_NOT_CANCELLABLE',
+  /** 422 — the basket handed to placement belongs to another sales channel (feature 154). */
+  ORDER_SALES_CHANNEL_MISMATCH: 'ORDER_SALES_CHANNEL_MISMATCH',
   // Saved list views (`specs/147-saved-views/`, FR-022) — an admin already
   // holds a view on the order list whose name differs only by case or
   // surrounding spaces.
@@ -301,6 +303,12 @@ export const ERROR_CODES = {
   STALE_SALES_CHANNEL_WRITE: 'STALE_SALES_CHANNEL_WRITE',
   SALES_CHANNEL_ATTRIBUTION_IMMUTABLE: 'SALES_CHANNEL_ATTRIBUTION_IMMUTABLE',
   SALES_CHANNEL_CODE_IMMUTABLE: 'SALES_CHANNEL_CODE_IMMUTABLE',
+  // Sales-channel access (feature 154). Raised by the kernel's access step
+  // after a request's channel is resolved; `details.channelCode` names it.
+  /** 403 — an anonymous request on a channel closed to anonymous visitors. */
+  SALES_CHANNEL_SIGN_IN_REQUIRED: 'SALES_CHANNEL_SIGN_IN_REQUIRED',
+  /** 403 — a customer request on a channel its Organization is not assigned to. */
+  SALES_CHANNEL_NOT_PERMITTED: 'SALES_CHANNEL_NOT_PERMITTED',
 
   // Compare (feature 007)
   COMPARISON_FULL: 'COMPARISON_FULL',

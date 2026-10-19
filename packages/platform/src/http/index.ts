@@ -43,6 +43,8 @@
  * **0** with it.
  */
 import './request-actor.js';
+// The `salesChannelAccess` route option (feature 154), carried the same way.
+import './sales-channel-access-option.js';
 
 export { HttpError } from './error-envelope.js';
 export { productAudienceOf, markPersonalisedPricing } from './product-audience.js';

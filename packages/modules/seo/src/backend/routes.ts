@@ -64,7 +64,9 @@ export async function registerSeoRoutes(
   // A stored value that cannot be read — not a string, or not one of the four
   // choices — is a `500` and never a permissive `200`: the storefront keeps
   // what it knew instead of withdrawing a `noindex` nobody withdrew.
-  app.get('/api/v1/storefront/seo/robots-policy', async (request, reply) => {
+  // Feature 154 — reachable whatever the sales-channel access rule decides:
+  // the crawler policy of a closed store is still served.
+  app.get('/api/v1/storefront/seo/robots-policy', { config: { salesChannelAccess: 'open' } }, async (request, reply) => {
     const channel = getResolvedChannel(request);
     reply.header('Cache-Control', 'no-store');
     const stored = await settings.get(DEFAULT_ROBOTS_SETTING_CODE, channel.id, z.string());

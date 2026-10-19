@@ -31,7 +31,7 @@ import type {
   VatValidator,
   DictionaryReferenceRegistryPort,
 } from '@endora-commerce/contracts';
-import type { AuditPort } from '@endora-commerce/platform/kernel';
+import type { AuditPort, SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import type { EventBus } from '@endora-commerce/platform/events';
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
@@ -478,6 +478,12 @@ export function registerModule(ctx: ModuleContext): void {
             dictionaryValidator: lazyPort<DictionaryValidator>(ctx, 'dictionaryValidator'),
             mailer: lazyPort<EmailMailerPort>(ctx, 'emailMailer'),
             templateEmail: lazyPort<TemplateEmailPort>(ctx, 'templateEmailPort'),
+            // Feature 154 — kernel-provided; binds a registered Organization to
+            // the system-default channel in its creating step.
+            salesChannelMembership: lazyPort<SalesChannelMembershipPort>(
+              ctx,
+              'salesChannelMembershipPort',
+            ),
             storefrontBaseUrl: cradle().storefrontBaseUrl,
             exposeTestProbe: cradle().organizationsExposeTestProbe,
             requireAdmin: (permission) => async (req, reply) =>
@@ -576,6 +582,7 @@ export function registerModule(ctx: ModuleContext): void {
               ),
             },
             auditLogService,
+            lazyPort<SalesChannelMembershipPort>(ctx, 'salesChannelMembershipPort'),
           );
           return {
             ensureForCustomerAccount: async (customerAccountId) =>
@@ -623,6 +630,9 @@ export function registerModule(ctx: ModuleContext): void {
               ),
             },
             auditLogService,
+            // Feature 154 — the personal Organization is bound to the
+            // system-default channel in the provisioning transaction.
+            lazyPort<SalesChannelMembershipPort>(ctx, 'salesChannelMembershipPort'),
           );
           return {
             provisionFor: async (em, input) => {

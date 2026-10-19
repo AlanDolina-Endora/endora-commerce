@@ -17,6 +17,7 @@ import {
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import { Cart, CartItem, Order } from '../../helpers/package-entities.js';
+import { addOrganizationChannels } from '../../helpers/sales-channel-access.js';
 
 /**
  * An order may only ship and be paid with methods offered in **its** sales
@@ -74,6 +75,8 @@ describe('order placement — methods must be offered in the order’s sales cha
     });
     expect(created.statusCode).toBe(201);
     channelB = { id: (created.json() as { id: string }).id, code: 'method-gate-b' };
+    // Feature 154 — the buyer shops on channel B as well as on the default.
+    await addOrganizationChannels(h, TEST_ORGANIZATION_ID, ['method-gate-b']);
 
     // The order's channel has to sell what the order contains: admin order
     // creation judges the assortment on the channel it names. The bridge row

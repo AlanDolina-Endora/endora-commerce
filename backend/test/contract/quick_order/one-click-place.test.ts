@@ -15,10 +15,11 @@ import {
   seedSuspendedOrganization,
 } from '../../helpers/seed-commerce.js';
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
-import { TEST_CUSTOMER_ID } from '../../helpers/test-actors.js';
+import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import { Address } from '../../helpers/package-entities.js';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
 import { Order, OrderItem } from '../../helpers/package-entities.js';
+import { addOrganizationChannels } from '../../helpers/sales-channel-access.js';
 
 /**
  * Issue #64 — one-click buy places an order, and refuses a suspended
@@ -216,6 +217,8 @@ describe('POST /api/v1/quick-order/one-click — placement', () => {
     });
     expect(created.statusCode).toBe(201);
     const channelBId = (created.json() as { id: string }).id;
+    // Feature 154 — the buyer shops on channel B as well.
+    await addOrganizationChannels(h, TEST_ORGANIZATION_ID, ['one-click-channel-b']);
 
     // The basket's assortment gate narrows to the request's channel, so the
     // product has to be published there before it can be bought there.
