@@ -769,12 +769,12 @@ below goes through the storefront catalogue (`lib/i18n/messages.ts`, `en-US` + `
   fixtures, fixed in `7b1ab3ae0` (the locked quote-request buyer's Organization bound to the fixture
   channels — 154's access rule answered 403) and `f49d9d990` (the one-click placement backstop
   doubles `addItems`, the write path since T167), plus a non-test path in the list.
-- Fork PR #2 green at `f49d9d990`: `quality`, `quality:static`, `test:backend:unit`,
+- Pull-request checks green at `f49d9d990`: `quality`, `quality:static`, `test:backend:unit`,
   `test:frontend`, `release:changeset`, `pack-gate`, `boot-gate`, `build:docs`, `dco`
-  (<https://github.com/bfluks/endora-commerce/pull/2>). This record is the only change after that
-  tip (`specs/` only).
+  (<https://github.com/endora-commerce/endora-commerce/pull/366/checks>). This record is the only
+  change after that tip (`specs/` only).
 - `node backend/scripts/dco-signoff.ts origin/master HEAD`: 0 findings.
-- Upstream PR: _(to be filled)_
+- Upstream PR: <https://github.com/endora-commerce/endora-commerce/pull/366> — closes #285 and #294.
 
 ---
 
