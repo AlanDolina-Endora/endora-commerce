@@ -194,6 +194,11 @@ describe('SalesChannelEditPage — saving', () => {
         bundle,
       },
     );
+    // The form re-seeds its fields from the loaded channel in an effect. Under
+    // load that effect can still be pending when the checkbox is clicked, and
+    // it then puts the loaded value back. `findByRole` settles the page —
+    // pending effects included — so the click lands after the re-seed.
+    await screen.findByRole('button', { name: 'Delete' });
     await waitFor(() => expect(anonymousSwitch().checked).toBe(true));
     fireEvent.click(anonymousSwitch());
     fireEvent.click(screen.getByRole('button', { name: en['identity.action.save']! }));
