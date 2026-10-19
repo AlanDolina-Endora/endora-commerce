@@ -290,7 +290,12 @@ export default async function HomePage(): Promise<ReactNode> {
           <ul className="m-0 grid list-none grid-cols-4 gap-[16px] p-0 max-[1100px]:grid-cols-2">
             {products.data.map((p) => (
               <li key={p.id}>
-                <ProductCard product={p} locale={locale} resolved={bestsellerPrices.get(p.id) ?? null} />
+                <ProductCard
+                  product={p}
+                  locale={locale}
+                  resolved={bestsellerPrices.get(p.id) ?? null}
+                  salesChannelCode={ctx.salesChannelCode}
+                />
               </li>
             ))}
           </ul>

@@ -17,6 +17,19 @@ up-sell suggestions, three conversions (Cart ↔ Quote Request, Shopping List
 → Cart), Organization-Administrator visibility + approval gate, an
 abandonment sweep, and a platform-admin observability surface.
 
+## One basket per store
+
+A basket belongs to the sales channel — the store — it is used on:
+
+- It is created on the channel of the request that creates it and records that channel (`salesChannelId`). Every basket read and write addresses the basket of the request's channel, so a customer who shops on two stores has a basket on each; an anonymous visitor's basket token names a basket on one store only, and filling a basket on another store starts a new one.
+- Line prices, promotions and coupons, and whether a product is sold on request only, are resolved for the basket's channel — the price a buyer sees in a store's basket is that store's price.
+- Merging at sign-in only merges an anonymous basket of the store the customer signs in on; a basket filled on another store is left as it is.
+- Placing an order uses the basket of the order's channel. A basket of another channel is refused with `422 ORDER_SALES_CHANNEL_MISMATCH` — *"Your basket belongs to a different store. Open the basket in this store and place the order again."* — before anything is reserved or written; the basket is kept and nothing is repriced.
+
+When baskets started recording their channel, every basket that had none was recorded on the system-default channel.
+
+The channel-access rule applies to baskets like to every storefront call: an anonymous visitor has no basket on a store closed to anonymous visitors, and a customer has none on a store their Organization is not assigned to.
+
 ## Lifecycle
 
 ```text
@@ -57,7 +70,7 @@ policy flag.
 
 | Verb + Path | Purpose |
 | --- | --- |
-| `GET /api/v1/cart` | Active cart (lazy-create); the payload includes `status`, `approvalStatus`, `salesChannelId`, `grandTotal`, `discount`, `primaryCta`, `droppedLines`, `couponDroppedThisRead`, `lastActivityAt` |
+| `GET /api/v1/cart` | The active cart of the request's sales channel (lazy-create); the payload includes `status`, `approvalStatus`, `salesChannelId`, `grandTotal`, `discount`, `primaryCta`, `droppedLines`, `couponDroppedThisRead`, `lastActivityAt` |
 | `POST /api/v1/cart/items` | Add line item (200-line cap enforced) |
 | `PATCH /api/v1/cart/items/:itemId` | Update quantity (accepts `0` to delete) |
 | `DELETE /api/v1/cart/items/:itemId` | Remove line |

@@ -79,6 +79,7 @@
  */
 
 import { backendBaseUrl } from '../env.mjs';
+import { channelHeaders } from '../channel/channel-header';
 
 /**
  * A sales channel's default robots policy, as the backend answers it.
@@ -360,7 +361,7 @@ export function createChannelCache<T>(deps: CrawlerPolicyReaderDeps, question: Q
       response = await deps.fetch(`${deps.baseUrl()}${question.path}`, {
         headers: {
           accept: 'application/json',
-          ...(channelCode !== undefined ? { 'x-sales-channel': channelCode } : {}),
+          ...channelHeaders(channelCode),
         },
         // This module is the cache; nothing underneath it may be one too.
         cache: 'no-store',

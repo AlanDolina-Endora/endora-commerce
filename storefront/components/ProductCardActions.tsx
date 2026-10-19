@@ -11,6 +11,7 @@ import {
 } from '../lib/actions/shoppingList';
 import { addRfqDraftItem } from '../lib/rfqDraft';
 import { addProductToCartAction } from '../lib/actions/cart';
+import { channelHeaders } from '../lib/channel/channel-header';
 
 /**
  * Product-card action buttons (add to cart / add to shopping list / add to
@@ -30,25 +31,31 @@ interface ButtonsConfig {
   showAddToQuote: boolean;
 }
 
-let cachedConfig: Promise<ButtonsConfig> | null = null;
+/** Per channel: the toggles are channel-scoped settings. */
+const cachedConfig = new Map<string, Promise<ButtonsConfig>>();
 
-function loadConfig(apiBase: string): Promise<ButtonsConfig> {
-  if (!cachedConfig) {
-    cachedConfig = fetch(`${apiBase}/api/v1/storefront/settings/product-card-buttons`, {
+function loadConfig(apiBase: string, channelCode: string | undefined): Promise<ButtonsConfig> {
+  const key = channelCode ?? '';
+  let config = cachedConfig.get(key);
+  if (!config) {
+    config = fetch(`${apiBase}/api/v1/storefront/settings/product-card-buttons`, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...channelHeaders(channelCode) },
     })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error('settings'))))
       .then((body: { data: ButtonsConfig }) => body.data)
       .catch(() => ({ showAddToCart: true, showAddToShoppingList: true, showAddToQuote: true }));
+    cachedConfig.set(key, config);
   }
-  return cachedConfig;
+  return config;
 }
 
 type ActionState = 'idle' | 'busy' | 'done' | 'error';
 
 export function ProductCardActions(props: {
   apiBase: string;
+  /** The active sales channel, sent on the settings read. Supplied by the layout's page. */
+  salesChannelCode: string | undefined;
   productId: string;
   productSlug: string;
   /** Display name carried into the client-side quote-request draft. */
@@ -67,13 +74,13 @@ export function ProductCardActions(props: {
 
   useEffect(() => {
     let cancelled = false;
-    void loadConfig(props.apiBase).then((c) => {
+    void loadConfig(props.apiBase, props.salesChannelCode).then((c) => {
       if (!cancelled) setCfg(c);
     });
     return () => {
       cancelled = true;
     };
-  }, [props.apiBase]);
+  }, [props.apiBase, props.salesChannelCode]);
 
   // Reflect default-list membership on the heart, and keep it in sync when any
   // other card (or the header) changes the list via `b2b:shopping-list:changed`.

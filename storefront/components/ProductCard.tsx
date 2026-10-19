@@ -54,6 +54,11 @@ export function ProductCard(props: {
    * bake its own `1.23` literal here.
    */
   vatRate?: number;
+  /**
+   * The active sales channel. The card's compare toggle and action buttons call
+   * the backend from the browser, where no request header carries it.
+   */
+  salesChannelCode: string | undefined;
 }): ReactNode {
   const { product, locale, stock, resolved, vatRate = DEFAULT_VAT_RATE } = props;
   const t = tForLocale(locale);
@@ -96,7 +101,7 @@ export function ProductCard(props: {
           />
         )}
       </Link>
-      <CompareToggle productId={product.id} />
+      <CompareToggle productId={product.id} salesChannelCode={props.salesChannelCode} />
       {resolved && resolved.salePrice ? (
         <span className="industria-badge industria-badge--sale" aria-label={t('product.requestQuote')}>
           Promocja
@@ -118,6 +123,7 @@ export function ProductCard(props: {
         </div>
         <ProductCardActions
           apiBase={CARD_API_BASE}
+          salesChannelCode={props.salesChannelCode}
           productId={product.id}
           productSlug={product.slug}
           productName={product.name}

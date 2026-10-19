@@ -75,6 +75,19 @@ const LISTING_BODY = {
   pagination: { limit: 4, cursor: null, hasMore: false },
 };
 
+/**
+ * The channel `middleware.ts` stamped on the request being served, as
+ * `next/headers` answers it — or `null` for no request scope at all
+ * (`specs/154-sales-channel-access/contracts/storefront-ux.md` §1.3).
+ */
+const stamped: { code: string | null } = { code: null };
+vi.mock('next/headers', () => ({
+  headers: async () => {
+    if (stamped.code === null) throw new Error('`headers` was called outside a request scope.');
+    return new Headers({ 'x-sales-channel': stamped.code });
+  },
+}));
+
 const ANONYMOUS: RequestContext = { salesChannelCode: 'pl_retail', locale: 'en-US' };
 const SIGNED_IN: RequestContext = { ...ANONYMOUS, viewerSession: 'a-buyer-session' };
 
@@ -214,5 +227,32 @@ describe('the storefront asks the price question as the viewer', () => {
         tags: ['catalog:product', 'catalog:product:a-slug'],
       });
     });
+  });
+});
+
+describe('a reader given no channel (`specs/154-sales-channel-access/`)', () => {
+  afterEach(() => {
+    stamped.code = null;
+  });
+
+  it('names the stamped channel, so the shared entry is one channel’s and not every channel’s', async () => {
+    stamped.code = 'pl_retail';
+    stubFetch(RESOLVED_PRICE_BODY);
+    await getResolvedPrice('p1', { quantity: 1 }, { locale: 'en-US' });
+
+    const call = calls[0]!;
+    expect(headerOf(call, 'X-Sales-Channel')).toBe('pl_retail');
+    expect(headerOf(call, 'Cookie')).toBeUndefined();
+  });
+
+  it('names it for a signed-in viewer too, and still lets no shared cache keep the answer', async () => {
+    stamped.code = 'pl_retail';
+    stubFetch(RESOLVED_PRICE_BODY);
+    await getResolvedPrice('p1', { quantity: 1 }, { locale: 'en-US', viewerSession: 'a-buyer-session' });
+
+    const call = calls[0]!;
+    expect(headerOf(call, 'X-Sales-Channel')).toBe('pl_retail');
+    expect(call.init.cache).toBe('no-store');
+    expect(call.init.next).toBeUndefined();
   });
 });
