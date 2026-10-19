@@ -154,7 +154,10 @@ export interface CustomerAccountsCradle {
    */
   readonly customerSocialLoginPort: {
     resolveByEmail(email: string): Promise<{ id: string } | null>;
-    autoCreate(email: string): Promise<{ id: string } | null>;
+    autoCreate(
+      email: string,
+      context: { salesChannelId: string | null },
+    ): Promise<{ id: string } | null>;
   };
   readonly customerAuthService: CustomerAuthService;
   readonly passwordResetService: PasswordResetService;
@@ -554,6 +557,7 @@ export function registerModule(ctx: ModuleContext): void {
 
         async autoCreate(
           email: string,
+          context: { salesChannelId: string | null },
         ): Promise<{ id: string; organizationId: string | null } | null> {
           const cradle = ctx.cradle<CustomerAccountsCradle>();
           // The channel a global-scope read resolves against. Both roots used
@@ -619,10 +623,13 @@ export function registerModule(ctx: ModuleContext): void {
               const organization = await provision.provisionFor(em, {
                 customerAccountId,
                 email: folded,
-                // Feature 154 — the provider's callback carries no storefront
-                // channel, so the personal organisation gets the system
-                // default (research R-8, "any other path").
-                salesChannelId: null,
+                // Feature 154 (owner decision D6) — the store the federated
+                // sign-in was started on, which `mfa` carries in the OAuth
+                // transaction because the provider's redirect names none, so
+                // the session issued next is accepted there. `mfa` creates an
+                // account only on a store open to anonymous visitors. Without a
+                // channel (a caller outside a sign-in) the default applies.
+                salesChannelId: context.salesChannelId,
               });
               const account = em.create(CustomerAccount, {
                 id: customerAccountId,

@@ -15,7 +15,11 @@ import type {
   MfaEnrolmentStatePort,
   MfaLoginPort,
 } from '@endora-commerce/contracts';
-import type { AuditPort, SalesChannelAccessPort } from '@endora-commerce/platform/kernel';
+import type {
+  AuditPort,
+  SalesChannelAccessPort,
+  SalesChannelResolutionPort,
+} from '@endora-commerce/platform/kernel';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
 import { lazyPort } from '@endora-commerce/platform/kernel';
@@ -216,6 +220,7 @@ export function registerModule(ctx: ModuleContext): void {
           const customerChannelAccess = createCustomerChannelAccess(
             customerAccounts,
             lazyPort<SalesChannelAccessPort>(ctx, 'salesChannelAccessPort'),
+            lazyPort<SalesChannelResolutionPort>(ctx, 'salesChannelResolutionPort'),
           );
           return mfaModule({
             emFactory,

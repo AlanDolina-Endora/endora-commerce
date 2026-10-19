@@ -9,5 +9,8 @@ cookie, creates no session, starts no second factor and leaves `lastLoginAt` unc
 password is still answered 401 first. This holds with the `mfa` module switched off.
 
 Individual self-registration assigns the new personal Organization the channel of the store the
-visitor registered on. An account created by a federated sign-in gets the system default, because
-the provider's callback carries no storefront channel.
+visitor registered on. An account created by a federated sign-in does the same:
+`customerSocialLoginPort.autoCreate(email, { salesChannelId })` takes the channel the sign-in was
+started on, which `mfa` carries in the OAuth transaction, and gives the new personal Organization
+exactly that channel, so the session issued next is accepted there. Without a channel the system
+default applies.

@@ -1182,7 +1182,10 @@ export async function setupBackendServer(
     resolveByEmail(
       email: string,
     ): Promise<{ id: string; organizationId: string | null; blocked: boolean } | null>;
-    autoCreate(email: string): Promise<{ id: string; organizationId: string | null } | null>;
+    autoCreate(
+      email: string,
+      context: { salesChannelId: string | null },
+    ): Promise<{ id: string; organizationId: string | null } | null>;
   } =>
     (
       container.cradle as never as {
@@ -1190,7 +1193,10 @@ export async function setupBackendServer(
           resolveByEmail(
             email: string,
           ): Promise<{ id: string; organizationId: string | null; blocked: boolean } | null>;
-          autoCreate(email: string): Promise<{ id: string; organizationId: string | null } | null>;
+          autoCreate(
+            email: string,
+            context: { salesChannelId: string | null },
+          ): Promise<{ id: string; organizationId: string | null } | null>;
         };
       }
     ).customerSocialLoginPort;
@@ -1958,7 +1964,8 @@ export async function setupBackendServer(
         // had configured), and one fixed password hash for every account it made.
         mfaSocialAccountResolvers: {
           resolveCustomerByEmail: (email: string) => customerSocialLogin().resolveByEmail(email),
-          autoCreateCustomer: (email: string) => customerSocialLogin().autoCreate(email),
+          autoCreateCustomer: (email: string, context: { salesChannelId: string }) =>
+            customerSocialLogin().autoCreate(email, context),
           resolveAdminByEmail: async (email: string) => {
             // T052 — the same port production reads, rather than a second copy of
             // the read. The comment that stood here argued for the copy on the

@@ -1,6 +1,9 @@
 import { ERROR_CODES, type CustomerAccountReadPort } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
-import type { SalesChannelAccessPort } from '@endora-commerce/platform/kernel';
+import type {
+  SalesChannelAccessPort,
+  SalesChannelResolutionPort,
+} from '@endora-commerce/platform/kernel';
 
 /**
  * Feature 154 — the sales-channel access rule, asked on the customer sign-ins
@@ -21,6 +24,15 @@ export interface CustomerChannelAccess {
   permits(organizationId: string | null, salesChannelId: string | null): Promise<boolean>;
   /** Throws the 403 `SALES_CHANNEL_NOT_PERMITTED` refusal unless the account may use the channel. */
   assertAccountMayUse(customerAccountId: string, salesChannelId: string | null): Promise<void>;
+  /**
+   * Whether a federated sign-in begun on `salesChannelId` may **create** an
+   * individual account (owner decision D6). Creating one is what an anonymous
+   * visitor does, so it is the rule's anonymous answer: only on a channel open
+   * to anonymous visitors — individual self-registration is refused on the
+   * others with `SALES_CHANNEL_SIGN_IN_REQUIRED`. No channel, or one that no
+   * longer exists, admits nothing. Never throws a refusal.
+   */
+  admitsNewAccount(salesChannelId: string | null): Promise<boolean>;
 }
 
 /**
@@ -31,6 +43,7 @@ export interface CustomerChannelAccess {
 export function createCustomerChannelAccess(
   accounts: Pick<CustomerAccountReadPort, 'findById'>,
   access: Pick<SalesChannelAccessPort, 'decide' | 'assertCustomerMayUse'>,
+  channels: Pick<SalesChannelResolutionPort, 'getById'>,
 ): CustomerChannelAccess {
   return {
     async permits(organizationId, salesChannelId) {
@@ -47,6 +60,15 @@ export function createCustomerChannelAccess(
       if (salesChannelId === null) throw channelNotPermitted();
       const account = await accounts.findById(customerAccountId);
       await access.assertCustomerMayUse(account?.organizationId ?? null, salesChannelId);
+    },
+    async admitsNewAccount(salesChannelId) {
+      if (salesChannelId === null) return false;
+      // Read at callback time, not when the sign-in was started: an operator
+      // who closed the store in between is answered with the store as it is.
+      const channel = await channels.getById(salesChannelId);
+      if (channel === null) return false;
+      const decision = await access.decide({ kind: 'anonymous' }, channel);
+      return decision.ok;
     },
   };
 }

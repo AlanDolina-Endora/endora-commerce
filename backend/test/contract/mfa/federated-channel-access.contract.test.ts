@@ -7,7 +7,7 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
-import { Session } from '../../helpers/package-entities.js';
+import { CustomerAccount, Organization, Session } from '../../helpers/package-entities.js';
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import { STUB_CUSTOMER_PASSWORD } from '../../helpers/seed-organizations.js';
 import { oauthBinding } from '../../helpers/oauth-binding.js';
@@ -22,6 +22,12 @@ import { assignOrganizationChannels } from '../../helpers/sales-channel-access.j
  *   storefront channel), and a refusal sends the browser back to the
  *   storefront's sign-in page with `error=sales_channel_not_permitted` and no
  *   session.
+ * - A federated sign-in that creates an account (T046/T056, owner decision D6)
+ *   gives the new personal Organization exactly the channel the sign-in was
+ *   started on, so the session it issues is accepted there; on a channel closed
+ *   to anonymous visitors it creates nothing — no account, no Organization, no
+ *   session — as individual self-registration is refused there, and sends the
+ *   browser back with `error=sales_channel_sign_in_required`.
  * - The second step re-decides on the channel of the challenge, so an
  *   assignment removed between the password and the code issues no session —
  *   and so does completing an enforced set-up.
@@ -29,6 +35,7 @@ import { assignOrganizationChannels } from '../../helpers/sales-channel-access.j
 
 const EMAIL = 'stub-customer@example.com';
 const OTHER = 'fca-other';
+const CLOSED = 'fca-closed';
 const STOREFRONT = 'http://localhost:3000';
 
 function totpCode(secretBase32: string, offsetMs = 0): string {
@@ -73,11 +80,15 @@ describe('mfa sign-in paths — sales-channel access (T045)', () => {
     return { state: new URL(location).searchParams.get('state')!, cookies: oauthBinding(res) };
   }
 
-  function callback(started: { state: string; cookies: Record<string, string> }) {
-    // The provider's redirect: no storefront channel signal at all.
+  function callback(
+    started: { state: string; cookies: Record<string, string> },
+    email: string = EMAIL,
+  ) {
+    // The provider's redirect: no storefront channel signal at all. The fake
+    // provider answers the `code` as the verified e-mail address.
     return h.app.inject({
       method: 'GET',
-      url: `/api/v1/auth/customer/oauth/google/callback?code=${encodeURIComponent(EMAIL)}&state=${encodeURIComponent(started.state)}`,
+      url: `/api/v1/auth/customer/oauth/google/callback?code=${encodeURIComponent(email)}&state=${encodeURIComponent(started.state)}`,
       cookies: started.cookies,
     });
   }
@@ -95,17 +106,25 @@ describe('mfa sign-in paths — sales-channel access (T045)', () => {
     h = await setupBackendServer();
     await setSetting(h, 'mfa.storefront.google_enabled', true);
     await setSetting(h, 'mfa.storefront.totp_enabled', true);
+    // Federated sign-in creates an account only where the platform allows an
+    // individual one at all; the sign-up cases below need it on.
+    await setSetting(h, 'customers.allow_registration_without_organization', true);
     const em = h.em();
-    em.create(SalesChannel, {
-      code: OTHER,
-      name: { 'en-US': OTHER },
-      languages: ['en-US'],
-      defaultLanguage: 'en-US',
-      currencies: ['PLN'],
-      defaultCurrency: 'PLN',
-      active: true,
-      anonymousAccess: true,
-    });
+    for (const [code, anonymousAccess] of [
+      [OTHER, true],
+      [CLOSED, false],
+    ] as const) {
+      em.create(SalesChannel, {
+        code,
+        name: { 'en-US': code },
+        languages: ['en-US'],
+        defaultLanguage: 'en-US',
+        currencies: ['PLN'],
+        defaultCurrency: 'PLN',
+        active: true,
+        anonymousAccess,
+      });
+    }
     await em.flush();
     await h.salesChannels.cache.invalidateAll();
   });
@@ -131,6 +150,53 @@ describe('mfa sign-in paths — sales-channel access (T045)', () => {
     it('signs in when the started-on channel is assigned', async () => {
       await assignOrganizationChannels(h, TEST_ORGANIZATION_ID, ['default', OTHER]);
       const res = await callback(await start(OTHER));
+      expect(res.statusCode).toBe(302);
+      expect(res.headers['location']).toBe(`${STOREFRONT}/account`);
+      expect(res.cookies.find((c) => c.name === 'b2b_session')?.value).toBeTruthy();
+    });
+  });
+
+  describe('federated sign-up (D6)', () => {
+    it('gives the new personal Organization exactly the channel the sign-in was started on, and signs it in there', async () => {
+      const email = `fca-signup-${Date.now()}@example.test`;
+      const res = await callback(await start(OTHER), email);
+      expect(res.statusCode).toBe(302);
+      expect(res.headers['location']).toBe(`${STOREFRONT}/account`);
+      const session = res.cookies.find((c) => c.name === 'b2b_session')?.value;
+      expect(session).toBeTruthy();
+
+      const account = await h.em().findOneOrFail(CustomerAccount, { email });
+      const channels = await h.salesChannels.membershipService.listChannelsForEntity(
+        'organization',
+        account.organizationId!,
+      );
+      expect(channels.map((c) => c.code)).toEqual([OTHER]);
+
+      const me = await h.app.inject({
+        method: 'GET',
+        url: '/api/v1/me/customer',
+        headers: { 'x-sales-channel': OTHER },
+        cookies: { b2b_session: session! },
+      });
+      expect(me.statusCode, me.body).toBe(200);
+    });
+
+    it('creates no account, no Organization and no session on a channel closed to anonymous visitors', async () => {
+      const email = `fca-closed-${Date.now()}@example.test`;
+      const organizationsBefore = await h.em().count(Organization, {});
+      const res = await callback(await start(CLOSED), email);
+      expect(res.statusCode).toBe(302);
+      expect(res.headers['location']).toBe(
+        `${STOREFRONT}/login?error=sales_channel_sign_in_required`,
+      );
+      expect(res.cookies.find((c) => c.name === 'b2b_session' && c.value)).toBeUndefined();
+      expect(await h.em().findOne(CustomerAccount, { email })).toBeNull();
+      expect(await h.em().count(Organization, {})).toBe(organizationsBefore);
+    });
+
+    it('still signs an existing account in on a closed channel its Organization is assigned to', async () => {
+      await assignOrganizationChannels(h, TEST_ORGANIZATION_ID, ['default', CLOSED]);
+      const res = await callback(await start(CLOSED));
       expect(res.statusCode).toBe(302);
       expect(res.headers['location']).toBe(`${STOREFRONT}/account`);
       expect(res.cookies.find((c) => c.name === 'b2b_session')?.value).toBeTruthy();

@@ -226,6 +226,7 @@ export function mfaModule(options: MfaModuleOptions): {
         options.emFactory,
         options.socialAccountResolvers,
         options.auditLogService,
+        options.customerChannelAccess,
       );
       await registerMfaOAuthRoutes(app, {
         oauthProvider: options.oauthProvider,

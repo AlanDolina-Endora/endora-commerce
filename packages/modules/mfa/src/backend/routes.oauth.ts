@@ -80,6 +80,14 @@ export interface MfaOAuthDeps {
  */
 export const SALES_CHANNEL_NOT_PERMITTED_LOGIN_ERROR = 'sales_channel_not_permitted';
 
+/**
+ * The `error` for a federated sign-in that would have **created** an account on
+ * a store closed to anonymous visitors (owner decision D6): refused as
+ * individual self-registration is refused there, with nothing created. The
+ * storefront maps it to its "signed-in business customers only" sign-in notice.
+ */
+export const SALES_CHANNEL_SIGN_IN_REQUIRED_LOGIN_ERROR = 'sales_channel_sign_in_required';
+
 type Surface = 'customer' | 'admin';
 
 /**
@@ -298,10 +306,17 @@ function registerCallback(app: FastifyInstance, deps: MfaOAuthDeps, surface: Sur
 
     const result =
       surface === 'customer'
-        ? await deps.socialIdentityService.signInCustomer(identity)
+        ? await deps.socialIdentityService.signInCustomer(identity, {
+            salesChannelId: tx.salesChannelId,
+          })
         : await deps.socialIdentityService.signInAdmin(identity);
 
     if (!result.ok) {
+      if (result.reason === 'sales_channel_sign_in_required') {
+        return reply.redirect(
+          loginRedirect(deps, surface, SALES_CHANNEL_SIGN_IN_REQUIRED_LOGIN_ERROR),
+        );
+      }
       const message =
         result.reason === 'unverified'
           ? 'Your provider email is not verified.'
