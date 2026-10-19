@@ -144,7 +144,7 @@ export interface CartsDeps {
  * route addresses is always the one of the channel it is used on
  * (`specs/154-sales-channel-access/`, contracts/basket-attribution.md §1).
  */
-export function cartActorOnRequestChannel(
+function cartActorOnRequestChannel(
   resolveCartActor: CartsDeps['resolveCartActor'],
   request: FastifyRequest,
 ): CartActor & { salesChannelId: string } {
