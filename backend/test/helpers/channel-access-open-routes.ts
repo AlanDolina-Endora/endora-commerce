@@ -103,6 +103,11 @@ export const CHANNEL_ACCESS_OPEN_ROUTES: Readonly<Record<string, OpenRouteEntry>
     owner: 'seo',
     reason: "A closed store's crawler policy is still served.",
   },
+  'GET /api/v1/storefront/seo/crawler-files': {
+    owner: 'seo',
+    reason:
+      "A closed store still serves robots.txt and llms.txt, built for a store with nothing public.",
+  },
 
   // links and downloads that name no storefront
   'GET /api/v1/public/product-feeds/:token': {
