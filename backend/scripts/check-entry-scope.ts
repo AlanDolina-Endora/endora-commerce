@@ -129,6 +129,17 @@ export const NO_SCOPE_NEEDED: Readonly<Record<string, string>> = {
     'process, about nothing. Falsified the day the handler warms the cache instead ' +
     'of emptying it, which would need `enterSystemScope` here.',
 
+  'packages/modules/assets_library/src/backend/workers/retention-sweep-worker.ts:buildAssetRetentionSweepWorker:new Worker':
+    'The asset retention sweep (specs/156-asset-stable-url/ contracts/' +
+    'storage-and-retention.md §4). Every row it reads or writes belongs to ' +
+    '`Asset`, `AssetPermalinkRelease` or `AssetObjectCleanup`, all ' +
+    '`@GlobalEntity()`, which the tenancy filter does not touch, and the ' +
+    'reference checks it makes before a purge read with plain SQL. A scope ' +
+    'would buy only an escape-hatch audit row per hourly tick — on an idle tick, ' +
+    'a record of access that read nobody\'s data. Falsified the day a pass, or ' +
+    'an asset reference resolver, queries a tenant-scoped entity through the ' +
+    'EntityManager.',
+
   'src/db/migrate.ts:<file>:program':
     "The migration runner. MikroORM's migrator executes each migration through " +
     'the connection as SQL and builds no entity query, so no global tenant ' +

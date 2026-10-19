@@ -28,7 +28,7 @@ of the platform, not of what happens to be written.
 | [admin_users](./admin_users.md) | Platform Administrator accounts + impersonation | @endora-commerce/mod-admin-users |
 | [analytics](./analytics.md) | Storefront event ingest + admin aggregation + optional GA4 forwarder | @endora-commerce/mod-analytics |
 | [api_keys](./api_keys.md) | Bearer-token integration credentials | @endora-commerce/mod-api-keys |
-| [Assets Library](./assets-library/index.md) | Central digital-asset library with pluggable storage adapters, soft-delete, and reference-protection guards | @endora-commerce/mod-assets-library |
+| [Assets Library](./assets-library/index.md) | Central digital-asset library with pluggable storage adapters, stable file URLs and permalinks, in-place file replacement, soft-delete with a retention sweep, and reference-protection guards | @endora-commerce/mod-assets-library |
 | [audit_logs](./audit_logs.md) | Sensitive-action audit trail | @endora-commerce/mod-audit-logs |
 | [auth](./auth.md) | Customer + admin sessions, password hashing, TOTP | @endora-commerce/mod-auth |
 | [Blog](./blog/index.md) | Editorial Posts with Page Builder bodies, taxonomy (Categories + Tags), and storefront feeds | @endora-commerce/mod-blog |

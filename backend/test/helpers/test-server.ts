@@ -2256,7 +2256,9 @@ export async function setupBackendServer(
       composedModules.contribute({
         transactionalEmailAssetUrl: async (assetId: string): Promise<string | null> => {
           try {
-            return (await assetsLibrary.handle.service.resolveUrl(assetId)).url;
+            // The embed form (specs/156-asset-stable-url/ R-8): an e-mail is a cached
+            // copy the platform never sees again, so the logo carries its marker.
+            return await assetsLibrary.handle.service.resolveEmbedUrl(assetId);
           } catch {
             return null;
           }

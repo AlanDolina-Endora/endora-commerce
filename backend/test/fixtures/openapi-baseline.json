@@ -441,6 +441,15 @@
         }
       }
     },
+    "/api/v1/admin/assets/folders/{folderId}/permalink-count": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/assets/move-many": {
       "post": {
         "responses": {
@@ -492,6 +501,40 @@
       }
     },
     "/api/v1/admin/assets/{id}/move": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/assets/{id}/permalink": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/assets/{id}/previous-version/restore": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/assets/{id}/replace": {
       "post": {
         "responses": {
           "200": {
@@ -8399,6 +8442,15 @@
       }
     },
     "/api/v1/storefront/speculation-rules": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/assets/file/*": {
       "get": {
         "responses": {
           "200": {

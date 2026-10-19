@@ -28,7 +28,7 @@ platformy, a nie tego, co akurat zostało opisane.
 | [admin_users](./admin_users.md) | Konta administratorów platformy i logowanie jako klient | @endora-commerce/mod-admin-users |
 | [analytics](./analytics.md) | Zbieranie zdarzeń ze storefrontu, zestawienia w panelu administracyjnym i opcjonalne przekazywanie do GA4 | @endora-commerce/mod-analytics |
 | [api_keys](./api_keys.md) | Dane uwierzytelniające integracji w postaci tokenu bearer | @endora-commerce/mod-api-keys |
-| [Biblioteka mediów](./assets-library/index.md) | Centralna biblioteka plików z wymiennymi adapterami przechowywania, usuwaniem miękkim i ochroną przed usunięciem używanych plików | @endora-commerce/mod-assets-library |
+| [Biblioteka zasobów](./assets-library/index.md) | Centralna biblioteka plików z wymiennymi adapterami przechowywania, stałymi adresami plików i stałymi linkami, podmianą pliku w miejscu, usuwaniem miękkim z okresowym czyszczeniem i ochroną przed usunięciem używanych plików | @endora-commerce/mod-assets-library |
 | [audit_logs](./audit_logs.md) | Dziennik audytu wrażliwych operacji | @endora-commerce/mod-audit-logs |
 | [auth](./auth.md) | Sesje klientów i administratorów, hashowanie haseł, TOTP | @endora-commerce/mod-auth |
 | [Blog](./blog/index.md) | Wpisy redakcyjne z treścią z Page Buildera, kategoriami i tagami oraz listami wpisów w storefroncie | @endora-commerce/mod-blog |
