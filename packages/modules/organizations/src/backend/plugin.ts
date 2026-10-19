@@ -150,9 +150,13 @@ export interface OrganizationsModuleOptions {
   commandBus?: CommandBus;
   /**
    * Feature 154 — the kernel's channel-membership writer, which binds a
-   * registered Organization to the system-default channel.
+   * registered Organization to the system-default channel, and backs the admin
+   * *Sales channels* endpoints and the admin create.
    */
-  salesChannelMembership?: Pick<SalesChannelMembershipPort, 'bindToDefaultIfEmpty'>;
+  salesChannelMembership?: Pick<
+    SalesChannelMembershipPort,
+    'bindToDefaultIfEmpty' | 'replaceChannelsForEntity' | 'listChannelsForEntity'
+  >;
 }
 
 export function organizationsModule(options: OrganizationsModuleOptions) {
@@ -268,6 +272,12 @@ export function organizationsModule(options: OrganizationsModuleOptions) {
           ? { taxIdValidationService: options.taxIdValidationService }
           : {}),
         ...(options.customFieldValues ? { customFieldValues: options.customFieldValues } : {}),
+        // Feature 154 — the Organization's *Sales channels* endpoints and the
+        // admin create.
+        ...(options.salesChannelMembership
+          ? { salesChannelMembership: options.salesChannelMembership }
+          : {}),
+        ...(options.dictionaryValidator ? { dictionaryValidator: options.dictionaryValidator } : {}),
         ...(options.commandBus
           ? {
               commandBus: options.commandBus,
