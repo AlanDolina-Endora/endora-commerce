@@ -69,6 +69,7 @@ import { Migration20260818T081253CartsCartCompletedOrderFk } from '@endora-comme
 import { Migration20260830T112911CartsOrganizationAttributionCheck } from '@endora-commerce/mod-carts/migrations';
 import { Migration20261008T061751CartsCartSourceQuoteRequest } from '@endora-commerce/mod-carts/migrations';
 import { Migration20261018T074021CartsCartItemAgreedPrice } from '@endora-commerce/mod-carts/migrations';
+import { Migration20261019T043854CartsChannelBackfill } from '@endora-commerce/mod-carts/migrations';
 
 // ── catalog ─────────────────────────────────────────────────────────────────
 import { Migration20260429T064146CatalogAttributeSetsInit } from '@endora-commerce/mod-catalog/migrations';
@@ -389,6 +390,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('carts', Migration20260830T112911CartsOrganizationAttributionCheck),
   migration('carts', Migration20261008T061751CartsCartSourceQuoteRequest),
   migration('carts', Migration20261018T074021CartsCartItemAgreedPrice),
+  migration('carts', Migration20261019T043854CartsChannelBackfill),
 
   // ── catalog ─────────────────────────────────────────────────────────────────
   migration('catalog', Migration20260429T064146CatalogAttributeSetsInit),
