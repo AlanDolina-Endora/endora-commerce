@@ -18,6 +18,12 @@ import { tForLocale } from '../i18n/messages';
 /** The `?error=` value of a sign-in the store refused. The federated callback uses it too. */
 export const CHANNEL_NOT_PERMITTED_ERROR = 'sales_channel_not_permitted';
 
+/**
+ * The `?error=` value of a federated sign-up the store refused: no account
+ * exists yet and the store is closed to anonymous visitors, so none is created.
+ */
+export const CHANNEL_SIGN_IN_REQUIRED_ERROR = 'sales_channel_sign_in_required';
+
 /** The `?error=` value for a failed sign-in step: the stable code, or the refusal's own sentence. */
 export function signInErrorParam(err: unknown, fallback: string): string {
   if (!(err instanceof StorefrontApiError)) return fallback;
@@ -29,5 +35,6 @@ export function signInErrorParam(err: unknown, fallback: string): string {
 export function signInErrorMessage(error: string | undefined, locale: string): string | undefined {
   if (error === undefined || error === '') return undefined;
   if (error === CHANNEL_NOT_PERMITTED_ERROR) return tForLocale(locale)('auth.login.channelNotPermitted');
+  if (error === CHANNEL_SIGN_IN_REQUIRED_ERROR) return tForLocale(locale)('auth.login.signInRequired');
   return error;
 }

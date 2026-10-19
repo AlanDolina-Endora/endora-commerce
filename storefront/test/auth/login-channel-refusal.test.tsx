@@ -35,7 +35,12 @@ vi.mock('../../lib/session', () => ({
   getMfaChallengeCookie: vi.fn(async () => 'challenge'),
 }));
 
-const { signInErrorParam, signInErrorMessage, CHANNEL_NOT_PERMITTED_ERROR } = await import(
+const {
+  signInErrorParam,
+  signInErrorMessage,
+  CHANNEL_NOT_PERMITTED_ERROR,
+  CHANNEL_SIGN_IN_REQUIRED_ERROR,
+} = await import(
   '../../lib/auth/sign-in-errors'
 );
 const { default: LoginPage } = await import('../../app/(auth)/login/page');
@@ -73,6 +78,12 @@ describe('the sign-in action’s error parameter', () => {
     );
     expect(signInErrorMessage(CHANNEL_NOT_PERMITTED_ERROR, 'pl-PL')).toBe(
       'To konto nie ma dostępu do tego sklepu.',
+    );
+    expect(signInErrorMessage(CHANNEL_SIGN_IN_REQUIRED_ERROR, 'en-US')).toBe(
+      'This store is available to signed-in business customers. Sign in, or apply for a business account.',
+    );
+    expect(signInErrorMessage('sales_channel_sign_in_required', 'pl-PL')).toBe(
+      'Ten sklep jest dostępny dla zalogowanych klientów biznesowych. Zaloguj się lub złóż wniosek o konto firmowe.',
     );
     expect(signInErrorMessage('Invalid email or password.', 'pl-PL')).toBe('Invalid email or password.');
     expect(signInErrorMessage(undefined, 'en-US')).toBeUndefined();
