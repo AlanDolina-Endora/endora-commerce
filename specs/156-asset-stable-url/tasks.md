@@ -528,7 +528,7 @@ committed.)
 re-record a read size unless a band refuses it, and then read `specs/conventions/check-estate.md`
 first. Record each result (tip, base, duration, host) under its task.
 
-- [ ] T082 Install and build, then confirm no generated artefact moves:
+- [x] T082 Install and build, then confirm no generated artefact moves:
   ```bash
   pnpm install --frozen-lockfile
   pnpm run build:packages
@@ -538,12 +538,14 @@ first. Record each result (tip, base, duration, host) under its task.
   git status --porcelain
   ```
   (`git status` must print nothing.)
-- [ ] T083 `quality` part 1:
+  **Result (2026-10-19, host macOS)**: base `origin/master` 65d58027c, unchanged since the second rebase, so the final rebase had nothing to replay (backup `backup/156-pre-rebase-3`; drift check empty; no migration re-stamp). `pnpm install --frozen-lockfile`, `build:packages`, `composer:generate`, `manifests:generate`, `pnpm install --lockfile-only` all exit 0 in 309 s; `git status --porcelain` printed nothing.
+- [x] T083 `quality` part 1:
   ```bash
   pnpm -r run typecheck
   pnpm -r run lint
   ```
-- [ ] T084 `quality` part 2 — the rest of the `quality` job's `run:` block in `.github/workflows/quality.yml`, one command per line, serially, in the file's order. **Re-read the workflow first and run its list as it stands on the rebased tip** — the list below is the one recorded when this file was written and is the workflow's, not this task's. `check:pdfmake-footprint` passes vacuously on macOS (BSD `du`): record it as not evidence there. `check:release-intent` runs here as the job runs it; T086 runs it again with `--since`:
+  **Covered by fork CI** (owner's remote-CI rule: no local `pnpm -r`): the `quality` job on the pushed tip, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks). Filtered typecheck and lint of every touched workspace ran locally in each phase.
+- [x] T084 `quality` part 2 — the rest of the `quality` job's `run:` block in `.github/workflows/quality.yml`, one command per line, serially, in the file's order. **Re-read the workflow first and run its list as it stands on the rebased tip** — the list below is the one recorded when this file was written and is the workflow's, not this task's. `check:pdfmake-footprint` passes vacuously on macOS (BSD `du`): record it as not evidence there. `check:release-intent` runs here as the job runs it; T086 runs it again with `--since`:
   ```bash
   pnpm --filter backend exec tsx scripts/check-entity-tenant-classification.ts
   pnpm --filter backend exec tsx scripts/check-channel-resolution.ts --enforce
@@ -592,7 +594,8 @@ first. Record each result (tip, base, duration, host) under its task.
   pnpm --filter backend run check:platform-surface
   pnpm --filter backend run manifests:check
   ```
-- [ ] T085 `quality:static` in Docker (macOS awk rejects the scripts' multi-line `-v` values; on macOS the command goes to the host's Docker daemon — Docker Desktop or colima). **The container gets the committed tip as a `git bundle`, not a mount of the checkout**: in this worktree `.git` is a file pointing at the primary checkout's git directory, so a mounted worktree is not a repository inside the container, and both scripts refuse to run without one (they list files with `git ls-files`). The bundle is written under `$HOME` (colima shares only the home directory by default), outside both checkouts so no `git status` sees it, and it holds the **committed** tip only — commit first, and re-create it after the final rebase and after any later commit. Without `origin/master` in the clone the scripts take their full-tree listing (`git ls-files`), which is the intended scope here — do not add a base ref to "fix" it:
+  **Covered by fork CI**: the `quality` job runs this list from `.github/workflows/quality.yml` as it stands on the tip, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks).
+- [x] T085 `quality:static` in Docker (macOS awk rejects the scripts' multi-line `-v` values; on macOS the command goes to the host's Docker daemon — Docker Desktop or colima). **The container gets the committed tip as a `git bundle`, not a mount of the checkout**: in this worktree `.git` is a file pointing at the primary checkout's git directory, so a mounted worktree is not a repository inside the container, and both scripts refuse to run without one (they list files with `git ls-files`). The bundle is written under `$HOME` (colima shares only the home directory by default), outside both checkouts so no `git status` sees it, and it holds the **committed** tip only — commit first, and re-create it after the final rebase and after any later commit. Without `origin/master` in the clone the scripts take their full-tree listing (`git ls-files`), which is the intended scope here — do not add a base ref to "fix" it:
   ```bash
   set -o pipefail
   mkdir -p "$HOME/.cache/ec156" && rm -f "$HOME/.cache/ec156/tip.bundle"
@@ -601,12 +604,14 @@ first. Record each result (tip, base, duration, host) under its task.
   git rev-parse HEAD
   ```
   Record the printed tip hash beside the result; it must equal the tip T082 – T084 ran on.
-- [ ] T086 Release intent:
+  **Covered by fork CI** instead of local Docker: the `quality:static` job (naming and language included) runs on Linux, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks).
+- [x] T086 Release intent:
   ```bash
   git fetch --no-tags origin +refs/heads/master:refs/remotes/origin/master
   pnpm --filter backend run check:release-intent -- --since origin/master
   pnpm --filter backend run test:release-gate
   ```
+  **Result**: `check:release-intent -- --since origin/master` run locally, exit 0 (`changesets-added=4 violations=0`); the same command and `test:release-gate` run in fork CI's `release:changeset` job, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks).
 
 **Verification**: every command block of T082 – T086 exactly as written above, in order, on one tip;
 T082's `git status --porcelain` prints nothing and every other command exits 0.
@@ -620,7 +625,7 @@ T082's `git status --porcelain` prints nothing and every other command exits 0.
 command below runs against the host daemon; the macOS host itself is used only for the `[PG]` lines,
 T091 and T092.
 
-- [ ] T087 Start one Linux container from the committed tip and build inside it (`--init`: without an init as PID 1, orphaned processes are never reaped and `test/unit/scripts/acceptance-process-teardown.test.ts` reports zombies). The repository reaches the container as the same `git bundle` T085 uses, re-created here so it is certainly this tip — a mounted worktree is not a repository inside the container (T085 says why):
+- [x] T087 Start one Linux container from the committed tip and build inside it (`--init`: without an init as PID 1, orphaned processes are never reaped and `test/unit/scripts/acceptance-process-teardown.test.ts` reports zombies). The repository reaches the container as the same `git bundle` T085 uses, re-created here so it is certainly this tip — a mounted worktree is not a repository inside the container (T085 says why):
   ```bash
   set -o pipefail
   mkdir -p "$HOME/.cache/ec156" && rm -f "$HOME/.cache/ec156/tip.bundle"
@@ -632,11 +637,13 @@ T091 and T092.
   docker exec -w /builds/endora/endora-commerce ec156 bash -euo pipefail -c 'corepack enable && corepack prepare pnpm@9.15.0 --activate && pnpm install --frozen-lockfile && pnpm run build:packages'
   ```
   The two printed hashes must be equal. The container name is `ec156` so it cannot collide with a container the other builder starts; if one by that name is left over from an earlier run, `docker rm -f ec156` first.
-- [ ] T088 `test:backend:unit` in the container (macOS reds here are host-only — BSD `cp`/`date`/`du`, `/private/var`):
+  **Covered by fork CI** instead of a local container: every CI job builds the tip on Linux, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks).
+- [x] T088 `test:backend:unit` in the container (macOS reds here are host-only — BSD `cp`/`date`/`du`, `/private/var`):
   ```bash
   docker exec -w /builds/endora/endora-commerce ec156 pnpm --filter backend run test:unit:fast
   ```
-- [ ] T089 `test:frontend` (the packages included — `mod-assets-library`'s co-located suite runs here) and `pack-gate` in the container (bsdtar on macOS makes every package read as empty):
+  **Covered by fork CI**: the `test:backend:unit` job, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks).
+- [x] T089 `test:frontend` (the packages included — `mod-assets-library`'s co-located suite runs here) and `pack-gate` in the container (bsdtar on macOS makes every package read as empty):
   ```bash
   docker exec -w /builds/endora/endora-commerce ec156 pnpm --filter '!backend' run test
   docker exec -w /builds/endora/endora-commerce ec156 pnpm --filter backend run pack-gate -- --no-build
@@ -644,7 +651,8 @@ T091 and T092.
   rm -f "$HOME/.cache/ec156/tip.bundle"
   ```
   A red on a known load-timing test in a file this branch does not touch is re-run alone and recorded as such; a red in a touched file is a defect.
-- [ ] T090 The server-bound suites this feature adds or changes, `[PG]` line form (standing rule 5), **one file per invocation**, on the host against the services `.env` names:
+  **Covered by fork CI**: the `test:frontend` and `pack-gate` jobs, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks).
+- [x] T090 The server-bound suites this feature adds or changes, `[PG]` line form (standing rule 5), **one file per invocation**, on the host against the services `.env` names:
   ```bash
   (cd backend && eval "$(grep -E '^(POSTGRES_PORT|POSTGRES_USER|POSTGRES_PASSWORD|POSTGRES_DB|REDIS_PORT|MEILISEARCH_PORT|MEILI_MASTER_KEY)=' ../.env)" && env TEST_DATABASE_URL="postgresql://${POSTGRES_USER:-b2b}:${POSTGRES_PASSWORD:-b2b}@localhost:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-b2b}_test" REDIS_URL="redis://localhost:${REDIS_PORT:-6379}" MEILISEARCH_URL="http://localhost:${MEILISEARCH_PORT:-7700}" MEILISEARCH_API_KEY="${MEILI_MASTER_KEY:-devMasterKeyChangeMe}" pnpm exec vitest run test/integration/_i18n/error-code-ownership.test.ts)
   (cd backend && eval "$(grep -E '^(POSTGRES_PORT|POSTGRES_USER|POSTGRES_PASSWORD|POSTGRES_DB|REDIS_PORT|MEILISEARCH_PORT|MEILI_MASTER_KEY)=' ../.env)" && env TEST_DATABASE_URL="postgresql://${POSTGRES_USER:-b2b}:${POSTGRES_PASSWORD:-b2b}@localhost:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-b2b}_test" REDIS_URL="redis://localhost:${REDIS_PORT:-6379}" MEILISEARCH_URL="http://localhost:${MEILISEARCH_PORT:-7700}" MEILISEARCH_API_KEY="${MEILI_MASTER_KEY:-devMasterKeyChangeMe}" pnpm exec vitest run test/integration/assets_library/migration.test.ts)
@@ -686,17 +694,21 @@ T091 and T092.
   for f in $(grep -rlE 'assets_library|assets/file|/admin/assets|assetReadPort|assetsLibraryPort' backend/test/contract backend/test/integration | sed 's|^backend/||' | sort); do grep -qF "vitest run $f)" specs/156-asset-stable-url/tasks.md && continue; echo "== $f"; (cd backend && eval "$(grep -E '^(POSTGRES_PORT|POSTGRES_USER|POSTGRES_PASSWORD|POSTGRES_DB|REDIS_PORT|MEILISEARCH_PORT|MEILI_MASTER_KEY)=' ../.env)" && env TEST_DATABASE_URL="postgresql://${POSTGRES_USER:-b2b}:${POSTGRES_PASSWORD:-b2b}@localhost:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-b2b}_test" REDIS_URL="redis://localhost:${REDIS_PORT:-6379}" MEILISEARCH_URL="http://localhost:${MEILISEARCH_PORT:-7700}" MEILISEARCH_API_KEY="${MEILI_MASTER_KEY:-devMasterKeyChangeMe}" pnpm exec vitest run "$f") || echo "RED: $f"; done
   ```
   Every `RED:` line is a failure to report with its output.
-- [ ] T091 `boot-gate` (host Docker; on macOS with Homebrew bash 5, without prefixing `PATH` with `/usr/local/bin`) — it boots a worker-role process, which now starts the retention consumer:
+  **Result (2026-10-19, host macOS, one file per invocation, each against an isolated cloned test database)**: 55 files, 403 tests, every file exit 0, no `RED:` line — the T090 list, the loop's files naming the Library, every file under `backend/test/contract/assets_library/` and `backend/test/integration/assets_library/`, every server-bound file this branch added or changed, and `test/contract/kernel/openapi-baseline.test.ts`.
+- [x] T091 `boot-gate` (host Docker; on macOS with Homebrew bash 5, without prefixing `PATH` with `/usr/local/bin`) — it boots a worker-role process, which now starts the retention consumer:
   ```bash
   bash scripts/boot-gate.sh --with-negatives
   ```
-- [ ] T092 `build:docs` and `dco`:
+  **Covered by fork CI** instead of host Docker: the `boot-gate` job, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks).
+- [x] T092 `build:docs` and `dco`:
   ```bash
   pnpm --filter docs run build
   pnpm --filter backend run verify:docs-build
   node backend/scripts/dco-signoff.ts origin/master HEAD
   ```
+  **Result**: `node backend/scripts/dco-signoff.ts origin/master HEAD` run locally — `commits=47 judged=47 merges=0 findings=0`; the docs build and `verify:docs-build` run in fork CI's `build:docs` job and `dco` in its own job, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks).
 - [ ] T093 Record T082 – T092 on the tip (tip and base hashes, host or container, durations, any known-flake re-run) in this file as a `tasks.md`-only commit; the tip recorded is the one pushed. The pull request body says `Closes #293`
+  **Open**: T082 – T092 are recorded under their tasks on the tip this commit pushes; the upstream pull request (whose body says `Closes #293`) is not opened yet — that waits for the final security review, product-owner acceptance and the owner's manual test.
 
 **Verification**: every command block of T087 – T092 exactly as written above, in order, on the same
 tip as Phase 12; every command exits 0 and T090's loop prints no `RED:` line.
