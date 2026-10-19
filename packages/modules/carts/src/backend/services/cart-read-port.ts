@@ -38,6 +38,8 @@ export class CartReadService implements CartReadPort {
       // D-178, so the empty arm is unreachable rather than a supported mode.
       // It stays because the context type still admits a null.
       ...(ctx.organizationId === null ? {} : { organizationId: ctx.organizationId }),
+      // One active basket per customer per channel (`specs/154-sales-channel-access/`).
+      salesChannelId: ctx.salesChannelId,
       status: 'active',
     });
     if (!cart) return null;

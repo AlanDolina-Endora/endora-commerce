@@ -174,10 +174,14 @@ export class OrderCreationAdminService {
       // via CartService). Clearing first matches the platform's single-active-cart
       // model (same approach as RfqService.convertToOrder). The assortment is
       // judged on the order's channel, not on the admin request's.
-      await this.cartService.clearForCustomer(customerCtx);
+      // The basket is the one of the order's channel, the channel the operator
+      // named (`specs/154-sales-channel-access/`, contracts/basket-attribution.md
+      // §1), so placement below reads the basket this seeds.
+      const basketCtx = { ...customerCtx, salesChannelId: input.salesChannelId };
+      await this.cartService.clearForCustomer(basketCtx);
       for (const it of input.items) {
         await this.cartService.addItem(
-          { customer: customerCtx },
+          { customer: basketCtx },
           {
             productId: it.productId,
             ...(it.variantId ? { variantId: it.variantId } : {}),

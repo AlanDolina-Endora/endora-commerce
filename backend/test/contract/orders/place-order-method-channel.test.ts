@@ -125,10 +125,14 @@ describe('order placement — methods must be offered in the order’s sales cha
     await teardownBackendServer(h);
   });
 
-  async function freshBasket(): Promise<void> {
+  /**
+   * A basket of `channel` (the system default when absent): an order is placed
+   * from the basket of its own channel (`specs/154-sales-channel-access/`).
+   */
+  async function freshBasket(channel?: { id: string }): Promise<void> {
     const em = h.em();
     await em.nativeDelete(Cart, { customerAccountId: TEST_CUSTOMER_ID, status: 'active' });
-    await seedCartForStubCustomer(em);
+    await seedCartForStubCustomer(em, channel?.id);
   }
 
   /** `channel` undefined ⇒ no signal at all ⇒ the system default, channel A. */
@@ -209,7 +213,7 @@ describe('order placement — methods must be offered in the order’s sales cha
     });
 
     it('places the order with the same two methods on the channel that offers them', async () => {
-      await freshBasket();
+      await freshBasket(channelB);
 
       const res = await place(channelB, {
         deliveryMethodId: deliveryOnlyB,
@@ -228,7 +232,7 @@ describe('order placement — methods must be offered in the order’s sales cha
       { name: 'channel A', channel: (): { id: string; code: string } | undefined => undefined },
       { name: 'channel B', channel: (): { id: string; code: string } | undefined => channelB },
     ])('places with methods bound to no channel on $name', async ({ channel }) => {
-      await freshBasket();
+      await freshBasket(channel());
 
       const res = await place(channel(), {
         deliveryMethodId: SEED_DELIVERY_METHOD_ID,
@@ -262,7 +266,7 @@ describe('order placement — methods must be offered in the order’s sales cha
     });
 
     it('previews on the channel that offers both methods', async () => {
-      await freshBasket();
+      await freshBasket(channelB);
 
       const res = await storefront('/api/v1/orders/preview-total', channelB, {
         deliveryMethodId: deliveryOnlyB,

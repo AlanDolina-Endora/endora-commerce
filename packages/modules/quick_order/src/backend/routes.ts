@@ -74,7 +74,11 @@ export async function registerQuickOrderRoutes(
       const body = quickOrderBuildRequestSchema.parse(request.body);
       const ctx = resolveCustomerContext(request);
       const result = await buildService.build(
-        { customerAccountId: ctx.customerAccountId, organizationId: ctx.organizationId },
+        {
+          customerAccountId: ctx.customerAccountId,
+          organizationId: ctx.organizationId,
+          salesChannelId: getResolvedChannel(request).id,
+        },
         {
           target: body.target,
           items: body.items.map((item) => ({

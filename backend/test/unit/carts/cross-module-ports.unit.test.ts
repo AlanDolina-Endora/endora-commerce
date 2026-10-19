@@ -167,7 +167,7 @@ describe('carts — quote-to-cart conversion reads quote_requests through its po
   } as unknown as QuoteRequestReadPort;
 
   const rfq = {} as unknown as RfqCustomerPort;
-  const ctx = { customerAccountId: 'cust-1', organizationId: 'org-1' };
+  const ctx = { customerAccountId: 'cust-1', organizationId: 'org-1', salesChannelId: 'channel-1' };
 
   /**
    * Issue #259 — the conversion narrows to the request's channel, and these

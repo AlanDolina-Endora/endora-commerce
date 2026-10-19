@@ -884,9 +884,17 @@ export class RfqService {
   // Convert to order (US5)
   // -------------------------------------------------------------------------
 
+  /**
+   * Seed the customer's basket on `salesChannelId` — the channel of the
+   * caller's request — with the approved quote's agreed lines. A customer holds
+   * one basket per channel (`specs/154-sales-channel-access/`), so the basket
+   * seeded is the one of the store the buyer converts on and goes to checkout
+   * from.
+   */
   async convertToOrder(
     rfqId: string,
     ctx: CustomerContext,
+    salesChannelId: string,
   ): Promise<{ cartId: string; checkoutUrl: string }> {
     const em = this.deps.emFactory();
     const rfq = await this.findVisibleForCustomer(em, rfqId, ctx);
@@ -991,6 +999,7 @@ export class RfqService {
       {
         customerAccountId: ctx.customerAccountId,
         organizationId: ctx.organizationId,
+        salesChannelId,
       },
       lines,
       // The basket remembers which request these prices were agreed on, and

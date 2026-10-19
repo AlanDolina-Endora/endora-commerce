@@ -302,18 +302,17 @@ export async function registerOrderRoutes(
       // honoured. The comparison ignores case: a UUID is the same id in either,
       // and a client echoing one in upper case has named the same channel.
       //
-      // **What this does not do, so nobody reads it as more than it is.** It
-      // makes the order's channel and the request's channel one thing; it does
-      // not bind a buyer to a channel. `X-Sales-Channel` and `?salesChannel=`
-      // are as much the client's to send as the body field was, and nothing
-      // ties a customer or an Organization to the channels they may order on —
-      // a buyer who sends another channel's header is placed under that
-      // channel's rules. Closing that is a decision about who may shop where,
-      // not about this route. Nor does it reconcile the order with its basket:
-      // a basket is created on the system-default channel whatever the request
-      // (`CartService`), so its assortment gate, its line prices and its
-      // promotions were all answered for that channel, and an order placed on
-      // another one carries them as they are.
+      // **What else holds, and where.** This makes the order's channel and the
+      // request's channel one thing. Who may use that channel is not this
+      // route's question: the kernel's channel-access step answers it before
+      // any handler runs — a customer only on the channels their Organization
+      // is assigned to (`specs/154-sales-channel-access/`). And the order is
+      // placed from the basket **of** that channel: a customer holds one basket
+      // per channel, created and priced on the channel it is used on, so its
+      // assortment gate, its line prices and its promotions were answered for
+      // the channel the order records. `placeOrder` reads that channel's basket
+      // and refuses one of another channel with 422
+      // `ORDER_SALES_CHANNEL_MISMATCH`, never repricing it.
       //
       // Admin order creation and the API-key intake call `placeOrder` from
       // their own services with the operator's chosen channel and the key's
@@ -1264,6 +1263,8 @@ export async function registerOrderRoutes(
       const result = await deps.orderReorderService.reorder(request.params.id, {
         customerAccountId: ctx.customerAccountId,
         organizationId: ctx.organizationId,
+        // The basket of the storefront the buyer reorders on.
+        salesChannelId: getResolvedChannel(request).id,
       });
       return { data: result };
     },
@@ -1277,7 +1278,14 @@ export async function registerOrderRoutes(
       if (!order) throw new HttpError(404, ERROR_CODES.ORDER_NOT_FOUND, 'Order not found.');
       const result = await deps.orderReorderService.reorder(
         request.params.id,
-        { customerAccountId: order.placedByCustomerAccountId, organizationId: order.organizationId },
+        {
+          customerAccountId: order.placedByCustomerAccountId,
+          organizationId: order.organizationId,
+          // An operator's request is on no storefront: the basket seeded is the
+          // one of the store the order was placed on, which is where the
+          // customer the e-mail invites back will find it.
+          salesChannelId: order.salesChannelId,
+        },
         { notifyCustomer: true },
       );
       return { data: { cartId: result.cartId, unavailableItems: result.unavailableItems } };

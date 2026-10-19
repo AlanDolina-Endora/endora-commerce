@@ -44,7 +44,13 @@ export interface RecomputedLinePrice {
 export interface CartPricingRecomputeContext {
   cartId: string;
   organizationId: string | null;
-  salesChannelId: string | null;
+  /**
+   * The basket's channel. Required: every basket carries the channel it is used
+   * on (`specs/154-sales-channel-access/`, M3 recorded the ones that did not),
+   * so the system-default fallback this used to take is gone rather than kept
+   * for a case that no longer occurs.
+   */
+  salesChannelId: string;
 }
 
 export class CartPricingRecompute {
@@ -172,10 +178,7 @@ export class CartPricingRecompute {
     return lines.every((l) => cachedIds.has(l.cartItemId));
   }
 
-  private async loadChannel(em: EntityManager, channelId: string | null): Promise<SalesChannel | null> {
-    if (channelId) {
-      return em.findOne(SalesChannel, { id: channelId });
-    }
-    return em.findOne(SalesChannel, { systemDefault: true });
+  private async loadChannel(em: EntityManager, channelId: string): Promise<SalesChannel | null> {
+    return em.findOne(SalesChannel, { id: channelId });
   }
 }

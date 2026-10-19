@@ -529,10 +529,12 @@ export interface CartCustomerContext {
   organizationId: string | null;
   /**
    * The sales channel whose basket is meant (`specs/154-sales-channel-access/`,
-   * FR-030). Optional while the producers are migrated; it becomes required
-   * when the basket is attributed to the channel it is used on.
+   * FR-030). A customer holds one active basket per channel, created, priced
+   * and placed on that channel; every producer passes the channel of its own
+   * request — or, for an operator placing an order on a customer's behalf, the
+   * channel that order names.
    */
-  salesChannelId?: string;
+  salesChannelId: string;
 }
 
 /**

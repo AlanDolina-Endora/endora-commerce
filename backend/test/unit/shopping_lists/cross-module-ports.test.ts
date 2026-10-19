@@ -186,9 +186,14 @@ describe('shopping_lists — conversion partitions by the port, and writes throu
 
   it('adds only the live lines to the cart, over cartWritePort', async () => {
     const added: string[] = [];
+    const basketChannels: string[] = [];
     const carts = {
-      addItem: async (_actor: unknown, input: { productId: string }) => {
+      addItem: async (
+        actor: { customer?: { salesChannelId: string } },
+        input: { productId: string },
+      ) => {
         added.push(input.productId);
+        basketChannels.push(actor.customer!.salesChannelId);
         return {} as CartWithItems;
       },
     } as unknown as CartWritePort;
@@ -201,9 +206,11 @@ describe('shopping_lists — conversion partitions by the port, and writes throu
       refusingChannelMembership,
     );
 
-    const result = await service.convertToCart(CTX, 'list-1', undefined);
+    const result = await service.convertToCart(CTX, 'list-1', undefined, 'channel-b');
 
     expect(added).toEqual(['prod-live']);
+    // The basket of the caller's channel (`specs/154-sales-channel-access/`).
+    expect(basketChannels).toEqual(['channel-b']);
     expect(result.added).toBe(1);
     expect(result.skipped).toEqual([
       { itemId: 'item-2', productId: 'prod-archived', reason: 'product_archived' },

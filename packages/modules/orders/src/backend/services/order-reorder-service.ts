@@ -33,6 +33,12 @@ export interface ReorderResult {
 interface ReorderContext {
   customerAccountId: string;
   organizationId: string;
+  /**
+   * The channel whose basket the lines are seeded into
+   * (`specs/154-sales-channel-access/`): the storefront request's for a buyer's
+   * reorder, the order's own for an operator's.
+   */
+  salesChannelId: string;
 }
 
 /**
@@ -131,7 +137,11 @@ export class OrderReorderService {
     // neither. `replaceItemsForCustomer` is `carts`' published answer to
     // exactly that, and its doc comment names this path.
     const cart = await this.cartWrite.replaceItemsForCustomer(
-      { customerAccountId: ctx.customerAccountId, organizationId: ctx.organizationId },
+      {
+        customerAccountId: ctx.customerAccountId,
+        organizationId: ctx.organizationId,
+        salesChannelId: ctx.salesChannelId,
+      },
       reorderable.map((it) => ({
         productId: it.productId,
         ...(it.variantId ? { variantId: it.variantId } : {}),
