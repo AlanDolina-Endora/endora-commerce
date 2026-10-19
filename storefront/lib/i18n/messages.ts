@@ -188,6 +188,17 @@ export type MessageKey =
   | 'auth.federated.divider'
   | 'auth.federated.google'
   | 'auth.federated.microsoft'
+  // `specs/154-sales-channel-access/` — a store that serves signed-in customers
+  // only, an account whose Organization may not use this store, and the screen
+  // a signed-in buyer sees on a store their account is not assigned to.
+  | 'auth.login.signInRequired'
+  | 'auth.login.channelNotPermitted'
+  | 'access.signInRequired'
+  | 'access.denied.title'
+  | 'access.denied.body'
+  | 'access.denied.otherStores'
+  | 'access.denied.signOut'
+  | 'access.denied.contact'
   // Issue #194 — the linked-identities panel on the account security page.
   | 'account.socialLinks.heading'
   | 'account.socialLinks.intro'
@@ -433,6 +444,16 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'auth.federated.divider': 'or',
     'auth.federated.google': 'Continue with Google',
     'auth.federated.microsoft': 'Continue with Microsoft',
+    'auth.login.signInRequired':
+      'This store is available to signed-in business customers. Sign in, or apply for a business account.',
+    'auth.login.channelNotPermitted': 'This account does not have access to this store.',
+    'access.signInRequired': 'This store is available to signed-in customers only. Please sign in.',
+    'access.denied.title': 'No access to this store',
+    'access.denied.body': 'Your account is not set up to buy in this store.',
+    'access.denied.otherStores': 'Stores you can use:',
+    'access.denied.signOut': 'Sign out',
+    'access.denied.contact':
+      'If you need to buy here, contact your organisation’s administrator or our sales team.',
     // Issue #194 — linked identities.
     'account.socialLinks.heading': 'Linked accounts',
     'account.socialLinks.intro':
@@ -664,6 +685,16 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'auth.federated.divider': 'lub',
     'auth.federated.google': 'Kontynuuj przez Google',
     'auth.federated.microsoft': 'Kontynuuj przez Microsoft',
+    'auth.login.signInRequired':
+      'Ten sklep jest dostępny dla zalogowanych klientów biznesowych. Zaloguj się lub złóż wniosek o konto firmowe.',
+    'auth.login.channelNotPermitted': 'To konto nie ma dostępu do tego sklepu.',
+    'access.signInRequired': 'Ten sklep jest dostępny tylko dla zalogowanych klientów. Zaloguj się.',
+    'access.denied.title': 'Brak dostępu do tego sklepu',
+    'access.denied.body': 'Twoje konto nie ma uprawnień do zakupów w tym sklepie.',
+    'access.denied.otherStores': 'Sklepy, z których możesz korzystać:',
+    'access.denied.signOut': 'Wyloguj się',
+    'access.denied.contact':
+      'Jeśli chcesz kupować tutaj, skontaktuj się z administratorem swojej organizacji lub z naszym działem sprzedaży.',
     // Issue #194 — linked identities.
     'account.socialLinks.heading': 'Powiązane konta',
     'account.socialLinks.intro':

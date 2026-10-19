@@ -1,6 +1,7 @@
 import { storefrontQuoteRequestNegotiationSchema } from '@endora-commerce/contracts';
 import { apiGetAuthed, apiMutate } from './mutations';
 import { backendBaseUrl } from '../env.mjs';
+import { activeChannelHeaders } from './channel-headers';
 
 /**
  * Storefront Quote Requests bindings — feature 008 workflow.
@@ -283,6 +284,7 @@ export async function getStorefrontQuoteRequestSettings(): Promise<{
   const baseUrl = backendBaseUrl();
   try {
     const res = await fetch(`${baseUrl}/api/v1/storefront/settings/quote-requests`, {
+      headers: await activeChannelHeaders(),
       cache: 'no-store',
     });
     if (!res.ok) return { showAddToQuoteOnCard: true, showAddToQuoteOnPdp: true };

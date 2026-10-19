@@ -2,6 +2,7 @@ import { apiMutate, extractSessionCookieValue } from './mutations';
 import { StorefrontApiError, type RequestContext } from './client';
 import { withModuleAbsence } from './module-absence';
 import { backendBaseUrl } from '../env.mjs';
+import { activeChannelHeaders } from './channel-headers';
 
 /**
  * The backend's origin, read per call.
@@ -119,8 +120,10 @@ export async function getCartItemCount(
   ctx?: RequestContext,
 ): Promise<number> {
   try {
-    const headers: Record<string, string> = { Accept: 'application/json' };
-    if (ctx?.salesChannelCode) headers['X-Sales-Channel'] = ctx.salesChannelCode;
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      ...(await activeChannelHeaders(ctx)),
+    };
     if (ctx?.locale) headers['Accept-Language'] = ctx.locale;
     const cookie = combineCookies(jar);
     if (cookie) headers['Cookie'] = cookie;
@@ -158,8 +161,10 @@ export async function getCart(
 }
 
 async function fetchCart(jar: CartCookieJar, ctx?: RequestContext): Promise<CartResult> {
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (ctx?.salesChannelCode) headers['X-Sales-Channel'] = ctx.salesChannelCode;
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...(await activeChannelHeaders(ctx)),
+  };
   if (ctx?.locale) headers['Accept-Language'] = ctx.locale;
   const cookie = combineCookies(jar);
   if (cookie) headers['Cookie'] = cookie;
@@ -394,8 +399,10 @@ export async function getCartUpsells(
   jar: CartCookieJar,
   ctx?: RequestContext,
 ): Promise<CartUpsellLine[]> {
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (ctx?.salesChannelCode) headers['X-Sales-Channel'] = ctx.salesChannelCode;
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...(await activeChannelHeaders(ctx)),
+  };
   if (ctx?.locale) headers['Accept-Language'] = ctx.locale;
   const cookie = combineCookies(jar);
   if (cookie) headers['Cookie'] = cookie;
@@ -493,8 +500,10 @@ export async function listOrganizationCarts(
   if (filter?.approvalStatus?.length) params.set('approvalStatus', filter.approvalStatus.join(','));
   if (filter?.page) params.set('page', String(filter.page));
   const qs = params.toString();
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (ctx?.salesChannelCode) headers['X-Sales-Channel'] = ctx.salesChannelCode;
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...(await activeChannelHeaders(ctx)),
+  };
   const cookie = combineCookies(jar);
   if (cookie) headers['Cookie'] = cookie;
   const res = await fetch(

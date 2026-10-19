@@ -394,7 +394,7 @@ export default async function ProductPage({
                         />
                       }
                       // Secondary actions row, alongside the shopping-list + quote.
-                      compareAction={<CompareToggle productId={product.id} variant="inline" />}
+                      compareAction={<CompareToggle productId={product.id} variant="inline" salesChannelCode={ctx.salesChannelCode} />}
                     />
                   ) : (
                     // No buy-actions row (no price and RFQ-on-PDP off): still
@@ -435,7 +435,7 @@ export default async function ProductPage({
           </div>
           {!buyActionsRendered ? (
             <div className="mt-3">
-              <CompareToggle productId={product.id} variant="inline" />
+              <CompareToggle productId={product.id} variant="inline" salesChannelCode={ctx.salesChannelCode} />
             </div>
           ) : null}
           <Hook code="product.buttons.after" />

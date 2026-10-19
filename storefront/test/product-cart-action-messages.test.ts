@@ -39,6 +39,26 @@ describe('cartActionFailure', () => {
   });
 });
 
+describe('cartActionFailure on a store the shopper may not use (`specs/154-sales-channel-access/`)', () => {
+  it('words a channel refusal in the shopper\'s language, whatever the backend answered in', () => {
+    const notPermitted = new StorefrontApiError(403, 'SALES_CHANNEL_NOT_PERMITTED', 'x');
+    const signIn = new StorefrontApiError(403, 'SALES_CHANNEL_SIGN_IN_REQUIRED', 'x');
+
+    expect(cartActionFailure(notPermitted, 'pl-PL', 'product.addToCartFailed')).toBe(
+      'To konto nie ma dostępu do tego sklepu.',
+    );
+    expect(cartActionFailure(notPermitted, 'en-US', 'product.oneClickFailed')).toBe(
+      'This account does not have access to this store.',
+    );
+    expect(cartActionFailure(signIn, 'en-US', 'product.addToCartFailed')).toBe(
+      'This store is available to signed-in customers only. Please sign in.',
+    );
+    expect(cartActionFailure(signIn, 'pl-PL', 'product.addToCartFailed')).toBe(
+      'Ten sklep jest dostępny tylko dla zalogowanych klientów. Zaloguj się.',
+    );
+  });
+});
+
 describe('the product page', () => {
   const source = readFileSync(
     resolve(import.meta.dirname, '../app/(catalog)/p/[slug]/page.tsx'),

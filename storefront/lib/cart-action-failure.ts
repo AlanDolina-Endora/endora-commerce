@@ -16,6 +16,15 @@ export function cartActionFailure(
   locale: string | undefined,
   key: 'product.addToCartFailed' | 'product.oneClickFailed',
 ): string {
+  // `specs/154-sales-channel-access/` — the store refused the shopper rather
+  // than the action (an assignment revoked mid-session, a session gone on a
+  // closed store). Said in the page's language, as the sign-in page says it.
+  if (err instanceof StorefrontApiError && err.code === 'SALES_CHANNEL_NOT_PERMITTED') {
+    return tForLocale(locale ?? '')('auth.login.channelNotPermitted');
+  }
+  if (err instanceof StorefrontApiError && err.code === 'SALES_CHANNEL_SIGN_IN_REQUIRED') {
+    return tForLocale(locale ?? '')('access.signInRequired');
+  }
   if (err instanceof StorefrontApiError) return err.message;
   // `tForLocale` answers an unknown locale in the catalogue's default.
   return tForLocale(locale ?? '')(key);
