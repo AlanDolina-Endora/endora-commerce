@@ -775,6 +775,7 @@ below goes through the storefront catalogue (`lib/i18n/messages.ts`, `en-US` + `
   change after that tip (`specs/` only).
 - `node backend/scripts/dco-signoff.ts origin/master HEAD`: 0 findings.
 - Upstream PR: <https://github.com/endora-commerce/endora-commerce/pull/366> — closes #285 and #294.
+- Rebased on `origin/master` `e41a8b0f6` (156 assets library, 154 PR B/C, API description, SEO fix): tip `85e648473`, PR checks green (<https://github.com/endora-commerce/endora-commerce/pull/366/checks>), `[PG]` 88 files / 0 failed / 657 tests (<https://github.com/bfluks/endora-commerce/actions/runs/39269164406>).
 
 ---
 
