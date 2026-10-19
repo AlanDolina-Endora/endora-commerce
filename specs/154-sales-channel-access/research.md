@@ -124,7 +124,7 @@ session-expired flow).
 | `_lifecycle` (platform) | `GET /api/v1/storefront/module-presence` (`packages/platform/src/lifecycle/routes.storefront.ts`) |
 | platform HTTP | `GET /api/v1/_openapi.json` |
 | `dictionaries` | `GET /api/v1/dictionary`, `GET /api/v1/dictionary/by-code` (registration form) |
-| `seo` | `GET /api/v1/storefront/seo/robots-policy` |
+| `seo` | `GET /api/v1/storefront/seo/robots-policy`, `GET /api/v1/storefront/seo/crawler-files` (added after PR A: `robots.txt` and `llms.txt` are served on every store — on a closed one, `Disallow: /` and an `llms.txt` that names the store and lists nothing; the answer carries `anonymousAccess`) |
 | `product_feeds` | `GET /api/v1/public/product-feeds/:token` |
 | `newsletter` | `/api/v1/newsletter/confirm`, `/click`, `/open.gif`, `/unsubscribe` |
 
