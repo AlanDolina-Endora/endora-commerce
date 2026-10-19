@@ -7,6 +7,7 @@ import {
 import { Cart } from '../../helpers/package-entities.js';
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 import { cartWritePortOf } from '../../helpers/orders-neighbour-ports.js';
 
 /**
@@ -21,7 +22,8 @@ import { cartWritePortOf } from '../../helpers/orders-neighbour-ports.js';
  */
 describe('carts — a seeded basket is a basket somebody just used', () => {
   let h: BackendServerHandle;
-  const CTX = { customerAccountId: TEST_CUSTOMER_ID, organizationId: TEST_ORGANIZATION_ID };
+  /** The basket of the system-default channel — the one a request naming none uses. */
+  let CTX: { customerAccountId: string; organizationId: string; salesChannelId: string };
   const LINE = { productId: SEED_PRODUCT_101_ID, quantity: 2, unitPrice: '11.25', currency: 'PLN' };
 
   const basket = async () => {
@@ -32,6 +34,11 @@ describe('carts — a seeded basket is a basket somebody just used', () => {
 
   beforeAll(async () => {
     h = await setupBackendServer();
+    CTX = {
+      customerAccountId: TEST_CUSTOMER_ID,
+      organizationId: TEST_ORGANIZATION_ID,
+      salesChannelId: await systemDefaultSalesChannelId(h.em()),
+    };
   });
 
   afterAll(async () => {

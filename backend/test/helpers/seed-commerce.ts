@@ -12,6 +12,7 @@ import { SEED_PRODUCT_101_ID } from './seed-catalog.js';
 import { STUB_CUSTOMER_PASSWORD } from './seed-organizations.js';
 import { Order } from './package-entities.js';
 import { bindOrganizationsToFixtureChannelsSql } from './sales-channel-access.js';
+import { systemDefaultSalesChannelId } from './sales-channel-fixtures.js';
 
 /**
  * Deterministic fixture IDs referenced by the US2 contract tests.
@@ -135,6 +136,7 @@ export async function seedSuspendedOrganization(em: EntityManager): Promise<void
     customerAccountId: customer.id,
     organizationId: org.id,
     status: 'active',
+    salesChannelId: await systemDefaultSalesChannelId(em),
   });
   await em.persistAndFlush(cart);
   const item = em.create(CartItem, {
@@ -181,11 +183,13 @@ export async function seedStockRaceFixture(em: EntityManager): Promise<void> {
     [SEED_PRODUCT_101_ID],
   );
 
+  const salesChannelId = await systemDefaultSalesChannelId(em);
   for (const cust of [a, b]) {
     const cart = em.create(Cart, {
       customerAccountId: cust.id,
       organizationId: TEST_ORGANIZATION_ID,
       status: 'active',
+      salesChannelId,
     });
     await em.persistAndFlush(cart);
     const item = em.create(CartItem, {
@@ -199,12 +203,36 @@ export async function seedStockRaceFixture(em: EntityManager): Promise<void> {
   }
 }
 
-/** Cart seed for the primary stub customer — used by T098 (empty) inverse and T103 happy path. */
-export async function seedCartForStubCustomer(em: EntityManager): Promise<void> {
+/**
+ * Cart seed for the primary stub customer — used by T098 (empty) inverse and T103 happy path.
+ *
+ * The basket is the one of `salesChannelId`, the system default unless a test
+ * places on another channel: a customer holds one basket per channel and an
+ * order is placed from the basket of its own (`specs/154-sales-channel-access/`).
+ * An active basket the customer already holds on that channel is replaced —
+ * `carts_one_active_per_customer_per_channel` admits one, and a seed that left
+ * the old one beside the new would have no basket to write.
+ */
+export async function seedCartForStubCustomer(
+  em: EntityManager,
+  salesChannelId?: string,
+): Promise<void> {
+  const channelId = salesChannelId ?? (await systemDefaultSalesChannelId(em));
+  const previous = await em.find(Cart, {
+    customerAccountId: TEST_CUSTOMER_ID,
+    salesChannelId: channelId,
+    status: 'active',
+  });
+  if (previous.length > 0) {
+    const ids = previous.map((c) => c.id);
+    await em.nativeDelete(CartItem, { cartId: { $in: ids } });
+    await em.nativeDelete(Cart, { id: { $in: ids } });
+  }
   const cart = em.create(Cart, {
     customerAccountId: TEST_CUSTOMER_ID,
     organizationId: TEST_ORGANIZATION_ID,
     status: 'active',
+    salesChannelId: channelId,
   });
   await em.persistAndFlush(cart);
   const item = em.create(CartItem, {
