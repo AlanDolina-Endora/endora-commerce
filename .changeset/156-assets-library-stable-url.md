@@ -28,7 +28,8 @@ and the new `AssetsLibraryService.resolveEmbedUrl(id)` answers the embed form. A
 cached before a replace keeps serving the previous marker for up to five minutes (the CMS page
 cache's lifetime); that URL redirects to the current file when it is requested. A browser that
 already holds the old `?v=` URL in its cache — it was served as immutable — can keep showing the
-previous image until the CMS page cache has turned over and the page is reloaded.
+previous image until the CMS page cache has turned over and the page is reloaded. Clearing the CMS
+page cache when an asset changes is tracked in #363.
 
 **Behaviour change for the file URL.** `GET /assets/file/<id>` answers a public local asset with
 `Cache-Control: public, no-cache` (it was `public, max-age=31536000, immutable`), so a replaced file

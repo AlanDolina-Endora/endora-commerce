@@ -249,7 +249,8 @@ pięć minut i nie jest czyszczona przy zmianie pliku. Strona CMS zapisana w pam
 podmianą serwuje więc poprzednie `?v=` przez maksymalnie pięć minut; ten adres przy żądaniu
 przekierowuje do bieżącego pliku. Przeglądarka, która ma już w pamięci podręcznej stary adres `?v=` —
 był serwowany jako `immutable` — może pokazywać poprzedni obraz, dopóki pamięć podręczna stron CMS się
-nie odświeży, a strona nie zostanie przeładowana.
+nie odświeży, a strona nie zostanie przeładowana. Czyszczenie pamięci podręcznej stron CMS przy
+zmianie pliku jest śledzone w [zgłoszeniu #363](https://github.com/endora-commerce/endora-commerce/issues/363).
 
 ## Magazyn w chmurze {#cloud-storage}
 

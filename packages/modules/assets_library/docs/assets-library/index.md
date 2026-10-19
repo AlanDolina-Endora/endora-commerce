@@ -274,7 +274,8 @@ replace therefore keeps serving the previous `?v=` for up to five minutes; that
 URL redirects to the current file when it is requested. A browser that already
 holds the old `?v=` URL in its cache — it was served as immutable — can keep
 showing the previous image until the CMS page cache has turned over and the
-page is reloaded.
+page is reloaded. Clearing the CMS page cache when an asset changes is tracked
+in [issue #363](https://github.com/endora-commerce/endora-commerce/issues/363).
 
 ## Cloud storage
 

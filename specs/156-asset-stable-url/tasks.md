@@ -544,7 +544,7 @@ first. Record each result (tip, base, duration, host) under its task.
   pnpm -r run typecheck
   pnpm -r run lint
   ```
-  **Covered by fork CI** (owner's remote-CI rule: no local `pnpm -r`): the `quality` job on the pushed tip, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks). Filtered typecheck and lint of every touched workspace ran locally in each phase.
+  **Covered by fork CI** (owner's remote-CI rule: no local `pnpm -r`): the `quality` job on the pushed tip, [PR checks](https://github.com/endora-commerce/endora-commerce/pull/364/checks). Filtered typecheck and lint of every touched workspace ran locally in each phase.
 - [x] T084 `quality` part 2 — the rest of the `quality` job's `run:` block in `.github/workflows/quality.yml`, one command per line, serially, in the file's order. **Re-read the workflow first and run its list as it stands on the rebased tip** — the list below is the one recorded when this file was written and is the workflow's, not this task's. `check:pdfmake-footprint` passes vacuously on macOS (BSD `du`): record it as not evidence there. `check:release-intent` runs here as the job runs it; T086 runs it again with `--since`:
   ```bash
   pnpm --filter backend exec tsx scripts/check-entity-tenant-classification.ts
@@ -594,7 +594,7 @@ first. Record each result (tip, base, duration, host) under its task.
   pnpm --filter backend run check:platform-surface
   pnpm --filter backend run manifests:check
   ```
-  **Covered by fork CI**: the `quality` job runs this list from `.github/workflows/quality.yml` as it stands on the tip, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks).
+  **Covered by fork CI**: the `quality` job runs this list from `.github/workflows/quality.yml` as it stands on the tip, [PR checks](https://github.com/endora-commerce/endora-commerce/pull/364/checks).
 - [x] T085 `quality:static` in Docker (macOS awk rejects the scripts' multi-line `-v` values; on macOS the command goes to the host's Docker daemon — Docker Desktop or colima). **The container gets the committed tip as a `git bundle`, not a mount of the checkout**: in this worktree `.git` is a file pointing at the primary checkout's git directory, so a mounted worktree is not a repository inside the container, and both scripts refuse to run without one (they list files with `git ls-files`). The bundle is written under `$HOME` (colima shares only the home directory by default), outside both checkouts so no `git status` sees it, and it holds the **committed** tip only — commit first, and re-create it after the final rebase and after any later commit. Without `origin/master` in the clone the scripts take their full-tree listing (`git ls-files`), which is the intended scope here — do not add a base ref to "fix" it:
   ```bash
   set -o pipefail
@@ -604,14 +604,14 @@ first. Record each result (tip, base, duration, host) under its task.
   git rev-parse HEAD
   ```
   Record the printed tip hash beside the result; it must equal the tip T082 – T084 ran on.
-  **Covered by fork CI** instead of local Docker: the `quality:static` job (naming and language included) runs on Linux, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks).
+  **Covered by fork CI** instead of local Docker: the `quality:static` job (naming and language included) runs on Linux, [PR checks](https://github.com/endora-commerce/endora-commerce/pull/364/checks).
 - [x] T086 Release intent:
   ```bash
   git fetch --no-tags origin +refs/heads/master:refs/remotes/origin/master
   pnpm --filter backend run check:release-intent -- --since origin/master
   pnpm --filter backend run test:release-gate
   ```
-  **Result**: `check:release-intent -- --since origin/master` run locally, exit 0 (`changesets-added=4 violations=0`); the same command and `test:release-gate` run in fork CI's `release:changeset` job, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks).
+  **Result**: `check:release-intent -- --since origin/master` run locally, exit 0 (`changesets-added=4 violations=0`); the same command and `test:release-gate` run in fork CI's `release:changeset` job, [PR checks](https://github.com/endora-commerce/endora-commerce/pull/364/checks).
 
 **Verification**: every command block of T082 – T086 exactly as written above, in order, on one tip;
 T082's `git status --porcelain` prints nothing and every other command exits 0.
@@ -637,12 +637,12 @@ T091 and T092.
   docker exec -w /builds/endora/endora-commerce ec156 bash -euo pipefail -c 'corepack enable && corepack prepare pnpm@9.15.0 --activate && pnpm install --frozen-lockfile && pnpm run build:packages'
   ```
   The two printed hashes must be equal. The container name is `ec156` so it cannot collide with a container the other builder starts; if one by that name is left over from an earlier run, `docker rm -f ec156` first.
-  **Covered by fork CI** instead of a local container: every CI job builds the tip on Linux, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks).
+  **Covered by fork CI** instead of a local container: every CI job builds the tip on Linux, [PR checks](https://github.com/endora-commerce/endora-commerce/pull/364/checks).
 - [x] T088 `test:backend:unit` in the container (macOS reds here are host-only — BSD `cp`/`date`/`du`, `/private/var`):
   ```bash
   docker exec -w /builds/endora/endora-commerce ec156 pnpm --filter backend run test:unit:fast
   ```
-  **Covered by fork CI**: the `test:backend:unit` job, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks).
+  **Covered by fork CI**: the `test:backend:unit` job, [PR checks](https://github.com/endora-commerce/endora-commerce/pull/364/checks).
 - [x] T089 `test:frontend` (the packages included — `mod-assets-library`'s co-located suite runs here) and `pack-gate` in the container (bsdtar on macOS makes every package read as empty):
   ```bash
   docker exec -w /builds/endora/endora-commerce ec156 pnpm --filter '!backend' run test
@@ -651,7 +651,7 @@ T091 and T092.
   rm -f "$HOME/.cache/ec156/tip.bundle"
   ```
   A red on a known load-timing test in a file this branch does not touch is re-run alone and recorded as such; a red in a touched file is a defect.
-  **Covered by fork CI**: the `test:frontend` and `pack-gate` jobs, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks).
+  **Covered by fork CI**: the `test:frontend` and `pack-gate` jobs, [PR checks](https://github.com/endora-commerce/endora-commerce/pull/364/checks).
 - [x] T090 The server-bound suites this feature adds or changes, `[PG]` line form (standing rule 5), **one file per invocation**, on the host against the services `.env` names:
   ```bash
   (cd backend && eval "$(grep -E '^(POSTGRES_PORT|POSTGRES_USER|POSTGRES_PASSWORD|POSTGRES_DB|REDIS_PORT|MEILISEARCH_PORT|MEILI_MASTER_KEY)=' ../.env)" && env TEST_DATABASE_URL="postgresql://${POSTGRES_USER:-b2b}:${POSTGRES_PASSWORD:-b2b}@localhost:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-b2b}_test" REDIS_URL="redis://localhost:${REDIS_PORT:-6379}" MEILISEARCH_URL="http://localhost:${MEILISEARCH_PORT:-7700}" MEILISEARCH_API_KEY="${MEILI_MASTER_KEY:-devMasterKeyChangeMe}" pnpm exec vitest run test/integration/_i18n/error-code-ownership.test.ts)
@@ -700,15 +700,16 @@ T091 and T092.
   ```bash
   bash scripts/boot-gate.sh --with-negatives
   ```
-  **Covered by fork CI** instead of host Docker: the `boot-gate` job, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks).
+  **Covered by fork CI** instead of host Docker: the `boot-gate` job, [PR checks](https://github.com/endora-commerce/endora-commerce/pull/364/checks).
 - [x] T092 `build:docs` and `dco`:
   ```bash
   pnpm --filter docs run build
   pnpm --filter backend run verify:docs-build
   node backend/scripts/dco-signoff.ts origin/master HEAD
   ```
-  **Result**: `node backend/scripts/dco-signoff.ts origin/master HEAD` run locally — `commits=47 judged=47 merges=0 findings=0`; the docs build and `verify:docs-build` run in fork CI's `build:docs` job and `dco` in its own job, [PR checks](https://github.com/bfluks/endora-commerce/pull/1/checks).
-- [ ] T093 Record T082 – T092 on the tip (tip and base hashes, host or container, durations, any known-flake re-run) in this file as a `tasks.md`-only commit; the tip recorded is the one pushed. The pull request body says `Closes #293`
+  **Result**: `node backend/scripts/dco-signoff.ts origin/master HEAD` run locally — `commits=47 judged=47 merges=0 findings=0`; the docs build and `verify:docs-build` run in fork CI's `build:docs` job and `dco` in its own job, [PR checks](https://github.com/endora-commerce/endora-commerce/pull/364/checks).
+- [x] T093 Record T082 – T092 on the tip (tip and base hashes, host or container, durations, any known-flake re-run) in this file as a `tasks.md`-only commit; the tip recorded is the one pushed. The pull request body says `Closes #293`
+  **Done (2026-10-19)**: upstream pull request [#364](https://github.com/endora-commerce/endora-commerce/pull/364) (`Closes #293`); the CMS page-cache follow-up is [#363](https://github.com/endora-commerce/endora-commerce/issues/363), cited in the module page's *Caching → CMS pages after a replace* (en + pl) and the changeset. The gate links above point at #364's checks; the fork's server-bound run links stay.
   **Open**: T082 – T092 are recorded under their tasks on the tip this commit pushes; the upstream pull request (whose body says `Closes #293`) is not opened yet — that waits for the final security review, product-owner acceptance and the owner's manual test.
   **Owner ruling on naming (2026-10-19, supersedes S5)**: the module keeps master's name everywhere in this feature's changes — the sidebar entry, `page.title`, the manifest display name, the `assets.read` permission label (manifest and `_i18n`), the `document_templates` Image block description and the module page's title and heading are back at their master values, and the two changesets that carried the rename are dropped; the palette entry `actions.openLibrary.label` is aligned to "Assets library" / "Biblioteka zasobów", its keywords keeping "media", "media library" and "multimedia". `naming.test.ts` now holds the sidebar, palette and page title to that name (the title case-insensitively, master's "Assets Library"); the batch-nine surface test's pin on the palette label moves with it (R-20, deliberate). The Polish module page and its sidebar label (`current.json`) say "Biblioteka zasobów". Owner ruling S6 A: the module page and the changeset say that the API option `deleteRecursively` moves a folder's assets to the trash without confirmation, so their permalinks answer `410` until restored.
   **Final review fix round (2026-10-19)**, each red first: the admin client encodes every id it puts in a path, and its replace request is pinned to authenticate exactly as the kit's multipart upload (the admin's shared `apiClient` carries no API key, so neither sends a bearer token); the file route resolves a name that fails the permalink rule (NUL, characters outside the class, over 200 characters) to the unused name's 404 without a query; a storage failure answers the generic translated `503` sentence and keeps the adapter error as the logged `cause`; `expectedContentVersion` after the file part is refused with `400 VALIDATION_FAILED` once the bytes are staged and before the commit; setting or removing a soft-deleted asset's permalink answers `410`. Docs (en, pl, cache re-pinned), both changesets, `data-model.md` §4, `spec.md` status, contracts `admin-api.md` and `file-serving.md` updated.
