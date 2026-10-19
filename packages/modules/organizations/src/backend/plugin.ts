@@ -150,8 +150,9 @@ export interface OrganizationsModuleOptions {
   commandBus?: CommandBus;
   /**
    * Feature 154 — the kernel's channel-membership writer, which binds a
-   * registered Organization to the system-default channel, and backs the admin
-   * *Sales channels* endpoints and the admin create.
+   * registered Organization to the channel of the store it registered on (the
+   * system default without one), and backs the admin *Sales channels*
+   * endpoints and the admin create.
    */
   salesChannelMembership?: Pick<
     SalesChannelMembershipPort,

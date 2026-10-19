@@ -479,7 +479,9 @@ export function registerModule(ctx: ModuleContext): void {
             mailer: lazyPort<EmailMailerPort>(ctx, 'emailMailer'),
             templateEmail: lazyPort<TemplateEmailPort>(ctx, 'templateEmailPort'),
             // Feature 154 — kernel-provided; binds a registered Organization to
-            // the system-default channel in its creating step.
+            // the channel of the store it registered on (the system default
+            // without one) in its creating step, and backs the admin *Sales
+            // channels* endpoints and the admin create.
             salesChannelMembership: lazyPort<SalesChannelMembershipPort>(
               ctx,
               'salesChannelMembershipPort',
@@ -631,7 +633,8 @@ export function registerModule(ctx: ModuleContext): void {
             },
             auditLogService,
             // Feature 154 — the personal Organization is bound to the
-            // system-default channel in the provisioning transaction.
+            // registering store's channel (the system default without one) in
+            // the provisioning transaction.
             lazyPort<SalesChannelMembershipPort>(ctx, 'salesChannelMembershipPort'),
           );
           return {

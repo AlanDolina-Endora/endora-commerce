@@ -86,7 +86,10 @@ export async function registerOrganizationsPublicRoutes(
     { schema: { body: registerOrganizationRequestSchema }, config: { salesChannelAccess: 'open' } },
     async (request, reply) => {
       const body = registerOrganizationRequestSchema.parse(request.body);
-      const result = await registrationService.registerOrganization(body);
+      // Feature 154 (D6) — the store registered on becomes the Organization's channel.
+      const result = await registrationService.registerOrganization(body, {
+        salesChannelId: currentSalesChannel()?.id ?? null,
+      });
       // Stash the raw token for the test-only probe so integration tests can
       // complete the verify step without reading the mail.
       if (deps.latestTokenByEmail) {

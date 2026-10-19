@@ -812,7 +812,10 @@ async function contributeReferenceDeployment(ctx: ComposedAppContext): Promise<v
     resolveByEmail(
       email: string,
     ): Promise<{ id: string; organizationId: string | null; blocked: boolean } | null>;
-    autoCreate(email: string): Promise<{ id: string; organizationId: string | null } | null>;
+    autoCreate(
+      email: string,
+      context: { salesChannelId: string | null },
+    ): Promise<{ id: string; organizationId: string | null } | null>;
   } =>
     (
       container.cradle as never as {
@@ -820,14 +823,18 @@ async function contributeReferenceDeployment(ctx: ComposedAppContext): Promise<v
           resolveByEmail(
             email: string,
           ): Promise<{ id: string; organizationId: string | null; blocked: boolean } | null>;
-          autoCreate(email: string): Promise<{ id: string; organizationId: string | null } | null>;
+          autoCreate(
+            email: string,
+            context: { salesChannelId: string | null },
+          ): Promise<{ id: string; organizationId: string | null } | null>;
         };
       }
     ).customerSocialLoginPort;
 
   const mfaSocialResolvers = {
     resolveCustomerByEmail: (email: string) => customerSocialLogin().resolveByEmail(email),
-    autoCreateCustomer: (email: string) => customerSocialLogin().autoCreate(email),
+    autoCreateCustomer: (email: string, context: { salesChannelId: string }) =>
+      customerSocialLogin().autoCreate(email, context),
     resolveAdminByEmail: async (email: string) => {
       // The claim's spelling is the identity provider's, and the row holds the
       // folded address, so the two are compared in the one form both modules
