@@ -9,7 +9,7 @@ import { ExternalLink, Trash2 } from 'lucide-react';
 import { validateAssetPermalink } from '@endora-commerce/contracts';
 import { Alert, AlertDescription, Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Select } from '@endora-commerce/admin-kit/ui';
 import { toAbsoluteAssetUrl } from '@endora-commerce/admin-kit/lib';
-import { ApiError, useAuth } from '@endora-commerce/admin-kit/lib';
+import { ApiError, formatDateTime, useAuth } from '@endora-commerce/admin-kit/lib';
 import { AssetUploader, ModalDialog } from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import {
@@ -46,34 +46,50 @@ interface ActionError {
   reload: boolean;
 }
 
-/** A replace waiting for the operator's confirmation; `settle` answers the uploader. */
-interface PendingReplace {
-  file: File;
-  settle: (asset: AssetDetail) => void;
+/** The uploader props that hold a replacement to the asset's own kind (FR-006). */
+function acceptFor(mimeType: string): { accept?: string; acceptPrefix?: 'image/' | 'video/' } {
+  if (mimeType === 'application/pdf') return { accept: 'application/pdf' };
+  // `acceptPrefix` also refuses a dropped file of another kind, which `accept` cannot.
+  if (mimeType.startsWith('image/')) return { accept: 'image/*', acceptPrefix: 'image/' };
+  if (mimeType.startsWith('video/')) return { accept: 'video/*', acceptPrefix: 'video/' };
+  return {};
 }
 
-/** What the file input accepts: the asset's own kind (FR-006). */
-function acceptFor(mimeType: string): string | undefined {
-  if (mimeType === 'application/pdf') return 'application/pdf';
-  if (mimeType.startsWith('image/')) return 'image/*';
-  if (mimeType.startsWith('video/')) return 'video/*';
-  return undefined;
+interface Refusal {
+  code: string | null;
+  /** The server's sentence; null when the answer carried none worth showing. */
+  message: string | null;
+  details: Record<string, unknown>;
 }
 
-/** The code, sentence and details of a refusal; the sentence alone for anything else. */
-function refusalOf(e: unknown): { code: string | null; message: string; details: Record<string, unknown> } {
+/**
+ * The code, sentence and details of a refusal. An answer that was not an error
+ * envelope (`INTERNAL`, which the kit's client and ours make of an HTML page
+ * from a proxy) and anything that is not an `ApiError` carry no sentence: the
+ * drawer shows its own generic one rather than a raw body.
+ */
+function refusalOf(e: unknown): Refusal {
   if (e instanceof ApiError) {
     const error = e.envelope.error as { code: string; message: string; details?: unknown };
     const details =
       error.details && typeof error.details === 'object' && !Array.isArray(error.details)
         ? (error.details as Record<string, unknown>)
         : {};
-    return { code: error.code, message: error.message, details };
+    const message = error.code === 'INTERNAL' || !error.message ? null : error.message;
+    return { code: error.code, message, details };
   }
-  return { code: null, message: e instanceof Error ? e.message : String(e), details: {} };
+  return { code: null, message: null, details: {} };
 }
 
-export function AssetDetailDrawer({
+/**
+ * Keyed by the asset, so nothing one asset's drawer holds — a permalink draft,
+ * an open dialog, a refusal — survives into another's.
+ */
+export function AssetDetailDrawer(props: AssetDetailDrawerProps): ReactNode {
+  return <AssetDetailDrawerBody key={props.assetId} {...props} />;
+}
+
+function AssetDetailDrawerBody({
   assetId,
   onChanged,
   onClose,
@@ -84,12 +100,11 @@ export function AssetDetailDrawer({
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<ActionError | null>(null);
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<'copied' | 'failed' | null>(null);
   const [permalinkDraft, setPermalinkDraft] = useState('');
   const [permalinkConfirm, setPermalinkConfirm] = useState<'change' | 'remove' | null>(null);
   const [reuse, setReuse] = useState<{ permalink: string; releasedAt: string } | null>(null);
-  const [pendingReplace, setPendingReplace] = useState<PendingReplace | null>(null);
-  const [retentionDays, setRetentionDays] = useState<number | null>(null);
+  const [pendingReplace, setPendingReplace] = useState<File | null>(null);
   const [restoreConfirm, setRestoreConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   // Set in the effect body and cleared in cleanup, so a response that lands
@@ -97,8 +112,15 @@ export function AssetDetailDrawer({
   const alive = useRef(false);
   const shareId = useId();
   const permalinkId = useId();
+  const permalinkHelpId = useId();
   const permalinkErrorId = useId();
   const previousTitleId = useId();
+  const mimeTypeId = useId();
+  const visibilityId = useId();
+  // Where focus goes when a permalink dialog closes: its opener may be gone (a
+  // removal) or never have been focused (a dialog opened by a refusal).
+  const permalinkInput = useRef<HTMLInputElement>(null);
+  const restoreButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     alive.current = true;
@@ -141,10 +163,10 @@ export function AssetDetailDrawer({
   }, [detail?.permalink]);
 
   useEffect(() => {
-    if (!copied) return undefined;
-    const timer = setTimeout(() => setCopied(false), 2000);
+    if (copyStatus !== 'copied') return undefined;
+    const timer = setTimeout(() => setCopyStatus(null), 2000);
     return (): void => clearTimeout(timer);
-  }, [copied]);
+  }, [copyStatus]);
 
   if (error) {
     return (
@@ -163,13 +185,10 @@ export function AssetDetailDrawer({
   const permalinkChanged = draft !== currentPermalink && draft !== '';
   const verdict = draft === '' ? null : validateAssetPermalink(draft);
   const invalidReason = verdict && !verdict.ok ? verdict.reason : null;
-  const accept = acceptFor(detail.mimeType);
+  const kindProps = acceptFor(detail.mimeType);
   const previous = detail.previousVersion;
-
-  const formatDate = (iso: string): string => {
-    const date = new Date(iso);
-    return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
-  };
+  const retentionDays = typeof detail.retentionDays === 'number' ? detail.retentionDays : null;
+  const sentenceOf = (refused: Refusal): string => refused.message ?? t('detail.error.generic');
 
   const save = async (patch: {
     filename?: string;
@@ -185,15 +204,21 @@ export function AssetDetailDrawer({
       setDetail(next);
       onChanged();
     } catch (e) {
-      if (alive.current) setActionError({ message: refusalOf(e).message, reload: false });
+      if (alive.current) setActionError({ message: sentenceOf(refusalOf(e)), reload: false });
     } finally {
       if (alive.current) setBusy(false);
     }
   };
 
   const copyShareUrl = async (): Promise<void> => {
-    await navigator.clipboard.writeText(shareUrl);
-    if (alive.current) setCopied(true);
+    try {
+      // `navigator.clipboard` is absent outside a secure context.
+      if (!navigator.clipboard) throw new Error('no clipboard');
+      await navigator.clipboard.writeText(shareUrl);
+      if (alive.current) setCopyStatus('copied');
+    } catch {
+      if (alive.current) setCopyStatus('failed');
+    }
   };
 
   const sendPermalink = async (value: string, confirmReuse: boolean): Promise<void> => {
@@ -212,13 +237,14 @@ export function AssetDetailDrawer({
       const refused = refusalOf(e);
       if (refused.code === 'ASSET_PERMALINK_PREVIOUSLY_USED' && !confirmReuse) {
         // Taking a name another asset held asks first (owner ruling P5).
+        const releasedAt = refused.details['releasedAt'];
         setReuse({
-          permalink: String(refused.details['permalink'] ?? value),
-          releasedAt: String(refused.details['releasedAt'] ?? ''),
+          permalink: typeof refused.details['permalink'] === 'string' ? refused.details['permalink'] : value,
+          releasedAt: typeof releasedAt === 'string' ? releasedAt : '',
         });
       } else {
         setReuse(null);
-        setActionError({ message: refused.message, reload: false });
+        setActionError({ message: sentenceOf(refused), reload: false });
       }
     } finally {
       if (alive.current) setBusy(false);
@@ -234,7 +260,7 @@ export function AssetDetailDrawer({
       setDetail(next);
       onChanged();
     } catch (e) {
-      if (alive.current) setActionError({ message: refusalOf(e).message, reload: false });
+      if (alive.current) setActionError({ message: sentenceOf(refusalOf(e)), reload: false });
     } finally {
       if (alive.current) setBusy(false);
     }
@@ -246,54 +272,49 @@ export function AssetDetailDrawer({
     else void sendPermalink(draft, false);
   };
 
-  // The uploader's request: wait for the operator's confirmation, then replace.
-  // A cancelled or refused replace answers the asset unchanged, so the uploader
-  // shows nothing of its own; the drawer shows the refusal.
-  const askToReplace = (file: File): Promise<AssetDetail> =>
-    new Promise((settle) => {
-      setActionError(null);
-      setPendingReplace({ file, settle });
-      assetsLibraryClient
-        .getRetentionDays()
-        .then((days) => {
-          if (alive.current) setRetentionDays(days);
-        })
-        .catch(() => undefined);
-    });
+  // The uploader's request only stages the chosen file and answers the asset
+  // unchanged, so the uploader is idle (its own label, no error) while the
+  // drawer asks for confirmation and then sends the replace itself.
+  const stageReplace = (file: File): Promise<AssetDetail> => {
+    setActionError(null);
+    setPendingReplace(file);
+    return Promise.resolve(detail);
+  };
 
   const cancelReplace = (): void => {
-    pendingReplace?.settle(detail);
     setPendingReplace(null);
   };
 
+  const isKind = (value: unknown): value is (typeof KINDS)[number] =>
+    KINDS.includes(value as (typeof KINDS)[number]);
+
   const confirmReplace = async (): Promise<void> => {
-    if (!pendingReplace) return;
-    const { file, settle } = pendingReplace;
+    if (!pendingReplace || busy) return;
+    const file = pendingReplace;
     setBusy(true);
     try {
       const next = await assetsLibraryClient.replaceAsset(assetId, file, detail.contentVersion);
-      settle(next);
       if (!alive.current) return;
       setPendingReplace(null);
+      // The answer is the replaced asset: show it as the sibling actions do.
+      setDetail(next);
       onChanged();
-      reload();
     } catch (e) {
-      settle(detail);
       if (!alive.current) return;
       setPendingReplace(null);
       const refused = refusalOf(e);
-      if (refused.code === 'ASSET_REPLACE_KIND_MISMATCH') {
-        const kindName = (value: unknown): string =>
-          KINDS.includes(value as (typeof KINDS)[number]) ? t(`kind.${String(value)}`) : String(value);
+      const currentKind = refused.details['currentKind'];
+      const newKind = refused.details['newKind'];
+      if (refused.code === 'ASSET_REPLACE_KIND_MISMATCH' && isKind(currentKind) && isKind(newKind)) {
         setActionError({
           message: t('detail.replace.kindMismatch', {
-            currentKind: kindName(refused.details['currentKind']),
-            newKind: kindName(refused.details['newKind']),
+            currentKind: t(`kind.${currentKind}`),
+            newKind: t(`kind.${newKind}`),
           }),
           reload: false,
         });
       } else {
-        setActionError({ message: refused.message, reload: refused.code === 'ASSET_REPLACE_CONFLICT' });
+        setActionError({ message: sentenceOf(refused), reload: refused.code === 'ASSET_REPLACE_CONFLICT' });
       }
     } finally {
       if (alive.current) setBusy(false);
@@ -301,7 +322,7 @@ export function AssetDetailDrawer({
   };
 
   const restorePrevious = async (): Promise<void> => {
-    if (!previous) return;
+    if (!previous || busy) return;
     setBusy(true);
     setActionError(null);
     try {
@@ -319,13 +340,14 @@ export function AssetDetailDrawer({
       if (!alive.current) return;
       setRestoreConfirm(false);
       const refused = refusalOf(e);
-      setActionError({ message: refused.message, reload: refused.code === 'ASSET_REPLACE_CONFLICT' });
+      setActionError({ message: sentenceOf(refused), reload: refused.code === 'ASSET_REPLACE_CONFLICT' });
     } finally {
       if (alive.current) setBusy(false);
     }
   };
 
   const softDelete = async (): Promise<void> => {
+    if (busy) return;
     setBusy(true);
     setActionError(null);
     try {
@@ -337,18 +359,28 @@ export function AssetDetailDrawer({
     } catch (e) {
       if (!alive.current) return;
       setDeleteConfirm(false);
-      setActionError({ message: refusalOf(e).message, reload: false });
+      setActionError({ message: sentenceOf(refusalOf(e)), reload: false });
     } finally {
       if (alive.current) setBusy(false);
     }
   };
 
+  // The confirming button stays focusable while its own request is in flight:
+  // `aria-busy` says so, and every confirm handler ignores a second press.
   const dialogFooter = (onCancel: () => void, confirmLabel: string, onConfirm: () => void, destructive = false): ReactNode => (
     <>
       <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
         {t('common.cancel')}
       </Button>
-      <Button type="button" variant={destructive ? 'destructive' : 'default'} disabled={busy} onClick={onConfirm}>
+      <Button
+        type="button"
+        variant={destructive ? 'destructive' : 'default'}
+        aria-busy={busy}
+        aria-disabled={busy}
+        onClick={(): void => {
+          if (!busy) onConfirm();
+        }}
+      >
         {confirmLabel}
       </Button>
     </>
@@ -358,8 +390,8 @@ export function AssetDetailDrawer({
     <Card className="sticky top-2 max-h-[calc(100vh-2rem)] overflow-y-auto">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base">{t('detail.title')}</CardTitle>
-        <Button type="button" size="sm" variant="ghost" onClick={onClose}>
-          ✕
+        <Button type="button" size="sm" variant="ghost" aria-label={t('detail.close')} onClick={onClose}>
+          <span aria-hidden="true">✕</span>
         </Button>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -407,7 +439,11 @@ export function AssetDetailDrawer({
             </Button>
           </div>
           <p role="status" aria-live="polite" className="text-xs text-muted-foreground">
-            {copied ? t('detail.shareUrl.copied') : ''}
+            {copyStatus === 'copied'
+              ? t('detail.shareUrl.copied')
+              : copyStatus === 'failed'
+                ? t('detail.shareUrl.copyFailed')
+                : ''}
           </p>
           {detail.visibility === 'private' ? (
             <p className="text-xs text-muted-foreground">{t('detail.shareUrl.privateNotice')}</p>
@@ -417,22 +453,27 @@ export function AssetDetailDrawer({
         {/* Permalink (FR-014 – FR-019, owner ruling P5). */}
         <div className="space-y-1">
           <Label htmlFor={permalinkId}>{t('detail.permalink.label')}</Label>
+          {/* Read-only rather than disabled while a request runs, so focus can
+              come back here when a permalink dialog closes. */}
           <Input
+            ref={permalinkInput}
             id={permalinkId}
             value={permalinkDraft}
-            readOnly={!canWrite}
-            placeholder="certificate.pdf"
+            readOnly={!canWrite || busy}
             aria-invalid={invalidReason !== null}
-            {...(invalidReason !== null ? { 'aria-describedby': permalinkErrorId } : {})}
+            aria-describedby={invalidReason !== null ? `${permalinkHelpId} ${permalinkErrorId}` : permalinkHelpId}
             onChange={(e): void => setPermalinkDraft(e.target.value)}
-            disabled={busy}
           />
-          <p className="text-xs text-muted-foreground">{t('detail.permalink.help')}</p>
-          {invalidReason !== null ? (
-            <p id={permalinkErrorId} className="text-xs text-destructive">
-              {t(`detail.permalink.invalid.${invalidReason}`)}
-            </p>
-          ) : null}
+          <p id={permalinkHelpId} className="text-xs text-muted-foreground">
+            {t('detail.permalink.help')}
+          </p>
+          <div aria-live="polite">
+            {invalidReason !== null ? (
+              <p id={permalinkErrorId} className="text-xs text-destructive">
+                {t(`detail.permalink.invalid.${invalidReason}`)}
+              </p>
+            ) : null}
+          </div>
           {canWrite ? (
             <div className="flex flex-wrap gap-2">
               <Button
@@ -468,8 +509,9 @@ export function AssetDetailDrawer({
           saveLabel={t('common.save')}
         />
         <div className="space-y-1">
-          <Label>{t('detail.mimeType')}</Label>
+          <Label htmlFor={mimeTypeId}>{t('detail.mimeType')}</Label>
           <Select
+            id={mimeTypeId}
             value={detail.mimeType}
             onChange={(e): void => {
               const v = e.target.value;
@@ -491,8 +533,9 @@ export function AssetDetailDrawer({
         </div>
 
         <div className="space-y-1">
-          <Label>{t('detail.visibility')}</Label>
+          <Label htmlFor={visibilityId}>{t('detail.visibility')}</Label>
           <Select
+            id={visibilityId}
             value={detail.visibility}
             onChange={(e): void => {
               const v = e.target.value as 'public' | 'private';
@@ -513,8 +556,8 @@ export function AssetDetailDrawer({
         {canWrite ? (
           <div className="border-t pt-3">
             <AssetUploader
-              upload={askToReplace}
-              {...(accept !== undefined ? { accept } : {})}
+              upload={stageReplace}
+              {...kindProps}
               triggerLabel={t('detail.replace.trigger')}
               onUploaded={(): void => undefined}
             />
@@ -537,14 +580,15 @@ export function AssetDetailDrawer({
                 {previous.sizeBytes} {t('detail.bytes')}
               </dd>
               <dt className="text-muted-foreground">{t('detail.previous.replacedAt')}</dt>
-              <dd>{formatDate(previous.replacedAt)}</dd>
+              <dd>{formatDateTime(previous.replacedAt)}</dd>
               <dt className="text-muted-foreground">{t('detail.previous.replacedBy')}</dt>
               <dd>{previous.replacedBy?.displayName ?? t('detail.previous.unknownActor')}</dd>
               <dt className="text-muted-foreground">{t('detail.previous.restorableUntil')}</dt>
-              <dd>{formatDate(previous.restorableUntil)}</dd>
+              <dd>{formatDateTime(previous.restorableUntil)}</dd>
             </dl>
             {canWrite ? (
               <Button
+                ref={restoreButton}
                 type="button"
                 size="sm"
                 variant="outline"
@@ -600,6 +644,7 @@ export function AssetDetailDrawer({
         <ModalDialog
           title={t(permalinkConfirm === 'change' ? 'detail.permalink.changeTitle' : 'detail.permalink.removeTitle')}
           busy={busy}
+          finalFocusRef={permalinkInput}
           onClose={(): void => setPermalinkConfirm(null)}
           footer={dialogFooter(
             (): void => setPermalinkConfirm(null),
@@ -624,6 +669,7 @@ export function AssetDetailDrawer({
         <ModalDialog
           title={t('detail.permalink.reuseTitle')}
           busy={busy}
+          finalFocusRef={permalinkInput}
           onClose={(): void => setReuse(null)}
           footer={dialogFooter(
             (): void => setReuse(null),
@@ -632,10 +678,12 @@ export function AssetDetailDrawer({
           )}
         >
           <p className="text-sm">
-            {t('detail.permalink.reuseBody', {
-              permalink: reuse.permalink,
-              releasedAt: reuse.releasedAt ? formatDate(reuse.releasedAt) : '',
-            })}
+            {reuse.releasedAt
+              ? t('detail.permalink.reuseBody', {
+                  permalink: reuse.permalink,
+                  releasedAt: formatDateTime(reuse.releasedAt),
+                })
+              : t('detail.permalink.reuseBodyNoDate', { permalink: reuse.permalink })}
           </p>
         </ModalDialog>
       ) : null}
@@ -648,11 +696,16 @@ export function AssetDetailDrawer({
           footer={dialogFooter(cancelReplace, t('detail.replace.confirm'), (): void => void confirmReplace())}
         >
           <p className="text-sm">
-            {t('detail.replace.confirmBody', {
-              currentFilename: detail.filename,
-              newFilename: pendingReplace.file.name,
-              retentionDays: retentionDays ?? '…',
-            })}
+            {retentionDays !== null
+              ? t('detail.replace.confirmBody', {
+                  currentFilename: detail.filename,
+                  newFilename: pendingReplace.name,
+                  retentionDays,
+                })
+              : t('detail.replace.confirmBodyNoRetention', {
+                  currentFilename: detail.filename,
+                  newFilename: pendingReplace.name,
+                })}
           </p>
         </ModalDialog>
       ) : null}
@@ -661,6 +714,7 @@ export function AssetDetailDrawer({
         <ModalDialog
           title={t('detail.previous.confirmTitle')}
           busy={busy}
+          finalFocusRef={restoreButton}
           onClose={(): void => setRestoreConfirm(false)}
           footer={dialogFooter(
             (): void => setRestoreConfirm(false),
@@ -714,13 +768,15 @@ function Field({
   saveLabel: string;
 }): ReactNode {
   const [v, setV] = useState(value);
+  const id = useId();
   useEffect(() => setV(value), [value]);
   const dirty = v !== value;
   return (
     <div className="space-y-1">
-      <Label>{label}</Label>
+      <Label htmlFor={id}>{label}</Label>
       <div className="flex items-center gap-2">
         <Input
+          id={id}
           value={v}
           {...(placeholder !== undefined ? { placeholder } : {})}
           onChange={(e): void => setV(e.target.value)}

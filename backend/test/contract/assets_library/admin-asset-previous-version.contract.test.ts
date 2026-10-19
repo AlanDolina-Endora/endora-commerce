@@ -38,7 +38,7 @@ interface PreviousVersion {
   restorableUntil: string;
 }
 
-type Detail = AssetBody & { previousVersion: PreviousVersion | null };
+type Detail = AssetBody & { previousVersion: PreviousVersion | null; retentionDays: number };
 
 describe('the previous version and its restore (feature 156)', () => {
   let h: BackendServerHandle;
@@ -119,6 +119,8 @@ describe('the previous version and its restore (feature 156)', () => {
       replacedBy: { id: TEST_ADMIN_ID, displayName: adminDisplayName },
     });
     expect(Date.parse(previous.restorableUntil) - Date.parse(previous.replacedAt)).toBe(9 * DAY_MS);
+    // The replace confirmation names this (UI block review): the detail carries it.
+    expect(after.retentionDays).toBe(9);
 
     const first = await restore(asset.id, {
       expectedContentVersion: after.contentVersion,

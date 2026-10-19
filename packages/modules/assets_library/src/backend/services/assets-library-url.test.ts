@@ -228,6 +228,25 @@ describe('AssetsLibraryService — previousVersion (feature 156)', () => {
     const unwired = await makeService(withPrevious(ADMIN_ID)).getAsset(ASSET_ID);
     expect(unwired.previousVersion?.replacedBy).toBeNull();
   });
+
+  // UI block review: the replace confirmation names the retention, read from the
+  // detail it already loads rather than from the storage state (which probes the bucket).
+  it('carries the retention in whole days, read once, with or without a previous version', async () => {
+    let reads = 0;
+    const loadRetentionDays = async (): Promise<number> => {
+      reads += 1;
+      return 7;
+    };
+    const withPrev = await makeService(withPrevious(ADMIN_ID), '', { loadRetentionDays }).getAsset(ASSET_ID);
+    expect(withPrev.retentionDays).toBe(7);
+    expect(reads).toBe(1);
+    const without = await makeService(seededAsset(), '', { loadRetentionDays: async () => 14 }).getAsset(ASSET_ID);
+    expect(without.retentionDays).toBe(14);
+    const fractional = await makeService(seededAsset(), '', { loadRetentionDays: async () => 2.5 }).getAsset(ASSET_ID);
+    expect(fractional.retentionDays).toBe(2);
+    const unwired = await makeService(seededAsset()).getAsset(ASSET_ID);
+    expect(unwired.retentionDays).toBe(30);
+  });
 });
 
 /** specs/156-asset-stable-url/ T061 — the embed form (research R-8, contracts/file-serving.md §3). */

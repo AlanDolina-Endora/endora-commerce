@@ -48,8 +48,7 @@ permalink is changed or removed and before a name another asset used is taken; *
 which accepts only the asset's own kind and confirms naming both files and how long the current one
 stays restorable; the previous version with **Restore**; and a warning before deleting an asset that
 has a permalink. Write controls need `assets.write`. The command palette (⌘K / CTRL+K) gains
-"Media library", opening the library for anyone holding `assets.read`. The storage state
-(`GET /api/v1/admin/assets/storage/state`) also reports `retentionDays`.
+"Media library", opening the library for anyone holding `assets.read`.
 
 **Database (one migration, owned by this module).**
 
@@ -98,7 +97,9 @@ filename, type, size, content version).
 
 **The previous version and its restore.** The asset detail now carries `previousVersion` — the
 replaced file's name, type, size, content version, when and by whom it was replaced, and
-`restorableUntil` (replaced at plus `assets.soft_delete_retention_days`) — or `null`. `POST
+`restorableUntil` (replaced at plus `assets.soft_delete_retention_days`) — or `null`, and
+`retentionDays`, that setting as the sweep reads it in whole days, which the replace confirmation
+names. `POST
 /api/v1/admin/assets/:id/previous-version/restore` (`assets.write`) swaps it back: the body names
 both `expectedContentVersion` and `expectedPreviousContentVersion`, so a restore brings back
 exactly the file the admin saw, and either one being out of date answers

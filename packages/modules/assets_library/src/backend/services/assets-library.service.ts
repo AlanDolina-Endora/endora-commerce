@@ -582,16 +582,20 @@ export class AssetsLibraryService {
   private async detail(a: Asset): Promise<AssetDetail> {
     const summary = await this.summary(a);
     const references = await this.deps.referenceRegistry.findReferences(a.id);
+    // Read once: it dates the previous version and is named by the replace
+    // confirmation. Whole days, at least one, as the contract declares.
+    const retentionDays = this.deps.loadRetentionDays ? await this.deps.loadRetentionDays() : 30;
     return {
       ...summary,
       altText: a.altText ?? null,
       references,
-      previousVersion: await this.previousVersion(a),
+      previousVersion: await this.previousVersion(a, retentionDays),
+      retentionDays: Math.max(1, Math.floor(retentionDays)),
     };
   }
 
   /** The kept previous version as the detail panel shows it (FR-022, FR-023). */
-  private async previousVersion(a: Asset): Promise<AssetPreviousVersion | null> {
+  private async previousVersion(a: Asset, retentionDays: number): Promise<AssetPreviousVersion | null> {
     if (
       !a.previousStorageLocator ||
       !a.previousFilename ||
@@ -602,7 +606,6 @@ export class AssetsLibraryService {
     ) {
       return null;
     }
-    const retentionDays = this.deps.loadRetentionDays ? await this.deps.loadRetentionDays() : 30;
     let replacedBy: AssetPreviousVersion['replacedBy'] = null;
     if (a.previousReplacedBy && this.deps.adminUsers) {
       const admin = await this.deps.adminUsers.findById(a.previousReplacedBy);

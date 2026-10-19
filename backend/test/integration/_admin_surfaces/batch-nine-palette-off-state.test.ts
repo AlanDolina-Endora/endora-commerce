@@ -34,13 +34,13 @@ import { withModuleOff, type OffStateAxis } from '../../helpers/off-state.js';
  * the two declarations are read from the two artefacts and compared here rather
  * than copied into a table.
  *
- * `assets_library` declares **none**, and that is asserted rather than skipped:
- * a module with no action has nothing to advertise, so the honest test is that
- * the registry answers nothing for it in both states — which also fails if
- * somebody adds one without adding it to this table. It is a Principle XVI
- * entry the register still owes; it is not this batch's to pay, because
- * inventing a landing action for a screen is a product decision and not a file
- * move.
+ * `assets_library` declared none when this batch landed, and paid that
+ * Principle XVI entry later (`specs/156-asset-stable-url/`): it now declares
+ * `open-assets-library` ("Media library", `assets.read`), so it is held to the
+ * same two proofs — the advertisement goes when the module does, and the
+ * declared permission is the one its own `./admin` route enforces. The table
+ * below names its action ids, so adding or dropping one without updating it
+ * fails here.
  *
  * ## The axis is chosen from the manifest, not guessed
  *

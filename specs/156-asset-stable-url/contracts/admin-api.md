@@ -46,6 +46,9 @@ export const assetPreviousVersionSchema = z.object({
 //   contentVersion: z.string()
 // assetDetailSchema gains:
 //   previousVersion: assetPreviousVersionSchema.nullable()
+//   retentionDays:   z.number().int().min(1) — `assets.soft_delete_retention_days` as the sweep
+//                    reads it, in whole days; named by the replace confirmation (UI block review:
+//                    read with the detail, not from the storage state, which probes the bucket)
 
 export const setAssetPermalinkRequestSchema = z.object({
   permalink: z.string().max(ASSET_PERMALINK_MAX_LENGTH * 2), // shape judged by validateAssetPermalink

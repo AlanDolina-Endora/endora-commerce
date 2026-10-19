@@ -105,6 +105,9 @@ export function AssetUploader({
           ref={fileInput}
           type="file"
           className="hidden"
+          // Named like its trigger: hidden from view, but not from every
+          // assistive technology or audit that reads the markup.
+          aria-label={triggerLabel ?? t('assetPicker.upload.trigger')}
           accept={accept}
           onChange={onChange}
         />

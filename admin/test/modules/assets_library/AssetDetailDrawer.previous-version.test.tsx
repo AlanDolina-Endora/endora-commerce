@@ -84,6 +84,35 @@ describe('AssetDetailDrawer — previous version', () => {
     });
   });
 
+  it('restores with the versions of the detail it rendered last — the one a replace answered', async () => {
+    client.current!.getAsset.mockResolvedValue(detail());
+    client.current!.replaceAsset.mockResolvedValue(
+      detail({
+        filename: 'certificate-2026.pdf',
+        contentVersion: 'ffffffffffff',
+        previousVersion: { ...PREVIOUS, filename: 'certificate.pdf', contentVersion: 'a1b2c3d4e5f6' },
+      }),
+    );
+    client.current!.restorePreviousVersion.mockResolvedValue(detail());
+    const user = userEvent.setup();
+    const { container } = render();
+    await screen.findByRole('button', { name: en('detail.replace.trigger') });
+    await user.upload(
+      container.querySelector('input[type="file"]') as HTMLInputElement,
+      new File(['%PDF-1.4 new'], 'certificate-2026.pdf', { type: 'application/pdf' }),
+    );
+    const replace = await screen.findByRole('dialog', { name: en('detail.replace.confirmTitle') });
+    await user.click(within(replace).getByRole('button', { name: en('detail.replace.confirm') }));
+    await user.click(await screen.findByRole('button', { name: en('detail.previous.restore') }));
+    const dialog = await screen.findByRole('dialog', { name: en('detail.previous.confirmTitle') });
+    await user.click(within(dialog).getByRole('button', { name: en('detail.previous.restore') }));
+    await waitFor(() => expect(client.current!.restorePreviousVersion).toHaveBeenCalledTimes(1));
+    expect(client.current!.restorePreviousVersion).toHaveBeenCalledWith(ASSET_ID, {
+      expectedContentVersion: 'ffffffffffff',
+      expectedPreviousContentVersion: 'a1b2c3d4e5f6',
+    });
+  });
+
   it('shows a conflict with the server sentence and Reload', async () => {
     client.current!.getAsset.mockResolvedValue(detail({ previousVersion: PREVIOUS }));
     client.current!.restorePreviousVersion.mockRejectedValue(

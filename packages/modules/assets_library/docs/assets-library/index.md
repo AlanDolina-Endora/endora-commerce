@@ -41,8 +41,7 @@ The Assets Library is the platform's digital-asset substrate. It owns:
    `assets.gcs.public_base_url`.
 5. **Test the connection** — `POST /api/v1/admin/assets/storage/self-check`.
    Returns `{ ok: true }` on success or `{ ok: false, reason: ... }` on
-   misconfiguration. The dashboard is at `GET /api/v1/admin/assets/storage/state`,
-   which also reports the effective `retentionDays`.
+   misconfiguration. The dashboard is at `GET /api/v1/admin/assets/storage/state`.
 
 The admin opens the library from the sidebar or from the command palette
 (⌘K / CTRL+K → "Media library", for anyone holding `assets.read`). The asset
@@ -215,7 +214,8 @@ A replace keeps the file it replaced as the asset's **previous version**; one
 is kept, and a further replace discards the one before it. The asset detail
 reports it as `previousVersion` — name, type, size, content version, when and
 by whom it was replaced, and `restorableUntil` (replaced at plus the retention
-period) — or `null`.
+period) — or `null`. The detail also answers `retentionDays`, the effective
+retention period in whole days, which the replace confirmation names.
 
 `POST /api/v1/admin/assets/:id/previous-version/restore` (**Restore** in the
 drawer) swaps the two: the previous file becomes current and the current one

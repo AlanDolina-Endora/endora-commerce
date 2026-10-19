@@ -38,8 +38,7 @@ Biblioteka mediów (Assets Library) to warstwa plików cyfrowych platformy. Zape
    `assets.gcs.prefix`, `assets.gcs.public_base_url`.
 5. **Test połączenia** — `POST /api/v1/admin/assets/storage/self-check`. Zwraca `{ ok: true }` po
    powodzeniu albo `{ ok: false, reason: ... }` przy błędnej konfiguracji. Stan przechowywania
-   pokazuje `GET /api/v1/admin/assets/storage/state`, który podaje też obowiązujący okres
-   przechowywania `retentionDays`.
+   pokazuje `GET /api/v1/admin/assets/storage/state`.
 
 Panel otwiera bibliotekę z menu bocznego albo z palety poleceń (⌘K / CTRL+K → „Biblioteka
 mediów”, dla każdego z uprawnieniem `assets.read`). Panel szczegółów pliku zawiera link do
@@ -193,7 +192,8 @@ Ustawienie i usunięcie stałego linku to audytowane komendy `asset.permalink_se
 Podmiana zachowuje zastąpiony plik jako **poprzednią wersję**; przechowywana jest jedna, a kolejna
 podmiana odrzuca wcześniejszą. Szczegóły pliku podają ją jako `previousVersion` — nazwa, typ,
 rozmiar, wersja zawartości, kiedy i przez kogo plik został podmieniony oraz `restorableUntil` (chwila
-podmiany plus okres przechowywania) — albo `null`.
+podmiany plus okres przechowywania) — albo `null`. Szczegóły podają też `retentionDays`, czyli
+obowiązujący okres przechowywania w pełnych dniach, który wymienia potwierdzenie podmiany.
 
 `POST /api/v1/admin/assets/:id/previous-version/restore` (**Przywróć poprzednią wersję** w panelu
 szczegółów) zamienia je miejscami: poprzedni plik staje się bieżącym, a bieżący — poprzednią wersją z

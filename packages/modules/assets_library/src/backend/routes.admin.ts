@@ -43,8 +43,6 @@ export interface AdminRoutesDeps {
   adapters: AdapterRegistry;
   emFactory: () => EntityManager;
   requireAdmin: RequireAdminFactory;
-  /** `assets.soft_delete_retention_days` as the sweep reads it; reported by the storage state. */
-  loadRetentionDays: () => Promise<number>;
 }
 
 /**
@@ -62,7 +60,7 @@ export async function registerAssetsLibraryAdminRoutes(
   app: FastifyInstance,
   deps: AdminRoutesDeps,
 ): Promise<void> {
-  const { service, folders, adapters, emFactory, requireAdmin, loadRetentionDays } = deps;
+  const { service, folders, adapters, emFactory, requireAdmin } = deps;
 
   // — POST /assets (multipart upload) -----------------------------------------
   app.post(
@@ -355,7 +353,6 @@ export async function registerAssetsLibraryAdminRoutes(
           selfCheck: result,
           pendingCleanupCount,
           softDeletedCount,
-          retentionDays: await loadRetentionDays(),
         },
       };
     },

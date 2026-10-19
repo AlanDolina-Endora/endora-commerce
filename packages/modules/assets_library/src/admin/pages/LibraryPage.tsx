@@ -270,6 +270,7 @@ export function LibraryPage(): ReactNode {
         {selected ? (
           <div className="col-span-3">
             <AssetDetailDrawer
+              key={selected}
               assetId={selected}
               onChanged={(): void => {
                 void loadItems();

@@ -73,14 +73,4 @@ describe('admin storage self-check + state (T073)', () => {
     expect(typeof out.pendingCleanupCount).toBe('number');
     expect(typeof out.softDeletedCount).toBe('number');
   });
-
-  // specs/156-asset-stable-url/ T074: the drawer's replace confirmation names how
-  // long the replaced file stays restorable, and an `assets.read` admin reads it here.
-  it('carries the retention in days, as the sweep reads it', async () => {
-    const r = await h.app.inject({ method: 'GET', url: '/api/v1/admin/assets/storage/state', cookies: adminCookie });
-    expect(r.statusCode).toBe(200);
-    const out = (r.json() as { data: { retentionDays: number } }).data;
-    expect(out.retentionDays).toBe(await h.assetsLibrary.loadRetentionDays());
-    expect(out.retentionDays).toBeGreaterThanOrEqual(1);
-  });
 });

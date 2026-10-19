@@ -17,7 +17,7 @@ import { adminSession, withSession } from '../../helpers/render-with-session';
 export const EN = JSON.parse(
   readFileSync(resolve(process.cwd(), '../packages/modules/assets_library/i18n/en.json'), 'utf8'),
 ) as Record<string, string>;
-const CORE = JSON.parse(
+export const CORE = JSON.parse(
   readFileSync(resolve(process.cwd(), '../packages/modules/_i18n/i18n/en.json'), 'utf8'),
 ) as Record<string, string>;
 
@@ -25,6 +25,13 @@ const CORE = JSON.parse(
 export function en(key: string, values: Record<string, string | number> = {}): string {
   const template = EN[key];
   if (template === undefined) throw new Error(`assets_library en.json has no ${key}`);
+  return template.replace(/\{(\w+)\}/g, (_m, name: string) => String(values[name] ?? `{${name}}`));
+}
+
+/** The kit's (`core`) English sentence for a key, with `{name}` placeholders filled. */
+export function core(key: string, values: Record<string, string | number> = {}): string {
+  const template = CORE[key];
+  if (template === undefined) throw new Error(`core en.json has no ${key}`);
   return template.replace(/\{(\w+)\}/g, (_m, name: string) => String(values[name] ?? `{${name}}`));
 }
 
@@ -52,6 +59,7 @@ export function detail(over: Partial<AssetDetail> = {}): AssetDetail {
     altText: null,
     references: [],
     previousVersion: null,
+    retentionDays: 30,
     ...over,
   };
 }
@@ -68,7 +76,6 @@ export interface MockClient {
   restorePreviousVersion: Mock;
   setPermalink: Mock;
   removePermalink: Mock;
-  getRetentionDays: Mock;
 }
 
 export function mockClient(): MockClient {
@@ -80,13 +87,14 @@ export function mockClient(): MockClient {
     restorePreviousVersion: vi.fn(),
     setPermalink: vi.fn(),
     removePermalink: vi.fn(),
-    getRetentionDays: vi.fn(async () => 30) as Mock,
   };
 }
 
+/** The element `renderDrawer` mounts — also what a `rerender` passes. */
+export function drawerUi(ui: ReactElement, permissions: readonly string[]): ReactElement {
+  return withSession(<StrictMode>{ui}</StrictMode>, { session: adminSession({ permissions }) });
+}
+
 export function renderDrawer(ui: ReactElement, permissions: readonly string[]): ReturnType<typeof renderWithI18n> {
-  return renderWithI18n(
-    withSession(<StrictMode>{ui}</StrictMode>, { session: adminSession({ permissions }) }),
-    { assets_library: EN, core: CORE },
-  );
+  return renderWithI18n(drawerUi(ui, permissions), { assets_library: EN, core: CORE });
 }

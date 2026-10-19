@@ -16,7 +16,6 @@ import type {
   PatchAssetRequest,
   PatchFolderRequest,
   RestorePreviousAssetVersionRequest,
-  StorageStateResponse,
 } from '@endora-commerce/contracts';
 
 export type { AssetSummary, AssetDetail, AssetFolder };
@@ -93,7 +92,10 @@ export const assetsLibraryClient = {
    * Replace the file in place. Multipart, so it goes through `fetch` over the
    * published origin as the kit's upload does; `expectedContentVersion` is sent
    * before the file part. A refusal is thrown as the kit's `ApiError`, so the
-   * drawer reads its code and details as it does for every other request.
+   * drawer reads its code and details as it does for every other request; an
+   * answer that is not an error envelope (an HTML page from a proxy) becomes
+   * `INTERNAL` with the status alone, as the kit's client makes it, never the
+   * raw body.
    */
   async replaceAsset(id: string, file: File, expectedContentVersion: string): Promise<AssetDetail> {
     const fd = new FormData();
@@ -105,17 +107,11 @@ export const assetsLibraryClient = {
       body: fd,
     });
     if (!r.ok) {
-      const text = await r.text();
-      let envelope: unknown = null;
-      try {
-        envelope = JSON.parse(text);
-      } catch {
-        envelope = null;
-      }
+      const envelope: unknown = await r.json().catch(() => null);
       if (envelope && typeof envelope === 'object' && 'error' in envelope) {
         throw new ApiError(r.status, envelope as ConstructorParameters<typeof ApiError>[1]);
       }
-      throw new Error(`Replace failed (${r.status}): ${text}`);
+      throw new ApiError(r.status, { error: { code: 'INTERNAL', message: `HTTP ${r.status}` } });
     }
     return ((await r.json()) as { data: AssetDetail }).data;
   },
@@ -146,12 +142,6 @@ export const assetsLibraryClient = {
   async removePermalink(id: string): Promise<AssetDetail> {
     const out = await apiClient.delete<{ data: AssetDetail }>(`/api/v1/admin/assets/${id}/permalink`);
     return out.data;
-  },
-
-  /** How long a replaced file stays restorable, as the retention sweep reads it. */
-  async getRetentionDays(): Promise<number> {
-    const out = await apiClient.get<StorageStateResponse>('/api/v1/admin/assets/storage/state');
-    return out.data.retentionDays;
   },
 
   // — Folders --------------------------------------------------------------

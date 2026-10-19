@@ -153,6 +153,12 @@ export const assetDetailSchema = assetSummarySchema.extend({
   references: z.array(assetReferenceSchema),
   /** The one kept previous version of the file, or null (specs/156-asset-stable-url/). */
   previousVersion: assetPreviousVersionSchema.nullable(),
+  /**
+   * `assets.soft_delete_retention_days` as the retention sweep reads it, in
+   * whole days (at least one): how long a replaced file stays restorable, named
+   * by the replace confirmation (specs/156-asset-stable-url/).
+   */
+  retentionDays: z.number().int().min(1),
 });
 export type AssetDetail = z.infer<typeof assetDetailSchema>;
 
@@ -295,12 +301,6 @@ export const storageStateResponseSchema = z.object({
     selfCheck: z.object({ ok: z.boolean(), reason: z.string().optional() }),
     pendingCleanupCount: z.number().int().nonnegative(),
     softDeletedCount: z.number().int().nonnegative(),
-    /**
-     * `assets.soft_delete_retention_days` as the retention sweep reads it (at
-     * least one day) — how long a deleted asset or a replaced file stays
-     * restorable (specs/156-asset-stable-url/).
-     */
-    retentionDays: z.number().positive(),
   }),
 });
 export type StorageStateResponse = z.infer<typeof storageStateResponseSchema>;

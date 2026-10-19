@@ -37,11 +37,13 @@ removePermalink(id: string): Promise<AssetDetail>;
 
 | Section | Visible with | Behaviour |
 | --- | --- | --- |
-| Shareable URL | `assets.read` | `permalinkUrl ?? fileUrl`, read-only, **Copy** button → "Copied" for 2 s; a muted notice when private: *not publicly reachable while the asset is private* (FR-018, FR-021) |
+| Shareable URL | `assets.read` | `permalinkUrl ?? fileUrl`, read-only, **Copy** button → "Copied" for 2 s, or *could not copy* when the clipboard refuses or is absent; a muted notice when private: *not publicly reachable while the asset is private* (FR-018, FR-021) |
 | Permalink | input visible with `assets.read`, editable with `assets.write` | inline error from `validateAssetPermalink`; **Save** disabled while invalid or unchanged; changing or removing a set permalink opens a `ModalDialog` warning that the old address will stop working at once (FR-019); a `409 ASSET_PERMALINK_PREVIOUSLY_USED` opens a second `ModalDialog` (*reuse*) — **Use it anyway** re-sends with `confirmReuse: true`, **Cancel** sends nothing (owner ruling P5); other server refusals shown in an `Alert` with `error.message` |
-| Replace file | `assets.write` | `AssetUploader` with `upload` and `accept` by kind; after a file is chosen, a `ModalDialog` names the current and the new filename and says every link will serve the new file; confirm → upload; success reloads the detail; kind mismatch shows the drawer's own sentence (§4); conflict shows the server sentence and a **Reload** button |
+| Replace file | `assets.write` | `AssetUploader` with `upload`, `accept` and (image, video) `acceptPrefix` by kind; after a file is chosen, a `ModalDialog` names the current and the new filename, the detail's `retentionDays` (a sentence without the number when absent) and says every link will serve the new file; confirm → upload; success shows the detail the replace answered; kind mismatch shows the drawer's own sentence (§4), or the server's when the refusal names no kinds; conflict shows the server sentence and a **Reload** button |
 | Previous version | `assets.read`, Restore with `assets.write` | filename, type, size, replaced at, replaced by (or *unknown*), restorable until; **Restore** → `ModalDialog` → restore with the asset's `contentVersion` and `previousVersion.contentVersion`; a `409 ASSET_REPLACE_CONFLICT` shows the message and **Reload**; absent section when `previousVersion` is null |
 | Soft delete | unchanged gate | when `permalink` is set, a `ModalDialog` first states that `<permalinkUrl>` will answer "gone" (FR-020); without a permalink unchanged |
+
+The drawer is keyed by the asset id, so no draft, dialog or refusal carries from one asset to another. A permalink dialog returns focus to the permalink input; the restore dialog to **Restore**. A confirming button stays focusable with `aria-busy` while its request runs. An answer that is not an error envelope shows `detail.error.generic`, never a raw body.
 
 All async actions follow the StrictMode rules (tasks.md standing rule 2): an `alive` flag set in
 the effect body and cleared in cleanup; "done" only after the response arrives.
@@ -85,6 +87,12 @@ kind.image | kind.video | kind.pdf | kind.other     an image | a video | a PDF |
 actions.openLibrary.label        Media library
 actions.openLibrary.description  Browse, upload and replace files, and manage permalinks.
 errors.ASSET_REPLACE_KIND_MISMATCH … errors.ASSET_PERMALINK_PREVIOUSLY_USED, errors.ASSET_PERMALINK_INVALID.<reason>   (contracts/admin-api.md §4)
+# Added by the UI block review (2026-10-19):
+detail.close                     Close asset detail
+detail.error.generic             The request failed. Try again.
+detail.shareUrl.copyFailed       The link could not be copied. Select it and copy it by hand.
+detail.permalink.reuseBodyNoDate {permalink} pointed to another file before. Links printed or shared with it will open this asset from now on.
+detail.replace.confirmBodyNoRetention  {currentFilename} will be replaced with {newFilename}. Every page, e-mail and link that uses this asset will show the new file. You can restore the current file afterwards for a limited time.
 ```
 
 Polish values are written in the same commit; `check:bundle-pairing`,

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ASSET_ID, detail, en, mockClient, refusal, renderDrawer } from './drawer-fixtures';
+import { ASSET_ID, core, detail, en, mockClient, refusal, renderDrawer } from './drawer-fixtures';
 
 /**
  * `specs/156-asset-stable-url/` T072 — **Replace file** in the asset detail
@@ -49,10 +49,11 @@ describe('AssetDetailDrawer — replace file', () => {
     expect(screen.queryByRole('button', { name: en('detail.replace.trigger') })).toBeNull();
   });
 
-  it('accepts only the asset’s own kind, confirms naming both files and the retention, then replaces once and reloads', async () => {
-    client.current!.getAsset.mockResolvedValue(detail());
-    client.current!.getRetentionDays.mockResolvedValue(14);
-    client.current!.replaceAsset.mockResolvedValue(detail({ filename: 'certificate-2026.pdf', contentVersion: 'ffffffffffff' }));
+  it('accepts only the asset’s own kind, confirms naming both files and the retention, then replaces once and shows the answer', async () => {
+    client.current!.getAsset.mockResolvedValue(detail({ retentionDays: 14 }));
+    client.current!.replaceAsset.mockResolvedValue(
+      detail({ filename: 'certificate-2026.pdf', contentVersion: 'ffffffffffff', retentionDays: 14 }),
+    );
     const user = userEvent.setup();
     const { container } = render();
     await screen.findByRole('button', { name: en('detail.replace.trigger') });
@@ -66,11 +67,84 @@ describe('AssetDetailDrawer — replace file', () => {
       ),
     ).toBeInTheDocument();
     expect(client.current!.replaceAsset).not.toHaveBeenCalled();
+    const fetches = client.current!.getAsset.mock.calls.length;
 
     await user.click(within(dialog).getByRole('button', { name: en('detail.replace.confirm') }));
     await waitFor(() => expect(client.current!.replaceAsset).toHaveBeenCalledTimes(1));
     expect(client.current!.replaceAsset).toHaveBeenCalledWith(ASSET_ID, NEW_PDF, 'a1b2c3d4e5f6');
-    await waitFor(() => expect(client.current!.getAsset.mock.calls.length).toBeGreaterThanOrEqual(2));
+    // US1-1: the drawer shows the server's answer — the new filename — without fetching again.
+    expect(await screen.findByDisplayValue('certificate-2026.pdf')).toBeInTheDocument();
+    expect(client.current!.getAsset.mock.calls.length).toBe(fetches);
+  });
+
+  it('keeps the trigger’s own label while the confirmation is open, not "Uploading…"', async () => {
+    client.current!.getAsset.mockResolvedValue(detail());
+    const user = userEvent.setup();
+    const { container } = render();
+    await screen.findByRole('button', { name: en('detail.replace.trigger') });
+    await user.upload(fileInput(container), NEW_PDF);
+    await screen.findByRole('dialog', { name: en('detail.replace.confirmTitle') });
+    expect(screen.getByRole('button', { name: en('detail.replace.trigger') })).toBeEnabled();
+    expect(screen.queryAllByText(core('assetPicker.upload.uploading'))).toEqual([]);
+  });
+
+  it.each([
+    ['image/png', 'image/*'],
+    ['image/svg+xml', 'image/*'],
+    ['video/mp4', 'video/*'],
+  ])('accepts %s assets as %s', async (mimeType, accept) => {
+    client.current!.getAsset.mockResolvedValue(detail({ mimeType, filename: 'photo' }));
+    const { container } = render();
+    await screen.findByRole('button', { name: en('detail.replace.trigger') });
+    expect(fileInput(container).getAttribute('accept')).toBe(accept);
+  });
+
+  it('sets no accept attribute for an asset of another kind', async () => {
+    client.current!.getAsset.mockResolvedValue(detail({ mimeType: 'application/zip', filename: 'bundle.zip' }));
+    const { container } = render();
+    await screen.findByRole('button', { name: en('detail.replace.trigger') });
+    expect(fileInput(container).hasAttribute('accept')).toBe(false);
+  });
+
+  it('refuses a dropped file of the wrong kind for an image asset before asking or sending', async () => {
+    client.current!.getAsset.mockResolvedValue(detail({ mimeType: 'image/png', filename: 'photo.png' }));
+    const { container } = render();
+    await screen.findByRole('button', { name: en('detail.replace.trigger') });
+    const zone = fileInput(container).parentElement as HTMLElement;
+    fireEvent.drop(zone, { dataTransfer: { files: [NEW_PDF] } });
+    expect(
+      await screen.findByText(core('assetPicker.upload.error.wrongType', { expected: 'image', actual: 'application/pdf' })),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(client.current!.replaceAsset).not.toHaveBeenCalled();
+  });
+
+  it('Escape on the confirmation replaces nothing', async () => {
+    client.current!.getAsset.mockResolvedValue(detail());
+    const user = userEvent.setup();
+    const { container } = render();
+    await screen.findByRole('button', { name: en('detail.replace.trigger') });
+    await user.upload(fileInput(container), NEW_PDF);
+    await screen.findByRole('dialog', { name: en('detail.replace.confirmTitle') });
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(client.current!.replaceAsset).not.toHaveBeenCalled();
+  });
+
+  it('confirms without a number when the detail carries no retention, never with a placeholder', async () => {
+    const { retentionDays: _omit, ...withoutRetention } = detail();
+    client.current!.getAsset.mockResolvedValue(withoutRetention);
+    const user = userEvent.setup();
+    const { container } = render();
+    await screen.findByRole('button', { name: en('detail.replace.trigger') });
+    await user.upload(fileInput(container), NEW_PDF);
+    const dialog = await screen.findByRole('dialog', { name: en('detail.replace.confirmTitle') });
+    expect(
+      within(dialog).getByText(
+        en('detail.replace.confirmBodyNoRetention', { currentFilename: 'certificate.pdf', newFilename: 'certificate-2026.pdf' }),
+      ),
+    ).toBeInTheDocument();
+    expect(dialog.textContent).not.toMatch(/…|undefined|\{retentionDays\}/);
   });
 
   it('Cancel on the confirmation replaces nothing', async () => {
@@ -101,6 +175,34 @@ describe('AssetDetailDrawer — replace file', () => {
         en('detail.replace.kindMismatch', { currentKind: en('kind.pdf'), newKind: en('kind.image') }),
       ),
     ).toBeInTheDocument();
+  });
+
+  it('falls back to the server sentence for a kind mismatch without details, never "undefined"', async () => {
+    client.current!.getAsset.mockResolvedValue(detail());
+    client.current!.replaceAsset.mockRejectedValue(
+      refusal(415, 'ASSET_REPLACE_KIND_MISMATCH', 'The file you chose is a different kind.'),
+    );
+    const user = userEvent.setup();
+    const { container } = render();
+    await screen.findByRole('button', { name: en('detail.replace.trigger') });
+    await user.upload(fileInput(container), NEW_PDF);
+    const dialog = await screen.findByRole('dialog', { name: en('detail.replace.confirmTitle') });
+    await user.click(within(dialog).getByRole('button', { name: en('detail.replace.confirm') }));
+    expect(await screen.findByText('The file you chose is a different kind.')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('undefined');
+  });
+
+  it('shows a translated generic sentence for an answer that is not an error envelope', async () => {
+    client.current!.getAsset.mockResolvedValue(detail());
+    client.current!.replaceAsset.mockRejectedValue(refusal(503, 'INTERNAL', 'HTTP 503'));
+    const user = userEvent.setup();
+    const { container } = render();
+    await screen.findByRole('button', { name: en('detail.replace.trigger') });
+    await user.upload(fileInput(container), NEW_PDF);
+    const dialog = await screen.findByRole('dialog', { name: en('detail.replace.confirmTitle') });
+    await user.click(within(dialog).getByRole('button', { name: en('detail.replace.confirm') }));
+    expect(await screen.findByText(en('detail.error.generic'))).toBeInTheDocument();
+    expect(screen.queryByText('HTTP 503')).toBeNull();
   });
 
   it('shows a conflict with the server sentence and a Reload that fetches the asset again', async () => {
