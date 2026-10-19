@@ -18,7 +18,7 @@ import { Asset, hasPreviousVersion, type AssetKind } from '../entities/asset.ent
 import { cloudContentDisposition } from './asset-urls.js';
 import { newContentVersion } from './content-version.js';
 import type { CleanupKey, CleanupLedgerPort } from './object-cleanup-ledger.js';
-import { mimeToKind, type StageInput, type StageResult } from './upload-pipeline.js';
+import { mimeToKind, storageUnavailable, type StageInput, type StageResult } from './upload-pipeline.js';
 import { siblingLocator } from './storage/locator.js';
 import { BackendUnavailableError, ConfigurationError, isObjectNotFound } from './storage/errors.js';
 import type { StorageAdapter, StorageCopyInput } from './storage/storage-adapter.js';
@@ -57,6 +57,13 @@ export interface AssetReplaceInput {
   declaredSize: number;
   /** The content version the admin saw; the row's current one when absent. */
   expectedContentVersion?: string;
+  /**
+   * Runs once the new bytes are staged and before anything is committed; a
+   * throw refuses the replace and cleans up like any other refusal. The route
+   * reads the rest of the request here, so a guard field sent after the file is
+   * refused rather than skipped.
+   */
+  afterStaged?: () => Promise<void>;
 }
 
 /** `certificate` is a PDF for the comparison and is kept on the row. */
@@ -88,15 +95,6 @@ export function replacementKind(
     );
   }
   return storedKind === 'certificate' ? 'certificate' : newKind;
-}
-
-function storageUnavailable(err: unknown): HttpError {
-  const reason = err instanceof Error ? err.message : String(err);
-  return new HttpError(
-    503,
-    ERROR_CODES.ASSET_STORAGE_UNAVAILABLE,
-    `The storage backend could not complete the replace: ${reason}`,
-  );
 }
 
 function isStorageFailure(err: unknown): boolean {
@@ -212,6 +210,7 @@ export async function replaceAssetFile(
       ...(backend === 's3' ? { sizeCapBytes: S3_SINGLE_REQUEST_MAX_BYTES } : {}),
     });
     const kind = replacementKind(current.kind, staged.detectedMime, staged.storedMime);
+    if (input.afterStaged) await input.afterStaged();
 
     result = await deps.commandBus.run<Asset>({
       action: 'asset.replace',

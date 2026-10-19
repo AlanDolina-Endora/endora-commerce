@@ -351,6 +351,15 @@ describe('replaceAssetFile — failures', () => {
     expect(h.locked.contentVersion).toBe(OLD_CV);
   });
 
+  it('answers 503 with the generic sentence, never the adapter text, and keeps it as the cause', async () => {
+    const h = harness({ failCopyOnto: STABLE });
+    const error = await replace(h).catch((e: unknown) => e);
+    expect(error).toMatchObject({ statusCode: 503, code: 'ASSET_STORAGE_UNAVAILABLE' });
+    expect((error as Error).message).toBe('The file storage is unavailable. Try again later.');
+    expect((error as Error).message).not.toContain('copy failed');
+    expect(((error as Error & { cause?: Error }).cause as Error).message).toBe('copy failed');
+  });
+
   it('leaves the row unchanged when the copy onto the stable key fails, and deletes both new objects', async () => {
     const h = harness({ failCopyOnto: STABLE });
     await expect(replace(h)).rejects.toMatchObject({ statusCode: 503, code: 'ASSET_STORAGE_UNAVAILABLE' });

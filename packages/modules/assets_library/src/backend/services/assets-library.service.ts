@@ -155,6 +155,7 @@ export class AssetsLibraryService {
         run: async ({ em }) => {
           const a = await em.findOne(Asset, { id: assetId }, { lockMode: LockMode.PESSIMISTIC_WRITE });
           if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+          refuseSoftDeleted(a);
           const old = a.permalink ?? null;
           if (old === permalink) {
             return { result: a, before: null, after: null, skipAudit: true };
@@ -223,6 +224,7 @@ export class AssetsLibraryService {
       run: async ({ em }) => {
         const a = await em.findOne(Asset, { id: assetId }, { lockMode: LockMode.PESSIMISTIC_WRITE });
         if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+        refuseSoftDeleted(a);
         const old = a.permalink ?? null;
         if (old === null) return { result: a, before: null, after: null, skipAudit: true };
         await this.#release(em, old, assetId, 'removed');
@@ -627,6 +629,16 @@ export class AssetsLibraryService {
         a.previousReplacedAt.getTime() + retentionDays * 24 * 60 * 60 * 1000,
       ).toISOString(),
     };
+  }
+}
+
+/**
+ * A soft-deleted asset's permalink is not changed: it is refused like a replace
+ * or a restore of its file, and the asset keeps the permalink it had.
+ */
+function refuseSoftDeleted(a: Asset): void {
+  if (a.deletedAt) {
+    throw new HttpError(410, ERROR_CODES.ASSET_GONE, 'Restore the asset before changing its permalink.');
   }
 }
 

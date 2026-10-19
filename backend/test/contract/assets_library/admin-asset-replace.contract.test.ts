@@ -400,6 +400,31 @@ describe('POST /api/v1/admin/assets/:id/replace (feature 156)', () => {
     expect((await detail(asset.id)).filename).toBe(first);
   });
 
+  // Security review: the guard field must come first. One that arrives after the
+  // file would have been skipped; it is refused before anything is committed.
+  it('refuses expectedContentVersion sent after the file part with 400 VALIDATION_FAILED, changing nothing', async () => {
+    const asset = await upload(`${runName()}.pdf`, 'application/pdf', pdfBytes('late-field'));
+    const { body, contentType } = multipartBody([
+      { name: 'file', filename: `${runName()}-late.pdf`, mime: 'application/pdf', value: pdfBytes('late') },
+      { name: 'expectedContentVersion', value: asset.contentVersion },
+    ]);
+    const res = await h.app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/assets/${asset.id}/replace`,
+      headers: { 'content-type': contentType },
+      cookies: ADMIN,
+      payload: body,
+    });
+    expect(res.statusCode, res.body).toBe(400);
+    const error = (res.json() as { error: { code: string; message: string } }).error;
+    expect(error.code).toBe('VALIDATION_FAILED');
+    expect(error.message).toMatch(/expectedContentVersion.*before the file/);
+    const after = await detail(asset.id);
+    expect(after.filename).toBe(asset.filename);
+    expect(after.contentVersion).toBe(asset.contentVersion);
+    expect(await cleanupEntriesOf(h, asset.id)).toEqual([]);
+  });
+
   it('answers 201 with one asset when an upload carries a second file part, ignoring it', async () => {
     const first = `${runName()}-first.pdf`;
     const second = `${runName()}-second.pdf`;

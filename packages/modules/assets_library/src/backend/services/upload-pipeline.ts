@@ -28,6 +28,22 @@ import type { AssetVisibility, StorageAdapter } from './storage/storage-adapter.
 import { isActiveDocument, isSvg, SVG_MIME } from './content-policy.js';
 import { cloudContentDisposition } from './asset-urls.js';
 
+
+/** The sentence a storage failure answers with: generic, whatever the adapter said. */
+export const STORAGE_UNAVAILABLE_MESSAGE = 'The file storage is unavailable. Try again later.';
+
+/**
+ * A storage failure as the API answers it (security review): `503` with the
+ * generic sentence, never the adapter's own text — which can name an absolute
+ * path, a bucket or an endpoint. The adapter error rides along as `cause`, so
+ * the platform's 5xx log line carries the detail an operator needs.
+ */
+export function storageUnavailable(err: unknown): HttpError {
+  const error = new HttpError(503, ERROR_CODES.ASSET_STORAGE_UNAVAILABLE, STORAGE_UNAVAILABLE_MESSAGE);
+  error.cause = err;
+  return error;
+}
+
 export interface UploadPolicy {
   /** From `assets.allowed_file_types` setting; `['*']` ⇒ unrestricted. */
   allowedTypes: string[];
@@ -284,12 +300,7 @@ export class UploadPipeline {
             )
           : tooLarge(capMb, `File exceeds the ${capMb} MB a single storage request accepts.`);
       }
-      const reason = err instanceof Error ? err.message : String(err);
-      throw new HttpError(
-        503,
-        ERROR_CODES.ASSET_STORAGE_UNAVAILABLE,
-        `Storage adapter failed to persist the upload: ${reason}`,
-      );
+      throw storageUnavailable(err);
     }
 
     return {

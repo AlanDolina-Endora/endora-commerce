@@ -370,3 +370,19 @@ describe('mimeToKind', () => {
     expect(mimeToKind(mime)).toBe(kind);
   });
 });
+
+/** Security review: a 503 never echoes the adapter's own text, which can name paths or buckets. */
+describe('UploadPipeline.stage — storage failure', () => {
+  it('answers 503 with the generic sentence and keeps the adapter error as the cause', async () => {
+    const s = stager();
+    const failure = new Error("EACCES: permission denied, open '/srv/private/var/assets/aa/bb/stage.bin'");
+    s.adapter.put = async () => {
+      throw failure;
+    };
+    const error = await s.stage('photo.png', 'image/png', Readable.from([TINY_PNG])).catch((e: unknown) => e);
+    expect(error).toMatchObject({ statusCode: 503, code: 'ASSET_STORAGE_UNAVAILABLE' });
+    expect((error as Error).message).not.toContain('/srv/private');
+    expect((error as Error).message).toBe('The file storage is unavailable. Try again later.');
+    expect((error as Error & { cause?: unknown }).cause).toBe(failure);
+  });
+});

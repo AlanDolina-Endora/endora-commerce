@@ -16,6 +16,7 @@
 // land in subsequent user stories.
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { Multipart } from '@fastify/multipart';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   ERROR_CODES,
@@ -145,30 +146,52 @@ export async function registerAssetsLibraryAdminRoutes(
       }
       let expectedContentVersion: string | undefined;
       let detail: Awaited<ReturnType<typeof service.replace>> | null = null;
-      try {
-        for await (const part of req.parts()) {
+      const parts = req.parts()[Symbol.asyncIterator]();
+      // The parts after the file, read once its bytes are staged and before the
+      // swap commits: a guard field there arrived too late to guard anything and
+      // is refused; a second file part ends the request and is ignored.
+      const readRest = async (): Promise<void> => {
+        for (;;) {
+          let next: IteratorResult<Multipart>;
+          try {
+            next = await parts.next();
+          } catch (err) {
+            if (isExtraFilePart(err)) return;
+            throw err;
+          }
+          if (next.done) return;
+          const part = next.value;
           if (part.type === 'file') {
-            if (detail) {
-              // A later file part is ignored (see `isExtraFilePart`); drain it.
-              part.file.resume();
-              continue;
-            }
-            detail = await service.replace({
-              assetId: req.params.id,
-              filename: part.filename ?? 'unknown',
-              declaredMime: part.mimetype ?? 'application/octet-stream',
-              stream: part.file,
-              // @fastify/multipart does not provide a guaranteed size.
-              declaredSize: 0,
-              ...(expectedContentVersion !== undefined ? { expectedContentVersion } : {}),
-            });
-          } else if (part.fieldname === 'expectedContentVersion') {
-            const value = String(part.value ?? '').trim();
-            expectedContentVersion = value.length > 0 ? value : undefined;
+            part.file.resume();
+          } else if (part.fieldname === 'expectedContentVersion' && String(part.value ?? '').trim() !== '') {
+            throw new HttpError(
+              400,
+              ERROR_CODES.VALIDATION_FAILED,
+              'expectedContentVersion must be sent before the file part; it arrived after it, so nothing was replaced.',
+            );
           }
         }
-      } catch (err) {
-        if (!(detail && isExtraFilePart(err))) throw err;
+      };
+      for (;;) {
+        const next = await parts.next();
+        if (next.done) break;
+        const part = next.value;
+        if (part.type === 'file') {
+          detail = await service.replace({
+            assetId: req.params.id,
+            filename: part.filename ?? 'unknown',
+            declaredMime: part.mimetype ?? 'application/octet-stream',
+            stream: part.file,
+            // @fastify/multipart does not provide a guaranteed size.
+            declaredSize: 0,
+            ...(expectedContentVersion !== undefined ? { expectedContentVersion } : {}),
+            afterStaged: readRest,
+          });
+          break;
+        } else if (part.fieldname === 'expectedContentVersion') {
+          const value = String(part.value ?? '').trim();
+          expectedContentVersion = value.length > 0 ? value : undefined;
+        }
       }
       if (!detail) {
         throw new HttpError(

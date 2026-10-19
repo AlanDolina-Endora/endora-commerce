@@ -2,7 +2,7 @@
 
 **Feature Branch**: `feat/156-asset-stable-url` (spec directory `specs/156-asset-stable-url/`)
 **Created**: 2026-10-16
-**Status**: Clarified — ready for plan (2026-10-16: round 1 Q1–Q5 and A-5, round 2 R2-1 – R2-5 and
+**Status**: Implemented, accepted with notes (2026-10-19) — every phase of `tasks.md` built, block QA, code review, security review (pass with notes) and product-owner acceptance (accepted with notes) done, the CI gate green on the tip; T093 and the manual checks remain for the owner. History: clarified — ready for plan (2026-10-16: round 1 Q1–Q5 and A-5, round 2 R2-1 – R2-5 and
 FR-018 answered by the product owner; round 3 Q1–Q3 and the architect's amendments to FR-006,
 FR-020 and FR-024 encoded the same day; 2026-10-18: owner rulings P1–P5 — read-at-sweep due rule,
 private permalinks answer `404`, purge safeguards, cloud `Content-Disposition`, confirmed reuse of a

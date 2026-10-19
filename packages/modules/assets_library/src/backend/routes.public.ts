@@ -23,7 +23,7 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { EntityManager } from '@mikro-orm/postgresql';
-import { ERROR_CODES, isAssetIdShaped } from '@endora-commerce/contracts';
+import { ERROR_CODES, isAssetIdShaped, validateAssetPermalink } from '@endora-commerce/contracts';
 
 import { HttpError } from '@endora-commerce/platform/http';
 import { Asset } from './entities/asset.entity.js';
@@ -62,6 +62,10 @@ export async function registerAssetsLibraryPublicRoutes(
     if (isAssetIdShaped(identifier)) {
       return { row: await em.findOne(Asset, { id: identifier }), form: 'id' };
     }
+    // Every stored permalink passed this rule, so a name that fails it — a NUL
+    // byte Postgres would refuse, characters outside the class, more than 200
+    // characters — names nothing: answer the unused name's 404 without a query.
+    if (!validateAssetPermalink(identifier).ok) return { row: null, form: 'permalink' };
     const hits = await em.execute<Array<{ id: string }>>(
       'select id::text as id from assets where lower(permalink) = lower(?) limit 1',
       [identifier],

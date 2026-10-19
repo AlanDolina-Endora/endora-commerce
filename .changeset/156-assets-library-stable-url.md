@@ -87,6 +87,9 @@ filename, type, size, content version).
 - Two replaces racing on the same version: one wins, the other gets `409 ASSET_REPLACE_CONFLICT`.
   A soft-deleted asset answers `410`, a legacy row `409 ASSET_LEGACY_CANNOT_REPLACE`, an
   unconfigured storage backend `503`. The asset's own backend is used, whatever the active one is.
+- `expectedContentVersion` must come before the file part. Sent after it, the request answers
+  `400 VALIDATION_FAILED`, refused once the new bytes are staged and before anything is committed,
+  so nothing is replaced; it is never silently skipped.
 - The replaced file is kept as the asset's previous version under a random, private storage key; a
   further replace discards the one before. Staging and previous objects are recorded in
   `asset_object_cleanups` before they exist, so a failed or interrupted replace leaves nothing that
@@ -115,11 +118,24 @@ operator-chosen permalink, as the audited Commands `asset.permalink_set` and
 `asset.permalink_remove`; setting the same value again, or removing none, writes nothing. A permalink
 is checked by the shared rule (`400 ASSET_PERMALINK_INVALID` with `details.code`) and is unique
 case-insensitively (`409 ASSET_PERMALINK_TAKEN` with the holder's id); a soft-deleted asset keeps
-its permalink. A permalink that was changed, removed or freed by a purge can be taken at once, but
+its permalink, and setting or removing it answers `410 ASSET_GONE` until the asset is restored. A permalink that was changed, removed or freed by a purge can be taken at once, but
 when the asset that held it last was a **different** one the request answers
 `409 ASSET_PERMALINK_PREVIOUSLY_USED` until `confirmReuse: true` is sent — links already printed with
 that name will open the new asset — and the audit entry records which asset held it. The list
 search (`q`) also matches permalinks.
+
+**Uploads take one file.** `POST /api/v1/admin/assets` now ignores a second file part and answers
+`201` with the asset the first one created; it used to answer `400 ASSET_UPLOAD_NO_FILE`. The replace
+route does the same.
+
+**Storage failures.** A storage failure during an upload or a replace answers
+`503 ASSET_STORAGE_UNAVAILABLE` with a generic, translated sentence instead of the adapter's own
+text, which could name a path, a bucket or an endpoint; the adapter's error is logged with the
+request.
+
+**Junk names on the file route.** `GET /assets/file/<name>` answers a name no permalink can be — a
+NUL byte, a character outside the permalink rule, more than 200 characters — with the same `404` as
+an unused name, without querying the database.
 
 **Retention floor.** `assets.soft_delete_retention_days` is now read as at least one day: `0`
 (or anything below one) behaves as one day, so a deletion or a replaced file is never due at once.

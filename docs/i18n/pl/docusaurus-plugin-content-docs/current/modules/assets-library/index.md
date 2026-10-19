@@ -70,7 +70,7 @@ Przesyłanie przyjmuje jedną część `file`; druga jest pomijana.
 
 | Adres | Stały? |
 | --- | --- |
-| Adres pliku `/assets/file/<id pliku>` (`fileUrl` oraz `GET /api/v1/admin/assets/:id/url` dla pliku publicznego) | Tak — w każdym mechanizmie przechowywania, po każdej podmianie, dopóki plik istnieje. |
+| Adres pliku (`fileUrl` oraz `GET /api/v1/admin/assets/:id/url` dla pliku publicznego): `/assets/file/<id pliku>` w lokalnym systemie plików; w S3 i GCS stały adres obiektu w zasobniku (na `public_base_url`, jeśli jest ustawiony) | Tak — po każdej podmianie, dopóki plik istnieje. `/assets/file/<id pliku>` odpowiada też w każdym mechanizmie przechowywania, przekierowując plik z chmury na jego adres w zasobniku. |
 | Stały link `/assets/file/<stały link>` (`permalinkUrl`) | Tak — po każdej podmianie, dopóki stały link nie zostanie zmieniony ani usunięty. |
 | Adres osadzenia `…?v=<contentVersion>` (osadzany przez katalog, CMS, feedy i e-maile) | Wskazuje jedną wersję pliku. Po podmianie przekierowuje do bieżącej wersji, więc nadal działa, ale nie jest to adres do udostępniania. |
 | Podpisany adres prywatny (`token`, `exp`) | Nie — ważny przez `assets.private_url_ttl_sec` (domyślnie 300 s) i wydawany na nowo przy każdym odczycie. |
@@ -117,6 +117,10 @@ Każdy plik ma `visibility ∈ {public, private}`. Adresy prywatne są ważne kr
 (TTL = `assets.private_url_ttl_sec`, domyślnie 300 s) i są wydawane na nowo przez panel lub
 storefront przy każdym odczycie.
 
+Przełączenie pliku na prywatny sprawia, że od następnego żądania platforma nie serwuje go bez
+podpisu, ale nie usuwa kopii, które przechowują już przeglądarki, CDN lub inne zewnętrzne pamięci
+podręczne.
+
 W adapterze **lokalnego systemu plików** adresy prywatne podpisuje backend kodem HMAC. Klucz
 podpisujący pochodzi ze zmiennej środowiskowej `ASSETS_LIBRARY_HMAC_KEY` (wygeneruj go poleceniem
 `openssl rand -hex 32`); zmiana klucza unieważnia wszystkie jeszcze ważne adresy prywatne.
@@ -151,7 +155,8 @@ podmianą pokazuje nazwy obu plików i czas, przez jaki bieżący plik będzie m
   `409 ASSET_LEGACY_CANNOT_REPLACE`; prześlij je ponownie. Plik usunięty miękko odpowiada `410`.
 - **Równoczesne podmiany.** Z dwóch podmian tej samej wersji wygrywa jedna; druga dostaje
   `409 ASSET_REPLACE_CONFLICT`. Wysłanie `expectedContentVersion` sprawia, że podmiana kończy się tak
-  samo, gdy plik zmienił się od chwili odczytu.
+  samo, gdy plik zmienił się od chwili odczytu. Pole musi poprzedzać część z plikiem; wysłane po niej
+  daje odpowiedź `400 VALIDATION_FAILED` i nic nie zostaje podmienione.
 - **Limit 5 GiB w S3.** Podmiana pliku w S3 na plik większy niż 5 GiB jest odrzucana kodem `413` z
   limitem 5120 MB — największym obiektem, jaki S3 kopiuje w jednym kroku.
 - Używany jest mechanizm przechowywania pliku, niezależnie od tego, który jest teraz aktywny.
@@ -182,7 +187,8 @@ wpisywania i prosi o potwierdzenie przed zmianą lub usunięciem ustawionego sta
   wydrukowane już linki z tą nazwą otworzą nowy plik — a wpis audytu zapisuje, który plik miał ją
   wcześniej. Plik, który odzyskuje własny dawny stały link, nie potrzebuje potwierdzenia.
 - **Usunięcie i trwałe usunięcie.** Plik usunięty miękko zachowuje stały link, który odpowiada `410`;
-  panel ostrzega przed usunięciem pliku ze stałym linkiem. Trwałe usunięcie zwalnia link.
+  panel ostrzega przed usunięciem pliku ze stałym linkiem. Trwałe usunięcie zwalnia link. Ustawienie
+  lub usunięcie stałego linku pliku usuniętego miękko daje odpowiedź `410`; najpierw przywróć plik.
 
 Ustawienie i usunięcie stałego linku to audytowane komendy `asset.permalink_set` i
 `asset.permalink_remove`. Wyszukiwanie na liście dopasowuje także stałe linki.
@@ -223,6 +229,9 @@ Co trasa pliku odpowiada w zależności od żądania:
   są za każdym razem weryfikowane ponownie, a adresy osadzenia wydawane przez platformę zawierają
   nowe `v`.
 - Niepodpisane żądanie warunkowe do pliku prywatnego nigdy nie dostaje `304`.
+- Roczna odpowiedź `immutable` na `?v=<bieżąca>` jest gwarantowana tylko w miarę możliwości, gdy
+  trwa podmiana: żądanie, które trafi w krótkie okno przed zatwierdzeniem podmiany, może zostać
+  zapisane w pamięci podręcznej z nowymi bajtami pod starym znacznikiem.
 - **Aktualizacja.** Przed tą wersją sam adres pliku był serwowany jako `immutable` na rok. Klient,
   który go wtedy zapisał w pamięci podręcznej, może trzymać swoją kopię do końca tego roku; adresy
   osadzenia są wersjonowane od tej wersji.

@@ -42,6 +42,8 @@ The permalink rule for library assets, the request shapes for setting a permalin
 
 A client that only reads these shapes needs no change. Code that builds an `AssetSummary`,
 `AssetDetail` or `AssetRecord` by hand — a test fixture, a mock, an optimistic list update — must
-add the new members. `url` and `storageUrl` keep their current values in this release.
+add the new members. The `url` and `storageUrl` members keep their shape (a string), but their
+values now carry `?v=<contentVersion>` for public assets — see the
+`@endora-commerce/mod-assets-library` changeset of this release for which values change and why.
 
 The routes that use the request schemas arrive with the assets library release that ships them.

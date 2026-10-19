@@ -256,6 +256,28 @@ describe('asset permalinks (feature 156)', () => {
     expect((res.json() as ErrorBody).error.code).toBe('ASSET_PERMALINK_TAKEN');
   });
 
+  // Security review: a soft-deleted asset is refused like a replace or a restore
+  // of it — restore the asset first — and its permalink stays as it was.
+  it('refuses to set or remove the permalink of a soft-deleted asset with 410, changing nothing', async () => {
+    const id = await asset();
+    const value = name('deleted.pdf');
+    expect((await put(id, { permalink: value })).statusCode).toBe(200);
+    expect((await h.app.inject({ method: 'DELETE', url: `/api/v1/admin/assets/${id}`, cookies: ADMIN })).statusCode).toBe(200);
+    const set = await put(id, { permalink: name('other.pdf') });
+    expect(set.statusCode, set.body).toBe(410);
+    expect((set.json() as ErrorBody).error.code).toBe('ASSET_GONE');
+    const removed = await remove(id);
+    expect(removed.statusCode, removed.body).toBe(410);
+    expect((removed.json() as ErrorBody).error.code).toBe('ASSET_GONE');
+    const rows = await h.em().fork().execute<Array<{ permalink: string | null }>>(
+      'select permalink from assets where id = ?',
+      [id],
+    );
+    expect(rows[0]?.permalink).toBe(value);
+    expect(await audits(id, 'asset.permalink_set')).toHaveLength(1);
+    expect(await audits(id, 'asset.permalink_remove')).toHaveLength(0);
+  });
+
   it('refuses an assets.read admin with 403 on PUT and DELETE', async () => {
     const id = await asset();
     expect((await put(id, { permalink: name() }, reader.cookies)).statusCode).toBe(403);

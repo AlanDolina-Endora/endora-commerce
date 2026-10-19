@@ -75,7 +75,7 @@ An upload takes one `file` part; a second one is ignored.
 
 | URL | Stable? |
 | --- | --- |
-| File URL `/assets/file/<asset id>` (`fileUrl`, and `GET /api/v1/admin/assets/:id/url` for a public asset) | Yes — on every backend, across every replace, for as long as the asset exists. |
+| File URL (`fileUrl`, and `GET /api/v1/admin/assets/:id/url` for a public asset): `/assets/file/<asset id>` on local storage; on S3 and GCS the object's stable bucket URL (on `public_base_url` when one is set) | Yes — across every replace, for as long as the asset exists. `/assets/file/<asset id>` also answers on every backend, redirecting a cloud asset to its bucket URL. |
 | Permalink `/assets/file/<permalink>` (`permalinkUrl`) | Yes — across every replace, until the permalink is changed or removed. |
 | Embed URL `…?v=<contentVersion>` (what the catalogue, CMS, feeds and e-mails embed) | Points at one version of the file. After a replace it redirects to the current version, so it keeps working, but it is not the URL to hand out. |
 | Signed private URL (`token`, `exp`) | No — valid for `assets.private_url_ttl_sec` (default 300 s) and re-issued on every read. |
@@ -124,6 +124,10 @@ Each asset has `visibility ∈ {public, private}`. Private URLs are short-lived
 (TTL = `assets.private_url_ttl_sec`, default 300s) and re-issued by the admin
 or storefront on every read.
 
+Making an asset private stops the platform serving it without a signature from
+the next request, but it does not purge copies that browsers, CDNs or other
+external caches already hold.
+
 For the **local FS** adapter, private URLs are HMAC-signed by the backend.
 The signing key is sourced from the `ASSETS_LIBRARY_HMAC_KEY` env var
 (generate with `openssl rand -hex 32`); rotate to invalidate every
@@ -166,7 +170,8 @@ stays restorable.
 - **Concurrent replaces.** Two replaces of the same version race to one winner;
   the other answers `409 ASSET_REPLACE_CONFLICT`. Sending
   `expectedContentVersion` makes a replace fail the same way when the asset
-  changed since it was read.
+  changed since it was read. The field must come before the file part; sent
+  after it, the request answers `400 VALIDATION_FAILED` and nothing is replaced.
 - **The 5 GiB ceiling on S3.** A replacement of an S3 asset above 5 GiB is
   refused with `413` naming 5120 MB, the largest object S3 copies in one step.
 - The asset's own backend is used, whatever backend is active now.
@@ -202,7 +207,8 @@ is changed or removed.
   An asset taking back its own former permalink needs no confirmation.
 - **Delete and purge.** A soft-deleted asset keeps its permalink, which answers
   `410`; the drawer warns before deleting an asset that has one. The hard
-  delete releases it.
+  delete releases it. Setting or removing the permalink of a soft-deleted asset
+  answers `410`; restore the asset first.
 
 Setting and removing a permalink are the audited Commands
 `asset.permalink_set` and `asset.permalink_remove`. The list search also
@@ -246,6 +252,9 @@ What the file route answers, by request:
   the permalink: both are revalidated every time, and the embed URLs the
   platform hands out carry the new `v`.
 - An unsigned conditional request on a private asset never receives `304`.
+- The one-year `immutable` answer on `?v=<current>` is best effort while a
+  replace is running: a request that arrives in the brief window before the
+  replace commits can be cached with the new bytes under the old marker.
 - **Upgrading.** Before this version the bare file URL was served
   `immutable` for a year. A client that cached it then can keep its copy until
   that year runs out; the embed URLs are versioned from this version on.

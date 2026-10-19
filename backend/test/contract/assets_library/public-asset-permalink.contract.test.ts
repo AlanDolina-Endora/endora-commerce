@@ -155,4 +155,25 @@ describe('serving by permalink (feature 156)', () => {
     expect(patch.statusCode).toBe(200);
     expect((await get(`/assets/file/${permalink}`)).statusCode).toBe(404);
   });
+
+  // Security review: a name no permalink can be — a NUL byte, characters outside
+  // the permalink rule, more than 200 characters — never reaches the database and
+  // answers exactly what an unused name answers.
+  it.each([
+    ['a NUL byte', 'a%00b'],
+    ['a character outside the rule', 'a%20b.pdf'],
+    ['an over-length name', 'n'.repeat(201)],
+  ])('answers %s with the 404 an unused name gets', async (_label, path) => {
+    const unused = await get(`/assets/file/${runName()}-unused.pdf`);
+    const junk = await get(`/assets/file/${path}`);
+    expect(unused.statusCode).toBe(404);
+    expect(junk.statusCode).toBe(404);
+    const strip = (body: string) => {
+      const parsed = JSON.parse(body) as { error: Record<string, unknown> };
+      delete parsed.error['requestId'];
+      return parsed;
+    };
+    expect(strip(junk.body)).toEqual(strip(unused.body));
+    for (const header of [...HEADERS, 'content-type']) expect(junk.headers[header], header).toBe(unused.headers[header]);
+  });
 });

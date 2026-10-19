@@ -44,6 +44,8 @@ Output: `{ status, headers, body: 'stream' | 'none' | { code, message }, locatio
      v ≠ current                            → 302 Location: canonical path ?v=<current>[&download=1], `no-store`
 ```
 
+An identifier that is not id-shaped and fails `validateAssetPermalink` (a NUL byte, a character outside the rule, more than 200 characters) resolves to `row = null` without a query, so it answers rule 1 like an unused name (security review 2026-10-19).
+
 A `304` is decided only after rules 1–3, so a private asset without a valid signature never answers
 `304`, whatever `If-None-Match` carries.
 

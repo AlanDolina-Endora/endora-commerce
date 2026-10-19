@@ -46,33 +46,33 @@ export const assetsLibraryClient = {
 
   async getAsset(id: string): Promise<AssetDetail> {
     const out = await apiClient.get<{ data: AssetDetail }>(
-      `/api/v1/admin/assets/${id}`,
+      `/api/v1/admin/assets/${encodeURIComponent(id)}`,
     );
     return out.data;
   },
 
   async getAssetUrl(id: string): Promise<{ url: string; expiresAt: string | null }> {
     const out = await apiClient.get<{ data: { url: string; expiresAt: string | null } }>(
-      `/api/v1/admin/assets/${id}/url`,
+      `/api/v1/admin/assets/${encodeURIComponent(id)}/url`,
     );
     return out.data;
   },
 
   async patchAsset(id: string, patch: PatchAssetRequest): Promise<AssetDetail> {
     const out = await apiClient.patch<{ data: AssetDetail }>(
-      `/api/v1/admin/assets/${id}`,
+      `/api/v1/admin/assets/${encodeURIComponent(id)}`,
       patch,
     );
     return out.data;
   },
 
   async softDeleteAsset(id: string): Promise<void> {
-    await apiClient.delete(`/api/v1/admin/assets/${id}`);
+    await apiClient.delete(`/api/v1/admin/assets/${encodeURIComponent(id)}`);
   },
 
   async restoreAsset(id: string): Promise<AssetDetail> {
     const out = await apiClient.post<{ data: AssetDetail }>(
-      `/api/v1/admin/assets/${id}/restore`,
+      `/api/v1/admin/assets/${encodeURIComponent(id)}/restore`,
       {},
     );
     return out.data;
@@ -80,7 +80,7 @@ export const assetsLibraryClient = {
 
   async moveAsset(id: string, folderId: string | null): Promise<AssetDetail> {
     const out = await apiClient.post<{ data: AssetDetail }>(
-      `/api/v1/admin/assets/${id}/move`,
+      `/api/v1/admin/assets/${encodeURIComponent(id)}/move`,
       { folderId },
     );
     return out.data;
@@ -95,13 +95,15 @@ export const assetsLibraryClient = {
    * drawer reads its code and details as it does for every other request; an
    * answer that is not an error envelope (an HTML page from a proxy) becomes
    * `INTERNAL` with the status alone, as the kit's client makes it, never the
-   * raw body.
+   * raw body. It authenticates as the kit's multipart upload does — the
+   * session cookie; the admin's shared `apiClient` is built without an API key,
+   * so no request of this screen sends a bearer token either.
    */
   async replaceAsset(id: string, file: File, expectedContentVersion: string): Promise<AssetDetail> {
     const fd = new FormData();
     fd.append('expectedContentVersion', expectedContentVersion);
     fd.append('file', file, file.name);
-    const r = await fetch(`${apiBaseUrl.replace(/\/+$/, '')}/api/v1/admin/assets/${id}/replace`, {
+    const r = await fetch(`${apiBaseUrl.replace(/\/+$/, '')}/api/v1/admin/assets/${encodeURIComponent(id)}/replace`, {
       method: 'POST',
       credentials: 'include',
       body: fd,
@@ -121,7 +123,7 @@ export const assetsLibraryClient = {
     versions: RestorePreviousAssetVersionRequest,
   ): Promise<AssetDetail> {
     const out = await apiClient.post<{ data: AssetDetail }>(
-      `/api/v1/admin/assets/${id}/previous-version/restore`,
+      `/api/v1/admin/assets/${encodeURIComponent(id)}/previous-version/restore`,
       versions,
     );
     return out.data;
@@ -132,7 +134,7 @@ export const assetsLibraryClient = {
     permalink: string,
     options?: { confirmReuse?: boolean },
   ): Promise<AssetDetail> {
-    const out = await apiClient.put<{ data: AssetDetail }>(`/api/v1/admin/assets/${id}/permalink`, {
+    const out = await apiClient.put<{ data: AssetDetail }>(`/api/v1/admin/assets/${encodeURIComponent(id)}/permalink`, {
       permalink,
       ...(options?.confirmReuse ? { confirmReuse: true } : {}),
     });
@@ -140,7 +142,7 @@ export const assetsLibraryClient = {
   },
 
   async removePermalink(id: string): Promise<AssetDetail> {
-    const out = await apiClient.delete<{ data: AssetDetail }>(`/api/v1/admin/assets/${id}/permalink`);
+    const out = await apiClient.delete<{ data: AssetDetail }>(`/api/v1/admin/assets/${encodeURIComponent(id)}/permalink`);
     return out.data;
   },
 
@@ -163,7 +165,7 @@ export const assetsLibraryClient = {
 
   async patchFolder(id: string, req: PatchFolderRequest): Promise<AssetFolder> {
     const out = await apiClient.patch<{ data: AssetFolder }>(
-      `/api/v1/admin/assets/folders/${id}`,
+      `/api/v1/admin/assets/folders/${encodeURIComponent(id)}`,
       req,
     );
     return out.data;
@@ -175,7 +177,7 @@ export const assetsLibraryClient = {
   ): Promise<{ deletedFolderId: string; softDeletedAssetIds?: string[] }> {
     const out = await apiClient.delete<{
       data: { deletedFolderId: string; softDeletedAssetIds?: string[] };
-    }>(`/api/v1/admin/assets/folders/${id}`, {
+    }>(`/api/v1/admin/assets/folders/${encodeURIComponent(id)}`, {
       body: JSON.stringify(req),
       headers: { 'content-type': 'application/json' },
     });

@@ -124,7 +124,7 @@ No relation to another module's entity.
 | Shape | Change |
 | --- | --- |
 | `AssetSummary` | `url` → embed form (versioned when public); **new** `fileUrl`, `permalink`, `permalinkUrl`, `contentVersion` |
-| `AssetDetail` | **new** `previousVersion: AssetPreviousVersion \| null` |
+| `AssetDetail` | **new** `previousVersion: AssetPreviousVersion \| null`; **new** `retentionDays: number` (whole days, at least 1 — `assets.soft_delete_retention_days` as the sweep reads it; named by the replace confirmation, UI block review 2026-10-19) |
 | `AssetPreviousVersion` | **new**: `filename`, `mimeType`, `sizeBytes`, `contentVersion`, `replacedAt`, `replacedBy: { id, displayName } \| null`, `restorableUntil` |
 | `AssetRecord` | **new** `contentVersion`, `permalink`; `storageUrl` carries the marker; `purgeAfterAt` derived at read time (same type) |
 | Request bodies | **new** `setAssetPermalinkRequestSchema` (`permalink`, optional `confirmReuse`), `restorePreviousAssetVersionRequestSchema` (both versions required); replace is multipart |

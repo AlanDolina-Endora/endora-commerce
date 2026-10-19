@@ -8,7 +8,7 @@
   "errors.ASSET_UPLOAD_NO_FILE": "Błąd: asset upload no file.",
   "errors.ASSET_UPLOAD_TYPE_NOT_ALLOWED": "Błąd: asset upload type not allowed.",
   "errors.ASSET_UPLOAD_TOO_LARGE": "Plik jest za duży: można przesłać plik o rozmiarze najwyżej {maxFileSizeMb} MB.",
-  "errors.ASSET_STORAGE_UNAVAILABLE": "Błąd: asset storage unavailable.",
+  "errors.ASSET_STORAGE_UNAVAILABLE": "Magazyn plików jest niedostępny. Spróbuj ponownie później.",
   "errors.ASSET_STORAGE_MISCONFIGURED": "Błąd: asset storage misconfigured.",
   "errors.ASSET_LEGACY_LOCATOR_CANNOT_HARDEN": "Błąd: asset legacy locator cannot harden.",
   "errors.ASSET_FILE_MISSING": "Błąd: asset file missing.",
