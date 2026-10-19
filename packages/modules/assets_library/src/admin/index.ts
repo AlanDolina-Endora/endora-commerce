@@ -23,7 +23,7 @@
  * `toAbsoluteAssetUrl` from `@endora-commerce/admin-kit/lib`, which is where
  * `LibraryPage` was already taking it from two files away.
  *
- * **One palette action, "Media library".** Choosing a landing action for a
+ * **One palette action, "Assets library".** Choosing a landing action for a
  * screen is a product decision rather than a file move, which is why batch 9
  * declared none; `specs/156-asset-stable-url/` made it (research R-16, round 3
  * Q2): `open-assets-library` → `/assets-library`, gated by `assets.read`, in

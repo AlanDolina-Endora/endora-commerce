@@ -32,7 +32,7 @@
   "adminRoles.permission.admin:read": "View admin notifications",
   "adminRoles.permission.admin_users:manage": "Manage admin users + roles",
   "adminRoles.permission.analytics:read": "View analytics",
-  "adminRoles.permission.assets.read": "Browse media library",
+  "adminRoles.permission.assets.read": "Browse assets library",
   "adminRoles.permission.assets.write": "Upload and manage assets",
   "adminRoles.permission.audit_log:read": "View audit log",
   "adminRoles.permission.blog.read": "View blog content",

@@ -451,8 +451,9 @@ describe('the surfaces neither module contributes, derived from the contribution
     // here as a fact about the declaration and driven for real in
     // `backend/test/integration/_admin_surfaces/batch-nine-palette-off-state.test.ts`,
     // which is where the server's effective enabled-set can be seen at all.
-    // `assets_library`' "Media library" landing action is the product decision
-    // `specs/156-asset-stable-url/` research R-16 records (round 3 Q2).
+    // `assets_library`' "Assets library" landing action is the product decision
+    // `specs/156-asset-stable-url/` research R-16 records (round 3 Q2), named
+    // like its sidebar entry by the owner's later ruling.
     const assets = (await import('@endora-commerce/mod-assets-library')).manifest;
     const customFields = (await import('@endora-commerce/mod-custom-fields')).manifest;
     expect((assets.actions ?? []).map((action) => action.id)).toEqual(['open-assets-library']);
@@ -463,7 +464,7 @@ describe('the surfaces neither module contributes, derived from the contribution
     const bundle = JSON.parse(
       readFileSync(resolve(process.cwd(), '../packages/modules/assets_library/i18n/en.json'), 'utf8'),
     ) as Record<string, string>;
-    expect(bundle['actions.openLibrary.label']).toBe('Media library');
+    expect(bundle['actions.openLibrary.label']).toBe('Assets library');
     expect((customFields.actions ?? []).map((action) => action.id)).toEqual([
       'open-custom-fields',
     ]);

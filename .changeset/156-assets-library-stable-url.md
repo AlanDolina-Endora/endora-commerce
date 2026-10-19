@@ -48,7 +48,8 @@ permalink is changed or removed and before a name another asset used is taken; *
 which accepts only the asset's own kind and confirms naming both files and how long the current one
 stays restorable; the previous version with **Restore**; and a warning before deleting an asset that
 has a permalink. Write controls need `assets.write`. The command palette (⌘K / CTRL+K) gains
-"Media library", opening the library for anyone holding `assets.read`.
+"Assets library" ("Biblioteka zasobów"), named like the sidebar entry and also found by "media",
+"media library" and "multimedia", opening the library for anyone holding `assets.read`.
 
 **Database (one migration, owned by this module).**
 
@@ -135,12 +136,8 @@ many files in the folder, at any depth, have a shareable link; the library moves
 files to the parent folder, so those links keep working. The count comes from the new
 `GET /api/v1/admin/assets/folders/:folderId/permalink-count` (`assets.read`), which answers
 `{ data: { permalinkedAssets } }` over live assets and `404 ASSET_FOLDER_NOT_FOUND` for an unknown
-folder.
-
-**One name: "Media library" (owner ruling).** The sidebar entry and the page title now say "Media
-library" ("Biblioteka mediów"), as the command palette does; the manifest's display name, the
-`assets.read` permission label and the module page's title follow. The module id, its routes and its
-translation keys are unchanged.
+folder. The API option `deleteRecursively` of the folder delete moves the folder's assets to the
+trash without confirmation, so their permalinks answer `410` until the assets are restored.
 
 **Uploads take one file.** `POST /api/v1/admin/assets` now ignores a second file part and answers
 `201` with the asset the first one created; it used to answer `400 ASSET_UPLOAD_NO_FILE`. The replace

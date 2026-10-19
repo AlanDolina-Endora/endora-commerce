@@ -91,6 +91,14 @@ const modules = [
   },
   {
     type: 'category',
+    label: 'Assets Library', key: 'assets_library',
+    link: { type: 'doc', id: 'modules/assets-library/index' },
+    items: [
+      'module-reference/assets-library',
+    ],
+  },
+  {
+    type: 'category',
     label: 'audit_logs', key: 'audit_logs',
     link: { type: 'doc', id: 'modules/audit_logs' },
     items: [
@@ -291,14 +299,6 @@ const modules = [
     link: { type: 'doc', id: 'modules/linkedin-ads' },
     items: [
       'module-reference/linkedin-ads',
-    ],
-  },
-  {
-    type: 'category',
-    label: 'Media library', key: 'assets_library',
-    link: { type: 'doc', id: 'modules/assets-library/index' },
-    items: [
-      'module-reference/assets-library',
     ],
   },
   {

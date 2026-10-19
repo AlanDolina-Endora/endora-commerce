@@ -1,11 +1,11 @@
 ---
-title: Biblioteka mediów
+title: Biblioteka zasobów
 description: Centralna biblioteka plików z wymiennymi adapterami przechowywania, stałymi adresami plików i stałymi linkami, podmianą pliku w miejscu, usuwaniem miękkim z okresowym czyszczeniem i ochroną przed usunięciem używanych plików
 ---
 
-# Biblioteka mediów
+# Biblioteka zasobów
 
-Biblioteka mediów (moduł `assets_library`) to warstwa plików cyfrowych platformy. Zapewnia:
+Biblioteka zasobów (Assets Library) to warstwa plików cyfrowych platformy. Zapewnia:
 
 - Centralny katalog plików (obrazów, wideo, PDF, dokumentów) wielokrotnie używanych w mediach
   produktów, załącznikach produktów, głównych obrazach kategorii i stronach CMS.
@@ -41,7 +41,7 @@ Biblioteka mediów (moduł `assets_library`) to warstwa plików cyfrowych platfo
    pokazuje `GET /api/v1/admin/assets/storage/state`.
 
 Panel otwiera bibliotekę z menu bocznego albo z palety poleceń (⌘K / CTRL+K → „Biblioteka
-mediów”, dla każdego z uprawnieniem `assets.read`). Panel szczegółów pliku zawiera link do
+zasobów”, dla każdego z uprawnieniem `assets.read`). Panel szczegółów pliku zawiera link do
 udostępnienia, stały link, **Podmień plik**, poprzednią wersję z przyciskiem **Przywróć poprzednią
 wersję** oraz usuwanie. Każda kontrolka zapisu wymaga uprawnienia `assets.write`.
 
@@ -191,7 +191,10 @@ wpisywania i prosi o potwierdzenie przed zmianą lub usunięciem ustawionego sta
   lub usunięcie stałego linku pliku usuniętego miękko daje odpowiedź `410`; najpierw przywróć plik.
 - **Usuwanie folderu.** Usunięcie folderu w bibliotece przenosi jego pliki do folderu nadrzędnego,
   więc ich stałe linki nadal działają; potwierdzenie podaje, ile plików w folderze, na dowolnej
-  głębokości, ma stały link (`GET /api/v1/admin/assets/folders/:folderId/permalink-count`).
+  głębokości, ma stały link (`GET /api/v1/admin/assets/folders/:folderId/permalink-count`). Opcja
+  API `deleteRecursively` żądania `DELETE /api/v1/admin/assets/folders/:folderId` przenosi natomiast
+  pliki folderu do kosza bez potwierdzenia, więc ich stałe linki odpowiadają `410`, dopóki pliki nie
+  zostaną przywrócone.
 
 Ustawienie i usunięcie stałego linku to audytowane komendy `asset.permalink_set` i
 `asset.permalink_remove`. Wyszukiwanie na liście dopasowuje także stałe linki.

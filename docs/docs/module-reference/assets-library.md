@@ -16,7 +16,7 @@ Rendered from the module's own manifest, and from nothing written by hand. What 
 | | |
 | --- | --- |
 | Module id | `assets_library` |
-| Name | Media library |
+| Name | Assets Library |
 | Version | `1.0.0` |
 | Ships from | `@endora-commerce/mod-assets-library` |
 | Licence | `MIT` |
@@ -36,7 +36,7 @@ Rendered from the module's own manifest, and from nothing written by hand. What 
 
 | Code | Label | Also needs |
 | --- | --- | --- |
-| `assets.read` | Browse media library | — |
+| `assets.read` | Browse assets library | — |
 | `assets.write` | Upload and manage assets | — |
 
 ## Command palette

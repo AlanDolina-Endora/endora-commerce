@@ -1,11 +1,11 @@
 ---
-title: Media library
+title: Assets Library
 description: Central digital-asset library with pluggable storage adapters, stable file URLs and permalinks, in-place file replacement, soft-delete with a retention sweep, and reference-protection guards
 ---
 
-# Media library
+# Assets Library
 
-The media library (the `assets_library` module) is the platform's digital-asset substrate. It owns:
+The Assets Library is the platform's digital-asset substrate. It owns:
 
 - A central catalogue of files (images, video, PDFs, documents) reusable
   across Product media, Product attachments, Category main images, and CMS
@@ -44,7 +44,7 @@ The media library (the `assets_library` module) is the platform's digital-asset 
    misconfiguration. The dashboard is at `GET /api/v1/admin/assets/storage/state`.
 
 The admin opens the library from the sidebar or from the command palette
-(⌘K / CTRL+K → "Media library", for anyone holding `assets.read`). The asset
+(⌘K / CTRL+K → "Assets library", for anyone holding `assets.read`). The asset
 detail drawer holds the shareable link, the permalink, **Replace file**, the
 previous version with **Restore**, and the delete action. Every write control
 needs `assets.write`.
@@ -212,7 +212,10 @@ is changed or removed.
 - **Deleting a folder.** Deleting a folder in the library moves its files to
   the parent folder, so their permalinks keep working; the confirmation names
   how many files in the folder, at any depth, have one
-  (`GET /api/v1/admin/assets/folders/:folderId/permalink-count`).
+  (`GET /api/v1/admin/assets/folders/:folderId/permalink-count`). The API
+  option `deleteRecursively` of `DELETE /api/v1/admin/assets/folders/:folderId`
+  instead moves the folder's assets to the trash without confirmation, so their
+  permalinks answer `410` until the assets are restored.
 
 Setting and removing a permalink are the audited Commands
 `asset.permalink_set` and `asset.permalink_remove`. The list search also

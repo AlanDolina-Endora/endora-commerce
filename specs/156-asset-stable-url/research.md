@@ -616,7 +616,7 @@ accessibility.
 deliberately with an off-state test asserting the empty answer
 (`admin/test/modules/batch-nine-surfaces.module-owned-surface.test.tsx`).
 
-**Decision.** One landing action "Media library", `actions.openLibrary` → `/assets-library`,
+**Decision.** One landing action "Assets library", `actions.openLibrary` → `/assets-library`,
 `requiredPermission: 'assets.read'`, icon `Image`; update the batch-nine test and rewrite that
 paragraph.
 

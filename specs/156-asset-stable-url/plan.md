@@ -51,7 +51,7 @@ change. The approach, with evidence and the rejected alternatives in [research.m
 - **No object is lost track of** (R-21): a cleanup ledger records staging, previous and superseded
   objects before they exist or stop being referenced, and the sweep retries their deletion.
 - **Admin**: every control in the existing detail drawer, built from the kit's `AssetUploader` (one
-  new optional prop) and `ModalDialog` (R-15); a palette landing entry "Media library" (R-16).
+  new optional prop) and `ModalDialog` (R-15); a palette landing entry "Assets library" (R-16).
 
 No new runtime dependency, no new setting, no new permission code. One module migration: eleven
 columns on `assets` and two small module-owned tables (`asset_permalink_releases`,
@@ -90,14 +90,14 @@ columns on `assets` and two small module-owned tables (`asset_permalink_releases
 | **XIII. Command Bus auditing (NN)** | Pass | The four new writes are Commands (R-6); the confirmed reuse of a permalink is recorded in its Command's audit row; no hand-placed audit call is added; the sweep's passes carry the module's existing `command-coverage-ignore` reasoning. |
 | **XIV. Entity-agnostic extensibility** | N/A | No "add a field" requirement. |
 | **XV. Untouched core / overlay** | N/A | No deployment overlay involved. |
-| **XVI. Command palette** | Pass | The plan adds the landing entry "Media library" (`/assets-library`, `assets.read`), round 3 Q2, FR-028. |
+| **XVI. Command palette** | Pass | The plan adds the landing entry "Assets library" (`/assets-library`, `assets.read`), round 3 Q2, FR-028. |
 | **XVII. Operator-toggleable modules (NN)** | Pass | `assets_library` is `nonDeactivatable`; the worker is attached through `ctx.worker`, which applies the presence gate regardless. The new `admin_users` edge points at a module that is itself non-deactivatable. |
 
 **Cross-cutting checklist**
 
 - **Admin permission manifest** — no new code; the four routes use `assets.write`, reads `assets.read`
   (FR-026). `permission-inventory.test.ts` re-run (Phase 10 verification and T090).
-- **Command palette** — one landing action, "Media library" (R-16, contracts/admin-surfaces.md §5).
+- **Command palette** — one landing action, "Assets library" (R-16, contracts/admin-surfaces.md §5).
 - **i18n (pl + en)** — seven error codes with sentences (one with five reason tokens) and ~40 admin
   keys in the module's own flat bundle (contracts/admin-surfaces.md §4).
 - **Settings module** — no new setting; `assets.soft_delete_retention_days` gains a one-day floor and

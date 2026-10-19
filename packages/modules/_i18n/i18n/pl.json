@@ -32,7 +32,7 @@
   "adminRoles.permission.admin:read": "Podgląd powiadomień administratora",
   "adminRoles.permission.admin_users:manage": "Zarządzanie użytkownikami admina i rolami",
   "adminRoles.permission.analytics:read": "Wyświetlanie analityki",
-  "adminRoles.permission.assets.read": "Przeglądanie biblioteki mediów",
+  "adminRoles.permission.assets.read": "Przeglądanie biblioteki zasobów",
   "adminRoles.permission.assets.write": "Przesyłanie i zarządzanie zasobami",
   "adminRoles.permission.audit_log:read": "Wyświetlanie dziennika audytu",
   "adminRoles.permission.blog.read": "Wyświetlanie treści bloga",

@@ -257,7 +257,7 @@ same permalink, new content.
 6. **Given** the asset detail panel, **When** an admin opens it, **Then** it shows the asset's
    shareable URL (the permalink when one is set, otherwise the file URL) with a copy action.
 7. **Given** an admin with `assets.read`, **When** they open the command palette (⌘K / CTRL+K) and
-   search for "Media library", **Then** an entry opens `/assets-library`; an admin without
+   search for "Assets library", **Then** an entry opens `/assets-library`; an admin without
    `assets.read` does not see the entry (FR-028).
 8. **Given** a private asset with a permalink, **When** the permalink is requested without a valid,
    unexpired platform signature — whether or not the asset is soft-deleted — **Then** the answer is
@@ -629,7 +629,7 @@ URLs answer `404`; an asset deleted fewer than N days earlier is untouched.
   (`docs/assets-library/index.md:99-102`).
 - **FR-028**: The new admin actions (replace file, set permalink) MUST be reachable from the asset
   detail panel; no new admin page is introduced. The module MUST add a command-palette entry
-  "Media library" (English and Polish, FR-025) that opens `/assets-library`, gated by `assets.read`;
+  "Assets library" (English and Polish, FR-025) that opens `/assets-library`, gated by `assets.read`;
   the module has no palette entry today (`src/admin/index.ts:26-32`), and the off-state test that
   asserts the empty answer is updated to assert this entry. *(Round 3 Q2.)*
 

@@ -84,13 +84,13 @@ detail.previous.confirmBody      {previousFilename} becomes the current file aga
 detail.delete.permalinkTitle     Delete an asset with a permalink?
 detail.delete.permalinkBody      {permalinkUrl} will answer that the file is gone. Restoring the asset brings it back.
 kind.image | kind.video | kind.pdf | kind.other     an image | a video | a PDF | a document
-actions.openLibrary.label        Media library
+actions.openLibrary.label        Assets library   (pl: Biblioteka zasobów; owner ruling 2026-10-19)
 actions.openLibrary.description  Browse, upload and replace files, and manage permalinks.
 errors.ASSET_REPLACE_KIND_MISMATCH … errors.ASSET_PERMALINK_PREVIOUSLY_USED, errors.ASSET_PERMALINK_INVALID.<reason>   (contracts/admin-api.md §4)
 # Added by the owner rulings S3 – S5 (2026-10-19):
-detail.replace.unavailable       This file was not uploaded through the media library, so it cannot be replaced in place. Upload the new file as a new asset.
+detail.replace.unavailable       This file was not uploaded through the assets library, so it cannot be replaced in place. Upload the new file as a new asset.
 folders.permalinkNotice          Files in this folder with a shareable link: {count}. Their links keep working: the files move to the parent folder.
-page.title, nav.assetsLibrary.label   Media library (pl: Biblioteka mediów)
+page.title, nav.assetsLibrary.label   master values kept (Assets Library / Assets library; pl: Biblioteka zasobów)
 # Added by the UI block review (2026-10-19):
 detail.close                     Close asset detail
 detail.error.generic             The request failed. Try again.

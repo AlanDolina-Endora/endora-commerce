@@ -36,7 +36,7 @@ import { withModuleOff, type OffStateAxis } from '../../helpers/off-state.js';
  *
  * `assets_library` declared none when this batch landed, and paid that
  * Principle XVI entry later (`specs/156-asset-stable-url/`): it now declares
- * `open-assets-library` ("Media library", `assets.read`), so it is held to the
+ * `open-assets-library` ("Assets library", `assets.read`), so it is held to the
  * same two proofs — the advertisement goes when the module does, and the
  * declared permission is the one its own `./admin` route enforces. The table
  * below names its action ids, so adding or dropping one without updating it
@@ -148,7 +148,7 @@ describe('batch 9 contributes no palette action while off (Constitution XVII ite
   });
 
   it('assets_library’s action targets the route its own admin layer declares', () => {
-    // Its "Media library" action (`specs/156-asset-stable-url/` research R-16)
+    // Its "Assets library" action (`specs/156-asset-stable-url/` research R-16)
     // paid the Principle XVI debt this case used to record as an absence; the
     // pairing is now the same as custom_fields' above.
     const manifest = REGISTERED_MANIFESTS.find(

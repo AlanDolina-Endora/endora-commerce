@@ -10,7 +10,7 @@
   "blocks.text.label": "Text",
   "blocks.text.description": "A paragraph; merge fields such as {{date}} are filled in.",
   "blocks.image.label": "Image",
-  "blocks.image.description": "An image from the media library, such as a logo.",
+  "blocks.image.description": "An image from the assets library, such as a logo.",
   "blocks.spacer.label": "Spacer",
   "blocks.spacer.description": "Empty vertical space.",
   "blocks.divider.label": "Divider",

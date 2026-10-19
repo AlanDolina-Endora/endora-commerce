@@ -108,7 +108,7 @@ const settings = defineModuleSettingsManifest({
 /** Module-lifecycle manifest (feature 018). */
 export const manifest = defineModuleManifest({
   id: 'assets_library',
-  name: 'Media library',
+  name: 'Assets Library',
   description:
     'Storage adapter registry (local / S3 / GCS), asset upload, and reference tracking.',
   version: '1.0.0',
@@ -146,8 +146,10 @@ export const manifest = defineModuleManifest({
   dependencies: ['auth', 'admin_users'],
   settings,
   /**
-   * The module's landing action under ⌘K (Constitution XVI) — "Media library",
-   * the product decision `specs/156-asset-stable-url/` research R-16 records.
+   * The module's landing action under ⌘K (Constitution XVI) — "Assets library",
+   * named like the sidebar entry: the product decision `specs/156-asset-stable-url/`
+   * research R-16 records, with the name the owner ruled later. Its keywords keep
+   * "media" so a search for the media library still finds it.
    */
   actions: [
     {
@@ -157,7 +159,7 @@ export const manifest = defineModuleManifest({
       icon: 'Image',
       targetRoute: '/assets-library',
       requiredPermission: 'assets.read',
-      keywords: ['assets', 'media', 'files', 'images', 'permalink', 'pliki', 'multimedia'],
+      keywords: ['assets', 'assets library', 'media', 'media library', 'files', 'images', 'permalink', 'pliki', 'zasoby', 'multimedia'],
       weight: 250,
     },
   ],
@@ -274,7 +276,7 @@ export const manifest = defineModuleManifest({
   i18n: { bundlesDir: 'i18n' },
   docs: { dir: 'docs' },
   permissions: [
-    { code: 'assets.read', label: 'Browse media library' },
+    { code: 'assets.read', label: 'Browse assets library' },
     { code: 'assets.write', label: 'Upload and manage assets' },
   ],
 });
