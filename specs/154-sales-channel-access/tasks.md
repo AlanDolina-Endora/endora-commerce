@@ -98,7 +98,7 @@ integration test.
 - [X] T032 [US1] [PR-A] Implement in `SC/src/backend/services/sales-channels.service.ts` and `routes.admin.ts` (create/update/summary mapping) — T031 green
 - [X] T033 [P] [US1] [PR-A] Write `BT/contract/sales_channels/storefront-access-read.contract.test.ts` — red: `/storefront/sales-channel` carries `anonymousAccess`; `/storefront/sales-channel/access` for anonymous on open/closed, customer permitted/not (with `permittedChannels` and `storefrontUrl` from the channel setting), admin → `viewer: 'other'`; `Cache-Control: private, no-store`; never 403
 - [X] T034 [US1] [PR-A] Implement both in `SC/src/backend/routes.storefront.ts` (open route; `salesChannelAccessPort`, `settingsReadPort` for `sales_channels.storefront_url` per channel) — T033 green
-- [ ] T035 [P] [US1] [PR-B] `BT/contract/customers/register-channel.contract.test.ts` — red: individual self-registration on a closed channel → 403 `SALES_CHANNEL_SIGN_IN_REQUIRED`, no account created (proves the route is *not* open)
+- [X] T035 [P] [US1] [PR-B] `BT/contract/customers/register-channel.contract.test.ts` — red: individual self-registration on a closed channel → 403 `SALES_CHANNEL_SIGN_IN_REQUIRED`, no account created (proves the route is *not* open) — was green on arrival: PR A already left `/customers/register` subject to the access step; kept as the guard that it stays so
 
 ### Storefront (D1 transport + closed-store UX)
 
@@ -120,10 +120,10 @@ integration test.
 
 ### Backend
 
-- [ ] T043 [P] [US2] [PR-B] Write `BT/contract/organizations/login-channel-access.contract.test.ts` — red: unassigned channel → 403 `SALES_CHANNEL_NOT_PERMITTED`, no `Set-Cookie`, no session row, no MFA challenge issued, `lastLoginAt` unchanged; wrong password on an unassigned channel → 401 (precedence); assigned → authenticated; anonymous basket of the login channel merged only when permitted
-- [ ] T044 [US2] [PR-B] Implement in `CA/src/backend/services/customer-auth-service.ts` (`assertCustomerMayUse` after the blocked check, before `beginLogin`; resolve `salesChannelAccessPort` with `lazyPort` in `CA/src/backend/index.ts`) — T043 green
-- [ ] T045 [P] [US2] [PR-B] Write `BT/contract/mfa/federated-channel-access.contract.test.ts` and an MFA-verify case — red: federated callback for an unassigned Organization redirects to `<storefront>/login?error=sales_channel_not_permitted` and creates no session; verify after the assignment was removed between steps → 403
-- [ ] T046 [US2] [PR-B] Implement in `packages/modules/mfa/src/backend/routes.oauth.ts` (customer surface, using `tx.salesChannelId`) and the customer MFA verify path — T045 green; plus a test that with `mfa` deactivated password sign-in still refuses (R-14)
+- [X] T043 [P] [US2] [PR-B] Write `BT/contract/organizations/login-channel-access.contract.test.ts` — red: unassigned channel → 403 `SALES_CHANNEL_NOT_PERMITTED`, no `Set-Cookie`, no session row, no MFA challenge issued, `lastLoginAt` unchanged; wrong password on an unassigned channel → 401 (precedence); assigned → authenticated; anonymous basket of the login channel merged only when permitted — plus a refused sign-in under an enforced second factor (no set-up ticket) and an anonymous basket left unadopted with its cookie untouched
+- [X] T044 [US2] [PR-B] Implement in `CA/src/backend/services/customer-auth-service.ts` (`assertCustomerMayUse` after the blocked check, before `beginLogin`; resolve `salesChannelAccessPort` with `lazyPort` in `CA/src/backend/index.ts`) — T043 green — a request with no channel is refused without a lookup; the policy's `assertCustomerMayUse` runs one channel read by id per sign-in
+- [X] T045 [P] [US2] [PR-B] Write `BT/contract/mfa/federated-channel-access.contract.test.ts` and an MFA-verify case — red: federated callback for an unassigned Organization redirects to `<storefront>/login?error=sales_channel_not_permitted` and creates no session; verify after the assignment was removed between steps → 403 — also covers the enforced set-up (`setup-ticket/complete`), refused before the enrolment is activated; the callback's unit cases are in `packages/modules/mfa/src/backend/routes.oauth.test.ts`
+- [X] T046 [US2] [PR-B] Implement in `packages/modules/mfa/src/backend/routes.oauth.ts` (customer surface, using `tx.salesChannelId`) and the customer MFA verify path — T045 green; plus a test that with `mfa` deactivated password sign-in still refuses (R-14) — `mfa/src/backend/services/customer-channel-access.ts` (decided on the channel stored with the challenge, set-up ticket or OAuth transaction); the `mfa`-off case is in `login-channel-access.contract.test.ts`
 - [X] T047 [P] [US2] [PR-A] Write `BT/integration/sales_channels/channel-access-invalidation.test.ts` — red: assign/unassign through the admin route → next request on the writer decided on the new set; a second composed app instance drops its LRU on the pub/sub message (≤ 1 s in test), and without pub/sub within the LRU TTL (fake clock)
 - [X] T048 [US2] [PR-A] Make T047 green (wiring fixes only; behaviour is T012/T016/T017)
 
@@ -138,18 +138,20 @@ integration test.
 
 ## Phase 6: User Story 4 — new Organizations get the channel they were created for (P1)
 
-> **PR A interim (2026-10-18):** so that a business or personal Organization created after PR A
-> merges is not locked out before PR B lands, PR A binds both to the **system-default** channel inside the creating step (`bindToDefaultIfEmpty` with the
-> caller's `em`). On a single-channel shop that is the request channel. T054/T056 replace the
-> default with the registering store's channel.
+> **PR A interim (2026-10-18), replaced by PR B (2026-10-19):** PR A bound a business or personal
+> Organization created after it merged to the **system-default** channel inside the creating step
+> (`bindToDefaultIfEmpty` with the caller's `em`), so nobody was locked out before PR B. PR B
+> (T054/T056) binds the **registering store's** channel instead (`replaceChannelsForEntity` with
+> the creating `em`); the system default remains only for a creation with no request channel
+> (provisioning outside a request, a federated sign-in's auto-created account, the demo seed).
 
 **Goal**: D6. **Independent test**: T053–T057.
 
-- [ ] T053 [P] [US4] [PR-B] Write `BT/contract/organizations/registration-channel.contract.test.ts` — red: business registration with `X-Sales-Channel: b` → exactly B (also when B is closed to anonymous visitors); without a header → exactly the default; invitation accept on any channel → the Organization's channels unchanged
-- [ ] T054 [US4] [PR-B] Implement in `OR/src/backend/services/registration-service.ts`: `replaceChannelsForEntity('organization', id, [getResolvedChannel().id], { em: <registration tx em> })` inside the creating transaction — T053 green
-- [ ] T055 [P] [US4] [PR-B] Extend `BT/contract/customers/register-channel.contract.test.ts` — red: individual registration on open channel A → personal Organization holds exactly A and the issued session is accepted on A; personal-Organization provisioning without a request channel (unit, `OR` provisioning service) → default
-- [ ] T056 [US4] [PR-B] Implement: `CA` passes `currentSalesChannel()?.id ?? null` into `PersonalOrganizationProvisionApi` (extend the `OR/src/ports` type with `salesChannelId: string | null`); `OR/src/backend/services/personal-organization-service.ts` binds that channel or the default on the provisioning `em` — T055 green
-- [ ] T057 [P] [US4] [PR-B] Unit test in `OR` asserting every `em.create(Organization` site in `OR/src/backend` is followed by a bind (a source-level guard listing the three sites: registration, provisioning, demo seed) so a fourth creation path cannot skip it
+- [X] T053 [P] [US4] [PR-B] Write `BT/contract/organizations/registration-channel.contract.test.ts` — red: business registration with `X-Sales-Channel: b` → exactly B (also when B is closed to anonymous visitors); without a header → exactly the default; invitation accept on any channel → the Organization's channels unchanged
+- [X] T054 [US4] [PR-B] Implement in `OR/src/backend/services/registration-service.ts`: `replaceChannelsForEntity('organization', id, [getResolvedChannel().id], { em: <registration tx em> })` inside the creating transaction — T053 green — the route passes `currentSalesChannel()?.id ?? null` into `registerOrganization`; without a channel the default is bound as before
+- [X] T055 [P] [US4] [PR-B] Extend `BT/contract/customers/register-channel.contract.test.ts` — red: individual registration on open channel A → personal Organization holds exactly A and the issued session is accepted on A; personal-Organization provisioning without a request channel (unit, `OR` provisioning service) → default — unit half: `OR/src/backend/services/personal-organization-channel.test.ts`
+- [X] T056 [US4] [PR-B] Implement: `CA` passes `currentSalesChannel()?.id ?? null` into `PersonalOrganizationProvisionApi` (extend the `OR/src/ports` type with `salesChannelId: string | null`); `OR/src/backend/services/personal-organization-service.ts` binds that channel or the default on the provisioning `em` — T055 green — the federated sign-in's auto-created account passes `null` (default): the provider's callback carries no storefront channel — see the PR B description
+- [X] T057 [P] [US4] [PR-B] Unit test in `OR` asserting every `em.create(Organization` site in `OR/src/backend` is followed by a bind (a source-level guard listing the three sites: registration, provisioning, demo seed) so a fourth creation path cannot skip it — `OR/src/backend/organization-creation-binds-channel.test.ts`; a site whose bind lives elsewhere is ledgered (demo seed → `packages/demo-composition`), and a new site that binds passes without an edit
 
 ---
 

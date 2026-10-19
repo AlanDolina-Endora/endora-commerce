@@ -23,6 +23,7 @@ import { currentSalesChannel } from '@endora-commerce/platform/kernel';
 import type { ChallengeStore } from './services/challenge-store.js';
 import type { MfaPolicyResolver } from './services/mfa-policy-resolver.js';
 import type { SocialIdentityService } from './services/social-identity-service.js';
+import type { CustomerChannelAccess } from './services/customer-channel-access.js';
 import type {
   OAuthProviderName,
   OAuthProviderPort,
@@ -65,7 +66,19 @@ export interface MfaOAuthDeps {
   backendBaseUrl: string;
   storefrontBaseUrl: string;
   adminBaseUrl: string;
+  /**
+   * Feature 154 — the sales-channel access rule for a customer sign-in, asked
+   * on the channel the transaction was started on.
+   */
+  customerChannelAccess: Pick<CustomerChannelAccess, 'permits'>;
 }
+
+/**
+ * The `error` the storefront's sign-in page maps to its "no access to this
+ * store" message (`contracts/storefront-ux.md` §3). A code, not a sentence: the
+ * storefront owns the wording in both of its languages.
+ */
+export const SALES_CHANNEL_NOT_PERMITTED_LOGIN_ERROR = 'sales_channel_not_permitted';
 
 type Surface = 'customer' | 'admin';
 
@@ -298,6 +311,20 @@ function registerCallback(app: FastifyInstance, deps: MfaOAuthDeps, surface: Sur
               ? ACCOUNT_BLOCKED_MESSAGE
               : 'No account found. Please create an account first.';
       return reply.redirect(loginRedirect(deps, surface, message));
+    }
+
+    // Feature 154 — a customer signs in only on a sales channel its
+    // Organization is assigned to: the channel the transaction was started on,
+    // because the provider's redirect carries no storefront channel. Decided
+    // before a second factor is started or a session issued, as the password
+    // sign-in decides it.
+    if (
+      surface === 'customer' &&
+      !(await deps.customerChannelAccess.permits(result.organizationId, tx.salesChannelId))
+    ) {
+      return reply.redirect(
+        loginRedirect(deps, surface, SALES_CHANNEL_NOT_PERMITTED_LOGIN_ERROR),
+      );
     }
 
     // The second factor, decided exactly as the password sign-ins decide it.

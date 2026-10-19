@@ -21,7 +21,11 @@ import type {
   MfaEnrolmentStatePort,
   MfaLoginPort,
 } from '@endora-commerce/contracts';
-import type { AttemptCounterStore, AuditPort } from '@endora-commerce/platform/kernel';
+import type {
+  AttemptCounterStore,
+  AuditPort,
+  SalesChannelAccessPort,
+} from '@endora-commerce/platform/kernel';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import { recordAuditFromContext } from '@endora-commerce/platform/commands';
 import { withSystemScope } from '@endora-commerce/platform/tenancy';
@@ -427,6 +431,9 @@ export function registerModule(ctx: ModuleContext): void {
             () => (effectiveState.isPresent('mfa') ? mfaLoginPort : undefined),
             auditLogService,
             customerAuthenticationThrottle,
+            // Feature 154 — kernel-provided and ungated, like the membership
+            // port; resolved per call so the singleton holds no captured value.
+            lazyPort<SalesChannelAccessPort>(ctx, 'salesChannelAccessPort'),
           ),
       )
       .singleton(),
@@ -612,6 +619,10 @@ export function registerModule(ctx: ModuleContext): void {
               const organization = await provision.provisionFor(em, {
                 customerAccountId,
                 email: folded,
+                // Feature 154 — the provider's callback carries no storefront
+                // channel, so the personal organisation gets the system
+                // default (research R-8, "any other path").
+                salesChannelId: null,
               });
               const account = em.create(CustomerAccount, {
                 id: customerAccountId,
