@@ -121,6 +121,12 @@ export async function registerQuickOrderAdminRoutes(
             quantity: item.quantity,
           })),
         },
+        {
+          // Feature 155 (FR-030, threat F10) — a literal: this route is the
+          // operator's, and no field of the body can say otherwise.
+          actor: 'operator',
+          language: await request.responseLanguage(),
+        },
       );
       return { data: result };
     },

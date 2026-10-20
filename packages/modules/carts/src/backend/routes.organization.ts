@@ -196,10 +196,15 @@ export async function registerCartsOrganizationRoutes(
       ...actor.customer,
       salesChannelId: getResolvedChannel(request).id,
     });
-    await cartApprovalService.submitForApproval(cart, {
-      customerAccountId: actor.customer.customerAccountId,
-      organizationId: actor.customer.organizationId,
-    });
+    const language = await request.responseLanguage();
+    await cartApprovalService.submitForApproval(
+      cart,
+      {
+        customerAccountId: actor.customer.customerAccountId,
+        organizationId: actor.customer.organizationId,
+      },
+      { language },
+    );
     return { data: { ok: true, approvalStatus: cart.approvalStatus } };
   });
 

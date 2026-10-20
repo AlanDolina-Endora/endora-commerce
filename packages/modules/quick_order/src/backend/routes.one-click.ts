@@ -54,6 +54,7 @@ export async function registerQuickOrderOneClickRoutes(
           ...(body.idempotencyKey ? { idempotencyKey: body.idempotencyKey } : {}),
         },
         getResolvedChannel(request).id,
+        { language: await request.responseLanguage() },
       );
       reply.status(201);
       return {

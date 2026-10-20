@@ -1,6 +1,8 @@
 import {
   ERROR_CODES,
+  isOrderMinimumEligibleType,
   type CartWritePort,
+  type CatalogProductReadPort,
   type OrderPlacementPort,
   type PlacedOrderRecord,
   type QuickOrderOneClickEligibility,
@@ -54,6 +56,11 @@ export class OneClickService {
     private readonly cartWrite: CartWritePort,
     private readonly orderPlacement: OrderPlacementPort,
     private readonly resolveOneClickEnabled: (salesChannelId: string | null) => Promise<boolean>,
+    /**
+     * Feature 155 (FR-010, R12.3) — where the default quantity comes from: the
+     * product's pieces minimum. `quick_order` already declares `catalog`.
+     */
+    private readonly catalogProducts: CatalogProductReadPort,
   ) {}
 
   async eligibility(
@@ -90,6 +97,8 @@ export class OneClickService {
     ctx: OneClickContext,
     input: OneClickPlaceInput,
     salesChannelId: string,
+    /** The language a minimum refusal names the product in (feature 155, D3/D4). */
+    options: { language?: string } = {},
   ): Promise<PlacedOrderRecord> {
     const eligibility = await this.eligibility(ctx.customerAccountId, salesChannelId);
     if (!eligibility.enabled) {
@@ -101,33 +110,67 @@ export class OneClickService {
 
     // The same channel-aware read `eligibility` just made, so the methods used
     // below are the ones it vouched for — and the refusal above came before the
-    // basket is cleared.
+    // basket is touched.
     const defaults = await this.preferenceService.resolveForCustomer(
       ctx.customerAccountId,
       salesChannelId,
     );
     const customerCtx = { customerAccountId: ctx.customerAccountId, organizationId: ctx.organizationId };
-    const basketCtx = { ...customerCtx, salesChannelId };
+    // Read before the basket is touched, so a failed read leaves it as it was.
+    const quantity = input.quantity ?? (await this.#defaultQuantity(input.productId));
 
-    // Clear-then-seed matches the single-active-cart model used by admin
-    // order-create and RFQ-convert.
-    await this.cartWrite.clearForCustomer(basketCtx);
-    await this.cartWrite.addItem(
-      { customer: basketCtx },
+    // The line becomes the buyer's whole basket (the single-active-cart model
+    // admin order-create and the API intake use too), and `addItems` clears the
+    // basket only once nothing is left to refuse the line for — resolution, the
+    // minimums, the price — so a refused line leaves the basket as it was.
+    // A placement refusal after the seed (stock, the organization, a method)
+    // still leaves the basket holding this one line: that is inherent to
+    // one-click, which buys through the basket, and out of scope here.
+    //
+    // The basket is the one of the channel the order is placed on
+    // (`specs/154-sales-channel-access/`, contracts/basket-attribution.md §1).
+    await this.cartWrite.addItems(
+      { customer: { ...customerCtx, salesChannelId } },
+      [
+        {
+          productId: input.productId,
+          ...(input.variantId ? { variantId: input.variantId } : {}),
+          quantity,
+        },
+      ],
       {
-        productId: input.productId,
-        ...(input.variantId ? { variantId: input.variantId } : {}),
-        quantity: input.quantity ?? 1,
+        onLineError: 'throw',
+        onBelowMinimum: 'throw',
+        replaceExisting: true,
+        ...(options.language ? { language: options.language } : {}),
       },
     );
 
-    return this.orderPlacement.placeOrder(customerCtx, {
-      deliveryAddressId: defaults.shippingAddressId!,
-      billingAddressId: defaults.billingAddressId!,
-      deliveryMethodId: defaults.deliveryMethodId!,
-      paymentMethodId: defaults.paymentMethodId!,
-      salesChannelId,
-      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
-    });
+    return this.orderPlacement.placeOrder(
+      customerCtx,
+      {
+        deliveryAddressId: defaults.shippingAddressId!,
+        billingAddressId: defaults.billingAddressId!,
+        deliveryMethodId: defaults.deliveryMethodId!,
+        paymentMethodId: defaults.paymentMethodId!,
+        salesChannelId,
+        ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+      },
+      options.language ? { language: options.language } : undefined,
+    );
+  }
+
+  /**
+   * Feature 155 (FR-010, R12.3, analyze F14) — the product's pieces minimum
+   * when its type carries one (`simple` / `configurable`) and it is above 1;
+   * otherwise 1. A product the read does not find gets 1, and the add path
+   * answers it with the unknown id's 404 — the minimum of a product the buyer
+   * may not see only ever sizes a line `addItem` then refuses as unknown.
+   */
+  async #defaultQuantity(productId: string): Promise<number> {
+    const product = await this.catalogProducts.findById(productId);
+    if (!product || !isOrderMinimumEligibleType(product.type)) return 1;
+    const minimum = product.minOrderQuantity;
+    return minimum !== null && minimum > 1 ? minimum : 1;
   }
 }

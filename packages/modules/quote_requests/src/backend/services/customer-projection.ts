@@ -22,6 +22,8 @@ export const CUSTOMER_ITEM_KEYS = [
   'taxRate',
   'packagingUnitName',
   'packagingUnitBaseQuantity',
+  // Feature 155 — the catalogue unit the line resolved to (analyze F14).
+  'packagingUnitId',
 ] as const;
 
 /** The event keys a customer reply carries; `payload` is filtered on its own. */

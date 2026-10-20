@@ -54,6 +54,7 @@ import { Migration20261014T115053QuoteRequestsNegotiationPolicies } from './2026
 import { Migration20261014T173236QuoteRequestsQuoteRequestListSavedViews } from './20261014T173236_quote_requests_quote_request_list_saved_views.js';
 import { Migration20261017T142116QuoteRequestsQuoteRequestDocumentTemplate } from './20261017T142116_quote_requests_quote_request_document_template.js';
 import { Migration20261017T142121QuoteRequestsQuoteRequestEventPdfSent } from './20261017T142121_quote_requests_quote_request_event_pdf_sent.js';
+import { Migration20261018T122118QuoteRequestsItemPackagingUnitId } from './20261018T122118_quote_requests_item_packaging_unit_id.js';
 
 export const migrations = [
   Migration20260424T190112QuoteRequestsInit,
@@ -68,6 +69,7 @@ export const migrations = [
   Migration20261014T173236QuoteRequestsQuoteRequestListSavedViews,
   Migration20261017T142116QuoteRequestsQuoteRequestDocumentTemplate,
   Migration20261017T142121QuoteRequestsQuoteRequestEventPdfSent,
+  Migration20261018T122118QuoteRequestsItemPackagingUnitId,
 ];
 
 export {
@@ -83,4 +85,5 @@ export {
   Migration20261014T173236QuoteRequestsQuoteRequestListSavedViews,
   Migration20261017T142116QuoteRequestsQuoteRequestDocumentTemplate,
   Migration20261017T142121QuoteRequestsQuoteRequestEventPdfSent,
+  Migration20261018T122118QuoteRequestsItemPackagingUnitId,
 };

@@ -10,6 +10,7 @@ import {
 import type { FulfilmentStrategy } from './inventory.js';
 import type { BulkImportReport } from './import-export.js';
 import type { AttributeScope } from './product-value-resolver.js';
+import { ORDER_MINIMUM_MAX } from './order-minimums.js';
 
 /**
  * Catalog module contracts — Source of truth per Principle V.
@@ -245,6 +246,12 @@ export const productSummarySchema = z.object({
    * indication (band + in-stock flag), present for bound and unbound keys.
    */
   availability: productAvailabilitySchema.optional(),
+  /**
+   * Feature 155 — the product's pieces minimum; `null` = none. Emitted only for
+   * `simple` / `configurable` products (else `null`). Optional so every producer
+   * written before it still compiles.
+   */
+  minOrderQuantity: z.number().int().positive().nullable().optional(),
 });
 export type ProductSummary = z.infer<typeof productSummarySchema>;
 
@@ -467,6 +474,8 @@ export const productDetailSchema = productSummarySchema.extend({
         baseQuantity: z.number().int().positive(),
         position: z.number().int().nonnegative(),
         isDefault: z.boolean(),
+        /** Feature 155 — minimum units of this unit per order of the product; `null` = none. */
+        minOrderUnits: z.number().int().positive().nullable().optional(),
       }),
     )
     .optional(),
@@ -646,6 +655,13 @@ const baseProductRequestObject = z.object({
     .nullable()
     .optional(),
   fulfilmentStrategyWarehouseOrder: z.array(uuidSchema).nullable().optional(),
+  /**
+   * Feature 155 — pieces minimum; `null` clears. Simple / configurable only (else
+   * 422 VALIDATION_FAILED, `details.field`, from the service).
+   */
+  minOrderQuantity: z.number().int().min(1).max(ORDER_MINIMUM_MAX).nullable().optional(),
+  /** Feature 155 — may `return`-kind cases include this product? Every type. */
+  returnable: z.boolean().optional(),
 });
 
 export const createProductRequestSchema = baseProductRequestObject.refine(
@@ -734,6 +750,8 @@ const bulkUpdateFieldsObject = z.object({
   // selected product.
   attributeSetId: uuidSchema.nullable().optional(),
   attributeValues: z.record(z.string(), z.unknown()).optional(),
+  /** Feature 155 — set (or unset) the returnable flag on every selected product. */
+  returnable: z.boolean().optional(),
 });
 
 export const bulkUpdateProductsRequestSchema = z.object({
@@ -751,6 +769,7 @@ export const bulkUpdateProductsRequestSchema = z.object({
       f.salesChannels !== undefined ||
       f.categories !== undefined ||
       f.attributeSetId !== undefined ||
+      f.returnable !== undefined ||
       (f.attributeValues !== undefined && Object.keys(f.attributeValues).length > 0),
     { message: 'at least one field must be present' },
   ),
@@ -1563,6 +1582,11 @@ export const packagingUnitSchema = z.object({
   baseQuantity: z.number().int().positive(),
   position: z.number().int().nonnegative(),
   isDefault: z.boolean(),
+  /**
+   * Feature 155 — minimum units of this unit per order of the product; `null` = none.
+   * Always emitted by `catalog`; optional so other builders of the DTO keep compiling.
+   */
+  minOrderUnits: z.number().int().positive().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -1574,6 +1598,8 @@ export const createPackagingUnitRequestSchema = z
     baseQuantity: z.number().int().positive(),
     isDefault: z.boolean().optional(),
     position: z.number().int().nonnegative().optional(),
+    /** Feature 155 — minimum number of this unit per order of the product; `null` clears. */
+    minOrderUnits: z.number().int().min(1).max(ORDER_MINIMUM_MAX).nullable().optional(),
   })
   .strict();
 export type CreatePackagingUnitRequest = z.infer<typeof createPackagingUnitRequestSchema>;
@@ -1584,6 +1610,8 @@ export const updatePackagingUnitRequestSchema = z
     baseQuantity: z.number().int().positive().optional(),
     isDefault: z.boolean().optional(),
     position: z.number().int().nonnegative().optional(),
+    /** Feature 155 — minimum number of this unit per order of the product; `null` clears. */
+    minOrderUnits: z.number().int().min(1).max(ORDER_MINIMUM_MAX).nullable().optional(),
   })
   .strict();
 export type UpdatePackagingUnitRequest = z.infer<typeof updatePackagingUnitRequestSchema>;
@@ -1836,6 +1864,10 @@ export interface CatalogProductRecord {
   lowStockThresholdMode: 'cumulative' | 'per_warehouse';
   fulfilmentStrategy: FulfilmentStrategy | null;
   fulfilmentStrategyWarehouseOrder: string[] | null;
+  /** Feature 155 — pieces minimum; `null` = none. Stored for any type, applied to simple/configurable only. */
+  minOrderQuantity: number | null;
+  /** Feature 155 — the product's current flag; order lines record their own copy at placement. */
+  returnable: boolean;
 }
 
 /**
@@ -2078,6 +2110,8 @@ export interface CatalogPackagingUnitRecord {
   isDefault: boolean;
   createdAt: Date;
   updatedAt: Date;
+  /** Feature 155 — minimum units of this packaging unit per order of the product; `null` = none. */
+  minOrderUnits: number | null;
 }
 
 /** A directed product↔product relation (cross-sell, up-sell, related). */
@@ -2165,6 +2199,18 @@ export interface CatalogProductReadPort {
     productId: string,
     packagingUnitId: string,
   ): Promise<CatalogPackagingUnitRecord | null>;
+  /**
+   * Feature 155 — the packaging units of the given products, ordered by product id, then
+   * `position`, then `name`. The batch twin of `listVariantsByProductIds`. Unknown ids contribute
+   * nothing.
+   *
+   * **No policy, like every method of this port: it answers for any id.** Callers MUST pass only
+   * product ids they have already vetted — resolved through the buyer-visibility and channel checks
+   * (`isProductVisibleTo`, the request-channel filter) or taken from a document the caller owns on the
+   * buyer's behalf (their basket, quote request or order). Passing an id straight from a request body
+   * turns this method into a catalogue enumeration oracle.
+   */
+  listPackagingUnitsByProductIds(productIds: readonly string[]): Promise<CatalogPackagingUnitRecord[]>;
 
   /** Links out of the given products, optionally narrowed to one kind. */
   listLinksBySourceIds(

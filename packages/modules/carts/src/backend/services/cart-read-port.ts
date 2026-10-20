@@ -77,9 +77,18 @@ export function createCartWritePort(
       return toCartRecord(await getService().getOrCreateForCustomer(ctx));
     },
 
-    async addItem(actor, input) {
-      const result = await getService().addItem(actor, input);
+    async addItem(actor, input, options) {
+      const result = await getService().addItem(actor, input, options);
       return { cart: toCartRecord(result.cart), items: result.items.map(toCartItemRecord) };
+    },
+
+    async addItems(actor, lines, options) {
+      const result = await getService().addItems(actor, lines, options);
+      return {
+        cart: toCartRecord(result.cart),
+        items: result.items.map(toCartItemRecord),
+        outcomes: result.outcomes,
+      };
     },
 
     clearForCustomer: (ctx) => getService().clearForCustomer(ctx),
@@ -97,6 +106,11 @@ export function createCartWritePort(
       // price holds at the quantity it was agreed for and at no other
       // (`cart-line-pricing.ts`). Any other seed — a reorder — carries none, and
       // its lines are priced like any other line, below.
+      // Feature 155 (FR-028) — the agreed quantity is also what exempts the line
+      // from the catalogue's minimums while the quantity still equals it
+      // (`CartItemRecord.quoteSeededQuantity`). This is the only writer of
+      // `agreedQuantity`: a reorder (no source) and every other path leave it
+      // `null`.
       const agreed = Boolean(options?.sourceQuoteRequestId);
       const created: CartItem[] = [];
       for (const line of lines) {
@@ -186,6 +200,7 @@ export function toCartItemRecord(item: CartItem): CartItemRecord {
     packagingUnitId: item.packagingUnitId ?? null,
     packagingUnitName: item.packagingUnitName ?? null,
     packagingUnitBaseQuantity: item.packagingUnitBaseQuantity ?? null,
+    quoteSeededQuantity: item.agreedQuantity ?? null,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
   };

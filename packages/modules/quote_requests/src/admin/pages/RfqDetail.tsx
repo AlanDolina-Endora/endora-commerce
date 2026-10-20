@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import {
+  AlertTriangle,
   CalendarClock,
   CalendarX,
   Check,
@@ -78,6 +79,17 @@ interface AdminRfqItem {
   customerProposedUnitPrice?: number | null;
   packagingUnitName?: string | null;
   packagingUnitBaseQuantity?: number | null;
+  /**
+   * Feature 155 (FR-030) — set by the admin read when the line is below its
+   * product's current minimum; `null`/absent when it is fine. Informs only.
+   */
+  minimumWarning?: MinimumWarning | null;
+}
+
+interface MinimumWarning {
+  kind: 'pieces' | 'packaging_unit';
+  minimum: number;
+  packagingUnitName?: string;
 }
 
 interface AdminRfqEvent {
@@ -631,7 +643,9 @@ export function RfqDetail(): ReactNode {
                       const reference = referenceViewOf(it, currentPrices);
                       const proposal = proposalOf(it);
                       return (
-                        <TableRow key={it.id}>
+                        // Top-aligned: the minimum badge under the quantity must not lift it
+                        // above the other cells' first line (U4).
+                        <TableRow key={it.id} className="[&>td]:align-top">
                           <TableCell>
                             <strong>{it.productName}</strong>
                             {it.variantLabel ? <small> ({it.variantLabel})</small> : null}
@@ -639,7 +653,13 @@ export function RfqDetail(): ReactNode {
                               <div className="text-xs text-muted-foreground">{it.lineNote}</div>
                             ) : null}
                           </TableCell>
-                          <TableCell>{it.quantity}</TableCell>
+                          <TableCell>
+                            <div className="tabular-nums">{it.quantity}</div>
+                            <MinimumWarningBadge
+                              warning={it.minimumWarning}
+                              packagingUnitName={it.packagingUnitName}
+                            />
+                          </TableCell>
                           <TableCell>
                             <ReferenceCell view={reference} perBaseUnit={Boolean(it.packagingUnitName)} />
                           </TableCell>
@@ -798,6 +818,38 @@ function CancelDialog(props: {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Feature 155 (FR-030, US4 #15) — "Below minimum (10 pcs)" / "(2 × Pallet)" on a
+ * line the admin read flags. Text plus icon, never colour alone (WCAG 1.4.1);
+ * amber `warning`, not `destructive`, because it informs and blocks nothing —
+ * a sales representative may set a line below the minimum on purpose (FR-012).
+ * It is the server's verdict on the saved revision (product totals across the
+ * request's lines), so the Modify tab shows it on a kept line only and does not
+ * recompute it while the operator types.
+ */
+function MinimumWarningBadge(props: {
+  warning: MinimumWarning | null | undefined;
+  packagingUnitName?: string | null | undefined;
+  id?: string;
+}): ReactNode {
+  const t = useTranslation('core');
+  const { warning } = props;
+  if (!warning) return null;
+  const unitName = warning.packagingUnitName ?? props.packagingUnitName ?? null;
+  const label =
+    warning.kind === 'pieces'
+      ? t('rfq.detail.minimum.pieces', { minimum: warning.minimum })
+      : unitName
+        ? t('rfq.detail.minimum.packagingUnit', { minimum: warning.minimum, packagingUnitName: unitName })
+        : t('rfq.detail.minimum.packagingUnitUnnamed', { minimum: warning.minimum });
+  return (
+    <Badge id={props.id} variant="warning" className="mt-1 gap-1">
+      <AlertTriangle className="size-3" aria-hidden="true" />
+      <span>{label}</span>
+    </Badge>
   );
 }
 
@@ -1120,7 +1172,9 @@ function ModifyCard({
                 // A new or switched line has no stored name yet; it is still a
                 // named group, by its position (review fix N7).
                 aria-label={orig?.productName ?? t('rfq.detail.modify.lineGroup', { number: i + 1 })}
-                className={cn('grid grid-cols-1 items-center gap-3', gridCols)}
+                // Top-aligned, every cell at least one control tall (h-9) and centred in it: the
+                // minimum badge hangs under the quantity input without moving any cell (U4).
+                className={cn('grid grid-cols-1 items-start gap-3', gridCols)}
               >
                 <ProductPicker
                   mode="select"
@@ -1140,14 +1194,22 @@ function ModifyCard({
                     if (v) prefillAgreed(i, { productId: v, variantId: null, quantity: qtyNum });
                   }}
                 />
-                <Input
-                  type="number"
-                  min={1}
-                  aria-label={t('rfq.detail.modify.quantity')}
-                  value={l.quantity}
-                  onChange={(e): void => updateLine(i, { quantity: e.target.value })}
-                  className="tabular-nums"
-                />
+                <div className="space-y-1">
+                  <Input
+                    type="number"
+                    min={1}
+                    aria-label={t('rfq.detail.modify.quantity')}
+                    aria-describedby={orig?.minimumWarning ? `rfq-line-${i}-minimum` : undefined}
+                    value={l.quantity}
+                    onChange={(e): void => updateLine(i, { quantity: e.target.value })}
+                    className="tabular-nums"
+                  />
+                  <MinimumWarningBadge
+                    id={`rfq-line-${i}-minimum`}
+                    warning={orig?.minimumWarning}
+                    packagingUnitName={orig?.packagingUnitName}
+                  />
+                </div>
                 <Input
                   type="number"
                   step="0.01"
@@ -1157,25 +1219,26 @@ function ModifyCard({
                   onChange={(e): void => updateLine(i, { agreedUnitPrice: e.target.value })}
                   className="tabular-nums"
                 />
-                <div className="self-center text-sm">
+                <div className="flex min-h-9 items-center text-sm">
                   <ReferenceCell view={reference} perBaseUnit={Boolean(orig?.packagingUnitName)} />
                 </div>
-                <span className="self-center text-sm tabular-nums text-muted-foreground">
+                <span className="flex min-h-9 items-center text-sm tabular-nums text-muted-foreground">
                   {desired !== null ? format.money(desired, currency) : '—'}
                 </span>
-                <div className="self-center text-sm">
+                <div className="flex min-h-9 items-center text-sm">
                   <DifferenceCell
                     price={typedAgreed}
                     currency={orig?.lineCurrency ?? currency}
                     reference={referencePriceOf(reference)}
                   />
                 </div>
-                <span className="self-center text-sm font-medium tabular-nums">
+                <span className="flex min-h-9 items-center text-sm font-medium tabular-nums">
                   {lineTotal !== null ? format.money(lineTotal, currency) : '—'}
                 </span>
                 <Button
                   variant="ghost"
                   size="sm"
+                  className="md:mt-0.5"
                   onClick={(): void => setLines((prev) => prev.filter((_, j) => j !== i))}
                 >
                   {t('rfq.detail.modify.remove')}
