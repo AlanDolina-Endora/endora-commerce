@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { CustomFieldListFilterField } from '@endora-commerce/contracts';
 import { setMobileViewport } from '../../setup';
@@ -69,6 +69,33 @@ beforeEach(() => {
     return Promise.reject(new Error(`unexpected GET ${path}`));
   });
 });
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+/**
+ * The kit commits a typed filter after a 300 ms pause. A test that waits for
+ * that commit on real timers spends the pause plus every `waitFor` poll under
+ * StrictMode, which a loaded CI runner stretched past the 5 s test timeout.
+ * So the pause is stepped over instead of waited for.
+ *
+ * Install the fake timers only after the page has rendered and its first
+ * `findBy*` has resolved on real timers: installed before `renderList()`, the
+ * typed change was observed to be lost (the input kept its old value and no
+ * commit followed). `shouldAdvanceTime` keeps the faked clock following the
+ * wall clock, because `waitFor` polls on the global `setTimeout`, which vitest
+ * fakes — without it the `waitFor` after the step would never poll.
+ */
+function installSteppedTimers(): void {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+}
+
+async function stepPastCommitPause(): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(300);
+  });
+}
 
 function renderList(path = '/crm/opportunities', language: 'en' | 'pl' = 'en'): ReturnType<typeof renderCrm> {
   return renderCrm(
@@ -157,9 +184,11 @@ describe('OpportunitiesList — More filters disclosure (U1 A)', () => {
   it('does not reorder the grid while expanded when a later filter turns active', async () => {
     renderList();
     fireEvent.click(await screen.findByRole('button', { name: 'More filters (3)' }));
+    installSteppedTimers();
     const tier = screen.getByLabelText('Tier');
     tier.focus();
     fireEvent.change(tier, { target: { value: 'gold' } });
+    await stepPastCommitPause();
     await waitFor(() =>
       expect(JSON.parse(lastListQuery().get('fieldFilters') ?? 'null')).toEqual({
         'custom:field_6': { contains: 'gold' },
@@ -181,7 +210,9 @@ describe('OpportunitiesList — More filters disclosure (U1 A)', () => {
   it('keeps a field shown while its filter is cleared, collapsed', async () => {
     renderList('/crm/opportunities?cf.field_5.contains=acme');
     const partner = await screen.findByLabelText('Partner');
+    installSteppedTimers();
     fireEvent.change(partner, { target: { value: '' } });
+    await stepPastCommitPause();
     await waitFor(() => expect(lastListQuery().get('fieldFilters')).toBeNull());
     expect(screen.getByLabelText('Partner')).toBe(partner);
   });

@@ -1,6 +1,6 @@
 import { StrictMode, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useLocation } from 'react-router-dom';
 import { ApiError } from '@endora-commerce/admin-kit/lib';
 import type { CustomFieldListFilterField } from '@endora-commerce/contracts';
@@ -78,6 +78,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   delete (window as { __xss?: unknown }).__xss;
 });
 
@@ -243,7 +244,15 @@ describe('OpportunitiesList — custom-field filters', () => {
       );
       await screen.findByText('The filter “Segment” is no longer available on this list.');
       listAnswer = async () => page(null);
+      // The search request follows a 300 ms typing pause: step over it rather
+      // than wait it out, which a loaded runner stretches towards the test
+      // timeout. Fake timers go in only after the first render settled on real
+      // ones, and follow the wall clock so the `waitFor` below still polls.
+      vi.useFakeTimers({ shouldAdvanceTime: true });
       fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'fleet' } });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
       await waitFor(() =>
         expect(screen.queryByText('The filter “Segment” is no longer available on this list.')).toBeNull(),
       );
