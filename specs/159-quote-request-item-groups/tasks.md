@@ -58,10 +58,10 @@ Paths: `CT` = `packages/contracts/src`, `AK` = `packages/admin-kit/src`, `QR` =
 
 ### The editor primitive (admin-kit)
 
-- [ ] T017 [P] Write `AT/components/useGroupedReorder.test.tsx` (`<StrictMode>`) — red: pointer drop on a line inserts before it, on a section's drop area appends; keyboard lift/move/drop/cancel within a section and across a boundary into the neighbour section; groups move by keyboard and never below the fixed section; `moveItemBy`/`moveSectionBy`; every move announced with name, section, position, total; `disabled` turns everything off
-- [ ] T018 Implement `AK/components/reorder/useGroupedReorder.ts` (reusing `ReorderAnnouncer`) and export — T017 green
-- [ ] T019 [P] Write `AT/components/LineGroupsEditor.test.tsx` (`<StrictMode>`, `axe-core` light + dark) — red: no group → bare list (no headings); *Add group* focuses the new name; empty name error; delete moves lines to *Ungrouped* in order and announces it; empty group shows the drop hint; *Move to group* menu lists other sections and moves to the end; *Move up/down*; *Ungrouped* last with no controls; `maxGroups` disables *Add group* with its description; `readOnly` renders headings and summaries only; `renderSummary` receives each section's lines
-- [ ] T020 Implement `AK/components/line-groups/LineGroupsEditor.tsx` (+ `index.ts`, export from `AK/components/index.ts`) on `useGroupedReorder`, `TouchReorderButtons`, `DropdownMenu`, `Input` — T019 green; `pnpm run build:packages`
+- [X] T017 [P] Write `AT/components/useGroupedReorder.test.tsx` (`<StrictMode>`) — red: pointer drop on a line inserts before it, on a section's drop area appends; keyboard lift/move/drop/cancel within a section and across a boundary into the neighbour section; groups move by keyboard and never below the fixed section; `moveItemBy`/`moveSectionBy`; every move announced with name, section, position, total; `disabled` turns everything off
+- [X] T018 Implement `AK/components/reorder/useGroupedReorder.ts` (reusing `ReorderAnnouncer`) and export — T017 green
+- [X] T019 [P] Write `AT/components/LineGroupsEditor.test.tsx` (`<StrictMode>`, `axe-core` light + dark) — red: no group → bare list (no headings); *Add group* focuses the new name; empty name error; delete moves lines to *Ungrouped* in order and announces it; empty group shows the drop hint; *Move to group* menu lists other sections and moves to the end; *Move up/down*; *Ungrouped* last with no controls; `maxGroups` disables *Add group* with its description; `readOnly` renders headings and summaries only; `renderSummary` receives each section's lines
+- [X] T020 Implement `AK/components/line-groups/LineGroupsEditor.tsx` (+ `index.ts`, export from `AK/components/index.ts`) on `useGroupedReorder`, `TouchReorderButtons`, `DropdownMenu`, `Input` — T019 green; `pnpm run build:packages`
 
 **Checkpoint**: shapes, tables, ordering and the editor exist; no screen uses them yet; every pre-existing
 suite is green (SC-004 baseline).
