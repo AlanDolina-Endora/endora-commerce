@@ -24,8 +24,8 @@ Paths: `CT` = `packages/contracts/src`, `AK` = `packages/admin-kit/src`, `QR` =
 
 ## Phase 1: Setup
 
-- [ ] T001 Confirm the worktree builds and record baselines: `pnpm run build:packages`, `pnpm -r run typecheck`, `pnpm --filter backend run test:unit:fast`, `pnpm --filter backend exec vitest run BT/contract/quote_requests BT/contract/orders BT/contract/document_templates`, `pnpm --filter '!backend' run test` — all green before any change
-- [ ] T002 List every read of quote and order lines that must adopt the display order (research R-1, R-6): `grep -rn "find(QuoteRequestItem\|find(OrderItem" packages/modules` — record the sites in the MR description (expected: `rfq-service.ts` ×5, `rfq-admin-service.ts` ×3, `quote-request-read-port.ts`, `document/document-service.ts`, `rfq-expiry-worker.ts` if it reads lines, `order-response.ts`, `order-service.ts`, `order-reorder-service.ts`, `order-clone-to-quote-service.ts`, `order-return-context.ts`)
+- [X] T001 Confirm the worktree builds and record baselines: `pnpm run build:packages`, `pnpm -r run typecheck`, `pnpm --filter backend run test:unit:fast`, `pnpm --filter backend exec vitest run BT/contract/quote_requests BT/contract/orders BT/contract/document_templates`, `pnpm --filter '!backend' run test` — all green before any change
+- [X] T002 List every read of quote and order lines that must adopt the display order (research R-1, R-6): `grep -rn "find(QuoteRequestItem\|find(OrderItem" packages/modules` — record the sites in the MR description (expected: `rfq-service.ts` ×5, `rfq-admin-service.ts` ×3, `quote-request-read-port.ts`, `document/document-service.ts`, `rfq-expiry-worker.ts` if it reads lines, `order-response.ts`, `order-service.ts`, `order-reorder-service.ts`, `order-clone-to-quote-service.ts`, `order-return-context.ts`)
 
 ---
 
@@ -35,26 +35,26 @@ Paths: `CT` = `packages/contracts/src`, `AK` = `packages/admin-kit/src`, `QR` =
 
 ### Shared contracts
 
-- [ ] T003 [P] Write `CT/line-groups.test.ts` — red, every row of `contracts/line-groups.md` §3 plus §1: name trimmed, empty/121-char refused; key regex; 51 groups refused; duplicate keys/ids refused with their paths; a `groupKey` naming no group refused at `items.<j>.groupKey`; `groups` without `items` refused (PATCH variant)
-- [ ] T004 Implement `CT/line-groups.ts` (`LINE_GROUP_LIMITS`, `lineGroupKeySchema`, `lineGroupNameSchema`, `lineGroupSchema`, `lineGroupInputSchema`, `newLineGroupInputSchema`, `refineLineGrouping`, `arrangeLineGroups`, `flattenSections`) and export from `CT/index.ts` — T003 green
-- [ ] T005 [P] Extend `CT/quote-requests.test.ts` — red: admin PATCH/POST bodies with `groups`/`groupKey` (valid, every refusal), item `groupId`/`position` defaults (an old reply parses), `itemGroups` default `[]`, the five history change kinds, `QuoteRequestDocumentData.groups` and line `groupId`/`position`
-- [ ] T006 Implement in `CT/quote-requests.ts` per `data-model.md` §4 and `contracts/quote-requests-api.md` — T005 green
-- [ ] T007 [P] Extend `CT/orders.test.ts` — red: `adminCreateOrderRequestSchema` with `groups`/`groupKey` and refusals; `adminOrderPreviewRequestSchema` unchanged (a `groupKey` is stripped, not refused); `orderSchema.itemGroups` default; item defaults
-- [ ] T008 Implement in `CT/orders.ts` per `data-model.md` §5 — T007 green; `pnpm run build:packages`
+- [X] T003 [P] Write `CT/line-groups.test.ts` — red, every row of `contracts/line-groups.md` §3 plus §1: name trimmed, empty/121-char refused; key regex; 51 groups refused; duplicate keys/ids refused with their paths; a `groupKey` naming no group refused at `items.<j>.groupKey`; `groups` without `items` refused (PATCH variant)
+- [X] T004 Implement `CT/line-groups.ts` (`LINE_GROUP_LIMITS`, `lineGroupKeySchema`, `lineGroupNameSchema`, `lineGroupSchema`, `lineGroupInputSchema`, `newLineGroupInputSchema`, `refineLineGrouping`, `arrangeLineGroups`, `flattenSections`) and export from `CT/index.ts` — T003 green
+- [X] T005 [P] Extend `CT/quote-requests.test.ts` — red: admin PATCH/POST bodies with `groups`/`groupKey` (valid, every refusal), item `groupId`/`position` defaults (an old reply parses), `itemGroups` default `[]`, the five history change kinds, `QuoteRequestDocumentData.groups` and line `groupId`/`position`
+- [X] T006 Implement in `CT/quote-requests.ts` per `data-model.md` §4 and `contracts/quote-requests-api.md` — T005 green
+- [X] T007 [P] Extend `CT/orders.test.ts` — red: `adminCreateOrderRequestSchema` with `groups`/`groupKey` and refusals; `adminOrderPreviewRequestSchema` unchanged (a `groupKey` is stripped, not refused); `orderSchema.itemGroups` default; item defaults
+- [X] T008 Implement in `CT/orders.ts` per `data-model.md` §5 — T007 green; `pnpm run build:packages`
 
 ### Storage
 
-- [ ] T009 [P] Write `BT/integration/quote_requests/line-groups-schema.test.ts` — red: table and columns exist with the types, defaults and checks of `data-model.md` §1.3; deleting a group sets its lines' `group_id` to `null` and deletes no line (D2); deleting a quote cascades its groups; legacy rows read `position = 0`
-- [ ] T010 Scaffold `pnpm --filter backend run migration:new -- --module quote_requests --name quote_request_item_groups`, write `up()`/`down()` per `data-model.md` §1.3; add `QR/src/backend/entities/quote-request-item-group.entity.ts` (`@TransitivelyScoped('QuoteRequest', 'quoteRequestId')`), `groupId`/`position` on `QuoteRequestItem`, the optional snapshot keys on `QuoteRequestRevisionLine`; register the entity in `QR/src/backend/index.ts`; `pnpm --filter backend run composer:generate` — T009 green
-- [ ] T011 [P] Write `BT/integration/orders/order-item-groups-schema.test.ts` — red: `data-model.md` §2.3 shape; set-null and cascade; legacy `order_items` rows read `position = 0`
-- [ ] T012 Scaffold `migration:new -- --module orders --name order_item_groups`; add `OR/src/backend/entities/order-item-group.entity.ts` (`@TransitivelyScoped('Order', 'orderId')`), `groupId`/`position` on `OrderItem`; register; `composer:generate` — T011 green; run the entity tenant-classification check and `BT/unit/db/migrations-registry.test.ts`
+- [X] T009 [P] Write `BT/integration/quote_requests/line-groups-schema.test.ts` — red: table and columns exist with the types, defaults and checks of `data-model.md` §1.3; deleting a group sets its lines' `group_id` to `null` and deletes no line (D2); deleting a quote cascades its groups; legacy rows read `position = 0`
+- [X] T010 Scaffold `pnpm --filter backend run migration:new -- --module quote_requests --name quote_request_item_groups`, write `up()`/`down()` per `data-model.md` §1.3; add `QR/src/backend/entities/quote-request-item-group.entity.ts` (`@TransitivelyScoped('QuoteRequest', 'quoteRequestId')`), `groupId`/`position` on `QuoteRequestItem`, the optional snapshot keys on `QuoteRequestRevisionLine`; register the entity in `QR/src/backend/index.ts`; `pnpm --filter backend run composer:generate` — T009 green
+- [X] T011 [P] Write `BT/integration/orders/order-item-groups-schema.test.ts` — red: `data-model.md` §2.3 shape; set-null and cascade; legacy `order_items` rows read `position = 0`
+- [X] T012 Scaffold `migration:new -- --module orders --name order_item_groups`; add `OR/src/backend/entities/order-item-group.entity.ts` (`@TransitivelyScoped('Order', 'orderId')`), `groupId`/`position` on `OrderItem`; register; `composer:generate` — T011 green; run the entity tenant-classification check and `BT/unit/db/migrations-registry.test.ts`
 
 ### One ordering everywhere (FR-011)
 
-- [ ] T013 [P] Write `BT/contract/quote_requests/line-groups.test.ts` § *ordering* — red: a quote whose lines were written with positions 2,0,1 is answered 0,1,2 by the admin reply, the customer reply, `listItems` and the PDF data; a legacy quote (all `position = 0`) keeps `(createdAt, id)` order
-- [ ] T014 Adopt `orderBy: { position: 'asc', createdAt: 'asc', id: 'asc' }` + `arrangeLineGroups` at every quote site listed in T002 (`serializeFull`, `modify`, `patchDraft`, `respondToRevision`, `convertToOrder`, `QuoteRequestReadService.listItems`, `QuoteRequestDocumentDataBuilder`); `serializeFull` answers `itemGroups` (admin: all; customer: non-empty) and items in display order; `CUSTOMER_ITEM_KEYS` += `groupId`, `position` — T013 green, `BT/contract/quote_requests/customer-routes.test.ts` still green
-- [ ] T015 [P] Extend `BT/contract/orders/order-response-schema.contract.test.ts` — red: `itemGroups` (default `[]`) and items `groupId`/`position` in display order on admin, customer and external replies
-- [ ] T016 Implement in `OR/src/backend/order-response.ts` `serializeShared` (ordered read + groups read + arrange) and adopt the ordering at the other `OrderItem` reads from T002 — T015 green
+- [X] T013 [P] Write `BT/contract/quote_requests/line-groups.test.ts` § *ordering* — red: a quote whose lines were written with positions 2,0,1 is answered 0,1,2 by the admin reply, the customer reply, `listItems` and the PDF data; a legacy quote (all `position = 0`) keeps `(createdAt, id)` order
+- [X] T014 Adopt `orderBy: { position: 'asc', createdAt: 'asc', id: 'asc' }` + `arrangeLineGroups` at every quote site listed in T002 (`serializeFull`, `modify`, `patchDraft`, `respondToRevision`, `convertToOrder`, `QuoteRequestReadService.listItems`, `QuoteRequestDocumentDataBuilder`); `serializeFull` answers `itemGroups` (admin: all; customer: non-empty) and items in display order; `CUSTOMER_ITEM_KEYS` += `groupId`, `position` — T013 green, `BT/contract/quote_requests/customer-routes.test.ts` still green
+- [X] T015 [P] Extend `BT/contract/orders/order-response-schema.contract.test.ts` — red: `itemGroups` (default `[]`) and items `groupId`/`position` in display order on admin, customer and external replies
+- [X] T016 Implement in `OR/src/backend/order-response.ts` `serializeShared` (ordered read + groups read + arrange) and adopt the ordering at the other `OrderItem` reads from T002 — T015 green
 
 ### The editor primitive (admin-kit)
 
@@ -106,8 +106,8 @@ unchanged.
 - [ ] T035 [US2] Implement in `history-diff.ts` (and projection plumbing in `history-projection.ts`) — T034 green
 - [ ] T036 [P] [US2] Extend `BT/contract/quote_requests/customer-routes.test.ts` — red: customer reply `itemGroups` holds non-empty groups only, items in display order with `groupId`/`position`; `comparisonAgainstLastSeen.diff` holds `{ kind: 'grouping' }` with no other key after a regroup; POST/PATCH with `groups` or `groupKey` → 400 (FR-025, SC-007); accept after a regroup revision succeeds (FR-024); resubmit copies no group (FR-026)
 - [ ] T037 [US2] Implement any remaining customer-reply wiring in `QR/src/backend/services/rfq-service.ts` / `customer-projection.ts` — T036 green
-- [ ] T038 [P] [US2] Extend `AT/modules/quote_requests/RfqDetail.history.test.tsx` — red: the five kinds render with their bundle sentences in en and pl; `null` side renders as *Ungrouped*
-- [ ] T039 [US2] Implement in `QR/src/admin/pages/RfqHistory.tsx` + bundle keys — T038 green
+- [X] T038 [P] [US2] Extend `AT/modules/quote_requests/RfqDetail.history.test.tsx` — red: the five kinds render with their bundle sentences in en and pl; `null` side renders as *Ungrouped*
+- [X] T039 [US2] Implement in `QR/src/admin/pages/RfqHistory.tsx` + bundle keys — T038 green
 - [ ] T040 [P] [US2] Write `SF/test/rfq/grouped-lines.test.tsx` — red: `GroupedLineRows` renders heading rows (`scope="colgroup"`), line rows, summary rows by the page's rule (agreed, else desired; every line or none) per section, *Other items* last; empty groups never; no non-empty group → markup identical to the line rows alone (SC-004); `describeDiff` of `grouping`; pl + en strings
 - [ ] T041 [US2] Implement `SF/components/line-groups/GroupedLineRows.tsx`, use it in `SF/app/(account)/quote-requests/[id]/page.tsx`, extend `SF/lib/api/rfq.ts` types and `SF/lib/i18n/messages.ts` (both catalogues) — T040 green; `pnpm --filter storefront run typecheck`
 
