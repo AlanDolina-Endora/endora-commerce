@@ -1,13 +1,11 @@
 /**
- * `?returnTo=` — where a screen opened from elsewhere leads back to
- * (`specs/158-crm-opportunity-inline-editing/`, FR-020).
+ * `?returnTo=` — where a screen opened from elsewhere leads back to.
  *
  * The screen that links names the way back; the screen that is opened reads
- * it and says only "Back". Neither knows what the other is: an Order's screen
- * does not know it was opened from a CRM Opportunity, only that there is a
- * path to return to. The create screens of Orders and Quote Requests have
- * read the same parameter since feature 143; their detail screens read it
- * through here.
+ * it and says only "Back". Neither knows what the other is: a detail screen
+ * does not know which module's screen opened it, only that there is a path to
+ * return to. The create screens of Orders and Quote Requests have read the
+ * same parameter for a while; their detail screens read it through here.
  *
  * The value is a path of this application only — never a scheme, a host or
  * `//` — so a crafted link cannot send the Back button anywhere else.

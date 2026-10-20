@@ -355,7 +355,7 @@ export function OrderDetail(): ReactNode {
     <>
       <PageHeader
         back={
-          // Opened from elsewhere — a CRM Opportunity, say: the way back leads
+          // Opened from another screen that named its own address: the way back leads
           // there, and says only "Back".
           returnTo ? { label: t('common.action.back'), to: returnTo } : { label: t('orders.page.title'), to: '/orders' }
         }
