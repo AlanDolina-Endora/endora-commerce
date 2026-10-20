@@ -934,10 +934,22 @@ describe('demo reset on a demo that has been used (issue #143)', () => {
     });
   }
 
-  /** Every usage counter of `promotions`, as `<scope type> <scope key>` → count. */
+  /**
+   * Every usage counter of the operator's promotion, as `<scope type> <scope
+   * key>` → count.
+   *
+   * Of **that promotion**, not of the table: `setupBackendServer` does not
+   * truncate `promotion_usage_counters`, so counters other files left on this
+   * database are still there, and which ones depends on which files ran here
+   * first. A counter's key is the promotion id, alone for the `global` scope
+   * and followed by `:` for every other, so the promotion's own are exactly
+   * the keys below — and the assertion is still "only those", over them.
+   */
   async function promotionCounters(): Promise<Record<string, number>> {
     const rows = await query<{ scope_type: string; scope_key: string; count: number }>(
-      `select scope_type, scope_key, count from promotion_usage_counters`,
+      `select scope_type, scope_key, count from promotion_usage_counters
+        where scope_key = $1 or starts_with(scope_key, $1 || ':')`,
+      [operatorPromotionId],
     );
     return Object.fromEntries(
       rows.map((row) => [`${row.scope_type} ${row.scope_key}`, Number(row.count)]),

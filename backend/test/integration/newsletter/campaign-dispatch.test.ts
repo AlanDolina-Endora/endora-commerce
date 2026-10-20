@@ -146,15 +146,23 @@ describe('newsletter campaign dispatch (US2)', () => {
   });
 
   async function sendOneCampaign(overrides: Partial<{ trackingEnabled: boolean }> = {}) {
+    // The audience is a tag this test owns, not `all`: `setupTestDb` truncates
+    // nothing, so `all` also reaches every active subscriber another file left
+    // behind (`tenancy/scoped-empty-explains-itself.test.ts` seeds two), and
+    // "the one e-mail sent" would count them. What is under test here is the
+    // tracking in the message, which the targeting does not touch.
     const em = db.em();
+    const tag = em.create(NewsletterTag, { code: 'tracked', name: 'Tracked' });
     const a = em.create(NewsletterSubscriber, { email: 'a@x.test', status: 'active' });
     await em.flush();
+    em.create(NewsletterSubscriberTag, { subscriberId: a.id, tagId: tag.id });
     const campaign = em.create(NewsletterCampaign, {
       name: 'Tracked',
       subject: 'S',
       content: buttonTree(DEAL),
       language: 'en-US',
-      targetType: 'all',
+      targetType: 'tag',
+      targetTagIds: [tag.id],
       ...overrides,
     });
     await em.flush();

@@ -89,8 +89,9 @@ pnpm --filter backend run test:unit:fast # FAST: test/unit minus its service-dep
                                          # files, plus the co-located src unit tests —
                                          # no Postgres, no Redis, no Meilisearch
 pnpm --filter backend exec vitest run <path>   # targeted run — prefer this while iterating
-pnpm --filter backend run test           # COMPLETE (~1 h): unit + contract + integration,
-                                         # needs all three services running
+pnpm --filter backend run test           # COMPLETE: unit + contract + integration, needs
+                                         # all three services; ~50 min at 6 workers with
+                                         # TEST_DATABASE_URL on `pnpm run dev:infra:test`
 pnpm --filter '!backend' run test        # every OTHER workspace member's suite — the
                                          # packages included; nothing above reaches them
 pnpm run dev                             # full dev stack; pnpm run dev:infra for docker services
