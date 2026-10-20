@@ -300,6 +300,7 @@ import { Migration20260611T140410PromptActionsInit } from '@endora-commerce/mod-
 import { Migration20260625T144228PwaInit } from '@endora-commerce/mod-pwa/migrations';
 import { Migration20260830T172022PwaOrganizationAttribution } from '@endora-commerce/mod-pwa/migrations';
 import { Migration20261016T172243PwaPushNotificationPreferences } from '@endora-commerce/mod-pwa/migrations';
+import { Migration20261020T131018PwaPreferencesOrganizationAttributionCheck } from '@endora-commerce/mod-pwa/migrations';
 
 // ── quick_order ─────────────────────────────────────────────────────────────
 import { Migration20260611T140359QuickOrderDefaultPreferences } from '@endora-commerce/mod-quick-order/migrations';
@@ -626,6 +627,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('pwa', Migration20260625T144228PwaInit),
   migration('pwa', Migration20260830T172022PwaOrganizationAttribution),
   migration('pwa', Migration20261016T172243PwaPushNotificationPreferences),
+  migration('pwa', Migration20261020T131018PwaPreferencesOrganizationAttributionCheck),
 
   // ── quick_order ─────────────────────────────────────────────────────────────
   migration('quick_order', Migration20260611T140359QuickOrderDefaultPreferences),
