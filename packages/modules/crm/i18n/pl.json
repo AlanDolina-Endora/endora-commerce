@@ -876,5 +876,16 @@
   "adminSearch.field.number": "Numer szansy sprzedażowej",
   "adminSearch.field.title": "Tytuł",
   "adminSearch.field.organizationName": "Nazwa organizacji",
-  "adminSearch.field.description": "Opis"
+  "adminSearch.field.description": "Opis",
+  "editor.toolbar": "Formatowanie",
+  "editor.format.bold": "Pogrubienie",
+  "editor.format.italic": "Kursywa",
+  "editor.format.strike": "Przekreślenie",
+  "editor.format.bulletList": "Lista punktowana",
+  "editor.format.orderedList": "Lista numerowana",
+  "editor.format.link": "Odnośnik",
+  "editor.link.url": "Adres odnośnika",
+  "editor.link.apply": "Wstaw odnośnik",
+  "editor.link.remove": "Usuń odnośnik",
+  "editor.link.invalid": "Podaj adres zaczynający się od http://, https:// lub mailto:."
 }

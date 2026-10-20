@@ -14,7 +14,7 @@ import { render } from '@testing-library/react';
 import { expect } from 'vitest';
 import { renderWithI18n } from '../../helpers/render-with-i18n';
 import { TranslationProvider } from '../../../../packages/admin-shell/src/i18n/TranslationProvider';
-import { readReferenceText, selectOffsets } from '../../../../packages/modules/crm/src/admin/lib/reference-editor-dom';
+import { textOfEditorDoc, type EditorDoc } from '../../../../packages/modules/crm/src/admin/lib/rich-text-doc';
 import { adminSession, modulePresence, withSession } from '../../helpers/render-with-session';
 
 /**
@@ -309,19 +309,78 @@ export const FOREIGN_PICKER_ENDPOINTS = [
   '/api/v1/admin/dictionary',
 ] as const;
 
-/**
- * The text a description, note or message field would send: what its content
- * stands for — a token for each chip — read by the field's own reader. What a
- * person sees in the field is its `textContent`, names and all.
- */
-export function storedText(field: HTMLElement): string {
-  return readReferenceText(field);
+interface EditorHandle {
+  getJSON(): unknown;
+  state: { doc: { descendants(visit: (node: EditorNode, position: number) => boolean | void): void } };
+  commands: { setTextSelection(position: number): boolean };
+  view: { domAtPos(position: number): { node: Node; offset: number } };
 }
 
-/** Put the caret at a place in a field's stored text, as a click there would. */
+interface EditorNode {
+  isText: boolean;
+  isTextblock: boolean;
+  isInline: boolean;
+  text?: string | null;
+  nodeSize: number;
+  attrs: Record<string, unknown>;
+}
+
+/** The TipTap editor behind a formatted field — TipTap hangs it on the element it edits. */
+export function editorOf(field: HTMLElement): EditorHandle {
+  const editor = (field as unknown as { editor?: EditorHandle }).editor;
+  if (!editor) throw new Error('not a formatted field: no editor on this element');
+  return editor;
+}
+
+/**
+ * The text a description, note or message field would send: what its content
+ * stands for — formatting written as the text grammar, a token for each chip —
+ * read by the field's own writer. What a person sees in the field is its
+ * `textContent`, names and all.
+ */
+export function storedText(field: HTMLElement): string {
+  return textOfEditorDoc(editorOf(field).getJSON() as EditorDoc);
+}
+
+/**
+ * Put the caret at a place in a field's stored text, as a click there would —
+ * for a plain text: a chip counts as its token, a new paragraph as one `\n`.
+ */
 export function caretAt(field: HTMLElement, offset: number): void {
+  const editor = editorOf(field);
+  let remaining = offset;
+  let target: number | null = null;
+  let first = true;
+  editor.state.doc.descendants((node, position) => {
+    if (target !== null) return false;
+    if (node.isTextblock) {
+      if (!first) remaining -= 1;
+      first = false;
+      if (remaining <= 0) target = position + 1;
+      return true;
+    }
+    if (!node.isInline) return true;
+    const length = node.isText
+      ? (node.text ?? '').length
+      : `[[${String(node.attrs['refType'])}:${String(node.attrs['refId'])}]]`.length;
+    if (remaining <= length) {
+      target = node.isText ? position + remaining : position + (remaining === 0 ? 0 : node.nodeSize);
+      return false;
+    }
+    remaining -= length;
+    return false;
+  });
+  // The editor's own focus command waits for a frame; a click focuses at once.
   field.focus();
-  selectOffsets(field, offset);
+  editor.commands.setTextSelection(target ?? 1);
+  // jsdom does not carry the editor's selection to the document's, which is
+  // where a key typed next lands: put it there too, as a click would.
+  const { node, offset: domOffset } = editor.view.domAtPos(target ?? 1);
+  const range = document.createRange();
+  range.setStart(node, domOffset);
+  range.collapse(true);
+  document.getSelection()?.removeAllRanges();
+  document.getSelection()?.addRange(range);
   document.dispatchEvent(new Event('selectionchange'));
 }
 
