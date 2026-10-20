@@ -22,6 +22,7 @@ of the platform, not of what happens to be written.
 | [Module Lifecycle](./lifecycle.md) | CLI-driven install / uninstall / enable / disable / status for every backend module + dependency validation + first-boot reconciliation | core |
 | [addresses](./addresses.md) | Customer postal addresses with default-per-kind invariant | @endora-commerce/mod-addresses |
 | [Admin Command Palette Actions](./admin-actions.md) | Module-contributed action registry surfaced in the Admin Command Palette (⌘K Actions group) | @endora-commerce/mod-admin-actions |
+| [Feedback](./admin-feedback.md) | Administrators send feedback from the admin to the makers of Endora Commerce, relayed as one e-mail and stored nowhere | @endora-commerce/mod-admin-feedback |
 | `admin_notifications` | _no page yet_ | @endora-commerce/mod-admin-notifications |
 | [admin_roles](./admin_roles.md) | Admin role definitions + per-module Permissions | @endora-commerce/mod-admin-roles |
 | [admin_search](./admin-search.md) | Global search in the admin — find organizations, customers, orders, quote requests, sales opportunities, products and categories from the command palette, with configurable searchable fields | @endora-commerce/mod-admin-search |
