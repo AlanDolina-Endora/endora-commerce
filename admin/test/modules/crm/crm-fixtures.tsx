@@ -312,7 +312,12 @@ export const FOREIGN_PICKER_ENDPOINTS = [
 interface EditorHandle {
   getJSON(): unknown;
   state: { doc: { descendants(visit: (node: EditorNode, position: number) => boolean | void): void } };
-  commands: { setTextSelection(position: number): boolean };
+  commands: {
+    setTextSelection(position: number | { from: number; to: number }): boolean;
+    selectAll(): boolean;
+    setContent(content: string): boolean;
+    clearContent(emitUpdate?: boolean): boolean;
+  };
   view: { domAtPos(position: number): { node: Node; offset: number } };
 }
 

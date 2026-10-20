@@ -188,9 +188,9 @@ describe('opportunityRichTextToPlain', () => {
 describe('reading stays linear', () => {
   it('reads a line of unclosed markers and brackets quickly', () => {
     const line = '[a _b '.repeat(5_000);
-    const started = performance.now();
+    const started = Date.now();
     const blocks = parseOpportunityRichText(line);
-    expect(performance.now() - started).toBeLessThan(500);
+    expect(Date.now() - started).toBeLessThan(500);
     expect(formatOpportunityRichText(blocks)).not.toBe('');
     expect(opportunityRichTextToPlain(line)).toBe(line);
   });

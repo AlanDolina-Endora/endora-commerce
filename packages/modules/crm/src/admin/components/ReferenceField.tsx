@@ -149,7 +149,7 @@ export interface ReferenceFieldProps {
  *
  * The toolbar above the field formats what is selected, and its buttons say
  * which formatting the caret is in; the usual keys do the same (Ctrl/Cmd + B,
- * I, Shift + X, Shift + 7, Shift + 8), and a line beginning `- ` or `1. ` is a
+ * I, Shift + S, Shift + 7, Shift + 8), and a line beginning `- ` or `1. ` is a
  * list.
  *
  * **While typing**: `@` opens a list of people, `@@` of the Organization's
