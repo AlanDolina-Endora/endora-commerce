@@ -122,15 +122,15 @@ unchanged.
 
 ### Facility
 
-- [ ] T042 [P] [US3] Extend `CT/document-templates.test.ts` — red: grouping union (null, absent, `sections` with defaults, `none`, legacy field shape with and without `by: 'field'`); `documentItemSectionSchema`; `isValidSectionPartition` (cover once, ascending, contiguous); every stored 153 built-in layout still validates
-- [ ] T043 [US3] Implement in `CT/document-templates.ts` (`DocumentItemSection`, `sections?` on the declaration, schema union, `isValidSectionPartition`, `sampleSections` on the type detail) — T042 green; `pnpm run build:packages`
-- [ ] T044 [P] [US3] Extend `DT/src/backend/rendering/items-table.test.ts` — red: **flat path byte-identical** to the pre-feature definition for null grouping and no group section (snapshot of the 153 fixtures); sections mode: heading row (name, item count with `Intl.PluralRules` texts in pl and en), rows, one subtotal row per table totals row over the section summary honouring `visibleWhen`, ungrouped heading from `otherItemsLabel` or the language default, striping continued, `row.number` continuous; `none` → flat; field grouping unchanged; invalid partition → flat
-- [ ] T045 [US3] Implement in `DT/src/backend/rendering/items-table.ts` (+ facility texts for *Other items* and item counts) — T044 green
-- [ ] T046 [P] [US3] Extend `DT/src/backend/rendering/document-renderer.test.ts` — red: `sections()` called once per collection per render; throwing `sections()` → flat table + one log line, document not failed; a test-only type declaring sections prints them with no facility change (FR-040, 153 SC-007 pattern)
-- [ ] T047 [US3] Implement in `document-renderer.ts` — T046 green
+- [X] T042 [P] [US3] Extend `CT/document-templates.test.ts` — red: grouping union (null, absent, `sections` with defaults, `none`, legacy field shape with and without `by: 'field'`); `documentItemSectionSchema`; `isValidSectionPartition` (cover once, ascending, contiguous); every stored 153 built-in layout still validates
+- [X] T043 [US3] Implement in `CT/document-templates.ts` (`DocumentItemSection`, `sections?` on the declaration, schema union, `isValidSectionPartition`, `sampleSections` on the type detail) — T042 green; `pnpm run build:packages`
+- [X] T044 [P] [US3] Extend `DT/src/backend/rendering/items-table.test.ts` — red: **flat path byte-identical** to the pre-feature definition for null grouping and no group section (snapshot of the 153 fixtures); sections mode: heading row (name, item count with `Intl.PluralRules` texts in pl and en), rows, one subtotal row per table totals row over the section summary honouring `visibleWhen`, ungrouped heading from `otherItemsLabel` or the language default, striping continued, `row.number` continuous; `none` → flat; field grouping unchanged; invalid partition → flat
+- [X] T045 [US3] Implement in `DT/src/backend/rendering/items-table.ts` (+ facility texts for *Other items* and item counts) — T044 green
+- [X] T046 [P] [US3] Extend `DT/src/backend/rendering/document-renderer.test.ts` — red: `sections()` called once per collection per render; throwing `sections()` → flat table + one log line, document not failed; a test-only type declaring sections prints them with no facility change (FR-040, 153 SC-007 pattern)
+- [X] T047 [US3] Implement in `document-renderer.ts` — T046 green
 - [ ] T048 [P] [US3] Extend `BT/contract/document_templates/admin-api.test.ts` (route 2) and `DT/src/backend/services/content-validation.test.ts` — red: `sampleSections` served (empty for the comparison and invoice types); grouping settings validated at save with paths; legacy templates still save — then implement in `document-template-service.ts` / `content-validation.ts` — green
-- [ ] T049 [P] [US3] Extend `AT/modules/document_templates/items-table-editor.test.tsx` — red: *Grouping* radios (Document's groups / By field / No grouping) write `null`→`{ by: 'sections' }` on option change, the 153 field shape, `{ by: 'none' }`; *Other items heading* and *Show item count*; the no-sections hint; canvas renders `sampleSections`
-- [ ] T050 [US3] Implement `DT/src/admin/blocks/items-table/{GroupingField,canvas}.tsx` + `DT/i18n/{en,pl}.json` keys — T049 green
+- [X] T049 [P] [US3] Extend `AT/modules/document_templates/items-table-editor.test.tsx` — red: *Grouping* radios (Document's groups / By field / No grouping) write `null`→`{ by: 'sections' }` on option change, the 153 field shape, `{ by: 'none' }`; *Other items heading* and *Show item count*; the no-sections hint; canvas renders `sampleSections`
+- [X] T050 [US3] Implement `DT/src/admin/blocks/items-table/{GroupingField,canvas}.tsx` + `DT/i18n/{en,pl}.json` keys — T049 green
 
 ### Quote host
 
