@@ -74,6 +74,17 @@ export interface OrderItem {
   lineTotal: number;
   productSnapshot: { sku: string; name: string; primaryAssetUrl: string | null };
   variantSnapshot: { sku: string; label: string } | null;
+  /** Feature 159 — the line's group (`itemGroups[].id`), `null` = ungrouped. */
+  groupId?: string | null;
+  /** Feature 159 — 0-based order within the line's section. */
+  position?: number;
+}
+
+/** Feature 159 — a named group of an order's lines, read-only after placement. */
+export interface OrderItemGroup {
+  id: string;
+  name: string;
+  position: number;
 }
 
 export interface OrderSummary {
@@ -96,6 +107,9 @@ export interface OrderSummary {
   } | null;
   deliveryMethod: { id: string; code: string; name: Record<string, string>; cost: number };
   paymentMethod: { id: string; code: string; name: Record<string, string>; kind: string };
+  /** Feature 159 — the order's groups, in order; absent on an older backend. */
+  itemGroups?: OrderItemGroup[];
+  /** In display order: each group's lines, then the ungrouped ones. */
   items: OrderItem[];
   subtotal: number;
   taxTotal: number;

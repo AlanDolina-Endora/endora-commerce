@@ -42,13 +42,32 @@ export function quoteSectionTotals(
   return { count: lines.length, net: round(net), vat, gross: round(net + vat) };
 }
 
-/** "3 items · net 120,00 zł · VAT 27,60 zł · gross 147,60 zł", in the page's language. */
-export function sectionSummaryText(totals: SectionTotals, currency: string, locale: string): string {
+/**
+ * The order page's rule (feature 159, FR-031): net from each line's unit price
+ * and quantity, gross the sum of the line totals the page shows (`lineTotal` is
+ * gross), VAT the difference — so a summary adds up the rows above it.
+ */
+export function orderSectionTotals(
+  lines: ReadonlyArray<{ quantity: number; unitPrice: number; lineTotal: number }>,
+): SectionTotals {
+  const round = (n: number): number => Math.round(n * 100) / 100;
+  if (lines.length === 0) return { count: 0, net: null, vat: null, gross: null };
+  const net = round(lines.reduce((s, line) => s + line.unitPrice * line.quantity, 0));
+  const gross = round(lines.reduce((s, line) => s + line.lineTotal, 0));
+  return { count: lines.length, net, vat: round(gross - net), gross };
+}
+
+/**
+ * "3 items · net 120,00 zł · VAT 27,60 zł · gross 147,60 zł", in the page's
+ * language. Amounts in the currency's own conventions unless the page formats
+ * its money in a locale of its own (`moneyLocale`).
+ */
+export function sectionSummaryText(totals: SectionTotals, currency: string, locale: string, moneyLocale?: string): string {
   const t = tForLocale(locale);
   const form = new Intl.PluralRules(locale).select(totals.count);
   const itemsKey = `lineGroups.summary.items.${form}` as MessageKey;
   const parts = [t(itemsKey).replace('{count}', String(totals.count))];
-  const money = (n: number): string => formatMoney(n, currency);
+  const money = (n: number): string => formatMoney(n, currency, moneyLocale);
   if (totals.net !== null) parts.push(t('lineGroups.summary.net').replace('{amount}', money(totals.net)));
   if (totals.vat !== null) parts.push(t('lineGroups.summary.vat').replace('{amount}', money(totals.vat)));
   if (totals.gross !== null) parts.push(t('lineGroups.summary.gross').replace('{amount}', money(totals.gross)));
@@ -67,6 +86,8 @@ export interface GroupedLineRowsProps<T extends GroupableLine> {
   readonly renderRow: (line: T) => ReactNode;
   /** A section's totals; the quote page's rule when absent. */
   readonly totals?: (lines: readonly T[]) => SectionTotals;
+  /** The locale the page formats its money in; the currency's own when absent. */
+  readonly moneyLocale?: string;
 }
 
 export function GroupedLineRows<T extends GroupableLine>(props: GroupedLineRowsProps<T>): ReactNode {
@@ -92,7 +113,7 @@ export function GroupedLineRows<T extends GroupableLine>(props: GroupedLineRowsP
           {section.lines.map((line) => renderRow(line))}
           <tr className="line-group__summary">
             <td colSpan={columnCount} className="muted" style={{ fontSize: 12 }}>
-              {sectionSummaryText(totalsOf(section.lines), currency, locale)}
+              {sectionSummaryText(totalsOf(section.lines), currency, locale, props.moneyLocale)}
             </td>
           </tr>
         </Fragment>
