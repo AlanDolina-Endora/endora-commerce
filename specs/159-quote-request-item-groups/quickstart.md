@@ -55,6 +55,8 @@ list price above what you will agree (to see discounts).
 3. *Document templates → Quote request →* a template → Line items table → *Grouping*: *Document's groups*
    selected; switch to *No grouping* → preview prints flat; *By field* → 153 behaviour (FR-041).
 4. Export an ungrouped quote: identical to before this feature (SC-004).
+5. Known limitation (research N-28): a group's heading row can fall at the foot of a page with its first
+   line on the next. Rows are never split; a heading is not kept with the row after it.
 
 ## 4. Carry-over (US4 — FR-050–FR-053)
 

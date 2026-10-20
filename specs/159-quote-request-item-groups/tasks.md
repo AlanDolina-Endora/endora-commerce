@@ -173,13 +173,16 @@ unchanged.
 
 ## Phase 9: Polish & cross-cutting
 
-- [ ] T068 [P] Documentation (en + pl): `QR/docs/quote_requests.md`, `OR/docs/orders.md`, `DT/docs/document-templates.md` and their Polish pages under `docs/i18n/pl/docusaurus-plugin-content-docs/current/modules/` — grouping, what customers see, carry-over, admin order groups, the table's *Grouping* setting (FR-086); `pnpm --filter backend run check:module-docs` and `check:docs-translations`
-- [ ] T069 [P] Off-state sweep: extend `BT/integration/quote_requests/off-state.test.ts` — facility off: grouping screens/APIs unaffected, PDFs refused; quote requests off: existing orders still serve `itemGroups`
-- [ ] T070 [P] Changesets (minor) for `@endora-commerce/contracts`, `@endora-commerce/admin-kit`, `@endora-commerce/mod-document-templates` (state the `grouping: null` meaning change), `@endora-commerce/mod-quote-requests`, `@endora-commerce/mod-orders` (`specs/conventions/release-intent.md`)
-- [ ] T071 Re-record `BT/fixtures/openapi-baseline.json` for the changed admin/customer/external replies and request bodies; `composer:generate` clean (no diff); `manifests:generate` + `pnpm install --lockfile-only` only if a package body changed
-- [ ] T072 Checks: `pnpm run check:naming && pnpm run check:language`; `pnpm --filter backend run` each of `i18n:hardcoded`, `check:bundle-pairing`, `check:command-coverage` (the grouping writes sit inside `modify`/`createOnBehalf`/`placeOrder`, which already audit — no new ignore marker), `check:module-boundary`, `check:port-dependencies`, `check:off-state-coverage`, `check:test-ownership`, `check:release-intent`; the entity tenant-classification test; re-record a read size only if its band refuses it (`specs/conventions/check-estate.md`)
-- [ ] T073 Verify: `pnpm -r run typecheck`, `pnpm -r run lint`, `pnpm --filter backend run test:unit:fast`, targeted contract + integration suites of `quote_requests`, `orders`, `document_templates`, `pnpm --filter '!backend' run test` (admin, storefront, packages); report failures with output
-- [ ] T074 Walk `quickstart.md` §0–§7 end to end
+- [X] T068 [P] Documentation (en + pl): `QR/docs/quote_requests.md`, `OR/docs/orders.md`, `DT/docs/document-templates.md` and their Polish pages under `docs/i18n/pl/docusaurus-plugin-content-docs/current/modules/` — grouping, what customers see, carry-over, admin order groups, the table's *Grouping* setting (FR-086); `pnpm --filter backend run check:module-docs` and `check:docs-translations`
+- [X] T069 [P] Off-state sweep: extend `BT/integration/quote_requests/off-state.test.ts` — facility off: grouping screens/APIs unaffected, PDFs refused; quote requests off: existing orders still serve `itemGroups`
+- [X] T070 [P] Changesets (minor) for `@endora-commerce/contracts`, `@endora-commerce/admin-kit`, `@endora-commerce/mod-document-templates` (state the `grouping: null` meaning change), `@endora-commerce/mod-quote-requests`, `@endora-commerce/mod-orders` (`specs/conventions/release-intent.md`)
+- [X] T071 (nothing to re-record — research N-29) Re-record `BT/fixtures/openapi-baseline.json` for the changed admin/customer/external replies and request bodies; `composer:generate` clean (no diff); `manifests:generate` + `pnpm install --lockfile-only` only if a package body changed
+- [X] T072 Checks: `pnpm run check:naming && pnpm run check:language`; `pnpm --filter backend run` each of `i18n:hardcoded`, `check:bundle-pairing`, `check:command-coverage` (the grouping writes sit inside `modify`/`createOnBehalf`/`placeOrder`, which already audit — no new ignore marker), `check:module-boundary`, `check:port-dependencies`, `check:off-state-coverage`, `check:test-ownership`, `check:release-intent`; the entity tenant-classification test; re-record a read size only if its band refuses it (`specs/conventions/check-estate.md`)
+- [X] T073 Verify: `pnpm -r run typecheck`, `pnpm -r run lint`, `pnpm --filter backend run test:unit:fast`, targeted contract + integration suites of `quote_requests`, `orders`, `document_templates`, `pnpm --filter '!backend' run test` (admin, storefront, packages); report failures with output
+- [ ] T074 Walk `quickstart.md` §0–§7 end to end — **not walked by hand**: no browser session was available to the implementer. Every step has an
+  automated counterpart green on 2026-10-20 (contract/integration suites of `quote_requests`, `orders`,
+  `carts`, `document_templates`, `tenancy`; the admin and storefront tests of US1–US6). The PDF heading
+  that can close a page (§3.5) is a known limitation, not met (research N-28). The manual walk is left to the owner
 
 ---
 

@@ -606,3 +606,32 @@ Smallest deviations taken where the plan met the code; later phases build on the
 
 **Checkpoint**: quickstart §4–§6 are covered by `place-order-quote-groups.test.ts`,
 `admin-create-groups.test.ts` and the admin/storefront tests above; not walked by hand (T074).
+
+## Implementation notes (polish, T068–T074, 2026-10-20)
+
+- **N-27 — Off-state sweep (T069).** `BT/integration/quote_requests/off-state.test.ts` § feature 159 adds
+  the cases R-23 left without a test of their own: with `document_templates` deactivated the quote PDF
+  answers `503 MODULE_DISABLED` while an operator still regroups the quote and both quote replies carry
+  the groups; with `quote_requests` off on **either** axis, an order placed from a grouped quote keeps
+  answering the same `itemGroups` on the admin and the customer read (the control: the quote itself is
+  refused meanwhile). The facility's four-route refusal stays in `BT/contract/quote_requests/pdf-export.test.ts`
+  and placement while `quote_requests` is off in `place-order-quote-groups.test.ts` (FR-083); the sweep
+  does not repeat them. `check:off-state-coverage` was already green (no new switchable module or edge).
+- **N-28 — A section heading can close a page (T074).** `dontBreakRows` keeps each row whole, but pdfmake
+  keeps no row with its neighbour, so a group's heading row can be the last row on a page with the group's
+  first line opening the next. The two remedies were weighed and not taken: the document-level
+  `pageBreakBefore` hook re-lays the whole document per node (the reason 153 gave for a line and its detail
+  row, which have the same limitation), and folding a heading and its first line into one unbreakable row
+  needs a nested table inside a spanned cell, which breaks the column grid, striping and borders. It is
+  stated as a limitation on the Document templates page and in the renderer's comment; the contract's
+  SHOULD (`contracts/document-sections.md` §3) is not met and is left to the owner.
+- **N-29 — Nothing to re-record (T071).** `openapi-baseline.json` still records no request or response
+  body for any route this feature touched (N-10), including route 2's `sampleSections` and the admin
+  preview's `taxRate`; `openapi-baseline.test.ts` passes unchanged. `composer:check` and `manifests:check`
+  report no drift, so no `manifests:generate` or lockfile change.
+- **N-30 — Changesets (T070).** The six `.changeset/159-*.md` files cover every changed package
+  (`contracts`, `admin-kit`, `mod-document-templates`, `mod-quote-requests`, `mod-orders`, `mod-i18n`);
+  `carts` did not change. `159-document-sections.md` states the `grouping: null` meaning change. No new
+  changeset was written for the documentation pages: they ship in the three module packages those
+  changesets already bump.
+
