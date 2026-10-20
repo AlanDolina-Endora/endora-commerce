@@ -117,7 +117,105 @@ export function historyDiff(
     changes.push({ kind: 'line_removed', line: ref(row.item) });
   }
 
+  changes.push(
+    ...groupingChanges(
+      before.items,
+      after.items,
+      after.items.map((_, index) => paired[index]?.item ?? null),
+      ref,
+    ),
+  );
+
   return changes;
+}
+
+// ---------------------------------------------------------------------------
+// Feature 159 (FR-022, research R-11) — the grouping, as the snapshots record
+// it. Groups pair by id; a snapshot written before the feature reads as all
+// ungrouped and in no known order.
+// ---------------------------------------------------------------------------
+
+interface RecordedGroup {
+  readonly id: string;
+  readonly name: string;
+  readonly position: number;
+}
+
+/** The groups a snapshot shows, in order. */
+function recordedGroups(items: readonly QuoteRequestRevisionLine[]): RecordedGroup[] {
+  const byId = new Map<string, RecordedGroup>();
+  items.forEach((item, index) => {
+    if (!item.groupId || byId.has(item.groupId)) return;
+    byId.set(item.groupId, { id: item.groupId, name: item.groupName ?? '', position: item.groupPosition ?? index });
+  });
+  return [...byId.values()].sort((a, b) => a.position - b.position);
+}
+
+function groupingChanges(
+  beforeItems: readonly QuoteRequestRevisionLine[],
+  afterItems: readonly QuoteRequestRevisionLine[],
+  /** Index-aligned with `afterItems`: the before line each after line is, or `null`. */
+  pairedBefore: readonly (QuoteRequestRevisionLine | null)[],
+  ref: (item: QuoteRequestRevisionLine) => QuoteRequestHistoryLineRef,
+): QuoteRequestHistoryChange[] {
+  const out: QuoteRequestHistoryChange[] = [];
+  const beforeGroups = recordedGroups(beforeItems);
+  const afterGroups = recordedGroups(afterItems);
+  const beforeById = new Map(beforeGroups.map((group) => [group.id, group]));
+  const afterById = new Map(afterGroups.map((group) => [group.id, group]));
+
+  for (const group of afterGroups) {
+    if (!beforeById.has(group.id)) out.push({ kind: 'group_added', group: { id: group.id, name: group.name } });
+  }
+  for (const group of beforeGroups) {
+    if (!afterById.has(group.id)) out.push({ kind: 'group_removed', group: { id: group.id, name: group.name } });
+  }
+  for (const group of afterGroups) {
+    const previous = beforeById.get(group.id);
+    if (previous && previous.name !== group.name) {
+      out.push({ kind: 'group_renamed', groupId: group.id, before: previous.name, after: group.name });
+    }
+  }
+
+  // A line that stayed in its section, by section: the order there is the
+  // order a reorder changed. A line added, removed or moved is reported as
+  // such and is no part of it.
+  const stayedBefore = new Map<string, QuoteRequestRevisionLine[]>();
+  const stayedAfter = new Map<string, QuoteRequestRevisionLine[]>();
+  afterItems.forEach((next, index) => {
+    const previous = pairedBefore[index] ?? null;
+    if (previous === null) return;
+    const from = previous.groupId ?? null;
+    const to = next.groupId ?? null;
+    if (from !== to) {
+      out.push({
+        kind: 'line_group',
+        line: ref(next),
+        before: from === null ? null : (previous.groupName ?? beforeById.get(from)?.name ?? null),
+        after: to === null ? null : (next.groupName ?? afterById.get(to)?.name ?? null),
+      });
+      return;
+    }
+    const section = to ?? '';
+    stayedAfter.set(section, [...(stayedAfter.get(section) ?? []), next]);
+    stayedBefore.set(section, [...(stayedBefore.get(section) ?? []), previous]);
+  });
+
+  // A snapshot written before the feature has no recorded order to compare.
+  const legacy = beforeItems.length > 0 && beforeItems.every((item) => item.position === undefined);
+  if (!legacy) {
+    const commonBefore = beforeGroups.filter((group) => afterById.has(group.id)).map((group) => group.id);
+    const commonAfter = afterGroups.filter((group) => beforeById.has(group.id)).map((group) => group.id);
+    const groupsReordered = commonBefore.join('|') !== commonAfter.join('|');
+    const linesReordered = [...stayedAfter.entries()].some(([section, lines]) => {
+      const previous = stayedBefore.get(section) ?? [];
+      // The after lines in after order, against the same lines in before order.
+      const beforeOrder = [...previous].sort((a, b) => beforeItems.indexOf(a) - beforeItems.indexOf(b));
+      return lines.some((_, index) => previous[index] !== beforeOrder[index]);
+    });
+    if (groupsReordered || linesReordered) out.push({ kind: 'line_order' });
+  }
+  return out;
 }
 
 /** Two snapshot prices, compared as numbers (a legacy snapshot may hold a string). */

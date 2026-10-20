@@ -182,6 +182,8 @@ describe('159 — quote request line groups [contract]', () => {
     it('keeps the (created_at, id) order of a quote whose lines all read position 0', async () => {
       const quote = await raise();
       const ids = await lineIdsByProduct(quote.id);
+      // Lines stored before the feature: every position the column default.
+      await sql(`update "quote_request_items" set "position" = 0 where "quote_request_id" = ?`, [quote.id]);
       const base = Date.parse('2026-01-01T00:00:00.000Z');
       const at = (offset: number) => new Date(base + offset * 1000).toISOString();
       await sql(`update "quote_request_items" set "created_at" = ? where "id" = ?`, [at(2), ids.get(SEED_PRODUCT_101_ID)]);

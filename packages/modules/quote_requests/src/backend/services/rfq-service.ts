@@ -477,6 +477,8 @@ export class RfqService {
         lineNote: lineInput.lineNote ?? null,
         lineCurrency: 'PLN',
         ...referenceColumns(references[index] ?? null, capturedAt),
+        // Feature 159 — the request's order, stored (ungrouped: one section).
+        position: index,
       });
       items.push(item);
     }
@@ -807,6 +809,8 @@ export class RfqService {
         lineNote: src.lineNote ?? null,
         lineCurrency: src.lineCurrency,
         ...referenceColumns(references[index] ?? null, capturedAt),
+        // Feature 159 — the order the buyer was shown, ungrouped (FR-026).
+        position: index,
       }),
     );
     this.#audit(em, 'quote_request.resubmit', newRfq.id, null, {

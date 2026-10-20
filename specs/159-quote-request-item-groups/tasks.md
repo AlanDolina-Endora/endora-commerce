@@ -102,10 +102,10 @@ suite is green (SC-004 baseline).
 **Goal**: storefront quote view grouped read-only; comparison notice; admin history kinds; acceptance
 unchanged.
 
-- [ ] T034 [P] [US2] Extend `QR/src/backend/services/history/history-diff.test.ts` — red: `group_added`, `group_removed`, `group_renamed`, `line_group` (incl. to/from ungrouped), `line_order` emitted once and only when unexplained; legacy-to-grouped first revision lists `group_added` + `line_group`; group pairing by `groupId`
-- [ ] T035 [US2] Implement in `history-diff.ts` (and projection plumbing in `history-projection.ts`) — T034 green
-- [ ] T036 [P] [US2] Extend `BT/contract/quote_requests/customer-routes.test.ts` — red: customer reply `itemGroups` holds non-empty groups only, items in display order with `groupId`/`position`; `comparisonAgainstLastSeen.diff` holds `{ kind: 'grouping' }` with no other key after a regroup; POST/PATCH with `groups` or `groupKey` → 400 (FR-025, SC-007); accept after a regroup revision succeeds (FR-024); resubmit copies no group (FR-026)
-- [ ] T037 [US2] Implement any remaining customer-reply wiring in `QR/src/backend/services/rfq-service.ts` / `customer-projection.ts` — T036 green
+- [X] T034 [P] [US2] Extend `QR/src/backend/services/history/history-diff.test.ts` — red: `group_added`, `group_removed`, `group_renamed`, `line_group` (incl. to/from ungrouped), `line_order` emitted once and only when unexplained; legacy-to-grouped first revision lists `group_added` + `line_group`; group pairing by `groupId`
+- [X] T035 [US2] Implement in `history-diff.ts` (and projection plumbing in `history-projection.ts`) — T034 green
+- [X] T036 [P] [US2] Extend `BT/contract/quote_requests/customer-routes.test.ts` — red: customer reply `itemGroups` holds non-empty groups only, items in display order with `groupId`/`position`; `comparisonAgainstLastSeen.diff` holds `{ kind: 'grouping' }` with no other key after a regroup; POST/PATCH with `groups` or `groupKey` → 400 (FR-025, SC-007); accept after a regroup revision succeeds (FR-024); resubmit copies no group (FR-026)
+- [X] T037 [US2] Implement any remaining customer-reply wiring in `QR/src/backend/services/rfq-service.ts` / `customer-projection.ts` — T036 green
 - [X] T038 [P] [US2] Extend `AT/modules/quote_requests/RfqDetail.history.test.tsx` — red: the five kinds render with their bundle sentences in en and pl; `null` side renders as *Ungrouped*
 - [X] T039 [US2] Implement in `QR/src/admin/pages/RfqHistory.tsx` + bundle keys — T038 green
 - [ ] T040 [P] [US2] Write `SF/test/rfq/grouped-lines.test.tsx` — red: `GroupedLineRows` renders heading rows (`scope="colgroup"`), line rows, summary rows by the page's rule (agreed, else desired; every line or none) per section, *Other items* last; empty groups never; no non-empty group → markup identical to the line rows alone (SC-004); `describeDiff` of `grouping`; pl + en strings
