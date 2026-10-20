@@ -105,6 +105,12 @@ So an invocation gets resources of its own, with nothing to remember:
 | PostgreSQL | `<base>_r_<stamp>_<rand>`, cloned from the migrated template of this run's migration set, `<base>_tpl_<digest>` | dropped by the run's teardown; a crashed run's database is swept by a later invocation once it is 4 h old and unconnected |
 | Redis | a logical database index, leased in index 0 and emptied before the run | released by the teardown; the lease expires 5 minutes after a crashed run stops refreshing it |
 
+**And one per worker, when the complete suite runs several** (`BACKEND_TEST_WORKERS`, 6 locally
+and 1 under CI): worker 1 takes the two resources above, and every further worker a clone of the
+same template and a Redis index of its own, released and swept the same way. The rules, the test
+Postgres and the files that stay serial are in `specs/conventions/backend-test-suite.md` § *Running
+the complete suite locally*.
+
 Index 0 is never leased and never emptied: it holds the leases themselves, and it is the one
 `pnpm run dev` uses (`backend/.env` ships `redis://localhost:6379`). Before this, every
 `setupBackendServer` ran its stale-cache drop against index 0 — `session:*`,
