@@ -2143,5 +2143,21 @@
   "customFieldFilters.dateRangeInverted": "The start date can't be after the end date.",
   "customFieldFilters.retry": "Try again",
   "customFieldFilters.removeChip": "Remove filter {label}",
-  "customFieldFilters.loading": "Loading filters…"
+  "customFieldFilters.loading": "Loading filters…",
+  "appShell.feedback.open": "Send feedback",
+  "appShell.feedback.title": "Send feedback to the Endora Commerce team",
+  "appShell.feedback.intro": "Tell us what works, what does not, or what you are missing. We read every message.",
+  "appShell.feedback.message": "Your feedback",
+  "appShell.feedback.email": "Your e-mail",
+  "appShell.feedback.phone": "Phone (optional)",
+  "appShell.feedback.context": "The platform version, this instance's address and your name are sent with your message, so we can answer it.",
+  "appShell.feedback.send": "Send feedback",
+  "appShell.feedback.sending": "Sending…",
+  "appShell.feedback.sent": "Thank you — your feedback was sent. We will reply to the e-mail address you gave.",
+  "appShell.feedback.error.message": "Write your feedback.",
+  "appShell.feedback.error.email": "Enter a valid e-mail address, e.g. name@company.com.",
+  "appShell.feedback.error.phone": "Enter a phone number using digits, spaces and + ( ) - only.",
+  "appShell.feedback.error.notConfigured": "Sending feedback is switched off on this instance. Write to us at {email}.",
+  "appShell.feedback.error.rateLimited": "You have sent several messages in a short time. Try again in a few minutes, or write to us at {email}.",
+  "appShell.feedback.error.delivery": "Your feedback could not be sent. What you wrote is kept — try again, or write to us at {email}."
 }

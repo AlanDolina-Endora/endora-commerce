@@ -2143,5 +2143,21 @@
   "customFieldFilters.dateRangeInverted": "Data początkowa nie może być późniejsza niż końcowa.",
   "customFieldFilters.retry": "Spróbuj ponownie",
   "customFieldFilters.removeChip": "Usuń filtr {label}",
-  "customFieldFilters.loading": "Wczytywanie filtrów…"
+  "customFieldFilters.loading": "Wczytywanie filtrów…",
+  "appShell.feedback.open": "Wyślij opinię",
+  "appShell.feedback.title": "Wyślij opinię zespołowi Endora Commerce",
+  "appShell.feedback.intro": "Napisz, co działa, co nie działa albo czego Ci brakuje. Czytamy każdą wiadomość.",
+  "appShell.feedback.message": "Twoja opinia",
+  "appShell.feedback.email": "Twój e-mail",
+  "appShell.feedback.phone": "Telefon (opcjonalnie)",
+  "appShell.feedback.context": "Razem z wiadomością wysyłamy wersję platformy, adres tej instancji i Twoje imię i nazwisko, żeby móc odpowiedzieć.",
+  "appShell.feedback.send": "Wyślij opinię",
+  "appShell.feedback.sending": "Wysyłanie…",
+  "appShell.feedback.sent": "Dziękujemy — opinia została wysłana. Odpowiemy na podany adres e-mail.",
+  "appShell.feedback.error.message": "Wpisz swoją opinię.",
+  "appShell.feedback.error.email": "Podaj poprawny adres e-mail, np. imie@firma.pl.",
+  "appShell.feedback.error.phone": "Podaj numer telefonu, używając tylko cyfr, spacji i znaków + ( ) -.",
+  "appShell.feedback.error.notConfigured": "Wysyłanie opinii jest wyłączone na tej instancji. Napisz do nas na {email}.",
+  "appShell.feedback.error.rateLimited": "Wysłano kilka wiadomości w krótkim czasie. Spróbuj ponownie za kilka minut albo napisz do nas na {email}.",
+  "appShell.feedback.error.delivery": "Nie udało się wysłać opinii. To, co napisano, zostało zachowane — spróbuj ponownie albo napisz do nas na {email}."
 }

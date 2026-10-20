@@ -14,6 +14,9 @@
   "sidebar.main.category.admin_actions": {
     "message": "Akcje palety poleceń"
   },
+  "sidebar.main.category.admin_feedback": {
+    "message": "Opinie"
+  },
   "sidebar.main.category.admin_roles": {
     "message": "admin_roles"
   },

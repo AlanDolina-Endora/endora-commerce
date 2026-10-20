@@ -317,3 +317,46 @@ describe('undo and redo', () => {
   });
 });
 
+describe('a field hidden and shown again', () => {
+  it('survives its effects being reconnected before the editor is mounted again — a lazy tab revealed anew', async () => {
+    // React reconnects a hidden subtree's effects when it is shown again
+    // (`<Activity>`, a Suspense boundary revealing a lazy tab). The editor's
+    // view is unmounted while hidden; touching it then threw on CI.
+    const { Activity } = await import('react');
+    const errors: unknown[] = [];
+    const onError = (event: ErrorEvent): void => {
+      errors.push(event.error);
+      event.preventDefault();
+    };
+    window.addEventListener('error', onError);
+    try {
+      function Toggle(): ReactElement {
+        const [shown, setShown] = useState(true);
+        return (
+          <div>
+            <button type="button" onClick={(): void => setShown((value) => !value)}>
+              toggle
+            </button>
+            <Activity mode={shown ? 'visible' : 'hidden'}>
+              <Harness initial={`Ask ${person}`} />
+            </Activity>
+          </div>
+        );
+      }
+      renderCrm(<Toggle />);
+      const toggle = screen.getByRole('button', { name: 'toggle' });
+      await userEvent.click(toggle);
+      // Hidden for longer than the editor hook's one-tick grace: the editor
+      // it held is destroyed while the field is away.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await userEvent.click(toggle);
+      const field = await screen.findByLabelText('Description');
+      expect(chips(field)).toEqual(['@Anna Nowak']);
+      await userEvent.click(screen.getByText('Description'));
+      await waitFor(() => expect(field).toHaveFocus());
+      expect(errors).toEqual([]);
+    } finally {
+      window.removeEventListener('error', onError);
+    }
+  });
+});
