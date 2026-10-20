@@ -39,6 +39,7 @@ export function sampleQuoteRequestData(language: string): QuoteRequestDocumentDa
       { label: texts.orderNumberLabel, value: 'PO-2026-117' },
       { label: texts.siteLabel, value: texts.siteValue },
     ],
+    groups: [],
     lines: [
       line(1, 'Hex bolt M8×40', 'HB-M8-40', 500, 0.42, 0.5),
       line(2, 'Hex nut M8', 'HN-M8', 500, 0.12, 0.12),
@@ -79,6 +80,8 @@ function line(
     lineCurrency: 'PLN',
     lineNote: null,
     attributes: {},
+    groupId: null,
+    position: n - 1,
     ...over,
   };
 }

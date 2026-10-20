@@ -11,7 +11,9 @@ export class OrderItem {
     | 'variantId'
     | 'variantSnapshot'
     | 'packagingUnitSnapshot'
-    | 'returnableAtPurchase';
+    | 'returnableAtPurchase'
+    | 'groupId'
+    | 'position';
 
   @PrimaryKey({ type: 'uuid' })
   id: string = randomUUID();
@@ -64,6 +66,20 @@ export class OrderItem {
 
   @Property({ type: 'decimal', precision: 14, scale: 2 })
   lineTotal!: string;
+
+  /**
+   * Feature 159 — the line's group (`order_item_groups`, same order), `null` =
+   * ungrouped. Written at placement, never changed (on delete set null).
+   */
+  @Property({ type: 'uuid', nullable: true })
+  groupId?: string | null = null;
+
+  /**
+   * Feature 159 — 0-based order within the line's section. Lines placed before
+   * the feature read `0`; readers break ties by `(createdAt, id)`.
+   */
+  @Property({ type: 'integer', default: 0 })
+  position: number = 0;
 
   @Property({ type: 'datetime', onCreate: () => new Date() })
   createdAt: Date = new Date();

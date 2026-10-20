@@ -55,6 +55,7 @@ import {
   type ReferenceColumns,
 } from './reference-price.js';
 import { carriedProposal, pairLines } from './line-carry-over.js';
+import { LINE_STORAGE_ORDER, loadArrangedQuoteLines, nonEmptyGroups, toLineGroup } from './line-order.js';
 import type { NegotiationPolicyService } from './negotiation-policy-service.js';
 import {
   CUSTOMER_EVENT_KEYS,
@@ -683,7 +684,8 @@ export class RfqService {
       await em.flush();
     });
 
-    const items = await em.find(QuoteRequestItem, { quoteRequestId: rfq.id });
+    // Feature 159 — the revision records the lines in display order.
+    const items = (await loadArrangedQuoteLines(em, rfq.id)).lines;
     const previousRevision = await this.deps.revisionService.byNumber(
       rfq.id,
       rfq.currentRevisionNumber - 1,
@@ -730,7 +732,8 @@ export class RfqService {
     const em = this.deps.emFactory();
     const sourceRfq = await this.findVisibleForCustomer(em, rfqId, ctx);
 
-    const sourceItems = await em.find(QuoteRequestItem, { quoteRequestId: sourceRfq.id });
+    // Feature 159 — copied in the order the buyer saw them; no group is copied (FR-026).
+    const sourceItems = (await loadArrangedQuoteLines(em, sourceRfq.id)).lines;
     if (sourceItems.length === 0) {
       throw new HttpError(400, ERROR_CODES.RFQ_EMPTY, 'Source RFQ has no items.');
     }
@@ -911,7 +914,7 @@ export class RfqService {
     // request nobody can order from. After the revision pin, so the buyer is
     // judged on the revision they are looking at.
     if (decision === 'accept') {
-      const lines = await em.find(QuoteRequestItem, { quoteRequestId: rfq.id });
+      const lines = await em.find(QuoteRequestItem, { quoteRequestId: rfq.id }, { orderBy: LINE_STORAGE_ORDER });
       if (hasUnpricedLine(lines)) throw quoteIncompleteError();
     }
 
@@ -1028,7 +1031,8 @@ export class RfqService {
       );
     }
 
-    const items = await em.find(QuoteRequestItem, { quoteRequestId: rfq.id });
+    // Feature 159 — the basket is seeded in the quote's display order.
+    const items = (await loadArrangedQuoteLines(em, rfq.id)).lines;
     if (items.length === 0) {
       throw new HttpError(409, ERROR_CODES.RFQ_EMPTY, 'Quote Request has no items.');
     }
@@ -1243,7 +1247,10 @@ export class RfqService {
     rfq: QuoteRequest,
     includeFullActorIdentity: boolean,
   ): Promise<RfqDto> {
-    const items = await em.find(QuoteRequestItem, { quoteRequestId: rfq.id });
+    // Feature 159 (FR-011) — the lines in display order; this read had no
+    // order at all before (research R-1).
+    const arranged = await loadArrangedQuoteLines(em, rfq.id);
+    const items = arranged.lines;
     const taxRate = await this.taxRateForOrganization(rfq.organizationId);
     const events = await em.find(
       QuoteRequestEvent,
@@ -1307,6 +1314,9 @@ export class RfqService {
       headerNote: rfq.headerNote ?? null,
       cancellationReason: rfq.cancellationReason ?? null,
       customFieldValues: await this.customFieldValuesFor(rfq, includeFullActorIdentity),
+      // Feature 159 — the admin editor needs every group, empty ones included;
+      // a customer is shown only the groups holding a line (D2, FR-034).
+      itemGroups: forAdmin ? arranged.groups.map(toLineGroup) : nonEmptyGroups(arranged),
       // Feature 146 (threat model T7): the customer reply is built from an
       // explicit allow-list of item, event and payload keys — a key added to
       // the admin projection, or one that reaches a stored payload, never
@@ -1330,6 +1340,9 @@ export class RfqService {
           packagingUnitBaseQuantity: it.packagingUnitBaseQuantity ?? null,
           // Feature 155 — the resolved catalogue unit; both replies (analyze F14).
           packagingUnitId: it.packagingUnitId ?? null,
+          // Feature 159 — the line's group and its order within its section.
+          groupId: it.groupId ?? null,
+          position: it.position,
         };
         if (!forAdmin) return pickKeys(item, CUSTOMER_ITEM_KEYS);
         return {

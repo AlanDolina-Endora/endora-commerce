@@ -24,6 +24,10 @@ export const CUSTOMER_ITEM_KEYS = [
   'packagingUnitBaseQuantity',
   // Feature 155 — the catalogue unit the line resolved to (analyze F14).
   'packagingUnitId',
+  // Feature 159 — the line's group (one of the reply's non-empty `itemGroups`)
+  // and its order within its section.
+  'groupId',
+  'position',
 ] as const;
 
 /** The event keys a customer reply carries; `payload` is filtered on its own. */

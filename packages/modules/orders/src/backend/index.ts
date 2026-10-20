@@ -111,6 +111,7 @@ import {
 import { OrderAppliedPromotion } from './entities/order-applied-promotion.entity.js';
 import { OrderComment } from './entities/order-comment.entity.js';
 import { OrderItem } from './entities/order-item.entity.js';
+import { OrderItemGroup } from './entities/order-item-group.entity.js';
 import { OrderListSavedView } from './entities/order-list-saved-view.entity.js';
 import { OrderPlacementIntent } from './entities/order-placement-intent.entity.js';
 import { OrderStatusTransition } from './entities/order-status-transition.entity.js';
@@ -1173,6 +1174,7 @@ export const entities = [
   OrderAppliedPromotion,
   OrderComment,
   OrderItem,
+  OrderItemGroup,
   OrderListSavedView,
   OrderPlacementIntent,
   OrderStatusTransition,

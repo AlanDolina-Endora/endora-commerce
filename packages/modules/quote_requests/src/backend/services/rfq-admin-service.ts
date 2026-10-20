@@ -43,6 +43,7 @@ import type { RfqNotificationService } from './rfq-notification-service.js';
 import { raisedOnChannelId } from './raised-on-channel.js';
 import { hasUnpricedLine, quoteIncompleteError } from './agreed-price.js';
 import { pairLines } from './line-carry-over.js';
+import { LINE_STORAGE_ORDER, loadArrangedQuoteLines } from './line-order.js';
 import { storedReferenceColumns } from './reference-price.js';
 import { AUTOMATIC_ADMIN_CREATION_NOTE } from './history/constants.js';
 import {
@@ -503,7 +504,7 @@ export class RfqAdminService {
     // line needs one. There is deliberately no "approve at the list price"
     // here: which price an unpriced line would be sold at is a commercial
     // decision, and the operator makes it by pricing the line (`modify`).
-    const lines = await em.find(QuoteRequestItem, { quoteRequestId: rfq.id });
+    const lines = await em.find(QuoteRequestItem, { quoteRequestId: rfq.id }, { orderBy: LINE_STORAGE_ORDER });
     if (hasUnpricedLine(lines)) throw quoteIncompleteError();
 
     const now = new Date();
@@ -749,7 +750,8 @@ export class RfqAdminService {
       await em.flush();
     });
 
-    const items = await em.find(QuoteRequestItem, { quoteRequestId: rfq.id });
+    // Feature 159 — the revision records the lines in display order.
+    const items = (await loadArrangedQuoteLines(em, rfq.id)).lines;
     const previousRevision = await this.deps.revisionService.byNumber(
       rfq.id,
       rfq.currentRevisionNumber - 1,

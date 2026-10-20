@@ -175,6 +175,7 @@ import {
   assertMethodsAllowedForOrganization,
   type OrganizationMethodChoice,
 } from './organization-method-allow-list-gate.js';
+import { loadArrangedOrderLines } from './order-line-order.js';
 
 
 export interface OrderEvents extends Record<string, EventBase> {
@@ -651,7 +652,8 @@ export class OrderService {
     const em = this.emFactory();
     const [customer, items] = await Promise.all([
       this.neighbours.customerAccountRead.findById(order.placedByCustomerAccountId),
-      em.find(OrderItem, { orderId: order.id }),
+      // Feature 159 — the confirmation lists the lines in display order.
+      loadArrangedOrderLines(em, order.id).then((arranged) => arranged.lines),
     ]);
     if (!customer) return orderEmailNotSent(undefined, emailContext, 'no_recipient');
 
@@ -2143,7 +2145,7 @@ export class OrderService {
         });
       }
 
-      const orderItems = items.map((item) => {
+      const orderItems = items.map((item, index) => {
         const product = productById.get(item.productId);
         // Feature 043 — when the line was ordered as a packaging unit, append
         // the unit name to the snapshot name so every order-derived document
@@ -2176,6 +2178,9 @@ export class OrderService {
           // updated. Always an explicit boolean (fail-closed): `null` is kept
           // for lines placed before the feature.
           returnableAtPurchase: returnableAtPurchase(product),
+          // Feature 159 (I-O3) — every new order's lines carry the basket's
+          // order; a grouping, when the order has one, is applied below.
+          position: index,
           taxRate: rateForProductId(item.productId).toFixed(4),
           lineTotal: (
             Number(item.unitPrice) *

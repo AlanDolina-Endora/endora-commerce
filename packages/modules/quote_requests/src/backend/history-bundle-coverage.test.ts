@@ -56,6 +56,8 @@ const OTHER_KEYS = [
   'rfq.detail.history.noChanges',
   'rfq.detail.history.none',
   'rfq.detail.history.note',
+  // Feature 159 — the name of the ungrouped section in a `line_group` change.
+  'rfq.detail.history.ungrouped',
   'rfq.detail.history.reason',
   'rfq.detail.history.revision',
   'rfq.detail.history.order',
@@ -79,7 +81,8 @@ const REQUIRED = [
 describe('quote request history — bundle coverage (T058)', () => {
   it('iterates the full schema enums', () => {
     expect(ENTRY_KINDS).toHaveLength(13);
-    expect(CHANGE_KINDS).toHaveLength(8);
+    // Feature 159 added the five grouping kinds.
+    expect(CHANGE_KINDS).toHaveLength(13);
   });
 
   it.each(REQUIRED)('%s exists, non-empty, in en and pl', (key) => {
