@@ -34,6 +34,7 @@ import type {
 } from '../admin-search-provider.js';
 import { QuoteRequest, type QuoteRequestStatus } from '../entities/quote-request.entity.js';
 import { QuoteRequestItem } from '../entities/quote-request-item.entity.js';
+import { QuoteRequestItemGroup } from '../entities/quote-request-item-group.entity.js';
 import { underRowLock } from './transition-lock.js';
 import type { RfqService} from './rfq-service.js';
 import { type RfqEventBus, type RfqEvents } from './rfq-service.js';
@@ -44,6 +45,7 @@ import { raisedOnChannelId } from './raised-on-channel.js';
 import { hasUnpricedLine, quoteIncompleteError } from './agreed-price.js';
 import { pairLines } from './line-carry-over.js';
 import { LINE_STORAGE_ORDER, loadArrangedQuoteLines } from './line-order.js';
+import { groupingShape, planLineGrouping, type GroupingShapeEntry, type LineGroupingPlan } from './line-grouping.js';
 import { storedReferenceColumns } from './reference-price.js';
 import { AUTOMATIC_ADMIN_CREATION_NOTE } from './history/constants.js';
 import {
@@ -641,6 +643,9 @@ export class RfqAdminService {
     // Research R7 — a validity change is recorded on the event, since no
     // revision snapshot carries `expiresAt`.
     const recorded: { validity?: { before: string | null; after: string | null } } = {};
+    // Feature 159 — the grouping's shape before and after, for the audit entry
+    // (FR-081); set only when the body rewrites the lines.
+    let groupingAudit: { before: GroupingShapeEntry[]; after: GroupingShapeEntry[] } | null = null;
     await underRowLock(em, rfq, async () => {
       if (body.headerNote !== undefined) rfq.headerNote = body.headerNote ?? null;
 
@@ -673,11 +678,9 @@ export class RfqAdminService {
         if (productById.size !== new Set(body.items.map((it) => it.productId)).size) {
           throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'One or more products do not exist.');
         }
-        const existing = await em.find(
-          QuoteRequestItem,
-          { quoteRequestId: rfq.id },
-          { orderBy: { createdAt: 'asc', id: 'asc' } },
-        );
+        // In display order — the order the operator saw, which the pairing's
+        // last rule (by order) relies on — with the stored groups.
+        const { lines: existing, groups: storedGroups } = await loadArrangedQuoteLines(em, rfq.id);
         // Feature 146, FR-034 (research R5.1, R5.2) — a body line is the stored
         // row its `id` names (same product only), else the row the R6 rule
         // pairs it with. A paired line keeps what the rep did not change:
@@ -694,7 +697,17 @@ export class RfqAdminService {
           })),
           'admin',
         );
+        // Feature 159 (research R-8, R-14) — the grouping travels with the line
+        // rewrite: planned before anything is written (a foreign group id is
+        // refused here), then written under this lock and flush.
+        const plan = planLineGrouping({
+          storedGroups,
+          body: { groups: body.groups, items: body.items },
+          pairedRows: paired,
+        });
+        groupingAudit = { before: groupingShape(storedGroups, existing.map((row) => row.groupId)), after: plan.after };
         await em.removeAndFlush(existing);
+        const groupIds = await writeLineGroups(em, rfq.id, storedGroups, plan);
         const items: QuoteRequestItem[] = [];
         for (const [index, lineInput] of body.items.entries()) {
           const product = productById.get(lineInput.productId)!;
@@ -727,6 +740,8 @@ export class RfqAdminService {
               ...(row !== null
                 ? storedReferenceColumns(row)
                 : { referenceUnitPrice: null, referenceCurrency: null, referenceCapturedAt: null }),
+              groupId: groupIds(plan.lines[index]!.group),
+              position: plan.lines[index]!.position,
             }),
           );
         }
@@ -743,9 +758,10 @@ export class RfqAdminService {
         if (before !== after) recorded.validity = { before, after };
       }
       rfq.version += 1;
-      this.#audit(em, 'quote_request.modify', rfq.id, null, {
+      this.#audit(em, 'quote_request.modify', rfq.id, groupingAudit ? { groups: groupingAudit.before } : null, {
         currentRevisionNumber: rfq.currentRevisionNumber,
         status: rfq.status,
+        ...(groupingAudit ? { groups: groupingAudit.after } : {}),
       });
       await em.flush();
     });
@@ -880,8 +896,15 @@ export class RfqAdminService {
     });
     await em.persistAndFlush(rfq);
 
+    // Feature 159 — the new quote's groups, written before its lines (FR-009).
+    const plan = planLineGrouping({
+      storedGroups: [],
+      body: { groups: body.groups, items: body.items },
+      pairedRows: body.items.map(() => null),
+    });
+    const groupIds = await writeLineGroups(em, rfq.id, [], plan);
     const items: QuoteRequestItem[] = [];
-    for (const lineInput of body.items) {
+    for (const [index, lineInput] of body.items.entries()) {
       const product = productById.get(lineInput.productId)!;
       items.push(
         em.create(QuoteRequestItem, {
@@ -894,6 +917,8 @@ export class RfqAdminService {
           agreedUnitPrice: lineInput.agreedUnitPrice.toFixed(2),
           lineNote: lineInput.lineNote ?? null,
           lineCurrency: 'PLN',
+          groupId: groupIds(plan.lines[index]!.group),
+          position: plan.lines[index]!.position,
         }),
       );
     }
@@ -901,12 +926,14 @@ export class RfqAdminService {
       status: rfq.status,
       itemCount: items.length,
       salesChannelId: rfq.salesChannelId ?? null,
+      groups: plan.after,
     });
     await em.persistAndFlush(items);
 
     const revision = await this.deps.revisionService.record({
       rfq,
-      items,
+      // Feature 159 — revision 1 records the lines in display order.
+      items: (await loadArrangedQuoteLines(em, rfq.id)).lines,
       actor: { adminUserId: ctx.adminUserId },
     });
 
@@ -1026,4 +1053,39 @@ function groupBy<T, K>(arr: T[], key: (t: T) => K): Map<K, T[]> {
     else out.set(k, [v]);
   }
   return out;
+}
+
+/**
+ * Feature 159 — write a grouping plan's groups (deletes, renames, creates) and
+ * flush, so a line inserted next can name a group created here; answers the id
+ * each planned line group resolves to. The quote's old lines are already gone
+ * when this runs, so a deleted group has no line left to set to null.
+ */
+async function writeLineGroups(
+  em: EntityManager,
+  quoteRequestId: string,
+  storedGroups: readonly QuoteRequestItemGroup[],
+  plan: LineGroupingPlan,
+): Promise<(group: LineGroupingPlan['lines'][number]['group']) => string | null> {
+  const storedById = new Map(storedGroups.map((group) => [group.id, group]));
+  for (const id of plan.deleteGroupIds) {
+    const row = storedById.get(id);
+    if (row) em.remove(row);
+  }
+  const createdByKey = new Map<string, string>();
+  for (const group of plan.groups) {
+    if (group.kind === 'create') {
+      const row = em.create(QuoteRequestItemGroup, { quoteRequestId, name: group.name, position: group.position });
+      em.persist(row);
+      createdByKey.set(group.key, row.id);
+    } else {
+      const row = storedById.get(group.id);
+      if (row) {
+        row.name = group.name;
+        row.position = group.position;
+      }
+    }
+  }
+  await em.flush();
+  return (group) => (group === null ? null : group.kind === 'existing' ? group.id : (createdByKey.get(group.key) ?? null));
 }

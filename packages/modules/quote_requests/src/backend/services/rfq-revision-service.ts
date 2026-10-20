@@ -5,6 +5,7 @@ import {
 } from '../entities/quote-request-revision.entity.js';
 import type { QuoteRequest } from '../entities/quote-request.entity.js';
 import type { QuoteRequestItem } from '../entities/quote-request-item.entity.js';
+import { QuoteRequestItemGroup } from '../entities/quote-request-item-group.entity.js';
 
 /**
  * Coarse-grained revision snapshot writer + diff calculator. Each
@@ -36,10 +37,16 @@ export type RfqDiffEntry =
       productName: string;
       before: number | null;
       after: number | null;
-    };
+    }
+  /**
+   * Feature 159 (research R-11) — the arrangement of the lines as shown differs.
+   * No other key: it names nothing the customer reply does not carry.
+   */
+  | { kind: 'grouping' };
 
 export interface RecordRevisionInput {
   rfq: QuoteRequest;
+  /** In display order (feature 159): the snapshot keeps the order it is given. */
   items: QuoteRequestItem[];
   actor: { adminUserId?: string | null; customerAccountId?: string | null };
   previousRevisionId?: string | null;
@@ -52,7 +59,11 @@ export class RfqRevisionService {
     // command-coverage-ignore: immutable per-revision snapshot of the RFQ state
     // (version history), written as part of the audited parent RFQ action.
     const em = this.emFactory();
-    const itemsSnapshot = input.items.map(toSnapshotLine);
+    // Feature 159 (research R-10) — each line records its place in the
+    // arrangement the customer is shown; only groups holding a line appear.
+    const groups = await em.find(QuoteRequestItemGroup, { quoteRequestId: input.rfq.id });
+    const groupById = new Map(groups.map((group) => [group.id, group]));
+    const itemsSnapshot = input.items.map((item) => toSnapshotLine(item, groupById));
     // Caller sets `rfq.currentRevisionNumber` to the number of the
     // revision being recorded BEFORE calling record(). This service
     // never auto-bumps so the number on the rfq row and on the
@@ -183,11 +194,66 @@ export class RfqRevisionService {
       }
     }
 
+    if (groupingChanged(args.beforeItems, args.afterItems)) out.push({ kind: 'grouping' });
+
     return out;
   }
 }
 
-function toSnapshotLine(item: QuoteRequestItem): QuoteRequestRevisionLine {
+/** A line's identity across two snapshots, and its occurrence among equal ones. */
+function lineIdentities(lines: readonly QuoteRequestRevisionLine[]): string[] {
+  const seen = new Map<string, number>();
+  return lines.map((line) => {
+    const base = `${line.productId}|${line.variantId ?? ''}|${line.packagingUnitName ?? ''}`;
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return `${base}#${n}`;
+  });
+}
+
+/**
+ * The arrangement as shown, over the lines both snapshots hold: sections in
+ * order (by group id and name), each with its lines in order. Lines only one
+ * side holds are added or removed lines — reported as such, not as a grouping
+ * change.
+ */
+function arrangement(lines: readonly QuoteRequestRevisionLine[], keep: ReadonlySet<string>): string {
+  const ids = lineIdentities(lines);
+  const sections: { key: string; lines: string[] }[] = [];
+  lines.forEach((line, index) => {
+    if (!keep.has(ids[index]!)) return;
+    const key = line.groupId ? `${line.groupId}:${line.groupName ?? ''}` : '';
+    let section = sections.find((candidate) => candidate.key === key);
+    if (!section) {
+      section = { key, lines: [] };
+      sections.push(section);
+    }
+    section.lines.push(ids[index]!);
+  });
+  return JSON.stringify(sections);
+}
+
+/**
+ * Feature 159 — whether the customer is shown a different arrangement. A
+ * snapshot written before the feature carries no `position` and an unordered
+ * line list, so against it only a grouped arrangement counts as a change.
+ */
+function groupingChanged(
+  before: readonly QuoteRequestRevisionLine[],
+  after: readonly QuoteRequestRevisionLine[],
+): boolean {
+  const legacy = before.length > 0 && before.every((line) => line.position === undefined);
+  if (legacy) return after.some((line) => (line.groupId ?? null) !== null);
+  const beforeIds = new Set(lineIdentities(before));
+  const common = new Set(lineIdentities(after).filter((id) => beforeIds.has(id)));
+  return arrangement(before, common) !== arrangement(after, common);
+}
+
+function toSnapshotLine(
+  item: QuoteRequestItem,
+  groupById: ReadonlyMap<string, Pick<QuoteRequestItemGroup, 'name' | 'position'>>,
+): QuoteRequestRevisionLine {
+  const group = item.groupId ? groupById.get(item.groupId) : undefined;
   return {
     productId: item.productId,
     variantId: item.variantId ?? null,
@@ -201,5 +267,9 @@ function toSnapshotLine(item: QuoteRequestItem): QuoteRequestRevisionLine {
     discountPercent: item.discountPercent != null ? Number(item.discountPercent) : null,
     packagingUnitName: item.packagingUnitName ?? null,
     packagingUnitBaseQuantity: item.packagingUnitBaseQuantity ?? null,
+    position: item.position ?? 0,
+    groupId: group ? item.groupId! : null,
+    groupName: group?.name ?? null,
+    groupPosition: group?.position ?? null,
   };
 }

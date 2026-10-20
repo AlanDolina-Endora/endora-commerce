@@ -56,6 +56,7 @@ import {
 } from './reference-price.js';
 import { carriedProposal, pairLines } from './line-carry-over.js';
 import { LINE_STORAGE_ORDER, loadArrangedQuoteLines, nonEmptyGroups, toLineGroup } from './line-order.js';
+import { planLineGrouping, type PlannedLineGroup } from './line-grouping.js';
 import type { NegotiationPolicyService } from './negotiation-policy-service.js';
 import {
   CUSTOMER_EVENT_KEYS,
@@ -572,11 +573,9 @@ export class RfqService {
         // axis.
         throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'One or more products do not exist.');
       }
-      const existing = await em.find(
-        QuoteRequestItem,
-        { quoteRequestId: rfq.id },
-        { orderBy: { createdAt: 'asc', id: 'asc' } },
-      );
+      // Feature 159 — in display order (the order the buyer saw), with the
+      // stored groups a paired line keeps (R-13).
+      const { lines: existing, groups: storedGroups } = await loadArrangedQuoteLines(em, rfq.id);
       // Feature 155 (FR-026) — packaging resolved against the catalogue
       // before the pairing, which reads the **resolved** name: a line naming
       // its unit by id alone pairs with the stored row of that unit.
@@ -617,6 +616,10 @@ export class RfqService {
           : referenceColumns(resolved[next++] ?? null, capturedAt),
       );
 
+      // Feature 159 (R-13, FR-025) — a customer body carries no grouping: a
+      // paired line keeps its group, a new line is ungrouped, no group changes;
+      // positions follow the body order within each section.
+      const grouping = planLineGrouping({ storedGroups, body: { items: body.items.map(() => ({})) }, pairedRows: paired });
       const lines = body.items.map((lineInput, index): QuoteRequestItemDraft => {
         const product = productById.get(lineInput.productId)!;
         const row = paired[index] ?? null;
@@ -643,6 +646,8 @@ export class RfqService {
           lineNote: lineInput.lineNote ?? null,
           lineCurrency: 'PLN',
           ...references[index]!,
+          groupId: plannedGroupId(grouping.lines[index]!.group),
+          position: grouping.lines[index]!.position,
         };
       });
       rewrite = { existing, lines };
@@ -1501,6 +1506,8 @@ type QuoteRequestItemDraft = Pick<
   | 'desiredUnitPrice'
   | 'lineNote'
   | 'lineCurrency'
+  | 'groupId'
+  | 'position'
 > &
   ReferenceColumns;
 
@@ -1539,4 +1546,9 @@ export async function quoteCustomFieldValuesFor(
 ): Promise<Record<string, unknown>> {
   if (forAdmin) return bag;
   return port ? port.projectForCustomer('quote_request', bag) : {};
+}
+
+/** A customer rewrite only ever keeps stored groups (it creates none). */
+function plannedGroupId(group: PlannedLineGroup): string | null {
+  return group?.kind === 'existing' ? group.id : null;
 }
