@@ -348,7 +348,13 @@ body,
   color: var(--sidebar-fg);
   display: flex; flex-direction: column;
   height: 100vh;
-  position: sticky; top: 0;
+  /* A sticky box is a stacking context of its own, so the collapsed rail's
+     fly-out (`.b2b-sidebar__rail-popover`) is only ever as high as the sidebar
+     itself. Above the topbar (35) and everything in the page — sticky
+     form-action bars (30), sticky table columns — so the fly-out is drawn over
+     the content (#380); below the mobile nav backdrop (40) and the
+     scrim, drawers and palette (50/60). The mobile drawer sets its own. */
+  position: sticky; top: 0; z-index: 36;
   border-right: 1px solid #000;
   width: 248px;
 }
