@@ -12,6 +12,7 @@ import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actor
 import { cartWritePortOf } from '../../helpers/orders-neighbour-ports.js';
 import { checkOutBasket, whenOrderCreatedSettled } from '../../helpers/quote-conversion.js';
 import { buyerChannelIds, createMinimumProduct, minimumFixtureRun } from '../../helpers/order-minimum-fixture.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 
 /**
  * `returns` off-state — Constitution XVII item 6.
@@ -113,7 +114,11 @@ describe('returns off-state (Constitution XVII)', () => {
 
     const orderId = await withModuleOff('returns', 'deactivated', async () => {
       await cartWritePortOf(h).replaceItemsForCustomer(
-        { customerAccountId: TEST_CUSTOMER_ID, organizationId: TEST_ORGANIZATION_ID },
+        {
+          customerAccountId: TEST_CUSTOMER_ID,
+          organizationId: TEST_ORGANIZATION_ID,
+          salesChannelId: await systemDefaultSalesChannelId(h.em()),
+        },
         [
           { productId: R.id, quantity: 1, unitPrice: '10.00', currency: 'PLN' },
           { productId: N.id, quantity: 1, unitPrice: '10.00', currency: 'PLN' },

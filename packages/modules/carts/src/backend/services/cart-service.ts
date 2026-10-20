@@ -519,13 +519,14 @@ export class CartService {
    */
   async #assertBatchOrderable(
     em: EntityManager,
-    actor: { customer?: CustomerContext; anonymousToken?: string },
+    actor: CartActor,
     resolvedLines: ReadonlyArray<{ index: number; input: CartBatchLineInput; resolved: ResolvedCartLine }>,
     rejections: ReadonlyMap<number, CartBatchRejection>,
   ): Promise<void> {
     const pricingCtx = await this.#linePricing.contextFor(em, {
       organizationId: actor.customer?.organizationId ?? null,
       signedIn: actor.customer !== undefined,
+      salesChannelId: this.#basketChannelOf(actor),
     });
     const quantities = new Map<string, number>();
     for (const { index, input, resolved } of resolvedLines) {

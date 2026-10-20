@@ -10,6 +10,7 @@ import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actor
 import { cartWritePortOf } from '../../helpers/orders-neighbour-ports.js';
 import { checkOutBasket, whenOrderCreatedSettled } from '../../helpers/quote-conversion.js';
 import { buyerChannelIds, createMinimumProduct, minimumFixtureRun } from '../../helpers/order-minimum-fixture.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 import { ADMIN_COOKIE, CUSTOMER_COOKIE, anyReasonId, resetReturnGraph, seedReturnableOrder } from './helpers.js';
 
 /**
@@ -293,7 +294,11 @@ describe('155 — returns refuse non-returnable lines; complaints are untouched 
         TEST_CUSTOMER_ID,
       ]);
     await cartWritePortOf(h).replaceItemsForCustomer(
-      { customerAccountId: TEST_CUSTOMER_ID, organizationId: TEST_ORGANIZATION_ID },
+      {
+        customerAccountId: TEST_CUSTOMER_ID,
+        organizationId: TEST_ORGANIZATION_ID,
+        salesChannelId: await systemDefaultSalesChannelId(h.em()),
+      },
       [
         { productId: R.id, quantity: 1, unitPrice: '10.00', currency: 'PLN' },
         { productId: N.id, quantity: 1, unitPrice: '10.00', currency: 'PLN' },

@@ -46,6 +46,8 @@ import {
 
 const ADMIN = { b2b_session: 'stub-admin-session' };
 const CTX = { customerAccountId: TEST_CUSTOMER_ID, organizationId: TEST_ORGANIZATION_ID };
+/** The buyer's basket of the system-default channel (`specs/154-sales-channel-access/`). */
+let BASKET_CTX: typeof CTX & { salesChannelId: string };
 
 describe('155 — placement stamps returnable_at_purchase on every path [integration]', () => {
   let h: BackendServerHandle;
@@ -92,6 +94,7 @@ describe('155 — placement stamps returnable_at_purchase on every path [integra
 
   beforeAll(async () => {
     h = await setupBackendServer();
+    BASKET_CTX = { ...CTX, salesChannelId: await systemDefaultSalesChannelId(h.em()) };
     const em = h.em();
     channelId = await systemDefaultSalesChannelId(em);
     const channels = Array.from(new Set([channelId, ...(await buyerChannelIds(em))]));
@@ -136,7 +139,7 @@ describe('155 — placement stamps returnable_at_purchase on every path [integra
   });
 
   it('checkout — R true, N false', async () => {
-    await cartWritePortOf(h).replaceItemsForCustomer(CTX, [
+    await cartWritePortOf(h).replaceItemsForCustomer(BASKET_CTX, [
       { productId: R.id, quantity: 1, unitPrice: '10.00', currency: 'PLN' },
       { productId: N.id, quantity: 1, unitPrice: '10.00', currency: 'PLN' },
     ]);

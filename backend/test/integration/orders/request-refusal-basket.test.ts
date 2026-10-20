@@ -37,6 +37,8 @@ import {
 
 const ADMIN = { b2b_session: 'stub-admin-session' };
 const CTX = { customerAccountId: TEST_CUSTOMER_ID, organizationId: TEST_ORGANIZATION_ID };
+/** The buyer's basket of the system-default channel (`specs/154-sales-channel-access/`). */
+let BASKET_CTX: typeof CTX & { salesChannelId: string };
 const PL_SENTENCE = (name: string) => `Minimalna ilość zamówienia produktu „${name}” to 10 szt.`;
 const EN_SENTENCE = (name: string) => `"${name}" has a minimum order quantity of 10 pcs.`;
 
@@ -73,7 +75,7 @@ describe('155 — a refused order request leaves the basket alone and names the 
   };
 
   const seedBasket = async () => {
-    await write().replaceItemsForCustomer(CTX, [
+    await write().replaceItemsForCustomer(BASKET_CTX, [
       { productId: K.id, quantity: 3, unitPrice: '10.00', currency: 'PLN' },
     ]);
     const before = await basket();
@@ -124,6 +126,7 @@ describe('155 — a refused order request leaves the basket alone and names the 
 
   beforeAll(async () => {
     h = await setupBackendServer();
+    BASKET_CTX = { ...CTX, salesChannelId: await systemDefaultSalesChannelId(h.em()) };
     const em = h.em();
     channelId = await systemDefaultSalesChannelId(em);
     const channels = Array.from(new Set([channelId, ...(await buyerChannelIds(em))]));
@@ -226,7 +229,7 @@ describe('155 — a refused order request leaves the basket alone and names the 
     });
 
     it('the basket being replaced does not count: K-less A × 7 in the basket does not carry an admin A × 5', async () => {
-      await write().replaceItemsForCustomer(CTX, [{ productId: A.id, quantity: 7, unitPrice: '10.00', currency: 'PLN' }]);
+      await write().replaceItemsForCustomer(BASKET_CTX, [{ productId: A.id, quantity: 7, unitPrice: '10.00', currency: 'PLN' }]);
       const before = await basket();
       const res = await adminCreate([{ productId: A.id, quantity: 5 }]);
       expect(res.statusCode, res.body).toBe(422);

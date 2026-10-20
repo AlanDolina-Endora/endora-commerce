@@ -1,7 +1,6 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { describe, expect, it } from 'vitest';
 import type {
-  CartWithItems,
   CartWritePort,
   CatalogProductReadPort,
   CatalogProductRecord,
@@ -190,17 +189,13 @@ describe('shopping_lists — conversion partitions by the port, and writes throu
     const added: string[] = [];
     const basketChannels: string[] = [];
     const carts = {
-      addItem: async (
-        actor: { customer?: { salesChannelId: string } },
-        input: { productId: string },
-      ) => {
-        added.push(input.productId);
-        basketChannels.push(actor.customer!.salesChannelId);
-        return {} as CartWithItems;
-      },
       // Feature 155 (R8) — the batch list → cart goes through; every line admitted.
-      addItems: async (_actor: unknown, lines: ReadonlyArray<{ productId: string }>) => {
+      addItems: async (
+        actor: { customer?: { salesChannelId: string } },
+        lines: ReadonlyArray<{ productId: string }>,
+      ) => {
         added.push(...lines.map((line) => line.productId));
+        basketChannels.push(actor.customer!.salesChannelId);
         return { cart: {}, items: [], outcomes: lines.map((_line, index) => ({ index, status: 'added' })) };
       },
     } as unknown as CartWritePort;
@@ -251,7 +246,7 @@ describe('shopping_lists — conversion partitions by the port, and writes throu
       catalogProducts,
       refusingChannelMembership,
     );
-    await expect(service.convertToCart(CTX, 'list-1', undefined)).rejects.toMatchObject({
+    await expect(service.convertToCart(CTX, 'list-1', undefined, 'channel-b')).rejects.toMatchObject({
       statusCode: 400,
       code: 'CART_PRODUCT_QUOTE_ONLY',
       message: 'This product is sold on request only and cannot be added to the cart.',

@@ -17,6 +17,7 @@ import {
 } from '../../helpers/seed-commerce.js';
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import { cartWritePortOf } from '../../helpers/orders-neighbour-ports.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 import {
   acceptedQuoteRequest,
   checkOutBasket,
@@ -49,6 +50,8 @@ import {
 
 const CUSTOMER = { b2b_session: 'stub-customer-session' };
 const CTX = { customerAccountId: TEST_CUSTOMER_ID, organizationId: TEST_ORGANIZATION_ID };
+/** The buyer's basket of the system-default channel (`specs/154-sales-channel-access/`). */
+let BASKET_CTX: typeof CTX & { salesChannelId: string };
 const PLACEMENT = {
   deliveryAddressId: SEED_ADDRESS_DELIVERY_ID,
   billingAddressId: SEED_ADDRESS_BILLING_ID,
@@ -105,7 +108,7 @@ describe('155 — placement and the checkout preview refuse below-minimum lines 
 
   const seed = (lines: Array<{ productId: string; quantity: number; unitPrice?: string }>) =>
     cartWritePortOf(h).replaceItemsForCustomer(
-      CTX,
+      BASKET_CTX,
       lines.map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice ?? '10.00', currency: 'PLN' })),
     );
 
@@ -200,6 +203,7 @@ describe('155 — placement and the checkout preview refuse below-minimum lines 
 
   beforeAll(async () => {
     h = await setupBackendServer();
+    BASKET_CTX = { ...CTX, salesChannelId: await systemDefaultSalesChannelId(h.em()) };
     const em = h.em();
     await em
       .getConnection()
@@ -414,7 +418,7 @@ describe('155 — placement and the checkout preview refuse below-minimum lines 
     const uncheckedCart = {
       addItems: async (_actor: unknown, lines: Array<{ productId: string; quantity: number }>) => ({
         ...(await realCart.replaceItemsForCustomer(
-          CTX,
+          BASKET_CTX,
           lines.map((line) => ({ productId: line.productId, quantity: line.quantity, unitPrice: '10.00', currency: 'PLN' })),
         )),
         outcomes: [],

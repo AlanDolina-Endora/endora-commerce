@@ -18,6 +18,7 @@ import {
 } from '../../helpers/test-server.js';
 
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 
 
 /**
@@ -265,7 +266,11 @@ describe('Quick-order Excel import + build', () => {
 
     it('US4 #1b — the cart holds A × 8: the preview rejects A × 5, the build adds it (total 13)', async () => {
       await cartWritePortOf(h).replaceItemsForCustomer(
-        { customerAccountId: TEST_CUSTOMER_ID, organizationId: TEST_ORGANIZATION_ID },
+        {
+          customerAccountId: TEST_CUSTOMER_ID,
+          organizationId: TEST_ORGANIZATION_ID,
+          salesChannelId: await systemDefaultSalesChannelId(h.em()),
+        },
         [{ productId: A.id, quantity: 8, unitPrice: '10.00', currency: 'PLN' }],
       );
 

@@ -8,6 +8,7 @@ import {
 } from '../../helpers/test-server.js';
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import { cartWritePortOf } from '../../helpers/orders-neighbour-ports.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 import {
   buyerChannelIds,
   createMinimumPackagingUnit,
@@ -159,7 +160,11 @@ describe('155 — GET /api/v1/cart flags lines below a minimum [contract]', () =
     await setProductMinimum(h.em(), raised.id, 10);
     try {
       await cartWritePortOf(h).replaceItemsForCustomer(
-        { customerAccountId: TEST_CUSTOMER_ID, organizationId: TEST_ORGANIZATION_ID },
+        {
+          customerAccountId: TEST_CUSTOMER_ID,
+          organizationId: TEST_ORGANIZATION_ID,
+          salesChannelId: await systemDefaultSalesChannelId(h.em()),
+        },
         [{ productId: raised.id, quantity: 5, unitPrice: '10.00', currency: 'PLN' }],
         { sourceQuoteRequestId: randomUUID() },
       );
@@ -168,7 +173,11 @@ describe('155 — GET /api/v1/cart flags lines below a minimum [contract]', () =
     } finally {
       await setProductMinimum(h.em(), raised.id, null);
       await cartWritePortOf(h).replaceItemsForCustomer(
-        { customerAccountId: TEST_CUSTOMER_ID, organizationId: TEST_ORGANIZATION_ID },
+        {
+          customerAccountId: TEST_CUSTOMER_ID,
+          organizationId: TEST_ORGANIZATION_ID,
+          salesChannelId: await systemDefaultSalesChannelId(h.em()),
+        },
         [],
       );
     }

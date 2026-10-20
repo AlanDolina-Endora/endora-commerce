@@ -278,7 +278,7 @@ describe('carts — quote-to-cart conversion reads quote_requests through its po
 });
 
 describe('carts — quote-to-cart conversion maps the batch outcomes (feature 155, R12.5)', () => {
-  const ctx = { customerAccountId: 'cust-1', organizationId: 'org-1' };
+  const ctx = { customerAccountId: 'cust-1', organizationId: 'org-1', salesChannelId: 'channel-1' };
   const qrLine = (id: string, productId: string, quantity: number) => ({
     id,
     quoteRequestId: 'qr-1',

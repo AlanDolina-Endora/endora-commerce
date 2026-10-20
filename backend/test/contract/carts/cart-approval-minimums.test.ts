@@ -27,6 +27,7 @@ import { seedOtherTestCustomer } from '../../helpers/seed-organizations.js';
 import { cartWritePortOf } from '../../helpers/orders-neighbour-ports.js';
 import { acceptedQuoteRequest, whenOrderCreatedSettled } from '../../helpers/quote-conversion.js';
 import { withModulesDeactivated } from '../../helpers/modules-deactivated.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 
 /**
  * Feature 155, owner ruling 2026-10-18 — a basket that cannot be ordered cannot be
@@ -341,7 +342,11 @@ describe('155 — submit-for-approval refuses a basket below a minimum [contract
     async function seedMemberBasket(quoteRequestId: string): Promise<string> {
       await retireMemberCart();
       await cartWritePortOf(h).replaceItemsForCustomer(
-        { customerAccountId: MEMBER_ID, organizationId: TEST_ORGANIZATION_ID },
+        {
+          customerAccountId: MEMBER_ID,
+          organizationId: TEST_ORGANIZATION_ID,
+          salesChannelId: await systemDefaultSalesChannelId(h.em()),
+        },
         [{ productId: A, quantity: 5, unitPrice: '11.25', currency: 'PLN' }],
         { sourceQuoteRequestId: quoteRequestId },
       );

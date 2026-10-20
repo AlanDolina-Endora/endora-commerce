@@ -44,7 +44,7 @@ interface ErrorBody {
 /** The slice of the carts service the backstop double replaces. */
 interface CartServiceSlice {
   addItems(...args: unknown[]): Promise<unknown>;
-  getOrCreateForCustomer(ctx: typeof CTX): Promise<unknown>;
+  getOrCreateForCustomer(ctx: typeof CTX & { salesChannelId: string }): Promise<unknown>;
 }
 
 describe('155 — admin create-order refuses below-minimum lines through the batch [integration]', () => {
@@ -182,14 +182,16 @@ describe('155 — admin create-order refuses below-minimum lines through the bat
     const original = service.getOrCreateForCustomer.bind(service);
     const admitted: CartBatchLineInput[][] = [];
     const spy = vi.spyOn(service, 'addItems').mockImplementation(async (...args: unknown[]) => {
+      // The basket the admin create addresses — the one of the order's channel.
+      const basket = (args[0] as { customer: typeof CTX & { salesChannelId: string } }).customer;
       const lines = args[1] as CartBatchLineInput[];
       admitted.push(lines);
       await cradle().cartWritePort.replaceItemsForCustomer(
-        CTX,
+        basket,
         lines.map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: '10.00', currency: 'PLN' })),
       );
       return {
-        cart: await original(CTX),
+        cart: await original(basket),
         items: [],
         outcomes: lines.map((_, index) => ({ index, status: 'added' as const })),
       };

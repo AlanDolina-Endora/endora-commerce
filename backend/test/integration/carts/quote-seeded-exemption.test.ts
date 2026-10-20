@@ -18,6 +18,7 @@ import {
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import { cartWritePortOf } from '../../helpers/orders-neighbour-ports.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 import {
   acceptedQuoteRequest,
   checkOutBasket,
@@ -57,6 +58,8 @@ import {
 
 const CUSTOMER = { b2b_session: 'stub-customer-session' };
 const CTX = { customerAccountId: TEST_CUSTOMER_ID, organizationId: TEST_ORGANIZATION_ID };
+/** The buyer's basket of the system-default channel (`specs/154-sales-channel-access/`). */
+let BASKET_CTX: typeof CTX & { salesChannelId: string };
 
 interface ErrorBody {
   error: { code: string; message: string; details?: Record<string, unknown> };
@@ -87,6 +90,7 @@ describe('155 — quote-seeded lines are exempt while unchanged [integration]', 
 
   beforeAll(async () => {
     h = await setupBackendServer();
+    BASKET_CTX = { ...CTX, salesChannelId: await systemDefaultSalesChannelId(h.em()) };
     const em = h.em();
     const a = await em.findOneOrFail(Product, { id: SEED_PRODUCT_101_ID }, { filters: false });
     previousMinimumOfA = a.minOrderQuantity ?? null;
@@ -182,7 +186,7 @@ describe('155 — quote-seeded lines are exempt while unchanged [integration]', 
   it('a seed with a quote source records each line’s seeded quantity; the lines are exempt', async () => {
     const source = randomUUID();
     await cartWritePortOf(h).replaceItemsForCustomer(
-      CTX,
+      BASKET_CTX,
       [
         { productId: SEED_PRODUCT_101_ID, quantity: 5, unitPrice: '11.25', currency: 'PLN' },
         { productId: B.id, quantity: 3, unitPrice: '10.00', currency: 'PLN' },
@@ -198,7 +202,7 @@ describe('155 — quote-seeded lines are exempt while unchanged [integration]', 
       ]),
     );
     const read = await cartWritePortOf(h).replaceItemsForCustomer(
-      CTX,
+      BASKET_CTX,
       [{ productId: SEED_PRODUCT_101_ID, quantity: 5, unitPrice: '11.25', currency: 'PLN' }],
       { sourceQuoteRequestId: source },
     );
@@ -221,7 +225,7 @@ describe('155 — quote-seeded lines are exempt while unchanged [integration]', 
       .findOneOrFail(Cart, { customerAccountId: TEST_CUSTOMER_ID, status: 'active' }, { filters: false });
     // The same quote's basket, with a second seeded line beside the agreed one.
     await cartWritePortOf(h).replaceItemsForCustomer(
-      CTX,
+      BASKET_CTX,
       [
         { productId: SEED_PRODUCT_101_ID, quantity: 5, unitPrice: '11.25', currency: 'PLN' },
         { productId: B.id, quantity: 3, unitPrice: '10.00', currency: 'PLN' },
@@ -243,7 +247,7 @@ describe('155 — quote-seeded lines are exempt while unchanged [integration]', 
 
   it('#7b — a line added after the quote was loaded is not exempt', async () => {
     await cartWritePortOf(h).replaceItemsForCustomer(
-      CTX,
+      BASKET_CTX,
       [{ productId: SEED_PRODUCT_101_ID, quantity: 5, unitPrice: '11.25', currency: 'PLN' }],
       { sourceQuoteRequestId: randomUUID() },
     );
@@ -292,7 +296,7 @@ describe('155 — quote-seeded lines are exempt while unchanged [integration]', 
 
   it('a bump of the seeded line ends its exemption while it differs', async () => {
     await cartWritePortOf(h).replaceItemsForCustomer(
-      CTX,
+      BASKET_CTX,
       [{ productId: SEED_PRODUCT_101_ID, quantity: 5, unitPrice: '11.25', currency: 'PLN' }],
       { sourceQuoteRequestId: randomUUID() },
     );
@@ -309,7 +313,7 @@ describe('155 — quote-seeded lines are exempt while unchanged [integration]', 
 
   it('a login merge into the seeded line ends its exemption likewise; the moved line carries no seeded quantity', async () => {
     await cartWritePortOf(h).replaceItemsForCustomer(
-      CTX,
+      BASKET_CTX,
       [{ productId: SEED_PRODUCT_101_ID, quantity: 5, unitPrice: '11.25', currency: 'PLN' }],
       { sourceQuoteRequestId: randomUUID() },
     );
@@ -329,7 +333,7 @@ describe('155 — quote-seeded lines are exempt while unchanged [integration]', 
 
     const service = h.cartService();
     if (!service) throw new Error('the composed CartService is not available');
-    await service.mergeAnonymousIntoCustomer(token, CTX);
+    await service.mergeAnonymousIntoCustomer(token, BASKET_CTX);
 
     const a = await lineOf(SEED_PRODUCT_101_ID);
     expect([a.quantity, a.agreedQuantity]).toEqual([6, 5]);
@@ -339,7 +343,7 @@ describe('155 — quote-seeded lines are exempt while unchanged [integration]', 
   });
 
   it('a reorder seed (no source) exempts nothing', async () => {
-    await cartWritePortOf(h).replaceItemsForCustomer(CTX, [
+    await cartWritePortOf(h).replaceItemsForCustomer(BASKET_CTX, [
       { productId: SEED_PRODUCT_101_ID, quantity: 5, unitPrice: '11.25', currency: 'PLN' },
     ]);
     expect((await lineOf(SEED_PRODUCT_101_ID)).agreedQuantity ?? null).toBeNull();
@@ -350,24 +354,24 @@ describe('155 — quote-seeded lines are exempt while unchanged [integration]', 
 
   it('a later seed replaces the exemptions', async () => {
     await cartWritePortOf(h).replaceItemsForCustomer(
-      CTX,
+      BASKET_CTX,
       [{ productId: SEED_PRODUCT_101_ID, quantity: 5, unitPrice: '11.25', currency: 'PLN' }],
       { sourceQuoteRequestId: randomUUID() },
     );
     await cartWritePortOf(h).replaceItemsForCustomer(
-      CTX,
+      BASKET_CTX,
       [{ productId: SEED_PRODUCT_101_ID, quantity: 7, unitPrice: '11.25', currency: 'PLN' }],
       { sourceQuoteRequestId: randomUUID() },
     );
     expect((await basketLines()).map((l) => [l.quantity, l.agreedQuantity])).toEqual([[7, 7]]);
-    await cartWritePortOf(h).replaceItemsForCustomer(CTX, [
+    await cartWritePortOf(h).replaceItemsForCustomer(BASKET_CTX, [
       { productId: SEED_PRODUCT_101_ID, quantity: 7, unitPrice: '11.25', currency: 'PLN' },
     ]);
     expect((await basketLines()).map((l) => l.agreedQuantity ?? null)).toEqual([null]);
   });
 
   it('a line the buyer adds carries no seeded quantity', async () => {
-    await cartWritePortOf(h).replaceItemsForCustomer(CTX, []);
+    await cartWritePortOf(h).replaceItemsForCustomer(BASKET_CTX, []);
     const res = await add({ productId: B.id, quantity: 10 });
     expect(res.statusCode, res.body).toBe(200);
     expect((await lineOf(B.id)).agreedQuantity ?? null).toBeNull();

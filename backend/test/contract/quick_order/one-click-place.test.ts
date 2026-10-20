@@ -32,6 +32,7 @@ import { Address, Product } from '../../helpers/package-entities.js';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
 import { Order, OrderItem } from '../../helpers/package-entities.js';
 import { addOrganizationChannels } from '../../helpers/sales-channel-access.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 
 /**
  * Issue #64 — one-click buy places an order, and refuses a suspended
@@ -316,6 +317,10 @@ describe('POST /api/v1/quick-order/one-click — placement', () => {
     /** Visible and sold, but with no price: refused at the write step (`CART_PRODUCT_UNPRICED`). */
     let U: MinimumProductFixture;
     const CTX = { customerAccountId: TEST_CUSTOMER_ID, organizationId: TEST_ORGANIZATION_ID };
+    /** The system default's: the route resolves it for a request naming no channel. */
+    let channelId: string;
+    /** The buyer's basket of that channel (`specs/154-sales-channel-access/`). */
+    const basketCtx = () => ({ ...CTX, salesChannelId: channelId });
 
     const cradle = () =>
       h.container.cradle as unknown as {
@@ -333,6 +338,7 @@ describe('POST /api/v1/quick-order/one-click — placement', () => {
 
     beforeAll(async () => {
       const em = h.em();
+      channelId = await systemDefaultSalesChannelId(em);
       A = await createMinimumProduct(em, {
         sku: `QOC-A-${RUN}`,
         nameEn: `Anchor ${RUN}`,
@@ -371,7 +377,7 @@ describe('POST /api/v1/quick-order/one-click — placement', () => {
     };
 
     const seedBasket = async () => {
-      await cradle().cartWritePort.replaceItemsForCustomer(CTX, [
+      await cradle().cartWritePort.replaceItemsForCustomer(basketCtx(), [
         { productId: K.id, quantity: 3, unitPrice: '10.00', currency: 'PLN' },
       ]);
       const before = await basket();
@@ -453,12 +459,12 @@ describe('POST /api/v1/quick-order/one-click — placement', () => {
     it('the placement backstop — with addItems replaced by a double that admits A × 5, placement still refuses [F3]', async () => {
       const OneClickService = cradle().quickOrderOneClickService.constructor as new (
         ...args: unknown[]
-      ) => { place(ctx: unknown, input: unknown, salesChannelId: string | null): Promise<unknown> };
+      ) => { place(ctx: unknown, input: unknown, salesChannelId: string): Promise<unknown> };
       const realCart = cradle().cartWritePort;
       const uncheckedCart = {
         addItems: async (_actor: unknown, lines: Array<{ productId: string; quantity: number }>) => ({
           ...(await realCart.replaceItemsForCustomer(
-            CTX,
+            basketCtx(),
             lines.map((line) => ({ productId: line.productId, quantity: line.quantity, unitPrice: '10.00', currency: 'PLN' })),
           )),
           outcomes: [],
@@ -480,7 +486,7 @@ describe('POST /api/v1/quick-order/one-click — placement', () => {
         cradle().catalogProductReadPort,
       );
       const before = await orderCount();
-      await expect(oneClick.place(CTX, { productId: A.id, quantity: 5 }, null)).rejects.toMatchObject({
+      await expect(oneClick.place(CTX, { productId: A.id, quantity: 5 }, channelId)).rejects.toMatchObject({
         statusCode: 422,
         code: ERROR_CODES.PRODUCT_BELOW_MINIMUM_QUANTITY,
       });

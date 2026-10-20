@@ -18,6 +18,7 @@ import { seedOtherTestCustomer } from '../../helpers/seed-organizations.js';
 import { cartWritePortOf } from '../../helpers/orders-neighbour-ports.js';
 import { acceptedQuoteRequest, whenOrderCreatedSettled } from '../../helpers/quote-conversion.js';
 import { setProductMinimum } from '../../helpers/order-minimum-fixture.js';
+import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 
 /**
  * Feature 155, Phase 8 (T056a) — FR-036, US4 #7e, threat F2: a quote-seeded
@@ -207,7 +208,11 @@ describe('155 — the quote-line exemption needs a vouched quote source at place
     // The same product and quantity at the list price: the line still carries a
     // seeded quantity and the basket its mark, but no agreed line is left.
     await cartWritePortOf(h).replaceItemsForCustomer(
-      { customerAccountId: TEST_CUSTOMER_ID, organizationId: TEST_ORGANIZATION_ID },
+      {
+        customerAccountId: TEST_CUSTOMER_ID,
+        organizationId: TEST_ORGANIZATION_ID,
+        salesChannelId: await systemDefaultSalesChannelId(h.em()),
+      },
       [{ productId: A, quantity: 5, unitPrice: '19.99', currency: 'PLN' }],
       { sourceQuoteRequestId: quotes.replaced },
     );
@@ -216,7 +221,11 @@ describe('155 — the quote-line exemption needs a vouched quote source at place
 
   it('a quote of another Organization named by the basket → judged like any line (XI)', async () => {
     await cartWritePortOf(h).replaceItemsForCustomer(
-      { customerAccountId: TEST_CUSTOMER_ID, organizationId: TEST_ORGANIZATION_ID },
+      {
+        customerAccountId: TEST_CUSTOMER_ID,
+        organizationId: TEST_ORGANIZATION_ID,
+        salesChannelId: await systemDefaultSalesChannelId(h.em()),
+      },
       [{ productId: A, quantity: 5, unitPrice: '11.25', currency: 'PLN' }],
       { sourceQuoteRequestId: foreignQuote },
     );
