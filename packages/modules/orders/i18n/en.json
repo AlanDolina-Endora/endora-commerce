@@ -109,5 +109,13 @@
   "lineGroups.announce.atEnd": "{name} is already last.",
   "lineGroups.announce.handle": "Move line {name}",
   "lineGroups.announce.groupHandle": "Move group {name}",
-  "lineGroups.otherItems": "Other items"
+  "lineGroups.otherItems": "Other items",
+  "orderDetail.comments.systemAuthor": "System",
+  "orderDetail.comments.systemNote.customFieldCarrySkipped.quote_request": "Not carried from quote request {reference}:",
+  "orderDetail.comments.systemNote.customFieldCarrySkipped.opportunity": "Not carried from sales opportunity {reference}:",
+  "orderDetail.comments.carryLine": "{field} — {reason}",
+  "orderDetail.comments.carryReason.target_missing": "the order has no field with this key",
+  "orderDetail.comments.carryReason.value_type_mismatch": "the order's field has a different value type",
+  "orderDetail.comments.carryReason.audience_mismatch": "the order's field is visible to customers, but the source field is internal",
+  "orderDetail.comments.carryReason.value_invalid": "the value is not valid for the order's field"
 }

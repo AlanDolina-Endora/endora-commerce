@@ -166,5 +166,11 @@
   "lineGroups.announce.atStart": "{name}: to już pierwsze miejsce.",
   "lineGroups.announce.atEnd": "{name}: to już ostatnie miejsce.",
   "lineGroups.announce.handle": "Przenieś pozycję {name}",
-  "lineGroups.announce.groupHandle": "Przenieś grupę {name}"
+  "lineGroups.announce.groupHandle": "Przenieś grupę {name}",
+  "history.carrySource": "Szansa sprzedażowa {reference}",
+  "history.carryLine": "{field} — {reason}",
+  "history.carryReason.target_missing": "zapytanie ofertowe nie ma pola o tym kluczu",
+  "history.carryReason.value_type_mismatch": "pole zapytania ofertowego ma inny typ wartości",
+  "history.carryReason.audience_mismatch": "pole zapytania ofertowego jest widoczne dla klientów, a pole szansy sprzedażowej jest wewnętrzne",
+  "history.carryReason.value_invalid": "wartość nie pasuje do pola zapytania ofertowego"
 }
