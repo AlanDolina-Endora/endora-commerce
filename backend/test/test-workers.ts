@@ -55,7 +55,7 @@ export interface WorkerServices {
   readonly redisUrl: string;
 }
 
-function isCi(env: NodeJS.ProcessEnv): boolean {
+export function isCi(env: NodeJS.ProcessEnv): boolean {
   const value = env['CI'];
   return value !== undefined && value !== '' && value !== '0' && value !== 'false';
 }
