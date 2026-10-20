@@ -128,15 +128,15 @@ unchanged.
 - [X] T045 [US3] Implement in `DT/src/backend/rendering/items-table.ts` (+ facility texts for *Other items* and item counts) — T044 green
 - [X] T046 [P] [US3] Extend `DT/src/backend/rendering/document-renderer.test.ts` — red: `sections()` called once per collection per render; throwing `sections()` → flat table + one log line, document not failed; a test-only type declaring sections prints them with no facility change (FR-040, 153 SC-007 pattern)
 - [X] T047 [US3] Implement in `document-renderer.ts` — T046 green
-- [ ] T048 [P] [US3] Extend `BT/contract/document_templates/admin-api.test.ts` (route 2) and `DT/src/backend/services/content-validation.test.ts` — red: `sampleSections` served (empty for the comparison and invoice types); grouping settings validated at save with paths; legacy templates still save — then implement in `document-template-service.ts` / `content-validation.ts` — green
+- [X] T048 [P] [US3] Extend `BT/contract/document_templates/admin-api.test.ts` (route 2) and `DT/src/backend/services/content-validation.test.ts` — red: `sampleSections` served (empty for the comparison and invoice types); grouping settings validated at save with paths; legacy templates still save — then implement in `document-template-service.ts` / `content-validation.ts` — green
 - [X] T049 [P] [US3] Extend `AT/modules/document_templates/items-table-editor.test.tsx` — red: *Grouping* radios (Document's groups / By field / No grouping) write `null`→`{ by: 'sections' }` on option change, the 153 field shape, `{ by: 'none' }`; *Other items heading* and *Show item count*; the no-sections hint; canvas renders `sampleSections`
 - [X] T050 [US3] Implement `DT/src/admin/blocks/items-table/{GroupingField,canvas}.tsx` + `DT/i18n/{en,pl}.json` keys — T049 green
 
 ### Quote host
 
-- [ ] T051 [P] [US3] Extend `QR/src/backend/document/quote-lines.test.ts` and `data-builder.test.ts` — red: data has non-empty `groups` and lines in display order; `sections()` partitions with `quoteSummary` per section (net/VAT/gross null when a section has an unpriced line; discount only where it applies); sum of section nets equals the document net (SC-002); sample has two groups and an ungrouped line
-- [ ] T052 [US3] Implement in `QR/src/backend/document/{data-builder,quote-lines,sample}.ts` — T051 green
-- [ ] T053 [P] [US3] Extend `BT/contract/quote_requests/pdf-export.test.ts` — red: grouped quote with the built-in layout and with a pre-feature template both print sections (assert on the render input / docDefinition through the test seam 153 uses); ungrouped quote → same definition as before
+- [X] T051 [P] [US3] Extend `QR/src/backend/document/quote-lines.test.ts` and `data-builder.test.ts` — red: data has non-empty `groups` and lines in display order; `sections()` partitions with `quoteSummary` per section (net/VAT/gross null when a section has an unpriced line; discount only where it applies); sum of section nets equals the document net (SC-002); sample has two groups and an ungrouped line
+- [X] T052 [US3] Implement in `QR/src/backend/document/{data-builder,quote-lines,sample}.ts` — T051 green
+- [X] T053 [P] [US3] Extend `BT/contract/quote_requests/pdf-export.test.ts` — red: grouped quote with the built-in layout and with a pre-feature template both print sections (assert on the render input / docDefinition through the test seam 153 uses); ungrouped quote → same definition as before
 
 **Checkpoint**: quickstart §3 passes.
 

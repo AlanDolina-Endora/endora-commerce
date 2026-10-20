@@ -522,3 +522,36 @@ Smallest deviations taken where the plan met the code; later phases build on the
 - **N-10 — OpenAPI baseline.** `backend/test/fixtures/openapi-baseline.json` records no request or response
   bodies for these routes, so nothing moved; `openapi-baseline.test.ts` passes unchanged (T071 has nothing
   to re-record for the MVP's surface).
+
+## Implementation notes (US3, T042–T053, 2026-10-20)
+
+- **N-11 — The facility's PDF texts live in `CT`.** The default *Other items* heading and the plural item
+  counts are `documentSectionTexts(language)` in `CT/document-templates.ts`, beside `formatDocumentValue`,
+  rather than in a text map under `DT/src/backend`: the editor canvas (`src/admin`, a separate compile that
+  cannot import backend files) must print what the PDF prints (153 FR-036). English and Polish ship; any
+  other language reads English; the form is chosen with `Intl.PluralRules`.
+- **N-12 — An ungrouped quote answers one section.** `quoteLineSections` returns a single `ungrouped`
+  section over every line for a quote with no group (and `[]` only for a quote with no line), so the
+  partition check holds and nothing is logged on every ungrouped export; the table prints flat because no
+  section is a group.
+- **N-13 — Partition check, twice.** `isValidSectionPartition` also refuses an empty section, a duplicate
+  key and an `ungrouped` section that is not last. The renderer checks once per collection per render and
+  logs once (`documentType`, `collection`); the table re-checks silently as a guard, and route 2 answers
+  `sampleSections: []` for a bad or throwing sample. A stored `grouping` with an unknown `by` reads as
+  *Document's groups* at render (tolerant, as every prop) and is refused at save.
+- **N-14 — Editor choices.** *By field* writes 153's shape without `by`, so a template stays readable by the
+  pre-feature renderer, and pre-selects the catalogue's first field (the stored shape requires one).
+  *Document's groups* writes `null`; touching *Other items heading* or *Show item count* writes
+  `{ by: 'sections', … }`. The "This document type has no groups." hint shows when the served
+  `sampleSections` is empty — route 2 carries no separate "declares sections" flag. The bundle key
+  `itemsTable.grouping.none` is replaced by `itemsTable.grouping.mode.none`.
+- **N-15 — Subtotal rows.** A section's subtotal rows are right-aligned and not bold (contract §3: "not
+  emphasised"); 153's field-grouping subtotal row keeps its bold.
+- **N-16 — How SC-004 is proven.** `DT/src/backend/rendering/__fixtures__/items-table-flat-153.json` was
+  recorded once from the renderer as 153 left it (four prop sets: bare, styled, detail row + totals, by
+  field); the test compares JSON, since the table `layout` functions do not serialise (their code is
+  unchanged). `BT/contract/quote_requests/pdf-export.test.ts` reads the definition of a real export through
+  a spy on the `documentRenderer` singleton's `buildDefinition` (the render port resolves to it); pdfmake
+  fills `colSpan` placeholder cells in place, so they read as empty there.
+- **N-17 — The sample keeps five lines.** Two groups (three lines and one) and one ungrouped line, so 153's
+  sample assertions (five priced lines, two discounted, one packed, one with a note) hold unchanged.
