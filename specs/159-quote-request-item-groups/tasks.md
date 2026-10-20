@@ -90,8 +90,8 @@ suite is green (SC-004 baseline).
 
 - [X] T030 [P] [US1] Write `AT/modules/quote_requests/RfqDetail.groups.test.tsx` (`<StrictMode>`, `axe-core`) — red: *Modify* seeds groups from `itemGroups` (empty ones included); add/rename/delete/move/reorder; section summaries (count, net, VAT, gross, discount when every line has a reference) recomputed on edit; per-group *Add product* adds into that group, the main control into *Ungrouped*; *Save revision* sends `groups` + `groupKey` in display order (extend the assertions of `RfqDetail.modify-payload.test.tsx`); read-only in *Approved*; *Overview* shows grouped read-only; no group → screens unchanged
 - [X] T031 [US1] Implement in `QR/src/admin/pages/RfqDetail.tsx` (`ModifyCard` with `LineGroupsEditor`; *Overview* read-only) and bundle keys of `contracts/ui.md` §4 in `QR/i18n/{en,pl}.json` — T030 green; `pnpm --filter backend run i18n:hardcoded`
-- [ ] T032 [P] [US1] Write `AT/modules/quote_requests/RfqCreatePage.groups.test.tsx` — red: groups on create, payload shape, product-browser additions land in *Ungrouped* or the chosen group
-- [ ] T033 [US1] Implement in `QR/src/admin/pages/RfqCreatePage.tsx` — T032 green
+- [X] T032 [P] [US1] Write `AT/modules/quote_requests/RfqCreatePage.groups.test.tsx` — red: groups on create, payload shape, product-browser additions land in *Ungrouped* or the chosen group
+- [X] T033 [US1] Implement in `QR/src/admin/pages/RfqCreatePage.tsx` — T032 green
 
 **Checkpoint**: US1 complete — quickstart §1 passes.
 

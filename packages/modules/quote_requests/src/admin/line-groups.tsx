@@ -66,7 +66,8 @@ export interface SectionTotals {
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
-export function sectionTotals(lines: readonly SummaryLine[], taxRate: number): SectionTotals {
+/** `taxRate: null` — a screen that shows no VAT (the create screen): net only. */
+export function sectionTotals(lines: readonly SummaryLine[], taxRate: number | null): SectionTotals {
   const count = lines.length;
   if (count === 0 || lines.some((line) => line.net === null)) {
     return { count, net: null, vat: null, gross: null, discount: null };
@@ -74,15 +75,15 @@ export function sectionTotals(lines: readonly SummaryLine[], taxRate: number): S
   const net = round2(lines.reduce((sum, line) => sum + line.net!, 0));
   // The section's VAT from its net, as the PDF computes it; the document total
   // stays authoritative (a section may differ from it by a cent).
-  const vat = round2(net * taxRate);
+  const vat = taxRate === null ? null : round2(net * taxRate);
   const everyReference = lines.every((line) => line.reference !== null);
   const reference = everyReference ? round2(lines.reduce((sum, line) => sum + line.reference!, 0)) : null;
   const discount = reference !== null && reference > net ? round2(reference - net) : null;
-  return { count, net, vat, gross: round2(net + vat), discount };
+  return { count, net, vat, gross: vat === null ? null : round2(net + vat), discount };
 }
 
 /** "3 items · Net 300.00 PLN · VAT 69.00 PLN · Gross 369.00 PLN · Discount 12.00 PLN". */
-export function useSectionSummaryText(): (totals: SectionTotals, currency: string) => string {
+export function useSectionSummaryText(): (totals: SectionTotals, currency: string | null) => string {
   const t = useTranslation('quote_requests');
   const { language } = useTranslationContext();
   const format = useRfqNumberFormat();
@@ -93,14 +94,11 @@ export function useSectionSummaryText(): (totals: SectionTotals, currency: strin
       const itemsKey = `lineGroups.summary.items.${form}`;
       const items = t(itemsKey, { count: totals.count });
       const parts = [items.startsWith('quote_requests.') ? t('lineGroups.summary.items.other', { count: totals.count }) : items];
-      if (totals.net !== null) {
-        parts.push(t('lineGroups.summary.net', { amount: format.money(totals.net, currency) }));
-        parts.push(t('lineGroups.summary.vat', { amount: format.money(totals.vat ?? 0, currency) }));
-        parts.push(t('lineGroups.summary.gross', { amount: format.money(totals.gross ?? 0, currency) }));
-      }
-      if (totals.discount !== null) {
-        parts.push(t('lineGroups.summary.discount', { amount: format.money(totals.discount, currency) }));
-      }
+      const money = (n: number): string => (currency === null ? format.amount(n) : format.money(n, currency));
+      if (totals.net !== null) parts.push(t('lineGroups.summary.net', { amount: money(totals.net) }));
+      if (totals.vat !== null) parts.push(t('lineGroups.summary.vat', { amount: money(totals.vat) }));
+      if (totals.gross !== null) parts.push(t('lineGroups.summary.gross', { amount: money(totals.gross) }));
+      if (totals.discount !== null) parts.push(t('lineGroups.summary.discount', { amount: money(totals.discount) }));
       return parts.join(' · ');
     };
   }, [t, language, format]);

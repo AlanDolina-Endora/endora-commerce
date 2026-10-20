@@ -14,16 +14,14 @@ import {
   Input,
   Label,
   PageHeader,
-  Table,
-  TableBody,
   TableCell,
   TableHead,
-  TableHeader,
   TableRow,
   Textarea,
   type ComboboxOption,
 } from '@endora-commerce/admin-kit/ui';
 import {
+  LineGroupsEditor,
   ProductBrowserDialog,
   ProductBrowserTrigger,
   ProductPicker,
@@ -34,6 +32,7 @@ import {
 } from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { createPricePrefillQueue, type PricePrefillQueue } from '../lib/price-prefill-queue';
+import { SectionSummary, sectionTotals, useQuoteLineGroupLabels, useSectionSummaryText } from '../line-groups.js';
 
 /**
  * Admin "create a Quote Request on behalf of a customer" (feature 008 US4).
@@ -63,6 +62,10 @@ interface AdminCustomerListItem {
  * which no prefill ever overwrites it (FR-033).
  */
 interface LineRow {
+  /** Feature 159 — the line's identity in the grouping editor: its product. */
+  key: string;
+  /** Feature 159 — the group (a group draft's key) the line is in; `null` = ungrouped. */
+  groupKey: string | null;
   productId: string;
   sku: string;
   name: string;
@@ -216,8 +219,10 @@ function parsePrice(input: string): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
-function productLine(item: ProductBrowserItem): LineRow {
+function productLine(item: ProductBrowserItem, groupKey: string | null): LineRow {
   return {
+    key: item.id,
+    groupKey,
     productId: item.id,
     sku: item.sku,
     name: productDisplayName(item),
@@ -229,6 +234,9 @@ function productLine(item: ProductBrowserItem): LineRow {
 
 export function RfqCreatePage(): ReactNode {
   const t = useTranslation('core');
+  const tGroups = useTranslation('quote_requests');
+  const groupLabels = useQuoteLineGroupLabels();
+  const summaryText = useSectionSummaryText();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   // Read once: what the page was opened with does not change under the form.
@@ -255,6 +263,12 @@ export function RfqCreatePage(): ReactNode {
   }, [openedWith.customerAccountId]);
   const [lines, setLines] = useState<LineRow[]>([]);
   const [browserOpen, setBrowserOpen] = useState(false);
+  // Feature 159 — the new quote's groups, and where the browser's products go:
+  // a group's *Add product* opens it for that group, the page's own controls
+  // add to Ungrouped.
+  const [groups, setGroups] = useState<Array<{ key: string; name: string }>>([]);
+  const [addTarget, setAddTarget] = useState<string | null>(null);
+  const groupCounter = useRef(0);
   const itemsId = useId();
   const [headerNote, setHeaderNote] = useState('');
   const [expiresInDays, setExpiresInDays] = useState('');
@@ -363,13 +377,13 @@ export function RfqCreatePage(): ReactNode {
    * first one's lines — and exactly the rows appended are prefilled. The prefill
    * stays out of the `setLines` updater, which StrictMode runs twice.
    */
-  const appendLines = (products: readonly ProductBrowserItem[]): void => {
+  const appendLines = (products: readonly ProductBrowserItem[], groupKey: string | null = null): void => {
     const present = new Set(linesRef.current.map((row) => row.productId));
     const added: LineRow[] = [];
     for (const p of products) {
       if (present.has(p.id)) continue;
       present.add(p.id);
-      added.push(productLine(p));
+      added.push(productLine(p, groupKey));
     }
     if (added.length === 0) return;
     linesRef.current = [...linesRef.current, ...added];
@@ -418,16 +432,25 @@ export function RfqCreatePage(): ReactNode {
     quantity: parsePositiveInt(row.quantityInput),
     price: parsePrice(row.agreedUnitPrice),
   }));
+  const parsedByKey = new Map(parsedLines.map((l) => [l.row.key, l]));
   const allLinesComplete = parsedLines.every((l) => l.quantity !== null && l.price !== null);
   const hasOrg = Boolean(customer?.organizationId);
   const total = parsedLines.reduce(
     (sum, l) => (l.quantity !== null && l.price !== null ? sum + l.quantity * l.price : sum),
     0,
   );
-  const canSubmit = hasOrg && lines.length > 0 && allLinesComplete && !busy;
+  // Feature 159 — every group needs a name before the request can be created.
+  const groupsNamed = groups.every((group) => group.name.trim() !== '');
+  const canSubmit = hasOrg && lines.length > 0 && allLinesComplete && groupsNamed && !busy;
+  // In display order: each group's lines, then the ungrouped ones.
+  const knownGroups = new Set(groups.map((group) => group.key));
+  const orderedLines = [
+    ...groups.flatMap((group) => parsedLines.filter((l) => l.row.groupKey === group.key)),
+    ...parsedLines.filter((l) => l.row.groupKey === null || !knownGroups.has(l.row.groupKey)),
+  ];
 
   const submit = async (): Promise<void> => {
-    if (!customer?.organizationId || !allLinesComplete) return;
+    if (!customer?.organizationId || !allLinesComplete || !groupsNamed) return;
     setBusy(true);
     setError(null);
     try {
@@ -437,10 +460,15 @@ export function RfqCreatePage(): ReactNode {
         customerAccountId: customer.id,
         ...(headerNote.trim() ? { headerNote: headerNote.trim() } : {}),
         ...(trimmedExpiry !== '' ? { expiresInDays: Number(trimmedExpiry) } : {}),
-        items: parsedLines.map((l) => ({
+        // Sent only when there is a group: a request without one is unchanged.
+        ...(groups.length > 0 ? { groups: groups.map((group) => ({ key: group.key, name: group.name.trim() })) } : {}),
+        items: orderedLines.map((l) => ({
           productId: l.row.productId,
           quantity: l.quantity ?? 0,
           agreedUnitPrice: l.price ?? 0,
+          ...(groups.length > 0
+            ? { groupKey: l.row.groupKey !== null && knownGroups.has(l.row.groupKey) ? l.row.groupKey : null }
+            : {}),
         })),
         ...(openedWith.origin ? { origin: openedWith.origin } : {}),
       });
@@ -523,17 +551,23 @@ export function RfqCreatePage(): ReactNode {
             rules={RFQ_PRODUCT_RULES}
             alreadyAddedIds={lineIds}
             onConfirm={(picked): void => {
-              appendLines(picked);
+              appendLines(picked, addTarget);
               setBrowserOpen(false);
+              setAddTarget(null);
             }}
-            onCancel={(): void => setBrowserOpen(false)}
+            onCancel={(): void => {
+              setBrowserOpen(false);
+              setAddTarget(null);
+            }}
           />
 
-          {lines.length === 0 ? (
+          {lines.length === 0 && groups.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('rfqCreate.items.empty')}</p>
           ) : (
-            <Table>
-              <TableHeader>
+            <LineGroupsEditor<LineRow>
+              layout="table"
+              columnCount={4}
+              tableHeader={
                 <TableRow>
                   <TableHead>{t('rfqCreate.field.product')}</TableHead>
                   <TableHead id={`${itemsId}-qty`} className="w-28">
@@ -546,14 +580,57 @@ export function RfqCreatePage(): ReactNode {
                     <span className="sr-only">{t('common.action.delete')}</span>
                   </TableHead>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {parsedLines.map(({ row, quantity, price }) => {
+              }
+              groups={groups}
+              lines={lines}
+              disabled={busy}
+              labels={groupLabels}
+              createGroupKey={(): string => `group-${(groupCounter.current += 1)}`}
+              getLineLabel={(row): string => row.name}
+              onChange={(next): void => {
+                setGroups(next.groups);
+                linesRef.current = next.lines;
+                setLines(next.lines);
+              }}
+              renderSummary={(sectionLines): ReactNode => (
+                <SectionSummary
+                  text={summaryText(
+                    sectionTotals(
+                      sectionLines.map((row) => {
+                        const parsed = parsedByKey.get(row.key);
+                        return {
+                          net:
+                            parsed && parsed.quantity !== null && parsed.price !== null ? parsed.quantity * parsed.price : null,
+                          reference: null,
+                        };
+                      }),
+                      null,
+                    ),
+                    null,
+                  )}
+                />
+              )}
+              renderSectionFooter={(section): ReactNode =>
+                section.kind === 'group' && section.key !== null ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(): void => {
+                      setAddTarget(section.key);
+                      setBrowserOpen(true);
+                    }}
+                  >
+                    {tGroups('lineGroups.addProduct')}
+                  </Button>
+                ) : null
+              }
+              renderLine={(row, slots): ReactNode => {
+                  const { quantity, price } = parsedByKey.get(row.key)!;
                   const rowId = `${itemsId}-${row.productId}`;
                   const isResolving = resolving.has(row.productId);
                   const priceMissing = price === null && !isResolving;
                   return (
-                    <TableRow key={row.productId}>
+                    <>
                       <TableCell>
                         <div id={`${rowId}-name`} data-line-name className="font-medium">
                           {row.name}
@@ -599,6 +676,9 @@ export function RfqCreatePage(): ReactNode {
                         ) : null}
                       </TableCell>
                       <TableCell className="align-top">
+                        <div className="flex items-center gap-1">
+                        {slots.handle}
+                        {slots.moveMenu}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -610,12 +690,12 @@ export function RfqCreatePage(): ReactNode {
                             {t('common.action.delete')}
                           </span>
                         </Button>
+                        </div>
                       </TableCell>
-                    </TableRow>
+                    </>
                   );
-                })}
-              </TableBody>
-            </Table>
+                }}
+            />
           )}
           <div className="flex justify-end pt-2 text-sm font-medium">
             {t('rfqCreate.total')}: {total.toFixed(2)}
