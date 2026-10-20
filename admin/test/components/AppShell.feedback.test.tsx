@@ -109,6 +109,17 @@ describe('AppShell — Send feedback (#379)', () => {
     expect(field(dialog, 'appShell.feedback.phone')).toHaveValue('');
   });
 
+  it('opens the dialog outside the sidebar, which neither colours it nor confines it on a phone', async () => {
+    // The sidebar sets the light text of its dark panel, and on a phone it is
+    // a drawer moved with `transform` — which makes it the box a `fixed`
+    // dialog is placed in. A dialog drawn inside it was faint and squeezed
+    // into the drawer (#379, seen on the demo instance).
+    renderShell();
+    const dialog = await openDialog();
+    expect(dialog.closest('.b2b-sidebar')).toBeNull();
+    expect(dialog.closest('aside')).toBeNull();
+  });
+
   it('refuses an empty message and an address that is not one, saying where, without a request', async () => {
     renderShell();
     const dialog = await openDialog();
