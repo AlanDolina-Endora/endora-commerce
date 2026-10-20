@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type {
   DocumentFieldDefinition,
@@ -355,7 +354,7 @@ describe('renderItemsTable — preview samples', () => {
 
 /**
  * The flat definitions the table printed before feature 159, recorded from the
- * pre-feature renderer (`__fixtures__/items-table-flat-153.json`). A document
+ * pre-feature renderer (`FLAT_153`, at the end of this file). A document
  * with no group must print them byte for byte (SC-004) whatever the table's
  * grouping says and whether or not the type declares sections.
  */
@@ -386,10 +385,8 @@ const FLAT_CASES: Record<string, Record<string, unknown>> = {
     totals: [{ field: 'net', label: '', visibleWhen: { op: 'always' } }],
   },
 };
-const FLAT_FIXTURE = new URL('./__fixtures__/items-table-flat-153.json', import.meta.url);
 const asJson = (node: unknown): unknown => JSON.parse(JSON.stringify(node));
-// Recorded once, from the renderer as 153 left it; never re-recorded to make a test pass.
-const recorded = (): Record<string, unknown> => JSON.parse(readFileSync(FLAT_FIXTURE, 'utf8')) as Record<string, unknown>;
+const recorded = (): Record<string, unknown> => FLAT_153;
 
 const priced = (amount: number | null): Record<string, DocumentValue> => ({ net: amount === null ? null : money(amount), discounts: null });
 const GROUPED: DocumentItemSection[] = [
@@ -524,3 +521,568 @@ describe('renderItemsTable — sections (159 FR-042, FR-043)', () => {
     expect(table.table.body[1]![0]!.text).toBe('{{who}} floor · 3 items');
   });
 });
+
+/**
+ * `FLAT_CASES` as the Line items table rendered them before feature 159 —
+ * recorded once from the renderer as 153 left it, as JSON (the table `layout`
+ * functions do not serialise; their code is unchanged). Never re-record this
+ * to make a test pass: a difference here is a change to every ungrouped PDF.
+ */
+const FLAT_153: Record<string, unknown> = {
+  "bare": {
+    "stack": [
+      {
+        "table": {
+          "headerRows": 1,
+          "dontBreakRows": true,
+          "widths": [
+            "auto",
+            "auto",
+            "auto"
+          ],
+          "body": [
+            [
+              {
+                "text": "L:row.number",
+                "bold": true,
+                "alignment": "right",
+                "fillColor": "#f1f5f9"
+              },
+              {
+                "text": "L:name",
+                "bold": true,
+                "alignment": "left",
+                "fillColor": "#f1f5f9"
+              },
+              {
+                "text": "L:price",
+                "bold": true,
+                "alignment": "right",
+                "fillColor": "#f1f5f9"
+              }
+            ],
+            [
+              {
+                "text": "1",
+                "alignment": "right"
+              },
+              {
+                "text": "Bolt",
+                "alignment": "left"
+              },
+              {
+                "text": "PLN 10.00",
+                "alignment": "right"
+              }
+            ],
+            [
+              {
+                "text": "2",
+                "alignment": "right"
+              },
+              {
+                "text": "Nut",
+                "alignment": "left"
+              },
+              {
+                "text": "PLN 2.50",
+                "alignment": "right"
+              }
+            ],
+            [
+              {
+                "text": "3",
+                "alignment": "right"
+              },
+              {
+                "text": "Washer",
+                "alignment": "left"
+              },
+              {
+                "text": "",
+                "alignment": "right"
+              }
+            ]
+          ]
+        },
+        "fontSize": 9,
+        "layout": {}
+      }
+    ],
+    "margin": [
+      0,
+      0,
+      0,
+      12
+    ]
+  },
+  "styled": {
+    "stack": [
+      {
+        "table": {
+          "headerRows": 1,
+          "dontBreakRows": true,
+          "widths": [
+            "*",
+            "auto",
+            80
+          ],
+          "body": [
+            [
+              {
+                "text": "L:name",
+                "bold": true,
+                "alignment": "left",
+                "fillColor": "#eeeeee"
+              },
+              {
+                "text": "L:discount",
+                "bold": true,
+                "alignment": "right",
+                "fillColor": "#eeeeee"
+              },
+              {
+                "text": "L:price",
+                "bold": true,
+                "alignment": "right",
+                "fillColor": "#eeeeee"
+              }
+            ],
+            [
+              {
+                "text": "Bolt",
+                "alignment": "left"
+              },
+              {
+                "text": "",
+                "alignment": "right"
+              },
+              {
+                "text": "PLN 10.00",
+                "alignment": "right"
+              }
+            ],
+            [
+              {
+                "text": "Nut",
+                "alignment": "left",
+                "fillColor": "#fafafa"
+              },
+              {
+                "text": "12.5 %",
+                "alignment": "right",
+                "fillColor": "#fafafa"
+              },
+              {
+                "text": "PLN 2.50",
+                "alignment": "right",
+                "fillColor": "#fafafa"
+              }
+            ],
+            [
+              {
+                "text": "Washer",
+                "alignment": "left"
+              },
+              {
+                "text": "",
+                "alignment": "right"
+              },
+              {
+                "text": "",
+                "alignment": "right"
+              }
+            ]
+          ]
+        },
+        "fontSize": 10,
+        "layout": {}
+      }
+    ],
+    "margin": [
+      0,
+      0,
+      0,
+      20
+    ]
+  },
+  "detailAndTotals": {
+    "stack": [
+      {
+        "table": {
+          "headerRows": 1,
+          "dontBreakRows": true,
+          "widths": [
+            "auto",
+            "auto",
+            "auto"
+          ],
+          "body": [
+            [
+              {
+                "text": "L:row.number",
+                "bold": true,
+                "alignment": "right",
+                "fillColor": "#f1f5f9"
+              },
+              {
+                "text": "L:name",
+                "bold": true,
+                "alignment": "left",
+                "fillColor": "#f1f5f9"
+              },
+              {
+                "text": "L:price",
+                "bold": true,
+                "alignment": "right",
+                "fillColor": "#f1f5f9"
+              }
+            ],
+            [
+              {
+                "text": "1",
+                "alignment": "right"
+              },
+              {
+                "text": "Bolt",
+                "alignment": "left"
+              },
+              {
+                "text": "PLN 10.00",
+                "alignment": "right"
+              }
+            ],
+            [
+              {
+                "text": "Note: Urgent · Acme",
+                "colSpan": 3,
+                "italics": true,
+                "fontSize": 8,
+                "color": "#475569"
+              },
+              {
+                "text": ""
+              },
+              {
+                "text": ""
+              }
+            ],
+            [
+              {
+                "text": "2",
+                "alignment": "right"
+              },
+              {
+                "text": "Nut",
+                "alignment": "left"
+              },
+              {
+                "text": "PLN 2.50",
+                "alignment": "right"
+              }
+            ],
+            [
+              {
+                "text": "Bolts Inc",
+                "colSpan": 3,
+                "italics": true,
+                "fontSize": 8,
+                "color": "#475569"
+              },
+              {
+                "text": ""
+              },
+              {
+                "text": ""
+              }
+            ],
+            [
+              {
+                "text": "3",
+                "alignment": "right"
+              },
+              {
+                "text": "Washer",
+                "alignment": "left"
+              },
+              {
+                "text": "",
+                "alignment": "right"
+              }
+            ],
+            [
+              {
+                "text": "Acme",
+                "colSpan": 3,
+                "italics": true,
+                "fontSize": 8,
+                "color": "#475569"
+              },
+              {
+                "text": ""
+              },
+              {
+                "text": ""
+              }
+            ]
+          ]
+        },
+        "fontSize": 9,
+        "layout": {}
+      },
+      {
+        "unbreakable": true,
+        "margin": [
+          0,
+          6,
+          0,
+          0
+        ],
+        "columns": [
+          {
+            "width": "*",
+            "text": ""
+          },
+          {
+            "width": "auto",
+            "table": {
+              "widths": [
+                "auto",
+                "auto"
+              ],
+              "body": [
+                [
+                  {
+                    "text": "Net",
+                    "alignment": "right",
+                    "bold": true,
+                    "border": [
+                      false,
+                      true,
+                      false,
+                      false
+                    ]
+                  },
+                  {
+                    "text": "PLN 17.50",
+                    "alignment": "right",
+                    "bold": true,
+                    "border": [
+                      false,
+                      true,
+                      false,
+                      false
+                    ]
+                  }
+                ]
+              ]
+            },
+            "layout": {}
+          }
+        ]
+      }
+    ],
+    "margin": [
+      0,
+      0,
+      0,
+      12
+    ]
+  },
+  "byField": {
+    "stack": [
+      {
+        "table": {
+          "headerRows": 1,
+          "dontBreakRows": true,
+          "widths": [
+            "auto",
+            "auto",
+            "auto"
+          ],
+          "body": [
+            [
+              {
+                "text": "L:row.number",
+                "bold": true,
+                "alignment": "right",
+                "fillColor": "#f1f5f9"
+              },
+              {
+                "text": "L:name",
+                "bold": true,
+                "alignment": "left",
+                "fillColor": "#f1f5f9"
+              },
+              {
+                "text": "L:price",
+                "bold": true,
+                "alignment": "right",
+                "fillColor": "#f1f5f9"
+              }
+            ],
+            [
+              {
+                "text": "Acme",
+                "colSpan": 3,
+                "bold": true,
+                "fillColor": "#f1f5f9"
+              },
+              {
+                "text": ""
+              },
+              {
+                "text": ""
+              }
+            ],
+            [
+              {
+                "text": "1",
+                "alignment": "right"
+              },
+              {
+                "text": "Bolt",
+                "alignment": "left"
+              },
+              {
+                "text": "PLN 10.00",
+                "alignment": "right"
+              }
+            ],
+            [
+              {
+                "text": "3",
+                "alignment": "right"
+              },
+              {
+                "text": "Washer",
+                "alignment": "left"
+              },
+              {
+                "text": "",
+                "alignment": "right"
+              }
+            ],
+            [
+              {
+                "text": "Subtotal",
+                "colSpan": 2,
+                "bold": true,
+                "alignment": "right"
+              },
+              {
+                "text": ""
+              },
+              {
+                "text": "PLN 10.00",
+                "bold": true,
+                "alignment": "right"
+              }
+            ],
+            [
+              {
+                "text": "Bolts Inc",
+                "colSpan": 3,
+                "bold": true,
+                "fillColor": "#f1f5f9"
+              },
+              {
+                "text": ""
+              },
+              {
+                "text": ""
+              }
+            ],
+            [
+              {
+                "text": "2",
+                "alignment": "right"
+              },
+              {
+                "text": "Nut",
+                "alignment": "left"
+              },
+              {
+                "text": "PLN 2.50",
+                "alignment": "right"
+              }
+            ],
+            [
+              {
+                "text": "Subtotal",
+                "colSpan": 2,
+                "bold": true,
+                "alignment": "right"
+              },
+              {
+                "text": ""
+              },
+              {
+                "text": "PLN 2.50",
+                "bold": true,
+                "alignment": "right"
+              }
+            ]
+          ]
+        },
+        "fontSize": 9,
+        "layout": {}
+      },
+      {
+        "unbreakable": true,
+        "margin": [
+          0,
+          6,
+          0,
+          0
+        ],
+        "columns": [
+          {
+            "width": "*",
+            "text": ""
+          },
+          {
+            "width": "auto",
+            "table": {
+              "widths": [
+                "auto",
+                "auto"
+              ],
+              "body": [
+                [
+                  {
+                    "text": "L:net",
+                    "alignment": "right",
+                    "border": [
+                      false,
+                      false,
+                      false,
+                      false
+                    ]
+                  },
+                  {
+                    "text": "PLN 17.50",
+                    "alignment": "right",
+                    "border": [
+                      false,
+                      false,
+                      false,
+                      false
+                    ]
+                  }
+                ]
+              ]
+            },
+            "layout": {}
+          }
+        ]
+      }
+    ],
+    "margin": [
+      0,
+      0,
+      0,
+      12
+    ]
+  }
+};

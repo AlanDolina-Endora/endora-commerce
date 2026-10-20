@@ -547,10 +547,11 @@ Smallest deviations taken where the plan met the code; later phases build on the
   `itemsTable.grouping.none` is replaced by `itemsTable.grouping.mode.none`.
 - **N-15 — Subtotal rows.** A section's subtotal rows are right-aligned and not bold (contract §3: "not
   emphasised"); 153's field-grouping subtotal row keeps its bold.
-- **N-16 — How SC-004 is proven.** `DT/src/backend/rendering/__fixtures__/items-table-flat-153.json` was
-  recorded once from the renderer as 153 left it (four prop sets: bare, styled, detail row + totals, by
+- **N-16 — How SC-004 is proven.** `FLAT_153` at the end of `DT/src/backend/rendering/items-table.test.ts`
+  was recorded once from the renderer as 153 left it (four prop sets: bare, styled, detail row + totals, by
   field); the test compares JSON, since the table `layout` functions do not serialise (their code is
-  unchanged). `BT/contract/quote_requests/pdf-export.test.ts` reads the definition of a real export through
+  unchanged). It is a literal in the test rather than a JSON file beside it because any non-TypeScript file
+  under a module's `src/` is a runtime asset the package must ship (`package-runtime-assets.test.ts`). `BT/contract/quote_requests/pdf-export.test.ts` reads the definition of a real export through
   a spy on the `documentRenderer` singleton's `buildDefinition` (the render port resolves to it); pdfmake
   fills `colSpan` placeholder cells in place, so they read as empty there.
 - **N-17 — The sample keeps five lines.** Two groups (three lines and one) and one ungrouped line, so 153's
