@@ -11,6 +11,7 @@ import { Alert, AlertDescription, Badge, Button } from '@endora-commerce/admin-k
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { crmApi } from '../api.js';
 import { errorMessage, moneyLabel } from '../lib/labels.js';
+import { useReturnHere } from '../lib/return-here.js';
 
 /** The reasons a counting document is left out that this screen has a sentence for. */
 const KNOWN_REASONS: ReadonlySet<string> = new Set(['currency_mismatch']);
@@ -44,6 +45,7 @@ export interface OpportunityValueProps {
  * own screen; one this reader cannot see is named by its kind alone.
  */
 export function OpportunityValue(props: OpportunityValueProps): ReactNode {
+  const returnHere = useReturnHere();
   const { opportunity, canWrite, onChange, reload } = props;
   const t = useTranslation('crm');
   const headingId = useId();
@@ -86,7 +88,7 @@ export function OpportunityValue(props: OpportunityValueProps): ReactNode {
     const reason = KNOWN_REASONS.has(excluded.reason)
       ? t(`value.excluded.reason.${excluded.reason}`, { currency: opportunity.currency })
       : t('value.excluded.reason.other');
-    const to = excluded.kind === 'order' ? `/orders/${excluded.id}` : `/quote-requests/${excluded.id}`;
+    const to = returnHere(excluded.kind === 'order' ? `/orders/${excluded.id}` : `/quote-requests/${excluded.id}`);
     return (
       <>
         <span className="font-medium">

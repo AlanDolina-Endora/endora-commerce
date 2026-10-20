@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   ClipboardList,
   Copy,
@@ -10,7 +10,7 @@ import {
   RotateCcw,
   Truck,
 } from 'lucide-react';
-import { ApiError, apiBaseUrl, apiClient, cn, formatDateTime, formatMoney, issueInvoiceNotice, statusBadgeStyle, useUnsavedChangesPrompt } from '@endora-commerce/admin-kit/lib';
+import { ApiError, apiBaseUrl, apiClient, cn, formatDateTime, formatMoney, issueInvoiceNotice, readReturnTo, statusBadgeStyle, useUnsavedChangesPrompt } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Badge, Button, Card, CardContent, Label, PageHeader, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Section } from '@endora-commerce/admin-kit/ui';
 import { CustomFieldValuesPanel } from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
@@ -151,6 +151,8 @@ interface OrderInvoiceRow {
 export function OrderDetail(): ReactNode {
   const t = useTranslation('core');
   const { id = '' } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const returnTo = readReturnTo(searchParams);
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [invoices, setInvoices] = useState<OrderInvoiceRow[]>([]);
   const [graph, setGraph] = useState<StatusGraph | null>(null);
@@ -352,7 +354,11 @@ export function OrderDetail(): ReactNode {
   return (
     <>
       <PageHeader
-        back={{ label: t('orders.page.title'), to: '/orders' }}
+        back={
+          // Opened from elsewhere — a CRM Opportunity, say: the way back leads
+          // there, and says only "Back".
+          returnTo ? { label: t('common.action.back'), to: returnTo } : { label: t('orders.page.title'), to: '/orders' }
+        }
         title={
           <>
             <button

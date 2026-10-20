@@ -17,6 +17,7 @@ import {
   detail,
   en,
   renderCrm,
+  returningHere,
 } from './crm-fixtures';
 
 /**
@@ -245,7 +246,7 @@ describe('the Change history tab', () => {
     expect(caused).toHaveTextContent(en('history.cause.order'));
     expect(within(caused).getByRole('link', { name: /ORD-1001/ })).toHaveAttribute(
       'href',
-      `/orders/${ORDER_ID}`,
+      returningHere(`/orders/${ORDER_ID}`),
     );
     // The identifier itself is never on screen.
     expect(caused).not.toHaveTextContent(ORDER_ID);
@@ -269,7 +270,7 @@ describe('the Change history tab', () => {
     const linked = item(panel, 3);
     expect(within(linked).getByRole('link', { name: en('history.document.open.order') })).toHaveAttribute(
       'href',
-      `/orders/${UNLINKED_ORDER_ID}`,
+      returningHere(`/orders/${UNLINKED_ORDER_ID}`),
     );
     expect(linked).not.toHaveTextContent(UNLINKED_ORDER_ID);
     expect(linked).not.toHaveTextContent('l1');

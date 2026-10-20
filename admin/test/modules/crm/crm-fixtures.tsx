@@ -11,6 +11,7 @@ import type {
 } from '@endora-commerce/contracts';
 import { AppLanguageContext } from '@endora-commerce/admin-kit/i18n';
 import { render } from '@testing-library/react';
+import { expect } from 'vitest';
 import { renderWithI18n } from '../../helpers/render-with-i18n';
 import { TranslationProvider } from '../../../../packages/admin-shell/src/i18n/TranslationProvider';
 import { readReferenceText, selectOffsets } from '../../../../packages/modules/crm/src/admin/lib/reference-editor-dom';
@@ -322,4 +323,14 @@ export function caretAt(field: HTMLElement, offset: number): void {
   field.focus();
   selectOffsets(field, offset);
   document.dispatchEvent(new Event('selectionchange'));
+}
+
+/**
+ * The address of a link to an Order or a Quote Request from an Opportunity:
+ * the document's own path, carrying `?returnTo=` back to the Opportunity
+ * (`specs/158-crm-opportunity-inline-editing/`, FR-020).
+ */
+export function returningHere(path: string): unknown {
+  const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return expect.stringMatching(new RegExp(`^${escaped}\\?returnTo=%2Fcrm%2Fopportunities%2F`));
 }

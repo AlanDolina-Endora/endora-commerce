@@ -17,6 +17,7 @@ import {
   renderCrm,
   core,
   crmLookupResponse,
+  returningHere,
 } from './crm-fixtures';
 
 /**
@@ -251,7 +252,7 @@ describe('OpportunityDetail — what became of the linked orders', () => {
     ).toBeInTheDocument();
     expect(within(outcomes).getByRole('link', { name: /ORD-1001/ })).toHaveAttribute(
       'href',
-      `/orders/${ORDER_ID}`,
+      returningHere(`/orders/${ORDER_ID}`),
     );
     expect(within(outcomes).getByRole('button', { name: en('propagation.retry') })).toBeInTheDocument();
     expect(
@@ -321,7 +322,7 @@ describe('OpportunityDetail — linked orders', () => {
     const region = linksRegion();
     expect(within(region).getByRole('link', { name: 'ORD-1001' })).toHaveAttribute(
       'href',
-      `/orders/${ORDER_ID}`,
+      returningHere(`/orders/${ORDER_ID}`),
     );
     // The Order's status is shown by its name, not by its code — once the
     // Orders module's statuses have been read, which is a request of its own.
@@ -619,7 +620,7 @@ describe('OpportunityDetail — tabs and their address (User Story 20)', () => {
     const orders = await within(panel).findByRole('region', { name: en('links.title') });
     expect(within(orders).getByRole('link', { name: 'ORD-1001' })).toHaveAttribute(
       'href',
-      `/orders/${ORDER_ID}`,
+      returningHere(`/orders/${ORDER_ID}`),
     );
     // The Quote Requests module is off here and nothing of it is linked: no section.
     expect(within(panel).queryByRole('heading', { name: en('links.quote.title') })).toBeNull();

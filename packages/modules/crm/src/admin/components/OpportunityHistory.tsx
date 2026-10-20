@@ -31,6 +31,7 @@ import {
   useOpportunityFieldDefinitions,
 } from './OpportunityCustomFields.js';
 import { ReferenceText } from './ReferenceText.js';
+import { useReturnHere } from '../lib/return-here.js';
 
 const PAGE_SIZE = 50;
 /** A long text (a description, a note) is cut here; the whole of it is where it lives. */
@@ -134,6 +135,7 @@ export interface OpportunityHistoryProps {
  * not shown; the two are never confused.
  */
 export function OpportunityHistory(props: OpportunityHistoryProps): ReactNode {
+  const returnHere = useReturnHere();
   const { opportunity } = props;
   const t = useTranslation('crm');
   const tCore = useTranslation('core');
@@ -253,7 +255,7 @@ export function OpportunityHistory(props: OpportunityHistoryProps): ReactNode {
     const link = opportunity.links.find(
       (item) => item.documentKind === documentKind && item.documentId === id,
     );
-    const to = documentKind === 'order' ? `/orders/${id}` : `/quote-requests/${id}`;
+    const to = returnHere(documentKind === 'order' ? `/orders/${id}` : `/quote-requests/${id}`);
     return (
       <Link to={to} className="text-primary underline-offset-4 hover:underline">
         {link?.available && link.number
