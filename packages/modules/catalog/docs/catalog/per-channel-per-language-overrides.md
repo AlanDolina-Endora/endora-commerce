@@ -168,8 +168,17 @@ Three consumers go through the resolver:
   is attached for client-side switcher previews.
 - **Storefront public read** — pulls the channel from the
   `x-sales-channel` header (the existing convention) and
-  the language from `Accept-Language`. The override layer is invisible
-  to the public client.
+  the language from `Accept-Language`, else the channel's default
+  language. The override layer is invisible to the public client: it
+  receives the effective value. The product page (name, description,
+  SEO fields, attribute values, the product-page attribute list, grouped
+  children, bundle options and product-link tiles) and every listing
+  card take the `(channel + language)` or `(channel-only)` slot when one
+  exists. When none does they keep the storefront's own baseline pick —
+  requested language, then the channel's default language, then `en-US`,
+  `en` and the first stored language — so a product without overrides
+  shows exactly what it showed before. Listing filters, attribute
+  filters and name sorting still read the baseline.
 - **Search indexer (Meilisearch)** — builds one document per
   `(product, channel)` pair. Each document's `name` and `description`
   fields are run through the resolver with `channel.defaultLanguage`

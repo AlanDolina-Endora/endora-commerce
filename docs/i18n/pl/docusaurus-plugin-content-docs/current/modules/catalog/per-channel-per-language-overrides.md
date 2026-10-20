@@ -153,8 +153,15 @@ Z funkcji rozstrzygającej korzystają trzy miejsca:
   `name`, `description`, `attributeValues` i `sources`. Przy `includeOverridesMap=true` dołącza też
   pełną listę nadpisań, aby klient mógł pokazywać podgląd przy przełączaniu kontekstu.
 - **Publiczny odczyt dla storefrontu** — kanał pobiera z nagłówka `x-sales-channel` (dotychczasowa
-  konwencja), a język z `Accept-Language`. Warstwa nadpisań jest niewidoczna dla publicznego
-  klienta.
+  konwencja), a język z `Accept-Language`, a gdy go brak — domyślny język kanału. Warstwa nadpisań
+  jest niewidoczna dla publicznego klienta: otrzymuje on wartość obowiązującą. Strona produktu
+  (nazwa, opis, pola SEO, wartości atrybutów, lista atrybutów na stronie produktu, produkty
+  składowe zestawu grupowego, opcje pakietu i kafelki powiązanych produktów) oraz każda karta na
+  liście produktów biorą wartość z miejsca `(channel + language)` lub `(channel-only)`, jeśli
+  istnieje. Jeśli nie istnieje, zostaje dotychczasowy wybór wartości bazowej storefrontu — język
+  z żądania, potem domyślny język kanału, potem `en-US`, `en` i pierwszy zapisany język — więc
+  produkt bez nadpisań wygląda dokładnie tak jak wcześniej. Filtry listy, filtrowanie po
+  atrybutach i sortowanie po nazwie nadal korzystają z wartości bazowych.
 - **Indeksowanie wyszukiwarki (Meilisearch)** — tworzy jeden dokument dla każdej pary
   `(product, channel)`. Pola `name` i `description` każdego dokumentu przechodzą przez funkcję
   rozstrzygającą z `channel.defaultLanguage` jako aktywnym językiem, więc nadpisania dla kanałów
