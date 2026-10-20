@@ -18,6 +18,8 @@ export * from './catalog.js';
 // Feature 155 — the minimum-order rule (specs/155-catalog-order-constraints/).
 export * from './order-minimums.js';
 export * from './localized-name.js';
+// Feature 159 — named, ordered line groups shared by quotes and orders.
+export * from './line-groups.js';
 export * from './quote-requests.js';
 export * from './organizations.js';
 export * from './customers.js';
