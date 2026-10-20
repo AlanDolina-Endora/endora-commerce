@@ -4,8 +4,8 @@
 needs to mean something.** It carries which test command to run and why, the
 unit files that talk to a live service, the five-shard serialisation and the host
 measurement behind it, per-invocation database and Redis isolation, the local parallel run — its
-workers, its test Postgres and the files that stay serial — and the
-workspace-resolution guard that refuses a run reading another checkout. One of the bodies
+workers, its test Postgres and the files that stay serial — the two seams a slow file uses to
+stop waiting on itself, and the workspace-resolution guard that refuses a run reading another checkout. One of the bodies
 `AGENTS.md` routes to; it is the single home for these rules, so never restate them in
 `AGENTS.md` or in a tool-specific pointer file.
 
@@ -142,6 +142,37 @@ an idle machine is the other thing that surfaces.**
 each inside 30 s cases and timed out at 32 s beside five busy workers; it now renders once, as a
 fixture with a budget sized for the work. A raised timeout over repeated work would have been the
 wrong repair.
+
+## Inside a slow file: spawn side by side, clone rather than migrate
+
+Two harness seams exist for the files whose wall-clock is dominated by work the file waits on
+rather than work it asserts. Neither changes what a case asserts — only when its input is produced.
+
+**Independent child processes run through a bounded pool.** `test/helpers/bounded-pool.ts`'s
+`mapBounded` runs at most *n* calls at once and returns results in input order;
+`spawnConcurrency()` is *n*: half the machine's threads locally, **one under CI** for the reason
+the worker count is one there, and `BACKEND_TEST_SPAWN_CONCURRENCY` overrides both.
+`test/unit/scripts/moved-module-tree.test.ts` spawns every check over its four fixture trees in
+its hooks — the moved-tree fixture's `prefetch`, through `prefetchChecks` so the four trees share
+one pool — and each case then reads the result of the spawn it used to make itself, identical
+script, arguments and tree; a request two cases shared is spawned once. Measured on a 16-thread
+machine (2026-10-20): **410 s → 101 s**. The hook budget is the per-spawn budget the cases
+carried, once per round of the pool, so a CI run at one gets what it had. The rule for a caller:
+only spawns that read a tree nothing writes to may be prefetched, and `run` reuses **only**
+prefetched results — a test that changes the tree between two runs still gets two spawns.
+
+**A file that needs a freshly migrated database clones one.** `test/helpers/migrated-database.ts`'s
+`migratedDatabase()` clones the template this invocation was cloned from
+(`cloneTemplateForCaller`, the seam `provisionWorkers` uses) and withdraws what
+`test/template-seed.ts` added beyond the migrations (`withdrawPlatformInvariants`, beside
+`establishPlatformInvariants` so a second invariant is withdrawn in the same edit). The three
+`test/integration/demo/` files that drive a platform's first boot through the CLI use it; each
+used to spawn `migration:up` into an empty database — 12.5 s per file on the test Postgres against
+0.2 s for the clone (2026-10-20). **`test/integration/demo/migrated-clone-parity.test.ts` is the
+one file that still migrates from empty, and that is its job**: it compares the two databases —
+schema, migration ledger and every table's rows, minus the `uuid` and timestamp columns a
+migration lets the database choose — so the substitution cannot drift silently. Under
+`BACKEND_TEST_ISOLATION=shared` there is no template, and the seam migrates from empty and says so.
 
 ## Proving a cross-file leak: the ordered pair, and the three ways it lies to you
 

@@ -235,6 +235,16 @@ directions and checks that every entry is actually using the seam. Under
 `BACKEND_TEST_ISOLATION=shared` there is no template to clone, so the seam falls back to the
 shared database and prints why — that is part of what the escape hatch costs.
 
+### A test that needs a freshly migrated database clones one too
+
+A file that drives a platform's **first boot** — the `test/integration/demo/` files that spawn
+`endora demo …` — needs a database holding exactly what `migration:up` from empty leaves, which is
+the template minus the one row `test/template-seed.ts` adds. `migratedDatabase()`
+(`test/helpers/migrated-database.ts`) is that: a clone of this invocation's template with
+`withdrawPlatformInvariants` applied, and `drop()` in teardown. `migrated-clone-parity.test.ts`
+holds that the two are the same database; see `specs/conventions/backend-test-suite.md` § *Inside
+a slow file*.
+
 Two escape hatches, both explicit:
 
 - `BACKEND_TEST_ISOLATION=shared` — the pre-#189 behaviour, every invocation on the base

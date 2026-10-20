@@ -75,8 +75,9 @@ export const SERIAL_TEST_FILES: readonly SerialTestEntry[] = [
   {
     pattern: 'test/integration/demo/**',
     reason:
-      'Each file migrates fresh databases from empty and spawns the demo pipeline as child ' +
-      'processes — minutes of CPU per file, with timeouts sized for a machine doing nothing else.',
+      'Each file takes a database of its own (a template clone, or in the parity file a ' +
+      'migration from empty) and spawns the demo pipeline or the migrator as child processes — ' +
+      'a minute of CPU per file, with timeouts sized for a machine doing nothing else.',
   },
   {
     pattern: 'test/perf/**',
