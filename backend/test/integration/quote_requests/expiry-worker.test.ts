@@ -47,7 +47,8 @@ describe('RfqExpiryWorker (US7 / T074)', () => {
     // ambiguous. A fresh event bus keeps this file's announcements its own.
     const composed = (
       h.container.cradle as unknown as {
-        quoteRequests: { handle(): { expiryWorker: RfqExpiryWorker & { deps: Record<string, unknown> } } };
+        // `deps` is the worker's private constructor parameter, read at runtime.
+        quoteRequests: { handle(): { expiryWorker: { deps: Record<string, unknown>; constructor: unknown } } };
       }
     ).quoteRequests.handle().expiryWorker;
     const Worker = composed.constructor as new (deps: unknown) => RfqExpiryWorker;

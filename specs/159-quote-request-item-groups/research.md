@@ -469,3 +469,56 @@ Changesets (minor): `@endora-commerce/contracts`, `@endora-commerce/admin-kit`,
 replies. `composer:generate` for the two migrations and the two entities; `manifests:generate` +
 `pnpm install --lockfile-only` only if a package body changes (none is expected: no package gains a
 dependency).
+
+---
+
+## Implementation notes (MVP, T001–T041, 2026-10-20)
+
+Smallest deviations taken where the plan met the code; later phases build on them.
+
+- **N-1 — Customer bodies strip, not refuse, on create.** `createQuoteRequestSchema` is deliberately
+  non-strict (its own comment: unknown keys are stripped, never refused) and the PATCH line schema is not
+  strict either. So a customer `POST` carrying `groups` / `groupKey` creates an ungrouped quote (the keys
+  are dropped), a customer `PATCH` carrying `groups` answers 400 (the body is strict), and a `groupKey`
+  on a PATCH line is dropped. FR-025 / SC-007 ("no customer endpoint accepts a grouping") hold; R-13's
+  "a sent key is refused" holds for the PATCH body only. Tests: `customer-routes.test.ts` § 159,
+  `line-carry-over.test.ts` § feature 159.
+- **N-2 — Refined admin bodies.** `adminPatchQuoteRequestSchema` and `adminCreateQuoteRequestSchema` are
+  now `.superRefine`d (as `adminCreateOrderRequestSchema` already was); `.extend()` on them is no longer
+  possible. Nothing in the tree extends them; the changeset says so.
+- **N-3 — History texts live in the `core` bundle.** `RfqHistory` reads `useTranslation('core')` and
+  `history-bundle-coverage.test.ts` requires `rfq.detail.history.change.<kind>` for every schema kind, so
+  the five kinds are `rfq.detail.history.change.{group_added,group_removed,group_renamed,line_group,line_order}`
+  plus `rfq.detail.history.ungrouped` in `_i18n/i18n/{en,pl}.json` — not `history.change.groupAdded` in the
+  `quote_requests` bundle as `contracts/ui.md` §4 lists. The editor's labels are in the `quote_requests`
+  bundle as planned (`lineGroups.*`).
+- **N-4 — Editor details.** `LineGroupsEditor` renders its own *Move group up/down* icon buttons with
+  per-group accessible names instead of `TouchReorderButtons`, whose labels are fixed core strings and
+  would give every group the same name. `useGroupedReorder` also announces a group's lift, drop and
+  cancel (`groupGrabbed`, `groupDropped`, `groupCancelled`). The editor gained `layout="table"` (one
+  table, a row group per section, `renderLine` returning cells): the create screen's lines are table rows
+  and its tests find a line by `closest('tr')`; the order create screen (US5) can use the same. In
+  `readOnly` empty groups are not shown (D2).
+- **N-5 — Admin Overview keeps its table.** The *Overview* tab shows groups as heading rows
+  (`<th scope="colgroup">`) and summary rows inside its existing table rather than through the read-only
+  editor, so the table's columns and its totals footer stay as they are.
+- **N-6 — Read port and positions early.** `quoteRequestReadPort.listItems` already answers `position` and
+  `group` (T057's subject) because the ordering test reads them; T056 still owes its own test. New orders
+  already store the basket order as `position` (part of I-O3, T059); customer create and resubmission
+  store the request's order as positions; revision snapshots read the quote's groups inside
+  `RfqRevisionService.record` (no new input on the record call).
+- **N-7 — PDF data groundwork.** `QuoteDocumentDataBuilder.build` already takes `groups`, arranges the
+  lines and emits `groups` and each line's `groupId` / `position`; the sample carries `groups: []` and
+  positions. US3 adds sections, the sample's two groups and the facility side.
+- **N-8 — Summaries.** Admin *Modify* totals a section from the typed agreed prices, *Overview* from the
+  stored agreed prices (the screen's own rule); the discount shows only where every line has a reference
+  and the reference total exceeds the net. The create screen shows no VAT, so its section summary is the
+  item count and net.
+- **N-9 — A test that imported the module's sources.** `backend/test/integration/quote_requests/expiry-worker.test.ts`
+  built `RfqExpiryWorker` from `src/`, which registers a second `QuoteRequest` entity class beside the
+  composed package's; with `QuoteRequestItemGroup` transitively scoped through that class name the ORM
+  refuses to boot. The test now builds the worker from the composed module's class and dependencies. A
+  booting test must not import `quote_requests`' or `orders`' entity-carrying sources by value.
+- **N-10 — OpenAPI baseline.** `backend/test/fixtures/openapi-baseline.json` records no request or response
+  bodies for these routes, so nothing moved; `openapi-baseline.test.ts` passes unchanged (T071 has nothing
+  to re-record for the MVP's surface).

@@ -395,6 +395,9 @@ export function LineGroupsEditor<TLine extends LineGroupsEditorLine>(
     };
   };
 
+  /** Whether a pointer drag is over this section's drop area. */
+  const isSectionTarget = (section: Section<TLine>): boolean => reorder.dropTarget === `section:${section.modelKey}`;
+
   const displayNameOf = (section: Section<TLine>): string =>
     section.kind === 'group' ? section.name || labels.groupName : labels.ungrouped;
 
@@ -411,7 +414,7 @@ export function LineGroupsEditor<TLine extends LineGroupsEditorLine>(
             <TableBody
               key={section.modelKey}
               aria-label={displayNameOf(section)}
-              className={cn(reorder.dropTarget === `section:${section.modelKey}` && 'outline outline-2 outline-ring')}
+              className={cn(isSectionTarget(section) && 'outline outline-2 outline-ring')}
               {...(readOnly ? {} : reorder.getSectionProps(section.modelKey))}
             >
               <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -469,7 +472,7 @@ export function LineGroupsEditor<TLine extends LineGroupsEditorLine>(
           className={cn(
             'rounded-md border p-3',
             section.kind === 'ungrouped' && 'border-dashed',
-            reorder.dropTarget === `section:${section.modelKey}` && 'ring-2 ring-ring',
+            isSectionTarget(section) && 'ring-2 ring-ring',
           )}
           {...(readOnly ? {} : reorder.getSectionProps(section.modelKey))}
         >
