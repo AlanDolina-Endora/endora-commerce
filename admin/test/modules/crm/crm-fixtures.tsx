@@ -57,6 +57,23 @@ function sentence(
   );
 }
 
+/**
+ * The Opportunity screen's tabs are `React.lazy`, and the ones that write text
+ * hold the formatted field — TipTap and ProseMirror, a large module graph that
+ * vitest transforms on first use. Left to the first test that opens such a
+ * tab, that cost landed inside its five-second assertion budget, and on a
+ * loaded CI runner the first test of `mentions` and of `comments` ran out of
+ * it (#387's follow-up). Loaded here, it is paid while the test file is
+ * imported, which no assertion is timing.
+ */
+await Promise.all([
+  import('../../../../packages/modules/crm/src/admin/components/ReferenceField'),
+  import('../../../../packages/modules/crm/src/admin/pages/opportunity-detail/tabs/OverviewTab'),
+  import('../../../../packages/modules/crm/src/admin/pages/opportunity-detail/tabs/NotesTab'),
+  import('../../../../packages/modules/crm/src/admin/pages/opportunity-detail/tabs/MessagesTab'),
+  import('../../../../packages/modules/crm/src/admin/pages/opportunity-detail/tabs/EventsTab'),
+]);
+
 /** The English sentence of one of the module's own keys. */
 export function en(key: string, params?: Record<string, string | number>): string {
   return sentence(CRM_BUNDLE, 'crm', key, params);
