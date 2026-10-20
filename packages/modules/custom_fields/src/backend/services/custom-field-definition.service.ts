@@ -31,6 +31,7 @@ import {
   applyRenameDefinitionKey,
   applyUpdateDefinition,
   applyUpdateOption,
+  assertListFilterSupported,
   assertOptionsRule,
   CustomFieldDefinitionError,
 } from './custom-field-definition-apply.js';
@@ -170,6 +171,7 @@ export class CustomFieldDefinitionService implements DefinitionSource, CustomFie
       throw new CustomFieldDefinitionError('entity_type_unknown', `Unknown entity type "${input.entityType}".`);
     }
     assertOptionsRule(input.valueType, input.options);
+    assertListFilterSupported(input.entityType, input.listFilter);
     const existing = await this.emFactory().findOne(CustomFieldDefinition, {
       entityType: input.entityType,
       key: input.key,
@@ -185,6 +187,7 @@ export class CustomFieldDefinitionService implements DefinitionSource, CustomFie
   async update(id: string, patch: UpdateCustomFieldDefinitionRequest): Promise<CustomFieldDefinition> {
     const current = await this.emFactory().findOne(CustomFieldDefinition, { id });
     if (!current) throw new CustomFieldDefinitionError('not_found', `Custom field ${id} not found.`);
+    assertListFilterSupported(current.entityType, patch.listFilter);
 
     // FR-010: changing valueType while values exist is rejected.
     if (patch.valueType !== undefined && patch.valueType !== current.valueType && this.valueService) {
@@ -193,6 +196,7 @@ export class CustomFieldDefinitionService implements DefinitionSource, CustomFie
         throw new CustomFieldDefinitionError(
           'value_type_locked',
           `Cannot change the value type of "${current.key}" while records hold values. Clear them first.`,
+          { key: current.key },
         );
       }
     }
@@ -248,6 +252,7 @@ export class CustomFieldDefinitionService implements DefinitionSource, CustomFie
         throw new CustomFieldDefinitionError(
           'option_in_use',
           `Option "${option.value}" is in use and cannot be removed.`,
+          { value: option.value, label: option.labelDefault },
         );
       }
     }

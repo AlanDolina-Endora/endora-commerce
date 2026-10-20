@@ -100,6 +100,7 @@ export function toCustomFieldDefinitionRecord(
     audience: definition.audience,
     sortOrder: definition.sortOrder,
     config: definition.config ?? {},
+    listFilter: definition.listFilter,
     createdAt: definition.createdAt,
     updatedAt: definition.updatedAt,
   };

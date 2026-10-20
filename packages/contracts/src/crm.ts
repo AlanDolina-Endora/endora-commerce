@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { isoDateTimeSchema } from './common.js';
+import { calendarDateSchema, isoDateTimeSchema } from './common.js';
 import { collectionEnvelope, dataEnvelope } from './envelopes.js';
-import { customFieldValuesSchema } from './custom-fields.js';
+import { customFieldFilterSchema, customFieldValuesSchema } from './custom-fields.js';
 import type { QuoteRequestStatus } from './quote-requests.js';
 
 /**
@@ -114,20 +114,6 @@ const colorSchema = z
 const currencyCodeSchema = z
   .string()
   .regex(/^[A-Z]{3}$/, 'Currency must be an ISO 4217 code, e.g. PLN');
-
-/** Whether `YYYY-MM-DD` names a day the calendar has: `2026-02-31` and `2026-13-01` do not. */
-function isCalendarDate(value: string): boolean {
-  const [year = 0, month = 0, day = 0] = value.split('-').map(Number);
-  if (year < 1) return false;
-  const date = new Date(0);
-  date.setUTCFullYear(year, month - 1, day);
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
-}
-
-const calendarDateSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD')
-  .refine(isCalendarDate, 'Not a date of the calendar');
 
 /** A non-negative decimal held as a string, as `numeric(14,2)` money is everywhere. */
 const decimalAmountSchema = z
@@ -357,24 +343,17 @@ export type OpportunityBoardCardConfig = z.infer<typeof OpportunityBoardCardConf
 
 export const OpportunityBoardCardConfigResponseSchema = dataEnvelope(OpportunityBoardCardConfigSchema);
 
-/** A bound of a number or an amount, as a decimal string. */
-const fieldFilterNumberSchema = z.string().regex(/^-?\d{1,12}(\.\d{1,4})?$/, 'Not a decimal number');
-
 /**
  * One field's filter: the operators of every kind in one object. Which of them
- * apply is the field's kind to say; the others are ignored by the server.
+ * apply is the field's kind to say. The board ignores the others; the
+ * Opportunities list refuses them on a `custom:` reference with 400
+ * `VALIDATION_FAILED`, as it refuses an inverted range.
+ *
+ * The same object as the admin lists' custom-field filter
+ * (`specs/157-custom-fields-list-filters/`), so a board filter and a list
+ * filter read one grammar.
  */
-export const OpportunityFieldFilterSchema = z
-  .object({
-    contains: z.string().trim().min(1).max(200).optional(),
-    in: z.array(z.string().min(1).max(200)).min(1).max(50).optional(),
-    is: z.boolean().optional(),
-    min: fieldFilterNumberSchema.optional(),
-    max: fieldFilterNumberSchema.optional(),
-    from: calendarDateSchema.optional(),
-    to: calendarDateSchema.optional(),
-  })
-  .strict();
+export const OpportunityFieldFilterSchema = customFieldFilterSchema;
 export type OpportunityFieldFilter = z.infer<typeof OpportunityFieldFilterSchema>;
 
 export const OpportunityFieldFiltersSchema = z
@@ -417,7 +396,20 @@ const opportunityFilterShape = {
   tagId: repeatable(z.string().uuid()),
   createdFrom: calendarDateSchema.optional(),
   createdTo: calendarDateSchema.optional(),
-  /** §12c — filters on the fields the board card shows; a field that is not shown is ignored. */
+  /**
+   * §12c — filters on fields, in one of two modes.
+   *
+   * - On the board, and on the list with `cardValues=true` (a board lane's
+   *   continuation): the card rule — a field the card does not show is ignored.
+   * - On the list otherwise: a `custom:` reference is governed by the
+   *   definition's list-filter option — filtered when it is on, whether or not
+   *   the card shows the field, and refused with 400
+   *   `CUSTOM_FIELD_FILTER_UNAVAILABLE` when it is off; `builtin:` references
+   *   keep the card rule.
+   *
+   * `cardValues` is a mode switch, never a security boundary: both modes run in
+   * the same tenant-scoped, assignment-scoped statement.
+   */
   fieldFilters: fieldFiltersParamSchema,
 };
 
