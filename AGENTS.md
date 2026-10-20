@@ -1,6 +1,6 @@
 # Endora Commerce (b2b-platform) — Agent Instructions
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 **This file is the single source of truth for every AI coding agent working in this
 repository, and since 2026-09-11 it is a *router*.** What is below is what an agent needs
@@ -372,6 +372,8 @@ pointing at whichever tree it was created from; the same property issue #255 dep
 - PostgreSQL — eleven nullable/backfilled columns, one partial unique expression index, two partial indexes and one check constraint on `assets`; two new tables `asset_permalink_releases` and `asset_object_cleanups` (all owned by `assets_library`, platform-global); object storage — one random-named previous object per replaced asset and short-lived random-named staging objects; Redis — one BullMQ queue and Job Scheduler (`assets_library.retention.sweep`) (156-asset-stable-url)
 - TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite through `@endora-commerce/admin-kit` (admin); Next.js 15 App Router, server components and server actions (storefront) — **no new runtime dependency** (155-catalog-order-constraints)
 - PostgreSQL — five columns on four existing tables (`products`, `product_packaging_units`, `order_items`, `quote_request_items`), three additive migrations owned by `catalog`, `orders`, `quote_requests`; the FR-028 exemption reads the existing `cart_items.agreed_quantity` (no migration on `carts`); no new table, no FK, no backfill (155-catalog-order-constraints)
+- TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite through `@endora-commerce/admin-kit` (admin) — **no new runtime or dev dependency** (157-custom-fields-list-filters)
+- PostgreSQL — one new column `custom_field_definitions.list_filter boolean not null default false` owned by `custom_fields`; no new table; host tables unchanged (157-custom-fields-list-filters)
 
 - TypeScript 5.x strict on Node.js ≥ 22.17; Fastify + MikroORM (PostgreSQL) + Zod + ioredis + BullMQ + Meilisearch (backend)
 - React 19 + Vite + react-router-dom 7 + Tailwind 4 (admin); Next.js 15 App Router + React 19 + Tailwind v4 (storefront)
@@ -382,6 +384,7 @@ pointing at whichever tree it was created from; the same property issue #255 dep
 See "Repo map" above.
 
 ## Recent Changes
+- 157-custom-fields-list-filters: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite through `@endora-commerce/admin-kit` (admin) — **no new runtime or dev dependency**
 - 155-catalog-order-constraints: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod (backend); React 19 + Vite through `@endora-commerce/admin-kit` (admin); Next.js 15 App Router, server components and server actions (storefront) — **no new runtime dependency**
 - 156-asset-stable-url: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, `@fastify/multipart`, MikroORM (PostgreSQL), Zod, ioredis, BullMQ, `@aws-sdk/client-s3`, `@google-cloud/storage`, `file-type` (backend, all existing); React 19 + Vite through `@endora-commerce/admin-kit` (admin) — **no new runtime dependency**
 - 154-sales-channel-access: Added TypeScript 5.x `strict`, Node.js ≥ 22.17, ESM + Fastify, MikroORM (PostgreSQL), Zod, ioredis (backend); React 19 + Vite through `@endora-commerce/admin-kit` (admin); Next.js 15 App Router middleware, server components and server actions (storefront) — **no new runtime dependency**
