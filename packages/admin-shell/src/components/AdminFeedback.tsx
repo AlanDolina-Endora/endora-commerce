@@ -1,4 +1,5 @@
 import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { MessageSquare } from 'lucide-react';
 import {
   ADMIN_FEEDBACK_ERROR_CODES,
@@ -66,7 +67,11 @@ export function AdminFeedback(props: { rail: boolean }): ReactNode {
         <MessageSquare aria-hidden="true" size={props.rail ? 16 : 12} />
         {props.rail ? null : <span>{label}</span>}
       </button>
-      {open ? <AdminFeedbackDialog onClose={(): void => setOpen(false)} /> : null}
+      {/* Into the page's body, not the sidebar's subtree: the sidebar sets the
+          light text of its dark panel, and on a phone it is a drawer moved
+          with `transform`, which makes it the box a `fixed` dialog is placed
+          in — a dialog drawn inside it was faint and squeezed into the drawer. */}
+      {open ? createPortal(<AdminFeedbackDialog onClose={(): void => setOpen(false)} />, document.body) : null}
     </>
   );
 }

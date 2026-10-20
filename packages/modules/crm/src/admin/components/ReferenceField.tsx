@@ -82,6 +82,18 @@ function productLabel(name: Record<string, string>, sku: string, language: strin
 const keyOf = (type: OpportunityReferenceType, id: string): string => `${type}:${id}`;
 
 /**
+ * The editor while its view is mounted, else `null`. React may run this
+ * field's effects with an editor the hook has already destroyed — effects
+ * reconnected after a lazy tab is revealed, or a Suspense boundary resolves,
+ * later than the hook's one-tick grace — and a destroyed editor's `view`
+ * throws (seen on CI). An effect that finds none waits for the editor that
+ * replaces it: the editor is in its dependencies.
+ */
+function mounted(editor: Editor | null): Editor | null {
+  return editor && !editor.isDestroyed ? editor : null;
+}
+
+/**
  * The caret's textblock up to the caret, as the `@` shortcuts read it: its
  * characters, and one placeholder per chip — so that a position in this string
  * is a position in the document, counted from the block's start.
@@ -348,13 +360,14 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
         learned = true;
       }
     }
-    if (!editor) return;
+    const live = mounted(editor);
+    if (!live) return;
     if (value !== emitted.current) {
       // A value from outside: a form reset, a reload, a draft sent and cleared.
       emitted.current = value;
       silent.current = true;
       try {
-        editor.commands.setContent(editorDocOf(value, describe), { emitUpdate: false });
+        live.commands.setContent(editorDocOf(value, describe), { emitUpdate: false });
       } finally {
         silent.current = false;
       }
@@ -362,9 +375,9 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
     }
     if (!learned) return;
     // Names that arrived: every chip that can say more now does.
-    const { tr } = editor.state;
+    const { tr } = live.state;
     let changed = false;
-    editor.state.doc.descendants((node, position) => {
+    live.state.doc.descendants((node, position) => {
       if (node.type.name !== REFERENCE_NODE) return;
       const entry = known.current.get(keyOf(node.attrs['refType'] as OpportunityReferenceType, node.attrs['refId'] as string));
       if (!entry) return;
@@ -373,17 +386,18 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
       tr.setNodeMarkup(position, undefined, { ...node.attrs, label: available ? entry.label : null, available });
       changed = true;
     });
-    if (changed) editor.view.dispatch(tr.setMeta('addToHistory', false));
+    if (changed) live.view.dispatch(tr.setMeta('addToHistory', false));
   }, [value, references, editor, describe]);
 
   useEffect(() => {
-    editor?.setEditable(!disabled);
+    mounted(editor)?.setEditable(!disabled);
   }, [editor, disabled]);
 
   // The label of the form: tied to the field by id, and a click on it focuses the field.
   useEffect(() => {
-    if (!editor) return undefined;
-    const element = editor.view.dom;
+    const live = mounted(editor);
+    if (!live) return undefined;
+    const element = live.view.dom;
     const label = Array.from(element.ownerDocument.querySelectorAll('label')).find(
       (candidate) => candidate.htmlFor === id,
     );
@@ -394,14 +408,14 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
     if (!label.id) label.id = `${id}-label`;
     setLabelId(label.id);
     const focus = (): void => {
-      if (editor.isEditable) editor.commands.focus();
+      if (!live.isDestroyed && live.isEditable) live.commands.focus();
     };
     label.addEventListener('click', focus);
     return (): void => label.removeEventListener('click', focus);
   }, [id, editor]);
 
   useEffect(() => {
-    if (autoFocus) editor?.commands.focus('end');
+    if (autoFocus) mounted(editor)?.commands.focus('end');
     // Once, when the field appears.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor]);
@@ -620,11 +634,12 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
   const settle = useCallback((): void => {
     const box = wrapper.current;
     const popup = list.current;
-    if (!editor || !box || !popup || triggerStart === null) return;
+    const live = mounted(editor);
+    if (!live || !box || !popup || triggerStart === null) return;
     const frame = box.getBoundingClientRect();
-    let anchor: { top: number; bottom: number; left: number } = editor.view.dom.getBoundingClientRect();
+    let anchor: { top: number; bottom: number; left: number } = live.view.dom.getBoundingClientRect();
     try {
-      const coords = editor.view.coordsAtPos(triggerStart);
+      const coords = live.view.coordsAtPos(triggerStart);
       if (coords.top !== 0 || coords.left !== 0 || coords.bottom !== 0) anchor = coords;
     } catch {
       // No layout (a test's DOM): the field's own box.
@@ -767,8 +782,9 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
   };
   const attributeKey = JSON.stringify(attributes);
   useLayoutEffect(() => {
-    if (!editor) return;
-    editor.setOptions({ editorProps: { ...editor.options.editorProps, attributes: JSON.parse(attributeKey) } });
+    const live = mounted(editor);
+    if (!live) return;
+    live.setOptions({ editorProps: { ...live.options.editorProps, attributes: JSON.parse(attributeKey) } });
   }, [editor, attributeKey]);
 
   // --- Formatting ----------------------------------------------------------------
