@@ -108,8 +108,8 @@ unchanged.
 - [X] T037 [US2] Implement any remaining customer-reply wiring in `QR/src/backend/services/rfq-service.ts` / `customer-projection.ts` — T036 green
 - [X] T038 [P] [US2] Extend `AT/modules/quote_requests/RfqDetail.history.test.tsx` — red: the five kinds render with their bundle sentences in en and pl; `null` side renders as *Ungrouped*
 - [X] T039 [US2] Implement in `QR/src/admin/pages/RfqHistory.tsx` + bundle keys — T038 green
-- [ ] T040 [P] [US2] Write `SF/test/rfq/grouped-lines.test.tsx` — red: `GroupedLineRows` renders heading rows (`scope="colgroup"`), line rows, summary rows by the page's rule (agreed, else desired; every line or none) per section, *Other items* last; empty groups never; no non-empty group → markup identical to the line rows alone (SC-004); `describeDiff` of `grouping`; pl + en strings
-- [ ] T041 [US2] Implement `SF/components/line-groups/GroupedLineRows.tsx`, use it in `SF/app/(account)/quote-requests/[id]/page.tsx`, extend `SF/lib/api/rfq.ts` types and `SF/lib/i18n/messages.ts` (both catalogues) — T040 green; `pnpm --filter storefront run typecheck`
+- [X] T040 [P] [US2] Write `SF/test/rfq/grouped-lines.test.tsx` — red: `GroupedLineRows` renders heading rows (`scope="colgroup"`), line rows, summary rows by the page's rule (agreed, else desired; every line or none) per section, *Other items* last; empty groups never; no non-empty group → markup identical to the line rows alone (SC-004); `describeDiff` of `grouping`; pl + en strings
+- [X] T041 [US2] Implement `SF/components/line-groups/GroupedLineRows.tsx`, use it in `SF/app/(account)/quote-requests/[id]/page.tsx`, extend `SF/lib/api/rfq.ts` types and `SF/lib/i18n/messages.ts` (both catalogues) — T040 green; `pnpm --filter storefront run typecheck`
 
 **Checkpoint**: MVP — quickstart §1–§2 pass.
 

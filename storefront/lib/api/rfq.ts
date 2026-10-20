@@ -40,6 +40,17 @@ export interface RfqItem {
   discountPercent: number | null;
   /** VAT rate (fraction, e.g. 0.23) applied to this line's net price. */
   taxRate?: number;
+  /** Feature 159 — the line's group (`itemGroups[].id`), `null` = ungrouped. */
+  groupId?: string | null;
+  /** Feature 159 — order within the line's section. */
+  position?: number;
+}
+
+/** Feature 159 — a group of a quote's lines, as the customer reply carries it (non-empty ones only). */
+export interface RfqItemGroup {
+  id: string;
+  name: string;
+  position: number;
 }
 
 export interface RfqEvent {
@@ -75,7 +86,9 @@ export type RfqDiffEntry =
       productName: string;
       before: number | null;
       after: number | null;
-    };
+    }
+  /** Feature 159 — the arrangement of the lines changed; names nothing. */
+  | { kind: 'grouping' };
 
 export interface RfqComparison {
   diff: RfqDiffEntry[];
@@ -94,6 +107,9 @@ export interface RfqDetail {
   lastCustomerSeenRevisionNumber: number;
   headerNote: string | null;
   cancellationReason: string | null;
+  /** Feature 159 — the groups holding a line, in order; absent on an older backend. */
+  itemGroups?: RfqItemGroup[];
+  /** In display order. */
   items: RfqItem[];
   events: RfqEvent[];
   comparisonAgainstLastSeen: RfqComparison | null;
