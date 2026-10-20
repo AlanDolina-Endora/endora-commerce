@@ -887,5 +887,6 @@
   "editor.link.url": "Adres odnośnika",
   "editor.link.apply": "Wstaw odnośnik",
   "editor.link.remove": "Usuń odnośnik",
-  "editor.link.invalid": "Podaj adres zaczynający się od http://, https:// lub mailto:."
+  "editor.link.invalid": "Podaj adres zaczynający się od http://, https:// lub mailto:.",
+  "references.order.openInNewTab": "Otwórz zamówienie {number} w nowej karcie"
 }

@@ -253,6 +253,7 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
     onKey: (_event: KeyboardEvent): boolean => false,
     follow: (_editor: Editor): void => undefined,
     onSubmitShortcut,
+    mentions,
   });
 
   const editor = useEditor(
@@ -289,7 +290,13 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
         handlePaste: (_view, event) => {
           const html = event.clipboardData?.getData('text/html') ?? '';
           const text = event.clipboardData?.getData('text/plain') ?? '';
-          if (html.includes('data-crm-token') || extractOpportunityReferenceTokens(text).length === 0) return false;
+          if (
+            !latest.current.mentions ||
+            html.includes('data-crm-token') ||
+            extractOpportunityReferenceTokens(text).length === 0
+          ) {
+            return false;
+          }
           const doc = editorDocOf(text.replace(/\r\n?/g, '\n'), describe);
           editorRef.current?.chain().insertContent(doc.content ?? []).run();
           return true;
@@ -669,6 +676,7 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
   latest.current.maxLength = maxLength;
   latest.current.onValueChange = onValueChange;
   latest.current.onSubmitShortcut = onSubmitShortcut;
+  latest.current.mentions = mentions;
   latest.current.onKey = (event: KeyboardEvent): boolean => {
     if (event.isComposing) return false;
     if (open) {

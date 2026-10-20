@@ -887,5 +887,6 @@
   "editor.link.url": "Link address",
   "editor.link.apply": "Apply link",
   "editor.link.remove": "Remove link",
-  "editor.link.invalid": "Enter an address starting with http://, https:// or mailto:."
+  "editor.link.invalid": "Enter an address starting with http://, https:// or mailto:.",
+  "references.order.openInNewTab": "Open order {number} in a new tab"
 }

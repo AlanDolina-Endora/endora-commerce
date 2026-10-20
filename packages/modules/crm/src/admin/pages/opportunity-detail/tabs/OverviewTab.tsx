@@ -68,8 +68,12 @@ export function OverviewTab(props: OpportunityTabProps): ReactNode {
             {editNotice}
           </p>
           {opportunity.description ? (
-            <div className="max-w-prose whitespace-pre-wrap break-words text-sm">
-              <ReferenceText text={opportunity.description} references={opportunity.references} />
+            <div className="max-w-prose text-sm">
+              <ReferenceText
+                text={opportunity.description}
+                references={opportunity.references}
+                orderStatuses={props.orderStatuses}
+              />
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
