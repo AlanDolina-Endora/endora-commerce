@@ -52,6 +52,12 @@ export function useOrderLineGroupLabels(): LineGroupsEditorLabels {
 export interface OrderSummaryLine {
   readonly net: number | null;
   readonly taxRate: number | null;
+  /**
+   * The line's stored gross total, when it has one (a placed order's
+   * `lineTotal`): the summary's gross is then the sum of what the lines show,
+   * and its VAT the difference.
+   */
+  readonly gross?: number | null;
 }
 
 export interface OrderSectionTotals {
@@ -75,6 +81,10 @@ export function orderSectionTotals(lines: readonly OrderSummaryLine[]): OrderSec
     return { count, net: null, vat: null, gross: null };
   }
   const net = round2(lines.reduce((sum, line) => sum + line.net!, 0));
+  if (lines.every((line) => line.gross != null)) {
+    const gross = round2(lines.reduce((sum, line) => sum + line.gross!, 0));
+    return { count, net, vat: round2(gross - net), gross };
+  }
   const vat = round2(lines.reduce((sum, line) => sum + line.net! * line.taxRate!, 0));
   return { count, net, vat, gross: round2(net + vat) };
 }
