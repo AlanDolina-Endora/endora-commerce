@@ -319,7 +319,13 @@ describe('155 — quote-seeded lines are exempt while unchanged [integration]', 
     );
     const token = `anon-148-merge-${randomUUID()}`;
     const em = h.em();
-    const anon = em.create(Cart, { anonymousCartToken: token, status: 'active' });
+    // The anonymous basket of the store the customer signs in on — a basket of
+    // another store is not merged (`specs/154-sales-channel-access/`).
+    const anon = em.create(Cart, {
+      anonymousCartToken: token,
+      status: 'active',
+      salesChannelId: BASKET_CTX.salesChannelId,
+    });
     await em.persistAndFlush(anon);
     em.create(CartItem, {
       cartId: anon.id,

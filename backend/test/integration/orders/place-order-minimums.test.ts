@@ -413,7 +413,7 @@ describe('155 — placement and the checkout preview refuse below-minimum lines 
     // without any check, and the real placement port.
     const OneClickService = cradle().quickOrderOneClickService.constructor as new (
       ...args: unknown[]
-    ) => { place(ctx: unknown, input: unknown, salesChannelId: string | null): Promise<unknown> };
+    ) => { place(ctx: unknown, input: unknown, salesChannelId: string): Promise<unknown> };
     const realCart = cradle().cartWritePort;
     const uncheckedCart = {
       addItems: async (_actor: unknown, lines: Array<{ productId: string; quantity: number }>) => ({
@@ -441,7 +441,7 @@ describe('155 — placement and the checkout preview refuse below-minimum lines 
       (h.container.cradle as unknown as { catalogProductReadPort: unknown }).catalogProductReadPort,
     );
     const ordersBefore = await orderCount();
-    await expect(oneClick.place(CTX, { productId: A.id, quantity: 5 }, null)).rejects.toMatchObject({
+    await expect(oneClick.place(CTX, { productId: A.id, quantity: 5 }, BASKET_CTX.salesChannelId)).rejects.toMatchObject({
       statusCode: 422,
       code: ERROR_CODES.PRODUCT_BELOW_MINIMUM_QUANTITY,
     });

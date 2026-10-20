@@ -154,7 +154,7 @@ describe('155 — placement stamps returnable_at_purchase on every path [integra
     // own test: `contract/quick_order/one-click-place.test.ts`).
     const OneClickService = cradle().quickOrderOneClickService.constructor as new (
       ...args: unknown[]
-    ) => { place(ctx: unknown, input: unknown, salesChannelId: string | null): Promise<{ id: string }> };
+    ) => { place(ctx: unknown, input: unknown, salesChannelId: string): Promise<{ id: string }> };
     const preferences = {
       resolveForCustomer: async () => ({
         shippingAddressId: SEED_ADDRESS_DELIVERY_ID,
@@ -170,9 +170,9 @@ describe('155 — placement stamps returnable_at_purchase on every path [integra
       async () => true,
       cradle().catalogProductReadPort,
     );
-    const viaR = await whenOrderCreatedSettled(h, () => oneClick.place(CTX, { productId: R.id, quantity: 1 }, null));
+    const viaR = await whenOrderCreatedSettled(h, () => oneClick.place(CTX, { productId: R.id, quantity: 1 }, channelId));
     expect(await stampsOf(placed(viaR.id))).toEqual({ [R.id]: true });
-    const viaN = await whenOrderCreatedSettled(h, () => oneClick.place(CTX, { productId: N.id, quantity: 1 }, null));
+    const viaN = await whenOrderCreatedSettled(h, () => oneClick.place(CTX, { productId: N.id, quantity: 1 }, channelId));
     expect(await stampsOf(placed(viaN.id))).toEqual({ [N.id]: false });
   });
 

@@ -8,7 +8,7 @@ import {
 } from '../../helpers/test-server.js';
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import { cartWritePortOf } from '../../helpers/orders-neighbour-ports.js';
-import { systemDefaultSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
+import { ensureSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
 import {
   buyerChannelIds,
   createMinimumPackagingUnit,
@@ -163,7 +163,8 @@ describe('155 — GET /api/v1/cart flags lines below a minimum [contract]', () =
         {
           customerAccountId: TEST_CUSTOMER_ID,
           organizationId: TEST_ORGANIZATION_ID,
-          salesChannelId: await systemDefaultSalesChannelId(h.em()),
+          // The basket of the channel the views below are read on.
+          salesChannelId: await ensureSalesChannelId(h.em(), CHANNEL['x-sales-channel']),
         },
         [{ productId: raised.id, quantity: 5, unitPrice: '10.00', currency: 'PLN' }],
         { sourceQuoteRequestId: randomUUID() },
@@ -176,7 +177,8 @@ describe('155 — GET /api/v1/cart flags lines below a minimum [contract]', () =
         {
           customerAccountId: TEST_CUSTOMER_ID,
           organizationId: TEST_ORGANIZATION_ID,
-          salesChannelId: await systemDefaultSalesChannelId(h.em()),
+          // The basket of the channel the views below are read on.
+          salesChannelId: await ensureSalesChannelId(h.em(), CHANNEL['x-sales-channel']),
         },
         [],
       );
