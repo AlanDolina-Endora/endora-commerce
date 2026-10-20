@@ -146,6 +146,31 @@ describe('admin order preview message codes', () => {
       'SOME_FUTURE_CODE',
     );
   });
+
+  it('feature 159 — a priced line carries its tax rate; a line without one still parses', () => {
+    const line = {
+      productId: '00000000-0000-4000-8000-000000000007',
+      quantity: 2,
+      unitPrice: '10.00',
+      currency: 'PLN',
+      lineTotal: 20,
+    };
+    const summary = {
+      subtotal: 20,
+      taxTotal: 4.6,
+      deliveryTotal: 0,
+      paymentSurcharge: 0,
+      discountTotal: 0,
+      total: 24.6,
+      currency: 'PLN',
+    };
+    const parsed = adminOrderPreviewResponseSchema.parse({
+      lines: [{ ...line, taxRate: 0.23 }, line],
+      summary,
+      messages: [],
+    });
+    expect(parsed.lines.map((l) => l.taxRate)).toEqual([0.23, undefined]);
+  });
 });
 
 describe('order saved views (FR-003, R-8, S-05, S-06)', () => {
