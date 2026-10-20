@@ -282,14 +282,15 @@ export class CartService {
   }
 
   /**
-   * The basket `actor` addresses on its channel, created there when there is
-   * none. The route mints a new token for a token of another channel's basket
-   * before it gets here; an in-process caller that did not is told so.
+   * The basket `actor` addresses on its channel, as its caller got or created
+   * it there. The route mints a new token for a token of another channel's
+   * basket before it gets here; an in-process caller that did not is told so.
+   *
+   * Deliberately not the getter as well: `check:command-coverage` clears a
+   * mutating method through the audited methods that call it **directly**
+   * (one hop), so `addItem` and `addItems` call `getOrCreateForAnon` themselves.
    */
-  async #basketFor(em: EntityManager, actor: CartActor): Promise<Cart> {
-    const cart = actor.customer
-      ? await this.#getOrCreateForCustomerOn(em, actor.customer)
-      : await this.getOrCreateForAnon(em, actor.anonymousToken!, this.#basketChannelOf(actor));
+  #requireBasket(cart: Cart | null): Cart {
     if (!cart) throw new HttpError(404, ERROR_CODES.NOT_FOUND, 'Cart not found.');
     return cart;
   }
@@ -320,7 +321,11 @@ export class CartService {
   ): Promise<{ cart: Cart; items: CartItem[] }> {
     const em = this.emFactory();
     assertCartActor(actor);
-    const cart = await this.#basketFor(em, actor);
+    const cart = this.#requireBasket(
+      actor.customer
+        ? await this.#getOrCreateForCustomerOn(em, actor.customer)
+        : await this.getOrCreateForAnon(em, actor.anonymousToken!, this.#basketChannelOf(actor)),
+    );
 
     const resolved = await this.#resolveLine(actor, input);
     const { product, packagingUnit, effectiveQuantity } = resolved;
@@ -451,7 +456,11 @@ export class CartService {
       await this.clearForCustomer(actor.customer!);
       cart = await this.#getOrCreateForCustomerOn(em, actor.customer!);
     } else {
-      cart = await this.#basketFor(em, actor);
+      cart = this.#requireBasket(
+        actor.customer
+          ? await this.#getOrCreateForCustomerOn(em, actor.customer)
+          : await this.getOrCreateForAnon(em, actor.anonymousToken!, this.#basketChannelOf(actor)),
+      );
       // Step 2 — the minimums with the cart, over the vetted records only.
       rejections = await this.#judgeBatch(
         cart,
