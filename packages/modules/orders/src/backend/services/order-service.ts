@@ -2733,6 +2733,21 @@ export class OrderService {
   }
 
   /**
+   * Products' display names in `language` (the id for a record that is gone) —
+   * for a refusal that has to name them before any basket is read: the admin
+   * creation's `group_conflict` (feature 159, FR-062).
+   */
+  async productDisplayNames(
+    productIds: readonly string[],
+    language: string | undefined,
+  ): Promise<Map<string, string>> {
+    const unique = Array.from(new Set(productIds));
+    const products = unique.length > 0 ? await this.neighbours.catalogProductRead.findByIds(unique) : [];
+    const byId = new Map(products.map((product) => [product.id, product]));
+    return new Map(unique.map((productId) => [productId, this.#productName(byId, productId, language)]));
+  }
+
+  /**
    * The name a minimum refusal gives a product: in `language`, the language the
    * envelope translates the sentence around it into (feature 155, D3/D4). The id
    * when the record is gone.
