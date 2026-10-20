@@ -848,6 +848,12 @@ export const adminOrderPreviewLineSchema = z.object({
   unitPrice: z.string(),
   currency: z.string(),
   lineTotal: z.number(),
+  /**
+   * Feature 159 — the rate the line is taxed at (a fraction, `0.23`), from the
+   * same authority as `summary.taxTotal`; absent on an unavailable line. The
+   * create screen sums a group's VAT from it.
+   */
+  taxRate: z.number().optional(),
   unavailable: z.boolean().optional(),
 });
 

@@ -17,16 +17,14 @@ import {
   Separator,
   PageHeader,
   Combobox,
-  Table,
-  TableBody,
   TableCell,
   TableHead,
-  TableHeader,
   TableRow,
 } from '@endora-commerce/admin-kit/ui';
 import type { ComboboxOption } from '@endora-commerce/admin-kit/ui';
 import {
   CountrySelect,
+  LineGroupsEditor,
   ProductBrowserDialog,
   ProductBrowserTrigger,
   ProductPicker,
@@ -37,6 +35,12 @@ import {
 } from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { RouteTabsZone } from '@endora-commerce/admin-kit/zones';
+import {
+  OrderSectionSummary,
+  orderSectionTotals,
+  useOrderLineGroupLabels,
+  useOrderSectionSummaryText,
+} from '../line-groups.js';
 
 /**
  * One order line (feature 145, FR-022). Keyed by `productId`: a product is a line
@@ -45,6 +49,10 @@ import { RouteTabsZone } from '@endora-commerce/admin-kit/zones';
  * invalid entry stays on screen, marked, instead of being coerced away.
  */
 interface ItemRow {
+  /** Feature 159 — the line's identity in the grouping editor: its product. */
+  key: string;
+  /** Feature 159 — the group (a group draft's `key`) the line is in; `null` = ungrouped. */
+  groupKey: string | null;
   productId: string;
   sku: string;
   name: string;
@@ -94,8 +102,10 @@ function unavailableReason(message: PreviewMessage | undefined): {
   return { key: 'orderCreate.line.unavailable' };
 }
 
-function productLine(item: ProductBrowserItem): ItemRow {
+function productLine(item: ProductBrowserItem, groupKey: string | null): ItemRow {
   return {
+    key: item.id,
+    groupKey,
     productId: item.id,
     sku: item.sku,
     name: productDisplayName(item),
@@ -230,7 +240,26 @@ interface PreviewLine {
   unitPrice: string;
   currency: string;
   lineTotal: number;
+  /** Feature 159 — the rate the line is taxed at; a group's VAT is summed from it. */
+  taxRate?: number;
   unavailable?: boolean;
+}
+
+/**
+ * Feature 159 (FR-062) — the lines a refused creation names as `group_conflict`,
+ * by product: `items.<j>.groupKey` read against the lines the request sent.
+ */
+function groupConflictProducts(err: unknown, sent: ReadonlyArray<{ productId: string }>): Set<string> {
+  const details = err instanceof ApiError ? err.envelope.error.details : undefined;
+  const conflicts = new Set<string>();
+  if (!Array.isArray(details)) return conflicts;
+  for (const detail of details as Array<{ path?: unknown; code?: unknown }>) {
+    if (detail.code !== 'group_conflict' || typeof detail.path !== 'string') continue;
+    const index = /^items\.(\d+)\.groupKey$/.exec(detail.path)?.[1];
+    const line = index === undefined ? undefined : sent[Number(index)];
+    if (line) conflicts.add(line.productId);
+  }
+  return conflicts;
 }
 
 interface PreviewResponse {
@@ -547,6 +576,9 @@ function AddressPicker(props: {
  */
 export function OrderCreatePage(): ReactNode {
   const t = useTranslation('core');
+  const tGroups = useTranslation('orders');
+  const groupLabels = useOrderLineGroupLabels();
+  const summaryText = useOrderSectionSummaryText();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   // Read once: what the page was opened with does not change under the form.
@@ -559,8 +591,16 @@ export function OrderCreatePage(): ReactNode {
   const [deliveryChoice, setDeliveryChoice] = useState<AddressChoice>({ mode: 'existing', id: '' });
   const [billingChoice, setBillingChoice] = useState<AddressChoice>({ mode: 'existing', id: '' });
   const [customerNote, setCustomerNote] = useState('');
+  // In display order: each group's lines, then the ungrouped ones (feature 159).
   const [items, setItems] = useState<ItemRow[]>([]);
   const [browserOpen, setBrowserOpen] = useState(false);
+  // Feature 159 — the order's groups, where the browser's products go (a
+  // group's *Add product* opens it for that group; everything else adds to
+  // Ungrouped), and the lines a refused creation named as in two groups.
+  const [groups, setGroups] = useState<Array<{ key: string; name: string }>>([]);
+  const [addTarget, setAddTarget] = useState<string | null>(null);
+  const groupCounter = useRef(0);
+  const [conflictProducts, setConflictProducts] = useState<ReadonlySet<string>>(() => new Set());
   const itemsId = useId();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -583,7 +623,8 @@ export function OrderCreatePage(): ReactNode {
       customerNote !== '' ||
       addressIsDraft(deliveryChoice) ||
       addressIsDraft(billingChoice) ||
-      items.length > 0);
+      items.length > 0 ||
+      groups.length > 0);
   useUnsavedChangesPrompt(dirty);
 
   // Static reference lists, loaded once on mount.
@@ -701,14 +742,20 @@ export function OrderCreatePage(): ReactNode {
   }, [customerAccountId, openedWith.customerAccountId, t]);
 
   // The lines that may be priced and sent: an invalid quantity keeps its line on
-  // screen, marked, and out of both requests (FR-022, FR-026).
+  // screen, marked, and out of both requests (FR-022, FR-026). The preview is
+  // asked about the lines only, so moving a line between groups does not
+  // re-price; its order is the display order.
+  // Keyed on what pricing reads, so a regroup that leaves it unchanged asks
+  // the preview nothing.
+  const pricingKey = JSON.stringify(
+    items.flatMap((it) => {
+      const quantity = parsePositiveInt(it.quantityInput);
+      return quantity === null ? [] : [{ productId: it.productId, quantity }];
+    }),
+  );
   const validItems = useMemo(
-    () =>
-      items.flatMap((it) => {
-        const quantity = parsePositiveInt(it.quantityInput);
-        return quantity === null ? [] : [{ productId: it.productId, quantity }];
-      }),
-    [items],
+    () => JSON.parse(pricingKey) as Array<{ productId: string; quantity: number }>,
+    [pricingKey],
   );
 
   // Live pricing preview — debounced; fires whenever the priced inputs change
@@ -749,17 +796,26 @@ export function OrderCreatePage(): ReactNode {
     };
   }, [customerAccountId, salesChannelId, deliveryMethodId, paymentMethodId, validItems, t]);
 
-  /** Append products as lines, in the order given, skipping any already a line. */
-  const appendLines = (products: readonly ProductBrowserItem[]): void =>
+  /**
+   * Append products as lines, in the order given, skipping any already a line —
+   * at the end of `groupKey`'s section (`null` = Ungrouped, which is last, so the
+   * end of the list).
+   */
+  const appendLines = (products: readonly ProductBrowserItem[], groupKey: string | null = null): void =>
     setItems((prev) => {
       const present = new Set(prev.map((row) => row.productId));
       const added: ItemRow[] = [];
       for (const p of products) {
         if (present.has(p.id)) continue;
         present.add(p.id);
-        added.push(productLine(p));
+        added.push(productLine(p, groupKey));
       }
-      return added.length === 0 ? prev : [...prev, ...added];
+      if (added.length === 0) return prev;
+      if (groupKey === null) return [...prev, ...added];
+      const lastOfGroup = prev.map((row) => row.groupKey).lastIndexOf(groupKey);
+      const at = lastOfGroup >= 0 ? lastOfGroup + 1 : prev.findIndex((row) => row.groupKey === null);
+      const index = at < 0 ? prev.length : at;
+      return [...prev.slice(0, index), ...added, ...prev.slice(index)];
     });
   const setQuantity = (productId: string, quantityInput: string): void =>
     setItems((prev) => prev.map((row) => (row.productId === productId ? { ...row, quantityInput } : row)));
@@ -780,7 +836,11 @@ export function OrderCreatePage(): ReactNode {
   const hasUnavailable = items.some((row) => messageByProduct.has(row.productId));
   const allQuantitiesValid = validItems.length === items.length;
 
+  // Every group needs a name before the order can be created (FR-002).
+  const groupsNamed = groups.every((group) => group.name.trim() !== '');
+
   const canSubmit =
+    groupsNamed &&
     !!customerAccountId.trim() &&
     !!salesChannelId.trim() &&
     !!deliveryMethodId.trim() &&
@@ -813,6 +873,15 @@ export function OrderCreatePage(): ReactNode {
   const submit = async (): Promise<void> => {
     setBusy(true);
     setError(null);
+    setConflictProducts(new Set());
+    // Feature 159 — with groups, each line names its group (the server places
+    // the lines as sent: each group's lines, then the ungrouped ones); without,
+    // the request is the one it always was.
+    const groupKeyOf = new Map(items.map((row) => [row.productId, row.groupKey]));
+    const sentItems =
+      groups.length > 0
+        ? validItems.map((it) => ({ ...it, groupKey: groupKeyOf.get(it.productId) ?? null }))
+        : validItems;
     try {
       const res = await apiClient.post<{ data: { id: string } }>('/api/v1/admin/orders', {
         customerAccountId: customerAccountId.trim(),
@@ -822,7 +891,8 @@ export function OrderCreatePage(): ReactNode {
         ...addressPayload(deliveryChoice, 'deliveryAddressId', 'deliveryAddress'),
         ...addressPayload(billingChoice, 'billingAddressId', 'billingAddress'),
         ...(customerNote.trim() ? { customerNote: customerNote.trim() } : {}),
-        items: validItems,
+        ...(groups.length > 0 ? { groups: groups.map((group) => ({ key: group.key, name: group.name.trim() })) } : {}),
+        items: sentItems,
         ...(openedWith.origin ? { origin: openedWith.origin } : {}),
       });
       setSubmitted(true);
@@ -832,6 +902,7 @@ export function OrderCreatePage(): ReactNode {
         navigate(`/orders/${res.data.id}`);
       }
     } catch (err) {
+      setConflictProducts(groupConflictProducts(err, sentItems));
       setError(err instanceof ApiError ? err.envelope.error.message : t('orderCreate.error'));
     } finally {
       setBusy(false);
@@ -1013,17 +1084,24 @@ export function OrderCreatePage(): ReactNode {
               rules={ORDER_PRODUCT_RULES}
               alreadyAddedIds={lineIds}
               onConfirm={(picked): void => {
-                appendLines(picked);
+                appendLines(picked, addTarget);
                 setBrowserOpen(false);
+                setAddTarget(null);
               }}
-              onCancel={(): void => setBrowserOpen(false)}
+              onCancel={(): void => {
+                setBrowserOpen(false);
+                setAddTarget(null);
+              }}
             />
 
-            {items.length === 0 ? (
+            {items.length === 0 && groups.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t('orderCreate.items.empty')}</p>
             ) : (
-              <Table>
-                <TableHeader>
+              // Feature 159 — with no group the editor renders the table as it was (FR-033).
+              <LineGroupsEditor<ItemRow>
+                layout="table"
+                columnCount={5}
+                tableHeader={
                   <TableRow>
                     <TableHead>{t('orderCreate.field.product')}</TableHead>
                     <TableHead id={`${itemsId}-qty`} className="w-28">
@@ -1035,72 +1113,126 @@ export function OrderCreatePage(): ReactNode {
                       <span className="sr-only">{t('common.action.delete')}</span>
                     </TableHead>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((row) => {
-                    const quantity = parsePositiveInt(row.quantityInput);
-                    const line = quantity === null ? undefined : lineByKey.get(`${row.productId}:${quantity}`);
-                    const rowId = `${itemsId}-${row.productId}`;
-                    const reason =
-                      quantity === null
-                        ? t('orderCreate.line.quantityInvalid')
-                        : line?.unavailable
-                          ? translateReason(unavailableReason(messageByProduct.get(row.productId)))
+                }
+                groups={groups}
+                lines={items}
+                disabled={busy}
+                labels={groupLabels}
+                createGroupKey={(): string => `group-${(groupCounter.current += 1)}`}
+                getLineLabel={(row): string => row.name}
+                onChange={(next): void => {
+                  setGroups(next.groups);
+                  setItems(next.lines);
+                  setConflictProducts(new Set());
+                }}
+                renderSummary={(sectionLines): ReactNode => (
+                  <OrderSectionSummary
+                    text={summaryText(
+                      orderSectionTotals(
+                        sectionLines.map((row) => {
+                          const quantity = parsePositiveInt(row.quantityInput);
+                          const line = quantity === null ? undefined : lineByKey.get(`${row.productId}:${quantity}`);
+                          const priced = line !== undefined && !line.unavailable;
+                          return {
+                            net: priced ? line.lineTotal : null,
+                            taxRate: priced ? (line.taxRate ?? null) : null,
+                          };
+                        }),
+                      ),
+                      preview?.summary.currency ?? '',
+                    )}
+                  />
+                )}
+                renderSectionFooter={(section): ReactNode =>
+                  section.kind === 'group' && section.key !== null ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(): void => {
+                        setAddTarget(section.key);
+                        setBrowserOpen(true);
+                      }}
+                    >
+                      {tGroups('lineGroups.addProduct')}
+                    </Button>
+                  ) : null
+                }
+                renderLine={(row, slots): ReactNode => {
+                  const quantity = parsePositiveInt(row.quantityInput);
+                  const line = quantity === null ? undefined : lineByKey.get(`${row.productId}:${quantity}`);
+                  const rowId = `${itemsId}-${row.productId}`;
+                  const reason =
+                    quantity === null
+                      ? t('orderCreate.line.quantityInvalid')
+                      : line?.unavailable
+                        ? translateReason(unavailableReason(messageByProduct.get(row.productId)))
+                        : conflictProducts.has(row.productId)
+                          ? tGroups('lineGroups.conflict')
                           : null;
-                    return (
-                      <TableRow key={row.productId}>
-                        <TableCell>
-                          <div id={`${rowId}-name`} data-line-name className="font-medium">
-                            {row.name}
-                          </div>
-                          <div className="font-mono text-xs text-muted-foreground">{row.sku}</div>
+                  const removeButton = (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-labelledby={`${rowId}-remove ${rowId}-name`}
+                      onClick={(): void => removeLine(row.productId)}
+                    >
+                      <Trash2 aria-hidden="true" />
+                      <span id={`${rowId}-remove`} className="sr-only">
+                        {t('common.action.delete')}
+                      </span>
+                    </Button>
+                  );
+                  return (
+                    <>
+                      <TableCell>
+                        <div id={`${rowId}-name`} data-line-name className="font-medium">
+                          {row.name}
+                        </div>
+                        <div className="font-mono text-xs text-muted-foreground">{row.sku}</div>
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          id={`${rowId}-qty`}
+                          type="text"
+                          inputMode="numeric"
+                          aria-labelledby={`${itemsId}-qty ${rowId}-name`}
+                          aria-invalid={quantity === null || undefined}
+                          aria-describedby={reason !== null ? `${rowId}-reason` : undefined}
+                          value={row.quantityInput}
+                          onChange={(e): void => setQuantity(row.productId, e.target.value)}
+                        />
+                      </TableCell>
+                      {reason !== null ? (
+                        <TableCell colSpan={2} className="text-right">
+                          <span id={`${rowId}-reason`} className="text-sm text-destructive">
+                            {reason}
+                          </span>
                         </TableCell>
-                        <TableCell>
-                          <Input
-                            id={`${rowId}-qty`}
-                            type="text"
-                            inputMode="numeric"
-                            aria-labelledby={`${itemsId}-qty ${rowId}-name`}
-                            aria-invalid={quantity === null || undefined}
-                            aria-describedby={reason !== null ? `${rowId}-reason` : undefined}
-                            value={row.quantityInput}
-                            onChange={(e): void => setQuantity(row.productId, e.target.value)}
-                          />
-                        </TableCell>
-                        {reason !== null ? (
-                          <TableCell colSpan={2} className="text-right">
-                            <span id={`${rowId}-reason`} className="text-sm text-destructive">
-                              {reason}
-                            </span>
+                      ) : (
+                        <>
+                          <TableCell className="text-right text-muted-foreground">
+                            {line ? formatMoney(Number(line.unitPrice), line.currency) : null}
                           </TableCell>
+                          <TableCell className="text-right font-medium">
+                            {line ? formatMoney(line.lineTotal, line.currency) : null}
+                          </TableCell>
+                        </>
+                      )}
+                      <TableCell>
+                        {slots.handle === null && slots.moveMenu === null ? (
+                          removeButton
                         ) : (
-                          <>
-                            <TableCell className="text-right text-muted-foreground">
-                              {line ? formatMoney(Number(line.unitPrice), line.currency) : null}
-                            </TableCell>
-                            <TableCell className="text-right font-medium">
-                              {line ? formatMoney(line.lineTotal, line.currency) : null}
-                            </TableCell>
-                          </>
+                          <div className="flex items-center gap-1">
+                            {slots.handle}
+                            {slots.moveMenu}
+                            {removeButton}
+                          </div>
                         )}
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            aria-labelledby={`${rowId}-remove ${rowId}-name`}
-                            onClick={(): void => removeLine(row.productId)}
-                          >
-                            <Trash2 aria-hidden="true" />
-                            <span id={`${rowId}-remove`} className="sr-only">
-                              {t('common.action.delete')}
-                            </span>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                      </TableCell>
+                    </>
+                  );
+                }}
+              />
             )}
           </CardContent>
         </Card>

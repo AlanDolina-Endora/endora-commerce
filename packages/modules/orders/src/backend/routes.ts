@@ -903,8 +903,12 @@ export async function registerOrderRoutes(
         unitPrice: string;
         currency: string;
         lineTotal: number;
+        /** Feature 159 — the rate the line is taxed at; priced lines only. */
+        taxRate?: number;
         unavailable?: boolean;
       }> = [];
+      /** Each priced line with its product tax class, to receive its rate below. */
+      const pricedLines: Array<{ line: { taxRate?: number }; productType: string }> = [];
       const messages: Array<{ productId: string; code: string; minimum?: number }> = [];
       let subtotal = 0;
       /** Net per product tax class, so VAT resolves the way `placeOrder` resolves it. */
@@ -1037,14 +1041,16 @@ export async function registerOrderRoutes(
           product.type,
           (taxableByProductType.get(product.type) ?? 0) + Number(unitPrice) * it.quantity,
         );
-        lines.push({
+        const priced: (typeof lines)[number] = {
           productId: it.productId,
           variantId: it.variantId ?? null,
           quantity: it.quantity,
           unitPrice,
           currency: entry.currency,
           lineTotal: Math.round(Number(unitPrice) * it.quantity * 100) / 100,
-        });
+        };
+        lines.push(priced);
+        pricedLines.push({ line: priced, productType: product.type });
       }
 
       // VAT from the same authority `placeOrder` uses, per product tax class —
@@ -1056,13 +1062,17 @@ export async function registerOrderRoutes(
       const vatStatus = organization?.vatStatus ?? 'vat_payer';
       const taxCountry = organization?.registeredAddress?.country ?? null;
       let taxTotal = 0;
+      const rateByProductType = new Map<string, number>();
       for (const [productType, taxable] of taxableByProductType) {
         const rate =
           vatStatus === 'vat_payer'
             ? await deps.resolveTaxRate({ country: taxCountry, productType, vatStatus })
             : 0;
+        rateByProductType.set(productType, rate);
         taxTotal += taxable * rate;
       }
+      // Feature 159 (FR-060) — the create screen sums a group's VAT from these.
+      for (const { line, productType } of pricedLines) line.taxRate = rateByProductType.get(productType) ?? 0;
       taxTotal = Math.round(taxTotal * 100) / 100;
       const deliveryTotal = deliveryMethod ? Number(deliveryMethod.cost) : 0;
       const paymentSurcharge = paymentMethod ? Number(paymentMethod.additionalPrice ?? '0') : 0;

@@ -556,3 +556,53 @@ Smallest deviations taken where the plan met the code; later phases build on the
   fills `colSpan` placeholder cells in place, so they read as empty there.
 - **N-17 — The sample keeps five lines.** Two groups (three lines and one) and one ungrouped line, so 153's
   sample assertions (five priced lines, two discounted, one packed, one with a note) hold unchanged.
+
+## Implementation notes (orders, T054–T067, 2026-10-20)
+
+- **N-18 — Exact matches are claimed before any fallback.** `carryQuoteGrouping`
+  (`OR/src/backend/domain/quote-line-groups.ts`) runs the contract's two matching rules as two passes
+  over the basket — every order line's product + variant + agreed-price match first, then product +
+  variant for the rest — rather than both rules per line. Per line, an earlier line whose price moved
+  could take, by fallback, the quote line a later line matches exactly, and both would land in the wrong
+  groups. Same result whenever per-line matching was right. Ungrouped quote lines rank by the quote's
+  display order; unmatched lines follow in basket order. A record set carrying neither `group` nor
+  `position` (an old port stub) yields the basket layout.
+- **N-19 — The admin preview names each line's tax rate.** FR-060 asks for VAT and gross per group on
+  the create screen, and `adminOrderPreviewLineSchema` carried only a net `lineTotal`. It gains an
+  optional `taxRate` (`CT/orders.ts`, the preview route resolves it per product tax class from the
+  authority `summary.taxTotal` uses); the screen sums a group's VAT as Σ net × rate. Additive; a
+  separate changeset (`.changeset/159-contracts-order-preview-tax-rate.md`).
+- **N-20 — `group_conflict` shape and language.** The 422 carries `details: [{ path, code:
+  'group_conflict', productId, issue }]` — `issue` because `HttpError`'s array details are
+  `{ path, issue }`. Its message names the product (`OrderService.productDisplayNames`, the request's
+  language) but stays English: the envelope never translates a `VALIDATION_FAILED` message. The admin
+  screen therefore shows its own translated sentence on the line (`orders` bundle
+  `lineGroups.conflict`) beside the server's message in the page alert.
+- **N-21 — Where the grouping is audited.** `stateAfter.groups` is added to the existing
+  `order.place_on_behalf` entry, which `placeOrder` writes only for an impersonated placement — the
+  admin creation and an administrator checking out on a buyer's behalf. A buyer's own checkout of a
+  grouped quote stays unaudited, as R-22 says.
+- **N-22 — Placement writes groups before lines.** `order_items.group_id` references
+  `order_item_groups` with no ORM relation, so the groups are created and flushed before the order's
+  lines are created (the lines are persisted on `create`). The layout is keyed by basket index.
+- **N-23 — Admin order screen keeps its table.** Like N-5, `OrderDetail` shows the groups as row groups
+  (`<tbody aria-label>`, a `<th scope="colgroup">` heading, a summary row) inside its existing items
+  table, so the columns and the totals footer stay. The ungrouped heading is *Other items* (spec US6),
+  the editor's section on the create screen is *Ungrouped* (as on quotes). A placed order's summary
+  takes gross as the sum of the stored `lineTotal`s (gross) and VAT as gross − net, so it adds up the
+  rows above it; the create screen, which has no stored gross, computes VAT from the rates (N-19). The
+  same rule is the storefront's `orderSectionTotals`.
+- **N-24 — Create screen details.** Lines are keyed by product (the screen offers a product once), so
+  a UI-built request never conflicts; the 422 mapping exists for the server's answer. The preview
+  request is keyed on product and quantity only, so moving a line between groups does not re-price. A
+  group's *Add product* opens the browser for that group, as on the quote create screen. Every group
+  must be named before *Create* enables.
+- **N-25 — Storefront.** The order detail's rows moved into `SF/components/orders/OrderItemRows.tsx`
+  (so the test renders the page's real markup); `GroupedLineRows` gained `orderSectionTotals` and an
+  optional `moneyLocale` — the order page formats money in the page locale, the quote page in the
+  currency's own, and each summary follows its page.
+- **N-26 — T056 green on arrival.** `listItems` already answered `group` and `position` (N-6); the
+  read-port test was added and passed without a red phase.
+
+**Checkpoint**: quickstart §4–§6 are covered by `place-order-quote-groups.test.ts`,
+`admin-create-groups.test.ts` and the admin/storefront tests above; not walked by hand (T074).

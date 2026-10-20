@@ -23,6 +23,7 @@ import { StorefrontApiError } from '../../../../lib/api/client';
 import { formatMoney } from '../../../../lib/i18n/money';
 import { tForLocale } from '../../../../lib/i18n/messages';
 import { resolvePaymentReturnNotice } from '../../../../lib/orders/payment-return-notice';
+import { OrderItemRows } from '../../../../components/orders/OrderItemRows';
 import { PurchaseTracker } from '../../../../components/analytics/EcommerceTrackers';
 import { purchaseTrackingPayload } from '../../../../lib/analytics/purchase-eligibility';
 import type { Metadata } from 'next';
@@ -260,24 +261,7 @@ export default async function OrderConfirmationPage({
           </tr>
         </thead>
         <tbody>
-          {order.items.map((it) => (
-            <tr key={it.id}>
-              <td>
-                <Link href={`/p/${it.productId}`}>{it.productSnapshot.name}</Link>
-                <br />
-                <small className="text-subtle">
-                  SKU: {it.variantSnapshot?.sku ?? it.productSnapshot.sku}
-                </small>
-              </td>
-              <td>{it.quantity}</td>
-              <td>
-                {formatMoney(it.unitPrice, order.currency, locale)}
-              </td>
-              <td className="text-right">
-                {formatMoney(it.lineTotal, order.currency, locale)}
-              </td>
-            </tr>
-          ))}
+          <OrderItemRows order={order} locale={locale} />
         </tbody>
         <tfoot>
           <tr>

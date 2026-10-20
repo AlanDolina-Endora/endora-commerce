@@ -144,30 +144,30 @@ unchanged.
 
 ## Phase 6: User Story 4 — The order placed from a quote keeps its groups (P2)
 
-- [ ] T054 [P] [US4] Write `OR/src/backend/domain/quote-line-groups.test.ts` — red, `carryQuoteGrouping`: exact match by product+variant+price, fallback by product+variant, duplicate products in two groups each keep their own, unmatched lines ungrouped after the matched ones in basket order, groups receiving nothing dropped, positions renumbered, records without `group`/`position` → no grouping; and `adminLayout` for T060
-- [ ] T055 [US4] Implement `OR/src/backend/domain/quote-line-groups.ts` — T054 green
-- [ ] T056 [P] [US4] Extend `CT`-level and `QR` read-port tests (`BT/contract/quote_requests/line-groups.test.ts` § *read port*) — red: `listItems` answers `position` and `group` in display order (FR-087)
-- [ ] T057 [US4] Implement in `QR/src/backend/services/quote-request-read-port.ts` — T056 green
-- [ ] T058 [P] [US4] Write `BT/integration/orders/place-order-quote-groups.test.ts` — red: unchanged basket from a grouped accepted quote → order groups/lines identical (SC-003); an added product → *Other items*; a source refused (other org, not approved, already ordered) → no groups, placed; `quote_requests` switched off → no groups, placed (FR-052, FR-083); a later quote change leaves the order alone; the quote port is called once per placement (spy)
-- [ ] T059 [US4] Implement in `OR/src/backend/services/order-service.ts`: `#assessQuoteRequestSource` returns the lines it read; after `OrderItem` creation write `order_item_groups` and set `groupId`/`position` (basket order for every other order) inside the transaction — T058 green; `BT/integration/orders/place-order-from-quote-request.test.ts` and `quote-request-source-review.test.ts` still green
+- [X] T054 [P] [US4] Write `OR/src/backend/domain/quote-line-groups.test.ts` — red, `carryQuoteGrouping`: exact match by product+variant+price, fallback by product+variant, duplicate products in two groups each keep their own, unmatched lines ungrouped after the matched ones in basket order, groups receiving nothing dropped, positions renumbered, records without `group`/`position` → no grouping; and `adminLayout` for T060
+- [X] T055 [US4] Implement `OR/src/backend/domain/quote-line-groups.ts` — T054 green
+- [X] T056 [P] [US4] Extend `CT`-level and `QR` read-port tests (`BT/contract/quote_requests/line-groups.test.ts` § *read port*) — red: `listItems` answers `position` and `group` in display order (FR-087)
+- [X] T057 [US4] Implement in `QR/src/backend/services/quote-request-read-port.ts` — T056 green
+- [X] T058 [P] [US4] Write `BT/integration/orders/place-order-quote-groups.test.ts` — red: unchanged basket from a grouped accepted quote → order groups/lines identical (SC-003); an added product → *Other items*; a source refused (other org, not approved, already ordered) → no groups, placed; `quote_requests` switched off → no groups, placed (FR-052, FR-083); a later quote change leaves the order alone; the quote port is called once per placement (spy)
+- [X] T059 [US4] Implement in `OR/src/backend/services/order-service.ts`: `#assessQuoteRequestSource` returns the lines it read; after `OrderItem` creation write `order_item_groups` and set `groupId`/`position` (basket order for every other order) inside the transaction — T058 green; `BT/integration/orders/place-order-from-quote-request.test.ts` and `quote-request-source-review.test.ts` still green
 
 ---
 
 ## Phase 7: User Story 5 — Group an order created in the Admin UI (P2)
 
-- [ ] T060 [P] [US5] Write `BT/contract/orders/admin-create-groups.test.ts` — red: create with groups → reply `itemGroups` and lines per the request; empty group not created; same product+variant in two groups → 422 `group_conflict` before the basket is touched (the customer's basket unchanged); a refused creation (minimum, method gate) writes no group; `order.place_on_behalf` audit carries `groups`; out-of-scope customer → refused as today; totals equal the ungrouped creation
-- [ ] T061 [US5] Implement in `OR/src/backend/services/order-creation-admin-service.ts` (validation, `lineGrouping`) and `order-service.ts` (`options.lineGrouping` → `adminLayout`), `OR/src/backend/routes.ts` body schema — T060 green; `BT/contract/orders/admin-create*.test.ts` still green
-- [ ] T062 [P] [US5] Write `AT/modules/orders/OrderCreatePage.groups.test.tsx` (`<StrictMode>`, `axe-core`) — red: editor around the items table; summaries from the preview lines; payload `groups` + `groupKey`; 422 `group_conflict` shown on the line; no group → page unchanged (existing `OrderCreatePage*.test.tsx` still green)
-- [ ] T063 [US5] Implement in `OR/src/admin/pages/OrderCreatePage.tsx` + `OR/i18n/{en,pl}.json` (`contracts/ui.md` §4) — T062 green
+- [X] T060 [P] [US5] Write `BT/contract/orders/admin-create-groups.test.ts` — red: create with groups → reply `itemGroups` and lines per the request; empty group not created; same product+variant in two groups → 422 `group_conflict` before the basket is touched (the customer's basket unchanged); a refused creation (minimum, method gate) writes no group; `order.place_on_behalf` audit carries `groups`; out-of-scope customer → refused as today; totals equal the ungrouped creation
+- [X] T061 [US5] Implement in `OR/src/backend/services/order-creation-admin-service.ts` (validation, `lineGrouping`) and `order-service.ts` (`options.lineGrouping` → `adminLayout`), `OR/src/backend/routes.ts` body schema — T060 green; `BT/contract/orders/admin-create*.test.ts` still green
+- [X] T062 [P] [US5] Write `AT/modules/orders/OrderCreatePage.groups.test.tsx` (`<StrictMode>`, `axe-core`) — red: editor around the items table; summaries from the preview lines; payload `groups` + `groupKey`; 422 `group_conflict` shown on the line; no group → page unchanged (existing `OrderCreatePage*.test.tsx` still green)
+- [X] T063 [US5] Implement in `OR/src/admin/pages/OrderCreatePage.tsx` + `OR/i18n/{en,pl}.json` (`contracts/ui.md` §4) — T062 green
 
 ---
 
 ## Phase 8: User Story 6 — Order groups shown read-only (P2)
 
-- [ ] T064 [P] [US6] Write `AT/modules/orders/OrderDetail.groups.test.tsx` — red: grouped read-only with summaries; no control changes grouping; legacy order unchanged
-- [ ] T065 [US6] Implement in `OR/src/admin/pages/OrderDetail.tsx` — T064 green
-- [ ] T066 [P] [US6] Write `SF/test/account/order-groups.test.tsx` — red: storefront order detail grouped with summaries from `unitPrice`/`taxRate`/`lineTotal`; ungrouped order unchanged
-- [ ] T067 [US6] Implement in `SF/app/(account)/orders/[id]/page.tsx`, `SF/lib/api/orders.ts` — T066 green
+- [X] T064 [P] [US6] Write `AT/modules/orders/OrderDetail.groups.test.tsx` — red: grouped read-only with summaries; no control changes grouping; legacy order unchanged
+- [X] T065 [US6] Implement in `OR/src/admin/pages/OrderDetail.tsx` — T064 green
+- [X] T066 [P] [US6] Write `SF/test/account/order-groups.test.tsx` — red: storefront order detail grouped with summaries from `unitPrice`/`taxRate`/`lineTotal`; ungrouped order unchanged
+- [X] T067 [US6] Implement in `SF/app/(account)/orders/[id]/page.tsx`, `SF/lib/api/orders.ts` — T066 green
 
 ---
 

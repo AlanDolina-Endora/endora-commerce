@@ -484,4 +484,32 @@ describe('159 — quote request line groups [contract]', () => {
       expect((await adminRead(quote.id)).itemGroups.map((group) => group.name)).toEqual(['Secret floor']);
     });
   });
+
+  describe('read port (T056, FR-087)', () => {
+    it('listItems answers every line with its group and its position, in display order, after a grouped save', async () => {
+      const quote = await raise();
+      const saved = await patch(quote, {
+        groups: [
+          { key: 'a', name: 'Hall A' },
+          { key: 'b', name: 'Hall B' },
+          { key: 'e', name: 'Empty' },
+        ],
+        items: [line(SEED_PRODUCT_102_ID, 'b'), line(SEED_PRODUCT_103_ID, null), line(SEED_PRODUCT_101_ID, 'b')],
+      });
+      expect(saved.statusCode, saved.body).toBe(200);
+      const reply = (saved.json() as { data: Reply }).data;
+      const hallB = reply.itemGroups.find((group) => group.name === 'Hall B')!;
+
+      const records = await readPort().listItems(quote.id);
+      expect(records.map((record) => [record.productId, record.group?.name ?? null, record.position])).toEqual([
+        [SEED_PRODUCT_102_ID, 'Hall B', 0],
+        [SEED_PRODUCT_101_ID, 'Hall B', 1],
+        [SEED_PRODUCT_103_ID, null, 0],
+      ]);
+      // The group as the reply names it: identity, name and the quote's position.
+      expect(records[0]!.group).toEqual({ id: hallB.id, name: 'Hall B', position: 1 });
+      // The read model is additive: every pre-159 key still answers as before.
+      expect(records[0]).toMatchObject({ quoteRequestId: quote.id, quantity: 2, agreedUnitPrice: expect.any(String) });
+    });
+  });
 });

@@ -22,7 +22,8 @@ import {
   paymentStatusLabelKey,
   paymentStatusOptions,
 } from '../lib/paymentStatus.js';
-import type { IssueInvoiceEmailOutcome, OrderPendingEffect } from '@endora-commerce/contracts';
+import { arrangeLineGroups, type IssueInvoiceEmailOutcome, type LineGroup, type OrderPendingEffect } from '@endora-commerce/contracts';
+import { OrderSectionSummary, orderSectionTotals, useOrderSectionSummaryText } from '../line-groups.js';
 
 type OrderTab = 'overview' | 'payment' | 'delivery' | 'comments';
 
@@ -35,6 +36,9 @@ interface OrderItem {
   unitPrice: number;
   taxRate: number;
   lineTotal: number;
+  /** Feature 159 — the line's group (`itemGroups[].id`), `null` = ungrouped. */
+  groupId?: string | null;
+  position?: number;
 }
 
 interface OrderAddress {
@@ -76,6 +80,9 @@ interface OrderDetail {
   billingAddress: OrderAddress;
   deliveryMethod: { code: string; name: Record<string, string>; cost: number };
   paymentMethod: { code: string; name: Record<string, string>; kind: string };
+  /** Feature 159 — the order's groups, by position; absent from an older server. */
+  itemGroups?: LineGroup[];
+  /** In display order. */
   items: OrderItem[];
   subtotal: number;
   taxTotal: number;
@@ -150,6 +157,8 @@ interface OrderInvoiceRow {
 
 export function OrderDetail(): ReactNode {
   const t = useTranslation('core');
+  const tOrders = useTranslation('orders');
+  const sectionSummaryText = useOrderSectionSummaryText();
   const { id = '' } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const returnTo = readReturnTo(searchParams);
@@ -642,32 +651,60 @@ export function OrderDetail(): ReactNode {
                       <TableHead className="text-right">{t('orderDetail.columns.line')}</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody>
-                    {order.items.map((it) => (
-                      <TableRow key={it.id}>
-                        <TableCell>
-                          <Link
-                            to={`/catalog/products/${it.productId}`}
-                            className="font-medium text-primary hover:underline"
-                          >
-                            {it.productSnapshot.name}
-                          </Link>
-                          <div className="font-mono text-xs text-muted-foreground">
-                            {it.variantSnapshot ? `${it.variantSnapshot.label} · ` : ''}
-                            {it.productSnapshot.sku}
-                          </div>
-                        </TableCell>
-                        <TableCell>{it.quantity}</TableCell>
-                        <TableCell className="tabular-nums">
-                          {formatMoney(it.unitPrice, order.currency)}
-                        </TableCell>
-                        <TableCell>{(it.taxRate * 100).toFixed(1)}%</TableCell>
-                        <TableCell className="tabular-nums text-right">
-                          {formatMoney(it.lineTotal, order.currency)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
+                  {/* Feature 159 — with groups, one row group per section (FR-032); read-only (FR-063). */}
+                  {orderLineSections(order, tOrders('lineGroups.otherItems')).map((section) => (
+                    <TableBody key={section.key} aria-label={section.heading ?? undefined}>
+                      {section.heading !== null ? (
+                        <TableRow className="bg-muted/40 hover:bg-muted/40">
+                          <TableHead colSpan={5} scope="colgroup" className="font-semibold text-foreground">
+                            {section.heading}
+                          </TableHead>
+                        </TableRow>
+                      ) : null}
+                      {section.items.map((it) => (
+                        <TableRow key={it.id}>
+                          <TableCell>
+                            <Link
+                              to={`/catalog/products/${it.productId}`}
+                              className="font-medium text-primary hover:underline"
+                            >
+                              {it.productSnapshot.name}
+                            </Link>
+                            <div className="font-mono text-xs text-muted-foreground">
+                              {it.variantSnapshot ? `${it.variantSnapshot.label} · ` : ''}
+                              {it.productSnapshot.sku}
+                            </div>
+                          </TableCell>
+                          <TableCell>{it.quantity}</TableCell>
+                          <TableCell className="tabular-nums">
+                            {formatMoney(it.unitPrice, order.currency)}
+                          </TableCell>
+                          <TableCell>{(it.taxRate * 100).toFixed(1)}%</TableCell>
+                          <TableCell className="tabular-nums text-right">
+                            {formatMoney(it.lineTotal, order.currency)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {section.heading !== null ? (
+                        <TableRow>
+                          <TableCell colSpan={5}>
+                            <OrderSectionSummary
+                              text={sectionSummaryText(
+                                orderSectionTotals(
+                                  section.items.map((it) => ({
+                                    net: it.unitPrice * it.quantity,
+                                    taxRate: it.taxRate,
+                                    gross: it.lineTotal,
+                                  })),
+                                ),
+                                order.currency,
+                              )}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                    </TableBody>
+                  ))}
                   <tfoot className="border-t [&_td]:p-2 [&_th]:p-2">
                     <tr>
                       <th colSpan={4} className="text-right font-medium text-muted-foreground">
@@ -837,3 +874,24 @@ function TabBtn(props: {
  * own siblings and tests use.
  */
 export default OrderDetail;
+
+/**
+ * Feature 159 — the items table's sections: with no group holding a line, one
+ * section with no heading (the table as it was, FR-033); otherwise each group by
+ * name, then the ungrouped lines under `otherItems`. Empty groups are never
+ * shown read-only, and an order stores none (D2).
+ */
+function orderLineSections(
+  order: OrderDetail,
+  otherItems: string,
+): Array<{ key: string; heading: string | null; items: OrderItem[] }> {
+  const sections = arrangeLineGroups(order.itemGroups ?? [], order.items);
+  if (!sections.some((section) => section.kind === 'group')) {
+    return [{ key: 'all', heading: null, items: order.items }];
+  }
+  return sections.map((section) => ({
+    key: section.group?.id ?? 'ungrouped',
+    heading: section.group?.name ?? otherItems,
+    items: [...section.lines],
+  }));
+}

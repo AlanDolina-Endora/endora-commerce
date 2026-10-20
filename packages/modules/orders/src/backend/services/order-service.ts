@@ -36,6 +36,7 @@ import { NoSystemDefaultChannel } from '@endora-commerce/platform/kernel';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
 import { Order } from '../entities/order.entity.js';
 import { OrderItem } from '../entities/order-item.entity.js';
+import { OrderItemGroup } from '../entities/order-item-group.entity.js';
 import { OrderAppliedPromotion } from '../entities/order-applied-promotion.entity.js';
 /**
  * The two em-carrying interfaces their owners write (D-94.5).
@@ -112,6 +113,13 @@ import { releaseOrderAllocations } from './order-allocation-release.js';
 import type { OrderTransitionEffectService } from './order-transition-effect-service.js';
 import { effectsOwedByPaymentStatusChange } from '../domain/transition-effects.js';
 import { judgeQuoteRequestSource } from '../domain/quote-request-source.js';
+import {
+  adminLayout,
+  basketLayout,
+  carryQuoteGrouping,
+  layoutShape,
+  type OrderLineGroupingInput,
+} from '../domain/quote-line-groups.js';
 import { quoteSourceHonoursExemptions } from '../domain/quote-source-exemption.js';
 import {
   assertBasketMeetsMinimums,
@@ -157,6 +165,7 @@ import type {
   PaymentMethodReadPort,
   PaymentMethodRecord,
   OrderPreviewTotalResponse,
+  QuoteRequestLineRecord,
   QuoteRequestReadPort,
   QuoteRequestRecord,
   ShippingAdapterRegistryPort,
@@ -365,6 +374,12 @@ interface QuoteRequestSourceAssessment {
   sourceQuoteRequestId: string | null;
   quoteRequest: QuoteRequestRecord | null;
   honoursExemptions: boolean;
+  /**
+   * Feature 159 (research R-16) — the request's lines as the judgement read
+   * them, in the quote's display order; the carry-over of its grouping reads
+   * these rather than asking the port a second time. Empty when nothing was read.
+   */
+  quoteRequestLines: readonly QuoteRequestLineRecord[];
 }
 
 /** A basket with no claim, or a claim nothing can vouch for: no source, no exemption. */
@@ -372,6 +387,7 @@ const NO_QUOTE_REQUEST_SOURCE: QuoteRequestSourceAssessment = Object.freeze({
   sourceQuoteRequestId: null,
   quoteRequest: null,
   honoursExemptions: false,
+  quoteRequestLines: [],
 });
 
 export class OrderService {
@@ -1484,16 +1500,17 @@ export class OrderService {
     const { organizationId, claimedQuoteRequestId } = input;
     const alreadyOrdered = (await input.countOrdersNamingIt()) > 0;
     const quoteRequest = await quoteRequests.findById(claimedQuoteRequestId);
+    const quoteRequestLines = quoteRequest ? await quoteRequests.listItems(quoteRequest.id) : [];
     const judged = judgeQuoteRequestSource({
       orderOrganizationId: organizationId,
       quoteRequest,
       alreadyOrdered,
-      quoteRequestLines: quoteRequest ? await quoteRequests.listItems(quoteRequest.id) : [],
+      quoteRequestLines,
       basketLines: input.basketLines,
     });
     const honoursExemptions = quoteSourceHonoursExemptions(judged, quoteRequest, new Date());
     if (judged.accepted) {
-      return { sourceQuoteRequestId: claimedQuoteRequestId, quoteRequest, honoursExemptions };
+      return { sourceQuoteRequestId: claimedQuoteRequestId, quoteRequest, honoursExemptions, quoteRequestLines };
     }
     if (input.logRefusal) {
       this.log?.warn(
@@ -1501,7 +1518,8 @@ export class OrderService {
         '[orders] the basket names a quote request this order may not carry; placing it without a source',
       );
     }
-    return { sourceQuoteRequestId: null, quoteRequest, honoursExemptions };
+    // A refused source carries nothing of the request — its grouping included (FR-052).
+    return { sourceQuoteRequestId: null, quoteRequest, honoursExemptions, quoteRequestLines: [] };
   }
 
   async placeOrder(
@@ -1511,7 +1529,13 @@ export class OrderService {
     // create path hands one on. It is echoed on `order.created.v1` and read
     // nowhere. `language` (feature 155) is the language the response is
     // answered in, which a minimum refusal names the product in.
-    options?: { origin?: OriginReference; language?: string | undefined },
+    // `lineGrouping` (feature 159, research R-17) is the grouping an
+    // administrator laid the order out in — likewise this module's own.
+    options?: {
+      origin?: OriginReference;
+      language?: string | undefined;
+      lineGrouping?: OrderLineGroupingInput | undefined;
+    },
   ): Promise<Order> {
     const em = this.emFactory();
     // What this placement announces, emitted once the transaction below has
@@ -2145,8 +2169,37 @@ export class OrderService {
         });
       }
 
+      // Feature 159 (contracts/orders-api.md §2; I-O1 … I-O3) — the layout of
+      // the order's lines, decided once: an administrator's grouping, else the
+      // grouping of the quote this order is vouched to be (from the lines the
+      // judgement above already read — the port is not asked again), else the
+      // basket's own order. The groups are written first and flushed: a line
+      // references its group by a plain column and the unit of work orders
+      // inserts by relations, which there are none of.
+      const placedLines = items.map((item, index) => ({
+        key: String(index),
+        productId: item.productId,
+        variantId: item.variantId ?? null,
+        unitPrice: item.unitPrice,
+      }));
+      const lineLayout = options?.lineGrouping
+        ? adminLayout(placedLines, options.lineGrouping)
+        : quoteSource.sourceQuoteRequestId !== null
+          ? carryQuoteGrouping(quoteSource.quoteRequestLines, placedLines)
+          : basketLayout(placedLines);
+      const orderGroupIdBySource = new Map<string, string>();
+      if (lineLayout.groups.length > 0) {
+        for (const group of lineLayout.groups) {
+          const row = tx.create(OrderItemGroup, { orderId: order.id, name: group.name, position: group.position });
+          orderGroupIdBySource.set(group.sourceId, row.id);
+        }
+        await tx.flush();
+      }
+
       const orderItems = items.map((item, index) => {
         const product = productById.get(item.productId);
+        const laidOut = lineLayout.lines.get(String(index));
+        const groupId = laidOut?.groupSourceId ? (orderGroupIdBySource.get(laidOut.groupSourceId) ?? null) : null;
         // Feature 043 — when the line was ordered as a packaging unit, append
         // the unit name to the snapshot name so every order-derived document
         // shows it, and keep a structured snapshot for programmatic use.
@@ -2178,9 +2231,9 @@ export class OrderService {
           // updated. Always an explicit boolean (fail-closed): `null` is kept
           // for lines placed before the feature.
           returnableAtPurchase: returnableAtPurchase(product),
-          // Feature 159 (I-O3) — every new order's lines carry the basket's
-          // order; a grouping, when the order has one, is applied below.
-          position: index,
+          // Feature 159 (I-O3) — the line's group and its place in its section.
+          groupId,
+          position: laidOut?.position ?? index,
           taxRate: rateForProductId(item.productId).toFixed(4),
           lineTotal: (
             Number(item.unitPrice) *
@@ -2473,7 +2526,13 @@ export class OrderService {
           objectType: 'order',
           objectId: order.id,
           stateBefore: null,
-          stateAfter: { total: total.toFixed(2), currency, status: order.status },
+          stateAfter: {
+            total: total.toFixed(2),
+            currency,
+            status: order.status,
+            // Feature 159 (FR-081, research R-22) — the grouping's shape, when the order has one.
+            ...(lineLayout.groups.length > 0 ? { groups: layoutShape(lineLayout) } : {}),
+          },
         });
       }
 
@@ -2671,6 +2730,21 @@ export class OrderService {
       }
     }
     return order;
+  }
+
+  /**
+   * Products' display names in `language` (the id for a record that is gone) —
+   * for a refusal that has to name them before any basket is read: the admin
+   * creation's `group_conflict` (feature 159, FR-062).
+   */
+  async productDisplayNames(
+    productIds: readonly string[],
+    language: string | undefined,
+  ): Promise<Map<string, string>> {
+    const unique = Array.from(new Set(productIds));
+    const products = unique.length > 0 ? await this.neighbours.catalogProductRead.findByIds(unique) : [];
+    const byId = new Map(products.map((product) => [product.id, product]));
+    return new Map(unique.map((productId) => [productId, this.#productName(byId, productId, language)]));
   }
 
   /**
