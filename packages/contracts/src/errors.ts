@@ -680,6 +680,13 @@ export const ERROR_CODES = {
   DOCUMENT_TEMPLATE_NOT_SELECTABLE: 'DOCUMENT_TEMPLATE_NOT_SELECTABLE',
   /** Producing the document failed. */
   DOCUMENT_RENDER_FAILED: 'DOCUMENT_RENDER_FAILED',
+
+  // Admin feedback (issue #379) — declared in the `admin_feedback` module's
+  // manifest; the same spellings as `ADMIN_FEEDBACK_ERROR_CODES`.
+  /** The relay address is empty or not an http(s) URL: sending is switched off. */
+  ADMIN_FEEDBACK_NOT_CONFIGURED: 'ADMIN_FEEDBACK_NOT_CONFIGURED',
+  /** The relay could not be reached in time, refused the message, or redirected. */
+  ADMIN_FEEDBACK_DELIVERY_FAILED: 'ADMIN_FEEDBACK_DELIVERY_FAILED',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

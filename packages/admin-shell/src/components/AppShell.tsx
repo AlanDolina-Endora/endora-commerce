@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useFocusTrap } from './hooks/useFocusTrap.js';
 import { BrandLogo } from './BrandLogo.js';
 import { VersionBadge } from './VersionBadge.js';
+import { AdminFeedback } from './AdminFeedback.js';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   BookOpen,
@@ -1070,6 +1071,7 @@ export function AppShell(): ReactNode {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => loadCollapsed());
   const [railMode, setRailMode] = useState<boolean>(() => loadRailMode());
   const platformVersion = usePlatformVersion();
+  const feedbackOffered = isModulePresent('admin_feedback');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [navDrawerOpen, setNavDrawerOpen] = useState(false);
   const sidebarRef = useRef<HTMLElement | null>(null);
@@ -1198,9 +1200,18 @@ export function AppShell(): ReactNode {
             search, divided from both. It is the link's sibling, not its child:
             the link's `aria-label` replaces its content as the accessible
             name, so a version inside it would be announced by nothing. */}
-        {platformVersion !== null ? (
+        {/* *Send feedback* (#379) sits beside the release, and is there while
+            the module that owns its endpoint is. Collapsed, the release is
+            hidden and the link is an icon of its own. */}
+        {platformVersion !== null || feedbackOffered ? (
           <div className="b2b-sidebar__version">
-            <VersionBadge version={platformVersion} />
+            {platformVersion !== null ? <VersionBadge version={platformVersion} /> : null}
+            {feedbackOffered && !(railMode && !isMobile) ? <AdminFeedback rail={false} /> : null}
+          </div>
+        ) : null}
+        {feedbackOffered && railMode && !isMobile ? (
+          <div className="b2b-sidebar__feedback-rail-row">
+            <AdminFeedback rail />
           </div>
         ) : null}
 

@@ -246,6 +246,14 @@ const modules = [
   { type: 'doc', id: 'module-reference/email', label: 'email', key: 'email' },
   {
     type: 'category',
+    label: 'Feedback', key: 'admin_feedback',
+    link: { type: 'doc', id: 'modules/admin-feedback' },
+    items: [
+      'module-reference/admin-feedback',
+    ],
+  },
+  {
+    type: 'category',
     label: 'Google Analytics', key: 'google_analytics',
     link: { type: 'doc', id: 'modules/google-analytics' },
     items: [

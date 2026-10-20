@@ -748,6 +748,19 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'customer-visible definition earns over values a deleted field left under its key. The noun ' +
       'is the definition, raised from `custom_fields`\' admin routes (D-121 T1).',
   },
+  ADMIN_FEEDBACK_NOT_CONFIGURED: {
+    to: 'admin_feedback',
+    reason:
+      'Minted with the `admin_feedback` module (issue #379), which did not exist when the prefix ' +
+      'chain was deleted: the refusal to send feedback while the relay address is empty or not an ' +
+      'http(s) URL. The noun is the feedback, the module\'s one route.',
+  },
+  ADMIN_FEEDBACK_DELIVERY_FAILED: {
+    to: 'admin_feedback',
+    reason:
+      'Minted with the `admin_feedback` module (issue #379): the relay could not be reached in time, ' +
+      'refused the message or redirected. The noun is the feedback, the module\'s one route.',
+  },
 };
 
 /**

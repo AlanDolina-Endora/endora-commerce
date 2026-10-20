@@ -22,6 +22,7 @@ platformy, a nie tego, co akurat zostało opisane.
 | [Cykl życia modułu](./lifecycle.md) | Instalacja, odinstalowanie, włączanie, wyłączanie i status każdego modułu backendu z poziomu CLI, walidacja zależności i uzgadnianie stanu przy pierwszym starcie | core |
 | [addresses](./addresses.md) | Adresy pocztowe klientów, z najwyżej jednym adresem domyślnym każdego rodzaju | @endora-commerce/mod-addresses |
 | [Akcje palety poleceń w panelu administracyjnym](./admin-actions.md) | Rejestr akcji dodawanych przez moduły do palety poleceń w panelu administracyjnym (⌘K, grupa Actions) | @endora-commerce/mod-admin-actions |
+| [Opinie](./admin-feedback.md) | Administratorzy wysyłają z panelu opinie twórcom Endora Commerce, przekazywane jako jeden e-mail i nigdzie nie zapisywane | @endora-commerce/mod-admin-feedback |
 | `admin_notifications` | _brak strony_ | @endora-commerce/mod-admin-notifications |
 | [admin_roles](./admin_roles.md) | Role administratorów i uprawnienia poszczególnych modułów | @endora-commerce/mod-admin-roles |
 | [admin_search](./admin-search.md) | Wyszukiwanie globalne w panelu administracyjnym — znajdowanie organizacji, klientów, zamówień, zapytań ofertowych, szans sprzedażowych, produktów i kategorii z palety poleceń, z konfigurowalnymi polami wyszukiwania | @endora-commerce/mod-admin-search |
