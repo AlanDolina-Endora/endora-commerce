@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   CalendarClock,
@@ -14,7 +14,7 @@ import {
   Send,
   XCircle,
 } from 'lucide-react';
-import { apiClient, ApiError, cn, formatDateTime, useModulePresence } from '@endora-commerce/admin-kit/lib';
+import { apiClient, ApiError, cn, formatDateTime, readReturnTo, useModulePresence } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Badge, Button, Card, CardContent, Input, Label, PageHeader, Section, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea } from '@endora-commerce/admin-kit/ui';
 import { CustomFieldValuesPanel, ProductPicker } from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
@@ -177,6 +177,8 @@ export function RfqDetail(): ReactNode {
   const t = useTranslation('core');
   const format = useRfqNumberFormat();
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const returnTo = readReturnTo(searchParams);
   const [rfq, setRfq] = useState<AdminRfqDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -414,7 +416,13 @@ export function RfqDetail(): ReactNode {
   return (
     <>
       <PageHeader
-        back={{ label: t('rfq.list.title'), to: '/quote-requests' }}
+        back={
+          // Opened from another screen that named its own address: the way back leads
+          // there, and says only "Back".
+          returnTo
+            ? { label: t('common.action.back'), to: returnTo }
+            : { label: t('rfq.list.title'), to: '/quote-requests' }
+        }
         title={
           <>
             <button

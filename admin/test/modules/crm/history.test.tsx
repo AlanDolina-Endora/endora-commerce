@@ -17,6 +17,7 @@ import {
   detail,
   en,
   renderCrm,
+  returningHere,
 } from './crm-fixtures';
 
 /**
@@ -245,7 +246,7 @@ describe('the Change history tab', () => {
     expect(caused).toHaveTextContent(en('history.cause.order'));
     expect(within(caused).getByRole('link', { name: /ORD-1001/ })).toHaveAttribute(
       'href',
-      `/orders/${ORDER_ID}`,
+      returningHere(`/orders/${ORDER_ID}`),
     );
     // The identifier itself is never on screen.
     expect(caused).not.toHaveTextContent(ORDER_ID);
@@ -269,7 +270,7 @@ describe('the Change history tab', () => {
     const linked = item(panel, 3);
     expect(within(linked).getByRole('link', { name: en('history.document.open.order') })).toHaveAttribute(
       'href',
-      `/orders/${UNLINKED_ORDER_ID}`,
+      returningHere(`/orders/${UNLINKED_ORDER_ID}`),
     );
     expect(linked).not.toHaveTextContent(UNLINKED_ORDER_ID);
     expect(linked).not.toHaveTextContent('l1');
@@ -507,12 +508,31 @@ describe('the Change history tab, on what an entry carries', () => {
     const panel = await openHistory(READER);
     const changed = row(item(panel, 0), en('history.field.description'));
     expect(changed).toHaveTextContent('@Anna Nowak about');
-    expect(within(changed).getByRole('link', { name: /ORD-1001/ })).toHaveAttribute('href', `/orders/${ORDER_ID}`);
+    expect(within(changed).getByRole('link', { name: /ORD-1001/ })).toHaveAttribute(
+      'href',
+      returningHere(`/orders/${ORDER_ID}`),
+    );
     expect(changed).toHaveTextContent('@Piotr Zielony about');
     expect(within(changed).getByText(en('references.unavailable.product'))).toBeInTheDocument();
     expect(changed).not.toHaveTextContent('[[');
     expect(changed).not.toHaveTextContent(ADMIN_ID);
     expect(changed).not.toHaveTextContent(hidden);
+  });
+
+  it('shows a formatted description by its words, without the formatting markers (specs/158-crm-opportunity-inline-editing/)', async () => {
+    only(
+      entry({
+        id: 'audit-f',
+        before: { description: 'Plain' },
+        after: { description: '**Bold** and _soft_\n- one' },
+        references: [],
+      }),
+    );
+    const panel = await openHistory(READER);
+    const changed = row(item(panel, 0), en('history.field.description'));
+    expect(changed).toHaveTextContent('Bold and soft');
+    expect(changed).toHaveTextContent('- one');
+    expect(changed).not.toHaveTextContent('**');
   });
 
   it('cuts a long description without cutting a mention in two', async () => {

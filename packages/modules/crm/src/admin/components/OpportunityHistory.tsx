@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, History } from 'lucide-react';
-import type {
-  OpportunityDetail,
-  OpportunityHistoryEntry,
-  OpportunityWorkflowStatus,
+import {
+  opportunityRichTextToPlain,
+  type OpportunityDetail,
+  type OpportunityHistoryEntry,
+  type OpportunityWorkflowStatus,
 } from '@endora-commerce/contracts';
 import { formatDateTime, useAuth } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Button } from '@endora-commerce/admin-kit/ui';
@@ -31,6 +32,7 @@ import {
   useOpportunityFieldDefinitions,
 } from './OpportunityCustomFields.js';
 import { ReferenceText } from './ReferenceText.js';
+import { useReturnHere } from '../lib/return-here.js';
 
 const PAGE_SIZE = 50;
 /** A long text (a description, a note) is cut here; the whole of it is where it lives. */
@@ -134,6 +136,7 @@ export interface OpportunityHistoryProps {
  * not shown; the two are never confused.
  */
 export function OpportunityHistory(props: OpportunityHistoryProps): ReactNode {
+  const returnHere = useReturnHere();
   const { opportunity } = props;
   const t = useTranslation('crm');
   const tCore = useTranslation('core');
@@ -253,7 +256,7 @@ export function OpportunityHistory(props: OpportunityHistoryProps): ReactNode {
     const link = opportunity.links.find(
       (item) => item.documentKind === documentKind && item.documentId === id,
     );
-    const to = documentKind === 'order' ? `/orders/${id}` : `/quote-requests/${id}`;
+    const to = returnHere(documentKind === 'order' ? `/orders/${id}` : `/quote-requests/${id}`);
     return (
       <Link to={to} className="text-primary underline-offset-4 hover:underline">
         {link?.available && link.number
@@ -319,9 +322,14 @@ export function OpportunityHistory(props: OpportunityHistoryProps): ReactNode {
       case 'kind':
         return raw === 'message' ? t('history.kind.message') : t('history.kind.note');
       case 'description':
-        // Cut before it is cut into chips, so a token is never shown in half.
+        // Its words without their formatting, cut before they are cut into
+        // chips, so neither a marker nor a token is ever shown in half.
         return typeof raw === 'string' ? (
-          <ReferenceText text={clipReferenceText(raw, TEXT_LIMIT)} references={entry.references} />
+          <ReferenceText
+            inline
+            text={clipReferenceText(opportunityRichTextToPlain(raw), TEXT_LIMIT)}
+            references={entry.references}
+          />
         ) : (
           plain(raw)
         );

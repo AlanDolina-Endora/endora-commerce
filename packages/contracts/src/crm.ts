@@ -216,12 +216,29 @@ export function mentionedAdminUserIds(text: string | null | undefined): string[]
  * A person has a `label` — their name — and never a `url`: the screen of an
  * administrator is `admin_users`', behind a permission of its own.
  */
+/**
+ * What an available Order reference says beyond its number
+ * (`specs/158-crm-opportunity-inline-editing/`, FR-012): its status code — the
+ * screen names it from `orders`' statuses — its total, when it was placed and
+ * for whom (the billing company, else the billing recipient).
+ */
+export const OpportunityReferenceOrderSchema = z.object({
+  status: z.string(),
+  total: z.string(),
+  currency: z.string(),
+  placedAt: z.string(),
+  customerName: z.string().nullable(),
+});
+export type OpportunityReferenceOrder = z.infer<typeof OpportunityReferenceOrderSchema>;
+
 export const OpportunityReferenceSchema = z.object({
   type: opportunityReferenceTypeSchema,
   id: z.string().uuid(),
   available: z.boolean(),
   label: z.string().nullable(),
   url: z.string().nullable(),
+  /** Present on an available Order only. */
+  order: OpportunityReferenceOrderSchema.optional(),
 });
 export type OpportunityReference = z.infer<typeof OpportunityReferenceSchema>;
 

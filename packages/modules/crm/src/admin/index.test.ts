@@ -236,6 +236,8 @@ describe('crm admin copy', () => {
       'events.reminder.': [...opportunityEventReminderStateSchema.options],
       'events.channel.': [...opportunityEventReminderChannelSchema.options],
       'events.saved.': ['created', 'updated', 'deleted'],
+      // The formatted field's toolbar (specs/158-crm-opportunity-inline-editing/).
+      'editor.format.': ['bold', 'italic', 'strike', 'bulletList', 'orderedList', 'link'],
     };
     const composed = sources.flatMap(({ text }) =>
       [...text.matchAll(/\bt\(\s*`([^`$]+)\$\{/g)].map((match) => match[1] as string),
