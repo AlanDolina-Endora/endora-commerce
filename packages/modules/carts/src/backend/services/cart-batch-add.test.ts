@@ -36,7 +36,7 @@ import { CART_MAX_LINES, CartService, type CustomerContext } from './cart-servic
  * bridge are port doubles.
  */
 
-const CUSTOMER: CustomerContext = { customerAccountId: 'cust-1', organizationId: 'org-1' };
+const CUSTOMER: CustomerContext = { customerAccountId: 'cust-1', organizationId: 'org-1', salesChannelId: 'channel-1' };
 const ACTOR = { customer: CUSTOMER };
 const DEFAULT_CHANNEL = { id: 'ch-default', systemDefault: true };
 
@@ -205,6 +205,7 @@ function existingCart(overrides: Partial<Row> = {}): Row {
     id: 'cart-1',
     customerAccountId: CUSTOMER.customerAccountId,
     organizationId: CUSTOMER.organizationId,
+    salesChannelId: CUSTOMER.salesChannelId,
     status: 'active',
     sourceQuoteRequestId: null,
     ...overrides,
