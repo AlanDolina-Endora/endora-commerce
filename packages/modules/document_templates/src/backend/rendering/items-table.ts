@@ -42,7 +42,10 @@ import { bool, color, num, str, type Props } from './props.js';
  * A line and its detail row are not kept together across a page break: pdfmake
  * keeps one row unbroken, not two, and the `pageBreakBefore` hook that could do
  * it re-lays the whole document per node. That is a SHOULD of the contract and
- * is verified by eye in the quickstart, not promised here.
+ * is verified by eye in the quickstart, not promised here. A section's heading
+ * row (feature 159) is in the same position — it can close a page with the
+ * section's first line opening the next — and stays a documented limitation for
+ * the same reason (`specs/159-quote-request-item-groups/research.md` N-28).
  *
  * **Sections** (feature 159, `specs/159-quote-request-item-groups/contracts/document-sections.md`
  * §3): with the grouping setting on *Document's groups* — which is what `null`

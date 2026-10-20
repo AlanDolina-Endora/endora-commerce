@@ -308,7 +308,8 @@ modułu.
 ## Encje
 
 `Order`, `OrderItem`, `Payment`, `OrderStatus`, `OrderStatusTransition`, `OrderTransitionEffect`,
-`OrderComment`, `OrderListSavedView` oraz kolumna `organizations.order_confirmation_emails` (właściciel:
+`OrderComment`, `OrderListSavedView`, `OrderItemGroup` (grupy pozycji zamówienia — zob. *Grupy
+pozycji*) oraz kolumna `organizations.order_confirmation_emails` (właściciel:
 `organizations`, odczyt przez port). `OrderItem` zapisuje kopię produktu, wariantu, ceny
 jednostkowej i stawki podatku z chwili złożenia zamówienia, aby historyczne zamówienia nie zmieniały
 się po zmianach cen i katalogu.
@@ -405,13 +406,24 @@ ceny, a podsumowanie liczy tylko wycenione. Wycena sprawdza asortyment dokładni
 sprzedaży, który wskazuje żądanie; `salesChannelId`, który nie wskazuje żadnego kanału, jest
 odrzucany z `404 NOT_FOUND`, a ekran pokazuje *Nie udało się przeliczyć cen*, nie oznaczając żadnej
 pozycji. Produkt usunięty miękko jest wyceniany jak dotąd. Utworzone zamówienie zawiera dokładnie
-pozycje i ilości widoczne na ekranie, w niezmienionym kształcie żądania `POST /api/v1/admin/orders`.
+pozycje i ilości widoczne na ekranie, w treści żądania `POST /api/v1/admin/orders`.
 
 **Najwyżej 200 pozycji.** `POST /api/v1/admin/orders` i `POST /api/v1/admin/orders/preview` w
 pierwszym kroku odrzucają więcej niż 200 pozycji, z kodem `422 VALIDATION_FAILED` i `details: {
 code: 'too_many_items', maximum: 200 }`, zanim oceniona zostanie którakolwiek pozycja. Tworzenie
 zamówienia odrzuca też żądanie, w którym łączna ilość produktu jest poniżej jego minimum, z błędem
 minimum i `details.lines[]` kluczowanym `index` pozycji.
+
+**Grupy pozycji.** Pozycje na ekranie można podzielić na nazwane grupy — *Dodaj grupę*, zmiana
+nazwy, usunięcie, przeciąganie, klawiatura i menu *Przenieś do grupy* przy każdej pozycji, dokładnie
+tak jak w zakładce *Modyfikacja* zapytania ofertowego; *Dodaj produkt* danej grupy dodaje do tej
+grupy, każde inne dodanie — do sekcji *Bez grupy*. Każda grupa pokazuje liczbę pozycji oraz wartość
+netto, VAT i brutto obok bieżącego podsumowania cen; w tym celu wycena zwraca dla każdej wycenionej
+pozycji `taxRate` (ułamek, `0.23`, z tego samego źródła co suma podatku w podsumowaniu; brak go przy
+pozycji, której nie da się wycenić), a VAT grupy to suma netto × stawka po jej pozycjach.
+Przeniesienie pozycji między grupami nie wycenia zamówienia ponownie. Każda grupa musi mieć nazwę,
+zanim przycisk **Utwórz zamówienie** stanie się aktywny. Co zamówienie zachowuje, opisuje sekcja
+*Grupy pozycji* niżej.
 
 ## Filtry pól niestandardowych
 
@@ -555,6 +567,49 @@ zapytania ofertowego.
 
 Gdy moduł zapytań ofertowych jest wyłączony, zamówienia są składane dokładnie tak jak dotąd i nie
 zapisują żadnego zapytania.
+
+## Grupy pozycji
+
+Zamówienie może pokazywać pozycje w **nazwanych grupach** — *Hala A*, *Hala B* — z pozycjami bez
+grupy pod nagłówkiem **Pozostałe pozycje**. Grupy służą wyłącznie prezentacji: nie zmieniają żadnej
+ceny, ilości ani sumy. Zamówienie otrzymuje je na jeden z dwóch sposobów i **nigdy ich później nie
+zmienia**: żaden ekran ani API nie edytuje grupowania złożonego zamówienia.
+
+**Z zaakceptowanego zapytania ofertowego.** Gdy przy składaniu zamówienia zostaje zapisane zapytanie
+ofertowe, z którego pochodzi koszyk (zob. poprzednią sekcję), zamówienie kopiuje grupy oferty w tej
+samej transakcji. Każda pozycja zamówienia jest dopasowywana do pozycji oferty: najpierw wszystkie
+pozycje z **tym samym produktem, wariantem i uzgodnioną ceną jednostkową**, potem pozostałe pozycje
+wyłącznie według **produktu i wariantu**, przy czym każda pozycja oferty jest użyta raz. Dopasowana
+pozycja przejmuje grupę i miejsce pozycji oferty; pozycja, która do niczego nie pasuje — dodana do
+koszyka po zamianie albo zmieniona tak, że już nie pasuje — trafia do sekcji *Pozostałe pozycje*, za
+dopasowanymi. Grupa oferty, do której nie trafiła żadna pozycja, nie jest kopiowana. Gdy przy
+składaniu zamówienia zapytanie nie zostaje zapisane albo moduł zapytań ofertowych jest wyłączony,
+zamówienie jest składane bez grup, a poza tym dokładnie tak jak wcześniej. Późniejsza zmiana oferty
+nie rusza grup zamówienia.
+
+**Z ekranu tworzenia zamówienia.** Operator układa pozycje w grupy przed utworzeniem zamówienia (zob.
+*Ekran tworzenia zamówienia*); zamówienie powstaje z nimi w tej samej transakcji, a odrzucone
+utworzenie nie zapisuje żadnej grupy. Grupy bez pozycji nie są tworzone. Ponieważ koszyk łączy dwie
+pozycje tego samego produktu i wariantu, żądanie, które umieszcza ten sam produkt i wariant w **dwóch
+różnych grupach**, jest odrzucane z `422 VALIDATION_FAILED` i `details: [{ path:
+'items.<j>.groupKey', code: 'group_conflict', productId, issue }]`, a komunikat wymienia produkt;
+ekran oferuje każdy produkt tylko raz, więc pokazuje przyczynę przy pozycji tylko wtedy, gdy tak
+odpowie serwer. `POST /api/v1/admin/orders` przyjmuje opcjonalną listę `groups` (`{ key, name }`, w
+kolejności wyświetlania, najwyżej 50, nazwy od 1 do 120 znaków) i dla każdej pozycji opcjonalny
+`groupKey`. Grupowanie jest utrwalane we wpisie audytu `order.place_on_behalf` (nazwa i liczba
+pozycji każdej grupy); własne złożenie zamówienia przez kupującego, jak dotąd, nie trafia do audytu.
+
+**Gdzie są pokazywane.** Ekran zamówienia w panelu administracyjnym i strona zamówienia kupującego
+pokazują każdą grupę jako sekcję z nagłówkiem, pozycjami i podsumowaniem — liczba pozycji, netto,
+VAT i brutto, sumujące wiersze nad nim — a następnie *Pozostałe pozycje*. Zamówienie bez grup i
+każde zamówienie złożone, zanim powstały grupy, wygląda dokładnie tak jak wcześniej. Każda odpowiedź
+z zamówieniem — dla administratora, klienta i zewnętrznego API zamówień — zawiera `itemGroups`
+(`{ id, name, position }`) oraz dla każdej pozycji `groupId` i `position`, z pozycjami w kolejności
+wyświetlania; integracja, która je pomija, działa dalej.
+
+**Co nie przenosi grup.** Faktury, zwroty, ponowne zamówienie (wypełnia koszyk), *zamów ponownie
+jako zapytanie ofertowe*, koszyk i checkout, e-maile, webhooki i przyjmowanie zamówień przez
+zewnętrzne API. Nie ma PDF zamówienia.
 
 ## Minimalne ilości zamówienia przy składaniu zamówienia
 

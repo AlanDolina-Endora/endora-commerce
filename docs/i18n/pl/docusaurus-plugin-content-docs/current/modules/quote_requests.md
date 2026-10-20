@@ -171,7 +171,10 @@ angielsku:
   uzgodnioną ceną) i usunięte, ilość, uzgodnioną cenę, cenę proponowaną przez klienta, notatkę
   pozycji, notatkę nagłówka i termin ważności — każdą jako stara → nowa wartość. Pozycje są
   nazywane produktem i wariantem. Zmiany jednostki opakowania i pól niestandardowych nie są
-  wymieniane. Rewizja bez wymienionej zmiany brzmi *oferta wysłana ponownie bez zmian*. Powód lub
+  wymieniane. Wymieniane są też zmiany grup pozycji — *dodano grupę*, *usunięto grupę*, *zmieniono
+  nazwę grupy* (z → na), pozycja *przeniesiona* z jednej grupy do innej (*Bez grupy* oznacza brak
+  grupy) oraz *zmieniono kolejność pozycji*, gdy pozycje lub grupy jedynie przestawiono — zob.
+  *Grupy pozycji*. Rewizja bez wymienionej zmiany brzmi *oferta wysłana ponownie bez zmian*. Powód lub
   notatka podane przy anulowaniu, odrzuceniu albo zatwierdzeniu są pokazywane.
 - **Ograniczona.** Historia odczytuje **100 najnowszych zdarzeń**. Gdy istnieją starsze, odpowiedź
   zawiera `truncated: true`, a zakładka informuje, że starsze wpisy nie są wyświetlane.
@@ -196,6 +199,83 @@ jednostkę opakowania, propozycję klienta i zapisaną cenę referencyjną każd
 pozycji, o ile sprzedawca ich nie zmienił. Zapisana cena referencyjna zostaje także wtedy, gdy
 sprzedawca zmienia ilość pozycji: rewizja sprzedawcy nigdy nie ustala jej ponownie. Pozycja dodana
 przez sprzedawcę ma wybrany przez niego wariant i notatkę, a jednostki opakowania nie ma.
+
+## Grupy pozycji
+
+Operator może podzielić pozycje oferty na **nazwane grupy** — *Parter*, *Piętro*, *Opcje* — tak aby
+długa oferta czytała się tak, jak klient myśli o zleceniu. Grupy służą **wyłącznie prezentacji**: nie
+zmieniają żadnej ceny, rabatu, ilości ani sumy, a pogrupowana oferta daje dokładnie te same sumy co
+te same pozycje bez grup.
+
+**Gdzie.** Zakładka **Modyfikacja** oferty i ekran **Utwórz zapytanie ofertowe**, dopóki pozycje
+oferty można edytować — w statusach *Created from admin* i *Pending*. W każdym innym statusie
+grupowanie jest pokazywane tylko do odczytu, a zapis, który je przesyła, jest odrzucany jak każda
+inna edycja pozycji (`409 RFQ_NOT_QUOTED`). Nie dochodzi żadne nowe uprawnienie: grupowanie wymaga
+`rfqs:handle` i dostępu handlowca do organizacji oferty, tak jak edycja jej pozycji.
+
+**Co może zrobić operator.**
+
+- **Dodaj grupę** tworzy grupę i ustawia fokus w polu jej nazwy. Nazwa jest przycinana i ma od 1 do
+  120 znaków; dwie grupy mogą mieć tę samą nazwę. Oferta ma najwyżej **50** grup — wtedy *Dodaj
+  grupę* jest nieaktywne i mówi dlaczego. Pusta nazwa daje komunikat *Wpisz nazwę grupy.* i blokuje
+  zapis.
+- **Zmiana nazwy** grupy odbywa się w polu jej nazwy, **usunięcie** — jej przyciskiem usuwania.
+  Usunięcie grupy nigdy nie usuwa pozycji: jej pozycje przechodzą, w swojej kolejności, do sekcji
+  **Bez grupy**.
+- **Przeniesienie pozycji** do innej grupy albo na wybrane miejsce we własnej: przeciągnięciem za
+  uchwyt, z klawiatury — fokus na uchwycie, Spacja lub Enter, przesuwanie strzałkami (za ostatnią
+  pozycją grupy pozycja wchodzi do następnej sekcji), Spacja lub Enter, aby upuścić, Escape, aby
+  anulować — albo menu **Przenieś do grupy** pozycji, które nie wymaga przeciągania. Każde
+  przeniesienie jest ogłaszane czytnikom ekranu.
+- **Kolejność grup** zmienia się przeciągnięciem, z klawiatury albo przyciskami przesuwania grupy w
+  górę i w dół. Sekcja **Bez grupy** jest zawsze ostatnia i nie można jej przesunąć, zmienić jej
+  nazwy ani jej usunąć.
+- Produkt dodany przyciskiem **Dodaj produkt** danej grupy trafia do tej grupy; każda inna dodana
+  pozycja trafia do sekcji *Bez grupy*.
+- Grupa opróżniona z pozycji **pozostaje**, dopóki nie zostanie usunięta, i jest pokazywana jako
+  puste pole upuszczania (*Przeciągnij tu pozycje lub użyj opcji Przenieś do grupy.*). Puste grupy
+  nigdy nie są pokazywane klientowi, drukowane ani przenoszone do zamówienia.
+
+**Podsumowania.** Każda sekcja pokazuje liczbę pozycji oraz wartość netto, VAT i brutto — według tej
+samej zasady, której używają sumy oferty — a tam, gdzie ekran pokazuje ceny katalogowe, także rabat
+względem ceny katalogowej. Są przeliczane przy każdej edycji i przeniesieniu pozycji. Ekran
+tworzenia nie pokazuje VAT, więc jego sekcje pokazują liczbę pozycji i wartość netto.
+
+**Zapis.** Grupowanie zapisuje ten sam przycisk, który zapisuje pozycje — **Zapisz rewizję** albo
+przycisk tworzenia — w tym samym zapisie, z tym samym sprawdzeniem współbieżności, i jest ono
+utrwalane we wpisie audytu tego zapisu (`quote_request.modify` albo
+`quote_request.create_on_behalf`, z nazwami grup i liczbą ich pozycji przed zmianą i po niej).
+**Zapis, który zmienia tylko grupowanie, jest rewizją jak każda inna**: klient dostaje powiadomienie
+i prośbę o jej akceptację. Zakładka **Historia** wymienia zmiany grupowania w każdej rewizji (zob.
+*Historia*).
+
+**Co widzi klient.** Oferta w storefroncie pokazuje każdą grupę, która ma pozycję, jako sekcję z
+nagłówkiem, w kolejności, z jej pozycjami i podsumowaniem, a następnie pozycje bez grupy pod
+nagłówkiem **Pozostałe pozycje**; oferta bez grup wygląda dokładnie tak jak wcześniej. Klient nie
+może tworzyć, zmieniać nazw, usuwać ani przestawiać grup, a żadne żądanie klienta nie przyjmuje
+grupowania. Porównanie z ostatnią rewizją, którą klient widział, mówi w jednym wpisie, że *zmieniono
+układ pozycji*, i nie wymienia niczego więcej. Akceptacja i odrzucenie rewizji działają jak
+wcześniej: grupowanie nigdy nie jest powodem odmowy akceptacji.
+
+**Co zachowuje grupę pozycji.** Edycja szkicu przez klienta zachowuje w grupie każdą pozycję, którą
+zachowuje. Klient API, który zapisuje pozycje oferty bez przesłania `groups`, zachowuje w grupie
+każdą zachowaną pozycję, a nowe pozycje umieszcza w sekcji *Bez grupy*. **Ponowne złożenie** zaczyna
+się bez grup: to nowe zapytanie, wycenione na nowo, które handlowiec grupuje ponownie. **Zamiana w
+zamówienie** wypełnia koszyk w kolejności oferty, a zamówienie złożone z tego koszyka zachowuje grupy
+— zob. stronę modułu zamówień.
+
+**PDF** drukuje grupy — zob. *PDF oferty*.
+
+**API.** `PATCH /api/v1/admin/quote-requests/:id` i `POST /api/v1/admin/quote-requests` przyjmują
+opcjonalną listę `groups` — całe grupowanie, w kolejności wyświetlania, każda grupa jako
+`{ key, id?, name }` (`id` zachowuje istniejącą grupę, grupa bez niego jest tworzona, a zapisana
+grupa pominięta na liście jest usuwana) — oraz dla każdej pozycji opcjonalny `groupKey` (`null` =
+bez grupy); pozycje przesyła się w kolejności wyświetlania. `groups` bez `items` daje odpowiedź
+`400`; `id`, które nie jest grupą tej oferty, daje `422 VALIDATION_FAILED`. Każda odpowiedź zawiera
+`itemGroups` (`{ id, name, position }`) oraz dla każdej pozycji `groupId` i `position`, z pozycjami
+w kolejności wyświetlania — odpowiedź dla administratora wymienia także puste grupy, odpowiedź dla
+klienta tylko grupy, które mają pozycję. Publikowany port odczytu `quoteRequestReadPort.listItems`
+zwraca `group` i `position` każdej pozycji, w kolejności wyświetlania.
 
 ## Minimalne ilości zamówienia i jednostki opakowania
 
@@ -533,6 +613,16 @@ Układ wbudowany drukuje liczbę porządkową, produkt, SKU, ilość, opakowanie
 (obie tylko wtedy, gdy któraś pozycja ma rabat), cenę po rabacie, stawkę VAT, wartość netto i
 brutto, uwagi pod pozycją oraz sumy — po angielsku i po polsku.
 
+**Grupy w PDF.** Pogrupowana oferta drukuje każdą grupę, która ma pozycję, jako wiersz nagłówka — jej
+nazwę i liczbę pozycji — potem jej pozycje, a następnie wiersz sumy częściowej dla każdej sumy
+tabeli, policzonej po pozycjach grupy; pozycje bez grupy następują pod nagłówkiem **Pozostałe
+pozycje** (*Other items*), a po nich jak dotąd sumy oferty. Liczba porządkowa biegnie 1…n przez
+wszystkie grupy. Układ wbudowany i każdy szablon zapisany, zanim powstały grupy, drukują je bez
+żadnej zmiany; szablon może zamiast tego drukować ofertę bez podziału albo grupować ją według pola
+(ustawienie *Grupowanie* tabeli pozycji, opisane na stronie Szablonów dokumentów). Oferta bez grup
+drukuje się dokładnie tak jak wcześniej. Gdy **Szablony dokumentów** są wyłączone, PDF nie powstaje,
+jak opisano wyżej, a grupowanie na wszystkich ekranach działa bez zmian.
+
 **Wysyłka.** *Wyślij PDF do klienta* podpowiada adres e-mail klienta, który złożył zapytanie.
 Handlowiec może go usunąć i dodać inne adresy — dowolne poprawne adresy, najwyżej **5**, powtórzenia
 są łączone — oraz opcjonalną wiadomość osobistą do 2 000 znaków. Każdy adres otrzymuje osobny e-mail
@@ -688,6 +778,13 @@ szablon zostawia identyfikator na miejscu, więc eksport wraca do szablonu domy�
 informuje. Zapis zmienia `updated_at`, ale nie `version`. Wiersz `quote_request_events` typu
 `pdf-sent` zapisuje każdą udaną wysyłkę *Wyślij PDF do klienta*; jest widoczny tylko w historii w
 panelu administracyjnym.
+
+`quote_request_item_groups` przechowuje grupy pozycji oferty — `name` i `position` każdej grupy,
+usuwane razem z zapytaniem ofertowym. `quote_request_items` przechowuje `group_id` każdej pozycji
+(`null` = bez grupy; usunięcie grupy ustawia go na `null`) i jej `position` w obrębie sekcji. Migawka
+pozycji w każdej rewizji zapisuje także grupę i miejsce pozycji, więc historia i porównanie klienta
+opisują grupowanie tak, jak pokazano je klientowi. Oferta utworzona, zanim powstały grupy, jest
+odczytywana jako niepogrupowana, z pozycjami w pierwotnej kolejności.
 
 `quote_request_list_saved_views` przechowuje zapisane widoki listy (zob. *Zapisane widoki*). Jest
 globalna dla platformy, a nie przypisana do organizacji: przechowuje wartości filtrów, nigdy
