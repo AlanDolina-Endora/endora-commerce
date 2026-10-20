@@ -776,6 +776,7 @@ below goes through the storefront catalogue (`lib/i18n/messages.ts`, `en-US` + `
 - `node backend/scripts/dco-signoff.ts origin/master HEAD`: 0 findings.
 - Upstream PR: <https://github.com/endora-commerce/endora-commerce/pull/366> — closes #285 and #294.
 - Rebased on `origin/master` `e41a8b0f6` (156 assets library, 154 PR B/C, API description, SEO fix): tip `85e648473`, PR checks green (<https://github.com/endora-commerce/endora-commerce/pull/366/checks>), `[PG]` 88 files / 0 failed / 657 tests (<https://github.com/bfluks/endora-commerce/actions/runs/39269164406>).
+- Rebased on `origin/master` `4aa101a51` (154 sign-in, registration, storefront channel and basket channel attribution; release 0.107.0): conflicts kept both sides — 154's per-channel basket on every cart path plus 155's minimums, quote-source exemption, response language and `addItems` options; follow-ups `561cdcf91`, `67e719c51`, `1b7dc4ca2`, `6cdfa8e9a`; no migration re-stamp. `[PG]` 61 files / 0 failed / 493 tests, including master's 21 new or changed 154 contract/integration files (<https://github.com/bfluks/endora-commerce/actions/runs/39375981217>); DCO 0 findings.
 
 ---
 
