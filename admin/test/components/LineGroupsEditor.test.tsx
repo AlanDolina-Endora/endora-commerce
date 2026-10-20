@@ -254,4 +254,85 @@ describe('LineGroupsEditor', () => {
     const { container } = renderEditor({ readOnly: true });
     await expectNoAxeViolations(container);
   });
+
+  describe('table layout (a screen whose lines are table rows)', () => {
+    function TableHarness(props: { groups?: LineGroupsEditorGroup[]; lines?: Line[]; readOnly?: boolean }): ReactElement {
+      const [groups, setGroups] = useState(props.groups ?? GROUPS);
+      const [lines, setLines] = useState(props.lines ?? LINES);
+      return (
+        <LineGroupsEditor<Line>
+          layout="table"
+          columnCount={2}
+          tableHeader={
+            <tr>
+              <th>Product</th>
+              <th>Actions</th>
+            </tr>
+          }
+          groups={groups}
+          lines={lines}
+          onChange={(next) => {
+            setGroups(next.groups);
+            setLines(next.lines);
+          }}
+          getLineLabel={(line) => line.name}
+          renderLine={(line, slots) => (
+            <>
+              <td data-line-name>{line.name}</td>
+              <td>
+                {slots.handle}
+                {slots.moveMenu}
+              </td>
+            </>
+          )}
+          renderSummary={(sectionLines) => <span>{`${sectionLines.length} lines`}</span>}
+          {...(props.readOnly ? { readOnly: true } : {})}
+          labels={LABELS}
+        />
+      );
+    }
+
+    it('renders one table: the caller’s header, a row group per section headed by its controls, lines as rows', async () => {
+      const user = userEvent.setup();
+      render(
+        <StrictMode>
+          <TableHarness />
+        </StrictMode>,
+      );
+      const table = screen.getByRole('table');
+      expect(within(table).getAllByRole('rowgroup').map((group) => group.getAttribute('aria-label'))).toEqual([
+        null,
+        'Ground floor',
+        'Options',
+        'Ungrouped',
+      ]);
+      expect(screen.getByText('Bolt', { selector: '[data-line-name]' }).closest('tr')).not.toBeNull();
+      const ground = within(table).getByRole('rowgroup', { name: 'Ground floor' });
+      expect(within(ground).getByRole('textbox', { name: 'Group name' })).toHaveValue('Ground floor');
+      expect(within(ground).getByText('2 lines')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Move Washer to group' }));
+      await user.click(await screen.findByRole('menuitem', { name: 'Options' }));
+      expect(within(within(table).getByRole('rowgroup', { name: 'Options' })).getByText('Washer')).toBeInTheDocument();
+      await expectNoAxeViolations(document.body);
+    });
+
+    it('with no group it is the plain table: no section rows, no summary', () => {
+      render(<TableHarness groups={[]} lines={LINES.map((line) => ({ ...line, groupKey: null }))} />);
+      const table = screen.getByRole('table');
+      expect(within(table).getAllByRole('row')).toHaveLength(4);
+      expect(within(table).queryByText(/lines$/)).toBeNull();
+      expect(screen.getByRole('button', { name: 'Add group' })).toBeInTheDocument();
+    });
+
+    it('read-only: group names as headers, no control', () => {
+      render(<TableHarness readOnly />);
+      expect(screen.queryAllByRole('button')).toEqual([]);
+      expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual([
+        'Product',
+        'Actions',
+        'Ground floor',
+        'Ungrouped',
+      ]);
+    });
+  });
 });

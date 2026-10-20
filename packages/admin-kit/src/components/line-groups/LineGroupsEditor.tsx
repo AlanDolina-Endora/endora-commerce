@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, GripVertical, Trash2 } from 'lucide-react';
 import { LINE_GROUP_LIMITS } from '@endora-commerce/contracts';
 import { Button } from '../../ui/button.js';
 import { Input } from '../../ui/input.js';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../ui/table.js';
 import { cn } from '../../lib/utils.js';
 import { RowActionMenu, RowActionMenuItem } from '../RowActionMenu.js';
 import { ReorderAnnouncer } from '../reorder/ReorderAnnouncer.js';
@@ -90,6 +91,16 @@ export interface LineGroupsEditorProps<TLine extends LineGroupsEditorLine> {
   /** Every control off, e.g. while saving. */
   disabled?: boolean;
   maxGroups?: number;
+  /**
+   * `list` (default): each section a region of line blocks. `table`: one table
+   * — the caller's header, a row group per section headed by its controls, and
+   * `renderLine` returns the line's **cells**, wrapped here in a row.
+   */
+  layout?: 'list' | 'table';
+  /** Table layout: the header row (`<tr>` with its `<th>`s). */
+  tableHeader?: ReactNode;
+  /** Table layout: the number of cells `renderLine` returns, for the spanning rows. */
+  columnCount?: number;
   /** A fresh key for a new group. Defaults to a counter. */
   createGroupKey?: () => string;
   labels: LineGroupsEditorLabels;
@@ -240,30 +251,210 @@ export function LineGroupsEditor<TLine extends LineGroupsEditorLine>(
     reorder.announce(labels.deletedAnnouncement({ name: deleted.name || labels.groupName }));
   };
 
+  const tableLayout = props.layout === 'table';
+  const columnCount = props.columnCount ?? 1;
+  const addGroupButton = readOnly ? null : (
+    <AddGroupButton
+      label={labels.addGroup}
+      onClick={addGroup}
+      disabled={disabled || groups.length >= maxGroups}
+      limitId={limitId}
+      limitText={groups.length >= maxGroups ? labels.limitReached({ max: maxGroups }) : null}
+    />
+  );
+
   if (!grouped) {
+    const bare = lines.map((line) =>
+      tableLayout ? (
+        <TableRow key={line.key}>{renderLine(line, { handle: null, moveMenu: null })}</TableRow>
+      ) : (
+        <div key={line.key}>{renderLine(line, { handle: null, moveMenu: null })}</div>
+      ),
+    );
     return (
       <div className={cn('space-y-2', className)}>
         <ReorderAnnouncer message={reorder.announcement} />
-        {lines.map((line) => (
-          <div key={line.key}>{renderLine(line, { handle: null, moveMenu: null })}</div>
-        ))}
-        {readOnly ? null : (
-          <AddGroupButton
-            label={labels.addGroup}
-            onClick={addGroup}
-            disabled={disabled || groups.length >= maxGroups}
-            limitId={limitId}
-            limitText={groups.length >= maxGroups ? labels.limitReached({ max: maxGroups }) : null}
-          />
+        {tableLayout ? (
+          <Table>
+            {props.tableHeader ? <TableHeader>{props.tableHeader}</TableHeader> : null}
+            <TableBody>{bare}</TableBody>
+          </Table>
+        ) : (
+          bare
         )}
+        {addGroupButton}
       </div>
     );
   }
 
   const visible = readOnly
-    ? sections.filter((section) => section.kind === 'ungrouped' || section.lines.length > 0)
+    ? sections.filter((section) => section.lines.length > 0)
     : sections;
   const groupCount = sections.length - 1;
+
+  /** A section's heading: the group's controls while editing, its name otherwise. */
+  const sectionHeading = (section: Section<TLine>): ReactNode => {
+    const groupIndex = sections.indexOf(section);
+    const displayName = section.kind === 'group' ? section.name || labels.groupName : labels.ungrouped;
+    if (section.kind !== 'group' || readOnly) {
+      return tableLayout ? displayName : <h3 className="text-sm font-semibold">{displayName}</h3>;
+    }
+    const nameInvalid = section.name!.trim() === '' && touched.has(section.key!);
+    const errorId = `${baseId}-error-${section.modelKey}`;
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          {...reorder.getSectionHandleProps(section.modelKey)}
+          className="inline-flex h-8 w-6 cursor-grab items-center justify-center rounded text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+        >
+          <GripVertical size={16} aria-hidden="true" />
+        </button>
+        <div className="min-w-48 flex-1 space-y-1">
+          <Input
+            ref={(element): void => {
+              nameRefs.current.set(section.key!, element);
+            }}
+            aria-label={labels.groupName}
+            placeholder={labels.groupNamePlaceholder}
+            required
+            maxLength={LINE_GROUP_LIMITS.maxNameLength}
+            value={section.name!}
+            disabled={disabled}
+            aria-invalid={nameInvalid ? true : undefined}
+            aria-describedby={nameInvalid ? errorId : undefined}
+            onChange={(event): void => renameGroup(section.key!, event.target.value)}
+            onBlur={(): void => setTouched((current) => new Set([...current, section.key!]))}
+            className="font-medium"
+          />
+          {nameInvalid ? (
+            <p id={errorId} className="text-xs font-normal text-destructive">
+              {labels.nameRequired}
+            </p>
+          ) : null}
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          aria-label={labels.moveGroupUp({ name: displayName })}
+          disabled={disabled || groupIndex === 0}
+          onClick={(): void => reorder.moveSectionBy(section.modelKey, -1)}
+        >
+          <ChevronUp aria-hidden="true" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          aria-label={labels.moveGroupDown({ name: displayName })}
+          disabled={disabled || groupIndex === groupCount - 1}
+          onClick={(): void => reorder.moveSectionBy(section.modelKey, 1)}
+        >
+          <ChevronDown aria-hidden="true" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-destructive"
+          aria-label={labels.deleteGroup({ name: displayName })}
+          disabled={disabled}
+          onClick={(): void => deleteGroup(section.key!)}
+        >
+          <Trash2 aria-hidden="true" />
+        </Button>
+      </div>
+    );
+  };
+
+  /** A line's handle and *Move to group* menu, while editing. */
+  const lineSlots = (section: Section<TLine>, line: TLine): LineGroupsEditorLineSlots => {
+    if (readOnly) return { handle: null, moveMenu: null };
+    const name = getLineLabel(line);
+    const targets = sections.filter((candidate) => candidate !== section);
+    return {
+      handle: (
+        <button
+          {...reorder.getItemHandleProps(line.key)}
+          className="inline-flex h-8 w-6 cursor-grab items-center justify-center rounded text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+        >
+          <GripVertical size={16} aria-hidden="true" />
+        </button>
+      ),
+      moveMenu: (
+        <RowActionMenu label={labels.moveToGroup({ name })} disabled={disabled}>
+          {targets.map((target) => (
+            <RowActionMenuItem key={target.modelKey} onSelect={(): void => reorder.moveItemTo(line.key, target.modelKey)}>
+              {target.kind === 'group' ? target.name || labels.groupName : labels.ungrouped}
+            </RowActionMenuItem>
+          ))}
+        </RowActionMenu>
+      ),
+    };
+  };
+
+  const displayNameOf = (section: Section<TLine>): string =>
+    section.kind === 'group' ? section.name || labels.groupName : labels.ungrouped;
+
+  if (tableLayout) {
+    return (
+      <div className={cn('space-y-2', className)}>
+        <ReorderAnnouncer
+          message={reorder.announcement}
+          {...(labels.instructions !== undefined && !readOnly ? { instructions: labels.instructions, instructionsId } : {})}
+        />
+        <Table>
+          {props.tableHeader ? <TableHeader>{props.tableHeader}</TableHeader> : null}
+          {visible.map((section) => (
+            <TableBody
+              key={section.modelKey}
+              aria-label={displayNameOf(section)}
+              className={cn(reorder.dropTarget === `section:${section.modelKey}` && 'outline outline-2 outline-ring')}
+              {...(readOnly ? {} : reorder.getSectionProps(section.modelKey))}
+            >
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableHead colSpan={columnCount} scope="colgroup" className="h-auto py-2 text-foreground">
+                  {sectionHeading(section)}
+                </TableHead>
+              </TableRow>
+              {section.lines.length === 0 ? (
+                readOnly ? null : (
+                  <TableRow>
+                    <TableCell colSpan={columnCount} className="text-center text-xs text-muted-foreground">
+                      {labels.emptyGroup}
+                    </TableCell>
+                  </TableRow>
+                )
+              ) : (
+                section.lines.map((line) => (
+                  <TableRow
+                    key={line.key}
+                    {...(readOnly ? {} : reorder.getItemProps(line.key))}
+                    className={cn(reorder.dropTarget === line.key && 'border-t-2 border-t-ring')}
+                  >
+                    {renderLine(line, lineSlots(section, line))}
+                  </TableRow>
+                ))
+              )}
+              {renderSummary ? (
+                <TableRow>
+                  <TableCell colSpan={columnCount}>{renderSummary(section.lines, toPublic(section))}</TableCell>
+                </TableRow>
+              ) : null}
+              {!readOnly && renderSectionFooter ? (
+                <TableRow>
+                  <TableCell colSpan={columnCount}>{renderSectionFooter(toPublic(section))}</TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          ))}
+        </Table>
+        {addGroupButton}
+      </div>
+    );
+  }
 
   return (
     <div className={cn('space-y-4', className)}>
@@ -271,154 +462,42 @@ export function LineGroupsEditor<TLine extends LineGroupsEditorLine>(
         message={reorder.announcement}
         {...(labels.instructions !== undefined && !readOnly ? { instructions: labels.instructions, instructionsId } : {})}
       />
-      {visible.map((section) => {
-        if (section.kind === 'ungrouped' && section.lines.length === 0 && readOnly) return null;
-        const groupIndex = sections.indexOf(section);
-        const displayName = section.kind === 'group' ? section.name || labels.groupName : labels.ungrouped;
-        const headingId = `${baseId}-heading-${section.modelKey}`;
-        const isDropTarget = reorder.dropTarget === `section:${section.modelKey}`;
-        const nameInvalid = section.kind === 'group' && section.name!.trim() === '' && touched.has(section.key!);
-        const errorId = `${baseId}-error-${section.modelKey}`;
-        return (
-          <section
-            key={section.modelKey}
-            aria-label={displayName}
-            className={cn(
-              'rounded-md border p-3',
-              section.kind === 'ungrouped' && 'border-dashed',
-              isDropTarget && 'ring-2 ring-ring',
-            )}
-            {...(readOnly ? {} : reorder.getSectionProps(section.modelKey))}
-          >
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              {section.kind === 'group' && !readOnly ? (
-                <>
-                  <button
-                    {...reorder.getSectionHandleProps(section.modelKey)}
-                    className="inline-flex h-8 w-6 cursor-grab items-center justify-center rounded text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
-                  >
-                    <GripVertical size={16} aria-hidden="true" />
-                  </button>
-                  <div className="min-w-48 flex-1 space-y-1">
-                    <Input
-                      ref={(element): void => {
-                        nameRefs.current.set(section.key!, element);
-                      }}
-                      aria-label={labels.groupName}
-                      placeholder={labels.groupNamePlaceholder}
-                      required
-                      maxLength={LINE_GROUP_LIMITS.maxNameLength}
-                      value={section.name!}
-                      disabled={disabled}
-                      aria-invalid={nameInvalid ? true : undefined}
-                      aria-describedby={nameInvalid ? errorId : undefined}
-                      onChange={(event): void => renameGroup(section.key!, event.target.value)}
-                      onBlur={(): void => setTouched((current) => new Set([...current, section.key!]))}
-                      className="font-medium"
-                    />
-                    {nameInvalid ? (
-                      <p id={errorId} className="text-xs text-destructive">
-                        {labels.nameRequired}
-                      </p>
-                    ) : null}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    aria-label={labels.moveGroupUp({ name: displayName })}
-                    disabled={disabled || groupIndex === 0}
-                    onClick={(): void => reorder.moveSectionBy(section.modelKey, -1)}
-                  >
-                    <ChevronUp aria-hidden="true" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    aria-label={labels.moveGroupDown({ name: displayName })}
-                    disabled={disabled || groupIndex === groupCount - 1}
-                    onClick={(): void => reorder.moveSectionBy(section.modelKey, 1)}
-                  >
-                    <ChevronDown aria-hidden="true" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive"
-                    aria-label={labels.deleteGroup({ name: displayName })}
-                    disabled={disabled}
-                    onClick={(): void => deleteGroup(section.key!)}
-                  >
-                    <Trash2 aria-hidden="true" />
-                  </Button>
-                </>
-              ) : (
-                <h3 id={headingId} className="text-sm font-semibold">
-                  {displayName}
-                </h3>
-              )}
+      {visible.map((section) => (
+        <section
+          key={section.modelKey}
+          aria-label={displayNameOf(section)}
+          className={cn(
+            'rounded-md border p-3',
+            section.kind === 'ungrouped' && 'border-dashed',
+            reorder.dropTarget === `section:${section.modelKey}` && 'ring-2 ring-ring',
+          )}
+          {...(readOnly ? {} : reorder.getSectionProps(section.modelKey))}
+        >
+          <div className="mb-2">{sectionHeading(section)}</div>
+          {section.lines.length === 0 ? (
+            readOnly ? null : (
+              <p className="rounded border border-dashed p-3 text-center text-xs text-muted-foreground">
+                {labels.emptyGroup}
+              </p>
+            )
+          ) : (
+            <div className="space-y-2">
+              {section.lines.map((line) => (
+                <div
+                  key={line.key}
+                  {...(readOnly ? {} : reorder.getItemProps(line.key))}
+                  className={cn(reorder.dropTarget === line.key && 'border-t-2 border-ring')}
+                >
+                  {renderLine(line, lineSlots(section, line))}
+                </div>
+              ))}
             </div>
-            {section.lines.length === 0 ? (
-              readOnly ? null : (
-                <p className="rounded border border-dashed p-3 text-center text-xs text-muted-foreground">
-                  {labels.emptyGroup}
-                </p>
-              )
-            ) : (
-              <div className="space-y-2">
-                {section.lines.map((line) => {
-                  const name = getLineLabel(line);
-                  const targets = sections.filter((candidate) => candidate !== section);
-                  const handle = readOnly ? null : (
-                    <button
-                      {...reorder.getItemHandleProps(line.key)}
-                      className="inline-flex h-8 w-6 cursor-grab items-center justify-center rounded text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
-                    >
-                      <GripVertical size={16} aria-hidden="true" />
-                    </button>
-                  );
-                  const moveMenu = readOnly ? null : (
-                    <RowActionMenu label={labels.moveToGroup({ name })} disabled={disabled}>
-                      {targets.map((target) => (
-                        <RowActionMenuItem
-                          key={target.modelKey}
-                          onSelect={(): void => reorder.moveItemTo(line.key, target.modelKey)}
-                        >
-                          {target.kind === 'group' ? target.name || labels.groupName : labels.ungrouped}
-                        </RowActionMenuItem>
-                      ))}
-                    </RowActionMenu>
-                  );
-                  return (
-                    <div
-                      key={line.key}
-                      {...(readOnly ? {} : reorder.getItemProps(line.key))}
-                      className={cn(reorder.dropTarget === line.key && 'border-t-2 border-ring')}
-                    >
-                      {renderLine(line, { handle, moveMenu })}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {renderSummary ? <div className="mt-2">{renderSummary(section.lines, toPublic(section))}</div> : null}
-            {!readOnly && renderSectionFooter ? <div className="mt-2">{renderSectionFooter(toPublic(section))}</div> : null}
-          </section>
-        );
-      })}
-      {readOnly ? null : (
-        <AddGroupButton
-          label={labels.addGroup}
-          onClick={addGroup}
-          disabled={disabled || groups.length >= maxGroups}
-          limitId={limitId}
-          limitText={groups.length >= maxGroups ? labels.limitReached({ max: maxGroups }) : null}
-        />
-      )}
+          )}
+          {renderSummary ? <div className="mt-2">{renderSummary(section.lines, toPublic(section))}</div> : null}
+          {!readOnly && renderSectionFooter ? <div className="mt-2">{renderSectionFooter(toPublic(section))}</div> : null}
+        </section>
+      ))}
+      {addGroupButton}
     </div>
   );
 }
