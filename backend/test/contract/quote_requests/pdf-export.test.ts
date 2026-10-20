@@ -374,7 +374,7 @@ describe('quote request PDF — admin routes Q1–Q3 (spec 153)', () => {
         spy.mockRestore();
       }
     };
-    const firstCells = (body: string[][]) => body.map((row) => row[0]);
+    const firstCells = (body: string[][]) => body.map((row) => row[0] ?? '');
 
     beforeAll(async () => {
       await sql(`delete from document_templates where document_type = ?`, [QUOTE_REQUEST_DOCUMENT_TYPE]);
