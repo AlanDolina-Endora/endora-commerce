@@ -879,5 +879,6 @@
   "references.order.openInNewTab": "Otwórz zamówienie {number} w nowej karcie",
   "inlineEdit.edit": "Edytuj: {field}",
   "inlineEdit.saved": "Zapisano: {field}.",
-  "inlineEdit.conflict": "Ktoś inny zmienił tę szansę w międzyczasie. Wyświetlono aktualną wersję — sprawdź ją i zapisz ponownie."
+  "inlineEdit.conflict": "Ktoś inny zmienił tę szansę w międzyczasie. Wyświetlono aktualną wersję — sprawdź ją i zapisz ponownie.",
+  "editor.link.placeholder": "https://…"
 }

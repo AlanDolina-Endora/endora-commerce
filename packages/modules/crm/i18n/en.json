@@ -879,5 +879,6 @@
   "references.order.openInNewTab": "Open order {number} in a new tab",
   "inlineEdit.edit": "Edit {field}",
   "inlineEdit.saved": "{field} saved.",
-  "inlineEdit.conflict": "Someone else changed this opportunity in the meantime. The current version is shown now — check it and save again."
+  "inlineEdit.conflict": "Someone else changed this opportunity in the meantime. The current version is shown now — check it and save again.",
+  "editor.link.placeholder": "https://…"
 }

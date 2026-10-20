@@ -864,7 +864,7 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
           <div className="min-w-48 flex-1 space-y-1">
             <Input
               aria-label={t('editor.link.url')}
-              placeholder="https://"
+              placeholder={t('editor.link.placeholder')}
               value={linkDraft}
               autoFocus
               aria-invalid={linkInvalid}
