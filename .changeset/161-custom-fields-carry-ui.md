@@ -16,6 +16,8 @@ The `/custom-fields` screen turns value carry-over on and off, shows where value
 - A new *Carries to* column lists each target as a chip. A chip whose same-key target no longer
   fits is marked *Incompatible*, with its reason as text; the mark goes as soon as the definitions
   are re-read compatible.
+- When the definitions of every type cannot be read, the table says *Carry checks are
+  unavailable* with a *Retry* button instead of showing no mark and asking nothing in silence.
 - Removing or adding an option, changing a field's audience in the table and deleting a field ask
   first when the change would break an enabled carry, naming every field on the other side.
   *Cancel* sends nothing; the proceed button, named after the action — *Remove option anyway*,
