@@ -817,12 +817,19 @@ export function registerModule(ctx: ModuleContext): void {
   ctx.di.register({
     crmOpportunityHistoryService: ctx
       .asFunction(
-        ({ emFactory, auditLogService, crmReferenceService }: CrmCradle & HistoryCradle & ReferencesCradle) =>
+        ({
+          emFactory,
+          auditLogService,
+          crmReferenceService,
+          crmOwnerReadChecks,
+        }: CrmCradle & HistoryCradle & ReferencesCradle) =>
           new OpportunityHistoryService({
             emFactory,
             auditLog: auditLogService,
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
             references: crmReferenceService,
+            // Feature 161 (owner ruling P2 = a) — values only for `custom_fields:read`.
+            mayReadCustomFields: crmOwnerReadChecks.customFields,
           }),
       )
       .singleton(),
