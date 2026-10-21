@@ -190,6 +190,38 @@ describe('orders — custom-field values received from a Sales Opportunity', () 
     expect(mailer.sent.slice(sentBefore)).toEqual([]);
   });
 
+  it('waits for a write that holds the row and plans over what it committed — no lost update (review fix S6)', async () => {
+    // Another writer holds the Order's row and changes another key of the bag.
+    // The carry must not read the bag before that write commits: it takes the
+    // row `for update` and plans over what it re-reads. Without the lock it
+    // reads the old bag, waits only at its own UPDATE, and overwrites the other
+    // writer's value. What tells the two apart is the final bag, not the timing.
+    const { key } = await pair('locked');
+    const otherKey = fixtureKey('locked_other');
+    const order = await seedCrmOrder(h.em());
+
+    const holder = await h.em().getKnex().transaction();
+    let carry: Promise<unknown> | null = null;
+    try {
+      await holder.raw(`select id from "orders" where id = ? for update`, [order.id]);
+      await holder.raw(`update "orders" set custom_field_values = ?::jsonb where id = ?`, [
+        JSON.stringify({ [otherKey]: 'held by the other writer' }),
+        order.id,
+      ]);
+      carry = receive(order.id, { [key]: 'fair' });
+      const pending = Symbol('pending');
+      const early = await Promise.race([carry, new Promise((resolve) => setTimeout(() => resolve(pending), 300))]);
+      expect(early, 'the carry finished while another writer held the row').toBe(pending);
+      await holder.commit();
+    } catch (error) {
+      await holder.rollback().catch(() => undefined);
+      throw error;
+    }
+
+    expect(await carry).toEqual({ outcome: 'applied', carried: [key], skipped: [] });
+    expect(await storedValues(order.id)).toEqual({ [otherKey]: 'held by the other writer', [key]: 'fair' });
+  });
+
   it('answers not-found for another Organization’s Order exactly as for a missing one, and writes nothing (FR-012)', async () => {
     const { key } = await pair('foreign');
     const order = await seedCrmOrder(h.em());
