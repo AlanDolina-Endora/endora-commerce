@@ -2,7 +2,7 @@
 
 How a product price is stored and resolved **today**: tables, the resolution algorithm with its precedence and tie-breaks, where the two targeting layers (Application Rule and Price matrix) overlap, and the pain points that keep bringing pricing back. This describes the code, not the proposal — for the proposal see `decision-record.md`. When the model changes, rewrite this file in the same merge request.
 
-**Verified against** `master` at `b1021c71b` on 2026-10-21. File:line citations are as of that commit; re-check them before relying on one.
+**Verified against** `master` at `b1021c71b` on 2026-10-21, and **re-verified for the P0 read-path hardening** (D-287 P0, branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21. File:line citations in passages P0 did not touch are as of `b1021c71b`; re-check them before relying on one.
 
 **Section numbers.** `§N` references follow the numbering of the original analysis, which is split across this directory: §1 → `current-model.md`; §2 → `read-paths-and-performance.md` (its summary table); §3–§9, §11, §12 → `decision-record.md`; §10 → `worked-examples.md`. `read-paths §N` points into `read-paths-and-performance.md`, `peers §N` into `peer-platforms.md`. Path abbreviations: `PL/` = `packages/modules/price_lists/src/`, `CON/` = `packages/contracts/src/`, `CAT/` = `packages/modules/catalog/src/`, `SF/` = `storefront/`.
 
@@ -36,8 +36,24 @@ A non-system list cannot be activated with `{kind:'all'}` (`price-list-service.t
 ### 1.2 Resolution algorithm, exactly as shipped
 
 Inputs: product (id, `attributeValues`), quantity, organization (id, `customerGroupId`), optional
-`customerGroupId`, sales channel (id, defaultCurrency), optional currency
-(`PL/backend/services/pricing-service.interface.ts:56-69`).
+`customerGroupId`, optional `customerAccountId` (P0), sales channel (id, defaultCurrency), optional
+currency (`PL/backend/services/pricing-service.interface.ts`, `PricingResolutionInput`).
+
+**The customer group** (`group` below) is one rule on every entry point since P0
+(`effectiveCustomerGroupId`, `PL/backend/services/customer-group-rule.ts`):
+
+```
+group = context.customerGroupId                 -- a group the caller already resolved
+     ?? account(customerAccountId).customerGroupId   -- read once per call; only when the account
+                                                 --   belongs to `organization`, else ignored
+     ?? organization.customerGroupId
+     ?? null
+```
+
+Callers name the buyer and the engine applies the rule: the catalogue listing, the product detail,
+search, the typeahead, comparisons, product links, the `resolved-price` route and the cart pass
+`customerAccountId`; quote reference prices and the admin order preview pass the group they
+resolved. The price ordering (`orderByUnitPrice`, `pricedProductIds`) applies the same rule.
 
 ```
 resolveEngine(product, qty, org, group, channel, currency)          pricing-service.ts:367-524
@@ -85,12 +101,25 @@ buyer ─────▶│ evaluate rule ─▶ base partition      sale partit
                       ▼                            ▼
                   base price  ◀── replaced wholesale by ──  sale price (if any, even if higher)
                       ▼ none
-               product.defaultPrice (listing/cart only, channel-default currency; cart says PLN)
+               product.defaultPrice (listing/cart only, in the channel-default currency)
                       ▼ none
                    unpriced
 ```
 
-The listing batch (`resolveListingPrices`, `pricing-service.ts:616-757`) is the same algorithm
+**Entry points.** `resolveEngine` / `resolveLinePrice` resolve one product at one quantity. Three
+batched entry points run the same algorithm over a set in "priority waves" — one bracket statement
+per fall-through level, not per product — and answer exactly what the single call answers per item:
+`resolveListingPrices` (quantity 1; the listing chain's `ListingPrice` per product),
+`resolveListingPriceDetails` (P0; the same plus `basePrice`, `salePrice` and `displayMode` from one
+resolution — `basePrice` is the base bracket, else the Product's own price when that is the listing
+answer — which the catalogue emits as `ProductSummary.resolvedPrice` for the PDP, the home cards and
+the typeahead) and `resolveLinePrices` (P0; many keyed lines, each at its own quantity, for the cart,
+the placement price check, quote reference prices and the external catalogue API). Consequence for
+the typeahead: a suggestion's `basePrice` now includes the own-price arm, which it lacked when it
+was built from `resolveEngine`. The identities are asserted in
+`backend/test/integration/price_lists/listing-prices-batch.test.ts` and `line-prices-batch.test.ts`.
+
+The listing batch is the same algorithm
 batched in "priority waves"; the price sort (`orderByUnitPrice`, `:791-883`) re-expresses it as a
 merge of per-list index streams built by running `pickPriorityChain` to exhaustion
 (`PL/backend/services/price-list-candidate-vector.ts:132-157`), with category criteria enumerated
@@ -121,8 +150,9 @@ Verified in code unless marked:
    (`…engine.ts:226-301`) and never again (no subscriber in `PL/backend`). A re-priced product keeps
    its old Default bracket; the editor's field is silently shadowed. A product created later has no
    Default bracket and is priced from the attribute (listing only in the channel default currency,
-   `PL/backend/services/listing-price-chain.ts:49`; cart labels it hard-coded PLN,
-   `packages/modules/carts/src/backend/services/cart-line-pricing.ts:69,145`). Price sort ignores the
+   `PL/backend/services/listing-price-chain.ts:49`; the cart labels it with the basket channel's
+   default currency since P0 — it was hard-coded PLN — and refuses it on a basket whose channel is
+   gone, `CartLinePricing.orderablePrices`). Price sort ignores the
    attribute arm (unpriced tail, `CAT/backend/services/catalog-query.service.ts:949-959`).
 2. **Percentage reference ignores the attribute arm**: `defaultBrackets` is only the Default list
    (`pricing-service.ts:278-291`), so a % entry on a product priced only by `defaultPrice` prices nothing.
@@ -139,20 +169,25 @@ Verified in code unless marked:
 8. **No channel/currency on the header** → every resolution loads every active list and evaluates
    every rule in memory, O(products × lists) (`pricing-service.ts:440,664,993`); no index can answer
    "which lists apply to me".
-9. **Customer's own group is ignored** on listings, PDP and cart (no `customerGroupId` passed —
-   grep of `catalog-query.service.ts`, `cart-line-pricing.ts`; `PL/backend/routes.storefront.ts:172`
-   says so) but honoured in quotes (`buyer-line-price-service.ts:119`) and admin order preview.
-10. **Variants have no price dimension** (#377); `price_override` exists and is dead for pricing.
-11. **Cache**: process-local LRU (`pricing-cache.ts`), `invalidateAll` only in the writer's process
-    and *inside* the Command Bus `run` callback, i.e. before commit (`price-list-service.ts:284-293`);
-    the status sweeper never invalidates (`price-list-status-worker.ts`, no cache reference) and runs
-    every 5 min; catalog writes (categories, attributes, `defaultPrice`) never invalidate; 5.3 % hit
+9. ~~**Customer's own group is ignored** on listings, PDP and cart~~ — fixed by P0: one rule on
+   every path (§1.2). Still not applied by the external catalogue API, which names the bound
+   organization but not the API key's customer account.
+10. **Variants have no price dimension** (#377); `price_override` exists and is dead for pricing
+    (since P0 the storefront variant picker no longer displays it).
+11. **Cache**: process-local LRU (`pricing-cache.ts`). Since P0 it is cleared after commit, on
+    every process (Redis `b2b:price_lists:pricing-generation`, best effort, TTL as the degraded
+    bound) and by a status sweep that flips a list (read-paths §2.4); the sweep still runs every
+    5 min; catalog writes (categories, attributes, `defaultPrice`) never invalidate; 5.3 % hit
     rate at 50 organisations (read-paths, `backend/test/perf/catalog/listing-price-viewer-cost.bench.ts:24-27`)
     because the key carries the organisation even when its prices equal everyone's.
 12. **Several resolution chains** (listing chain, cart `orderablePrice`, cart `recompute`, order
-    intake probe, buyer line price) with different inputs — #168 (read-paths §5).
+    intake probe, buyer line price) — since P0 they share the customer-group rule and the batched
+    entry points, but the cart `recompute` still lacks the agreed price, the own-price fallback and
+    the display-mode check — #168 (read-paths §5).
 13. **PLP cards cannot show strikethrough**: `ListingPrice` carries one amount + `isSale`
-    (`CON/price-lists.ts:514-529`); only PDP/typeahead get base+sale.
+    (`CON/price-lists.ts:514-529`); only PDP/typeahead/home cards render base+sale — since P0 every
+    `ProductSummary` carries `resolvedPrice`, so PLP cards could, but `ProductGrid` does not pass it
+    yet.
 14. **Promotions stack on sale prices with no way to exclude** (no price-list criterion in
     `packages/modules/promotions/src/backend/services/promotion-rule-evaluator.ts`, read-paths §6).
 

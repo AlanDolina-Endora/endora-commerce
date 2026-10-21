@@ -2,7 +2,7 @@
 
 The product owner's three target scenarios (E1–E3) and the cases that chose the precedence (F, S, T, Q vectors), and the cases the owner's rulings of 2026-10-21 decide (C∩, configurable precedence, H, A, K, U, V, D vectors), each as **inputs → expected price → which row wins and why**, under the proposed model, with today's answer where it differs. They are written to become the failing-first tests of the pricing-model feature (Constitution III) and to answer "what should this cost?" without re-deriving the algorithm.
 
-**Verified against** `master` at `b1021c71b` on 2026-10-21. File:line citations are as of that commit; re-check them before relying on one.
+**Verified against** `master` at `b1021c71b` on 2026-10-21; §10.11 re-checked for the P0 read-path hardening (branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21. File:line citations are as of `b1021c71b`; re-check them before relying on one.
 
 **Section numbers.** `§N` references follow the numbering of the original analysis, which is split across this directory: §1 → `current-model.md`; §2 → `read-paths-and-performance.md` (its summary table); §3–§9, §11, §12 → `decision-record.md`; §10 → `worked-examples.md`. `read-paths §N` points into `read-paths-and-performance.md`, `peers §N` into `peer-platforms.md`. Path abbreviations: `PL/` = `packages/modules/price_lists/src/`, `CON/` = `packages/contracts/src/`, `CAT/` = `packages/modules/catalog/src/`, `SF/` = `storefront/`.
 
@@ -217,6 +217,13 @@ Chain depth (N6):
 | A3.2 | same rep; L8 {Acme, Beta} | — | — | **not visible** (answers as missing, N3) | a member out of scope |
 | A3.3 | same rep; L9 groups {VIP, Gold} | — | — | read-only | not an organization list |
 | A4 | create a list with members of two kinds (Acme and VIP) | — | — | refused `400 VALIDATION_FAILED` | one kind per list |
+
+The effective-group rule of A2.1–A2.3 (the customer's own group, else the organization's — one
+group, never both) already holds on the **current** model since P0, on every entry point
+(`current-model.md` §1.2): the current-model vectors are
+`backend/test/integration/price_lists/line-prices-batch.test.ts` (own group wins; an account of
+another organization is ignored) and `customer-own-group-every-path.test.ts` (listing, product
+detail, `resolved-price`, cart). P1 keeps the rule and moves the audience onto the header.
 
 ### 10.12 Channel sets and currency (Q5)
 

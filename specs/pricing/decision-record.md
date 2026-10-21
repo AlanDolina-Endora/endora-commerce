@@ -11,7 +11,7 @@ The record answers the question the product owner asked before issue #378 (*Pric
 move to a Price matrix and drop the Application rule, or keep the Application rule and extend it
 with criteria on attributes flagged `isPriceRule` plus a priority?**
 
-**Verified against** `master` at `b1021c71b` on 2026-10-21. File:line citations are as of that commit; re-check them before relying on one.
+**Verified against** `master` at `b1021c71b` on 2026-10-21; §6 point 6, §8.2 row P0 and §12 re-checked for the P0 read-path hardening (branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21. File:line citations are as of `b1021c71b`; re-check them before relying on one.
 
 **Section numbers.** `§N` references follow the numbering of the original analysis, which is split across this directory: §1 → `current-model.md`; §2 → `read-paths-and-performance.md` (its summary table); §3–§9, §11, §12 → `decision-record.md`; §10 → `worked-examples.md`. `read-paths §N` points into `read-paths-and-performance.md`, `peers §N` into `peer-platforms.md`. Path abbreviations: `PL/` = `packages/modules/price_lists/src/`, `CON/` = `packages/contracts/src/`, `CAT/` = `packages/modules/catalog/src/`, `SF/` = `storefront/`.
 
@@ -633,7 +633,11 @@ Goal (requirement 9): listing and PDP no slower than today's measured p95 (listi
    same surface exported.
 6. **Read-path fixes independent of the model** (P0): one resolution for the PDP (it is priced
    twice), batched bestsellers/typeahead/external-API/cart-recompute/buyer-line paths, customer's own
-   group on every path, the variant picker not showing an uncharged price.
+   group on every path, the variant picker not showing an uncharged price. **Implemented** on branch
+   `fix/pricing-read-path-hardening` (2026-10-21), together with point 3's after-commit and
+   cross-replica invalidation for the current LRU (`b2b:price_lists:pricing-generation`) and the
+   sweeper bump; what changed and what is still open is in `read-paths-and-performance.md`,
+   *P0 — what changed*.
 7. **Quantity for sort** (Q10, ruled): quantity 1, what the card shows.
 
 ## 7. Display settings and promotions (Q8a, Q8b)
@@ -726,7 +730,7 @@ unaffected).
 
 | # | Feature | Contains | Depends on |
 | --- | --- | --- | --- |
-| P0 | Pricing read-path hardening (**in progress with `endora-commerce-dev`, scope unchanged**) | one PDP resolution, batched N+1 paths, customer group on every path, invalidate after commit, cross-replica generation channel, sweeper invalidation, cart PLN fallback removed, variant picker stops showing `price_override` | none |
+| P0 | Pricing read-path hardening (**implemented on `fix/pricing-read-path-hardening`, 2026-10-21, full scope**; #165 and #166 are fixed in code, #167, #168 and the quote-line half of #303 remain open) | one PDP resolution, batched N+1 paths, customer group on every path, invalidate after commit, cross-replica generation channel, sweeper invalidation, cart PLN fallback removed, variant picker stops showing `price_override` | none |
 | P1 | Pricing model v2 — model, conversion, removal, sort | header with channel and audience sets; rows with variant, signed percent, amount adjustment; base books with variant rows; three-tier resolver over the rank table; precedence table seeded with **HY** (changes refused until P3); sale = min; priority tie-break; line price source tier; **the materialised price surface and the new price sort** (the feature-086 ordering reads `price_list_price_brackets`, which P1 removes, so the sort is rewritten once, on the surface, rather than twice); one-shot conversion and demo reseed (§8.1); removal of everything §8.1 lists; versioned admin API and `minor` changesets; every consumer re-pointed to the one resolution chain | D-287 (ratified) |
 | P2 | #378 re-scoped: price book editor | create wizard (type → currency → channel set → audience set → schedule), grid (rows = selections, expandable to variants; cells = price with in-cell tiers; Medusa-style keyboard: Tab/Enter, drag-fill, paste from a spreadsheet, undo), bulk add via the 145 product picker, category/attribute rows, duplicate dialog, price explainer, product-editor base-price zone, *Pricing settings* page with `pricing.show_list_price` | P1 |
 | P3 | Configurable precedence flow | stage → impact preview → confirm → activate → versioned rebuild → flip, with `price_lists:configure`; the *Advanced* editor; optional Meilisearch everyone price | P1 (the surface) |
@@ -773,5 +777,9 @@ Verdict: **pass**. D-287 is ratified; P1's spec can be written now.
 ## 12. Handoff
 
 - D-287 is ratified; #378 is re-scoped to P2 and is not implemented on the current model.
-- P0 is with `endora-commerce-dev`, scope as in §8.2.
+- P0 is implemented on `fix/pricing-read-path-hardening`, scope as in §8.2. Issues #165 (agreed
+  price only at the agreed quantity, commit `7d2d00fcc`) and #166 (a reorder is repriced, placement
+  refuses drift) are fixed in code; #167 (quote validity not checked at placement), #168 (`GET /cart`
+  re-resolves on a second chain) and the quote-line half of #303 (quote lines stored in PLN) remain
+  open. Open read-path items are listed in `read-paths-and-performance.md`.
 - P1 needs `/speckit.specify` (feature 160) from §5, §8 and §10; N12–N13 are ruled.
