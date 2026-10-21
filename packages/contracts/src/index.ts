@@ -191,6 +191,7 @@ export * from './admin-actions.js';
 export * from './admin-contributions.js';
 export * from './product-scope-overrides.js';
 export * from './product-value-resolver.js';
+export * from './storefront-value-overrides.js';
 export * from './mfa.js';
 export * from './prompt-actions.js';
 export * from './pwa.js';

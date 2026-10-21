@@ -1,9 +1,10 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   SYSTEM_ATTRIBUTE_SCOPES,
-  resolveAttribute,
+  channelOverrideFor,
   type AttributeScope,
   type OverrideRow,
+  type StorefrontOverrideContext,
 } from '@endora-commerce/contracts';
 
 import { loadOverridesByProduct } from './product-value-resolver.service.js';
@@ -12,42 +13,19 @@ import { loadOverridesByProduct } from './product-value-resolver.service.js';
  * Issue #384 — what a storefront read needs to show a product's
  * per-(sales channel, language) overrides (features 022/023).
  *
- * **Only the override slots are taken from the resolver.** The fallback chain
- * is `resolveAttribute` in `@endora-commerce/contracts` — the one the admin
- * scope editor previews with and the search indexer indexes with — and this
- * file adds no second implementation of it. What it deliberately does *not*
- * take from the resolver is the baseline leg: the storefront reads have always
- * walked their own language fallback over the baseline JSONB (`preferred` →
- * the channel's default language → `en-US` → `en` → first key), which differs
- * from the resolver's (`languageCode` → primary language → first sorted key)
- * in its edges. Replacing it would change what every product *without* an
- * override shows, so an override answers here only when the resolver says a
- * channel slot produced the value, and the caller's existing baseline pick
- * answers otherwise.
+ * The slot choice itself — the language legs, and which override answers —
+ * is `@endora-commerce/contracts`' `storefront-value-overrides`, shared with
+ * `search`'s result cards so the two modules cannot show one product under two
+ * names. Re-exported here so this module's reads name one import. What stays
+ * in this file is what only `catalog` can do: read the rows, and map a
+ * product's user attributes through their scopes.
  */
-
-/** The request's resolution context, as the storefront reads hold it. */
-export interface StorefrontOverrideContext {
-  channelId: string;
-  /**
-   * The languages a (channel, language) override is looked up for, in order:
-   * the `Accept-Language` pick, then the channel's default language — the
-   * first two legs the baseline language pick walks, so an override answers
-   * for exactly the language whose baseline text the page would otherwise
-   * show. Empty when neither is known: only channel-only slots can answer.
-   */
-  languages: readonly string[];
-}
-
-/** The ordered, de-duplicated language legs for a request. */
-export function overrideLanguages(
-  preferredLanguage: string | undefined,
-  channelDefaultLanguage: string | undefined,
-): string[] {
-  return [...new Set([preferredLanguage, channelDefaultLanguage])].filter(
-    (l): l is string => typeof l === 'string' && l.length > 0,
-  );
-}
+export {
+  channelOverrideFor,
+  effectiveSystemText,
+  overrideLanguages,
+  type StorefrontOverrideContext,
+} from '@endora-commerce/contracts';
 
 /**
  * Every override row the request's sales channel holds for a set of products,
@@ -62,58 +40,6 @@ export function loadChannelOverridesByProduct(
   channelId: string,
 ): Promise<Map<string, OverrideRow[]>> {
   return loadOverridesByProduct(em, { productIds, channelId });
-}
-
-/**
- * The override value for one attribute in this context, or `undefined` when no
- * channel slot applies and the caller's baseline should stand.
- *
- * The resolver takes one language and falls through to the channel-only slot
- * inside the same call, so each language leg is asked for its
- * (channel, language) slot alone, and the channel-only slot is asked last.
- */
-export function channelOverrideFor(
-  overrides: readonly OverrideRow[] | undefined,
-  attributeKey: string,
-  scope: AttributeScope,
-  ctx: StorefrontOverrideContext,
-): unknown {
-  if (!overrides || overrides.length === 0) return undefined;
-  const resolve = (languageCode: string | null) =>
-    resolveAttribute({
-      attributeKey,
-      // No baseline: the baseline leg is the caller's (see the file comment).
-      baseline: undefined,
-      overrides,
-      scope,
-      ctx: {
-        channelId: ctx.channelId,
-        languageCode,
-        // Unused: with no baseline, the resolver's primary-language leg cannot answer.
-        primaryLanguage: languageCode ?? '',
-      },
-    });
-  for (const languageCode of ctx.languages) {
-    const resolved = resolve(languageCode);
-    if (resolved.source === 'channel+language') return resolved.value;
-  }
-  const channelOnly = resolve(null);
-  return channelOnly.source === 'channel' ? channelOnly.value : undefined;
-}
-
-/**
- * The effective Name or Description: the channel override when one applies
- * and is a non-empty string, else `baselineText` — the caller's existing
- * language pick over the baseline JSONB.
- */
-export function effectiveSystemText(
-  overrides: readonly OverrideRow[] | undefined,
-  attributeKey: 'name' | 'description',
-  ctx: StorefrontOverrideContext,
-  baselineText: string,
-): string {
-  const v = channelOverrideFor(overrides, attributeKey, SYSTEM_ATTRIBUTE_SCOPES[attributeKey]!, ctx);
-  return typeof v === 'string' && v.length > 0 ? v : baselineText;
 }
 
 /**

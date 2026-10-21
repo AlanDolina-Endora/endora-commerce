@@ -7,6 +7,7 @@ import type {
   CatalogProductReadPort,
   CatalogProductRecord,
   CatalogProductValueOverrideRecord,
+  CatalogValueOverrideLookupOptions,
   CatalogProductVariantRecord,
   ProductLinkKind,
 } from '@endora-commerce/contracts';
@@ -171,10 +172,12 @@ export class CatalogProductReadService implements CatalogProductReadPort {
 
   async listValueOverridesByProductIds(
     productIds: readonly string[],
+    options: CatalogValueOverrideLookupOptions = {},
   ): Promise<CatalogProductValueOverrideRecord[]> {
     if (productIds.length === 0) return [];
     const overrides = await this.emFactory().find(ProductValueOverride, {
       productId: { $in: [...productIds] },
+      ...(options.channelId !== undefined ? { channelId: options.channelId } : {}),
     });
     return overrides.map(toCatalogProductValueOverrideRecord);
   }

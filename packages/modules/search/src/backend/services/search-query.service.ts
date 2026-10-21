@@ -1,10 +1,12 @@
 import { Meilisearch, MeilisearchApiError, type SearchResponse } from 'meilisearch';
 import {
   ERROR_CODES,
+  effectiveSystemText,
   isOrderMinimumEligibleType,
   isProductVisibleTo,
   listingPriceChannelContext,
   listingPriceMoney,
+  overrideLanguages,
   type CatalogAttributeReadPort,
   type CatalogProductReadPort,
   type CatalogProductRecord,
@@ -12,6 +14,7 @@ import {
   type ListingPriceDetail,
   type ListingPriceDetailPort,
   type OrganizationDetailsPort,
+  type OverrideRow,
   type PriceOrganization,
   type ProductAudience,
   type ProductListSort,
@@ -94,7 +97,7 @@ export interface SearchListResult {
   pagination: { cursor: string | null; hasMore: boolean; limit: number };
 }
 
-interface DocumentHit
+export interface DocumentHit
   extends Pick<
     IndexedDocument,
     'id' | 'sku' | 'name' | 'slug' | 'type' | 'categorySlugs'
@@ -241,12 +244,22 @@ export class SearchQueryService {
     const hasMore = response.hits.length > params.limit;
     const nextCursor = hasMore ? encodeOffsetCursor(offset + params.limit) : null;
 
-    if (hits.length === 0) {
-      return {
-        data: [],
-        pagination: { cursor: nextCursor, hasMore, limit: params.limit },
-      };
-    }
+    return {
+      data: hits.length === 0 ? [] : await this.hydrateHits(hits, ctx),
+      pagination: { cursor: nextCursor, hasMore, limit: params.limit },
+    };
+  }
+
+  /**
+   * The post-Meilisearch half of {@link listProducts}: re-read every hit from
+   * Postgres and project it into the card the catalogue's listing would show.
+   * Separate so the projection can be asserted without a search engine.
+   */
+  async hydrateHits(
+    hits: readonly DocumentHit[],
+    ctx: SearchQueryContext,
+  ): Promise<ProductSummary[]> {
+    const channel = ctx.resolvedChannel;
 
     // Hydrate the channel-aware price + multilingual name override from
     // Postgres. This protects against stale index data and keeps R-18
@@ -296,6 +309,12 @@ export class SearchQueryService {
             },
           })
         : new Map<string, ListingPriceDetail>();
+    // Issue #384 — the request channel's value overrides for the page, in one
+    // read, so a card's name is the one the catalogue's card shows for this
+    // (channel, language). Not `hit.name`: the indexer resolves that in the
+    // channel's default language only, so it is wrong for any other request
+    // language — it stays what the index ranks and sorts by.
+    const overridesByProduct = await this.#channelOverridesFor(products, channel.id);
     const summaries: ProductSummary[] = [];
     for (const hit of hits) {
       const product = productById.get(hit.id);
@@ -309,14 +328,31 @@ export class SearchQueryService {
           ctx.preferredLanguage,
           resolvedPrices.get(product.id)?.price,
           resolvedPrices.get(product.id),
+          overridesByProduct.get(product.id),
         ),
       );
     }
 
-    return {
-      data: summaries,
-      pagination: { cursor: nextCursor, hasMore, limit: params.limit },
-    };
+    return summaries;
+  }
+
+  /** Every override row `channelId` holds for the page's products, bucketed by product. */
+  async #channelOverridesFor(
+    products: readonly CatalogProductRecord[],
+    channelId: string,
+  ): Promise<Map<string, OverrideRow[]>> {
+    const byProduct = new Map<string, OverrideRow[]>();
+    if (products.length === 0) return byProduct;
+    const rows = await this.products.listValueOverridesByProductIds(
+      products.map((p) => p.id),
+      { channelId },
+    );
+    for (const row of rows) {
+      const list = byProduct.get(row.productId) ?? [];
+      list.push(row);
+      byProduct.set(row.productId, list);
+    }
+    return byProduct;
   }
 
   #requireListingPrices(): ListingPriceDetailPort {
@@ -505,6 +541,12 @@ export function searchHitSummary(
    * projected onto `ProductSummary.resolvedPrice`. Omitted, the field is too.
    */
   detail?: ListingPriceDetail,
+  /**
+   * Issue #384 — this product's value-override rows for `channel`. A channel
+   * override for the request's language legs wins over the baseline pick;
+   * omitted or empty, the name is exactly what it was before.
+   */
+  overrides?: readonly OverrideRow[],
 ): ProductSummary {
   const price = resolvedPrice === undefined ? null : listingPriceMoney(resolvedPrice);
 
@@ -512,7 +554,16 @@ export function searchHitSummary(
     id: product.id,
     sku: product.sku,
     type: product.type,
-    name: pickLang(product.name, preferredLanguage, channel) || hit.name,
+    name:
+      effectiveSystemText(
+        overrides,
+        'name',
+        {
+          channelId: channel.id,
+          languages: overrideLanguages(preferredLanguage, channel.defaultLanguage),
+        },
+        pickLang(product.name, preferredLanguage, channel),
+      ) || hit.name,
     slug: product.slug,
     categorySlugs: hit.categorySlugs,
     primaryAssetUrl: hit.primaryAssetUrl ?? null,

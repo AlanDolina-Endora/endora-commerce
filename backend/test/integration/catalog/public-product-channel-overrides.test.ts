@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
+  ANONYMOUS_PRODUCT_AUDIENCE,
+  type CatalogProductReadPort,
+} from '@endora-commerce/contracts';
+import { SearchQueryService } from '../../../../packages/modules/search/dist/backend/services/search-query.service.js';
+
+import {
   setupBackendServer,
   teardownBackendServer,
   type BackendServerHandle,
@@ -31,6 +37,8 @@ describe('Issue #384 — public product reads honour channel value overrides', (
   let groupedSlug: string;
   let bundleSlug: string;
   let createdSince: string;
+  let retailChannelId: string;
+  let vipChannelId: string;
 
   beforeAll(async () => {
     h = await setupBackendServer();
@@ -121,8 +129,8 @@ describe('Issue #384 — public product reads honour channel value overrides', (
       [],
       'all',
     );
-    const retailChannelId = rows.find((r) => r.code === 'pl_retail')!.id;
-    const vipChannelId = rows.find((r) => r.code === 'pl_b2b_vip')!.id;
+    retailChannelId = rows.find((r) => r.code === 'pl_retail')!.id;
+    vipChannelId = rows.find((r) => r.code === 'pl_b2b_vip')!.id;
     await conn.execute(
       `insert into sales_channel_products (sales_channel_id, product_id)
        values (?,?), (?,?), (?,?), (?,?), (?,?), (?,?)
@@ -342,5 +350,58 @@ describe('Issue #384 — public product reads honour channel value overrides', (
     };
     expect(await read('pl_b2b_vip')).toEqual({ child: 'Zestaw hurtowy', related: 'Zestaw hurtowy' });
     expect(await read('pl_retail')).toEqual({ child: 'Zestaw bazowy', related: 'Zestaw bazowy' });
+  });
+
+  it('a search result card shows the name the listing card shows, for every channel and language', async () => {
+    // The hydration step of the Meilisearch path, driven with a hit the way
+    // the engine returns it, so the case needs no search engine. The hit's
+    // indexed name is deliberately neither text: the card must not trust it.
+    const search = new SearchQueryService(
+      h.container.resolve<CatalogProductReadPort>('catalogProductReadPort'),
+    );
+    const searchCardName = async (
+      channelId: string,
+      code: string,
+      language: string | null,
+    ): Promise<string | undefined> => {
+      const [card] = await search.hydrateHits(
+        [
+          {
+            id: productId,
+            sku: 'unused',
+            slug,
+            type: 'simple',
+            name: 'Indexed name',
+            categorySlugs: [],
+            primaryAssetUrl: null,
+          },
+        ],
+        {
+          resolvedChannel: {
+            id: channelId,
+            code,
+            // Withholds prices, so the case needs no pricing port.
+            isPublic: false,
+            defaultCurrency: 'PLN',
+            defaultLanguage: 'pl-PL',
+          },
+          audience: ANONYMOUS_PRODUCT_AUDIENCE,
+          preferredLanguage: language ?? undefined,
+        },
+      );
+      return card?.name;
+    };
+    for (const [channelId, code] of [
+      [vipChannelId, 'pl_b2b_vip'],
+      [retailChannelId, 'pl_retail'],
+    ] as const) {
+      for (const language of ['pl-PL', 'en-US', 'de-DE', null]) {
+        expect(await searchCardName(channelId, code, language), `${code} ${language}`).toBe(
+          await readCardName(code, language),
+        );
+      }
+    }
+    expect(await searchCardName(vipChannelId, 'pl_b2b_vip', 'pl-PL')).toBe('Zestaw hurtowy');
+    expect(await searchCardName(retailChannelId, 'pl_retail', 'pl-PL')).toBe('Zestaw bazowy');
   });
 });
