@@ -1,6 +1,6 @@
 ---
 title: custom_fields
-description: Typed fields an operator adds to orders, quote requests, opportunities and other records without a code change, edited on one screen and offered as filters on the admin lists.
+description: Typed fields an operator adds to orders, quote requests, opportunities and other records without a code change, edited on one screen, offered as filters on the admin lists and carried from one record to the record created from it.
 ---
 
 # `custom_fields`
@@ -42,6 +42,9 @@ Choose the record type on **Custom Fields**, then fill in the form under the tab
 - **Required** — a record cannot be saved without a value.
 - **Use as list filter** — offered only for orders, quote requests and opportunities. See
   [List filters](#list-filters).
+- **Carry value to …** — one checkbox per record type the value can follow, offered only for
+  quote requests, orders and opportunities, with one help line for the group. See
+  [Carrying values between quote requests, orders and opportunities](#carrying-values-between-quote-requests-orders-and-opportunities).
 
 **Add field** creates it. **Delete** (the bin) asks in place before a field is deleted. Creating,
 editing and deleting fields needs the `custom_fields:write`
@@ -69,6 +72,8 @@ record type and the type as fixed text, and edits the rest:
   An option's **stored value** never changes — it is what records hold — so relabelling an option
   keeps every record and every filter on it working.
 - **Use as list filter**, where the record type offers it.
+- **Carry value to …**, where the record type offers it — one checkbox per target, each with its
+  own help line.
 
 Option changes are saved as soon as you make them, so once one is made the dialog's **Cancel**
 reads **Close**. **Save** sends only what you changed, and nothing at all when nothing changed. If the change is
@@ -124,14 +129,131 @@ Opportunities list — a link that filtered the list by it is refused until the 
 There is no custom-field filter on the storefront or on any API-key endpoint. Filtering on an
 *internal* field is an administrator's tool and reveals nothing the list did not already show.
 
+## Carrying values between quote requests, orders and opportunities
+
+When one record is created from another — an order placed from a quote request, a sales opportunity
+opened for an order — a field can hand its value on to the field **with the same key** on the new
+record. A quote request field `order_source` holding *Trade fair* then gives the order placed from
+that request an `order_source` of *Trade fair*, without anybody typing it again.
+
+### The pairs
+
+The option sits on the field the value comes **from**. Five pairs are offered:
+
+| A field on | can carry its value to | when |
+| --- | --- | --- |
+| Quote requests | Orders | the customer places the order from the accepted quote request (see *Orders*) |
+| Quote requests | Opportunities | the CRM opens an opportunity for the request |
+| Orders | Opportunities | the CRM opens an opportunity for the order, or the order joins the opportunity of the quote request it was placed from |
+| Opportunities | Quote requests | an administrator creates the quote request from the opportunity |
+| Opportunities | Orders | an administrator creates the order from the opportunity |
+
+No other record type offers the option: a Category, Product, Customer or Organization field shows
+no **Carry value to …** checkbox. An order field is not offered *Quote request* — an order cloned
+into a quote request by the customer receives no carried value. Fields that follow a module follow
+it here too: while `crm` is switched off no checkbox names opportunities and opportunity fields are
+not listed, while `quote_requests` is off the same holds for quote requests, and nothing is carried
+into or out of those records. The options are kept, and work again once the module is back;
+records created in the meantime are not filled in afterwards.
+
+### What is carried, and when
+
+- **Once, when the records are joined.** A value is carried when the new record is created or
+  joined to its source, and only then. Editing either record later changes nothing on the other.
+  Turning the option on or off changes no stored value and fills in no record created earlier.
+- **Only into an empty field.** If the new record already holds a value for the key — typed in, or
+  carried from an earlier document — that value is kept. When two orders join one opportunity with
+  different values, the first fills the opportunity's field and the second leaves it alone.
+- **Only a value.** An empty source field carries nothing and never clears the target. A value left
+  on a record by a field that has since been deleted is not carried.
+- **Only within one organization.** Both records always belong to the same organization; a pair of
+  records of different organizations carries nothing.
+- **Never in the way.** Carrying never makes a checkout, an order or quote request created by an
+  administrator, or an opportunity fail. Another required field left empty on the new record does
+  not stop a value from being carried, and carrying adds no new reason for a record to be refused.
+- **A manual link carries nothing.** Linking an existing order or quote request to an opportunity on
+  the opportunity's *Links* tab, or from the *Linked opportunity* panel of the document, carries no
+  value in either direction and records nothing.
+
+### When the option can be turned on
+
+**Carry value to …** is accepted only when the target record type has a field with the same key
+that can hold the value. Otherwise saving is refused, the form or dialog stays open, and the
+message names the reason:
+
+| Refusal | Means |
+| --- | --- |
+| No field with the key on the target | Create the field on the target record type first. |
+| Different type | The two fields must have the same type. Nothing is widened: *Single choice* does not carry into *Multiple choice*, and no type carries into *Text*. The message names both types. |
+| Missing options | For a choice field, every option's stored value on this field must exist on the target. The labels may differ and the target may have more options. The message lists the missing values. |
+| Visible to customers | This field is *Internal* and the target field is *Customer*. An internal value would become visible to customers, so this is refused — change one of the two fields' audience first. *Customer* to *Internal*, and two fields of the same audience, are accepted. |
+| Switched off | The target record type's module is switched off. |
+
+Carrying changes no field's audience: whoever may read the **target** field reads the value carried
+into it. Turning the option on or off is a change to the field like any other, recorded in the
+audit log.
+
+### Changing a field that carries, or receives
+
+A field that is part of a carry can still be changed or deleted. Before a change that would stop
+values from carrying, the screen warns you and lists every field on the other side, as
+*record type · key*:
+
+| You are about to | The warning appears when | The button that goes ahead |
+| --- | --- | --- |
+| remove an option (**Remove** in the dialog) | a field carrying into this one has that option | **Remove option anyway** |
+| add an option (**Add option**) | this field carries to a field that lacks it | **Save anyway** |
+| change *Who can see the value* in the table | this field would become *Customer* while a field carrying into it is *Internal*, or *Internal* while it carries to a *Customer* field | **Save anyway** |
+| delete the field (the bin) | it carries to, or receives from, any field | **Delete field anyway** |
+
+The removal and deletion buttons are red, like every destructive action. **Cancel** changes
+nothing. A change that breaks no carry asks nothing more than it did before — and where the warning
+appears, it replaces the usual confirmation for that removal or deletion rather than adding a
+second one. The type of a field cannot be changed on this screen, so there is no warning for it.
+
+Going ahead keeps the **Carry value to …** option as it was. The table's **Carries to** column
+lists the record types each field carries to; a carry that no longer works is marked
+**Incompatible**, with the reason — the missing field, the two types, the missing options or the
+audience — beside it on a narrow screen and on hover otherwise. The mark clears as soon as the
+fields match again or the option is turned off.
+
+### A value that is not carried
+
+The mark is a warning, not a switch: a carry marked *Incompatible* still runs, and each value is
+judged against the target field **as it is when the record is created**. A choice value whose
+option the target has since gained is carried; a carry the table showed as fine is skipped if the
+target no longer fits by then.
+
+A value that cannot be carried is skipped, the record is created all the same, and the new record
+says what was left out — **one** entry per conversion, naming every skipped field once with its
+reason:
+
+| Target | Where the entry is |
+| --- | --- |
+| Order | an internal note by *System* in the order's comments — never shown to the customer and sending no notification |
+| Quote request | an entry by *System* in the request's History — in the Admin UI only, never in the customer's view of the request |
+| Opportunity | the entry of its creation, or of the order joining it, in its *Change history* |
+
+The reasons are: the target has no field with the key, the target field's type differs, the target
+field is visible to customers while the source field is internal, or the value does not fit the
+target field — for example a choice whose option the target lacks. A conversion
+that skips nothing records nothing.
+
+Each entry names a field by **its label as it read when the value was skipped**, in the reader's
+language, so anybody who may see the record can read which field it was — `custom_fields:read` is
+not needed for that, and renaming or deleting the field later does not change the entry. The entry
+holds only the field's name and the reason, never a value; custom-field values themselves stay
+visible only with `custom_fields:read`, as before. An entry recorded before field names were kept
+with it names the field by its current label where it can, and otherwise by its key.
+
 ## For integrators
 
 | Verb + Path | Permission | Purpose |
 | --- | --- | --- |
-| `GET /api/v1/admin/custom-fields/entity-types` | `custom_fields:read` | The entity types offered now, each with `listFilter`: whether its fields may be list filters. |
-| `GET /api/v1/admin/custom-fields/definitions?entityType=…` | `custom_fields:read` | The fields of a type, each with `listFilter`. |
-| `POST /api/v1/admin/custom-fields/definitions` | `custom_fields:write` | Create a field; `listFilter` is optional and refused with `422` for a type that does not offer it. |
-| `PATCH /api/v1/admin/custom-fields/definitions/:id` | `custom_fields:write` | Change `labelDefault`, `label`, `required`, `audience` or `listFilter`; absent members are left as they are. |
+| `GET /api/v1/admin/custom-fields/entity-types` | `custom_fields:read` | The entity types offered now, each with `listFilter`: whether its fields may be list filters, and `carryTargets`: the types its fields may carry to, leaving out a type whose module is switched off. |
+| `GET /api/v1/admin/custom-fields/definitions?entityType=…` | `custom_fields:read` | The fields of a type, each with `listFilter` and `carryTo`, the types it carries to (a type whose module is switched off is left out). |
+| `POST /api/v1/admin/custom-fields/definitions` | `custom_fields:write` | Create a field; `listFilter` is optional and refused with `422` for a type that does not offer it; `carryTo` is optional (default `[]`). |
+| `PATCH /api/v1/admin/custom-fields/definitions/:id` | `custom_fields:write` | Change `labelDefault`, `label`, `required`, `audience`, `listFilter` or `carryTo` (the whole new list); absent members are left as they are. Only a **newly added** `carryTo` entry is judged, so re-sending a carry that has since become incompatible is accepted, and an entry naming a switched-off module is kept whatever the list sent. |
 | `POST`, `PATCH`, `DELETE …/definitions/:id/options[/:optionId]` | `custom_fields:write` | Add, change (labels, `isDefault`, `sortOrder` — never `value`) or remove an option. `409` for an option in use. |
 
 The definition and option routes refuse with these codes:
@@ -142,6 +264,7 @@ The definition and option routes refuse with these codes:
 | `409` | `CUSTOM_FIELD_VALUE_TYPE_LOCKED` | changing the value type of a field while records hold values | `key` |
 | `409` | `CUSTOM_FIELD_STORED_VALUES_EXIST` | creating a *Customer*-visible field under a key whose values a deleted field left on records — create it as internal first | `key` |
 | `422` | `CUSTOM_FIELD_DEFINITION_INVALID` | an invalid definition, among them `listFilter` on a record type that does not offer it (`list_filter_unsupported`) | — |
+| `422` | `CUSTOM_FIELD_CARRY_INCOMPATIBLE` | turning on a `carryTo` entry the target cannot take | `code` — `target_missing`, `value_type_mismatch`, `options_missing`, `audience_mismatch`, `pair_unsupported` (a pair that is not offered, the field's own type included) or `target_unavailable` (the target's module is switched off); `targetEntityType`, `key`; `sourceValueType` and `targetValueType` for a type mismatch; `missingOptionValues` (a comma-separated string) and `missingOptionValueList` (an array) for missing options |
 
 The three lists take the filters as a request parameter:
 

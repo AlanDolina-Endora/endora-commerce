@@ -950,21 +950,21 @@ plus the `[PG]` files named in T063, on the fork's `ci-pg` run.
 
 **Goal**: FR-018 (`specs/conventions/module-documentation.md`, `docs/docs/contributing/documentation-i18n.md`).
 
-- [ ] T054 [P] `packages/modules/custom_fields/docs/custom_fields.md` (created by the filters
+- [x] T054 [P] `packages/modules/custom_fields/docs/custom_fields.md` (created by the filters
   feature) gains *Carrying values between Quote Requests, Orders and Sales Opportunities*: the five
   pairs, fill-empty, the compatibility rule, the configuration refusal and its reasons, the
   audience rule, the drift warning and the *Incompatible* mark, skip-and-record; and
   `docs/docs/architecture/custom-fields.md` gains the carry port and receiver ports (who computes,
   who writes, R-5/R-6)
-- [ ] T055 [P] `packages/modules/orders/docs/orders.md` (the carried values at placement, the
+- [x] T055 [P] `packages/modules/orders/docs/orders.md` (the carried values at placement, the
   system note), `packages/modules/quote_requests/docs/quote_requests.md` (the
   `custom-field-carry-skipped` history entry, admin-only), `packages/modules/crm/docs/crm.md` (the
   carry on creation, joining and from an Opportunity; the history member; system attribution; no
   carry on manual links)
-- [ ] T056 The Polish pages under `docs/i18n/pl/docusaurus-plugin-content-docs/current/`
+- [x] T056 The Polish pages under `docs/i18n/pl/docusaurus-plugin-content-docs/current/`
   (`architecture/custom-fields.md`, `modules/{custom_fields,orders,quote_requests,crm}.md`) and the
   translation cache entries in `docs/translation-cache/pl/` per the manual workflow
-- [ ] T057 `pnpm --filter backend run composer:generate` (module reference pages, sidebar); commit
+- [x] T057 `pnpm --filter backend run composer:generate` (module reference pages, sidebar); commit
   any regenerated artefact; `pnpm --filter backend run check:docs-translations`
 
 **Verification**:
@@ -976,6 +976,21 @@ pnpm --filter backend run check:docs-translations
 
 (`git status` must list nothing after the commit. `check:naming` / `check:language` and the docs
 build run on the fork's CI in Phase 10 — on macOS they need Linux tools.)
+
+- **Phase 9 notes.** The pages describe the owner rulings of 2026-10-21 as ruled, ahead of the admin
+  half of Phase 8a: the proceed buttons named by action (V1; the add-option and audience warnings
+  read *Save anyway*), one help line per carry checkbox in the editor and one shared line in the
+  create row (V2), and the skip lines named by the stored source label and shown to every reader of
+  the record, values still behind `custom_fields:read` (V3). On this tip the bundles still read
+  *Continue anyway* / *Kontynuuj mimo to* and the CRM lines are still gated — T065–T067 close that.
+  Amended rather than appended: the architecture page's "`listFilter` is the one interpreted
+  attribute", `crm.md`'s "an opportunity created automatically has no custom values", and the
+  orders Comments bullet; a stray two-line fragment in `crm.md` § Opportunities created
+  automatically (en and pl), which said the quote-conversion join was "not effective yet", is
+  removed. The `custom_fields` description changed, so the module map (en, regenerated) and its
+  Polish mirror moved with it; no module reference page moved. Six Polish cache entries re-pinned
+  through `hashSourceBody` / `writeCacheEntry`. Verification: `composer:generate` (module map only),
+  `check:module-docs` findings 0, `check:docs-translations` findings 0.
 
 ---
 

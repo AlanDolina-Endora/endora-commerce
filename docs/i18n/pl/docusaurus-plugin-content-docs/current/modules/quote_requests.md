@@ -176,6 +176,13 @@ angielsku:
   grupy) oraz *zmieniono kolejność pozycji*, gdy pozycje lub grupy jedynie przestawiono — zob.
   *Grupy pozycji*. Rewizja bez wymienionej zmiany brzmi *oferta wysłana ponownie bez zmian*. Powód lub
   notatka podane przy anulowaniu, odrzuceniu albo zatwierdzeniu są pokazywane.
+- **Wartości nieprzeniesione z szansy sprzedażowej.** Gdy zapytanie utworzone z szansy
+  sprzedażowej nie mogło przyjąć części jej wartości pól niestandardowych (zob. *Pola
+  niestandardowe*), historia zawiera jeden wpis autorstwa *System*, *Nie przeniesiono wartości pól
+  niestandardowych z szansy sprzedażowej*, który podaje numer szansy i wymienia każde pominięte
+  pole — jego nazwą z chwili pominięcia — wraz z powodem. Wpis nie pokazuje żadnej wartości i może go
+  przeczytać każdy, kto może otworzyć zapytanie. Jest **widoczny tylko dla administratorów**: widok
+  zapytania u klienta nigdy go nie pokazuje. Przeniesione wartości nie mają osobnego wpisu.
 - **Ograniczona.** Historia odczytuje **100 najnowszych zdarzeń**. Gdy istnieją starsze, odpowiedź
   zawiera `truncated: true`, a zakładka informuje, że starsze wpisy nie są wyświetlane.
 
@@ -437,6 +444,31 @@ Zapytania ofertowe przyjmują pola niestandardowe, definiowane na ekranie **Pola
 Pola te podążają za tym modułem: gdy `quote_requests` jest wyłączony, nie są tam wyświetlane, nie
 można ich tworzyć ani edytować i nie zwraca ich API definicji; pola, ich opcje i zapisane wartości
 są zachowane i wracają bez zmian po ponownym włączeniu modułu.
+
+### Wartości przenoszone do zapytania i z niego
+
+Pole zapytania ofertowego może przekazywać swoją wartość dalej, a pole szansy sprzedażowej — do
+zapytania ofertowego; ustawia się to dla każdego pola opcją **Przenoś wartość do: …** na ekranie
+**Pola niestandardowe**, którego strona opisuje reguły (ten sam klucz, zgodny typ i opcje, zasada
+widoczności). Wypełniane jest tylko puste pole i tylko raz:
+
+- **Do zamówienia** złożonego z zaakceptowanego zapytania, przy składaniu — zob. stronę modułu
+  zamówień.
+- **Do szansy sprzedażowej**, którą moduł CRM otwiera dla zapytania albo do której dołącza
+  zamówienie złożone z zapytania — zob. stronę modułu CRM.
+- **Z szansy sprzedażowej** do zapytania, które administrator tworzy przyciskiem **Utwórz zapytanie
+  ofertowe** na karcie *Powiązania* szansy. Wartości trafiają do zapytania, gdy moduł CRM powiąże je
+  z szansą, w zmianie przypisanej **systemowi** (`quote_request.custom_fields.carry` w dzienniku
+  audytu); utworzenie zapytania pozostaje przypisane administratorowi. Wartość, której nie da się
+  przenieść, jest pomijana i wymieniana w *Historii* zapytania (zob. *Historia*), a zapytanie i tak
+  powstaje. Zapytanie powiązane z szansą ręcznie nie otrzymuje niczego, podobnie jak zapytanie,
+  które klient utworzył jako kopię zamówienia.
+
+Gdy ten moduł jest wyłączony, nic nie jest przenoszone do zapytania ofertowego ani z niego i nic nie
+jest odtwarzane po jego powrocie. Dla integratorów: zapisane zdarzenie ma typ
+`custom-field-carry-skipped`; w `GET /api/v1/admin/quote-requests/:id/history` jest to wpis o
+`kind` `custom_field_carry_skipped`, którego `customFieldCarry` zawiera `source` (`entityType:
+"opportunity"`, `recordId`, `reference`) i `skipped` (`key`, `reason`, `label`).
 
 ### Filtry pól niestandardowych na liście
 

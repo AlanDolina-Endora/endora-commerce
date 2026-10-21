@@ -192,6 +192,15 @@ English and Polish:
   *order changed* when lines or groups were only reordered — see *Line groups*.
   A revision with no listed change reads *offer re-sent without changes*. A reason or note given with a cancellation,
   rejection or approval is shown.
+- **Values not carried from a sales opportunity.** When a request created from
+  a sales opportunity could not take some of the opportunity's custom-field
+  values (see *Custom fields*), the history holds one entry by *System*,
+  *Custom field values not carried from a sales opportunity*, naming the
+  opportunity by its number and listing each skipped field — by its name as it
+  read when it was skipped — with the reason. It shows no value, and anybody who
+  can open the request reads it. The entry is **admin-only**: the customer's view
+  of the request never shows it. Values that were carried are not an entry of
+  their own.
 - **Bounded.** The history reads the **most recent 100 events**. When older
   events exist, the reply carries `truncated: true` and the tab says that older
   entries are not shown.
@@ -479,6 +488,30 @@ Quote requests take custom fields, defined on **Custom Fields**. They follow thi
 `quote_requests` is switched off its fields are not listed there, cannot be created or edited and
 are not offered by the definitions API; the fields, their options and the stored values are kept
 and come back unchanged when the module is switched on again.
+
+### Values carried into and out of a request
+
+A quote request field can carry its value on, and an opportunity field can carry its value into a
+quote request — set per field with **Carry value to …** on **Custom Fields**, whose page has the
+rules (same key, compatible type and options, the audience rule). Only an empty field is filled,
+and only once:
+
+- **Into the order** placed from an accepted request, at placement — see the Orders module's page.
+- **Into a sales opportunity** the CRM module opens for the request, or that an order placed from
+  the request joins — see the CRM module's page.
+- **From a sales opportunity**, into a request an administrator creates with **Create quote
+  request** on the opportunity's *Links* tab. The values arrive once the CRM module has linked the
+  request to the opportunity, in a change attributed to the **system** (`quote_request.custom_fields.carry`
+  in the audit log); the request's creation stays attributed to the administrator. A value that
+  cannot be carried is skipped and named in the request's *History* (see *History*), and the
+  request is created all the same. A request linked to an opportunity by hand receives nothing, and
+  neither does a request a customer cloned from an order.
+
+While this module is switched off nothing is carried into or out of a quote request, and nothing is
+replayed when it returns. For integrators: the stored event is of type
+`custom-field-carry-skipped`; on `GET /api/v1/admin/quote-requests/:id/history` it is an entry of
+`kind` `custom_field_carry_skipped` whose `customFieldCarry` holds `source` (`entityType:
+"opportunity"`, `recordId`, `reference`) and `skipped` (`key`, `reason`, `label`).
 
 ### Custom-field filters on the list
 
