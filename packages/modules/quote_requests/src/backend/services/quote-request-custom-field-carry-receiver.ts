@@ -4,6 +4,7 @@ import {
   type CustomFieldCarryReceipt,
   type CustomFieldCarryReceiverPort,
 } from '@endora-commerce/contracts';
+import { LockMode } from '@mikro-orm/core';
 import type { Command, CommandBus } from '@endora-commerce/platform/commands';
 import { QuoteRequest } from '../entities/quote-request.entity.js';
 import { QuoteRequestEvent } from '../entities/quote-request-event.entity.js';
@@ -23,6 +24,14 @@ const NOT_FOUND: CustomFieldCarryReceipt = Object.freeze({ outcome: 'not-found',
  * carried is named in one admin-only `custom-field-carry-skipped` event. A
  * missing request and one of another Organization are one answer, `not-found`,
  * and nothing is written; nothing carried and nothing skipped writes no entry.
+ *
+ * **The row is held from the read to the write.** Every other writer of a
+ * request takes it `for update` (`underRowLock`); this Command does the same
+ * — the Command Bus's transaction is the lock's — and plans over the bag it
+ * re-reads under the lock, so an administrator's concurrent edit is either
+ * committed before the plan reads it or refused afterwards on the version this
+ * carry bumped. Never `underRowLock` itself: there is no version the system
+ * caller read, and a 409 here would be a carry lost with nobody to retry it.
  */
 export class QuoteRequestCustomFieldCarryReceiver implements CustomFieldCarryReceiverPort {
   constructor(
@@ -43,7 +52,9 @@ function receiveCarriedValuesCommand(
     objectType: 'quote_request',
     objectId: input.recordId,
     run: async ({ em }) => {
-      const quote = await em.findOne(QuoteRequest, { id: input.recordId });
+      // The Command's EntityManager is a fresh fork, so this is a read of the
+      // stored row, taken `for update`: the plan below is made under the lock.
+      const quote = await em.findOne(QuoteRequest, { id: input.recordId }, { lockMode: LockMode.PESSIMISTIC_WRITE });
       if (!quote || quote.organizationId !== input.organizationId) {
         return { result: NOT_FOUND, skipAudit: true };
       }

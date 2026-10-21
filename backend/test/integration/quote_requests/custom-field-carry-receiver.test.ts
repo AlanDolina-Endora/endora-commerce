@@ -198,6 +198,49 @@ describe('quote_requests — custom-field values received from a Sales Opportuni
     expect(buyerDetail.body).not.toContain(key);
   });
 
+  it('waits for a write that holds the row and plans over what it committed — no lost update (review fix 2026-10-21)', async () => {
+    // Another writer — an administrator's PATCH, under `underRowLock` — holds the
+    // row and changes another key of the bag. The carry must not read the bag
+    // before that write commits: it takes the row `for update` and plans over
+    // what it re-reads. Without the lock it reads the old bag, waits only at its
+    // own UPDATE, and overwrites the other writer's value. What tells the two
+    // apart is the final bag, not the timing.
+    const { key } = await pair('locked');
+    const otherKey = fixtureKey('locked_other');
+    const rfq = await submitCrmQuoteRequest(h);
+    const versionOf = async (): Promise<number> => {
+      const rows = (await h
+        .em()
+        .getConnection()
+        .execute(`select version from "quote_requests" where id = ?`, [rfq.id])) as Array<{ version: number | string }>;
+      return Number(rows[0]!.version);
+    };
+    const before = await versionOf();
+
+    const holder = await h.em().getKnex().transaction();
+    let carry: Promise<unknown> | null = null;
+    try {
+      await holder.raw(`select id from "quote_requests" where id = ? for update`, [rfq.id]);
+      await holder.raw(
+        `update "quote_requests" set custom_field_values = ?::jsonb, version = version + 1 where id = ?`,
+        [JSON.stringify({ [otherKey]: 'held by the other writer' }), rfq.id],
+      );
+      carry = receive(rfq.id, { [key]: 'fair' });
+      const pending = Symbol('pending');
+      const early = await Promise.race([carry, new Promise((resolve) => setTimeout(() => resolve(pending), 300))]);
+      expect(early, 'the carry finished while another writer held the row').toBe(pending);
+      await holder.commit();
+    } catch (error) {
+      await holder.rollback().catch(() => undefined);
+      throw error;
+    }
+
+    expect(await carry).toEqual({ outcome: 'applied', carried: [key], skipped: [] });
+    expect(await storedValues(rfq.id)).toEqual({ [otherKey]: 'held by the other writer', [key]: 'fair' });
+    // One bump each: the other writer's and the carry's (owner ruling P1 = c).
+    expect(await versionOf()).toBe(before + 2);
+  });
+
   it('answers not-found for another Organization’s request exactly as for a missing one, and writes nothing (FR-012)', async () => {
     const { key } = await pair('foreign');
     const rfq = await submitCrmQuoteRequest(h);
