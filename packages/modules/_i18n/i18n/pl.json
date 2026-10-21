@@ -1708,6 +1708,7 @@
   "rfq.detail.history.order": "Zamówienie {id}",
   "rfq.detail.history.relatedRequest": "Ponowione z zapytania {id}",
   "rfq.detail.history.lineWithVariant": "{product} ({variant})",
+  "rfq.detail.history.lineInGroup": "{line} — {group}",
   "rfq.detail.history.money": "{amount} {currency}",
   "rfq.detail.history.actor.system": "System",
   "rfq.detail.history.actor.unknownUser": "nieznany użytkownik",

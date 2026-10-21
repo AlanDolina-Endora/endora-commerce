@@ -152,6 +152,12 @@ export const quoteRequestHistoryLineRefSchema = z.object({
   productName: z.string(),
   /** Resolved on read; `null` when the variant is gone. */
   variantLabel: z.string().nullable(),
+  /**
+   * Feature 159 (research N-32) — the line's group (`null` = ungrouped), present
+   * only where it tells the line apart: its product, variant and packaging unit
+   * sit on more than one line of either revision.
+   */
+  groupName: z.string().nullable().optional(),
 });
 export type QuoteRequestHistoryLineRef = z.infer<typeof quoteRequestHistoryLineRefSchema>;
 
@@ -330,6 +336,15 @@ export type QuoteRequestHistory = z.infer<typeof quoteRequestHistorySchema>;
 // Comparison view (rendered when awaitingCustomerRevisionAcceptance is true)
 // ---------------------------------------------------------------------------
 
+/**
+ * Feature 159 (research N-32) — the group of the line a comparison entry is
+ * about (`null` = ungrouped), present only where the product sits on more than
+ * one line of either revision (same variant and packaging unit), so "Bolt: 5 →
+ * 3" says which Bolt line. The
+ * group's name is one the customer was shown on that revision.
+ */
+const diffGroupNameSchema = z.string().nullable().optional();
+
 export const rfqDiffEntrySchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('header_note'),
@@ -342,11 +357,13 @@ export const rfqDiffEntrySchema = z.discriminatedUnion('kind', [
     productName: z.string(),
     quantity: z.number().int().positive(),
     agreedUnitPrice: z.number().nullable(),
+    groupName: diffGroupNameSchema,
   }),
   z.object({
     kind: z.literal('line_removed'),
     productId: uuidSchema,
     productName: z.string(),
+    groupName: diffGroupNameSchema,
   }),
   z.object({
     kind: z.literal('line_quantity'),
@@ -354,6 +371,7 @@ export const rfqDiffEntrySchema = z.discriminatedUnion('kind', [
     productName: z.string(),
     before: z.number().int().positive(),
     after: z.number().int().positive(),
+    groupName: diffGroupNameSchema,
   }),
   z.object({
     kind: z.literal('line_agreed_unit_price'),
@@ -361,6 +379,7 @@ export const rfqDiffEntrySchema = z.discriminatedUnion('kind', [
     productName: z.string(),
     before: z.number().nullable(),
     after: z.number().nullable(),
+    groupName: diffGroupNameSchema,
   }),
   /**
    * Feature 159 — the arrangement of the lines (group names, group order,
@@ -621,6 +640,14 @@ export const adminPatchQuoteRequestLineSchema = z.object({
   lineNote: z.string().max(2000).nullable().optional(),
   /** Feature 159 — the `groups[].key` this line belongs to; `null` = ungrouped. */
   groupKey: lineGroupKeySchema.nullable().optional(),
+  /**
+   * Feature 159 (research N-33) — a new line split off a stored line of this
+   * quote (*Split line*): with no `id`, it takes that line's variant, packaging
+   * unit, customer's proposal, note, currency and stored reference, as the
+   * line it was split from keeps them. A value naming no line of this quote is
+   * ignored — the line is a plain new line.
+   */
+  splitFromId: uuidSchema.optional(),
 });
 export type AdminPatchQuoteRequestLine = z.infer<typeof adminPatchQuoteRequestLineSchema>;
 

@@ -485,6 +485,88 @@ describe('159 — quote request line groups [contract]', () => {
     });
   });
 
+  describe('one product on several lines (research N-31 … N-33)', () => {
+    interface SplitReply extends Reply {
+      items: Array<
+        ReplyItem & { quantity: number; desiredUnitPrice: number | null; agreedUnitPrice: number | null; lineNote: string | null }
+      >;
+      comparisonAgainstLastSeen?: { diff: Array<Record<string, unknown>> } | null;
+    }
+
+    /** A customer's quote of 101 × 8 with a proposal and a note, and 102 × 1. */
+    async function raiseWithProposal(): Promise<SplitReply> {
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/v1/quote-requests',
+        cookies: CUSTOMER,
+        payload: {
+          items: [
+            { productId: SEED_PRODUCT_101_ID, quantity: 8, desiredUnitPrice: 20, lineNote: 'Pallets' },
+            { productId: SEED_PRODUCT_102_ID, quantity: 1 },
+          ],
+        },
+      });
+      expect(res.statusCode, res.body).toBe(201);
+      return (res.json() as { data: SplitReply }).data;
+    }
+
+    it('a line split off into another group keeps the original’s proposal and note; both lines are the quote’s own', async () => {
+      const quote = await raiseWithProposal();
+      const [bolt, other] = quote.items;
+      const res = await patch(quote, {
+        groups: [
+          { key: 'y', name: 'Y' },
+          { key: 'z', name: 'Z' },
+        ],
+        items: [
+          { id: bolt!.id, productId: SEED_PRODUCT_101_ID, quantity: 5, agreedUnitPrice: 11, groupKey: 'y' },
+          { id: other!.id, productId: SEED_PRODUCT_102_ID, quantity: 1, agreedUnitPrice: 12, groupKey: 'z' },
+          { productId: SEED_PRODUCT_101_ID, quantity: 3, agreedUnitPrice: 11, groupKey: 'z', splitFromId: bolt!.id },
+        ],
+      });
+      expect(res.statusCode, res.body).toBe(200);
+      const reply = (res.json() as { data: SplitReply }).data;
+      const [y, z] = reply.itemGroups;
+      expect(reply.items.map((item) => [item.productId, item.groupId, item.quantity, item.desiredUnitPrice, item.lineNote])).toEqual([
+        [SEED_PRODUCT_101_ID, y!.id, 5, 20, 'Pallets'],
+        [SEED_PRODUCT_102_ID, z!.id, 1, null, null],
+        [SEED_PRODUCT_101_ID, z!.id, 3, 20, 'Pallets'],
+      ]);
+      expect(disagreements(deepStrict(quoteRequestSchema), reply)).toEqual([]);
+
+      // The customer sees both lines, each in its group, and a comparison that says which Bolt line changed.
+      const mine = (await customerRead(quote.id)) as SplitReply;
+      expect(mine.items.map((item) => [item.groupId, item.quantity])).toEqual([
+        [y!.id, 5],
+        [z!.id, 1],
+        [z!.id, 3],
+      ]);
+      const lineEntries = (mine.comparisonAgainstLastSeen?.diff ?? []).filter((entry) => entry['productId'] === SEED_PRODUCT_101_ID);
+      expect(lineEntries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ kind: 'line_added', groupName: 'Z', quantity: 3 }),
+          expect.objectContaining({ kind: 'line_quantity', groupName: 'Y', before: 8, after: 5 }),
+        ]),
+      );
+    });
+
+    it('a splitFromId naming no line of this quote is a plain new line', async () => {
+      const quote = await raiseWithProposal();
+      const foreign = await raiseWithProposal();
+      const [bolt, other] = quote.items;
+      const res = await patch(quote, {
+        items: [
+          { id: bolt!.id, productId: SEED_PRODUCT_101_ID, quantity: 5, agreedUnitPrice: 11 },
+          { id: other!.id, productId: SEED_PRODUCT_102_ID, quantity: 1, agreedUnitPrice: 12 },
+          { productId: SEED_PRODUCT_101_ID, quantity: 3, agreedUnitPrice: 11, splitFromId: foreign.items[0]!.id },
+        ],
+      });
+      expect(res.statusCode, res.body).toBe(200);
+      const reply = (res.json() as { data: SplitReply }).data;
+      expect(reply.items[2]).toMatchObject({ quantity: 3, desiredUnitPrice: null, lineNote: null });
+    });
+  });
+
   describe('read port (T056, FR-087)', () => {
     it('listItems answers every line with its group and its position, in display order, after a grouped save', async () => {
       const quote = await raise();

@@ -143,4 +143,19 @@ describe('GroupedLineRows', () => {
     // The other kinds read as they did.
     expect(describeRfqDiff({ kind: 'line_removed', productId: 'p', productName: 'Bolt' }, 'pl-PL')).toBe('Usunięto: Bolt');
   });
+
+  it('names the group of a product on several lines, so the entry says which line (N-32)', () => {
+    const entry = { kind: 'line_quantity', productId: 'p', productName: 'Bolt', before: 5, after: 3 } as const;
+    expect(describeRfqDiff({ ...entry, groupName: 'Hall A' }, 'pl-PL')).toBe('Bolt (Hall A): ilość 5 → 3');
+    expect(describeRfqDiff({ ...entry, groupName: null }, 'pl-PL')).toBe('Bolt (Pozostałe pozycje): ilość 5 → 3');
+    expect(describeRfqDiff({ ...entry, groupName: null }, 'en-US')).toBe('Bolt (Other items): ilość 5 → 3');
+    expect(
+      describeRfqDiff(
+        { kind: 'line_added', productId: 'p', productName: 'Bolt', groupName: 'Hall B', quantity: 2, agreedUnitPrice: null },
+        'pl-PL',
+      ),
+    ).toBe('Dodano: Bolt (Hall B) × 2');
+    // A product on one line is named as before.
+    expect(describeRfqDiff(entry, 'pl-PL')).toBe('Bolt: ilość 5 → 3');
+  });
 });

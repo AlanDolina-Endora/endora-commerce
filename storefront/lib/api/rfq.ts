@@ -69,14 +69,17 @@ export type RfqDiffEntry =
       kind: 'line_added';
       productId: string;
       productName: string;
+      /** Feature 159 — present only for a product on several lines; `null` = ungrouped. */
+      groupName?: string | null;
       quantity: number;
       agreedUnitPrice: number | null;
     }
-  | { kind: 'line_removed'; productId: string; productName: string }
+  | { kind: 'line_removed'; productId: string; productName: string; groupName?: string | null }
   | {
       kind: 'line_quantity';
       productId: string;
       productName: string;
+      groupName?: string | null;
       before: number;
       after: number;
     }
@@ -84,6 +87,7 @@ export type RfqDiffEntry =
       kind: 'line_agreed_unit_price';
       productId: string;
       productName: string;
+      groupName?: string | null;
       before: number | null;
       after: number | null;
     }

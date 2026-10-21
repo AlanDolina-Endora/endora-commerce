@@ -253,6 +253,46 @@ describe('historyDiff — grouping', () => {
     expect(historyDiff(snap([at(P, 0, null), at(Q, 1, null)]), snap([at(P, 0, null), at(Q, 1, null)]))).toEqual([]);
   });
 
+  // Feature 159 (research N-32) — one product on several lines, in different groups.
+  it('pairs a split product by its group, whatever the order, and names the group on its line', () => {
+    const before = [
+      { ...at(P, 0, ground), quantity: 5 },
+      { ...at(P, 0, first), quantity: 3 },
+    ];
+    // First floor moved above Ground floor, and its P went from 3 to 2.
+    const after = [
+      { ...at(P, 0, { ...first, position: 0 }), quantity: 2 },
+      { ...at(P, 0, { ...ground, position: 1 }), quantity: 5 },
+    ];
+    expect(historyDiff(snap(before), snap(after))).toEqual([
+      { kind: 'line_quantity', line: { ...refP, groupName: 'First floor' }, before: 3, after: 2 },
+      { kind: 'line_order' },
+    ]);
+  });
+
+  it('a line split off into another group: the rest is a quantity change, the new line an addition, each named by its group', () => {
+    const changes = historyDiff(
+      snap([{ ...at(P, 0, ground), quantity: 8 }]),
+      snap([
+        { ...at(P, 0, ground), quantity: 5 },
+        { ...at(P, 0, first), quantity: 3 },
+      ]),
+    );
+    expect(changes).toEqual([
+      { kind: 'line_quantity', line: { ...refP, groupName: 'Ground floor' }, before: 8, after: 5 },
+      { kind: 'line_added', line: { ...refP, groupName: 'First floor' }, quantity: 3, agreedUnitPrice: null, currency: 'PLN' },
+      { kind: 'group_added', group: { id: G2, name: 'First floor' } },
+    ]);
+  });
+
+  it('an ungrouped line of a split product is named as ungrouped (`groupName: null`)', () => {
+    const changes = historyDiff(
+      snap([{ ...at(P, 0, ground), quantity: 5 }, { ...at(P, 0, null), quantity: 3 }]),
+      snap([{ ...at(P, 0, ground), quantity: 5 }]),
+    );
+    expect(changes).toEqual([{ kind: 'line_removed', line: { ...refP, groupName: null } }]);
+  });
+
   it('every grouping change parses with the published schema', () => {
     const changes = historyDiff(
       snap([at(P, 0, ground), at(Q, 0, first)]),

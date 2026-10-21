@@ -427,6 +427,30 @@ describe.each<Language>(['en', 'pl'])('RfqHistory — %s', (language) => {
     expect(container.innerHTML).not.toMatch(/rfq\.detail\.history|group_added|line_group|line_order/);
   });
 
+  it('feature 159 — a line of a product on several lines is named with its group (N-32)', async () => {
+    answerHistory({
+      truncated: false,
+      entries: [
+        entry('modified', REP, {
+          revisionNumber: 6,
+          changes: [
+            { kind: 'line_quantity', line: { ...plain, groupName: 'Hall A' }, before: 5, after: 3 },
+            { kind: 'line_removed', line: { ...plain, groupName: null } },
+          ],
+        }),
+      ],
+    });
+    renderHistory(language);
+    await screen.findAllByText(tr(language, 'entry.modified'));
+    const inGroup = (group: string): string => tr(language, 'lineInGroup', { line: line(plain), group });
+    expect(
+      screen.getByText(tr(language, 'change.line_quantity', { line: inGroup('Hall A'), before: 5, after: 3 })),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(tr(language, 'change.line_removed', { line: inGroup(tr(language, 'ungrouped')) })),
+    ).toBeInTheDocument();
+  });
+
   it('lists two changes of one kind on one line, each under its own key (review fix N6)', async () => {
     const line = { productId: SOURCE_RFQ, variantId: null, productName: 'Twin', variantLabel: null };
     const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);

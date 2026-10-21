@@ -4,10 +4,11 @@
  * revision snapshots, as the admin History lists it.
  *
  * Pure: two snapshots and the variant labels in, a change list out. Lines pair
- * by the same rule the rewrites use (`pairLines`, customer mode: product and
- * variant, then packaging name, then order), so two variants of one product
- * never merge and a legacy snapshot without packaging keys still pairs by
- * product and variant. The validity change is not a snapshot property; the
+ * by the same rule the rewrites use (`pairSnapshotLines` over `pairLines`,
+ * customer mode: product and variant, then packaging name, then order — each
+ * preferring the same group and quantity, feature 159), so two variants of one
+ * product never merge and a legacy snapshot without packaging keys still pairs
+ * by product and variant. The validity change is not a snapshot property; the
  * projection adds it from the event payload (research R7).
  *
  * Packaging-unit and custom-field changes are never listed, and neither is the
@@ -19,7 +20,7 @@ import type {
   QuoteRequestHistoryLineRef,
 } from '@endora-commerce/contracts';
 import type { QuoteRequestRevisionLine } from '../../entities/quote-request-revision.entity.js';
-import { pairLines } from '../line-carry-over.js';
+import { disambiguatingGroupName, pairSnapshotLines } from '../snapshot-pairing.js';
 
 /** The part of a revision the diff compares. */
 export interface HistorySnapshot {
@@ -40,37 +41,25 @@ export function historyDiff(
     changes.push({ kind: 'header_note', before: beforeNote, after: afterNote });
   }
 
-  const rows = before.items.map((item, index) => ({
-    id: String(index),
-    productId: item.productId,
-    variantId: item.variantId ?? null,
-    packagingUnitName: item.packagingUnitName ?? null,
-    item,
-  }));
-  const { paired, removed } = pairLines(
-    rows,
-    after.items.map((item) => ({
-      productId: item.productId,
-      variantId: item.variantId ?? null,
-      // An absent key (a snapshot written before feature 146) says nothing
-      // about packaging: only product, variant and order decide.
-      packagingUnitName: 'packagingUnitName' in item ? (item.packagingUnitName ?? null) : undefined,
-    })),
-    'customer',
-  );
-
+  // Feature 159 (research N-32) — one product may sit on several lines, in
+  // different groups: they pair by group and quantity, and a reference to one
+  // of them names its group, so "P: 3 → 2" says which P line.
+  const { paired, removed } = pairSnapshotLines(before.items, after.items);
+  const groupNameOf = disambiguatingGroupName(before.items, after.items);
   const ref = (item: QuoteRequestRevisionLine): QuoteRequestHistoryLineRef => {
     const variantId = item.variantId ?? null;
+    const groupName = groupNameOf(item);
     return {
       productId: item.productId,
       variantId,
       productName: item.productName,
       variantLabel: variantId !== null ? (variantLabels.get(variantId) ?? null) : null,
+      ...(groupName !== undefined ? { groupName } : {}),
     };
   };
 
   after.items.forEach((next, index) => {
-    const previous = paired[index]?.item ?? null;
+    const previous = paired[index] ?? null;
     const line = ref(next);
     if (previous === null) {
       changes.push({
@@ -113,15 +102,15 @@ export function historyDiff(
     }
   });
 
-  for (const row of removed) {
-    changes.push({ kind: 'line_removed', line: ref(row.item) });
+  for (const item of removed) {
+    changes.push({ kind: 'line_removed', line: ref(item) });
   }
 
   changes.push(
     ...groupingChanges(
       before.items,
       after.items,
-      after.items.map((_, index) => paired[index]?.item ?? null),
+      paired,
       ref,
     ),
   );

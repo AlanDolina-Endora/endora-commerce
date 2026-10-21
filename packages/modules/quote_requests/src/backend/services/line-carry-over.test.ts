@@ -154,6 +154,86 @@ describe('pairLines — customer patchDraft (no ids)', () => {
   });
 });
 
+/**
+ * Feature 159 (research N-32) — one product may sit on several lines, in
+ * different groups. With no id to go by, a line pairs with a row of its own
+ * group first, then one of its own quantity, before position decides.
+ */
+describe('pairLines — one product on several lines (feature 159)', () => {
+  const Y = 'group-y';
+  const Z = 'group-z';
+
+  it('a customer line pairs with the row of its quantity: removing the 5 keeps the 3 in its group', () => {
+    const five = row('five', { quantity: 5, groupId: Y });
+    const three = row('three', { quantity: 3, groupId: Z });
+    const { paired, removed } = pairLines(
+      [five, three],
+      [{ productId: P1, variantId: null, packagingUnitName: null, quantity: 3 }],
+      'customer',
+    );
+    expect(paired).toEqual([three]);
+    expect(removed).toEqual([five]);
+  });
+
+  it('a line naming its group pairs with the row of that group, ahead of quantity and position', () => {
+    const five = row('five', { quantity: 5, groupId: Y });
+    const three = row('three', { quantity: 3, groupId: Z });
+    const { paired } = pairLines(
+      [five, three],
+      [
+        { productId: P1, variantId: null, packagingUnitName: null, groupId: Z, quantity: 5 },
+        { productId: P1, variantId: null, packagingUnitName: null, groupId: Y, quantity: 3 },
+      ],
+      'customer',
+    );
+    expect(paired).toEqual([three, five]);
+  });
+
+  it('group and quantity together win over the group alone', () => {
+    const a = row('a', { quantity: 2, groupId: Y });
+    const b = row('b', { quantity: 7, groupId: Y });
+    const { paired } = pairLines(
+      [a, b],
+      [
+        { productId: P1, variantId: null, packagingUnitName: null, groupId: Y, quantity: 4 },
+        { productId: P1, variantId: null, packagingUnitName: null, groupId: Y, quantity: 2 },
+      ],
+      'customer',
+    );
+    // The 2 claims its exact row first; the 4 (changed) takes the other row of Y.
+    expect(paired).toEqual([b, a]);
+  });
+
+  it('`groupId: null` is a group too — the ungrouped section', () => {
+    const grouped = row('grouped', { quantity: 1, groupId: Y });
+    const ungrouped = row('ungrouped', { quantity: 1, groupId: null });
+    const { paired } = pairLines(
+      [grouped, ungrouped],
+      [{ productId: P1, variantId: null, packagingUnitName: null, groupId: null }],
+      'customer',
+    );
+    expect(paired).toEqual([ungrouped]);
+  });
+
+  it('an admin line without an id pairs by group within its variant wildcard', () => {
+    const y = row('y', { variantId: V1, quantity: 1, groupId: Y });
+    const z = row('z', { variantId: V1, quantity: 1, groupId: Z });
+    const { paired } = pairLines([y, z], [{ productId: P1, groupId: Z }], 'admin');
+    expect(paired).toEqual([z]);
+  });
+
+  it('a line saying nothing of group or quantity still pairs by position', () => {
+    const a = row('a', { quantity: 5, groupId: Y });
+    const b = row('b', { quantity: 3, groupId: Z });
+    const { paired } = pairLines(
+      [a, b],
+      [{ productId: P1, variantId: null, packagingUnitName: null }],
+      'customer',
+    );
+    expect(paired).toEqual([a]);
+  });
+});
+
 describe('carriedProposal — threat model T5', () => {
   it('a paired line whose body omits desiredUnitPrice carries the stored proposal', () => {
     expect(carriedProposal(undefined, { desiredUnitPrice: '95.00' })).toBe('95.00');

@@ -1708,6 +1708,7 @@
   "rfq.detail.history.order": "Order {id}",
   "rfq.detail.history.relatedRequest": "Re-submitted from request {id}",
   "rfq.detail.history.lineWithVariant": "{product} ({variant})",
+  "rfq.detail.history.lineInGroup": "{line} — {group}",
   "rfq.detail.history.money": "{amount} {currency}",
   "rfq.detail.history.actor.system": "System",
   "rfq.detail.history.actor.unknownUser": "unknown user",

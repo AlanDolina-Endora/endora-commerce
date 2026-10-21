@@ -58,6 +58,8 @@ const OTHER_KEYS = [
   'rfq.detail.history.note',
   // Feature 159 — the name of the ungrouped section in a `line_group` change.
   'rfq.detail.history.ungrouped',
+  // Feature 159 (N-32) — a line of a product on several lines, with its group.
+  'rfq.detail.history.lineInGroup',
   'rfq.detail.history.reason',
   'rfq.detail.history.revision',
   'rfq.detail.history.order',

@@ -173,6 +173,17 @@ describe('quote request history — changes', () => {
     { kind: 'line_order' },
   ];
 
+  it('a line reference may name its group — `null` = ungrouped — where one product sits on several lines (N-32)', () => {
+    for (const groupName of ['Hall A', null]) {
+      const change = { kind: 'line_quantity', line: { ...LINE_REF, groupName }, before: 5, after: 3 };
+      expect(quoteRequestHistoryChangeSchema.parse(change)).toEqual(change);
+    }
+    expect(quoteRequestHistoryChangeSchema.parse({ kind: 'line_removed', line: LINE_REF })).toEqual({
+      kind: 'line_removed',
+      line: LINE_REF,
+    });
+  });
+
   it.each(changes.map((c) => [c.kind, c]))('parses a %s change', (_kind, change) => {
     expect(quoteRequestHistoryChangeSchema.parse(change)).toEqual(change);
   });
@@ -692,6 +703,30 @@ describe('line groups — replies (T005)', () => {
       currentRevisionNumber: 2,
     });
     expect(parsed.diff[0]).toEqual({ kind: 'grouping' });
+  });
+
+  it('an admin PATCH line may name the stored line it was split off (N-33)', () => {
+    const body = {
+      items: [
+        { id: ID(60), productId: ID(2), quantity: 5 },
+        { productId: ID(2), quantity: 3, splitFromId: ID(60) },
+      ],
+    };
+    expect(adminPatchQuoteRequestSchema.parse(body).items?.[1]).toMatchObject({ splitFromId: ID(60) });
+    expect(() =>
+      adminPatchQuoteRequestSchema.parse({ items: [{ productId: ID(2), quantity: 3, splitFromId: 'nope' }] }),
+    ).toThrow();
+  });
+
+  it('a line entry of the comparison may name its group where one product sits on several lines (N-32)', () => {
+    const base = { kind: 'line_quantity', productId: ID(2), productName: 'Bolt', before: 5, after: 3 } as const;
+    expect(rfqDiffEntrySchema.parse(base)).toEqual(base);
+    expect(rfqDiffEntrySchema.parse({ ...base, groupName: 'Hall A' })).toEqual({ ...base, groupName: 'Hall A' });
+    expect(rfqDiffEntrySchema.parse({ ...base, groupName: null })).toEqual({ ...base, groupName: null });
+    for (const kind of ['line_added', 'line_removed', 'line_agreed_unit_price'] as const) {
+      const option = rfqDiffEntrySchema.options.find((o) => o.shape.kind.value === kind)!;
+      expect(Object.keys(option.shape)).toContain('groupName');
+    }
   });
 
   it("the document data carries non-empty groups and each line's group and position", () => {

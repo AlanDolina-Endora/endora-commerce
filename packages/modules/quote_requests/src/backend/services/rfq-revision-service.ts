@@ -6,6 +6,7 @@ import {
 import type { QuoteRequest } from '../entities/quote-request.entity.js';
 import type { QuoteRequestItem } from '../entities/quote-request-item.entity.js';
 import { QuoteRequestItemGroup } from '../entities/quote-request-item-group.entity.js';
+import { disambiguatingGroupName, pairSnapshotLines } from './snapshot-pairing.js';
 
 /**
  * Coarse-grained revision snapshot writer + diff calculator. Each
@@ -20,14 +21,17 @@ export type RfqDiffEntry =
       kind: 'line_added';
       productId: string;
       productName: string;
+      /** Feature 159 (research N-32) — only for a product on several lines; `null` = ungrouped. */
+      groupName?: string | null;
       quantity: number;
       agreedUnitPrice: number | null;
     }
-  | { kind: 'line_removed'; productId: string; productName: string }
+  | { kind: 'line_removed'; productId: string; productName: string; groupName?: string | null }
   | {
       kind: 'line_quantity';
       productId: string;
       productName: string;
+      groupName?: string | null;
       before: number;
       after: number;
     }
@@ -35,6 +39,7 @@ export type RfqDiffEntry =
       kind: 'line_agreed_unit_price';
       productId: string;
       productName: string;
+      groupName?: string | null;
       before: number | null;
       after: number | null;
     }
@@ -125,8 +130,9 @@ export class RfqRevisionService {
    * Pure diff calculator. Takes two snapshots (`before`, `after`) plus
    * their header notes and returns the list of diff entries in the
    * order header → line_added → line_removed → line_quantity →
-   * line_agreed_unit_price. Stable by productId so renderers can
-   * group/sort easily.
+   * line_agreed_unit_price → grouping, each kind in the snapshots' line
+   * order. Lines pair one to one (feature 159: a product may sit on several
+   * lines, in different groups — see `snapshot-pairing.ts`).
    */
   diffRevisions(args: {
     beforeHeaderNote: string | null;
@@ -144,39 +150,41 @@ export class RfqRevisionService {
       });
     }
 
-    const beforeByProduct = new Map(args.beforeItems.map((l) => [l.productId, l]));
-    const afterByProduct = new Map(args.afterItems.map((l) => [l.productId, l]));
+    // Feature 159 (research N-32) — lines pair one to one (a product may sit
+    // on several lines, in different groups), and an entry about a product on
+    // more than one line names its group.
+    const { paired, removed } = pairSnapshotLines(args.beforeItems, args.afterItems);
+    const groupNameOf = disambiguatingGroupName(args.beforeItems, args.afterItems);
+    const named = (item: QuoteRequestRevisionLine): { groupName?: string | null } => {
+      const groupName = groupNameOf(item);
+      return groupName !== undefined ? { groupName } : {};
+    };
 
-    for (const [productId, after] of afterByProduct) {
-      if (!beforeByProduct.has(productId)) {
-        out.push({
-          kind: 'line_added',
-          productId,
-          productName: after.productName,
-          quantity: after.quantity,
-          agreedUnitPrice: after.agreedUnitPrice,
-        });
-      }
+    args.afterItems.forEach((after, index) => {
+      if (paired[index] !== null) return;
+      out.push({
+        kind: 'line_added',
+        productId: after.productId,
+        productName: after.productName,
+        ...named(after),
+        quantity: after.quantity,
+        agreedUnitPrice: after.agreedUnitPrice,
+      });
+    });
+
+    for (const before of removed) {
+      out.push({ kind: 'line_removed', productId: before.productId, productName: before.productName, ...named(before) });
     }
 
-    for (const [productId, before] of beforeByProduct) {
-      if (!afterByProduct.has(productId)) {
-        out.push({
-          kind: 'line_removed',
-          productId,
-          productName: before.productName,
-        });
-      }
-    }
-
-    for (const [productId, after] of afterByProduct) {
-      const before = beforeByProduct.get(productId);
-      if (!before) continue;
+    args.afterItems.forEach((after, index) => {
+      const before = paired[index];
+      if (!before) return;
       if (before.quantity !== after.quantity) {
         out.push({
           kind: 'line_quantity',
-          productId,
+          productId: after.productId,
           productName: after.productName,
+          ...named(after),
           before: before.quantity,
           after: after.quantity,
         });
@@ -186,49 +194,39 @@ export class RfqRevisionService {
       if (beforePrice !== afterPrice) {
         out.push({
           kind: 'line_agreed_unit_price',
-          productId,
+          productId: after.productId,
           productName: after.productName,
+          ...named(after),
           before: beforePrice,
           after: afterPrice,
         });
       }
-    }
+    });
 
-    if (groupingChanged(args.beforeItems, args.afterItems)) out.push({ kind: 'grouping' });
+    if (groupingChanged(args.beforeItems, args.afterItems, paired)) out.push({ kind: 'grouping' });
 
     return out;
   }
 }
 
-/** A line's identity across two snapshots, and its occurrence among equal ones. */
-function lineIdentities(lines: readonly QuoteRequestRevisionLine[]): string[] {
-  const seen = new Map<string, number>();
-  return lines.map((line) => {
-    const base = `${line.productId}|${line.variantId ?? ''}|${line.packagingUnitName ?? ''}`;
-    const n = seen.get(base) ?? 0;
-    seen.set(base, n + 1);
-    return `${base}#${n}`;
-  });
-}
-
 /**
- * The arrangement as shown, over the lines both snapshots hold: sections in
- * order (by group id and name), each with its lines in order. Lines only one
- * side holds are added or removed lines — reported as such, not as a grouping
- * change.
+ * The arrangement as shown, over the lines both snapshots hold (`ids` names
+ * each line by its pair; a line without one is added or removed — reported as
+ * such, not as a grouping change): sections in order (by group id and name),
+ * each with its lines in order.
  */
-function arrangement(lines: readonly QuoteRequestRevisionLine[], keep: ReadonlySet<string>): string {
-  const ids = lineIdentities(lines);
-  const sections: { key: string; lines: string[] }[] = [];
+function arrangement(lines: readonly QuoteRequestRevisionLine[], ids: ReadonlyArray<number | null>): string {
+  const sections: { key: string; lines: number[] }[] = [];
   lines.forEach((line, index) => {
-    if (!keep.has(ids[index]!)) return;
+    const id = ids[index];
+    if (id === null || id === undefined) return;
     const key = line.groupId ? `${line.groupId}:${line.groupName ?? ''}` : '';
     let section = sections.find((candidate) => candidate.key === key);
     if (!section) {
       section = { key, lines: [] };
       sections.push(section);
     }
-    section.lines.push(ids[index]!);
+    section.lines.push(id);
   });
   return JSON.stringify(sections);
 }
@@ -241,12 +239,17 @@ function arrangement(lines: readonly QuoteRequestRevisionLine[], keep: ReadonlyS
 function groupingChanged(
   before: readonly QuoteRequestRevisionLine[],
   after: readonly QuoteRequestRevisionLine[],
+  /** Index-aligned with `after`: the `before` line each line is, or `null`. */
+  paired: ReadonlyArray<QuoteRequestRevisionLine | null>,
 ): boolean {
   const legacy = before.length > 0 && before.every((line) => line.position === undefined);
   if (legacy) return after.some((line) => (line.groupId ?? null) !== null);
-  const beforeIds = new Set(lineIdentities(before));
-  const common = new Set(lineIdentities(after).filter((id) => beforeIds.has(id)));
-  return arrangement(before, common) !== arrangement(after, common);
+  const afterIds = paired.map((line, index) => (line === null ? null : index));
+  const beforeIds = before.map((line) => {
+    const index = paired.indexOf(line);
+    return index < 0 ? null : index;
+  });
+  return arrangement(before, beforeIds) !== arrangement(after, afterIds);
 }
 
 function toSnapshotLine(

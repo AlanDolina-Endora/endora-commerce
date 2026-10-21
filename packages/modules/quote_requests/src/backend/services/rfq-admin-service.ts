@@ -688,12 +688,23 @@ export class RfqAdminService {
         // stored reference; variant and note too, unless the body carries the
         // key (`lineNote: null` clears). A new line has no packaging unit and no
         // reference — `modify` never prices a line.
+        // Feature 159 (research N-32) — a line without an id pairs with a row
+        // of the group it names (an existing group, by its id) and of its
+        // quantity first: one product may sit on several lines.
+        const storedIdOfKey = new Map((body.groups ?? []).flatMap((group) => (group.id ? [[group.key, group.id]] : [])));
         const { paired } = pairLines(
           existing,
           body.items.map((line) => ({
             id: line.id,
             productId: line.productId,
             variantId: line.variantId,
+            quantity: line.quantity,
+            groupId:
+              body.groups === undefined
+                ? undefined
+                : line.groupKey == null
+                  ? null
+                  : storedIdOfKey.get(line.groupKey),
           })),
           'admin',
         );
@@ -711,7 +722,15 @@ export class RfqAdminService {
         const items: QuoteRequestItem[] = [];
         for (const [index, lineInput] of body.items.entries()) {
           const product = productById.get(lineInput.productId)!;
-          const row = paired[index] ?? null;
+          // Feature 159 (research N-33) — a new line split off a stored line of
+          // this quote takes what that line carries beyond the body (variant,
+          // packaging unit, proposal, note, currency, reference); the stored
+          // line itself stays paired with the line it still is.
+          const row =
+            paired[index] ??
+            (lineInput.splitFromId !== undefined
+              ? (existing.find((stored) => stored.id === lineInput.splitFromId && stored.productId === product.id) ?? null)
+              : null);
           const variantId =
             lineInput.variantId !== undefined ? lineInput.variantId : (row?.variantId ?? null);
           items.push(

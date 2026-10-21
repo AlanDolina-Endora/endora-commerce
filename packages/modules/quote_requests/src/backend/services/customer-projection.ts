@@ -77,11 +77,16 @@ export function customerEventsOf<T extends { readonly eventType: string }>(event
   return events.filter((event) => !ADMIN_ONLY_EVENT_TYPES.has(event.eventType));
 }
 
-/** The keys of one `payload.diff` entry (`RfqDiffEntry`). */
+/**
+ * The keys of one `payload.diff` entry (`RfqDiffEntry`). `groupName` (feature
+ * 159, research N-32) names the group of a product on several lines — a group
+ * the customer was shown on that revision.
+ */
 export const CUSTOMER_DIFF_KEYS = new Set([
   'kind',
   'productId',
   'productName',
+  'groupName',
   'quantity',
   'agreedUnitPrice',
   'before',

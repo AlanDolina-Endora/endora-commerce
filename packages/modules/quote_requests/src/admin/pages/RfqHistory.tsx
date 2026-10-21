@@ -99,9 +99,13 @@ function actorLabel(t: T, actor: QuoteRequestHistoryActor): string {
 }
 
 function lineLabel(t: T, line: QuoteRequestHistoryLineRef): string {
-  return line.variantLabel === null
-    ? line.productName
-    : t('lineWithVariant', { product: line.productName, variant: line.variantLabel });
+  const label =
+    line.variantLabel === null
+      ? line.productName
+      : t('lineWithVariant', { product: line.productName, variant: line.variantLabel });
+  // Feature 159 (research N-32) — a product on several lines: which one.
+  if (line.groupName === undefined) return label;
+  return t('lineInGroup', { line: label, group: line.groupName ?? t('ungrouped') });
 }
 
 function changeSentence(f: Formatters, change: QuoteRequestHistoryChange): string {

@@ -206,6 +206,36 @@ describe('RfqRevisionService — grouping (T025)', () => {
     expect(diff(legacy, [placed('a', G1, 'One', 0, 0)])).toEqual([{ kind: 'grouping' }]);
   });
 
+  // Feature 159 (research N-32) — one product on several lines, in different groups.
+  it('a split product: each line is compared with its own, and the entry names its group', () => {
+    const before = [{ ...placed('a', G1, 'One', 0, 0), quantity: 5 }, { ...placed('a', G2, 'Two', 1, 0), quantity: 3 }];
+    const after = [{ ...placed('a', G1, 'One', 0, 0), quantity: 5 }, { ...placed('a', G2, 'Two', 1, 0), quantity: 2 }];
+    expect(diff(before, after)).toEqual([
+      { kind: 'line_quantity', productId: 'a', productName: 'A', groupName: 'Two', before: 3, after: 2 },
+    ]);
+  });
+
+  it('a line split off into another group: an addition and a quantity change, each naming its group', () => {
+    const before = [{ ...placed('a', G1, 'One', 0, 0), quantity: 8 }];
+    const after = [{ ...placed('a', G1, 'One', 0, 0), quantity: 5 }, { ...placed('a', G2, 'Two', 1, 0), quantity: 3 }];
+    expect(diff(before, after)).toEqual([
+      { kind: 'line_added', productId: 'a', productName: 'A', groupName: 'Two', quantity: 3, agreedUnitPrice: null },
+      { kind: 'line_quantity', productId: 'a', productName: 'A', groupName: 'One', before: 8, after: 5 },
+    ]);
+  });
+
+  it('two groups of a split product swapped: only the arrangement changed', () => {
+    const before = [{ ...placed('a', G1, 'One', 0, 0), quantity: 5 }, { ...placed('a', G2, 'Two', 1, 0), quantity: 3 }];
+    const after = [{ ...placed('a', G2, 'Two', 0, 0), quantity: 3 }, { ...placed('a', G1, 'One', 1, 0), quantity: 5 }];
+    expect(diff(before, after)).toEqual([{ kind: 'grouping' }]);
+  });
+
+  it('an ungrouped line of a split product is named as ungrouped (`groupName: null`)', () => {
+    const before = [{ ...placed('a', G1, 'One', 0, 0), quantity: 5 }, { ...placed('a', null, null, null, 0), quantity: 3 }];
+    const after = [{ ...placed('a', G1, 'One', 0, 0), quantity: 5 }];
+    expect(diff(before, after)).toEqual([{ kind: 'line_removed', productId: 'a', productName: 'A', groupName: null }]);
+  });
+
   it('records the lines in the order given, each with its place and its group, only groups holding lines', async () => {
     const created: unknown[] = [];
     const em = {
