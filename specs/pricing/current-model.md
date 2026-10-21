@@ -2,7 +2,7 @@
 
 How a product price is stored and resolved **today**: tables, the resolution algorithm with its precedence and tie-breaks, where the two targeting layers (Application Rule and Price matrix) overlap, and the pain points that keep bringing pricing back. This describes the code, not the proposal — for the proposal see `decision-record.md`. When the model changes, rewrite this file in the same merge request.
 
-**Verified against** `master` at `b1021c71b` on 2026-10-21, and **re-verified for the P0 read-path hardening** (D-287 P0, branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21. File:line citations in passages P0 did not touch are as of `b1021c71b`; re-check them before relying on one.
+**Verified against** `master` at `b1021c71b` on 2026-10-21, and **re-verified for the P0 read-path hardening and the #166 reorder fix** (D-287 P0, branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21. File:line citations in passages P0 did not touch are as of `b1021c71b`; re-check them before relying on one.
 
 **Section numbers.** `§N` references follow the numbering of the original analysis, which is split across this directory: §1 → `current-model.md`; §2 → `read-paths-and-performance.md` (its summary table); §3–§9, §11, §12 → `decision-record.md`; §10 → `worked-examples.md`. `read-paths §N` points into `read-paths-and-performance.md`, `peers §N` into `peer-platforms.md`. Path abbreviations: `PL/` = `packages/modules/price_lists/src/`, `CON/` = `packages/contracts/src/`, `CAT/` = `packages/modules/catalog/src/`, `SF/` = `storefront/`.
 
@@ -185,7 +185,9 @@ Verified in code unless marked:
     has **one** chain for the read and for placement: `GET /api/v1/cart` prices through
     `CartLinePricing.orderablePrices` (agreed price at the agreed quantity → price list → own price
     in the basket channel's currency → refusal; display mode `none` refused), the chain placement's
-    drift check runs, and a line it refuses reads as unavailable — #168 (read-paths §5).
+    drift check runs, and a line it refuses reads as unavailable — #168 (read-paths §5). A
+    reorder seeds through the same chain: every line at its current price, and a line the chain
+    refuses is left out and reported in `unavailableItems` as `no_price` — #166.
 13. **PLP cards cannot show strikethrough**: `ListingPrice` carries one amount + `isSale`
     (`CON/price-lists.ts:514-529`); only PDP/typeahead/home cards render base+sale — since P0 every
     `ProductSummary` carries `resolvedPrice`, so PLP cards could, but `ProductGrid` does not pass it

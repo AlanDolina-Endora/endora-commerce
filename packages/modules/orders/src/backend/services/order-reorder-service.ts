@@ -130,8 +130,13 @@ export class OrderReorderService {
       return true;
     });
 
-    // Clear the customer's active cart and reseed it from the order's items
-    // (snapshot prices; the cart re-prices on read where wired). This module
+    // Clear the customer's active cart and reseed it from the order's items.
+    // `carts` prices every seeded line at what this buyer may order it at
+    // now, in one batch through the chain placement charges by; with
+    // `dropUnorderable` a line nobody may order now — nothing prices it for
+    // this buyer, or it is sold on request only — is left out and named, and
+    // is reported below as `no_price` beside the discontinued ones (issue
+    // #166). It used to be seeded at the old order's price, silently. This module
     // used to `em.create(Cart, …)` and hand-build `CartItem` rows, which is two
     // of another module's tables written from here, with the clear-then-seed
     // rule spelled out a second time and the `lastActivityAt` bookkeeping in
@@ -150,7 +155,11 @@ export class OrderReorderService {
         unitPrice: String(it.unitPrice),
         currency: order.currency,
       })),
+      { dropUnorderable: true },
     );
+    for (const line of cart.unorderable ?? []) {
+      unavailableItems.push({ productId: line.productId, variantId: line.variantId, reason: 'no_price' });
+    }
 
     if (opts.notifyCustomer) await this.notify(em, order);
 

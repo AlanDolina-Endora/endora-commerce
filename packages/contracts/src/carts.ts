@@ -661,6 +661,24 @@ export interface CartSeedLine {
 export interface CartSeedOptions {
   /** The accepted Quote Request these lines are the agreed lines of. */
   sourceQuoteRequestId?: string | null;
+  /**
+   * Issue #166 — leave out of the basket every seed line that has no price
+   * this customer may order it at now (no price list and no price of its own,
+   * or sold on request only), and name them in the answer's `unorderable`.
+   * A reorder sets it, so the buyer is told rather than handed a basket
+   * placement refuses. Ignored for an agreed seed (`sourceQuoteRequestId`),
+   * whose lines are priced by their agreement. Absent, such a line is kept at
+   * the price it was seeded with, as before.
+   */
+  dropUnorderable?: boolean;
+}
+
+/** A seed line `dropUnorderable` left out, and why (issue #166). */
+export interface CartSeedUnorderableLine {
+  productId: string;
+  variantId: string | null;
+  /** `unpriced`: nothing prices it for this customer; `quote_only`: sold on request only. */
+  reason: 'unpriced' | 'quote_only';
 }
 
 /**
@@ -852,7 +870,7 @@ export interface CartWritePort {
     ctx: CartCustomerContext,
     lines: readonly CartSeedLine[],
     options?: CartSeedOptions,
-  ): Promise<CartWithItems>;
+  ): Promise<CartWithItems & { unorderable?: CartSeedUnorderableLine[] }>;
 }
 
 export interface CartItemView {
