@@ -1,7 +1,7 @@
 # Pricing — decision record: price matrix vs Application rule
 
 **Status: RATIFIED — D-287, 2026-10-21** (the product owner: "Tak, zatwierdzam D-287" — "Yes, I
-ratify D-287"). The owner answered both rounds of questions (Q1–Q11 and N1–N11, *Owner rulings*
+ratify D-287"). The owner answered both rounds of questions (Q1–Q11 and N1–N13, *Owner rulings*
 below) and this record is revised to those answers. It is the **target contract for P1 onwards**
 (§8.2); until P1 lands, `current-model.md` still describes the code that is shipped. D-287 is the
 next ruling above the floor in `specs/pre-migration-history/README.md`.
@@ -69,6 +69,8 @@ section named.
 | N9 surcharge bound | +1000 % | 2026-10-21 | §5.1 |
 | N10 wider intersections | No — "no customer has asked for it so far" | 2026-10-21 | §5.10 |
 | N11 default preset | "Choose the variant that realises the scenarios I gave" → **HY** (§5.6, evidence in `worked-examples.md` §10.10) | 2026-10-21 | §5.6 |
+| N12 demo price lists | Yes — the demo instance's price lists reproduce E1–E3 | 2026-10-21 | §8 |
+| N13 dev price lists | Drop the non-system price lists of development databases and reseed; no conversion | 2026-10-21 | §8 |
 
 ## 0. Decision in one paragraph
 
@@ -744,14 +746,11 @@ re-scoped to P2 and is not implemented on the current model.
 
 ### 9.1 Resolved (2026-10-21)
 
-Q1–Q11 and N1–N11 are answered; the answers and where each lands are in *Owner rulings* above.
+Q1–Q11 and N1–N13 are answered; the answers and where each lands are in *Owner rulings* above.
 
-### 9.2 Still open (each with my default; none blocks the P1 spec)
+### 9.2 Still open
 
-| # | Question | Default |
-| --- | --- | --- |
-| N12 | Should the demo instance's price lists reproduce E1–E3 (VIP, Acme B2B (demo), Screws, color = red)? | yes |
-| N13 | Should P1 keep any non-system price lists of development databases, or are dropping and reseeding them acceptable? | drop and reseed |
+Nothing.
 
 ## 11. Constitution Check (of the proposal)
 
@@ -774,5 +773,4 @@ Verdict: **pass**. D-287 is ratified; P1's spec can be written now.
 
 - D-287 is ratified; #378 is re-scoped to P2 and is not implemented on the current model.
 - P0 is with `endora-commerce-dev`, scope as in §8.2.
-- P1 needs `/speckit.specify` (feature 160) from §5, §8 and §10, with N12–N13 for its clarification
-  session.
+- P1 needs `/speckit.specify` (feature 160) from §5, §8 and §10; N12–N13 are ruled.
