@@ -173,8 +173,12 @@ Three consumers go through the resolver:
   receives the effective value. The product page (name, description,
   SEO fields, attribute values, the product-page attribute list, grouped
   children, bundle options and product-link tiles) and every listing
-  card take the `(channel + language)` or `(channel-only)` slot when one
-  exists. When none does they keep the storefront's own baseline pick —
+  card take the `(channel + language)` slot for the requested language,
+  then the one for the channel's default language, then the
+  `(channel-only)` slot — the same two languages the baseline pick
+  tries first, so an override answers for the language whose baseline
+  text the page would otherwise show. When no slot applies they keep
+  the storefront's own baseline pick —
   requested language, then the channel's default language, then `en-US`,
   `en` and the first stored language — so a product without overrides
   shows exactly what it showed before. Listing filters, attribute
@@ -232,11 +236,11 @@ exact inverse — drop the two tables and the two columns.
   surfaces only the system Name + Description today. User attribute
   overrides are accepted by the PATCH endpoint and resolved on read,
   but the admin SPA does not yet expose a write affordance for them.
-- **Storefront public read shape change** — `products.name` and
-  `products.description` still ship as `Record<lang, string>` JSONB
-  on the public catalog endpoint. Switching to a resolved scalar is
-  a breaking change for storefront consumers and is scoped as a
-  follow-up.
+- **Override-aware listing filters and sorting** — the public catalog
+  endpoint returns `name` and `description` as the resolved string for
+  the request's sales channel and language (see *Read paths* above), but
+  listing filters, attribute filters and name sorting still read the
+  baseline values. Making them follow the overrides is a follow-up.
 - **Channel-aware reindex enqueue** — the PATCH endpoint does not
   yet enqueue a Meilisearch reindex job per touched channel; the
   next per-product upsert (driven by any catalog mutation) picks it

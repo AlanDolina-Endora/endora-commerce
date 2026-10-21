@@ -157,8 +157,11 @@ Z funkcji rozstrzygającej korzystają trzy miejsca:
   jest niewidoczna dla publicznego klienta: otrzymuje on wartość obowiązującą. Strona produktu
   (nazwa, opis, pola SEO, wartości atrybutów, lista atrybutów na stronie produktu, produkty
   składowe zestawu grupowego, opcje pakietu i kafelki powiązanych produktów) oraz każda karta na
-  liście produktów biorą wartość z miejsca `(channel + language)` lub `(channel-only)`, jeśli
-  istnieje. Jeśli nie istnieje, zostaje dotychczasowy wybór wartości bazowej storefrontu — język
+  liście produktów biorą wartość z miejsca `(channel + language)` dla języka z żądania, potem z
+  miejsca `(channel + language)` dla domyślnego języka kanału, a potem z miejsca `(channel-only)`.
+  To te same dwa języki, od których zaczyna wybór wartości bazowej, więc nadpisanie obowiązuje dla
+  języka, z którego strona wzięłaby tekst bazowy. Jeśli żadne miejsce nie ma wartości, zostaje
+  dotychczasowy wybór wartości bazowej storefrontu — język
   z żądania, potem domyślny język kanału, potem `en-US`, `en` i pierwszy zapisany język — więc
   produkt bez nadpisań wygląda dokładnie tak jak wcześniej. Filtry listy, filtrowanie po
   atrybutach i sortowanie po nazwie nadal korzystają z wartości bazowych.
@@ -207,10 +210,10 @@ usuwa obie tabele i obie kolumny.
   pokazuje dziś tylko systemowe Name i Description. Endpoint PATCH przyjmuje nadpisania atrybutów
   użytkownika, a odczyt je rozstrzyga, ale aplikacja panelu nie ma jeszcze dla nich interfejsu
   zapisu.
-- **Zmiana postaci publicznego odczytu dla storefrontu** — publiczny endpoint katalogu nadal
-  zwraca `products.name` i `products.description` jako JSONB `Record<lang, string>`. Przejście na
-  pojedynczą, rozstrzygniętą wartość to zmiana niezgodna wstecz dla konsumentów storefrontu i
-  zostanie zrobione osobno.
+- **Filtry i sortowanie listy z uwzględnieniem nadpisań** — publiczny endpoint katalogu zwraca
+  `name` i `description` jako wartość obowiązującą dla kanału sprzedaży i języka żądania (zob.
+  *Odczyt* powyżej), ale filtry listy, filtrowanie po atrybutach i sortowanie po nazwie nadal
+  korzystają z wartości bazowych. Uwzględnienie w nich nadpisań zostanie zrobione osobno.
 - **Ponowne indeksowanie z uwzględnieniem kanału** — endpoint PATCH nie dodaje jeszcze do kolejki
   zadania ponownego indeksowania w Meilisearch dla każdego zmienionego kanału; zmianę uwzględni
   dopiero następna aktualizacja indeksu produktu (wywołana dowolną zmianą w katalogu). Osobne
