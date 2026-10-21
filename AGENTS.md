@@ -160,6 +160,7 @@ the *Subject* column, which keeps the section names this file used to carry.
 | Changing anything a package publishes, or cutting a release | Release intent — changesets | `specs/conventions/release-intent.md` |
 | Judging whether something may be published, or reviewing a file, a changeset body or a commit message against the disclosure gate | Commercial data | `specs/conventions/commercial-data.md` |
 | Writing or changing anything under `backend/src/apps/<deployment>/` | Overlay modules | `specs/conventions/overlay-modules.md` |
+| Changing how a price is stored, resolved, displayed, sorted, indexed or cached, or specifying anything that touches price lists | Pricing | `specs/conventions/pricing.md` |
 | Touching a package's build configuration, or a type-check and a test run disagreeing about a file | Building the packages | `specs/conventions/building-packages.md` |
 | Running or changing anything in `backend/test/`, or a suite result needing to mean something | Which backend test command to use | `specs/conventions/backend-test-suite.md` |
 
