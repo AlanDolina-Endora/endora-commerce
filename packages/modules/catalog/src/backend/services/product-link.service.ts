@@ -35,11 +35,6 @@ interface StorefrontContext {
     code: string;
     isPublic: boolean;
     defaultCurrency: string;
-    /**
-     * Issue #384 — the channel's default language: the second language leg a
-     * (channel, language) override is looked up for, after the request's.
-     */
-    defaultLanguage: string;
   };
   /**
    * Who is asking. A cross-sell tile is a card with an Add-to-cart on it, and

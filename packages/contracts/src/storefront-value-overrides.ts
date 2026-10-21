@@ -1,5 +1,10 @@
 import { SYSTEM_ATTRIBUTE_SCOPES } from './catalog.js';
-import { resolveAttribute, type AttributeScope, type OverrideRow } from './product-value-resolver.js';
+import {
+  isNonEmpty,
+  resolveAttribute,
+  type AttributeScope,
+  type OverrideRow,
+} from './product-value-resolver.js';
 
 /**
  * Issue #384 — which per-(sales channel, language) override (features 022/023)
@@ -56,13 +61,6 @@ function isPlainRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-function hasValue(v: unknown): boolean {
-  if (v === undefined || v === null || v === '') return false;
-  if (Array.isArray(v)) return v.length > 0;
-  if (isPlainRecord(v)) return Object.keys(v).length > 0;
-  return true;
-}
-
 /**
  * Whether the baseline answers at `language` — where the caller's pick stops.
  * A per-language record answers where it holds a value (an empty string does
@@ -70,8 +68,8 @@ function hasValue(v: unknown): boolean {
  * answers at every leg; an absent baseline answers at none.
  */
 function baselineAnswersAt(baseline: unknown, language: string): boolean {
-  if (isPlainRecord(baseline)) return hasValue(baseline[language]);
-  return hasValue(baseline);
+  if (isPlainRecord(baseline)) return isNonEmpty(baseline[language]);
+  return isNonEmpty(baseline);
 }
 
 /**

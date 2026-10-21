@@ -38,7 +38,7 @@ describe('ProductLinkService.listForStorefront — channel filter (feature 052 U
   // case reads as the public: the channel filter has to hold for the caller who
   // has the least, and the priced answer has its own suite.
   const rc = (id: string, code: string, isPublic: boolean) => ({
-    resolvedChannel: { id, code, isPublic, defaultCurrency: 'PLN', defaultLanguage: 'pl-PL' },
+    resolvedChannel: { id, code, isPublic, defaultCurrency: 'PLN' },
     audience: ANONYMOUS_PRODUCT_AUDIENCE,
   });
 

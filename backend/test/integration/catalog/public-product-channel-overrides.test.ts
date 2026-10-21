@@ -352,6 +352,31 @@ describe('Issue #384 — public product reads honour channel value overrides', (
     expect(await read('pl_retail')).toEqual({ child: 'Zestaw bazowy', related: 'Zestaw bazowy' });
   });
 
+  it('a related tile keeps its own language pick, which has no channel-default leg', async () => {
+    // A known, owner-accepted divergence from the catalogue card, older than
+    // #384: the tile picks request language → en-US → en → first key and never
+    // the channel default, so on this pl-PL-default channel a request with no
+    // `pl-PL` in it shows the en-US baseline, and the (channel, pl-PL)
+    // override — walked over that same pick — does not answer. The catalogue
+    // card shows 'Zestaw hurtowy' for both requests (cases above).
+    const relatedName = async (language: string | null): Promise<string | undefined> => {
+      const res = await h.app.inject({
+        method: 'GET',
+        url: `/api/v1/catalog/products/${groupedSlug}/links?kind=related`,
+        headers: {
+          'x-sales-channel': 'pl_b2b_vip',
+          ...(language !== null ? { 'accept-language': language } : {}),
+        },
+      });
+      expect(res.statusCode, res.body).toBe(200);
+      const rows = (res.json() as { data: Array<{ product: { id: string; name: string } }> })
+        .data;
+      return rows.find((l) => l.product.id === productId)?.product.name;
+    };
+    expect(await relatedName(null)).toBe('Baseline kit');
+    expect(await relatedName('de-DE')).toBe('Baseline kit');
+  });
+
   it('a search result card shows the name the listing card shows, for every channel and language', async () => {
     // The hydration step of the Meilisearch path, driven with a hit the way
     // the engine returns it, so the case needs no search engine. The hit's
