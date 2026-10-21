@@ -941,7 +941,8 @@ branch from the commit that lands V3's backend half, which they depend on.
   new suite "carry help lines" (en + pl, both layouts).
 - [x] T067 [V3] [admin UI] The Order note, the Quote Request entry and the Opportunity change history name a
   skipped field by its stored `label` (the reader's locale, then `labelDefault`), falling back to the
-  current definition and then the key for a skip without one; the CRM skip lines are shown to every reader
+  field's key for a skip without one — no lookup of the current definition (coordinator ruling
+  2026-10-21); the CRM skip lines are shown to every reader
   of the record, while custom-field values stay behind `custom_fields:read`. The Order note no longer needs
   `GET /custom-fields/definitions?entityType=order` for a labelled skip.
   **Built as the coordinator's brief states it**: stored label (`labels[lang]`, then `labelDefault`), then
@@ -1072,6 +1073,52 @@ host or CI run) under its task.
   lists the owner answers to Q1–Q5, and follows the repository's pull-request template
 
 ---
+
+## Review fixes (2026-10-21)
+
+Code review and security review of the pushed tip `b375f9ee5`, with the owner's rulings P1–P4 and
+W1 and the coordinator's label-fallback ruling.
+
+- [x] **R1 [should] Quote Request receiver without the row lock.** `quote-request-custom-field-carry-receiver.ts`
+  now reads the request `for update` (`LockMode.PESSIMISTIC_WRITE`) inside its Command's transaction and
+  plans over the bag it re-reads under the lock. Not `underRowLock`: the system caller read no version, and
+  its 409 would lose the carry with nobody to retry it. An admin PATCH that holds the row is waited for and
+  its value kept; one that read before the carry is refused on the version the carry bumped. Owner ruling
+  P1 = c keeps the bump. `[PG]` `integration/quote_requests/custom-field-carry-receiver.test.ts` "waits for a
+  write that holds the row…": a raw transaction holds the row and changes another key; the carry is still
+  pending after 300 ms; after the commit the bag holds both keys and `version` is +2. The discriminating
+  assertion is the final bag, which does not depend on timing. The QA pin
+  `integration/crm/custom-field-carry-quote-version.test.ts` is unchanged.
+- [x] **R2 [should] A carry that throws after the link.** `opportunity-origin-link-service.ts` catches around
+  `carryIntoDocument` and warns with `opportunityId`, `documentKind`, `documentId` and the error, message naming
+  "custom-field carry"; never rethrows. Unit: `opportunity-origin-link-service.test.ts` "keeps the link when the
+  carry throws…".
+- [x] **R3 Owner ruling P2 = a — CRM history strips values.** `OpportunityHistoryService` takes
+  `mayReadCustomFields` (`crmOwnerReadChecks.customFields`, `custom_fields:read`, a new member of
+  `OwnerReadChecks`) and leaves `customFieldValues` out of every entry's `before`/`after` for a caller without it,
+  asked once per page; `customFieldCarry` stays. Unit: `opportunity-history-service.test.ts` (3 new). `[PG]`
+  contract: `contract/crm/history.contract.test.ts` "custom-field values need custom_fields:read" (full admin gets
+  the values; a `crm:read` + `orders:read` role gets none, the rest of each entry intact). Order and Quote
+  Request audit logs are out of scope. Changeset: `crm` patch.
+- [x] **R4 Nits.** `custom-field-carry.service.ts`: the dead `options_missing → value_invalid` mapping is gone —
+  the branch skips only on the three reasons that can arise. `customFieldCarrySkipLabelSchema`: every string
+  `.max(200)` (`CUSTOM_FIELD_CARRY_SKIP_LABEL_MAX`), contract test in `custom-fields.carry.test.ts`; since a
+  definition's per-locale labels are not capped, `labelOf` cuts the snapshot to 200 characters so a skip
+  written now always parses (unit: "cuts a label snapshot…"). `customFieldCarrySkipRecord` documents that it
+  strips every other field.
+- [x] **R5 `AGENTS.md` appendix.** `origin/master`'s file re-run through `update-agent-context.sh` with
+  `SPECIFY_FEATURE_DIRECTORY=specs/161-custom-fields-value-carry`, tag corrected from
+  `feat/161-custom-fields-value-carry` to `161-custom-fields-value-carry`. The result is byte-identical to the
+  branch's file: the script keeps the newest three Recent Changes, so `156-asset-stable-url` drops by its own
+  rule. `test/unit/docs/agents-router.test.ts` 28/28.
+- [x] **R6 Docs (en + pl).** `quote_requests.md` and `crm.md`: the version bump after a create from an
+  Opportunity and the `409 VERSION_CONFLICT` re-read (P1). `custom_fields.md`: an Opportunity field's audience
+  is about the target document (P3); the drift-warning buttons are *Add option anyway* / *Dodaj opcję mimo to*
+  and *Change audience anyway* / *Zmień widoczność mimo to* (W1; *Save anyway* gone); an unlabelled skip names
+  the key, no definition lookup. `crm.md`: history values need `custom_fields:read` (P2), and the Admin UI
+  sentence that listed values under codes for such readers now says none are listed. The pages do not quote
+  the create-row help text, so P4's wording is not quoted. Polish caches re-pinned;
+  `check:docs-translations` and `check:module-docs` 0 findings.
 
 ## Dependencies and order
 
