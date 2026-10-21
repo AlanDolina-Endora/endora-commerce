@@ -626,7 +626,7 @@ export function CustomFieldsPage(): ReactNode {
           counterparts={pendingChange.counterparts}
           typeLabel={typeLabel}
           {...(pendingChange.lead ? { lead: pendingChange.lead } : {})}
-          proceedVariant={pendingChange.change.kind === 'delete' ? 'destructive' : 'default'}
+          action={pendingChange.change.kind}
           onCancel={() => setPendingChange(null)}
           onProceed={() => {
             setPendingChange(null);

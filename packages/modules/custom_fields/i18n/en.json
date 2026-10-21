@@ -102,6 +102,7 @@
   "customFields.carry.legend": "Value carry-over",
   "customFields.carry.toggle": "Carry value to {entityType}",
   "customFields.carry.help": "When a record of type {entityType} is created from this one, its empty field with the same key receives this value.",
+  "customFields.carry.helpGroup": "When a record of a ticked type is created from this one, its empty field with the same key receives this value.",
   "customFields.carry.incompatible": "Incompatible",
   "customFields.carry.incompatibleLabel": "Carry to {entityType} is incompatible: {reason}",
   "customFields.carry.reason.target_missing": "{entityType} has no field with the key “{key}”.",
@@ -111,6 +112,8 @@
   "customFields.carry.warning.title": "This change stops values from carrying",
   "customFields.carry.warning.body": "After this change, values will no longer carry between this field and:",
   "customFields.carry.warning.counterpart": "{entityType} · {key}",
-  "customFields.carry.warning.proceed": "Continue anyway",
+  "customFields.carry.warning.proceedRemoveOption": "Remove option anyway",
+  "customFields.carry.warning.proceedDeleteField": "Delete field anyway",
+  "customFields.carry.warning.proceedSave": "Save anyway",
   "customFields.carry.warning.cancel": "Cancel"
 }

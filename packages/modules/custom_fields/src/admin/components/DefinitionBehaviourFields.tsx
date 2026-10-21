@@ -54,8 +54,12 @@ export interface DefinitionBehaviourFieldsProps {
  * - *Carry value to …*, one checkbox per `entityTypeInfo.carryTargets` entry
  *   in the registry's order, none when the type has no target (feature 161,
  *   `specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §1.1).
- *   Each checkbox is described by its own help line, so a screen reader hears
- *   what turning it on does without reading the block's prose.
+ *   In the `stacked` layout (the editor dialog) each checkbox is described by
+ *   its own help line, so a screen reader hears what turning it on does
+ *   without reading the block's prose. In the narrow `row` layout (the create
+ *   form) one shared line explains the whole group and describes the group,
+ *   not each checkbox — a help line per target would wrap the row into a wall
+ *   of near-identical sentences (owner ruling V2, 2026-10-21).
  */
 export function DefinitionBehaviourFields({
   entityTypeInfo,
@@ -72,6 +76,7 @@ export function DefinitionBehaviourFields({
   const carryTo = value.carryTo ?? [];
   if (!entityTypeInfo.listFilter && carryTargets.length === 0) return null;
   const helpId = `${id}-help`;
+  const carryGroupHelpId = `${id}-carry-help`;
 
   const emit = (next: Partial<DefinitionBehaviourValue>): void =>
     onChange({
@@ -109,7 +114,7 @@ export function DefinitionBehaviourFields({
             id={controlId}
             checked={carryTo.includes(target)}
             disabled={disabled}
-            aria-describedby={`${controlId}-help`}
+            aria-describedby={layout === 'row' ? undefined : `${controlId}-help`}
             onChange={(event): void =>
               emit({
                 // Kept in the registry's order, whatever order they were ticked in.
@@ -136,12 +141,21 @@ export function DefinitionBehaviourFields({
       <>
         {listFilterControl}
         {carryControls.length > 0 ? (
-          <div role="group" aria-label={t('customFields.carry.legend')} className="flex flex-wrap items-center gap-x-4">
+          <div
+            role="group"
+            aria-label={t('customFields.carry.legend')}
+            aria-describedby={carryGroupHelpId}
+            className="flex flex-wrap items-center gap-x-4"
+          >
             {carryControls.map((item) => item.control)}
           </div>
         ) : null}
         {listFilterHelp(help)}
-        {carryControls.map((item) => item.help(help))}
+        {carryControls.length > 0 ? (
+          <p id={carryGroupHelpId} className={help}>
+            {t('customFields.carry.helpGroup')}
+          </p>
+        ) : null}
       </>
     );
   }

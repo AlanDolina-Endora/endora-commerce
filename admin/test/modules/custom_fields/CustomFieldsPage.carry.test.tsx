@@ -102,8 +102,8 @@ async function renderPage(
 const toggle = (entityType: string, bundle: Record<string, string> = EN): string =>
   sentence(bundle, 'customFields.carry.toggle', { entityType });
 
-async function openEditor(key = 'region'): Promise<HTMLElement> {
-  const title = sentence(EN, 'customFields.editor.title', { key });
+async function openEditor(key = 'region', bundle: Record<string, string> = EN): Promise<HTMLElement> {
+  const title = sentence(bundle, 'customFields.editor.title', { key });
   fireEvent.click(await screen.findByRole('button', { name: title }));
   return screen.findByRole('dialog', { name: title });
 }
@@ -113,7 +113,8 @@ describe('CustomFieldsPage — carry options (US4)', () => {
     await renderPage('quote_request');
     const toOrder = screen.getByRole('checkbox', { name: toggle('Order') });
     expect(screen.getByRole('checkbox', { name: toggle('Opportunity') })).not.toBeChecked();
-    expect(toOrder).toHaveAccessibleDescription(sentence(EN, 'customFields.carry.help', { entityType: 'Order' }));
+    // The create form's row explains the group once, not each box (owner ruling V2; see the help-line suite below).
+    expect(toOrder).not.toHaveAccessibleDescription();
     fireEvent.change(screen.getByPlaceholderText('po_number'), { target: { value: 'region_copy' } });
     fireEvent.click(toOrder);
     fireEvent.click(screen.getByRole('button', { name: 'Add field' }));
@@ -227,6 +228,45 @@ describe('CustomFieldsPage — carry options (US4)', () => {
     fireEvent.click(within(dialog).getByRole('checkbox', { name: toggle('Opportunity') }));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(await within(dialog).findByText('Server sentence.')).toBeInTheDocument();
+  });
+});
+
+/**
+ * Owner ruling V2 (2026-10-21, T066) — the editor dialog explains each carry
+ * checkbox with its own help line; the narrow create-form row explains the
+ * whole group with one shared line, linked to the group rather than to each box.
+ */
+describe.each([
+  ['en', EN],
+  ['pl', PL],
+] as const)('CustomFieldsPage — carry help lines (%s)', (_language, bundle) => {
+  const typeName = (entityType: 'order' | 'opportunity'): string =>
+    sentence(bundle, CARRY_ENTITY_TYPES.find((info) => info.entityType === entityType)!.labelKey);
+
+  it('describes the create form\'s carry group with one shared help line', async () => {
+    await renderPage('quote_request', bundle);
+    const shared = sentence(bundle, 'customFields.carry.helpGroup');
+    const group = screen.getByRole('group', { name: sentence(bundle, 'customFields.carry.legend') });
+    expect(group).toHaveAccessibleDescription(shared);
+    expect(screen.getAllByText(shared)).toHaveLength(1);
+    for (const target of ['order', 'opportunity'] as const) {
+      const box = within(group).getByRole('checkbox', { name: toggle(typeName(target), bundle) });
+      expect(box).not.toHaveAttribute('aria-describedby');
+      // No per-target sentence is printed in the row.
+      expect(screen.queryByText(sentence(bundle, 'customFields.carry.help', { entityType: typeName(target) }))).toBeNull();
+    }
+  });
+
+  it('describes each carry checkbox of the editor dialog by its own help line', async () => {
+    await renderPage('quote_request', bundle);
+    const dialog = await openEditor('region', bundle);
+    const fieldset = within(dialog).getByRole('group', { name: sentence(bundle, 'customFields.carry.legend') });
+    for (const target of ['order', 'opportunity'] as const) {
+      expect(within(fieldset).getByRole('checkbox', { name: toggle(typeName(target), bundle) })).toHaveAccessibleDescription(
+        sentence(bundle, 'customFields.carry.help', { entityType: typeName(target) }),
+      );
+    }
+    expect(within(dialog).queryByText(sentence(bundle, 'customFields.carry.helpGroup'))).toBeNull();
   });
 });
 

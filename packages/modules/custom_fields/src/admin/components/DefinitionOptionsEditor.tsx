@@ -31,7 +31,8 @@ export interface CarryDriftGuard {
   /** Shows the warning; answers `true` once the operator proceeds, `false` on cancel. */
   confirm: (
     counterparts: readonly CarryCounterpart[],
-    options?: { lead?: string; destructive?: boolean },
+    /** `action` is the change asked about — the warning's proceed button names it. */
+    options: { action: DefinitionChange['kind']; lead?: string },
   ) => Promise<boolean>;
 }
 
@@ -426,8 +427,8 @@ function OptionRow({
               if (carryGuard && broken.length > 0) {
                 void carryGuard
                   .confirm(broken, {
+                    action: 'remove-option',
                     lead: t('customFields.editor.option.removeConfirm', { label: option.labelDefault }),
-                    destructive: true,
                   })
                   .then((proceed) => {
                     if (proceed) remove();
@@ -486,7 +487,7 @@ function AddOptionRow({ definitionId, nextSortOrder, onChanged, disabled, carryG
     setInvalid(false);
     setError(null);
     const broken = carryGuard?.brokenBy({ kind: 'add-option', definitionId, optionValue: trimmedValue }) ?? [];
-    if (carryGuard && broken.length > 0 && !(await carryGuard.confirm(broken))) return;
+    if (carryGuard && broken.length > 0 && !(await carryGuard.confirm(broken, { action: 'add-option' }))) return;
     setBusy(true);
     try {
       await customFieldsClient.createOption(definitionId, {

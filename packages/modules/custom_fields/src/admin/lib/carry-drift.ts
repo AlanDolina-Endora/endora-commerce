@@ -115,3 +115,28 @@ export function carryCounterpartsBrokenBy(
 
   return found;
 }
+
+/** The proceed button of a drift warning, as the change it confirms reads (owner ruling V1, 2026-10-21). */
+export interface CarryDriftProceed {
+  /** A `custom_fields` bundle key naming the action. */
+  labelKey: string;
+  /** A removal or a deletion reads as destructive; an audience change or an added option does not. */
+  destructive: boolean;
+}
+
+/**
+ * What the drift warning's proceed button says and how it looks, for the kind
+ * of change it confirms — the one mapping the page's dialog and the editor's
+ * in-place warning both read, so the two can never name the same action apart.
+ */
+export function carryDriftProceed(kind: DefinitionChange['kind']): CarryDriftProceed {
+  switch (kind) {
+    case 'delete':
+      return { labelKey: 'customFields.carry.warning.proceedDeleteField', destructive: true };
+    case 'remove-option':
+      return { labelKey: 'customFields.carry.warning.proceedRemoveOption', destructive: true };
+    case 'audience':
+    case 'add-option':
+      return { labelKey: 'customFields.carry.warning.proceedSave', destructive: false };
+  }
+}

@@ -9,7 +9,7 @@ import type {
   UpdateCustomFieldDefinitionRequest,
 } from '@endora-commerce/contracts';
 import { customFieldsClient } from '../api/custom-fields-client.js';
-import { carryCounterpartsBrokenBy, type CarryCounterpart } from '../lib/carry-drift.js';
+import { carryCounterpartsBrokenBy, carryDriftProceed, type CarryCounterpart, type CarryDriftProceed } from '../lib/carry-drift.js';
 import { entityTypeLabelKey, refusalSentence } from '../lib/carry-labels.js';
 import { sameLabel, withLanguages } from './localized-label.js';
 import { CarryDriftNotice } from './CarryDriftWarning.js';
@@ -38,7 +38,8 @@ export interface DefinitionEditorDialogProps {
 interface PendingDrift {
   counterparts: readonly CarryCounterpart[];
   lead?: string;
-  destructive: boolean;
+  /** The proceed button, named after the change asked about (owner ruling V1). */
+  proceed: CarryDriftProceed;
   resolve: (proceed: boolean) => void;
 }
 
@@ -104,13 +105,13 @@ export function DefinitionEditorDialog({
   const carryGuard = useMemo<CarryDriftGuard>(
     () => ({
       brokenBy: (change) => carryCounterpartsBrokenBy(change, known),
-      confirm: (counterparts, options = {}) =>
+      confirm: (counterparts, options) =>
         new Promise<boolean>((resolve) => {
           driftOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
           setDrift({
             counterparts,
             ...(options.lead ? { lead: options.lead } : {}),
-            destructive: options.destructive === true,
+            proceed: carryDriftProceed(options.action),
             resolve,
           });
         }),
@@ -188,10 +189,10 @@ export function DefinitionEditorDialog({
             </Button>
             <Button
               type="button"
-              variant={drift.destructive ? 'destructive' : 'default'}
+              variant={drift.proceed.destructive ? 'destructive' : 'default'}
               onClick={(): void => settleDrift(true)}
             >
-              {t('customFields.carry.warning.proceed')}
+              {t(drift.proceed.labelKey)}
             </Button>
           </>
         ) : (

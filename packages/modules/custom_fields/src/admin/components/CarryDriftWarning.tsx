@@ -4,7 +4,7 @@ import { Button } from '@endora-commerce/admin-kit/ui';
 import { ModalDialog } from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import type { SupportedEntityType } from '@endora-commerce/contracts';
-import type { CarryCounterpart } from '../lib/carry-drift.js';
+import { carryDriftProceed, type CarryCounterpart, type DefinitionChange } from '../lib/carry-drift.js';
 import { shownKey } from '../lib/carry-labels.js';
 
 export interface CarryDriftNoticeProps {
@@ -46,8 +46,8 @@ export function CarryDriftNotice({ counterparts, typeLabel, lead }: CarryDriftNo
 export interface CarryDriftDialogProps extends CarryDriftNoticeProps {
   onCancel: () => void;
   onProceed: () => void;
-  /** `destructive` for a deletion, so the button reads as what it does. */
-  proceedVariant?: 'default' | 'destructive';
+  /** The change the warning confirms: its proceed button names it, destructive-styled for a deletion. */
+  action: DefinitionChange['kind'];
 }
 
 /**
@@ -61,10 +61,11 @@ export function CarryDriftDialog({
   lead,
   onCancel,
   onProceed,
-  proceedVariant = 'default',
+  action,
 }: CarryDriftDialogProps): ReactNode {
   const t = useTranslation('custom_fields');
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const proceed = carryDriftProceed(action);
   return (
     <ModalDialog
       title={t('customFields.carry.warning.title')}
@@ -75,8 +76,13 @@ export function CarryDriftDialog({
           <Button ref={cancelRef} type="button" variant="outline" className="min-h-11 sm:min-h-9" onClick={onCancel}>
             {t('customFields.carry.warning.cancel')}
           </Button>
-          <Button type="button" variant={proceedVariant} className="min-h-11 sm:min-h-9" onClick={onProceed}>
-            {t('customFields.carry.warning.proceed')}
+          <Button
+            type="button"
+            variant={proceed.destructive ? 'destructive' : 'default'}
+            className="min-h-11 sm:min-h-9"
+            onClick={onProceed}
+          >
+            {t(proceed.labelKey)}
           </Button>
         </>
       }

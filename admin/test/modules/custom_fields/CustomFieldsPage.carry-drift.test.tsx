@@ -7,20 +7,28 @@ import { renderWithI18n } from '../../helpers/render-with-i18n';
 import { adminSession } from '../../helpers/render-with-session';
 import { expectNoAxeViolations } from '../../helpers/axe';
 import en from '../../../../packages/modules/custom_fields/i18n/en.json';
+import pl from '../../../../packages/modules/custom_fields/i18n/pl.json';
 import coreEn from '../../../../packages/modules/_i18n/i18n/en.json';
+import corePl from '../../../../packages/modules/_i18n/i18n/pl.json';
 import { CARRY_ENTITY_TYPES, carryDefinition, sentence } from './carry-fixtures';
 
 /**
  * Feature 161 (T043, US4-6, US4-8, SC-007, FR-019) — a change that would stop
  * an enabled carry from working asks first, in the page, naming every field on
- * the other side; *Cancel* sends nothing and *Proceed* sends exactly what the
- * action sent before (`specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §1.4).
+ * the other side; *Cancel* sends nothing and the proceed button — named after
+ * the action it confirms (owner ruling V1, 2026-10-21, T065) — sends exactly
+ * what the action sent before
+ * (`specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §1.4).
  */
 
-const EN = en as Record<string, string>;
+type Bundle = Record<string, string>;
+const EN = en as Bundle;
+const PL = pl as Bundle;
 const WARNING = sentence(EN, 'customFields.carry.warning.title');
-const PROCEED = sentence(EN, 'customFields.carry.warning.proceed');
 const CANCEL = sentence(EN, 'customFields.carry.warning.cancel');
+const REMOVE_OPTION_ANYWAY = sentence(EN, 'customFields.carry.warning.proceedRemoveOption');
+const DELETE_FIELD_ANYWAY = sentence(EN, 'customFields.carry.warning.proceedDeleteField');
+const SAVE_ANYWAY = sentence(EN, 'customFields.carry.warning.proceedSave');
 
 /** Internal, offers north + south, carries to the Order field of the same key. */
 const QR_REGION = carryDefinition('00000000-0000-4000-8000-0000000d0001', { carryTo: ['order'] });
@@ -85,18 +93,24 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function renderPage(entityType: 'quote_request' | 'order'): Promise<void> {
+async function renderPage(
+  entityType: 'quote_request' | 'order',
+  bundle: Bundle = EN,
+  core: Bundle = coreEn as Bundle,
+): Promise<void> {
   renderWithI18n(
     <StrictMode>
       <AuthProvider initial={adminSession({ permissions: ['custom_fields:read', 'custom_fields:write'] })}>
         <CustomFieldsPage />
       </AuthProvider>
     </StrictMode>,
-    { custom_fields: EN, core: coreEn as Record<string, string> },
+    { custom_fields: bundle, core },
   );
-  const recordType = sentence(EN, 'customFields.form.entity');
+  const recordType = sentence(bundle, 'customFields.form.entity');
   await waitFor(() =>
-    expect(within(screen.getByLabelText(recordType)).getAllByRole('option').map((o) => o.textContent)).toContain('Order'),
+    expect(within(screen.getByLabelText(recordType)).getAllByRole('option').map((o) => o.textContent)).toContain(
+      sentence(bundle, 'customFields.entity.order'),
+    ),
   );
   fireEvent.change(screen.getByLabelText(recordType), { target: { value: entityType } });
   await waitFor(() => expect(client.list).toHaveBeenCalledWith(entityType));
@@ -104,8 +118,8 @@ async function renderPage(entityType: 'quote_request' | 'order'): Promise<void> 
   await screen.findByRole('row', { name: /region/ });
 }
 
-async function openEditor(key = 'region'): Promise<HTMLElement> {
-  const title = sentence(EN, 'customFields.editor.title', { key });
+async function openEditor(key = 'region', bundle: Bundle = EN): Promise<HTMLElement> {
+  const title = sentence(bundle, 'customFields.editor.title', { key });
   fireEvent.click(await screen.findByRole('button', { name: title }));
   return screen.findByRole('dialog', { name: title });
 }
@@ -143,9 +157,9 @@ describe('CustomFieldsPage — drift warnings', () => {
       expect(REQUESTS()).toBe(0);
     });
 
-    it('removes the option exactly as before on Proceed', async () => {
+    it('removes the option exactly as before on Remove option anyway', async () => {
       const warning = await askToRemoveSouth();
-      fireEvent.click(within(warning).getByRole('button', { name: PROCEED }));
+      fireEvent.click(within(warning).getByRole('button', { name: REMOVE_OPTION_ANYWAY }));
       await waitFor(() => expect(client.removeOption).toHaveBeenCalledTimes(1));
       expect(client.removeOption).toHaveBeenCalledWith(ORDER_REGION.id, ORDER_REGION.options[1]!.id);
       expect(REQUESTS()).toBe(1);
@@ -172,9 +186,9 @@ describe('CustomFieldsPage — drift warnings', () => {
       expect(REQUESTS()).toBe(0);
     });
 
-    it('adds the option exactly as before on Proceed', async () => {
+    it('adds the option exactly as before on Save anyway', async () => {
       const warning = await askToAddEast();
-      fireEvent.click(within(warning).getByRole('button', { name: PROCEED }));
+      fireEvent.click(within(warning).getByRole('button', { name: SAVE_ANYWAY }));
       await waitFor(() => expect(client.createOption).toHaveBeenCalledTimes(1));
       expect(client.createOption).toHaveBeenCalledWith(QR_REGION.id, {
         value: 'east',
@@ -201,11 +215,11 @@ describe('CustomFieldsPage — drift warnings', () => {
       expect(REQUESTS()).toBe(0);
     });
 
-    it('sends the audience exactly as before on Proceed', async () => {
+    it('sends the audience exactly as before on Save anyway', async () => {
       await renderPage('order');
       fireEvent.change(audienceOf(), { target: { value: 'customer' } });
       const warning = await screen.findByRole('dialog', { name: WARNING });
-      fireEvent.click(within(warning).getByRole('button', { name: PROCEED }));
+      fireEvent.click(within(warning).getByRole('button', { name: SAVE_ANYWAY }));
       await waitFor(() => expect(client.update).toHaveBeenCalledTimes(1));
       expect(client.update).toHaveBeenCalledWith(ORDER_REGION.id, { audience: 'customer' });
     });
@@ -223,14 +237,78 @@ describe('CustomFieldsPage — drift warnings', () => {
       expect(REQUESTS()).toBe(0);
     });
 
-    it('deletes exactly as before on Proceed', async () => {
+    it('deletes exactly as before on Delete field anyway', async () => {
       await renderPage('quote_request');
       fireEvent.click(screen.getByRole('button', { name: sentence(EN, 'customFields.table.delete', { key: 'region' }) }));
       const warning = await screen.findByRole('dialog', { name: WARNING });
       expectCounterparts(warning, ['Order · region']);
-      fireEvent.click(within(warning).getByRole('button', { name: PROCEED }));
+      fireEvent.click(within(warning).getByRole('button', { name: DELETE_FIELD_ANYWAY }));
       await waitFor(() => expect(client.remove).toHaveBeenCalledTimes(1));
       expect(client.remove).toHaveBeenCalledWith(QR_REGION.id);
+    });
+  });
+
+  /**
+   * Owner ruling V1 (T065): the proceed button names the action — never a bare
+   * "Continue" — and stays destructive-styled for a removal or a deletion.
+   */
+  describe.each([
+    ['en', EN, coreEn as Bundle],
+    ['pl', PL, corePl as Bundle],
+  ] as const)('the proceed button names the action (%s)', (_language, bundle, core) => {
+    const say = (key: string, params: Record<string, string> = {}): string => sentence(bundle, key, params);
+    const title = (): string => say('customFields.carry.warning.title');
+    /** The warning's only two buttons, *Cancel* first, and the proceed button's name. */
+    function expectButtons(warning: HTMLElement, proceedKey: string, destructive: boolean): void {
+      const buttons = within(warning).getAllByRole('button');
+      expect(buttons.map((button) => button.textContent)).toEqual([say('customFields.carry.warning.cancel'), say(proceedKey)]);
+      const proceed = buttons[1]!;
+      if (destructive) expect(proceed).toHaveClass('bg-destructive');
+      else expect(proceed).not.toHaveClass('bg-destructive');
+      // The old generic label is gone from both bundles.
+      expect(bundle['customFields.carry.warning.proceed']).toBeUndefined();
+    }
+
+    it('reads "remove option anyway", destructive, for removing an option a carry needs', async () => {
+      await renderPage('order', bundle, core);
+      const dialog = await openEditor('region', bundle);
+      const south = within(dialog).getByRole('group', { name: 'South' });
+      fireEvent.click(within(south).getByRole('button', { name: say('customFields.editor.option.remove') }));
+      const warning = await screen.findByRole('dialog', { name: title() });
+      const proceed = within(warning).getByRole('button', { name: say('customFields.carry.warning.proceedRemoveOption') });
+      expect(proceed).toHaveClass('bg-destructive');
+      fireEvent.click(proceed);
+      await waitFor(() => expect(client.removeOption).toHaveBeenCalledTimes(1));
+    });
+
+    it('reads "save anyway", not destructive, for adding an option the target lacks', async () => {
+      await renderPage('quote_request', bundle, core);
+      const dialog = await openEditor('region', bundle);
+      const add = within(dialog).getByRole('group', { name: say('customFields.editor.option.add') });
+      fireEvent.change(within(add).getByLabelText(say('customFields.editor.option.value')), { target: { value: 'east' } });
+      fireEvent.change(within(add).getByLabelText(say('customFields.editor.labelDefault')), { target: { value: 'East' } });
+      fireEvent.click(within(add).getByRole('button', { name: say('customFields.editor.option.add') }));
+      const warning = await screen.findByRole('dialog', { name: title() });
+      const proceed = within(warning).getByRole('button', { name: say('customFields.carry.warning.proceedSave') });
+      expect(proceed).not.toHaveClass('bg-destructive');
+      fireEvent.click(proceed);
+      await waitFor(() => expect(client.createOption).toHaveBeenCalledTimes(1));
+    });
+
+    it('reads "save anyway", not destructive, for an audience change', async () => {
+      await renderPage('order', bundle, core);
+      fireEvent.change(screen.getByLabelText(say('customFields.audience.rowLabel', { key: 'region' })), {
+        target: { value: 'customer' },
+      });
+      const warning = await screen.findByRole('dialog', { name: title() });
+      expectButtons(warning, 'customFields.carry.warning.proceedSave', false);
+    });
+
+    it('reads "delete field anyway", destructive, for deleting a field a carry needs', async () => {
+      await renderPage('quote_request', bundle, core);
+      fireEvent.click(screen.getByRole('button', { name: say('customFields.table.delete', { key: 'region' }) }));
+      const warning = await screen.findByRole('dialog', { name: title() });
+      expectButtons(warning, 'customFields.carry.warning.proceedDeleteField', true);
     });
   });
 
