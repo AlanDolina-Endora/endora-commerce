@@ -631,7 +631,7 @@ R-10, R-11, R-13).
   non-binding edge
 
 **Phase 5 result** (2026-10-20):
-- Migration `20261020T130555_quote_requests_quote_request_event_carry_skipped`, registered in the
+- Migration `20261021T164808_quote_requests_quote_request_event_carry_skipped`, registered in the
   module barrel and the regenerated registry.
 - T031: the history bundle title was already added at the block 1 end (core `_i18n` bundle). The
   receiver writes the skip event with `actorRoleLabel: 'System'` (how the projection names a
@@ -682,6 +682,18 @@ pnpm --filter backend run check:port-catches
 pnpm --filter backend run check:command-coverage -- --strict
 pnpm --filter backend run check:module-boundary
 ```
+
+**Mid-delivery rebase** (2026-10-21, after Phases 7–8 joined from the UI stream): onto
+`origin/master` at `aa6891d63` (backup `backup/161-pre-rebase-1`). Master had landed
+`specs/158-crm-opportunity-inline-editing/` and `specs/159-quote-request-item-groups/`. Conflicts were
+adjacent additions (contracts imports and tests, the minted-code ledger, the order placement audit
+`stateAfter`, three modules' bundles, `OrderDetail.tsx`, `OpportunityHistory.tsx`), each kept on both
+sides; the history-kind count test now reads 14 entry kinds and 13 change kinds. Master's newer
+`orders` and `quote_requests` migrations (`20261020T172007`, `20261020T171341`) re-stamped ours to
+`20261021T164807_orders_order_comment_system_note` and
+`20261021T164808_quote_requests_quote_request_event_carry_skipped`. Registries regenerated; the crm
+reference page's Polish cache still matches its English hash. The AGENTS.md appendix keeps three
+Recent Changes lines, as `agents-router.test.ts` caps it.
 
 ---
 

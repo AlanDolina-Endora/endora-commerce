@@ -12,7 +12,7 @@ const BEFORE = `'created','submitted','modified','approved','canceled','expired'
   'completed','customer-accepted-revision','customer-rejected-revision',
   're-submitted','note-added','pdf-sent'`;
 
-export class Migration20261020T130555QuoteRequestsQuoteRequestEventCarrySkipped extends Migration {
+export class Migration20261021T164808QuoteRequestsQuoteRequestEventCarrySkipped extends Migration {
   override async up(): Promise<void> {
     this.addSql(`alter table "quote_request_events" drop constraint "qre_event_type_check";`);
     this.addSql(

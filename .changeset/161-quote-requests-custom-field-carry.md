@@ -12,7 +12,7 @@ A Quote Request created from a Sales Opportunity receives the Opportunity's carr
   no audit entry is written.
 - **History.** A value that cannot be carried is named in one `custom-field-carry-skipped` event
   (new value of the `qre_event_type_check` constraint, migration
-  `Migration20261020T130555QuoteRequestsQuoteRequestEventCarrySkipped`), shown in
+  `Migration20261021T164808QuoteRequestsQuoteRequestEventCarrySkipped`), shown in
   `GET /api/v1/admin/quote-requests/:id/history` as a `custom_field_carry_skipped` entry with
   `customFieldCarry` (the source Opportunity and every skipped key with its reason). It is
   admin-only: buyer replies leave the event out.

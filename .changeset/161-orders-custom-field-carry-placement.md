@@ -13,7 +13,7 @@ An Order placed from a vouched Quote Request receives the request's carried cust
 - **System notes in the Order's comments.** A value that cannot be carried — no matching field,
   another value type, an internal value into a customer-visible field, or a value the field does
   not accept — is named in one author-less, internal, non-notifying system note. New column
-  `order_comments.system_note` (migration `Migration20261020T113026OrdersOrderCommentSystemNote`).
+  `order_comments.system_note` (migration `Migration20261021T164807OrdersOrderCommentSystemNote`).
   `GET /api/v1/admin/orders/:id/comments` gives every comment `systemNote` (`null` for an ordinary
   comment); `GET /api/v1/orders/:id/comments` never lists a system note and its shape is unchanged.
 - `OrderServiceNeighbourPorts` and `OrdersModuleOptions` gain the required `customFieldCarry`

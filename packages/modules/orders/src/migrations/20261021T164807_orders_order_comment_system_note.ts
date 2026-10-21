@@ -12,7 +12,7 @@ import { Migration } from '@mikro-orm/migrations';
  * `order_comments` is this module's own table; nothing of another module's is
  * referenced.
  */
-export class Migration20261020T113026OrdersOrderCommentSystemNote extends Migration {
+export class Migration20261021T164807OrdersOrderCommentSystemNote extends Migration {
   override async up(): Promise<void> {
     this.addSql(`alter table "order_comments" add column "system_note" jsonb null;`);
   }
