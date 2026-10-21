@@ -132,20 +132,21 @@ every shape of [contracts/carry-api.md](./contracts/carry-api.md) §1, §2, §4�
   remote branch, above the README floor `136`. **Renumbered 2026-10-21**: `origin/master` then held
   `specs/158-crm-opportunity-inline-editing/` and `specs/159-quote-request-item-groups/`, and a remote
   branch `feat/160-pricing-model-v2`; `161` was free on both, so the directory, the changesets and every
-  reference became `161` (the worktree path `endora-commerce-wt-158` is unchanged). `QuoteRequestSourceAssessment` present (feat/155 merged);
+  reference became `161` (the feature worktree's path is unchanged). `QuoteRequestSourceAssessment` present (feat/155 merged);
   `listFilter` present (the filters feature merged); no carry or system-note symbol on master. `git log`:
   feat/155's and the filters feature's commits, the `0.107.0` release (changelog and version only), and
   `91df8b536` (`specs/154-sales-channel-access/`, basket channel attribution), which rewrites part of
   `order-service.ts` placement — the Phase 3 anchors in `order-service.ts` are re-derived at the start
   of Phase 3.
 - [x] T000a Stand the worktree up (`AGENTS.md` § *Commands*; never a symlinked `node_modules`),
-  from the directory holding the primary checkout, then copy the four untracked `.env` files:
+  from the directory holding the primary checkout, then copy the four untracked `.env` files
+  (`<feature-worktree>` is the feature worktree's directory name):
   ```bash
-  git -C endora-commerce worktree add ../endora-commerce-wt-158 -b feat/161-custom-fields-value-carry origin/master
-  bash endora-commerce-wt-158/scripts/setup-worktree.sh
-  for f in .env backend/.env admin/.env storefront/.env; do cp -p "endora-commerce/$f" "endora-commerce-wt-158/$f" || echo "MISSING: $f"; done
-  git -C endora-commerce-wt-158 check-ignore -v .env backend/.env admin/.env storefront/.env
-  (cd endora-commerce-wt-158 && pnpm run build:packages)
+  git -C endora-commerce worktree add ../<feature-worktree> -b feat/161-custom-fields-value-carry origin/master
+  bash <feature-worktree>/scripts/setup-worktree.sh
+  for f in .env backend/.env admin/.env storefront/.env; do cp -p "endora-commerce/$f" "<feature-worktree>/$f" || echo "MISSING: $f"; done
+  git -C <feature-worktree> check-ignore -v .env backend/.env admin/.env storefront/.env
+  (cd <feature-worktree> && pnpm run build:packages)
   ```
   Every `MISSING:` line is a stop; `check-ignore` must name an ignore rule for each file. Do not
   start a second service stack from the worktree — the copied `.env` points at the primary
@@ -733,8 +734,8 @@ Recent Changes lines, as `agents-router.test.ts` caps it.
   violations 0 (ledgered 4, stale 0); `fixture-substitution` violations 0. No ledger entry needed.
 
 - **Phase 6 notes** (2026-10-21). T036–T039 are written; the Docker services were down on the
-  workstation, so their `[PG]` files are verified on the fork's `ci-pg` run only. **Result**: fork
-  `ci-pg` run `39646383808` on `189da5071` — 15 files (Phase 5's six, Phase 6's five, the four the
+  workstation, so their `[PG]` files are verified on the fork's `ci-pg` run only. **Result**: the
+  fork's service-backed run on `189da5071` — 15 files (Phase 5's six, Phase 6's five, the four the
   label snapshot or the re-stamped migrations touch), `failed=0`, 133 tests. T036 sets `crm.auto_create_from_orders` on and
   `crm.auto_create_from_quote_requests` off for its describe, after reading both values to write
   back. T037's carry-option retention while `quote_requests` is off is already
@@ -931,7 +932,9 @@ branch from the commit that lands V3's backend half, which they depend on.
   `.proceedDeleteField`, `.proceedSave`. **Deliberately changed existing assertions** (standing rule 12):
   `CustomFieldsPage.carry-drift.test.tsx` — the four "… on Proceed" tests click the action's own label
   instead of the removed `PROCEED` constant; new suite "the proceed button names the action" (en + pl,
-  label and style per action).
+  label and style per action). *Superseded in part by owner ruling W1 (2026-10-21, review fix R10):
+  `.proceedSave` / "Save anyway" no longer exists — the add-option and audience buttons read "Add option
+  anyway" and "Change audience anyway".*
 - [x] T066 [V2] [admin UI] One help line per carry checkbox in the definition editor; one shared help line
   for the group in the narrow create-form row. `DefinitionBehaviourFields` `layout="row"`: the checkboxes
   lose their own `aria-describedby`, the `role="group"` gains one pointing at
@@ -1059,12 +1062,12 @@ host or CI run) under its task.
 - [ ] T061 Service-backed run on the fork: build the throwaway `ci-pg/<branch>` branch from the
   tip plus the fork-only workflow commit and a `ci-pg-files.txt` listing, relative to `backend/`,
   every server-bound file this feature adds or changes —
-  `test/integration/custom_fields/{carry-options,entity-owner-presence,carry-port,carry-audience,cross-tenant}.test.ts`,
+  `test/integration/custom_fields/{carry-options,entity-owner-presence,carry-port,carry-audience,cross-tenant,carry-refusal-atomicity,one-definitions-cache}.test.ts`,
   `test/contract/custom_fields/host-managed.test.ts`,
-  `test/contract/orders/{comments,carry-system-note-visibility}.test.ts`,
+  `test/contract/orders/{comments,carry-system-note-visibility}.test.ts`, `test/contract/crm/history.contract.test.ts`,
   `test/integration/orders/{place-order-custom-field-carry,place-order-from-quote-request,custom-field-carry-receiver,admin-write-scope,admin-create-origin}.test.ts`,
   `test/integration/quote_requests/{custom-field-carry-receiver,off-state,history,admin-create-origin}.test.ts`,
-  `test/integration/crm/{custom-field-carry-into-opportunity,custom-field-carry-from-opportunity,auto-create,history,custom-fields,off-state}.test.ts`,
+  `test/integration/crm/{custom-field-carry-into-opportunity,custom-field-carry-from-opportunity,custom-field-carry-quote-version,auto-create,history,custom-fields,off-state}.test.ts`,
   `test/integration/_i18n/error-code-ownership.test.ts`, `test/contract/kernel/openapi-baseline.test.ts`,
   `test/contract/kernel/harness-parity.test.ts` — push it, record the per-file table, delete the
   branch. A red file is fixed on the feature branch (never on `ci-pg/…`) and the run repeated.
@@ -1148,6 +1151,52 @@ W1 and the coordinator's label-fallback ruling.
   gate against a response that still carries values. RED observed: with the drop and the
   placeholder removed, 3 of 38 fail. Changeset `161-crm-history-hidden-values-ui.md` (`crm` patch).
 
+- [x] **R9 [should] Order receiver without the row lock** (coordinator ruling S6, consistent with owner
+  ruling P1). `order-custom-field-carry-receiver.ts` now reads the Order `for update`
+  (`LockMode.PESSIMISTIC_WRITE`) inside its Command's transaction and plans over the bag it re-reads under
+  the lock, as R1 does for the Quote Request. An Order has no `version`, so nothing is bumped. `[PG]`
+  `integration/orders/custom-field-carry-receiver.test.ts` "waits for a write that holds the row…": a raw
+  transaction holds the Order's row and writes another key; the carry is still pending after 300 ms; after
+  the commit the bag holds both keys. The discriminating assertion is the final bag. RED observed on the
+  fork's service-backed run against the test commit alone: the bag held only the carried key, the other
+  writer's value lost; 4 of 5 green. Changeset: a bullet in
+  `161-orders-custom-field-carry-receiver.md`. *Known residue*: the admin `PATCH
+  /api/v1/admin/orders/:id/custom-fields` reads without a lock and writes the whole bag, so an
+  administrator's write that read before a carry and commits after it can still drop the carried value;
+  Orders have no version to refuse it with — left for the coordinator.
+- [x] **R10 W1 — the add-option and audience drift buttons** (owner ruling W1, 2026-10-21, supersedes V1's
+  "Save anyway"). `carryDriftProceed` maps `add-option` → `.warning.proceedAddOption` ("Add option
+  anyway" / "Dodaj opcję mimo to") and `audience` → `.warning.proceedChangeAudience` ("Change audience
+  anyway" / "Zmień widoczność mimo to"), both default-styled; `.proceedSave` is gone and
+  `CustomFieldsPage.carry-drift.test.tsx` asserts it (and the older `.proceed`) is absent from the bundle.
+  Tests: `carry-drift.test.ts` (the mapping per kind), `CustomFieldsPage.carry-drift.test.tsx` (label and
+  style per action, en + pl). Changeset: `161-custom-fields-carry-ui.md`. Commit `bb3e76345`.
+- [x] **R11 P4 — help wording and quoted type names.** `customFields.carry.help` / `.helpGroup` read the
+  owner's wording ("When a record of type “{entityType}” is created from a record with this field, the
+  new record's empty field with the same key receives this field's value." / "… of a selected type …");
+  the six `errors.CUSTOM_FIELD_CARRY_INCOMPATIBLE.<token>` sentences and the four
+  `customFields.carry.reason.*` sentences quote the type names (and the value types). Deliberately
+  changed existing assertion (standing rule 12): `integration/custom_fields/carry-options.test.ts`
+  "refuses a target with no same-key field" now expects `exists on “order”`. Commits `b899df45c`,
+  `95fee6e92`.
+- [x] **R12 The drift warning is announced, the reason is text, and unavailable checks say so.**
+  `CarryDriftWarning` / `DefinitionEditorDialog`: the dialog is described by the warning
+  (`aria-describedby`) and a `role="status"` live region says the warning appeared; the *Incompatible*
+  reason is visible small muted text under the chip at every width (no `title`, no screen-reader-only
+  copy); when every type's definitions read fails, the table card shows a warning `Alert`
+  (`customFields.carry.checksUnavailable` with *Retry*, `customFields.carry.retry`). Tests:
+  `CustomFieldsPage.carry-drift.test.tsx`, `CustomFieldsPage.carry.test.tsx`. Docs (S3): the
+  `custom_fields` page no longer says the reason shows "on hover" (en + pl, Polish cache re-pinned).
+  Commits `8fd3303f1`, `63f197d46`, `3dbb4b9f6`.
+- [x] **R13 admin-kit `ModalDialog` takes `aria-describedby`** (needed by R12). Optional; set on the panel
+  beside `aria-labelledby`, absent when not passed. Test: `admin/test/components/ModalDialog.test.tsx`.
+  Changeset: `161-admin-kit-modal-dialog-described-by.md` (`admin-kit` patch). Commit `172597cd7`.
+- [x] **R14 `carryReasonUnknown` fallback.** The Quote Request and Sales Opportunity history renderers
+  read a skip reason they do not know as `history.carryReasonUnknown` ("the value could not be carried" /
+  Polish in both bundles), never the code; the Sales Opportunity is named "sales opportunity" alike in
+  both modules' reason sentences. Tests: `admin/test/modules/crm/history.test.tsx`,
+  `admin/test/modules/quote_requests/RfqDetail.history.test.tsx`. Commit `7f0a9aacb`.
+
 ## Dependencies and order
 
 ```text
@@ -1203,6 +1252,9 @@ request before Phase 10.
 | FR-018 | T054 – T057 |
 | FR-019 | T008 (server allows drift), T041, T043 |
 | FR-020 | T042 (mark appears and clears) |
+| P1 (owner ruling 2026-10-21) | R1 (`[PG]` `integration/quote_requests/custom-field-carry-receiver.test.ts` "waits for a write that holds the row…"), `[PG]` `integration/crm/custom-field-carry-quote-version.test.ts`, R9 (`[PG]` `integration/orders/custom-field-carry-receiver.test.ts` "waits for a write that holds the row…") |
+| P2 (owner ruling 2026-10-21) | R3 (`opportunity-history-service.test.ts`, `[PG]` `contract/crm/history.contract.test.ts` "custom-field values need custom_fields:read"), R8 (`admin/test/modules/crm/history.test.tsx`) |
+| V3 (owner ruling 2026-10-21) | T063, T064 (label snapshot, contract and writers), T067 (the three renderers name the field without `custom_fields:read`), R4 (label cut to 200) |
 | SC-001 | T017, T023, T033 |
 | SC-002 | T017, T023, T029, T036, T037 |
 | SC-003 | T013, T023, T028 |
