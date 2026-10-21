@@ -43,6 +43,7 @@ names the test that holds it.
 | No cross-process invalidation (§2.4) | bump published on `b2b:price_lists:pricing-generation`, every process subscribes on boot | `backend/test/integration/kernel/cross-process-invalidation.test.ts` |
 | Sweeper does not invalidate (§2.4) | a sweep that flips a list bumps | `pricing-invalidation-after-commit.test.ts` |
 | Cart own-price fallback labelled PLN (§1) | labelled with the basket channel's default currency; a basket with no channel is unpriced for it | `cart-line-pricing.test.ts` |
+| `GET /cart` re-priced on a second chain — #168 (§5) | the read prices through `CartLinePricing.orderablePrices`, the chain placement's drift check runs: agreed price, own-price fallback and display-mode refusal included; a line placement would refuse reads as unavailable | `backend/test/integration/carts/cart-read-equals-placement.test.ts` |
 | Variant picker shows `price_override` (§1) | no price per variant; the PDP price block is the price of every variant | `storefront/test/catalog/variant-picker.test.tsx` |
 
 Still open after P0 (not fixed, by decision or scope):
@@ -55,7 +56,7 @@ Still open after P0 (not fixed, by decision or scope):
 - Next.js `pricing:*` cache tags are still never revalidated by the backend (§2.4).
 - Catalog writes (categories, `defaultPrice`) still do not invalidate the pricing cache (§2.4).
 - Short price-sorted and search pages (#235, §3).
-- Issues #167, #168 and the quote-line half of #303 (§8).
+- Issues #167 and the quote-line half of #303 (§8).
 
 ## Detailed audit
 
@@ -308,7 +309,7 @@ Gaps still open (code-verified unless marked):
 
 ## 5. Carts / orders / quote requests
 
-**Two different "cart line price" implementations exist.**
+**One cart line price chain** since #168 was settled on the P0 branch (there were two).
 
 1. `CartLinePricing.orderablePrice` / `orderablePrices` (`packages/modules/carts/src/backend/services/cart-line-pricing.ts`):
    agreed price **only at the agreed quantity** → the price list at the line's quantity (one
@@ -317,12 +318,16 @@ Gaps still open (code-verified unless marked):
    whose channel is gone is unpriced for it) → unpriced. Display mode `none` = quote-only. Amount
    rounded to 2 dp while brackets store 4 dp. Used on add/merge/qty change, the batch add, the
    login/reorder reprice and at placement; it passes the basket's customer account (P0).
-2. `CartPricingRecompute.recompute` (`cart-pricing-recompute.ts`) for `GET /api/v1/cart`: one
-   batched `resolveLinePrices` call (P0; it was one `resolveLinePrice` per line), with the
-   customer account; still **no agreed price, no own-price fallback, no display-mode check**;
-   Redis 30 s. `writeBackTo` has no caller (grep).
-   → The cart page and checkout can show different figures — open issue **#168**, not settled by
-   P0 (switching the read to `orderablePrices` is now a one-call change, but it is a ruling).
+2. `CartPricingRecompute.recompute` (`cart-pricing-recompute.ts`) for `GET /api/v1/cart` runs
+   **chain (1)** — `CartLinePricing.orderablePrices` over the lines with their agreements, one
+   batched `resolveLinePrices` call per read — so the read shows the price placement's drift check
+   accepts (#168, ruled by the owner and fixed on the P0 branch). A line the chain refuses
+   (unpriced, sold on request only, product gone) keeps its stored price on the wire and reads
+   `unavailable: true` with `unavailableReason` `no_price_in_customer_list` / `not_purchasable`,
+   since placement refuses it. Redis 30 s, refusals cached with the prices. `writeBackTo` has no
+   caller (grep). It used to be a plain list price per line, with no agreed price, no own-price
+   fallback and no display-mode check, so a quote-seeded line read at the list price and was
+   charged the agreed one.
 
 **Re-resolution at checkout: yes.** Order placement calls `cartPlacementApply.findPriceDrift` inside
 the placement transaction, which re-runs chain (1) for the basket in one batched call (P0) and refuses with `409 CART_PRICE_CHANGED`
@@ -411,8 +416,8 @@ Public tracker (`gh issue list … --search price`), pricing-related:
 | --- | --- | --- | --- |
 | 378 | open | Replace "Products & brackets" with a rebuilt multi-currency Price matrix | two authoring models (brackets vs matrix) |
 | 377 | open | PDP: configurable products (variant price) | no variant dimension |
-| 168 | open | `GET /cart` shows re-resolved prices, checkout uses stored | two cart price chains — still two after P0 (the read is batched, not unified) |
-| 166 | open | Reorder seeds the basket at old order prices | fixed in code: the reorder seed reprices through `repriceLinesForCustomer` (`backend/test/integration/carts/cart-line-repricing.test.ts`, "a seed without an agreement — a reorder") and placement refuses drift with 409; issue still open |
+| 168 | open | `GET /cart` shows re-resolved prices, checkout uses stored | fixed on the P0 branch: one chain for the read and placement (`cart-read-equals-placement.test.ts`) |
+| 166 | open | Reorder seeds the basket at old order prices | price fixed in code: the reorder seed reprices through `repriceLinesForCustomer` (`backend/test/integration/carts/cart-line-repricing.test.ts`, "a seed without an agreement — a reorder"; at the port, not through `OrderReorderService`) and placement refuses drift (`place-order-line-price-current.test.ts`); **not done**: a line with no current price keeps its old price and is not reported in `unavailableItems` |
 | 165 | open | Quote-seeded line keeps agreed price at any quantity | fixed in code by commit `7d2d00fcc` (agreed price only at the agreed quantity, `cart-line-repricing.test.ts`); issue still open |
 | 167 | open | Quote validity checked at seeding, not placement | still open: the placement drift check honours an agreed price after the quote lapsed (a lapse only drops the minimums exemption) |
 | 303 | open | Quote lines always stored in PLN | the cart half (own-price fallback labelled PLN) fixed by P0; quote lines still stored in PLN |
@@ -432,7 +437,7 @@ Recurring root causes visible in code:
 1. **Multiple sources of truth for "the price"**: `defaultPrice` attribute vs Default list brackets
    vs matrix entries vs stored `cart_items.unit_price` vs agreed quote price vs reorder snapshot (§1, §5).
 2. **Multiple resolution chains** written by each consumer: listing chain, cart `orderablePrice`,
-   cart `recompute`, order intake probe, buyer-line-price — each with different inputs
+   cart `recompute` (merged into the cart chain by #168), order intake probe, buyer-line-price — each with different inputs
    (currency, customer group, agreed price, own-price currency) (§2.2, §5).
 3. **Rules in JSONB** → no indexable "which lists apply to me", full active-list scan + in-memory
    evaluation every request, and price-sort needs a bespoke stream-merge SQL engine (§0, §3).

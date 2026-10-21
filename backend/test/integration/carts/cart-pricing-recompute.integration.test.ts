@@ -5,11 +5,13 @@ import { setupTestDb, type TestDb } from '../../helpers/test-db.js';
 import { Product } from '../../helpers/package-entities.js';
 import { CartRecomputeCache } from '../../../../packages/modules/carts/src/backend/services/cart-recompute-cache.js';
 import { CartPricingRecompute } from '../../../../packages/modules/carts/src/backend/services/cart-pricing-recompute.js';
+import { CartLinePricing } from '../../../../packages/modules/carts/src/backend/services/cart-line-pricing.js';
 import type {
   CatalogProductReadPort,
   LinePriceResult,
   LinePricesPort,
   OrganizationDetailsPort,
+  ProductDisplayModePort,
 } from '@endora-commerce/contracts';
 
 /**
@@ -51,6 +53,17 @@ function catalogStub(knownProductId: () => string): CatalogProductReadPort {
         .filter((id) => id === knownProductId())
         .map((id) => ({ id, attributeValues: {} }) as never),
   } as unknown as CatalogProductReadPort;
+}
+
+/** Display mode for a line no price list holds — orderable. */
+const GROSS: ProductDisplayModePort = { resolveDisplayMode: async () => 'gross_only' };
+
+/**
+ * Issue #168 — the helper prices through the chain placement charges by, so a
+ * case hands it a `CartLinePricing` over the stubbed engine.
+ */
+function chainOver(pricingService: LinePricesPort): CartLinePricing {
+  return new CartLinePricing(pricingService, GROSS, NO_ORGANIZATIONS);
 }
 
 /** No organisation in these cases — the anonymous-price path. */
@@ -118,10 +131,9 @@ describe('CartPricingRecompute — resolver call counts & write-back', () => {
 
     const helper = new CartPricingRecompute(
       () => em,
-      pricingService,
+      chainOver(pricingService),
       cache,
       catalogStub(() => seedProductId),
-      NO_ORGANIZATIONS,
     );
 
     const lines = [
@@ -155,10 +167,9 @@ describe('CartPricingRecompute — resolver call counts & write-back', () => {
     const { pricingService } = batchedPricing(() => null);
     const helper = new CartPricingRecompute(
       () => em,
-      pricingService,
+      chainOver(pricingService),
       cache,
       catalogStub(() => seedProductId),
-      NO_ORGANIZATIONS,
     );
 
     const out = await helper.recompute(
@@ -166,7 +177,8 @@ describe('CartPricingRecompute — resolver call counts & write-back', () => {
       [{ cartItemId: testItemId, productId: seedProductId, quantity: 1 }],
     );
     expect(out[0]?.amount).toBeNull();
-    expect(out[0]?.currency).toBe('PLN');
+    // No list price and no price of its own: placement refuses it, and so does the read.
+    expect(out[0]?.refusal).toBe('unpriced');
   });
 
   it('returns null amount when the product is missing from the catalog', async () => {
@@ -182,10 +194,9 @@ describe('CartPricingRecompute — resolver call counts & write-back', () => {
     }));
     const helper = new CartPricingRecompute(
       () => em,
-      pricingService,
+      chainOver(pricingService),
       cache,
       catalogStub(() => seedProductId),
-      NO_ORGANIZATIONS,
     );
 
     const out = await helper.recompute(
@@ -193,5 +204,6 @@ describe('CartPricingRecompute — resolver call counts & write-back', () => {
       [{ cartItemId: testItemId, productId: '00000000-0000-4000-8000-000000000999', quantity: 1 }],
     );
     expect(out[0]?.amount).toBeNull();
+    expect(out[0]?.refusal).toBe('product_missing');
   });
 });

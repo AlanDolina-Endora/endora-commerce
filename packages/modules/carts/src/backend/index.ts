@@ -361,12 +361,16 @@ export function registerModule(ctx: ModuleContext): void {
         lazyPort<CatalogProductReadPort>(ctx, 'catalogProductReadPort'),
         lazyPort<SalesChannelMembershipPort>(ctx, 'salesChannelMembershipPort'),
       ),
+      // Issue #168 — the read prices through the chain placement charges by.
       cartPricingRecompute: new CartPricingRecompute(
         emFactory,
-        lazyPort<LinePricesPort>(ctx, 'pricingService'),
+        new CartLinePricing(
+          lazyPort<LinePricesPort>(ctx, 'pricingService'),
+          lazyPort<ProductDisplayModePort>(ctx, 'productDisplayModePort'),
+          lazyPort<OrganizationDetailsPort>(ctx, 'organizationDetailsPort'),
+        ),
         cradle.cartRecomputeCache,
         lazyPort<CatalogProductReadPort>(ctx, 'catalogProductReadPort'),
-        lazyPort<OrganizationDetailsPort>(ctx, 'organizationDetailsPort'),
       ),
       assertOrganizationCanTransact: async (organizationId) => {
         await ctx.cradle<CartsCradle>().organizationReadPort.assertCanTransact(organizationId);

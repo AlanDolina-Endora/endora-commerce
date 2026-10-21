@@ -730,7 +730,7 @@ unaffected).
 
 | # | Feature | Contains | Depends on |
 | --- | --- | --- | --- |
-| P0 | Pricing read-path hardening (**implemented on `fix/pricing-read-path-hardening`, 2026-10-21, full scope**; #165 and #166 are fixed in code, #167, #168 and the quote-line half of #303 remain open) | one PDP resolution, batched N+1 paths, customer group on every path, invalidate after commit, cross-replica generation channel, sweeper invalidation, cart PLN fallback removed, variant picker stops showing `price_override` | none |
+| P0 | Pricing read-path hardening (**implemented on `fix/pricing-read-path-hardening`, 2026-10-21, full scope**; #165 is fixed in code; #166's re-pricing is fixed in code but a reorder does not report lines that no longer have a price; #168 fixed on the branch by owner ruling; #167 and the quote-line half of #303 remain open) | one PDP resolution, batched N+1 paths, customer group on every path, invalidate after commit, cross-replica generation channel, sweeper invalidation, cart PLN fallback removed, variant picker stops showing `price_override` | none |
 | P1 | Pricing model v2 — model, conversion, removal, sort | header with channel and audience sets; rows with variant, signed percent, amount adjustment; base books with variant rows; three-tier resolver over the rank table; precedence table seeded with **HY** (changes refused until P3); sale = min; priority tie-break; line price source tier; **the materialised price surface and the new price sort** (the feature-086 ordering reads `price_list_price_brackets`, which P1 removes, so the sort is rewritten once, on the surface, rather than twice); one-shot conversion and demo reseed (§8.1); removal of everything §8.1 lists; versioned admin API and `minor` changesets; every consumer re-pointed to the one resolution chain | D-287 (ratified) |
 | P2 | #378 re-scoped: price book editor | create wizard (type → currency → channel set → audience set → schedule), grid (rows = selections, expandable to variants; cells = price with in-cell tiers; Medusa-style keyboard: Tab/Enter, drag-fill, paste from a spreadsheet, undo), bulk add via the 145 product picker, category/attribute rows, duplicate dialog, price explainer, product-editor base-price zone, *Pricing settings* page with `pricing.show_list_price` | P1 |
 | P3 | Configurable precedence flow | stage → impact preview → confirm → activate → versioned rebuild → flip, with `price_lists:configure`; the *Advanced* editor; optional Meilisearch everyone price | P1 (the surface) |
@@ -777,9 +777,11 @@ Verdict: **pass**. D-287 is ratified; P1's spec can be written now.
 ## 12. Handoff
 
 - D-287 is ratified; #378 is re-scoped to P2 and is not implemented on the current model.
-- P0 is implemented on `fix/pricing-read-path-hardening`, scope as in §8.2. Issues #165 (agreed
-  price only at the agreed quantity, commit `7d2d00fcc`) and #166 (a reorder is repriced, placement
-  refuses drift) are fixed in code; #167 (quote validity not checked at placement), #168 (`GET /cart`
-  re-resolves on a second chain) and the quote-line half of #303 (quote lines stored in PLN) remain
-  open. Open read-path items are listed in `read-paths-and-performance.md`.
+- P0 is implemented on `fix/pricing-read-path-hardening`, scope as in §8.2. Issue #165 (agreed
+  price only at the agreed quantity, commit `7d2d00fcc`) is fixed in code; #166 is fixed in code
+  for the price (a reorder is repriced, placement refuses drift) but not for the report: a line
+  with no current price keeps its old price in the basket and is not named in the reorder's
+  `unavailableItems` (since #168 the cart read shows it as unavailable, and placement refuses it); #168 (`GET /cart` re-resolved on a second chain) is fixed on
+  the branch — one chain for the read and placement; #167 (quote validity not checked at placement)
+  and the quote-line half of #303 (quote lines stored in PLN) remain open. Open read-path items are listed in `read-paths-and-performance.md`.
 - P1 needs `/speckit.specify` (feature 160) from §5, §8 and §10; N12–N13 are ruled.

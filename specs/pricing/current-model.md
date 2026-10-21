@@ -180,10 +180,12 @@ Verified in code unless marked:
     5 min; catalog writes (categories, attributes, `defaultPrice`) never invalidate; 5.3 % hit
     rate at 50 organisations (read-paths, `backend/test/perf/catalog/listing-price-viewer-cost.bench.ts:24-27`)
     because the key carries the organisation even when its prices equal everyone's.
-12. **Several resolution chains** (listing chain, cart `orderablePrice`, cart `recompute`, order
-    intake probe, buyer line price) — since P0 they share the customer-group rule and the batched
-    entry points, but the cart `recompute` still lacks the agreed price, the own-price fallback and
-    the display-mode check — #168 (read-paths §5).
+12. **Several resolution chains** (listing chain, cart chain, order intake probe, buyer line
+    price) — since P0 they share the customer-group rule and the batched entry points, and the cart
+    has **one** chain for the read and for placement: `GET /api/v1/cart` prices through
+    `CartLinePricing.orderablePrices` (agreed price at the agreed quantity → price list → own price
+    in the basket channel's currency → refusal; display mode `none` refused), the chain placement's
+    drift check runs, and a line it refuses reads as unavailable — #168 (read-paths §5).
 13. **PLP cards cannot show strikethrough**: `ListingPrice` carries one amount + `isSale`
     (`CON/price-lists.ts:514-529`); only PDP/typeahead/home cards render base+sale — since P0 every
     `ProductSummary` carries `resolvedPrice`, so PLP cards could, but `ProductGrid` does not pass it

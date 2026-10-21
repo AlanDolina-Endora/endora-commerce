@@ -26,7 +26,8 @@ import type { CartActor, CartService } from './services/cart-service.js';
 import type { CartUpsellService } from './services/cart-upsell-service.js';
 import type { CartCouponService } from './services/cart-coupon-service.js';
 import type { CartConversionService } from './services/cart-conversion-service.js';
-import type { CartPricingRecompute } from './services/cart-pricing-recompute.js';
+import type { CartPricingRecompute, RecomputeRefusal } from './services/cart-pricing-recompute.js';
+import { agreementOf } from './services/cart-line-pricing.js';
 import { derivePrimaryCta } from './services/cart-state-machine.js';
 import {
   evaluateCartViewMinimums,
@@ -265,8 +266,11 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
       products,
     );
 
-    // Feature 027 §R5 — re-pricing on read (FR-008).
+    // Feature 027 §R5 — re-pricing on read (FR-008), through the chain
+    // placement charges by (issue #168): the agreed price, the price list, the
+    // Product's own price, and a refusal for a line placement would refuse.
     let recomputedPrices: Map<string, { amount: number; currency: string }> | null = null;
+    let pricingRefusals: Map<string, RecomputeRefusal> | null = null;
     if (deps.cartPricingRecompute && items.length > 0) {
       try {
         const lines = items.map((it) => ({
@@ -274,6 +278,7 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
           productId: it.productId,
           variantId: it.variantId ?? null,
           quantity: it.quantity,
+          agreed: agreementOf(it),
         }));
         const resolved = await deps.cartPricingRecompute.recompute(
           {
@@ -291,6 +296,11 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
             .filter((r) => r.amount !== null)
             .map((r) => [r.cartItemId, { amount: r.amount as number, currency: r.currency }]),
         );
+        pricingRefusals = new Map(
+          resolved
+            .filter((r) => r.amount === null && r.refusal)
+            .map((r) => [r.cartItemId, r.refusal as RecomputeRefusal]),
+        );
       } catch (err) {
         // The tolerance is narrow and stays: a resolver hiccup on one read must
         // not take the whole cart down, and the snapshotted unit price is a
@@ -305,6 +315,7 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
         rethrowIfModuleDisabled(err);
         request.log.warn({ err, cartId: cart.id }, 'cart repricing failed; rendering snapshots');
         recomputedPrices = null;
+        pricingRefusals = null;
       }
     }
 
@@ -351,6 +362,7 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
         productMeta,
         application,
         minimumViews,
+        pricingRefusals,
       ),
     };
   });
@@ -757,10 +769,11 @@ function serializeCartMini(cart: Cart, items: CartItem[]) {
  * Feature 027 fields are additive: `salesChannelId`, `status`,
  * `approvalStatus`, `discount`, `grandTotal`, `primaryCta`,
  * `droppedLines`, `couponDroppedThisRead`, `lastActivityAt`, and per-line
- * `lineTotal`. Re-pricing-on-read is a follow-up — the snapshotted
- * `unitPrice` on `cart_items` is returned as the current price for now;
- * the CartPricingRecompute helper (foundation T014) will be wired into
- * this serializer when the read path lands.
+ * `lineTotal`. The full view passes `recomputedPrices` — each line priced by
+ * the chain placement charges by (`CartPricingRecompute`, issue #168) — and
+ * `pricingRefusals`, the lines placement would refuse, which read as
+ * unavailable at their stored price; the mutation answers pass neither and
+ * return the stored `unitPrice`.
  */
 interface ProductMeta {
   name: string;
@@ -777,6 +790,11 @@ function serializeCart(
   application: PromotionApplication | null = null,
   /** Feature 155 — the full view's per-line minimum flags; absent on the mutation answers. */
   minimumViews: Map<string, CartLineMinimumView> | null = null,
+  /**
+   * Issue #168 — lines the placement chain gives no orderable price: they read
+   * as unavailable, because placement refuses them.
+   */
+  pricingRefusals: Map<string, RecomputeRefusal> | null = null,
 ) {
   let subtotal = 0;
   let currency = items[0]?.currency ?? 'PLN';
@@ -788,6 +806,7 @@ function serializeCart(
     subtotal += unitPriceAmount * it.quantity;
     const meta = productMeta.get(it.productId) ?? null;
     const minimum = minimumViews?.get(it.id) ?? null;
+    const refusal = pricingRefusals?.get(it.id);
     // Feature 043 — append the packaging-unit name to the display name when the
     // line was added as a packaging unit (e.g. "<name> (Paleta)").
     const packagingUnitName = it.packagingUnitName ?? null;
@@ -803,10 +822,17 @@ function serializeCart(
       quantity: it.quantity,
       unitPrice: { amount: unitPriceAmount, currency: lineCurrency },
       lineTotal: { amount: unitPriceAmount * it.quantity, currency: lineCurrency },
-      unavailable: minimum?.unavailable ?? false,
+      unavailable: (minimum?.unavailable ?? false) || refusal !== undefined,
       // FR-037 — a line whose product record is gone, in the vocabulary the
-      // storefront already renders.
-      unavailableReason: minimum?.unavailable ? ('not_purchasable' as const) : null,
+      // storefront already renders. Issue #168 — a line placement would refuse
+      // reads the same way: sold on request only is `not_purchasable`, no
+      // price for this buyer is `no_price_in_customer_list`.
+      unavailableReason:
+        minimum?.unavailable || refusal === 'quote_only' || refusal === 'product_missing'
+          ? ('not_purchasable' as const)
+          : refusal === 'unpriced'
+            ? ('no_price_in_customer_list' as const)
+            : null,
       ...(minimum
         ? { minOrderQuantity: minimum.minOrderQuantity, belowMinimum: minimum.belowMinimum }
         : {}),
