@@ -161,7 +161,11 @@ describe('orders — custom-field values received from a Sales Opportunity', () 
     const order = await seedCrmOrder(h.em());
     const sentBefore = mailer.sent.length;
     const receipt = await receive(order.id, { [key]: 'fair' });
-    expect(receipt).toEqual({ outcome: 'applied', carried: [], skipped: [{ key, reason: 'audience_mismatch' }] });
+    expect(receipt).toEqual({
+      outcome: 'applied',
+      carried: [],
+      skipped: [{ key, reason: 'audience_mismatch', label: { labelDefault: key, labels: {} } }],
+    });
     expect(Object.hasOwn(await storedValues(order.id), key)).toBe(false);
 
     const notes = (await adminComments(order.id)).filter((c) => c.systemNote !== null);

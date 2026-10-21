@@ -23,6 +23,8 @@ interface Spec {
   required?: boolean;
   carryTo?: SupportedEntityType[];
   options?: string[];
+  labelDefault?: string;
+  labels?: Record<string, string>;
 }
 
 function cached(entityType: SupportedEntityType, spec: Spec): CachedDefinition {
@@ -32,8 +34,8 @@ function cached(entityType: SupportedEntityType, spec: Spec): CachedDefinition {
       id: definitionId,
       entityType,
       key: spec.key,
-      label: {},
-      labelDefault: spec.key,
+      label: spec.labels ?? {},
+      labelDefault: spec.labelDefault ?? spec.key,
       valueType: spec.valueType ?? 'text',
       required: spec.required ?? false,
       audience: spec.audience ?? 'internal',
@@ -66,6 +68,11 @@ function source(definitions: Partial<Record<SupportedEntityType, Spec[]>>): Defi
 }
 
 const QR_TO_ORDER = { sourceType: 'quote_request', targetType: 'order' } as const;
+
+/** A skip as the plan names it: with the source definition's label (owner ruling 2026-10-21, V3). */
+function skip(key: string, reason: string, labelDefault = key, labels: Record<string, string> = {}) {
+  return { key, reason, label: { labelDefault, labels } };
+}
 
 function service(
   definitions: Partial<Record<SupportedEntityType, Spec[]>>,
@@ -122,7 +129,7 @@ describe('CustomFieldCarryService.plan', () => {
       sourceValues: { k: 'v' },
       targetValues: {},
     });
-    expect(plan).toEqual({ values: {}, carried: [], skipped: [{ key: 'k', reason: 'target_missing' }] });
+    expect(plan).toEqual({ values: {}, carried: [], skipped: [skip('k', 'target_missing')] });
   });
 
   it('skips a key whose value types differ — value_type_mismatch', async () => {
@@ -130,7 +137,7 @@ describe('CustomFieldCarryService.plan', () => {
       quote_request: [{ key: 'k', valueType: 'number', carryTo: ['order'] }],
       order: [{ key: 'k', valueType: 'text' }],
     }).plan({ ...QR_TO_ORDER, sourceValues: { k: 12 }, targetValues: {} });
-    expect(plan.skipped).toEqual([{ key: 'k', reason: 'value_type_mismatch' }]);
+    expect(plan.skipped).toEqual([skip('k', 'value_type_mismatch')]);
     expect(plan.values).toEqual({});
   });
 
@@ -139,7 +146,7 @@ describe('CustomFieldCarryService.plan', () => {
       quote_request: [{ key: 'k', audience: 'internal', carryTo: ['order'] }],
       order: [{ key: 'k', audience: 'customer' }],
     }).plan({ ...QR_TO_ORDER, sourceValues: { k: 'secret' }, targetValues: {} });
-    expect(plan).toEqual({ values: {}, carried: [], skipped: [{ key: 'k', reason: 'audience_mismatch' }] });
+    expect(plan).toEqual({ values: {}, carried: [], skipped: [skip('k', 'audience_mismatch')] });
   });
 
   it('carries a customer value into an internal field', async () => {
@@ -155,7 +162,7 @@ describe('CustomFieldCarryService.plan', () => {
       quote_request: [{ key: 'k', valueType: 'select', options: ['fair', 'web'], carryTo: ['order'] }],
       order: [{ key: 'k', valueType: 'select', options: ['fair'] }],
     }).plan({ ...QR_TO_ORDER, sourceValues: { k: 'web' }, targetValues: {} });
-    expect(plan).toEqual({ values: {}, carried: [], skipped: [{ key: 'k', reason: 'value_invalid' }] });
+    expect(plan).toEqual({ values: {}, carried: [], skipped: [skip('k', 'value_invalid')] });
   });
 
   it('judges a multiselect per value: carried when every held value exists on the target', async () => {
@@ -219,6 +226,35 @@ describe('CustomFieldCarryService.plan', () => {
       targetValues: { other: 'kept', dormant: [1] },
     });
     expect(plan.values).toEqual({ other: 'kept', dormant: [1], a: '1' });
-    expect(plan.skipped).toEqual([{ key: 'b', reason: 'target_missing' }]);
+    expect(plan.skipped).toEqual([skip('b', 'target_missing')]);
+  });
+
+  it('names every skip with the source definition’s label, never the target’s (owner ruling 2026-10-21, V3)', async () => {
+    const plan = await service({
+      quote_request: [
+        { key: 'gone', carryTo: ['order'], labelDefault: 'Order source', labels: { pl: 'Źródło zamówienia' } },
+        { key: 'typed', valueType: 'number', carryTo: ['order'], labelDefault: 'Fair stand', labels: { pl: 'Stoisko' } },
+      ],
+      order: [{ key: 'typed', valueType: 'text', labelDefault: 'Target label', labels: { pl: 'Etykieta celu' } }],
+    }).plan({ ...QR_TO_ORDER, sourceValues: { gone: 'fair', typed: 4 }, targetValues: {} });
+    expect(plan.skipped).toEqual([
+      skip('gone', 'target_missing', 'Order source', { pl: 'Źródło zamówienia' }),
+      skip('typed', 'value_type_mismatch', 'Fair stand', { pl: 'Stoisko' }),
+    ]);
+  });
+
+  it('hands out a copy of the label map, not the cached definition’s own object', async () => {
+    const labels = { pl: 'Źródło zamówienia' };
+    const definitions: DefinitionSource = {
+      listForEntity: async (entityType) =>
+        entityType === 'quote_request' ? [cached('quote_request', { key: 'k', carryTo: ['order'], labels })] : [],
+    };
+    const plan = await new CustomFieldCarryService(definitions, () => true).plan({
+      ...QR_TO_ORDER,
+      sourceValues: { k: 'v' },
+      targetValues: {},
+    });
+    expect(plan.skipped[0]?.label?.labels).toEqual(labels);
+    expect(plan.skipped[0]?.label?.labels).not.toBe(labels);
   });
 });

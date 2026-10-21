@@ -270,7 +270,7 @@ describe('crm — custom-field values carried into Sales Opportunities', () => {
     expect(opportunityId).not.toBeNull();
     expect(Object.hasOwn(await opportunityValues(opportunityId!), key)).toBe(false);
     const creation = (await history(opportunityId!)).find((entry) => entry.action === 'crm.opportunity.create');
-    expect(carryOf(creation)?.skipped).toEqual([{ key, reason: 'target_missing' }]);
+    expect(carryOf(creation)?.skipped).toEqual([{ key, reason: 'target_missing', label: { labelDefault: key, labels: {} } }]);
   });
 
   it('records a skip from a Quote Request on the Opportunity, and not on the request (US2-6)', async () => {
@@ -293,7 +293,7 @@ describe('crm — custom-field values carried into Sales Opportunities', () => {
     const opportunityId = await opportunityOf(rfq.id);
     expect(opportunityId).not.toBeNull();
     const creation = (await history(opportunityId!)).find((entry) => entry.action === 'crm.opportunity.create');
-    expect(carryOf(creation)?.skipped).toEqual([{ key, reason: 'audience_mismatch' }]);
+    expect(carryOf(creation)?.skipped).toEqual([{ key, reason: 'audience_mismatch', label: { labelDefault: key, labels: {} } }]);
 
     const quoteHistory = await h.app.inject({
       method: 'GET',

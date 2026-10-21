@@ -63,10 +63,10 @@ describe('quote_requests — custom-field values received from a Sales Opportuni
   };
 
   /** A Quote Request field and the same-key Opportunity field carrying to it. */
-  const pair = async (name: string) => {
+  const pair = async (name: string, sourceExtra: Record<string, unknown> = {}) => {
     const key = fixtureKey(name);
     const quoteRequestDefinitionId = await define('quote_request', key);
-    await define('opportunity', key, { carryTo: ['quote_request'] });
+    await define('opportunity', key, { carryTo: ['quote_request'], ...sourceExtra });
     return { key, quoteRequestDefinitionId };
   };
 
@@ -146,7 +146,13 @@ describe('quote_requests — custom-field values received from a Sales Opportuni
   });
 
   it('names a value it cannot carry in one admin-only history entry (FR-010, Q5)', async () => {
-    const { key, quoteRequestDefinitionId } = await pair('skipped');
+    // The skip names the source field by its label as it read when the value was skipped
+    // (owner ruling 2026-10-21, V3): the Opportunity's, not the request's.
+    const sourceLabel = { labelDefault: `Source ${RUN}`, labels: { pl: `Źródło ${RUN}` } };
+    const { key, quoteRequestDefinitionId } = await pair('skipped', {
+      labelDefault: sourceLabel.labelDefault,
+      label: sourceLabel.labels,
+    });
     const drift = await h.app.inject({
       method: 'PATCH',
       url: `${API}/definitions/${quoteRequestDefinitionId}`,
@@ -156,7 +162,11 @@ describe('quote_requests — custom-field values received from a Sales Opportuni
     expect(drift.statusCode, drift.body).toBe(200);
     const rfq = await submitCrmQuoteRequest(h);
     const receipt = await receive(rfq.id, { [key]: 'fair' });
-    expect(receipt).toEqual({ outcome: 'applied', carried: [], skipped: [{ key, reason: 'audience_mismatch' }] });
+    expect(receipt).toEqual({
+      outcome: 'applied',
+      carried: [],
+      skipped: [{ key, reason: 'audience_mismatch', label: sourceLabel }],
+    });
     expect(Object.hasOwn(await storedValues(rfq.id), key)).toBe(false);
 
     const skipped = (await events(rfq.id)).filter((e) => e.event_type === 'custom-field-carry-skipped');
@@ -164,7 +174,7 @@ describe('quote_requests — custom-field values received from a Sales Opportuni
     expect(skipped[0]!.payload).toMatchObject({
       type: 'custom-field-carry-skipped',
       source: { entityType: 'opportunity', reference: 'OPP-000042' },
-      skipped: [{ key, reason: 'audience_mismatch' }],
+      skipped: [{ key, reason: 'audience_mismatch', label: sourceLabel }],
     });
 
     const adminHistory = await h.app.inject({
@@ -179,7 +189,7 @@ describe('quote_requests — custom-field values received from a Sales Opportuni
     expect(carryEntries).toHaveLength(1);
     expect(carryEntries[0]!.customFieldCarry).toMatchObject({
       source: { entityType: 'opportunity', reference: 'OPP-000042' },
-      skipped: [{ key, reason: 'audience_mismatch' }],
+      skipped: [{ key, reason: 'audience_mismatch', label: sourceLabel }],
     });
 
     const buyerDetail = await h.app.inject({ method: 'GET', url: `/api/v1/quote-requests/${rfq.id}`, cookies: CRM_CUSTOMER });

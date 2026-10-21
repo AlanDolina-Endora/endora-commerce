@@ -877,6 +877,61 @@ pnpm --filter backend run check:bundle-pairing
 
 ---
 
+## Phase 8a: Owner rulings 2026-10-21 (V1–V3) **[backend]** + **[admin UI]**
+
+**Goal**: the three rulings of `spec.md` § Clarifications, Session 2026-10-21. V3's contract and backend
+half is the builder's; V1, V2 and V3's admin half go to `endora-commerce-designer` in the UI worktree, on a
+branch from the commit that lands V3's backend half, which they depend on.
+
+- [x] T063 [V3] **RED** — the label snapshot, contract and writers:
+  `packages/contracts/src/custom-fields.carry.test.ts` §1.3 (a skip keeps `label: { labelDefault, labels }`;
+  a skip without one still parses and gains no key; a malformed label is refused;
+  `customFieldCarrySkipRecord` copies the label and drops anything else);
+  `custom-field-carry.service.test.ts` (every skip names the **source** definition's label, never the
+  target's, and hands out a copy of the cached map); `opportunity-custom-field-carry.test.ts` (the audit
+  `after.customFieldCarry.skipped` keeps the label, and a skip without one stays without);
+  `history-projection.test.ts` (the `custom_field_carry_skipped` entry passes the label through);
+  `[PG]` `test/integration/quote_requests/custom-field-carry-receiver.test.ts` (the receipt, the stored
+  event payload and the admin history entry carry the Opportunity definition's label, distinct from the
+  request's). **Deliberately changed existing assertions** (standing rule 12) — each `toEqual` over a skip
+  gains `label`: `custom-field-carry.service.test.ts` (`target_missing`, `value_type_mismatch`,
+  `audience_mismatch`, `value_invalid`, "never loses a target key"); `[PG]`
+  `test/integration/custom_fields/carry-port.test.ts` (`value_invalid`);
+  `test/integration/orders/custom-field-carry-receiver.test.ts` (the receipt);
+  `test/integration/orders/place-order-custom-field-carry.test.ts` (SC-005 note);
+  `test/integration/crm/custom-field-carry-into-opportunity.test.ts` (US2-5 and the audience skip);
+  `test/integration/crm/custom-field-carry-from-opportunity.test.ts` (the Quote Request history entry).
+- [x] T064 [V3] Implement: `customFieldCarrySkipLabelSchema` and an optional `label` on
+  `customFieldCarrySkipSchema` / `CustomFieldCarrySkip`, plus `customFieldCarrySkipRecord`
+  (`@endora-commerce/contracts`); the carry port fills `label` from the source definition on every skip;
+  the Order system note, both receivers, the Opportunity carry and the Quote Request history projection
+  store or project skips through `customFieldCarrySkipRecord` instead of re-mapping to `{ key, reason }`.
+  Contract `carry-api.md` §4.1, §5, §6 and `data-model.md` §2, §4.1; changesets
+  `161-contracts-custom-field-carry.md` (amended) and `161-carry-skip-label.md`.
+- [ ] T065 [V1] [admin UI] Drift-warning proceed buttons name the action ("Remove option anyway",
+  "Delete field anyway", "Save anyway"; pl "Usuń opcję mimo to", "Usuń pole mimo to", "Zapisz mimo to"),
+  destructive-styled for removals and deletions.
+- [ ] T066 [V2] [admin UI] One help line per carry checkbox in the definition editor; one shared help line
+  for the group in the narrow create-form row.
+- [ ] T067 [V3] [admin UI] The Order note, the Quote Request entry and the Opportunity change history name a
+  skipped field by its stored `label` (the reader's locale, then `labelDefault`), falling back to the
+  current definition and then the key for a skip without one; the CRM skip lines are shown to every reader
+  of the record, while custom-field values stay behind `custom_fields:read`. The Order note no longer needs
+  `GET /custom-fields/definitions?entityType=order` for a labelled skip.
+
+**Verification** (T063–T064):
+```bash
+pnpm --filter @endora-commerce/contracts run build
+pnpm --filter @endora-commerce/contracts exec vitest run src/custom-fields.carry.test.ts
+pnpm --filter @endora-commerce/mod-custom-fields run build
+pnpm --filter @endora-commerce/mod-custom-fields exec vitest run src/backend/services/custom-field-carry.service.test.ts
+pnpm --filter @endora-commerce/mod-crm exec vitest run src/backend/services/opportunity-custom-field-carry.test.ts
+pnpm --filter @endora-commerce/mod-quote-requests exec vitest run src/backend/services/history/history-projection.test.ts
+```
+plus the `[PG]` files named in T063, on the fork's `ci-pg` run.
+
+---
+
 ## Phase 9: Documentation, en + pl **[docs]**
 
 **Goal**: FR-018 (`specs/conventions/module-documentation.md`, `docs/docs/contributing/documentation-i18n.md`).

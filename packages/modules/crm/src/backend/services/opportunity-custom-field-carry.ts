@@ -1,4 +1,4 @@
-import type { CustomFieldCarryPort } from '@endora-commerce/contracts';
+import { customFieldCarrySkipRecord, type CustomFieldCarryPort } from '@endora-commerce/contracts';
 
 /**
  * Order / Quote Request → Sales Opportunity custom-field carry
@@ -45,7 +45,7 @@ export async function carryIntoOpportunity(
           customFieldCarry: {
             source: { entityType: source.sourceType, recordId: source.recordId },
             carried: [...plan.carried],
-            skipped: plan.skipped.map(({ key, reason }) => ({ key, reason })),
+            skipped: plan.skipped.map(customFieldCarrySkipRecord),
           },
         }
       : {},

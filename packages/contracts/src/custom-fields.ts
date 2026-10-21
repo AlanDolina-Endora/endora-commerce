@@ -809,15 +809,44 @@ export const customFieldCarrySkipReasonSchema = z.enum([
 ]);
 export type CustomFieldCarrySkipReason = z.infer<typeof customFieldCarrySkipReasonSchema>;
 
+/**
+ * The skipped field's label as its **source** definition read when the value
+ * was skipped (owner ruling 2026-10-21, V3): a history line names the field in
+ * the reader's language without asking `custom_fields` for definitions, so an
+ * administrator without `custom_fields:read` reads it too. A snapshot — a later
+ * rename does not rewrite history.
+ */
+export const customFieldCarrySkipLabelSchema = z.object({
+  labelDefault: z.string(),
+  labels: localizedLabelSchema,
+});
+export type CustomFieldCarrySkipLabel = z.infer<typeof customFieldCarrySkipLabelSchema>;
+
+/** `label` is absent on a skip recorded before the snapshot existed. */
 export const customFieldCarrySkipSchema = z.object({
   key: z.string(),
   reason: customFieldCarrySkipReasonSchema,
+  label: customFieldCarrySkipLabelSchema.optional(),
 });
 
-/** One key not carried, with its reason. */
+/** One key not carried, with its reason and the source field's label snapshot. */
 export interface CustomFieldCarrySkip {
   readonly key: string;
   readonly reason: CustomFieldCarrySkipReason;
+  readonly label?: CustomFieldCarrySkipLabel;
+}
+
+/**
+ * A plain copy of a skip for a record to store: `key`, `reason` and — when the
+ * skip has one — a copy of its label snapshot, nothing else the value carries.
+ */
+export function customFieldCarrySkipRecord(
+  skip: Omit<CustomFieldCarrySkip, 'label'> & { readonly label?: CustomFieldCarrySkipLabel | undefined },
+): CustomFieldCarrySkip {
+  const { key, reason, label } = skip;
+  return label === undefined
+    ? { key, reason }
+    : { key, reason, label: { labelDefault: label.labelDefault, labels: { ...label.labels } } };
 }
 
 /**

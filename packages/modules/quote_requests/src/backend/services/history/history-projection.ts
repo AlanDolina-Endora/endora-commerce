@@ -14,6 +14,7 @@
  * not reach the response.
  */
 import {
+  customFieldCarrySkipRecord,
   customFieldCarrySkipSchema,
   quoteRequestHistoryChangeSchema,
   uuidSchema,
@@ -291,7 +292,7 @@ function customFieldCarryOf(event: HistoryEventInput): QuoteRequestHistoryEntry[
   const raw = Array.isArray(event.payload['skipped']) ? (event.payload['skipped'] as unknown[]) : [];
   const skipped = raw.flatMap((item) => {
     const parsed = customFieldCarrySkipSchema.safeParse(item);
-    return parsed.success ? [{ key: parsed.data.key, reason: parsed.data.reason }] : [];
+    return parsed.success ? [customFieldCarrySkipRecord(parsed.data)] : [];
   });
   if (skipped.length === 0) return null;
   return { source: { entityType, recordId: recordId as string, reference }, skipped };

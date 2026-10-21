@@ -108,7 +108,18 @@ designer's):
 export type CustomFieldCarrySkipReason =
   | 'target_missing' | 'value_type_mismatch' | 'audience_mismatch' | 'value_invalid';
 
-export interface CustomFieldCarrySkip { readonly key: string; readonly reason: CustomFieldCarrySkipReason }
+/** The source definition's label when the value was skipped (owner ruling 2026-10-21, V3). */
+export const customFieldCarrySkipLabelSchema = z.object({ labelDefault: z.string(), labels: localizedLabelSchema });
+
+export interface CustomFieldCarrySkip {
+  readonly key: string;
+  readonly reason: CustomFieldCarrySkipReason;
+  /** Absent on a skip recorded before the snapshot existed. */
+  readonly label?: CustomFieldCarrySkipLabel;
+}
+
+/** A plain copy for a record to store: key, reason, and a copy of the label when present. */
+export function customFieldCarrySkipRecord(skip): CustomFieldCarrySkip;
 
 export interface CustomFieldCarryPlan {
   readonly values: Record<string, unknown>;
@@ -128,6 +139,14 @@ export interface CustomFieldCarryPort {
 
 Semantics: research R-5. No database write, no audit, no event. `custom_fields` is
 `nonDeactivatable`, so the gate never closes; callers write no `catch` around it.
+
+**Label snapshot (owner ruling 2026-10-21, V3).** Every skip `plan` answers carries `label` — the
+**source** definition's `labelDefault` and per-locale `label` map as they read at that moment; the
+source is always known at carry time, so a `target_missing` skip has one too. All three writers —
+the Order system note, the Quote Request `custom-field-carry-skipped` event and the Opportunity
+audit `after.customFieldCarry` — store it through `customFieldCarrySkipRecord`, so a history line
+names the field in the reader's language without a `custom_fields` definitions read. Only the name
+and reason are shown that way; the values stay behind `custom_fields:read` where they were.
 
 ### 4.2 `CustomFieldCarryReceiverPort` — `orderCustomFieldCarryPort` (owner `orders`), `quoteRequestCustomFieldCarryPort` (owner `quote_requests`)
 
@@ -171,7 +190,7 @@ export const orderCommentSystemNoteSchema = z.object({
     recordId: uuidSchema,
     reference: z.string(),
   }),
-  skipped: z.array(z.object({ key: z.string(), reason: customFieldCarrySkipReasonSchema })).min(1),
+  skipped: z.array(customFieldCarrySkipSchema).min(1), // { key, reason, label? }
 });
 // orderCommentSchema + systemNote: orderCommentSystemNoteSchema.nullable().optional()
 ```
@@ -180,7 +199,7 @@ export const orderCommentSystemNoteSchema = z.object({
 
 `rfqEventTypeSchema` + `'custom-field-carry-skipped'`; the history entry DTO for that type carries
 `{ source: { entityType: 'opportunity', recordId, reference }, skipped: CustomFieldCarrySkip[] }`
-(admin replies only).
+(admin replies only). Each skip keeps the `label` snapshot its event stored (owner ruling 2026-10-21, V3).
 
 ## 7. CRM (`packages/contracts/src/crm.ts`)
 

@@ -3,12 +3,22 @@ import {
   type CustomFieldCarryPlan,
   type CustomFieldCarryPort,
   type CustomFieldCarrySkip,
+  type CustomFieldCarrySkipLabel,
   type SupportedEntityType,
 } from '@endora-commerce/contracts';
 import { effectiveState } from '@endora-commerce/platform/kernel';
 import type { CachedDefinition } from './custom-field-definitions-cache.js';
 import { carryTargetsOf, isSupportedEntityType, SUPPORTED_ENTITIES } from './custom-field-registry.js';
 import { coerce, isEmpty, type DefinitionSource } from './custom-field-value.service.js';
+
+/**
+ * The source definition's label as it reads now, for the skip to keep (owner
+ * ruling 2026-10-21, V3) — a copy, never the cached definition's own map. The
+ * source is always known here, a `target_missing` skip included.
+ */
+function labelOf(definition: CachedDefinition['definition']): CustomFieldCarrySkipLabel {
+  return { labelDefault: definition.labelDefault, labels: { ...(definition.label ?? {}) } };
+}
 
 /**
  * The carry port (`specs/161-custom-fields-value-carry/`, research R-5):
@@ -25,6 +35,9 @@ import { coerce, isEmpty, type DefinitionSource } from './custom-field-value.ser
  *
  * Either type's owner module absent → an empty plan: nothing carried, nothing
  * recorded (FR-005, FR-014). It writes nothing, audits nothing, emits nothing.
+ * Every skip carries the source field's label snapshot (owner ruling
+ * 2026-10-21, V3), so whoever records it can name the field without a
+ * definitions read.
  * Key lookups are prototype-free: `constructor` is a valid key.
  */
 export class CustomFieldCarryService implements CustomFieldCarryPort {
@@ -78,12 +91,16 @@ export class CustomFieldCarryService implements CustomFieldCarryPort {
       )[0];
       if (reason !== undefined) {
         // `options_missing` cannot arise with no option sets; mapped for the type's sake.
-        skipped.push({ key, reason: reason.reason === 'options_missing' ? 'value_invalid' : reason.reason });
+        skipped.push({
+          key,
+          reason: reason.reason === 'options_missing' ? 'value_invalid' : reason.reason,
+          label: labelOf(definition),
+        });
         continue;
       }
       const result = coerce(target!.definition.valueType, sourceValues[key], target!.options);
       if ('code' in result) {
-        skipped.push({ key, reason: 'value_invalid' });
+        skipped.push({ key, reason: 'value_invalid', label: labelOf(definition) });
         continue;
       }
       values[key] = result.value;

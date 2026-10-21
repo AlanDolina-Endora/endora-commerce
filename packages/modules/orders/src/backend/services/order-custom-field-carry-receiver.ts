@@ -1,7 +1,8 @@
-import type {
-  CustomFieldCarryPort,
-  CustomFieldCarryReceipt,
-  CustomFieldCarryReceiverPort,
+import {
+  customFieldCarrySkipRecord,
+  type CustomFieldCarryPort,
+  type CustomFieldCarryReceipt,
+  type CustomFieldCarryReceiverPort,
 } from '@endora-commerce/contracts';
 import type { Command, CommandBus } from '@endora-commerce/platform/commands';
 import { Order } from '../entities/order.entity.js';
@@ -56,7 +57,7 @@ function receiveCarriedValuesCommand(
       const receipt: CustomFieldCarryReceipt = {
         outcome: 'applied',
         carried: [...plan.carried],
-        skipped: plan.skipped.map(({ key, reason }) => ({ key, reason })),
+        skipped: plan.skipped.map(customFieldCarrySkipRecord),
       };
       if (receipt.carried.length === 0 && receipt.skipped.length === 0) {
         return { result: receipt, skipAudit: true };

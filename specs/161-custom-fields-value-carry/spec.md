@@ -325,6 +325,8 @@ field — refused with a reason; create the Order field, retry — accepted.
   in the history of a Quote Request or a Sales Opportunity, and for an Order as FR-010a states. On a Quote
   Request the entry MUST be admin-only: it is never shown to the buyer on any buyer-facing surface (owner
   ruling 2026-10-19). Carry-over MUST NEVER make a buyer's checkout or an operator's create fail.
+  Each skipped key MUST keep the source field's label as it read when the value was skipped, so the
+  entry names the field to any administrator who can see the record (owner ruling 2026-10-21, V3).
 - **FR-010a**: On an **Order**, a skip MUST be recorded as an internal system note in the Order's comments:
   not visible to the customer on any buyer-facing or API-key surface, sending no notification, attributed to
   the system rather than to an admin or the customer, and written together with the placement or link it
@@ -484,3 +486,23 @@ R-15, R-2).
   2026-10-19): No; it stays excluded from carry-over. Amends FR-001 and Out of Scope.
 - Q5: Is the Quote Request's skip entry admin-only? → A (owner ruling 2026-10-19): Yes; it is never shown to
   the buyer. Amends FR-010 and SC-006.
+
+### Session 2026-10-21
+
+Owner rulings on the review of the admin surfaces (Phases 7 and 8).
+
+- V1: What does the proceed button of a carry-drift warning say? → A (owner ruling 2026-10-21): It names
+  the action — "Remove option anyway", "Delete field anyway", "Save anyway" (Polish: "Usuń opcję mimo to",
+  "Usuń pole mimo to", "Zapisz mimo to"). It stays destructive-styled for removals and deletions.
+  Amends FR-019.
+- V2: How are the carry checkboxes explained? → A (owner ruling 2026-10-21): In the definition editor, one
+  help line per carry checkbox; in the narrow create-form row, one shared help line for the group.
+  Amends FR-002.
+- V3: Who may read which field a skip names? → A (owner ruling 2026-10-21): Every carry-skip entry stores a
+  snapshot of the skipped field's label — the **source** definition's, as it read at write time — so any
+  administrator who can see the record reads the field's name in their language without
+  `custom_fields:read`. It applies to the Order system note, the Quote Request skip entry and the Sales
+  Opportunity audit entry. Only skip lines (name and reason, never a value) become visible to every reader;
+  custom-field **values** stay hidden from a reader without `custom_fields:read`. A skip recorded before the
+  snapshot existed has no label. Amends FR-010 and FR-010a.
+

@@ -69,7 +69,8 @@ hand (`specs/conventions/module-migrations.md`); each lands with
   {
     "kind": "custom_field_carry_skipped",
     "source": { "entityType": "quote_request" | "opportunity", "recordId": "<uuid>", "reference": "<business number of the source>" },
-    "skipped": [{ "key": "order_source", "reason": "target_missing" | "value_type_mismatch" | "audience_mismatch" | "value_invalid" }]
+    "skipped": [{ "key": "order_source", "reason": "target_missing" | "value_type_mismatch" | "audience_mismatch" | "value_invalid",
+                  "label": { "labelDefault": "Order source", "labels": { "pl": "<Polish label>" } } }]
   }
   ```
 
@@ -104,8 +105,9 @@ hand (`specs/conventions/module-migrations.md`); each lands with
 
 `{ values: Record<string, unknown>; carried: string[]; skipped: CustomFieldCarrySkip[] }` —
 `values` is the target bag to persist (the input target bag plus the carried keys; never a removed
-or overwritten key), `carried` the keys added, `skipped` the keys not carried with a reason.
-`plan` writes nothing.
+or overwritten key), `carried` the keys added, `skipped` the keys not carried with a reason and the
+source definition's label snapshot `{ labelDefault, labels }` (owner ruling 2026-10-21, V3; optional on
+the wire, so rows written before it still parse). `plan` writes nothing.
 
 ### 4.2 `CustomFieldCarryIncompatibility` (the pure rule's answer)
 

@@ -76,4 +76,31 @@ describe('carryIntoOpportunity', () => {
       },
     });
   });
+
+  it('keeps each skip’s label snapshot in the audit entry (owner ruling 2026-10-21, V3)', async () => {
+    const label = { labelDefault: 'Order source', labels: { pl: 'Źródło zamówienia' } };
+    const result = await carryIntoOpportunity(
+      port({
+        values: {},
+        carried: [],
+        skipped: [
+          { key: 'k', reason: 'target_missing', label },
+          { key: 'old', reason: 'value_invalid' },
+        ],
+      }),
+      { sourceType: 'order', recordId: ORDER_ID, sourceValues: { k: 'v', old: 'w' } },
+      {},
+    );
+    expect(result.after).toEqual({
+      customFieldCarry: {
+        source: { entityType: 'order', recordId: ORDER_ID },
+        carried: [],
+        skipped: [
+          { key: 'k', reason: 'target_missing', label },
+          { key: 'old', reason: 'value_invalid' },
+        ],
+      },
+    });
+  });
 });
+

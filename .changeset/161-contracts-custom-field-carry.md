@@ -23,7 +23,10 @@ Shared shapes for carrying custom-field values between Quote Requests, Orders an
 - `CustomFieldCarryPort` (`plan`) answers which values carry into a target bag, as a
   `CustomFieldCarryPlan` of `values`, `carried` keys and `skipped` keys, each a
   `CustomFieldCarrySkip` with a `customFieldCarrySkipReasonSchema` reason (`target_missing`,
-  `value_type_mismatch`, `audience_mismatch`, `value_invalid`).
+  `value_type_mismatch`, `audience_mismatch`, `value_invalid`). A skip also carries an optional
+  `label` (`customFieldCarrySkipLabelSchema`: `labelDefault` and a per-locale `labels` map), the
+  source field's label when the value was skipped; a skip stored without one still parses.
+  `customFieldCarrySkipRecord(skip)` makes the plain copy a record stores.
 - `CustomFieldCarryReceiverPort` (`receiveCarriedValues`, answering a `CustomFieldCarryReceipt`)
   is how a Sales Opportunity's values are pushed to the Order or Quote Request created from it.
 - `orderCommentSystemNoteSchema` (type `OrderCommentSystemNote`) is an author-less system note

@@ -480,4 +480,27 @@ describe('feature 161 — values a Sales Opportunity could not carry', () => {
     );
     expect(entry!.customFieldCarry).toBeNull();
   });
+
+  it('passes each skip’s label snapshot through, and a skip stored without one stays without (owner ruling 2026-10-21, V3)', () => {
+    const label = { labelDefault: 'Order source', labels: { pl: 'Źródło zamówienia' } };
+    const [entry] = projectHistory(
+      [
+        event('custom-field-carry-skipped', { role: 'System' }, {
+          source: { entityType: 'opportunity', recordId: OPPORTUNITY, reference: 'OPP-000008' },
+          skipped: [
+            { key: 'order_source', reason: 'target_missing', label },
+            { key: 'fair', reason: 'value_invalid' },
+          ],
+        }),
+      ],
+      [],
+      directory(),
+    );
+    expect(entry!.customFieldCarry?.skipped).toEqual([
+      { key: 'order_source', reason: 'target_missing', label },
+      { key: 'fair', reason: 'value_invalid' },
+    ]);
+    expect(quoteRequestHistoryEntrySchema.safeParse(entry).success).toBe(true);
+  });
 });
+

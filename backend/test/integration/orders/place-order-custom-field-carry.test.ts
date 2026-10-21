@@ -263,7 +263,7 @@ describe('orders — custom-field values carried from the quote request at place
     const placed = await place();
     expect(Object.hasOwn(await orderValues(placed.id), key)).toBe(false);
     const notes = (await adminComments(placed.id)).filter((c) => c.systemNote !== null);
-    expect(notes.map((n) => n.systemNote!.skipped)).toEqual([[{ key, reason: 'audience_mismatch' }]]);
+    expect(notes.map((n) => n.systemNote!.skipped)).toEqual([[{ key, reason: 'audience_mismatch', label: { labelDefault: key, labels: {} } }]]);
   });
 
   it('an unrelated required Order field fails neither the placement nor the carry', async () => {

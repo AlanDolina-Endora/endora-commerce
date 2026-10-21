@@ -149,3 +149,42 @@ describe('§1.2 assessCustomFieldCarry', () => {
     ).toEqual([{ reason: 'options_missing', missingOptionValues: ['constructor'] }]);
   });
 });
+
+describe('§1.3 customFieldCarrySkipSchema — the skipped field’s label (owner ruling 2026-10-21, V3)', () => {
+  it('keeps a label snapshot: the default and the per-locale map', () => {
+    const skip = {
+      key: 'order_source',
+      reason: 'target_missing',
+      label: { labelDefault: 'Order source', labels: { pl: 'Źródło zamówienia' } },
+    };
+    expect(cf.customFieldCarrySkipSchema.parse(skip)).toEqual(skip);
+  });
+
+  it('parses a skip stored before the label existed, and leaves label absent', () => {
+    const parsed = cf.customFieldCarrySkipSchema.parse({ key: 'order_source', reason: 'value_invalid' });
+    expect(parsed).toEqual({ key: 'order_source', reason: 'value_invalid' });
+    expect(Object.hasOwn(parsed, 'label')).toBe(false);
+  });
+
+  it('refuses a label that is not a default plus a map of strings', () => {
+    for (const label of [{ labels: {} }, { labelDefault: 'A', labels: { pl: 1 } }, 'Order source']) {
+      expect(cf.customFieldCarrySkipSchema.safeParse({ key: 'k', reason: 'target_missing', label }).success).toBe(
+        false,
+      );
+    }
+  });
+});
+
+describe('§1.3 customFieldCarrySkipRecord', () => {
+  it('copies key, reason and the label snapshot, and drops anything else', () => {
+    const labels = { pl: 'Źródło zamówienia' };
+    const skip = { key: 'k', reason: 'target_missing', label: { labelDefault: 'Order source', labels }, extra: 1 } as const;
+    const record = cf.customFieldCarrySkipRecord(skip);
+    expect(record).toEqual({ key: 'k', reason: 'target_missing', label: { labelDefault: 'Order source', labels } });
+    expect(record.label?.labels).not.toBe(labels);
+  });
+
+  it('adds no label key to a skip without one', () => {
+    expect(Object.hasOwn(cf.customFieldCarrySkipRecord({ key: 'k', reason: 'value_invalid' }), 'label')).toBe(false);
+  });
+});

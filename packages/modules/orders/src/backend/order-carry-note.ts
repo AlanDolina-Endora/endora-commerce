@@ -1,5 +1,10 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
-import type { CustomFieldCarrySkip, CustomFieldCarrySkipReason, OrderCommentSystemNote } from '@endora-commerce/contracts';
+import {
+  customFieldCarrySkipRecord,
+  type CustomFieldCarrySkip,
+  type CustomFieldCarrySkipReason,
+  type OrderCommentSystemNote,
+} from '@endora-commerce/contracts';
 import { OrderComment } from './entities/order-comment.entity.js';
 
 /**
@@ -55,7 +60,7 @@ export function buildCarrySkipNote(
   const systemNote: OrderCommentSystemNote = {
     kind: 'custom_field_carry_skipped',
     source: { ...input.source },
-    skipped: input.skipped.map(({ key, reason }) => ({ key, reason })),
+    skipped: input.skipped.map(customFieldCarrySkipRecord),
   };
   return em.create(OrderComment, {
     orderId: input.orderId,

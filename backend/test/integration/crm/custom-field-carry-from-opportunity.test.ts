@@ -257,7 +257,7 @@ describe('crm — custom-field values carried from a Sales Opportunity into the 
       expect.objectContaining({
         customFieldCarry: {
           source: { entityType: 'opportunity', recordId: opportunity.id, reference: opportunity.number },
-          skipped: [{ key, reason: 'audience_mismatch' }],
+          skipped: [{ key, reason: 'audience_mismatch', label: { labelDefault: key, labels: {} } }],
         },
       }),
     ]);

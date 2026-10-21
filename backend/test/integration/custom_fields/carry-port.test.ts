@@ -124,6 +124,10 @@ describe('custom_fields — the carry port in the composed server', () => {
       ...ADMIN,
     });
     expect(removed.statusCode, removed.body).toBe(204);
-    expect(await plan('web')).toEqual({ values: {}, carried: [], skipped: [{ key: KEY, reason: 'value_invalid' }] });
+    expect(await plan('web')).toEqual({
+      values: {},
+      carried: [],
+      skipped: [{ key: KEY, reason: 'value_invalid', label: { labelDefault: KEY, labels: {} } }],
+    });
   });
 });
