@@ -4,6 +4,7 @@ import {
   type CustomFieldCarryReceipt,
   type CustomFieldCarryReceiverPort,
 } from '@endora-commerce/contracts';
+import { LockMode } from '@mikro-orm/core';
 import type { Command, CommandBus } from '@endora-commerce/platform/commands';
 import { Order } from '../entities/order.entity.js';
 import { buildCarrySkipNote } from '../order-carry-note.js';
@@ -23,6 +24,12 @@ const NOT_FOUND: CustomFieldCarryReceipt = Object.freeze({ outcome: 'not-found',
  * one internal, author-less, non-notifying system note. A missing Order and one
  * of another Organization are one answer, `not-found`, and nothing is written;
  * nothing carried and nothing skipped writes no entry.
+ *
+ * **The row is held from the read to the write**, as the Quote Request
+ * receiver holds its own: the Order is read `for update` inside the Command's
+ * transaction and the plan is made over the bag re-read under the lock, so a
+ * concurrent writer that holds the row is waited for and its value kept rather
+ * than overwritten by a plan made over the bag it replaced.
  */
 export class OrderCustomFieldCarryReceiver implements CustomFieldCarryReceiverPort {
   constructor(
@@ -43,7 +50,9 @@ function receiveCarriedValuesCommand(
     objectType: 'order',
     objectId: input.recordId,
     run: async ({ em }) => {
-      const order = await em.findOne(Order, { id: input.recordId });
+      // The Command's EntityManager is a fresh fork, so this is a read of the
+      // stored row, taken `for update`: the plan below is made under the lock.
+      const order = await em.findOne(Order, { id: input.recordId }, { lockMode: LockMode.PESSIMISTIC_WRITE });
       if (!order || order.organizationId !== input.organizationId) {
         return { result: NOT_FOUND, skipAudit: true };
       }

@@ -11,3 +11,5 @@ An Order created from a Sales Opportunity receives the Opportunity's carried cus
   written; when nothing is carried and nothing skipped, no audit entry is written.
 - A value that cannot be carried is named in one internal, author-less, non-notifying system note
   in the Order's comments, as at placement.
+- The Order is read `for update` inside that Command and the carry is planned over the values read
+  under the lock, so a concurrent write that holds the Order is waited for and its values are kept.
