@@ -235,6 +235,13 @@ inna edycja pozycji (`409 RFQ_NOT_QUOTED`). Nie dochodzi żadne nowe uprawnienie
 - Grupa opróżniona z pozycji **pozostaje**, dopóki nie zostanie usunięta, i jest pokazywana jako
   puste pole upuszczania (*Przeciągnij tu pozycje lub użyj opcji Przenieś do grupy.*). Puste grupy
   nigdy nie są pokazywane klientowi, drukowane ani przenoszone do zamówienia.
+- **Jeden produkt w kilku pozycjach.** Ten sam produkt może być w kilku pozycjach — w różnych
+  grupach albo dwa razy w jednej: *5 sztuk w Hali A, 3 w Hali B*. W zakładce *Modyfikacja* przycisk
+  **Podziel pozycję** (obok *Przenieś do grupy*, przy pozycji o ilości 2 lub większej) pyta o ilość
+  do przeniesienia na nową pozycję (od 1 do ilości pozycji minus 1) i o grupę nowej pozycji —
+  domyślnie tę samą — po czym dodaje pozycję tego samego produktu, wariantu, jednostki opakowania,
+  uzgodnionej ceny i propozycji klienta, zmniejszając pierwotną. Na ekranie tworzenia zapytania
+  produkt, który już jest w zapytaniu, można po prostu dodać ponownie.
 
 **Podsumowania.** Każda sekcja pokazuje liczbę pozycji oraz wartość netto, VAT i brutto — według tej
 samej zasady, której używają sumy oferty — a tam, gdzie ekran pokazuje ceny katalogowe, także rabat
@@ -254,12 +261,17 @@ nagłówkiem, w kolejności, z jej pozycjami i podsumowaniem, a następnie pozyc
 nagłówkiem **Pozostałe pozycje**; oferta bez grup wygląda dokładnie tak jak wcześniej. Klient nie
 może tworzyć, zmieniać nazw, usuwać ani przestawiać grup, a żadne żądanie klienta nie przyjmuje
 grupowania. Porównanie z ostatnią rewizją, którą klient widział, mówi w jednym wpisie, że *zmieniono
-układ pozycji*, i nie wymienia niczego więcej. Akceptacja i odrzucenie rewizji działają jak
+układ pozycji*, i nie wymienia niczego więcej. Każda pozycja jest porównywana z własną: przy
+produkcie w kilku pozycjach wpis wymienia grupę pozycji, której dotyczy — *Śruba (Hala B): ilość 3 →
+2* — i tak samo robi *Historia* w panelu administracyjnym. Akceptacja i odrzucenie rewizji działają jak
 wcześniej: grupowanie nigdy nie jest powodem odmowy akceptacji.
 
 **Co zachowuje grupę pozycji.** Edycja szkicu przez klienta zachowuje w grupie każdą pozycję, którą
 zachowuje. Klient API, który zapisuje pozycje oferty bez przesłania `groups`, zachowuje w grupie
-każdą zachowaną pozycję, a nowe pozycje umieszcza w sekcji *Bez grupy*. **Ponowne złożenie** zaczyna
+każdą zachowaną pozycję, a nowe pozycje umieszcza w sekcji *Bez grupy*. Pozycja bez identyfikatora
+jest dopasowywana do zapisanej pozycji tego samego produktu najpierw według grupy, potem według
+ilości, a dopiero potem według kolejności — dlatego usunięcie jednej z dwóch pozycji produktu
+zostawia drugą w jej grupie. **Ponowne złożenie** zaczyna
 się bez grup: to nowe zapytanie, wycenione na nowo, które handlowiec grupuje ponownie. **Zamiana w
 zamówienie** wypełnia koszyk w kolejności oferty, a zamówienie złożone z tego koszyka zachowuje grupy
 — zob. stronę modułu zamówień.
@@ -271,7 +283,10 @@ opcjonalną listę `groups` — całe grupowanie, w kolejności wyświetlania, k
 `{ key, id?, name }` (`id` zachowuje istniejącą grupę, grupa bez niego jest tworzona, a zapisana
 grupa pominięta na liście jest usuwana) — oraz dla każdej pozycji opcjonalny `groupKey` (`null` =
 bez grupy); pozycje przesyła się w kolejności wyświetlania. `groups` bez `items` daje odpowiedź
-`400`; `id`, które nie jest grupą tej oferty, daje `422 VALIDATION_FAILED`. Każda odpowiedź zawiera
+`400`; `id`, które nie jest grupą tej oferty, daje `422 VALIDATION_FAILED`. Nowa pozycja wydzielona
+z zapisanej ma `splitFromId` (identyfikator zapisanej pozycji): zachowuje wtedy jej jednostkę
+opakowania, propozycję klienta, uwagę i cenę referencyjną; `splitFromId`, które nie wskazuje pozycji
+tej oferty, jest pomijane. Każda odpowiedź zawiera
 `itemGroups` (`{ id, name, position }`) oraz dla każdej pozycji `groupId` i `position`, z pozycjami
 w kolejności wyświetlania — odpowiedź dla administratora wymienia także puste grupy, odpowiedź dla
 klienta tylko grupy, które mają pozycję. Publikowany port odczytu `quoteRequestReadPort.listItems`
@@ -920,8 +935,8 @@ sposoby:
   filtrem typu i wyszukiwaniem po SKU, slugu lub nazwie. Zaznaczenie przetrwa zmianę strony,
   rozmiaru strony i filtrów, a **Dodaj N** dodaje każdy zaznaczony produkt jako pozycję o ilości 1
   — najwyżej 200 naraz. Produkty robocze i nieaktywne można dodać; produkty nadrzędne typu grouped
-  i bundle są widoczne z powodem i nie da się ich zaznaczyć; produkt, który już jest w zapytaniu,
-  jest oznaczony jako już dodany.
+  i bundle są widoczne z powodem i nie da się ich zaznaczyć. Produkt, który już jest w zapytaniu,
+  można dodać ponownie jako osobną pozycję — na przykład, by umieścić go w drugiej grupie.
 - **Szybkie dodawanie po nazwie lub SKU**, obok, dopisuje jeden produkt według tych samych zasad.
 
 Bez uprawnienia `catalog:read` obie te opcje są nieaktywne i każda pokazuje podpowiedź.

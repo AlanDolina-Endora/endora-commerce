@@ -76,6 +76,30 @@ below it.
 - States: empty group, focus-visible on every control, drop indicator line, disabled while saving.
   `axe-core` clean in light and dark themes. Hit targets ≥ 24 × 24 px.
 
+### 1.3 `SplitLineDialog` — *Split line* (D6, research N-33)
+
+```tsx
+<SplitLineDialog
+  lineName="Bolt" quantity={8} step={1}
+  targets={[{ key: 'g1', name: 'Hall A' }, { key: null, name: 'Ungrouped' }]}
+  defaultTargetKey="g1"                       // the line's own section
+  labels={…}                                  // every string from the module's bundle
+  onConfirm={({ quantity, targetKey }) => …} onClose={…}
+/>
+```
+
+Beside the editor, domain-free like it: a `ModalDialog` (focus trap, Escape, focus back to the opener)
+asking for the quantity to move — a number field focused on open, starting at half the line rounded down
+to the step, valid in whole steps from `step` to `quantity − step`; an invalid entry is marked
+(`aria-invalid`) with its reason in the field's description and disables the confirm button — and the
+section of the new line (a native `select`, default the line's own). Enter confirms. `canSplitLine(quantity,
+step)` says whether a line can be split at all; `splitLineInto(lines, key, split, ops)` applies a confirmed
+split to a display-ordered list (the source keeps the rest; the caller's `make` builds the new line, placed
+right after the source in its own section, else after the target section's last line).
+
+The screens show the trigger — an icon button (`lucide` `Split`, `aria-label` and `title` "Split line:
+{name}") beside *Move to group* — on every line whose quantity can be split, grouped or not.
+
 ## 2. Admin screens
 
 | Screen (module) | Change |
@@ -83,8 +107,9 @@ below it.
 | `RfqDetail.tsx` *Modify* tab (`quote_requests`) | the line grid is wrapped by `LineGroupsEditor`; `ModifyLineDraft` gains `key`, `groupKey`; the draft keeps `groups: { key, id?, name }[]` seeded from `rfq.itemGroups` (empty ones included); `save()` sends `groups` + `items[].groupKey` in display order; section summary = the screen's own total rule (net, VAT, gross, plus discount vs. reference where every line has one) over the section's draft lines |
 | `RfqDetail.tsx` *Overview* tab | lines shown through `LineGroupsEditor readOnly` (no group → unchanged table) |
 | `RfqHistory.tsx` | renders the five new change kinds (§4) |
-| `RfqCreatePage.tsx` | same editor; `groups` + `groupKey` on create |
-| `OrderCreatePage.tsx` (`orders`) | items table wrapped by the editor; section summary from the preview's per-line amounts (net, VAT, gross); create sends `groups` + `groupKey`; the 422 `group_conflict` mapped to the line |
+| `RfqCreatePage.tsx` | same editor; `groups` + `groupKey` on create; lines keyed per line (D6) — a product already a line is offered again, and the price prefill queue is keyed by line |
+| `RfqDetail.tsx` *Modify* tab — *Split line* (D6) | the trigger per line; the new line copies the product, variant, agreed price and (shown) proposal and reference of the line it came from and is sent with `splitFromId`, so the server keeps its packaging unit, proposal and reference |
+| `OrderCreatePage.tsx` (`orders`) | items table wrapped by the editor; section summary from the preview's per-line amounts (net, VAT, gross); create sends `groups` + `groupKey`, one request line per screen line in display order; lines keyed per line (D6) with *Split line*; each line reads the preview answer at its own index (only while it is still about its product and quantity) |
 | `OrderDetail.tsx` (`orders`) | items shown grouped read-only (no PDF action — owner answer Q-A) |
 | `GroupingField.tsx`, `items-table/canvas.tsx` (`document_templates`) | contracts/document-sections.md §4 |
 
@@ -128,6 +153,12 @@ the existing `open-rfq-inbox` and `open-orders` actions).
 | `summary.items.one` / `.few` / `.many` / `.other` | {count} item / — / — / {count} items | {count} pozycja / {count} pozycje / {count} pozycji / {count} pozycji |
 | `summary.net` / `summary.vat` / `summary.gross` / `summary.discount` | Net / VAT / Gross / Discount | Netto / VAT / Brutto / Rabat |
 | `announce.grabbed`, `.moved`, `.dropped`, `.cancelled`, `.groupMoved`, `.atStart`, `.atEnd`, `.handle`, `.groupHandle` | (sentences naming line, group, position, total) | (Polish equivalents) |
+| `split.action` / `split.title` (D6) | Split line: {name} | Podziel pozycję: {name} |
+| `split.quantity` | Quantity for the new line | Ilość na nowej pozycji |
+| `split.quantityHelp` | From {min} to {max}. {remaining} stay on this line. | Od {min} do {max}. Na tej pozycji zostanie {remaining}. |
+| `split.quantityInvalid` | Enter a whole number from {min} to {max}, in steps of {step}. | Wpisz liczbę całkowitą od {min} do {max}, co {step}. |
+| `split.target` | Group of the new line | Grupa nowej pozycji |
+| `split.confirm` / `split.cancel` | Split line / Cancel | Podziel pozycję / Anuluj |
 
 The admin interpolator (`AK/i18n/interpolate.ts`) substitutes `{name}` only — there is no ICU plural
 syntax in the tree — so a count picks its key with `new Intl.PluralRules(language).select(count)`
@@ -138,7 +169,8 @@ The storefront and the PDF texts use the same selection.
 {name}"; `groupRemoved` "Group {name} removed" / "Usunięto grupę {name}"; `groupRenamed` "Group renamed
 from {before} to {after}" / "Zmieniono nazwę grupy z {before} na {after}"; `lineGroup` "{line} moved
 from {before} to {after}" / "{line}: przeniesiono z {before} do {after}" (`null` → the *Ungrouped*
-label); `lineOrder` "Order of lines changed" / "Zmieniono kolejność pozycji".
+label); `lineOrder` "Order of lines changed" / "Zmieniono kolejność pozycji". A line reference naming its
+group (D6) reads `rfq.detail.history.lineInGroup` "{line} — {group}" in both languages.
 
 `document_templates` (`itemsTable.grouping.*`): `mode.sections` "Document's groups" / "Grupy z
 dokumentu"; `mode.field` "By field" / "Według pola"; `mode.none` "No grouping" / "Bez grupowania";

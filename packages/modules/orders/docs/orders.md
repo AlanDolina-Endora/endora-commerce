@@ -394,8 +394,9 @@ shows **Items** at once.
   type filter and a search by SKU, slug or name. The selection survives page,
   page-size and filter changes, and **Add N** adds every ticked product as a
   line of quantity 1 — at most 200 in one step. Grouped and bundle parents,
-  draft and inactive products, and products already on the order are listed
-  with their reason and cannot be ticked.
+  and draft and inactive products, are listed with their reason and cannot be
+  ticked. A product already on the order can be added again: it becomes a line
+  of its own (for instance in another group).
 - **Quick add by name or SKU**, beside it, appends one product under the same
   rules.
 
@@ -448,6 +449,13 @@ same authority as the summary's tax total; absent on a line it cannot price),
 and a group's VAT is the sum of net × rate over its lines. Moving a line between groups does not price the order again. Every
 group needs a name before **Create order** enables. See *Line groups* below for
 what the order keeps.
+
+**Split line.** A line of quantity 2 or more has a *Split line* button beside
+*Move to group*. It asks for the quantity to move to a new line (from 1 to the
+line's quantity minus 1) and the group of the new line — the line's own by
+default — and adds a line of the same product with that quantity, reducing the
+original. This is how one product goes into two groups: for example 5 pieces in
+*Hall A* and 3 in *Hall B*. Each line is priced at its own quantity.
 
 ## Custom-field filters
 
@@ -615,8 +623,11 @@ grouping.
 **From an accepted quote request.** When placement records the quote request
 the basket came from (see the previous section), the order copies the quote's
 groups in the same transaction. Each order line is matched to a quote line:
-first every line with the **same product, variant and agreed unit price**, then
-the remaining lines by **product and variant** alone, each quote line used once.
+first every line with the **same product, variant, agreed quantity and agreed
+unit price**, then by product, variant and price, then by product, variant and
+quantity, and finally by **product and variant** alone, each quote line used
+once. So a product split over two groups of the quote — 5 pieces in one, 3 in
+another, at one price — keeps each line in its group.
 A matched line takes the quote line's group and order; a line that matches
 nothing — added to the basket after the conversion, or changed so it no longer
 matches — goes under *Other items*, after the matched ones. A quote group that
@@ -628,12 +639,10 @@ the order's groups alone.
 **From the Create order screen.** An operator arranges the lines into groups
 before creating the order (see *The Create order screen*); the order is created
 with them in the same transaction, and a refused creation writes no group.
-Groups without a line are not created. Because the basket merges two lines of
-one product and variant, a request that puts the same product and variant in
-**two different groups** is refused with `422 VALIDATION_FAILED` and
-`details: [{ path: 'items.<j>.groupKey', code: 'group_conflict', productId,
-issue }]`, the message naming the product; the screen offers a product once, so
-it shows the reason on the line only when the server answers so.
+Groups without a line are not created. **One product may be on several lines**
+— in two different groups, or twice in one: each request line becomes an order
+line of its own, in its own group, priced at its own quantity (a product's
+minimum order quantity is still judged on its total across its lines).
 `POST /api/v1/admin/orders` takes an optional `groups` list
 (`{ key, name }`, in display order, at most 50, names of 1 to 120 characters)
 and per item an optional `groupKey`. The grouping is recorded in the

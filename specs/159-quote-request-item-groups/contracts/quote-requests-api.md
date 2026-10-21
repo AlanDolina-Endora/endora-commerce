@@ -46,6 +46,22 @@ recorded from the lines **in display order** with the snapshot keys of `data-mod
 A body that changes only the grouping is handled exactly the same way — a revision the customer is
 asked to accept (owner answer Q-B, research R-9).
 
+**One product on several lines (D6, research N-32, N-33).** `items` may name one product and variant
+on several lines, in different groups or in one. A line without an `id` pairs with a stored row by
+`pairLines` (admin mode), whose every pass prefers a row of the line's group (the stored id its
+`groupKey` names; nothing for a new group, nor without `groups`) and quantity before stored order.
+A new line may carry **`splitFromId`** — the stored line it was split off with *Split line*:
+
+```jsonc
+{ "id": "L1", "productId": "X", "quantity": 5, "groupKey": "g-y" },                    // kept, reduced
+{ "productId": "X", "quantity": 3, "groupKey": "g-z", "splitFromId": "L1" }           // split off L1
+```
+
+The new line takes that row's variant (unless sent), variant label, product name snapshot, packaging
+unit, customer's proposal, line note (unless sent), currency and stored reference; the stored row
+itself stays paired with the line that names its `id`. A `splitFromId` naming no line of this quote
+(another quote's, a deleted one, another product's) is ignored: the line is a plain new line.
+
 ## 2. `POST /api/v1/admin/quote-requests` — create on behalf
 
 `adminCreateQuoteRequestSchema` += `groups?: newLineGroupInputSchema[]`; each line += `groupKey?`.
@@ -76,6 +92,13 @@ non-empty set, never from the admin projection.
 - `comparisonAgainstLastSeen.diff[]` may contain `{ "kind": "grouping" }` — no other key (passes
   `CUSTOMER_DIFF_KEYS`). Emitted when the sections as shown differ (group names, group order,
   membership, line order) between the last-seen and the current revision.
+- Revision lines pair one to one (`snapshot-pairing.ts`: `pairLines`, customer mode, each pass
+  preferring the same group and quantity) — not by product, which collapsed a product on several
+  lines (D6, research N-32). A `line_added`, `line_removed`, `line_quantity` or
+  `line_agreed_unit_price` entry about a product, variant and packaging unit that sits on more than
+  one line of either revision carries **`groupName`** — the group's name, `null` = ungrouped — so
+  `X: 5 → 3` says which X line; otherwise the key is absent. `groupName` is in `CUSTOMER_DIFF_KEYS`:
+  it is a group the customer was shown on that revision.
 - `GET /api/v1/admin/quote-requests/:id/history` — `entries[].changes[]` may contain:
 
 ```jsonc
@@ -87,6 +110,9 @@ non-empty set, never from the admin projection.
 ```
 
 `before`/`after` of `line_group` are group names as recorded in the snapshots, `null` = ungrouped.
+`QuoteRequestHistoryLineRef` gains an optional `groupName` (`null` = ungrouped) under the same rule
+as the comparison's: present only for a product, variant and packaging unit on more than one line of
+either revision; the History tab renders it with `rfq.detail.history.lineInGroup`.
 Groups pair by `groupId`; a legacy snapshot (no keys) reads as all-ungrouped, so the first grouped
 revision after this feature lists `group_added` for each group and `line_group` for each placed line.
 `line_order` appears at most once per entry, only when an order differs and no `group_*`/`line_group`

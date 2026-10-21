@@ -186,6 +186,48 @@ unchanged.
 
 ---
 
+## Phase 10: One product on several lines, in different groups (owner decision D6, 2026-10-21)
+
+**Goal**: spec D6, FR-014, FR-015, FR-054 and FR-062 as rewritten — one product and variant on several
+lines of a quote or an order, in different groups or in one, through the whole chain; *Split line*.
+Research N-31 … N-35. `CA` = `packages/modules/carts`.
+
+### Orders and the basket
+
+- [X] T075 [P] Extend `OR/src/backend/domain/quote-line-groups.test.ts` — red: `carryQuoteGrouping` keeps X×5 in Y and X×3 in Z at one price in their groups whatever the basket order (exact pass on quantity); `planAdminLineGrouping` keeps every request line, no conflict; `adminLayout` lays a split product out by request index and, with a shuffled basket, by quantity
+- [X] T076 Implement in `OR/src/backend/domain/quote-line-groups.ts` (`claimInPasses`, `quantity` on both line shapes, `OrderLineGroupingInput.lines` as the request's list) and pass each basket line's quantity in `order-service.ts` — T075 green; drop `OrderService.productDisplayNames`
+- [X] T077 [P] Extend `CA/src/backend/services/cart-batch-add.test.ts` — red: `keepRepeatedLines` keeps a repeated product two lines, in request order with increasing creation times, each priced at its own quantity; minimums still on the product total; refused without `replaceExisting`
+- [X] T078 Implement `keepRepeatedLines` in `CA/src/backend/services/cart-service.ts` and on `CartWritePort.addItems` (`CT/carts.ts`, type test in `CT/order-minimum-shapes.test.ts`); seed lines a millisecond apart in `cart-read-port.ts` `replaceItemsForCustomer`; order placement's basket read by `(createdAt, id)` in `cart-placement-apply-port.ts` — T077 green
+- [X] T079 [P] Extend `BT/integration/carts/seed-bookkeeping.test.ts` (a seed of repeated lines reads back in seed order), `BT/integration/orders/place-order-quote-groups.test.ts` (a split product at one price lands in the right groups, also with the basket re-timed to list it swapped) and `BT/contract/orders/admin-create-groups.test.ts` (one product in two groups and twice ungrouped is created line for line; the layout is the same on every run; the `group_conflict` case removed) — red on the previous build
+- [X] T080 Implement in `OR/src/backend/services/order-creation-admin-service.ts`: no conflict check, seed with `keepRepeatedLines` — T079 green
+
+### Quotes
+
+- [X] T081 [P] Extend `QR/src/backend/services/line-carry-over.test.ts` — red: without ids a line pairs with a row of its group and quantity first (group + quantity, group, quantity), `groupId: null` is the ungrouped section, a line saying neither still pairs by position
+- [X] T082 Implement the preferences in `QR/src/backend/services/line-carry-over.ts` `pairLines`; pass group and quantity from `rfq-admin-service.ts` `modify` — T081 green
+- [X] T083 [P] Extend `history/history-diff.test.ts` and `revision-diff.test.ts` — red: a split product pairs by group whatever the order; a split-off line is an addition beside a quantity change; each entry about a product on several lines names its group (`null` = ungrouped); two swapped groups of a split product are only a grouping change
+- [X] T084 Implement `QR/src/backend/services/snapshot-pairing.ts` (shared pairing, `disambiguatingGroupName`), use it in `history-diff.ts` and `rfq-revision-service.ts` `diffRevisions`; `groupName` on the diff entries and the history line reference (`CT/quote-requests.ts`, `CUSTOMER_DIFF_KEYS`) — T083 green
+- [X] T085 [P] Extend `BT/contract/quote_requests/line-groups.test.ts` — red: a PATCH line with `splitFromId` keeps the source's proposal and note; the customer sees both lines and a comparison naming each line's group; a `splitFromId` of another quote is a plain new line
+- [X] T086 Implement `splitFromId` on `adminPatchQuoteRequestLineSchema` and in `modify` — T085 green
+- [X] T087 [P] Storefront: `SF/test/rfq/grouped-lines.test.tsx` — the comparison sentence names the group (`Other items` for `null`); implement in `SF/lib/quote-requests/describe-diff.ts`, `SF/lib/api/rfq.ts`
+- [X] T088 [P] Admin History: `AT/modules/quote_requests/RfqDetail.history.test.tsx` — a line reference with `groupName` renders `rfq.detail.history.lineInGroup`; implement in `RfqHistory.tsx` and the `_i18n` bundles (en, pl); `history-bundle-coverage.test.ts` lists the key
+
+### Admin screens
+
+- [X] T089 [P] Write `AT/components/SplitLineDialog.test.tsx` (`<StrictMode>`, `axe-core`) — red: named dialog, half the quantity and the line's section to start, `null` for Ungrouped, out-of-range and off-step quantities refused with the reason on the field, Enter / Escape / Cancel; `splitLineInto` placement
+- [X] T090 Implement `AK/components/line-groups/SplitLineDialog.tsx` (`SplitLineDialog`, `canSplitLine`, `splitLineInto`) and export — T089 green
+- [X] T091 [P] Extend `AT/modules/quote_requests/RfqDetail.groups.test.tsx` — red: *Split line* into another group and within the line's own; the new line named after the line it came from and sent with `splitFromId`; no split for a line of quantity 1; no axe violation
+- [X] T092 Implement *Split line* in `QR/src/admin/pages/RfqDetail.tsx` (`useQuoteSplitLineLabels`, bundle keys `lineGroups.split.*` en/pl) — T091 green
+- [X] T093 [P] Extend `AT/modules/quote_requests/{RfqCreatePage.groups,RfqCreatePage.product-browser,price-prefill-queue}` — red: one product added twice, each line priced at its own quantity and sent on its own; the browser and the quick search offer a product already a line; the prefill queue keyed by line; one confirm applied once
+- [X] T094 Implement in `QR/src/admin/pages/RfqCreatePage.tsx` and `QR/src/admin/lib/price-prefill-queue.ts` — T093 green
+- [X] T095 [P] Extend `AT/modules/orders/{OrderCreatePage.groups,OrderCreatePage.product-browser,OrderCreatePage.catalog-permission}` — red: one product on two lines in two groups with their own quantity and summary; *Split line*; a product already a line offered again; the `group_conflict` test removed
+- [X] T096 Implement in `OR/src/admin/pages/OrderCreatePage.tsx` (per-line keys, display-ordered request, per-line preview lookup, *Split line*, no conflict mapping) and `OR/i18n/{en,pl}.json` (`lineGroups.split.*`; `lineGroups.conflict` removed) — T095 green
+
+### Polish
+
+- [ ] T097 [P] Spec, contracts (`orders-api.md`, `quote-requests-api.md`, `ui.md`), research N-31 … N-35; documentation en + pl of `quote_requests` and `orders`; changesets
+- [ ] T098 Verify: `pnpm run build:packages`, `pnpm -r run typecheck`, `pnpm -r run lint`, `test:unit:fast`, the contract and integration suites of `quote_requests`, `orders`, `carts`, `pnpm --filter '!backend' run test`, `check:naming`, `check:language` and the T072 checks
+
 ## Dependencies & execution order
 
 - **Phase 1 → Phase 2 → stories.** Within Phase 2: T003–T004 before T005–T008; T009–T012 independent of

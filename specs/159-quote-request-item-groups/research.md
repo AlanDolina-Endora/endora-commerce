@@ -72,7 +72,8 @@ in this checkout. Abbreviations: `QR` = `packages/modules/quote_requests`, `OR` 
   (`OR/src/manifest.ts`).
 - **The basket merges repeated lines** of one `(product, variant, unit)` (`carts/…/cart-service.ts`
   `#writeLine`); the admin creation screen offers each product once (`OrderCreatePage.tsx`
-  `appendLines`, "skipping any already a line") and sends no variant.
+  `appendLines`, "skipping any already a line") and sends no variant. *(As of 2026-10-21 the admin
+  creation seeds with `keepRepeatedLines` and the screen offers a product again — N-31.)*
 - **Invoices** read orders through the order read port and are out of scope (D4).
 
 ### R-3 — What the document-templates facility can print today
@@ -300,8 +301,8 @@ write `orders`' tables (Principle I) after the commit, so an order would exist w
 ### R-17 — Admin order creation: the grouping enters placement as an internal option
 
 **Decision**: `adminCreateOrderRequestSchema` gains `groups` (no `id`: a new document) and a per-line
-`groupKey`; `OrderCreationAdminService.create` validates it (FR-062: one product+variant in one group
-only), then passes a `lineGrouping` to `placeOrder` through its options — like `origin`, not on
+`groupKey`; `OrderCreationAdminService.create` validates it (FR-062 as first written: one
+product+variant in one group only — **superseded by D6 on 2026-10-21, see N-31**), then passes a `lineGrouping` to `placeOrder` through its options — like `origin`, not on
 `OrderPlacementPort`. `placeOrder` maps order lines to the request's lines by `(productId, variantId)`.
 The admin preview schema is untouched (`adminCreateOrderItemSchema` stays; the create schema uses an
 extension).
@@ -572,7 +573,8 @@ Smallest deviations taken where the plan met the code; later phases build on the
   optional `taxRate` (`CT/orders.ts`, the preview route resolves it per product tax class from the
   authority `summary.taxTotal` uses); the screen sums a group's VAT as Σ net × rate. Additive; a
   separate changeset (`.changeset/159-contracts-order-preview-tax-rate.md`).
-- **N-20 — `group_conflict` shape and language.** The 422 carries `details: [{ path, code:
+- **N-20 — `group_conflict` shape and language.** *(Superseded by N-31: the refusal, its
+  `productDisplayNames` helper and the `lineGroups.conflict` text are gone.)* The 422 carried `details: [{ path, code:
   'group_conflict', productId, issue }]` — `issue` because `HttpError`'s array details are
   `{ path, issue }`. Its message names the product (`OrderService.productDisplayNames`, the request's
   language) but stays English: the envelope never translates a `VALIDATION_FAILED` message. The admin
@@ -592,7 +594,8 @@ Smallest deviations taken where the plan met the code; later phases build on the
   takes gross as the sum of the stored `lineTotal`s (gross) and VAT as gross − net, so it adds up the
   rows above it; the create screen, which has no stored gross, computes VAT from the rates (N-19). The
   same rule is the storefront's `orderSectionTotals`.
-- **N-24 — Create screen details.** Lines are keyed by product (the screen offers a product once), so
+- **N-24 — Create screen details.** *(The first two sentences are superseded by N-34: lines are keyed
+  per line.)* Lines are keyed by product (the screen offers a product once), so
   a UI-built request never conflicts; the 422 mapping exists for the server's answer. The preview
   request is keyed on product and quantity only, so moving a line between groups does not re-price. A
   group's *Add product* opens the browser for that group, as on the quote create screen. Every group
@@ -632,7 +635,74 @@ Smallest deviations taken where the plan met the code; later phases build on the
   report no drift, so no `manifests:generate` or lockfile change.
 - **N-30 — Changesets (T070).** The six `.changeset/159-*.md` files cover every changed package
   (`contracts`, `admin-kit`, `mod-document-templates`, `mod-quote-requests`, `mod-orders`, `mod-i18n`);
-  `carts` did not change. `159-document-sections.md` states the `grouping: null` meaning change. No new
+  `carts` did not change *(until D6: `159-carts-keep-repeated-lines.md` covers `mod-carts`, N-31)*. `159-document-sections.md` states the `grouping: null` meaning change. No new
   changeset was written for the documentation pages: they ship in the three module packages those
   changesets already bump.
+
+## One product on several lines (owner decision D6, 2026-10-21)
+
+The owner asked that one product and variant may sit on several lines of a document, in different
+groups — *5 pcs of X in group Y and 3 pcs of X in group Z* — through creation, modification, the
+customer's view, the PDF, the conversion and admin order creation. A survey of the chain found the
+storage, the request schemas, the quote `modify` write, `planLineGrouping`, the PDF and the minimums
+(feature 155 sums a product across its lines by design) already line-based. What was not:
+
+- **N-31 — Orders: the basket, the admin layout and the carry.** (a) The admin creation seeded the
+  basket through `CartWritePort.addItems(…, { replaceExisting: true })`, whose write merges a repeated
+  `(product, variant, unit)` into the first line — so it refused one product in two groups
+  (`group_conflict`, N-20). `addItems` gains `keepRepeatedLines` (with `replaceExisting` only): every
+  line is written as its own, priced at its own quantity (`#assertBatchOrderable` prices each at its
+  own quantity too), created in request order a millisecond apart; the minimums are judged on the
+  batch total as before. The admin creation always seeds that way — grouped or not, the request is the
+  order — and `group_conflict` is removed. (b) **Pricing (owner default):** each line of a split
+  product is priced at its own quantity, as separate basket lines already are; a quote's lines carry
+  their own agreed prices anyway. (c) The basket order was not deterministic: seeded lines shared a
+  creation time and fell back to random ids, and placement's own read of the basket
+  (`CartPlacementApplyService.readActiveForPlacement`) carried no `orderBy` at all. The seed
+  (`replaceItemsForCustomer`) now creates its lines a millisecond apart in seed order and the
+  placement read orders by `(createdAt, id)` like `CartReadService`. (d) `adminLayout` pairs each
+  basket line with the request line at its own index (product, variant and quantity agreeing), then
+  — as a safety net — by product, variant and quantity, then product and variant;
+  `OrderLineGroupingInput.lines` is the request's line list. (e) `carryQuoteGrouping` matched by
+  product, variant and price, then product and variant, ignoring quantity, so X×5 in Y and X×3 in Z at
+  one price landed in whichever order the basket listed them. It now passes, each over every line
+  first: product + variant + agreed quantity + price; + price; + quantity; product + variant.
+  Alternatives rejected: *a basket line id carried into placement* — the basket is `carts`' and
+  placement reads it whole; *keeping `group_conflict` and asking for two variants* — not what was
+  asked.
+- **N-32 — Quotes: pairing and naming a line among several of its product.** `pairLines` (feature
+  146) pairs an incoming line with a stored row by id, then by product/variant/unit passes, then
+  position. Without ids — a customer's draft edit, an admin API client, the revision comparisons —
+  removing X×5 from *[X×5 in Y, X×3 in Z]* paired the remaining X×3 with the Y row. Each pass now
+  prefers, among the rows it accepts, one of the line's own group and quantity, then group, then
+  quantity, before stored order (each preference over every line first). The customer comparison
+  (`RfqRevisionService.diffRevisions`) mapped revision lines **by product**, so two lines of one
+  product collapsed into one; it now pairs one to one through the history diff's rule
+  (`snapshot-pairing.ts`, shared by both). An entry about a product, variant and packaging unit on
+  more than one line of either revision carries `groupName` (`null` = ungrouped) — the comparison
+  entry and the History line reference alike — so *X: 5 → 3* says which X line. The group's name is
+  one the customer was shown on that revision, so FR-023's rule holds.
+- **N-33 — *Split line*.** The *Modify* editor allowed a product twice but offered no way to make the
+  second line short of adding a blank one and re-choosing the product, which loses the customer's
+  proposal and the packaging unit (a new line has neither — `modify` never prices). A per-line *Split
+  line* action (icon button beside *Move to group*, EN *Split line* / PL *Podziel pozycję*) opens the
+  kit's new `SplitLineDialog` — quantity to move (1 … quantity − 1; the editor enforces no packaging
+  step, so the step is 1), the new line's group (default its own) — and inserts the new line after the
+  original or at the end of the target group. It is sent with `splitFromId`, an optional admin PATCH
+  line key naming the stored line it came from; the server copies that row's variant, packaging unit,
+  proposal, note, currency and reference onto it (ignored when it names no line of this quote). The
+  admin order creation offers the same action. Not on *Create quote request*: a new quote's lines have
+  no proposal to keep, and adding the product again does the same.
+- **N-34 — The create screens are keyed per line.** *Create quote request* and *Create order* keyed
+  their rows by product (row key, de-duplicating `appendLines`, quantity/price/remove handlers, the
+  *already added* greying in the browser and the quick search, DOM ids). Rows now carry their own key;
+  a product already a line is offered again; the quote screen's price-prefill queue is keyed by line,
+  so two lines of one product each ask at their own quantity; the order screen reads each line's
+  preview answer at its own index, and only while it is still about the line's product and quantity
+  (the preview answers one line per request line, in order). The de-duplication used to absorb two
+  browser confirms landing in one tick; a confirm is now applied once per opening of the browser.
+- **N-35 — What stays as it was.** The storefront's customer draft basket (`storefront/lib/rfqDraft.ts`)
+  still merges a product added twice: customers do not group lines, and a second line of one product
+  would mean nothing to them. The order minimums stay per product across lines (feature 155 D1). The
+  quote PDF and every read-only screen were already line-based.
 

@@ -257,6 +257,14 @@ organisation in the representative's reach, as editing its lines does.
 - A group emptied of its lines **stays** until it is deleted, shown as an empty
   drop area (*Drag lines here or use Move to group.*). Empty groups are never
   shown to the customer, printed or carried to an order.
+- **One product on several lines.** The same product may sit on several lines —
+  in different groups, or twice in one: *5 pieces in Hall A, 3 in Hall B*. On
+  the *Modify* tab, **Split line** (the button beside *Move to group*, on a line
+  of quantity 2 or more) asks for the quantity to move to a new line (from 1 to
+  the line's quantity minus 1) and the new line's group — the line's own by
+  default — and adds a line of the same product, variant, packaging unit, agreed
+  price and customer's proposal, reducing the original. On *Create quote
+  request* a product already on the request can simply be added again.
 
 **Summaries.** Every section shows its item count and its net, VAT and gross,
 by the same rule the quote's own totals use, and its discount against the list
@@ -278,13 +286,17 @@ lines without a group under **Other items**; a quote with no group looks
 exactly as before. The customer cannot create, rename, delete or reorder a
 group, and no customer request accepts a grouping. The comparison with the last
 revision the customer saw says, in one entry, that *the arrangement of the
-lines changed*, and names nothing else. Accepting and rejecting a revision work
+lines changed*, and names nothing else. Each line is compared with its own: for
+a product on several lines, an entry names the group of the line it is about —
+*Bolt (Hall B): quantity 3 → 2* — and the admin *History* does the same. Accepting and rejecting a revision work
 as before: the grouping is never a reason to refuse an acceptance.
 
 **What keeps a line's group.** A customer's own draft edit keeps every line it
 keeps in its group. An API client that saves a quote's lines without sending
 `groups` keeps every line it keeps in its group and puts new lines in
-*Ungrouped*. A **resubmission** starts ungrouped: it is a new request, re-priced,
+*Ungrouped*. Where a line carries no id, it is matched to a stored line of the
+same product by its group first, then by its quantity, then by position — so
+removing one of two lines of a product keeps the other in its group. A **resubmission** starts ungrouped: it is a new request, re-priced,
 for the representative to group again. **Convert to order** fills the basket
 in the quote's order, and the order placed from it keeps the groups — see the
 Orders module's page.
@@ -297,7 +309,10 @@ whole grouping, in display order, each `{ key, id?, name }` (`id` keeps an
 existing group, a group without one is created, a stored group left out is
 deleted) — and per line an optional `groupKey` (`null` = ungrouped); lines are
 sent in display order. `groups` without `items` answers `400`; an `id` that is
-not a group of this quote answers `422 VALIDATION_FAILED`. Every reply carries
+not a group of this quote answers `422 VALIDATION_FAILED`. A new line split off
+a stored one carries `splitFromId` (the stored line's id): it then keeps that
+line's packaging unit, customer's proposal, note and reference price; a
+`splitFromId` that names no line of this quote is ignored. Every reply carries
 `itemGroups` (`{ id, name, position }`) and, per line, `groupId` and
 `position`, with lines in display order — the admin reply lists empty groups
 too, the customer reply only the groups that hold a line. The published read
@@ -1020,8 +1035,8 @@ products in two ways:
   page-size and filter changes, and **Add N** adds every ticked product as a
   line of quantity 1 — at most 200 in one step. Draft and inactive products
   may be added; grouped and bundle parents are listed with their reason and
-  cannot be ticked; a product already on the request is marked as already
-  added.
+  cannot be ticked. A product already on the request can be added again, as a
+  line of its own — for instance to put it in a second group.
 - **Quick add by name or SKU**, beside it, appends one product under the same
   rules.
 

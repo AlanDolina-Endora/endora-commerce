@@ -22,20 +22,29 @@
 - `adminCreateOrderLineSchema = adminCreateOrderItemSchema.extend({ groupKey: lineGroupKeySchema.nullable().optional() })`;
   `adminCreateOrderRequestSchema.items` uses it; `groups: newLineGroupInputSchema[]` optional; the shared
   `refineLineGrouping` applies (400 on a malformed body). `adminOrderPreviewRequestSchema` is unchanged.
-- **422 `VALIDATION_FAILED`** with `details: [{ path: 'items.<j>.groupKey', code: 'group_conflict' }]`
-  when two lines of one `(productId, variantId)` name different groups (FR-062; the basket merges them —
-  research R-2). Checked first, after `assertWithinAdminOrderItemBound`, before the basket is touched.
+- **One product on several lines (D6, FR-062, research N-31).** `items` may name one product and
+  variant on several lines, in different groups or in one; each becomes an order line of its own.
+  The earlier `422 group_conflict` is gone. The basket is seeded with
+  `CartWritePort.addItems(…, { replaceExisting: true, keepRepeatedLines: true })`: no line merges
+  into another, each is priced at its own quantity, and the lines are created in request order a
+  millisecond apart, so the basket — and placement's read of it, ordered by `(createdAt, id)` —
+  lists them in request order. Minimums are still judged per product on the batch total (155 D1).
 - Groups with no line are not created (D2).
 - `OrderCreationAdminService.create` hands `placeOrder` an internal option:
 
 ```ts
 interface OrderLineGroupingInput {
   readonly groups: readonly { key: string; name: string }[];      // in display order
-  /** `${productId}:${variantId ?? ''}` → { groupKey | null, index } — index = position in the request. */
-  readonly lines: ReadonlyMap<string, { groupKey: string | null; index: number }>;
+  /** Every request line, in request order. */
+  readonly lines: readonly { productId: string; variantId: string | null; quantity: number; groupKey: string | null }[];
 }
 placeOrder(ctx, req, options?: { origin?; language?; lineGrouping?: OrderLineGroupingInput })
 ```
+
+`adminLayout` pairs each basket line with the request line at its own index when product, variant and
+quantity agree; as a safety net, then with the first unclaimed request line of the same product,
+variant and quantity, then of the same product and variant. Lines follow the request within each
+section; a basket line no request line accounts for is ungrouped, last.
 
 Not on `OrderPlacementPort` (like `origin`): only this module's admin path supplies it.
 
@@ -56,10 +65,10 @@ write order_item_groups (non-empty only), set order_items.group_id / position
 
 ```ts
 export interface QuoteLineForCarry {
-  productId: string; variantId: string | null; agreedUnitPrice: string | null;
+  productId: string; variantId: string | null; agreedUnitPrice: string | null; quantity?: number;
   position?: number; group?: { id: string; name: string; position: number } | null;
 }
-export interface OrderLineForCarry { key: string; productId: string; variantId: string | null; unitPrice: string }
+export interface OrderLineForCarry { key: string; productId: string; variantId: string | null; unitPrice: string; quantity?: number }
 export interface CarriedGrouping {
   groups: { sourceId: string; name: string; position: number }[];            // non-empty, renumbered
   lines: Map<string /* order line key */, { groupSourceId: string | null; position: number }>;
@@ -67,9 +76,12 @@ export interface CarriedGrouping {
 export function carryQuoteGrouping(quote: readonly QuoteLineForCarry[], order: readonly OrderLineForCarry[]): CarriedGrouping;
 ```
 
-Matching, per order line in basket order: (1) the first unclaimed quote line with the same product,
-variant and `Number(agreedUnitPrice) === Number(unitPrice)`; else (2) the first unclaimed with the same
-product and variant; else unmatched. Matched lines take the quote line's group, ordered by the quote
+Matching, per order line in basket order, each pass over every line before the next: (1) the first
+unclaimed quote line with the same product, variant, quantity and `Number(agreedUnitPrice) ===
+Number(unitPrice)`; (2) the same product, variant and price; (3) the same product, variant and
+quantity; (4) the same product and variant; else unmatched. Pass (1) is what keeps a product split over
+two groups at one price in the right groups whatever the basket's order (D6, research N-31); the
+conversion seeds the basket one line per quote line, in display order, a millisecond apart. Matched lines take the quote line's group, ordered by the quote
 display order; unmatched lines are ungrouped after the matched ungrouped lines, in basket order. Quote
 groups receiving no line are dropped; the rest keep their relative order, positions renumbered `0…`.
 

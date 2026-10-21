@@ -376,8 +376,9 @@ od razu pokazuje sekcję **Pozycje**.
   zakładce **Aktywne**: katalog podzielony na strony, z zakładkami statusów i ich licznikami,
   filtrem typu i wyszukiwaniem po SKU, slugu lub nazwie. Zaznaczenie przetrwa zmianę strony,
   rozmiaru strony i filtrów, a **Dodaj N** dodaje każdy zaznaczony produkt jako pozycję o ilości 1
-  — najwyżej 200 naraz. Produkty nadrzędne typu grouped i bundle, produkty robocze i nieaktywne
-  oraz produkty, które już są w zamówieniu, są widoczne z powodem i nie da się ich zaznaczyć.
+  — najwyżej 200 naraz. Produkty nadrzędne typu grouped i bundle oraz produkty robocze i nieaktywne
+  są widoczne z powodem i nie da się ich zaznaczyć. Produkt, który już jest w zamówieniu, można
+  dodać ponownie: staje się osobną pozycją (na przykład w innej grupie).
 - **Szybkie dodawanie po nazwie lub SKU**, obok, dopisuje jeden produkt według tych samych zasad.
 
 Bez uprawnienia `catalog:read` obie te opcje są nieaktywne i każda pokazuje podpowiedź.
@@ -424,6 +425,12 @@ pozycji, której nie da się wycenić), a VAT grupy to suma netto × stawka po j
 Przeniesienie pozycji między grupami nie wycenia zamówienia ponownie. Każda grupa musi mieć nazwę,
 zanim przycisk **Utwórz zamówienie** stanie się aktywny. Co zamówienie zachowuje, opisuje sekcja
 *Grupy pozycji* niżej.
+
+**Podziel pozycję.** Pozycja o ilości 2 lub większej ma obok *Przenieś do grupy* przycisk *Podziel
+pozycję*. Pyta on o ilość do przeniesienia na nową pozycję (od 1 do ilości pozycji minus 1) i o grupę
+nowej pozycji — domyślnie tę samą — po czym dodaje pozycję tego samego produktu z tą ilością,
+zmniejszając pierwotną. Tak jeden produkt trafia do dwóch grup: na przykład 5 sztuk do *Hali A* i 3
+do *Hali B*. Każda pozycja jest wyceniana według własnej ilości.
 
 ## Filtry pól niestandardowych
 
@@ -578,8 +585,11 @@ zmienia**: żaden ekran ani API nie edytuje grupowania złożonego zamówienia.
 **Z zaakceptowanego zapytania ofertowego.** Gdy przy składaniu zamówienia zostaje zapisane zapytanie
 ofertowe, z którego pochodzi koszyk (zob. poprzednią sekcję), zamówienie kopiuje grupy oferty w tej
 samej transakcji. Każda pozycja zamówienia jest dopasowywana do pozycji oferty: najpierw wszystkie
-pozycje z **tym samym produktem, wariantem i uzgodnioną ceną jednostkową**, potem pozostałe pozycje
-wyłącznie według **produktu i wariantu**, przy czym każda pozycja oferty jest użyta raz. Dopasowana
+pozycje z **tym samym produktem, wariantem, uzgodnioną ilością i uzgodnioną ceną jednostkową**, potem
+według produktu, wariantu i ceny, potem według produktu, wariantu i ilości, a na końcu wyłącznie
+według **produktu i wariantu**, przy czym każda pozycja oferty jest użyta raz. Dzięki temu produkt
+rozdzielony w ofercie na dwie grupy — 5 sztuk w jednej, 3 w drugiej, po tej samej cenie — zachowuje
+każdą pozycję w jej grupie. Dopasowana
 pozycja przejmuje grupę i miejsce pozycji oferty; pozycja, która do niczego nie pasuje — dodana do
 koszyka po zamianie albo zmieniona tak, że już nie pasuje — trafia do sekcji *Pozostałe pozycje*, za
 dopasowanymi. Grupa oferty, do której nie trafiła żadna pozycja, nie jest kopiowana. Gdy przy
@@ -589,12 +599,10 @@ nie rusza grup zamówienia.
 
 **Z ekranu tworzenia zamówienia.** Operator układa pozycje w grupy przed utworzeniem zamówienia (zob.
 *Ekran tworzenia zamówienia*); zamówienie powstaje z nimi w tej samej transakcji, a odrzucone
-utworzenie nie zapisuje żadnej grupy. Grupy bez pozycji nie są tworzone. Ponieważ koszyk łączy dwie
-pozycje tego samego produktu i wariantu, żądanie, które umieszcza ten sam produkt i wariant w **dwóch
-różnych grupach**, jest odrzucane z `422 VALIDATION_FAILED` i `details: [{ path:
-'items.<j>.groupKey', code: 'group_conflict', productId, issue }]`, a komunikat wymienia produkt;
-ekran oferuje każdy produkt tylko raz, więc pokazuje przyczynę przy pozycji tylko wtedy, gdy tak
-odpowie serwer. `POST /api/v1/admin/orders` przyjmuje opcjonalną listę `groups` (`{ key, name }`, w
+utworzenie nie zapisuje żadnej grupy. Grupy bez pozycji nie są tworzone. **Jeden produkt może być w
+kilku pozycjach** — w dwóch różnych grupach albo dwa razy w jednej: każda pozycja żądania staje się
+osobną pozycją zamówienia, we własnej grupie, wycenioną według własnej ilości (minimalna ilość
+zamówienia produktu jest nadal oceniana na sumie jego pozycji). `POST /api/v1/admin/orders` przyjmuje opcjonalną listę `groups` (`{ key, name }`, w
 kolejności wyświetlania, najwyżej 50, nazwy od 1 do 120 znaków) i dla każdej pozycji opcjonalny
 `groupKey`. Grupowanie jest utrwalane we wpisie audytu `order.place_on_behalf` (nazwa i liczba
 pozycji każdej grupy); własne złożenie zamówienia przez kupującego, jak dotąd, nie trafia do audytu.

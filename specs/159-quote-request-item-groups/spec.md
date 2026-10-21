@@ -4,7 +4,7 @@
 **Created**: 2026-10-20
 **Status**: Ready for implementation — owner decisions D1–D5 are fixed and the owner answered Q-A and
 Q-B on 2026-10-20 (*Clarifications*): no order PDF in this feature (D4 amended); a grouping-only save
-is an ordinary revision.
+is an ordinary revision. D6 (2026-10-21) allows one product on several lines, in different groups.
 **Input**: GitHub issue #375, *"Quote requests: group line items into named, reorderable groups that
 carry over to orders"* — when an admin builds a quote request in the Admin UI they can group its
 line items into named groups, each with its own summary; groups can be created, named, renamed,
@@ -71,6 +71,17 @@ order the database returns them.
 - **A customer's resubmission does not copy groups**; a reorder and an order cloned back into a
   quote do not either. Each starts a new document whose grouping is the representative's to make
   (research R-24).
+
+### Owner decision, 2026-10-21
+
+- **D6 — One product on several lines, in different groups.** The same product and variant may be
+  placed on several lines of one document, in different groups or twice in one — *5 pcs of X in
+  Hall A and 3 pcs of X in Hall B* — through the whole chain: creating and modifying a quote, what
+  the customer sees, the quote PDF, the conversion to an order, the admin order creation and every
+  order screen. It replaces the earlier rule that an admin-created order refuses one product in two
+  groups. Each line is priced at its own quantity, as separate basket lines already are; a quote's
+  lines carry their own agreed prices anyway. An administrator can make such a line from an
+  existing one with *Split line* (research N-31 … N-34).
 
 ### Owner answers, 2026-10-20
 
@@ -285,11 +296,17 @@ grouped, each group with its summary, then *Other items*. Neither can change the
   customer's draft); should one exist, the customer's edit keeps every unchanged line in its group.
 - **An API client that does not know groups** saves a quote's lines — every line it keeps stays in
   its group; lines it adds are ungrouped.
-- **The same product twice on an admin-created order in two different groups** — refused, because
-  the order merges repeated lines of one product and variant into one line (the screen offers each
-  product once already).
+- **The same product twice on an admin-created order, in two groups or in one** — allowed (D6):
+  each request line becomes an order line of its own, in its own group, priced at its own quantity;
+  a product's minimum order quantity is still judged on its total across its lines.
 - **The same product on two quote lines in two groups, both converted** — each order line keeps the
-  group of the quote line it came from.
+  group of the quote line it came from, whatever order the basket lists them in — even at one agreed
+  price, the agreed quantity tells them apart.
+- **A product on several lines changes between two revisions** — the customer's comparison and the
+  admin *History* pair each line with its own (by group, then quantity) and name the group of the
+  line an entry is about, so *X: 5 → 3* says which X line.
+- **A customer's own draft basket** — a customer adding a product twice still gets one line of it
+  (the storefront draft merges by product); customers do not group lines.
 - **Quote requests switched off at checkout** — the order is placed without groups (as it is placed
   without its quote source today).
 - **Document templates switched off** — PDFs are unavailable as today; groups on every screen are
@@ -337,6 +354,17 @@ grouped, each group with its summary, then *Other items*. Neither can change the
 - **FR-013**: An admin API client that saves a quote's lines without sending a grouping MUST keep every
   line it keeps (the same pairing that keeps a line's note and reference price) in its group, and put
   lines it adds in the ungrouped section.
+- **FR-014** (D6): A quote MUST accept the same product and variant on several lines, in different
+  groups or in one; *Create quote request* MUST let an administrator add a product that is already a
+  line, and every line MUST keep its own quantity, agreed price and price prefill. Where a line is
+  paired with a stored line without an id (an API client, a customer's draft edit, a revision
+  comparison), a line of the same group and then of the same quantity MUST be preferred before
+  position decides.
+- **FR-015** (D6): The *Modify* tab MUST offer, on every line of quantity 2 or more, a *Split line*
+  action (*Podziel pozycję*) that asks for the quantity to move (1 … quantity − 1) and the group of the
+  new line (default: the line's own) and creates a new line of the same product, variant, packaging
+  unit, agreed price and customer's proposal, reducing the original by the quantity moved; it MUST be
+  operable by keyboard alone and return focus to the control that opened it.
 
 #### Revisions, history and the customer's acceptance
 
@@ -349,7 +377,8 @@ grouped, each group with its summary, then *Other items*. Neither can change the
   *order changed* (lines or groups reordered with no other change to them).
 - **FR-023**: The customer's comparison with the last revision they saw MUST say, in one entry, that the
   arrangement of the lines changed, and MUST NOT reveal anything the customer reply does not already
-  carry.
+  carry. An entry about a product that sits on more than one line MUST name the group of the line it
+  is about (D6); the *History* line reference likewise.
 - **FR-024**: Accepting or rejecting a revision MUST behave exactly as today; the grouping MUST NOT be
   a reason to refuse an acceptance.
 - **FR-025**: No customer-facing operation MUST accept a grouping input; a customer's own draft edit
@@ -404,6 +433,9 @@ grouped, each group with its summary, then *Other items*. Neither can change the
 - **FR-052**: When the source is not vouched, or quote requests are off, the order MUST be placed
   without groups and otherwise exactly as today.
 - **FR-053**: An order's grouping MUST NOT change when its quote changes later.
+- **FR-054** (D6): Order lines MUST be matched to quote lines by product, variant, agreed quantity and
+  agreed price first, so a product split over several quote lines at one price keeps each line's
+  group whatever the basket's order.
 
 #### Grouping an order in the Admin UI
 
@@ -411,8 +443,11 @@ grouped, each group with its summary, then *Other items*. Neither can change the
   FR-008's summaries (item count, net, VAT, gross per group).
 - **FR-061**: The order MUST be created with the grouping on the screen in the same transaction as the
   order; a refused creation MUST write no group.
-- **FR-062**: A creation request naming the same product and variant on lines of different groups
-  MUST be refused with a message naming the product.
+- **FR-062** (D6, superseding the earlier refusal): A creation request naming the same product and
+  variant on several lines — in different groups or in one — MUST create one order line per request
+  line, each in its own group and priced at its own quantity; minimums stay judged per product. The
+  screen MUST let an administrator add a product that is already a line and MUST offer *Split line*
+  (FR-015) on its lines.
 - **FR-063**: An order's grouping MUST be read-only after placement on every surface and in every API.
 
 #### Invoices
