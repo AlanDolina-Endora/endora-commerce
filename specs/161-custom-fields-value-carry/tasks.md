@@ -958,6 +958,10 @@ branch from the commit that lands V3's backend half, which they depend on.
   behind its own gate while the skip lines show" and the Polish fallback test; `RfqDetail.history` "names a
   skipped field by the label stored with the skip" (en + pl). Contract `admin-surfaces.md` §1.1, §1.4,
   §1.5, §2, §3, §4 updated.
+  Verification (T065–T067): carry-drift 20, carry 19, system-note 11, RfqDetail.history 38, crm history 32;
+  the Phase 7/8 admin batch 8 files 164/164; crm `index.test.ts` 18/18; `history-bundle-coverage` 56/56;
+  typecheck clean (admin and the four modules), lint clean bar the pre-existing `OrderDetail.tsx` warning;
+  `i18n:hardcoded` regressions 0, `check:bundle-pairing` 0, `check:admin-surface` 0.
 
 **Verification** (T063–T064):
 ```bash
