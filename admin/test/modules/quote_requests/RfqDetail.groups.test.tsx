@@ -208,6 +208,75 @@ describe('RfqDetail — Modify with groups (T030)', () => {
   });
 });
 
+describe('RfqDetail — Split line (research N-33)', () => {
+  it('splits a line into another group: the rest stays, the new line names the line it came from', async () => {
+    await openModify();
+    await userEvent.click(screen.getByRole('button', { name: 'Split line: Nut' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Split line: Nut' });
+    const quantity = within(dialog).getByLabelText(QR_EN['lineGroups.split.quantity']!);
+    // Half of 4 to start with.
+    expect(quantity).toHaveValue(2);
+    await userEvent.clear(quantity);
+    await userEvent.type(quantity, '1');
+    await userEvent.selectOptions(within(dialog).getByLabelText(QR_EN['lineGroups.split.target']!), 'Spare');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Split line' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    // The new line is a Nut line in Spare, named like the line it came from.
+    expect(within(region('Spare')).getByRole('group', { name: 'Nut' })).toBeInTheDocument();
+    expect(region('Hall')).toHaveTextContent('2 items');
+    expect(region('Spare')).toHaveTextContent('1 item');
+
+    const body = await saveBody();
+    const row = (item: Record<string, unknown>): unknown[] => [
+      item['id'] ?? null,
+      item['productId'],
+      item['quantity'],
+      item['agreedUnitPrice'],
+      item['groupKey'],
+      item['splitFromId'] ?? null,
+    ];
+    expect(body.items.map(row)).toEqual([
+      [L1, P1, 2, 10, HALL, null],
+      [L2, P2, 3, 5, HALL, null],
+      [null, P2, 1, 5, EMPTY, L2],
+      [L3, P3, 10, 1, null, null],
+    ]);
+  });
+
+  it('splits within the line’s own group by default, the new line right after it', async () => {
+    await openModify();
+    await userEvent.click(screen.getByRole('button', { name: 'Split line: Washer' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Split line: Washer' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Split line' }));
+    const ungrouped = within(region('Ungrouped')).getAllByRole('group', { name: 'Washer' });
+    expect(ungrouped).toHaveLength(2);
+    const body = await saveBody();
+    expect(body.items.slice(2).map((item) => [item['quantity'], item['groupKey']])).toEqual([
+      [5, null],
+      [5, null],
+    ]);
+  });
+
+  it('offers no split for a line of quantity 1', async () => {
+    await openModify();
+    const bolt = within(region('Hall')).getByRole('group', { name: 'Bolt' });
+    // The line's first number field is its quantity.
+    const qty = within(bolt).getAllByRole('spinbutton')[0]!;
+    await userEvent.clear(qty);
+    await userEvent.type(qty, '1');
+    expect(screen.queryByRole('button', { name: 'Split line: Bolt' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Split line: Nut' })).toBeInTheDocument();
+  });
+
+  it('the split dialog has no automated accessibility violation', async () => {
+    await openModify();
+    await userEvent.click(screen.getByRole('button', { name: 'Split line: Nut' }));
+    await screen.findByRole('dialog', { name: 'Split line: Nut' });
+    await expectNoAxeViolations(document.body);
+  });
+});
+
 describe('RfqDetail — Overview with groups (FR-032)', () => {
   it('shows each non-empty group as a heading with its lines and summary, then Ungrouped', async () => {
     answer(groupedPayload('Approved'));

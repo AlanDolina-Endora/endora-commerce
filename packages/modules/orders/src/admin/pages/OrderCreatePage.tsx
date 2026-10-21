@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Copy, Info, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, Info, Split, Trash2 } from 'lucide-react';
 import type { AdminOrderPreviewMessageCode } from '@endora-commerce/contracts';
 import { ApiError, apiClient, useUnsavedChangesPrompt, formatMoney as formatMoneyShared } from '@endora-commerce/admin-kit/lib';
 import {
@@ -28,8 +28,11 @@ import {
   ProductBrowserDialog,
   ProductBrowserTrigger,
   ProductPicker,
+  SplitLineDialog,
+  canSplitLine,
   parsePositiveInt,
   productDisplayName,
+  splitLineInto,
   type ProductBrowserItem,
   type ProductBrowserRules,
 } from '@endora-commerce/admin-kit/components';
@@ -40,16 +43,18 @@ import {
   orderSectionTotals,
   useOrderLineGroupLabels,
   useOrderSectionSummaryText,
+  useOrderSplitLineLabels,
 } from '../line-groups.js';
 
 /**
- * One order line (feature 145, FR-022). Keyed by `productId`: a product is a line
- * at most once, which is what the picker's and the quick search's *already added*
- * state relies on. `quantityInput` is what the operator typed — kept as text so an
- * invalid entry stays on screen, marked, instead of being coerced away.
+ * One order line (feature 145, FR-022). Keyed by its own `key`: one product may be
+ * on several lines — in different groups, or twice in one (feature 159, research
+ * N-31) — so the picker and the quick search offer a product already a line again.
+ * `quantityInput` is what the operator typed — kept as text so an invalid entry
+ * stays on screen, marked, instead of being coerced away.
  */
 interface ItemRow {
-  /** Feature 159 — the line's identity in the grouping editor: its product. */
+  /** The line's identity — the grouping editor's, the preview lookup's and the row's DOM ids. */
   key: string;
   /** Feature 159 — the group (a group draft's `key`) the line is in; `null` = ungrouped. */
   groupKey: string | null;
@@ -102,9 +107,12 @@ function unavailableReason(message: PreviewMessage | undefined): {
   return { key: 'orderCreate.line.unavailable' };
 }
 
-function productLine(item: ProductBrowserItem, groupKey: string | null): ItemRow {
+/** Feature 159 (research N-31) — nothing is "already added": a product may be a line twice. */
+const NO_IDS: readonly string[] = [];
+
+function productLine(item: ProductBrowserItem, groupKey: string | null, key: string): ItemRow {
   return {
-    key: item.id,
+    key,
     groupKey,
     productId: item.id,
     sku: item.sku,
@@ -243,23 +251,6 @@ interface PreviewLine {
   /** Feature 159 — the rate the line is taxed at; a group's VAT is summed from it. */
   taxRate?: number;
   unavailable?: boolean;
-}
-
-/**
- * Feature 159 (FR-062) — the lines a refused creation names as `group_conflict`,
- * by product: `items.<j>.groupKey` read against the lines the request sent.
- */
-function groupConflictProducts(err: unknown, sent: ReadonlyArray<{ productId: string }>): Set<string> {
-  const details = err instanceof ApiError ? err.envelope.error.details : undefined;
-  const conflicts = new Set<string>();
-  if (!Array.isArray(details)) return conflicts;
-  for (const detail of details as Array<{ path?: unknown; code?: unknown }>) {
-    if (detail.code !== 'group_conflict' || typeof detail.path !== 'string') continue;
-    const index = /^items\.(\d+)\.groupKey$/.exec(detail.path)?.[1];
-    const line = index === undefined ? undefined : sent[Number(index)];
-    if (line) conflicts.add(line.productId);
-  }
-  return conflicts;
 }
 
 interface PreviewResponse {
@@ -578,6 +569,7 @@ export function OrderCreatePage(): ReactNode {
   const t = useTranslation('core');
   const tGroups = useTranslation('orders');
   const groupLabels = useOrderLineGroupLabels();
+  const splitLabels = useOrderSplitLineLabels();
   const summaryText = useOrderSectionSummaryText();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -594,13 +586,24 @@ export function OrderCreatePage(): ReactNode {
   // In display order: each group's lines, then the ungrouped ones (feature 159).
   const [items, setItems] = useState<ItemRow[]>([]);
   const [browserOpen, setBrowserOpen] = useState(false);
-  // Feature 159 — the order's groups, where the browser's products go (a
+  // Feature 159 — the order's groups, and where the browser's products go (a
   // group's *Add product* opens it for that group; everything else adds to
-  // Ungrouped), and the lines a refused creation named as in two groups.
+  // Ungrouped).
   const [groups, setGroups] = useState<Array<{ key: string; name: string }>>([]);
   const [addTarget, setAddTarget] = useState<string | null>(null);
   const groupCounter = useRef(0);
-  const [conflictProducts, setConflictProducts] = useState<ReadonlySet<string>>(() => new Set());
+  const lineCounter = useRef(0);
+  const newLineKey = (): string => `line-${(lineCounter.current += 1)}`;
+  // One confirm per opening of the browser: two confirms landing in one tick
+  // must not add their products twice now that a product may be a line twice.
+  const browserConfirmed = useRef(false);
+  const openBrowser = (target: string | null): void => {
+    browserConfirmed.current = false;
+    setAddTarget(target);
+    setBrowserOpen(true);
+  };
+  // Feature 159 (research N-33) — the line whose *Split line* dialog is open.
+  const [splitting, setSplitting] = useState<string | null>(null);
   const itemsId = useId();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -746,13 +749,20 @@ export function OrderCreatePage(): ReactNode {
   // asked about the lines only, so moving a line between groups does not
   // re-price; its order is the display order.
   // Keyed on what pricing reads, so a regroup that leaves it unchanged asks
-  // the preview nothing.
-  const pricingKey = JSON.stringify(
-    items.flatMap((it) => {
-      const quantity = parsePositiveInt(it.quantityInput);
-      return quantity === null ? [] : [{ productId: it.productId, quantity }];
-    }),
-  );
+  // the preview nothing. One request line per screen line, a repeated product
+  // included (feature 159, research N-31): the preview answers one line each.
+  // In display order — each group's lines, then the ungrouped ones — whatever
+  // order an edit left the list in.
+  const knownGroupKeys = new Set(groups.map((group) => group.key));
+  const displayItems = [
+    ...groups.flatMap((group) => items.filter((it) => it.groupKey === group.key)),
+    ...items.filter((it) => it.groupKey === null || !knownGroupKeys.has(it.groupKey)),
+  ];
+  const pricedRows = displayItems.flatMap((it) => {
+    const quantity = parsePositiveInt(it.quantityInput);
+    return quantity === null ? [] : [{ row: it, quantity }];
+  });
+  const pricingKey = JSON.stringify(pricedRows.map(({ row, quantity }) => ({ productId: row.productId, quantity })));
   const validItems = useMemo(
     () => JSON.parse(pricingKey) as Array<{ productId: string; quantity: number }>,
     [pricingKey],
@@ -797,36 +807,38 @@ export function OrderCreatePage(): ReactNode {
   }, [customerAccountId, salesChannelId, deliveryMethodId, paymentMethodId, validItems, t]);
 
   /**
-   * Append products as lines, in the order given, skipping any already a line —
-   * at the end of `groupKey`'s section (`null` = Ungrouped, which is last, so the
-   * end of the list).
+   * Append products as lines, in the order given — a product already a line
+   * included: it becomes a line of its own (feature 159, research N-31) — at the
+   * end of `groupKey`'s section (`null` = Ungrouped, which is last, so the end of
+   * the list). Keys are made here, outside the updater StrictMode runs twice.
    */
-  const appendLines = (products: readonly ProductBrowserItem[], groupKey: string | null = null): void =>
+  const appendLines = (products: readonly ProductBrowserItem[], groupKey: string | null = null): void => {
+    const added = products.map((p) => productLine(p, groupKey, newLineKey()));
+    if (added.length === 0) return;
     setItems((prev) => {
-      const present = new Set(prev.map((row) => row.productId));
-      const added: ItemRow[] = [];
-      for (const p of products) {
-        if (present.has(p.id)) continue;
-        present.add(p.id);
-        added.push(productLine(p, groupKey));
-      }
-      if (added.length === 0) return prev;
       if (groupKey === null) return [...prev, ...added];
       const lastOfGroup = prev.map((row) => row.groupKey).lastIndexOf(groupKey);
       const at = lastOfGroup >= 0 ? lastOfGroup + 1 : prev.findIndex((row) => row.groupKey === null);
       const index = at < 0 ? prev.length : at;
       return [...prev.slice(0, index), ...added, ...prev.slice(index)];
     });
-  const setQuantity = (productId: string, quantityInput: string): void =>
-    setItems((prev) => prev.map((row) => (row.productId === productId ? { ...row, quantityInput } : row)));
-  const removeLine = (productId: string): void =>
-    setItems((prev) => prev.filter((row) => row.productId !== productId));
-  const lineIds = items.map((row) => row.productId);
+  };
+  const setQuantity = (key: string, quantityInput: string): void =>
+    setItems((prev) => prev.map((row) => (row.key === key ? { ...row, quantityInput } : row)));
+  const removeLine = (key: string): void => setItems((prev) => prev.filter((row) => row.key !== key));
 
-  // Per-line price lookup for the items table (keyed by product + quantity, so a
-  // line whose quantity just changed shows nothing until its new price arrives).
-  const lineByKey = new Map<string, PreviewLine>();
-  for (const line of preview?.lines ?? []) lineByKey.set(`${line.productId}:${line.quantity}`, line);
+  // Per-line price lookup for the items table: the preview answers one line per
+  // request line, in order, so a screen line reads the answer at its own index —
+  // only while that answer is still about its product and quantity, so a line
+  // whose quantity just changed shows nothing until its new price arrives.
+  const splitRow = splitting !== null ? items.find((row) => row.key === splitting) : undefined;
+  const previewIndexByKey = new Map(pricedRows.map(({ row }, index) => [row.key, index]));
+  const previewLineOf = (row: ItemRow, quantity: number | null): PreviewLine | undefined => {
+    if (quantity === null) return undefined;
+    const index = previewIndexByKey.get(row.key);
+    const line = index === undefined ? undefined : preview?.lines[index];
+    return line && line.productId === row.productId && line.quantity === quantity ? line : undefined;
+  };
   const messageByProduct = new Map<string, PreviewMessage>();
   for (const m of preview?.messages ?? []) messageByProduct.set(m.productId, m);
   const translateReason = (reason: ReturnType<typeof unavailableReason>): string =>
@@ -873,14 +885,16 @@ export function OrderCreatePage(): ReactNode {
   const submit = async (): Promise<void> => {
     setBusy(true);
     setError(null);
-    setConflictProducts(new Set());
-    // Feature 159 — with groups, each line names its group (the server places
-    // the lines as sent: each group's lines, then the ungrouped ones); without,
-    // the request is the one it always was.
-    const groupKeyOf = new Map(items.map((row) => [row.productId, row.groupKey]));
+    // Feature 159 — with groups, each line names its own group (the server
+    // places the lines as sent, one order line each: each group's lines, then
+    // the ungrouped ones); without, the request is the one it always was.
     const sentItems =
       groups.length > 0
-        ? validItems.map((it) => ({ ...it, groupKey: groupKeyOf.get(it.productId) ?? null }))
+        ? pricedRows.map(({ row, quantity }) => ({
+            productId: row.productId,
+            quantity,
+            groupKey: row.groupKey !== null && knownGroupKeys.has(row.groupKey) ? row.groupKey : null,
+          }))
         : validItems;
     try {
       const res = await apiClient.post<{ data: { id: string } }>('/api/v1/admin/orders', {
@@ -902,7 +916,6 @@ export function OrderCreatePage(): ReactNode {
         navigate(`/orders/${res.data.id}`);
       }
     } catch (err) {
-      setConflictProducts(groupConflictProducts(err, sentItems));
       setError(err instanceof ApiError ? err.envelope.error.message : t('orderCreate.error'));
     } finally {
       setBusy(false);
@@ -1061,7 +1074,7 @@ export function OrderCreatePage(): ReactNode {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap items-end gap-3">
-              <ProductBrowserTrigger onOpen={(): void => setBrowserOpen(true)} />
+              <ProductBrowserTrigger onOpen={(): void => openBrowser(null)} />
               <div className="min-w-64 flex-1 space-y-1">
                 <Label htmlFor={`${itemsId}-quick-search`}>{t('orderCreate.items.quickSearch')}</Label>
                 <ProductPicker
@@ -1072,7 +1085,6 @@ export function OrderCreatePage(): ReactNode {
                   onChange={(): void => {}}
                   onPickProduct={(item): void => appendLines([item])}
                   rules={ORDER_PRODUCT_RULES}
-                  alreadyAddedIds={lineIds}
                   includeArchived
                   placeholder={t('orderCreate.placeholder.product')}
                 />
@@ -1082,8 +1094,10 @@ export function OrderCreatePage(): ReactNode {
               open={browserOpen}
               title={t('orderCreate.items.browse')}
               rules={ORDER_PRODUCT_RULES}
-              alreadyAddedIds={lineIds}
+              alreadyAddedIds={NO_IDS}
               onConfirm={(picked): void => {
+                if (browserConfirmed.current) return;
+                browserConfirmed.current = true;
                 appendLines(picked, addTarget);
                 setBrowserOpen(false);
                 setAddTarget(null);
@@ -1123,15 +1137,13 @@ export function OrderCreatePage(): ReactNode {
                 onChange={(next): void => {
                   setGroups(next.groups);
                   setItems(next.lines);
-                  setConflictProducts(new Set());
                 }}
                 renderSummary={(sectionLines): ReactNode => (
                   <OrderSectionSummary
                     text={summaryText(
                       orderSectionTotals(
                         sectionLines.map((row) => {
-                          const quantity = parsePositiveInt(row.quantityInput);
-                          const line = quantity === null ? undefined : lineByKey.get(`${row.productId}:${quantity}`);
+                          const line = previewLineOf(row, parsePositiveInt(row.quantityInput));
                           const priced = line !== undefined && !line.unavailable;
                           return {
                             net: priced ? line.lineTotal : null,
@@ -1148,10 +1160,7 @@ export function OrderCreatePage(): ReactNode {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={(): void => {
-                        setAddTarget(section.key);
-                        setBrowserOpen(true);
-                      }}
+                      onClick={(): void => openBrowser(section.key)}
                     >
                       {tGroups('lineGroups.addProduct')}
                     </Button>
@@ -1159,22 +1168,36 @@ export function OrderCreatePage(): ReactNode {
                 }
                 renderLine={(row, slots): ReactNode => {
                   const quantity = parsePositiveInt(row.quantityInput);
-                  const line = quantity === null ? undefined : lineByKey.get(`${row.productId}:${quantity}`);
-                  const rowId = `${itemsId}-${row.productId}`;
+                  const line = previewLineOf(row, quantity);
+                  const rowId = `${itemsId}-${row.key}`;
                   const reason =
                     quantity === null
                       ? t('orderCreate.line.quantityInvalid')
                       : line?.unavailable
                         ? translateReason(unavailableReason(messageByProduct.get(row.productId)))
-                        : conflictProducts.has(row.productId)
-                          ? tGroups('lineGroups.conflict')
-                          : null;
+                        : null;
+                  // Feature 159 (research N-33) — part of the line to a new line.
+                  const splitButton =
+                    quantity !== null && canSplitLine(quantity) ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        aria-label={splitLabels.action({ name: row.name })}
+                        title={splitLabels.action({ name: row.name })}
+                        disabled={busy}
+                        onClick={(): void => setSplitting(row.key)}
+                      >
+                        <Split aria-hidden="true" />
+                      </Button>
+                    ) : null;
                   const removeButton = (
                     <Button
                       variant="ghost"
                       size="sm"
                       aria-labelledby={`${rowId}-remove ${rowId}-name`}
-                      onClick={(): void => removeLine(row.productId)}
+                      onClick={(): void => removeLine(row.key)}
                     >
                       <Trash2 aria-hidden="true" />
                       <span id={`${rowId}-remove`} className="sr-only">
@@ -1199,7 +1222,7 @@ export function OrderCreatePage(): ReactNode {
                           aria-invalid={quantity === null || undefined}
                           aria-describedby={reason !== null ? `${rowId}-reason` : undefined}
                           value={row.quantityInput}
-                          onChange={(e): void => setQuantity(row.productId, e.target.value)}
+                          onChange={(e): void => setQuantity(row.key, e.target.value)}
                         />
                       </TableCell>
                       {reason !== null ? (
@@ -1219,12 +1242,13 @@ export function OrderCreatePage(): ReactNode {
                         </>
                       )}
                       <TableCell>
-                        {slots.handle === null && slots.moveMenu === null ? (
+                        {slots.handle === null && slots.moveMenu === null && splitButton === null ? (
                           removeButton
                         ) : (
                           <div className="flex items-center gap-1">
                             {slots.handle}
                             {slots.moveMenu}
+                            {splitButton}
                             {removeButton}
                           </div>
                         )}
@@ -1234,6 +1258,38 @@ export function OrderCreatePage(): ReactNode {
                 }}
               />
             )}
+            {splitRow ? (
+              <SplitLineDialog
+                lineName={splitRow.name}
+                quantity={Number(splitRow.quantityInput)}
+                targets={[
+                  ...groups.map((group) => ({ key: group.key, name: group.name.trim() || groupLabels.groupName })),
+                  { key: null, name: groupLabels.ungrouped },
+                ]}
+                defaultTargetKey={
+                  splitRow.groupKey !== null && groups.some((group) => group.key === splitRow.groupKey)
+                    ? splitRow.groupKey
+                    : null
+                }
+                labels={splitLabels}
+                onConfirm={(split): void => {
+                  setItems((prev) => [
+                    ...splitLineInto(prev, splitRow.key, split, {
+                      quantityOf: (row) => Number(row.quantityInput),
+                      setQuantity: (row, quantity) => ({ ...row, quantityInput: String(quantity) }),
+                      make: (source, quantity, groupKey) => ({
+                        ...source,
+                        key: newLineKey(),
+                        groupKey,
+                        quantityInput: String(quantity),
+                      }),
+                    }),
+                  ]);
+                  setSplitting(null);
+                }}
+                onClose={(): void => setSplitting(null)}
+              />
+            ) : null}
           </CardContent>
         </Card>
       ) : null}

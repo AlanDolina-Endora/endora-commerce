@@ -12,11 +12,19 @@ import {
   History,
   PencilLine,
   Send,
+  Split,
   XCircle,
 } from 'lucide-react';
 import { apiClient, ApiError, cn, formatDateTime, readReturnTo, useModulePresence } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Badge, Button, Card, CardContent, Input, Label, PageHeader, Section, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea } from '@endora-commerce/admin-kit/ui';
-import { CustomFieldValuesPanel, LineGroupsEditor, ProductPicker } from '@endora-commerce/admin-kit/components';
+import {
+  CustomFieldValuesPanel,
+  LineGroupsEditor,
+  ProductPicker,
+  SplitLineDialog,
+  canSplitLine,
+  splitLineInto,
+} from '@endora-commerce/admin-kit/components';
 import { arrangeLineGroups, type LineGroup } from '@endora-commerce/contracts';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { AdminZone } from '@endora-commerce/admin-kit/zones';
@@ -35,7 +43,13 @@ import {
   type ReferenceView,
 } from '../reference-view.js';
 import { RfqHistory } from './RfqHistory.js';
-import { SectionSummary, sectionTotals, useQuoteLineGroupLabels, useSectionSummaryText } from '../line-groups.js';
+import {
+  SectionSummary,
+  sectionTotals,
+  useQuoteLineGroupLabels,
+  useQuoteSplitLineLabels,
+  useSectionSummaryText,
+} from '../line-groups.js';
 import { QuoteRequestPdfDialog, type QuoteRequestPdfMode } from '../components/QuoteRequestPdfDialog.js';
 
 /**
@@ -956,6 +970,13 @@ interface ModifyLineDraft {
    * the operator switches the line to another product.
    */
   id?: string | undefined;
+  /**
+   * Feature 159 (research N-33) — the stored line this new line was split off
+   * (*Split line*): sent as `splitFromId`, so the server copies that line's
+   * packaging unit, proposal, note and reference; the screen reads its name,
+   * proposal and reference from it too. Dropped with a product switch.
+   */
+  splitFromId?: string | undefined;
   productId: string;
   variantId: string | null;
   lineNote: string | null;
@@ -989,9 +1010,12 @@ function ModifyCard({
   const t = useTranslation('core');
   const tGroups = useTranslation('quote_requests');
   const groupLabels = useQuoteLineGroupLabels();
+  const splitLabels = useQuoteSplitLineLabels();
   const summaryText = useSectionSummaryText();
   const format = useRfqNumberFormat();
   const [headerNote, setHeaderNote] = useState(rfq.headerNote ?? '');
+  // Feature 159 (research N-33) — the line whose *Split line* dialog is open.
+  const [splitting, setSplitting] = useState<string | null>(null);
   // Feature 159 — the grouping draft. A stored group's key is its id (a valid
   // request key), so a saved group keeps its identity across a rename; a new
   // group gets a fresh key and no id. Empty groups are kept (D2).
@@ -1101,6 +1125,8 @@ function ModifyCard({
           // so the revision keeps them (FR-034). `variantId` is not nullable in
           // the contract: a line without a variant omits the key.
           ...(l.id ? { id: l.id, lineNote: l.lineNote } : {}),
+          // A line split off a stored one: the server copies what it carries.
+          ...(!l.id && l.splitFromId ? { splitFromId: l.splitFromId } : {}),
           productId: l.productId.trim(),
           ...(l.variantId ? { variantId: l.variantId } : {}),
           quantity: Number(l.quantity),
@@ -1180,9 +1206,44 @@ function ModifyCard({
   const originalById = new Map(rfq.items.map((it) => [it.id, it]));
   const currency = rfq.items[0]?.lineCurrency ?? 'PLN';
 
+  /** A line's name: its stored product name, else its position (review fix N7). */
+  const lineName = (l: ModifyLineDraft): string => {
+    const storedId = l.id ?? l.splitFromId;
+    const stored = storedId ? originalById.get(storedId) : undefined;
+    return (stored && stored.productId === l.productId ? stored.productName : undefined) ??
+      t('rfq.detail.modify.lineGroup', { number: lines.indexOf(l) + 1 });
+  };
+
+  // Feature 159 (research N-33) — the open split, and where its new line may go.
+  const splitLine = splitting !== null ? lines.find((l) => l.key === splitting) : undefined;
+  const knownGroupKeys = new Set(groups.map((group) => group.key));
+  const confirmSplit = (split: { quantity: number; targetKey: string | null }): void => {
+    if (!splitLine) return;
+    setLines((prev) => [
+      ...splitLineInto(prev, splitLine.key, split, {
+        quantityOf: (l) => Number(l.quantity),
+        setQuantity: (l, quantity) => ({ ...l, quantity: String(quantity) }),
+        make: (source, quantity, groupKey) => ({
+          key: newKey('line-'),
+          groupKey,
+          splitFromId: source.id ?? source.splitFromId,
+          productId: source.productId,
+          variantId: source.variantId,
+          lineNote: source.lineNote,
+          quantity: String(quantity),
+          agreedUnitPrice: source.agreedUnitPrice,
+          currentPrice: source.currentPrice,
+        }),
+      }),
+    ]);
+    setSplitting(null);
+  };
+
   // One line's derived figures, shared by its row and its section's summary.
   const modifyLineView = (l: ModifyLineDraft) => {
-    const stored = l.id ? originalById.get(l.id) : undefined;
+    // A split-off line reads its proposal and reference from the line it came from.
+    const storedId = l.id ?? l.splitFromId;
+    const stored = storedId ? originalById.get(storedId) : undefined;
     const orig = stored && stored.productId === l.productId ? stored : undefined;
     const desired = orig ? proposalOf(orig) : null;
     const reference: ReferenceView = orig
@@ -1303,10 +1364,7 @@ function ModifyCard({
             disabled={busy}
             createGroupKey={(): string => newKey('group-')}
             labels={groupLabels}
-            getLineLabel={(l): string =>
-              (l.id ? originalById.get(l.id)?.productName : undefined) ??
-              t('rfq.detail.modify.lineGroup', { number: lines.indexOf(l) + 1 })
-            }
+            getLineLabel={(l): string => lineName(l)}
             onChange={(next): void => {
               const ids = new Map(groups.map((group) => [group.key, group.id]));
               setGroups(
@@ -1349,7 +1407,7 @@ function ModifyCard({
                   role="group"
                   // A new or switched line has no stored name yet; it is still a
                   // named group, by its position (review fix N7).
-                  aria-label={orig?.productName ?? t('rfq.detail.modify.lineGroup', { number: i + 1 })}
+                  aria-label={lineName(l)}
                   // Top-aligned, every cell at least one control tall (h-9) and centred in it: the
                   // minimum badge hangs under the quantity input without moving any cell (U4).
                   className={cn('grid grid-cols-1 items-start gap-3', gridCols)}
@@ -1364,6 +1422,7 @@ function ModifyCard({
                       // and variant so the server treats it as a new line.
                       updateLine(l.key, {
                         id: undefined,
+                        splitFromId: undefined,
                         productId: v ?? '',
                         variantId: null,
                         agreedUnitPrice: '',
@@ -1416,6 +1475,20 @@ function ModifyCard({
                   <div className="flex items-center gap-1 md:mt-0.5">
                     {slots.handle}
                     {slots.moveMenu}
+                    {l.productId && canSplitLine(qtyNum) ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        aria-label={splitLabels.action({ name: lineName(l) })}
+                        title={splitLabels.action({ name: lineName(l) })}
+                        disabled={busy}
+                        onClick={(): void => setSplitting(l.key)}
+                      >
+                        <Split aria-hidden="true" />
+                      </Button>
+                    ) : null}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1429,6 +1502,22 @@ function ModifyCard({
             }}
           />
         </div>
+        {splitLine ? (
+          <SplitLineDialog
+            lineName={lineName(splitLine)}
+            quantity={Number(splitLine.quantity)}
+            targets={[
+              ...groups.map((group) => ({ key: group.key, name: group.name.trim() || groupLabels.groupName })),
+              { key: null, name: groupLabels.ungrouped },
+            ]}
+            defaultTargetKey={
+              splitLine.groupKey !== null && knownGroupKeys.has(splitLine.groupKey) ? splitLine.groupKey : null
+            }
+            labels={splitLabels}
+            onConfirm={confirmSplit}
+            onClose={(): void => setSplitting(null)}
+          />
+        ) : null}
         <div className="flex gap-2">
           <Button
             variant="outline"

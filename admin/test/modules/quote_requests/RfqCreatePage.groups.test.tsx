@@ -91,6 +91,7 @@ const BUNDLE = {
     'rfqCreate.submit',
     'rfqCreate.items.quickSearch',
     'rfqCreate.field.agreedUnitPrice',
+    'rfqCreate.field.quantity',
   ]),
   quote_requests: QR_EN,
 };
@@ -176,6 +177,45 @@ describe('RfqCreatePage — groups (T032)', () => {
     expect(body.items).toEqual([
       { productId: 'prod-2', quantity: 1, agreedUnitPrice: 10, groupKey: body.groups[0]!.key },
       { productId: 'prod-3', quantity: 1, agreedUnitPrice: 10, groupKey: body.groups[0]!.key },
+      { productId: 'prod-1', quantity: 1, agreedUnitPrice: 10, groupKey: null },
+    ]);
+  });
+
+  it('places one product on two lines in two groups, each priced and sent on its own (N-31)', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText('customerAccountId')).toHaveValue('Jan Kowalski'));
+    await quickAdd('Widget');
+    // The same product again is a second line — the quick search no longer refuses it.
+    const quick = screen.getByRole('combobox', { name: 'rfqCreate.items.quickSearch' });
+    await userEvent.clear(quick);
+    await userEvent.type(quick, 'Wid');
+    const option = await screen.findByRole('option', { name: /Widget/ });
+    expect(option).not.toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(option);
+    await waitFor(() =>
+      expect(screen.getAllByRole('spinbutton', { name: 'rfqCreate.field.agreedUnitPrice Widget' })).toHaveLength(2),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add group' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Group name' }), 'Hall A');
+    await userEvent.click(screen.getAllByRole('button', { name: 'Move Widget to group' })[1]!);
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Hall A' }));
+    const hallQuantity = within(rowgroup('Hall A')).getByRole('textbox', { name: 'rfqCreate.field.quantity Widget' });
+    await userEvent.clear(hallQuantity);
+    await userEvent.type(hallQuantity, '5');
+    // Each line asks its own price, at its own quantity.
+    await waitFor(() =>
+      expect(getSpy.mock.calls.some(([url]) => String(url).includes('/resolved-price') && String(url).includes('quantity=5'))).toBe(true),
+    );
+    expect(within(rowgroup('Ungrouped')).getByRole('textbox', { name: 'rfqCreate.field.quantity Widget' })).toHaveValue('1');
+
+    const submit = screen.getByText('rfqCreate.submit');
+    await waitFor(() => expect(submit).not.toBeDisabled());
+    await userEvent.click(submit);
+    await waitFor(() => expect(postSpy).toHaveBeenCalledTimes(1));
+    const [, body] = postSpy.mock.calls[0] as [string, { groups: Array<{ key: string }>; items: Array<Record<string, unknown>> }];
+    expect(body.items).toEqual([
+      { productId: 'prod-1', quantity: 5, agreedUnitPrice: 10, groupKey: body.groups[0]!.key },
       { productId: 'prod-1', quantity: 1, agreedUnitPrice: 10, groupKey: null },
     ]);
   });

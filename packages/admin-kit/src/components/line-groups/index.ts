@@ -7,3 +7,5 @@ export type {
   LineGroupsEditorProps,
   LineGroupsEditorSection,
 } from './LineGroupsEditor.js';
+export { SplitLineDialog, canSplitLine, splitLineInto } from './SplitLineDialog.js';
+export type { SplitLineDialogLabels, SplitLineDialogProps, SplitLineDialogTarget } from './SplitLineDialog.js';

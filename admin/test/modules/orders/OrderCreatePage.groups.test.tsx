@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { ApiError, formatMoney } from '@endora-commerce/admin-kit/lib';
+import { formatMoney } from '@endora-commerce/admin-kit/lib';
 import { renderWithI18n, passthroughBundle } from '../../helpers/render-with-i18n';
 import { adminSession, modulePresence, withSession } from '../../helpers/render-with-session';
 import { expectNoAxeViolations } from '../../helpers/axe';
@@ -15,8 +15,9 @@ import { expectNoAxeViolations } from '../../helpers/axe';
  * (`specs/159-quote-request-item-groups/contracts/ui.md` §2; FR-060 … FR-062):
  * the kit's editor around the items table, each group's summary from the
  * preview's per-line amounts, *Create* sending `groups` and each line's
- * `groupKey` in display order, and the server's `group_conflict` shown on the
- * line it names. Without a group the request is the one it always was.
+ * `groupKey` in display order. One product may be on several lines, in
+ * different groups (research N-31), and *Split line* makes one (N-33). Without
+ * a group the request is the one it always was.
  */
 
 const getSpy = vi.fn();
@@ -239,38 +240,70 @@ describe('OrderCreatePage — line groups (T062)', () => {
     expect(screen.getByText('orderCreate.submit')).toBeDisabled();
   });
 
-  it('shows the server’s group_conflict on the line it names', async () => {
-    const preview = postSpy.getMockImplementation()!;
-    postSpy.mockImplementation((path: string, body: never) => {
-      if (path === '/api/v1/admin/orders') {
-        return Promise.reject(
-          new ApiError(422, {
-            error: {
-              code: 'VALIDATION_FAILED',
-              message: 'A product can be in one group only: "Widget" is placed in two groups.',
-              requestId: 'r-1',
-              details: [{ path: 'items.1.groupKey', code: 'group_conflict', issue: '"Widget" is already on a line of another group.' }],
-            },
-          } as never),
-        );
-      }
-      return preview(path, body) as Promise<unknown>;
-    });
+  it('places one product on two lines in two groups — each its own quantity, price and summary (N-31)', async () => {
     renderPage();
-    await groupGadgetInHallA();
+    await fillParties();
+    await quickAdd('Widget');
+    await quickAdd('Widget');
+    await waitFor(() => expect(screen.getAllByText('Widget')).toHaveLength(2));
+    await userEvent.click(screen.getByRole('button', { name: 'Add group' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Group name' }), 'Hall A');
+    await userEvent.click(screen.getAllByRole('button', { name: 'Move Widget to group' })[1]!);
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Hall A' }));
+    const hallQuantity = within(rowgroup('Hall A')).getByRole('textbox', { name: 'orderCreate.field.quantity Widget' });
+    await userEvent.clear(hallQuantity);
+    await userEvent.type(hallQuantity, '3');
+    await waitFor(() => expect(rowgroup('Hall A')).toHaveTextContent(`1 item · Net ${money(30)}`));
+    expect(rowgroup('Ungrouped')).toHaveTextContent(`1 item · Net ${money(10)}`);
+
     const submit = screen.getByText('orderCreate.submit');
     await waitFor(() => expect(submit).not.toBeDisabled());
     await userEvent.click(submit);
+    const create = await waitFor(() => {
+      const call = postSpy.mock.calls.find(([path]) => path === '/api/v1/admin/orders');
+      expect(call).toBeDefined();
+      return call!;
+    });
+    const body = create[1] as { groups: Array<{ key: string }>; items: unknown[] };
+    expect(body.items).toEqual([
+      { productId: 'prod-1', quantity: 3, groupKey: body.groups[0]!.key },
+      { productId: 'prod-1', quantity: 1, groupKey: null },
+    ]);
+  });
 
-    // items.1 is Widget — the second line in display order.
-    const widgetRow = (await within(rowgroup('Ungrouped')).findByText('Widget')).closest('tr')!;
-    await waitFor(() =>
-      expect(widgetRow).toHaveTextContent(ORDERS_EN['lineGroups.conflict']!),
-    );
-    expect(within(rowgroup('Hall A')).getByText('Gadget').closest('tr')!).not.toHaveTextContent(
-      ORDERS_EN['lineGroups.conflict']!,
-    );
-    expect(navigateSpy).not.toHaveBeenCalled();
+  it('splits a line into a group with Split line (N-33)', async () => {
+    renderPage();
+    await fillParties();
+    await quickAdd('Widget');
+    const quantity = screen.getByRole('textbox', { name: 'orderCreate.field.quantity Widget' });
+    await userEvent.clear(quantity);
+    await userEvent.type(quantity, '5');
+    await userEvent.click(screen.getByRole('button', { name: 'Add group' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Group name' }), 'Hall A');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Split line: Widget' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Split line: Widget' });
+    const moved = within(dialog).getByLabelText(ORDERS_EN['lineGroups.split.quantity']!);
+    await userEvent.clear(moved);
+    await userEvent.type(moved, '2');
+    await userEvent.selectOptions(within(dialog).getByLabelText(ORDERS_EN['lineGroups.split.target']!), 'Hall A');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Split line' }));
+
+    expect(within(rowgroup('Hall A')).getByRole('textbox', { name: 'orderCreate.field.quantity Widget' })).toHaveValue('2');
+    expect(within(rowgroup('Ungrouped')).getByRole('textbox', { name: 'orderCreate.field.quantity Widget' })).toHaveValue('3');
+    const submit = screen.getByText('orderCreate.submit');
+    await waitFor(() => expect(submit).not.toBeDisabled());
+    await userEvent.click(submit);
+    const create = await waitFor(() => {
+      const call = postSpy.mock.calls.find(([path]) => path === '/api/v1/admin/orders');
+      expect(call).toBeDefined();
+      return call!;
+    });
+    const body = create[1] as { groups: Array<{ key: string }>; items: unknown[] };
+    expect(body.items).toEqual([
+      { productId: 'prod-1', quantity: 2, groupKey: body.groups[0]!.key },
+      { productId: 'prod-1', quantity: 3, groupKey: null },
+    ]);
   });
 
   it('without a group sends the request it always sent', async () => {

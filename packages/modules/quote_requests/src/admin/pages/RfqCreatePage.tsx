@@ -54,15 +54,16 @@ interface AdminCustomerListItem {
 }
 
 /**
- * One quote-request line (feature 145, FR-030). Keyed by `productId`: a product
- * is a line at most once, which is what the picker's and the quick search's
- * *already added* state relies on. `quantityInput` is kept as typed so an
+ * One quote-request line (feature 145, FR-030). Keyed by its own `key`: one
+ * product may be on several lines — in different groups, or twice in one
+ * (feature 159, research N-31) — so the picker and the quick search offer a
+ * product already a line again. `quantityInput` is kept as typed so an
  * invalid entry stays on screen, marked. `priceSource` says where the agreed
  * price came from: `manual` once the operator has typed in the field, after
  * which no prefill ever overwrites it (FR-033).
  */
 interface LineRow {
-  /** Feature 159 — the line's identity in the grouping editor: its product. */
+  /** The line's identity — the grouping editor's, the price prefill's and the row's DOM ids. */
   key: string;
   /** Feature 159 — the group (a group draft's key) the line is in; `null` = ungrouped. */
   groupKey: string | null;
@@ -211,6 +212,9 @@ const RFQ_PRODUCT_RULES: ProductBrowserRules = {
   blockedTypes: ['grouped', 'bundle'],
 };
 
+/** Feature 159 (research N-31) — nothing is "already added": a product may be a line twice. */
+const NO_IDS: readonly string[] = [];
+
 /** An agreed unit price of 0 or more, or `null` when the field holds none. */
 function parsePrice(input: string): number | null {
   const trimmed = input.trim();
@@ -219,9 +223,9 @@ function parsePrice(input: string): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
-function productLine(item: ProductBrowserItem, groupKey: string | null): LineRow {
+function productLine(item: ProductBrowserItem, groupKey: string | null, key: string): LineRow {
   return {
-    key: item.id,
+    key,
     groupKey,
     productId: item.id,
     sku: item.sku,
@@ -283,12 +287,12 @@ export function RfqCreatePage(): ReactNode {
   // meantime — the operator may type one while its question is in flight.
   const queueRef = useRef<PricePrefillQueue | null>(null);
   const [resolving, setResolving] = useState<ReadonlySet<string>>(() => new Set());
-  const markResolving = useCallback((productId: string, on: boolean): void => {
+  const markResolving = useCallback((key: string, on: boolean): void => {
     setResolving((prev) => {
-      if (prev.has(productId) === on) return prev;
+      if (prev.has(key) === on) return prev;
       const next = new Set(prev);
-      if (on) next.add(productId);
-      else next.delete(productId);
+      if (on) next.add(key);
+      else next.delete(key);
       return next;
     });
   }, []);
@@ -306,11 +310,11 @@ export function RfqCreatePage(): ReactNode {
         );
         return res.data.resolvedPrice?.amount ?? null;
       },
-      onResult: (productId, amount) => {
-        markResolving(productId, false);
+      onResult: (key, amount) => {
+        markResolving(key, false);
         setLines((prev) =>
           prev.map((row) =>
-            row.productId === productId && row.priceSource !== 'manual'
+            row.key === key && row.priceSource !== 'manual'
               ? { ...row, agreedUnitPrice: amount ?? '', priceSource: amount === null ? 'none' : 'resolved' }
               : row,
           ),
@@ -326,22 +330,23 @@ export function RfqCreatePage(): ReactNode {
 
   /** Ask for a line's price, when it may be prefilled at all; otherwise drop any question it had. */
   const prefill = useCallback(
-    (row: Pick<LineRow, 'productId' | 'quantityInput' | 'priceSource'>, cust: AdminCustomerListItem | null): void => {
+    (row: Pick<LineRow, 'key' | 'productId' | 'quantityInput' | 'priceSource'>, cust: AdminCustomerListItem | null): void => {
       const queue = queueRef.current;
       if (!queue) return;
       const quantity = parsePositiveInt(row.quantityInput);
       if (row.priceSource === 'manual' || quantity === null || !cust?.organizationId) {
-        queue.forget(row.productId);
-        markResolving(row.productId, false);
+        queue.forget(row.key);
+        markResolving(row.key, false);
         return;
       }
       queue.request({
+        key: row.key,
         productId: row.productId,
         quantity,
         customerId: cust.id,
         organizationId: cust.organizationId,
       });
-      markResolving(row.productId, true);
+      markResolving(row.key, true);
     },
     [markResolving],
   );
@@ -370,21 +375,18 @@ export function RfqCreatePage(): ReactNode {
   }, [customer, prefill]);
 
   /**
-   * Append products as lines, in the order given, skipping any already a line.
+   * Append products as lines, in the order given — a product already a line
+   * included: it becomes a line of its own (feature 159, research N-31).
    *
-   * De-duplicated once, against `linesRef` — which this advances at once, so a
-   * second add landing before the next render (two confirms in one tick) sees the
-   * first one's lines — and exactly the rows appended are prefilled. The prefill
-   * stays out of the `setLines` updater, which StrictMode runs twice.
+   * `linesRef` is advanced at once, so a second add landing before the next
+   * render sees the first one's lines, and exactly the rows appended are
+   * prefilled. The prefill stays out of the `setLines` updater, which StrictMode
+   * runs twice. A browser confirm is applied once (`browserConfirmed`), so two
+   * confirms landing in one tick do not add their products twice.
    */
+  const lineCounter = useRef(0);
   const appendLines = (products: readonly ProductBrowserItem[], groupKey: string | null = null): void => {
-    const present = new Set(linesRef.current.map((row) => row.productId));
-    const added: LineRow[] = [];
-    for (const p of products) {
-      if (present.has(p.id)) continue;
-      present.add(p.id);
-      added.push(productLine(p, groupKey));
-    }
+    const added = products.map((p) => productLine(p, groupKey, `line-${(lineCounter.current += 1)}`));
     if (added.length === 0) return;
     linesRef.current = [...linesRef.current, ...added];
     setLines((prev) => [...prev, ...added]);
@@ -395,12 +397,12 @@ export function RfqCreatePage(): ReactNode {
   // answers nothing, so it is cleared rather than left on screen as current
   // (FR-034 then marks the line). A hand-typed price is the operator's and stays.
   // A valid quantity asks again through `prefill`.
-  const setQuantity = (productId: string, quantityInput: string): void => {
-    const row = lines.find((r) => r.productId === productId);
+  const setQuantity = (key: string, quantityInput: string): void => {
+    const row = lines.find((r) => r.key === key);
     const invalid = parsePositiveInt(quantityInput) === null;
     setLines((prev) =>
       prev.map((r) => {
-        if (r.productId !== productId) return r;
+        if (r.key !== key) return r;
         return invalid && r.priceSource === 'resolved'
           ? { ...r, quantityInput, agreedUnitPrice: '', priceSource: 'none' }
           : { ...r, quantityInput };
@@ -410,20 +412,26 @@ export function RfqCreatePage(): ReactNode {
   };
 
   // Typing a price makes it the operator's: it is never prefilled again (FR-033).
-  const setPrice = (productId: string, agreedUnitPrice: string): void => {
+  const setPrice = (key: string, agreedUnitPrice: string): void => {
     setLines((prev) =>
-      prev.map((r) => (r.productId === productId ? { ...r, agreedUnitPrice, priceSource: 'manual' } : r)),
+      prev.map((r) => (r.key === key ? { ...r, agreedUnitPrice, priceSource: 'manual' } : r)),
     );
-    queueRef.current?.forget(productId);
-    markResolving(productId, false);
+    queueRef.current?.forget(key);
+    markResolving(key, false);
   };
 
-  const removeLine = (productId: string): void => {
-    setLines((prev) => prev.filter((r) => r.productId !== productId));
-    queueRef.current?.forget(productId);
-    markResolving(productId, false);
+  const removeLine = (key: string): void => {
+    setLines((prev) => prev.filter((r) => r.key !== key));
+    queueRef.current?.forget(key);
+    markResolving(key, false);
   };
-  const lineIds = lines.map((row) => row.productId);
+  // One confirm per opening of the browser (see `appendLines`).
+  const browserConfirmed = useRef(false);
+  const openBrowser = (target: string | null): void => {
+    browserConfirmed.current = false;
+    setAddTarget(target);
+    setBrowserOpen(true);
+  };
 
   // Every line is sent; a line with an invalid quantity or no price blocks
   // submit rather than being dropped from the request (FR-034).
@@ -528,7 +536,7 @@ export function RfqCreatePage(): ReactNode {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-end gap-3">
-            <ProductBrowserTrigger onOpen={(): void => setBrowserOpen(true)} />
+            <ProductBrowserTrigger onOpen={(): void => openBrowser(null)} />
             <div className="min-w-64 flex-1 space-y-1">
               <Label htmlFor={`${itemsId}-quick-search`}>{t('rfqCreate.items.quickSearch')}</Label>
               <ProductPicker
@@ -539,7 +547,6 @@ export function RfqCreatePage(): ReactNode {
                 onChange={(): void => {}}
                 onPickProduct={(item): void => appendLines([item])}
                 rules={RFQ_PRODUCT_RULES}
-                alreadyAddedIds={lineIds}
                 includeArchived
                 placeholder={t('rfqCreate.placeholder.product')}
               />
@@ -549,8 +556,10 @@ export function RfqCreatePage(): ReactNode {
             open={browserOpen}
             title={t('rfqCreate.items.browse')}
             rules={RFQ_PRODUCT_RULES}
-            alreadyAddedIds={lineIds}
+            alreadyAddedIds={NO_IDS}
             onConfirm={(picked): void => {
+              if (browserConfirmed.current) return;
+              browserConfirmed.current = true;
               appendLines(picked, addTarget);
               setBrowserOpen(false);
               setAddTarget(null);
@@ -615,10 +624,7 @@ export function RfqCreatePage(): ReactNode {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={(): void => {
-                      setAddTarget(section.key);
-                      setBrowserOpen(true);
-                    }}
+                    onClick={(): void => openBrowser(section.key)}
                   >
                     {tGroups('lineGroups.addProduct')}
                   </Button>
@@ -626,8 +632,8 @@ export function RfqCreatePage(): ReactNode {
               }
               renderLine={(row, slots): ReactNode => {
                   const { quantity, price } = parsedByKey.get(row.key)!;
-                  const rowId = `${itemsId}-${row.productId}`;
-                  const isResolving = resolving.has(row.productId);
+                  const rowId = `${itemsId}-${row.key}`;
+                  const isResolving = resolving.has(row.key);
                   const priceMissing = price === null && !isResolving;
                   return (
                     <>
@@ -646,7 +652,7 @@ export function RfqCreatePage(): ReactNode {
                           aria-invalid={quantity === null || undefined}
                           aria-describedby={quantity === null ? `${rowId}-qty-reason` : undefined}
                           value={row.quantityInput}
-                          onChange={(e): void => setQuantity(row.productId, e.target.value)}
+                          onChange={(e): void => setQuantity(row.key, e.target.value)}
                         />
                         {quantity === null ? (
                           <p id={`${rowId}-qty-reason`} className="mt-1 text-xs text-destructive">
@@ -665,7 +671,7 @@ export function RfqCreatePage(): ReactNode {
                           aria-describedby={priceMissing ? `${rowId}-price-reason` : undefined}
                           aria-busy={isResolving || undefined}
                           value={row.agreedUnitPrice}
-                          onChange={(e): void => setPrice(row.productId, e.target.value)}
+                          onChange={(e): void => setPrice(row.key, e.target.value)}
                         />
                         {isResolving ? (
                           <p className="mt-1 text-xs text-muted-foreground">{t('rfqCreate.loading')}</p>
@@ -683,7 +689,7 @@ export function RfqCreatePage(): ReactNode {
                           variant="ghost"
                           size="sm"
                           aria-labelledby={`${rowId}-remove ${rowId}-name`}
-                          onClick={(): void => removeLine(row.productId)}
+                          onClick={(): void => removeLine(row.key)}
                         >
                           <Trash2 aria-hidden="true" />
                           <span id={`${rowId}-remove`} className="sr-only">

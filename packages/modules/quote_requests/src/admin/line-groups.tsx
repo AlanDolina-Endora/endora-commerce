@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import type { LineGroupsEditorLabels } from '@endora-commerce/admin-kit/components';
+import type { LineGroupsEditorLabels, SplitLineDialogLabels } from '@endora-commerce/admin-kit/components';
 import { useTranslation, useTranslationContext } from '@endora-commerce/admin-kit/i18n';
 import { useRfqNumberFormat } from './number-format.js';
 
@@ -106,4 +106,25 @@ export function useSectionSummaryText(): (totals: SectionTotals, currency: strin
 
 export function SectionSummary(props: { text: string }): ReactNode {
   return <p className="text-xs tabular-nums text-muted-foreground">{props.text}</p>;
+}
+
+/**
+ * The *Split line* labels (research N-33), in the admin language, and the
+ * accessible name of the button that opens it.
+ */
+export function useQuoteSplitLineLabels(): SplitLineDialogLabels & { action: (context: { name: string }) => string } {
+  const t = useTranslation('quote_requests');
+  return useMemo(() => {
+    const g = (key: string, params?: Record<string, string | number>): string => t(`lineGroups.split.${key}`, params);
+    return {
+      action: ({ name }) => g('action', { name }),
+      title: ({ name }) => g('title', { name }),
+      quantity: g('quantity'),
+      quantityHelp: (c) => g('quantityHelp', { ...c }),
+      quantityInvalid: (c) => g('quantityInvalid', { ...c }),
+      target: g('target'),
+      confirm: g('confirm'),
+      cancel: g('cancel'),
+    };
+  }, [t]);
 }
