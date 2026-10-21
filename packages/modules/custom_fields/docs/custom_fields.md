@@ -221,8 +221,8 @@ second one. The type of a field cannot be changed on this screen, so there is no
 Going ahead keeps the **Carry value to …** option as it was. The table's **Carries to** column
 lists the record types each field carries to; a carry that no longer works is marked
 **Incompatible**, with the reason — the missing field, the two types, the missing options or the
-audience — beside it on a narrow screen and on hover otherwise. The mark clears as soon as the
-fields match again or the option is turned off.
+audience — written under the mark. The mark clears as soon as the fields match again or the option
+is turned off.
 
 ### A value that is not carried
 

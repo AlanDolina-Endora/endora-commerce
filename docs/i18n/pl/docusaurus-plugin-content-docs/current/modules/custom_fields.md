@@ -228,8 +228,8 @@ Typu pola nie można zmienić na tym ekranie, więc nie ma dla niego ostrzeżeni
 Kontynuowanie zostawia opcję **Przenoś wartość do: …** bez zmian. Kolumna **Przenosi do** w tabeli
 wymienia typy rekordów, do których pole przenosi wartość; przenoszenie, które przestało działać, jest
 oznaczone jako **Niezgodne**, z powodem — brakującym polem, dwoma typami, brakującymi opcjami albo
-widocznością — widocznym obok na wąskim ekranie, a w pozostałych przypadkach po najechaniu kursorem.
-Oznaczenie znika, gdy tylko pola znów do siebie pasują albo opcja zostanie wyłączona.
+widocznością — wypisanym pod oznaczeniem. Oznaczenie znika, gdy tylko pola znów do siebie pasują
+albo opcja zostanie wyłączona.
 
 ### Wartość, która nie została przeniesiona
 
