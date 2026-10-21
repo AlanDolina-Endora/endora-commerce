@@ -23,8 +23,9 @@ onChange: (next: { listFilter: boolean; carryTo: SupportedEntityType[] }) => voi
 
 One checkbox per `entityTypeInfo.carryTargets` entry, in that order, labelled
 `customFields.carry.toggle` ("Carry value to {entityType}", the type label translated), with help
-text `customFields.carry.help` ("When a {entityType} is created from this record, an empty field
-with the same key receives this value."). Owner ruling V2 (2026-10-21): in the editor dialog
+text `customFields.carry.help` ("When a record of type “{entityType}” is created from a record with
+this field, the new record's empty field with the same key receives this field's value." — owner
+ruling P4, 2026-10-21, adapted to name the checkbox's own type). Owner ruling V2 (2026-10-21): in the editor dialog
 (`layout="stacked"`) each checkbox is described by its own help line; in the narrow create-form row
 (`layout="row"`) the checkboxes carry no description of their own and one shared line,
 `customFields.carry.helpGroup`, describes the `role="group"` through `aria-describedby`. No toggle when `carryTargets` is empty (Category, Product,
