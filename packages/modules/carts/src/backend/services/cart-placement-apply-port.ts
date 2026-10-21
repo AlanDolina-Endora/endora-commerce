@@ -66,7 +66,10 @@ export class CartPlacementApplyService implements CartPlacementApplyPort {
       status: 'active',
     });
     if (!cart) return null;
-    const items = await em.find(CartItem, { cartId: cart.id });
+    // In the basket's own order — `CartReadService`'s. The order's lines are
+    // numbered in it, and a quote's or an administrator's grouping is laid over
+    // it (feature 159, research N-31); unordered, it was the heap's order.
+    const items = await em.find(CartItem, { cartId: cart.id }, { orderBy: { createdAt: 'asc', id: 'asc' } });
     return { cart: toCartRecord(cart), items: items.map(toCartItemRecord) };
   }
 

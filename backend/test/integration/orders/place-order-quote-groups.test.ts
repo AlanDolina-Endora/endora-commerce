@@ -21,7 +21,7 @@ interface OrderReply {
   id: string;
   sourceQuoteRequestId: string | null;
   itemGroups: Array<{ id: string; name: string; position: number }>;
-  items: Array<{ productId: string; groupId: string | null; position: number; unitPrice: string }>;
+  items: Array<{ productId: string; groupId: string | null; position: number; unitPrice: string; quantity: number }>;
 }
 
 /**
@@ -47,7 +47,7 @@ describe('159 — an order placed from a grouped quote keeps its groups', () => 
     customer: Record<string, string> = CUSTOMER,
     layout: {
       groups: Array<{ key: string; name: string }>;
-      items: Array<{ productId: string; groupKey: string | null; agreedUnitPrice: number }>;
+      items: Array<{ productId: string; groupKey: string | null; agreedUnitPrice: number; quantity?: number }>;
     } = {
       groups: [
         { key: 'a', name: 'Hall A' },
@@ -65,7 +65,9 @@ describe('159 — an order placed from a grouped quote keeps its groups', () => 
       method: 'POST',
       url: '/api/v1/quote-requests',
       cookies: customer,
-      payload: { items: layout.items.map(({ productId }) => ({ productId, quantity: 3, desiredUnitPrice: 20 })) },
+      payload: {
+        items: layout.items.map(({ productId, quantity }) => ({ productId, quantity: quantity ?? 3, desiredUnitPrice: 20 })),
+      },
     });
     expect(created.statusCode, created.body).toBe(201);
     const rfq = (created.json() as { data: { id: string; version: number } }).data;
@@ -76,7 +78,7 @@ describe('159 — an order placed from a grouped quote keeps its groups', () => 
       headers: { 'if-match': `"${rfq.version}"` },
       payload: {
         groups: layout.groups,
-        items: layout.items.map((item) => ({ ...item, quantity: 3 })),
+        items: layout.items.map((item) => ({ ...item, quantity: item.quantity ?? 3 })),
       },
     });
     expect(priced.statusCode, priced.body).toBe(200);
@@ -191,6 +193,45 @@ describe('159 — an order placed from a grouped quote keeps its groups', () => 
 
     // The operator reads the same arrangement.
     expect(shapeOf(await orderAs(placed.id, ADMIN, true))).toEqual(shapeOf(mine));
+  });
+
+  it('one product split over two groups at one price lands in the right groups, whatever the basket order (N-31)', async () => {
+    // Z's line first in the quote's own line order: quantity, not position, must decide.
+    const splitQuote = () =>
+      acceptedGroupedQuote(CUSTOMER, {
+        groups: [
+          { key: 'y', name: 'Group Y' },
+          { key: 'z', name: 'Group Z' },
+        ],
+        items: [
+          { productId: SEED_PRODUCT_102_ID, groupKey: 'z', agreedUnitPrice: 12, quantity: 2 },
+          { productId: SEED_PRODUCT_101_ID, groupKey: 'z', agreedUnitPrice: 11, quantity: 3 },
+          { productId: SEED_PRODUCT_101_ID, groupKey: 'y', agreedUnitPrice: 11, quantity: 5 },
+        ],
+      });
+    const expected = [
+      ['Group Y', SEED_PRODUCT_101_ID, 0],
+      ['Group Z', SEED_PRODUCT_102_ID, 0],
+      ['Group Z', SEED_PRODUCT_101_ID, 1],
+    ];
+
+    // As seeded: the basket reads back in the quote's display order.
+    await convertQuoteRequestToCart(h, await splitQuote());
+    const seeded = await orderAs((await place()).id, CUSTOMER);
+    expect(shapeOf(seeded)).toEqual(expected);
+    expect(seeded.items.map((item) => item.quantity)).toEqual([5, 2, 3]);
+
+    // Re-timed so the split lines read back swapped: the carry does not lean on the basket's order.
+    const second = await splitQuote();
+    await convertQuoteRequestToCart(h, second);
+    await sql(
+      `update "cart_items" set "created_at" = "created_at" - interval '1 hour'
+        where "quantity" = 3 and "cart_id" in (select "id" from "carts" where "source_quote_request_id" = ? and "status" = 'active')`,
+      [second],
+    );
+    const swapped = await orderAs((await place()).id, CUSTOMER);
+    expect(shapeOf(swapped)).toEqual(expected);
+    expect(swapped.items.map((item) => item.quantity)).toEqual([5, 2, 3]);
   });
 
   it('a product added to the basket after the conversion is ungrouped, after the quote’s lines (FR-051)', async () => {

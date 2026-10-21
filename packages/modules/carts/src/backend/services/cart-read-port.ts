@@ -113,9 +113,16 @@ export function createCartWritePort(
       // `null`.
       const agreed = Boolean(options?.sourceQuoteRequestId);
       const created: CartItem[] = [];
-      for (const line of lines) {
+      // One line per seed line, never merged, created a millisecond apart in
+      // seed order: the basket is read back by creation time, and lines sharing
+      // one would fall back to their random ids — an order placed from it would
+      // list them, and a quote's split product (feature 159, research N-31)
+      // would meet them, in no stable order.
+      const seedBase = Date.now();
+      for (const [index, line] of lines.entries()) {
         const item = em.create(CartItem, {
           cartId: cart.id,
+          createdAt: new Date(seedBase + index),
           productId: line.productId,
           ...(line.variantId ? { variantId: line.variantId } : {}),
           quantity: line.quantity,

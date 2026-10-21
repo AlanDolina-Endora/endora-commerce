@@ -23,6 +23,8 @@ export interface QuoteLineForCarry {
   readonly productId: string;
   readonly variantId: string | null;
   readonly agreedUnitPrice: string | null;
+  /** The quoted (agreed) quantity; absent on a structural stub of the port. */
+  readonly quantity?: number;
   /** Absent on a record from a port written before feature 159. */
   readonly position?: number;
   /** Absent as above; `null` = ungrouped. */
@@ -35,6 +37,8 @@ export interface OrderLineForCarry {
   readonly productId: string;
   readonly variantId: string | null;
   readonly unitPrice: string;
+  /** Absent: quantity takes no part in the matching. */
+  readonly quantity?: number;
 }
 
 export interface LaidOutGroup {
@@ -54,11 +58,6 @@ export interface OrderLineLayout {
 /** The contract's name for a carried layout. */
 export type CarriedGrouping = OrderLineLayout;
 
-/** `(productId, variantId)` as one map key — the basket merges lines of one product and variant. */
-export function orderLineGroupingKey(productId: string, variantId: string | null | undefined): string {
-  return `${productId}:${variantId ?? ''}`;
-}
-
 /**
  * The grouping an administrator's creation request carries into placement
  * (`placeOrder`'s `options.lineGrouping`; not on `OrderPlacementPort`).
@@ -66,8 +65,17 @@ export function orderLineGroupingKey(productId: string, variantId: string | null
 export interface OrderLineGroupingInput {
   /** In display order. */
   readonly groups: readonly { readonly key: string; readonly name: string }[];
-  /** {@link orderLineGroupingKey} → the request line's group key and its index in the request. */
-  readonly lines: ReadonlyMap<string, { readonly groupKey: string | null; readonly index: number }>;
+  /**
+   * Every request line, in request order. The admin creation seeds one basket
+   * line per request line, in this order, and never merges two of them
+   * (research N-31), so one product may sit on lines of several groups.
+   */
+  readonly lines: readonly {
+    readonly productId: string;
+    readonly variantId: string | null;
+    readonly quantity: number;
+    readonly groupKey: string | null;
+  }[];
 }
 
 /** No group; positions in basket order. */
@@ -123,12 +131,40 @@ function assemble(
 }
 
 /**
+ * Pair each order line, in basket order, with one candidate: pass by pass, every
+ * line's match under a pass claimed before any line tries the next, so a looser
+ * match never takes the candidate another line matches more exactly. Each
+ * candidate is claimed once. Answers order line key → candidate index.
+ */
+function claimInPasses<C>(
+  order: readonly OrderLineForCarry[],
+  candidates: readonly C[],
+  passes: ReadonlyArray<(candidate: C, line: OrderLineForCarry, candidateIndex: number, basketIndex: number) => boolean>,
+): Map<string, number> {
+  const claimed = new Set<number>();
+  const matchOf = new Map<string, number>();
+  for (const accept of passes) {
+    order.forEach((line, basketIndex) => {
+      if (matchOf.has(line.key)) return;
+      const index = candidates.findIndex((c, i) => !claimed.has(i) && accept(c, line, i, basketIndex));
+      if (index < 0) return;
+      claimed.add(index);
+      matchOf.set(line.key, index);
+    });
+  }
+  return matchOf;
+}
+
+/**
  * The quote's grouping, carried onto the order placed from it (FR-050–FR-051).
  *
  * Each order line, in basket order, claims a quote line: first by product,
- * variant and agreed unit price (every line's exact match is claimed before
- * any fallback, so a line whose price moved cannot take the quote line another
- * line matches exactly), then by product and variant alone. A matched line
+ * variant, agreed quantity and agreed unit price, then by product, variant and
+ * price, then by product, variant and quantity, then by product and variant
+ * alone — every line's closer match claimed before any looser one, so a line
+ * whose price or quantity moved cannot take the quote line another line
+ * matches exactly (research N-31: one product may sit on several quote lines,
+ * in different groups, at one price). A matched line
  * takes its quote line's group and its place in the quote's display order; an
  * unmatched line is ungrouped, after the matched ungrouped lines, in basket
  * order. Quote groups receiving no line are dropped.
@@ -144,21 +180,18 @@ export function carryQuoteGrouping(
 
   const sameItem = (q: QuoteLineForCarry, o: OrderLineForCarry) =>
     q.productId === o.productId && (q.variantId ?? null) === (o.variantId ?? null);
-  const claimed = new Set<number>();
-  const matchOf = new Map<string, number>();
-  const claim = (accept: (q: QuoteLineForCarry, o: OrderLineForCarry) => boolean) => {
-    for (const line of order) {
-      if (matchOf.has(line.key)) continue;
-      const index = quote.findIndex((q, i) => !claimed.has(i) && accept(q, line));
-      if (index < 0) continue;
-      claimed.add(index);
-      matchOf.set(line.key, index);
-    }
-  };
-  claim(
-    (q, o) => sameItem(q, o) && q.agreedUnitPrice != null && Number(q.agreedUnitPrice) === Number(o.unitPrice),
-  );
-  claim(sameItem);
+  const sameQuantity = (q: QuoteLineForCarry, o: OrderLineForCarry) =>
+    q.quantity !== undefined && o.quantity !== undefined && q.quantity === o.quantity;
+  const samePrice = (q: QuoteLineForCarry, o: OrderLineForCarry) =>
+    q.agreedUnitPrice != null && Number(q.agreedUnitPrice) === Number(o.unitPrice);
+  // Research N-31 — one product split over several quote lines at one price is
+  // told apart by its agreed quantity, so the exact pass names it too.
+  const matchOf = claimInPasses(order, quote, [
+    (q, o) => sameItem(q, o) && sameQuantity(q, o) && samePrice(q, o),
+    (q, o) => sameItem(q, o) && samePrice(q, o),
+    (q, o) => sameItem(q, o) && sameQuantity(q, o),
+    sameItem,
+  ]);
 
   // Candidate groups by their quote position, ties by first appearance.
   const groupOrder: Array<{ sourceId: string; name: string; position: number; seen: number }> = [];
@@ -176,40 +209,57 @@ export function carryQuoteGrouping(
   });
 }
 
-/** An administrator's grouping applied to the placed lines (FR-061). */
+/**
+ * An administrator's grouping applied to the placed lines (FR-061). The basket
+ * holds one line per request line in request order (research N-31), so a
+ * basket line takes the request line at its own index when product, variant
+ * and quantity agree; otherwise, as a safety net, the first unclaimed request
+ * line of the same product, variant and quantity, then of the same product and
+ * variant. Within a section lines follow the request; a basket line no request
+ * line accounts for is ungrouped, last.
+ */
 export function adminLayout(order: readonly OrderLineForCarry[], grouping: OrderLineGroupingInput): OrderLineLayout {
   const groupOrder = grouping.groups.map((group) => ({ sourceId: group.key, name: group.name }));
-  const requestSize = Math.max(0, ...[...grouping.lines.values()].map((line) => line.index + 1));
+  type Requested = OrderLineGroupingInput['lines'][number];
+  const sameItem = (r: Requested, o: OrderLineForCarry) =>
+    r.productId === o.productId && (r.variantId ?? null) === (o.variantId ?? null);
+  const sameQuantity = (r: Requested, o: OrderLineForCarry) => o.quantity === undefined || r.quantity === o.quantity;
+  const matchOf = claimInPasses(order, grouping.lines, [
+    (r, o, requestIndex, basketIndex) => requestIndex === basketIndex && sameItem(r, o) && sameQuantity(r, o),
+    (r, o) => sameItem(r, o) && sameQuantity(r, o),
+    sameItem,
+  ]);
+  const requestSize = grouping.lines.length;
   return assemble(order, groupOrder, (line, basketIndex) => {
-    const requested = grouping.lines.get(orderLineGroupingKey(line.productId, line.variantId));
-    if (!requested) return { groupSourceId: null, rank: requestSize + basketIndex };
-    return { groupSourceId: requested.groupKey, rank: requested.index };
+    const index = matchOf.get(line.key);
+    if (index === undefined) return { groupSourceId: null, rank: requestSize + basketIndex };
+    return { groupSourceId: grouping.lines[index]!.groupKey, rank: index };
   });
 }
 
 /**
- * Read an administrator's creation request into a {@link OrderLineGroupingInput}
- * and find the lines the basket could not honour: one product and variant on
- * lines of two different groups (FR-062). The basket merges such lines into one,
- * so the request is refused, each conflicting line named by its index.
+ * Read an administrator's creation request into a {@link OrderLineGroupingInput}:
+ * every line kept, in request order. One product and variant may sit on lines
+ * of several groups (research N-31, superseding the earlier `group_conflict`).
  */
 export function planAdminLineGrouping(
   groups: readonly { key: string; name: string }[],
-  items: readonly { productId: string; variantId?: string | null | undefined; groupKey?: string | null | undefined }[],
-): { grouping: OrderLineGroupingInput; conflicts: Array<{ index: number; productId: string }> } {
-  const lines = new Map<string, { groupKey: string | null; index: number }>();
-  const conflicts: Array<{ index: number; productId: string }> = [];
-  items.forEach((item, index) => {
-    const key = orderLineGroupingKey(item.productId, item.variantId);
-    const groupKey = item.groupKey ?? null;
-    const first = lines.get(key);
-    if (!first) {
-      lines.set(key, { groupKey, index });
-    } else if (first.groupKey !== groupKey) {
-      conflicts.push({ index, productId: item.productId });
-    }
-  });
-  return { grouping: { groups: groups.map(({ key, name }) => ({ key, name })), lines }, conflicts };
+  items: readonly {
+    productId: string;
+    variantId?: string | null | undefined;
+    quantity: number;
+    groupKey?: string | null | undefined;
+  }[],
+): OrderLineGroupingInput {
+  return {
+    groups: groups.map(({ key, name }) => ({ key, name })),
+    lines: items.map((item) => ({
+      productId: item.productId,
+      variantId: item.variantId ?? null,
+      quantity: item.quantity,
+      groupKey: item.groupKey ?? null,
+    })),
+  };
 }
 
 /** The layout's shape — `stateAfter.groups` of the `order.place_on_behalf` audit entry (FR-081). */

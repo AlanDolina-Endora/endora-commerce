@@ -395,6 +395,14 @@ export class CartService {
    * ({@link clearForCustomer}) only once steps 1 and 2 have passed, so a refused
    * request leaves the basket exactly as it was.
    *
+   * `keepRepeatedLines` (with `replaceExisting` only) writes every line as a line
+   * of its own — a repeated `(product, variant, unit)` is not merged into the
+   * first — each priced at its own quantity, created in request order with
+   * strictly increasing creation times so the basket reads back in that order.
+   * The admin order creation needs it to place one product on lines of several
+   * groups (feature 159, research N-31). Minimums are still judged on the
+   * product's total across the batch (step 2).
+   *
    * `ModuleDisabledError` is always thrown. More than {@link CART_MAX_LINES}
    * lines can never fit a cart and are refused before anything is resolved.
    */
@@ -405,9 +413,13 @@ export class CartService {
       onLineError: 'throw' | 'report';
       onBelowMinimum?: 'report' | 'throw';
       replaceExisting?: boolean;
+      keepRepeatedLines?: boolean;
       language?: string;
     },
   ): Promise<{ cart: Cart; items: CartItem[]; outcomes: CartBatchLineOutcome[] }> {
+    if (options.keepRepeatedLines && !options.replaceExisting) {
+      throw new Error('[carts] addItems: keepRepeatedLines needs replaceExisting — it describes a fresh basket.');
+    }
     if (options.replaceExisting && !actor.customer) {
       throw new Error('[carts] addItems: replaceExisting needs a customer — only a customer has a basket to replace.');
     }
@@ -449,7 +461,7 @@ export class CartService {
       // are judged here too, before the basket is cleared, so a request refused
       // for them also leaves the basket as it was.
       if (options.onLineError === 'throw') {
-        await this.#assertBatchOrderable(em, actor, resolvedLines, rejections);
+        await this.#assertBatchOrderable(em, actor, resolvedLines, rejections, options.keepRepeatedLines === true);
       }
       // Only now, with nothing left to refuse the request for, is the customer's
       // basket replaced.
@@ -470,7 +482,12 @@ export class CartService {
       this.#throwIfBelowMinimum(rejections, resolvedLines, options);
     }
 
-    // Step 3 — the accepted lines, in input order.
+    // Step 3 — the accepted lines, in input order. Kept apart, each line is
+    // created a millisecond after the one before it: the basket is read back by
+    // creation time, and lines written within one millisecond would otherwise
+    // fall back to their random ids.
+    const kept = options.keepRepeatedLines === true;
+    const seedBase = Date.now();
     let added = 0;
     let failure: unknown = null;
     for (const { index, input, resolved } of resolvedLines) {
@@ -480,7 +497,14 @@ export class CartService {
         continue;
       }
       try {
-        await this.#writeLine(em, cart, actor, input, resolved);
+        await this.#writeLine(
+          em,
+          cart,
+          actor,
+          input,
+          resolved,
+          kept ? { createdAt: new Date(seedBase + index) } : undefined,
+        );
       } catch (err) {
         rethrowIfModuleDisabled(err);
         if (options.onLineError === 'throw' || !(err instanceof HttpError)) {
@@ -524,13 +548,15 @@ export class CartService {
    * line to price at and no line cap to meet (a batch holds at most
    * `CART_MAX_LINES` lines). Refuses with exactly the refusal the write would
    * raise. A price edited between this and the write can still refuse a line
-   * after the clear; placement prices the basket again either way.
+   * after the clear; placement prices the basket again either way. With
+   * `keepRepeated` no line merges, so each is priced at its own quantity.
    */
   async #assertBatchOrderable(
     em: EntityManager,
     actor: CartActor,
     resolvedLines: ReadonlyArray<{ index: number; input: CartBatchLineInput; resolved: ResolvedCartLine }>,
     rejections: ReadonlyMap<number, CartBatchRejection>,
+    keepRepeated: boolean,
   ): Promise<void> {
     const pricingCtx = await this.#linePricing.contextFor(em, {
       organizationId: actor.customer?.organizationId ?? null,
@@ -541,7 +567,7 @@ export class CartService {
     for (const { index, input, resolved } of resolvedLines) {
       if (rejections.has(index)) continue;
       const key = `${resolved.product.id}|${input.variantId ?? ''}|${input.packagingUnitId ?? ''}`;
-      const quantity = (quantities.get(key) ?? 0) + resolved.effectiveQuantity;
+      const quantity = (keepRepeated ? 0 : (quantities.get(key) ?? 0)) + resolved.effectiveQuantity;
       quantities.set(key, quantity);
       await this.#orderablePriceOrRefuse(pricingCtx, {
         product: resolved.product,
@@ -607,7 +633,8 @@ export class CartService {
   /**
    * The write of one resolved line, the minimum already decided: bump the line
    * matching `(product, variant, unit)` or create one behind the line cap and the
-   * quote-only refusal, priced through `price_lists`.
+   * quote-only refusal, priced through `price_lists`. `separate` (a
+   * `keepRepeatedLines` batch) always creates a line, at the creation time given.
    */
   async #writeLine(
     em: EntityManager,
@@ -615,6 +642,7 @@ export class CartService {
     actor: CartActor,
     input: CartLineInput,
     resolved: ResolvedCartLine,
+    separate?: { createdAt: Date },
   ): Promise<void> {
     // command-coverage-ignore: the ephemeral cart's own line write; its typed
     // `line_added` audit row is recorded by the public caller (`addItem`,
@@ -623,12 +651,14 @@ export class CartService {
     // If the same product+variant+packaging-unit is already in the cart, bump
     // quantity. A packaging-unit line and a single-piece line of the same
     // product stay distinct (different `packagingUnitId`).
-    const existing = await em.findOne(CartItem, {
-      cartId: cart.id,
-      productId: product.id,
-      variantId: input.variantId ?? null,
-      packagingUnitId: input.packagingUnitId ?? null,
-    });
+    const existing = separate
+      ? null
+      : await em.findOne(CartItem, {
+          cartId: cart.id,
+          productId: product.id,
+          variantId: input.variantId ?? null,
+          packagingUnitId: input.packagingUnitId ?? null,
+        });
     const pricingCtx = await this.#linePricing.contextFor(em, {
       organizationId: actor.customer?.organizationId ?? null,
       signedIn: actor.customer !== undefined,
@@ -685,6 +715,7 @@ export class CartService {
       quantity: effectiveQuantity,
       unitPrice: price.unitPrice,
       currency: price.currency,
+      ...(separate ? { createdAt: separate.createdAt } : {}),
     });
     em.persist(item);
     cart.lastActivityAt = new Date();

@@ -18,7 +18,7 @@ import {
 } from './transactional-email-helper.js';
 import { rethrowIfModuleDisabled, SalesChannel } from '@endora-commerce/platform/kernel';
 import { assertWithinAdminOrderItemBound } from './request-minimums.js';
-import { planAdminLineGrouping, type OrderLineGroupingInput } from '../domain/quote-line-groups.js';
+import { planAdminLineGrouping } from '../domain/quote-line-groups.js';
 
 /** A new address typed on the create form (vs. an existing org address id). */
 export interface AdminCreateOrderInlineAddress {
@@ -90,8 +90,9 @@ export class OrderCreationAdminService {
   ): Promise<Order> {
     // Feature 155 (FR-038) — first, before anything is read or written.
     assertWithinAdminOrderItemBound(input.items.length);
-    // Feature 159 (FR-062) — next, before the customer's basket is touched.
-    const lineGrouping = await this.#lineGrouping(input, options.language);
+    // Feature 159 (FR-061) — the request's grouping, every line kept.
+    const lineGrouping =
+      input.groups === undefined ? undefined : planAdminLineGrouping(input.groups, input.items);
     // command-coverage-ignore: the order write is delegated to
     // OrderService.placeOrder (audited there); the only local mutation here is
     // the optional append-only OrderComment, not audited domain-state.
@@ -220,10 +221,16 @@ export class OrderCreationAdminService {
         quantity: it.quantity,
         salesChannelId: input.salesChannelId,
       }));
+      //
+      // Feature 159 (research N-31) — every request line stays a line of its
+      // own (`keepRepeatedLines`): one product may sit on lines of several
+      // groups, each priced at its own quantity, and the basket reads back in
+      // request order, which is what placement lays the groups out by.
       await this.cartService.addItems({ customer: basketCtx }, lines, {
         onLineError: 'throw',
         onBelowMinimum: 'throw',
         replaceExisting: true,
+        keepRepeatedLines: true,
         ...(options.language ? { language: options.language } : {}),
       });
 
@@ -302,39 +309,5 @@ export class OrderCreationAdminService {
     }
 
     return order;
-  }
-
-  /**
-   * Feature 159 (contracts/orders-api.md §1) — the request's grouping, handed
-   * to placement, or `undefined` for a request that sends none. The basket
-   * merges lines of one product and variant, so such lines in two different
-   * groups cannot both be honoured: the request is refused (422,
-   * `group_conflict` at each later line), naming the product.
-   */
-  async #lineGrouping(
-    input: AdminCreateOrderInput,
-    language: string | undefined,
-  ): Promise<OrderLineGroupingInput | undefined> {
-    if (input.groups === undefined) return undefined;
-    const { grouping, conflicts } = planAdminLineGrouping(input.groups, input.items);
-    if (conflicts.length === 0) return grouping;
-    const names = await this.orderService.productDisplayNames(
-      conflicts.map((conflict) => conflict.productId),
-      language,
-    );
-    const nameOf = (productId: string) => names.get(productId) ?? productId;
-    const details = conflicts.map((conflict) => ({
-      path: `items.${conflict.index}.groupKey`,
-      code: 'group_conflict',
-      productId: conflict.productId,
-      issue: `"${nameOf(conflict.productId)}" is already on a line of another group.`,
-    }));
-    const named = Array.from(new Set(conflicts.map((conflict) => `"${nameOf(conflict.productId)}"`))).join(', ');
-    throw new HttpError(
-      422,
-      ERROR_CODES.VALIDATION_FAILED,
-      `A product can be in one group only: ${named} is placed in two groups.`,
-      details,
-    );
   }
 }

@@ -35,11 +35,7 @@ interface OrderReply {
   subtotal: string;
   taxTotal: string;
   itemGroups: Array<{ id: string; name: string; position: number }>;
-  items: Array<{ productId: string; groupId: string | null; position: number }>;
-}
-
-interface ErrorBody {
-  error: { code: string; message: string; details?: Array<{ path: string; code?: string; issue: string }> };
+  items: Array<{ productId: string; groupId: string | null; position: number; quantity: number }>;
 }
 
 /**
@@ -86,14 +82,6 @@ describe('159 — POST /api/v1/admin/orders with line groups [contract]', () => 
       (await sql<{ count: string }>(`select count(*)::text as "count" from "order_item_groups" where "name" = ?`, [name]))[0]!
         .count,
     );
-
-  const basketOfCustomer = async () => {
-    const res = await h.app.inject({ method: 'GET', url: '/api/v1/cart', cookies: CUSTOMER });
-    expect(res.statusCode, res.body).toBe(200);
-    return (res.json() as { data: { items: Array<{ productId: string; quantity: number }> } }).data.items
-      .map((item) => [item.productId, item.quantity])
-      .sort();
-  };
 
   beforeAll(async () => {
     h = await setupBackendServer();
@@ -212,27 +200,66 @@ describe('159 — POST /api/v1/admin/orders with line groups [contract]', () => 
     expect((plain.json() as { data: OrderReply }).data.itemGroups).toEqual([]);
   });
 
-  it('refuses one product and variant in two groups with 422 group_conflict naming the product — the basket untouched (FR-062)', async () => {
-    const before = await basketOfCustomer();
-    const name = `Conflict ${randomUUID()}`;
+  it('places one product on lines of two groups — each line its own, in its group, at its own quantity (N-31)', async () => {
+    const y = `Y ${randomUUID()}`;
+    const z = `Z ${randomUUID()}`;
     const res = await create({
       groups: [
-        { key: 'a', name },
-        { key: 'b', name: 'Other' },
+        { key: 'y', name: y },
+        { key: 'z', name: z },
       ],
       items: [
-        { productId: SEED_PRODUCT_102_ID, quantity: 1, groupKey: 'a' },
-        { productId: SEED_PRODUCT_101_ID, quantity: 1, groupKey: 'a' },
-        { productId: SEED_PRODUCT_101_ID, quantity: 1, groupKey: 'b' },
+        { productId: SEED_PRODUCT_101_ID, quantity: 5, groupKey: 'y' },
+        { productId: SEED_PRODUCT_102_ID, quantity: 1, groupKey: 'z' },
+        { productId: SEED_PRODUCT_101_ID, quantity: 3, groupKey: 'z' },
+        { productId: SEED_PRODUCT_101_ID, quantity: 2 },
       ],
     });
-    expect(res.statusCode, res.body).toBe(422);
-    const error = (res.json() as ErrorBody).error;
-    expect(error.code).toBe('VALIDATION_FAILED');
-    expect(error.details).toEqual([expect.objectContaining({ path: 'items.2.groupKey', code: 'group_conflict' })]);
-    expect(error.message).toContain('Example simple product');
-    expect(await groupsNamed(name)).toBe(0);
-    expect(await basketOfCustomer()).toEqual(before);
+    expect(res.statusCode, res.body).toBe(201);
+    const order = (res.json() as { data: OrderReply }).data;
+    expect(shapeOf(order)).toEqual([
+      [y, SEED_PRODUCT_101_ID, 0],
+      [z, SEED_PRODUCT_102_ID, 0],
+      [z, SEED_PRODUCT_101_ID, 1],
+      ['-', SEED_PRODUCT_101_ID, 0],
+    ]);
+    expect(order.items.map((item) => item.quantity)).toEqual([5, 1, 3, 2]);
+    expect(disagreements(deepStrict(orderSchema), order)).toEqual([]);
+  });
+
+  it('the same layout comes back however often it is created — the basket order is deterministic (N-31)', async () => {
+    for (let round = 0; round < 3; round += 1) {
+      const res = await create({
+        groups: [
+          { key: 'y', name: 'Y' },
+          { key: 'z', name: 'Z' },
+        ],
+        items: [
+          { productId: SEED_PRODUCT_101_ID, quantity: 3, groupKey: 'z' },
+          { productId: SEED_PRODUCT_101_ID, quantity: 4, groupKey: 'y' },
+          { productId: SEED_PRODUCT_101_ID, quantity: 3, groupKey: 'y' },
+        ],
+      });
+      expect(res.statusCode, res.body).toBe(201);
+      const order = (res.json() as { data: OrderReply }).data;
+      expect(shapeOf(order).map(([section]) => section)).toEqual(['Y', 'Y', 'Z']);
+      expect(order.items.map((item) => item.quantity)).toEqual([4, 3, 3]);
+    }
+  });
+
+  it('a repeated product with no grouping is two lines too — the request is the order (N-31)', async () => {
+    const res = await create({
+      items: [
+        { productId: SEED_PRODUCT_101_ID, quantity: 2 },
+        { productId: SEED_PRODUCT_101_ID, quantity: 1 },
+      ],
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    const order = (res.json() as { data: OrderReply }).data;
+    expect(order.items.map((item) => [item.productId, item.quantity])).toEqual([
+      [SEED_PRODUCT_101_ID, 2],
+      [SEED_PRODUCT_101_ID, 1],
+    ]);
   });
 
   it('a malformed grouping is a 400 (unknown key, duplicate keys)', async () => {

@@ -4,7 +4,6 @@ import {
   basketLayout,
   carryQuoteGrouping,
   layoutShape,
-  orderLineGroupingKey,
   planAdminLineGrouping,
   type OrderLineForCarry,
   type OrderLineLayout,
@@ -32,13 +31,21 @@ const quoteLine = (
   group: typeof HALL_A | null,
   position: number,
   variantId: string | null = null,
-): QuoteLineForCarry => ({ productId, variantId, agreedUnitPrice, group, position });
+  quantity?: number,
+): QuoteLineForCarry => ({ productId, variantId, agreedUnitPrice, group, position, ...(quantity !== undefined ? { quantity } : {}) });
 
-const orderLine = (key: string, productId: string, unitPrice: string, variantId: string | null = null): OrderLineForCarry => ({
+const orderLine = (
+  key: string,
+  productId: string,
+  unitPrice: string,
+  variantId: string | null = null,
+  quantity?: number,
+): OrderLineForCarry => ({
   key,
   productId,
   variantId,
   unitPrice,
+  ...(quantity !== undefined ? { quantity } : {}),
 });
 
 /** The layout as a readable list: `[section, key, position]` in display order. */
@@ -86,6 +93,33 @@ describe('carryQuoteGrouping', () => {
     expect(display(carryQuoteGrouping(quote, order))).toEqual([
       ['Hall A', 'y', 0],
       ['Hall B', 'x', 0],
+    ]);
+  });
+
+  it('one product split over two groups at the same price: quantity decides, whatever the basket order (N-31)', () => {
+    const GROUP_Y = { id: '00000000-0000-4000-8000-00000000b001', name: 'Y', position: 0 };
+    const GROUP_Z = { id: '00000000-0000-4000-8000-00000000b002', name: 'Z', position: 1 };
+    const quote = [quoteLine(P1, '10', GROUP_Y, 0, null, 5), quoteLine(P1, '10', GROUP_Z, 0, null, 3)];
+    for (const order of [
+      [orderLine('five', P1, '10.00', null, 5), orderLine('three', P1, '10.00', null, 3)],
+      [orderLine('three', P1, '10.00', null, 3), orderLine('five', P1, '10.00', null, 5)],
+    ]) {
+      expect(display(carryQuoteGrouping(quote, order))).toEqual([
+        ['Y', 'five', 0],
+        ['Z', 'three', 0],
+      ]);
+    }
+  });
+
+  it('a split line whose quantity changed in the basket still lands in a group of its product', () => {
+    const GROUP_Y = { id: '00000000-0000-4000-8000-00000000b001', name: 'Y', position: 0 };
+    const GROUP_Z = { id: '00000000-0000-4000-8000-00000000b002', name: 'Z', position: 1 };
+    const quote = [quoteLine(P1, '10', GROUP_Y, 0, null, 5), quoteLine(P1, '10', GROUP_Z, 0, null, 3)];
+    // The 5 became 6; the 3 is untouched and keeps Z, so the 6 takes Y.
+    const order = [orderLine('six', P1, '10', null, 6), orderLine('three', P1, '10', null, 3)];
+    expect(display(carryQuoteGrouping(quote, order))).toEqual([
+      ['Y', 'six', 0],
+      ['Z', 'three', 0],
     ]);
   });
 
@@ -188,63 +222,42 @@ describe('basketLayout', () => {
 });
 
 describe('planAdminLineGrouping', () => {
-  it('maps each request line by product and variant to its group key and request index', () => {
-    const planned = planAdminLineGrouping(
+  it('keeps every request line, in request order, with its product, variant, quantity and group key', () => {
+    const grouping = planAdminLineGrouping(
       [
         { key: 'g1', name: 'Hall A' },
         { key: 'g2', name: 'Hall B' },
       ],
       [
-        { productId: P1, groupKey: 'g2' },
-        { productId: P2, variantId: V1, groupKey: 'g1' },
-        { productId: P3 },
+        { productId: P1, quantity: 5, groupKey: 'g2' },
+        { productId: P2, variantId: V1, quantity: 1, groupKey: 'g1' },
+        { productId: P3, quantity: 2 },
       ],
     );
-    expect(planned.conflicts).toEqual([]);
-    expect(planned.grouping.groups).toEqual([
+    expect(grouping.groups).toEqual([
       { key: 'g1', name: 'Hall A' },
       { key: 'g2', name: 'Hall B' },
     ]);
-    expect([...planned.grouping.lines.entries()]).toEqual([
-      [orderLineGroupingKey(P1, null), { groupKey: 'g2', index: 0 }],
-      [orderLineGroupingKey(P2, V1), { groupKey: 'g1', index: 1 }],
-      [orderLineGroupingKey(P3, null), { groupKey: null, index: 2 }],
+    expect(grouping.lines).toEqual([
+      { productId: P1, variantId: null, quantity: 5, groupKey: 'g2' },
+      { productId: P2, variantId: V1, quantity: 1, groupKey: 'g1' },
+      { productId: P3, variantId: null, quantity: 2, groupKey: null },
     ]);
   });
 
-  it('the same product and variant in two groups is a conflict, named at the later line (FR-062)', () => {
-    const planned = planAdminLineGrouping(
+  it('the same product and variant on lines of two groups is no conflict — each line keeps its own group (N-31)', () => {
+    const grouping = planAdminLineGrouping(
       [
         { key: 'g1', name: 'Hall A' },
         { key: 'g2', name: 'Hall B' },
       ],
       [
-        { productId: P1, groupKey: 'g1' },
-        { productId: P2, groupKey: 'g1' },
-        { productId: P1, groupKey: 'g2' },
-        { productId: P2, groupKey: 'g1' },
-        { productId: P1 },
+        { productId: P1, quantity: 5, groupKey: 'g1' },
+        { productId: P1, quantity: 3, groupKey: 'g2' },
+        { productId: P1, quantity: 1 },
       ],
     );
-    expect(planned.conflicts).toEqual([
-      { index: 2, productId: P1 },
-      { index: 4, productId: P1 },
-    ]);
-  });
-
-  it('the same product in one group, or as two variants, is no conflict', () => {
-    const planned = planAdminLineGrouping(
-      [{ key: 'g1', name: 'Hall A' }],
-      [
-        { productId: P1, groupKey: 'g1' },
-        { productId: P1, groupKey: 'g1' },
-        { productId: P2, variantId: V1, groupKey: 'g1' },
-        { productId: P2 },
-      ],
-    );
-    expect(planned.conflicts).toEqual([]);
-    // The first line of a product decides its index.
-    expect(planned.grouping.lines.get(orderLineGroupingKey(P1, null))).toEqual({ groupKey: 'g1', index: 0 });
+    expect(grouping.lines.map((line) => line.groupKey)).toEqual(['g1', 'g2', null]);
   });
 });
 
@@ -256,15 +269,15 @@ describe('adminLayout', () => {
       { key: 'g3', name: 'Empty' },
     ],
     [
-      { productId: P1, groupKey: 'g2' },
-      { productId: P2, groupKey: 'g1' },
-      { productId: P3 },
-      { productId: P4, groupKey: 'g1' },
+      { productId: P1, quantity: 1, groupKey: 'g2' },
+      { productId: P2, quantity: 1, groupKey: 'g1' },
+      { productId: P3, quantity: 1 },
+      { productId: P4, quantity: 1, groupKey: 'g1' },
     ],
-  ).grouping;
+  );
 
   it('lays the order out as the request did; a group no line names is not created (D2)', () => {
-    const order = [orderLine('0', P1, '1'), orderLine('1', P2, '1'), orderLine('2', P3, '1'), orderLine('3', P4, '1')];
+    const order = [orderLine('0', P1, '1', null, 1), orderLine('1', P2, '1', null, 1), orderLine('2', P3, '1', null, 1), orderLine('3', P4, '1', null, 1)];
     const layout = adminLayout(order, grouping);
     expect(layout.groups).toEqual([
       { sourceId: 'g1', name: 'Hall A', position: 0 },
@@ -279,11 +292,43 @@ describe('adminLayout', () => {
   });
 
   it('an order line the request did not name is ungrouped, last', () => {
-    const order = [orderLine('extra', '00000000-0000-4000-8000-000000000999', '1'), orderLine('0', P1, '1'), orderLine('2', P3, '1')];
+    const order = [
+      orderLine('extra', '00000000-0000-4000-8000-000000000999', '1', null, 1),
+      orderLine('0', P1, '1', null, 1),
+      orderLine('2', P3, '1', null, 1),
+    ];
     expect(display(adminLayout(order, grouping))).toEqual([
       ['Hall B', '0', 0],
       ['-', '2', 0],
       ['-', 'extra', 1],
+    ]);
+  });
+
+  it('one product split over two groups: each basket line takes the group of its own request line (N-31)', () => {
+    const split = planAdminLineGrouping(
+      [
+        { key: 'y', name: 'Group Y' },
+        { key: 'z', name: 'Group Z' },
+      ],
+      [
+        { productId: P1, quantity: 5, groupKey: 'y' },
+        { productId: P2, quantity: 1, groupKey: 'z' },
+        { productId: P1, quantity: 3, groupKey: 'z' },
+      ],
+    );
+    // The basket in request order (one line per request line).
+    const inOrder = [orderLine('0', P1, '10', null, 5), orderLine('1', P2, '10', null, 1), orderLine('2', P1, '10', null, 3)];
+    expect(display(adminLayout(inOrder, split))).toEqual([
+      ['Group Y', '0', 0],
+      ['Group Z', '1', 0],
+      ['Group Z', '2', 1],
+    ]);
+    // A basket answered in another order still pairs by quantity.
+    const shuffled = [orderLine('a', P1, '10', null, 3), orderLine('b', P2, '10', null, 1), orderLine('c', P1, '10', null, 5)];
+    expect(display(adminLayout(shuffled, split))).toEqual([
+      ['Group Y', 'c', 0],
+      ['Group Z', 'b', 0],
+      ['Group Z', 'a', 1],
     ]);
   });
 });
