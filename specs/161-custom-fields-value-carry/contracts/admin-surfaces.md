@@ -37,9 +37,12 @@ registry does not list it.
 - The create form sends `carryTo` (default `[]`). The editor's *Save* sends `carryTo` **only when it
   changed** (the filters feature's changed-members rule), as the whole new array.
 - A 422 `CUSTOM_FIELD_CARRY_INCOMPATIBLE` keeps the form/dialog open and shows an error `Alert`
-  whose sentence the page builds from `error.details` (`customFields.carry.refusal.<code>`,
-  interpolating the translated target type, the key, the two value-type labels or the missing
-  option values). Unknown `details.code` → the server's `error.message`.
+  whose sentence the page builds from `error.details` with the error bundle's own sentences,
+  `errors.CUSTOM_FIELD_CARRY_INCOMPATIBLE.<token>` (`refusalSentence` in
+  `packages/modules/custom_fields/src/admin/lib/carry-labels.ts`), interpolating the translated
+  target type, the key, the two value-type labels or the missing option values; type names are
+  quoted (owner ruling P4, 2026-10-21). There are no `customFields.carry.refusal.*` keys. Unknown
+  `details.code` → the server's `error.message`.
 
 ### 1.3 Table column and the "incompatible" mark (FR-006, FR-020, US4-5, US4-7)
 
@@ -103,13 +106,14 @@ the UI (the filters feature's editor never sends it), so no site asks about it.
 
 ### 1.5 Keys (`packages/modules/custom_fields/i18n/{en,pl}.json`)
 
-`customFields.carry.toggle`, `.help`, `.incompatible`, `.checksUnavailable`, `.retry`,
-`.reason.target_missing`,
+`customFields.carry.legend`, `.toggle`, `.help`, `.helpGroup`, `.incompatible`,
+`.checksUnavailable`, `.retry`, `.reason.target_missing`,
 `.reason.value_type_mismatch`, `.reason.options_missing`, `.reason.audience_mismatch`,
-`.helpGroup`, `.refusal.<six tokens>`, `.warning.title`, `.warning.body`,
+`.warning.title`, `.warning.body`,
 `.warning.proceedRemoveOption`, `.warning.proceedDeleteField`, `.warning.proceedAddOption`,
 `.warning.proceedChangeAudience`,
-`.warning.cancel`, `.warning.counterpart`, `customFields.table.carriesTo`. Final wording is the designer's.
+`.warning.cancel`, `.warning.counterpart`, `customFields.table.carriesTo`. Refusals reuse the six
+`errors.CUSTOM_FIELD_CARRY_INCOMPATIBLE.<token>` sentences of the same bundles (§1.2).
 
 ## 2. Order detail — the system note (US1-4, FR-010a, SC-006)
 
@@ -117,9 +121,11 @@ the UI (the filters feature's editor never sends it), so no site asks about it.
 
 - `OrderCommentRow` gains `systemNote: OrderCommentSystemNote | null`.
 - A row with `systemNote` renders: author "System" (`orderDetail.comments.systemAuthor`), an
-  *Internal* marker as internal comments already show, and the sentence
-  `orderDetail.comments.systemNote.customFieldCarrySkipped` ("Not carried from {sourceType}
-  {reference}:") followed by one line per skipped key with
+  *Internal* marker as internal comments already show, and the sentence of its source,
+  `orderDetail.comments.systemNote.customFieldCarrySkipped.quote_request` ("Not carried from quote
+  request {reference}:") or `.customFieldCarrySkipped.opportunity` ("Not carried from sales
+  opportunity {reference}:"), followed by one line per skipped key,
+  `orderDetail.comments.carryLine` ("{field} — {reason}") with
   `orderDetail.comments.carryReason.<reason>`. The field is named by the label stored with the
   skip (owner ruling V3, 2026-10-21): `label.labels[language]`, then `label.labelDefault`, then the
   key for a note written before labels were stored, cut at 64 characters. The screen makes **no**
@@ -131,10 +137,13 @@ the UI (the filters feature's editor never sends it), so no site asks about it.
 ## 3. Quote Request history (US3, FR-010)
 
 `packages/modules/quote_requests/src/admin/pages/RfqHistory.tsx` renders the
-`custom-field-carry-skipped` entry: title `history.customFieldCarrySkipped` ("Custom field values
-not carried from sales opportunity {reference}"), one line per key with
-`history.carryReason.<reason>`, the field named by its stored label as on the Order note (§2).
-Keys in `packages/modules/quote_requests/i18n/{en,pl}.json`.
+`custom-field-carry-skipped` entry: the entry title is the core key
+`rfq.detail.history.entry.custom_field_carry_skipped` ("Custom field values not carried from a sales
+opportunity", `packages/modules/_i18n/i18n/{en,pl}.json`), then `history.carrySource` ("Sales
+opportunity {reference}") and one line per key, `history.carryLine` ("{field} — {reason}") with
+`history.carryReason.<reason>` — or `history.carryReasonUnknown` ("the value could not be carried")
+for a reason this screen does not know, never the code. The field is named by its stored label as
+on the Order note (§2). Module keys in `packages/modules/quote_requests/i18n/{en,pl}.json`.
 
 ## 4. Opportunity history (US2-5, US2-6)
 
@@ -142,12 +151,20 @@ Keys in `packages/modules/quote_requests/i18n/{en,pl}.json`.
 `packages/modules/crm/src/admin/lib/history-fields.ts`:
 
 - `customFieldCarry` joins `LABELLED_HISTORY_FIELDS` with `history.field.customFieldCarry`; the
-  entry renders "Not carried from {sourceType}:" and one line per skipped key with
-  `history.carryReason.<reason>`; `carried` is silent (the carried values show through the existing
+  entry renders `history.customFieldCarry.from.order` / `.from.quote_request` ("Not carried from the
+  order:" / "Not carried from the quote request:") and one line per skipped key,
+  `history.customFieldCarry.line` ("{field} — {reason}") with `history.carryReason.<reason>`, or
+  `history.carryReasonUnknown` for an unknown reason; `carried` is silent (the carried values show through the existing
   `customFieldValues` row).
 - The field is named by the label stored with the skip, as on the Order note (§2), with no
   definitions read for it. Owner ruling V3 (2026-10-21): the skip lines — name and reason, never a
   value — are shown to every reader of the Opportunity, **without** `custom_fields:read`. The
-  `customFieldValues` row keeps the existing `canSeeCustomFields` gate unchanged.
+  `customFieldValues` row keeps the existing `canSeeCustomFields` gate.
+- Owner ruling P2 (2026-10-21) strips `customFieldValues` from the history response for a caller
+  without `custom_fields:read` (`carry-api.md` §7). The screen also drops a `customFieldValues`
+  change for that reader even if a response still carries one (a client gate; no definitions read),
+  and a `crm.opportunity.update` entry left with nothing to show reads
+  `history.customFieldValuesHidden` ("Custom field values changed. Your role does not give access to
+  them." / „Zmieniono wartości pól niestandardowych. Twoja rola nie daje do nich dostępu.").
 - `packages/modules/crm/src/admin/index.test.ts` stays green: every key an audited state can carry
   is labelled or silent.

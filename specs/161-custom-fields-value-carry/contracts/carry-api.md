@@ -207,6 +207,14 @@ No route or schema change. `OpportunityHistoryEntry.after` is already an opaque 
 member `customFieldCarry` (data-model §4.3) is documented in the history-fields module and labelled
 in both bundles.
 
+**The history response varies by caller** (owner ruling P2 = a, 2026-10-21).
+`GET /api/v1/admin/crm/opportunities/:id/history` leaves `customFieldValues` out of every entry's
+`before` and `after` for a caller without `custom_fields:read` (`OpportunityHistoryService`'s
+`mayReadCustomFields`, the `customFields` member of `OwnerReadChecks`, asked once per page); the
+rest of each entry, `customFieldCarry` included, is unchanged. A caller holding
+`custom_fields:read` receives the values as before. The shape is the same for both callers — the
+member is absent, never `null`. Order and Quote Request audit logs are out of this rule's scope.
+
 ## 8. Events
 
 No new event name. Existing events carry the values implicitly: `order.created.v1` subscribers
