@@ -922,16 +922,42 @@ branch from the commit that lands V3's backend half, which they depend on.
   store or project skips through `customFieldCarrySkipRecord` instead of re-mapping to `{ key, reason }`.
   Contract `carry-api.md` §4.1, §5, §6 and `data-model.md` §2, §4.1; changesets
   `161-contracts-custom-field-carry.md` (amended) and `161-carry-skip-label.md`.
-- [ ] T065 [V1] [admin UI] Drift-warning proceed buttons name the action ("Remove option anyway",
+- [x] T065 [V1] [admin UI] Drift-warning proceed buttons name the action ("Remove option anyway",
   "Delete field anyway", "Save anyway"; pl "Usuń opcję mimo to", "Usuń pole mimo to", "Zapisz mimo to"),
-  destructive-styled for removals and deletions.
-- [ ] T066 [V2] [admin UI] One help line per carry checkbox in the definition editor; one shared help line
-  for the group in the narrow create-form row.
-- [ ] T067 [V3] [admin UI] The Order note, the Quote Request entry and the Opportunity change history name a
+  destructive-styled for removals and deletions. One mapping, `carryDriftProceed(kind)` in
+  `custom_fields/src/admin/lib/carry-drift.ts`, read by the page's `CarryDriftDialog` (`action` replaces
+  `proceedVariant`) and the editor's in-place warning (`CarryDriftGuard.confirm` takes `{ action }` instead
+  of `{ destructive }`); `customFields.carry.warning.proceed` is replaced by `.proceedRemoveOption`,
+  `.proceedDeleteField`, `.proceedSave`. **Deliberately changed existing assertions** (standing rule 12):
+  `CustomFieldsPage.carry-drift.test.tsx` — the four "… on Proceed" tests click the action's own label
+  instead of the removed `PROCEED` constant; new suite "the proceed button names the action" (en + pl,
+  label and style per action).
+- [x] T066 [V2] [admin UI] One help line per carry checkbox in the definition editor; one shared help line
+  for the group in the narrow create-form row. `DefinitionBehaviourFields` `layout="row"`: the checkboxes
+  lose their own `aria-describedby`, the `role="group"` gains one pointing at
+  `customFields.carry.helpGroup`. **Deliberately changed existing assertion**:
+  `CustomFieldsPage.carry.test.tsx` "offers one carry checkbox per carry target in the create form…" — the
+  create-form checkbox now has no accessible description of its own (it asserted the per-target help);
+  new suite "carry help lines" (en + pl, both layouts).
+- [x] T067 [V3] [admin UI] The Order note, the Quote Request entry and the Opportunity change history name a
   skipped field by its stored `label` (the reader's locale, then `labelDefault`), falling back to the
   current definition and then the key for a skip without one; the CRM skip lines are shown to every reader
   of the record, while custom-field values stay behind `custom_fields:read`. The Order note no longer needs
   `GET /custom-fields/definitions?entityType=order` for a labelled skip.
+  **Built as the coordinator's brief states it**: stored label (`labels[lang]`, then `labelDefault`), then
+  the key — no current-definition fallback for an unlabelled skip on any of the three surfaces, so the
+  Order note makes no definitions read at all and an old entry reads the same to every reader. The CRM
+  definitions read is back to `customFieldValues` only. **Deliberately changed existing assertions**:
+  `OrderDetail.system-note.test.tsx` — the line-list test (labels now come from the skip; en and pl render
+  in their own provider language; no definitions read), "names every field by its key without
+  custom_fields:read" became "…by its stored label…", "names a field by its key when the definitions
+  cannot be read" deleted (no such read remains), and the suite mocks `CustomFieldValuesPanel`, whose own
+  definitions read would otherwise mask the proof; `crm/history.test.tsx` — "shows the entry without the
+  field lines to a reader who may not read the fields" now asserts the lines are shown, and the
+  `CREATED_WITH_SKIPS` / `JOINED_WITH_SKIPS` fixtures carry stored labels. New: crm "keeps the values row
+  behind its own gate while the skip lines show" and the Polish fallback test; `RfqDetail.history` "names a
+  skipped field by the label stored with the skip" (en + pl). Contract `admin-surfaces.md` §1.1, §1.4,
+  §1.5, §2, §3, §4 updated.
 
 **Verification** (T063–T064):
 ```bash

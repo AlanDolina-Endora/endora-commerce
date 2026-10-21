@@ -24,7 +24,10 @@ onChange: (next: { listFilter: boolean; carryTo: SupportedEntityType[] }) => voi
 One checkbox per `entityTypeInfo.carryTargets` entry, in that order, labelled
 `customFields.carry.toggle` ("Carry value to {entityType}", the type label translated), with help
 text `customFields.carry.help` ("When a {entityType} is created from this record, an empty field
-with the same key receives this value."). No toggle when `carryTargets` is empty (Category, Product,
+with the same key receives this value."). Owner ruling V2 (2026-10-21): in the editor dialog
+(`layout="stacked"`) each checkbox is described by its own help line; in the narrow create-form row
+(`layout="row"`) the checkboxes carry no description of their own and one shared line,
+`customFields.carry.helpGroup`, describes the `role="group"` through `aria-describedby`. No toggle when `carryTargets` is empty (Category, Product,
 Customer, Organization — US4-4). An Order definition is never offered *Quote Request* because the
 registry does not list it.
 
@@ -75,25 +78,29 @@ export function carryCounterpartsBrokenBy(
 ```
 
 Each change site calls it before acting; a non-empty answer opens an in-dialog confirmation
-(`customFields.carry.warning.title`, a list of "{entityType} · {key}" lines,
-`customFields.carry.warning.proceed` / `.cancel`), never `window.confirm`:
+(`customFields.carry.warning.title`, a list of "{entityType} · {key}" lines, `.cancel` and a
+proceed button named after the action), never `window.confirm`. Owner ruling V1 (2026-10-21): one
+proceed key per action, mapped from the change kind by `carryDriftProceed` in
+`packages/modules/custom_fields/src/admin/lib/carry-drift.ts`, which both the page's dialog and the
+editor's in-place warning read:
 
-| Site | Change |
-| --- | --- |
-| Options section — *Remove* | `remove-option` (breaks sources whose options include it) |
-| Options section — *Add option* | `add-option` (breaks this source's carries whose target lacks it) |
-| Table — audience select | `audience` (target → `customer` under an `internal` source; source → `internal` under a `customer` target) |
-| Table — *Delete* | `delete` |
+| Site | Change | Proceed key (en / pl) | Style |
+| --- | --- | --- | --- |
+| Options section — *Remove* | `remove-option` (breaks sources whose options include it) | `.warning.proceedRemoveOption` — "Remove option anyway" / "Usuń opcję mimo to" | destructive |
+| Options section — *Add option* | `add-option` (breaks this source's carries whose target lacks it) | `.warning.proceedSave` — "Save anyway" / "Zapisz mimo to" | default |
+| Table — audience select | `audience` (target → `customer` under an `internal` source; source → `internal` under a `customer` target) | `.warning.proceedSave` — "Save anyway" / "Zapisz mimo to" | default |
+| Table — *Delete* | `delete` | `.warning.proceedDeleteField` — "Delete field anyway" / "Usuń pole mimo to" | destructive |
 
-*Cancel* sends nothing; *Proceed* runs the action exactly as before. Value type is not editable in
+*Cancel* sends nothing; the proceed button runs the action exactly as before. Value type is not editable in
 the UI (the filters feature's editor never sends it), so no site asks about it.
 
 ### 1.5 Keys (`packages/modules/custom_fields/i18n/{en,pl}.json`)
 
 `customFields.carry.toggle`, `.help`, `.incompatible`, `.reason.target_missing`,
 `.reason.value_type_mismatch`, `.reason.options_missing`, `.reason.audience_mismatch`,
-`.refusal.<six tokens>`, `.warning.title`, `.warning.body`, `.warning.proceed`, `.warning.cancel`,
-`.warning.counterpart`, `customFields.table.carriesTo`. Final wording is the designer's.
+`.helpGroup`, `.refusal.<six tokens>`, `.warning.title`, `.warning.body`,
+`.warning.proceedRemoveOption`, `.warning.proceedDeleteField`, `.warning.proceedSave`,
+`.warning.cancel`, `.warning.counterpart`, `customFields.table.carriesTo`. Final wording is the designer's.
 
 ## 2. Order detail — the system note (US1-4, FR-010a, SC-006)
 
@@ -103,8 +110,12 @@ the UI (the filters feature's editor never sends it), so no site asks about it.
 - A row with `systemNote` renders: author "System" (`orderDetail.comments.systemAuthor`), an
   *Internal* marker as internal comments already show, and the sentence
   `orderDetail.comments.systemNote.customFieldCarrySkipped` ("Not carried from {sourceType}
-  {reference}:") followed by one line per skipped key — the field's label where the Order
-  definition is known, else its key — with `orderDetail.comments.carryReason.<reason>`. `body` is
+  {reference}:") followed by one line per skipped key with
+  `orderDetail.comments.carryReason.<reason>`. The field is named by the label stored with the
+  skip (owner ruling V3, 2026-10-21): `label.labels[language]`, then `label.labelDefault`, then the
+  key for a note written before labels were stored, cut at 64 characters. The screen makes **no**
+  definitions read for it, so every admin who can see the Order reads the name without
+  `custom_fields:read`. `body` is
   the fallback when a key is missing.
 - No reply, edit or delete affordance appears on it (none exists for any comment today).
 
@@ -113,7 +124,8 @@ the UI (the filters feature's editor never sends it), so no site asks about it.
 `packages/modules/quote_requests/src/admin/pages/RfqHistory.tsx` renders the
 `custom-field-carry-skipped` entry: title `history.customFieldCarrySkipped` ("Custom field values
 not carried from sales opportunity {reference}"), one line per key with
-`history.carryReason.<reason>`. Keys in `packages/modules/quote_requests/i18n/{en,pl}.json`.
+`history.carryReason.<reason>`, the field named by its stored label as on the Order note (§2).
+Keys in `packages/modules/quote_requests/i18n/{en,pl}.json`.
 
 ## 4. Opportunity history (US2-5, US2-6)
 
@@ -124,7 +136,9 @@ not carried from sales opportunity {reference}"), one line per key with
   entry renders "Not carried from {sourceType}:" and one line per skipped key with
   `history.carryReason.<reason>`; `carried` is silent (the carried values show through the existing
   `customFieldValues` row).
-- Shown under the existing `canSeeCustomFields` gate (a reader without `custom_fields:read` sees the
-  entry without the field lines).
+- The field is named by the label stored with the skip, as on the Order note (§2), with no
+  definitions read for it. Owner ruling V3 (2026-10-21): the skip lines — name and reason, never a
+  value — are shown to every reader of the Opportunity, **without** `custom_fields:read`. The
+  `customFieldValues` row keeps the existing `canSeeCustomFields` gate unchanged.
 - `packages/modules/crm/src/admin/index.test.ts` stays green: every key an audited state can carry
   is labelled or silent.
