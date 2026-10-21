@@ -120,6 +120,15 @@ export const NO_SCOPE_NEEDED: Readonly<Record<string, string>> = {
     'state-changed subscriber drops it, so the module owns no `on(\'message\')` ' +
     'site at all.)',
 
+  "packages/modules/price_lists/src/backend/services/pricing-generation.ts:start:on('message')":
+    'D-287 P0 — a synchronous, EntityManager-free cache drop: `handleMessage` parses ' +
+    'the `{ origin }` payload and, unless the announcement is this process\'s own, ' +
+    'empties the in-process pricing LRU. No EntityManager, no read — the next ' +
+    'resolution reloads, inside its caller\'s own scope. Entering the hatch here ' +
+    'would write an escape-hatch audit record per price write per process, about ' +
+    'nothing. Falsified the day the handler warms the cache instead of emptying ' +
+    'it, which would need `enterSystemScope` here.',
+
   "packages/platform/src/kernel/sales-channels/sales-channel-access-cache.ts:watch:on('message')":
     'Feature 154 — a synchronous, EntityManager-free cache drop: the handler parses ' +
     'the `{ organizationId }` payload and deletes that Organization\'s entry (or every ' +
