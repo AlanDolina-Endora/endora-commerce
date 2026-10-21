@@ -114,6 +114,7 @@
   "customFields.carry.warning.counterpart": "{entityType} · {key}",
   "customFields.carry.warning.proceedRemoveOption": "Remove option anyway",
   "customFields.carry.warning.proceedDeleteField": "Delete field anyway",
-  "customFields.carry.warning.proceedSave": "Save anyway",
+  "customFields.carry.warning.proceedAddOption": "Add option anyway",
+  "customFields.carry.warning.proceedChangeAudience": "Change audience anyway",
   "customFields.carry.warning.cancel": "Cancel"
 }

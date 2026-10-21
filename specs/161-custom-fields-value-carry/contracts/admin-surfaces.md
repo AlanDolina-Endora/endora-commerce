@@ -80,15 +80,16 @@ export function carryCounterpartsBrokenBy(
 Each change site calls it before acting; a non-empty answer opens an in-dialog confirmation
 (`customFields.carry.warning.title`, a list of "{entityType} · {key}" lines, `.cancel` and a
 proceed button named after the action), never `window.confirm`. Owner ruling V1 (2026-10-21): one
-proceed key per action, mapped from the change kind by `carryDriftProceed` in
+proceed key per action (owner ruling W1, 2026-10-21, named the add-option and audience
+buttons after their actions too), mapped from the change kind by `carryDriftProceed` in
 `packages/modules/custom_fields/src/admin/lib/carry-drift.ts`, which both the page's dialog and the
 editor's in-place warning read:
 
 | Site | Change | Proceed key (en / pl) | Style |
 | --- | --- | --- | --- |
 | Options section — *Remove* | `remove-option` (breaks sources whose options include it) | `.warning.proceedRemoveOption` — "Remove option anyway" / "Usuń opcję mimo to" | destructive |
-| Options section — *Add option* | `add-option` (breaks this source's carries whose target lacks it) | `.warning.proceedSave` — "Save anyway" / "Zapisz mimo to" | default |
-| Table — audience select | `audience` (target → `customer` under an `internal` source; source → `internal` under a `customer` target) | `.warning.proceedSave` — "Save anyway" / "Zapisz mimo to" | default |
+| Options section — *Add option* | `add-option` (breaks this source's carries whose target lacks it) | `.warning.proceedAddOption` — "Add option anyway" / "Dodaj opcję mimo to" | default |
+| Table — audience select | `audience` (target → `customer` under an `internal` source; source → `internal` under a `customer` target) | `.warning.proceedChangeAudience` — "Change audience anyway" / "Zmień widoczność mimo to" | default |
 | Table — *Delete* | `delete` | `.warning.proceedDeleteField` — "Delete field anyway" / "Usuń pole mimo to" | destructive |
 
 *Cancel* sends nothing; the proceed button runs the action exactly as before. Value type is not editable in
@@ -99,7 +100,8 @@ the UI (the filters feature's editor never sends it), so no site asks about it.
 `customFields.carry.toggle`, `.help`, `.incompatible`, `.reason.target_missing`,
 `.reason.value_type_mismatch`, `.reason.options_missing`, `.reason.audience_mismatch`,
 `.helpGroup`, `.refusal.<six tokens>`, `.warning.title`, `.warning.body`,
-`.warning.proceedRemoveOption`, `.warning.proceedDeleteField`, `.warning.proceedSave`,
+`.warning.proceedRemoveOption`, `.warning.proceedDeleteField`, `.warning.proceedAddOption`,
+`.warning.proceedChangeAudience`,
 `.warning.cancel`, `.warning.counterpart`, `customFields.table.carriesTo`. Final wording is the designer's.
 
 ## 2. Order detail — the system note (US1-4, FR-010a, SC-006)

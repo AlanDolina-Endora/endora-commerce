@@ -114,6 +114,7 @@
   "customFields.carry.warning.counterpart": "{entityType} · {key}",
   "customFields.carry.warning.proceedRemoveOption": "Usuń opcję mimo to",
   "customFields.carry.warning.proceedDeleteField": "Usuń pole mimo to",
-  "customFields.carry.warning.proceedSave": "Zapisz mimo to",
+  "customFields.carry.warning.proceedAddOption": "Dodaj opcję mimo to",
+  "customFields.carry.warning.proceedChangeAudience": "Zmień widoczność mimo to",
   "customFields.carry.warning.cancel": "Anuluj"
 }

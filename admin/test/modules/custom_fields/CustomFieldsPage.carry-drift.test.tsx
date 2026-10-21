@@ -28,7 +28,8 @@ const WARNING = sentence(EN, 'customFields.carry.warning.title');
 const CANCEL = sentence(EN, 'customFields.carry.warning.cancel');
 const REMOVE_OPTION_ANYWAY = sentence(EN, 'customFields.carry.warning.proceedRemoveOption');
 const DELETE_FIELD_ANYWAY = sentence(EN, 'customFields.carry.warning.proceedDeleteField');
-const SAVE_ANYWAY = sentence(EN, 'customFields.carry.warning.proceedSave');
+const ADD_OPTION_ANYWAY = sentence(EN, 'customFields.carry.warning.proceedAddOption');
+const CHANGE_AUDIENCE_ANYWAY = sentence(EN, 'customFields.carry.warning.proceedChangeAudience');
 
 /** Internal, offers north + south, carries to the Order field of the same key. */
 const QR_REGION = carryDefinition('00000000-0000-4000-8000-0000000d0001', { carryTo: ['order'] });
@@ -186,9 +187,9 @@ describe('CustomFieldsPage — drift warnings', () => {
       expect(REQUESTS()).toBe(0);
     });
 
-    it('adds the option exactly as before on Save anyway', async () => {
+    it('adds the option exactly as before on Add option anyway', async () => {
       const warning = await askToAddEast();
-      fireEvent.click(within(warning).getByRole('button', { name: SAVE_ANYWAY }));
+      fireEvent.click(within(warning).getByRole('button', { name: ADD_OPTION_ANYWAY }));
       await waitFor(() => expect(client.createOption).toHaveBeenCalledTimes(1));
       expect(client.createOption).toHaveBeenCalledWith(QR_REGION.id, {
         value: 'east',
@@ -215,11 +216,11 @@ describe('CustomFieldsPage — drift warnings', () => {
       expect(REQUESTS()).toBe(0);
     });
 
-    it('sends the audience exactly as before on Save anyway', async () => {
+    it('sends the audience exactly as before on Change audience anyway', async () => {
       await renderPage('order');
       fireEvent.change(audienceOf(), { target: { value: 'customer' } });
       const warning = await screen.findByRole('dialog', { name: WARNING });
-      fireEvent.click(within(warning).getByRole('button', { name: SAVE_ANYWAY }));
+      fireEvent.click(within(warning).getByRole('button', { name: CHANGE_AUDIENCE_ANYWAY }));
       await waitFor(() => expect(client.update).toHaveBeenCalledTimes(1));
       expect(client.update).toHaveBeenCalledWith(ORDER_REGION.id, { audience: 'customer' });
     });
@@ -265,8 +266,9 @@ describe('CustomFieldsPage — drift warnings', () => {
       const proceed = buttons[1]!;
       if (destructive) expect(proceed).toHaveClass('bg-destructive');
       else expect(proceed).not.toHaveClass('bg-destructive');
-      // The old generic label is gone from both bundles.
+      // The old generic labels are gone from both bundles.
       expect(bundle['customFields.carry.warning.proceed']).toBeUndefined();
+      expect(bundle['customFields.carry.warning.proceedSave']).toBeUndefined();
     }
 
     it('reads "remove option anyway", destructive, for removing an option a carry needs', async () => {
@@ -281,7 +283,7 @@ describe('CustomFieldsPage — drift warnings', () => {
       await waitFor(() => expect(client.removeOption).toHaveBeenCalledTimes(1));
     });
 
-    it('reads "save anyway", not destructive, for adding an option the target lacks', async () => {
+    it('reads "add option anyway", not destructive, for adding an option the target lacks', async () => {
       await renderPage('quote_request', bundle, core);
       const dialog = await openEditor('region', bundle);
       const add = within(dialog).getByRole('group', { name: say('customFields.editor.option.add') });
@@ -289,19 +291,19 @@ describe('CustomFieldsPage — drift warnings', () => {
       fireEvent.change(within(add).getByLabelText(say('customFields.editor.labelDefault')), { target: { value: 'East' } });
       fireEvent.click(within(add).getByRole('button', { name: say('customFields.editor.option.add') }));
       const warning = await screen.findByRole('dialog', { name: title() });
-      const proceed = within(warning).getByRole('button', { name: say('customFields.carry.warning.proceedSave') });
-      expect(proceed).not.toHaveClass('bg-destructive');
+      expectButtons(warning, 'customFields.carry.warning.proceedAddOption', false);
+      const proceed = within(warning).getByRole('button', { name: say('customFields.carry.warning.proceedAddOption') });
       fireEvent.click(proceed);
       await waitFor(() => expect(client.createOption).toHaveBeenCalledTimes(1));
     });
 
-    it('reads "save anyway", not destructive, for an audience change', async () => {
+    it('reads "change audience anyway", not destructive, for an audience change', async () => {
       await renderPage('order', bundle, core);
       fireEvent.change(screen.getByLabelText(say('customFields.audience.rowLabel', { key: 'region' })), {
         target: { value: 'customer' },
       });
       const warning = await screen.findByRole('dialog', { name: title() });
-      expectButtons(warning, 'customFields.carry.warning.proceedSave', false);
+      expectButtons(warning, 'customFields.carry.warning.proceedChangeAudience', false);
     });
 
     it('reads "delete field anyway", destructive, for deleting a field a carry needs', async () => {

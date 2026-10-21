@@ -135,8 +135,9 @@ export function carryDriftProceed(kind: DefinitionChange['kind']): CarryDriftPro
       return { labelKey: 'customFields.carry.warning.proceedDeleteField', destructive: true };
     case 'remove-option':
       return { labelKey: 'customFields.carry.warning.proceedRemoveOption', destructive: true };
-    case 'audience':
     case 'add-option':
-      return { labelKey: 'customFields.carry.warning.proceedSave', destructive: false };
+      return { labelKey: 'customFields.carry.warning.proceedAddOption', destructive: false };
+    case 'audience':
+      return { labelKey: 'customFields.carry.warning.proceedChangeAudience', destructive: false };
   }
 }

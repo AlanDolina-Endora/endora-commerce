@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CustomFieldAudience, CustomFieldValueType, SupportedEntityType } from '@endora-commerce/contracts';
 import {
   carryCounterpartsBrokenBy,
+  carryDriftProceed,
   type CarryDriftDefinition,
 } from '../../../../packages/modules/custom_fields/src/admin/lib/carry-drift';
 
@@ -151,5 +152,17 @@ describe('carryCounterpartsBrokenBy', () => {
       options: [],
     };
     expect(carryCounterpartsBrokenBy({ kind: 'delete', definitionId: legacy.id }, [legacy])).toEqual([]);
+  });
+});
+
+/** Owner ruling W1 (2026-10-21): one proceed button per action, named after it. */
+describe('carryDriftProceed', () => {
+  it.each([
+    ['remove-option', 'customFields.carry.warning.proceedRemoveOption', true],
+    ['add-option', 'customFields.carry.warning.proceedAddOption', false],
+    ['audience', 'customFields.carry.warning.proceedChangeAudience', false],
+    ['delete', 'customFields.carry.warning.proceedDeleteField', true],
+  ] as const)('names %s by %s, destructive: %s', (kind, labelKey, destructive) => {
+    expect(carryDriftProceed(kind)).toEqual({ labelKey, destructive });
   });
 });

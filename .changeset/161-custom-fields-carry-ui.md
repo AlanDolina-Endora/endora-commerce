@@ -18,8 +18,9 @@ The `/custom-fields` screen turns value carry-over on and off, shows where value
   are re-read compatible.
 - Removing or adding an option, changing a field's audience in the table and deleting a field ask
   first when the change would break an enabled carry, naming every field on the other side.
-  *Cancel* sends nothing; *Continue anyway* makes the change exactly as before. A change that
-  breaks nothing asks nothing.
+  *Cancel* sends nothing; the proceed button, named after the action — *Remove option anyway*,
+  *Add option anyway*, *Change audience anyway*, *Delete field anyway* — makes the change exactly
+  as before. A change that breaks nothing asks nothing.
 
 **For a module author.** `DefinitionBehaviourFields` takes an optional `value.carryTo` (answered
 back by `onChange`) and an optional `entityTypes`; `DefinitionEditorDialog` takes optional
