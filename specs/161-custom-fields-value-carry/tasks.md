@@ -1121,6 +1121,32 @@ W1 and the coordinator's label-fallback ruling.
   sentence that listed values under codes for such readers now says none are listed. The pages do not quote
   the create-row help text, so P4's wording is not quoted. Polish caches re-pinned;
   `check:docs-translations` and `check:module-docs` 0 findings.
+- [x] **R7 Phase 7 mutation check — `carry-drift.ts` `applied()`.** Code review found that RED had never been observed for the drift helper. Each branch of
+  `applied()` in `packages/modules/custom_fields/src/admin/lib/carry-drift.ts` was broken on its
+  own (the change made a no-op, or `delete` answering the definition instead of `null`), both suites
+  were run against `src` (`admin/test/modules/custom_fields/carry-drift.test.ts` and
+  `CustomFieldsPage.carry-drift.test.tsx`), and the branch was restored before the next one. Base:
+  `bb3e76345` (W1, after the rebase onto `8cd00c718`) plus the admin fixes of this round.
+
+  | Branch broken | `carry-drift.test.ts` | `CustomFieldsPage.carry-drift.test.tsx` |
+  | --- | --- | --- |
+  | `remove-option` → `return definition` | RED, 2 of 17 | RED, 8 of 23 |
+  | `add-option` → `: definition` | RED, 1 of 17 | RED, 4 of 23 |
+  | `audience` → `return definition` | RED, 2 of 17 | RED, 4 of 23 |
+  | `delete` → `return definition` | RED, 2 of 17 | RED, 5 of 23 |
+
+  No mutation survived, so no test was added for it. All 17 + 23 tests are green with the source
+  restored.
+- [x] **R8 [admin UI] CRM history for a reader without `custom_fields:read` (follows R3).**
+  `OpportunityHistory.tsx` drops a `customFieldValues` change for that reader even if a response
+  carries one (client gate; no definitions read), and a `crm.opportunity.update` entry left with
+  nothing to show says `history.customFieldValuesHidden` — "Custom field values changed. Your role
+  does not give access to them." / „Zmieniono wartości pól niestandardowych. Twoja rola nie daje do
+  nich dostępu.". `admin/test/modules/crm/history.test.tsx`: fixtures for that reader now pass
+  through `servedWithoutCustomFields` (the stripped response); new tests for the placeholder (en +
+  pl), its absence for a permitted reader and for an edit showing another field, and the client
+  gate against a response that still carries values. RED observed: with the drop and the
+  placeholder removed, 3 of 38 fail. Changeset `161-crm-history-hidden-values-ui.md` (`crm` patch).
 
 ## Dependencies and order
 
@@ -1184,24 +1210,3 @@ request before Phase 10.
 | SC-005 | T008, T013, T017, T038 |
 | SC-006 | T016, T017, T028 (QR entry absent for the buyer), T029, T039 |
 | SC-007 | T043 |
-
-## Review fixes (2026-10-21)
-
-### Phase 7 mutation check — `carry-drift.ts` `applied()`
-
-Code review found that RED had never been observed for the drift helper. Each branch of
-`applied()` in `packages/modules/custom_fields/src/admin/lib/carry-drift.ts` was broken on its
-own (the change made a no-op, or `delete` answering the definition instead of `null`), both suites
-were run against `src` (`admin/test/modules/custom_fields/carry-drift.test.ts` and
-`CustomFieldsPage.carry-drift.test.tsx`), and the branch was restored before the next one. Base:
-`00d5bcabc` plus the admin fixes of this round.
-
-| Branch broken | `carry-drift.test.ts` | `CustomFieldsPage.carry-drift.test.tsx` |
-| --- | --- | --- |
-| `remove-option` → `return definition` | RED, 2 of 17 | RED, 8 of 23 |
-| `add-option` → `: definition` | RED, 1 of 17 | RED, 4 of 23 |
-| `audience` → `return definition` | RED, 2 of 17 | RED, 4 of 23 |
-| `delete` → `return definition` | RED, 2 of 17 | RED, 5 of 23 |
-
-No mutation survived, so no test was added for it. All 17 + 23 tests are green with the source
-restored.
