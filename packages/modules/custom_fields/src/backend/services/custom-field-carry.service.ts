@@ -20,7 +20,13 @@ import { coerce, isEmpty, type DefinitionSource } from './custom-field-value.ser
 function labelOf(definition: CachedDefinition['definition']): CustomFieldCarrySkipLabel {
   // A definition's per-locale labels are not capped; a stored skip's are, so
   // the snapshot is cut to what a skip holds rather than dropped when read.
-  const cut = (text: string): string => [...text].slice(0, CUSTOM_FIELD_CARRY_SKIP_LABEL_MAX).join('');
+  // Cut in UTF-16 code units — what the schema's `.max` counts — never inside
+  // a surrogate pair.
+  const cut = (text: string): string => {
+    if (text.length <= CUSTOM_FIELD_CARRY_SKIP_LABEL_MAX) return text;
+    const head = text.slice(0, CUSTOM_FIELD_CARRY_SKIP_LABEL_MAX);
+    return /[\uD800-\uDBFF]$/.test(head) ? head.slice(0, -1) : head;
+  };
   return {
     labelDefault: cut(definition.labelDefault),
     labels: Object.fromEntries(Object.entries(definition.label ?? {}).map(([locale, text]) => [locale, cut(text)])),

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { customFieldCarrySkipLabelSchema } from '@endora-commerce/contracts';
 import type {
   CustomFieldAudience,
   CustomFieldValueType,
@@ -264,5 +265,14 @@ describe('CustomFieldCarryService.plan', () => {
       quote_request: [{ key: 'k', carryTo: ['order'], labels: { pl: long } }],
     }).plan({ ...QR_TO_ORDER, sourceValues: { k: 'v' }, targetValues: {} });
     expect(plan.skipped).toEqual([skip('k', 'target_missing', 'k', { pl: 'Ź'.repeat(200) })]);
+  });
+
+  it('cuts by what the schema counts, and never inside a character of two code units', async () => {
+    const plan = await service({
+      quote_request: [{ key: 'k', carryTo: ['order'], labels: { pl: `${'a'.repeat(199)}${'😀'.repeat(5)}` } }],
+    }).plan({ ...QR_TO_ORDER, sourceValues: { k: 'v' }, targetValues: {} });
+    const label = plan.skipped[0]!.label!;
+    expect(label.labels.pl).toBe('a'.repeat(199));
+    expect(customFieldCarrySkipLabelSchema.safeParse(label).success).toBe(true);
   });
 });

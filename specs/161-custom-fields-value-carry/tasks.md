@@ -1103,8 +1103,10 @@ W1 and the coordinator's label-fallback ruling.
 - [x] **R4 Nits.** `custom-field-carry.service.ts`: the dead `options_missing → value_invalid` mapping is gone —
   the branch skips only on the three reasons that can arise. `customFieldCarrySkipLabelSchema`: every string
   `.max(200)` (`CUSTOM_FIELD_CARRY_SKIP_LABEL_MAX`), contract test in `custom-fields.carry.test.ts`; since a
-  definition's per-locale labels are not capped, `labelOf` cuts the snapshot to 200 characters so a skip
-  written now always parses (unit: "cuts a label snapshot…"). `customFieldCarrySkipRecord` documents that it
+  definition's per-locale labels are not capped, `labelOf` cuts the snapshot to 200 UTF-16 code units (what
+  `.max` counts), never inside a surrogate pair, so a skip written now always parses (unit: "cuts a label
+  snapshot…", "cuts by what the schema counts…"). Consumers re-run: `history-projection.test.ts` 30/30,
+  `opportunity-custom-field-carry.test.ts` 5/5, the `mod-orders` package suite 219/219. `customFieldCarrySkipRecord` documents that it
   strips every other field.
 - [x] **R5 `AGENTS.md` appendix.** `origin/master`'s file re-run through `update-agent-context.sh` with
   `SPECIFY_FEATURE_DIRECTORY=specs/161-custom-fields-value-carry`, tag corrected from
