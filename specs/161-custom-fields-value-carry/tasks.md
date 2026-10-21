@@ -733,8 +733,9 @@ Recent Changes lines, as `agents-router.test.ts` caps it.
   violations 0 (ledgered 4, stale 0); `fixture-substitution` violations 0. No ledger entry needed.
 
 - **Phase 6 notes** (2026-10-21). T036–T039 are written; the Docker services were down on the
-  workstation, so their `[PG]` files are verified on the fork's `ci-pg` run only (the result is
-  recorded below once it lands). T036 sets `crm.auto_create_from_orders` on and
+  workstation, so their `[PG]` files are verified on the fork's `ci-pg` run only. **Result**: fork
+  `ci-pg` run `39646383808` on `189da5071` — 15 files (Phase 5's six, Phase 6's five, the four the
+  label snapshot or the re-stamped migrations touch), `failed=0`, 133 tests. T036 sets `crm.auto_create_from_orders` on and
   `crm.auto_create_from_quote_requests` off for its describe, after reading both values to write
   back. T037's carry-option retention while `quote_requests` is off is already
   `custom_fields/entity-owner-presence.test.ts`' (Phase 2) and is not repeated; Opportunity → Quote
