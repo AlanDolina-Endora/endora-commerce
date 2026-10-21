@@ -125,7 +125,7 @@ describe('custom_fields — the carry options of a definition', () => {
       await define('quote_request', key, { valueType: 'select', options: [option('a')], carryTo: ['order'] }),
     );
     expect(error.details).toMatchObject({ code: 'target_missing', targetEntityType: 'order', key });
-    expect(error.message).toBe(`No field with the key “${key}” exists on order. Create it first.`);
+    expect(error.message).toBe(`No field with the key “${key}” exists on “order”. Create it first.`);
   });
 
   it.each([
