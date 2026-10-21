@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -19,6 +20,7 @@ import {
   renderCrm,
   returningHere,
 } from './crm-fixtures';
+import crmPl from '../../../../packages/modules/crm/i18n/pl.json';
 
 /**
  * The *Change history* tab of an Opportunity
@@ -568,8 +570,13 @@ describe('the Change history tab, on what an entry carries', () => {
 /**
  * Feature 161 (T049, US2-5, US2-6) — a creation or a join that could not carry
  * every custom-field value into the Opportunity says so: from which kind of
- * record, and — for somebody who may read the fields — a line per key with
- * its reason (`specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §4).
+ * record, and a line per field with its reason
+ * (`specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §4).
+ *
+ * Owner ruling V3 (2026-10-21, T067): the field is named by the label stored
+ * with the skip — the reader's language, then the default label, then the key
+ * for an entry recorded before labels were stored — and the skip lines show to
+ * every reader of the Opportunity, while the values row keeps its own gate.
  */
 describe('the Change history tab, on custom-field values not carried', () => {
   const CREATED_WITH_SKIPS = entry({
@@ -584,7 +591,9 @@ describe('the Change history tab, on custom-field values not carried', () => {
         source: { entityType: 'quote_request', recordId: '00000000-0000-4000-8000-0000000000e7' },
         carried: ['lead_source'],
         skipped: [
-          { key: 'region', reason: 'value_type_mismatch' },
+          // The source field's label, stored with the skip (V3); no Polish label.
+          { key: 'region', reason: 'value_type_mismatch', label: { labelDefault: 'Region', labels: { en: 'Region' } } },
+          // Recorded before labels were stored.
           { key: 'gone_field', reason: 'target_missing' },
         ],
       },
@@ -603,7 +612,13 @@ describe('the Change history tab, on custom-field values not carried', () => {
       customFieldCarry: {
         source: { entityType: 'order', recordId: UNLINKED_ORDER_ID },
         carried: [],
-        skipped: [{ key: 'key_account', reason: 'audience_mismatch' }],
+        skipped: [
+          {
+            key: 'key_account',
+            reason: 'audience_mismatch',
+            label: { labelDefault: 'Key account', labels: { en: 'Key account', pl: 'Kluczowy klient' } },
+          },
+        ],
       },
     },
   });
@@ -631,7 +646,7 @@ describe('the Change history tab, on custom-field values not carried', () => {
   const line = (field: string, reason: string): string =>
     en('history.customFieldCarry.line', { field, reason: en(`history.carryReason.${reason}`) });
 
-  it('says a creation could not carry some values, a line per key under its label, with the reason', async () => {
+  it('says a creation could not carry some values, a line per field under its stored label, with the reason', async () => {
     only(CREATED_WITH_SKIPS);
     const panel = await openHistory(READER);
     const created = item(panel, 0);
@@ -640,7 +655,7 @@ describe('the Change history tab, on custom-field values not carried', () => {
     await within(carry).findByText(line('Region', 'value_type_mismatch'));
     expect(within(carry).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
       line('Region', 'value_type_mismatch'),
-      // A key with no definition is shown under its code.
+      // A skip recorded without a label is shown under its key.
       line('gone_field', 'target_missing'),
     ]);
     // What it did carry shows as the values themselves, not again here.
@@ -659,15 +674,71 @@ describe('the Change history tab, on custom-field values not carried', () => {
     expect(await within(carry).findByText(line('Key account', 'audience_mismatch'))).toBeInTheDocument();
   });
 
-  it('shows the entry without the field lines to a reader who may not read the fields', async () => {
+  // V3 (T067) — this test asserted the lines were hidden without
+  // `custom_fields:read`; the ruling shows them to every reader of the record.
+  it('shows the field lines, under their stored labels, to a reader who may not read the fields', async () => {
     only(CREATED_WITH_SKIPS);
     const panel = await openHistory(['crm:read', 'orders:read']);
     const created = item(panel, 0);
     const carry = row(created, en('history.field.customFieldCarry'));
     expect(within(carry).getByText(en('history.customFieldCarry.from.quote_request'))).toBeInTheDocument();
-    expect(within(carry).queryAllByRole('listitem')).toEqual([]);
-    expect(created).not.toHaveTextContent('gone_field');
+    expect(within(carry).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      line('Region', 'value_type_mismatch'),
+      line('gone_field', 'target_missing'),
+    ]);
+    // The names come with the entry: no field definition is read for them.
     expect(getSpy).not.toHaveBeenCalledWith(DEFINITIONS_PATH);
+  });
+
+  it('keeps the values row behind its own gate while the skip lines show (V3)', async () => {
+    only(CREATED_WITH_SKIPS);
+    const panel = await openHistory(['crm:read', 'orders:read']);
+    const created = item(panel, 0);
+    // The skip lines name the field by its stored label…
+    expect(within(row(created, en('history.field.customFieldCarry'))).getByText(line('Region', 'value_type_mismatch'))).toBeInTheDocument();
+    // …while the values row is exactly what it was for this reader: no definition
+    // read, so no field label and no option label — the value only by its code.
+    const values = row(created, en('history.field.customFieldValues'));
+    expect(within(values).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['lead_source: trade_fair']);
+    expect(values).not.toHaveTextContent('Lead source');
+    expect(values).not.toHaveTextContent('Trade fair');
+    expect(getSpy).not.toHaveBeenCalledWith(DEFINITIONS_PATH);
+  });
+
+  it('names a skipped field in Polish, falling back to the default label, then to the key', async () => {
+    const pl = crmPl as Record<string, string>;
+    const plText = (key: string, params: Record<string, string> = {}): string =>
+      pl[key]!.replace(/\{(\w+)\}/g, (_m, name: string) => params[name] ?? '');
+    const plLine = (field: string, reason: string): string =>
+      plText('history.customFieldCarry.line', { field, reason: plText(`history.carryReason.${reason}`) });
+    only(CREATED_WITH_SKIPS, JOINED_WITH_SKIPS);
+    renderCrm(
+      <StrictMode>
+        <OpportunityDetail />
+      </StrictMode>,
+      {
+        path: `/crm/opportunities/${OPPORTUNITY_ID}`,
+        pattern: '/crm/opportunities/:id',
+        permissions: ['crm:read', 'orders:read'],
+        language: 'pl',
+      },
+    );
+    await screen.findByRole('heading', { level: 1, name: /Fleet renewal/ });
+    await userEvent.click(screen.getByRole('tab', { name: plText('opportunity.tabs.history') }));
+    const panel = await screen.findByRole('tabpanel', { name: plText('opportunity.tabs.history') });
+    const list = await within(panel).findByRole('list', { name: plText('history.title') });
+    const [created, joined] = within(list).getAllByRole('listitem').filter((li) => li.parentElement === list);
+    const carryOf = (entryItem: HTMLElement): HTMLElement =>
+      within(entryItem).getByText(plText('history.field.customFieldCarry')).parentElement as HTMLElement;
+    expect(within(carryOf(created!)).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      // No Polish label stored: the default label.
+      plLine('Region', 'value_type_mismatch'),
+      // No label stored at all: the key.
+      plLine('gone_field', 'target_missing'),
+    ]);
+    expect(within(carryOf(joined!)).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      plLine('Kluczowy klient', 'audience_mismatch'),
+    ]);
   });
 
   it('says nothing about a carry that skipped nothing', async () => {

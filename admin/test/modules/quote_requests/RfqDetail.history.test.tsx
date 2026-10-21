@@ -331,6 +331,44 @@ describe.each<Language>(['en', 'pl'])('RfqHistory — %s', (language) => {
     expect(container.textContent).not.toMatch(/target_missing|value_type_mismatch|audience_mismatch|value_invalid/);
   });
 
+  it('names a skipped field by the label stored with the skip, in the reader\'s language (161, V3, T067)', async () => {
+    const longLabel = `L${'y'.repeat(70)}`;
+    answerHistory({
+      truncated: false,
+      entries: [
+        entry('custom_field_carry_skipped', SYSTEM, {
+          customFieldCarry: {
+            source: { entityType: 'opportunity', recordId: ORDER_ID, reference: 'OPP-000043' },
+            skipped: [
+              { key: 'fair', reason: 'target_missing', label: { labelDefault: 'Trade fair', labels: { en: 'Trade fair', pl: 'Targi' } } },
+              // No label in Polish: a Polish reader gets the default label.
+              { key: 'region', reason: 'value_type_mismatch', label: { labelDefault: 'Region', labels: { en: 'Sales region' } } },
+              // Recorded before labels were stored: the key.
+              { key: 'order_source', reason: 'audience_mismatch' },
+              { key: 'long_label', reason: 'value_invalid', label: { labelDefault: longLabel, labels: {} } },
+              { key: 'markup', reason: 'value_invalid', label: { labelDefault: XSS, labels: {} } },
+            ],
+          },
+        }),
+      ],
+    });
+    const { container } = renderHistory(language);
+    await screen.findByText(tr(language, 'entry.custom_field_carry_skipped'));
+    const reason = (code: string): string => trModule(language, `history.carryReason.${code}`);
+    const line = (field: string, code: string): string => trModule(language, 'history.carryLine', { field, reason: reason(code) });
+    const lines = screen.getAllByRole('listitem').filter((item) => item.tagName === 'LI' && item.closest('ul ul, li ul'));
+    expect(lines.map((item) => item.textContent)).toEqual([
+      line(language === 'pl' ? 'Targi' : 'Trade fair', 'target_missing'),
+      line(language === 'pl' ? 'Region' : 'Sales region', 'value_type_mismatch'),
+      line('order_source', 'audience_mismatch'),
+      line(`${longLabel.slice(0, 64)}…`, 'value_invalid'),
+      line(XSS, 'value_invalid'),
+    ]);
+    // A stored label is text, never markup; no key is shown where a label was stored.
+    expect(container.querySelector('img, script')).toBeNull();
+    expect(container.textContent).not.toMatch(/long_label|markup/);
+  });
+
   it('ships a reason sentence for every reason a carry can be skipped by (161)', () => {
     for (const code of customFieldCarrySkipReasonSchema.options) {
       expect(MODULE_ENTRIES[language][`history.carryReason.${code}`], code).toBeTruthy();

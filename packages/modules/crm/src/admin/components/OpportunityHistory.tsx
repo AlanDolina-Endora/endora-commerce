@@ -2,14 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Link } from 'react-router-dom';
 import { ArrowRight, History } from 'lucide-react';
 import {
+  customFieldCarrySkipLabelSchema,
   customFieldCarrySkipReasonSchema,
   opportunityRichTextToPlain,
+  type CustomFieldCarrySkipLabel,
   type OpportunityDetail,
   type OpportunityHistoryEntry,
   type OpportunityWorkflowStatus,
 } from '@endora-commerce/contracts';
 import { formatDateTime, useAuth } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Button } from '@endora-commerce/admin-kit/ui';
+import { resolveCustomFieldLabel } from '@endora-commerce/admin-kit/components';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { crmApi, type OrderStatusOption } from '../api.js';
 import {
@@ -41,7 +44,7 @@ const TEXT_LIMIT = 280;
 const ORDERS_READ = 'orders:read';
 const RETRY_ACTION = 'crm.opportunity.propagation_retry';
 const NOT_FOLLOWED_ACTION = 'crm.opportunity.propagation_skip';
-/** A field key shown to an operator is cut here. */
+/** A field name shown to an operator is cut here. */
 const SHOWN_KEY_LIMIT = 64;
 const CARRY_SKIP_REASONS: ReadonlySet<string> = new Set(customFieldCarrySkipReasonSchema.options);
 
@@ -60,19 +63,38 @@ function asState(value: unknown): State | null {
     : null;
 }
 
+interface CarrySkipLine {
+  key: string;
+  reason: string;
+  /** The source field's label as it read when the skip was recorded; absent on an older entry. */
+  label?: CustomFieldCarrySkipLabel;
+}
+
 /**
  * The keys a `customFieldCarry` member says were not carried, each with its
- * reason (feature 161, data-model §4.3) — `[]` for one that only carried.
+ * reason and stored label (feature 161, data-model §4.3; owner ruling V3) —
+ * `[]` for one that only carried. A label that does not parse is left out,
+ * so the line falls back to the key rather than to a guess.
  */
-function carrySkips(raw: unknown): Array<{ key: string; reason: string }> {
+function carrySkips(raw: unknown): CarrySkipLine[] {
   const skipped = asState(raw)?.skipped;
   if (!Array.isArray(skipped)) return [];
-  return skipped.flatMap((item: unknown) => {
+  return skipped.flatMap((item: unknown): CarrySkipLine[] => {
     const skip = asState(item);
-    return typeof skip?.key === 'string' && typeof skip.reason === 'string'
-      ? [{ key: skip.key, reason: skip.reason }]
-      : [];
+    if (typeof skip?.key !== 'string' || typeof skip.reason !== 'string') return [];
+    const label = customFieldCarrySkipLabelSchema.safeParse(skip.label);
+    return [{ key: skip.key, reason: skip.reason, ...(label.success ? { label: label.data } : {}) }];
   });
+}
+
+/**
+ * The name a skip line gives its field: the stored label in the reader's
+ * language, then its default label, then the key; cut at {@link SHOWN_KEY_LIMIT}.
+ */
+function skippedFieldName(skip: CarrySkipLine, language: string): string {
+  const name = skip.label ? resolveCustomFieldLabel(skip.label.labels, skip.label.labelDefault, language) : '';
+  const shown = name === '' ? skip.key : name;
+  return shown.length > SHOWN_KEY_LIMIT ? `${shown.slice(0, SHOWN_KEY_LIMIT)}…` : shown;
 }
 
 function same(a: unknown, b: unknown): boolean {
@@ -249,7 +271,7 @@ export function OpportunityHistory(props: OpportunityHistoryProps): ReactNode {
 
   // The fields' own labels, for somebody `custom_fields` lets read them.
   const { definitions } = useOpportunityFieldDefinitions(
-    canSeeCustomFields && (carries('customFieldValues') || carries('customFieldCarry')),
+    canSeeCustomFields && carries('customFieldValues'),
   );
 
   /** Administrators this page can name: the assignee and everybody who acted. */
@@ -441,9 +463,12 @@ export function OpportunityHistory(props: OpportunityHistoryProps): ReactNode {
 
   /**
    * What a creation or a join could not carry in (feature 161): which kind of
-   * record the values came from, then — for somebody `custom_fields` lets read
-   * the fields — a line per key with its reason. What it did carry is silent
-   * here; the values show in the entry's custom fields row.
+   * record the values came from, then a line per field with its reason, the
+   * field named by the label stored with the skip. Every reader of the
+   * Opportunity sees these lines — they name a field and a reason, never a
+   * value (owner ruling V3, 2026-10-21) — so they need no definition read and
+   * no `custom_fields:read`. What it did carry is silent here; the values show
+   * in the entry's custom fields row, under that row's own gate.
    */
   const carryNote = (raw: unknown): ReactNode => {
     const source = asState(asState(raw)?.source);
@@ -451,24 +476,18 @@ export function OpportunityHistory(props: OpportunityHistoryProps): ReactNode {
     return (
       <div className="space-y-0.5">
         <p>{t(`history.customFieldCarry.from.${from}`)}</p>
-        {canSeeCustomFields ? (
-          <ul className="list-disc space-y-0.5 pl-5">
-            {carrySkips(raw).map((skip) => {
-              const definition = definitions.find((candidate) => candidate.key === skip.key);
-              const label = customFieldLabel(definition, skip.key, language);
-              return (
-                <li key={skip.key}>
-                  {t('history.customFieldCarry.line', {
-                    field: label.length > SHOWN_KEY_LIMIT ? `${label.slice(0, SHOWN_KEY_LIMIT)}…` : label,
-                    reason: CARRY_SKIP_REASONS.has(skip.reason)
-                      ? t(`history.carryReason.${skip.reason}`)
-                      : humaniseKey(skip.reason),
-                  })}
-                </li>
-              );
-            })}
-          </ul>
-        ) : null}
+        <ul className="list-disc space-y-0.5 pl-5">
+          {carrySkips(raw).map((skip) => (
+            <li key={skip.key} className="break-words">
+              {t('history.customFieldCarry.line', {
+                field: skippedFieldName(skip, language),
+                reason: CARRY_SKIP_REASONS.has(skip.reason)
+                  ? t(`history.carryReason.${skip.reason}`)
+                  : humaniseKey(skip.reason),
+              })}
+            </li>
+          ))}
+        </ul>
       </div>
     );
   };

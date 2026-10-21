@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   ClipboardList,
@@ -10,7 +10,7 @@ import {
   RotateCcw,
   Truck,
 } from 'lucide-react';
-import { ApiError, apiBaseUrl, apiClient, cn, formatDateTime, formatMoney, issueInvoiceNotice, readReturnTo, statusBadgeStyle, useAuth, useUnsavedChangesPrompt } from '@endora-commerce/admin-kit/lib';
+import { ApiError, apiBaseUrl, apiClient, cn, formatDateTime, formatMoney, issueInvoiceNotice, readReturnTo, statusBadgeStyle, useUnsavedChangesPrompt } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Badge, Button, Card, CardContent, Label, PageHeader, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Section } from '@endora-commerce/admin-kit/ui';
 import { CustomFieldValuesPanel, resolveCustomFieldLabel } from '@endora-commerce/admin-kit/components';
 import { useTranslation, useTranslationContext } from '@endora-commerce/admin-kit/i18n';
@@ -25,7 +25,6 @@ import {
 import {
   arrangeLineGroups,
   customFieldCarrySkipReasonSchema,
-  type CustomFieldDefinitionDto,
   type IssueInvoiceEmailOutcome,
   type LineGroup,
   type OrderCommentSystemNote,
@@ -155,10 +154,7 @@ interface OrderCommentRow {
   createdAt: string;
 }
 
-/** Reading the Order's field definitions is `custom_fields`' permission (feature 161). */
-const CUSTOM_FIELDS_READ = 'custom_fields:read';
-const ORDER_FIELD_DEFINITIONS_URL = '/api/v1/admin/custom-fields/definitions?entityType=order';
-/** A field key shown to an operator is cut here. */
+/** A field name shown to an operator is cut here. */
 const SHOWN_KEY_LIMIT = 64;
 const SKIP_REASONS: ReadonlySet<string> = new Set(customFieldCarrySkipReasonSchema.options);
 const NOTE_SOURCES: ReadonlySet<string> = new Set(['quote_request', 'opportunity']);
@@ -166,23 +162,34 @@ const NOTE_SOURCES: ReadonlySet<string> = new Set(['quote_request', 'opportunity
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 /**
+ * The name a skip line gives its field (owner ruling V3, 2026-10-21): the
+ * source field's label as stored with the skip, in the reader's language,
+ * then its default label, then — for a note written before the label was
+ * stored — the key; cut at {@link SHOWN_KEY_LIMIT}. Needs no definition read,
+ * so whoever may read the Order reads the name.
+ */
+function skippedFieldName(skip: OrderCommentSystemNote['skipped'][number], language: string): string {
+  const name = skip.label ? resolveCustomFieldLabel(skip.label.labels, skip.label.labelDefault, language) : '';
+  const shown = name === '' ? skip.key : name;
+  return shown.length > SHOWN_KEY_LIMIT ? `${shown.slice(0, SHOWN_KEY_LIMIT)}…` : shown;
+}
+
+/**
  * A system note as the operator reads it, in their language (feature 161,
  * `specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §2): which
  * record the values came from, then a line per value not carried — the
- * field's label where the Order definition is known, else its key — with the
- * reason. A source or a reason this screen has no sentence for falls back to
- * the stored English `body`, never to a code.
+ * field's stored label, else its key — with the reason. A source or a reason
+ * this screen has no sentence for falls back to the stored English `body`,
+ * never to a code.
  */
 function SystemNoteBody({
   note,
   body,
-  definitions,
   language,
   t,
 }: {
   note: OrderCommentSystemNote;
   body: string;
-  definitions: readonly CustomFieldDefinitionDto[];
   language: string;
   t: Translate;
 }): ReactNode {
@@ -191,11 +198,6 @@ function SystemNoteBody({
     NOTE_SOURCES.has(note.source.entityType) &&
     note.skipped.every((skip) => SKIP_REASONS.has(skip.reason));
   if (!readable) return <p className="whitespace-pre-wrap break-words">{body}</p>;
-  const fieldName = (key: string): string => {
-    const definition = definitions.find((candidate) => candidate.key === key);
-    if (definition) return resolveCustomFieldLabel(definition.label, definition.labelDefault, language);
-    return key.length > SHOWN_KEY_LIMIT ? `${key.slice(0, SHOWN_KEY_LIMIT)}…` : key;
-  };
   return (
     <div className="space-y-1">
       <p className="break-words">
@@ -207,7 +209,7 @@ function SystemNoteBody({
         {note.skipped.map((skip) => (
           <li key={skip.key} className="break-words">
             {t('orderDetail.comments.carryLine', {
-              field: fieldName(skip.key),
+              field: skippedFieldName(skip, language),
               reason: t(`orderDetail.comments.carryReason.${skip.reason}`),
             })}
           </li>
@@ -233,7 +235,6 @@ export function OrderDetail(): ReactNode {
   const sectionSummaryText = useOrderSectionSummaryText();
   // Feature 161 — the system note's sentences are this module's own.
   const { language } = useTranslationContext();
-  const canReadFieldDefinitions = useAuth().hasPermission(CUSTOM_FIELDS_READ);
   const { id = '' } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const returnTo = readReturnTo(searchParams);
@@ -313,29 +314,6 @@ export function OrderDetail(): ReactNode {
   useEffect(() => {
     void loadComments();
   }, [loadComments]);
-
-  // Feature 161 — the Order's field labels, asked only once a system note is
-  // listed and only of somebody `custom_fields` lets read them; else keys.
-  const wantsFieldLabels = useMemo(
-    () => canReadFieldDefinitions && comments.some((c) => c.systemNote),
-    [canReadFieldDefinitions, comments],
-  );
-  const [orderFieldDefinitions, setOrderFieldDefinitions] = useState<CustomFieldDefinitionDto[]>([]);
-  useEffect(() => {
-    if (!wantsFieldLabels) return undefined;
-    let alive = true;
-    apiClient
-      .get<{ data: CustomFieldDefinitionDto[] }>(ORDER_FIELD_DEFINITIONS_URL)
-      .then((res) => {
-        if (alive) setOrderFieldDefinitions(res.data);
-      })
-      .catch(() => {
-        if (alive) setOrderFieldDefinitions([]);
-      });
-    return (): void => {
-      alive = false;
-    };
-  }, [wantsFieldLabels]);
 
   // Invoices issued for this order, newest first; drives the "Invoice PDF"
   // download link (the PDF endpoint is keyed by invoice id, not order id).
@@ -898,7 +876,6 @@ export function OrderDetail(): ReactNode {
                         <SystemNoteBody
                           note={c.systemNote}
                           body={c.body}
-                          definitions={orderFieldDefinitions}
                           language={language}
                           t={tOrders}
                         />

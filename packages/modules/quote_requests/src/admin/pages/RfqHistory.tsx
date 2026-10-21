@@ -10,6 +10,7 @@ import {
 } from '@endora-commerce/contracts';
 import { apiClient } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Button } from '@endora-commerce/admin-kit/ui';
+import { resolveCustomFieldLabel } from '@endora-commerce/admin-kit/components';
 import { useTranslation, useTranslationContext } from '@endora-commerce/admin-kit/i18n';
 import { adminNumberLocale, rfqNumberFormat } from '../number-format.js';
 
@@ -30,7 +31,9 @@ import { adminNumberLocale, rfqNumberFormat } from '../number-format.js';
  * Feature 161 adds one entry whose sentences are this module's own bundle's
  * (`history.*` in `quote_requests`): custom-field values a Sales Opportunity
  * could not carry into the request. Its title is `core`'s, as every kind's is;
- * under it the Opportunity's number, then a key and a reason per line.
+ * under it the Opportunity's number, then a field and a reason per line — the
+ * field named by the label stored with the skip, in the reader's language
+ * (owner ruling V3, 2026-10-21), its key for an entry recorded before.
  */
 
 type T = (key: string, params?: Record<string, string | number>) => string;
@@ -44,7 +47,7 @@ const ROLE_KEYS: Record<string, string> = {
   Administrator: 'administrator',
 };
 
-/** A field key shown to an operator is cut here. */
+/** A field name shown to an operator is cut here. */
 const SHOWN_KEY_LIMIT = 64;
 const SKIP_REASONS: ReadonlySet<string> = new Set(customFieldCarrySkipReasonSchema.options);
 
@@ -54,7 +57,11 @@ interface Formatters {
   q: T;
   amount: (n: number | null) => string;
   dateTime: (iso: string) => string;
+  /** The name a carry-skip line gives its field: stored label (reader's language, then default), else the key. */
+  fieldName: (skip: CarrySkip) => string;
 }
+
+type CarrySkip = NonNullable<QuoteRequestHistoryEntry['customFieldCarry']>['skipped'][number];
 
 /** Built once per language and translator, not on every render (review fix N6). */
 function useFormatters(): Formatters {
@@ -73,6 +80,10 @@ function useFormatters(): Formatters {
       dateTime: (iso) => {
         const d = new Date(iso);
         return Number.isNaN(d.getTime()) ? iso : dates.format(d);
+      },
+      fieldName: (skip) => {
+        const name = skip.label ? resolveCustomFieldLabel(skip.label.labels, skip.label.labelDefault, language) : '';
+        return shownKey(name === '' ? skip.key : name);
       },
     };
   }, [language, t, q]);
@@ -187,7 +198,7 @@ function shownKey(key: string): string {
 }
 
 function HistoryEntry({ entry, f }: { entry: QuoteRequestHistoryEntry; f: Formatters }): ReactNode {
-  const { t, q } = f;
+  const { t, q, fieldName } = f;
   const keys = entry.changes === null ? [] : changeKeys(entry.changes);
   const carry = entry.customFieldCarry ?? null;
   return (
@@ -208,8 +219,8 @@ function HistoryEntry({ entry, f }: { entry: QuoteRequestHistoryEntry; f: Format
           {carry.skipped.map((skip) => (
             <li key={skip.key} className="break-words">
               {SKIP_REASONS.has(skip.reason)
-                ? q('history.carryLine', { field: shownKey(skip.key), reason: q(`history.carryReason.${skip.reason}`) })
-                : shownKey(skip.key)}
+                ? q('history.carryLine', { field: fieldName(skip), reason: q(`history.carryReason.${skip.reason}`) })
+                : fieldName(skip)}
             </li>
           ))}
         </ul>
