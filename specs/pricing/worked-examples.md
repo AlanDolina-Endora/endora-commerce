@@ -25,8 +25,9 @@ The product owner's three target scenarios (E1–E3) and the cases that chose th
 - Quantity 1 unless stated. Amounts in PLN; percentages half-up to 4 dp. Percentages are signed
   adjustments (`decision-record.md` §5.1): `percent −10` is a 10 % discount, `percent +20` a 20 %
   surcharge.
-- Precedence: the **AF** preset (*Audience first*, the default after migration) unless a vector
-  names another; §10.10 shows the cases where the presets differ.
+- Precedence: §10.2–§10.8 are stated under the **AF** preset (*Audience first*) unless a vector
+  names another. Under **HY**, the default preset (N11), every one of them gives the same answer
+  except F1 (70.00 instead of 98.00); §10.10 shows every case where the presets differ.
 - Audiences are sets of one kind; "audience org Acme" means the set {Acme}.
 
 ### 10.2 E1 — category ∩ attribute price for everyone
@@ -151,34 +152,55 @@ attribute value.
 
 ### 10.10 Configurable precedence — the cases where the presets differ
 
-Presets (`decision-record.md` §5.6): **AF** audience first (default), **SF** specificity first,
-**HY** contract first, blanket last. Toggle **cat>attr** (default) / **attr>cat**.
+Presets (`decision-record.md` §5.6): **AF** audience first, **SF** specificity first, **HY** contract
+first, blanket last (**default**, N11), **AF-N** audience first with nearest-organization-first
+depth. Toggle **cat>attr** (default) / **attr>cat**.
 
-| Vector | Config | Buyer / product | AF | SF | HY |
-| --- | --- | --- | --- | --- | --- |
-| E3.1 | E3 | Acme / P1 | **95.00** | **95.00** | **95.00** |
-| E3.4 (= F3) | E3 + e3b (VIP product P2 −10) | Acme / P2: org.category 42.50 vs group.product 45.00 | **42.50** | **45.00** | **42.50** |
-| F1 | Acme list: all products −2; VIP list: P1 −30 | Acme / P1: org.all 98.00 vs group.product 70.00 | **98.00** | **70.00** | **70.00** |
-| F2 | CH everyone list: P1 fixed 90; Acme list: all products −3 | Acme / P1: catalogue C = 90, only org.all | **87.30** | **87.30** | **87.30** |
-| F4 | CH everyone list: P2 fixed 48; Acme list: category Screws −15 | Acme / P2: C = 48, only org.category | **40.80** | **40.80** | **40.80** |
-| F5 | Acme list: all products −2; VIP list: category Screws −5 | Acme / P2: org.all 49.00 vs group.category 47.50 | **49.00** | **47.50** | **49.00** — HY's own limit: an org blanket still beats a group *category* rule |
+**N11 evidence — the owner's scenarios under every preset.** "Owner" is the answer the owner's own
+wording fixes; a preset is eligible only if it matches every row.
+
+| Vector | Owner's wording | Owner | AF | SF | HY | AF-N |
+| --- | --- | --- | --- | --- | --- | --- |
+| E1.1 | red in Screws → 120 | 120.00 | 120.00 | 120.00 | 120.00 | 120.00 |
+| E1.2 | blue screw keeps its base | 50.00 | 50.00 | 50.00 | 50.00 | 50.00 |
+| E1.3 | red bolt keeps its base | 30.00 | 30.00 | 30.00 | 30.00 | 30.00 |
+| E2.1 | Screws 0200 −20 % for Acme | 80.00 | 80.00 | 80.00 | 80.00 | 80.00 |
+| E2.2 | other screws −10 % for Acme | 45.00 | 45.00 | 45.00 | 45.00 | 45.00 |
+| E3.1 | "for Acme, which belongs to VIP, Screws 0200 5 % cheaper, not 10 %" | 95.00 | 95.00 | 95.00 | 95.00 | 95.00 |
+| E3.2 | VIP member without own terms: −10 % | 90.00 | 90.00 | 90.00 | 90.00 | 90.00 |
+| E3.3 | "products in Screws −15 % for Acme" | 42.50 | 42.50 | 42.50 | 42.50 | 42.50 |
+| E3.4 | the same sentence, on a screw VIP has its own −10 % for | 42.50 | 42.50 | **45.00 ✗** | 42.50 | 42.50 |
+
+SF is out (E3.4). Among AF, HY and AF-N the F vectors decide:
+
+| Vector | Config | Buyer / product | AF | SF | HY | AF-N |
+| --- | --- | --- | --- | --- | --- | --- |
+| F1 | Acme list: all products −2; VIP list: P1 −30 | Acme / P1: org.all 98.00 vs group.product 70.00 | 98.00 ✗ | 70.00 | **70.00** | 98.00 ✗ |
+| F2 | CH everyone list: P1 fixed 90; Acme list: all products −3 | Acme / P1: catalogue C = 90, only org.all | 87.30 | 87.30 | **87.30** | 87.30 |
+| F3 | = E3.4 | | 42.50 | 45.00 | **42.50** | 42.50 |
+| F4 | CH everyone list: P2 fixed 48; Acme list: category Screws −15 | Acme / P2: C = 48, only org.category | 40.80 | 40.80 | **40.80** | 40.80 |
+| F5 | Acme list: all products −2; VIP list: category Screws −5 | Acme / P2: org.all 49.00 vs group.category 47.50 | 49.00 ✗ | 47.50 | **47.50** | 49.00 ✗ |
+
+✗ in F1/F5 marks the anomaly "an Acme buyer pays more than any other VIP member because Acme has a
+small blanket discount". HY is the only preset with no ✗ in either table, hence the default.
 
 F2 and F4 do not depend on the preset: the everyone price is the catalogue tier, below every buyer
 cell. The presets only order buyer cells against each other.
 
-Category/attribute toggle (applies in every tier):
+Category/attribute toggle (applies in every tier, every preset):
 
 | Vector | Config | Buyer / product | cat>attr | attr>cat |
 | --- | --- | --- | --- | --- |
 | C1 | Acme list: category Screws −10; attribute color = red −20 | Acme / P1 (red, in Screws) | **90.00** (org.category) | **80.00** (org.attribute) |
 | C2 | CH everyone list: category Screws fixed 110; attribute color = red fixed 125 | guest / P1 | **110.00** | **125.00** |
 
-Chain depth inside a cell (N6), under every preset:
+Chain depth (N6):
 
-| Vector | Config | Buyer / product | Expected | Today |
-| --- | --- | --- | --- | --- |
-| H1 | list {AcmeW}: category Screws −7; list {Acme}: product P1 −5 | AcmeW / P1: org.product (depth 1) 95.00 vs org.category (depth 0) 93.00 | **95.00** — the cell outranks the depth | 93.00 — today the nearest organization's list is picked first (`price-list-resolver.ts:41-52`) |
-| H2 | list {AcmeW}: product P1 −7; list {Acme}: product P1 −5 | AcmeW / P1: both org.product, depth 0 beats depth 1 | **93.00** | 93.00 |
+| Vector | Config | Buyer / product | AF, SF, HY (within cell) | AF-N (nearest organization first) | Today |
+| --- | --- | --- | --- | --- | --- |
+| H1 | list {AcmeW}: category Screws −7; list {Acme}: product P1 −5 | AcmeW / P1: org.product (depth 1) 95.00 vs org.category (depth 0) 93.00 | **95.00** — the cell outranks the depth | **93.00** — the own organization outranks the cell | 93.00 — the nearest organization's list is picked first (`price-list-resolver.ts:41-52`) |
+| H2 | list {AcmeW}: product P1 −7; list {Acme}: product P1 −5 | AcmeW / P1: both org.product | **93.00** (depth 0 beats depth 1) | **93.00** | 93.00 |
+| H3 | configuration HY + `nearest_organization_first` | — | — | refused `400 VALIDATION_FAILED` (I5) | — |
 
 ### 10.11 Audience sets (Q1)
 

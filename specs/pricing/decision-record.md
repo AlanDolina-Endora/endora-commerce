@@ -1,11 +1,10 @@
 # Pricing — decision record: price matrix vs Application rule
 
-**Status: PROPOSED — Option A accepted in principle via the owner's Q1 answer (2026-10-21); formal
-ratification as D-287 pending.** The owner answered every question of the first round (Q1–Q11,
-*Owner rulings* below) and this record is revised to those answers; §9 lists the questions the
-answers raise in turn. The ruling number **D-287** stays reserved (next free above the floor in
-`specs/pre-migration-history/README.md`) for the ratification of §0. Until then `current-model.md`
-describes what the code does and this file describes what it should do.
+**Status: RATIFIED — D-287, 2026-10-21** (the product owner: "Tak, zatwierdzam D-287" — "Yes, I
+ratify D-287"). The owner answered both rounds of questions (Q1–Q11 and N1–N11, *Owner rulings*
+below) and this record is revised to those answers. It is the **target contract for P1 onwards**
+(§8.2); until P1 lands, `current-model.md` still describes the code that is shipped. D-287 is the
+next ruling above the floor in `specs/pre-migration-history/README.md`.
 
 The record answers the question the product owner asked before issue #378 (*Price lists: replace
 'Products & brackets' with a rebuilt multi-currency Price matrix*) is worked on: **should price lists
@@ -45,7 +44,7 @@ section named.
 
 | Item | Ruling | Date | Where it lands |
 | --- | --- | --- | --- |
-| §0 decision | Option A accepted in principle (implied by Q1); formal D-287 ratification pending | 2026-10-21 | §0 |
+| §0 decision | **Ratified as D-287** — Option A, as revised by the rulings below | 2026-10-21 | §0 |
 | Q1 audience | On the price-list header, as a **set of audiences of one kind**: everyone, a set of customer groups, or a set of organizations. Kinds are not mixed in one list | 2026-10-21 | §5.1, §5.2 |
 | Q2 `color = red` | An attribute flagged `isPriceRule`, which is what makes it usable in a price list. Owner open to dropping the flag if it is unnecessary, but not every attribute is suitable (e.g. long text). Owner asks the architect to analyse whether variant prices belong in price lists too (#377) | 2026-10-21 | §5.8 (variants), §5.9 (flag) |
 | Q3 percent reference | Percentages are off the **catalogue price** | 2026-10-21 | §5.3 |
@@ -58,6 +57,18 @@ section named.
 | Q9 sales representatives | Edit only their organizations' lists; everything else read-only | 2026-10-21 | §5.7 |
 | Q10 sort quantity | Sort and filter by the quantity-1 price | 2026-10-21 | §6 |
 | Q11 configurable precedence | **Yes, now** — "do it once and properly" | 2026-10-21 | §5.6 |
+| Context | **There is no production deployment yet**: a change in price calculation affects only development environments and the demo instance | 2026-10-21 | §8 |
+| N1 fixed product price on variants | Yes — a fixed product price applies to every variant unless a variant row says otherwise | 2026-10-21 | §5.8 |
+| N2 amount adjustment | Yes — on every list | 2026-10-21 | §5.1 |
+| N3 partly out-of-scope organization lists | Hidden from the representative (answers as missing) | 2026-10-21 | §5.7 |
+| N4 list price display | Shown only when above "your price" | 2026-10-21 | §7 |
+| N5 promotions exclusion | Owned by `promotions`, shown on the pricing settings page through a zone | 2026-10-21 | §7 |
+| N6 chain depth | "Could this be made configurable? If not, yes." → not an independent axis (it composes only with *Audience first*); offered as the extra preset **AF-N**; within-cell depth is the rule of every other preset | 2026-10-21 | §5.2, §5.6 |
+| N7 permission | Yes — `price_lists:configure` | 2026-10-21 | §5.6 |
+| N8 "from" price | Yes — lowest variant price on the card, in sort and in the price filter | 2026-10-21 | §5.8 |
+| N9 surcharge bound | +1000 % | 2026-10-21 | §5.1 |
+| N10 wider intersections | No — "no customer has asked for it so far" | 2026-10-21 | §5.10 |
+| N11 default preset | "Choose the variant that realises the scenarios I gave" → **HY** (§5.6, evidence in `worked-examples.md` §10.10) | 2026-10-21 | §5.6 |
 
 ## 0. Decision in one paragraph
 
@@ -69,7 +80,8 @@ attribute | all), a quantity tier and a price (fixed amount, a percentage adjust
 adjustment — surcharges allowed).** Resolution has three tiers: *catalogue price* (base, overridden
 by "everyone" lists of the channel) → *buyer price* (organization and customer-group rows ranked by
 a **configurable, invariant-checked precedence of audience × selection cells**; percentages are off
-the catalogue price) → *sale* (charged only when lower; the regular price is the compare-at). The
+the catalogue price; default preset **HY — contract first, blanket last**) → *sale* (charged only
+when lower; the regular price is the compare-at). The
 list **Priority** stays a tie-break between lists that define the same cell. Base prices move into
 per-currency system price books, **which also hold variant prices** (#377): a variant inherits its
 product's price unless a variant row says otherwise, and attribute rows match a variant's axis
@@ -138,12 +150,12 @@ All tables owned by `price_lists`.
 | Column | Type | Rule |
 | --- | --- | --- |
 | `id`, `name`, `status`, `starts_at`, `ends_at`, `created_at`, `updated_at` | as today | dates are evaluated **at read time** as well as by the sweeper (removes the 0–5 min activation lag) |
-| `type` | `regular \| sale` (DB value `base` kept for `regular` to avoid churn) | |
+| `type` | `regular \| sale` (the DB value `base` is renamed `regular` — no production data to protect) | |
 | `currency_code` | char(3) NOT NULL (reuse/rename the legacy `currency`) | required at creation; **immutable** (fixed and amount-adjustment rows are in it) |
 | `audience_kind` | `everyone \| customer_groups \| organizations` NOT NULL (Q1) | immutable after activation; changing it is *duplicate* |
 | `priority` | integer NOT NULL default 0 (reuse legacy column) | same-cell tie-break only (§5.4) |
 | `is_system` | boolean | `true` only for the per-currency base books |
-| ~~`application_rule`~~, ~~`modified_at` as tie-break~~, ~~`code`~~, ~~`is_default`~~ | dropped in the contract phase | |
+| ~~`application_rule`~~, ~~`modified_at` as tie-break~~, ~~`code`~~, ~~`is_default`~~ | dropped in P1 (§8.1) | |
 
 **`price_list_sales_channels`** `(price_list_id, sales_channel_id)` PK, index `(sales_channel_id,
 price_list_id)` — the channel set (Q5, §5.5). At least one row for a non-system list; none for a
@@ -167,7 +179,7 @@ Header index: `(currency_code, status)`; system books unique on `(currency_code)
 | --- | --- |
 | `product_id`, `category_id`, `attribute_key`, `attribute_value` | unchanged; selection kind derived as today (`CON/price-lists.ts` `priceMatrixSelectionKind`) |
 | `variant_id` | **new**, uuid NULL, FK `product_variants` on delete cascade; set ⇒ `product_id` = the variant's parent (kept for the per-page prefetch) — the *variant* selection kind (§5.8) |
-| `organization_id` | **dropped** after migration (audience is the header's) |
+| `organization_id` | **dropped** in P1 (audience is the header's) |
 | `currency_code` | **dropped** (the header's) |
 | `min_quantity`, `max_quantity` | unchanged — one row = one tier of a cell; a *cell* = rows with the same selection on one list |
 | `price_type` | `fixed \| percent \| amount` |
@@ -178,8 +190,8 @@ Header index: `(currency_code, status)`; system books unique on `(currency_code)
 **`price_list_precedence`** — the configurable precedence (Q11, §5.6): `version` int PK, `cells`
 jsonb (the ordered 12 buyer cells), `category_before_attribute` boolean, `state` `staged | active |
 superseded`, `impact` jsonb (the preview report), `created_by`, `created_at`, `activated_at`; a
-partial unique index allows one `active` and at most one `staged` row. Seeded with version 1 = the
-*Audience first* preset (today's semantics).
+partial unique index allows one `active` and at most one `staged` row, plus `depth_mode`
+`within_cell | nearest_organization_first` (§5.6). Seeded with version 1 = the **HY** preset (N11).
 
 **Base prices**: one **system price book per currency** (`is_system`, no channel rows, audience
 everyone, type regular), holding product rows (fixed, optional tiers) and variant rows (fixed, or a
@@ -240,12 +252,15 @@ Plain-language form for the docs and the admin explainer:
    catalogue price.
 3. A sale price is charged only when it is lower than your price; your price is then the compare-at.
 
-**Chain depth sits inside a cell, not above it** (N6): a parent organization's product row beats
-the buyer organization's own category row, because both are "organization" rows and the product row
-is the more specific statement about the product; between two organizations' rows of the same kind,
-the nearer one wins. Feature 056 meant a descendant to inherit its ancestors' lists as its own, and
-this is that reading. It is a behaviour change from 148 (`matrix-price-resolver.ts:205-207` ranks
-the organization before the selection); the migration report lists every price it changes (vector H1).
+**Chain depth sits inside a cell, not above it** (N6), in every preset except **AF-N**: a parent
+organization's product row beats the buyer organization's own category row, because both are
+"organization" rows and the product row is the more specific statement about the product; between
+two organizations' rows of the same kind, the nearer one wins. Feature 056 meant a descendant to
+inherit its ancestors' lists as its own, and this is that reading. It differs from 148
+(`matrix-price-resolver.ts:205-207` ranks the organization before the selection), which is what the
+**AF-N** preset keeps (`depth_mode = nearest_organization_first`: the order key's first two
+components swap for organization cells, so every row of a nearer organization beats every row of a
+farther one). §5.6 says why that is a preset and not a free axis; vector H1 shows both.
 
 ### 5.3 Percent semantics: replacement, off the catalogue price (Q3, Q4, Q6 ruled)
 
@@ -316,17 +331,55 @@ order is between their combinations.
 | I1 | Within one audience, selection kinds keep the specificity order variant > product > category ∩ attribute > {category, attribute} > all | Otherwise a broader row makes a narrower row of the same audience unreachable — "all products −2 %" above "this product 50 PLN" for the same customer is a configuration nobody means and nobody can debug |
 | I2 | For each selection kind, `org.<kind>` before `group.<kind>` | An organization is a member of its group; the reverse order makes every organization row of that kind unreachable whenever the group has one |
 | I3 | Category/attribute order is the same in every audience and tier | One toggle, one meaning |
-| I4 | The three tiers (catalogue → buyer → sale-when-lower), chain depth inside a cell, priority after rank | They are the model, not a preference; §5.2, §5.4 |
+| I4 | The three tiers (catalogue → buyer → sale-when-lower), priority after rank | They are the model, not a preference; §5.2, §5.4 |
+| I5 | `depth_mode = nearest_organization_first` only with the AF order | See *Chain depth* below |
 
 Under I1–I3 the valid orders are the interleavings of the two six-cell chains in which every
 `org.k` precedes `group.k` — the ballot sequences, **132** of them (Catalan C₆) — times 2 for the
-toggle: **264 valid configurations**, a set small enough to test exhaustively. Shipped presets:
+toggle: 264, plus the AF order with nearest-organization-first depth under each toggle (I5):
+**266 valid configurations**, a set small enough to test exhaustively. Shipped presets:
 
 | Preset | Order | Character |
 | --- | --- | --- |
-| **AF — Audience first** (default, = today's semantics) | org.variant, org.product, org.category_attribute, org.category, org.attribute, org.all, group.variant, group.product, group.category_attribute, group.category, group.attribute, group.all | Anything agreed with the organization beats anything set for its group |
+| **AF — Audience first** | org.variant, org.product, org.category_attribute, org.category, org.attribute, org.all, group.variant, group.product, group.category_attribute, group.category, group.attribute, group.all | Anything agreed with the organization beats anything set for its group |
 | **SF — Specificity first** (the owner's literal list) | org.variant, group.variant, org.product, group.product, org.category_attribute, group.category_attribute, org.category, group.category, org.attribute, group.attribute, org.all, group.all | The most specific statement about the product wins; audience breaks ties |
-| **HY — Contract first, blanket last** | org.variant, org.product, org.category_attribute, org.category, org.attribute, group.variant, group.product, org.all, group.category_attribute, group.category, group.attribute, group.all | AF, except an organization's all-products rule yields to the group's variant and product prices — fixes F1 without losing F3 |
+| **HY — Contract first, blanket last** (**default**, N11) | org.variant, org.product, org.category_attribute, org.category, org.attribute, group.variant, group.product, group.category_attribute, group.category, group.attribute, org.all, group.all | AF, except an organization's *all-products* rule comes after every group rule but the group's own all-products rule: the blanket discount covers what nothing more specific covers — fixes F1 and F5 without losing F3 |
+| **AF-N — Audience first, nearest organization first** | the AF order, `depth_mode = nearest_organization_first` | 148's behaviour: every row of the buyer's own organization beats every row of a parent (vector H1 = 93.00) |
+
+*HY was first drafted with `org.all` between `group.product` and `group.category_attribute`; that
+version still let an organization blanket beat a group category rule (F5). Moving `org.all` to just
+before `group.all` — the last place I2 allows — removes the F5 anomaly and changes nothing else in
+§10.10.*
+
+**Default preset (N11): HY.** The owner's rule was "the variant that realises the scenarios I gave".
+Run against every preset (`worked-examples.md` §10.10, *N11 evidence*):
+
+- **E1** (red in Screws → 120) is decided in the catalogue tier, below every buyer cell: all four
+  presets give 120.00 / 50.00 / 30.00.
+- **E2** (Acme: Screws −10 %, Screws 0200 −20 %) involves only organization cells, and I1 orders
+  them: all presets give 80.00 / 45.00.
+- **E3**, original wording — "for Acme, which belongs to VIP, Screws 0200 should be 5 % cheaper, not
+  10 %; plus products in Screws −15 % for Acme against base": Screws 0200 is 95.00 under every preset
+  (org.product is the first populated cell in each). The second half is a rule *for every Screws
+  product* for Acme; a preset honours it only if a group product row cannot override it on another
+  screw — E3.4: **AF 42.50, HY 42.50, AF-N 42.50, SF 45.00**. SF breaks the owner's own sentence
+  and is out.
+- Of the three left, **F1** (Acme blanket −2 % vs VIP Screws 0200 −30 %) gives AF 98.00 and AF-N
+  98.00 — logging in as Acme costs more than any other VIP member pays — and HY 70.00. **F5** (Acme
+  blanket −2 % vs VIP Screws −5 %) gives AF 49.00, AF-N 49.00, HY 47.50. F2–F4 are equal under all
+  three. HY satisfies every scenario and is the only one free of both anomalies.
+- No owner scenario has an organization blanket rule, so HY's one difference from AF never
+  contradicts the owner's examples.
+
+**Chain depth (N6): a constrained preset, not an independent axis.** "Nearest organization first"
+means all rows of the buyer's own organization rank before any row of a parent. Combined with an
+order that places a group cell *between* two organization cells, it is contradictory: in HY,
+`group.attribute` must come before the own organization's `org.all` but after the parent's
+`org.product` (I2), while nearest-first needs the own `org.all` before the parent's `org.product` —
+a cycle. Every order except AF places some group cell between organization cells, so the mode is
+sound only with AF, and offering it as a free toggle would mean refusing it under 131 of the 132
+orders. It ships as the **AF-N** preset (I5); every other preset uses within-cell depth, which is
+N6's "yes". The validator refuses `nearest_organization_first` with any order but AF.
 
 An *Advanced* editor lets an operator reorder the twelve cells directly; the editor only offers
 moves that keep I1–I3 (and the server re-validates with the same pure function). §10.10 shows E3.4
@@ -377,15 +430,18 @@ explainer read the same map.
 
 **Test strategy** (no new dependency — the space is small enough to enumerate):
 
-- `validatePrecedence` unit tests: generate **all** interleavings of the two chains (C(12,6) = 924,
-  × 2 toggles): exactly the 264 ballot sequences are accepted; every one violating I2 is refused with
-  the offending pair; permutations breaking I1 (a seeded generator in the test) are refused.
-- Resolver property tests over all 264 orders on one generated fixture (every cell populated for one
-  buyer): the winner is always the populated cell with the smallest rank; removing a row from a cell
-  that does not win never changes the answer; the answer is total and deterministic.
-- Named vector sets per preset (AF, SF, HY) — `worked-examples.md` §10.10 — as the failing-first
-  integration tests.
-- The identity tests (batch == single, surface == live) run under each of the three presets.
+- `validatePrecedence` unit tests: generate **all** interleavings of the two chains (C(12,6) = 924)
+  × 2 toggles × 2 depth modes: exactly the 266 valid configurations are accepted; every one violating
+  I2 is refused with the offending pair, every `nearest_organization_first` with a non-AF order is
+  refused (I5); permutations breaking I1 (a seeded generator in the test) are refused.
+- Resolver property tests over all 266 configurations on one generated fixture (every cell populated
+  for a buyer with a two-level organization chain): the winner is always the populated cell with the
+  smallest rank (depth-adjusted for AF-N); removing a row that does not win never changes the answer;
+  the answer is total and deterministic.
+- Named vector sets per preset (AF, SF, HY, AF-N) — `worked-examples.md` §10.10 — as the
+  failing-first integration tests; the N11 evidence table is one of them, so a change of the default
+  preset has to change a test.
+- The identity tests (batch == single, surface == live) run under each of the four presets.
 
 ### 5.7 Cross-cutting
 
@@ -474,8 +530,8 @@ Variant axes are product attributes flagged `isVariantAxis`
   maximum; the worker resolves variants to compute it.
 
 **Migration**: `price_override` values become fixed variant rows in the base book of the platform's
-default currency (the value has no currency, as `defaultPrice` had none; the report lists them); the
-column is then `catalog`'s to drop in the contract phase (another module's migration). The data
+default currency (the value has no currency, as `defaultPrice` had none); the column is then
+dropped by a new `catalog`-owned migration in the same feature (§8.1). The data
 migration reads variants through `catalog`'s product read port (`catalog-product-read.service.ts:262`
 already exposes `priceOverride`), never by SQL on `catalog`'s tables.
 
@@ -607,49 +663,78 @@ Goal (requirement 9): listing and PDP no slower than today's measured p95 (listi
 
 ## 8. Migration path and phasing
 
-### 8.1 Data migration (expand → migrate → contract)
+**There is no production deployment** (owner, 2026-10-21): a change in price calculation reaches
+only development environments and the demo instance. Two things follow. Preserving today's answers
+is not a constraint — which is why the default preset is chosen by the owner's scenarios (HY) and
+not by continuity (AF). And the expand → migrate → contract split, which exists to keep live data
+correct while two schemas coexist, protects nothing here: the old tables and columns go in the same
+feature that introduces the new ones.
 
-A `module:*`-style command with `--dry-run` producing a report, then the real run, then an
-equivalence check that resolves a sample of (buyer profile × product × quantity) before and after
-and lists every difference. The precedence is seeded with the AF preset, which reproduces today's
-answers except where §5.2's chain-depth change, Q7's category-above-attribute order, or the
-sale-only-when-lower rule decide otherwise — the report counts each separately.
+### 8.1 Data conversion — one shot, base prices only
+
+One migration step, owned by `price_lists` and scaffolded with `pnpm --filter backend run
+migration:new` (no number is assigned here), converts the only data worth keeping in a development
+database — product prices — and drops the rest:
 
 | Today | Becomes |
 | --- | --- |
-| Default list brackets | per-currency system base books (PLN keeps `…d51b`) |
-| `defaultPrice` on products with no Default bracket | base row in the channel-default currency (report lists them) |
-| `product_variants.price_override` | fixed variant row in the base book of the platform default currency (report lists them) |
-| list with rule = AND/OR of at most `salesChannel[S]`, `currency[K]`, one of `organization[O]` / `customerGroup[G]` | one list per currency k ∈ K (or every currency its rows use), channel set = S ∩ {channels offering k} (or every channel offering k), audience set = O or G (or everyone) — sets now, so no per-member split |
-| `category` criterion on a list | each row's selection intersected: product rows kept only for products in the category at migration time (report), selection rows become category ∩ selection where representable, else flagged |
-| organization AND customerGroup in one AND | not representable (intersection audience) → list left **draft**, flagged |
-| organizations OR customer groups in one OR | split into one organization-set list and one group-set list (one kind per list) |
-| own brackets | product rows (fixed), per currency into that currency's list |
-| matrix rows with `organization_id` | moved to an organization-set list `{that organization}` with the source list's header (created if absent) |
-| fixed rows with `currency_code` | into that currency's list; percent rows (sign flipped) copied into every currency list |
-| implicit order org > group > category > channel, `modifiedAt` | `priority` assigned from today's chain order so same-cell ties resolve as before |
-| type base/sale | regular/sale — behaviour change: sale only when lower (report lists lines that change) |
+| Default list brackets | rows of the per-currency system base books (PLN keeps `…d51b`) |
+| `products.attribute_values.defaultPrice` on products with no Default bracket | base row in the platform default currency |
+| `product_variants.price_override` | fixed variant row in the base book of the platform default currency, read through `catalog`'s product read port (`catalog-product-read.service.ts:262`), never by SQL on `catalog`'s tables |
+| every non-system price list, its roster, brackets and matrix entries | **dropped**. Converting Application rules (AND/OR trees, category criteria, mixed audiences) into price books is the hardest part of a behaviour-preserving migration and protects no one |
 
-Breaking: admin API shapes for lists (rule → header fields and sets) and matrix rows (no
-org/currency; variant; signed adjustments) → versioned contracts (Principle II); `CON/price-lists.ts`
-rule schemas and `evaluateApplicationRule` retire with their two consumers (`organizations` panel
-re-pointed; `pwa`'s audience evaluator only mirrors the shape and is unaffected).
+The demo is **reseeded**, not converted: the demo composition seeds base prices today through
+`DefaultPriceListMigrator` from the catalogue's `defaultPrice` (`packages/demo-composition/src/composition.ts:976-986`,
+`CAT/backend/demo/seed.ts:184`) and clears `price_list_assignments` on reset
+(`packages/demo-composition/src/demo-usage.ts:530-533`). P1 rewrites both to write base-book rows
+directly, and adds demo price lists that reproduce E1–E3 (`worked-examples.md` §10.2–§10.4), so the
+demo instance shows the owner's scenarios (N12). A before/after equivalence report is not built.
+
+Removed in the same feature (formerly the separate contract phase): `price_lists.application_rule`,
+`code`, `is_default`, `modified_at` as a tie-break; `price_list_products`; `price_list_price_brackets`;
+the feature-014 tables `price_list_items` and `price_list_assignments`; the matrix entries'
+`organization_id` and `currency_code`; the `defaultPrice` virtual key in `catalog`
+(`CAT/backend/services/catalog-admin.service.ts:114-125`) and the Product editor field; and
+`product_variants.price_override` — the last in a **new migration owned by `catalog`**, in the same
+feature, after the conversion step has read it (module ownership of migrations,
+`specs/conventions/module-migrations.md`; nobody edits another module's existing migration).
+
+**Principle II, stated honestly.** The constitution says "Breaking API changes MUST be versioned"
+with no exception for the absence of external consumers (`.specify/memory/constitution.md:403-414`),
+and its rationale names third-party integrations and independent deploys. Two things are therefore
+still owed, even with no production deployment:
+
+- **The packages**: `@endora-commerce/contracts` and the `price_lists` module package are published
+  (0.x on npmjs); removing the rule schemas and changing the list/matrix shapes is a breaking change
+  recorded as a **`minor`** changeset (in a 0.x series `minor` *is* the breaking level — D-225,
+  `specs/conventions/release-intent.md`), with the old call and the new one in its body.
+- **The HTTP admin API**: the new shapes are published under a new, versioned resource — e.g.
+  `/api/v1/admin/price-books/…` replacing `/api/v1/admin/price-lists-engine/…` — so no client can
+  mistake one contract for the other. My reading, not the constitution's words: the principle requires
+  the version marker, not a period of serving both; the only client of the old routes is this
+  repository's admin (no other module or app calls them — grep of `packages`, `admin`, `storefront`,
+  `backend/src`), so the old routes are removed in the same release rather than deprecated.
+
+`CON/price-lists.ts` rule schemas and `evaluateApplicationRule` retire with their two consumers
+(`organizations` panel re-pointed; `pwa`'s audience evaluator only mirrors the shape and is
+unaffected).
 
 ### 8.2 Features
 
 | # | Feature | Contains | Depends on |
 | --- | --- | --- | --- |
-| P0 | Pricing read-path hardening | one PDP resolution, batched N+1 paths, customer group on every path, invalidate after commit, cross-replica generation channel, sweeper invalidation, cart PLN fallback removed, variant picker stops showing `price_override` | none — survives the redesign |
-| P1 | Pricing model v2 (backend + contracts) | header columns, channel and audience sets, row evolution (variant, signed percent, amount adjustment), base books with variant rows, three-tier resolver over the rank table, precedence table seeded with AF (changes refused until P3), sale = min, priority tie-break, line price source tier, migration command + equivalence report, versioned admin API, `defaultPrice`/`price_override` reads retired | D-287 ratified |
+| P0 | Pricing read-path hardening (**in progress with `endora-commerce-dev`, scope unchanged**) | one PDP resolution, batched N+1 paths, customer group on every path, invalidate after commit, cross-replica generation channel, sweeper invalidation, cart PLN fallback removed, variant picker stops showing `price_override` | none |
+| P1 | Pricing model v2 — model, conversion, removal, sort | header with channel and audience sets; rows with variant, signed percent, amount adjustment; base books with variant rows; three-tier resolver over the rank table; precedence table seeded with **HY** (changes refused until P3); sale = min; priority tie-break; line price source tier; **the materialised price surface and the new price sort** (the feature-086 ordering reads `price_list_price_brackets`, which P1 removes, so the sort is rewritten once, on the surface, rather than twice); one-shot conversion and demo reseed (§8.1); removal of everything §8.1 lists; versioned admin API and `minor` changesets; every consumer re-pointed to the one resolution chain | D-287 (ratified) |
 | P2 | #378 re-scoped: price book editor | create wizard (type → currency → channel set → audience set → schedule), grid (rows = selections, expandable to variants; cells = price with in-cell tiers; Medusa-style keyboard: Tab/Enter, drag-fill, paste from a spreadsheet, undo), bulk add via the 145 product picker, category/attribute rows, duplicate dialog, price explainer, product-editor base-price zone, *Pricing settings* page with `pricing.show_list_price` | P1 |
-| P3 | Price surface, sort and configurable precedence | materialised profile surface (versioned), worker, profile-keyed cache, precedence stage → preview → confirm → activate → flip with `price_lists:configure`, optional Meilisearch everyone price | P1 |
+| P3 | Configurable precedence flow | stage → impact preview → confirm → activate → versioned rebuild → flip, with `price_lists:configure`; the *Advanced* editor; optional Meilisearch everyone price | P1 (the surface) |
 | P4 | Promotions exclusion | `promotions` rule condition and setting on the persisted price source (carts and orders columns), zone on the pricing settings page | P1 |
-| P5 | Contract | drop `application_rule`, `price_list_products`, `price_list_price_brackets`, legacy columns, `price_list_items`/`price_list_assignments`, `defaultPrice` virtual key; `catalog` drops `price_override` | P1–P3 in production |
 
-The precedence configuration ships with P3 because its safeguards (impact preview, versioned rebuild)
-are built on the surface; P1 already resolves through the rank table, so P3 adds the editor and the
-flow, not a resolver change. #377's storefront work (variant selection, gallery) consumes P1's variant
-prices.
+What collapsed: the former P3 surface moved into P1 (the sort has to be rewritten when the old
+tables go), and the former P5 contract phase folded into P1. P1 is large; its spec should split it
+into independently testable user stories (model + resolver, conversion + reseed, surface + sort,
+consumers), not into separate features. #377's storefront work (variant selection, gallery) consumes
+P1's variant prices. P0 overlaps P1 in places (the cache work survives; the resolution-chain fixes in
+consumers are re-touched by P1's re-pointing), and that overlap is accepted rather than re-scoped.
 
 **#378 as written conflicts with requirement 3**: "currencies as columns" assumes multi-currency
 lists; under the decision the currency is the header, so columns are quantity tiers. #378 is
@@ -657,32 +742,23 @@ re-scoped to P2 and is not implemented on the current model.
 
 ## 9. Questions
 
-### 9.1 Resolved — first round (2026-10-21)
+### 9.1 Resolved (2026-10-21)
 
-Q1–Q11 are answered; the answers and where each lands are in *Owner rulings* above.
+Q1–Q11 and N1–N11 are answered; the answers and where each lands are in *Owner rulings* above.
 
-### 9.2 New questions raised by the answers (each with my default)
+### 9.2 Still open (each with my default; none blocks the P1 spec)
 
 | # | Question | Default |
 | --- | --- | --- |
-| N1 | A *fixed* product-level price on a configurable product applies to every variant (flattens variant differences) unless a variant row says otherwise — confirm | yes |
-| N2 | Offer the *amount adjustment* price type (±Δ off the reference) on every list, not only for variants in the base book | yes, everywhere |
-| N3 | Sales representative and an organization-set list with members outside their scope: hidden (as a missing list), or visible read-only (discloses the other members)? | hidden |
-| N4 | With `pricing.show_list_price` on, show the list price only when it is above "your price" | yes |
-| N5 | Promotions exclusion owned by `promotions` (setting + per-promotion condition), shown on the pricing settings page through a zone — instead of a `price_lists` setting | yes |
-| N6 | Chain depth ranks inside a cell: a parent organization's product row beats the buyer organization's own category row (behaviour change from 148, vector H1) | yes |
-| N7 | Precedence changes require a new permission `price_lists:configure` | yes |
-| N8 | A card for a product whose variants differ shows "from {lowest}", and sort/range use the lowest | yes |
-| N9 | Surcharge bound: at most +1000 % | yes |
-| N10 | Intersections beyond one category ∩ one attribute value | not offered |
-| N11 | Which precedence preset is active after migration | AF (reproduces today's answers); consider HY afterwards (§10.10) |
+| N12 | Should the demo instance's price lists reproduce E1–E3 (VIP, Acme B2B (demo), Screws, color = red)? | yes |
+| N13 | Should P1 keep any non-system price lists of development databases, or are dropping and reseeding them acceptable? | drop and reseed |
 
 ## 11. Constitution Check (of the proposal)
 
 | Principle | Verdict |
 | --- | --- |
 | I Modular | pass — all within `price_lists`; `catalog` loses the `defaultPrice` and `price_override` price roles; the promotions exclusion stays in `promotions`; `carts`/`orders` own their new line column; consumers via existing ports |
-| II API-first | pass, with versioned breaking change of the admin list/matrix contracts |
+| II API-first | pass — breaking changes still versioned with no production deployment: a new admin resource path and `minor` changesets on the published 0.x packages (§8.1) |
 | III TDD | §10 vectors are the failing-first tests; exhaustive precedence tests; identity tests (surface == live, batch == single) per preset |
 | IV No new dependency | pass — Postgres, Redis pub/sub, BullMQ already in the stack; no property-testing library (the space is enumerated) |
 | IX UI reuse | grid built from admin-kit primitives + 145 product picker |
@@ -692,11 +768,11 @@ Q1–Q11 are answered; the answers and where each lands are in *Owner rulings* a
 | XIII Command Bus | pass — every price and precedence write audited; the existing un-audited display-mode settings write is called out to be fixed |
 | XIV, XV, XVI, XVII | pass — no bespoke columns on host tables beyond the line price source; overlays decorate `pricingService` as today; palette actions added; activation unchanged |
 
-Verdict: **pass**. P1's spec can be written once D-287 is ratified; N1–N11 can be settled in its
-clarification session.
+Verdict: **pass**. D-287 is ratified; P1's spec can be written now.
 
 ## 12. Handoff
 
-- Ratify §0 as D-287; #378 is re-scoped to P2 and is not implemented on the current model.
-- P0 can start now with `endora-commerce-dev`; it is model-independent.
-- P1 needs `/speckit.specify` (feature 160) from §5, §8.1 and §10.
+- D-287 is ratified; #378 is re-scoped to P2 and is not implemented on the current model.
+- P0 is with `endora-commerce-dev`, scope as in §8.2.
+- P1 needs `/speckit.specify` (feature 160) from §5, §8 and §10, with N12–N13 for its clarification
+  session.
