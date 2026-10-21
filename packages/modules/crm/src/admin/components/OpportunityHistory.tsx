@@ -499,6 +499,18 @@ export function OpportunityHistory(props: OpportunityHistoryProps): ReactNode {
     return entry.actor.name ?? t('history.actor.deleted');
   };
 
+  /**
+   * An edit that shows this reader nothing: its states differ only in the
+   * custom-field values they may not read (owner ruling P2), so the entry says
+   * that much rather than standing empty under its heading.
+   */
+  const valuesHidden = (entry: OpportunityHistoryEntry, changes: readonly HistoryChange[]): boolean =>
+    !canSeeCustomFields &&
+    entry.action === 'crm.opportunity.update' &&
+    changes.length === 0 &&
+    statusChange(entry) === null &&
+    cause(entry) === null;
+
   const heading = (entry: OpportunityHistoryEntry): string => {
     const key = `auditLog.${entry.action}`;
     const label = t(key);
@@ -572,9 +584,13 @@ export function OpportunityHistory(props: OpportunityHistoryProps): ReactNode {
         <ol aria-label={t('history.title')} className="space-y-3">
           {entries.map((entry) => {
             // An Order's status is `orders`' to show: no row without `orders:read`.
+            // Custom-field values are `custom_fields`' (owner ruling P2): the
+            // server strips them for a reader without `custom_fields:read`, and
+            // this screen drops any that arrive all the same.
             const changes = historyChanges(entry).filter(
               (change) =>
                 (canReadOrders || change.field !== 'orderStatusCode') &&
+                (canSeeCustomFields || change.field !== 'customFieldValues') &&
                 // A carry that skipped nothing has nothing to say.
                 (change.field !== 'customFieldCarry' || carrySkips(change.after).length > 0),
             );
@@ -590,6 +606,9 @@ export function OpportunityHistory(props: OpportunityHistoryProps): ReactNode {
                 </div>
                 {statusChange(entry)}
                 {cause(entry)}
+                {valuesHidden(entry, changes) ? (
+                  <p className="break-words text-sm text-muted-foreground">{t('history.customFieldValuesHidden')}</p>
+                ) : null}
                 {changes.length > 0 ? (
                   <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[minmax(8rem,auto)_1fr]">
                     {changes.map((change) => (

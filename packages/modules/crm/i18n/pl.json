@@ -889,5 +889,6 @@
   "history.carryReason.value_type_mismatch": "pole szansy sprzedażowej ma inny typ wartości",
   "history.carryReason.audience_mismatch": "pole szansy sprzedażowej jest widoczne dla klientów, a pole źródłowe jest wewnętrzne",
   "history.carryReason.value_invalid": "wartość nie pasuje do pola szansy sprzedażowej",
-  "history.carryReasonUnknown": "nie udało się przenieść wartości"
+  "history.carryReasonUnknown": "nie udało się przenieść wartości",
+  "history.customFieldValuesHidden": "Zmieniono wartości pól niestandardowych. Twoja rola nie daje do nich dostępu."
 }

@@ -20,6 +20,7 @@ import {
   renderCrm,
   returningHere,
 } from './crm-fixtures';
+import crmEn from '../../../../packages/modules/crm/i18n/en.json';
 import crmPl from '../../../../packages/modules/crm/i18n/pl.json';
 
 /**
@@ -113,6 +114,20 @@ function entry(overrides: Partial<OpportunityHistoryEntry>): OpportunityHistoryE
     references: [],
     ...overrides,
   };
+}
+
+/**
+ * An entry as the server serves it to a reader without `custom_fields:read`
+ * (feature 161, owner ruling P2): `customFieldValues` left out of `before` and
+ * `after`, everything else — `customFieldCarry` included — as it was.
+ */
+function servedWithoutCustomFields(source: OpportunityHistoryEntry): OpportunityHistoryEntry {
+  const strip = (state: unknown): unknown => {
+    if (state === null || typeof state !== 'object' || Array.isArray(state)) return state;
+    const { customFieldValues: _hidden, ...rest } = state as Record<string, unknown>;
+    return rest;
+  };
+  return { ...source, before: strip(source.before) as never, after: strip(source.after) as never };
 }
 
 const FIRST_PAGE: OpportunityHistoryEntry[] = [
@@ -400,18 +415,69 @@ describe('the Change history tab, on what an entry carries', () => {
     expect(created).not.toHaveTextContent('trade_fair');
   });
 
-  it('falls back to the field code, never to JSON, for a reader who may not read the definitions', async () => {
-    only(CREATED);
+  it('shows no custom field row to a reader who may not read the fields, as the server serves the entry (P2)', async () => {
+    only(servedWithoutCustomFields(CREATED));
     const panel = await openHistory(['crm:read', 'orders:read']);
     const created = item(panel, 0);
-    const fields = row(created, en('history.field.customFieldValues'));
-    expect(within(fields).getAllByRole('listitem').map((line) => line.textContent)).toEqual([
-      'lead_source: trade_fair',
-      `key_account: ${en('customFields.value.yes')}`,
-      'retired_field: kept',
-    ]);
-    expect(created).not.toHaveTextContent('{');
+    expect(within(created).getByText(en('history.field.title'))).toBeInTheDocument();
+    expect(within(created).queryByText(en('history.field.customFieldValues'))).toBeNull();
+    // A creation still has its other fields to show: no placeholder.
+    expect(within(created).queryByText(en('history.customFieldValuesHidden'))).toBeNull();
     expect(getSpy).not.toHaveBeenCalledWith(DEFINITIONS_PATH);
+  });
+
+  it('keeps the values hidden client-side even if a server still sends them to that reader (P2)', async () => {
+    // Not what the server sends since P2 — the gate this screen holds on its own.
+    only(CREATED, FIELDS_EDITED);
+    const panel = await openHistory(['crm:read', 'orders:read']);
+    const [created, edited] = [item(panel, 0), item(panel, 1)];
+    for (const shown of [created, edited]) {
+      expect(within(shown).queryByText(en('history.field.customFieldValues'))).toBeNull();
+      expect(shown).not.toHaveTextContent(/trade_fair|referral|lead_source|retired_field/);
+    }
+    // An edit of values alone says so, rather than standing empty.
+    expect(within(edited).getByText(en('history.customFieldValuesHidden'))).toBeInTheDocument();
+    expect(getSpy).not.toHaveBeenCalledWith(DEFINITIONS_PATH);
+  });
+
+  it.each(['en', 'pl'] as const)(
+    'says custom field values changed for an edit of values alone, to a reader who may not read them (P2, %s)',
+    async (language) => {
+      only(servedWithoutCustomFields(FIELDS_EDITED));
+      const bundle = (language === 'pl' ? crmPl : crmEn) as Record<string, string>;
+      renderCrm(
+        <StrictMode>
+          <OpportunityDetail />
+        </StrictMode>,
+        {
+          path: `/crm/opportunities/${OPPORTUNITY_ID}`,
+          pattern: '/crm/opportunities/:id',
+          permissions: ['crm:read', 'orders:read'],
+          language,
+        },
+      );
+      await screen.findByRole('heading', { level: 1, name: /Fleet renewal/ });
+      await userEvent.click(screen.getByRole('tab', { name: bundle['opportunity.tabs.history']! }));
+      const panel = await screen.findByRole('tabpanel', { name: bundle['opportunity.tabs.history']! });
+      const list = await within(panel).findByRole('list', { name: bundle['history.title']! });
+      const edited = within(list).getAllByRole('listitem')[0] as HTMLElement;
+      expect(within(edited).getByText(bundle['history.customFieldValuesHidden']!)).toBeInTheDocument();
+      expect(within(edited).queryByText(bundle['history.field.customFieldValues']!)).toBeNull();
+    },
+  );
+
+  it('shows the values, not the placeholder, to a reader who may read them', async () => {
+    only(FIELDS_EDITED);
+    const panel = await openHistory(READER);
+    const edited = item(panel, 0);
+    await within(row(edited, en('history.field.customFieldValues'))).findByText(/Lead source/);
+    expect(within(edited).queryByText(en('history.customFieldValuesHidden'))).toBeNull();
+  });
+
+  it('does not claim a values change for an edit that shows something else', async () => {
+    only(servedWithoutCustomFields(UNFORESEEN));
+    const panel = await openHistory(['crm:read', 'orders:read']);
+    expect(within(item(panel, 0)).queryByText(en('history.customFieldValuesHidden'))).toBeNull();
   });
 
   it('shows an edit of custom field values field by field, and only the fields that changed', async () => {
@@ -700,7 +766,7 @@ describe('the Change history tab, on custom-field values not carried', () => {
   // V3 (T067) — this test asserted the lines were hidden without
   // `custom_fields:read`; the ruling shows them to every reader of the record.
   it('shows the field lines, under their stored labels, to a reader who may not read the fields', async () => {
-    only(CREATED_WITH_SKIPS);
+    only(servedWithoutCustomFields(CREATED_WITH_SKIPS));
     const panel = await openHistory(['crm:read', 'orders:read']);
     const created = item(panel, 0);
     const carry = row(created, en('history.field.customFieldCarry'));
@@ -713,18 +779,15 @@ describe('the Change history tab, on custom-field values not carried', () => {
     expect(getSpy).not.toHaveBeenCalledWith(DEFINITIONS_PATH);
   });
 
-  it('keeps the values row behind its own gate while the skip lines show (V3)', async () => {
-    only(CREATED_WITH_SKIPS);
+  it('shows the skip lines without the values row to a reader who may not read the fields (V3, P2)', async () => {
+    only(servedWithoutCustomFields(CREATED_WITH_SKIPS));
     const panel = await openHistory(['crm:read', 'orders:read']);
     const created = item(panel, 0);
     // The skip lines name the field by its stored label…
     expect(within(row(created, en('history.field.customFieldCarry'))).getByText(line('Region', 'value_type_mismatch'))).toBeInTheDocument();
-    // …while the values row is exactly what it was for this reader: no definition
-    // read, so no field label and no option label — the value only by its code.
-    const values = row(created, en('history.field.customFieldValues'));
-    expect(within(values).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['lead_source: trade_fair']);
-    expect(values).not.toHaveTextContent('Lead source');
-    expect(values).not.toHaveTextContent('Trade fair');
+    // …while the server sent no values, so there is no values row and no definition read.
+    expect(within(created).queryByText(en('history.field.customFieldValues'))).toBeNull();
+    expect(created).not.toHaveTextContent(/lead_source|trade_fair|Lead source|Trade fair/);
     expect(getSpy).not.toHaveBeenCalledWith(DEFINITIONS_PATH);
   });
 
@@ -734,7 +797,7 @@ describe('the Change history tab, on custom-field values not carried', () => {
       pl[key]!.replace(/\{(\w+)\}/g, (_m, name: string) => params[name] ?? '');
     const plLine = (field: string, reason: string): string =>
       plText('history.customFieldCarry.line', { field, reason: plText(`history.carryReason.${reason}`) });
-    only(CREATED_WITH_SKIPS, JOINED_WITH_SKIPS);
+    only(servedWithoutCustomFields(CREATED_WITH_SKIPS), servedWithoutCustomFields(JOINED_WITH_SKIPS));
     renderCrm(
       <StrictMode>
         <OpportunityDetail />
