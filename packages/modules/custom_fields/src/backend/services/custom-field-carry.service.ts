@@ -1,5 +1,6 @@
 import {
   assessCustomFieldCarry,
+  CUSTOM_FIELD_CARRY_SKIP_LABEL_MAX,
   type CustomFieldCarryPlan,
   type CustomFieldCarryPort,
   type CustomFieldCarrySkip,
@@ -17,7 +18,13 @@ import { coerce, isEmpty, type DefinitionSource } from './custom-field-value.ser
  * source is always known here, a `target_missing` skip included.
  */
 function labelOf(definition: CachedDefinition['definition']): CustomFieldCarrySkipLabel {
-  return { labelDefault: definition.labelDefault, labels: { ...(definition.label ?? {}) } };
+  // A definition's per-locale labels are not capped; a stored skip's are, so
+  // the snapshot is cut to what a skip holds rather than dropped when read.
+  const cut = (text: string): string => [...text].slice(0, CUSTOM_FIELD_CARRY_SKIP_LABEL_MAX).join('');
+  return {
+    labelDefault: cut(definition.labelDefault),
+    labels: Object.fromEntries(Object.entries(definition.label ?? {}).map(([locale, text]) => [locale, cut(text)])),
+  };
 }
 
 /**
@@ -82,20 +89,17 @@ export class CustomFieldCarryService implements CustomFieldCarryPort {
       const key = definition.key;
       if (Object.hasOwn(targetValues, key) && !isEmpty(targetValues[key])) continue;
       const target = targets.get(key);
-      const reason = assessCustomFieldCarry(
-        // The option question is asked of the value below, not of the option sets.
+      const incompatibility = assessCustomFieldCarry(
+        // The option question is asked of the value below, not of the option
+        // sets: with no option sets on either side, `options_missing` cannot
+        // arise, and an option the target lacks is `coerce`'s `value_invalid`.
         { valueType: definition.valueType, audience: definition.audience, options: [] },
         target
           ? { valueType: target.definition.valueType, audience: target.definition.audience, options: [] }
           : null,
       )[0];
-      if (reason !== undefined) {
-        // `options_missing` cannot arise with no option sets; mapped for the type's sake.
-        skipped.push({
-          key,
-          reason: reason.reason === 'options_missing' ? 'value_invalid' : reason.reason,
-          label: labelOf(definition),
-        });
+      if (incompatibility !== undefined && incompatibility.reason !== 'options_missing') {
+        skipped.push({ key, reason: incompatibility.reason, label: labelOf(definition) });
         continue;
       }
       const result = coerce(target!.definition.valueType, sourceValues[key], target!.options);

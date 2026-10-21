@@ -257,4 +257,12 @@ describe('CustomFieldCarryService.plan', () => {
     expect(plan.skipped[0]?.label?.labels).toEqual(labels);
     expect(plan.skipped[0]?.label?.labels).not.toBe(labels);
   });
+
+  it('cuts a label snapshot to what a stored skip holds — 200 characters a string (review fix 2026-10-21)', async () => {
+    const long = 'Ź'.repeat(250);
+    const plan = await service({
+      quote_request: [{ key: 'k', carryTo: ['order'], labels: { pl: long } }],
+    }).plan({ ...QR_TO_ORDER, sourceValues: { k: 'v' }, targetValues: {} });
+    expect(plan.skipped).toEqual([skip('k', 'target_missing', 'k', { pl: 'Ź'.repeat(200) })]);
+  });
 });

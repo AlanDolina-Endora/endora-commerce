@@ -810,15 +810,23 @@ export const customFieldCarrySkipReasonSchema = z.enum([
 export type CustomFieldCarrySkipReason = z.infer<typeof customFieldCarrySkipReasonSchema>;
 
 /**
+ * The longest string a skip's label snapshot holds — a definition's
+ * `labelDefault` cap. `custom_fields` cuts the snapshot to it when it takes it,
+ * since a definition's per-locale labels are not capped.
+ */
+export const CUSTOM_FIELD_CARRY_SKIP_LABEL_MAX = 200;
+
+/**
  * The skipped field's label as its **source** definition read when the value
  * was skipped (owner ruling 2026-10-21, V3): a history line names the field in
  * the reader's language without asking `custom_fields` for definitions, so an
  * administrator without `custom_fields:read` reads it too. A snapshot — a later
- * rename does not rewrite history.
+ * rename does not rewrite history. Each string is at most
+ * {@link CUSTOM_FIELD_CARRY_SKIP_LABEL_MAX} characters.
  */
 export const customFieldCarrySkipLabelSchema = z.object({
-  labelDefault: z.string(),
-  labels: localizedLabelSchema,
+  labelDefault: z.string().max(CUSTOM_FIELD_CARRY_SKIP_LABEL_MAX),
+  labels: z.record(z.string(), z.string().max(CUSTOM_FIELD_CARRY_SKIP_LABEL_MAX)),
 });
 export type CustomFieldCarrySkipLabel = z.infer<typeof customFieldCarrySkipLabelSchema>;
 
@@ -838,7 +846,9 @@ export interface CustomFieldCarrySkip {
 
 /**
  * A plain copy of a skip for a record to store: `key`, `reason` and — when the
- * skip has one — a copy of its label snapshot, nothing else the value carries.
+ * skip has one — a copy of its label snapshot (`labelDefault` and `labels`).
+ * **It strips every other field**: whatever else the value carries, on the skip
+ * or on its label, is dropped and never reaches a stored record.
  */
 export function customFieldCarrySkipRecord(
   skip: Omit<CustomFieldCarrySkip, 'label'> & { readonly label?: CustomFieldCarrySkipLabel | undefined },

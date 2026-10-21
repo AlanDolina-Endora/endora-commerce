@@ -175,6 +175,22 @@ describe('§1.3 customFieldCarrySkipSchema — the skipped field’s label (owne
   });
 });
 
+describe('§1.3 customFieldCarrySkipLabelSchema — bounded strings (review fix 2026-10-21)', () => {
+  const long = 'x'.repeat(201);
+  const at = 'x'.repeat(200);
+
+  it('accepts a default and per-locale labels of up to 200 characters', () => {
+    expect(cf.customFieldCarrySkipLabelSchema.safeParse({ labelDefault: at, labels: { pl: at } }).success).toBe(true);
+  });
+
+  it('refuses a default or a per-locale label longer than 200 characters', () => {
+    expect(cf.customFieldCarrySkipLabelSchema.safeParse({ labelDefault: long, labels: {} }).success).toBe(false);
+    expect(cf.customFieldCarrySkipLabelSchema.safeParse({ labelDefault: 'A', labels: { pl: long } }).success).toBe(
+      false,
+    );
+  });
+});
+
 describe('§1.3 customFieldCarrySkipRecord', () => {
   it('copies key, reason and the label snapshot, and drops anything else', () => {
     const labels = { pl: 'Źródło zamówienia' };
