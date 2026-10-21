@@ -224,6 +224,33 @@ export type ProductPriceTier = z.infer<typeof productPriceTierSchema>;
 
 // --- Product summary (list response) ----------------------------------------
 
+/**
+ * D-287 P0 — the price a storefront surface renders, from the **same**
+ * resolution that produced `ProductSummary.price`: the regular (base) price,
+ * the sale price when a sale list priced the product, and the display mode.
+ *
+ * The product page used to fetch this separately from
+ * `GET /api/v1/storefront/products/:id/resolved-price` after the catalogue had
+ * already priced the product for `price`, so every product page resolved its
+ * product twice, and the home page's cards fanned out one such request per card
+ * (`specs/pricing/read-paths-and-performance.md` §2.1). Carrying it here makes
+ * a catalogue read the one resolution those surfaces need.
+ *
+ * `basePrice` is the base partition's figure, else the Product's own price
+ * when that is what `price` came from; `salePrice` is set only when a sale list
+ * priced the product (it is then also `price`). Both are `null` when nothing
+ * prices the product; `displayMode` is still the viewer's, so a page can tell
+ * "sold on request only" (`none`) from "no price". The display-mode values are
+ * `displayModeSchema`'s (`price-lists.ts`, which imports this file and checks
+ * the two agree at compile time).
+ */
+export const productResolvedPriceSchema = z.object({
+  basePrice: z.object({ amount: z.string(), currency: z.string().length(3) }).nullable(),
+  salePrice: z.object({ amount: z.string(), currency: z.string().length(3) }).nullable(),
+  displayMode: z.enum(['gross_only', 'net_only', 'both', 'none']),
+});
+export type ProductResolvedPrice = z.infer<typeof productResolvedPriceSchema>;
+
 export const productSummarySchema = z.object({
   id: uuidSchema,
   sku: z.string().min(1).max(255),
@@ -252,6 +279,13 @@ export const productSummarySchema = z.object({
    * written before it still compiles.
    */
   minOrderQuantity: z.number().int().positive().nullable().optional(),
+  /**
+   * D-287 P0 — base + sale + display mode from the resolution behind `price`
+   * ({@link productResolvedPriceSchema}). `null` where the channel withholds
+   * prices; absent from producers that do not resolve one (optional so every
+   * producer written before it still compiles).
+   */
+  resolvedPrice: productResolvedPriceSchema.nullable().optional(),
 });
 export type ProductSummary = z.infer<typeof productSummarySchema>;
 
@@ -1892,6 +1926,15 @@ export interface ProductAudience {
   readonly organizationId: string | null;
   /** `true` for any caller the platform has identified; `false` for the public. */
   readonly authenticated: boolean;
+  /**
+   * D-287 P0 — the signed-in customer account, when the caller is one. **Not a
+   * visibility input**: `isProductVisibleTo` never reads it. It travels with
+   * the audience because the audience is the one sanctioned answer to "who is
+   * asking", and the price beside a product depends on the customer's own
+   * customer group, which overrides the organisation's (feature 040 R6). Absent
+   * for every other caller.
+   */
+  readonly customerAccountId?: string | null;
 }
 
 /**

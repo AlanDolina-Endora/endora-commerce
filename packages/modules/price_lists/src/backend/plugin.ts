@@ -179,6 +179,8 @@ export function priceListsModule(options: PriceListsModuleOptions): {
     pricingCache,
     options.resolveOrgChain,
     options.targetReads,
+    // D-287 P0 — the customer's own group, for callers that name the account.
+    options.customerAccountRead,
   );
   const statusWorker = new PriceListStatusWorker(options.emFactory, pricingGeneration);
   // One engine instance behind the probe and the port alike: a quote's "price
