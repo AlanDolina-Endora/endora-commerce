@@ -1487,6 +1487,12 @@ What to expect:
 - **Who sees the buttons.** *Create order* needs `crm:write` and
   `orders:write`; *Create quote request* needs `crm:write` and `rfqs:handle`.
   The create screens also search customers, which needs `customers:read`.
+- **A quote request's version moves once more.** The values are carried just
+  after the create request has answered, in a write of the quote request's own,
+  and a carry that fills a field raises the request's `version`. A client that
+  edits the new request with the version the create response returned is then
+  refused with `409 VERSION_CONFLICT`: read the request again and send the
+  version it reports now. A carry that fills nothing leaves the version alone.
 - **With the Quote Requests module switched off** there is no *Create quote
   request* button. *Create order* is unaffected.
 - **With the CRM module switched off** the create screens work exactly as they
@@ -1525,7 +1531,8 @@ Each entry says **when**, **what** (`action`), **who** (`actor`) and the state
   carried or skipped custom-field values carries `after.customFieldCarry`:
   `source` (`entityType` `order` or `quote_request`, `recordId`), `carried` (the
   keys filled) and `skipped` (one `{ key, reason, label }` per field not
-  carried). The carried values themselves are in `after.customFieldValues`.
+  carried). The carried values themselves are in `after.customFieldValues`,
+  for a reader who holds `custom_fields:read`.
 
 | Verb + Path | Permission | Purpose |
 | --- | --- | --- |
@@ -1536,8 +1543,15 @@ disagree with what happened — and **anybody who may read the opportunity may
 read its history**. The permission that opens the platform-wide audit log is
 not needed.
 
-Five things to know:
+Six things to know:
 
+- **Custom field values need `custom_fields:read`.** An entry's `before` and
+  `after` carry the opportunity's custom field values (`customFieldValues`) only
+  for a reader who also holds `custom_fields:read`; for anybody else the server
+  leaves that member out of every entry, and the rest of the entry is as it was
+  recorded. `customFieldCarry` stays for every reader: it names fields, reasons
+  and labels, never a value. A role holding `crm:read` alone therefore no
+  longer reads custom field values through the history.
 - A note or a message is in the history as the fact that it was written,
   edited or deleted — by whom, and how long it was. Its text is not: that is
   read on the *Notes* and *Messages* tabs.
@@ -1563,8 +1577,9 @@ Each entry is a sentence — *Opportunity status changed*, *Note added* — with
 who did it and when. A status change shows the two statuses by name; when an
 order caused it, the entry names that order and links to it. An edit lists the
 fields that changed, as they were and as they are. Custom field values are
-listed a line per field under the fields' own labels — or under their codes for
-somebody without `custom_fields:read` — and an order's status is shown by name,
+listed a line per field under the fields' own labels, to somebody holding
+`custom_fields:read`; for anybody else the history holds no custom field
+values, so none are listed. An order's status is shown by name,
 to somebody holding `orders:read` only. A description that changed is shown as
 its words, without the formatting marks: a person, an order or a product it
 mentions is shown by name, never as the token. *Show earlier changes* reads the

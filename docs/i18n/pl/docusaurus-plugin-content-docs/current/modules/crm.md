@@ -1550,6 +1550,13 @@ Czego się spodziewać:
   `orders:write`; *Utwórz zapytanie ofertowe* wymaga `crm:write` i
   `rfqs:handle`. Ekrany tworzenia wyszukują też klientów, co wymaga
   `customers:read`.
+- **Wersja zapytania ofertowego zmienia się jeszcze raz.** Wartości są
+  przenoszone tuż po tym, jak żądanie utworzenia odpowiedziało, w osobnym
+  zapisie zapytania ofertowego, a przeniesienie, które wypełnia pole, podnosi
+  `version` zapytania. Klient, który edytuje nowe zapytanie z wersją zwróconą w
+  odpowiedzi na utworzenie, dostaje wtedy `409 VERSION_CONFLICT`: odczytaj
+  zapytanie ponownie i wyślij wersję, którą zwraca teraz. Przeniesienie, które
+  niczego nie wypełnia, nie zmienia wersji.
 - **Gdy moduł Zapytań ofertowych jest wyłączony**, przycisku *Utwórz zapytanie
   ofertowe* nie ma. *Utwórz zamówienie* działa bez zmian.
 - **Gdy moduł CRM jest wyłączony**, ekrany tworzenia działają dokładnie tak
@@ -1591,7 +1598,8 @@ stan **przed** i **po**:
   zawiera `after.customFieldCarry`: `source` (`entityType` `order` albo
   `quote_request`, `recordId`), `carried` (wypełnione klucze) i `skipped` (po
   jednym `{ key, reason, label }` na każde nieprzeniesione pole). Same
-  przeniesione wartości są w `after.customFieldValues`.
+  przeniesione wartości są w `after.customFieldValues` — dla czytającego z
+  uprawnieniem `custom_fields:read`.
 
 | Metoda + ścieżka | Uprawnienie | Cel |
 | --- | --- | --- |
@@ -1602,8 +1610,16 @@ rozminąć się z tym, co się wydarzyło — a **każdy, kto może czytać szan
 czytać jej historię**. Uprawnienie otwierające dziennik audytu całej platformy
 nie jest potrzebne.
 
-Pięć rzeczy, o których warto wiedzieć:
+Sześć rzeczy, o których warto wiedzieć:
 
+- **Wartości pól niestandardowych wymagają `custom_fields:read`.** `before` i
+  `after` wpisu zawierają wartości pól niestandardowych szansy
+  (`customFieldValues`) tylko dla czytającego, który ma także
+  `custom_fields:read`; dla każdego innego serwer pomija ten element w każdym
+  wpisie, a reszta wpisu jest taka, jak została zapisana. `customFieldCarry`
+  zostaje dla każdego czytającego: nazywa pola, powody i etykiety, nigdy
+  wartości. Rola z samym `crm:read` nie odczytuje więc już wartości pól
+  niestandardowych przez historię zmian.
 - Notatka albo wiadomość jest w historii jako fakt, że została napisana,
   zmieniona albo usunięta — przez kogo i jak była długa. Jej treści tam nie
   ma: czyta się ją na kartach *Notatki* i *Wiadomości*.
@@ -1629,8 +1645,9 @@ wpis jest zdaniem — *Zmieniono status szansy sprzedażowej*, *Dodano notatkę*
 z informacją, kto i kiedy to zrobił. Zmiana statusu pokazuje oba statusy z
 nazwy; jeśli spowodowało ją zamówienie, wpis wskazuje to zamówienie i prowadzi
 do niego. Edycja wymienia zmienione pola: jak było i jak jest. Wartości pól
-niestandardowych są wymienione po jednej w wierszu, pod własnymi etykietami pól
-— albo pod ich kodami dla osoby bez `custom_fields:read` — a status zamówienia
+niestandardowych są wymienione po jednej w wierszu, pod własnymi etykietami pól,
+osobie z uprawnieniem `custom_fields:read`; dla każdego innego historia nie
+zawiera wartości pól niestandardowych, więc nie są wymieniane. Status zamówienia
 jest pokazywany z nazwy, wyłącznie osobie z uprawnieniem `orders:read`.
 Zmieniony opis jest pokazywany jako same słowa, bez znaczników formatowania:
 wspomniana w nim osoba, zamówienie albo produkt są pokazywane z nazwy, nigdy

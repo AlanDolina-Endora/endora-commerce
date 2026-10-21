@@ -193,6 +193,13 @@ Carrying changes no field's audience: whoever may read the **target** field read
 into it. Turning the option on or off is a change to the field like any other, recorded in the
 audit log.
 
+**An opportunity field's audience is about the document it carries into.** Opportunities are seen
+by administrators only, so *Who can see the value* changes nothing on the opportunity itself. What
+it decides is where the value may go: an opportunity field set to *Customer* may carry into an
+order or quote request field that is visible to customers, and the customer then sees the value
+on that order or request. Leave an opportunity field at *Internal*, the default, unless its value
+is meant for the customer.
+
 ### Changing a field that carries, or receives
 
 A field that is part of a carry can still be changed or deleted. Before a change that would stop
@@ -202,8 +209,8 @@ values from carrying, the screen warns you and lists every field on the other si
 | You are about to | The warning appears when | The button that goes ahead |
 | --- | --- | --- |
 | remove an option (**Remove** in the dialog) | a field carrying into this one has that option | **Remove option anyway** |
-| add an option (**Add option**) | this field carries to a field that lacks it | **Save anyway** |
-| change *Who can see the value* in the table | this field would become *Customer* while a field carrying into it is *Internal*, or *Internal* while it carries to a *Customer* field | **Save anyway** |
+| add an option (**Add option**) | this field carries to a field that lacks it | **Add option anyway** |
+| change *Who can see the value* in the table | this field would become *Customer* while a field carrying into it is *Internal*, or *Internal* while it carries to a *Customer* field | **Change audience anyway** |
 | delete the field (the bin) | it carries to, or receives from, any field | **Delete field anyway** |
 
 The removal and deletion buttons are red, like every destructive action. **Cancel** changes
@@ -244,7 +251,7 @@ was skipped**, in the reader's language, so anybody who may see the record can r
 not needed for that, and renaming or deleting the field later does not change the entry. The entry
 holds only the field's name and the reason, never a value; custom-field values themselves stay
 visible only with `custom_fields:read`, as before. An entry recorded before field names were kept
-with it names the field by its current label where it can, and otherwise by its key.
+with it names the field by its key — the field's current definition is not looked up.
 
 ## For integrators
 

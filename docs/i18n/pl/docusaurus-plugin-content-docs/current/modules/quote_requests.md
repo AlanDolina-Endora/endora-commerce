@@ -464,6 +464,14 @@ widoczności). Wypełniane jest tylko puste pole i tylko raz:
   powstaje. Zapytanie powiązane z szansą ręcznie nie otrzymuje niczego, podobnie jak zapytanie,
   które klient utworzył jako kopię zamówienia.
 
+  **Wersja zmienia się tuż po utworzeniu.** Przeniesienie, które wypełnia pole, jest zmianą
+  zapytania jak każda inna i podnosi jego `version`, a następuje tuż po tym, jak żądanie utworzenia
+  odpowiedziało. Klient, który edytuje nowe zapytanie z wersją zwróconą w odpowiedzi na utworzenie,
+  dostaje więc `409 VERSION_CONFLICT`, gdy wartości zostały już przeniesione: odczytaj zapytanie
+  ponownie i wyślij wersję, którą zwraca teraz. Przeniesienie, które niczego nie wypełnia, nie
+  zmienia wersji. Na czas odczytu i zapisu przeniesienie blokuje wiersz zapytania, więc nigdy nie
+  nadpisuje edycji administratora wykonanej w tej samej chwili.
+
 Gdy ten moduł jest wyłączony, nic nie jest przenoszone do zapytania ofertowego ani z niego i nic nie
 jest odtwarzane po jego powrocie. Dla integratorów: zapisane zdarzenie ma typ
 `custom-field-carry-skipped`; w `GET /api/v1/admin/quote-requests/:id/history` jest to wpis o

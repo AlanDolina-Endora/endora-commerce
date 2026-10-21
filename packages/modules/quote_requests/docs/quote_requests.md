@@ -507,6 +507,14 @@ and only once:
   request is created all the same. A request linked to an opportunity by hand receives nothing, and
   neither does a request a customer cloned from an order.
 
+  **The version moves right after the create.** A carry that fills a field is a change to the
+  request like any other and raises its `version`, and it runs just after the create request has
+  answered. A client that edits the new request with the version the create response returned is
+  therefore refused with `409 VERSION_CONFLICT` once values have been carried: read the request
+  again and send the version it reports now. A carry that fills nothing leaves the version alone.
+  The carry holds the request's row while it reads and writes it, so it never overwrites an
+  administrator's edit made at the same moment.
+
 While this module is switched off nothing is carried into or out of a quote request, and nothing is
 replayed when it returns. For integrators: the stored event is of type
 `custom-field-carry-skipped`; on `GET /api/v1/admin/quote-requests/:id/history` it is an entry of

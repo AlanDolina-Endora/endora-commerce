@@ -200,6 +200,13 @@ Przenoszenie nie zmienia widoczności żadnego pola: wartość przeniesioną do 
 ten, kto może czytać to pole. Włączenie lub wyłączenie opcji jest zmianą pola jak każda inna i trafia
 do dziennika audytu.
 
+**Widoczność pola szansy sprzedażowej dotyczy dokumentu, do którego trafia wartość.** Szanse
+sprzedażowe widzą tylko administratorzy, więc *kto widzi wartość* nie zmienia niczego w samej szansie.
+Rozstrzyga natomiast, dokąd wartość może trafić: pole szansy ustawione na *Klient* może przenosić
+wartość do pola zamówienia lub zapytania ofertowego widocznego dla klientów, a wtedy klient widzi tę
+wartość w tym zamówieniu lub zapytaniu. Zostaw pole szansy jako *Wewnętrzne* — to ustawienie
+domyślne — chyba że jego wartość jest przeznaczona dla klienta.
+
 ### Zmiana pola, które przenosi lub przyjmuje wartość
 
 Pole, które bierze udział w przenoszeniu, nadal można zmienić lub usunąć. Przed zmianą, po której
@@ -209,8 +216,8 @@ postaci *typ rekordu · klucz*:
 | Zamierzasz | Ostrzeżenie pojawia się, gdy | Przycisk, który kontynuuje |
 | --- | --- | --- |
 | usunąć opcję (**Usuń** w oknie) | pole przenoszące wartość do tego pola ma tę opcję | **Usuń opcję mimo to** |
-| dodać opcję (**Dodaj opcję**) | to pole przenosi wartość do pola, które tej opcji nie ma | **Zapisz mimo to** |
-| zmienić w tabeli, *kto widzi wartość* | to pole stałoby się widoczne dla *Klienta*, a przenosi do niego pole *Wewnętrzne*, albo stałoby się *Wewnętrzne*, a przenosi do pola widocznego dla *Klienta* | **Zapisz mimo to** |
+| dodać opcję (**Dodaj opcję**) | to pole przenosi wartość do pola, które tej opcji nie ma | **Dodaj opcję mimo to** |
+| zmienić w tabeli, *kto widzi wartość* | to pole stałoby się widoczne dla *Klienta*, a przenosi do niego pole *Wewnętrzne*, albo stałoby się *Wewnętrzne*, a przenosi do pola widocznego dla *Klienta* | **Zmień widoczność mimo to** |
 | usunąć pole (kosz) | pole przenosi wartość do jakiegokolwiek pola lub ją od niego przyjmuje | **Usuń pole mimo to** |
 
 Przyciski usunięcia opcji i pola są czerwone, jak każda nieodwracalna akcja. **Anuluj** niczego nie
@@ -252,7 +259,7 @@ została pominięta**, w języku czytającego, więc każdy, kto może zobaczyć
 `custom_fields:read`, a późniejsza zmiana nazwy lub usunięcie pola nie zmienia wpisu. Wpis zawiera
 tylko nazwę pola i powód, nigdy wartość; same wartości pól niestandardowych są jak dotąd widoczne
 tylko z `custom_fields:read`. Wpis zapisany, zanim nazwy pól zaczęto w nim przechowywać, nazywa pole
-jego obecną etykietą, gdy to możliwe, a w przeciwnym razie kluczem.
+jego kluczem — bieżąca definicja pola nie jest odczytywana.
 
 ## Dla integratorów
 
