@@ -1034,7 +1034,7 @@ build run on the fork's CI in Phase 10 — on macOS they need Linux tools.)
 `origin/master`**, under the remote-CI rule (standing rule 13). Record each result (tip, base,
 host or CI run) under its task.
 
-- [ ] T058 Final rebase onto `origin/master` (backup branch first); re-run T000's `git log` and
+- [x] T058 Final rebase onto `origin/master` (backup branch first); re-run T000's `git log` and
   `git grep` lines against the new base; regenerate and confirm nothing moves:
   ```bash
   pnpm install --frozen-lockfile
@@ -1046,7 +1046,7 @@ host or CI run) under its task.
   ```
   (`git status` must print nothing. If a migration's stamp now sorts before a newer one of the same
   module, leave it — order inside a module is by stamp and the three are independent.)
-- [ ] T059 Local cheap checks:
+- [x] T059 Local cheap checks:
   ```bash
   pnpm --filter backend run check:release-intent -- --since origin/master
   node backend/scripts/dco-signoff.ts origin/master HEAD
@@ -1054,12 +1054,12 @@ host or CI run) under its task.
   pnpm --filter backend run check:port-dependencies
   pnpm --filter backend run check:module-boundary
   ```
-- [ ] T060 Push the branch to the fork and open the draft pull request; record the CI result of
+- [x] T060 Push the branch to the fork and open the draft pull request; record the CI result of
   every job on the pushed tip — `quality` (whole-workspace `typecheck`, `lint` and the workflow's
   check list), `quality:static` (naming, language), `test:backend:unit`, `test:frontend` (the
   packages' co-located suites included), `release:changeset`, `pack-gate`, `boot-gate`,
   `build:docs`, `dco`. A red job is fixed on the branch with a new signed commit and re-pushed.
-- [ ] T061 Service-backed run on the fork: build the throwaway `ci-pg/<branch>` branch from the
+- [x] T061 Service-backed run on the fork: build the throwaway `ci-pg/<branch>` branch from the
   tip plus the fork-only workflow commit and a `ci-pg-files.txt` listing, relative to `backend/`,
   every server-bound file this feature adds or changes —
   `test/integration/custom_fields/{carry-options,entity-owner-presence,carry-port,carry-audience,cross-tenant,carry-refusal-atomicity,one-definitions-cache}.test.ts`,
@@ -1071,9 +1071,42 @@ host or CI run) under its task.
   `test/integration/_i18n/error-code-ownership.test.ts`, `test/contract/kernel/openapi-baseline.test.ts`,
   `test/contract/kernel/harness-parity.test.ts` — push it, record the per-file table, delete the
   branch. A red file is fixed on the feature branch (never on `ci-pg/…`) and the run repeated.
-- [ ] T062 Record T058 – T061 (tip and base hashes, CI run links, any known-flake re-run with its
+- [x] T062 Record T058 – T061 (tip and base hashes, CI run links, any known-flake re-run with its
   evidence) in this file as a `tasks.md`-only commit; the pull request body says `Closes #287`,
   lists the owner answers to Q1–Q5, and follows the repository's pull-request template
+
+**Gate record** (2026-10-21; T062). CI results are described here without fork run links.
+
+- **T058.** `origin/master` re-fetched at `aa6891d63` — the base of the mid-delivery rebase, with no
+  commit since — so the rebase was a no-op (backup `backup/161-pre-rebase-2`). T000's lines against it:
+  `161` free on `origin/master`; README floor `136`; `QuoteRequestSourceAssessment` and `listFilter`
+  present; no carry or system-note symbol on master; the `git log` prints only commits already
+  integrated at the mid-delivery rebase. **New**: a remote branch `feat/161-price-book-editor`
+  (`specs/161-price-book-editor/`, first commit 2026-10-21 18:43, not on master) now also carries
+  `161`; left to the coordinator (AGENTS.md: cite the slug). Regenerate sequence: `git status
+  --porcelain` empty. `AGENTS.md` appendix re-run from master's file, tag corrected to
+  `161-custom-fields-value-carry`: byte-identical to the branch's. `check:docs-translations` 0
+  findings, so no re-pin at rebase time; master gained no migration, so no re-stamp.
+- **Acceptance fixes after T058** (product owner's conditions, coordinator rulings): S6 = R9, S3 = the
+  doc half of R12 (Polish cache re-pinned), S2 (spec), S5 (contracts), S4 = R10 – R14, S1 (T061's
+  list), N1, N2; and R15 below, found by T060.
+- **T059** on `2699dd16c` (R15 after it touches one admin page; `dco` re-judged by CI on `24072b4a0`): `check:release-intent --since origin/master` 0 violations;
+  `dco-signoff.ts origin/master HEAD` 0 findings; `check:error-translations`,
+  `check:port-dependencies`, `check:module-boundary` 0 violations; `check:docs-translations`,
+  `check:module-docs` 0 findings.
+- **T060** on `24072b4a0` (base `aa6891d63`): `quality`, `quality:static`, `test:backend:unit`,
+  `test:frontend`, `release:changeset`, `pack-gate`, `boot-gate`, `build:docs`, `dco` all green; no
+  flake re-run. The tip before it, `2699dd16c`, was red in `test:frontend` only (R15).
+- **T061** on `2699dd16c` plus the fork-only workflow: 30 files, 296 tests, 29 green. The red one is
+  `test/contract/kernel/openapi-baseline.test.ts`, whose only difference is `POST
+  /api/v1/admin/feedback` — a route master's `admin_feedback` module (`53e88c7da`) registers while
+  master's `backend/test/fixtures/openapi-baseline.json` does not list it. The branch touches neither,
+  and the diff names no route of this feature, which is what the file was listed to prove: master
+  drift, not fixed here. RED proof for R9: the order receiver file alone on the test commit, 1 of 5
+  red for the lost value. `git diff --name-only 2699dd16c..24072b4a0` is
+  `packages/modules/orders/src/admin/pages/OrderDetail.tsx` only, so the service-backed run stands for
+  the final code tip. The `ci-pg` branch and its worktree are deleted.
+- The pull request body is the coordinator's; the upstream pull request is not opened here.
 
 ---
 
@@ -1196,6 +1229,14 @@ W1 and the coordinator's label-fallback ruling.
   Polish in both bundles), never the code; the Sales Opportunity is named "sales opportunity" alike in
   both modules' reason sentences. Tests: `admin/test/modules/crm/history.test.tsx`,
   `admin/test/modules/quote_requests/RfqDetail.history.test.tsx`. Commit `7f0a9aacb`.
+
+- [x] **R15 The order page names no contributor** (found by T060). `admin/test/modules/orders/OrderDetail.after-zone.test.tsx`
+  "leaves the host naming no contributor" (master's, present since the mid-delivery rebase) was red:
+  `OrderDetail.tsx` spelled `'opportunity'` in the set of note sources it can render. The set is now read
+  from `orderCommentSystemNoteSchema`'s `source.entityType` options, so the page names no module; no
+  behaviour changes. It had not surfaced before because the earlier tips' `quality` runs were cancelled.
+  Locally `admin/test/modules/orders` was run as a directory (25 files, 159 tests green) — an
+  exception to standing rule 13.
 
 ## Dependencies and order
 
