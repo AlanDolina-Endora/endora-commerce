@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Organization } from '../../helpers/package-entities.js';
-import { ERROR_CODES } from '@endora-commerce/contracts';
+import { ERROR_CODES, type LinePricesPort, type OrgLinePricePort } from '@endora-commerce/contracts';
 import {
   setupBackendServer,
   teardownBackendServer,
@@ -349,6 +349,29 @@ describe('External bulk pricing parity with cart pricing (062 / T015, SC-001)', 
     expect((foreign as { reason: string }).reason).toBe('sku_not_in_assortment');
     expect(unknown!.price).toBeNull();
     expect((unknown as { reason: string }).reason).toBe('sku_not_in_assortment');
+  });
+
+  it('prices a multi-line request in one batched resolution, not one per line (D-287 P0)', async () => {
+    const pricing = (h.container.cradle as unknown as { pricingService: OrgLinePricePort & LinePricesPort }).pricingService;
+    const batch = vi.spyOn(pricing, 'resolveLinePrices');
+    const single = vi.spyOn(pricing, 'resolveLinePrice');
+    try {
+      const bulk = await bulkPrice(keyOrgA, [
+        { sku: 'PAR-SHARED-001', quantity: 1 },
+        { sku: 'PAR-SHARED-001', quantity: 10 },
+        { sku: 'PAR-NOBRACKET-002', quantity: 3 },
+        { sku: 'PAR-SHARED-001', quantity: 25 },
+      ]);
+      expect(bulk.statusCode).toBe(200);
+      expect(bulk.data!.map((line) => (line.price ? Number(line.price.amount) : null))).toEqual([
+        111, 99, null, 99,
+      ]);
+      expect(batch).toHaveBeenCalledTimes(1);
+      expect(single).not.toHaveBeenCalled();
+    } finally {
+      batch.mockRestore();
+      single.mockRestore();
+    }
   });
 
   it('more than 200 lines ⇒ 422 VALIDATION_FAILED', async () => {

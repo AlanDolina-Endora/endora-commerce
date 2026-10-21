@@ -43,14 +43,30 @@ included) is judged against that, not against the target.
 - **A change to resolution semantics updates the set in the same merge request**:
   `current-model.md` when behaviour changes, and a vector in `worked-examples.md` for the case the
   change decides. Refresh the *Verified against* line of every file you re-checked.
-- **A new consumer prices in batches**, through `resolveListingPrices` on the pricing service
-  (`packages/modules/price_lists/src/backend/services/pricing-service.interface.ts`), never one
-  `resolveEngine` / `resolveLinePrice` call per product. The per-product paths that remain are
-  listed in `read-paths-and-performance.md` as defects, not as precedent.
-- **Keep the identity tests green and meaningful**: the batch must equal the single resolution
-  (`backend/test/integration/price_lists/listing-prices-batch.test.ts`), and the price-sort order
-  must equal live resolution (`backend/test/integration/price_lists/unit-price-ordering.test.ts`).
-  A new resolution path owes the same kind of identity test.
-- **The pricing cache is per process**: a write invalidates only the writer's process, before
-  commit. Until that is fixed, a test or a design must not assume another replica sees a price
-  change within the 60 s TTL (`read-paths-and-performance.md` §2.4).
+- **A new consumer prices in batches**, through the batched entry points on the pricing service
+  (`packages/modules/price_lists/src/backend/services/pricing-service.interface.ts`):
+  `resolveListingPrices` (quantity 1, a listing), `resolveListingPriceDetails` (the same plus
+  base / sale / display mode, for a surface that renders the split) and `resolveLinePrices` (many
+  lines, each at its own quantity) — never one `resolveEngine` / `resolveLinePrice` call per product
+  or line. The per-product paths that remain are listed in `read-paths-and-performance.md` as
+  defects, not as precedent.
+- **A buyer is named, not resolved by the caller**: pass the organization and, for a signed-in
+  customer, `customerAccountId`; the engine applies the one customer-group rule
+  (`current-model.md` §1.2). Do not compute a group in a consumer.
+- **Keep the identity tests green and meaningful**: the listing batch must equal the single
+  resolution (`backend/test/integration/price_lists/listing-prices-batch.test.ts`), the line batch
+  must equal one `resolveLinePrice` per line key by key
+  (`backend/test/integration/price_lists/line-prices-batch.test.ts`), and the price-sort order must
+  equal live resolution (`backend/test/integration/price_lists/unit-price-ordering.test.ts`). A new
+  resolution path owes the same kind of identity test.
+- **An overlay that decorates `resolveLinePrice` decorates `resolveLinePrices` too.** The cart,
+  the placement price check, quote reference prices and the external catalogue API price through
+  the batch; wrapping the single call alone leaves them on core
+  (`backend/src/apps/example/modules/example_overlay/backend.ts` is the reference).
+- **The pricing cache is per process, invalidated after commit and announced to every process.**
+  Every audited price-list write and every status sweep that flips a list clears the writer's LRU
+  once the write has committed and publishes a bump on the Redis channel
+  `b2b:price_lists:pricing-generation`; every process clears its own LRU on a bump. Publishing is
+  best effort: when it is lost, the 60 s TTL is the bound on another replica's staleness, so a test
+  or a design may rely on the bump for promptness but not for correctness. Catalog writes do not
+  bump (`read-paths-and-performance.md` §2.4).

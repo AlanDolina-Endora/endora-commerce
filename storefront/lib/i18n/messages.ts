@@ -167,7 +167,6 @@ export type MessageKey =
   | 'product.backorder.hint'
   | 'product.variants.heading'
   | 'product.variants.sku'
-  | 'product.variants.priceOverride'
   | 'product.variants.stockLevel'
   | 'product.variants.outOfStock'
   | 'product.variants.selectThisVariant'
@@ -572,7 +571,6 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'product.backorder.hint': 'Currently out of stock — backorder available, dispatched as soon as the next batch arrives.',
     'product.variants.heading': 'Variants',
     'product.variants.sku': 'SKU',
-    'product.variants.priceOverride': 'Price',
     'product.variants.stockLevel': 'In stock',
     'product.variants.outOfStock': 'Out of stock',
     'product.variants.selectThisVariant': 'Currently selected',
@@ -954,7 +952,6 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'product.backorder.hint': 'Aktualnie brak na stanie — produkt mozna zamowic, wysylka po dotarciu kolejnej dostawy.',
     'product.variants.heading': 'Warianty',
     'product.variants.sku': 'Kod',
-    'product.variants.priceOverride': 'Cena',
     'product.variants.stockLevel': 'Dostepne',
     'product.variants.outOfStock': 'Niedostepny',
     'product.variants.selectThisVariant': 'Wybrany',

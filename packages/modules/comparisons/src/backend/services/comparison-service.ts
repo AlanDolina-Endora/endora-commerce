@@ -548,6 +548,10 @@ export class ComparisonService {
             context: {
               salesChannel: { id: viewerSalesChannelId, defaultCurrency: currency },
               organization: viewerOrganization,
+              // D-287 P0 — the customer's own group, as on the catalogue listing.
+              ...(viewerOrganization && viewer.kind === 'buyer' && viewer.audience.customerAccountId
+                ? { customerAccountId: viewer.audience.customerAccountId }
+                : {}),
             },
           })
         : new Map<string, ListingPrice>();

@@ -19,7 +19,7 @@ import type {
   CatalogPackagingUnitRecord,
   CatalogProductReadPort,
   CatalogProductRecord,
-  LinePricePort,
+  LinePricesPort,
   ProductDisplayModePort,
   OrganizationDetailsPort,
 } from '@endora-commerce/contracts';
@@ -146,8 +146,11 @@ export class CartService {
    */
   constructor(
     private readonly emFactory: () => EntityManager,
-    /** `price_lists`' line-resolution slice (feature 075, Phase C). */
-    private readonly pricingService: LinePricePort,
+    /**
+     * `price_lists`' line-resolution slice (feature 075, Phase C) — the batched
+     * one since D-287 P0, so a basket's lines are priced in one call.
+     */
+    private readonly pricingService: LinePricesPort,
     /** `catalog`'s product read model — products, variants, packaging units. */
     private readonly catalogProducts: CatalogProductReadPort,
     /** `organizations`' read model — the buying org the price resolves against. */
@@ -562,19 +565,26 @@ export class CartService {
       organizationId: actor.customer?.organizationId ?? null,
       signedIn: actor.customer !== undefined,
       salesChannelId: this.#basketChannelOf(actor),
+      customerAccountId: actor.customer?.customerAccountId ?? null,
     });
     const quantities = new Map<string, number>();
+    const lines: Array<Parameters<CartLinePricing['orderablePrices']>[1][number]> = [];
     for (const { index, input, resolved } of resolvedLines) {
       if (rejections.has(index)) continue;
       const key = `${resolved.product.id}|${input.variantId ?? ''}|${input.packagingUnitId ?? ''}`;
       const quantity = (keepRepeated ? 0 : (quantities.get(key) ?? 0)) + resolved.effectiveQuantity;
       quantities.set(key, quantity);
-      await this.#orderablePriceOrRefuse(pricingCtx, {
+      lines.push({
+        key: String(lines.length),
         product: resolved.product,
         variantId: input.variantId ?? null,
         quantity,
       });
     }
+    // D-287 P0 — the batch is priced in one call; the first line that cannot
+    // be ordered refuses, in line order, exactly as the per-line loop did.
+    const answers = await this.#linePricing.orderablePrices(pricingCtx, lines);
+    for (const line of lines) this.#refuseUnorderable(answers.get(line.key)!, line);
   }
 
   /**
@@ -663,6 +673,7 @@ export class CartService {
       organizationId: actor.customer?.organizationId ?? null,
       signedIn: actor.customer !== undefined,
       salesChannelId: this.#basketChannelOf(actor),
+      customerAccountId: actor.customer?.customerAccountId ?? null,
     });
     if (existing) {
       // The merged line is a line of a new quantity, so it takes the price for
@@ -848,7 +859,14 @@ export class CartService {
     ctx: CartPricingContext,
     line: Parameters<CartLinePricing['orderablePrice']>[1],
   ): Promise<Extract<CartLinePriceAnswer, { ok: true }>> {
-    const answer = await this.#linePricing.orderablePrice(ctx, line);
+    return this.#refuseUnorderable(await this.#linePricing.orderablePrice(ctx, line), line);
+  }
+
+  /** The refusal half of {@link #orderablePriceOrRefuse}, for an answer already in hand. */
+  #refuseUnorderable(
+    answer: CartLinePriceAnswer,
+    line: { product: { id: string } },
+  ): Extract<CartLinePriceAnswer, { ok: true }> {
     if (answer.ok) return answer;
     if (answer.reason === 'quote_only') {
       // Issue #86 — its own code: raised as `VALIDATION_FAILED` it could not
@@ -913,6 +931,7 @@ export class CartService {
         organizationId: actor.customer?.organizationId ?? cart.organizationId ?? null,
         signedIn: actor.customer !== undefined,
         salesChannelId: this.#basketChannelOf(actor),
+        customerAccountId: actor.customer?.customerAccountId ?? cart.customerAccountId ?? null,
       });
       const price = await this.#orderablePriceOrRefuse(pricingCtx, {
         product,
@@ -1177,21 +1196,33 @@ export class CartService {
       organizationId: customer.organizationId,
       signedIn: true,
       salesChannelId: customer.salesChannelId,
+      customerAccountId: customer.customerAccountId,
     });
     const products = await this.catalogProducts.findByIds([
       ...new Set(items.map((it) => it.productId)),
     ]);
     const productById = new Map(products.map((p) => [p.id, p]));
+    // D-287 P0 — every line in one batched resolution.
+    const answers = await this.#linePricing.orderablePrices(
+      pricingCtx,
+      items.flatMap((item) => {
+        const product = productById.get(item.productId);
+        return product
+          ? [
+              {
+                key: item.id,
+                product,
+                variantId: item.variantId ?? null,
+                quantity: item.quantity,
+                agreed: agreementOf(item),
+              },
+            ]
+          : [];
+      }),
+    );
     for (const item of items) {
-      const product = productById.get(item.productId);
-      if (!product) continue;
-      const answer = await this.#linePricing.orderablePrice(pricingCtx, {
-        product,
-        variantId: item.variantId ?? null,
-        quantity: item.quantity,
-        agreed: agreementOf(item),
-      });
-      if (!answer.ok) continue;
+      const answer = answers.get(item.id);
+      if (!answer?.ok) continue;
       item.unitPrice = answer.unitPrice;
       item.currency = answer.currency;
     }

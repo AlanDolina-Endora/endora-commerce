@@ -8,7 +8,7 @@ import { CompareToggle } from './CompareToggle';
 import { BaseSalePriceBlock } from './pricing/BaseSalePriceBlock';
 import { QuoteRequestCta } from './pricing/QuoteRequestCta';
 import { ProductCardActions } from './ProductCardActions';
-import type { ResolvedPrice } from '../lib/api/pricing';
+import type { PriceDisplay } from '../lib/api/pricing';
 import { toAbsoluteAssetUrl } from '../lib/asset-url';
 import { publicApiBaseUrl } from '../lib/env.mjs';
 
@@ -48,7 +48,7 @@ export function ProductCard(props: {
   stock?: StorefrontProductStock | null;
   /** Optional feature-011 resolver payload — when present it drives
    *  the price block, sale treatment, and display-mode handling. */
-  resolved?: ResolvedPrice | null;
+  resolved?: PriceDisplay | null;
   /**
    * Fractional VAT rate used to derive gross from net; defaults to the
    * deployment assumption in `lib/i18n/money` (issue #132). The card used to
@@ -142,7 +142,7 @@ export function ProductCard(props: {
 function renderPriceSlot(args: {
   product: ProductSummary;
   locale: string;
-  resolved: ResolvedPrice | null | undefined;
+  resolved: PriceDisplay | null | undefined;
   t: ReturnType<typeof tForLocale>;
   vatRate: number;
 }): ReactNode {

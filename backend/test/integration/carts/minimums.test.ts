@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { ERROR_CODES, type LinePricePort } from '@endora-commerce/contracts';
+import { ERROR_CODES, type LinePricesPort } from '@endora-commerce/contracts';
 import {
   setupBackendServer,
   teardownBackendServer,
@@ -351,8 +351,9 @@ describe('155 — cart add and edit enforce the order minimums [integration]', (
     });
 
     it('a refused add makes no price_lists call; an accepted one does', async () => {
-      const pricing = (h.container.cradle as unknown as { pricingService: LinePricePort }).pricingService;
-      const spy = vi.spyOn(pricing, 'resolveLinePrice');
+      // D-287 P0 — the cart prices through the batched slice.
+      const pricing = (h.container.cradle as unknown as { pricingService: LinePricesPort }).pricingService;
+      const spy = vi.spyOn(pricing, 'resolveLinePrices');
       try {
         const refused = await add(basket(), { productId: A.id, quantity: 5 });
         expect(refused.statusCode, refused.body).toBe(422);

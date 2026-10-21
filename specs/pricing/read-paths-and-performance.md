@@ -2,7 +2,7 @@
 
 Every place a price is **read** — listings, PDP, search, typeahead, cart, checkout, quotes, promotions — with its query shape, caching, measured cost and known N+1 paths. The summary table comes first; the detailed audit follows.
 
-**Verified against** `master` at `b1021c71b` on 2026-10-21. File:line citations are as of that commit; re-check them before relying on one.
+**Verified against** `master` at `b1021c71b` on 2026-10-21, and **re-verified for the P0 read-path hardening** (D-287 P0, branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21. File:line citations in passages P0 did not touch are as of `b1021c71b`; the passages P0 changed cite symbols rather than lines. Re-check either before relying on it.
 
 **Section numbers.** `§N` references follow the numbering of the original analysis, which is split across this directory: §1 → `current-model.md`; §2 → `read-paths-and-performance.md` (its summary table); §3–§9, §11, §12 → `decision-record.md`; §10 → `worked-examples.md`. `read-paths §N` points into `read-paths-and-performance.md`, `peers §N` into `peer-platforms.md`. Path abbreviations: `PL/` = `packages/modules/price_lists/src/`, `CON/` = `packages/contracts/src/`, `CAT/` = `packages/modules/catalog/src/`, `SF/` = `storefront/`.
 
@@ -14,15 +14,49 @@ Every place a price is **read** — listings, PDP, search, typeahead, cart, chec
 | --- | --- | --- |
 | Listing page, 50 cards (`resolveListingPrices`) | 14–15 statements, p95 ≈ 22 ms on 120 products | batched; CPU O(products × active lists); `listing-price-viewer-cost.bench.ts:43-68` |
 | Same with matrix entries | p95 11–15 ms on 2 000 products | `backend/test/perf/price_lists/matrix-resolver.bench.ts:37-45` |
-| `resolveEngine` (PDP, cart line) | ≈ 7 statements; p95 8.5–11 ms, 50 lists | `backend/test/perf/price_lists/resolver.bench.ts:39-46`; PDP prices the product twice (read-paths §2.1) |
+| `resolveEngine` (`resolved-price` route, a single cart add) | ≈ 7 statements (+1 account read for a signed-in customer); p95 8.5–11 ms, 50 lists | `backend/test/perf/price_lists/resolver.bench.ts:39-46`; the PDP no longer calls it (read-paths §2.1) |
+| `resolveLinePrices` (cart read, placement check, quote reference, external API) | **12 statements for 9 lines and for 45 lines**, against 112 for one `resolveLinePrice` per line | `backend/test/integration/price_lists/line-prices-batch.test.ts` (asserted constant, ≤ 16) |
 | Price-sorted first page | 3.1 ms no matrix; 41.4 ms category %; 21.3 ms all-products % (2 000 products) | merge of index streams (`PL/backend/services/unit-price-ordering.ts:1-41`) |
 | Search (Meilisearch) | index carries **no price**; hits re-priced from Postgres; price sort/range routed to Postgres | `packages/modules/search/src/backend/services/search-query.service.ts:78-84, 262-291` |
-| N+1 survivors | home bestsellers, typeahead, external catalog API, cart GET recompute, buyer line price | read-paths §2.3, §5 |
+| N+1 survivors | admin order preview, external order intake probe, product feed generation | read-paths §2.3, §5; the five paths P0 batched are listed in *P0 — what changed* below |
 
 Not measured anywhere: > 5 000 products on the listing path, hundreds of org-targeted lists,
-category-heavy rules, multi-replica cache behaviour (read-paths §7).
+category-heavy rules, multi-replica cache behaviour under load (read-paths §7).
 
 ---
+
+## P0 — what changed (D-287 P0, read-path hardening)
+
+The model is unchanged; these are the read-path defects of the audit below that P0 fixed. Each
+names the test that holds it.
+
+| Defect (audit §) | Now | Test |
+| --- | --- | --- |
+| PDP priced twice (§2.1) | `GET /api/v1/catalog/products/:slug` carries `ProductSummary.resolvedPrice` (base, sale, display mode) from the resolution behind `price` (`resolveListingPriceDetails`); the storefront PDP no longer calls `resolved-price` | `backend/test/integration/price_lists/customer-own-group-every-path.test.ts` (one details call, no `resolveEngine`); `storefront/test/catalog/single-price-resolution.test.tsx` |
+| Home bestsellers N+1 HTTP (§2.1) | the cards read the listing's `resolvedPrice`; `getResolvedPricesBulk` is removed | `single-price-resolution.test.tsx` |
+| Typeahead `resolveEngine` per hit (§4) | one `resolveListingPriceDetails` call per popup | `packages/modules/search/src/backend/services/cross-module-ports.test.ts` |
+| External catalogue API per summary / line / rung (§2.1) | one `resolveLinePrices` call each | `backend/test/contract/catalog/bulk-pricing-parity.test.ts` |
+| Cart GET recompute, batch add, login/reorder reprice, placement drift check per line (§5) | one `resolveLinePrices` call per basket (`CartLinePricing.orderablePrices`) | `packages/modules/carts/src/backend/services/cart-line-pricing.test.ts`, `backend/test/integration/carts/cart-pricing-recompute.integration.test.ts` |
+| Quote reference prices per line (§5) | one `resolveLinePrices` call per 100-line chunk | `packages/modules/price_lists/src/backend/services/buyer-line-price-service.test.ts` |
+| Customer's own group ignored on listings, PDP, cart (§2.2) | one rule on every path, price sort included (`current-model.md` §1.2) | `customer-own-group-every-path.test.ts`, `line-prices-batch.test.ts` |
+| Invalidate before commit (§2.4) | after `CommandBus.run` returns, only for a write that mutated; a fill that straddles an invalidation is not stored | `backend/test/integration/price_lists/pricing-invalidation-after-commit.test.ts` |
+| No cross-process invalidation (§2.4) | bump published on `b2b:price_lists:pricing-generation`, every process subscribes on boot | `backend/test/integration/kernel/cross-process-invalidation.test.ts` |
+| Sweeper does not invalidate (§2.4) | a sweep that flips a list bumps | `pricing-invalidation-after-commit.test.ts` |
+| Cart own-price fallback labelled PLN (§1) | labelled with the basket channel's default currency; a basket with no channel is unpriced for it | `cart-line-pricing.test.ts` |
+| `GET /cart` re-priced on a second chain — #168 (§5) | the read prices through `CartLinePricing.orderablePrices`, the chain placement's drift check runs: agreed price, own-price fallback and display-mode refusal included; a line placement would refuse reads as unavailable | `backend/test/integration/carts/cart-read-equals-placement.test.ts` |
+| Variant picker shows `price_override` (§1) | no price per variant; the PDP price block is the price of every variant | `storefront/test/catalog/variant-picker.test.tsx` |
+
+Still open after P0 (not fixed, by decision or scope):
+- **N+1**: admin order preview (`orders/src/backend/routes.ts`, `resolveLinePrice` per line), the
+  external order intake probe (`order-api-intake-service.ts`), product feed generation
+  (`product_feeds/src/backend/plugin.ts`, one `resolveLinePrice` per item).
+- The external catalogue API prices the bound **organization** only; the API key's bound customer
+  account is not passed, so that customer's own group does not apply there.
+- The typeahead passes **no currency** (prices in the channel default).
+- Next.js `pricing:*` cache tags are still never revalidated by the backend (§2.4).
+- Catalog writes (categories, `defaultPrice`) still do not invalidate the pricing cache (§2.4).
+- Short price-sorted and search pages (#235, §3).
+- Issues #167 and the quote-line half of #303 (§8).
 
 ## Detailed audit
 
@@ -78,10 +112,13 @@ Consequences:
 - The listing chain is *"applicable list → product's own `defaultPrice` → nothing"*
   (`PL/backend/services/listing-price-chain.ts:7-11, 24-53`). The own-price arm applies only when
   the requested currency equals the channel default (`:49`).
-- The cart applies the same fallback but labels it **hard-coded `PLN`**
-  (`packages/modules/carts/src/backend/services/cart-line-pricing.ts:69, 143-145`) — it does not
-  apply the currency guard the listing chain does. On a non-PLN channel the card and the cart line
-  disagree on currency (inferred from the two code paths).
+- The cart applies the same fallback. Until P0 it labelled it **hard-coded `PLN`**; since P0 it
+  labels it with the basket channel's default currency, as the listing chain does, and a basket
+  whose channel is gone is unpriced for it (`CartLinePricing.orderablePrices`). The cart prices in
+  the channel default only, so the listing's "requested currency equals channel default" guard has
+  no cart counterpart to disagree with.
+- The storefront variant picker showed `product_variants.price_override`, which is never charged;
+  since P0 it shows no price per variant (`SF/components/VariantPicker.tsx`).
 - Price-sort and price-range ignore the own-price arm entirely; those products go to the
   "unpriced tail" (`CAT/backend/services/catalog-query.service.ts:949-959`).
 - Variant prices do not exist: brackets have no `variant_id` (`…engine.ts:117-138`); `variantId`
@@ -100,11 +137,11 @@ Consequences:
 | --- | --- | --- | --- |
 | Category page `/c/[slug]`, `/catalog`, `/search` | `SF/app/(catalog)/c/[slug]/page.tsx:82`, `SF/app/(catalog)/catalog/page.tsx:49`, `SF/app/(catalog)/search/page.tsx:49` → `SF/lib/api/catalog.ts:82-110` | `GET /api/v1/catalog/products` | batched `resolveListingPrices` (qty 1) |
 | PLP card | `SF/components/ProductGrid.tsx:43` renders `<ProductCard>` **without** `resolved` | — | uses `ProductSummary.price` = `{amount,currency}` only (`packages/contracts/src/price-lists.ts:540-546`) → **no sale/strikethrough, no display-mode on PLP cards** |
-| Home "bestsellers" | `SF/app/page.tsx:62-78` | `GET /api/v1/catalog/products?limit=4` **plus** `getResolvedPricesBulk` → N × `GET /api/v1/storefront/products/:id/resolved-price` | **N+1 HTTP** (fan-out, concurrency 8, `SF/lib/api/pricing.ts:116-137`; comment `:10-13` says the batch route "is not yet implemented") |
-| PDP `/p/[slug]` | `SF/app/(catalog)/p/[slug]/page.tsx:130, 138-141` | `GET /api/v1/catalog/products/:slug` **and** `GET /api/v1/storefront/products/:id/resolved-price?quantity=1` | the product is priced **twice**: once by `resolveListingPrices([product])` (`CAT/backend/services/catalog-query.service.ts:1293-1299`), once by `resolveEngine` (`PL/backend/routes.storefront.ts:148-209`). PDP passes no `variantId` (`page.tsx:140`). |
+| Home "bestsellers" | `SF/app/page.tsx` | `GET /api/v1/catalog/products?limit=4` | **P0:** the cards render the listing's `ProductSummary.resolvedPrice`; the per-card `resolved-price` fan-out (`getResolvedPricesBulk`) is gone |
+| PDP `/p/[slug]` | `SF/app/(catalog)/p/[slug]/page.tsx` | `GET /api/v1/catalog/products/:slug` | **P0:** priced **once**, by `resolveListingPriceDetails([product])` in `CatalogQueryService.getProductByIdOrSlug`; the page renders `product.resolvedPrice` and no longer calls `resolved-price` (it priced the product a second time through `resolveEngine`). PDP passes no `variantId`. |
 | Cart page | `SF/app/(commerce)/cart/page.tsx:152` | `GET /api/v1/storefront/pricing/display-mode/:productId` (first item only) | display-mode chain |
-| Typeahead | `SF/components/SearchAutocomplete.tsx:346-355` | `GET /api/v1/search/suggest` | per-item `resolveEngine` (see §4) — the one listing-like surface that **does** show strikethrough |
-| External catalog API (`/api/v1/external/catalog/*`) | n/a (B2B integrations) | `CAT/backend/services/catalog-org-price-decorator.ts` | **N+1**: sequential `resolveLinePrice` per summary (`:102-125`), per bulk line (`:175-214`), and per tier quantity for the ladder (`:224-256`) |
+| Typeahead | `SF/components/SearchAutocomplete.tsx:346-355` | `GET /api/v1/search/suggest` | **P0:** one `resolveListingPriceDetails` call for the popup (see §4) |
+| External catalog API (`/api/v1/external/catalog/*`) | n/a (B2B integrations) | `CAT/backend/services/catalog-org-price-decorator.ts` | **P0:** one `resolveLinePrices` call each for the summaries, the bulk lines and the tier ladder (it was one sequential `resolveLinePrice` per summary, line and rung) |
 
 ### 2.2 Buyer context
 
@@ -112,19 +149,21 @@ Consequences:
   `OrganizationDetailsPort` once per page (`CAT/backend/services/catalog-query.service.ts:533-544`;
   storefront routes `PL/backend/routes.storefront.ts:60-74`). Org inheritance chain via
   `organizationInheritancePort.priceListOrgChain` (`PL/backend/index.ts:142-143`).
-- **Customer group**: only the **organization's** group (`pricing-service.ts:624-625`). The
-  customer's own group override (feature 040) is *not* resolved on listings, the PDP endpoint
-  (`routes.storefront.ts:172-175` says so explicitly), or the cart (`cart-line-pricing.ts:111-120`
-  passes no `customerGroupId`). It **is** resolved by `BuyerLinePriceService`
-  (`PL/backend/services/buyer-line-price-service.ts:119`) and admin order preview
-  (`packages/modules/orders/src/backend/routes.ts:974-983`). → Same buyer can get different list
-  winners on PLP vs. quote vs. admin order (inferred from the inputs).
+- **Customer group** (P0): one rule on every path — explicit group ?? the customer account's own
+  group ?? the organization's (`effectiveCustomerGroupId`, `PL/backend/services/customer-group-rule.ts`).
+  Callers name the buyer: `productAudienceOf` carries `customerAccountId`, and the listing, the
+  product detail, product links, search, the typeahead, comparisons, the `resolved-price` route
+  and the cart pass it; the engine reads the account once per call (one statement) and ignores an
+  account of another organization. The price **ordering** (`orderByUnitPrice`, `pricedProductIds`)
+  applies the same rule, so the sort and the card agree. `BuyerLinePriceService` and the admin
+  order preview pass the group they resolved. Before P0 listings, the PDP endpoint and the cart
+  used the organization's group alone, so one buyer could meet different winners on PLP vs. quote.
 - **Sales channel**: resolved once by middleware (`getResolvedChannel`, `routes.storefront.ts:125, 166`).
   A non-public channel skips pricing entirely (`catalog-query.service.ts:516`).
 - **Currency**: `?currency=` from the `currency` cookie (`SF/lib/api/catalog.ts:39-43`), normalised
   to "omit if equal to channel default" (`packages/contracts/src/price-lists.ts:775-785`). The cart
-  and the typeahead ignore it: cart prices in the channel default (`cart-line-pricing.ts:111-120`),
-  suggest passes no currency (`packages/modules/search/src/backend/services/suggestion-pricing-enricher.ts:83-86`).
+  and the typeahead ignore it: the cart prices in the basket channel's default currency, the
+  typeahead passes no currency (still open after P0).
 
 ### 2.3 Query cost per listing page (`resolveListingPrices`, `PL/backend/services/pricing-service.ts:616-757`)
 
@@ -149,14 +188,20 @@ Measured after batching: a 50-card page cold = **14 statements, 61.9 ms anon / 1
 32.1 ms signed-in; p95 22 ms** (`backend/test/perf/catalog/listing-price-viewer-cost.bench.ts:43-68`;
 corpus only 120 products, no categories — `:70-82`).
 
-Per-product, non-batched paths still in production use (all cache-miss cost ≈ 7 statements each,
+The same walk now backs two more batched entry points (P0): `resolveListingPriceDetails` (the
+listing answer plus base / sale / display mode) and `resolveLinePrices` (many lines, each at its own
+quantity; one walk item per distinct product × variant × quantity). Measured for
+`resolveLinePrices`: **9 lines = 12 statements, 45 lines = 12 statements, against 112 for one
+`resolveLinePrice` per line** (`backend/test/integration/price_lists/line-prices-batch.test.ts`).
+A signed-in customer adds one account read per call.
+
+Per-product, non-batched paths still in production use (cache-miss cost ≈ 7 statements each,
 sequential):
-- PDP `resolved-price` → `resolveEngine` (1 product, fine).
-- Home page bestsellers: 4 × HTTP × `resolveEngine` (`SF/app/page.tsx:74-78`).
-- Typeahead: `Promise.all` of `resolveEngine` per hit (`suggestion-pricing-enricher.ts:78-102`).
-- External catalog API summaries, bulk and tier ladder (`catalog-org-price-decorator.ts:109, 186, 238`).
-- Cart GET recompute, cart add/merge, placement drift check, buyer line price, order intake —
-  all loop `resolveLinePrice` per line (§5).
+- The `resolved-price` route → `resolveEngine` (1 product, fine; no catalogue surface calls it
+  since P0), and a single cart add or quantity change (a batch of one).
+- Admin order preview — `resolveLinePrice` per line (`orders/src/backend/routes.ts`).
+- External order intake probe (`order-api-intake-service.ts`).
+- Product feed generation — `resolveLinePrice` per item (`product_feeds/src/backend/plugin.ts`).
 - `resolveEngine` additionally **constructs a new `PriceListService` per call** via dynamic import
   to resolve display mode (`pricing-service.ts:491-504`) — 1–4 more statements
   (`price-list-service.ts:1070-1125`).
@@ -165,23 +210,21 @@ sequential):
 
 | Layer | Where | Key | TTL | Invalidation |
 | --- | --- | --- | --- | --- |
-| **`PricingCache` — in-process LRU, not Redis** | `PL/backend/services/pricing-cache.ts:1-106`, one instance per process (`PL/backend/plugin.ts:138-164`) | `(productId, variantId, quantity, currency, salesChannelId, organizationId, customerGroupId)` (`:25-33, 96-106`) | 60 s (`:40`), capacity 5 000 (`:41`); tests use 0 (`PL/backend/index.ts:50-56`) | `invalidateAll()` on every audited `PriceListService` write (`price-list-service.ts:236-238, 284-303`), incl. matrix writes (`price-matrix-service.ts:41-46`) |
+| **`PricingCache` — in-process LRU, not Redis** | `PL/backend/services/pricing-cache.ts`, one instance per process (`PL/backend/plugin.ts`) | `(productId, variantId, quantity, currency, salesChannelId, organizationId, effective customerGroupId)` | 60 s, capacity 5 000; tests use 0 (`PL/backend/index.ts`) | **P0:** through `PricingGeneration` (`PL/backend/services/pricing-generation.ts`): every audited `PriceListService` write (matrix writes included) after `CommandBus.run` returns, and only when it mutated; every status sweep that flips a list; each bump clears the local LRU and is published on Redis `b2b:price_lists:pricing-generation`, which every process subscribes to on boot. A fill whose resolution began before a bump is not stored (generation counter). |
 | cart recompute | Redis `b2b:cart:recompute:<cartId>` (`packages/modules/carts/src/backend/services/cart-recompute-cache.ts:20-21`) | cartId | 30 s | `invalidate(cartId)` on cart writes (`:77-80`); hit check is by cartItemId only, not quantity (`cart-pricing-recompute.ts:176-179`) |
 | Next Data Cache (storefront) | `SF/lib/api/client.ts:120-156` | URL (+channel/lang headers) | 60 s, **anonymous only**; signed-in = `no-store` | tags `pricing:resolved`, `pricing:product:<id>`, `catalog:products` (`SF/lib/api/pricing.ts:95, 159`, `SF/lib/api/catalog.ts:108`) — **no backend code posts these tags** (grep of `packages`/`backend/src` for them is empty; the shared tag vocabulary covers only CMS/megamenu, `packages/contracts/src/storefront-cache-tags.ts:20-38`) |
 | HTTP | backend sets `Cache-Control: private, no-store` for org-bound responses (`markPersonalisedPricing`, `routes.storefront.ts:112, 156`) | | | |
 
-Gaps (code-verified unless marked):
-- **Multi-process staleness**: `invalidateAll` clears only the writer's process. `PricingCache` is
-  not registered in the kernel's `InProcessCacheRegistry` (`packages/platform/src/kernel/cache/in-process-cache-registry.ts`; no registration in `PL/`), and there is no pub/sub. Every other API/worker replica serves the old price for up to 60 s.
-- **Scheduler does not invalidate**: `PriceListStatusWorker.sweep` flips `scheduled→active` /
-  `active→expired` with no cache call (`PL/backend/services/price-list-status-worker.ts:63-96`), and
-  sweeps every 5 min (`:8`) → a sale "starting at 00:00" goes live 0–5 min + 0–60 s late.
+Fixed by P0 (kept for the record): multi-process staleness (a write cleared only the writer's
+process), the scheduler not invalidating, and the invalidate-before-commit race. The cross-process
+bump is best effort: a lost message degrades to the 60 s TTL, the pre-P0 behaviour. A scheduled
+list still goes live up to one sweep interval (5 min) after its `startsAt`, since activation is
+the sweep's, not read-time.
+
+Gaps still open (code-verified unless marked):
 - **Catalog-side writes do not invalidate**: category membership (drives category rules and display
   mode) and `defaultPrice` (own-price arm) are written by `catalog`, which never touches the pricing
   cache (grep).
-- **Invalidate-before-commit race (inferred)**: inside the Command Bus path the cache is cleared in the
-  `run` callback (`price-list-service.ts:289-293`), i.e. before the transaction commits; a concurrent
-  read in that window re-caches the pre-write value for 60 s.
 - **Worst-case anonymous staleness ≈ 60 s Next + 60 s backend LRU** (inferred from both TTLs, no tag
   revalidation).
 - **Hit rate collapses for B2B**: 99.0 % anonymous vs **5.3 % at 50 organizations**
@@ -253,9 +296,12 @@ Gaps (code-verified unless marked):
   path (`CAT/backend/routes.public.ts:270-275`), losing typo tolerance (`:31-34`) (inferred consequence).
 - **Re-priced after the hit, buyer-specific**: hits are re-read from Postgres and priced with the
   same batched `resolveListingPrices` for the viewer and currency (`packages/modules/search/src/backend/services/search-query.service.ts:262-291`) — "four statements" per page (`:273-275`). Audience filtering also post-hoc → short pages (#235).
-- **Typeahead** (`suggestion-pricing-enricher.ts:65-103`): per-hit `resolveEngine` in `Promise.all`
-  (N parallel, ≈7 statements each on miss), returns `basePrice`/`salePrice`/`displayMode` — so
-  suggestions show strikethrough while PLP cards don't. No currency passed (`:85`).
+- **Typeahead** (`suggestion-pricing-enricher.ts`, P0): one `resolveListingPriceDetails` call for
+  the popup (it was a per-hit `resolveEngine` in `Promise.all`), returning `basePrice`/`salePrice`/
+  `displayMode`. `basePrice` is now the listing chain's, so a product priced only by its own
+  attribute shows it (it showed none). A pricing refusal degrades the whole popup to plain
+  summaries; a switched-off `price_lists` is re-thrown. No currency passed (still open). The
+  Meilisearch result path prices through the same call and carries `resolvedPrice`.
 - `admin_search`: no price references in `packages/modules/admin_search/src` (grep for `price`
   returns nothing) — irrelevant.
 
@@ -263,30 +309,37 @@ Gaps (code-verified unless marked):
 
 ## 5. Carts / orders / quote requests
 
-**Two different "cart line price" implementations exist.**
+**One cart line price chain** since #168 was settled on the P0 branch (there were two).
 
-1. `CartLinePricing.orderablePrice` (`packages/modules/carts/src/backend/services/cart-line-pricing.ts:20-146`):
-   agreed price **only at the agreed quantity** (`:22-26, 150-159`) → `resolveLinePrice` at the
-   line's quantity (brackets apply to the actual qty, `:27-28`) → own `defaultPrice` in PLN
-   (`:143-145`) → unpriced. Display mode `none` = quote-only (`:122-134`). Amount rounded to 2 dp
-   (`:138`) while brackets store 4 dp. Used on add/merge/qty change (`cart-service.ts:572, 672, 699, 917, 1188`) and at placement.
-2. `CartPricingRecompute.recompute` (`cart-pricing-recompute.ts:68-158`) for `GET /api/v1/cart`
-   (`carts/src/backend/routes.ts:268-291`): plain `resolveLinePrice` per line, **no agreed price,
-   no own-price fallback, no display-mode check**; Redis 30 s. Header admits "per-line today (no
-   batched variant)" (`:25-28`). `writeBackTo` (`:161-174`) has no caller (grep).
-   → The cart page and checkout can show different figures — open issue **#168**.
+1. `CartLinePricing.orderablePrice` / `orderablePrices` (`packages/modules/carts/src/backend/services/cart-line-pricing.ts`):
+   agreed price **only at the agreed quantity** → the price list at the line's quantity (one
+   batched `resolveLinePrices` call for every line without an agreement, P0) → own `defaultPrice`
+   labelled with the **basket channel's default currency** (P0; it was hard-coded `PLN`; a basket
+   whose channel is gone is unpriced for it) → unpriced. Display mode `none` = quote-only. Amount
+   rounded to 2 dp while brackets store 4 dp. Used on add/merge/qty change, the batch add, the
+   login/reorder reprice and at placement; it passes the basket's customer account (P0).
+2. `CartPricingRecompute.recompute` (`cart-pricing-recompute.ts`) for `GET /api/v1/cart` runs
+   **chain (1)** — `CartLinePricing.orderablePrices` over the lines with their agreements, one
+   batched `resolveLinePrices` call per read — so the read shows the price placement's drift check
+   accepts (#168, ruled by the owner and fixed on the P0 branch). A line the chain refuses
+   (unpriced, sold on request only, product gone) keeps its stored price on the wire and reads
+   `unavailable: true` with `unavailableReason` `no_price_in_customer_list` / `not_purchasable`,
+   since placement refuses it. Redis 30 s, refusals cached with the prices. `writeBackTo` has no
+   caller (grep). It used to be a plain list price per line, with no agreed price, no own-price
+   fallback and no display-mode check, so a quote-seeded line read at the list price and was
+   charged the agreed one.
 
 **Re-resolution at checkout: yes.** Order placement calls `cartPlacementApply.findPriceDrift` inside
-the placement transaction, which re-runs chain (1) per line and refuses with `409 CART_PRICE_CHANGED`
+the placement transaction, which re-runs chain (1) for the basket in one batched call (P0) and refuses with `409 CART_PRICE_CHANGED`
 on any difference (`packages/modules/orders/src/backend/services/order-service.ts:1696-1727`;
-`carts/src/backend/services/cart-placement-apply-port.ts:130-178`). Note it goes through the
-in-process `PricingCache`, so "current" can be up to 60 s old / another replica's view (inferred
-from §2.4).
+`carts/src/backend/services/cart-placement-apply-port.ts:130-178`). It goes through the
+in-process `PricingCache`, which since P0 is cleared on every process after a price write commits;
+only a lost bump leaves "current" up to 60 s old.
 
 Quote requests: reference price at submit via `BuyerLinePricePort`
 (`packages/modules/quote_requests/src/backend/services/reference-price.ts:5-16, 66-90`) →
-`BuyerLinePriceService` (chunks of 100, **sequential `resolveLinePrice` per line**,
-`buyer-line-price-service.ts:122-162`); resolves the account's own customer group (`:119`). An
+`BuyerLinePriceService` (chunks of 100, **one `resolveLinePrices` call per chunk** since P0);
+resolves the account's own customer group through `effectiveCustomerGroupId`. An
 accepted quote seeds the cart with the agreed price + agreed quantity (chain 1, step 1). Quote line
 currency is hard-coded PLN (open issue **#303**).
 
@@ -333,7 +386,8 @@ Benches (all `describe.skipIf(PERF_RUN !== 'true')`):
 What is **not** measured (gap): catalogue scale beyond 5 000 products for the listing path; many
 (100s) active price lists with org-targeted rules (the resolver loads and evaluates all of them per
 request); category-rule-heavy configurations; multi-replica cache behaviour; typeahead and
-external-API N+1 paths; cart/checkout with large baskets.
+cart/checkout with large baskets. (The typeahead, external-API and cart N+1 paths are batched since
+P0, with a statement-count assertion in `line-prices-batch.test.ts`.)
 
 Specs: the canonical tree carries only `specs/148-price-list-matrix-rules/` for pricing
 (plan `:55` "budget test"); features 011 (engine) and 086 (price sort) are pre-migration and
@@ -345,9 +399,11 @@ Complexity summary (per request, cache miss):
 | Path | Statements | Scaling |
 | --- | --- | --- |
 | Listing page (batched) | ~8–15 | constant in page size; CPU O(products × active lists) |
-| `resolveEngine` / `resolveLinePrice` | ~7 (+1 per bracket fall-through) | per product / per line |
-| Cart GET, add, placement drift, quote reference, order preview, external API, typeahead | ~7 × lines | **linear, sequential** (typeahead parallel) |
-| PDP | listing batch(1) + resolveEngine | 2 resolutions |
+| `resolveEngine` / `resolveLinePrice` | ~7 (+1 per bracket fall-through, +1 account read for a signed-in customer) | per product / per line |
+| `resolveLinePrices` — cart GET, batch add, placement drift, quote reference, external API (P0) | 12 for 9 lines and for 45 (fixture) | constant in lines |
+| Typeahead (P0) | one listing batch | constant in hits |
+| Admin order preview, order intake probe, product feeds | ~7 × lines | **linear, sequential** |
+| PDP (P0) | listing batch(1) | 1 resolution |
 | Price-sorted page | 2 per chunk + visibility/tail reads; up to 8×limit rows scanned | O(category size) for the id array; O(categories in rules) sequential reads |
 
 ---
@@ -360,11 +416,11 @@ Public tracker (`gh issue list … --search price`), pricing-related:
 | --- | --- | --- | --- |
 | 378 | open | Replace "Products & brackets" with a rebuilt multi-currency Price matrix | two authoring models (brackets vs matrix) |
 | 377 | open | PDP: configurable products (variant price) | no variant dimension |
-| 168 | open | `GET /cart` shows re-resolved prices, checkout uses stored | two cart price chains |
-| 166 | open | Reorder seeds the basket at old order prices | stored vs resolved price (now caught by placement drift 409 — inferred) |
-| 165 | open | Quote-seeded line keeps agreed price at any quantity | addressed in code by `cart-line-pricing.ts:150-159` (commit `7d2d00fcc`) but issue still open |
-| 167 | open | Quote validity checked at seeding, not placement | agreed-price lifecycle |
-| 303 | open | Quote lines always stored in PLN | hard-coded currency |
+| 168 | open | `GET /cart` shows re-resolved prices, checkout uses stored | fixed on the P0 branch: one chain for the read and placement (`cart-read-equals-placement.test.ts`) |
+| 166 | open | Reorder seeds the basket at old order prices | price fixed in code: the reorder seed reprices through `repriceLinesForCustomer` (`backend/test/integration/carts/cart-line-repricing.test.ts`, "a seed without an agreement — a reorder"; at the port, not through `OrderReorderService`) and placement refuses drift (`place-order-line-price-current.test.ts`); **not done**: a line with no current price keeps its old price and is not reported in `unavailableItems` |
+| 165 | open | Quote-seeded line keeps agreed price at any quantity | fixed in code by commit `7d2d00fcc` (agreed price only at the agreed quantity, `cart-line-repricing.test.ts`); issue still open |
+| 167 | open | Quote validity checked at seeding, not placement | still open: the placement drift check honours an agreed price after the quote lapsed (a lapse only drops the minimums exemption) |
+| 303 | open | Quote lines always stored in PLN | the cart half (own-price fallback labelled PLN) fixed by P0; quote lines still stored in PLN |
 | 235 | open | Search and price-ordered lists answer short pages | post-hoc filtering + scan budget |
 | 96 | open | `DisplayModeOverrideRow` untranslated | — |
 | 236 | closed | Quote-only product could be added to cart when no list held it | display mode vs unpriced |
@@ -381,12 +437,14 @@ Recurring root causes visible in code:
 1. **Multiple sources of truth for "the price"**: `defaultPrice` attribute vs Default list brackets
    vs matrix entries vs stored `cart_items.unit_price` vs agreed quote price vs reorder snapshot (§1, §5).
 2. **Multiple resolution chains** written by each consumer: listing chain, cart `orderablePrice`,
-   cart `recompute`, order intake probe, buyer-line-price — each with different inputs
+   cart `recompute` (merged into the cart chain by #168), order intake probe, buyer-line-price — each with different inputs
    (currency, customer group, agreed price, own-price currency) (§2.2, §5).
 3. **Rules in JSONB** → no indexable "which lists apply to me", full active-list scan + in-memory
    evaluation every request, and price-sort needs a bespoke stream-merge SQL engine (§0, §3).
 4. **Per-viewer prices can't be indexed** in Meilisearch → search can't sort/filter by price (§4).
-5. **Cache is per-process, coarse, and not wired to scheduler or catalog writes** (§2.4).
-6. **Currency and variant are second-class**: hard-coded PLN in cart/quote, no variant column,
-   currency not passed on cart/typeahead (§1, §2.2, #303, #377).
-7. **N+1 survives on every non-listing path** (§2.3, §7).
+5. **Cache is per-process and coarse**; since P0 it is cleared after commit on every process and by
+   the sweeper, but not by catalog writes (§2.4).
+6. **Currency and variant are second-class**: hard-coded PLN on quote lines (the cart's was removed
+   by P0), no variant column, currency not passed on the typeahead (§1, §2.2, #303, #377).
+7. **N+1 survived on every non-listing path** until P0; the admin order preview, the order intake
+   probe and product feeds still loop (§2.3, §7).

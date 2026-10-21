@@ -140,7 +140,15 @@ export function orderServiceNeighbours(
     cartPlacementApply: new CartPlacementApplyService(
       emFactory,
       new CartLinePricing(
-        new PricingService(emFactory, undefined, undefined, neighbourReadPorts(emFactory)),
+        // D-287 P0 — the engine reads the basket customer's own group, so the
+        // rig hands it `customer_accounts`' read port as the composition does.
+        new PricingService(
+          emFactory,
+          undefined,
+          undefined,
+          neighbourReadPorts(emFactory),
+          new CustomerAccountReadService(emFactory, twoFactorEnrolmentsFor(emFactory, 'customer')),
+        ),
         {
           resolveDisplayMode: (input) =>
             new PriceListService(

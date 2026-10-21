@@ -37,7 +37,6 @@ import { ViewItemTracker } from '../../../../components/analytics/EcommerceTrack
 import { getStorefrontQuoteRequestSettings } from '../../../../lib/api/rfq';
 import { getProductBySlug } from '../../../../lib/api/catalog';
 import { getStorefrontProductStock } from '../../../../lib/api/inventory';
-import { getResolvedPrice, PRICING_UNAVAILABLE } from '../../../../lib/api/pricing';
 import { getMe } from '../../../../lib/api/account';
 import { addCartItem, type CartCookieJar } from '../../../../lib/api/cart';
 import {
@@ -135,23 +134,22 @@ export default async function ProductPage({
 
   const primaryCategory = product.categories[0];
   const rfqSettings = await getStorefrontQuoteRequestSettings();
-  const [stock, resolvedPrice] = await Promise.all([
-    getStorefrontProductStock(product.id, ctx),
-    getResolvedPrice(product.id, { quantity: 1 }, ctx),
-  ]);
+  const stock = await getStorefrontProductStock(product.id, ctx);
   const customerEmail = await readCustomerEmail();
   /**
-   * `price_lists` is not present (issue #124). Nothing on this page may quote a
-   * figure: the catalogue's legacy `defaultPrice` projection is not a price the
-   * platform stands behind, and an Add-to-cart posted against it can only come
-   * back 503. The page still renders — the product, its media, its attributes —
-   * with no price and no cart action; the quote path stays open where the
-   * deployment offers one, because a quote is a request for a price rather than
-   * a claim about one.
+   * D-287 P0 — **one** resolution prices this page. The product detail carries
+   * the base / sale / display-mode split (`resolvedPrice`) from the resolution
+   * that priced `price`; this page used to ask
+   * `GET /storefront/products/:id/resolved-price` as well, so every view
+   * resolved the product twice.
+   *
+   * `price_lists` not being present (issue #124) still quotes nothing: the
+   * catalogue detail cannot price without it and refuses, so no figure reaches
+   * this page from a module the platform is not serving. A channel that
+   * withholds prices answers `price: null` and `resolvedPrice: null`.
    */
-  const pricingAbsent = resolvedPrice === PRICING_UNAVAILABLE;
-  const resolved = pricingAbsent ? null : resolvedPrice;
-  const price = pricingAbsent ? null : product.price;
+  const resolved = product.resolvedPrice ?? null;
+  const price = product.price;
   const isQuoteOnly = resolved?.displayMode === 'none';
   // Feature 039 (US5) — one-click buy is offered only to a logged-in buyer who
   // is eligible (setting enabled for the channel + all four valid defaults).
@@ -452,7 +450,6 @@ export default async function ProductPage({
               labels={{
                 heading: t('product.variants.heading'),
                 sku: t('product.variants.sku'),
-                priceOverride: t('product.variants.priceOverride'),
                 stockLevel: t('product.variants.stockLevel'),
                 outOfStock: t('product.variants.outOfStock'),
                 selectThisVariant: t('product.variants.selectThisVariant'),
