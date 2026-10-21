@@ -89,7 +89,7 @@ export function createDefinitionCommand(
           { key: input.key },
         );
       }
-      // Feature 158 — every carry target of a new definition is judged now,
+      // Feature 161 — every carry target of a new definition is judged now,
       // in this transaction, against the same-key definition of the target.
       await assertCarryTargetsAccepted(
         em,
@@ -123,7 +123,7 @@ export function updateDefinitionCommand(
       return def ? snapshotDefinition(def) : null;
     },
     run: async ({ em }) => {
-      // Feature 158 — only the carry targets this patch turns on are judged:
+      // Feature 161 — only the carry targets this patch turns on are judged:
       // one already on stays as configured whatever has drifted since (FR-019).
       const current = await em.findOne(CustomFieldDefinition, { id });
       const added = current

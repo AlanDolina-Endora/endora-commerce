@@ -272,7 +272,7 @@ function toEntry(
 }
 
 /**
- * Feature 158 — the Sales Opportunity a value came from and every key not
+ * Feature 161 — the Sales Opportunity a value came from and every key not
  * carried, with its reason. Read field by field, as `deliveryOf` reads its
  * payload: a skip that is not well formed is left out, and a source that is
  * not one — or nothing left to name — reads as none.

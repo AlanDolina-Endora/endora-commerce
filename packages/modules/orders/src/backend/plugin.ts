@@ -229,7 +229,7 @@ export interface OrdersModuleOptions {
    */
   quoteRequestRead: () => QuoteRequestReadPort | null;
   /**
-   * `custom_fields`' carry port (`specs/158-custom-fields-value-carry/`): the
+   * `custom_fields`' carry port (`specs/161-custom-fields-value-carry/`): the
    * vouched Quote Request's custom-field values the new Order receives. An
    * accessor resolved per call; `custom_fields` is not deactivatable.
    */

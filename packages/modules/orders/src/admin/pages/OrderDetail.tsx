@@ -150,12 +150,12 @@ interface OrderCommentRow {
   notifyCustomer: boolean;
   authorAdminUserId: string | null;
   authorCustomerAccountId: string | null;
-  /** Feature 158 — present on a note the platform wrote (both authors `null`). */
+  /** Feature 161 — present on a note the platform wrote (both authors `null`). */
   systemNote?: OrderCommentSystemNote | null;
   createdAt: string;
 }
 
-/** Reading the Order's field definitions is `custom_fields`' permission (feature 158). */
+/** Reading the Order's field definitions is `custom_fields`' permission (feature 161). */
 const CUSTOM_FIELDS_READ = 'custom_fields:read';
 const ORDER_FIELD_DEFINITIONS_URL = '/api/v1/admin/custom-fields/definitions?entityType=order';
 /** A field key shown to an operator is cut here. */
@@ -166,8 +166,8 @@ const NOTE_SOURCES: ReadonlySet<string> = new Set(['quote_request', 'opportunity
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 /**
- * A system note as the operator reads it, in their language (feature 158,
- * `specs/158-custom-fields-value-carry/contracts/admin-surfaces.md` §2): which
+ * A system note as the operator reads it, in their language (feature 161,
+ * `specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §2): which
  * record the values came from, then a line per value not carried — the
  * field's label where the Order definition is known, else its key — with the
  * reason. A source or a reason this screen has no sentence for falls back to
@@ -231,7 +231,7 @@ export function OrderDetail(): ReactNode {
   const t = useTranslation('core');
   const tOrders = useTranslation('orders');
   const sectionSummaryText = useOrderSectionSummaryText();
-  // Feature 158 — the system note's sentences are this module's own.
+  // Feature 161 — the system note's sentences are this module's own.
   const { language } = useTranslationContext();
   const canReadFieldDefinitions = useAuth().hasPermission(CUSTOM_FIELDS_READ);
   const { id = '' } = useParams<{ id: string }>();
@@ -314,7 +314,7 @@ export function OrderDetail(): ReactNode {
     void loadComments();
   }, [loadComments]);
 
-  // Feature 158 — the Order's field labels, asked only once a system note is
+  // Feature 161 — the Order's field labels, asked only once a system note is
   // listed and only of somebody `custom_fields` lets read them; else keys.
   const wantsFieldLabels = useMemo(
     () => canReadFieldDefinitions && comments.some((c) => c.systemNote),

@@ -1,6 +1,6 @@
 # Research: Custom-field value carry-over between Quote Requests, Orders and Sales Opportunities
 
-**Feature**: `specs/158-custom-fields-value-carry/` (issue #287; the directory number is assigned
+**Feature**: `specs/161-custom-fields-value-carry/` (issue #287; the directory number is assigned
 when the spec enters its branch — first free number on `origin/master` above the floor in
 `specs/pre-migration-history/README.md`). **Builds on** `specs/157-custom-fields-list-filters/`
 (issue #286, "the filters feature" below), whose definition editor this feature extends, and on

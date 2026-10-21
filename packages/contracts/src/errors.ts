@@ -526,7 +526,7 @@ export const ERROR_CODES = {
   CUSTOM_FIELD_OPTION_IN_USE: 'CUSTOM_FIELD_OPTION_IN_USE',
   CUSTOM_FIELD_VALUE_TYPE_LOCKED: 'CUSTOM_FIELD_VALUE_TYPE_LOCKED',
   CUSTOM_FIELD_STORED_VALUES_EXIST: 'CUSTOM_FIELD_STORED_VALUES_EXIST',
-  // Feature 158 — turning on a definition's "carry value to" option for a
+  // Feature 161 — turning on a definition's "carry value to" option for a
   // target that cannot take the values: no same-key field, another value type,
   // missing options, an internal value into a customer-visible field, a pair the
   // registry does not offer, or a target whose module is off (`details.code`).

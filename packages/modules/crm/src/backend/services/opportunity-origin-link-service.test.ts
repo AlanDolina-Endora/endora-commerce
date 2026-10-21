@@ -31,7 +31,7 @@ function service(overrides: { opportunity?: unknown; scope?: unknown } = {}) {
     links: { linkAutomatically: vi.fn(async () => 'linked' as const) },
     adminScope: { resolveForAdmin: vi.fn(async () => overrides.scope ?? { allowAll: true }) },
     warn: vi.fn(),
-    // Feature 158 — the Opportunity's values pushed to the document it linked.
+    // Feature 161 — the Opportunity's values pushed to the document it linked.
     carryIntoDocument: vi.fn(async () => undefined),
   };
   return { deps, subject: new OpportunityOriginLinkService(deps as never as OpportunityOriginLinkServiceDeps) };
@@ -131,7 +131,7 @@ describe('readEventOrigin', () => {
   });
 });
 
-/** Feature 158 (US3, research R-10) — the carry follows the link, and only a link just made. */
+/** Feature 161 (US3, research R-10) — the carry follows the link, and only a link just made. */
 describe('OpportunityOriginLinkService — carrying the Opportunity’s values', () => {
   it('pushes the values once, after the link is made, naming the document and the Opportunity', async () => {
     const { deps, subject } = service();

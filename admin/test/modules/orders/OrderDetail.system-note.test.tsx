@@ -10,10 +10,10 @@ import ordersEn from '../../../../packages/modules/orders/i18n/en.json';
 import ordersPl from '../../../../packages/modules/orders/i18n/pl.json';
 
 /**
- * Feature 158 (T047, US1-4, FR-010a, SC-006) — the system note the platform
+ * Feature 161 (T047, US1-4, FR-010a, SC-006) — the system note the platform
  * writes into an Order's comments when a custom-field value could not be
  * carried into it, read in the operator's language
- * (`specs/158-custom-fields-value-carry/contracts/admin-surfaces.md` §2).
+ * (`specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §2).
  */
 
 const getSpy = vi.fn();

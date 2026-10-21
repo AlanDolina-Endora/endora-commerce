@@ -57,7 +57,7 @@ export interface OpportunityOriginLinkServiceDeps {
   /** A refusal is said to the operator's log and to nobody else. */
   warn: (fields: Record<string, unknown>, message: string) => void;
   /**
-   * Feature 158 (research R-10) — push the Opportunity's custom-field values
+   * Feature 161 (research R-10) — push the Opportunity's custom-field values
    * to the document's owner, which carries them into its empty fields in a
    * Command of its own. Called once, and only for a link just made: the rule
    * that decides the link decides the carry.

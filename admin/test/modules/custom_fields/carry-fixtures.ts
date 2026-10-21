@@ -5,7 +5,7 @@ import type {
 } from '@endora-commerce/contracts';
 
 /**
- * Shared fixtures of feature 158's two `/custom-fields` suites
+ * Shared fixtures of feature 161's two `/custom-fields` suites
  * (`CustomFieldsPage.carry.test.tsx`, `CustomFieldsPage.carry-drift.test.tsx`):
  * the registry's carry pairs and a definition builder.
  */

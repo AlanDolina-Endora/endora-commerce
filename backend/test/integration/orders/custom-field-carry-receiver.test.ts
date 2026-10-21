@@ -13,7 +13,7 @@ import { CRM_ADMIN, CRM_CUSTOMER, seedCrmOrder, seedCrmOrganization } from '../.
 
 /**
  * `orderCustomFieldCarryPort` — `orders` receives a Sales Opportunity's values
- * into an Order created from it (`specs/158-custom-fields-value-carry/` US3;
+ * into an Order created from it (`specs/161-custom-fields-value-carry/` US3;
  * contract `carry-api.md` §4.2; research R-8, R-10).
  *
  * One Command of the owner: empty fields filled, a held value kept, a value

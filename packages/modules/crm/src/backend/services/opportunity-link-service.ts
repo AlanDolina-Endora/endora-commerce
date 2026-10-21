@@ -42,7 +42,7 @@ export interface OpportunityLinkServiceDeps {
    */
   mayRead: Pick<OwnerReadChecks, 'orders' | 'quoteRequests'>;
   /**
-   * `custom_fields`' carry port (feature 158): a document's values the
+   * `custom_fields`' carry port (feature 161): a document's values the
    * Opportunity it joins receives into its empty fields. Lazy, resolved per call.
    */
   customFieldCarry: CustomFieldCarryPort;
@@ -60,7 +60,7 @@ export interface AutomaticLink {
   documentId: string;
   linkSource: Exclude<OpportunityLinkSource, 'manual'>;
   /**
-   * The joining document's custom-field values (feature 158) — given for an
+   * The joining document's custom-field values (feature 161) — given for an
    * Order joining from its Quote Request, never for an origin link (that carry
    * goes the other way) and never for a manual link.
    */
@@ -239,7 +239,7 @@ export class OpportunityLinkService {
             linkSource: link.linkSource,
             linkedByAdminUserId: null,
           });
-          // Feature 158 (US2-2, US2-3) — the joining document's carried values
+          // Feature 161 (US2-2, US2-3) — the joining document's carried values
           // fill the Opportunity's **empty** fields, in this Command, and what
           // was carried or skipped is named in this entry.
           const carry = link.carry

@@ -4,7 +4,7 @@ import { carryIntoOpportunity } from './opportunity-custom-field-carry.js';
 
 /**
  * Order / Quote Request → Opportunity custom-field carry
- * (`specs/158-custom-fields-value-carry/` research R-9, data-model §4.3): the
+ * (`specs/161-custom-fields-value-carry/` research R-9, data-model §4.3): the
  * plan `custom_fields` answers, and the member the create or link Command adds
  * to its audit `after` — present only when something was carried or skipped.
  */

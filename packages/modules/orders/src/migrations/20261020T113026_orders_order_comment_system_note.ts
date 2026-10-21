@@ -3,7 +3,7 @@ import { Migration } from '@mikro-orm/migrations';
 /**
  * An order comment may be an author-less **system note** the platform writes:
  * custom-field values that could not be carried into the Order from the record
- * it was created from (`specs/158-custom-fields-value-carry/`, data-model §2).
+ * it was created from (`specs/161-custom-fields-value-carry/`, data-model §2).
  * Present ⇒ a system note; every existing comment reads `null` and is unchanged.
  *
  * `down` removes the rows the column defined before dropping it: a system note

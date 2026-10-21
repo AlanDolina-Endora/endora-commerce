@@ -12,7 +12,7 @@ type ReceiveInput = Parameters<CustomFieldCarryReceiverPort['receiveCarriedValue
 const NOT_FOUND: CustomFieldCarryReceipt = Object.freeze({ outcome: 'not-found', carried: [], skipped: [] });
 
 /**
- * `quoteRequestCustomFieldCarryPort` (`specs/158-custom-fields-value-carry/`,
+ * `quoteRequestCustomFieldCarryPort` (`specs/161-custom-fields-value-carry/`,
  * contract `carry-api.md` §4.2, research R-10): a Sales Opportunity's values
  * received into a Quote Request created from it, once CRM has linked the two.
  *

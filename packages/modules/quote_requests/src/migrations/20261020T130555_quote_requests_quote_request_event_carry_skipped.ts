@@ -2,7 +2,7 @@ import { Migration } from '@mikro-orm/migrations';
 
 /**
  * A quote request's history records the custom-field values a Sales
- * Opportunity could not carry into it (`specs/158-custom-fields-value-carry/`,
+ * Opportunity could not carry into it (`specs/161-custom-fields-value-carry/`,
  * data-model §3): the event type check gains `custom-field-carry-skipped`.
  *
  * `down()` restores the twelve values of the `pdf-sent` migration, and fails

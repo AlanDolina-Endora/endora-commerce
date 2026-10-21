@@ -24,10 +24,10 @@ export interface DefinitionEditorDialogProps {
   onClose: () => void;
   /** Saved; the dialog is done. */
   onSaved: () => void;
-  /** Feature 158 — the entity-types list, to name a carry target. */
+  /** Feature 161 — the entity-types list, to name a carry target. */
   entityTypes?: readonly CustomFieldEntityTypeInfo[];
   /**
-   * Feature 158 — every definition the page knows, of every type, so an option
+   * Feature 161 — every definition the page knows, of every type, so an option
    * change can say which carries it breaks. The edited definition's own entry
    * is replaced by the dialog's latest read.
    */
@@ -53,7 +53,7 @@ const SELECT_TYPES = new Set(['select', 'multiselect']);
  *
  * The key, the entity type and the value type are shown, never offered. *Save*
  * sends **one** `PATCH` holding only the members the operator changed among
- * `labelDefault`, `label`, `required`, `listFilter` and `carryTo` (feature 158,
+ * `labelDefault`, `label`, `required`, `listFilter` and `carryTo` (feature 161,
  * as the whole new list) — never `config`,
  * `options`, `valueType` or `key` (threat model F-6); nothing changed sends
  * nothing. Options are edited through their own sub-routes, one action at a
@@ -83,7 +83,7 @@ export function DefinitionEditorDialog({
   /** An option action applies at once, so after one *Cancel* would undo nothing: it reads *Close*. */
   const [optionsTouched, setOptionsTouched] = useState(false);
   /**
-   * Feature 158 — an option change that breaks a carry asks first. The question
+   * Feature 161 — an option change that breaks a carry asks first. The question
    * takes the dialog's place rather than opening a second dialog over it: two
    * modals would both answer Escape and both trap focus. The editor stays
    * mounted under it (hidden), so a half-typed option survives a *Cancel*.

@@ -233,8 +233,8 @@ export const manifest = defineModuleManifest({
         'than from a caught refusal. A link holds the Quote Request by value, so no table of ' +
         'that owner is referenced from this module\'s schema.',
     },
-    // Feature 158 — an Opportunity's custom-field values pushed into a Quote
-    // Request created from it (`specs/158-custom-fields-value-carry/`, R-16).
+    // Feature 161 — an Opportunity's custom-field values pushed into a Quote
+    // Request created from it (`specs/161-custom-fields-value-carry/`, R-16).
     {
       moduleId: 'quote_requests',
       name: 'quoteRequestCustomFieldCarryPort',

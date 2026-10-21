@@ -355,7 +355,7 @@ export interface OrderServiceNeighbourPorts {
    */
   readonly quoteRequestRead: () => QuoteRequestReadPort | null;
   /**
-   * `custom_fields`' carry port (`specs/158-custom-fields-value-carry/`,
+   * `custom_fields`' carry port (`specs/161-custom-fields-value-carry/`,
    * research R-7): which of the vouched Quote Request's custom-field values the
    * new Order receives. Resolved per call; `custom_fields` is not
    * deactivatable, so there is no absent state to ask about and no `catch`.
@@ -2057,7 +2057,7 @@ export class OrderService {
       // Vouched once, at the top of the transaction under the request's lock.
       const { sourceQuoteRequestId } = quoteSource;
 
-      // Feature 158 (US1; research R-7) — the vouched request's custom-field
+      // Feature 161 (US1; research R-7) — the vouched request's custom-field
       // values its definitions carry to Orders, read now, under the same lock.
       // Only empty fields are filled (a new Order has none) and nothing here can
       // refuse the placement: a value that cannot be carried is skipped and
@@ -2161,7 +2161,7 @@ export class OrderService {
       });
       await tx.persistAndFlush(order);
 
-      // Feature 158 (FR-010a) — what could not be carried, as one internal,
+      // Feature 161 (FR-010a) — what could not be carried, as one internal,
       // author-less, non-notifying note in this transaction.
       if (carry && carry.skipped.length > 0 && quoteSource.quoteRequest) {
         buildCarrySkipNote(tx, {
@@ -2574,7 +2574,7 @@ export class OrderService {
             status: order.status,
             // Feature 159 (FR-081, research R-22) — the grouping's shape, when the order has one.
             ...(lineLayout.groups.length > 0 ? { groups: layoutShape(lineLayout) } : {}),
-            // Feature 158 (US1-5) — the custom-field values carried from the request.
+            // Feature 161 (US1-5) — the custom-field values carried from the request.
             ...(carry && carry.carried.length > 0 ? { carriedCustomFieldKeys: [...carry.carried] } : {}),
           },
         });

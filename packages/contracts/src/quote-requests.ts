@@ -125,7 +125,7 @@ export const rfqEventTypeSchema = z.enum([
   // Feature 153 (owner answer Q4) — the quote PDF was e-mailed. Admin replies
   // only: a customer reply leaves these events out.
   'pdf-sent',
-  // Feature 158 — custom-field values a Sales Opportunity could not carry into
+  // Feature 161 — custom-field values a Sales Opportunity could not carry into
   // this request. Admin replies only: it names keys of possibly internal fields.
   'custom-field-carry-skipped',
 ]);
@@ -281,7 +281,7 @@ export const quoteRequestHistoryEntryKindSchema = z.enum([
   'note_added',
   // Feature 153 (owner answer Q4).
   'pdf_sent',
-  // Feature 158.
+  // Feature 161.
   'custom_field_carry_skipped',
 ]);
 export type QuoteRequestHistoryEntryKind = z.infer<typeof quoteRequestHistoryEntryKindSchema>;
@@ -318,7 +318,7 @@ export const quoteRequestHistoryEntrySchema = z.object({
     .nullable()
     .optional(),
   /**
-   * Feature 158 — `custom_field_carry_skipped` entries only: the Sales
+   * Feature 161 — `custom_field_carry_skipped` entries only: the Sales
    * Opportunity the values came from and every key not carried, with its reason.
    */
   customFieldCarry: z

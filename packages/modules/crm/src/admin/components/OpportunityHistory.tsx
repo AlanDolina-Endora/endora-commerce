@@ -62,7 +62,7 @@ function asState(value: unknown): State | null {
 
 /**
  * The keys a `customFieldCarry` member says were not carried, each with its
- * reason (feature 158, data-model §4.3) — `[]` for one that only carried.
+ * reason (feature 161, data-model §4.3) — `[]` for one that only carried.
  */
 function carrySkips(raw: unknown): Array<{ key: string; reason: string }> {
   const skipped = asState(raw)?.skipped;
@@ -440,7 +440,7 @@ export function OpportunityHistory(props: OpportunityHistoryProps): ReactNode {
   };
 
   /**
-   * What a creation or a join could not carry in (feature 158): which kind of
+   * What a creation or a join could not carry in (feature 161): which kind of
    * record the values came from, then — for somebody `custom_fields` lets read
    * the fields — a line per key with its reason. What it did carry is silent
    * here; the values show in the entry's custom fields row.

@@ -11,7 +11,7 @@ import { carryTargetsOf, isSupportedEntityType, SUPPORTED_ENTITIES } from './cus
 import { coerce, isEmpty, type DefinitionSource } from './custom-field-value.service.js';
 
 /**
- * The carry port (`specs/158-custom-fields-value-carry/`, research R-5):
+ * The carry port (`specs/161-custom-fields-value-carry/`, research R-5):
  * `custom_fields` computes which source values carry into a target bag, and
  * the module that owns the target persists the answer in its own write.
  *

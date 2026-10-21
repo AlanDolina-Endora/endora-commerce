@@ -566,10 +566,10 @@ describe('the Change history tab, on what an entry carries', () => {
 });
 
 /**
- * Feature 158 (T049, US2-5, US2-6) — a creation or a join that could not carry
+ * Feature 161 (T049, US2-5, US2-6) — a creation or a join that could not carry
  * every custom-field value into the Opportunity says so: from which kind of
  * record, and — for somebody who may read the fields — a line per key with
- * its reason (`specs/158-custom-fields-value-carry/contracts/admin-surfaces.md` §4).
+ * its reason (`specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §4).
  */
 describe('the Change history tab, on custom-field values not carried', () => {
   const CREATED_WITH_SKIPS = entry({

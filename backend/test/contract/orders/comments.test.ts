@@ -149,7 +149,7 @@ describe('Order comments', () => {
     expect(count).toBeGreaterThanOrEqual(2);
   });
 
-  // Feature 158 (FR-010a, SC-006) — an author-less system note: listed to the
+  // Feature 161 (FR-010a, SC-006) — an author-less system note: listed to the
   // administrator with its structured shape, never to the buyer, even if its
   // visibility flag were ever set.
   it('lists a system note to the administrator only, with its shape, and every other comment with systemNote null', async () => {

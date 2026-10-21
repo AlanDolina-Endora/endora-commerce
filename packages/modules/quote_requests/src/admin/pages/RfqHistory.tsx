@@ -27,7 +27,7 @@ import { adminNumberLocale, rfqNumberFormat } from '../number-format.js';
  * screen reads; `history-bundle-coverage.test.ts` holds that every entry and
  * change kind has one in both languages.
  *
- * Feature 158 adds one entry whose sentences are this module's own bundle's
+ * Feature 161 adds one entry whose sentences are this module's own bundle's
  * (`history.*` in `quote_requests`): custom-field values a Sales Opportunity
  * could not carry into the request. Its title is `core`'s, as every kind's is;
  * under it the Opportunity's number, then a key and a reason per line.
@@ -50,7 +50,7 @@ const SKIP_REASONS: ReadonlySet<string> = new Set(customFieldCarrySkipReasonSche
 
 interface Formatters {
   t: T;
-  /** This module's own bundle (feature 158). */
+  /** This module's own bundle (feature 161). */
   q: T;
   amount: (n: number | null) => string;
   dateTime: (iso: string) => string;

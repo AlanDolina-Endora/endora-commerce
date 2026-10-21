@@ -84,7 +84,7 @@ export const updateCustomFieldOptionSchema = z.object({
 export type UpdateCustomFieldOptionRequest = z.infer<typeof updateCustomFieldOptionSchema>;
 
 /**
- * How many entity types one definition may carry its values to (feature 158).
+ * How many entity types one definition may carry its values to (feature 161).
  * Every source type of the registry offers at most two targets.
  */
 export const CUSTOM_FIELD_CARRY_MAX_TARGETS = 2;
@@ -92,7 +92,7 @@ export const CUSTOM_FIELD_CARRY_MAX_TARGETS = 2;
 /**
  * The entity types a definition's values carry **to** when a record of such a
  * type is created from, or joins, a record of the definition's own type
- * (feature 158). Which pairs exist is the registry's `carryTargets` marker to
+ * (feature 161). Which pairs exist is the registry's `carryTargets` marker to
  * say ({@link customFieldEntityTypeInfoSchema}); "never the definition's own
  * type" is a server refusal, not a refine — the patch schema does not know
  * the type.
@@ -123,7 +123,7 @@ export const customFieldDefinitionSchema = z.object({
    * offers the option ({@link customFieldEntityTypeInfoSchema}).
    */
   listFilter: z.boolean(),
-  /** See {@link customFieldCarryToSchema} (feature 158). */
+  /** See {@link customFieldCarryToSchema} (feature 161). */
   carryTo: customFieldCarryToSchema,
   options: z.array(customFieldOptionSchema).default([]),
   createdAt: isoDateTimeSchema,
@@ -138,7 +138,7 @@ export const createCustomFieldDefinitionSchema = customFieldDefinitionSchema
   // customer only where an administrator has said they may.
   // A definition created without `listFilter` is not a list filter; the
   // server reads the absence as `false` rather than the schema defaulting it.
-  // A definition created without `carryTo` carries nothing (feature 158).
+  // A definition created without `carryTo` carries nothing (feature 161).
   .extend({
     audience: customFieldAudienceSchema.default('internal'),
     listFilter: z.boolean().optional(),
@@ -184,7 +184,7 @@ export const customFieldEntityTypeInfoSchema = z.object({
   listFilter: z.boolean(),
   /**
    * The entity types definitions of this type may carry their values to
-   * (feature 158), filtered to targets whose owner module is present.
+   * (feature 161), filtered to targets whose owner module is present.
    */
   carryTargets: z.array(supportedEntityTypeSchema).default([]),
 });
@@ -458,7 +458,7 @@ export const CUSTOM_FIELD_DEFINITION_ERROR_CODES = [
   'option_in_use',
   // Feature 157 — `listFilter` set on a definition whose entity type does not offer it.
   'list_filter_unsupported',
-  // Feature 158 — a carry target turned on that cannot take the definition's values.
+  // Feature 161 — a carry target turned on that cannot take the definition's values.
   'carry_incompatible',
 ] as const;
 export type CustomFieldDefinitionErrorCode =
@@ -504,7 +504,7 @@ export interface CustomFieldDefinitionRecord {
   sortOrder: number;
   config: Record<string, unknown>;
   listFilter: boolean;
-  /** Feature 158 — see {@link customFieldCarryToSchema}. */
+  /** Feature 161 — see {@link customFieldCarryToSchema}. */
   carryTo: SupportedEntityType[];
   createdAt: Date;
   updatedAt: Date;
@@ -735,7 +735,7 @@ export function isCustomFieldFilterUnavailableFailure(
 }
 
 // ---------------------------------------------------------------------------
-// --- value carry-over (specs/158-custom-fields-value-carry/) ---------------
+// --- value carry-over (specs/161-custom-fields-value-carry/) ---------------
 // ---------------------------------------------------------------------------
 
 /** One side of a carry pair, as the compatibility rule reads it. */
@@ -757,7 +757,7 @@ export type CustomFieldCarryIncompatibility =
   | { reason: 'audience_mismatch' };
 
 /**
- * The one compatibility rule of a carry pair (feature 158). The server refuses
+ * The one compatibility rule of a carry pair (feature 161). The server refuses
  * turning a carry on with it, the admin marks drifted carries with it, and the
  * carry port applies its type and audience halves at conversion. Pure: no I/O.
  *
@@ -833,7 +833,7 @@ export interface CustomFieldCarryPlan {
 }
 
 /**
- * Container name: `customFieldCarryPort`. Owner: `custom_fields` (feature 158).
+ * Container name: `customFieldCarryPort`. Owner: `custom_fields` (feature 161).
  *
  * The host that owns a carry's **target** record asks it which source values
  * carry into its own current bag, and persists the answer in its own write.
@@ -870,7 +870,7 @@ export interface CustomFieldCarryReceipt {
 /**
  * Container name: `orderCustomFieldCarryPort`. Owner: `orders`.
  * Container name: `quoteRequestCustomFieldCarryPort`. Owner: `quote_requests`.
- * (Feature 158.)
+ * (Feature 161.)
  *
  * `crm` pushes a Sales Opportunity's values to the document created from it,
  * once its origin link is made; the document's owner carries them into empty

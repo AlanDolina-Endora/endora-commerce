@@ -221,7 +221,7 @@ export function registerModule(ctx: ModuleContext): void {
             quoteRequests: crmQuoteRequests,
             linksChanged: (opportunityId) => crmOpportunityValueService.recalculate(opportunityId),
             mayRead: crmOwnerReadChecks,
-            // Feature 158 — an Order joining from its Quote Request carries its
+            // Feature 161 — an Order joining from its Quote Request carries its
             // values into the Opportunity's empty fields.
             customFieldCarry: lazyPort<CustomFieldCarryPort>(ctx, 'customFieldCarryPort'),
           }),
@@ -484,7 +484,7 @@ export function registerModule(ctx: ModuleContext): void {
             customFields: lazyPort<CustomFieldValuePort>(ctx, 'customFieldValueService'),
             // Feature 157 — the list's custom-field filters.
             customFieldListFilter: lazyPort<CustomFieldListFilterPort>(ctx, 'customFieldListFilterPort'),
-            // Feature 158 — a document's values carried into the Opportunity created for it.
+            // Feature 161 — a document's values carried into the Opportunity created for it.
             customFieldCarry: lazyPort<CustomFieldCarryPort>(ctx, 'customFieldCarryPort'),
             // --- end of Custom fields ----------------------------------------
             recalculateValue: (opportunityId) => crmOpportunityValueService.recalculate(opportunityId),

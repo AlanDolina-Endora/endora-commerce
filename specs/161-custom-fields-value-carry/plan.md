@@ -1,6 +1,6 @@
 # Implementation Plan: Custom-field value carry-over between Quote Requests, Orders and Sales Opportunities
 
-**Branch**: `feat/158-custom-fields-value-carry` (number assigned when the spec enters the branch) |
+**Branch**: `feat/161-custom-fields-value-carry` (number assigned when the spec enters the branch) |
 **Date**: 2026-10-19 | **Spec**: [spec.md](./spec.md) (clarified 2026-10-16; issue #287)
 **Input**: the spec above, owner rulings **C4 (a)** — the target keeps an existing value — and
 **C5 (c)** — refuse at configuration, and at conversion skip with a history entry.
@@ -134,7 +134,7 @@ each with a test:
 ### Documentation (this feature)
 
 ```text
-specs/158-custom-fields-value-carry/
+specs/161-custom-fields-value-carry/
 ├── spec.md
 ├── plan.md                    # this file
 ├── research.md                # R-1 … R-18
@@ -229,7 +229,7 @@ admin/test/modules/
 
 docs/docs/architecture/custom-fields.md; docs/i18n/pl/docusaurus-plugin-content-docs/current/{architecture/custom-fields,modules/{custom_fields,orders,quote_requests,crm}}.md;
 docs/translation-cache/pl/*.json
-.changeset/158-*.md                                                  # one per meaning
+.changeset/161-*.md                                                  # one per meaning
 ```
 
 **Not touched**: `carts`, `catalog`, `returns`, `quick_order`, `shopping_lists`, `assets_library`,

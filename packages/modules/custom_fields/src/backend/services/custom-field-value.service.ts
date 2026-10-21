@@ -171,7 +171,7 @@ type CoerceErr = { code: CustomFieldValidationErrorDto['code']; message: string 
 
 /**
  * Validate + coerce one value by its declared type. Returns the stored value or a typed error.
- * Exported for the carry port (feature 158), which judges a carried value by the same rule.
+ * Exported for the carry port (feature 161), which judges a carried value by the same rule.
  */
 export function coerce(
   valueType: string,

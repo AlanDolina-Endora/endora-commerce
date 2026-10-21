@@ -26,7 +26,7 @@ import {
 
 /**
  * Quote Request → Order custom-field carry at placement
- * (`specs/158-custom-fields-value-carry/` US1; FR-007 – FR-010a, FR-012 – FR-015;
+ * (`specs/161-custom-fields-value-carry/` US1; FR-007 – FR-010a, FR-012 – FR-015;
  * research R-7, R-8).
  *
  * Inside placement's transaction, on the vouched quote source: each value the

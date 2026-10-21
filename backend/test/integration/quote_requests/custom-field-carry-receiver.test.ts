@@ -13,7 +13,7 @@ import { CRM_ADMIN, CRM_CUSTOMER, seedCrmOrganization, submitCrmQuoteRequest } f
 /**
  * `quoteRequestCustomFieldCarryPort` — `quote_requests` receives a Sales
  * Opportunity's values into a Quote Request created from it
- * (`specs/158-custom-fields-value-carry/` US3; contract `carry-api.md` §4.2;
+ * (`specs/161-custom-fields-value-carry/` US3; contract `carry-api.md` §4.2;
  * research R-10, R-11).
  *
  * One Command of the owner: empty fields filled, a held value kept, a value

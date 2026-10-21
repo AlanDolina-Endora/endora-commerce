@@ -761,7 +761,7 @@ describe('line groups — replies (T005)', () => {
   });
 });
 
-describe('feature 158 — the custom-field-carry-skipped history event', () => {
+describe('feature 161 — the custom-field-carry-skipped history event', () => {
   it('is an event type', () => {
     expect(rfqEventTypeSchema.parse('custom-field-carry-skipped')).toBe('custom-field-carry-skipped');
   });

@@ -1409,7 +1409,7 @@ export async function registerOrderRoutes(
 function serializeCommentForCustomer(c: OrderComment): Record<string, unknown> {
   const serialized = serializeComment(c);
   delete serialized.authorAdminUserId;
-  // Feature 158 — a system note is never listed to the buyer, and the member
+  // Feature 161 — a system note is never listed to the buyer, and the member
   // is the admin surface's.
   delete serialized.systemNote;
   return serialized;

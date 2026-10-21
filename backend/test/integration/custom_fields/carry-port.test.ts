@@ -9,7 +9,7 @@ import {
 
 /**
  * `customFieldCarryPort` as the composed server publishes it
- * (`specs/158-custom-fields-value-carry/contracts/carry-api.md` §4.1, research
+ * (`specs/161-custom-fields-value-carry/contracts/carry-api.md` §4.1, research
  * R-5): a real Quote Request → Order plan over stored definitions, and a
  * definition change visible to the very next plan — the definition Command's
  * invalidation of the shared per-entity cache, not the TTL.

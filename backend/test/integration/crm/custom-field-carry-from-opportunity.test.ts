@@ -25,7 +25,7 @@ import {
 
 /**
  * Sales Opportunity → Quote Request / Order custom-field carry
- * (`specs/158-custom-fields-value-carry/` US3; FR-007 – FR-010a, FR-012 – FR-015;
+ * (`specs/161-custom-fields-value-carry/` US3; FR-007 – FR-010a, FR-012 – FR-015;
  * research R-10).
  *
  * A document an administrator creates **from** an Opportunity is linked to it

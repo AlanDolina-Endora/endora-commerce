@@ -566,8 +566,8 @@ export function registerModule(ctx: ModuleContext): void {
   );
 
   /**
-   * Feature 158 — a Sales Opportunity's custom-field values received into a
-   * Quote Request created from it (`specs/158-custom-fields-value-carry/`,
+   * Feature 161 — a Sales Opportunity's custom-field values received into a
+   * Quote Request created from it (`specs/161-custom-fields-value-carry/`,
    * contract `carry-api.md` §4.2). `crm` decides this module's presence before
    * it calls; the carry itself is planned by `custom_fields`.
    */

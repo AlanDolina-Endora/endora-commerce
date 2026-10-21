@@ -19,7 +19,7 @@ describe('custom-field registry', () => {
     expect([...owned].sort()).toEqual(['opportunity', 'quote_request']);
   });
 
-  // `specs/158-custom-fields-value-carry/` data-model §1.1 — the carry pairs.
+  // `specs/161-custom-fields-value-carry/` data-model §1.1 — the carry pairs.
   it('offers carry targets on exactly quote_request, order and opportunity', () => {
     expect(SUPPORTED_ENTITIES.quote_request.carryTargets).toEqual(['order', 'opportunity']);
     expect(SUPPORTED_ENTITIES.order.carryTargets).toEqual(['opportunity']);

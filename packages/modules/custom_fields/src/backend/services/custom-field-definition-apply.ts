@@ -50,7 +50,7 @@ export class CustomFieldDefinitionError extends Error {
     message: string,
     /**
      * What a refusal's sentence names (feature 157): the field `key`, an
-     * option's `value` and `label`. A carry refusal (feature 158) adds its
+     * option's `value` and `label`. A carry refusal (feature 161) adds its
      * reason token as `code` and the missing option values as a list.
      */
     readonly details?: Readonly<Record<string, string | readonly string[]>>,
@@ -102,7 +102,7 @@ export function assertListFilterSupported(entityType: string, listFilter: boolea
   }
 }
 
-/** One definition as a carry judgement reads it (feature 158). */
+/** One definition as a carry judgement reads it (feature 161). */
 export interface CarrySourceDefinition {
   readonly entityType: SupportedEntityType;
   readonly key: string;
@@ -127,7 +127,7 @@ function carryRefusal(
 }
 
 /**
- * Judge the carry targets a definition write **adds** (feature 158, research
+ * Judge the carry targets a definition write **adds** (feature 161, research
  * R-4), on the Command's own transaction. Each must be offered by the source
  * type's registry entry (`pair_unsupported`), have its owner module present
  * (`target_unavailable`), and pass {@link assessCustomFieldCarry} against the
@@ -208,7 +208,7 @@ export async function assertCarryTargetsAccepted(
 }
 
 /**
- * The apply seam's own floor for `carryTo` (feature 158): a host writing
+ * The apply seam's own floor for `carryTo` (feature 161): a host writing
  * through it may name only the pairs its type's registry entry offers. The
  * compatibility judgement is the definition Commands' (above); a host-managed
  * type offers no pair, so this refuses any carry a host names.

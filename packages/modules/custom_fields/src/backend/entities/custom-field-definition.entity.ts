@@ -86,7 +86,7 @@ export class CustomFieldDefinition {
 
   /**
    * The entity types this definition's values carry to
-   * (`specs/158-custom-fields-value-carry/`). Settable only to the registry
+   * (`specs/161-custom-fields-value-carry/`). Settable only to the registry
    * entry's `carryTargets`, each judged compatible when it is turned on; an
    * entry whose owner module is off is kept, and not served.
    */
