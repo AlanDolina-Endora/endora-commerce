@@ -369,6 +369,27 @@ describe.each<Language>(['en', 'pl'])('RfqHistory — %s', (language) => {
     expect(container.textContent).not.toMatch(/long_label|markup/);
   });
 
+  it('words a skip reason it does not know by the generic sentence, never by its code (161)', async () => {
+    answerHistory({
+      truncated: false,
+      entries: [
+        entry('custom_field_carry_skipped', SYSTEM, {
+          customFieldCarry: {
+            source: { entityType: 'opportunity', recordId: ORDER_ID, reference: 'OPP-000044' },
+            // A reason a newer server may answer and this screen has no sentence for.
+            skipped: [{ key: 'region', reason: 'owner_unreachable' as never, label: { labelDefault: 'Region', labels: {} } }],
+          },
+        }),
+      ],
+    });
+    const { container } = renderHistory(language);
+    await screen.findByText(tr(language, 'entry.custom_field_carry_skipped'));
+    expect(
+      screen.getByText(trModule(language, 'history.carryLine', { field: 'Region', reason: trModule(language, 'history.carryReasonUnknown') })),
+    ).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/owner.unreachable/i);
+  });
+
   it('ships a reason sentence for every reason a carry can be skipped by (161)', () => {
     for (const code of customFieldCarrySkipReasonSchema.options) {
       expect(MODULE_ENTRIES[language][`history.carryReason.${code}`], code).toBeTruthy();

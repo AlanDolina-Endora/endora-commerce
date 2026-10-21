@@ -218,9 +218,13 @@ function HistoryEntry({ entry, f }: { entry: QuoteRequestHistoryEntry; f: Format
         <ul className="mt-1 list-disc space-y-0.5 pl-5">
           {carry.skipped.map((skip) => (
             <li key={skip.key} className="break-words">
-              {SKIP_REASONS.has(skip.reason)
-                ? q('history.carryLine', { field: fieldName(skip), reason: q(`history.carryReason.${skip.reason}`) })
-                : fieldName(skip)}
+              {q('history.carryLine', {
+                field: fieldName(skip),
+                // A reason this screen does not know yet reads as the generic sentence, never as its code.
+                reason: SKIP_REASONS.has(skip.reason)
+                  ? q(`history.carryReason.${skip.reason}`)
+                  : q('history.carryReasonUnknown'),
+              })}
             </li>
           ))}
         </ul>

@@ -481,9 +481,11 @@ export function OpportunityHistory(props: OpportunityHistoryProps): ReactNode {
             <li key={skip.key} className="break-words">
               {t('history.customFieldCarry.line', {
                 field: skippedFieldName(skip, language),
+                // A reason this screen does not know yet reads as the generic
+                // sentence — never as its code, however humanised.
                 reason: CARRY_SKIP_REASONS.has(skip.reason)
                   ? t(`history.carryReason.${skip.reason}`)
-                  : humaniseKey(skip.reason),
+                  : t('history.carryReasonUnknown'),
               })}
             </li>
           ))}

@@ -665,6 +665,29 @@ describe('the Change history tab, on custom-field values not carried', () => {
     expect(created).not.toHaveTextContent('{');
   });
 
+  it('words a skip reason it does not know by the generic sentence, never by its code', async () => {
+    only(
+      entry({
+        id: 'audit-cu',
+        action: 'crm.opportunity.create',
+        before: null,
+        after: {
+          title: 'Fleet renewal',
+          customFieldCarry: {
+            source: { entityType: 'quote_request', recordId: '00000000-0000-4000-8000-0000000000e8' },
+            carried: [],
+            // A reason a newer server may answer and this screen has no sentence for.
+            skipped: [{ key: 'region', reason: 'owner_unreachable', label: { labelDefault: 'Region', labels: {} } }],
+          },
+        },
+      }),
+    );
+    const panel = await openHistory(READER);
+    const carry = row(item(panel, 0), en('history.field.customFieldCarry'));
+    expect(await within(carry).findByText(en('history.customFieldCarry.line', { field: 'Region', reason: en('history.carryReasonUnknown') }))).toBeInTheDocument();
+    expect(carry).not.toHaveTextContent(/owner.unreachable/i);
+  });
+
   it('says a join could not carry a value from the order', async () => {
     only(JOINED_WITH_SKIPS);
     const panel = await openHistory(READER);

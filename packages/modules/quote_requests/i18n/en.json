@@ -169,6 +169,7 @@
   "history.carryLine": "{field} — {reason}",
   "history.carryReason.target_missing": "the quote request has no field with this key",
   "history.carryReason.value_type_mismatch": "the quote request's field has a different value type",
-  "history.carryReason.audience_mismatch": "the quote request's field is visible to customers, but the opportunity's field is internal",
-  "history.carryReason.value_invalid": "the value is not valid for the quote request's field"
+  "history.carryReason.audience_mismatch": "the quote request's field is visible to customers, but the sales opportunity's field is internal",
+  "history.carryReason.value_invalid": "the value is not valid for the quote request's field",
+  "history.carryReasonUnknown": "the value could not be carried"
 }
