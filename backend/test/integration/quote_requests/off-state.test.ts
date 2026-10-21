@@ -24,6 +24,7 @@ import { withSystemScope } from '../../../src/tenancy/escape-hatch.js';
 import { Order, Product } from '../../helpers/package-entities.js';
 import {
   acceptedQuoteRequest,
+  checkOutBasket,
   convertQuoteRequestToCart,
   whenOrderCreatedSettled,
 } from '../../helpers/quote-conversion.js';
@@ -300,6 +301,143 @@ describe('quote_requests off-state, from a package (Constitution XVII)', () => {
     } finally {
       await setProductMinimum(em, SEED_PRODUCT_101_ID, previousMinimum);
     }
+  });
+
+  /**
+   * Feature 159 (T069; FR-083, research R-23) — line groups across the two
+   * off-states that touch them.
+   *
+   * - `document_templates` off: the quote PDF is refused (`refuses-without`, as
+   *   153), and nothing else about the grouping moves — an operator still
+   *   groups a quote, both replies still carry the groups.
+   * - `quote_requests` off: an order placed from a grouped quote keeps showing
+   *   its groups. They are `orders`' own rows, written at placement, so the
+   *   quote module's absence has nothing to take away. (A placement while it
+   *   is off carries no groups — `place-order-quote-groups.test.ts` FR-083.)
+   */
+  describe('feature 159 — line groups (FR-083)', () => {
+    type Grouped = {
+      itemGroups: Array<{ id: string; name: string; position: number }>;
+      items: Array<{ productId: string; groupId: string | null; position: number }>;
+    };
+
+    const read = async (url: string, cookies: Record<string, string>): Promise<Grouped> => {
+      const res = await h.app.inject({ method: 'GET', url, cookies });
+      expect(res.statusCode, `${url}: ${res.body}`).toBe(200);
+      return (res.json() as { data: Grouped }).data;
+    };
+
+    /** `[group name | '-', productId]` per line, in the reply's order. */
+    const shapeOf = (reply: Grouped) => {
+      const names = new Map(reply.itemGroups.map((group) => [group.id, group.name]));
+      return reply.items.map((item) => [item.groupId ? names.get(item.groupId) : '-', item.productId]);
+    };
+
+    /** A Pending quote of the shared buyer, grouped by the operator into `Hall A`. */
+    async function groupedQuote(): Promise<string> {
+      const created = await h.app.inject({
+        method: 'POST',
+        url: '/api/v1/quote-requests',
+        cookies: customer,
+        payload: { items: [{ productId: SEED_PRODUCT_101_ID, quantity: 2, desiredUnitPrice: 12 }] },
+      });
+      expect(created.statusCode, created.body).toBe(201);
+      const rfq = (created.json() as { data: { id: string; version: number } }).data;
+      const grouped = await h.app.inject({
+        method: 'PATCH',
+        url: `/api/v1/admin/quote-requests/${rfq.id}`,
+        cookies: admin,
+        headers: { 'if-match': `"${rfq.version}"` },
+        payload: {
+          groups: [{ key: 'a', name: 'Hall A' }],
+          items: [{ productId: SEED_PRODUCT_101_ID, quantity: 2, agreedUnitPrice: 11, groupKey: 'a' }],
+        },
+      });
+      expect(grouped.statusCode, grouped.body).toBe(200);
+      return rfq.id;
+    }
+
+    it('document templates off: the quote PDF is refused, grouping and the replies are unaffected', async () => {
+      const quoteId = await groupedQuote();
+      const adminUrl = `/api/v1/admin/quote-requests/${quoteId}`;
+      const before = await read(adminUrl, admin);
+      expect(shapeOf(before)).toEqual([['Hall A', SEED_PRODUCT_101_ID]]);
+
+      await withModuleOff('document_templates', 'deactivated', async () => {
+        const pdf = await h.app.inject({ method: 'GET', url: `${adminUrl}/pdf`, cookies: admin });
+        expect(pdf.statusCode, pdf.body).toBe(503);
+        expect((pdf.json() as { error: { code: string } }).error.code).toBe('MODULE_DISABLED');
+
+        expect(await read(adminUrl, admin)).toMatchObject({ itemGroups: before.itemGroups });
+        expect(shapeOf(await read(`/api/v1/quote-requests/${quoteId}`, customer))).toEqual([
+          ['Hall A', SEED_PRODUCT_101_ID],
+        ]);
+
+        // Regrouping is a quote write, not a document one: it still saves.
+        const { version } = (await read(adminUrl, admin)) as Grouped & { version: number };
+        const renamed = await h.app.inject({
+          method: 'PATCH',
+          url: adminUrl,
+          cookies: admin,
+          headers: { 'if-match': `"${version}"` },
+          payload: {
+            groups: [{ key: 'a', id: before.itemGroups[0]!.id, name: 'Hall A1' }],
+            items: [{ productId: SEED_PRODUCT_101_ID, quantity: 2, agreedUnitPrice: 11, groupKey: 'a' }],
+          },
+        });
+        expect(renamed.statusCode, renamed.body).toBe(200);
+        expect(shapeOf((renamed.json() as { data: Grouped }).data)).toEqual([['Hall A1', SEED_PRODUCT_101_ID]]);
+      });
+
+      const pdf = await h.app.inject({ method: 'GET', url: `${adminUrl}/pdf`, cookies: admin });
+      expect(pdf.statusCode, pdf.body).toBe(200);
+      expect(shapeOf(await read(adminUrl, admin))).toEqual([['Hall A1', SEED_PRODUCT_101_ID]]);
+    });
+
+    it.each(['deactivated', 'platform-unavailable'] as const)(
+      'quote requests %s: an order placed from a grouped quote still serves its itemGroups',
+      async (axis) => {
+        const em = h.em();
+        await em
+          .getConnection()
+          .execute(`update "stock_levels" set "on_hand" = 100000 where "product_id" = ?`, [SEED_PRODUCT_101_ID]);
+        await em
+          .getConnection()
+          .execute(
+            `update "carts" set "status" = 'completed' where "customer_account_id" = ? and "status" = 'active'`,
+            [TEST_CUSTOMER_ID],
+          );
+
+        const quoteId = await groupedQuote();
+        const detail = await read(`/api/v1/quote-requests/${quoteId}`, customer);
+        const accepted = await h.app.inject({
+          method: 'POST',
+          url: `/api/v1/quote-requests/${quoteId}/accept-revision`,
+          cookies: customer,
+          payload: {
+            expectedRevisionNumber: (detail as Grouped & { currentRevisionNumber: number }).currentRevisionNumber,
+          },
+        });
+        expect(accepted.statusCode, accepted.body).toBe(200);
+        await convertQuoteRequestToCart(h, quoteId);
+        const placed = await whenOrderCreatedSettled(h, () => checkOutBasket(h));
+        await reactor.idle();
+
+        const customerUrl = `/api/v1/orders/${placed.id}`;
+        const adminUrl = `/api/v1/admin/orders/${placed.id}`;
+        const customerBefore = await read(customerUrl, customer);
+        const adminBefore = await read(adminUrl, admin);
+        expect(shapeOf(customerBefore)).toEqual([['Hall A', SEED_PRODUCT_101_ID]]);
+
+        await withModuleOff('quote_requests', axis, async () => {
+          // The control: the quote itself is gone, so the order's answer below is an exemption measured.
+          const quote = await h.app.inject({ method: 'GET', url: `/api/v1/quote-requests/${quoteId}`, cookies: customer });
+          expect(quote.statusCode, quote.body).not.toBe(200);
+          expect(await read(customerUrl, customer)).toEqual(customerBefore);
+          expect(await read(adminUrl, admin)).toEqual(adminBefore);
+        });
+      },
+    );
   });
 
   /**

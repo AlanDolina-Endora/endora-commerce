@@ -394,6 +394,63 @@ describe.each<Language>(['en', 'pl'])('RfqHistory — %s', (language) => {
     expect(screen.queryByText(notice)).toBeNull();
   });
 
+  it('feature 159 — lists the grouping changes as sentences; no group reads as Ungrouped (T038)', async () => {
+    const group = { id: '00000000-0000-4000-8000-0000000001a1', name: 'Ground floor' };
+    answerHistory({
+      truncated: false,
+      entries: [
+        entry('modified', REP, {
+          revisionNumber: 5,
+          changes: [
+            { kind: 'group_added', group },
+            { kind: 'group_removed', group: { ...group, name: 'Options' } },
+            { kind: 'group_renamed', groupId: group.id, before: 'First floor', after: 'Floor 1' },
+            { kind: 'line_group', line: blue, before: null, after: 'Ground floor' },
+            { kind: 'line_group', line: plain, before: 'Ground floor', after: null },
+            { kind: 'line_order' },
+          ],
+        }),
+      ],
+    });
+    const { container } = renderHistory(language);
+    await screen.findAllByText(tr(language, 'entry.modified'));
+    const ungrouped = tr(language, 'ungrouped');
+    const expected = [
+      tr(language, 'change.group_added', { name: 'Ground floor' }),
+      tr(language, 'change.group_removed', { name: 'Options' }),
+      tr(language, 'change.group_renamed', { before: 'First floor', after: 'Floor 1' }),
+      tr(language, 'change.line_group', { line: line(blue), before: ungrouped, after: 'Ground floor' }),
+      tr(language, 'change.line_group', { line: line(plain), before: 'Ground floor', after: ungrouped }),
+      tr(language, 'change.line_order'),
+    ];
+    for (const sentence of expected) expect(screen.getByText(sentence)).toBeInTheDocument();
+    expect(container.innerHTML).not.toMatch(/rfq\.detail\.history|group_added|line_group|line_order/);
+  });
+
+  it('feature 159 — a line of a product on several lines is named with its group (N-32)', async () => {
+    answerHistory({
+      truncated: false,
+      entries: [
+        entry('modified', REP, {
+          revisionNumber: 6,
+          changes: [
+            { kind: 'line_quantity', line: { ...plain, groupName: 'Hall A' }, before: 5, after: 3 },
+            { kind: 'line_removed', line: { ...plain, groupName: null } },
+          ],
+        }),
+      ],
+    });
+    renderHistory(language);
+    await screen.findAllByText(tr(language, 'entry.modified'));
+    const inGroup = (group: string): string => tr(language, 'lineInGroup', { line: line(plain), group });
+    expect(
+      screen.getByText(tr(language, 'change.line_quantity', { line: inGroup('Hall A'), before: 5, after: 3 })),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(tr(language, 'change.line_removed', { line: inGroup(tr(language, 'ungrouped')) })),
+    ).toBeInTheDocument();
+  });
+
   it('lists two changes of one kind on one line, each under its own key (review fix N6)', async () => {
     const line = { productId: SOURCE_RFQ, variantId: null, productName: 'Twin', variantLabel: null };
     const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);

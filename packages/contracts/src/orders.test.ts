@@ -5,7 +5,10 @@ import {
   adminOrderPreviewMessageCodeSchema,
   adminOrderPreviewResponseSchema,
   adminOrdersListQuerySchema,
+  adminCreateOrderRequestSchema,
+  adminOrderPreviewRequestSchema,
   createOrderSavedViewRequestSchema,
+  orderItemSchema,
   orderSavedViewSchema,
   orderSchema,
   updateOrderSavedViewRequestSchema,
@@ -143,6 +146,31 @@ describe('admin order preview message codes', () => {
       'SOME_FUTURE_CODE',
     );
   });
+
+  it('feature 159 — a priced line carries its tax rate; a line without one still parses', () => {
+    const line = {
+      productId: '00000000-0000-4000-8000-000000000007',
+      quantity: 2,
+      unitPrice: '10.00',
+      currency: 'PLN',
+      lineTotal: 20,
+    };
+    const summary = {
+      subtotal: 20,
+      taxTotal: 4.6,
+      deliveryTotal: 0,
+      paymentSurcharge: 0,
+      discountTotal: 0,
+      total: 24.6,
+      currency: 'PLN',
+    };
+    const parsed = adminOrderPreviewResponseSchema.parse({
+      lines: [{ ...line, taxRate: 0.23 }, line],
+      summary,
+      messages: [],
+    });
+    expect(parsed.lines.map((l) => l.taxRate)).toEqual([0.23, undefined]);
+  });
 });
 
 describe('order saved views (FR-003, R-8, S-05, S-06)', () => {
@@ -279,5 +307,118 @@ describe('adminOrdersListQuerySchema customFieldFilters (specs/157-custom-fields
     };
     const once = adminOrdersListQuerySchema.parse(query);
     expect(adminOrdersListQuerySchema.parse(once)).toEqual(once);
+  });
+});
+
+// Feature 159 — line groups on orders (`specs/159-quote-request-item-groups/`).
+describe('order line groups (T007)', () => {
+  const ID = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const CREATE = {
+    customerAccountId: ID(3),
+    salesChannelId: ID(4),
+    deliveryMethodId: ID(5),
+    paymentMethodId: ID(6),
+    deliveryAddressId: ID(7),
+    billingAddressId: ID(7),
+  };
+  const ITEM = {
+    id: ID(20),
+    productId: ID(21),
+    productSnapshot: { sku: 'B-1', name: 'Bolt', primaryAssetUrl: null },
+    variantId: null,
+    variantSnapshot: null,
+    quantity: 2,
+    unitPrice: 10,
+    taxRate: 0.23,
+    lineTotal: 24.6,
+  };
+  const paths = (result: { error?: { issues: { path: PropertyKey[] }[] } }) =>
+    (result.error?.issues ?? []).map((issue) => issue.path.join('.'));
+
+  it('admin create accepts groups and per-line group keys', () => {
+    const parsed = adminCreateOrderRequestSchema.parse({
+      ...CREATE,
+      groups: [{ key: 'g1', name: ' Hall A ' }],
+      items: [
+        { productId: ID(30), quantity: 1, groupKey: 'g1' },
+        { productId: ID(31), quantity: 1 },
+      ],
+    });
+    expect(parsed.groups).toEqual([{ key: 'g1', name: 'Hall A' }]);
+    expect(parsed.items[0]?.groupKey).toBe('g1');
+  });
+
+  it('admin create refuses an id on a group, an unknown key, duplicate keys and 51 groups', () => {
+    expect(
+      adminCreateOrderRequestSchema.safeParse({
+        ...CREATE,
+        groups: [{ key: 'g1', id: ID(9), name: 'A' }],
+        items: [{ productId: ID(30), quantity: 1, groupKey: 'g1' }],
+      }).success,
+    ).toBe(false);
+    expect(
+      paths(
+        adminCreateOrderRequestSchema.safeParse({
+          ...CREATE,
+          items: [{ productId: ID(30), quantity: 1, groupKey: 'nope' }],
+        }),
+      ),
+    ).toEqual(['items.0.groupKey']);
+    expect(
+      paths(
+        adminCreateOrderRequestSchema.safeParse({
+          ...CREATE,
+          groups: [
+            { key: 'a', name: 'A' },
+            { key: 'a', name: 'B' },
+          ],
+          items: [{ productId: ID(30), quantity: 1 }],
+        }),
+      ),
+    ).toEqual(['groups.1.key']);
+    const many = Array.from({ length: 51 }, (_, i) => ({ key: `k${i}`, name: `G${i}` }));
+    expect(
+      paths(
+        adminCreateOrderRequestSchema.safeParse({
+          ...CREATE,
+          groups: many,
+          items: [{ productId: ID(30), quantity: 1 }],
+        }),
+      ),
+    ).toContain('groups');
+  });
+
+  it('admin create still applies its address rule', () => {
+    const { deliveryAddressId: _omit, ...withoutDelivery } = CREATE;
+    expect(
+      paths(
+        adminCreateOrderRequestSchema.safeParse({
+          ...withoutDelivery,
+          items: [{ productId: ID(30), quantity: 1 }],
+        }),
+      ),
+    ).toEqual(['deliveryAddressId']);
+  });
+
+  it('the admin preview is unchanged: a groupKey is stripped, not refused', () => {
+    const parsed = adminOrderPreviewRequestSchema.parse({
+      customerAccountId: ID(3),
+      salesChannelId: ID(4),
+      items: [{ productId: ID(30), quantity: 1, groupKey: 'g1' }],
+    });
+    expect(parsed.items[0]).not.toHaveProperty('groupKey');
+  });
+
+  it('an order item defaults groupId and position; an order defaults itemGroups', () => {
+    const item = orderItemSchema.parse(ITEM);
+    expect(item.groupId).toBeNull();
+    expect(item.position).toBe(0);
+    expect(orderItemSchema.parse({ ...ITEM, groupId: ID(40), position: 2 })).toMatchObject({
+      groupId: ID(40),
+      position: 2,
+    });
+    expect(orderSchema.parse(ORDER).itemGroups).toEqual([]);
+    const groups = [{ id: ID(40), name: 'Hall A', position: 0 }];
+    expect(orderSchema.parse({ ...ORDER, itemGroups: groups }).itemGroups).toEqual(groups);
   });
 });

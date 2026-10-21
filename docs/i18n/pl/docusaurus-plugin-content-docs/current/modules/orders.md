@@ -308,7 +308,8 @@ modułu.
 ## Encje
 
 `Order`, `OrderItem`, `Payment`, `OrderStatus`, `OrderStatusTransition`, `OrderTransitionEffect`,
-`OrderComment`, `OrderListSavedView` oraz kolumna `organizations.order_confirmation_emails` (właściciel:
+`OrderComment`, `OrderListSavedView`, `OrderItemGroup` (grupy pozycji zamówienia — zob. *Grupy
+pozycji*) oraz kolumna `organizations.order_confirmation_emails` (właściciel:
 `organizations`, odczyt przez port). `OrderItem` zapisuje kopię produktu, wariantu, ceny
 jednostkowej i stawki podatku z chwili złożenia zamówienia, aby historyczne zamówienia nie zmieniały
 się po zmianach cen i katalogu.
@@ -375,8 +376,9 @@ od razu pokazuje sekcję **Pozycje**.
   zakładce **Aktywne**: katalog podzielony na strony, z zakładkami statusów i ich licznikami,
   filtrem typu i wyszukiwaniem po SKU, slugu lub nazwie. Zaznaczenie przetrwa zmianę strony,
   rozmiaru strony i filtrów, a **Dodaj N** dodaje każdy zaznaczony produkt jako pozycję o ilości 1
-  — najwyżej 200 naraz. Produkty nadrzędne typu grouped i bundle, produkty robocze i nieaktywne
-  oraz produkty, które już są w zamówieniu, są widoczne z powodem i nie da się ich zaznaczyć.
+  — najwyżej 200 naraz. Produkty nadrzędne typu grouped i bundle oraz produkty robocze i nieaktywne
+  są widoczne z powodem i nie da się ich zaznaczyć. Produkt, który już jest w zamówieniu, można
+  dodać ponownie: staje się osobną pozycją (na przykład w innej grupie).
 - **Szybkie dodawanie po nazwie lub SKU**, obok, dopisuje jeden produkt według tych samych zasad.
 
 Bez uprawnienia `catalog:read` obie te opcje są nieaktywne i każda pokazuje podpowiedź.
@@ -405,13 +407,30 @@ ceny, a podsumowanie liczy tylko wycenione. Wycena sprawdza asortyment dokładni
 sprzedaży, który wskazuje żądanie; `salesChannelId`, który nie wskazuje żadnego kanału, jest
 odrzucany z `404 NOT_FOUND`, a ekran pokazuje *Nie udało się przeliczyć cen*, nie oznaczając żadnej
 pozycji. Produkt usunięty miękko jest wyceniany jak dotąd. Utworzone zamówienie zawiera dokładnie
-pozycje i ilości widoczne na ekranie, w niezmienionym kształcie żądania `POST /api/v1/admin/orders`.
+pozycje i ilości widoczne na ekranie, w treści żądania `POST /api/v1/admin/orders`.
 
 **Najwyżej 200 pozycji.** `POST /api/v1/admin/orders` i `POST /api/v1/admin/orders/preview` w
 pierwszym kroku odrzucają więcej niż 200 pozycji, z kodem `422 VALIDATION_FAILED` i `details: {
 code: 'too_many_items', maximum: 200 }`, zanim oceniona zostanie którakolwiek pozycja. Tworzenie
 zamówienia odrzuca też żądanie, w którym łączna ilość produktu jest poniżej jego minimum, z błędem
 minimum i `details.lines[]` kluczowanym `index` pozycji.
+
+**Grupy pozycji.** Pozycje na ekranie można podzielić na nazwane grupy — *Dodaj grupę*, zmiana
+nazwy, usunięcie, przeciąganie, klawiatura i menu *Przenieś do grupy* przy każdej pozycji, dokładnie
+tak jak w zakładce *Modyfikacja* zapytania ofertowego; *Dodaj produkt* danej grupy dodaje do tej
+grupy, każde inne dodanie — do sekcji *Bez grupy*. Każda grupa pokazuje liczbę pozycji oraz wartość
+netto, VAT i brutto obok bieżącego podsumowania cen; w tym celu wycena zwraca dla każdej wycenionej
+pozycji `taxRate` (ułamek, `0.23`, z tego samego źródła co suma podatku w podsumowaniu; brak go przy
+pozycji, której nie da się wycenić), a VAT grupy to suma netto × stawka po jej pozycjach.
+Przeniesienie pozycji między grupami nie wycenia zamówienia ponownie. Każda grupa musi mieć nazwę,
+zanim przycisk **Utwórz zamówienie** stanie się aktywny. Co zamówienie zachowuje, opisuje sekcja
+*Grupy pozycji* niżej.
+
+**Podziel pozycję.** Pozycja o ilości 2 lub większej ma obok *Przenieś do grupy* przycisk *Podziel
+pozycję*. Pyta on o ilość do przeniesienia na nową pozycję (od 1 do ilości pozycji minus 1) i o grupę
+nowej pozycji — domyślnie tę samą — po czym dodaje pozycję tego samego produktu z tą ilością,
+zmniejszając pierwotną. Tak jeden produkt trafia do dwóch grup: na przykład 5 sztuk do *Hali A* i 3
+do *Hali B*. Każda pozycja jest wyceniana według własnej ilości.
 
 ## Filtry pól niestandardowych
 
@@ -555,6 +574,50 @@ zapytania ofertowego.
 
 Gdy moduł zapytań ofertowych jest wyłączony, zamówienia są składane dokładnie tak jak dotąd i nie
 zapisują żadnego zapytania.
+
+## Grupy pozycji
+
+Zamówienie może pokazywać pozycje w **nazwanych grupach** — *Hala A*, *Hala B* — z pozycjami bez
+grupy pod nagłówkiem **Pozostałe pozycje**. Grupy służą wyłącznie prezentacji: nie zmieniają żadnej
+ceny, ilości ani sumy. Zamówienie otrzymuje je na jeden z dwóch sposobów i **nigdy ich później nie
+zmienia**: żaden ekran ani API nie edytuje grupowania złożonego zamówienia.
+
+**Z zaakceptowanego zapytania ofertowego.** Gdy przy składaniu zamówienia zostaje zapisane zapytanie
+ofertowe, z którego pochodzi koszyk (zob. poprzednią sekcję), zamówienie kopiuje grupy oferty w tej
+samej transakcji. Każda pozycja zamówienia jest dopasowywana do pozycji oferty: najpierw wszystkie
+pozycje z **tym samym produktem, wariantem, uzgodnioną ilością i uzgodnioną ceną jednostkową**, potem
+według produktu, wariantu i ceny, potem według produktu, wariantu i ilości, a na końcu wyłącznie
+według **produktu i wariantu**, przy czym każda pozycja oferty jest użyta raz. Dzięki temu produkt
+rozdzielony w ofercie na dwie grupy — 5 sztuk w jednej, 3 w drugiej, po tej samej cenie — zachowuje
+każdą pozycję w jej grupie. Dopasowana
+pozycja przejmuje grupę i miejsce pozycji oferty; pozycja, która do niczego nie pasuje — dodana do
+koszyka po zamianie albo zmieniona tak, że już nie pasuje — trafia do sekcji *Pozostałe pozycje*, za
+dopasowanymi. Grupa oferty, do której nie trafiła żadna pozycja, nie jest kopiowana. Gdy przy
+składaniu zamówienia zapytanie nie zostaje zapisane albo moduł zapytań ofertowych jest wyłączony,
+zamówienie jest składane bez grup, a poza tym dokładnie tak jak wcześniej. Późniejsza zmiana oferty
+nie rusza grup zamówienia.
+
+**Z ekranu tworzenia zamówienia.** Operator układa pozycje w grupy przed utworzeniem zamówienia (zob.
+*Ekran tworzenia zamówienia*); zamówienie powstaje z nimi w tej samej transakcji, a odrzucone
+utworzenie nie zapisuje żadnej grupy. Grupy bez pozycji nie są tworzone. **Jeden produkt może być w
+kilku pozycjach** — w dwóch różnych grupach albo dwa razy w jednej: każda pozycja żądania staje się
+osobną pozycją zamówienia, we własnej grupie, wycenioną według własnej ilości (minimalna ilość
+zamówienia produktu jest nadal oceniana na sumie jego pozycji). `POST /api/v1/admin/orders` przyjmuje opcjonalną listę `groups` (`{ key, name }`, w
+kolejności wyświetlania, najwyżej 50, nazwy od 1 do 120 znaków) i dla każdej pozycji opcjonalny
+`groupKey`. Grupowanie jest utrwalane we wpisie audytu `order.place_on_behalf` (nazwa i liczba
+pozycji każdej grupy); własne złożenie zamówienia przez kupującego, jak dotąd, nie trafia do audytu.
+
+**Gdzie są pokazywane.** Ekran zamówienia w panelu administracyjnym i strona zamówienia kupującego
+pokazują każdą grupę jako sekcję z nagłówkiem, pozycjami i podsumowaniem — liczba pozycji, netto,
+VAT i brutto, sumujące wiersze nad nim — a następnie *Pozostałe pozycje*. Zamówienie bez grup i
+każde zamówienie złożone, zanim powstały grupy, wygląda dokładnie tak jak wcześniej. Każda odpowiedź
+z zamówieniem — dla administratora, klienta i zewnętrznego API zamówień — zawiera `itemGroups`
+(`{ id, name, position }`) oraz dla każdej pozycji `groupId` i `position`, z pozycjami w kolejności
+wyświetlania; integracja, która je pomija, działa dalej.
+
+**Co nie przenosi grup.** Faktury, zwroty, ponowne zamówienie (wypełnia koszyk), *zamów ponownie
+jako zapytanie ofertowe*, koszyk i checkout, e-maile, webhooki i przyjmowanie zamówień przez
+zewnętrzne API. Nie ma PDF zamówienia.
 
 ## Minimalne ilości zamówienia przy składaniu zamówienia
 

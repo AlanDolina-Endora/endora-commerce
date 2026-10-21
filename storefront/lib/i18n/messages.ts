@@ -289,6 +289,17 @@ export type MessageKey =
   | 'quoteRequest.success.viewRequest'
   | 'quoteRequest.success.allRequests'
   | 'quoteRequest.success.continueShopping'
+  // Feature 159 — a document's line groups, read-only, and the comparison's
+  // notice that the arrangement changed.
+  | 'quoteRequest.diff.grouping'
+  | 'lineGroups.otherItems'
+  | 'lineGroups.summary.items.one'
+  | 'lineGroups.summary.items.few'
+  | 'lineGroups.summary.items.many'
+  | 'lineGroups.summary.items.other'
+  | 'lineGroups.summary.net'
+  | 'lineGroups.summary.vat'
+  | 'lineGroups.summary.gross'
   // Issue #193 — federated sign-in. Rendered only when `mfa` is present and the
   // provider is configured + enabled, so these never label a dead control.
   | 'auth.federated.groupLabel'
@@ -681,6 +692,15 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'quoteRequest.success.viewRequest': 'View quote request',
     'quoteRequest.success.allRequests': 'All quote requests',
     'quoteRequest.success.continueShopping': 'Continue shopping',
+    'quoteRequest.diff.grouping': 'The arrangement of the lines changed.',
+    'lineGroups.otherItems': 'Other items',
+    'lineGroups.summary.items.one': '{count} item',
+    'lineGroups.summary.items.few': '{count} items',
+    'lineGroups.summary.items.many': '{count} items',
+    'lineGroups.summary.items.other': '{count} items',
+    'lineGroups.summary.net': 'net {amount}',
+    'lineGroups.summary.vat': 'VAT {amount}',
+    'lineGroups.summary.gross': 'gross {amount}',
     // Issue #193 — federated sign-in.
     'auth.federated.groupLabel': 'Other sign-in options',
     'auth.federated.divider': 'or',
@@ -1054,6 +1074,15 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'quoteRequest.success.viewRequest': 'Zobacz zapytanie ofertowe',
     'quoteRequest.success.allRequests': 'Wszystkie zapytania ofertowe',
     'quoteRequest.success.continueShopping': 'Kontynuuj zakupy',
+    'quoteRequest.diff.grouping': 'Zmieniono układ pozycji.',
+    'lineGroups.otherItems': 'Pozostałe pozycje',
+    'lineGroups.summary.items.one': '{count} pozycja',
+    'lineGroups.summary.items.few': '{count} pozycje',
+    'lineGroups.summary.items.many': '{count} pozycji',
+    'lineGroups.summary.items.other': '{count} pozycji',
+    'lineGroups.summary.net': 'netto {amount}',
+    'lineGroups.summary.vat': 'VAT {amount}',
+    'lineGroups.summary.gross': 'brutto {amount}',
     // Issue #193 — federated sign-in.
     'auth.federated.groupLabel': 'Inne sposoby logowania',
     'auth.federated.divider': 'lub',

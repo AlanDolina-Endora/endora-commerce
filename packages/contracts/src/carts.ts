@@ -812,6 +812,13 @@ export interface CartWritePort {
    * basket exactly as it was. It requires `onLineError: 'throw'`; with
    * `'report'` the call is refused before anything is read or written.
    *
+   * `keepRepeatedLines` (with `replaceExisting` only) — every line stays a line
+   * of its own: a repeated `(product, variant, unit)` is not merged into the
+   * first, each line is priced at its own quantity, and the basket reads back in
+   * the batch's order. Minimums are still judged on a product's total. Feature
+   * 159 (research N-31): the admin order creation's one product on lines of
+   * several groups.
+   *
    * `ModuleDisabledError` is always thrown. At most `CART_MAX_LINES` (200) lines.
    *
    * `language` names a refused product — the language the response is answered
@@ -824,6 +831,7 @@ export interface CartWritePort {
       onLineError: 'throw' | 'report';
       onBelowMinimum?: 'report' | 'throw';
       replaceExisting?: boolean;
+      keepRepeatedLines?: boolean;
       language?: string;
     },
   ): Promise<CartWithItems & { outcomes: CartBatchLineOutcome[] }>;

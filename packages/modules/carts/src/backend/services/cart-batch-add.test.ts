@@ -681,6 +681,79 @@ describe('addItems — replaceExisting judges the request alone and clears only 
     expect(result.items.map((i) => [i.productId, i.quantity])).toEqual([[A, 10]]);
   });
 
+  /**
+   * Feature 159 (research N-31) — the admin order creation places one product on
+   * lines of several groups, so its seed keeps a repeated line a line of its own,
+   * in request order, each priced at its own quantity.
+   */
+  it('keepRepeatedLines: a repeated product stays two lines, in request order, each priced at its own quantity', async () => {
+    const r = rig({
+      carts: [existingCart()],
+      items: [cartLine({ productId: B, quantity: 3 })],
+      // From 8 pieces a cheaper bracket: a merged B × 8 would reach it.
+      resolveLinePrice: async ({ context }) => ({
+        amount: context.quantity >= 8 ? '8.00' : '10.00',
+        currency: 'PLN',
+        priceListId: 'pl-1',
+        isSale: false,
+        bracketStartQuantity: 1,
+        displayMode: 'gross_only',
+      }),
+    });
+    const result = await r.service.addItems(
+      ACTOR,
+      [
+        { productId: B, quantity: 5 },
+        { productId: C, quantity: 10 },
+        { productId: B, quantity: 3 },
+      ],
+      { onLineError: 'throw', onBelowMinimum: 'throw', replaceExisting: true, keepRepeatedLines: true },
+    );
+    const lines = result.items.filter((item) => item.cartId === result.cart.id);
+    expect(lines.map((item) => [item.productId, item.quantity, item.unitPrice])).toEqual([
+      [B, 5, '10.00'],
+      [C, 10, '8.00'],
+      [B, 3, '10.00'],
+    ]);
+    // Distinct, increasing creation times: the basket reads back in request order.
+    const times = lines.map((item) => (item.createdAt as Date).getTime());
+    expect(times).toEqual([...times].sort((a, b) => a - b));
+    expect(new Set(times).size).toBe(3);
+  });
+
+  it('keepRepeatedLines still judges a minimum on the product total across its lines (feature 155, D1)', async () => {
+    const r = rig();
+    const result = await r.service.addItems(
+      ACTOR,
+      [
+        { productId: A, variantId: RED, quantity: 5 },
+        { productId: A, variantId: RED, quantity: 5 },
+      ],
+      { onLineError: 'throw', onBelowMinimum: 'throw', replaceExisting: true, keepRepeatedLines: true },
+    );
+    expect(result.items.map((item) => item.quantity)).toEqual([5, 5]);
+  });
+
+  it('without keepRepeatedLines a repeated product is merged into one line, as before', async () => {
+    const r = rig();
+    const result = await r.service.addItems(
+      ACTOR,
+      [
+        { productId: B, quantity: 5 },
+        { productId: B, quantity: 3 },
+      ],
+      { onLineError: 'throw', replaceExisting: true },
+    );
+    expect(result.items.map((item) => [item.productId, item.quantity])).toEqual([[B, 8]]);
+  });
+
+  it('keepRepeatedLines is refused without replaceExisting — it describes a fresh basket', async () => {
+    const r = rig();
+    await expect(
+      r.service.addItems(ACTOR, [{ productId: B, quantity: 1 }], { onLineError: 'throw', keepRepeatedLines: true }),
+    ).rejects.toThrow(/keepRepeatedLines/);
+  });
+
   it('is refused for an anonymous actor — only a customer has a basket to replace', async () => {
     const r = rig();
     await expect(

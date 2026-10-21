@@ -6,7 +6,7 @@ import {
 } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import { Order } from '../entities/order.entity.js';
-import { OrderItem } from '../entities/order-item.entity.js';
+import { loadArrangedOrderLines } from './order-line-order.js';
 
 interface CloneContext {
   customerAccountId: string;
@@ -51,7 +51,8 @@ export class OrderCloneToQuoteService {
     const order = await em.findOne(Order, { id: orderId, organizationId: ctx.organizationId });
     if (!order) throw new HttpError(404, ERROR_CODES.ORDER_NOT_FOUND, 'Order not found.');
 
-    const items = await em.find(OrderItem, { orderId });
+    // Feature 159 — the lines in the order's display order.
+    const items = (await loadArrangedOrderLines(em, orderId)).lines;
     if (items.length === 0) {
       throw new HttpError(409, ERROR_CODES.VALIDATION_FAILED, 'Order has no line items to clone.');
     }

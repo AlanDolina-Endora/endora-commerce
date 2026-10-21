@@ -113,6 +113,11 @@ export type { KanbanBoardLabels, KanbanBoardProps, KanbanCardRenderState, Kanban
 export { ReorderAnnouncer } from './reorder/ReorderAnnouncer.js';
 export type { ReorderAnnouncerProps } from './reorder/ReorderAnnouncer.js';
 export { moveItem, useReorderList } from './reorder/useReorderList.js';
+// Feature 159 — named, ordered line groups: the editor and its section reorder hook.
+export { LineGroupsEditor, SplitLineDialog, canSplitLine, splitLineInto } from './line-groups/index.js';
+export type { LineGroupsEditorGroup, LineGroupsEditorLabels, LineGroupsEditorLine, LineGroupsEditorLineSlots, LineGroupsEditorProps, LineGroupsEditorSection, SplitLineDialogLabels, SplitLineDialogProps, SplitLineDialogTarget } from './line-groups/index.js';
+export { useGroupedReorder } from './reorder/useGroupedReorder.js';
+export type { GroupedHandleProps, GroupedItemContext, GroupedItemProps, GroupedReorderKeyboardEvent, GroupedReorderLabels, GroupedReorderModel, GroupedReorderSection, GroupedSectionContext, GroupedSectionHandleProps, GroupedSectionProps, UseGroupedReorderOptions, UseGroupedReorderResult } from './reorder/useGroupedReorder.js';
 export type { ReorderHandleProps, ReorderItemProps, ReorderKeyboardEvent, ReorderLabelContext, ReorderLabels, ReorderListOptions, UseReorderListOptions, UseReorderListResult } from './reorder/useReorderList.js';
 export { RuleBuilder } from './rule-builder/RuleBuilder.js';
 export { ProductBrowserDialog } from './product-browser/ProductBrowserDialog.js';

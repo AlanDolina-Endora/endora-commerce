@@ -9,6 +9,12 @@ import {
   type OriginReference,
 } from './common.js';
 import { customFieldFiltersQueryParamSchema, customFieldValuesSchema } from './custom-fields.js';
+import {
+  lineGroupKeySchema,
+  lineGroupSchema,
+  newLineGroupInputSchema,
+  refineLineGrouping,
+} from './line-groups.js';
 import { vatStatusSchema } from './organizations.js';
 import {
   savedListViewColumnsSchema,
@@ -55,6 +61,10 @@ export const orderItemSchema = z.object({
   unitPrice: z.number().finite().nonnegative(),
   taxRate: z.number().finite().nonnegative(),
   lineTotal: z.number().finite().nonnegative(),
+  /** Feature 159 — the line's group (`itemGroups[].id`), `null` = ungrouped. */
+  groupId: uuidSchema.nullable().default(null),
+  /** Feature 159 — 0-based order within the line's section. */
+  position: z.number().int().nonnegative().default(0),
 });
 export type OrderItem = z.infer<typeof orderItemSchema>;
 
@@ -175,6 +185,12 @@ export const orderSchema = z.object({
     kind: z.enum(['bank_transfer', 'pickup', 'credit_limit', 'gateway']),
   }),
   sourceQuoteRequestId: uuidSchema.nullable(),
+  /**
+   * Feature 159 — the order's line groups in display order (every one holds a
+   * line: an order never stores an empty group). Fixed at placement.
+   */
+  itemGroups: z.array(lineGroupSchema).default([]),
+  /** In display order: each group's lines, then the ungrouped lines. */
   items: z.array(orderItemSchema),
   subtotal: z.number().finite().nonnegative(),
   taxTotal: z.number().finite().nonnegative(),
@@ -679,11 +695,24 @@ export type AdminCreateOrderInlineAddress = z.infer<typeof adminCreateOrderInlin
  */
 export const ADMIN_ORDER_MAX_ITEMS = 200;
 
+/**
+ * Feature 159 — a line of the admin create request: the preview's item plus the
+ * `groups[].key` it belongs to (absent or `null` = ungrouped). The preview keeps
+ * `adminCreateOrderItemSchema`, so a `groupKey` sent there is stripped.
+ */
+export const adminCreateOrderLineSchema = adminCreateOrderItemSchema.extend({
+  groupKey: lineGroupKeySchema.nullable().optional(),
+});
+export type AdminCreateOrderLine = z.infer<typeof adminCreateOrderLineSchema>;
+
 export const adminCreateOrderRequestSchema = z
   .object({
     customerAccountId: uuidSchema,
     salesChannelId: uuidSchema,
-    items: z.array(adminCreateOrderItemSchema).min(1),
+    /** Feature 159 — the new order's groups in display order; a group no line names is not created. */
+    groups: z.array(newLineGroupInputSchema).optional(),
+    /** In display order: each group's lines, then the ungrouped lines. */
+    items: z.array(adminCreateOrderLineSchema).min(1),
     deliveryMethodId: uuidSchema,
     paymentMethodId: uuidSchema,
     /**
@@ -725,6 +754,7 @@ export const adminCreateOrderRequestSchema = z
         message: 'Provide exactly one of billingAddressId or billingAddress.',
       });
     }
+    refineLineGrouping(ctx, val);
   });
 export type AdminCreateOrderRequest = z.infer<typeof adminCreateOrderRequestSchema>;
 
@@ -818,6 +848,12 @@ export const adminOrderPreviewLineSchema = z.object({
   unitPrice: z.string(),
   currency: z.string(),
   lineTotal: z.number(),
+  /**
+   * Feature 159 — the rate the line is taxed at (a fraction, `0.23`), from the
+   * same authority as `summary.taxTotal`; absent on an unavailable line. The
+   * create screen sums a group's VAT from it.
+   */
+  taxRate: z.number().optional(),
   unavailable: z.boolean().optional(),
 });
 

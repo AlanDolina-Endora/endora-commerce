@@ -99,9 +99,13 @@ function actorLabel(t: T, actor: QuoteRequestHistoryActor): string {
 }
 
 function lineLabel(t: T, line: QuoteRequestHistoryLineRef): string {
-  return line.variantLabel === null
-    ? line.productName
-    : t('lineWithVariant', { product: line.productName, variant: line.variantLabel });
+  const label =
+    line.variantLabel === null
+      ? line.productName
+      : t('lineWithVariant', { product: line.productName, variant: line.variantLabel });
+  // Feature 159 (research N-32) — a product on several lines: which one.
+  if (line.groupName === undefined) return label;
+  return t('lineInGroup', { line: label, group: line.groupName ?? t('ungrouped') });
 }
 
 function changeSentence(f: Formatters, change: QuoteRequestHistoryChange): string {
@@ -146,6 +150,21 @@ function changeSentence(f: Formatters, change: QuoteRequestHistoryChange): strin
       if (change.before === null) return t('change.validity_set', { after: f.dateTime(change.after!) });
       if (change.after === null) return t('change.validity_removed', { before: f.dateTime(change.before) });
       return t('change.validity', { before: f.dateTime(change.before), after: f.dateTime(change.after) });
+    // Feature 159 — the grouping. Group names are operator content, shown as
+    // recorded; `null` is the ungrouped section.
+    case 'group_added':
+    case 'group_removed':
+      return t(`change.${change.kind}`, { name: change.group.name });
+    case 'group_renamed':
+      return t('change.group_renamed', { before: change.before, after: change.after });
+    case 'line_group':
+      return t('change.line_group', {
+        line: lineLabel(t, change.line),
+        before: change.before ?? t('ungrouped'),
+        after: change.after ?? t('ungrouped'),
+      });
+    case 'line_order':
+      return t('change.line_order');
   }
 }
 

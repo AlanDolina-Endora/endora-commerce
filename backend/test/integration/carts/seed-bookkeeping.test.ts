@@ -62,4 +62,22 @@ describe('carts — a seeded basket is a basket somebody just used', () => {
     // What the port answers is the row as written, not the row as first read.
     expect(seeded.cart.lastActivityAt.getTime()).toBeGreaterThanOrEqual(before - 1000);
   });
+
+  /**
+   * Feature 159 (research N-31) — a quote may hold one product on several lines
+   * (in different groups), and the seed writes them in one flush. The basket is
+   * read by creation time, so lines sharing one came back in random-id order.
+   */
+  it('reads a seed of repeated lines back in seed order, every time', async () => {
+    const quantities = [5, 3, 7, 1, 4, 2, 6, 9];
+    for (let round = 0; round < 3; round += 1) {
+      const seeded = await cartWritePortOf(h).replaceItemsForCustomer(
+        CTX,
+        quantities.map((quantity) => ({ ...LINE, quantity })),
+      );
+      expect(seeded.items.map((item) => item.quantity)).toEqual(quantities);
+      const read = await cartWritePortOf(h).replaceItemsForCustomer(CTX, quantities.map((quantity) => ({ ...LINE, quantity })));
+      expect(read.items.map((item) => item.quantity)).toEqual(quantities);
+    }
+  });
 });

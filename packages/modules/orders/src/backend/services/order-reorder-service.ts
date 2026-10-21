@@ -2,7 +2,6 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import { ERROR_CODES } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import { Order } from '../entities/order.entity.js';
-import { OrderItem } from '../entities/order-item.entity.js';
 import type {
   CartWritePort,
   CatalogProductReadPort,
@@ -17,6 +16,7 @@ import {
   type OrderEmailResult,
 } from './transactional-email-helper.js';
 import { rethrowIfModuleDisabled } from '@endora-commerce/platform/kernel';
+import { loadArrangedOrderLines } from './order-line-order.js';
 
 export interface ReorderUnavailableItem {
   productId: string;
@@ -82,7 +82,8 @@ export class OrderReorderService {
       });
     }
 
-    const items = await em.find(OrderItem, { orderId });
+    // Feature 159 — the lines in the order's display order.
+    const items = (await loadArrangedOrderLines(em, orderId)).lines;
     const productIds = [...new Set(items.map((it) => it.productId))];
     // `liveOnly` is the soft-delete half of the old predicate; the status half
     // stays here because it is `!== 'inactive'` rather than `=== 'active'`, and

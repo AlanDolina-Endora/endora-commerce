@@ -1,5 +1,12 @@
 import { z } from 'zod';
 import { isoDateTimeSchema, OriginReferenceSchema, uuidSchema, type OriginReference } from './common.js';
+import {
+  lineGroupInputSchema,
+  lineGroupKeySchema,
+  lineGroupSchema,
+  newLineGroupInputSchema,
+  refineLineGrouping,
+} from './line-groups.js';
 
 /**
  * Quote Requests (RFQ) module contracts — feature 008 workflow rewrite.
@@ -87,6 +94,14 @@ export const quoteRequestItemSchema = z.object({
     })
     .nullable()
     .optional(),
+  /**
+   * Feature 159 — the line's group (`itemGroups[].id`), `null` = ungrouped.
+   * Admin and customer replies; defaulted so a reply written before the
+   * feature parses.
+   */
+  groupId: uuidSchema.nullable().default(null),
+  /** Feature 159 — 0-based order within the line's section (its group, or the ungrouped lines). */
+  position: z.number().int().nonnegative().default(0),
 });
 export type QuoteRequestItem = z.infer<typeof quoteRequestItemSchema>;
 
@@ -137,6 +152,12 @@ export const quoteRequestHistoryLineRefSchema = z.object({
   productName: z.string(),
   /** Resolved on read; `null` when the variant is gone. */
   variantLabel: z.string().nullable(),
+  /**
+   * Feature 159 (research N-32) — the line's group (`null` = ungrouped), present
+   * only where it tells the line apart: its product, variant and packaging unit
+   * sit on more than one line of either revision.
+   */
+  groupName: z.string().nullable().optional(),
 });
 export type QuoteRequestHistoryLineRef = z.infer<typeof quoteRequestHistoryLineRefSchema>;
 
@@ -189,6 +210,30 @@ export const quoteRequestHistoryChangeSchema = z.discriminatedUnion('kind', [
     before: isoDateTimeSchema.nullable(),
     after: isoDateTimeSchema.nullable(),
   }),
+  // Feature 159 — the grouping as recorded in the revision snapshots. Groups
+  // pair across snapshots by id; names are as recorded, `null` = ungrouped.
+  z.object({
+    kind: z.literal('group_added'),
+    group: z.object({ id: uuidSchema, name: z.string() }),
+  }),
+  z.object({
+    kind: z.literal('group_removed'),
+    group: z.object({ id: uuidSchema, name: z.string() }),
+  }),
+  z.object({
+    kind: z.literal('group_renamed'),
+    groupId: uuidSchema,
+    before: z.string(),
+    after: z.string(),
+  }),
+  z.object({
+    kind: z.literal('line_group'),
+    line: quoteRequestHistoryLineRefSchema,
+    before: z.string().nullable(),
+    after: z.string().nullable(),
+  }),
+  /** Lines or groups reordered with no other change explaining it; at most once per entry. */
+  z.object({ kind: z.literal('line_order') }),
 ]);
 export type QuoteRequestHistoryChange = z.infer<typeof quoteRequestHistoryChangeSchema>;
 
@@ -291,6 +336,15 @@ export type QuoteRequestHistory = z.infer<typeof quoteRequestHistorySchema>;
 // Comparison view (rendered when awaitingCustomerRevisionAcceptance is true)
 // ---------------------------------------------------------------------------
 
+/**
+ * Feature 159 (research N-32) — the group of the line a comparison entry is
+ * about (`null` = ungrouped), present only where the product sits on more than
+ * one line of either revision (same variant and packaging unit), so "Bolt: 5 →
+ * 3" says which Bolt line. The
+ * group's name is one the customer was shown on that revision.
+ */
+const diffGroupNameSchema = z.string().nullable().optional();
+
 export const rfqDiffEntrySchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('header_note'),
@@ -303,11 +357,13 @@ export const rfqDiffEntrySchema = z.discriminatedUnion('kind', [
     productName: z.string(),
     quantity: z.number().int().positive(),
     agreedUnitPrice: z.number().nullable(),
+    groupName: diffGroupNameSchema,
   }),
   z.object({
     kind: z.literal('line_removed'),
     productId: uuidSchema,
     productName: z.string(),
+    groupName: diffGroupNameSchema,
   }),
   z.object({
     kind: z.literal('line_quantity'),
@@ -315,6 +371,7 @@ export const rfqDiffEntrySchema = z.discriminatedUnion('kind', [
     productName: z.string(),
     before: z.number().int().positive(),
     after: z.number().int().positive(),
+    groupName: diffGroupNameSchema,
   }),
   z.object({
     kind: z.literal('line_agreed_unit_price'),
@@ -322,7 +379,14 @@ export const rfqDiffEntrySchema = z.discriminatedUnion('kind', [
     productName: z.string(),
     before: z.number().nullable(),
     after: z.number().nullable(),
+    groupName: diffGroupNameSchema,
   }),
+  /**
+   * Feature 159 — the arrangement of the lines (group names, group order,
+   * membership, line order) differs. Carries no other key: it names nothing
+   * the customer reply does not already carry.
+   */
+  z.object({ kind: z.literal('grouping') }),
 ]);
 export type RfqDiffEntry = z.infer<typeof rfqDiffEntrySchema>;
 
@@ -369,6 +433,13 @@ export const quoteRequestSchema = z.object({
   cancellationReason: z.string().nullable(),
   /** Feature 055 — custom-field values captured on this quote request. */
   customFieldValues: z.record(z.string(), z.unknown()).default({}),
+  /**
+   * Feature 159 — the quote's line groups in display order. Admin replies:
+   * every group, empty ones included (the editor needs them). Customer
+   * replies: groups holding at least one line only.
+   */
+  itemGroups: z.array(lineGroupSchema).default([]),
+  /** In display order: each group's lines in order, then the ungrouped lines. */
   items: z.array(quoteRequestItemSchema),
   events: z.array(quoteRequestEventSchema),
   comparisonAgainstLastSeen: rfqComparisonAgainstLastSeenSchema.nullable(),
@@ -518,22 +589,29 @@ export const adminCreateQuoteRequestLineSchema = z.object({
   quantity: z.number().int().positive(),
   agreedUnitPrice: z.number().finite().nonnegative(),
   lineNote: z.string().max(2000).optional(),
+  /** Feature 159 — the `groups[].key` this line belongs to; absent or `null` = ungrouped. */
+  groupKey: lineGroupKeySchema.nullable().optional(),
 });
 export type AdminCreateQuoteRequestLine = z.infer<typeof adminCreateQuoteRequestLineSchema>;
 
-export const adminCreateQuoteRequestSchema = z.object({
-  organizationId: uuidSchema,
-  customerAccountId: uuidSchema,
-  headerNote: z.string().max(2000).optional(),
-  items: z.array(adminCreateQuoteRequestLineSchema).min(1),
-  expiresInDays: z.number().int().nonnegative().optional(),
-  /**
-   * Where the request is being created from — opaque to `quote_requests`,
-   * which validates its shape and hands it on with `rfq.created_by_admin.v1`.
-   * Not stored and not returned.
-   */
-  origin: OriginReferenceSchema.optional(),
-});
+export const adminCreateQuoteRequestSchema = z
+  .object({
+    organizationId: uuidSchema,
+    customerAccountId: uuidSchema,
+    headerNote: z.string().max(2000).optional(),
+    /** Feature 159 — the new quote's groups in display order; lines name them by `groupKey`. */
+    groups: z.array(newLineGroupInputSchema).optional(),
+    /** In display order: each group's lines, then the ungrouped lines. */
+    items: z.array(adminCreateQuoteRequestLineSchema).min(1),
+    expiresInDays: z.number().int().nonnegative().optional(),
+    /**
+     * Where the request is being created from — opaque to `quote_requests`,
+     * which validates its shape and hands it on with `rfq.created_by_admin.v1`.
+     * Not stored and not returned.
+     */
+    origin: OriginReferenceSchema.optional(),
+  })
+  .superRefine((body, ctx) => refineLineGrouping(ctx, body));
 export type AdminCreateQuoteRequest = z.infer<typeof adminCreateQuoteRequestSchema>;
 
 /** The name of the event that announces a Quote Request an administrator created. */
@@ -560,18 +638,36 @@ export const adminPatchQuoteRequestLineSchema = z.object({
   quantity: z.number().int().positive(),
   agreedUnitPrice: z.number().finite().nonnegative().nullable().optional(),
   lineNote: z.string().max(2000).nullable().optional(),
+  /** Feature 159 — the `groups[].key` this line belongs to; `null` = ungrouped. */
+  groupKey: lineGroupKeySchema.nullable().optional(),
+  /**
+   * Feature 159 (research N-33) — a new line split off a stored line of this
+   * quote (*Split line*): with no `id`, it takes that line's variant, packaging
+   * unit, customer's proposal, note, currency and stored reference, as the
+   * line it was split from keeps them. A value naming no line of this quote is
+   * ignored — the line is a plain new line.
+   */
+  splitFromId: uuidSchema.optional(),
 });
 export type AdminPatchQuoteRequestLine = z.infer<typeof adminPatchQuoteRequestLineSchema>;
 
 export const adminPatchQuoteRequestSchema = z
   .object({
     headerNote: z.string().max(2000).nullable().optional(),
+    /**
+     * Feature 159 — the whole grouping in display order; requires `items`.
+     * Absent with `items` present: every paired line keeps its group, new
+     * lines are ungrouped, no group is deleted (research R-14).
+     */
+    groups: z.array(lineGroupInputSchema).optional(),
+    /** In display order: each group's lines, then the ungrouped lines. */
     items: z.array(adminPatchQuoteRequestLineSchema).min(1).optional(),
     expiresInDays: z.number().int().nonnegative().optional(),
     /** Feature 055 — custom-field values for this quote request (validated on write). */
     customFieldValues: z.record(z.string(), z.unknown()).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((body, ctx) => refineLineGrouping(ctx, body));
 export type AdminPatchQuoteRequest = z.infer<typeof adminPatchQuoteRequestSchema>;
 
 export const adminApproveQuoteRequestSchema = z
@@ -768,6 +864,13 @@ export interface QuoteRequestLineRecord {
   referenceUnitPrice?: string | null;
   /** Currency of `referenceUnitPrice`; `null` exactly when it is `null`. */
   referenceCurrency?: string | null;
+  /**
+   * Feature 159 (FR-087) — 0-based order within the line's section. Optional,
+   * so every structural stub of the port written before it still compiles.
+   */
+  position?: number;
+  /** Feature 159 — the line's group, or `null` when ungrouped. Optional as above. */
+  group?: { id: string; name: string; position: number } | null;
 }
 
 /**
@@ -796,7 +899,9 @@ export interface QuoteRequestReadPort {
     organizationIds: readonly string[],
   ): Promise<QuoteRequestRecord[]>;
   /**
-   * The quote's lines, in insertion order. Added in `carts`' cut: the
+   * The quote's lines, in display order (feature 159: groups in order, each
+   * group's lines in order, then the ungrouped lines — insertion order for a
+   * quote never grouped). Added in `carts`' cut: the
    * quote-to-cart conversion read `QuoteRequestItem` directly, so it kept
    * re-stocking a cart from quotes belonging to a module an operator had
    * switched off.
@@ -1011,6 +1116,9 @@ export const quoteRequestDocumentDataSchema = z.object({
   salesRep: z.object({ name: z.string(), email: z.string() }).nullable(),
   /** The quote's custom fields whose definition customers may see, with a value. */
   details: z.array(z.object({ label: z.string(), value: z.string() })),
+  /** Feature 159 — the groups holding at least one line, in display order. */
+  groups: z.array(lineGroupSchema).default([]),
+  /** In display order. */
   lines: z.array(
     z.object({
       id: z.string(),
@@ -1029,6 +1137,10 @@ export const quoteRequestDocumentDataSchema = z.object({
       lineNote: z.string().nullable(),
       /** Attribute code → display text in the export language. */
       attributes: z.record(z.string(), z.string()),
+      /** Feature 159 — the line's group (`groups[].id`), `null` = ungrouped. */
+      groupId: z.string().nullable().default(null),
+      /** Feature 159 — order within the line's section. */
+      position: z.number().int().nonnegative().default(0),
     }),
   ),
 });

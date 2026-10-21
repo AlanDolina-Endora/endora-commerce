@@ -4,7 +4,7 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
-import { SEED_PRODUCT_101_ID, SEED_PRODUCT_102_ID } from '../../helpers/seed-catalog.js';
+import { SEED_PRODUCT_101_ID, SEED_PRODUCT_102_ID, SEED_PRODUCT_103_ID } from '../../helpers/seed-catalog.js';
 import { QuoteRequestItem } from '../../helpers/package-entities.js';
 import { PriceListService } from '../../../../packages/modules/price_lists/src/backend/services/price-list-service.js';
 import {
@@ -273,6 +273,57 @@ describe('146 — line data carried across rewrites [integration]', () => {
       const added = after.find((l) => l.packagingUnitName === PALETA_10)!;
       expect(added.referenceUnitPrice).toBe('110.00');
       expect(added.desiredUnitPrice ?? null).toBeNull();
+    });
+  });
+
+  describe('customer draft edit keeps the grouping (feature 159, T027, R-13)', () => {
+    it('a paired line keeps its group and the body’s order within it; a new line is ungrouped; no group changes', async () => {
+      const created = await create([
+        { productId: SEED_PRODUCT_101_ID, quantity: 1 },
+        { productId: SEED_PRODUCT_102_ID, quantity: 1 },
+      ]);
+      // No representative's save can have happened on a draft the customer may
+      // still edit, so the group is laid in directly: defence in depth.
+      const conn = h.em().getConnection();
+      const groupId = '00000000-0000-4000-8000-000000159c01';
+      await conn.execute(
+        `insert into "quote_request_item_groups" ("id", "quote_request_id", "name", "position", "created_at", "updated_at")
+         values (?, ?, 'Hall', 0, now(), now())`,
+        [groupId, created.id],
+      );
+      await conn.execute(`update "quote_request_items" set "group_id" = ? where "quote_request_id" = ?`, [groupId, created.id]);
+
+      await customerPatch(created.id, {
+        items: [
+          { productId: SEED_PRODUCT_103_ID, quantity: 1 },
+          { productId: SEED_PRODUCT_102_ID, quantity: 1 },
+          { productId: SEED_PRODUCT_101_ID, quantity: 1 },
+        ],
+      });
+      const after = await linesOf(created.id);
+      const of = (productId: string) => after.find((l) => l.productId === productId)!;
+      expect([of(SEED_PRODUCT_102_ID).groupId, of(SEED_PRODUCT_102_ID).position]).toEqual([groupId, 0]);
+      expect([of(SEED_PRODUCT_101_ID).groupId, of(SEED_PRODUCT_101_ID).position]).toEqual([groupId, 1]);
+      expect([of(SEED_PRODUCT_103_ID).groupId ?? null, of(SEED_PRODUCT_103_ID).position]).toEqual([null, 0]);
+      const groups = await conn.execute<Array<{ id: string; name: string; position: number }>>(
+        `select "id", "name", "position" from "quote_request_item_groups" where "quote_request_id" = ?`,
+        [created.id],
+      );
+      expect(groups).toEqual([{ id: groupId, name: 'Hall', position: 0 }]);
+    });
+
+    it('a customer body carrying groups is refused (400) and a groupKey on a line is ignored (FR-025)', async () => {
+      const created = await create([{ productId: SEED_PRODUCT_101_ID, quantity: 1 }]);
+      const refused = await h.app.inject({
+        method: 'PATCH',
+        url: `/api/v1/quote-requests/${created.id}`,
+        cookies: customer,
+        payload: { groups: [{ key: 'g', name: 'Mine' }], items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1, groupKey: 'g' }] },
+      });
+      expect(refused.statusCode, refused.body).toBe(400);
+      await customerPatch(created.id, { items: [{ productId: SEED_PRODUCT_101_ID, quantity: 2, groupKey: 'g' }] });
+      const after = await linesOf(created.id);
+      expect(after.map((l) => l.groupId ?? null)).toEqual([null]);
     });
   });
 });

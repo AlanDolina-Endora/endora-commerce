@@ -320,7 +320,8 @@ once the module is back on.
 
 `Order`, `OrderItem`, `Payment`, `OrderStatus`,
 `OrderStatusTransition`, `OrderTransitionEffect`, `OrderComment`,
-`OrderListSavedView`, and the
+`OrderListSavedView`, `OrderItemGroup` (an order's line groups — see *Line
+groups*), and the
 `organizations.order_confirmation_emails` column (owned by `organizations`,
 read via a port). `OrderItem` snapshots the product + variant + unit price +
 tax rate at placement so historical orders survive pricing / catalog changes.
@@ -393,8 +394,9 @@ shows **Items** at once.
   type filter and a search by SKU, slug or name. The selection survives page,
   page-size and filter changes, and **Add N** adds every ticked product as a
   line of quantity 1 — at most 200 in one step. Grouped and bundle parents,
-  draft and inactive products, and products already on the order are listed
-  with their reason and cannot be ticked.
+  and draft and inactive products, are listed with their reason and cannot be
+  ticked. A product already on the order can be added again: it becomes a line
+  of its own (for instance in another group).
 - **Quick add by name or SKU**, beside it, appends one product under the same
   rules.
 
@@ -427,7 +429,7 @@ checks the assortment of exactly the sales channel the request names; a
 `salesChannelId` that names no channel is refused with `404 NOT_FOUND`, and the
 screen shows *Could not calculate prices* without marking any line. A
 soft-deleted product is priced as before. The order created is exactly the
-lines and quantities on screen, in the unchanged `POST /api/v1/admin/orders`
+lines and quantities on screen, in the `POST /api/v1/admin/orders`
 payload.
 
 **At most 200 lines.** `POST /api/v1/admin/orders` and
@@ -436,6 +438,24 @@ step, with `422 VALIDATION_FAILED` and `details: { code: 'too_many_items',
 maximum: 200 }`, before any line is evaluated. Create order also refuses a
 request in which a product's total is below its minimum, with the minimum
 error and `details.lines[]` keyed by the item's `index`.
+
+**Line groups.** The screen's items can be sorted into named groups — *Add
+group*, rename, delete, drag and drop, the keyboard and each line's *Move to
+group* menu, exactly as on a quote request's *Modify* tab; a group's own *Add
+product* adds to that group, anything else to *Ungrouped*. Each group shows its
+item count, net, VAT and gross next to the live price summary; for that the
+preview answers each priced line's `taxRate` (a fraction, `0.23`, from the
+same authority as the summary's tax total; absent on a line it cannot price),
+and a group's VAT is the sum of net × rate over its lines. Moving a line between groups does not price the order again. Every
+group needs a name before **Create order** enables. See *Line groups* below for
+what the order keeps.
+
+**Split line.** A line of quantity 2 or more has a *Split line* button beside
+*Move to group*. It asks for the quantity to move to a new line (from 1 to the
+line's quantity minus 1) and the group of the new line — the line's own by
+default — and adds a line of the same product with that quantity, reducing the
+original. This is how one product goes into two groups: for example 5 pieces in
+*Hall A* and 3 in *Hall B*. Each line is priced at its own quantity.
 
 ## Custom-field filters
 
@@ -591,6 +611,56 @@ name a quote request.
 
 With the Quote Requests module switched off, orders are placed exactly as
 before and record no quote request.
+
+## Line groups
+
+An order can show its lines in **named groups** — *Hall A*, *Hall B* — with the
+lines without a group under **Other items**. Groups are presentation only: they
+change no price, quantity or total. An order gets them in one of two ways, and
+**never changes them afterwards**: no screen and no API edits a placed order's
+grouping.
+
+**From an accepted quote request.** When placement records the quote request
+the basket came from (see the previous section), the order copies the quote's
+groups in the same transaction. Each order line is matched to a quote line:
+first every line with the **same product, variant, agreed quantity and agreed
+unit price**, then by product, variant and price, then by product, variant and
+quantity, and finally by **product and variant** alone, each quote line used
+once. So a product split over two groups of the quote — 5 pieces in one, 3 in
+another, at one price — keeps each line in its group.
+A matched line takes the quote line's group and order; a line that matches
+nothing — added to the basket after the conversion, or changed so it no longer
+matches — goes under *Other items*, after the matched ones. A quote group that
+receives no line is not copied. When placement does not record the quote
+request, or the Quote Requests module is switched off, the order is placed
+without groups, otherwise exactly as before. A later change to the quote leaves
+the order's groups alone.
+
+**From the Create order screen.** An operator arranges the lines into groups
+before creating the order (see *The Create order screen*); the order is created
+with them in the same transaction, and a refused creation writes no group.
+Groups without a line are not created. **One product may be on several lines**
+— in two different groups, or twice in one: each request line becomes an order
+line of its own, in its own group, priced at its own quantity (a product's
+minimum order quantity is still judged on its total across its lines).
+`POST /api/v1/admin/orders` takes an optional `groups` list
+(`{ key, name }`, in display order, at most 50, names of 1 to 120 characters)
+and per item an optional `groupKey`. The grouping is recorded in the
+`order.place_on_behalf` audit entry (each group's name and line count); a
+buyer's own checkout stays unaudited, as before.
+
+**Where they are shown.** The admin order screen and the buyer's order page
+show each group as a headed section with its lines and a summary — item count,
+net, VAT and gross, adding up the rows above it — then *Other items*. An order
+without groups, and every order placed before groups existed, looks exactly as
+before. Every order reply — admin, customer and the external order API —
+carries `itemGroups` (`{ id, name, position }`) and, per line, `groupId` and
+`position`, lines in display order; an integration that ignores them keeps
+working.
+
+**What does not carry groups.** Invoices, returns, reorder (it fills a basket),
+*order again as a quote request*, the cart and checkout, e-mails, webhooks and
+the external order intake. There is no order PDF.
 
 ## Order minimums at placement
 

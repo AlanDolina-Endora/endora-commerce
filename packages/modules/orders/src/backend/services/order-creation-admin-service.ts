@@ -18,6 +18,7 @@ import {
 } from './transactional-email-helper.js';
 import { rethrowIfModuleDisabled, SalesChannel } from '@endora-commerce/platform/kernel';
 import { assertWithinAdminOrderItemBound } from './request-minimums.js';
+import { planAdminLineGrouping } from '../domain/quote-line-groups.js';
 
 /** A new address typed on the create form (vs. an existing org address id). */
 export interface AdminCreateOrderInlineAddress {
@@ -33,7 +34,18 @@ export interface AdminCreateOrderInlineAddress {
 export interface AdminCreateOrderInput {
   customerAccountId: string;
   salesChannelId: string;
-  items: Array<{ productId: string; variantId?: string | undefined; quantity: number }>;
+  /**
+   * In display order: each group's lines, then the ungrouped ones. `groupKey`
+   * names one of `groups` (feature 159; the route's schema has checked it).
+   */
+  items: Array<{
+    productId: string;
+    variantId?: string | undefined;
+    quantity: number;
+    groupKey?: string | null | undefined;
+  }>;
+  /** Feature 159 — the new order's groups, in display order; a group no line names is not created. */
+  groups?: Array<{ key: string; name: string }> | undefined;
   deliveryMethodId: string;
   paymentMethodId: string;
   /** Per side, supply EITHER an existing org address id OR an inline address. */
@@ -78,6 +90,9 @@ export class OrderCreationAdminService {
   ): Promise<Order> {
     // Feature 155 (FR-038) — first, before anything is read or written.
     assertWithinAdminOrderItemBound(input.items.length);
+    // Feature 159 (FR-061) — the request's grouping, every line kept.
+    const lineGrouping =
+      input.groups === undefined ? undefined : planAdminLineGrouping(input.groups, input.items);
     // command-coverage-ignore: the order write is delegated to
     // OrderService.placeOrder (audited there); the only local mutation here is
     // the optional append-only OrderComment, not audited domain-state.
@@ -206,10 +221,16 @@ export class OrderCreationAdminService {
         quantity: it.quantity,
         salesChannelId: input.salesChannelId,
       }));
+      //
+      // Feature 159 (research N-31) — every request line stays a line of its
+      // own (`keepRepeatedLines`): one product may sit on lines of several
+      // groups, each priced at its own quantity, and the basket reads back in
+      // request order, which is what placement lays the groups out by.
       await this.cartService.addItems({ customer: basketCtx }, lines, {
         onLineError: 'throw',
         onBelowMinimum: 'throw',
         replaceExisting: true,
+        keepRepeatedLines: true,
         ...(options.language ? { language: options.language } : {}),
       });
 
@@ -226,6 +247,7 @@ export class OrderCreationAdminService {
         {
           ...(input.origin ? { origin: input.origin } : {}),
           ...(options.language ? { language: options.language } : {}),
+          ...(lineGrouping ? { lineGrouping } : {}),
         },
       );
     } catch (err) {
