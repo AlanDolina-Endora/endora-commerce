@@ -12,6 +12,7 @@ import {
   type LanguageReadPort,
   type ListingPriceOrderPort,
   type ListingPricePort,
+  type ListingPriceDetailPort,
   type OrgLinePricePort,
   type CustomFieldDefinitionReadPort,
   type CustomFieldValuePort,
@@ -117,7 +118,10 @@ export interface CatalogModuleOptions {
    * pricing uses). Consumed only by the external catalog namespace's
    * decoration layer — SC-001 parity by construction.
    */
-  pricingService?: OrgLinePricePort & ListingPricePort & ListingPriceOrderPort;
+  pricingService?: OrgLinePricePort &
+    ListingPricePort &
+    ListingPriceDetailPort &
+    ListingPriceOrderPort;
   /**
    * Feature 062 — inventory availability port for the external namespace's
    * `availability` indication. Optional: when omitted the field is omitted.

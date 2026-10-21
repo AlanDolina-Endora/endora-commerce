@@ -98,22 +98,25 @@ export class CatalogOrgPriceDecorator {
     const products = await em.find(Product, { id: { $in: summaries.map((s) => s.id) } });
     const productById = new Map(products.map((p) => [p.id, p]));
 
+    // D-287 P0 — one batched resolution for the page; it was one sequential
+    // `resolveLinePrice` per summary.
+    const priced = await this.deps.pricingService.resolveLinePrices({
+      lines: summaries.flatMap((summary, index) => {
+        const product = productById.get(summary.id);
+        return product ? [{ key: String(index), product, quantity: 1 }] : [];
+      }),
+      context: { organization, salesChannel: context.salesChannel },
+    });
+
     const out: ProductSummary[] = [];
-    for (const summary of summaries) {
+    for (const [index, summary] of summaries.entries()) {
       const decorated = this.#withAvailability(summary, availabilityByProduct);
       const product = productById.get(summary.id);
       if (!product) {
         out.push({ ...decorated, price: null, priceUnavailable: true });
         continue;
       }
-      const resolved = await this.deps.pricingService.resolveLinePrice({
-        product,
-        context: {
-          quantity: 1,
-          organization,
-          salesChannel: context.salesChannel,
-        },
-      });
+      const resolved = priced.get(String(index)) ?? null;
       out.push(
         resolved
           ? {
@@ -171,8 +174,20 @@ export class CatalogOrgPriceDecorator {
       context.salesChannel.id,
     );
 
+    // D-287 P0 — every in-assortment line in one batched resolution, each at
+    // its own quantity; it was one sequential `resolveLinePrice` per line.
+    const priced = await this.deps.pricingService.resolveLinePrices({
+      lines: lines.flatMap((line, index) => {
+        const product = productBySku.get(line.sku);
+        return product && assortment.has(product.id)
+          ? [{ key: String(index), product, quantity: line.quantity }]
+          : [];
+      }),
+      context: { organization, salesChannel: context.salesChannel },
+    });
+
     const out: CatalogBulkPriceLine[] = [];
-    for (const line of lines) {
+    for (const [index, line] of lines.entries()) {
       const product = productBySku.get(line.sku);
       if (!product || !assortment.has(product.id)) {
         out.push({
@@ -183,14 +198,7 @@ export class CatalogOrgPriceDecorator {
         });
         continue;
       }
-      const resolved = await this.deps.pricingService.resolveLinePrice({
-        product,
-        context: {
-          quantity: line.quantity,
-          organization,
-          salesChannel: context.salesChannel,
-        },
-      });
+      const resolved = priced.get(String(index)) ?? null;
       if (!resolved) {
         out.push({
           sku: line.sku,
@@ -233,12 +241,16 @@ export class CatalogOrgPriceDecorator {
     );
     const probeQuantities = Array.from(new Set([1, ...minQuantities])).sort((a, b) => a - b);
 
+    // D-287 P0 — every rung in one batched resolution; it was one sequential
+    // `resolveLinePrice` per probe quantity.
+    const priced = await this.deps.pricingService.resolveLinePrices({
+      lines: probeQuantities.map((quantity) => ({ key: String(quantity), product, quantity })),
+      context: { organization, salesChannel },
+    });
+
     const tiers: ProductPriceTier[] = [];
     for (const quantity of probeQuantities) {
-      const resolved = await this.deps.pricingService.resolveLinePrice({
-        product,
-        context: { quantity, organization, salesChannel },
-      });
+      const resolved = priced.get(String(quantity)) ?? null;
       if (!resolved) continue;
       const tier: ProductPriceTier = {
         minQuantity: quantity,
