@@ -7,14 +7,28 @@ import { CartRecomputeCache } from '../../../../packages/modules/carts/src/backe
 import { CartPricingRecompute } from '../../../../packages/modules/carts/src/backend/services/cart-pricing-recompute.js';
 import type {
   CatalogProductReadPort,
-  LinePricePort,
+  LinePriceResult,
+  LinePricesPort,
   OrganizationDetailsPort,
 } from '@endora-commerce/contracts';
 
 /**
+ * D-287 P0 — the helper prices through the batched slice. This adapts a
+ * per-line answer into it, and `resolveLinePrices` itself is the spy, so a
+ * case counts batches (one per cold read) and the lines each carried.
+ */
+function batchedPricing(answer: (quantity: number) => LinePriceResult | null) {
+  const resolveLinePrices = vi.fn(
+    async (input: { lines: ReadonlyArray<{ key: string; quantity: number }> }) =>
+      new Map(input.lines.map((line) => [line.key, answer(line.quantity)])),
+  );
+  return { resolveLinePrices, pricingService: { resolveLinePrices } as unknown as LinePricesPort };
+}
+
+/**
  * T021 (feature 027) — CartPricingRecompute helper.
  *
- * Verifies (a) the resolver is invoked for each line on a cold cache,
+ * Verifies (a) the resolver is invoked once, for every line, on a cold cache,
  * (b) the second invocation within the TTL window is served from the
  * cache (zero further resolver calls), (c) the `writeBackTo` helper
  * stamps recomputed_* on the entity rows.
@@ -93,15 +107,14 @@ describe('CartPricingRecompute — resolver call counts & write-back', () => {
   it('resolves each line via PricingService on cold cache, then serves from cache', async () => {
     const em = db.em();
     const cache = new CartRecomputeCache(redis, { ttlSeconds: 30 });
-    const resolveLinePrice = vi.fn().mockImplementation(async (input: { context: { quantity: number } }) => ({
-      amount: (10 * input.context.quantity).toFixed(2),
+    const { resolveLinePrices, pricingService } = batchedPricing((quantity) => ({
+      amount: (10 * quantity).toFixed(2),
       currency: 'PLN',
       priceListId: '00000000-0000-4000-8000-000000000d11',
       isSale: false,
       bracketStartQuantity: 1,
       displayMode: 'gross_only' as const,
     }));
-    const pricingService = { resolveLinePrice } as unknown as LinePricePort;
 
     const helper = new CartPricingRecompute(
       () => em,
@@ -123,7 +136,9 @@ describe('CartPricingRecompute — resolver call counts & write-back', () => {
     expect(first).toHaveLength(2);
     expect(first[0]?.amount).toBe(20);
     expect(first[1]?.amount).toBe(50);
-    expect(resolveLinePrice).toHaveBeenCalledTimes(2);
+    // One batched call for both lines — it was one call per line.
+    expect(resolveLinePrices).toHaveBeenCalledTimes(1);
+    expect(resolveLinePrices.mock.calls[0]![0].lines).toHaveLength(2);
 
     // Second call — cache hit, no further resolver invocations.
     const second = await helper.recompute(
@@ -131,15 +146,13 @@ describe('CartPricingRecompute — resolver call counts & write-back', () => {
       lines,
     );
     expect(second).toHaveLength(2);
-    expect(resolveLinePrice).toHaveBeenCalledTimes(2);
+    expect(resolveLinePrices).toHaveBeenCalledTimes(1);
   });
 
   it('returns null amount on resolver failure (no eligible price list)', async () => {
     const em = db.em();
     const cache = new CartRecomputeCache(redis, { ttlSeconds: 30 });
-    const pricingService = {
-      resolveLinePrice: vi.fn().mockResolvedValue(null),
-    } as unknown as LinePricePort;
+    const { pricingService } = batchedPricing(() => null);
     const helper = new CartPricingRecompute(
       () => em,
       pricingService,
@@ -159,16 +172,14 @@ describe('CartPricingRecompute — resolver call counts & write-back', () => {
   it('returns null amount when the product is missing from the catalog', async () => {
     const em = db.em();
     const cache = new CartRecomputeCache(redis, { ttlSeconds: 30 });
-    const pricingService = {
-      resolveLinePrice: vi.fn().mockResolvedValue({
-        amount: '15.00',
-        currency: 'PLN',
-        priceListId: 'x',
-        isSale: false,
-        bracketStartQuantity: 1,
-        displayMode: 'gross_only' as const,
-      }),
-    } as unknown as LinePricePort;
+    const { pricingService } = batchedPricing(() => ({
+      amount: '15.00',
+      currency: 'PLN',
+      priceListId: 'x',
+      isSale: false,
+      bracketStartQuantity: 1,
+      displayMode: 'gross_only' as const,
+    }));
     const helper = new CartPricingRecompute(
       () => em,
       pricingService,

@@ -1,7 +1,7 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
   CatalogProductReadPort,
-  LinePricePort,
+  LinePricesPort,
   OrganizationDetailsPort,
 } from '@endora-commerce/contracts';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
@@ -22,10 +22,14 @@ import type { CartItem } from '../entities/cart-item.entity.js';
  * this customer; the cart UI surfaces a `no_price_in_customer_list`
  * unavailability reason for the line).
  *
- * Implementation note: PricingService is per-line today (no batched
- * variant). The cache amortizes work across reads; a future optimization
- * may batch into a single PricingService call when the resolver gains a
- * batch endpoint.
+ * D-287 P0 — the lines are resolved in **one** batched `resolveLinePrices`
+ * call; this was one sequential `resolveLinePrice` per line (about seven
+ * statements each on a cold pricing cache), on the busiest cart read. The
+ * Redis cache still amortises repeat reads within its TTL.
+ *
+ * Still a second chain beside `CartLinePricing.orderablePrice` (no agreed
+ * price, no own-price fallback, no display-mode check) — issue #168, which is
+ * not settled here.
  */
 
 export interface RecomputeLineRequest {
@@ -51,13 +55,18 @@ export interface CartPricingRecomputeContext {
    * for a case that no longer occurs.
    */
   salesChannelId: string;
+  /**
+   * D-287 P0 — the basket's customer, whose own customer group overrides the
+   * organisation's. Absent for a guest basket.
+   */
+  customerAccountId?: string | null;
 }
 
 export class CartPricingRecompute {
   constructor(
     private readonly emFactory: () => EntityManager,
-    /** `price_lists`' line-resolution slice (feature 075, Phase C). */
-    private readonly pricingService: LinePricePort,
+    /** `price_lists`' batched line-resolution slice (D-287 P0). */
+    private readonly pricingService: LinePricesPort,
     private readonly cache: CartRecomputeCache,
     /** `catalog`'s product read model — the two fields the resolver reads. */
     private readonly catalogProducts: CatalogProductReadPort,
@@ -108,6 +117,25 @@ export class CartPricingRecompute {
     const products = await this.catalogProducts.findByIds(productIds);
     const productById = new Map(products.map((p) => [p.id, p]));
 
+    // No `catch` (issue #84): the batch already answers "no resolver match"
+    // with `null`, which is the `amount: null` this loop wants, and that answer
+    // then goes into the recompute cache below. A `catch` here cached "no
+    // price" for the whole cart whenever `price_lists` was switched off, and
+    // the TTL kept doing it after it came back.
+    const priced = await this.pricingService.resolveLinePrices({
+      lines: lines.flatMap((line) => {
+        const product = productById.get(line.productId);
+        return product
+          ? [{ key: line.cartItemId, product, variantId: line.variantId ?? null, quantity: line.quantity }]
+          : [];
+      }),
+      context: {
+        ...(organization ? { organization } : {}),
+        ...(organization && ctx.customerAccountId ? { customerAccountId: ctx.customerAccountId } : {}),
+        salesChannel: channel,
+      },
+    });
+
     const recomputed: RecomputedLinePrice[] = [];
     for (const line of lines) {
       const product = productById.get(line.productId);
@@ -115,20 +143,7 @@ export class CartPricingRecompute {
         recomputed.push({ cartItemId: line.cartItemId, amount: null, currency: 'PLN' });
         continue;
       }
-      // No `catch` (issue #84): `resolveLinePrice` already answers "no resolver
-      // match" with `null`, which is the `amount: null` this loop wants, and
-      // that answer then goes into the recompute cache below. A `catch` here
-      // cached "no price" for the whole cart whenever `price_lists` was
-      // switched off, and the TTL kept doing it after it came back.
-      const resolved = await this.pricingService.resolveLinePrice({
-        product,
-        variantId: line.variantId ?? null,
-        context: {
-          quantity: line.quantity,
-          ...(organization ? { organization } : {}),
-          salesChannel: channel,
-        },
-      });
+      const resolved = priced.get(line.cartItemId) ?? null;
       if (!resolved) {
         recomputed.push({ cartItemId: line.cartItemId, amount: null, currency: 'PLN' });
       } else {

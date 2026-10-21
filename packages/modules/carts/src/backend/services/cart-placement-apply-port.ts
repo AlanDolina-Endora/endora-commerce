@@ -133,31 +133,50 @@ export class CartPlacementApplyService implements CartPlacementApplyPort {
     // lines were added — never the system default (contracts/basket-attribution.md
     // §2). The basket is read on this `em`, so the answer describes the row
     // placement holds.
-    const cart = await em.findOneOrFail(Cart, { id: input.cartId }, { fields: ['id', 'salesChannelId'] });
+    const cart = await em.findOneOrFail(
+      Cart,
+      { id: input.cartId },
+      { fields: ['id', 'salesChannelId', 'customerAccountId'] },
+    );
     if (!cart.salesChannelId) {
       throw new Error(`[carts] cart ${input.cartId} records no sales channel to price it on.`);
     }
     // Placement is a signed-in buyer's, whoever places it.
+    // D-287 P0 — the basket's customer, whose own group the lines were added
+    // at; the drift check must price on it too or it would report drift on
+    // every line of a customer with their own group.
     const ctx = await this.linePricing.contextFor(em, {
       organizationId: input.organizationId,
       signedIn: true,
       salesChannelId: cart.salesChannelId,
+      customerAccountId: cart.customerAccountId ?? null,
     });
     const products = await this.catalogProducts.findByIds([
       ...new Set(items.map((it) => it.productId)),
     ]);
     const productById = new Map(products.map((p) => [p.id, p]));
+    // D-287 P0 — every line in one batched resolution; it was one per line,
+    // inside the placement transaction.
+    const answers = await this.linePricing.orderablePrices(
+      ctx,
+      items.flatMap((item) => {
+        const product = productById.get(item.productId);
+        return product
+          ? [
+              {
+                key: item.id,
+                product,
+                variantId: item.variantId ?? null,
+                quantity: item.quantity,
+                agreed: agreementOf(item),
+              },
+            ]
+          : [];
+      }),
+    );
     const out: Array<{ item: CartItem; differs: boolean; drift: CartLinePriceDrift }> = [];
     for (const item of items) {
-      const product = productById.get(item.productId);
-      const answer = product
-        ? await this.linePricing.orderablePrice(ctx, {
-            product,
-            variantId: item.variantId ?? null,
-            quantity: item.quantity,
-            agreed: agreementOf(item),
-          })
-        : null;
+      const answer = answers.get(item.id) ?? null;
       const current = answer?.ok ? { unitPrice: answer.unitPrice, currency: answer.currency } : null;
       out.push({
         item,

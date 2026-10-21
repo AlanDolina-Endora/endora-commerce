@@ -281,6 +281,8 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
             organizationId: cart.organizationId ?? null,
             // The basket was looked up on this channel, so it is the basket's.
             salesChannelId: actor.salesChannelId,
+            // D-287 P0 — the customer's own group, as on the add path.
+            customerAccountId: cart.customerAccountId ?? null,
           },
           lines,
         );

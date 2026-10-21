@@ -165,17 +165,33 @@ function rig(
       UNITS.filter((u) => ids.includes(u.productId)),
     ),
   };
-  const pricing: LinePricePort = {
-    resolveLinePrice:
-      options.resolveLinePrice ??
-      (async ({ product: p }) => ({
-        amount: '10.00',
-        currency: 'PLN',
-        priceListId: 'pl-1',
-        isSale: false,
-        bracketStartQuantity: 1,
-        displayMode: p.id === Q ? 'none' : 'gross_only',
-      })),
+  const single: LinePricePort['resolveLinePrice'] =
+    options.resolveLinePrice ??
+    (async ({ product: p }) => ({
+      amount: '10.00',
+      currency: 'PLN',
+      priceListId: 'pl-1',
+      isSale: false,
+      bracketStartQuantity: 1,
+      displayMode: p.id === Q ? 'none' : 'gross_only',
+    }));
+  // D-287 P0 — the cart prices through the batched slice; each line is
+  // answered by the single-line function a case supplies.
+  const pricing: LinePricesPort = {
+    resolveLinePrices: async ({ lines, context }) => {
+      const out = new Map();
+      for (const line of lines) {
+        out.set(
+          line.key,
+          await single({
+            product: line.product,
+            variantId: line.variantId ?? null,
+            context: { ...context, quantity: line.quantity },
+          }),
+        );
+      }
+      return out;
+    },
   };
   const organizations = { findById: async () => null } as unknown as OrganizationDetailsPort;
   const membership = {
