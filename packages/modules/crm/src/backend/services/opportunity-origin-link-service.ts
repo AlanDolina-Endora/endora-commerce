@@ -113,8 +113,24 @@ export class OpportunityOriginLinkService {
       documentId: document.id,
       linkSource: 'created_from_opportunity',
     });
-    if (outcome === 'linked') await this.deps.carryIntoDocument(document, opportunity);
+    if (outcome === 'linked') await this.#carry(document, opportunity);
     return outcome;
+  }
+
+  /**
+   * The carry follows a link that has committed, so a carry that throws must
+   * not undo it or reach the subscriber: the document stays linked, and the
+   * operator's log says which document did not receive the values.
+   */
+  async #carry(document: OriginatedDocument, opportunity: CrmOpportunity): Promise<void> {
+    try {
+      await this.deps.carryIntoDocument(document, opportunity);
+    } catch (error) {
+      this.deps.warn(
+        { opportunityId: opportunity.id, documentKind: document.kind, documentId: document.id, error },
+        'crm: the custom-field carry into a document created from an opportunity failed; the link stands',
+      );
+    }
   }
 
   async #canReach(adminUserId: string, organizationId: string): Promise<boolean> {

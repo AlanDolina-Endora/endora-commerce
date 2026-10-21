@@ -150,6 +150,17 @@ describe('OpportunityOriginLinkService — carrying the Opportunity’s values',
     expect(deps.carryIntoDocument).not.toHaveBeenCalled();
   });
 
+  it('keeps the link when the carry throws, and says so in the log only (review fix 2026-10-21)', async () => {
+    const { deps, subject } = service();
+    deps.carryIntoDocument.mockRejectedValueOnce(new Error('receiver failed'));
+    expect(await subject.link(origin, order)).toBe('linked');
+    expect(deps.warn).toHaveBeenCalledTimes(1);
+    const [fields, message] = deps.warn.mock.calls[0] as unknown as [Record<string, unknown>, string];
+    expect(fields).toMatchObject({ opportunityId: OPPORTUNITY_ID, documentKind: 'order', documentId: ORDER_ID });
+    expect(fields.error).toBeInstanceOf(Error);
+    expect(message).toContain('custom-field carry');
+  });
+
   it('pushes nothing for a refused claim or an origin of another type', async () => {
     const refused = service({ opportunity: null });
     expect(await refused.subject.link(origin, order)).toBe('refused');
