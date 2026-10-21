@@ -173,16 +173,21 @@ Three consumers go through the resolver:
   receives the effective value. The product page (name, description,
   SEO fields, attribute values, the product-page attribute list, grouped
   children, bundle options and product-link tiles) and every listing
-  card take the `(channel + language)` slot for the requested language,
-  then the one for the channel's default language, then the
-  `(channel-only)` slot — the same two languages the baseline pick
-  tries first, so an override answers for the language whose baseline
-  text the page would otherwise show. When no slot applies they keep
-  the storefront's own baseline pick —
-  requested language, then the channel's default language, then `en-US`,
-  `en` and the first stored language — so a product without overrides
-  shows exactly what it showed before. Listing filters, attribute
-  filters and name sorting still read the baseline.
+  card walk the storefront's own baseline language pick — requested
+  language, then the channel's default language, then `en-US`, `en` and
+  the first stored language — and at each language take the
+  `(channel + language)` slot if it is filled, else stop there if the
+  baseline has text for that language. An override therefore answers
+  only for the language whose baseline text the page would show, or an
+  earlier one in that order: a request in `en-US` on a channel whose
+  default is `pl-PL` shows the `en-US` baseline, not the `pl-PL`
+  override, while a `de-DE` request for a product with no `de-DE` text
+  falls through to `pl-PL` and shows its override. The `(channel-only)`
+  slot is asked last and wins over the baseline wherever the walk
+  stopped. Product-link tiles walk their own pick, which has no
+  channel-default leg. A product without overrides shows exactly what
+  it showed before. Listing filters, attribute filters and name sorting
+  still read the baseline.
 - **Search indexer (Meilisearch)** — builds one document per
   `(product, channel)` pair. Each document's `name` and `description`
   fields are run through the resolver with `channel.defaultLanguage`
@@ -191,8 +196,8 @@ Three consumers go through the resolver:
 - **Search result cards** — the search module re-reads every hit from
   Postgres before it answers, and the card name it shows is resolved
   there, not taken from the index: the request's sales channel override
-  rows are read once per results page and the card takes the same slots,
-  in the same order, as a listing card above. The indexed name is
+  rows are read once per results page and the card walks the same
+  languages and slots, in the same order, as a listing card above. The indexed name is
   resolved for the channel's default language only, so it would be
   wrong for a request in any other language. A product without an
   override for the channel shows exactly what it showed before.
