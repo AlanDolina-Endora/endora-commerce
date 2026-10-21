@@ -182,7 +182,7 @@ unchanged.
 - [ ] T074 Walk `quickstart.md` §0–§7 end to end — **not walked by hand**: no browser session was available to the implementer. Every step has an
   automated counterpart green on 2026-10-20 (contract/integration suites of `quote_requests`, `orders`,
   `carts`, `document_templates`, `tenancy`; the admin and storefront tests of US1–US6). The PDF heading
-  that can close a page (§3.5) is a known limitation, not met (research N-28). The manual walk is left to the owner
+  that can close a page (§3.5) is a known limitation accepted by the owner on 2026-10-21 (research N-28). The manual walk is left to the owner
 
 ---
 

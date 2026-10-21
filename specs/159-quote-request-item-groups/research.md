@@ -624,7 +624,8 @@ Smallest deviations taken where the plan met the code; later phases build on the
   row, which have the same limitation), and folding a heading and its first line into one unbreakable row
   needs a nested table inside a spanned cell, which breaks the column grid, striping and borders. It is
   stated as a limitation on the Document templates page and in the renderer's comment; the contract's
-  SHOULD (`contracts/document-sections.md` §3) is not met and is left to the owner.
+  SHOULD (`contracts/document-sections.md` §3) is not met. **Owner ruling (2026-10-21): accepted as a known
+  limitation**; revisit the renderer only if orphaned headings turn out to be a frequent complaint.
 - **N-29 — Nothing to re-record (T071).** `openapi-baseline.json` still records no request or response
   body for any route this feature touched (N-10), including route 2's `sampleSections` and the admin
   preview's `taxRate`; `openapi-baseline.test.ts` passes unchanged. `composer:check` and `manifests:check`
