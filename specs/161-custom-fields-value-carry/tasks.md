@@ -702,18 +702,18 @@ Recent Changes lines, as `agents-router.test.ts` caps it.
 **Goal**: FR-005, FR-014 on both owned types and both axes; SC-005, SC-006 on every target type
 (research R-12, R-13).
 
-- [ ] T036 [P] **RED → green** Extend `backend/test/integration/crm/off-state.test.ts`: with `crm`
+- [x] T036 [P] **RED → green** Extend `backend/test/integration/crm/off-state.test.ts`: with `crm`
   off (deactivated while platform-available, and platform-unavailable) an order placed from a
   vouched QR still carries QR → Order; no Opportunity is created or joined and the order's
   values are untouched; switching `crm` back on creates nothing for that order (no replay, US2-4,
   FR-014); `GET …/custom-fields/entity-types` offers no `opportunity` carry target meanwhile
-- [ ] T037 [P] **RED → green** Extend `backend/test/integration/quote_requests/off-state.test.ts`
+- [x] T037 [P] **RED → green** Extend `backend/test/integration/quote_requests/off-state.test.ts`
   (feat/155 also extended this file — append a separate `describe`): with `quote_requests` off, a
   basket seeded from a QR places an Order that carries nothing (no vouched source); Opportunity →
   QR is not attempted (CRM's `isPresent()` decision — no 503 in the log, the Opportunity's
   history unchanged); `quote_request` carry options are hidden and retained; after re-enabling,
   they are served again and nothing is replayed
-- [ ] T038 [P] **RED → green** New `backend/test/integration/custom_fields/carry-audience.test.ts`
+- [x] T038 [P] **RED → green** New `backend/test/integration/custom_fields/carry-audience.test.ts`
   (SC-005), for each target type that has a non-admin reader — Order (buyer order detail
   `GET /api/v1/orders/:id`, API-key order read) and Quote Request (buyer request detail):
   (a) a `customer`→`customer` carry whose **source** is then made `internal` → the value is skipped
@@ -721,13 +721,26 @@ Recent Changes lines, as `agents-router.test.ts` caps it.
   whose **target** is then made `customer` → skipped likewise; (c) a `customer`→`internal`
   carry → carried, and the value appears in admin replies only. The Opportunity has no non-admin
   reader; its case is covered by T013
-- [ ] T039 [P] **RED → green** New `backend/test/contract/orders/carry-system-note-visibility.test.ts`
+- [x] T039 [P] **RED → green** New `backend/test/contract/orders/carry-system-note-visibility.test.ts`
   (SC-006): after a placement that writes a system note, the buyer's comments route, the buyer's
   order detail, the API-key order read and the transactional-email outbox contain nothing of it;
   the admin comments route does
-- [ ] T040 Run the off-state and presence ratchets and record the results under this task:
+- [x] T040 Run the off-state and presence ratchets and record the results under this task:
   `check:off-state-coverage`, `check:entry-presence`, `check:subscribe-seam`; if a ledger asks
   for an entry, add it with its reason in the same commit
+  **Result** (2026-10-21): `off-state-coverage` switchable 39, proven 39, findings 0;
+  `entry-presence` violations 0 (ledgered 2, stale 0); `subscribe-seam` 0 / 0; `port-catches`
+  violations 0 (ledgered 4, stale 0); `fixture-substitution` violations 0. No ledger entry needed.
+
+- **Phase 6 notes** (2026-10-21). T036–T039 are written; the Docker services were down on the
+  workstation, so their `[PG]` files are verified on the fork's `ci-pg` run only (the result is
+  recorded below once it lands). T036 sets `crm.auto_create_from_orders` on and
+  `crm.auto_create_from_quote_requests` off for its describe, after reading both values to write
+  back. T037's carry-option retention while `quote_requests` is off is already
+  `custom_fields/entity-owner-presence.test.ts`' (Phase 2) and is not repeated; Opportunity → Quote
+  Request is proven by announcing `rfq.created_by_admin.v1` with an origin while the module is off
+  (the module itself emits nothing then), with a positive control while on. No existing assertion
+  changed.
 
 **Verification**:
 ```bash

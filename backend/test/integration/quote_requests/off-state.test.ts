@@ -37,6 +37,15 @@ import {
   SEED_PAYMENT_METHOD_ID,
 } from '../../helpers/seed-commerce.js';
 import { bindOrganizationsToFixtureChannelsSql } from '../../helpers/sales-channel-access.js';
+import { CrmOpportunityLink } from '../../helpers/package-entities.js';
+import { TEST_ADMIN_ID } from '../../helpers/test-actors.js';
+import { CRM_SETTING_CODES } from '../../../../packages/modules/crm/src/manifest.js';
+import {
+  createCrmOpportunity,
+  crmPlacedDocumentsHandled,
+  setCrmSetting,
+  whenCrmEventSettled,
+} from '../../helpers/seed-crm.js';
 
 /**
  * `quote_requests` off-state — Constitution XVII item 6, from a **package**
@@ -586,4 +595,223 @@ describe('quote_requests off-state, from a package (Constitution XVII)', () => {
       expect(history.statusCode, history.body).toBe(200);
     });
   });
+
+  /**
+   * Feature 161 (`specs/161-custom-fields-value-carry/` T037; FR-005, FR-014) —
+   * custom-field carry with `quote_requests` off.
+   *
+   * - A basket converted from a request while the module was on places an
+   *   Order that carries nothing: there is no vouched quote source to carry
+   *   from, so there is nothing to skip either — no system note.
+   * - Opportunity → Quote Request is not attempted: CRM asks the module's
+   *   presence before it reads the request, so the announcement of a request
+   *   created from an Opportunity links nothing and carries nothing, and the
+   *   Opportunity's history is unchanged. Nothing is replayed once back on.
+   *
+   * The `quote_request` carry options being hidden and retained while the module
+   * is off is `custom_fields/entity-owner-presence.test.ts`' (Phase 2).
+   */
+  describe('feature 161 — custom-field carry while quote_requests is off', () => {
+    const CUSTOM_FIELDS_API = '/api/v1/admin/custom-fields';
+    const RUN = randomUUID().slice(0, 8);
+    const ORDER_KEY = `cfc_${RUN}_qr_off_order`;
+    const OPPORTUNITY_KEY = `cfc_${RUN}_qr_off_opportunity`;
+    const created: string[] = [];
+    let storedAutoCreate: unknown;
+
+    const define = async (entityType: string, key: string, carryTo: string[]) => {
+      const response = await h.app.inject({
+        method: 'POST',
+        url: `${CUSTOM_FIELDS_API}/definitions`,
+        cookies: admin,
+        payload: {
+          entityType,
+          key,
+          label: {},
+          labelDefault: key,
+          valueType: 'text',
+          required: false,
+          sortOrder: 0,
+          config: {},
+          options: [],
+          audience: 'internal',
+          carryTo,
+        },
+      });
+      expect(response.statusCode, response.body).toBe(201);
+      created.push((response.json() as { data: { id: string } }).data.id);
+    };
+
+    const valuesOf = async (
+      table: 'orders' | 'quote_requests' | 'crm_opportunities',
+      id: string,
+    ): Promise<Record<string, unknown>> => {
+      const rows = (await h
+        .em()
+        .getConnection()
+        .execute(`select custom_field_values from "${table}" where id = ?`, [id])) as Array<{
+        custom_field_values: Record<string, unknown> | null;
+      }>;
+      expect(rows).toHaveLength(1);
+      return rows[0]!.custom_field_values ?? {};
+    };
+
+    const setValues = async (table: 'quote_requests' | 'crm_opportunities', id: string, values: Record<string, unknown>) => {
+      await h
+        .em()
+        .getConnection()
+        .execute(`update "${table}" set custom_field_values = ?::jsonb where id = ?`, [JSON.stringify(values), id]);
+    };
+
+    const systemNotes = async (orderId: string): Promise<unknown[]> => {
+      const response = await h.app.inject({ method: 'GET', url: `/api/v1/admin/orders/${orderId}/comments`, cookies: admin });
+      expect(response.statusCode, response.body).toBe(200);
+      return (response.json() as { data: Array<{ systemNote: unknown }> }).data.filter((c) => c.systemNote !== null);
+    };
+
+    const carrySkipEvents = async (quoteRequestId: string): Promise<number> => {
+      const rows = (await h
+        .em()
+        .getConnection()
+        .execute(
+          `select count(*)::int as n from "quote_request_events" where quote_request_id = ? and event_type = 'custom-field-carry-skipped'`,
+          [quoteRequestId],
+        )) as Array<{ n: number }>;
+      return rows[0]!.n;
+    };
+
+    const opportunityHistory = async (opportunityId: string): Promise<unknown[]> => {
+      const response = await h.app.inject({
+        method: 'GET',
+        url: `/api/v1/admin/crm/opportunities/${opportunityId}/history`,
+        cookies: admin,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return (response.json() as { data: unknown[] }).data;
+    };
+
+    /** A request converted into the buyer's basket while the module is on. */
+    const quoteInBasket = async (value: string) => {
+      await h
+        .em()
+        .getConnection()
+        .execute(`update "carts" set "status" = 'completed' where "customer_account_id" = ? and "status" = 'active'`, [
+          TEST_CUSTOMER_ID,
+        ]);
+      const rfq = await acceptedQuoteRequest(h, { quantity: 2, agreedUnitPrice: 11.25 });
+      await setValues('quote_requests', rfq.id, { [ORDER_KEY]: value });
+      await convertQuoteRequestToCart(h, rfq.id);
+    };
+
+    /** A submitted request, and an Opportunity holding `value`, announced as created from it. */
+    const announceCreatedFromOpportunity = async (quoteRequestId: string, opportunityId: string) =>
+      whenCrmEventSettled(h, 'rfq.created_by_admin.v1', (payload) => payload['rfqId'] === quoteRequestId, async () => {
+        h.eventBus.emit('rfq.created_by_admin.v1' as never, {
+          eventId: randomUUID(),
+          occurredAt: new Date().toISOString(),
+          rfqId: quoteRequestId,
+          organizationId: TEST_ORGANIZATION_ID,
+          adminUserId: TEST_ADMIN_ID,
+          origin: { type: 'crm_opportunity', id: opportunityId },
+        } as never);
+      });
+
+    const opportunityWithValue = async (value: string) => {
+      const opportunity = await createCrmOpportunity(h, { title: `cfc ${RUN} ${value}` });
+      await setValues('crm_opportunities', opportunity.id, { [OPPORTUNITY_KEY]: value });
+      return opportunity;
+    };
+
+    const submittedRequest = async (): Promise<string> => {
+      const rfq = await acceptedQuoteRequest(h, { quantity: 1, agreedUnitPrice: 11.25 });
+      return rfq.id;
+    };
+
+    const linksOf = (quoteRequestId: string) =>
+      h.em().count(CrmOpportunityLink, { documentKind: 'quote_request', documentId: quoteRequestId }, { filters: false });
+
+    beforeAll(async () => {
+      // The value in force, read and kept to write back (standing rule 7).
+      const rows = (await h
+        .em()
+        .getConnection()
+        .execute(`select coalesce(global_value, default_value) as value from "settings" where code = ?`, [
+          CRM_SETTING_CODES.AUTO_CREATE_FROM_QUOTE_REQUESTS,
+        ])) as Array<{ value: unknown }>;
+      if (!rows[0]) throw new Error('The setting crm.auto_create_from_quote_requests is not registered.');
+      storedAutoCreate = rows[0].value;
+      // A submitted request gets no Opportunity of its own: only the announced origin links one.
+      await setCrmSetting(h, CRM_SETTING_CODES.AUTO_CREATE_FROM_QUOTE_REQUESTS, false);
+      await h
+        .em()
+        .getConnection()
+        .execute(`update "stock_levels" set "on_hand" = 100000 where "product_id" = ?`, [SEED_PRODUCT_101_ID]);
+      await define('order', ORDER_KEY, []);
+      await define('quote_request', ORDER_KEY, ['order']);
+      await define('quote_request', OPPORTUNITY_KEY, []);
+      await define('opportunity', OPPORTUNITY_KEY, ['quote_request']);
+    });
+
+    afterAll(async () => {
+      await setCrmSetting(h, CRM_SETTING_CODES.AUTO_CREATE_FROM_QUOTE_REQUESTS, storedAutoCreate);
+      for (const id of [...created].reverse()) {
+        await h.app.inject({ method: 'DELETE', url: `${CUSTOM_FIELDS_API}/definitions/${id}`, cookies: admin });
+      }
+    });
+
+    it('carries a request’s value into the Order placed from its basket while on — the positive control', async () => {
+      const value = `on_${RUN}`;
+      await quoteInBasket(value);
+      const order = await whenOrderCreatedSettled(h, () => checkOutBasket(h));
+      expect((await valuesOf('orders', order.id))[ORDER_KEY]).toBe(value);
+      await reactor.idle();
+    });
+
+    it.each(['deactivated', 'platform-unavailable'] as const)(
+      'while %s a basket converted from a request places an Order that carries nothing and records nothing',
+      async (axis) => {
+        await quoteInBasket(`off_${axis}_${RUN}`);
+        let orderId = '';
+        let during: Record<string, unknown> = {};
+        await withModuleOff('quote_requests', axis, async () => {
+          orderId = (await whenOrderCreatedSettled(h, () => checkOutBasket(h))).id;
+          during = await valuesOf('orders', orderId);
+          expect(Object.hasOwn(during, ORDER_KEY)).toBe(false);
+          expect(await systemNotes(orderId)).toEqual([]);
+        });
+        await reactor.idle();
+        expect(await valuesOf('orders', orderId)).toEqual(during);
+        expect(await systemNotes(orderId)).toEqual([]);
+      },
+    );
+
+    it('carries an Opportunity’s value into the request created from it while on — the positive control', async () => {
+      const value = `on_${RUN}`;
+      const opportunity = await opportunityWithValue(value);
+      const quoteRequestId = await submittedRequest();
+      await announceCreatedFromOpportunity(quoteRequestId, opportunity.id);
+      expect(await linksOf(quoteRequestId)).toBe(1);
+      expect((await valuesOf('quote_requests', quoteRequestId))[OPPORTUNITY_KEY]).toBe(value);
+    });
+
+    it.each(['deactivated', 'platform-unavailable'] as const)(
+      'while %s a request announced as created from an Opportunity is neither linked nor carried into, then or afterwards',
+      async (axis) => {
+        const opportunity = await opportunityWithValue(`off_${axis}_${RUN}`);
+        const quoteRequestId = await submittedRequest();
+        const valuesBefore = await valuesOf('quote_requests', quoteRequestId);
+        const historyBefore = await opportunityHistory(opportunity.id);
+        await withModuleOff('quote_requests', axis, async () => {
+          await announceCreatedFromOpportunity(quoteRequestId, opportunity.id);
+          expect(await linksOf(quoteRequestId)).toBe(0);
+        });
+        await crmPlacedDocumentsHandled(h);
+        expect(await linksOf(quoteRequestId)).toBe(0);
+        expect(await valuesOf('quote_requests', quoteRequestId)).toEqual(valuesBefore);
+        expect(await carrySkipEvents(quoteRequestId)).toBe(0);
+        expect(await opportunityHistory(opportunity.id)).toEqual(historyBefore);
+      },
+    );
+  });
 });
+
