@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from 'react';
+import { useId, useRef, type ReactNode } from 'react';
 import { TriangleAlert } from 'lucide-react';
 import { Button } from '@endora-commerce/admin-kit/ui';
 import { ModalDialog } from '@endora-commerce/admin-kit/components';
@@ -13,6 +13,14 @@ export interface CarryDriftNoticeProps {
   typeLabel: (entityType: SupportedEntityType) => string;
   /** A sentence naming the action itself, above the warning (a deletion says what it deletes). */
   lead?: string;
+  /** The wrapper's id, for the dialog's `aria-describedby`. */
+  id?: string;
+  /**
+   * A removal or a deletion: the warning icon reads in the destructive colour.
+   * Otherwise (an added option, an audience change) it reads amber — a caution,
+   * not a loss.
+   */
+  destructive?: boolean;
 }
 
 /**
@@ -20,13 +28,20 @@ export interface CarryDriftNoticeProps {
  * warning's sentence and one "<entity type> · <key>" line per counterpart.
  * Text only — the key is interpolated, never markup.
  */
-export function CarryDriftNotice({ counterparts, typeLabel, lead }: CarryDriftNoticeProps): ReactNode {
+export function CarryDriftNotice({ counterparts, typeLabel, lead, id, destructive = false }: CarryDriftNoticeProps): ReactNode {
   const t = useTranslation('custom_fields');
   return (
-    <div className="space-y-2 text-sm">
+    <div id={id} className="space-y-2 text-sm">
       {lead ? <p className="break-words">{lead}</p> : null}
       <p className="flex items-start gap-2 break-words">
-        <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
+        <TriangleAlert
+          className={
+            destructive
+              ? 'mt-0.5 size-4 shrink-0 text-destructive'
+              : 'mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-400'
+          }
+          aria-hidden="true"
+        />
         <span>{t('customFields.carry.warning.body')}</span>
       </p>
       <ul className="list-disc space-y-0.5 pl-10">
@@ -43,7 +58,7 @@ export function CarryDriftNotice({ counterparts, typeLabel, lead }: CarryDriftNo
   );
 }
 
-export interface CarryDriftDialogProps extends CarryDriftNoticeProps {
+export interface CarryDriftDialogProps extends Omit<CarryDriftNoticeProps, 'id' | 'destructive'> {
   onCancel: () => void;
   onProceed: () => void;
   /** The change the warning confirms: its proceed button names it, destructive-styled for a deletion. */
@@ -53,7 +68,9 @@ export interface CarryDriftDialogProps extends CarryDriftNoticeProps {
 /**
  * The warning as a dialog of its own, for a change made outside any dialog
  * (the table's audience select and *Delete*). Focus starts on *Cancel* — the
- * choice that changes nothing — and Escape or the scrim cancel too.
+ * choice that changes nothing — and Escape or the scrim cancel too. The notice
+ * describes the dialog (`aria-describedby`), so a screen reader reads the
+ * warning and its counterparts with the title as focus enters.
  */
 export function CarryDriftDialog({
   counterparts,
@@ -65,12 +82,14 @@ export function CarryDriftDialog({
 }: CarryDriftDialogProps): ReactNode {
   const t = useTranslation('custom_fields');
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const noticeId = useId();
   const proceed = carryDriftProceed(action);
   return (
     <ModalDialog
       title={t('customFields.carry.warning.title')}
       onClose={onCancel}
       initialFocusRef={cancelRef}
+      aria-describedby={noticeId}
       footer={
         <>
           <Button ref={cancelRef} type="button" variant="outline" className="min-h-11 sm:min-h-9" onClick={onCancel}>
@@ -87,7 +106,13 @@ export function CarryDriftDialog({
         </>
       }
     >
-      <CarryDriftNotice counterparts={counterparts} typeLabel={typeLabel} {...(lead ? { lead } : {})} />
+      <CarryDriftNotice
+        id={noticeId}
+        counterparts={counterparts}
+        typeLabel={typeLabel}
+        destructive={proceed.destructive}
+        {...(lead ? { lead } : {})}
+      />
     </ModalDialog>
   );
 }

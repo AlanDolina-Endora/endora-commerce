@@ -134,16 +134,30 @@ export function CustomFieldsPage(): ReactNode {
   // `null` until read (or when the read failed): no mark is shown on a guess.
   const offersCarry = entityTypes.some((info) => (info.carryTargets ?? []).length > 0);
   const [allDefinitions, setAllDefinitions] = useState<CustomFieldDefinitionDto[] | null>(null);
+  /**
+   * The last read of every type's definitions failed. The marks and the drift
+   * warnings then know only the selected type's rows, so the page says the
+   * checks are off rather than letting a change pass silently unchecked.
+   */
+  const [allFailed, setAllFailed] = useState(false);
+  const [allLoading, setAllLoading] = useState(false);
   const allSequence = useRef(0);
   const [pendingChange, setPendingChange] = useState<PendingTableChange | null>(null);
 
   const loadAll = useCallback(async (): Promise<void> => {
     const current = ++allSequence.current;
+    setAllLoading(true);
     try {
       const listed = await customFieldsClient.list();
-      if (current === allSequence.current) setAllDefinitions(listed);
+      if (current !== allSequence.current) return;
+      setAllDefinitions(listed);
+      setAllFailed(false);
     } catch {
-      if (current === allSequence.current) setAllDefinitions(null);
+      if (current !== allSequence.current) return;
+      setAllDefinitions(null);
+      setAllFailed(true);
+    } finally {
+      if (current === allSequence.current) setAllLoading(false);
     }
   }, []);
 
@@ -337,7 +351,8 @@ export function CustomFieldsPage(): ReactNode {
   /**
    * One chip per carry target, and an *Incompatible* mark with its reason
    * where the same-key target no longer fits (FR-020). The reason is visible
-   * text on a narrow screen and the chip's description on a wide one.
+   * text under the chip at every width — never a hover-only `title` — and is
+   * read once, as the text it is.
    */
   function carryChips(d: CustomFieldDefinitionDto): ReactNode {
     const targets = d.carryTo ?? [];
@@ -359,14 +374,14 @@ export function CustomFieldsPage(): ReactNode {
               <span className="flex flex-wrap items-center gap-1">
                 <Badge variant="secondary">{entityType}</Badge>
                 {reasons.length > 0 ? (
-                  <Badge variant="warning" title={reason} className="gap-1">
+                  <Badge variant="warning" className="gap-1">
                     <TriangleAlert className="size-3" aria-hidden="true" />
                     {t('customFields.carry.incompatible')}
                   </Badge>
                 ) : null}
               </span>
               {reasons.length > 0 ? (
-                <span className="block break-words text-xs text-muted-foreground sm:sr-only">{reason}</span>
+                <span className="block break-words text-xs text-muted-foreground">{reason}</span>
               ) : null}
             </li>
           );
@@ -482,6 +497,24 @@ export function CustomFieldsPage(): ReactNode {
           <CardTitle>{t('customFields.table.title')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          {offersCarry && allFailed ? (
+            <Alert variant="warning">
+              <AlertDescription className="flex flex-wrap items-center gap-2">
+                <span className="break-words">{t('customFields.carry.checksUnavailable')}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11 sm:min-h-9"
+                  disabled={allLoading}
+                  aria-busy={allLoading}
+                  onClick={(): void => void loadAll()}
+                >
+                  {t('customFields.carry.retry')}
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
           {loadedFor !== entityType ? (
             <p role="status" className="text-sm text-muted-foreground">
               {t('customFields.table.loading')}

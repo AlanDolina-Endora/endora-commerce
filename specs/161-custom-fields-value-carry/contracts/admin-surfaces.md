@@ -46,13 +46,18 @@ registry does not list it.
 - New column *Carries to* (`customFields.table.carriesTo`): one chip per `carryTo` entry with the
   translated type label; "—" when empty.
 - A chip whose carry is incompatible gets an *Incompatible* badge (`customFields.carry.incompatible`)
-  and its reason as visible text under the chip on narrow screens and as `title` / accessible
-  description otherwise (`customFields.carry.reason.<reason>` — names the missing field, the type
-  pair, the missing options, or the audience rule). The reason is computed as
+  and its reason as visible small muted text under the chip at every width — no `title`, no
+  screen-reader-only copy, so it is read once (`customFields.carry.reason.<reason>` — names the
+  missing field, the type pair, the missing options, or the audience rule). The reason is computed as
   `assessCustomFieldCarry(source, target)` where `target` is the same-key definition of the chip's
   type in the page's definitions list (or `null`).
 - The mark disappears as soon as the list re-reads and the rule answers `[]`, or the option is
   turned off.
+- When some type offers a carry target and the read of every type's definitions fails, the table
+  card shows a warning `Alert` — `customFields.carry.checksUnavailable` ("Carry checks are
+  unavailable." / "Nie udało się sprawdzić powiązań przenoszenia.") with a *Retry* button
+  (`customFields.carry.retry`, "Retry" / "Spróbuj ponownie") that reads the list again. No mark is
+  shown while it stands, and the alert goes once a read succeeds.
 
 ### 1.4 Drift warnings (FR-019, US4-6, US4-8, SC-007)
 
@@ -98,7 +103,8 @@ the UI (the filters feature's editor never sends it), so no site asks about it.
 
 ### 1.5 Keys (`packages/modules/custom_fields/i18n/{en,pl}.json`)
 
-`customFields.carry.toggle`, `.help`, `.incompatible`, `.reason.target_missing`,
+`customFields.carry.toggle`, `.help`, `.incompatible`, `.checksUnavailable`, `.retry`,
+`.reason.target_missing`,
 `.reason.value_type_mismatch`, `.reason.options_missing`, `.reason.audience_mismatch`,
 `.helpGroup`, `.refusal.<six tokens>`, `.warning.title`, `.warning.body`,
 `.warning.proceedRemoveOption`, `.warning.proceedDeleteField`, `.warning.proceedAddOption`,

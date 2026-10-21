@@ -26,6 +26,7 @@ const EN = en as Bundle;
 const PL = pl as Bundle;
 const WARNING = sentence(EN, 'customFields.carry.warning.title');
 const CANCEL = sentence(EN, 'customFields.carry.warning.cancel');
+const BODY = sentence(EN, 'customFields.carry.warning.body');
 const REMOVE_OPTION_ANYWAY = sentence(EN, 'customFields.carry.warning.proceedRemoveOption');
 const DELETE_FIELD_ANYWAY = sentence(EN, 'customFields.carry.warning.proceedDeleteField');
 const ADD_OPTION_ANYWAY = sentence(EN, 'customFields.carry.warning.proceedAddOption');
@@ -158,12 +159,53 @@ describe('CustomFieldsPage — drift warnings', () => {
       expect(REQUESTS()).toBe(0);
     });
 
+    it('describes the editor by the warning while it stands, and says it appeared', async () => {
+      await renderPage('order');
+      const dialog = await openEditor();
+      const announcement = within(dialog).getByTestId('drift-announcement');
+      // Mounted, empty, before there is anything to say — so the swap is announced.
+      expect(announcement).toHaveAttribute('role', 'status');
+      expect(announcement).toHaveTextContent('');
+      expect(dialog).not.toHaveAttribute('aria-describedby');
+
+      fireEvent.click(within(within(dialog).getByRole('group', { name: 'South' })).getByRole('button', { name: 'Remove' }));
+      const warning = await screen.findByRole('dialog', { name: WARNING });
+      expect(warning).toBe(dialog);
+      expect(announcement).toHaveTextContent(WARNING);
+      expect(warning).toHaveAccessibleDescription(expect.stringContaining(BODY));
+      expect(warning).toHaveAccessibleDescription(expect.stringContaining('Quote request · region'));
+      // Focus still starts on the answer that changes nothing.
+      expect(within(warning).getByRole('button', { name: CANCEL })).toHaveFocus();
+
+      fireEvent.click(within(warning).getByRole('button', { name: CANCEL }));
+      await screen.findByRole('dialog', { name: sentence(EN, 'customFields.editor.title', { key: 'region' }) });
+      expect(announcement).toHaveTextContent('');
+      expect(dialog).not.toHaveAttribute('aria-describedby');
+    });
+
     it('removes the option exactly as before on Remove option anyway', async () => {
       const warning = await askToRemoveSouth();
       fireEvent.click(within(warning).getByRole('button', { name: REMOVE_OPTION_ANYWAY }));
       await waitFor(() => expect(client.removeOption).toHaveBeenCalledTimes(1));
       expect(client.removeOption).toHaveBeenCalledWith(ORDER_REGION.id, ORDER_REGION.options[1]!.id);
       expect(REQUESTS()).toBe(1);
+    });
+
+    it('leaves focus on the options heading once the option is gone, not on the page', async () => {
+      const warning = await askToRemoveSouth();
+      // The re-read answers the definition without "south".
+      db.definitions = [QR_REGION, { ...ORDER_REGION, options: [ORDER_REGION.options[0]!] }, ORDER_NOTE];
+      fireEvent.click(within(warning).getByRole('button', { name: REMOVE_OPTION_ANYWAY }));
+      const editor = await screen.findByRole('dialog', { name: sentence(EN, 'customFields.editor.title', { key: 'region' }) });
+      await waitFor(() => expect(within(editor).queryByRole('group', { name: 'South' })).toBeNull());
+      const heading = within(editor).getByRole('heading', { name: sentence(EN, 'customFields.editor.section.options') });
+      expect(heading).toHaveFocus();
+    });
+
+    it('draws the warning icon in the destructive colour for a removal', async () => {
+      const warning = await askToRemoveSouth();
+      const icon = warning.querySelector('svg');
+      expect(icon).toHaveClass('text-destructive');
     });
   });
 
@@ -181,6 +223,10 @@ describe('CustomFieldsPage — drift warnings', () => {
     it('asks first, naming the target, and keeps the typed option on Cancel', async () => {
       const warning = await askToAddEast();
       expectCounterparts(warning, ['Order · region']);
+      // An added option loses nothing: the icon reads as a caution, not a loss.
+      const icon = warning.querySelector('svg');
+      expect(icon).not.toHaveClass('text-destructive');
+      expect(icon).toHaveClass('text-amber-700');
       fireEvent.click(within(warning).getByRole('button', { name: CANCEL }));
       const editor = await screen.findByRole('dialog', { name: sentence(EN, 'customFields.editor.title', { key: 'region' }) });
       expect(within(within(editor).getByRole('group', { name: 'Add option' })).getByLabelText('Stored value')).toHaveValue('east');
@@ -210,6 +256,11 @@ describe('CustomFieldsPage — drift warnings', () => {
       fireEvent.change(audienceOf(), { target: { value: 'customer' } });
       const warning = await screen.findByRole('dialog', { name: WARNING });
       expectCounterparts(warning, ['Quote request · region']);
+      // Read with the title as focus enters the dialog on Cancel.
+      expect(warning).toHaveAccessibleDescription(expect.stringContaining(BODY));
+      expect(warning).toHaveAccessibleDescription(expect.stringContaining('Quote request · region'));
+      expect(within(warning).getByRole('button', { name: CANCEL })).toHaveFocus();
+      expect(warning.querySelector('svg')).not.toHaveClass('text-destructive');
       fireEvent.click(within(warning).getByRole('button', { name: CANCEL }));
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
       expect(audienceOf().value).toBe('internal');
@@ -233,6 +284,11 @@ describe('CustomFieldsPage — drift warnings', () => {
       const warning = await screen.findByRole('dialog', { name: WARNING });
       expect(within(warning).getByText(sentence(EN, 'customFields.table.deleteConfirm', { key: 'region' }))).toBeInTheDocument();
       expectCounterparts(warning, ['Quote request · region']);
+      expect(warning).toHaveAccessibleDescription(
+        expect.stringContaining(sentence(EN, 'customFields.table.deleteConfirm', { key: 'region' })),
+      );
+      expect(warning).toHaveAccessibleDescription(expect.stringContaining(BODY));
+      expect(warning.querySelector('svg')).toHaveClass('text-destructive');
       fireEvent.click(within(warning).getByRole('button', { name: CANCEL }));
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
       expect(REQUESTS()).toBe(0);

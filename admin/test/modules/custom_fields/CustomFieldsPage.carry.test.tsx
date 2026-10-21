@@ -295,8 +295,11 @@ describe('CustomFieldsPage — the Carries to column (US4-5, US4-7)', () => {
     });
     const row = screen.getByRole('row', { name: /region/ });
     const mark = await within(row).findByText(sentence(EN, 'customFields.carry.incompatible'));
-    expect(mark).toHaveAttribute('title', reason);
-    expect(within(row).getByText(reason)).toBeInTheDocument();
+    // The reason is visible text at every width, said once: no hover-only title, no screen-reader-only copy.
+    expect(mark).not.toHaveAttribute('title');
+    expect(within(row).getAllByText(reason)).toHaveLength(1);
+    expect(within(row).getByText(reason).className).not.toMatch(/sr-only/);
+    expect(row.querySelector('[title]')).toBeNull();
 
     // The Order field gains "south"; the next read finds the carry compatible.
     db.definitions = [QR_REGION, carryDefinition(ORDER_REGION.id, { entityType: 'order' }), OPPORTUNITY_REGION];
@@ -325,5 +328,42 @@ describe('CustomFieldsPage — the Carries to column (US4-5, US4-7)', () => {
     expect(within(row).getByText('Order')).toBeInTheDocument();
     // Without the Order definitions there is nothing to judge by: no guess is shown.
     expect(within(row).queryByText(sentence(EN, 'customFields.carry.incompatible'))).toBeNull();
+  });
+
+  it.each([
+    ['en', EN],
+    ['pl', PL],
+  ] as const)('says the carry checks are unavailable when the every-type read failed, and retries (%s)', async (_language, bundle) => {
+    db.failAll = true;
+    await renderPage('quote_request', bundle);
+    const unavailable = sentence(bundle, 'customFields.carry.checksUnavailable');
+    const alert = (await screen.findByText(unavailable)).closest('[role="alert"]') as HTMLElement;
+    expect(alert).not.toBeNull();
+    const retry = within(alert).getByRole('button', { name: sentence(bundle, 'customFields.carry.retry') });
+
+    // The read comes back: the alert goes and the marks it held back appear.
+    db.failAll = false;
+    const reads = client.list.mock.calls.filter(([type]) => type === undefined).length;
+    fireEvent.click(retry);
+    await waitFor(() => expect(screen.queryByText(unavailable)).toBeNull());
+    expect(client.list.mock.calls.filter(([type]) => type === undefined).length).toBe(reads + 1);
+    const row = screen.getByRole('row', { name: /region/ });
+    expect(await within(row).findByText(sentence(bundle, 'customFields.carry.incompatible'))).toBeInTheDocument();
+  });
+
+  it('keeps the alert when the retry fails too', async () => {
+    db.failAll = true;
+    await renderPage('quote_request');
+    const unavailable = sentence(EN, 'customFields.carry.checksUnavailable');
+    await screen.findByText(unavailable);
+    fireEvent.click(screen.getByRole('button', { name: sentence(EN, 'customFields.carry.retry') }));
+    await waitFor(() => expect(screen.getByRole('button', { name: sentence(EN, 'customFields.carry.retry') })).toBeEnabled());
+    expect(screen.getByText(unavailable)).toBeInTheDocument();
+  });
+
+  it('shows no unavailable alert when the every-type read works', async () => {
+    await renderPage('quote_request');
+    await within(screen.getByRole('row', { name: /region/ })).findByText(sentence(EN, 'customFields.carry.incompatible'));
+    expect(screen.queryByText(sentence(EN, 'customFields.carry.checksUnavailable'))).toBeNull();
   });
 });

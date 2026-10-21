@@ -9,7 +9,13 @@ import type {
   UpdateCustomFieldDefinitionRequest,
 } from '@endora-commerce/contracts';
 import { customFieldsClient } from '../api/custom-fields-client.js';
-import { carryCounterpartsBrokenBy, carryDriftProceed, type CarryCounterpart, type CarryDriftProceed } from '../lib/carry-drift.js';
+import {
+  carryCounterpartsBrokenBy,
+  carryDriftProceed,
+  type CarryCounterpart,
+  type CarryDriftProceed,
+  type DefinitionChange,
+} from '../lib/carry-drift.js';
 import { entityTypeLabelKey, refusalSentence } from '../lib/carry-labels.js';
 import { sameLabel, withLanguages } from './localized-label.js';
 import { CarryDriftNotice } from './CarryDriftWarning.js';
@@ -38,6 +44,8 @@ export interface DefinitionEditorDialogProps {
 interface PendingDrift {
   counterparts: readonly CarryCounterpart[];
   lead?: string;
+  /** The change asked about. */
+  action: DefinitionChange['kind'];
   /** The proceed button, named after the change asked about (owner ruling V1). */
   proceed: CarryDriftProceed;
   resolve: (proceed: boolean) => void;
@@ -92,6 +100,7 @@ export function DefinitionEditorDialog({
   const [drift, setDrift] = useState<PendingDrift | null>(null);
   const driftCancelRef = useRef<HTMLButtonElement>(null);
   const driftOpener = useRef<HTMLElement | null>(null);
+  const optionsHeadingRef = useRef<HTMLHeadingElement>(null);
 
   const typeLabel = useCallback(
     (entityType: SupportedEntityType): string => t(entityTypeLabelKey(entityType, entityTypes)),
@@ -111,6 +120,7 @@ export function DefinitionEditorDialog({
           setDrift({
             counterparts,
             ...(options.lead ? { lead: options.lead } : {}),
+            action: options.action,
             proceed: carryDriftProceed(options.action),
             resolve,
           });
@@ -121,13 +131,22 @@ export function DefinitionEditorDialog({
 
   const settleDrift = useCallback(
     (proceed: boolean): void => {
+      // A removed option takes its *Remove* button with it once the definition
+      // is re-read, so focus waits on the options heading instead of falling
+      // to the page.
+      if (proceed && drift?.action === 'remove-option' && optionsHeadingRef.current !== null) {
+        driftOpener.current = optionsHeadingRef.current;
+      }
       drift?.resolve(proceed);
       setDrift(null);
     },
     [drift],
   );
 
-  // The question opens on *Cancel*; once answered, focus goes back to the control that asked.
+  // The question opens on *Cancel* — the answer that changes nothing, as Escape
+  // and the scrim are — and once answered focus goes back to the control that
+  // asked. Focus does not enter the dialog anew, so its description is not
+  // re-read: the live region below says the warning appeared.
   useEffect(() => {
     if (drift !== null) {
       driftCancelRef.current?.focus();
@@ -173,6 +192,7 @@ export function DefinitionEditorDialog({
     }
   };
 
+  const driftNoticeId = `${id}-drift-notice`;
   const labelErrorId = `${id}-label-error`;
   const requiredNoticeId = `${id}-required-notice`;
   const showRequiredNotice = required && !definition.required;
@@ -181,15 +201,23 @@ export function DefinitionEditorDialog({
       title={drift ? t('customFields.carry.warning.title') : t('customFields.editor.title', { key: definition.key })}
       onClose={drift ? (): void => settleDrift(false) : onClose}
       busy={busy}
+      {...(drift ? { 'aria-describedby': driftNoticeId } : {})}
       footer={
         drift ? (
           <>
-            <Button ref={driftCancelRef} type="button" variant="outline" onClick={(): void => settleDrift(false)}>
+            <Button
+              ref={driftCancelRef}
+              type="button"
+              variant="outline"
+              className="min-h-11 sm:min-h-9"
+              onClick={(): void => settleDrift(false)}
+            >
               {t('customFields.carry.warning.cancel')}
             </Button>
             <Button
               type="button"
               variant={drift.proceed.destructive ? 'destructive' : 'default'}
+              className="min-h-11 sm:min-h-9"
               onClick={(): void => settleDrift(true)}
             >
               {t(drift.proceed.labelKey)}
@@ -207,10 +235,16 @@ export function DefinitionEditorDialog({
         )
       }
     >
+      {/* Mounted before it has anything to say, so the in-place swap is announced. */}
+      <p role="status" data-testid="drift-announcement" className="sr-only">
+        {drift ? t('customFields.carry.warning.title') : ''}
+      </p>
       {drift ? (
         <CarryDriftNotice
+          id={driftNoticeId}
           counterparts={drift.counterparts}
           typeLabel={typeLabel}
+          destructive={drift.proceed.destructive}
           {...(drift.lead ? { lead: drift.lead } : {})}
         />
       ) : null}
@@ -295,7 +329,7 @@ export function DefinitionEditorDialog({
 
         {SELECT_TYPES.has(definition.valueType) ? (
           <section aria-labelledby={`${id}-options`} className="space-y-2">
-            <h3 id={`${id}-options`} className="text-sm font-semibold">
+            <h3 id={`${id}-options`} ref={optionsHeadingRef} tabIndex={-1} className="text-sm font-semibold">
               {t('customFields.editor.section.options')}
             </h3>
             <p className="break-words text-sm text-muted-foreground">{t('customFields.editor.optionsNote')}</p>
