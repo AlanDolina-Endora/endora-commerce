@@ -1,6 +1,7 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
   CatalogBulkPriceLine,
+  LinePricesPort,
   OrgLinePricePort,
   OrganizationDetailsPort,
   OrganizationRecord,
@@ -52,8 +53,12 @@ export interface CatalogOrgPriceDecoratorDeps {
    * ladder — was published in this cut, because `PricingServiceContract` is
    * deliberately not in `@endora-commerce/contracts` (it is the overlay decoration's
    * contract gate) and was `listBracketMinQuantities`' only declaration.
+   *
+   * D-287 P0 — and `LinePricesPort`, named beside it rather than folded into
+   * it: summaries, bulk lines and the tier ladder are each priced in one
+   * `resolveLinePrices` call.
    */
-  pricingService: OrgLinePricePort;
+  pricingService: OrgLinePricePort & LinePricesPort;
   /**
    * Feature 075 — the buying organisation, read through `organizations`' port
    * instead of `em.findOne(Organization, …)` against its table. The engine

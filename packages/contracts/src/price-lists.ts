@@ -1055,11 +1055,10 @@ export interface ProductDisplayModePort {
  * reasoning). `PricingServiceContract` is a superset and satisfies this
  * structurally, so no implementation changed.
  *
- * D-287 P0 — it extends {@link LinePricesPort} as well: the external summaries,
- * bulk lines and tier ladder are priced in one batched call each rather than
- * one `resolveLinePrice` per product, line and rung.
+ * D-287 P0 left it as it was — a stub of it still compiles — and the external
+ * namespace, which now prices in batches, names `OrgLinePricePort & LinePricesPort`.
  */
-export interface OrgLinePricePort extends LinePricePort, LinePricesPort {
+export interface OrgLinePricePort extends LinePricePort {
   /**
    * Feature 062 — the distinct bracket start quantities (ascending) across
    * every ACTIVE price list for a (product, currency). The caller probes

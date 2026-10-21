@@ -14,6 +14,7 @@ import {
   type ListingPricePort,
   type ListingPriceDetailPort,
   type OrgLinePricePort,
+  type LinePricesPort,
   type CustomFieldDefinitionReadPort,
   type CustomFieldValuePort,
   type OrganizationDetailsPort,
@@ -119,6 +120,7 @@ export interface CatalogModuleOptions {
    * decoration layer — SC-001 parity by construction.
    */
   pricingService?: OrgLinePricePort &
+    LinePricesPort &
     ListingPricePort &
     ListingPriceDetailPort &
     ListingPriceOrderPort;

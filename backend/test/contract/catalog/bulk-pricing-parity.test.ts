@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Organization } from '../../helpers/package-entities.js';
-import { ERROR_CODES, type OrgLinePricePort } from '@endora-commerce/contracts';
+import { ERROR_CODES, type LinePricesPort, type OrgLinePricePort } from '@endora-commerce/contracts';
 import {
   setupBackendServer,
   teardownBackendServer,
@@ -352,7 +352,7 @@ describe('External bulk pricing parity with cart pricing (062 / T015, SC-001)', 
   });
 
   it('prices a multi-line request in one batched resolution, not one per line (D-287 P0)', async () => {
-    const pricing = (h.container.cradle as unknown as { pricingService: OrgLinePricePort }).pricingService;
+    const pricing = (h.container.cradle as unknown as { pricingService: OrgLinePricePort & LinePricesPort }).pricingService;
     const batch = vi.spyOn(pricing, 'resolveLinePrices');
     const single = vi.spyOn(pricing, 'resolveLinePrice');
     try {
