@@ -180,7 +180,7 @@ angielsku:
   sprzedażowej nie mogło przyjąć części jej wartości pól niestandardowych (zob. *Pola
   niestandardowe*), historia zawiera jeden wpis autorstwa *System*, *Nie przeniesiono wartości pól
   niestandardowych z szansy sprzedażowej*, który podaje numer szansy i wymienia każde pominięte
-  pole — jego nazwą z chwili pominięcia — wraz z powodem. Wpis nie pokazuje żadnej wartości i może go
+  pole — nazwą pola szansy z chwili pominięcia — wraz z powodem. Wpis nie pokazuje żadnej wartości i może go
   przeczytać każdy, kto może otworzyć zapytanie. Jest **widoczny tylko dla administratorów**: widok
   zapytania u klienta nigdy go nie pokazuje. Przeniesione wartości nie mają osobnego wpisu.
 - **Ograniczona.** Historia odczytuje **100 najnowszych zdarzeń**. Gdy istnieją starsze, odpowiedź

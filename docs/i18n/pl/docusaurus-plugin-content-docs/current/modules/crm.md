@@ -1643,7 +1643,8 @@ zamówienia:* albo *Nie przeniesiono z zapytania ofertowego:*, a pod nim jest po
 jednej linii na każde pominięte pole, z powodem — szansa sprzedażowa nie ma
 pola o tym kluczu, jej pole ma inny typ, jej pole jest widoczne dla klientów, a
 pole źródłowe jest wewnętrzne, albo wartość nie pasuje do jej pola. Pole jest
-nazwane **etykietą z chwili pominięcia**, w Twoim języku, a te linie widzi
+nazwane **etykietą pola zamówienia lub zapytania ofertowego z chwili
+pominięcia**, w Twoim języku, a te linie widzi
 **każdy, kto może czytać szansę** — nie potrzeba do nich `custom_fields:read` i
 nie zawierają żadnej wartości. Same wartości pozostają, jak wyżej, dostępne
 tylko z `custom_fields:read`. Wpis zapisany, zanim zaczęto przechowywać

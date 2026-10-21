@@ -466,7 +466,7 @@ wpisu audytu. Przeniesione wartości są w zamówieniu od początku, więc odczy
 Gdy wartość zostanie pominięta, karta **Komentarze** zamówienia zawiera jedną notatkę autorstwa
 **System** dla danego złożenia lub powiązania, oznaczoną jako *Wewnętrzny*: *Nie przeniesiono z
 zapytania ofertowego …:* lub *Nie przeniesiono z szansy sprzedażowej …:*, a pod spodem po jednej
-linii na każde pominięte pole — jego nazwa z chwili pominięcia i powód (zamówienie nie ma pola o tym
+linii na każde pominięte pole — nazwa pola, z którego pochodzi, z chwili pominięcia, i powód (zamówienie nie ma pola o tym
 kluczu, pole ma inny typ, pole widoczne dla klientów miałoby dostać wartość pola wewnętrznego,
 wartość nie pasuje do pola). Może ją przeczytać każdy, kto może otworzyć zamówienie; nie pokazuje
 żadnej wartości.

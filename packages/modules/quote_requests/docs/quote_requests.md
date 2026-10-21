@@ -196,8 +196,8 @@ English and Polish:
   a sales opportunity could not take some of the opportunity's custom-field
   values (see *Custom fields*), the history holds one entry by *System*,
   *Custom field values not carried from a sales opportunity*, naming the
-  opportunity by its number and listing each skipped field — by its name as it
-  read when it was skipped — with the reason. It shows no value, and anybody who
+  opportunity by its number and listing each skipped field — by the name of the
+  opportunity's field, as it read when it was skipped — with the reason. It shows no value, and anybody who
   can open the request reads it. The entry is **admin-only**: the customer's view
   of the request never shows it. Values that were carried are not an entry of
   their own.

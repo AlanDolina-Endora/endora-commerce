@@ -1575,8 +1575,8 @@ values reads *Not carried from the order:* or *Not carried from the quote
 request:*, followed by one line per skipped field with the reason — the
 opportunity has no field with this key, its field has a different type, its
 field is visible to customers while the source field is internal, or the value
-is not valid for its field. A field is named by **its label as it read when it
-was skipped**, in your language, and these lines are shown to **anybody who may
+is not valid for its field. A field is named by **the label of the order's or quote
+request's field, as it read when it was skipped**, in your language, and these lines are shown to **anybody who may
 read the opportunity** — `custom_fields:read` is not needed for them, and they
 hold no value. The values themselves stay behind `custom_fields:read` as above.
 An entry recorded before labels were kept names the field by its current label

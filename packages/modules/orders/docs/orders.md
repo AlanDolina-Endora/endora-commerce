@@ -490,8 +490,8 @@ read them.
 
 When a value is skipped, the order's **Comments** tab holds one note by **System** for that
 placement or link, marked *Internal*: *Not carried from quote request …:* or *Not carried from
-sales opportunity …:*, followed by one line per skipped field — its name as it read when it was
-skipped, and the reason (no such field on the order, a different type, a field visible to
+sales opportunity …:*, followed by one line per skipped field — the name of the field it came from, as it
+read when it was skipped, and the reason (no such field on the order, a different type, a field visible to
 customers fed by an internal one, a value the field does not accept). Anybody who can open the
 order can read it; it shows no value.
 

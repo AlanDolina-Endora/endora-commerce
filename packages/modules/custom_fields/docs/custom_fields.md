@@ -239,8 +239,8 @@ field is visible to customers while the source field is internal, or the value d
 target field — for example a choice whose option the target lacks. A conversion
 that skips nothing records nothing.
 
-Each entry names a field by **its label as it read when the value was skipped**, in the reader's
-language, so anybody who may see the record can read which field it was — `custom_fields:read` is
+Each entry names a field by **the label of the field the value came from, as it read when the value
+was skipped**, in the reader's language, so anybody who may see the record can read which field it was — `custom_fields:read` is
 not needed for that, and renaming or deleting the field later does not change the entry. The entry
 holds only the field's name and the reason, never a value; custom-field values themselves stay
 visible only with `custom_fields:read`, as before. An entry recorded before field names were kept

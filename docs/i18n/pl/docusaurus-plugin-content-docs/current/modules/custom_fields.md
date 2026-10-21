@@ -247,8 +247,8 @@ widoczne dla klientów, a pole źródłowe — wewnętrzne, albo wartość nie p
 przykład opcja wyboru, której pole docelowe nie ma. Przeniesienie, w którym nic nie pominięto,
 niczego nie zapisuje.
 
-Każdy wpis nazywa pole **jego etykietą z chwili, w której wartość została pominięta**, w języku
-czytającego, więc każdy, kto może zobaczyć rekord, wie, o które pole chodzi — nie potrzeba do tego
+Każdy wpis nazywa pole **etykietą pola, z którego pochodzi wartość, z chwili, w której wartość
+została pominięta**, w języku czytającego, więc każdy, kto może zobaczyć rekord, wie, o które pole chodzi — nie potrzeba do tego
 `custom_fields:read`, a późniejsza zmiana nazwy lub usunięcie pola nie zmienia wpisu. Wpis zawiera
 tylko nazwę pola i powód, nigdy wartość; same wartości pól niestandardowych są jak dotąd widoczne
 tylko z `custom_fields:read`. Wpis zapisany, zanim nazwy pól zaczęto w nim przechowywać, nazywa pole
