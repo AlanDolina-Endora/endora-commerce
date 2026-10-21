@@ -1,8 +1,8 @@
 # Feature Specification: Custom-field value carry-over between Quote Requests, Orders and Sales Opportunities
 
-**Feature Branch**: `feat/150-custom-fields-value-carry`
+**Feature Branch**: `feat/161-custom-fields-value-carry`
 **Created**: 2026-10-16
-**Status**: Clarified — ready for plan
+**Status**: Implemented — accepted by the product owner with conditions (2026-10-21); in the Phase 10 gate, pull request not yet opened
 **Issues**: #287
 **Input**: Issue #287 — *Custom Field value propagation across entities (Quote Request / Order / Lead).* When
 one entity is created from another (a Quote Request becomes an Order; a Sales Opportunity leads to a Quote
@@ -11,10 +11,10 @@ option ("Transfer value to Order", …) so that a value of `order_source` on a Q
 `order_source` field of the Order created from it; the same for Order ↔ Sales Opportunity and Quote Request
 ↔ Sales Opportunity.
 
-**Dependency.** This feature builds on `149-custom-fields-list-filters` (issue #286), which ships first and
-delivers the ability to edit an existing definition's options on `/custom-fields`. 150 adds the carry-over
-options to that same editing surface and does not redesign it. 150 MUST NOT be planned against the
-pre-149 editor (audience-only editing); if 149 slips, the plan states how the carry options are reached.
+**Dependency.** This feature builds on `specs/157-custom-fields-list-filters/` (issue #286), which ships first and
+delivers the ability to edit an existing definition's options on `/custom-fields`. 161 adds the carry-over
+options to that same editing surface and does not redesign it. 161 MUST NOT be planned against the
+earlier editor (audience-only editing); if the filters feature slips, the plan states how the carry options are reached.
 
 ## Current state (origin/master fda284a45)
 
@@ -37,8 +37,8 @@ Paths are relative to the repository root.
   (`packages/modules/custom_fields/src/backend/services/custom-field-registry.ts:66`); `quote_request`
   declares no owner module (`:55`) although `quote_requests` is toggleable
   (its `activation` is at `packages/modules/quote_requests/src/manifest.ts:232`).
-  `149-custom-fields-list-filters` (FR-005a) adds `ownerModuleId: 'quote_requests'`, so from 149 on Quote Request definitions are not served while
-  `quote_requests` is off; 150 relies on that.
+  `specs/157-custom-fields-list-filters/` (FR-005a) adds `ownerModuleId: 'quote_requests'`, so from that feature on Quote Request definitions are not served while
+  `quote_requests` is off; 161 relies on that.
 - An option's stored value cannot be changed, and an option held by any record cannot be removed
   (`custom-field-definition.service.ts:222-256`); so an option can disappear from a target only while no
   target record holds it.
@@ -199,7 +199,7 @@ the value.
 
 ### User Story 4 - Operator sets the carry options on the definition editor (Priority: P1)
 
-On `/custom-fields`, using the definition editing surface delivered by 149, an operator with
+On `/custom-fields`, using the definition editing surface delivered by `specs/157-custom-fields-list-filters/`, an operator with
 `custom_fields:write` sets "Carry value to …" on a Quote Request, Order or Opportunity definition for each
 other entity type of that trio. Turning an option on is refused unless the target entity type has a
 compatible definition with the same key.
@@ -290,8 +290,12 @@ field — refused with a reason; create the Order field, retry — accepted.
   Request MUST NOT be offered: the conversion exists (the buyer's *clone to quote*) but is out of scope for
   carry-over (owner ruling 2026-10-19), so a clone-to-quote Quote Request receives no carried value.
 - **FR-002**: The options MUST be settable when creating a definition and editable on an existing definition
-  from `/custom-fields` through the editing surface delivered by `149-custom-fields-list-filters`, by a
+  from `/custom-fields` through the editing surface delivered by `specs/157-custom-fields-list-filters/`, by a
   holder of `custom_fields:write`; each change MUST be audited as a definition update (Command Bus).
+  Each carry checkbox MUST be explained: in the definition editor by one help line per checkbox, in the
+  narrow create-form row by one shared help line for the group (owner ruling 2026-10-21, V2). The help
+  line says that when a record of the named type is created from a record with this field, the new
+  record's empty field with the same key receives this field's value (owner ruling 2026-10-21, P4).
 - **FR-003**: Turning a "carry to X" option on MUST be refused unless a definition with the same key exists
   on X and is compatible with the source. Compatible means: the **same value type**, and for `select` /
   `multiselect` every option value of the source exists as an option value on the target (labels may
@@ -327,6 +331,9 @@ field — refused with a reason; create the Order field, retry — accepted.
   ruling 2026-10-19). Carry-over MUST NEVER make a buyer's checkout or an operator's create fail.
   Each skipped key MUST keep the source field's label as it read when the value was skipped, so the
   entry names the field to any administrator who can see the record (owner ruling 2026-10-21, V3).
+  Custom-field **values** stay hidden from a reader without `custom_fields:read`: a Sales Opportunity's
+  history MUST leave them out of its entries for such a caller, while the skip lines stay (owner ruling
+  2026-10-21, P2 = a).
 - **FR-010a**: On an **Order**, a skip MUST be recorded as an internal system note in the Order's comments:
   not visible to the customer on any buyer-facing or API-key surface, sending no notification, attributed to
   the system rather than to an admin or the customer, and written together with the placement or link it
@@ -336,7 +343,10 @@ field — refused with a reason; create the Order field, retry — accepted.
 - **FR-011**: Carry-over MUST NOT change any definition's audience; the T definition's audience governs who
   reads the carried value. Turning "carry to X" on MUST be refused when the source definition is `internal`
   and the target definition is `customer`, through the same refusal path as an incompatible type (FR-003).
-  `customer` → `internal`, `internal` → `internal` and `customer` → `customer` are allowed.
+  `customer` → `internal`, `internal` → `internal` and `customer` → `customer` are allowed. A Sales
+  Opportunity is seen by administrators only, so an Opportunity field's audience changes nothing on the
+  Opportunity itself; it decides only where the value may be carried — a `customer` Opportunity field may
+  carry into a `customer` Order or Quote Request field (owner ruling 2026-10-21, P3 = a).
 - **FR-012**: Carry-over MUST only happen between records of the same Organization; a pair whose
   Organizations differ carries nothing.
 - **FR-013**: Values written by carry-over MUST be written with the creation or link they belong to and
@@ -345,7 +355,10 @@ field — refused with a reason; create the Order field, retry — accepted.
   and the **system** for values carried from a Sales Opportunity into an Order or Quote Request created from
   it, written by an audited write of the document's owner module when the origin link is established
   (owner ruling 2026-10-19). In that last case the document's creation itself stays attributed to the
-  operator who created it. Where the creation itself is not audited today (buyer checkout), this feature
+  operator who created it. A carry that fills a Quote Request's field MUST raise the request's `version`,
+  so an edit sent with the version the create returned is refused with `409 VERSION_CONFLICT` and
+  re-read; the carry MUST hold the receiving record's row from its read to its write, so it never
+  overwrites a concurrent edit (owner ruling 2026-10-21, P1 = c). Where the creation itself is not audited today (buyer checkout), this feature
   adds no new audit trail for it, but MUST NOT write carried values through a separate unaudited path
   (Principle XIII).
 - **FR-014**: A source or target whose owner module (`crm`, `quote_requests`) is not present MUST carry
@@ -358,7 +371,10 @@ field — refused with a reason; create the Order field, retry — accepted.
 - **FR-019**: Changing or deleting a definition that is the target or the source of an enabled carry MUST be
   allowed. Before saving a change that makes the carry incompatible under FR-003 / FR-011, or before
   deleting such a definition, the editor MUST warn the operator, naming every counterpart field (entity type
-  and key) of the affected carries. The carry options MUST stay as configured.
+  and key) of the affected carries. The carry options MUST stay as configured. The warning's proceed
+  button MUST name the action — "Remove option anyway", "Delete field anyway", "Add option anyway",
+  "Change audience anyway" — destructive-styled for removals and deletions (owner rulings 2026-10-21, V1
+  and W1).
 - **FR-020**: The definitions table MUST mark a source's carry "incompatible" while its target is missing or
   incompatible under FR-003 / FR-011, stating the reason, and MUST clear the mark once compatibility is
   restored or the option is turned off. A carry marked "incompatible" still runs at conversion under FR-010:
@@ -428,7 +444,7 @@ field — refused with a reason; create the Order field, retry — accepted.
   2026-10-19).
 - Carrying values onto Invoices, Returns, Carts, Customers, Organizations or any other entity.
 - Product attributes (`/catalog/attributes`) and categories.
-- List filters (`149-custom-fields-list-filters`).
+- List filters (`specs/157-custom-fields-list-filters/`).
 
 ## Constitution constraints
 
@@ -449,7 +465,7 @@ field — refused with a reason; create the Order field, retry — accepted.
 ### Session 2026-10-16
 
 - Q: Deliver issues #286 and #287 together or split? → A (product owner): Split. This feature covers #287 and
-  builds on the definition editor delivered by `149-custom-fields-list-filters`, which ships first.
+  builds on the definition editor delivered by `specs/157-custom-fields-list-filters/`, which ships first.
 - Q: The target record already has a value for the key — what happens? → A (product owner): Keep the
   target's value; carry-over fills only an empty target.
 - Q: The target definition is missing or incompatible — what happens? → A (product owner): Refuse at
@@ -489,12 +505,13 @@ R-15, R-2).
 
 ### Session 2026-10-21
 
-Owner rulings on the review of the admin surfaces (Phases 7 and 8).
+Owner rulings on the review of the admin surfaces (Phases 7 and 8: V1 – V3, W1) and on the code and
+security review of the pushed branch (P1 – P4).
 
 - V1: What does the proceed button of a carry-drift warning say? → A (owner ruling 2026-10-21): It names
   the action — "Remove option anyway", "Delete field anyway", "Save anyway" (Polish: "Usuń opcję mimo to",
   "Usuń pole mimo to", "Zapisz mimo to"). It stays destructive-styled for removals and deletions.
-  Amends FR-019.
+  Amends FR-019. *Superseded in part by W1 below: "Save anyway" no longer exists.*
 - V2: How are the carry checkboxes explained? → A (owner ruling 2026-10-21): In the definition editor, one
   help line per carry checkbox; in the narrow create-form row, one shared help line for the group.
   Amends FR-002.
@@ -505,4 +522,22 @@ Owner rulings on the review of the admin surfaces (Phases 7 and 8).
   Opportunity audit entry. Only skip lines (name and reason, never a value) become visible to every reader;
   custom-field **values** stay hidden from a reader without `custom_fields:read`. A skip recorded before the
   snapshot existed has no label. Amends FR-010 and FR-010a.
-
+- W1: What do the add-option and audience drift buttons say, which V1 answered with one "Save anyway"? →
+  A (owner ruling 2026-10-21): Each names its action — add an option → "Add option anyway" ("Dodaj opcję
+  mimo to"), change the audience → "Change audience anyway" ("Zmień widoczność mimo to"); both keep the
+  default style. Supersedes V1's "Save anyway" ("Zapisz mimo to"). Amends FR-019.
+- P1: A carry from a Sales Opportunity fills a Quote Request field just after the create answered — does
+  it raise the request's version? → A (owner ruling 2026-10-21): (c) Yes. An edit sent with the version
+  the create returned is refused with `409 VERSION_CONFLICT` and re-read; the carry holds the row while it
+  reads and writes, so a concurrent edit is never overwritten. Amends FR-013.
+- P2: May a reader without `custom_fields:read` see custom-field values in a Sales Opportunity's history?
+  → A (owner ruling 2026-10-21): (a) No. The history response leaves `customFieldValues` out for that
+  caller; the skip lines stay (V3). Order and Quote Request audit logs are out of scope. Amends FR-010.
+- P3: What does an Opportunity field's audience mean, when Opportunities are admin-only? → A (owner ruling
+  2026-10-21): (a) It is about the document the value carries into: a `customer` Opportunity field may
+  carry into a `customer` Order or Quote Request field, and the customer then sees the value there.
+  Amends FR-011.
+- P4: How is a carry checkbox's help worded? → A (owner ruling 2026-10-21): "When a record of type
+  “{type}” is created from a record with this field, the new record's empty field with the same key
+  receives this field's value." (the group line: "When a record of a selected type is created …"); type
+  names in the carry refusals and reasons are quoted. Amends FR-002.
