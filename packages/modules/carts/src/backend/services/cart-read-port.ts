@@ -5,6 +5,7 @@ import type {
   CartReadPort,
   CartRecord,
   CartSeedLine,
+  CartSeedUnorderableLine,
   CartWithItems,
   CartWritePort,
 } from '@endora-commerce/contracts';
@@ -93,7 +94,11 @@ export function createCartWritePort(
 
     clearForCustomer: (ctx) => getService().clearForCustomer(ctx),
 
-    async replaceItemsForCustomer(ctx, lines, options): Promise<CartWithItems> {
+    async replaceItemsForCustomer(
+      ctx,
+      lines,
+      options,
+    ): Promise<CartWithItems & { unorderable?: CartSeedUnorderableLine[] }> {
       // command-coverage-ignore: seeds the customer's own active cart from an
       // already-audited source (a reorder, an accepted quote). The cart is not
       // an auditable domain object — the order or quote that produced these
@@ -141,7 +146,21 @@ export function createCartWritePort(
       // A seed without an agreement (a reorder) copies prices from the past;
       // the basket holds the prices the customer may order the lines at now,
       // so the buyer reviews and places at what they are shown.
-      if (!agreed) await getService().repriceLinesForCustomer(em, ctx, created);
+      const unorderable: CartSeedUnorderableLine[] = [];
+      if (!agreed) {
+        const refused = await getService().repriceLinesForCustomer(em, ctx, created);
+        // Issue #166 — a reorder asks for the lines nobody may order now to be
+        // left out and named, rather than seeded at a past price placement
+        // would refuse.
+        if (options?.dropUnorderable) {
+          for (const item of created) {
+            const reason = refused.get(item.id);
+            if (!reason) continue;
+            unorderable.push({ productId: item.productId, variantId: item.variantId ?? null, reason });
+            em.remove(item);
+          }
+        }
+      }
       // The basket as **this** `EntityManager` holds it. `getOrCreateForCustomer`
       // answers a row managed by the service's own, so a column set on that
       // object is flushed by nobody — which is how `lastActivityAt` below went
@@ -161,7 +180,7 @@ export function createCartWritePort(
       if (!seeded) {
         throw new Error(`[carts] cart ${cart.id} vanished between seeding and reading it back.`);
       }
-      return seeded;
+      return options?.dropUnorderable ? { ...seeded, unorderable } : seeded;
     },
   };
 }

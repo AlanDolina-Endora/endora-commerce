@@ -1185,13 +1185,18 @@ export class CartService {
    * product this read cannot see) keeps what it holds; order placement refuses
    * it until the buyer reviews the cart. Used where refusing is not an option:
    * the login merge, and seeding a basket from a past order.
+   *
+   * Answers the lines the chain refused, by item id, with the reason (issue
+   * #166): a reorder leaves them out of the basket and reports them. A line
+   * whose product this read cannot see is not in the answer.
    */
   async repriceLinesForCustomer(
     em: EntityManager,
     customer: CustomerContext,
     items: CartItem[],
-  ): Promise<void> {
-    if (items.length === 0) return;
+  ): Promise<Map<string, 'unpriced' | 'quote_only'>> {
+    const refused = new Map<string, 'unpriced' | 'quote_only'>();
+    if (items.length === 0) return refused;
     const pricingCtx = await this.#linePricing.contextFor(em, {
       organizationId: customer.organizationId,
       signedIn: true,
@@ -1222,10 +1227,15 @@ export class CartService {
     );
     for (const item of items) {
       const answer = answers.get(item.id);
-      if (!answer?.ok) continue;
+      if (!answer) continue;
+      if (!answer.ok) {
+        refused.set(item.id, answer.reason);
+        continue;
+      }
       item.unitPrice = answer.unitPrice;
       item.currency = answer.currency;
     }
+    return refused;
   }
 
   async clearForCustomer(ctx: CustomerContext): Promise<void> {

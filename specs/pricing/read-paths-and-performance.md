@@ -2,7 +2,7 @@
 
 Every place a price is **read** — listings, PDP, search, typeahead, cart, checkout, quotes, promotions — with its query shape, caching, measured cost and known N+1 paths. The summary table comes first; the detailed audit follows.
 
-**Verified against** `master` at `b1021c71b` on 2026-10-21, and **re-verified for the P0 read-path hardening** (D-287 P0, branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21. File:line citations in passages P0 did not touch are as of `b1021c71b`; the passages P0 changed cite symbols rather than lines. Re-check either before relying on it.
+**Verified against** `master` at `b1021c71b` on 2026-10-21, and **re-verified for the P0 read-path hardening and the #166 reorder fix** (D-287 P0, branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21. File:line citations in passages P0 did not touch are as of `b1021c71b`; the passages P0 changed cite symbols rather than lines. Re-check either before relying on it.
 
 **Section numbers.** `§N` references follow the numbering of the original analysis, which is split across this directory: §1 → `current-model.md`; §2 → `read-paths-and-performance.md` (its summary table); §3–§9, §11, §12 → `decision-record.md`; §10 → `worked-examples.md`. `read-paths §N` points into `read-paths-and-performance.md`, `peers §N` into `peer-platforms.md`. Path abbreviations: `PL/` = `packages/modules/price_lists/src/`, `CON/` = `packages/contracts/src/`, `CAT/` = `packages/modules/catalog/src/`, `SF/` = `storefront/`.
 
@@ -417,7 +417,7 @@ Public tracker (`gh issue list … --search price`), pricing-related:
 | 378 | open | Replace "Products & brackets" with a rebuilt multi-currency Price matrix | two authoring models (brackets vs matrix) |
 | 377 | open | PDP: configurable products (variant price) | no variant dimension |
 | 168 | open | `GET /cart` shows re-resolved prices, checkout uses stored | fixed on the P0 branch: one chain for the read and placement (`cart-read-equals-placement.test.ts`) |
-| 166 | open | Reorder seeds the basket at old order prices | price fixed in code: the reorder seed reprices through `repriceLinesForCustomer` (`backend/test/integration/carts/cart-line-repricing.test.ts`, "a seed without an agreement — a reorder"; at the port, not through `OrderReorderService`) and placement refuses drift (`place-order-line-price-current.test.ts`); **not done**: a line with no current price keeps its old price and is not reported in `unavailableItems` |
+| 166 | open | Reorder seeds the basket at old order prices | fixed: a reorder seeds every line at the price this buyer may order it at now (one batched `CartLinePricing.orderablePrices` call), leaves out a line nobody may order now and reports it in `unavailableItems` with `reason: 'no_price'` beside the discontinued ones (`backend/test/contract/orders/reorder-current-prices.test.ts`); placement refuses drift (`place-order-line-price-current.test.ts`) |
 | 165 | open | Quote-seeded line keeps agreed price at any quantity | fixed in code by commit `7d2d00fcc` (agreed price only at the agreed quantity, `cart-line-repricing.test.ts`); issue still open |
 | 167 | open | Quote validity checked at seeding, not placement | still open: the placement drift check honours an agreed price after the quote lapsed (a lapse only drops the minimums exemption) |
 | 303 | open | Quote lines always stored in PLN | the cart half (own-price fallback labelled PLN) fixed by P0; quote lines still stored in PLN |
