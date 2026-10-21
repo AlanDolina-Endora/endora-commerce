@@ -225,8 +225,8 @@ Research N-31 … N-35. `CA` = `packages/modules/carts`.
 
 ### Polish
 
-- [ ] T097 [P] Spec, contracts (`orders-api.md`, `quote-requests-api.md`, `ui.md`), research N-31 … N-35; documentation en + pl of `quote_requests` and `orders`; changesets
-- [ ] T098 Verify: `pnpm run build:packages`, `pnpm -r run typecheck`, `pnpm -r run lint`, `test:unit:fast`, the contract and integration suites of `quote_requests`, `orders`, `carts`, `pnpm --filter '!backend' run test`, `check:naming`, `check:language` and the T072 checks
+- [X] T097 [P] Spec, contracts (`orders-api.md`, `quote-requests-api.md`, `ui.md`), research N-31 … N-35; documentation en + pl of `quote_requests` and `orders`; changesets
+- [X] T098 Verify: `pnpm run build:packages`, `pnpm -r run typecheck`, `pnpm -r run lint`, `test:unit:fast`, the contract and integration suites of `quote_requests`, `orders`, `carts`, `pnpm --filter '!backend' run test`, `check:naming`, `check:language` and the T072 checks — green on 2026-10-21 (190 contract/integration files, 1167 tests; `test:unit:fast` 7655 tests, its one timeout `check-module-boundary.test.ts` green when re-run alone; admin 3317 tests, three timeouts under the concurrent backend run green when re-run alone, two of them the known CRM flakes). `check:docs-translations` asked for the Polish cache entries of the two module pages to be refreshed
 
 ## Dependencies & execution order
 
