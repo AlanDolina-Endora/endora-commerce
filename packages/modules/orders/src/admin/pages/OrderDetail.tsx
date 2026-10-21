@@ -25,6 +25,7 @@ import {
 import {
   arrangeLineGroups,
   customFieldCarrySkipReasonSchema,
+  orderCommentSystemNoteSchema,
   type IssueInvoiceEmailOutcome,
   type LineGroup,
   type OrderCommentSystemNote,
@@ -157,7 +158,8 @@ interface OrderCommentRow {
 /** A field name shown to an operator is cut here. */
 const SHOWN_KEY_LIMIT = 64;
 const SKIP_REASONS: ReadonlySet<string> = new Set(customFieldCarrySkipReasonSchema.options);
-const NOTE_SOURCES: ReadonlySet<string> = new Set(['quote_request', 'opportunity']);
+// The note's own schema names the sources, so this host page names no contributor module.
+const NOTE_SOURCES: ReadonlySet<string> = new Set(orderCommentSystemNoteSchema.shape.source.shape.entityType.options);
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
