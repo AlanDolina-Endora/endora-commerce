@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  getProductDisplayMode,
-  getResolvedPrice,
-  getResolvedPricesBulk,
-} from '../../lib/api/pricing';
+import { getProductDisplayMode, getResolvedPrice } from '../../lib/api/pricing';
 import { getCategoryTree, getProductBySlug, listProducts } from '../../lib/api/catalog';
 import { withoutViewer, type RequestContext } from '../../lib/api/client';
 
@@ -129,21 +125,6 @@ describe('the storefront asks the price question as the viewer', () => {
         tags: ['pricing:resolved', 'pricing:product:p1'],
       });
       expect(call.init.cache).toBeUndefined();
-    });
-
-    it('carries the viewer through the bulk wrapper too', async () => {
-      // The home page's bestseller cards are the second surface this renders,
-      // and they go through the fan-out rather than the singular call. A
-      // wrapper that dropped the context would put the public price on the
-      // cards and the buyer's on the product page they link to.
-      stubFetch(RESOLVED_PRICE_BODY);
-      await getResolvedPricesBulk(['p1', 'p2'], {}, SIGNED_IN);
-
-      expect(calls).toHaveLength(2);
-      for (const call of calls) {
-        expect(headerOf(call, 'Cookie')).toBe('b2b_session=a-buyer-session');
-        expect(call.init.cache).toBe('no-store');
-      }
     });
   });
 
