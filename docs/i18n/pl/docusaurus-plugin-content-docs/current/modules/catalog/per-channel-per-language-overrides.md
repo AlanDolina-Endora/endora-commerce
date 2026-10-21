@@ -145,7 +145,7 @@ Details. Nadpisania dla kanałów są dodatkiem.
 
 ## Odczyt
 
-Z funkcji rozstrzygającej korzystają trzy miejsca:
+Z funkcji rozstrzygającej korzystają następujące miejsca:
 
 - **Endpoint administracyjny** —
   `GET /api/v1/admin/catalog/products/:id?channelId=&languageCode=&includeOverridesMap=true`
@@ -156,8 +156,7 @@ Z funkcji rozstrzygającej korzystają trzy miejsca:
   konwencja), a język z `Accept-Language`, a gdy go brak — domyślny język kanału. Warstwa nadpisań
   jest niewidoczna dla publicznego klienta: otrzymuje on wartość obowiązującą. Strona produktu
   (nazwa, opis, pola SEO, wartości atrybutów, lista atrybutów na stronie produktu, produkty
-  składowe zestawu grupowego, opcje pakietu i kafelki powiązanych produktów) oraz każda karta na
-  liście produktów przechodzą przez języki w kolejności własnego wyboru wartości bazowej
+  składowe zestawu grupowego i opcje pakietu) oraz każda karta na liście produktów przechodzą przez języki w kolejności własnego wyboru wartości bazowej
   storefrontu — język z żądania, potem domyślny język kanału, potem `en-US`, `en` i pierwszy
   zapisany język — i dla każdego języka biorą wartość z miejsca `(channel + language)`, jeśli jest
   wypełnione, a w przeciwnym razie zatrzymują się na nim, jeśli wartość bazowa ma tekst w tym
@@ -166,8 +165,10 @@ Z funkcji rozstrzygającej korzystają trzy miejsca:
   `pl-PL` pokazuje tekst bazowy `en-US`, a nie nadpisanie `pl-PL`, natomiast żądanie w `de-DE` dla
   produktu bez tekstu `de-DE` przechodzi do `pl-PL` i pokazuje jego nadpisanie. Miejsce
   `(channel-only)` jest sprawdzane na końcu i wygrywa z wartością bazową niezależnie od tego, gdzie
-  zatrzymało się przejście. Kafelki powiązanych produktów przechodzą przez własny wybór, który nie
-  uwzględnia domyślnego języka kanału. Produkt bez nadpisań wygląda dokładnie tak jak wcześniej.
+  zatrzymało się przejście. Kafelki powiązanych produktów zachowują własny wybór języka, który nie
+  uwzględnia domyślnego języka kanału, i przez niego przechodzą miejsca nadpisań, więc kafelek może
+  pokazać tekst bazowy `en-US` tam, gdzie karta na liście pokazuje nadpisanie domyślnego języka
+  kanału. Produkt bez nadpisań wygląda dokładnie tak jak wcześniej.
   Filtry listy, filtrowanie po atrybutach i sortowanie po nazwie nadal korzystają z wartości
   bazowych.
 - **Indeksowanie wyszukiwarki (Meilisearch)** — tworzy jeden dokument dla każdej pary

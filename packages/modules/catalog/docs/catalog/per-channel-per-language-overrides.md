@@ -159,7 +159,7 @@ additive.
 
 ## Read paths
 
-Three consumers go through the resolver:
+These consumers go through the resolver:
 
 - **Admin endpoint** — `GET /api/v1/admin/catalog/products/:id?channelId=&languageCode=&includeOverridesMap=true`
   returns the baseline product PLUS, when context params are passed, a
@@ -172,8 +172,7 @@ Three consumers go through the resolver:
   language. The override layer is invisible to the public client: it
   receives the effective value. The product page (name, description,
   SEO fields, attribute values, the product-page attribute list, grouped
-  children, bundle options and product-link tiles) and every listing
-  card walk the storefront's own baseline language pick — requested
+  children and bundle options) and every listing card walk the storefront's own baseline language pick — requested
   language, then the channel's default language, then `en-US`, `en` and
   the first stored language — and at each language take the
   `(channel + language)` slot if it is filled, else stop there if the
@@ -184,8 +183,10 @@ Three consumers go through the resolver:
   override, while a `de-DE` request for a product with no `de-DE` text
   falls through to `pl-PL` and shows its override. The `(channel-only)`
   slot is asked last and wins over the baseline wherever the walk
-  stopped. Product-link tiles walk their own pick, which has no
-  channel-default leg. A product without overrides shows exactly what
+  stopped. Product-link tiles keep their own language pick, which has
+  no channel-default leg, and walk the override slots over it, so a
+  tile can show the `en-US` baseline where the listing card shows the
+  channel default's override. A product without overrides shows exactly what
   it showed before. Listing filters, attribute filters and name sorting
   still read the baseline.
 - **Search indexer (Meilisearch)** — builds one document per
