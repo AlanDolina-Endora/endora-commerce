@@ -16,7 +16,11 @@ import { Product } from '../entities/product.entity.js';
 import { ProductLink, type ProductLinkKind } from '../entities/product-link.entity.js';
 import { resolvePrimaryAssetUrls } from './primary-asset-url.js';
 import { viewerOrganizationFor } from './viewer-organization.js';
-import { effectiveSystemText, loadOverridesByProduct } from './storefront-value-overrides.js';
+import {
+  effectiveSystemText,
+  loadChannelOverridesByProduct,
+  overrideLanguages,
+} from './storefront-value-overrides.js';
 interface StorefrontContext {
   /**
    * The request's resolved sales channel (feature 053 / FR-002). Always
@@ -32,11 +36,10 @@ interface StorefrontContext {
     isPublic: boolean;
     defaultCurrency: string;
     /**
-     * Issue #384 — the language a channel override is looked up for when the
-     * request names none. Optional so a caller holding a narrower channel shape
-     * still compiles; without it only channel-only overrides apply.
+     * Issue #384 — the channel's default language: the second language leg a
+     * (channel, language) override is looked up for, after the request's.
      */
-    defaultLanguage?: string;
+    defaultLanguage: string;
   };
   /**
    * Who is asking. A cross-sell tile is a card with an Add-to-cart on it, and
@@ -423,15 +426,17 @@ export class ProductLinkService {
           })
         : new Map();
 
-    // Issue #384 — every visible target's override rows in one statement; the
-    // tile shows the channel's name where one applies.
-    const overridesByProduct = await loadOverridesByProduct(
+    // Issue #384 — every visible target's override rows on this channel in
+    // one statement; the tile shows the channel's name where one applies,
+    // looked up for the request language, then the channel default.
+    const overridesByProduct = await loadChannelOverridesByProduct(
       em,
       visibleTargets.map((t) => t.id),
+      channel.id,
     );
     const overrideCtx = {
       channelId: channel.id,
-      languageCode: ctx.preferredLanguage ?? channel.defaultLanguage ?? null,
+      languages: overrideLanguages(ctx.preferredLanguage, channel.defaultLanguage),
     };
 
     const out: StorefrontLinkSummary[] = [];

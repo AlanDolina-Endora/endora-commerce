@@ -29,6 +29,7 @@ describe('Issue #384 — public product reads honour channel value overrides', (
   let slug: string;
   let attributeKey: string;
   let groupedSlug: string;
+  let bundleSlug: string;
   let createdSince: string;
 
   beforeAll(async () => {
@@ -95,6 +96,25 @@ describe('Issue #384 — public product reads honour channel value overrides', (
     const groupedData = (grouped.json() as { data: { id: string; slug: string } }).data;
     groupedSlug = groupedData.slug;
 
+    const bundle = await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/catalog/products',
+      payload: {
+        sku: `OVR-384-BDL-${Date.now()}`,
+        type: 'bundle',
+        name: { 'pl-PL': 'Pakiet', 'en-US': 'Bundle' },
+        description: { 'pl-PL': 'Pakiet', 'en-US': 'Bundle' },
+        categoryIds: [],
+        attributeValues: {},
+        visibility: 'public',
+        status: 'active',
+      },
+      cookies: { b2b_session: 'stub-admin-session' },
+    });
+    expect(bundle.statusCode, bundle.body).toBe(201);
+    const bundleData = (bundle.json() as { data: { id: string; slug: string } }).data;
+    bundleSlug = bundleData.slug;
+
     const conn = h.em().getConnection();
     const rows = await conn.execute<Array<{ id: string; code: string }>>(
       `select id, code from sales_channels where code in ('pl_retail', 'pl_b2b_vip')`,
@@ -105,7 +125,7 @@ describe('Issue #384 — public product reads honour channel value overrides', (
     const vipChannelId = rows.find((r) => r.code === 'pl_b2b_vip')!.id;
     await conn.execute(
       `insert into sales_channel_products (sales_channel_id, product_id)
-       values (?,?), (?,?), (?,?), (?,?)
+       values (?,?), (?,?), (?,?), (?,?), (?,?), (?,?)
        on conflict do nothing`,
       [
         retailChannelId,
@@ -116,6 +136,10 @@ describe('Issue #384 — public product reads honour channel value overrides', (
         groupedData.id,
         vipChannelId,
         groupedData.id,
+        retailChannelId,
+        bundleData.id,
+        vipChannelId,
+        bundleData.id,
       ],
     );
     // The attribute's baseline goes straight onto the row: the create route
@@ -125,8 +149,13 @@ describe('Issue #384 — public product reads honour channel value overrides', (
       `update products set attribute_values = jsonb_build_object(?::text, 'Gloss') where id = ?`,
       [attributeKey, productId],
     );
+    // `de-DE` is a channel language with no baseline text on the product, so a
+    // `de-DE` request falls through to the channel default `pl-PL`, pinned here
+    // rather than assumed from the fixture.
     await conn.execute(
-      `update sales_channels set languages = '["pl-PL","en-US"]'::jsonb where id in (?, ?)`,
+      `update sales_channels
+          set languages = '["pl-PL","en-US","de-DE"]'::jsonb, default_language = 'pl-PL'
+        where id in (?, ?)`,
       [retailChannelId, vipChannelId],
     );
     await conn.execute(
@@ -140,6 +169,23 @@ describe('Issue #384 — public product reads honour channel value overrides', (
          (id, source_product_id, target_product_id, kind, position, created_at, updated_at)
        values (gen_random_uuid(), ?, ?, 'related', 0, now(), now())`,
       [groupedData.id, productId],
+    );
+
+    const slotId = (
+      await conn.execute<Array<{ id: string }>>(
+        `insert into bundle_slots
+           (id, parent_product_id, name, min_quantity, max_quantity, position, created_at, updated_at)
+         values (gen_random_uuid(), ?, '{"pl-PL":"Zestaw","en-US":"Kit"}'::jsonb, 0, 1, 0, now(), now())
+         returning id`,
+        [bundleData.id],
+        'all',
+      )
+    )[0]!.id;
+    await conn.execute(
+      `insert into bundle_slot_options
+         (id, slot_id, option_product_id, default_quantity, position, created_at, updated_at)
+       values (gen_random_uuid(), ?, ?, 1, 0, now(), now())`,
+      [slotId, productId],
     );
 
     const patch = await h.app.inject({
@@ -170,21 +216,28 @@ describe('Issue #384 — public product reads honour channel value overrides', (
     seo: { metaTitle: string };
   };
 
-  async function readDetail(channel: string, language: string): Promise<Detail> {
+  /** `language: null` sends no `Accept-Language` — the channel default leg. */
+  async function readDetail(channel: string, language: string | null): Promise<Detail> {
     const res = await h.app.inject({
       method: 'GET',
       url: `/api/v1/catalog/products/${slug}`,
-      headers: { 'x-sales-channel': channel, 'accept-language': language },
+      headers: {
+        'x-sales-channel': channel,
+        ...(language !== null ? { 'accept-language': language } : {}),
+      },
     });
     expect(res.statusCode, res.body).toBe(200);
     return (res.json() as { data: Detail }).data;
   }
 
-  async function readCardName(channel: string, language: string): Promise<string | undefined> {
+  async function readCardName(channel: string, language: string | null): Promise<string | undefined> {
     const res = await h.app.inject({
       method: 'GET',
       url: `/api/v1/catalog/products?limit=100&changedSince=${encodeURIComponent(createdSince)}`,
-      headers: { 'x-sales-channel': channel, 'accept-language': language },
+      headers: {
+        'x-sales-channel': channel,
+        ...(language !== null ? { 'accept-language': language } : {}),
+      },
     });
     expect(res.statusCode, res.body).toBe(200);
     const cards = (res.json() as { data: Array<{ id: string; name: string }> }).data;
@@ -217,6 +270,47 @@ describe('Issue #384 — public product reads honour channel value overrides', (
     expect(detail.name).toBe('Baseline kit');
     expect(detail.description).toBe('Baseline description');
     expect(detail.attributeValues[attributeKey]).toBe('Matte');
+  });
+
+  it('with no Accept-Language the channel default language picks the (channel, language) override', async () => {
+    const detail = await readDetail('pl_b2b_vip', null);
+    expect(detail.name).toBe('Zestaw hurtowy');
+    expect(detail.description).toBe('Opis hurtowy');
+    expect(await readCardName('pl_b2b_vip', null)).toBe('Zestaw hurtowy');
+    expect((await readDetail('pl_retail', null)).name).toBe('Zestaw bazowy');
+  });
+
+  it('a request language with no text falls back to the channel default for the override too, not only for the baseline', async () => {
+    // `de-DE` has no baseline text, so the page shows the `pl-PL` baseline;
+    // the (channel, pl-PL) override must win over it exactly as it does for a
+    // `pl-PL` request — and as the search index, built for the channel
+    // default, already shows.
+    const detail = await readDetail('pl_b2b_vip', 'de-DE');
+    expect(detail.name).toBe('Zestaw hurtowy');
+    expect(detail.description).toBe('Opis hurtowy');
+    expect(await readCardName('pl_b2b_vip', 'de-DE')).toBe('Zestaw hurtowy');
+    expect((await readDetail('pl_retail', 'de-DE')).name).toBe('Zestaw bazowy');
+  });
+
+  it('a bundle lists its slot option under the option effective name', async () => {
+    const read = async (channel: string): Promise<string | undefined> => {
+      const res = await h.app.inject({
+        method: 'GET',
+        url: `/api/v1/catalog/products/${bundleSlug}`,
+        headers: { 'x-sales-channel': channel, 'accept-language': 'pl-PL' },
+      });
+      expect(res.statusCode, res.body).toBe(200);
+      const body = res.json() as {
+        data: {
+          bundleSlots?: Array<{ options: Array<{ product: { id: string; name: string } }> }>;
+        };
+      };
+      return body.data.bundleSlots
+        ?.flatMap((s) => s.options)
+        .find((o) => o.product.id === productId)?.product.name;
+    };
+    expect(await read('pl_b2b_vip')).toBe('Zestaw hurtowy');
+    expect(await read('pl_retail')).toBe('Zestaw bazowy');
   });
 
   it('the listing card follows the same resolution', async () => {

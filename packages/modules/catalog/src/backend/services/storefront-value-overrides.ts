@@ -6,7 +6,7 @@ import {
   type OverrideRow,
 } from '@endora-commerce/contracts';
 
-import { ProductValueOverride } from '../entities/product-value-override.entity.js';
+import { loadOverridesByProduct } from './product-value-resolver.service.js';
 
 /**
  * Issue #384 — what a storefront read needs to show a product's
@@ -30,40 +30,47 @@ import { ProductValueOverride } from '../entities/product-value-override.entity.
 export interface StorefrontOverrideContext {
   channelId: string;
   /**
-   * The request language — the `Accept-Language` pick, else the channel
-   * default. `null` when neither is known: only channel-only slots can answer.
+   * The languages a (channel, language) override is looked up for, in order:
+   * the `Accept-Language` pick, then the channel's default language — the
+   * first two legs the baseline language pick walks, so an override answers
+   * for exactly the language whose baseline text the page would otherwise
+   * show. Empty when neither is known: only channel-only slots can answer.
    */
-  languageCode: string | null;
+  languages: readonly string[];
+}
+
+/** The ordered, de-duplicated language legs for a request. */
+export function overrideLanguages(
+  preferredLanguage: string | undefined,
+  channelDefaultLanguage: string | undefined,
+): string[] {
+  return [...new Set([preferredLanguage, channelDefaultLanguage])].filter(
+    (l): l is string => typeof l === 'string' && l.length > 0,
+  );
 }
 
 /**
- * Every override row for a set of products, in one statement, bucketed by
- * product id. Rows are independent of the viewer and of the channel — the
- * channel is applied when resolving — so one fetch serves a whole page.
+ * Every override row the request's sales channel holds for a set of products,
+ * in one statement, bucketed by product id. Rows are independent of the
+ * viewer, so one fetch serves a whole read section. The one read of the table
+ * is `loadOverridesByProduct` in the resolver service; this narrows it to the
+ * channel.
  */
-export async function loadOverridesByProduct(
+export function loadChannelOverridesByProduct(
   em: EntityManager,
   productIds: readonly string[],
+  channelId: string,
 ): Promise<Map<string, OverrideRow[]>> {
-  const out = new Map<string, OverrideRow[]>();
-  if (productIds.length === 0) return out;
-  const rows = await em.find(ProductValueOverride, { productId: { $in: [...new Set(productIds)] } });
-  for (const r of rows) {
-    const list = out.get(r.productId) ?? [];
-    list.push({
-      attributeKey: r.attributeKey,
-      channelId: r.channelId,
-      languageCode: r.languageCode ?? null,
-      value: r.value,
-    });
-    out.set(r.productId, list);
-  }
-  return out;
+  return loadOverridesByProduct(em, { productIds, channelId });
 }
 
 /**
  * The override value for one attribute in this context, or `undefined` when no
  * channel slot applies and the caller's baseline should stand.
+ *
+ * The resolver takes one language and falls through to the channel-only slot
+ * inside the same call, so each language leg is asked for its
+ * (channel, language) slot alone, and the channel-only slot is asked last.
  */
 export function channelOverrideFor(
   overrides: readonly OverrideRow[] | undefined,
@@ -72,22 +79,26 @@ export function channelOverrideFor(
   ctx: StorefrontOverrideContext,
 ): unknown {
   if (!overrides || overrides.length === 0) return undefined;
-  const resolved = resolveAttribute({
-    attributeKey,
-    // No baseline: the baseline leg is the caller's (see the file comment).
-    baseline: undefined,
-    overrides,
-    scope,
-    ctx: {
-      channelId: ctx.channelId,
-      languageCode: ctx.languageCode,
-      // Unused: with no baseline, the resolver's primary-language leg cannot answer.
-      primaryLanguage: ctx.languageCode ?? '',
-    },
-  });
-  return resolved.source === 'channel+language' || resolved.source === 'channel'
-    ? resolved.value
-    : undefined;
+  const resolve = (languageCode: string | null) =>
+    resolveAttribute({
+      attributeKey,
+      // No baseline: the baseline leg is the caller's (see the file comment).
+      baseline: undefined,
+      overrides,
+      scope,
+      ctx: {
+        channelId: ctx.channelId,
+        languageCode,
+        // Unused: with no baseline, the resolver's primary-language leg cannot answer.
+        primaryLanguage: languageCode ?? '',
+      },
+    });
+  for (const languageCode of ctx.languages) {
+    const resolved = resolve(languageCode);
+    if (resolved.source === 'channel+language') return resolved.value;
+  }
+  const channelOnly = resolve(null);
+  return channelOnly.source === 'channel' ? channelOnly.value : undefined;
 }
 
 /**

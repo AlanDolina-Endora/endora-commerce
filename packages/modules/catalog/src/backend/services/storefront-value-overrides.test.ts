@@ -20,25 +20,44 @@ const rows: OverrideRow[] = [
 describe('effectiveSystemText (issue #384)', () => {
   it('takes the (channel, language) override', () => {
     expect(
-      effectiveSystemText(rows, 'name', { channelId: A, languageCode: 'pl-PL' }, 'Baseline'),
+      effectiveSystemText(rows, 'name', { channelId: A, languages: ['pl-PL'] }, 'Baseline'),
     ).toBe('Zestaw hurtowy');
   });
 
   it('takes the channel-only override when no language slot matches', () => {
     expect(
-      effectiveSystemText(rows, 'name', { channelId: A, languageCode: 'en-US' }, 'Baseline'),
+      effectiveSystemText(rows, 'name', { channelId: A, languages: ['en-US'] }, 'Baseline'),
+    ).toBe('Channel-only name');
+  });
+
+  it('walks the request language, then the channel default, before the channel-only slot', () => {
+    // Request `de-DE` on a channel whose default is `pl-PL`: the baseline pick
+    // falls through to `pl-PL`, so the (channel, pl-PL) override must answer
+    // ahead of the channel-only one.
+    expect(
+      effectiveSystemText(rows, 'name', { channelId: A, languages: ['de-DE', 'pl-PL'] }, 'Baseline'),
+    ).toBe('Zestaw hurtowy');
+    const deRows: OverrideRow[] = [
+      ...rows,
+      { attributeKey: 'name', channelId: A, languageCode: 'de-DE', value: { v: 'Großhandelsset' } },
+    ];
+    expect(
+      effectiveSystemText(deRows, 'name', { channelId: A, languages: ['de-DE', 'pl-PL'] }, 'Baseline'),
+    ).toBe('Großhandelsset');
+    expect(
+      effectiveSystemText(rows, 'name', { channelId: A, languages: ['de-DE', 'fr-FR'] }, 'Baseline'),
     ).toBe('Channel-only name');
   });
 
   it("keeps the caller's baseline pick on another channel, with no rows, and for an empty override", () => {
     expect(
-      effectiveSystemText(rows, 'name', { channelId: B, languageCode: 'pl-PL' }, 'Baseline'),
+      effectiveSystemText(rows, 'name', { channelId: B, languages: ['pl-PL'] }, 'Baseline'),
     ).toBe('Baseline');
     expect(
-      effectiveSystemText(undefined, 'name', { channelId: A, languageCode: 'pl-PL' }, 'Baseline'),
+      effectiveSystemText(undefined, 'name', { channelId: A, languages: ['pl-PL'] }, 'Baseline'),
     ).toBe('Baseline');
     expect(
-      effectiveSystemText(rows, 'description', { channelId: A, languageCode: 'pl-PL' }, 'Opis'),
+      effectiveSystemText(rows, 'description', { channelId: A, languages: ['pl-PL'] }, 'Opis'),
     ).toBe('Opis');
   });
 });
@@ -46,7 +65,7 @@ describe('effectiveSystemText (issue #384)', () => {
 describe('channelOverrideFor (issue #384)', () => {
   it('never answers from a baseline slot', () => {
     const scope: AttributeScope = { channelScoped: false, languageScoped: false };
-    expect(channelOverrideFor(rows, 'finish', scope, { channelId: A, languageCode: null })).toBe(
+    expect(channelOverrideFor(rows, 'finish', scope, { channelId: A, languages: [] })).toBe(
       undefined,
     );
   });
@@ -61,7 +80,7 @@ describe('effectiveAttributeValues (issue #384)', () => {
     const out = await effectiveAttributeValues(
       { finish: 'Gloss', color: 'red' },
       rows,
-      { channelId: A, languageCode: 'pl-PL' },
+      { channelId: A, languages: ['pl-PL'] },
       async () => scopes,
     );
     expect(out).toEqual({ finish: 'Matte', color: 'red' });
@@ -73,7 +92,7 @@ describe('effectiveAttributeValues (issue #384)', () => {
     const out = await effectiveAttributeValues(
       values,
       rows.filter((r) => r.attributeKey === 'name'),
-      { channelId: A, languageCode: 'pl-PL' },
+      { channelId: A, languages: ['pl-PL'] },
       async () => {
         scopeReads += 1;
         return scopes;
@@ -87,7 +106,7 @@ describe('effectiveAttributeValues (issue #384)', () => {
     const out = await effectiveAttributeValues(
       { finish: 'Gloss' },
       rows,
-      { channelId: A, languageCode: 'pl-PL' },
+      { channelId: A, languages: ['pl-PL'] },
       async () => new Map([['finish', { channelScoped: false, languageScoped: false }]]),
     );
     expect(out).toEqual({ finish: 'Gloss' });

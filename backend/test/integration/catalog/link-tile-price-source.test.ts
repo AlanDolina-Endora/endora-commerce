@@ -102,6 +102,7 @@ describe('product link tile price source (#132)', () => {
         code: channelCode,
         isPublic: true,
         defaultCurrency: 'PLN',
+        defaultLanguage: 'pl-PL',
       },
       // The price *source* is what this suite asks about; the viewer is the
       // public one, and which figure each viewer gets is asserted next door in

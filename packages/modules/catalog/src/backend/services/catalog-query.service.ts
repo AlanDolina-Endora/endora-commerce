@@ -23,7 +23,8 @@ import { viewerOrganizationFor } from './viewer-organization.js';
 import {
   effectiveAttributeValues,
   effectiveSystemText,
-  loadOverridesByProduct,
+  loadChannelOverridesByProduct,
+  overrideLanguages,
   type StorefrontOverrideContext,
 } from './storefront-value-overrides.js';
 import {
@@ -171,9 +172,9 @@ export interface ListingCardReads {
   /** Product id -> its category slugs, in `product_categories` primary-key order. */
   categorySlugsByProduct: Map<string, string[]>;
   /**
-   * Issue #384 — product id -> its `product_value_overrides` rows, every
-   * channel's. The rows do not vary by viewer either; the request's channel and
-   * language pick among them when the card is built.
+   * Issue #384 — product id -> its `product_value_overrides` rows for the
+   * request's sales channel only. The rows do not vary by viewer either; the
+   * request's language legs pick among them when the card is built.
    */
   overridesByProduct: Map<string, OverrideRow[]>;
 }
@@ -609,6 +610,8 @@ export class CatalogQueryService {
   async #listingCardReadsFor(
     em: EntityManager,
     productIds: readonly string[],
+    /** The request's resolved sales channel — the override rows are read for it alone. */
+    channelId: string,
   ): Promise<ListingCardReads> {
     const categorySlugsByProduct = new Map<string, string[]>();
     if (productIds.length === 0) {
@@ -635,7 +638,7 @@ export class CatalogQueryService {
       categorySlugsByProduct.set(row.product_id, slugs);
     }
 
-    const overridesByProduct = await loadOverridesByProduct(em, ids);
+    const overridesByProduct = await loadChannelOverridesByProduct(em, ids, channelId);
 
     return { assetUrlByProduct, categorySlugsByProduct, overridesByProduct };
   }
@@ -780,7 +783,11 @@ export class CatalogQueryService {
     // same reason (issue #263): both helpers took an id list already, and both
     // were being handed one id at a time from inside the loop.
     const resolvedPrices = await this.#listingPricesFor(priceable, ctx);
-    const cardReads = await this.#listingCardReadsFor(em, priceable.map((p) => p.id));
+    const cardReads = await this.#listingCardReadsFor(
+      em,
+      priceable.map((p) => p.id),
+      channel.id,
+    );
     const summaries = priceable.map((p) =>
       this.toSummary(p, channel, ctx.preferredLanguage, resolvedPrices, cardReads),
     );
@@ -1149,7 +1156,11 @@ export class CatalogQueryService {
       hasMore && page.length > 0 ? encodeObjectCursor(cursors[params.limit - 1]!) : null;
 
     const resolvedPrices = await this.#listingPricesFor(page, ctx);
-    const cardReads = await this.#listingCardReadsFor(em, page.map((p) => p.id));
+    const cardReads = await this.#listingCardReadsFor(
+      em,
+      page.map((p) => p.id),
+      channel.id,
+    );
     return {
       data: page.map((p) =>
         this.toSummary(p, channel, ctx.preferredLanguage, resolvedPrices, cardReads),
@@ -1259,7 +1270,11 @@ export class CatalogQueryService {
     const page = collected.slice(0, params.limit);
     const last = page[page.length - 1];
     const nextCursor = hasMore && last ? encodeObjectCursor(keyset.of(last)) : null;
-    const cardReads = await this.#listingCardReadsFor(em, page.map((p) => p.id));
+    const cardReads = await this.#listingCardReadsFor(
+      em,
+      page.map((p) => p.id),
+      channel.id,
+    );
     return {
       data: page.map((p) =>
         this.toSummary(p, channel, ctx.preferredLanguage, prices, cardReads),
@@ -1328,7 +1343,7 @@ export class CatalogQueryService {
       throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'Product not found.');
     }
 
-    const cardReads = await this.#listingCardReadsFor(em, [product.id]);
+    const cardReads = await this.#listingCardReadsFor(em, [product.id], channel.id);
     const summary = this.toSummary(
       product,
       channel,
@@ -1426,14 +1441,18 @@ export class CatalogQueryService {
 
     // Issue #384 — channel-scoped user attributes carry their override for
     // this (channel, language); the scope lookup runs only when the product
-    // has a user-attribute override row at all.
+    // has a user-attribute override row at all. The attribute views are read
+    // at most once for this page, and only by whichever step needs them first.
+    let attributeViews: Promise<CatalogAttributeView[]> | undefined;
+    const listAttributeViews = (): Promise<CatalogAttributeView[]> =>
+      (attributeViews ??= this.#requireAttributeRead().listAll());
     const attributeValues = await effectiveAttributeValues(
       product.attributeValues ?? {},
       overrides,
       overrideCtx,
       async () =>
         new Map(
-          (await this.#requireAttributeRead().listAll()).map((a) => [
+          (await listAttributeViews()).map((a) => [
             a.key,
             { channelScoped: a.channelScoped, languageScoped: a.languageScoped },
           ]),
@@ -1452,6 +1471,7 @@ export class CatalogQueryService {
       attributeValues,
       ctx.preferredLanguage,
       channel,
+      listAttributeViews,
     );
 
     const detail: ProductDetail = {
@@ -1733,8 +1753,8 @@ export class CatalogQueryService {
     const assetUrlByProduct = await resolvePrimaryAssetUrls(em, this.#requireAssets(), ids);
 
     const resolvedPrices = await this.#listingPricesFor(products, ctx);
-    // Issue #384 — one statement for every child's override rows.
-    const overridesByProduct = await loadOverridesByProduct(em, ids);
+    // Issue #384 — one statement for every child's override rows on this channel.
+    const overridesByProduct = await loadChannelOverridesByProduct(em, ids, channel.id);
     const overrideCtx = this.#overrideContext(channel, ctx.preferredLanguage);
     for (const p of products) {
       const price = this.#summaryPrice(resolvedPrices, p.id);
@@ -2042,6 +2062,8 @@ export class CatalogQueryService {
     values: Record<string, unknown>,
     preferredLanguage: string | undefined,
     channel: CatalogResolvedChannel,
+    /** The page's attribute-view read, shared with the override step (issue #384). */
+    listAttributeViews: () => Promise<CatalogAttributeView[]>,
   ): Promise<Array<{ key: string; label: string; valueType: CatalogAttributeView['valueType']; valueRendered: string }>> {
     const valueKeys = Object.keys(values).filter((k) => {
       const v = values[k];
@@ -2051,7 +2073,7 @@ export class CatalogQueryService {
 
     // Feature 061 — attribute metadata + options come from the composed view.
     const valueKeySet = new Set(valueKeys);
-    const allViews = await this.#requireAttributeRead().listAll();
+    const allViews = await listAttributeViews();
     const attrs = allViews.filter((a) => valueKeySet.has(a.key) && a.isVisibleOnProductPage);
     if (attrs.length === 0) return [];
 
@@ -2453,15 +2475,20 @@ export class CatalogQueryService {
   }
 
   /**
-   * Issue #384 — the (channel, language) an override is looked up for: the
-   * request language, else the channel's default — the same first two legs the
-   * baseline pick walks.
+   * Issue #384 — the (channel, language) slots an override is looked up for:
+   * the request language, then the channel's default language, then the
+   * channel-only slot — the first two legs `pickLang` walks over the baseline,
+   * so a (channel, language) override answers for whichever language the
+   * baseline text would have come from.
    */
   #overrideContext(
     channel: CatalogResolvedChannel,
     preferredLanguage: string | undefined,
   ): StorefrontOverrideContext {
-    return { channelId: channel.id, languageCode: preferredLanguage ?? channel.defaultLanguage };
+    return {
+      channelId: channel.id,
+      languages: overrideLanguages(preferredLanguage, channel.defaultLanguage),
+    };
   }
 
   private pickLang(
