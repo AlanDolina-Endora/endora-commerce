@@ -187,7 +187,15 @@ Three consumers go through the resolver:
   `(product, channel)` pair. Each document's `name` and `description`
   fields are run through the resolver with `channel.defaultLanguage`
   as the active language, so per-channel overrides flow into
-  storefront search ranking.
+  storefront search ranking and name sorting.
+- **Search result cards** — the search module re-reads every hit from
+  Postgres before it answers, and the card name it shows is resolved
+  there, not taken from the index: the request's sales channel override
+  rows are read once per results page and the card takes the same slots,
+  in the same order, as a listing card above. The indexed name is
+  resolved for the channel's default language only, so it would be
+  wrong for a request in any other language. A product without an
+  override for the channel shows exactly what it showed before.
 
 ## Admin UI
 

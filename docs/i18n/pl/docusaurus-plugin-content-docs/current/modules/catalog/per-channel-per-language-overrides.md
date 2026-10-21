@@ -168,7 +168,14 @@ Z funkcji rozstrzygającej korzystają trzy miejsca:
 - **Indeksowanie wyszukiwarki (Meilisearch)** — tworzy jeden dokument dla każdej pary
   `(product, channel)`. Pola `name` i `description` każdego dokumentu przechodzą przez funkcję
   rozstrzygającą z `channel.defaultLanguage` jako aktywnym językiem, więc nadpisania dla kanałów
-  wpływają na wyniki wyszukiwania w storefroncie.
+  wpływają na trafność wyników wyszukiwania w storefroncie i na sortowanie po nazwie.
+- **Karty wyników wyszukiwania** — moduł wyszukiwania przed udzieleniem odpowiedzi ponownie
+  odczytuje każde trafienie z Postgresa, a nazwa na karcie jest ustalana właśnie tam, a nie
+  brana z indeksu: wiersze nadpisań kanału sprzedaży z żądania są odczytywane raz na stronę
+  wyników, a karta bierze wartość z tych samych miejsc i w tej samej kolejności co karta na
+  liście produktów opisana wyżej. Zindeksowana nazwa jest ustalana tylko dla domyślnego języka
+  kanału, więc dla żądania w każdym innym języku byłaby błędna. Produkt bez nadpisania dla
+  danego kanału wygląda dokładnie tak jak wcześniej.
 
 ## Panel administracyjny
 

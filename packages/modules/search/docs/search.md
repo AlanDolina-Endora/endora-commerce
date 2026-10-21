@@ -147,8 +147,17 @@ The listing contract's four sorts map as follows:
 | `-name` | `name:desc` |
 
 The indexed `name` is resolved in the channel's own default language,
-which is the language the listing renders, so the order a buyer sees
-is the order they were sorted by.
+which is the language the listing renders by default, so the order a
+buyer sees is the order they were sorted by.
+
+The name a result card *shows* does not come from the index. Every hit
+is re-read from Postgres before the page is answered, and the card
+takes the name the catalogue's listing card shows for the request's
+sales channel and language: the channel's value override when one
+applies (the channel's override rows for the page are read once), else
+the baseline text in the request language. A request in a language
+other than the channel's default is therefore still sorted by the
+default-language name.
 
 **Upgrading an index built before the sort settings were applied** needs a reindex: the
 settings were never applied (`sortableAttributes` was `[]` on every
