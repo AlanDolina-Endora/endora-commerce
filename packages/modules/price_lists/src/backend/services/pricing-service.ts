@@ -418,6 +418,9 @@ export class PricingService implements PricingServiceContract {
     };
     const cached = this.cache?.get(cacheKey);
     if (cached) return cached;
+    // Read before the first statement: an answer that straddles an
+    // invalidation is returned but not stored (D-287 P0).
+    const generation = this.cache?.generation;
 
     // Build the resolution context.
     const productCategoryIds =
@@ -519,7 +522,7 @@ export class PricingService implements PricingServiceContract {
       displayMode,
       currencyCode,
     };
-    this.cache?.set(cacheKey, result);
+    this.cache?.set(cacheKey, result, generation);
     return result;
   }
 
@@ -641,6 +644,7 @@ export class PricingService implements PricingServiceContract {
       if (!requested.has(product.id)) requested.set(product.id, product);
     }
 
+    const generation = this.cache?.generation;
     const pending: PricedProductRef[] = [];
     for (const product of requested.values()) {
       const cached = this.cache?.get(cacheKeyFor(product.id));
@@ -750,7 +754,7 @@ export class PricingService implements PricingServiceContract {
         displayMode: displayModes.get(product.id) ?? 'gross_only',
         currencyCode,
       };
-      this.cache?.set(cacheKeyFor(product.id), engine);
+      this.cache?.set(cacheKeyFor(product.id), engine, generation);
       out.set(product.id, listingPriceFrom(lineFromEngine(engine), product, currencyCode, salesChannel.defaultCurrency));
     }
     return out;
