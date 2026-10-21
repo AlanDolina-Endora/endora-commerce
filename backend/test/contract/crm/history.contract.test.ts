@@ -160,7 +160,7 @@ describe('crm opportunity history — custom-field values need custom_fields:rea
   let h: BackendServerHandle;
   let reader: { cookies: { b2b_session: string }; undo: () => void };
   let definitionId: string;
-  const key = `hist_${randomUUID().slice(0, 8)}`;
+  const key = `cfc_${randomUUID().slice(0, 8)}_history`;
 
   const history = (id: string, cookies: Record<string, string>) =>
     h.app.inject({ method: 'GET', url: `${CRM_API}/opportunities/${id}/history`, cookies });
