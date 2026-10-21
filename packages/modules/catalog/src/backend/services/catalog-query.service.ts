@@ -1434,6 +1434,7 @@ export class CatalogQueryService {
       overrides,
       'description',
       overrideCtx,
+      product.description,
       this.pickLang(product.description, ctx.preferredLanguage, channel),
     );
     // The summary's name went through the same resolution.
@@ -1766,6 +1767,7 @@ export class CatalogQueryService {
           overridesByProduct.get(p.id),
           'name',
           overrideCtx,
+          p.name,
           this.pickLang(p.name, ctx.preferredLanguage, channel),
         ),
         primaryAssetUrl: assetUrlByProduct.get(p.id) ?? null,
@@ -2452,6 +2454,7 @@ export class CatalogQueryService {
       cardReads.overridesByProduct.get(product.id),
       'name',
       this.#overrideContext(channel, preferredLanguage),
+      product.name,
       this.pickLang(product.name, preferredLanguage, channel),
     );
 
@@ -2475,11 +2478,11 @@ export class CatalogQueryService {
   }
 
   /**
-   * Issue #384 — the (channel, language) slots an override is looked up for:
-   * the request language, then the channel's default language, then the
-   * channel-only slot — the first two legs `pickLang` walks over the baseline,
-   * so a (channel, language) override answers for whichever language the
-   * baseline text would have come from.
+   * Issue #384 — the language chain an override is walked over: exactly the
+   * legs `pickLang` walks over the baseline (request language, channel
+   * default, `en-US`, `en`), so a (channel, language) override answers for
+   * whichever language the baseline text would have come from and never for
+   * a later one.
    */
   #overrideContext(
     channel: CatalogResolvedChannel,

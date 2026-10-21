@@ -5,6 +5,7 @@ import {
   channelOverrideFor,
   effectiveAttributeValues,
   effectiveSystemText,
+  overrideLanguages,
 } from './storefront-value-overrides.js';
 
 const A = 'channel-a';
@@ -20,13 +21,13 @@ const rows: OverrideRow[] = [
 describe('effectiveSystemText (issue #384)', () => {
   it('takes the (channel, language) override', () => {
     expect(
-      effectiveSystemText(rows, 'name', { channelId: A, languages: ['pl-PL'] }, 'Baseline'),
+      effectiveSystemText(rows, 'name', { channelId: A, languages: ['pl-PL'] }, {}, 'Baseline'),
     ).toBe('Zestaw hurtowy');
   });
 
   it('takes the channel-only override when no language slot matches', () => {
     expect(
-      effectiveSystemText(rows, 'name', { channelId: A, languages: ['en-US'] }, 'Baseline'),
+      effectiveSystemText(rows, 'name', { channelId: A, languages: ['en-US'] }, {}, 'Baseline'),
     ).toBe('Channel-only name');
   });
 
@@ -35,37 +36,101 @@ describe('effectiveSystemText (issue #384)', () => {
     // falls through to `pl-PL`, so the (channel, pl-PL) override must answer
     // ahead of the channel-only one.
     expect(
-      effectiveSystemText(rows, 'name', { channelId: A, languages: ['de-DE', 'pl-PL'] }, 'Baseline'),
+      effectiveSystemText(rows, 'name', { channelId: A, languages: ['de-DE', 'pl-PL'] }, {}, 'Baseline'),
     ).toBe('Zestaw hurtowy');
     const deRows: OverrideRow[] = [
       ...rows,
       { attributeKey: 'name', channelId: A, languageCode: 'de-DE', value: { v: 'Großhandelsset' } },
     ];
     expect(
-      effectiveSystemText(deRows, 'name', { channelId: A, languages: ['de-DE', 'pl-PL'] }, 'Baseline'),
+      effectiveSystemText(deRows, 'name', { channelId: A, languages: ['de-DE', 'pl-PL'] }, {}, 'Baseline'),
     ).toBe('Großhandelsset');
     expect(
-      effectiveSystemText(rows, 'name', { channelId: A, languages: ['de-DE', 'fr-FR'] }, 'Baseline'),
+      effectiveSystemText(rows, 'name', { channelId: A, languages: ['de-DE', 'fr-FR'] }, {}, 'Baseline'),
     ).toBe('Channel-only name');
   });
 
   it("keeps the caller's baseline pick on another channel, with no rows, and for an empty override", () => {
     expect(
-      effectiveSystemText(rows, 'name', { channelId: B, languages: ['pl-PL'] }, 'Baseline'),
+      effectiveSystemText(rows, 'name', { channelId: B, languages: ['pl-PL'] }, {}, 'Baseline'),
     ).toBe('Baseline');
     expect(
-      effectiveSystemText(undefined, 'name', { channelId: A, languages: ['pl-PL'] }, 'Baseline'),
+      effectiveSystemText(undefined, 'name', { channelId: A, languages: ['pl-PL'] }, {}, 'Baseline'),
     ).toBe('Baseline');
     expect(
-      effectiveSystemText(rows, 'description', { channelId: A, languages: ['pl-PL'] }, 'Opis'),
+      effectiveSystemText(rows, 'description', { channelId: A, languages: ['pl-PL'] }, {}, 'Opis'),
     ).toBe('Opis');
+  });
+});
+
+describe('the language walk over baseline and overrides (issue #384)', () => {
+  const blob = { 'pl-PL': 'Zestaw bazowy', 'en-US': 'Baseline kit' };
+  const plOnly: OverrideRow[] = [
+    { attributeKey: 'name', channelId: A, languageCode: 'pl-PL', value: { v: 'Zestaw hurtowy' } },
+  ];
+
+  it('builds the chain the baseline pick walks', () => {
+    expect(overrideLanguages('en-US', 'pl-PL')).toEqual(['en-US', 'pl-PL', 'en']);
+    expect(overrideLanguages(undefined, 'pl-PL')).toEqual(['pl-PL', 'en-US', 'en']);
+    expect(overrideLanguages('de-DE', undefined)).toEqual(['de-DE', 'en-US', 'en']);
+  });
+
+  it('never lets a later-language override beat an earlier-language baseline value', () => {
+    const ctx = { channelId: A, languages: overrideLanguages('en-US', 'pl-PL') };
+    expect(effectiveSystemText(plOnly, 'name', ctx, blob, 'Baseline kit')).toBe('Baseline kit');
+  });
+
+  it('lets the override answer for the language the baseline pick lands on', () => {
+    const ctx = { channelId: A, languages: overrideLanguages('de-DE', 'pl-PL') };
+    expect(effectiveSystemText(plOnly, 'name', ctx, blob, 'Zestaw bazowy')).toBe('Zestaw hurtowy');
+    // Same request on a tile whose own pick has no channel-default leg: the
+    // walk reaches `en-US` first, so the baseline stands.
+    const tile = { channelId: A, languages: overrideLanguages('de-DE', undefined) };
+    expect(effectiveSystemText(plOnly, 'name', tile, blob, 'Baseline kit')).toBe('Baseline kit');
+  });
+
+  it("walks past an empty baseline value, and reaches the pick's first-key tail", () => {
+    const ctx = { channelId: A, languages: overrideLanguages('en-US', 'pl-PL') };
+    expect(
+      effectiveSystemText(plOnly, 'name', ctx, { 'en-US': '', 'pl-PL': 'Zestaw bazowy' }, 'Zestaw bazowy'),
+    ).toBe('Zestaw hurtowy');
+    const frRows: OverrideRow[] = [
+      { attributeKey: 'name', channelId: A, languageCode: 'fr-FR', value: { v: 'Kit de gros' } },
+    ];
+    expect(
+      effectiveSystemText(frRows, 'name', ctx, { 'fr-FR': 'Kit de base' }, 'Kit de base'),
+    ).toBe('Kit de gros');
+  });
+
+  it('keeps the channel-only slot behind the stop, as before', () => {
+    const ctx = { channelId: A, languages: overrideLanguages('en-US', 'pl-PL') };
+    const withChannelOnly: OverrideRow[] = [
+      ...plOnly,
+      { attributeKey: 'name', channelId: A, languageCode: null, value: { v: 'Channel-only name' } },
+    ];
+    expect(effectiveSystemText(withChannelOnly, 'name', ctx, blob, 'Baseline kit')).toBe(
+      'Channel-only name',
+    );
+  });
+
+  it('treats a scalar baseline as present in every language', () => {
+    const scope: AttributeScope = { channelScoped: true, languageScoped: true };
+    const finishRows: OverrideRow[] = [
+      { attributeKey: 'finish', channelId: A, languageCode: 'pl-PL', value: { v: 'Mat' } },
+    ];
+    const enCtx = { channelId: A, languages: overrideLanguages('en-US', 'pl-PL') };
+    expect(channelOverrideFor(finishRows, 'finish', scope, enCtx, 'Gloss')).toBe(undefined);
+    expect(channelOverrideFor(finishRows, 'finish', scope, enCtx, undefined)).toBe('Mat');
+    expect(
+      channelOverrideFor(finishRows, 'finish', scope, enCtx, { 'pl-PL': 'Połysk', 'en-US': 'Gloss' }),
+    ).toBe(undefined);
   });
 });
 
 describe('channelOverrideFor (issue #384)', () => {
   it('never answers from a baseline slot', () => {
     const scope: AttributeScope = { channelScoped: false, languageScoped: false };
-    expect(channelOverrideFor(rows, 'finish', scope, { channelId: A, languages: [] })).toBe(
+    expect(channelOverrideFor(rows, 'finish', scope, { channelId: A, languages: [] }, undefined)).toBe(
       undefined,
     );
   });

@@ -126,6 +126,15 @@ describe('search hit names honour channel value overrides (#384)', () => {
     expect(card?.name).toBe('Zestaw detaliczny');
   });
 
+  it("keeps the request language's baseline over the channel default's override", async () => {
+    const { service } = serviceWith(
+      [product('p1', { 'pl-PL': 'Zestaw bazowy', 'en-US': 'Baseline kit' })],
+      [override('p1', CHANNEL.id, 'pl-PL', 'Zestaw detaliczny')],
+    );
+    const [card] = await service.hydrateHits([hit('p1')], ctx('en-US'));
+    expect(card?.name).toBe('Baseline kit');
+  });
+
   it('takes the channel-only override when no language slot applies', async () => {
     const { service } = serviceWith(
       [product('p1', { 'pl-PL': 'Zestaw bazowy', 'en-US': 'Baseline kit' })],

@@ -428,7 +428,7 @@ export class ProductLinkService {
 
     // Issue #384 — every visible target's override rows on this channel in
     // one statement; the tile shows the channel's name where one applies,
-    // looked up for the request language, then the channel default.
+    // walked over the same language chain as the tile's baseline pick.
     const overridesByProduct = await loadChannelOverridesByProduct(
       em,
       visibleTargets.map((t) => t.id),
@@ -436,7 +436,9 @@ export class ProductLinkService {
     );
     const overrideCtx = {
       channelId: channel.id,
-      languages: overrideLanguages(ctx.preferredLanguage, channel.defaultLanguage),
+      // The tile's own `pickLang` has no channel-default leg, so neither has
+      // the walk: an override answers only for the language the tile shows.
+      languages: overrideLanguages(ctx.preferredLanguage, undefined),
     };
 
     const out: StorefrontLinkSummary[] = [];
@@ -448,6 +450,7 @@ export class ProductLinkService {
         overridesByProduct.get(target.id),
         'name',
         overrideCtx,
+        target.name,
         pickLang(target.name, ctx.preferredLanguage),
       );
       const resolved = resolvedPrices.get(target.id);

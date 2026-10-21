@@ -543,8 +543,9 @@ export function searchHitSummary(
   detail?: ListingPriceDetail,
   /**
    * Issue #384 — this product's value-override rows for `channel`. A channel
-   * override for the request's language legs wins over the baseline pick;
-   * omitted or empty, the name is exactly what it was before.
+   * override for the language the baseline pick lands on (or an earlier leg of
+   * its chain) wins over that pick; omitted or empty, the name is exactly what
+   * it was before.
    */
   overrides?: readonly OverrideRow[],
 ): ProductSummary {
@@ -562,6 +563,7 @@ export function searchHitSummary(
           channelId: channel.id,
           languages: overrideLanguages(preferredLanguage, channel.defaultLanguage),
         },
+        product.name,
         pickLang(product.name, preferredLanguage, channel),
       ) || hit.name,
     slug: product.slug,

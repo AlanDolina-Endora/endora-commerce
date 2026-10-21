@@ -13,7 +13,7 @@ import { loadOverridesByProduct } from './product-value-resolver.service.js';
  * Issue #384 — what a storefront read needs to show a product's
  * per-(sales channel, language) overrides (features 022/023).
  *
- * The slot choice itself — the language legs, and which override answers —
+ * The slot choice itself — the language walk, and which override answers —
  * is `@endora-commerce/contracts`' `storefront-value-overrides`, shared with
  * `search`'s result cards so the two modules cannot show one product under two
  * names. Re-exported here so this module's reads name one import. What stays
@@ -44,7 +44,8 @@ export function loadChannelOverridesByProduct(
 
 /**
  * The product's `attributeValues` with every channel-scoped user attribute
- * replaced by its override for this context. Returns the input record itself
+ * replaced by its override for this context — walked over the attribute's own
+ * baseline value, so a per-language value stops the walk where it answers. Returns the input record itself
  * when no user-attribute override row exists, so a product without overrides
  * costs no attribute-metadata read and no copy.
  */
@@ -63,7 +64,7 @@ export async function effectiveAttributeValues(
   for (const key of new Set(userRows.map((o) => o.attributeKey))) {
     const scope = scopes.get(key);
     if (!scope) continue;
-    const v = channelOverrideFor(userRows, key, scope, ctx);
+    const v = channelOverrideFor(userRows, key, scope, ctx, values[key]);
     if (v !== undefined) out[key] = v;
   }
   return out;
