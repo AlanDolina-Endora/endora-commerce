@@ -1107,6 +1107,22 @@ host or CI run) under its task.
   `packages/modules/orders/src/admin/pages/OrderDetail.tsx` only, so the service-backed run stands for
   the final code tip. The `ci-pg` branch and its worktree are deleted.
 - The pull request body is the coordinator's; the upstream pull request is not opened here.
+- **Renumbered 161 → 162** (2026-10-22, owner ruling D1 = a): the remote branch
+  `feat/161-price-book-editor` (`specs/161-price-book-editor/`) claimed `161` minutes before this
+  feature's earlier renumber commit. `162` was free on `origin/master`, on every remote branch and in
+  every open upstream pull request. Commit `6b95c5e63` (backup `backup/162-pre-renumber` at
+  `3e82a4626`) moves this directory and the sixteen `.changeset/161-*` files to `162`, and rewrites
+  every reference to this feature in code comments, test names, specs and the `AGENTS.md` appendix
+  (re-run from master's file, tag corrected to `162-custom-fields-value-carry`). The dated records
+  above that say `161` — the 2026-10-21 renumber, the backup refs `backup/161-pre-rebase-1` and `-2`,
+  T058 and R5 — are left as written; `issue #161`, `D-161`, `T161` and the 161-character name limits
+  are other subjects and unchanged. No docs page named the number, so no Polish cache was re-pinned.
+  Branch renamed to `feat/162-custom-fields-value-carry`. Local: `check:release-intent --since
+  origin/master` 0 violations, `check:docs-translations` and `check:module-docs` 0 findings,
+  `dco-signoff.ts` 0 findings, `test/unit/docs/agents-router.test.ts` 28/28, `composer:generate`
+  leaves `git status --porcelain` empty. Fork CI on `6b95c5e63`: `quality`, `quality:static`,
+  `test:backend:unit`, `test:frontend`, `release:changeset`, `pack-gate`, `boot-gate`, `build:docs`,
+  `dco` all green; no flake re-run.
 
 ---
 
