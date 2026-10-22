@@ -1013,7 +1013,37 @@ export class RfqService {
   ): Promise<{ cartId: string; checkoutUrl: string }> {
     const em = this.deps.emFactory();
     const rfq = await this.findVisibleForCustomer(em, rfqId, ctx);
+    const seeded = await this.seedBasketFromApproved(em, rfq, {
+      customerAccountId: ctx.customerAccountId,
+      organizationId: ctx.organizationId,
+      salesChannelId,
+    });
+    const cartId = seeded.cartId;
+    this.#audit(em, 'quote_request.convert_to_order', rfq.id, null, {
+      cartId,
+      itemCount: seeded.itemCount,
+    });
+    await em.flush();
 
+    return {
+      cartId,
+      checkoutUrl: `/checkout?cartId=${cartId}&fromRfq=${rfq.id}`,
+    };
+  }
+
+  /**
+   * Seed `owner`'s basket on `owner.salesChannelId` with an approved request's
+   * lines at the agreed unit prices — the rules a conversion is held to, in one
+   * place. The customer's own conversion calls it for the caller on the
+   * channel they convert on; the admin's `prepareCustomerBasket` (issue #170)
+   * for the customer who owns the request, on the channel it was raised on.
+   * Records nothing itself: each caller audits its own action.
+   */
+  async seedBasketFromApproved(
+    em: EntityManager,
+    rfq: QuoteRequest,
+    owner: { customerAccountId: string; organizationId: string; salesChannelId: string },
+  ): Promise<{ cartId: string; itemCount: number }> {
     if (rfq.status !== 'Approved') {
       throw new HttpError(409, ERROR_CODES.RFQ_NOT_QUOTED, 'Quote Request is not approved.');
     }
@@ -1112,11 +1142,7 @@ export class RfqService {
     // inside the module that owns them; `carts` published
     // `replaceItemsForCustomer` naming this call site.
     const seeded = await this.deps.carts.replaceItemsForCustomer(
-      {
-        customerAccountId: ctx.customerAccountId,
-        organizationId: ctx.organizationId,
-        salesChannelId,
-      },
+      owner,
       lines,
       // The basket remembers which request these prices were agreed on, and
       // `orders` copies that onto the order it places from it — after reading
@@ -1126,17 +1152,7 @@ export class RfqService {
       // (`specs/143-crm-sales-opportunities/`, FR-100).
       { sourceQuoteRequestId: rfq.id },
     );
-    const cartId = seeded.cart.id;
-    this.#audit(em, 'quote_request.convert_to_order', rfq.id, null, {
-      cartId,
-      itemCount: seeded.items.length,
-    });
-    await em.flush();
-
-    return {
-      cartId,
-      checkoutUrl: `/checkout?cartId=${cartId}&fromRfq=${rfq.id}`,
-    };
+    return { cartId: seeded.cart.id, itemCount: seeded.items.length };
   }
 
   // -------------------------------------------------------------------------

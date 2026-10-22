@@ -701,6 +701,18 @@ export const adminCancelQuoteRequestSchema = z
   .strict();
 export type AdminCancelQuoteRequest = z.infer<typeof adminCancelQuoteRequestSchema>;
 
+/**
+ * `POST /api/v1/admin/quote-requests/:id/prepare-customer-basket` (issue #170):
+ * the approved request's lines are in the basket of the customer who owns it,
+ * at the agreed prices, for that customer to check out.
+ */
+export const adminPrepareCustomerBasketResponseSchema = z.object({
+  cartId: uuidSchema,
+  customerAccountId: uuidSchema,
+  itemCount: z.number().int().nonnegative(),
+});
+export type AdminPrepareCustomerBasketResponse = z.infer<typeof adminPrepareCustomerBasketResponseSchema>;
+
 export const adminAssignQuoteRequestSchema = z.object({
   adminUserId: uuidSchema,
 });

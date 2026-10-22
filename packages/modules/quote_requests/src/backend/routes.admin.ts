@@ -6,6 +6,7 @@ import {
   adminCancelQuoteRequestSchema,
   adminCreateQuoteRequestSchema,
   adminPatchQuoteRequestSchema,
+  adminPrepareCustomerBasketResponseSchema,
   createQuoteRequestSavedViewRequestSchema,
   customFieldFiltersQueryParamSchema,
   ERROR_CODES,
@@ -16,7 +17,7 @@ import {
 import { savedViewActor } from './saved-view-actor.js';
 import type { RfqAdminService, AdminContext, AdminAssignmentScope } from './services/rfq-admin-service.js';
 import type { QuoteRequestListViewService } from './services/quote-request-list-view-service.js';
-import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
+import { getResolvedChannel, type RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import { HttpError } from '@endora-commerce/platform/http';
 
 export interface AdminContextResolver {
@@ -160,6 +161,26 @@ export async function registerQuoteRequestsAdminRoutes(
       const rfq = await adminService.approve(ctx, request.params.id, expectedVersion, body.note);
       setEtag(reply, rfq.version);
       return { data: rfq };
+    },
+  );
+
+  // Issue #170 — the operator's conversion: the approved request's lines into
+  // the basket of the customer who owns it. The admin screen used to post to the
+  // storefront's `convert-to-order`, which refuses an administrator with 401.
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/admin/quote-requests/:id/prepare-customer-basket',
+    { preHandler: guard },
+    async (request) => {
+      const ctx = await resolveAdminContext(request);
+      // The quote's own channel decides the basket; the resolved one (the
+      // system default on an admin route) only stands in where the request
+      // records none.
+      const result = await adminService.prepareCustomerBasket(
+        ctx,
+        request.params.id,
+        getResolvedChannel(request).id,
+      );
+      return { data: adminPrepareCustomerBasketResponseSchema.parse(result) };
     },
   );
 
