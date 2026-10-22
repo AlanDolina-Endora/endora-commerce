@@ -552,6 +552,53 @@ export class RfqAdminService {
   }
 
   // -------------------------------------------------------------------------
+  // Prepare the customer's basket (issue #170)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Put an approved request's lines into the basket of the **customer who owns
+   * it**, at the agreed prices, for that customer to check out.
+   *
+   * The admin screen's order action used to post to the storefront's
+   * `convert-to-order`, which is `requireCustomer`-guarded: an administrator's
+   * session answered `401`, which the Admin UI reads as an expired session.
+   * Had it been accepted it would have seeded the *caller's* basket. This is
+   * the operator's version of the same conversion — the same rules, through
+   * `RfqService.seedBasketFromApproved` — aimed at the request's customer, for
+   * a request this administrator may see. Like the customer's conversion it
+   * replaces what that customer's basket held.
+   *
+   * A customer holds one basket per sales channel
+   * (`specs/154-sales-channel-access/`). The one seeded is the basket of the
+   * channel the quote was raised on — the store the customer agreed it in, and
+   * the one channel a conversion can honestly be judged against (see
+   * `seedBasketFromApproved`). A request that records no channel (raised before
+   * requests did) falls back to `fallbackChannelId`, the channel the admin
+   * request resolved to — the system default.
+   */
+  async prepareCustomerBasket(
+    ctx: AdminContext,
+    rfqId: string,
+    fallbackChannelId: string,
+  ): Promise<{ cartId: string; customerAccountId: string; itemCount: number }> {
+    const em = this.deps.emFactory();
+    const rfq = await this.findVisibleForAdmin(em, ctx, rfqId);
+    const owner = {
+      customerAccountId: rfq.customerAccountId,
+      organizationId: rfq.organizationId,
+      salesChannelId: rfq.salesChannelId ?? fallbackChannelId,
+    };
+    const seeded = await this.deps.rfqService.seedBasketFromApproved(em, rfq, owner);
+    this.#audit(em, 'quote_request.prepare_customer_basket', rfq.id, null, {
+      cartId: seeded.cartId,
+      customerAccountId: owner.customerAccountId,
+      itemCount: seeded.itemCount,
+    });
+    await em.flush();
+    return { cartId: seeded.cartId, customerAccountId: owner.customerAccountId, itemCount: seeded.itemCount };
+  }
+
+  // -------------------------------------------------------------------------
   // Cancel (US2)
   // -------------------------------------------------------------------------
 

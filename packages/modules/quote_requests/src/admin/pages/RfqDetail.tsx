@@ -15,6 +15,7 @@ import {
   Split,
   XCircle,
 } from 'lucide-react';
+import type { AdminPrepareCustomerBasketResponse } from '@endora-commerce/contracts';
 import { apiClient, ApiError, cn, formatDateTime, readReturnTo, useModulePresence } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Badge, Button, Card, CardContent, Input, Label, PageHeader, Section, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea } from '@endora-commerce/admin-kit/ui';
 import {
@@ -294,22 +295,23 @@ export function RfqDetail(): ReactNode {
     }
   };
 
+  // Issue #170 — the operator's conversion prepares the basket of the customer
+  // who owns the request, through the admin route. It used to post to the
+  // storefront's `convert-to-order`, which is customer-only: an administrator's
+  // session got a 401, which signs the operator out. Confirmed first, because
+  // it replaces what that customer's basket holds.
   const convert = async (): Promise<void> => {
     if (!rfq) return;
+    if (!window.confirm(t('rfq.detail.convert.confirm'))) return;
     setBusy(true);
     setError(null);
     setInfo(null);
     try {
-      const res = await apiClient.post<{ data: { cartId: string; checkoutUrl: string } }>(
-        `/api/v1/quote-requests/${rfq.id}/convert-to-order`,
+      const res = await apiClient.post<{ data: AdminPrepareCustomerBasketResponse }>(
+        `/api/v1/admin/quote-requests/${rfq.id}/prepare-customer-basket`,
         {},
       );
-      setInfo(
-        t('rfq.detail.convert.success', {
-          cartId: res.data.cartId.slice(0, 8),
-          url: res.data.checkoutUrl,
-        }),
-      );
+      setInfo(t('rfq.detail.convert.success', { count: res.data.itemCount }));
     } catch (err) {
       setError(err instanceof ApiError ? err.envelope.error.message : t('rfq.detail.convert.error'));
     } finally {

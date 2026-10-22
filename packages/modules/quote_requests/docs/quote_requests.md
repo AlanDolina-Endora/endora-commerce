@@ -50,6 +50,7 @@ revision additionally pin `expectedRevisionNumber`.
 | `POST /api/v1/admin/quote-requests` | admin | Create on customer's behalf → status `Created from admin`. |
 | `PATCH /api/v1/admin/quote-requests/:id` | admin | Modify a Pending or Created from admin RFQ → triggers customer re-acceptance. |
 | `POST /api/v1/admin/quote-requests/:id/approve` | admin | Approve a Pending RFQ whose every line has an agreed unit price. |
+| `POST /api/v1/admin/quote-requests/:id/prepare-customer-basket` | admin | Seed the basket of the customer who owns an Approved RFQ at the agreed unit prices, replacing what it held, for that customer to check out. The basket is the one of the channel the request was raised on. The same rules as the customer's own conversion; audited as `quote_request.prepare_customer_basket`. |
 | `POST /api/v1/admin/quote-requests/:id/cancel` | admin | Cancel with optional reason. |
 | `POST /api/v1/admin/quote-requests/:id/assign` | admin | Set `assignedAdminUserId` (informational). |
 | `GET`, `POST /api/v1/admin/quote-requests/list-views`; `PATCH`, `DELETE …/list-views/:id` | admin | Saved views on the quote request list — see *Saved views*. |

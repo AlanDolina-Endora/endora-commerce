@@ -49,6 +49,7 @@ dodatkowo wymagają podania `expectedRevisionNumber`.
 | `POST /api/v1/admin/quote-requests` | administrator | Utworzenie w imieniu klienta → status `Created from admin`. |
 | `PATCH /api/v1/admin/quote-requests/:id` | administrator | Zmiana zapytania w statusie Pending lub Created from admin → wymaga ponownej akceptacji klienta. |
 | `POST /api/v1/admin/quote-requests/:id/approve` | administrator | Zatwierdzenie zapytania w statusie Pending, którego każda pozycja ma uzgodnioną cenę jednostkową. |
+| `POST /api/v1/admin/quote-requests/:id/prepare-customer-basket` | administrator | Wypełnienie koszyka klienta, do którego należy zatwierdzone zapytanie, pozycjami po uzgodnionych cenach jednostkowych — z zastąpieniem jego dotychczasowej zawartości — aby klient sfinalizował zakup w checkoucie. Koszyk należy do kanału, w którym złożono zapytanie. Te same zasady co przy konwersji wykonywanej przez klienta; zapisywane w audycie jako `quote_request.prepare_customer_basket`. |
 | `POST /api/v1/admin/quote-requests/:id/cancel` | administrator | Anulowanie z opcjonalnym powodem. |
 | `POST /api/v1/admin/quote-requests/:id/assign` | administrator | Ustawienie `assignedAdminUserId` (wyłącznie informacyjne). |
 | `GET`, `POST /api/v1/admin/quote-requests/list-views`; `PATCH`, `DELETE …/list-views/:id` | administrator | Zapisane widoki listy zapytań ofertowych — zob. *Zapisane widoki*. |
