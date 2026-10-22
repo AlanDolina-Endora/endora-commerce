@@ -21,6 +21,13 @@ import { BundleSlotOption } from '../entities/bundle-slot-option.entity.js';
 import { resolvePrimaryAssetUrls } from './primary-asset-url.js';
 import { viewerOrganizationFor } from './viewer-organization.js';
 import {
+  effectiveAttributeValues,
+  effectiveSystemText,
+  loadChannelOverridesByProduct,
+  overrideLanguages,
+  type StorefrontOverrideContext,
+} from './storefront-value-overrides.js';
+import {
   ERROR_CODES,
   isOrderMinimumEligibleType,
   isPriceSort,
@@ -39,6 +46,7 @@ import {
   type ListingPriceDetailPort,
   type ListingPriceViewerContext,
   type OrganizationDetailsPort,
+  type OverrideRow,
   type ProductAudience,
   type ProductDetail,
   type ProductListSort,
@@ -163,6 +171,12 @@ export interface ListingCardReads {
   assetUrlByProduct: Map<string, string | null>;
   /** Product id -> its category slugs, in `product_categories` primary-key order. */
   categorySlugsByProduct: Map<string, string[]>;
+  /**
+   * Issue #384 — product id -> its `product_value_overrides` rows for the
+   * request's sales channel only. The rows do not vary by viewer either; the
+   * request's language legs pick among them when the card is built.
+   */
+  overridesByProduct: Map<string, OverrideRow[]>;
 }
 
 export interface ListProductsParams {
@@ -596,10 +610,12 @@ export class CatalogQueryService {
   async #listingCardReadsFor(
     em: EntityManager,
     productIds: readonly string[],
+    /** The request's resolved sales channel — the override rows are read for it alone. */
+    channelId: string,
   ): Promise<ListingCardReads> {
     const categorySlugsByProduct = new Map<string, string[]>();
     if (productIds.length === 0) {
-      return { assetUrlByProduct: new Map(), categorySlugsByProduct };
+      return { assetUrlByProduct: new Map(), categorySlugsByProduct, overridesByProduct: new Map() };
     }
 
     // Primary asset — for listings prefer the gallery's Thumbnail (US3),
@@ -622,7 +638,9 @@ export class CatalogQueryService {
       categorySlugsByProduct.set(row.product_id, slugs);
     }
 
-    return { assetUrlByProduct, categorySlugsByProduct };
+    const overridesByProduct = await loadChannelOverridesByProduct(em, ids, channelId);
+
+    return { assetUrlByProduct, categorySlugsByProduct, overridesByProduct };
   }
 
   // ------------------------------------------------------------------
@@ -765,7 +783,11 @@ export class CatalogQueryService {
     // same reason (issue #263): both helpers took an id list already, and both
     // were being handed one id at a time from inside the loop.
     const resolvedPrices = await this.#listingPricesFor(priceable, ctx);
-    const cardReads = await this.#listingCardReadsFor(em, priceable.map((p) => p.id));
+    const cardReads = await this.#listingCardReadsFor(
+      em,
+      priceable.map((p) => p.id),
+      channel.id,
+    );
     const summaries = priceable.map((p) =>
       this.toSummary(p, channel, ctx.preferredLanguage, resolvedPrices, cardReads),
     );
@@ -1134,7 +1156,11 @@ export class CatalogQueryService {
       hasMore && page.length > 0 ? encodeObjectCursor(cursors[params.limit - 1]!) : null;
 
     const resolvedPrices = await this.#listingPricesFor(page, ctx);
-    const cardReads = await this.#listingCardReadsFor(em, page.map((p) => p.id));
+    const cardReads = await this.#listingCardReadsFor(
+      em,
+      page.map((p) => p.id),
+      channel.id,
+    );
     return {
       data: page.map((p) =>
         this.toSummary(p, channel, ctx.preferredLanguage, resolvedPrices, cardReads),
@@ -1244,7 +1270,11 @@ export class CatalogQueryService {
     const page = collected.slice(0, params.limit);
     const last = page[page.length - 1];
     const nextCursor = hasMore && last ? encodeObjectCursor(keyset.of(last)) : null;
-    const cardReads = await this.#listingCardReadsFor(em, page.map((p) => p.id));
+    const cardReads = await this.#listingCardReadsFor(
+      em,
+      page.map((p) => p.id),
+      channel.id,
+    );
     return {
       data: page.map((p) =>
         this.toSummary(p, channel, ctx.preferredLanguage, prices, cardReads),
@@ -1313,13 +1343,17 @@ export class CatalogQueryService {
       throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'Product not found.');
     }
 
+    const cardReads = await this.#listingCardReadsFor(em, [product.id], channel.id);
     const summary = this.toSummary(
       product,
       channel,
       ctx.preferredLanguage,
       await this.#listingPricesFor([product], ctx),
-      await this.#listingCardReadsFor(em, [product.id]),
+      cardReads,
     );
+    // Issue #384 — the product's override rows, already read for the summary.
+    const overrides = cardReads.overridesByProduct.get(product.id);
+    const overrideCtx = this.#overrideContext(channel, ctx.preferredLanguage);
 
     // Categories
     const categoryRows = await em.execute<{ category_id: string }[]>(
@@ -1396,8 +1430,35 @@ export class CatalogQueryService {
       for (const a of aAssets) attachmentAssetsById.set(a.id, a);
     }
 
-    const descriptionText = this.pickLang(product.description, ctx.preferredLanguage, channel);
-    const nameText = this.pickLang(product.name, ctx.preferredLanguage, channel);
+    const descriptionText = effectiveSystemText(
+      overrides,
+      'description',
+      overrideCtx,
+      product.description,
+      this.pickLang(product.description, ctx.preferredLanguage, channel),
+    );
+    // The summary's name went through the same resolution.
+    const nameText = summary.name;
+
+    // Issue #384 — channel-scoped user attributes carry their override for
+    // this (channel, language); the scope lookup runs only when the product
+    // has a user-attribute override row at all. The attribute views are read
+    // at most once for this page, and only by whichever step needs them first.
+    let attributeViews: Promise<CatalogAttributeView[]> | undefined;
+    const listAttributeViews = (): Promise<CatalogAttributeView[]> =>
+      (attributeViews ??= this.#requireAttributeRead().listAll());
+    const attributeValues = await effectiveAttributeValues(
+      product.attributeValues ?? {},
+      overrides,
+      overrideCtx,
+      async () =>
+        new Map(
+          (await listAttributeViews()).map((a) => [
+            a.key,
+            { channelScoped: a.channelScoped, languageScoped: a.languageScoped },
+          ]),
+        ),
+    );
 
     // Feature 012 / FR-030 — "Parametry produktu" tab projection.
     // Resolve every attribute that is flagged isVisibleOnProductPage
@@ -1408,14 +1469,16 @@ export class CatalogQueryService {
     const visibleAttributes = await this.buildVisibleAttributesProjection(
       em,
       product,
+      attributeValues,
       ctx.preferredLanguage,
       channel,
+      listAttributeViews,
     );
 
     const detail: ProductDetail = {
       ...summary,
       description: descriptionText,
-      attributeValues: this.coerceAttributeValues(product.attributeValues),
+      attributeValues: this.coerceAttributeValues(attributeValues),
       assets: assets.map((a) => ({
         id: a.id,
         kind: a.kind,
@@ -1691,13 +1754,22 @@ export class CatalogQueryService {
     const assetUrlByProduct = await resolvePrimaryAssetUrls(em, this.#requireAssets(), ids);
 
     const resolvedPrices = await this.#listingPricesFor(products, ctx);
+    // Issue #384 — one statement for every child's override rows on this channel.
+    const overridesByProduct = await loadChannelOverridesByProduct(em, ids, channel.id);
+    const overrideCtx = this.#overrideContext(channel, ctx.preferredLanguage);
     for (const p of products) {
       const price = this.#summaryPrice(resolvedPrices, p.id);
       result.set(p.id, {
         id: p.id,
         sku: p.sku,
         slug: p.slug,
-        name: this.pickLang(p.name, ctx.preferredLanguage, channel),
+        name: effectiveSystemText(
+          overridesByProduct.get(p.id),
+          'name',
+          overrideCtx,
+          p.name,
+          this.pickLang(p.name, ctx.preferredLanguage, channel),
+        ),
         primaryAssetUrl: assetUrlByProduct.get(p.id) ?? null,
         price,
       });
@@ -1988,10 +2060,13 @@ export class CatalogQueryService {
   private async buildVisibleAttributesProjection(
     em: EntityManager,
     product: Product,
+    /** The product's effective attribute values for the request (issue #384). */
+    values: Record<string, unknown>,
     preferredLanguage: string | undefined,
     channel: CatalogResolvedChannel,
+    /** The page's attribute-view read, shared with the override step (issue #384). */
+    listAttributeViews: () => Promise<CatalogAttributeView[]>,
   ): Promise<Array<{ key: string; label: string; valueType: CatalogAttributeView['valueType']; valueRendered: string }>> {
-    const values = product.attributeValues ?? {};
     const valueKeys = Object.keys(values).filter((k) => {
       const v = values[k];
       return v !== undefined && v !== null && v !== '';
@@ -2000,7 +2075,7 @@ export class CatalogQueryService {
 
     // Feature 061 — attribute metadata + options come from the composed view.
     const valueKeySet = new Set(valueKeys);
-    const allViews = await this.#requireAttributeRead().listAll();
+    const allViews = await listAttributeViews();
     const attrs = allViews.filter((a) => valueKeySet.has(a.key) && a.isVisibleOnProductPage);
     if (attrs.length === 0) return [];
 
@@ -2373,7 +2448,15 @@ export class CatalogQueryService {
     // own legacy attribute.
     const price = this.#summaryPrice(resolvedPrices, product.id);
 
-    const nameText = this.pickLang(product.name, preferredLanguage, channel);
+    // Issue #384 — the channel's override when one applies, else the baseline
+    // language pick, out of the page's pre-read override rows.
+    const nameText = effectiveSystemText(
+      cardReads.overridesByProduct.get(product.id),
+      'name',
+      this.#overrideContext(channel, preferredLanguage),
+      product.name,
+      this.pickLang(product.name, preferredLanguage, channel),
+    );
 
     return {
       id: product.id,
@@ -2391,6 +2474,23 @@ export class CatalogQueryService {
         ? (product.minOrderQuantity ?? null)
         : null,
       resolvedPrice: this.#summaryResolvedPrice(resolvedPrices, product.id),
+    };
+  }
+
+  /**
+   * Issue #384 — the language chain an override is walked over: exactly the
+   * legs `pickLang` walks over the baseline (request language, channel
+   * default, `en-US`, `en`), so a (channel, language) override answers for
+   * whichever language the baseline text would have come from and never for
+   * a later one.
+   */
+  #overrideContext(
+    channel: CatalogResolvedChannel,
+    preferredLanguage: string | undefined,
+  ): StorefrontOverrideContext {
+    return {
+      channelId: channel.id,
+      languages: overrideLanguages(preferredLanguage, channel.defaultLanguage),
     };
   }
 

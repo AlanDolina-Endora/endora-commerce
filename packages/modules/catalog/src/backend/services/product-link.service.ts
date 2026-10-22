@@ -16,6 +16,11 @@ import { Product } from '../entities/product.entity.js';
 import { ProductLink, type ProductLinkKind } from '../entities/product-link.entity.js';
 import { resolvePrimaryAssetUrls } from './primary-asset-url.js';
 import { viewerOrganizationFor } from './viewer-organization.js';
+import {
+  effectiveSystemText,
+  loadChannelOverridesByProduct,
+  overrideLanguages,
+} from './storefront-value-overrides.js';
 interface StorefrontContext {
   /**
    * The request's resolved sales channel (feature 053 / FR-002). Always
@@ -416,12 +421,33 @@ export class ProductLinkService {
           })
         : new Map();
 
+    // Issue #384 — every visible target's override rows on this channel in
+    // one statement; the tile shows the channel's name where one applies,
+    // walked over the same language chain as the tile's baseline pick.
+    const overridesByProduct = await loadChannelOverridesByProduct(
+      em,
+      visibleTargets.map((t) => t.id),
+      channel.id,
+    );
+    const overrideCtx = {
+      channelId: channel.id,
+      // The tile's own `pickLang` has no channel-default leg, so neither has
+      // the walk: an override answers only for the language the tile shows.
+      languages: overrideLanguages(ctx.preferredLanguage, undefined),
+    };
+
     const out: StorefrontLinkSummary[] = [];
     for (const link of rows) {
       if (!visibleIds.has(link.targetProductId)) continue;
       const target = byId.get(link.targetProductId);
       if (!target) continue;
-      const name = pickLang(target.name, ctx.preferredLanguage);
+      const name = effectiveSystemText(
+        overridesByProduct.get(target.id),
+        'name',
+        overrideCtx,
+        target.name,
+        pickLang(target.name, ctx.preferredLanguage),
+      );
       const resolved = resolvedPrices.get(target.id);
       const price = resolved === undefined ? null : listingPriceMoney(resolved);
       out.push({

@@ -132,8 +132,16 @@ Cztery sposoby sortowania z kontraktu listy produktów odpowiadają następując
 | `name` | `name:asc` |
 | `-name` | `name:desc` |
 
-Zindeksowane `name` jest ustalane w domyślnym języku kanału, czyli w języku, w którym wyświetla się
-lista produktów, więc kolejność widziana przez kupującego to ta, według której posortowano wyniki.
+Zindeksowane `name` jest ustalane w domyślnym języku kanału, czyli w języku, w którym domyślnie
+wyświetla się lista produktów, więc kolejność widziana przez kupującego to ta, według której
+posortowano wyniki.
+
+Nazwa *wyświetlana* na karcie wyniku nie pochodzi z indeksu. Każde trafienie jest przed udzieleniem
+odpowiedzi ponownie odczytywane z Postgresa, a karta dostaje tę nazwę, którą dla kanału sprzedaży i
+języka z żądania pokazuje karta na liście produktów katalogu: nadpisanie wartości dla kanału, jeśli
+obowiązuje (wiersze nadpisań kanału dla strony wyników są odczytywane raz), a w przeciwnym razie
+tekst bazowy w języku z żądania. Żądanie w języku innym niż domyślny język kanału jest więc nadal
+sortowane według nazwy w języku domyślnym.
 
 **Aktualizacja indeksu zbudowanego przed wprowadzeniem ustawień sortowania** wymaga ponownego
 zindeksowania: ustawienia nigdy nie były stosowane (`sortableAttributes` było `[]` w każdym indeksie,

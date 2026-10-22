@@ -2166,6 +2166,12 @@ export interface CatalogProductLinkRow {
   position: number;
 }
 
+/** {@link CatalogProductReadPort.listValueOverridesByProductIds}' narrowing. */
+export interface CatalogValueOverrideLookupOptions {
+  /** One sales channel's rows only; absent, every channel's. */
+  channelId?: string;
+}
+
 /** A per-channel / per-language override of one attribute value (feature 022). */
 export interface CatalogProductValueOverrideRecord {
   id: string;
@@ -2261,9 +2267,14 @@ export interface CatalogProductReadPort {
     kind?: ProductLinkKind,
   ): Promise<CatalogProductLinkRow[]>;
 
-  /** Attribute-value overrides for the given products. */
+  /**
+   * Attribute-value overrides for the given products — every channel's, or
+   * only `options.channelId`'s rows when it is given (issue #384: a storefront
+   * read shows one sales channel's overrides and reads only those).
+   */
   listValueOverridesByProductIds(
     productIds: readonly string[],
+    options?: CatalogValueOverrideLookupOptions,
   ): Promise<CatalogProductValueOverrideRecord[]>;
 
   /**
