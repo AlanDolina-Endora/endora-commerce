@@ -70,7 +70,7 @@ export const manifest = defineModuleManifest({
    * and an English message; each now has a sentence naming what it refuses
    * (`details.label` / `details.value`, or `details.key`) and no tokens.
    *
-   * **`CUSTOM_FIELD_CARRY_INCOMPATIBLE`** (feature 161) is the family's tenth
+   * **`CUSTOM_FIELD_CARRY_INCOMPATIBLE`** (feature 162) is the family's tenth
    * and the first with tokens: the definition Commands refuse turning on a
    * carry towards a target that cannot take the values, and `details.code`
    * names why — one sentence per token, filled from `details.key`,

@@ -118,7 +118,7 @@ function entry(overrides: Partial<OpportunityHistoryEntry>): OpportunityHistoryE
 
 /**
  * An entry as the server serves it to a reader without `custom_fields:read`
- * (feature 161, owner ruling P2): `customFieldValues` left out of `before` and
+ * (feature 162, owner ruling P2): `customFieldValues` left out of `before` and
  * `after`, everything else — `customFieldCarry` included — as it was.
  */
 function servedWithoutCustomFields(source: OpportunityHistoryEntry): OpportunityHistoryEntry {
@@ -634,10 +634,10 @@ describe('the Change history tab, on what an entry carries', () => {
 });
 
 /**
- * Feature 161 (T049, US2-5, US2-6) — a creation or a join that could not carry
+ * Feature 162 (T049, US2-5, US2-6) — a creation or a join that could not carry
  * every custom-field value into the Opportunity says so: from which kind of
  * record, and a line per field with its reason
- * (`specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §4).
+ * (`specs/162-custom-fields-value-carry/contracts/admin-surfaces.md` §4).
  *
  * Owner ruling V3 (2026-10-21, T067): the field is named by the label stored
  * with the skip — the reader's language, then the default label, then the key

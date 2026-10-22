@@ -1,4 +1,4 @@
-# Tasks: Custom-field value carry-over (`specs/161-custom-fields-value-carry/`)
+# Tasks: Custom-field value carry-over (`specs/162-custom-fields-value-carry/`)
 
 **Input**: [spec.md](./spec.md) (clarified 2026-10-16; owner rulings C4 (a), C5 (c); issue #287),
 [plan.md](./plan.md), [research.md](./research.md), [data-model.md](./data-model.md),
@@ -6,10 +6,10 @@
 [contracts/admin-surfaces.md](./contracts/admin-surfaces.md), [quickstart.md](./quickstart.md).
 
 **Organisation**: ten phases, **one builder spawn each**, each ≤ 10 tasks and **independently
-committable** on `feat/161-custom-fields-value-carry`, built in its own `git worktree` (T000a;
-`git commit -s`, English conventional message, no AI trailer). `161` is the number this directory
+committable** on `feat/162-custom-fields-value-carry`, built in its own `git worktree` (T000a;
+`git commit -s`, English conventional message, no AI trailer). `162` is the number this directory
 carries once it enters the branch — the first free number on `origin/master` above the floor
-(T000); until then the directory and every `161` below are placeholders. Each phase ends
+(T000); until then the directory and every `162` below are placeholders. Each phase ends
 with a **Verification** block: one command per line, run serially, in order, **only the phase's
 new or changed tests, the derived-artefact tests whose input the phase changed, and its `[PG]`
 files** — the heavy suites run on the fork's CI in Phase 10 (standing rule 13). Phases are marked
@@ -106,12 +106,12 @@ every shape of [contracts/carry-api.md](./contracts/carry-api.md) §1, §2, §4�
 `@endora-commerce/contracts` (research R-1 – R-5, R-8, R-11).
 
 - [x] T000 **Upstream drift check — stop and report on any finding.** From the primary checkout,
-  with `N` the first free number (replace `161` below). Each line is self-contained:
+  with `N` the first free number (replace `162` below). Each line is self-contained:
   ```bash
   git fetch --no-tags origin +refs/heads/master:refs/remotes/origin/master
-  set -o pipefail; N=161; specs_on_master="$(git ls-tree --name-only origin/master specs/)" && { printf '%s\n' "$specs_on_master" | grep -E "^specs/${N}-" && echo "STOP: ${N} is taken on origin/master" || echo "${N} is free on origin/master"; }
+  set -o pipefail; N=162; specs_on_master="$(git ls-tree --name-only origin/master specs/)" && { printf '%s\n' "$specs_on_master" | grep -E "^specs/${N}-" && echo "STOP: ${N} is taken on origin/master" || echo "${N} is free on origin/master"; }
   set -o pipefail; git show origin/master:specs/pre-migration-history/README.md | grep -F '| Last pre-migration feature |'
-  set -o pipefail; N=161; remote_heads="$(git ls-remote --heads origin)" && { printf '%s\n' "$remote_heads" | grep -E "refs/heads/[a-z]+/${N}-" && echo "STOP: a remote branch carries ${N}" || echo "no remote branch carries ${N}"; }
+  set -o pipefail; N=162; remote_heads="$(git ls-remote --heads origin)" && { printf '%s\n' "$remote_heads" | grep -E "refs/heads/[a-z]+/${N}-" && echo "STOP: a remote branch carries ${N}" || echo "no remote branch carries ${N}"; }
   git grep -n "QuoteRequestSourceAssessment" origin/master -- packages/modules/orders/src/backend/services/order-service.ts
   git grep -n -E "DefinitionBehaviourFields|listFilter" origin/master -- packages/modules/custom_fields/src packages/contracts/src/custom-fields.ts
   git grep -n -E "carryTo|carry_to|customFieldCarryPort|CustomFieldCarry|system_note|systemNote|custom-field-carry-skipped" origin/master -- packages backend/test admin/test
@@ -126,8 +126,8 @@ every shape of [contracts/carry-api.md](./contracts/carry-api.md) §1, §2, §4�
   then the plan's anchors in the files it names must be re-derived first. For feat/155's and the
   filters feature's commits: re-read `#vouchedQuoteRequestSource` / `#assessQuoteRequestSource`,
   `DefinitionBehaviourFields`'s props and `snapshotDefinition`, and correct any task text that
-  names them before T001. Then **renumber sweep**: in this directory and in every `.changeset/161-*`
-  path below replace `161` with `${N}`.
+  names them before T001. Then **renumber sweep**: in this directory and in every `.changeset/162-*`
+  path below replace `162` with `${N}`.
   **Result** (2026-10-20): `origin/master` at `842b66eb9`; `N` = 158, free on `origin/master` and on every
   remote branch, above the README floor `136`. **Renumbered 2026-10-21**: `origin/master` then held
   `specs/158-crm-opportunity-inline-editing/` and `specs/159-quote-request-item-groups/`, and a remote
@@ -142,7 +142,7 @@ every shape of [contracts/carry-api.md](./contracts/carry-api.md) §1, §2, §4�
   from the directory holding the primary checkout, then copy the four untracked `.env` files
   (`<feature-worktree>` is the feature worktree's directory name):
   ```bash
-  git -C endora-commerce worktree add ../<feature-worktree> -b feat/161-custom-fields-value-carry origin/master
+  git -C endora-commerce worktree add ../<feature-worktree> -b feat/162-custom-fields-value-carry origin/master
   bash <feature-worktree>/scripts/setup-worktree.sh
   for f in .env backend/.env admin/.env storefront/.env; do cp -p "endora-commerce/$f" "<feature-worktree>/$f" || echo "MISSING: $f"; done
   git -C <feature-worktree> check-ignore -v .env backend/.env admin/.env storefront/.env
@@ -197,7 +197,7 @@ every shape of [contracts/carry-api.md](./contracts/carry-api.md) §1, §2, §4�
   lists every hand-built `CustomFieldDefinitionRecord` / `CustomFieldDefinitionDto` /
   entity-type fake (the filters feature added `listFilter` to exactly these); add `carryTo: []` or
   `carryTargets: []` where the type now requires it; typecheck each package the grep touched. Then
-  the changeset `.changeset/161-contracts-custom-field-carry.md` —
+  the changeset `.changeset/162-contracts-custom-field-carry.md` —
   `'@endora-commerce/contracts': minor`: `carryTo`, `carryTargets`, `assessCustomFieldCarry`, the
   carry and receiver port types, the order comment system note, the
   `custom-field-carry-skipped` history event type, `CUSTOM_FIELD_CARRY_INCOMPATIBLE`
@@ -321,7 +321,7 @@ conversion uses (FR-007, FR-009, FR-010, FR-014; research R-1 – R-5, R-12).
   `one-definitions-cache.test.ts` reaches the module) answers a real QR → Order plan; a definition
   change (option added to the target) is visible to the next `plan` call without waiting for the
   TTL (the Command's invalidation, R-5); `check:port-shape` accepts the port. Then the changeset
-  `.changeset/161-custom-fields-carry-options.md` — `'@endora-commerce/mod-custom-fields': minor`:
+  `.changeset/162-custom-fields-carry-options.md` — `'@endora-commerce/mod-custom-fields': minor`:
   the carry options on definitions and entity types, the configuration refusal
   (`CUSTOM_FIELD_CARRY_INCOMPATIBLE`), retention while an owner is off, `customFieldCarryPort`
 
@@ -428,7 +428,7 @@ R-7, R-8).
   (non-deactivatable owner — no activation consequence) and say why in the commit; if it does not,
   change nothing. Update any `OrderServiceNeighbourPorts` stub in co-located or backend tests the
   type check names (standing rule 12: name each file in the commit)
-- [x] T022 Changeset `.changeset/161-orders-custom-field-carry-placement.md` —
+- [x] T022 Changeset `.changeset/162-orders-custom-field-carry-placement.md` —
   `'@endora-commerce/mod-orders': minor`: an Order placed from a vouched Quote Request receives the
   request's carried custom-field values; a value that cannot be carried is recorded as an internal
   system note in the Order's comments (admin `systemNote` member; never listed to the buyer)
@@ -515,7 +515,7 @@ R-11).
   `quoteRequest.record.customFieldValues`); origin links pass **no** `carry` (R-9); wire
   `lazyPort<CustomFieldCarryPort>(ctx, 'customFieldCarryPort')` in
   `packages/modules/crm/src/backend/index.ts` (resolved per call, never captured); T023 green
-- [x] T027 Changeset `.changeset/161-crm-custom-field-carry.md` — `'@endora-commerce/mod-crm':
+- [x] T027 Changeset `.changeset/162-crm-custom-field-carry.md` — `'@endora-commerce/mod-crm':
   minor`: Opportunities created for, or joined by, an Order or Quote Request receive carried
   custom-field values into empty fields; skipped keys are named in the creation or link history
   entry (extended in T035)
@@ -624,11 +624,11 @@ R-10, R-11, R-13).
   the value); add the `nonBindingDependencies` entry for `quoteRequestCustomFieldCarryPort`
   (`kind: 'degrades-without'`, `whenAbsent` per research R-16) to
   `packages/modules/crm/src/manifest.ts`; T033 green
-- [x] T035 Changesets: `.changeset/161-quote-requests-custom-field-carry.md` —
+- [x] T035 Changesets: `.changeset/162-quote-requests-custom-field-carry.md` —
   `'@endora-commerce/mod-quote-requests': minor` (`quoteRequestCustomFieldCarryPort`, the
-  `custom-field-carry-skipped` history entry, admin-only); `.changeset/161-orders-custom-field-carry-receiver.md`
+  `custom-field-carry-skipped` history entry, admin-only); `.changeset/162-orders-custom-field-carry-receiver.md`
   — `'@endora-commerce/mod-orders': minor` (`orderCustomFieldCarryPort`); extend
-  `.changeset/161-crm-custom-field-carry.md` with the Opportunity → document carry and the new
+  `.changeset/162-crm-custom-field-carry.md` with the Opportunity → document carry and the new
   non-binding edge
 
 **Phase 5 result** (2026-10-20):
@@ -797,7 +797,7 @@ additive props only.
   `onChange`), the refusal sentence from `details`, the *Carries to* column and the mark
   (`assessCustomFieldCarry` over the loaded list), and the confirmation step at the four sites of
   §1.4 (kit `ModalDialog`, no `window.confirm`); `custom-fields-client.ts` types; T042, T043 green;
-  `i18n:hardcoded` adds no finding. Then the changeset `.changeset/161-custom-fields-carry-ui.md` —
+  `i18n:hardcoded` adds no finding. Then the changeset `.changeset/162-custom-fields-carry-ui.md` —
   `'@endora-commerce/mod-custom-fields': minor`
 
 **Verification**:
@@ -854,9 +854,9 @@ contract `admin-surfaces.md` §2 – §4).
   `packages/modules/crm/src/admin/lib/history-fields.ts` and its keys to
   `packages/modules/crm/i18n/{en,pl}.json`; `packages/modules/crm/src/admin/index.test.ts` green;
   T049 green
-- [x] T053 Changesets `.changeset/161-orders-carry-note-ui.md` (`mod-orders`: patch),
-  `.changeset/161-quote-requests-carry-history-ui.md` (`mod-quote-requests`: patch),
-  `.changeset/161-crm-carry-history-ui.md` (`mod-crm`: patch)
+- [x] T053 Changesets `.changeset/162-orders-carry-note-ui.md` (`mod-orders`: patch),
+  `.changeset/162-quote-requests-carry-history-ui.md` (`mod-quote-requests`: patch),
+  `.changeset/162-crm-carry-history-ui.md` (`mod-crm`: patch)
 
 **Verification**:
 ```bash
@@ -922,7 +922,7 @@ branch from the commit that lands V3's backend half, which they depend on.
   the Order system note, both receivers, the Opportunity carry and the Quote Request history projection
   store or project skips through `customFieldCarrySkipRecord` instead of re-mapping to `{ key, reason }`.
   Contract `carry-api.md` §4.1, §5, §6 and `data-model.md` §2, §4.1; changesets
-  `161-contracts-custom-field-carry.md` (amended) and `161-carry-skip-label.md`.
+  `162-contracts-custom-field-carry.md` (amended) and `162-carry-skip-label.md`.
 - [x] T065 [V1] [admin UI] Drift-warning proceed buttons name the action ("Remove option anyway",
   "Delete field anyway", "Save anyway"; pl "Usuń opcję mimo to", "Usuń pole mimo to", "Zapisz mimo to"),
   destructive-styled for removals and deletions. One mapping, `carryDriftProceed(kind)` in
@@ -1182,7 +1182,7 @@ W1 and the coordinator's label-fallback ruling.
   through `servedWithoutCustomFields` (the stripped response); new tests for the placeholder (en +
   pl), its absence for a permitted reader and for an edit showing another field, and the client
   gate against a response that still carries values. RED observed: with the drop and the
-  placeholder removed, 3 of 38 fail. Changeset `161-crm-history-hidden-values-ui.md` (`crm` patch).
+  placeholder removed, 3 of 38 fail. Changeset `162-crm-history-hidden-values-ui.md` (`crm` patch).
 
 - [x] **R9 [should] Order receiver without the row lock** (coordinator ruling S6, consistent with owner
   ruling P1). `order-custom-field-carry-receiver.ts` now reads the Order `for update`
@@ -1193,7 +1193,7 @@ W1 and the coordinator's label-fallback ruling.
   the commit the bag holds both keys. The discriminating assertion is the final bag. RED observed on the
   fork's service-backed run against the test commit alone: the bag held only the carried key, the other
   writer's value lost; 4 of 5 green. Changeset: a bullet in
-  `161-orders-custom-field-carry-receiver.md`. *Known residue*: the admin `PATCH
+  `162-orders-custom-field-carry-receiver.md`. *Known residue*: the admin `PATCH
   /api/v1/admin/orders/:id/custom-fields` reads without a lock and writes the whole bag, so an
   administrator's write that read before a carry and commits after it can still drop the carried value;
   Orders have no version to refuse it with — left for the coordinator.
@@ -1203,7 +1203,7 @@ W1 and the coordinator's label-fallback ruling.
   anyway" / "Zmień widoczność mimo to"), both default-styled; `.proceedSave` is gone and
   `CustomFieldsPage.carry-drift.test.tsx` asserts it (and the older `.proceed`) is absent from the bundle.
   Tests: `carry-drift.test.ts` (the mapping per kind), `CustomFieldsPage.carry-drift.test.tsx` (label and
-  style per action, en + pl). Changeset: `161-custom-fields-carry-ui.md`. Commit `bb3e76345`.
+  style per action, en + pl). Changeset: `162-custom-fields-carry-ui.md`. Commit `bb3e76345`.
 - [x] **R11 P4 — help wording and quoted type names.** `customFields.carry.help` / `.helpGroup` read the
   owner's wording ("When a record of type “{entityType}” is created from a record with this field, the
   new record's empty field with the same key receives this field's value." / "… of a selected type …");
@@ -1223,7 +1223,7 @@ W1 and the coordinator's label-fallback ruling.
   Commits `8fd3303f1`, `63f197d46`, `3dbb4b9f6`.
 - [x] **R13 admin-kit `ModalDialog` takes `aria-describedby`** (needed by R12). Optional; set on the panel
   beside `aria-labelledby`, absent when not passed. Test: `admin/test/components/ModalDialog.test.tsx`.
-  Changeset: `161-admin-kit-modal-dialog-described-by.md` (`admin-kit` patch). Commit `172597cd7`.
+  Changeset: `162-admin-kit-modal-dialog-described-by.md` (`admin-kit` patch). Commit `172597cd7`.
 - [x] **R14 `carryReasonUnknown` fallback.** The Quote Request and Sales Opportunity history renderers
   read a skip reason they do not know as `history.carryReasonUnknown` ("the value could not be carried" /
   Polish in both bundles), never the code; the Sales Opportunity is named "sales opportunity" alike in

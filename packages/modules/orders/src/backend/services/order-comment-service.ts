@@ -90,7 +90,7 @@ export class OrderCommentService {
 
   /**
    * Only customer-visible comments (FR-031) — and never a system note
-   * (feature 161), whatever its visibility flag says: two filters, so one
+   * (feature 162), whatever its visibility flag says: two filters, so one
    * mistaken flag cannot show the buyer an internal note.
    */
   async listForCustomer(orderId: string): Promise<OrderComment[]> {

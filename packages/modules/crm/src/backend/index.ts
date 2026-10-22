@@ -221,7 +221,7 @@ export function registerModule(ctx: ModuleContext): void {
             quoteRequests: crmQuoteRequests,
             linksChanged: (opportunityId) => crmOpportunityValueService.recalculate(opportunityId),
             mayRead: crmOwnerReadChecks,
-            // Feature 161 — an Order joining from its Quote Request carries its
+            // Feature 162 — an Order joining from its Quote Request carries its
             // values into the Opportunity's empty fields.
             customFieldCarry: lazyPort<CustomFieldCarryPort>(ctx, 'customFieldCarryPort'),
           }),
@@ -484,7 +484,7 @@ export function registerModule(ctx: ModuleContext): void {
             customFields: lazyPort<CustomFieldValuePort>(ctx, 'customFieldValueService'),
             // Feature 157 — the list's custom-field filters.
             customFieldListFilter: lazyPort<CustomFieldListFilterPort>(ctx, 'customFieldListFilterPort'),
-            // Feature 161 — a document's values carried into the Opportunity created for it.
+            // Feature 162 — a document's values carried into the Opportunity created for it.
             customFieldCarry: lazyPort<CustomFieldCarryPort>(ctx, 'customFieldCarryPort'),
             // --- end of Custom fields ----------------------------------------
             recalculateValue: (opportunityId) => crmOpportunityValueService.recalculate(opportunityId),
@@ -828,7 +828,7 @@ export function registerModule(ctx: ModuleContext): void {
             auditLog: auditLogService,
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
             references: crmReferenceService,
-            // Feature 161 (owner ruling P2 = a) — values only for `custom_fields:read`.
+            // Feature 162 (owner ruling P2 = a) — values only for `custom_fields:read`.
             mayReadCustomFields: crmOwnerReadChecks.customFields,
           }),
       )

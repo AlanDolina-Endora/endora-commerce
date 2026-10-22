@@ -643,7 +643,7 @@ export function registerModule(ctx: ModuleContext): void {
               effectiveState.isPresent('quote_requests')
                 ? lazyPort<QuoteRequestReadPort>(ctx, 'quoteRequestReadPort')
                 : null,
-            // Feature 161 — the custom-field values a vouched Quote Request
+            // Feature 162 — the custom-field values a vouched Quote Request
             // carries into the Order (`custom_fields` is not deactivatable).
             customFieldCarry: () => lazyPort<CustomFieldCarryPort>(ctx, 'customFieldCarryPort'),
             // The payment row placement opens (feature 080, T048; D-179). **No
@@ -870,8 +870,8 @@ export function registerModule(ctx: ModuleContext): void {
   // ---------------------------------------------------------------------------
 
   /**
-   * Feature 161 — a Sales Opportunity's custom-field values received into an
-   * Order created from it (`specs/161-custom-fields-value-carry/`, contract
+   * Feature 162 — a Sales Opportunity's custom-field values received into an
+   * Order created from it (`specs/162-custom-fields-value-carry/`, contract
    * `carry-api.md` §4.2). The carry is planned by `custom_fields`.
    */
   ctx.di.providePort<CustomFieldCarryReceiverPort>(

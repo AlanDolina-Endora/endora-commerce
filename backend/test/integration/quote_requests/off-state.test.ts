@@ -597,7 +597,7 @@ describe('quote_requests off-state, from a package (Constitution XVII)', () => {
   });
 
   /**
-   * Feature 161 (`specs/161-custom-fields-value-carry/` T037; FR-005, FR-014) —
+   * Feature 162 (`specs/162-custom-fields-value-carry/` T037; FR-005, FR-014) —
    * custom-field carry with `quote_requests` off.
    *
    * - A basket converted from a request while the module was on places an
@@ -611,7 +611,7 @@ describe('quote_requests off-state, from a package (Constitution XVII)', () => {
    * The `quote_request` carry options being hidden and retained while the module
    * is off is `custom_fields/entity-owner-presence.test.ts`' (Phase 2).
    */
-  describe('feature 161 — custom-field carry while quote_requests is off', () => {
+  describe('feature 162 — custom-field carry while quote_requests is off', () => {
     const CUSTOM_FIELDS_API = '/api/v1/admin/custom-fields';
     const RUN = randomUUID().slice(0, 8);
     const ORDER_KEY = `cfc_${RUN}_qr_off_order`;

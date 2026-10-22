@@ -764,7 +764,7 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
   CUSTOM_FIELD_CARRY_INCOMPATIBLE: {
     to: 'custom_fields',
     reason:
-      'Minted by feature 161 (`specs/161-custom-fields-value-carry/`, FR-003, FR-011) for turning ' +
+      'Minted by feature 162 (`specs/162-custom-fields-value-carry/`, FR-003, FR-011) for turning ' +
       'on a definition\'s carry option towards a target that cannot take its values, named by the ' +
       '`details.code` token. The noun is the custom-field definition and its carry option, and the ' +
       'judgement is `custom_fields`\' own definition Command (D-121 T1).',

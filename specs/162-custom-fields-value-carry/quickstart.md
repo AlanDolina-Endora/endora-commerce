@@ -1,4 +1,4 @@
-# Quickstart: Custom-field value carry-over (`specs/161-custom-fields-value-carry/`)
+# Quickstart: Custom-field value carry-over (`specs/162-custom-fields-value-carry/`)
 
 A manual walk-through of the four stories on a dev stack (`pnpm run dev`), for the owner's test and
 for a reviewer. Every field key and record below is an example; use your own.

@@ -1,6 +1,6 @@
 # Endora Commerce (b2b-platform) — Agent Instructions
 
-Last updated: 2026-10-21
+Last updated: 2026-10-22
 
 **This file is the single source of truth for every AI coding agent working in this
 repository, and since 2026-09-11 it is a *router*.** It holds what an agent needs before its
@@ -289,6 +289,6 @@ never a copy — `.agents/skills/ux-laws/SKILL.md` is one. Update it in place.
 See "Repo map" above.
 
 ## Recent Changes
-- 161-custom-fields-value-carry
+- 162-custom-fields-value-carry
 - 157-custom-fields-list-filters
 - 155-catalog-order-constraints

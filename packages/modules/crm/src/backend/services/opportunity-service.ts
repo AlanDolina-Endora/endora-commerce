@@ -87,7 +87,7 @@ export interface OpportunityServiceDeps {
   /** Operator-defined fields (US15): `custom_fields` validates, this service writes. */
   customFields: CustomFieldValuePort;
   /**
-   * `custom_fields`' carry port (feature 161): the document's values an
+   * `custom_fields`' carry port (feature 162): the document's values an
    * Opportunity created for it receives. Lazy, like every port here.
    */
   customFieldCarry: CustomFieldCarryPort;
@@ -151,7 +151,7 @@ export interface AutomaticOpportunityInput {
   document: { kind: OpportunityDocumentKind; id: string };
   /**
    * The document's custom-field values, carried into the new Opportunity
-   * (feature 161). Absent for a document created **from** an Opportunity: that
+   * (feature 162). Absent for a document created **from** an Opportunity: that
    * carry goes the other way.
    */
   carry?: OpportunityCarrySource;
@@ -162,7 +162,7 @@ interface CreateOptions {
   source: OpportunitySource;
   /** A document linked to the Opportunity in the same transaction (`link_source = 'auto'`). */
   document?: { kind: OpportunityDocumentKind; id: string };
-  /** Feature 161 — what the custom-field carry adds to the audit entry (`customFieldCarry`). */
+  /** Feature 162 — what the custom-field carry adds to the audit entry (`customFieldCarry`). */
   carryAfter?: Record<string, unknown>;
 }
 
@@ -354,7 +354,7 @@ export class OpportunityService {
         ? input.salesChannelId
         : null;
 
-    // Feature 161 (US2; research R-9) — the document's carried custom-field
+    // Feature 162 (US2; research R-9) — the document's carried custom-field
     // values, planned before the Command: the Opportunity is new, so every
     // carried field is empty. Not validated against the Opportunity's other
     // fields — a required one must not stop the creation.

@@ -34,7 +34,7 @@ function labelOf(definition: CachedDefinition['definition']): CustomFieldCarrySk
 }
 
 /**
- * The carry port (`specs/161-custom-fields-value-carry/`, research R-5):
+ * The carry port (`specs/162-custom-fields-value-carry/`, research R-5):
  * `custom_fields` computes which source values carry into a target bag, and
  * the module that owns the target persists the answer in its own write.
  *

@@ -149,7 +149,7 @@ describe('crm opportunity history (contract)', () => {
 });
 
 /**
- * Owner ruling P2 = a (`specs/161-custom-fields-value-carry/`, review fixes
+ * Owner ruling P2 = a (`specs/162-custom-fields-value-carry/`, review fixes
  * 2026-10-21): the history serves an Opportunity's custom-field values only to
  * a caller who may read custom fields. `crm:read`'s `requires` is advisory
  * (D-175), so a role holding `crm:read` alone exists, and for it every entry's

@@ -66,10 +66,10 @@ describe('OpportunityAutoCreateService — a placed Order', () => {
       salesChannelId: CHANNEL_ID,
       source: 'order',
       document: { kind: 'order', id: ORDER_ID },
-      // Feature 161 — the Order's values, for the carry into the Opportunity.
+      // Feature 162 — the Order's values, for the carry into the Opportunity.
       carry: { sourceType: 'order', recordId: ORDER_ID, sourceValues: { order_source: 'fair' } },
     });
-    // The join hands on the Order exactly as it was read (feature 161).
+    // The join hands on the Order exactly as it was read (feature 162).
     expect(deps.links.linkOrderPlacedFromQuoteRequest).toHaveBeenCalledWith(order);
     expect(deps.events.emit).toHaveBeenCalledWith(
       'crm.opportunity.document_linked.v1',
@@ -190,7 +190,7 @@ describe('OpportunityAutoCreateService — a submitted Quote Request', () => {
       salesChannelId: null,
       source: 'quote_request',
       document: { kind: 'quote_request', id: QUOTE_ID },
-      // Feature 161 — the Quote Request's values, for the carry into the Opportunity.
+      // Feature 162 — the Quote Request's values, for the carry into the Opportunity.
       carry: { sourceType: 'quote_request', recordId: QUOTE_ID, sourceValues: { order_source: 'web' } },
     });
   });

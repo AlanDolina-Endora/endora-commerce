@@ -7,7 +7,7 @@ import {
 
 /**
  * A change an operator is about to make to one definition, as the drift
- * warning reads it (`specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §1.4).
+ * warning reads it (`specs/162-custom-fields-value-carry/contracts/admin-surfaces.md` §1.4).
  * The value type is not here: the admin never edits it.
  */
 export type DefinitionChange =
@@ -31,7 +31,7 @@ export interface CarryDriftDefinition {
   valueType: CustomFieldDefinitionDto['valueType'];
   audience: CustomFieldAudience;
   options: ReadonlyArray<{ value: string }>;
-  /** Absent on a definition read before feature 161 — it carries nothing. */
+  /** Absent on a definition read before feature 162 — it carries nothing. */
   carryTo?: readonly SupportedEntityType[];
 }
 

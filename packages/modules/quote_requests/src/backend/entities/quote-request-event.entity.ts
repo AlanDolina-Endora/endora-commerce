@@ -26,7 +26,7 @@ export type QuoteRequestEventType =
   // Feature 153 (owner answer Q4) — the quote PDF was e-mailed. Admin-only:
   // the customer reply leaves it out.
   | 'pdf-sent'
-  // Feature 161 — custom-field values a Sales Opportunity could not carry into
+  // Feature 162 — custom-field values a Sales Opportunity could not carry into
   // the request. Admin-only: it names keys of possibly internal fields.
   | 'custom-field-carry-skipped';
 

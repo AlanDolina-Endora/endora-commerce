@@ -155,7 +155,7 @@ describe('OpportunityHistoryService — references of an audited text', () => {
 });
 
 /**
- * Owner ruling P2 = a (`specs/161-custom-fields-value-carry/`, review fixes
+ * Owner ruling P2 = a (`specs/162-custom-fields-value-carry/`, review fixes
  * 2026-10-21): an Opportunity's custom-field values are served in its history
  * only to a caller who may read custom fields; a carry's skip lines name a
  * field and a reason, never a value, and stay.

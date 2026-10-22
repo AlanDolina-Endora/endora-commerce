@@ -10,7 +10,7 @@ import type { DefinitionSource } from './custom-field-value.service.js';
 import { CustomFieldCarryService } from './custom-field-carry.service.js';
 
 /**
- * The carry port (`specs/161-custom-fields-value-carry/contracts/carry-api.md`
+ * The carry port (`specs/162-custom-fields-value-carry/contracts/carry-api.md`
  * §4.1, research R-5): which source values carry into a target bag. Pure over
  * the definitions it is handed — no database write, no audit — and it never
  * overwrites, never consults an unrelated target field, and carries nothing

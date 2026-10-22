@@ -60,7 +60,7 @@ const SELECT_TYPES = new Set(['select', 'multiselect']);
 
 /**
  * A patch's `carryTo` with the stored targets it could not see merged back
- * (feature 161, research R-12): a carry to a type whose owner module is off is
+ * (feature 162, research R-12): a carry to a type whose owner module is off is
  * not served, so a save made meanwhile must not read as turning it off.
  */
 function retainHiddenCarryTargets(

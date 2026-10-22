@@ -18,7 +18,7 @@ import {
 import { submitCrmQuoteRequest } from '../../helpers/seed-crm.js';
 
 /**
- * Carry-over never widens who reads a value (`specs/161-custom-fields-value-carry/`
+ * Carry-over never widens who reads a value (`specs/162-custom-fields-value-carry/`
  * T038; SC-005, FR-011).
  *
  * For each target type a non-administrator reads — the Order (the buyer's order

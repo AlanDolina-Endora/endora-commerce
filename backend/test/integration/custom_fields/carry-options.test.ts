@@ -9,7 +9,7 @@ import { seedCrmAdmin, seedCrmOrder } from '../../helpers/seed-crm.js';
 
 /**
  * The carry options of a custom-field definition
- * (`specs/161-custom-fields-value-carry/` US4, FR-001 – FR-004, FR-011, FR-019).
+ * (`specs/162-custom-fields-value-carry/` US4, FR-001 – FR-004, FR-011, FR-019).
  *
  * `carryTo` is a definition attribute, written by the definition Commands and
  * audited with them. Turning a target on is judged once, at that moment, by

@@ -71,7 +71,7 @@ function coreEntries(language: Language): Record<string, string> {
 
 const ENTRIES: Record<Language, Record<string, string>> = { en: coreEntries('en'), pl: coreEntries('pl') };
 
-/** `quote_requests`' own bundle, shipped — the feature 161 entry's detail lines are its. */
+/** `quote_requests`' own bundle, shipped — the feature 162 entry's detail lines are its. */
 function moduleEntries(language: Language): Record<string, string> {
   return JSON.parse(
     readFileSync(join(REPO_ROOT, 'packages/modules/quote_requests/i18n', `${language}.json`), 'utf8'),
@@ -205,7 +205,7 @@ const FULL: QuoteRequestHistory = {
     entry('pdf_sent', REP, {
       delivery: { recipients: ['buyer@example.com', 'two@example.com'], templateName: 'With discounts', language: 'pl-PL', message: XSS },
     }),
-    // Feature 161 — values a Sales Opportunity could not carry into the request
+    // Feature 162 — values a Sales Opportunity could not carry into the request
     // (its skip lines are rendered and tested with the History renderer, T048).
     entry('custom_field_carry_skipped', SYSTEM, {
       customFieldCarry: {
@@ -297,7 +297,7 @@ describe.each<Language>(['en', 'pl'])('RfqHistory — %s', (language) => {
     expect(container.innerHTML).not.toMatch(/rfq\.detail\.history|core\.rfq/);
   });
 
-  it('says which sales opportunity a carry came from and lists each key not carried with its reason (161, T048)', async () => {
+  it('says which sales opportunity a carry came from and lists each key not carried with its reason (162, T048)', async () => {
     const longKey = `k${'x'.repeat(70)}`;
     answerHistory({
       truncated: false,
@@ -331,7 +331,7 @@ describe.each<Language>(['en', 'pl'])('RfqHistory — %s', (language) => {
     expect(container.textContent).not.toMatch(/target_missing|value_type_mismatch|audience_mismatch|value_invalid/);
   });
 
-  it('names a skipped field by the label stored with the skip, in the reader\'s language (161, V3, T067)', async () => {
+  it('names a skipped field by the label stored with the skip, in the reader\'s language (162, V3, T067)', async () => {
     const longLabel = `L${'y'.repeat(70)}`;
     answerHistory({
       truncated: false,
@@ -369,7 +369,7 @@ describe.each<Language>(['en', 'pl'])('RfqHistory — %s', (language) => {
     expect(container.textContent).not.toMatch(/long_label|markup/);
   });
 
-  it('words a skip reason it does not know by the generic sentence, never by its code (161)', async () => {
+  it('words a skip reason it does not know by the generic sentence, never by its code (162)', async () => {
     answerHistory({
       truncated: false,
       entries: [
@@ -390,7 +390,7 @@ describe.each<Language>(['en', 'pl'])('RfqHistory — %s', (language) => {
     expect(container.textContent).not.toMatch(/owner.unreachable/i);
   });
 
-  it('ships a reason sentence for every reason a carry can be skipped by (161)', () => {
+  it('ships a reason sentence for every reason a carry can be skipped by (162)', () => {
     for (const code of customFieldCarrySkipReasonSchema.options) {
       expect(MODULE_ENTRIES[language][`history.carryReason.${code}`], code).toBeTruthy();
     }

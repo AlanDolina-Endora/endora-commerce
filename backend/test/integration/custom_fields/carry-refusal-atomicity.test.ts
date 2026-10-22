@@ -8,7 +8,7 @@ import {
 import { seedCrmAdmin } from '../../helpers/seed-crm.js';
 
 /**
- * A refused carry option leaves nothing behind (`specs/161-custom-fields-value-carry/`
+ * A refused carry option leaves nothing behind (`specs/162-custom-fields-value-carry/`
  * FR-003, FR-002; QA edge case "a refused write leaves no partial write").
  *
  * `carry-options.test.ts` proves each refusal reads right; this file proves the

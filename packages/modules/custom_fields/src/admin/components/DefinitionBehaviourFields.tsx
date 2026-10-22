@@ -12,7 +12,7 @@ import { entityTypeLabelKey } from '../lib/carry-labels.js';
 
 /**
  * The block's value. `carryTo` is present where the entity type offers carry
- * targets (feature 161) — a caller for a type that offers none leaves it out,
+ * targets (feature 162) — a caller for a type that offers none leaves it out,
  * and `onChange` answers it back only when it was given or changed.
  */
 export interface DefinitionBehaviourValue {
@@ -52,8 +52,8 @@ export interface DefinitionBehaviourFieldsProps {
  * - *Use as list filter*, offered only where the entity type's entry says the
  *   type has it (feature 157).
  * - *Carry value to …*, one checkbox per `entityTypeInfo.carryTargets` entry
- *   in the registry's order, none when the type has no target (feature 161,
- *   `specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §1.1).
+ *   in the registry's order, none when the type has no target (feature 162,
+ *   `specs/162-custom-fields-value-carry/contracts/admin-surfaces.md` §1.1).
  *   In the `stacked` layout (the editor dialog) each checkbox is described by
  *   its own help line, so a screen reader hears what turning it on does
  *   without reading the block's prose. In the narrow `row` layout (the create
@@ -71,7 +71,7 @@ export function DefinitionBehaviourFields({
 }: DefinitionBehaviourFieldsProps): ReactNode {
   const t = useTranslation('custom_fields');
   const id = useId();
-  // `?? []`: an entry read from a server older than feature 161 has no marker.
+  // `?? []`: an entry read from a server older than feature 162 has no marker.
   const carryTargets = entityTypeInfo.carryTargets ?? [];
   const carryTo = value.carryTo ?? [];
   if (!entityTypeInfo.listFilter && carryTargets.length === 0) return null;

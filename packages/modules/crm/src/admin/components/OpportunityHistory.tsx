@@ -72,7 +72,7 @@ interface CarrySkipLine {
 
 /**
  * The keys a `customFieldCarry` member says were not carried, each with its
- * reason and stored label (feature 161, data-model §4.3; owner ruling V3) —
+ * reason and stored label (feature 162, data-model §4.3; owner ruling V3) —
  * `[]` for one that only carried. A label that does not parse is left out,
  * so the line falls back to the key rather than to a guess.
  */
@@ -462,7 +462,7 @@ export function OpportunityHistory(props: OpportunityHistoryProps): ReactNode {
   };
 
   /**
-   * What a creation or a join could not carry in (feature 161): which kind of
+   * What a creation or a join could not carry in (feature 162): which kind of
    * record the values came from, then a line per field with its reason, the
    * field named by the label stored with the skip. Every reader of the
    * Opportunity sees these lines — they name a field and a reason, never a

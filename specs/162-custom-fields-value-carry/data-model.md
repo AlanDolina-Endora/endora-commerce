@@ -1,4 +1,4 @@
-# Data model: Custom-field value carry-over (`specs/161-custom-fields-value-carry/`)
+# Data model: Custom-field value carry-over (`specs/162-custom-fields-value-carry/`)
 
 Two columns and one widened check constraint, in three migrations owned by three modules. No new
 table, no host-record column, no tenant-scoped entity. Everything else is a transient shape (a port

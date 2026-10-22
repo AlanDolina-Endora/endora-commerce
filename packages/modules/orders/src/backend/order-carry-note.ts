@@ -9,7 +9,7 @@ import { OrderComment } from './entities/order-comment.entity.js';
 
 /**
  * The Order's record of custom-field values not carried into it
- * (`specs/161-custom-fields-value-carry/`, research R-8): one author-less,
+ * (`specs/162-custom-fields-value-carry/`, research R-8): one author-less,
  * internal, non-notifying **system note** per conversion, naming every skipped
  * key once with its reason.
  *

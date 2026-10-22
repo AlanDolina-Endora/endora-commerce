@@ -25,7 +25,7 @@ import {
 
 /**
  * Order / Quote Request → Sales Opportunity custom-field carry
- * (`specs/161-custom-fields-value-carry/` US2; FR-007 – FR-010, FR-012 – FR-015;
+ * (`specs/162-custom-fields-value-carry/` US2; FR-007 – FR-010, FR-012 – FR-015;
  * research R-9, R-11).
  *
  * Inside CRM's own `crm.opportunity.create` and `crm.opportunity.link_add`

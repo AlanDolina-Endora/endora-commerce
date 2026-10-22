@@ -20,7 +20,7 @@ interface HarnessProps {
   busy?: boolean;
   useInitialFocus?: boolean;
   useFinalFocus?: boolean;
-  /** Feature 161 — describe the dialog by its body paragraph. */
+  /** Feature 162 — describe the dialog by its body paragraph. */
   describe?: boolean;
 }
 
@@ -88,7 +88,7 @@ describe('ModalDialog (admin-kit)', () => {
     expect(dialog).toHaveAttribute('aria-modal', 'true');
   });
 
-  it('is described by the element aria-describedby names (161)', async () => {
+  it('is described by the element aria-describedby names (162)', async () => {
     await openHarness({ describe: true });
     expect(screen.getByRole('dialog', { name: 'Rename tag' })).toHaveAccessibleDescription(
       'Every opportunity carrying the tag shows the new name.',

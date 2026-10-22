@@ -37,7 +37,7 @@ import type {
 
 /**
  * What {@link CustomFieldDefinitionApplyApi.applyCreate} takes: the create
- * request with `carryTo` optional (feature 161). A host-managed type's registry
+ * request with `carryTo` optional (feature 162). A host-managed type's registry
  * entry offers no carry target, so a host never names one; an absent `carryTo`
  * is stored as none.
  */

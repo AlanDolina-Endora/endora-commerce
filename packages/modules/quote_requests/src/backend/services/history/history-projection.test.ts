@@ -439,7 +439,7 @@ describe('feature 153 — the quote PDF sent by e-mail (owner answer Q4)', () =>
   });
 });
 
-describe('feature 161 — values a Sales Opportunity could not carry', () => {
+describe('feature 162 — values a Sales Opportunity could not carry', () => {
   const OPPORTUNITY = 'f0000000-0000-4000-8000-0000000000bb';
 
   it('a custom-field-carry-skipped event is one system entry naming its source and every skipped key', () => {

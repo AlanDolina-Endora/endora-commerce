@@ -1,6 +1,6 @@
 # Feature Specification: Custom-field value carry-over between Quote Requests, Orders and Sales Opportunities
 
-**Feature Branch**: `feat/161-custom-fields-value-carry`
+**Feature Branch**: `feat/162-custom-fields-value-carry`
 **Created**: 2026-10-16
 **Status**: Implemented — accepted by the product owner with conditions (2026-10-21); in the Phase 10 gate, pull request not yet opened
 **Issues**: #287
@@ -12,8 +12,8 @@ option ("Transfer value to Order", …) so that a value of `order_source` on a Q
 ↔ Sales Opportunity.
 
 **Dependency.** This feature builds on `specs/157-custom-fields-list-filters/` (issue #286), which ships first and
-delivers the ability to edit an existing definition's options on `/custom-fields`. 161 adds the carry-over
-options to that same editing surface and does not redesign it. 161 MUST NOT be planned against the
+delivers the ability to edit an existing definition's options on `/custom-fields`. 162 adds the carry-over
+options to that same editing surface and does not redesign it. 162 MUST NOT be planned against the
 earlier editor (audience-only editing); if the filters feature slips, the plan states how the carry options are reached.
 
 ## Current state (origin/master fda284a45)
@@ -38,7 +38,7 @@ Paths are relative to the repository root.
   declares no owner module (`:55`) although `quote_requests` is toggleable
   (its `activation` is at `packages/modules/quote_requests/src/manifest.ts:232`).
   `specs/157-custom-fields-list-filters/` (FR-005a) adds `ownerModuleId: 'quote_requests'`, so from that feature on Quote Request definitions are not served while
-  `quote_requests` is off; 161 relies on that.
+  `quote_requests` is off; 162 relies on that.
 - An option's stored value cannot be changed, and an option held by any record cannot be removed
   (`custom-field-definition.service.ts:222-256`); so an option can disappear from a target only while no
   target record holds it.

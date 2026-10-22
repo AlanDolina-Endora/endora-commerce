@@ -728,7 +728,7 @@ describe('crm off-state (Constitution XVII)', () => {
   });
 
   /**
-   * Feature 161 (`specs/161-custom-fields-value-carry/` T036; FR-005, FR-014, US2-4) —
+   * Feature 162 (`specs/162-custom-fields-value-carry/` T036; FR-005, FR-014, US2-4) —
    * custom-field carry with `crm` off. A Quote Request's value still follows it
    * into the Order placed from it: that pair is `custom_fields`' and `orders`'
    * own. No Sales Opportunity is created or joined, so nothing carries into one,
@@ -736,7 +736,7 @@ describe('crm off-state (Constitution XVII)', () => {
    * back on replays nothing. Meanwhile no type offers `opportunity` as a carry
    * target.
    */
-  describe('feature 161 — custom-field carry while crm is off', () => {
+  describe('feature 162 — custom-field carry while crm is off', () => {
     const CUSTOM_FIELDS_API = '/api/v1/admin/custom-fields';
     const RUN = randomUUID().slice(0, 8);
     const KEY = `cfc_${RUN}_crm_off`;

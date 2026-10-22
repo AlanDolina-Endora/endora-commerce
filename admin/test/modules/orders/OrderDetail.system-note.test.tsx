@@ -11,10 +11,10 @@ import ordersEn from '../../../../packages/modules/orders/i18n/en.json';
 import ordersPl from '../../../../packages/modules/orders/i18n/pl.json';
 
 /**
- * Feature 161 (T047, US1-4, FR-010a, SC-006) — the system note the platform
+ * Feature 162 (T047, US1-4, FR-010a, SC-006) — the system note the platform
  * writes into an Order's comments when a custom-field value could not be
  * carried into it, read in the operator's language
- * (`specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §2).
+ * (`specs/162-custom-fields-value-carry/contracts/admin-surfaces.md` §2).
  *
  * Owner ruling V3 (2026-10-21, T067): a skip line names the field by the label
  * stored with the skip — the reader's language, then the default label, then

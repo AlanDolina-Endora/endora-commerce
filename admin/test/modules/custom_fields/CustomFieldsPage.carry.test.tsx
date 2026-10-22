@@ -11,10 +11,10 @@ import coreEn from '../../../../packages/modules/_i18n/i18n/en.json';
 import { CARRY_ENTITY_TYPES, carryDefinition, sentence } from './carry-fixtures';
 
 /**
- * Feature 161 (T042, US4) — `/custom-fields` offers the carry options, sends
+ * Feature 162 (T042, US4) — `/custom-fields` offers the carry options, sends
  * them, explains a refusal in words, and shows which targets a definition
  * carries to, marked where the target no longer fits
- * (`specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §1.1 – §1.3).
+ * (`specs/162-custom-fields-value-carry/contracts/admin-surfaces.md` §1.1 – §1.3).
  */
 
 const EN = en as Record<string, string>;

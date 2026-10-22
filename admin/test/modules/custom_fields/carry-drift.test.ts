@@ -7,9 +7,9 @@ import {
 } from '../../../../packages/modules/custom_fields/src/admin/lib/carry-drift';
 
 /**
- * Feature 161 (T041, US4-6, US4-8, FR-019) — which enabled carries a change a
+ * Feature 162 (T041, US4-6, US4-8, FR-019) — which enabled carries a change a
  * definition is about to undergo turns from compatible to incompatible
- * (`specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §1.4).
+ * (`specs/162-custom-fields-value-carry/contracts/admin-surfaces.md` §1.4).
  */
 
 let sequence = 0;

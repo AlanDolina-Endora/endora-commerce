@@ -2,7 +2,7 @@ import { customFieldCarrySkipRecord, type CustomFieldCarryPort } from '@endora-c
 
 /**
  * Order / Quote Request → Sales Opportunity custom-field carry
- * (`specs/161-custom-fields-value-carry/`, research R-9, data-model §4.3).
+ * (`specs/162-custom-fields-value-carry/`, research R-9, data-model §4.3).
  *
  * `custom_fields` answers which of the document's values carry into the
  * Opportunity's current bag (empty fields only); CRM stores `values` in the

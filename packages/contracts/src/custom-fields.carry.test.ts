@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as cf from './custom-fields.js';
 
 /**
- * `specs/161-custom-fields-value-carry/contracts/carry-api.md` §1 — the carry
+ * `specs/162-custom-fields-value-carry/contracts/carry-api.md` §1 — the carry
  * attribute on definitions, the entity-type marker and the one compatibility
  * rule every caller applies (FR-001, FR-003, FR-011).
  */

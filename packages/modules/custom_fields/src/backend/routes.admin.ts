@@ -44,7 +44,7 @@ function toHttp(err: unknown): never {
         throw new HttpError(409, ERROR_CODES.CUSTOM_FIELD_STORED_VALUES_EXIST, err.message, { ...err.details });
       case 'option_in_use':
         throw new HttpError(409, ERROR_CODES.CUSTOM_FIELD_OPTION_IN_USE, err.message, { ...err.details });
-      // Feature 161 — `details.code` names why the carry target was refused.
+      // Feature 162 — `details.code` names why the carry target was refused.
       case 'carry_incompatible':
         throw new HttpError(422, ERROR_CODES.CUSTOM_FIELD_CARRY_INCOMPATIBLE, err.message, { ...err.details });
       default:
@@ -112,7 +112,7 @@ function serialize({ definition, options }: CachedDefinition): Record<string, un
     sortOrder: definition.sortOrder,
     config: definition.config,
     listFilter: definition.listFilter,
-    // Feature 161 — a carry to a type whose owner module is off is not
+    // Feature 162 — a carry to a type whose owner module is off is not
     // offered; the row keeps it, and serves it again with the owner.
     carryTo: definition.carryTo.filter((target) => isEntityTypeServed(target)),
     options: options.map((o) => ({
@@ -164,7 +164,7 @@ export async function registerCustomFieldsAdminRoutes(
         labelKey: meta.labelKey,
         // Whether the type's definitions may be list filters (feature 157).
         listFilter: meta.listFilter === true,
-        // The types its definitions may carry to, while their owner is present (feature 161).
+        // The types its definitions may carry to, while their owner is present (feature 162).
         carryTargets: (meta.carryTargets ?? []).filter((target) => isEntityTypeServed(target)),
         ...(meta.managedBy
           ? {

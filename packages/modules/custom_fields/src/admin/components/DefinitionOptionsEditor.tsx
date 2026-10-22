@@ -20,8 +20,8 @@ import type { CarryCounterpart, DefinitionChange } from '../lib/carry-drift.js';
 import { sameLabel, withLanguages } from './localized-label.js';
 
 /**
- * Asks before an option change that breaks an enabled carry (feature 161,
- * `specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §1.4). The
+ * Asks before an option change that breaks an enabled carry (feature 162,
+ * `specs/162-custom-fields-value-carry/contracts/admin-surfaces.md` §1.4). The
  * dialog that renders this editor owns the question; the editor only says
  * which change it is about to make.
  */
@@ -41,7 +41,7 @@ export interface DefinitionOptionsEditorProps {
   /** Re-reads the definition after an option action. */
   onChanged: () => Promise<void>;
   disabled?: boolean;
-  /** Feature 161 — present where a change can break a carry. */
+  /** Feature 162 — present where a change can break a carry. */
   carryGuard?: CarryDriftGuard;
 }
 

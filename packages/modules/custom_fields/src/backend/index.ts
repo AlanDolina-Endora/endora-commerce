@@ -175,9 +175,9 @@ export function registerModule(ctx: ModuleContext): void {
   );
 
   /**
-   * Feature 161 — which custom-field values carry from one record into another
+   * Feature 162 — which custom-field values carry from one record into another
    * of a type the definition names in `carryTo`
-   * (`specs/161-custom-fields-value-carry/contracts/carry-api.md` §4.1). It
+   * (`specs/162-custom-fields-value-carry/contracts/carry-api.md` §4.1). It
    * computes and never writes: the module owning the target record persists
    * the answer in its own write. Reads through the same per-entity cache, so a
    * committed definition change reaches the next plan without waiting for the

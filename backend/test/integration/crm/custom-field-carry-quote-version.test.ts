@@ -15,7 +15,7 @@ import {
 } from '../../helpers/seed-crm.js';
 
 /**
- * QA finding for `specs/161-custom-fields-value-carry/` (US3-1, FR-013): the
+ * QA finding for `specs/162-custom-fields-value-carry/` (US3-1, FR-013): the
  * Opportunity → Quote Request carry bumps `quote_requests.version`
  * (`quote-request-custom-field-carry-receiver.ts`: `quote.version += 1`).
  *

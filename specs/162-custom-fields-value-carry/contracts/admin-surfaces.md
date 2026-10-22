@@ -1,4 +1,4 @@
-# Contract: admin surfaces (`specs/161-custom-fields-value-carry/`)
+# Contract: admin surfaces (`specs/162-custom-fields-value-carry/`)
 
 Admin UI only. No new route, page, permission code, palette action or nav entry (FR-017;
 `/custom-fields` is reachable as the existing palette action `open-custom-fields`). Every component

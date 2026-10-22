@@ -18,7 +18,7 @@ export const CATALOG_READ_PERMISSION = 'catalog:read';
 /**
  * The permission `custom_fields` gates its definitions and values with — what
  * an Opportunity's history asks before it serves custom-field values
- * (feature 161, owner ruling P2 = a).
+ * (feature 162, owner ruling P2 = a).
  */
 export const CUSTOM_FIELDS_READ_PERMISSION = 'custom_fields:read';
 

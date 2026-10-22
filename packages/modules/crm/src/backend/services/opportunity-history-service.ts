@@ -20,7 +20,7 @@ export interface OpportunityHistoryServiceDeps {
   /** What the tokens of an audited text name, for the reader. */
   references: Pick<ReferenceService, 'resolveMany'>;
   /**
-   * Feature 161 (owner ruling P2 = a) — whether the caller may read custom
+   * Feature 162 (owner ruling P2 = a) — whether the caller may read custom
    * fields (`custom_fields:read`). Without it, no entry serves the
    * Opportunity's custom-field values.
    */
@@ -110,7 +110,7 @@ function decodeCursor(cursor: string | undefined): number {
  * is no next page; the last page then carries `truncated: true`. `hasMore`
  * keeps its one meaning — a next page exists and `cursor` asks for it.
  *
- * **Custom-field values need `custom_fields:read`** (feature 161, owner ruling
+ * **Custom-field values need `custom_fields:read`** (feature 162, owner ruling
  * P2 = a). `crm:read`'s `requires` is advisory, so a reader may hold it alone;
  * for that reader every entry's `before` and `after` are served without
  * `customFieldValues`, decided here, server-side, once per page.

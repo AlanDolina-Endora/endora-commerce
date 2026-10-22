@@ -1,4 +1,4 @@
-# Contract: carry options, the carry port and the receiver ports (`specs/161-custom-fields-value-carry/`)
+# Contract: carry options, the carry port and the receiver ports (`specs/162-custom-fields-value-carry/`)
 
 Everything here is defined in `@endora-commerce/contracts` **before** any route or service uses it
 (Principle II). All changes are additive except where §1.3 marks a required member of an in-process

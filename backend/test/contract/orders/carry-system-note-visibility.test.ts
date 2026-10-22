@@ -18,7 +18,7 @@ import {
 
 /**
  * The Order system note is the administrators' alone
- * (`specs/161-custom-fields-value-carry/` T039; SC-006, FR-010a).
+ * (`specs/162-custom-fields-value-carry/` T039; SC-006, FR-010a).
  *
  * After a placement that could not carry a value, the note naming it is in the
  * admin comments reply — and nowhere a buyer, an API key or a mailbox reads:

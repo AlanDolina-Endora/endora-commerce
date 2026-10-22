@@ -150,7 +150,7 @@ interface OrderCommentRow {
   notifyCustomer: boolean;
   authorAdminUserId: string | null;
   authorCustomerAccountId: string | null;
-  /** Feature 161 — present on a note the platform wrote (both authors `null`). */
+  /** Feature 162 — present on a note the platform wrote (both authors `null`). */
   systemNote?: OrderCommentSystemNote | null;
   createdAt: string;
 }
@@ -177,8 +177,8 @@ function skippedFieldName(skip: OrderCommentSystemNote['skipped'][number], langu
 }
 
 /**
- * A system note as the operator reads it, in their language (feature 161,
- * `specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §2): which
+ * A system note as the operator reads it, in their language (feature 162,
+ * `specs/162-custom-fields-value-carry/contracts/admin-surfaces.md` §2): which
  * record the values came from, then a line per value not carried — the
  * field's stored label, else its key — with the reason. A source or a reason
  * this screen has no sentence for falls back to the stored English `body`,
@@ -235,7 +235,7 @@ export function OrderDetail(): ReactNode {
   const t = useTranslation('core');
   const tOrders = useTranslation('orders');
   const sectionSummaryText = useOrderSectionSummaryText();
-  // Feature 161 — the system note's sentences are this module's own.
+  // Feature 162 — the system note's sentences are this module's own.
   const { language } = useTranslationContext();
   const { id = '' } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();

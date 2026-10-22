@@ -913,7 +913,7 @@ export type AdminOrderPreviewResponse = z.infer<typeof adminOrderPreviewResponse
 // --- Comments --------------------------------------------------------------
 
 /**
- * Feature 161 — an author-less **system note** the platform writes into an
+ * Feature 162 — an author-less **system note** the platform writes into an
  * Order's comments: custom-field values that could not be carried into the
  * Order from the record it was created from. Internal, never notifying, and
  * never listed to the buyer. The comment's `body` is an English fallback; a
@@ -940,7 +940,7 @@ export const orderCommentSchema = z.object({
   body: z.string(),
   isCustomerVisible: z.boolean(),
   notifyCustomer: z.boolean(),
-  /** Feature 161 — admin replies only; present ⇒ a system note (both authors `null`). */
+  /** Feature 162 — admin replies only; present ⇒ a system note (both authors `null`). */
   systemNote: orderCommentSystemNoteSchema.nullable().optional(),
   createdAt: isoDateTimeSchema,
 });

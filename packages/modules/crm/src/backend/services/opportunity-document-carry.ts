@@ -4,7 +4,7 @@ import type { OriginatedDocument } from './opportunity-origin-link-service.js';
 
 /**
  * Opportunity → Order / Quote Request custom-field carry
- * (`specs/161-custom-fields-value-carry/`, research R-10): the Opportunity's
+ * (`specs/162-custom-fields-value-carry/`, research R-10): the Opportunity's
  * values pushed to the owner of the document just linked to it, which carries
  * them into empty fields in a Command of its own and records what it skipped.
  *

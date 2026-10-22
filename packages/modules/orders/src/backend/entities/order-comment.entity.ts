@@ -48,7 +48,7 @@ export class OrderComment {
 
   /**
    * Present ⇒ an author-less **system note** the platform wrote
-   * (`specs/161-custom-fields-value-carry/`, data-model §2): both authors
+   * (`specs/162-custom-fields-value-carry/`, data-model §2): both authors
    * `null`, never customer-visible, never notifying, and `body` an English
    * fallback of what the note says. Never listed to the buyer.
    */

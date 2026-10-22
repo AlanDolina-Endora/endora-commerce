@@ -33,7 +33,7 @@ const FALLBACK_ENTITY_TYPES: CustomFieldEntityTypeInfo[] = (
   labelKey: `customFields.entity.${entityType}`,
   // The list-filter option is offered only once the server says the type has it.
   listFilter: false,
-  // So are the carry options (feature 161).
+  // So are the carry options (feature 162).
   carryTargets: [],
 }));
 const VALUE_TYPES: CustomFieldValueType[] = [
@@ -60,7 +60,7 @@ function draftOptions(
     .map((value, i) => ({ value, label: {}, labelDefault: value, isDefault: false, sortOrder: i }));
 }
 
-/** A change from the table waiting on the drift warning's answer (feature 161). */
+/** A change from the table waiting on the drift warning's answer (feature 162). */
 interface PendingTableChange {
   change: DefinitionChange;
   counterparts: CarryCounterpart[];
@@ -75,7 +75,7 @@ interface PendingTableChange {
  * 157). Every write control — create, edit, delete, audience — is offered only
  * to an operator holding `custom_fields:write`; a reader sees the table.
  *
- * Feature 161 (`specs/161-custom-fields-value-carry/contracts/admin-surfaces.md`
+ * Feature 162 (`specs/162-custom-fields-value-carry/contracts/admin-surfaces.md`
  * §1): the *Carry value to …* options, a *Carries to* column whose chips are
  * marked *Incompatible* when the same-key target no longer fits, and a warning
  * before an audience change or a deletion that breaks an enabled carry. Both
@@ -130,7 +130,7 @@ export function CustomFieldsPage(): ReactNode {
   const [listFilter, setListFilter] = useState(false);
   const [carryTo, setCarryTo] = useState<SupportedEntityType[]>([]);
 
-  // Feature 161 — every type's definitions, for the carry marks and warnings.
+  // Feature 162 — every type's definitions, for the carry marks and warnings.
   // `null` until read (or when the read failed): no mark is shown on a guess.
   const offersCarry = entityTypes.some((info) => (info.carryTargets ?? []).length > 0);
   const [allDefinitions, setAllDefinitions] = useState<CustomFieldDefinitionDto[] | null>(null);
@@ -217,7 +217,7 @@ export function CustomFieldsPage(): ReactNode {
         await fn();
         await reload();
       } catch (err) {
-        // A carry refusal reads as a sentence built from `details` (feature 161).
+        // A carry refusal reads as a sentence built from `details` (feature 162).
         setError(refusalSentence(t, err, typeLabel, t('customFields.error.action')));
       }
     },
@@ -262,7 +262,7 @@ export function CustomFieldsPage(): ReactNode {
         audience,
         sortOrder: rows.length,
         config: {},
-        // Feature 161 — `[]` unless the operator ticked a target the type offers.
+        // Feature 162 — `[]` unless the operator ticked a target the type offers.
         carryTo: draftCarryTo,
         options: opts,
         // Sent only where the entity type offers the option.

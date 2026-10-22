@@ -13,12 +13,12 @@ import corePl from '../../../../packages/modules/_i18n/i18n/pl.json';
 import { CARRY_ENTITY_TYPES, carryDefinition, sentence } from './carry-fixtures';
 
 /**
- * Feature 161 (T043, US4-6, US4-8, SC-007, FR-019) — a change that would stop
+ * Feature 162 (T043, US4-6, US4-8, SC-007, FR-019) — a change that would stop
  * an enabled carry from working asks first, in the page, naming every field on
  * the other side; *Cancel* sends nothing and the proceed button — named after
  * the action it confirms (owner ruling V1, 2026-10-21, T065) — sends exactly
  * what the action sent before
- * (`specs/161-custom-fields-value-carry/contracts/admin-surfaces.md` §1.4).
+ * (`specs/162-custom-fields-value-carry/contracts/admin-surfaces.md` §1.4).
  */
 
 type Bundle = Record<string, string>;

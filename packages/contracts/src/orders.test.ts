@@ -425,7 +425,7 @@ describe('order line groups (T007)', () => {
   });
 });
 
-describe('feature 161 — the order comment system note', () => {
+describe('feature 162 — the order comment system note', () => {
   const NOTE = {
     kind: 'custom_field_carry_skipped',
     source: {

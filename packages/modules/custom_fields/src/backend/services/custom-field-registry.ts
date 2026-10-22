@@ -55,7 +55,7 @@ export interface SupportedEntityMeta {
    */
   readonly listFilter?: true;
   /**
-   * Optional carry marker (feature 161). The entity types definitions of this
+   * Optional carry marker (feature 162). The entity types definitions of this
    * type may carry their values to, when a record of such a type is created
    * from, or joins, a record of this type. A definition's `carryTo` may name
    * only these; on any other type the option is refused. Generic, like the
@@ -124,7 +124,7 @@ export function isEntityTypeServed(entityType: string): boolean {
   return !owner || effectiveState.isPresent(owner);
 }
 
-/** The entity types definitions of `entityType` may carry their values to (feature 161). */
+/** The entity types definitions of `entityType` may carry their values to (feature 162). */
 export function carryTargetsOf(entityType: string): readonly SupportedEntityType[] {
   return isSupportedEntityType(entityType) ? (SUPPORTED_ENTITIES[entityType].carryTargets ?? []) : [];
 }

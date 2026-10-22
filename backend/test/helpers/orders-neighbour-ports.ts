@@ -172,7 +172,7 @@ export function orderServiceNeighbours(
     // degrade and the default here: these rigs place orders from baskets no
     // quote filled, so there is no claim to vouch for.
     quoteRequestRead: () => null,
-    // Feature 161 — asked only for a vouched quote source, which these rigs
+    // Feature 162 — asked only for a vouched quote source, which these rigs
     // never have; it answers the target bag unchanged.
     customFieldCarry: () => ({
       plan: async ({ targetValues }) => ({ values: { ...targetValues }, carried: [], skipped: [] }),

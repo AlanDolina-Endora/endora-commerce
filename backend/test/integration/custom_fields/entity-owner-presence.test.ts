@@ -28,7 +28,7 @@ const AXES: OffStateAxis[] = ['deactivated', 'platform-unavailable'];
 
 /**
  * The owned types, their owner module, the host table their values live on, and
- * — for the carry options of `specs/161-custom-fields-value-carry/` — the other
+ * — for the carry options of `specs/162-custom-fields-value-carry/` — the other
  * owned type that carries values to it (`source`, offered `order` too) and a
  * type whose only other target is it (`carrier`).
  */
@@ -49,7 +49,7 @@ interface EntityTypeRow {
   managedBy?: unknown;
 }
 
-/** The rows as they read once `absent` is no longer a carry target of any type (feature 161). */
+/** The rows as they read once `absent` is no longer a carry target of any type (feature 162). */
 const withoutCarryTarget = (rows: EntityTypeRow[], absent: string): EntityTypeRow[] =>
   rows.map((row) => ({ ...row, carryTargets: row.carryTargets.filter((target) => target !== absent) }));
 
@@ -312,7 +312,7 @@ describe('custom_fields — a host type follows its owner module', () => {
     });
   });
 
-  // `specs/161-custom-fields-value-carry/` FR-005, research R-12 — a carry to a
+  // `specs/162-custom-fields-value-carry/` FR-005, research R-12 — a carry to a
   // type whose owner is off is hidden and inert, never dropped, and offered
   // again with the owner.
   describe.each(OWNED)('carry options naming $entityType, owned by $owner', (owned) => {

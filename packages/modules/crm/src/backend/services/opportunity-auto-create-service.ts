@@ -168,7 +168,7 @@ export class OpportunityAutoCreateService {
       salesChannelId: order.salesChannelId,
       source: 'order',
       document: { kind: 'order', id: order.id },
-      // Feature 161 — the Order's values, carried into the new Opportunity.
+      // Feature 162 — the Order's values, carried into the new Opportunity.
       carry: { sourceType: 'order', recordId: order.id, sourceValues: order.customFieldValues ?? {} },
     });
   }
@@ -232,7 +232,7 @@ export class OpportunityAutoCreateService {
       salesChannelId: null,
       source: 'quote_request',
       document: { kind: 'quote_request', id: record.id },
-      // Feature 161 — the Quote Request's values, carried into the new Opportunity.
+      // Feature 162 — the Quote Request's values, carried into the new Opportunity.
       carry: { sourceType: 'quote_request', recordId: record.id, sourceValues: record.customFieldValues ?? {} },
     });
   }
