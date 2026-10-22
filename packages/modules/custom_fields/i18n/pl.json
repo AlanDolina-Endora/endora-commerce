@@ -102,6 +102,7 @@
   "customFields.carry.legend": "Przenoszenie wartości",
   "customFields.carry.toggle": "Przenoś wartość do: {entityType}",
   "customFields.carry.help": "Gdy z rekordu zawierającego to pole powstanie rekord typu „{entityType}”, puste pole o tym samym kluczu w nowym rekordzie otrzyma wartość tego pola.",
+  "customFields.carry.refusalSummary": "Nie zapisano — zobacz „{section}” powyżej.",
   "customFields.carry.helpGroup": "Gdy z rekordu zawierającego to pole powstanie rekord zaznaczonego typu, puste pole o tym samym kluczu w nowym rekordzie otrzyma wartość tego pola.",
   "customFields.carry.incompatible": "Niezgodne",
   "customFields.carry.checksUnavailable": "Nie udało się sprawdzić powiązań przenoszenia.",

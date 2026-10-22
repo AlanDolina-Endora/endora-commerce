@@ -1253,6 +1253,16 @@ W1 and the coordinator's label-fallback ruling.
   behaviour changes. It had not surfaced before because the earlier tips' `quality` runs were cancelled.
   Locally `admin/test/modules/orders` was run as a directory (25 files, 159 tests green) — an
   exception to standing rule 13.
+- [x] **R16 The carry refusal is said where it is fixed** (owner test finding 1.3, 2026-10-22). The editor
+  dialog showed a `CUSTOM_FIELD_CARRY_INCOMPATIBLE` refusal at the top of the dialog, scrolled out of sight
+  of *Save* and of the carry options. The sentence (still `refusalSentence`, built from `details`) is now
+  rendered inside the carry group, describing it and every ticked box (`aria-describedby`,
+  `aria-invalid`), and takes the focus; the footer adds `customFields.carry.refusalSummary` beside
+  *Save*. The dialog's other save failures moved from the top to the same footer slot (`role="alert"`),
+  so the dialog has one error place. The create form's carry refusal likewise left the page-top alert
+  for a line under the form's carry group, focused; the page alert keeps the load and table-action
+  errors. Changing the boxes (or the record type) withdraws the refusal. `isCarryRefusal` in
+  `carry-labels.ts` tells the two apart. Test: `CustomFieldsPage.carry.test.tsx` (US4-3, US4-2 cases).
 
 ## Dependencies and order
 

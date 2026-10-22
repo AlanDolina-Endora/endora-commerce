@@ -7,7 +7,7 @@ import { CarryDriftDialog } from '../components/CarryDriftWarning.js';
 import { DefinitionBehaviourFields } from '../components/DefinitionBehaviourFields.js';
 import { DefinitionEditorDialog } from '../components/DefinitionEditorDialog.js';
 import { carryCounterpartsBrokenBy, type CarryCounterpart, type DefinitionChange } from '../lib/carry-drift.js';
-import { entityTypeLabelKey, incompatibilitySentence, refusalSentence } from '../lib/carry-labels.js';
+import { entityTypeLabelKey, incompatibilitySentence, isCarryRefusal, refusalSentence } from '../lib/carry-labels.js';
 import { Alert, AlertDescription, Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Label, PageHeader, Select } from '@endora-commerce/admin-kit/ui';
 import { ResponsiveTable, resolveCustomFieldLabel, type ResponsiveColumn } from '@endora-commerce/admin-kit/components';
 import { useTranslation, useTranslationContext } from '@endora-commerce/admin-kit/i18n';
@@ -129,6 +129,12 @@ export function CustomFieldsPage(): ReactNode {
   const [options, setOptions] = useState('');
   const [listFilter, setListFilter] = useState(false);
   const [carryTo, setCarryTo] = useState<SupportedEntityType[]>([]);
+  /**
+   * The create form's carry refusal (R16): said beside the carry options it is
+   * about, at the form, not in the page-top alert out of sight above the table.
+   */
+  const [createCarryError, setCreateCarryError] = useState<string | null>(null);
+  const createCarryErrorRef = useRef<HTMLParagraphElement>(null);
 
   // Feature 162 — every type's definitions, for the carry marks and warnings.
   // `null` until read (or when the read failed): no mark is shown on a guess.
@@ -211,18 +217,24 @@ export function CustomFieldsPage(): ReactNode {
   }, [refresh, offersCarry, loadAll]);
 
   const run = useCallback(
-    async (fn: () => Promise<unknown>): Promise<void> => {
+    async (fn: () => Promise<unknown>, onCarryRefusal?: (sentence: string) => void): Promise<void> => {
       setError(null);
       try {
         await fn();
         await reload();
       } catch (err) {
         // A carry refusal reads as a sentence built from `details` (feature 162).
-        setError(refusalSentence(t, err, typeLabel, t('customFields.error.action')));
+        const sentence = refusalSentence(t, err, typeLabel, t('customFields.error.action'));
+        if (onCarryRefusal && isCarryRefusal(err)) onCarryRefusal(sentence);
+        else setError(sentence);
       }
     },
     [reload, t, typeLabel],
   );
+
+  useEffect(() => {
+    if (createCarryError !== null) createCarryErrorRef.current?.focus();
+  }, [createCarryError]);
 
   /** Runs `proceed` at once, or after the drift warning when `change` breaks an enabled carry. */
   const guarded = (change: DefinitionChange, proceed: () => void, lead?: string): void => {
@@ -251,6 +263,7 @@ export function CustomFieldsPage(): ReactNode {
 
   const submit = (): void => {
     const opts = draftOptions(valueType, options);
+    setCreateCarryError(null);
     void run(async () => {
       await customFieldsClient.create({
         entityType,
@@ -274,7 +287,7 @@ export function CustomFieldsPage(): ReactNode {
       setAudience('internal');
       setListFilter(false);
       setCarryTo([]);
-    });
+    }, setCreateCarryError);
   };
 
   const columns: ResponsiveColumn<CustomFieldDefinitionDto>[] = [
@@ -470,7 +483,11 @@ export function CustomFieldsPage(): ReactNode {
           <Select
             id="entity"
             value={entityType}
-            onChange={(e) => setEntityType(e.target.value as SupportedEntityType)}
+            onChange={(e) => {
+              setEntityType(e.target.value as SupportedEntityType);
+              // A carry refusal was about the type it was made for.
+              setCreateCarryError(null);
+            }}
           >
             {entityTypes.map((info) => (
               <option key={info.entityType} value={info.entityType}>
@@ -619,10 +636,16 @@ export function CustomFieldsPage(): ReactNode {
                 value={carryTargets.length > 0 ? { listFilter, carryTo: draftCarryTo } : { listFilter }}
                 onChange={(next) => {
                   setListFilter(next.listFilter);
-                  if (next.carryTo !== undefined) setCarryTo(next.carryTo);
+                  if (next.carryTo !== undefined && next.carryTo.join() !== draftCarryTo.join()) {
+                    setCarryTo(next.carryTo);
+                    // The refusal was about the boxes as they were.
+                    setCreateCarryError(null);
+                  }
                 }}
                 entityTypes={entityTypes}
                 layout="row"
+                carryError={createCarryError}
+                carryErrorRef={createCarryErrorRef}
               />
             ) : null}
             <Button size="sm" disabled={!key.trim()} onClick={submit}>

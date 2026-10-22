@@ -12,7 +12,8 @@ The `/custom-fields` screen turns value carry-over on and off, shows where value
   the carry list only when it changed.
 - A refused carry option keeps the form or the editor open with a sentence that names what is
   wrong — the missing field and its type, the two value types, the missing option values, or the
-  audience rule — in the operator's language.
+  audience rule — in the operator's language. The sentence stands under the carry options it is
+  about and takes the focus; the editor also says beside *Save* that nothing was saved.
 - A new *Carries to* column lists each target as a chip. A chip whose same-key target no longer
   fits is marked *Incompatible*, with its reason as text; the mark goes as soon as the definitions
   are re-read compatible.
@@ -25,6 +26,6 @@ The `/custom-fields` screen turns value carry-over on and off, shows where value
   as before. A change that breaks nothing asks nothing.
 
 **For a module author.** `DefinitionBehaviourFields` takes an optional `value.carryTo` (answered
-back by `onChange`) and an optional `entityTypes`; `DefinitionEditorDialog` takes optional
+back by `onChange`), an optional `entityTypes`, and an optional `carryError` with its `carryErrorRef`; `DefinitionEditorDialog` takes optional
 `entityTypes` and `definitions`; `DefinitionOptionsEditor` takes an optional `carryGuard`. All
 additive.

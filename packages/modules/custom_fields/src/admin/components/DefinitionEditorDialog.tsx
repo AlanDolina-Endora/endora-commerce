@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Alert, AlertDescription, Button, Checkbox, Input, Label } from '@endora-commerce/admin-kit/ui';
+import { Button, Checkbox, Input, Label } from '@endora-commerce/admin-kit/ui';
 import { ModalDialog } from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import type {
@@ -16,7 +16,7 @@ import {
   type CarryDriftProceed,
   type DefinitionChange,
 } from '../lib/carry-drift.js';
-import { entityTypeLabelKey, refusalSentence } from '../lib/carry-labels.js';
+import { entityTypeLabelKey, isCarryRefusal, refusalSentence } from '../lib/carry-labels.js';
 import { sameLabel, withLanguages } from './localized-label.js';
 import { CarryDriftNotice } from './CarryDriftWarning.js';
 import { DefinitionBehaviourFields } from './DefinitionBehaviourFields.js';
@@ -87,7 +87,15 @@ export function DefinitionEditorDialog({
   const [carryTo, setCarryTo] = useState<SupportedEntityType[]>(definition.carryTo ?? []);
   const offersCarry = (entityTypeInfo.carryTargets ?? []).length > 0;
   const [labelInvalid, setLabelInvalid] = useState(false);
+  /** A refused save other than a carry refusal, said in the footer beside *Save*. */
   const [error, setError] = useState<string | null>(null);
+  /**
+   * A carry refusal (R16): its sentence beside the carry options, where it is
+   * fixed, a summary beside *Save*, and focus on the sentence so it is never
+   * left scrolled out of sight at the other end of the dialog.
+   */
+  const [carryError, setCarryError] = useState<string | null>(null);
+  const carryErrorRef = useRef<HTMLParagraphElement>(null);
   const [busy, setBusy] = useState(false);
   /** An option action applies at once, so after one *Cancel* would undo nothing: it reads *Close*. */
   const [optionsTouched, setOptionsTouched] = useState(false);
@@ -157,6 +165,10 @@ export function DefinitionEditorDialog({
     if (opener?.isConnected) opener.focus();
   }, [drift]);
 
+  useEffect(() => {
+    if (carryError !== null) carryErrorRef.current?.focus();
+  }, [carryError]);
+
   const reread = useCallback(async (): Promise<void> => {
     setOptionsTouched(true);
     setCurrent(await customFieldsClient.get(definition.id));
@@ -182,12 +194,15 @@ export function DefinitionEditorDialog({
     }
     setBusy(true);
     setError(null);
+    setCarryError(null);
     try {
       await customFieldsClient.update(definition.id, patch);
       onSaved();
     } catch (err) {
       // A carry refusal keeps the dialog open with a sentence built from `details`.
-      setError(refusalSentence(t, err, typeLabel, t('customFields.editor.saveFailed')));
+      const sentence = refusalSentence(t, err, typeLabel, t('customFields.editor.saveFailed'));
+      if (isCarryRefusal(err)) setCarryError(sentence);
+      else setError(sentence);
       setBusy(false);
     }
   };
@@ -225,6 +240,19 @@ export function DefinitionEditorDialog({
           </>
         ) : (
         <>
+          {error !== null || carryError !== null ? (
+            <p
+              data-testid="save-error"
+              // A carry refusal's sentence takes the focus, which reads it; the
+              // summary is not announced a second time.
+              role={carryError === null ? 'alert' : undefined}
+              className="min-w-0 basis-full break-words text-sm text-destructive sm:basis-0 sm:flex-1 sm:self-center"
+            >
+              {carryError !== null
+                ? t('customFields.carry.refusalSummary', { section: t('customFields.carry.legend') })
+                : error}
+            </p>
+          ) : null}
           <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
             {optionsTouched ? t('customFields.editor.close') : t('customFields.editor.cancel')}
           </Button>
@@ -249,12 +277,6 @@ export function DefinitionEditorDialog({
         />
       ) : null}
       <div className="space-y-5" hidden={drift !== null}>
-        {error ? (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
-
         <section aria-labelledby={`${id}-identity`} className="space-y-2">
           <h3 id={`${id}-identity`} className="text-sm font-semibold">
             {t('customFields.editor.section.identity')}
@@ -343,10 +365,16 @@ export function DefinitionEditorDialog({
           value={offersCarry ? { listFilter, carryTo } : { listFilter }}
           onChange={(next): void => {
             setListFilter(next.listFilter);
-            if (next.carryTo !== undefined) setCarryTo(next.carryTo);
+            if (next.carryTo !== undefined && !sameTargets(next.carryTo, carryTo)) {
+              setCarryTo(next.carryTo);
+              // The refusal was about the boxes as they were.
+              setCarryError(null);
+            }
           }}
           entityTypes={entityTypes}
           disabled={busy}
+          carryError={carryError}
+          carryErrorRef={carryErrorRef}
         />
       </div>
     </ModalDialog>

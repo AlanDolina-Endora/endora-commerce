@@ -102,6 +102,7 @@
   "customFields.carry.legend": "Value carry-over",
   "customFields.carry.toggle": "Carry value to {entityType}",
   "customFields.carry.help": "When a record of type “{entityType}” is created from a record with this field, the new record's empty field with the same key receives this field's value.",
+  "customFields.carry.refusalSummary": "Not saved: see “{section}” above.",
   "customFields.carry.helpGroup": "When a record of a selected type is created from a record with this field, the new record's empty field with the same key receives this field's value.",
   "customFields.carry.incompatible": "Incompatible",
   "customFields.carry.checksUnavailable": "Carry checks are unavailable.",

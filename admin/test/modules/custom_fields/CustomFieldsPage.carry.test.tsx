@@ -180,17 +180,42 @@ describe('CustomFieldsPage — carry options (US4)', () => {
     const dialog = await openEditor();
     fireEvent.click(within(dialog).getByRole('checkbox', { name: toggle('Opportunity') }));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
-    expect(
-      await within(dialog).findByText(
-        sentence(EN, 'errors.CUSTOM_FIELD_CARRY_INCOMPATIBLE.options_missing', {
-          key: 'region',
-          targetEntityType: 'Opportunity',
-          missingOptionValues: 'south, west',
-        }),
-      ),
-    ).toBeInTheDocument();
+    const refusal = sentence(EN, 'errors.CUSTOM_FIELD_CARRY_INCOMPATIBLE.options_missing', {
+      key: 'region',
+      targetEntityType: 'Opportunity',
+      missingOptionValues: 'south, west',
+    });
+    const message = await within(dialog).findByText(refusal);
     expect(screen.getByRole('dialog')).toBe(dialog);
     expect(within(dialog).queryByText(/CUSTOM_FIELD_CARRY_INCOMPATIBLE/)).toBeNull();
+
+    // R16 — the sentence sits in the carry group it is about, which it describes,
+    // and takes the focus, so it is never left scrolled out of sight.
+    const group = within(dialog).getByRole('group', { name: sentence(EN, 'customFields.carry.legend') });
+    expect(group).toContainElement(message);
+    expect(group).toHaveAccessibleDescription(refusal);
+    await waitFor(() => expect(message).toHaveFocus());
+    const ticked = within(group).getByRole('checkbox', { name: toggle('Opportunity') });
+    expect(ticked).toHaveAttribute('aria-invalid', 'true');
+    expect(ticked).toHaveAccessibleDescription(
+      `${sentence(EN, 'customFields.carry.help', { entityType: 'Opportunity' })} ${refusal}`,
+    );
+    expect(within(group).getByRole('checkbox', { name: toggle('Order') })).toHaveAttribute('aria-invalid', 'true');
+    // The footer says beside Save that nothing was saved, and where to look; the
+    // sentence itself is said once.
+    const footer = within(dialog).getByRole('button', { name: 'Save' }).parentElement as HTMLElement;
+    expect(
+      within(footer).getByText(
+        sentence(EN, 'customFields.carry.refusalSummary', { section: sentence(EN, 'customFields.carry.legend') }),
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).getAllByText(refusal)).toHaveLength(1);
+
+    // Changing the boxes withdraws the refusal they no longer match.
+    fireEvent.click(ticked);
+    expect(within(dialog).queryByText(refusal)).toBeNull();
+    expect(group).not.toHaveAttribute('aria-describedby');
+    expect(within(group).getByRole('checkbox', { name: toggle('Order') })).not.toHaveAttribute('aria-invalid');
   });
 
   it('names the missing field and its type when the create form is refused (US4-2)', async () => {
@@ -207,11 +232,21 @@ describe('CustomFieldsPage — carry options (US4)', () => {
     fireEvent.change(screen.getByPlaceholderText('po_number'), { target: { value: 'fresh_key' } });
     fireEvent.click(screen.getByRole('checkbox', { name: toggle('Order') }));
     fireEvent.click(screen.getByRole('button', { name: 'Add field' }));
-    expect(
-      await screen.findByText(
-        sentence(EN, 'errors.CUSTOM_FIELD_CARRY_INCOMPATIBLE.target_missing', { key: 'fresh_key', targetEntityType: 'Order' }),
-      ),
-    ).toBeInTheDocument();
+    const refusal = sentence(EN, 'errors.CUSTOM_FIELD_CARRY_INCOMPATIBLE.target_missing', {
+      key: 'fresh_key',
+      targetEntityType: 'Order',
+    });
+    const message = await screen.findByText(refusal);
+    // R16 — said at the form, beside the carry group it describes, and focused;
+    // not in the page-top alert above the table.
+    const group = screen.getByRole('group', { name: sentence(EN, 'customFields.carry.legend') });
+    expect(group).toHaveAccessibleDescription(`${sentence(EN, 'customFields.carry.helpGroup')} ${refusal}`);
+    expect(message.parentElement).toBe(group.parentElement);
+    await waitFor(() => expect(message).toHaveFocus());
+    expect(screen.getByRole('checkbox', { name: toggle('Order') })).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('checkbox', { name: toggle('Opportunity') })).not.toHaveAttribute('aria-invalid');
+    expect(screen.getAllByText(refusal)).toHaveLength(1);
+    expect(message.closest('[role="alert"]')).toBeNull();
     // The form keeps what was typed, so the operator can fix it and try again.
     expect(screen.getByPlaceholderText('po_number')).toHaveValue('fresh_key');
     expect(screen.getByRole('checkbox', { name: toggle('Order') })).toBeChecked();

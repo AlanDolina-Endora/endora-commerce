@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { useId, type ReactNode, type Ref } from 'react';
 import { Checkbox } from '@endora-commerce/admin-kit/ui';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import type {
@@ -42,6 +42,13 @@ export interface DefinitionBehaviourFieldsProps {
    * help drops to a full-width line at the row's end.
    */
   layout?: 'stacked' | 'row';
+  /**
+   * A refused save's carry sentence (R16): shown beside the carry options,
+   * describing their group and the ticked boxes, which it marks invalid.
+   */
+  carryError?: string | null;
+  /** The carry error's element, focusable so the form can move focus to it. */
+  carryErrorRef?: Ref<HTMLParagraphElement>;
 }
 
 /**
@@ -68,6 +75,8 @@ export function DefinitionBehaviourFields({
   entityTypes = [],
   disabled = false,
   layout = 'stacked',
+  carryError = null,
+  carryErrorRef,
 }: DefinitionBehaviourFieldsProps): ReactNode {
   const t = useTranslation('custom_fields');
   const id = useId();
@@ -77,6 +86,9 @@ export function DefinitionBehaviourFields({
   if (!entityTypeInfo.listFilter && carryTargets.length === 0) return null;
   const helpId = `${id}-help`;
   const carryGroupHelpId = `${id}-carry-help`;
+  const carryErrorId = `${id}-carry-error`;
+  const describedBy = (...ids: ReadonlyArray<string | false | undefined>): string | undefined =>
+    ids.filter(Boolean).join(' ') || undefined;
 
   const emit = (next: Partial<DefinitionBehaviourValue>): void =>
     onChange({
@@ -106,6 +118,8 @@ export function DefinitionBehaviourFields({
   const carryControls = carryTargets.map((target) => {
     const controlId = `${id}-carry-${target}`;
     const entityType = t(entityTypeLabelKey(target, entityTypes));
+    // A refusal is about a ticked target: an unticked box is not wrong.
+    const invalid = carryError !== null && carryTo.includes(target);
     return {
       target,
       control: (
@@ -114,7 +128,8 @@ export function DefinitionBehaviourFields({
             id={controlId}
             checked={carryTo.includes(target)}
             disabled={disabled}
-            aria-describedby={layout === 'row' ? undefined : `${controlId}-help`}
+            aria-invalid={invalid || undefined}
+            aria-describedby={describedBy(layout !== 'row' && `${controlId}-help`, invalid && carryErrorId)}
             onChange={(event): void =>
               emit({
                 // Kept in the registry's order, whatever order they were ticked in.
@@ -135,6 +150,19 @@ export function DefinitionBehaviourFields({
     };
   });
 
+  const carryErrorLine = (className: string): ReactNode =>
+    carryError !== null ? (
+      <p
+        id={carryErrorId}
+        ref={carryErrorRef}
+        tabIndex={-1}
+        data-testid="carry-error"
+        className={`${className} rounded-sm text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+      >
+        {carryError}
+      </p>
+    ) : null;
+
   if (layout === 'row') {
     const help = 'order-last basis-full break-words text-sm text-muted-foreground';
     return (
@@ -144,7 +172,7 @@ export function DefinitionBehaviourFields({
           <div
             role="group"
             aria-label={t('customFields.carry.legend')}
-            aria-describedby={carryGroupHelpId}
+            aria-describedby={describedBy(carryGroupHelpId, carryError !== null && carryErrorId)}
             className="flex flex-wrap items-center gap-x-4"
           >
             {carryControls.map((item) => item.control)}
@@ -156,6 +184,7 @@ export function DefinitionBehaviourFields({
             {t('customFields.carry.helpGroup')}
           </p>
         ) : null}
+        {carryControls.length > 0 ? carryErrorLine('order-last basis-full break-words text-sm') : null}
       </>
     );
   }
@@ -169,7 +198,10 @@ export function DefinitionBehaviourFields({
         </div>
       ) : null}
       {carryControls.length > 0 ? (
-        <fieldset className="space-y-2">
+        <fieldset
+          className="space-y-2"
+          aria-describedby={carryError !== null ? carryErrorId : undefined}
+        >
           <legend className="text-sm font-semibold">{t('customFields.carry.legend')}</legend>
           {carryControls.map((item) => (
             <div key={item.target} className="space-y-1">
@@ -177,6 +209,7 @@ export function DefinitionBehaviourFields({
               {item.help(help)}
             </div>
           ))}
+          {carryErrorLine('break-words text-sm')}
         </fieldset>
       ) : null}
     </div>

@@ -36,13 +36,16 @@ registry does not list it.
 
 - The create form sends `carryTo` (default `[]`). The editor's *Save* sends `carryTo` **only when it
   changed** (the filters feature's changed-members rule), as the whole new array.
-- A 422 `CUSTOM_FIELD_CARRY_INCOMPATIBLE` keeps the form/dialog open and shows an error `Alert`
+- A 422 `CUSTOM_FIELD_CARRY_INCOMPATIBLE` keeps the form/dialog open and shows an error
   whose sentence the page builds from `error.details` with the error bundle's own sentences,
   `errors.CUSTOM_FIELD_CARRY_INCOMPATIBLE.<token>` (`refusalSentence` in
   `packages/modules/custom_fields/src/admin/lib/carry-labels.ts`), interpolating the translated
   target type, the key, the two value-type labels or the missing option values; type names are
   quoted (owner ruling P4, 2026-10-21). There are no `customFields.carry.refusal.*` keys. Unknown
   `details.code` → the server's `error.message`.
+- Placement (R16, owner finding 1.3): the sentence is shown inside the carry group (describing it and
+  the ticked boxes, which get `aria-invalid`) and focused; the editor's footer adds
+  `customFields.carry.refusalSummary` beside *Save*. It is not the page-top or dialog-top `Alert`.
 
 ### 1.3 Table column and the "incompatible" mark (FR-006, FR-020, US4-5, US4-7)
 

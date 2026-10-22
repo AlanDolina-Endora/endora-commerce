@@ -101,3 +101,11 @@ export function refusalSentence(
   }
   return message;
 }
+
+/**
+ * Whether a refused save is a carry refusal, which the forms show beside the
+ * carry options rather than with the other errors (R16).
+ */
+export function isCarryRefusal(error: unknown): boolean {
+  return error instanceof ApiError && error.envelope.error.code === ERROR_CODES.CUSTOM_FIELD_CARRY_INCOMPATIBLE;
+}
