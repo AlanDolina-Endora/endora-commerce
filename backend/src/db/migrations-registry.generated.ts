@@ -150,6 +150,7 @@ import { Migration20261009T163307CrmOpportunityMessageReads } from '@endora-comm
 import { Migration20260718T200338CustomFieldsInit } from '@endora-commerce/mod-custom-fields/migrations';
 import { Migration20261010T090000CustomFieldsDefinitionAudience } from '@endora-commerce/mod-custom-fields/migrations';
 import { Migration20261019T103522CustomFieldsDefinitionListFilter } from '@endora-commerce/mod-custom-fields/migrations';
+import { Migration20261020T110920CustomFieldsDefinitionCarryTo } from '@endora-commerce/mod-custom-fields/migrations';
 
 // ── customer_accounts ───────────────────────────────────────────────────────
 import { Migration20260425T055041CustomerAccountsPasswordResetTokens } from '@endora-commerce/mod-customer-accounts/migrations';
@@ -247,6 +248,7 @@ import { Migration20260824T080000OrdersDeliveryPointSnapshot } from '@endora-com
 import { Migration20261003T201537OrdersOrderTransitionEffects } from '@endora-commerce/mod-orders/migrations';
 import { Migration20261016T082022OrdersOrderItemReturnableAtPurchase } from '@endora-commerce/mod-orders/migrations';
 import { Migration20261020T172007OrdersOrderItemGroups } from '@endora-commerce/mod-orders/migrations';
+import { Migration20261021T164807OrdersOrderCommentSystemNote } from '@endora-commerce/mod-orders/migrations';
 
 // ── organizations ───────────────────────────────────────────────────────────
 import { Migration20260424T205317OrganizationsInit } from '@endora-commerce/mod-organizations/migrations';
@@ -321,6 +323,7 @@ import { Migration20261017T142116QuoteRequestsQuoteRequestDocumentTemplate } fro
 import { Migration20261017T142121QuoteRequestsQuoteRequestEventPdfSent } from '@endora-commerce/mod-quote-requests/migrations';
 import { Migration20261018T122118QuoteRequestsItemPackagingUnitId } from '@endora-commerce/mod-quote-requests/migrations';
 import { Migration20261020T171341QuoteRequestsQuoteRequestItemGroups } from '@endora-commerce/mod-quote-requests/migrations';
+import { Migration20261021T164808QuoteRequestsQuoteRequestEventCarrySkipped } from '@endora-commerce/mod-quote-requests/migrations';
 
 // ── returns ─────────────────────────────────────────────────────────────────
 import { Migration20260625T144227ReturnsInit } from '@endora-commerce/mod-returns/migrations';
@@ -479,6 +482,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('custom_fields', Migration20260718T200338CustomFieldsInit),
   migration('custom_fields', Migration20261010T090000CustomFieldsDefinitionAudience),
   migration('custom_fields', Migration20261019T103522CustomFieldsDefinitionListFilter),
+  migration('custom_fields', Migration20261020T110920CustomFieldsDefinitionCarryTo),
 
   // ── customer_accounts ───────────────────────────────────────────────────────
   migration('customer_accounts', Migration20260425T055041CustomerAccountsPasswordResetTokens),
@@ -576,6 +580,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('orders', Migration20261003T201537OrdersOrderTransitionEffects),
   migration('orders', Migration20261016T082022OrdersOrderItemReturnableAtPurchase),
   migration('orders', Migration20261020T172007OrdersOrderItemGroups),
+  migration('orders', Migration20261021T164807OrdersOrderCommentSystemNote),
 
   // ── organizations ───────────────────────────────────────────────────────────
   migration('organizations', Migration20260424T205317OrganizationsInit),
@@ -650,6 +655,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('quote_requests', Migration20261017T142121QuoteRequestsQuoteRequestEventPdfSent),
   migration('quote_requests', Migration20261018T122118QuoteRequestsItemPackagingUnitId),
   migration('quote_requests', Migration20261020T171341QuoteRequestsQuoteRequestItemGroups),
+  migration('quote_requests', Migration20261021T164808QuoteRequestsQuoteRequestEventCarrySkipped),
 
   // ── returns ─────────────────────────────────────────────────────────────────
   migration('returns', Migration20260625T144227ReturnsInit),

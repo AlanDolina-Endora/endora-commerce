@@ -880,5 +880,15 @@
   "inlineEdit.edit": "Edit {field}",
   "inlineEdit.saved": "{field} saved.",
   "inlineEdit.conflict": "Someone else changed this opportunity in the meantime. The current version is shown now — check it and save again.",
-  "editor.link.placeholder": "https://…"
+  "editor.link.placeholder": "https://…",
+  "history.field.customFieldCarry": "Custom fields not carried",
+  "history.customFieldCarry.from.order": "Not carried from the order:",
+  "history.customFieldCarry.from.quote_request": "Not carried from the quote request:",
+  "history.customFieldCarry.line": "{field} — {reason}",
+  "history.carryReason.target_missing": "the sales opportunity has no field with this key",
+  "history.carryReason.value_type_mismatch": "the sales opportunity's field has a different value type",
+  "history.carryReason.audience_mismatch": "the sales opportunity's field is visible to customers, but the source field is internal",
+  "history.carryReason.value_invalid": "the value is not valid for the sales opportunity's field",
+  "history.carryReasonUnknown": "the value could not be carried",
+  "history.customFieldValuesHidden": "Custom field values changed. Your role does not give access to them."
 }

@@ -450,6 +450,10 @@ opportunity's organization, and an order belongs to **at most one**
 opportunity — linking one that is already linked is refused, naming the
 opportunity that holds it.
 
+Linking an order by hand carries no custom-field value in either direction —
+only an order placed from a linked quote request, or created from the
+opportunity, does (see *Custom fields*).
+
 Each link has a switch, **follow the opportunity's status**, on by default.
 Switch it off for an order that should stay linked — for reference, or for its
 value — without being moved.
@@ -1279,7 +1283,9 @@ opportunity the order is linked to the same one (`linkSource:
 closed, and whatever `crm.auto_create_from_orders` says: such an order never
 gets an opportunity of its own. From then on it is a linked order like any
 other: it follows the order-status mappings, and the opportunity's value counts
-it.
+it. Joining also fills the opportunity's **empty** custom fields from the
+order's, for every order field that carries to opportunities; a value the
+opportunity already holds is kept (see *Custom fields*).
 
 The order records its quote request when it is placed from the basket the
 customer filled by ordering the accepted quote request on its page in the
@@ -1421,7 +1427,9 @@ An opportunity created this way:
 - is titled with the document's number and the organization's name;
 - is linked to the document, and its value is **computed** from it (see *Quote
   requests and a computed value*), in the document's currency;
-- records where it came from: `source` is `order` or `quote_request`.
+- records where it came from: `source` is `order` or `quote_request`;
+- receives the document's custom-field values for every order or quote request
+  field whose **Carry value to Opportunity** option is on (see *Custom fields*).
 
 What is **not** created:
 
@@ -1429,8 +1437,6 @@ What is **not** created:
 - nothing for an order that records a quote request linked to an opportunity —
   the order joins that opportunity instead, whatever the settings say (see
   *Linking quote requests*);
-  records its quote request today, so this is not effective yet (see *Linking
-  quote requests*);
 - nothing for documents that existed before the setting was switched on;
 - nothing while the CRM module is switched off, and nothing afterwards for the
   documents placed in the meantime;
@@ -1464,6 +1470,9 @@ on its **Links** tab, which says that the new document is being linked and then 
 document is in its list from then on, marked in the change history as *created
 from the opportunity*. An order created this way follows the opportunity's
 status like any linked order, and both kinds count towards a computed value.
+Once linked, the document receives the opportunity's custom-field values for
+every opportunity field whose **Carry value to Order** or **Carry value to
+Quote request** option is on, into its empty fields only (see *Custom fields*).
 
 What to expect:
 
@@ -1474,10 +1483,16 @@ What to expect:
   you may see. If you save the document for a customer of another organization
   it is created, but it is **not** linked: the opportunity says so on your
   return and offers a link to the document. Nothing about the opportunity is
-  changed.
+  changed, and no custom-field value is carried.
 - **Who sees the buttons.** *Create order* needs `crm:write` and
   `orders:write`; *Create quote request* needs `crm:write` and `rfqs:handle`.
   The create screens also search customers, which needs `customers:read`.
+- **A quote request's version moves once more.** The values are carried just
+  after the create request has answered, in a write of the quote request's own,
+  and a carry that fills a field raises the request's `version`. A client that
+  edits the new request with the version the create response returned is then
+  refused with `409 VERSION_CONFLICT`: read the request again and send the
+  version it reports now. A carry that fills nothing leaves the version alone.
 - **With the Quote Requests module switched off** there is no *Create quote
   request* button. *Create order* is unaffected.
 - **With the CRM module switched off** the create screens work exactly as they
@@ -1511,7 +1526,13 @@ Each entry says **when**, **what** (`action`), **who** (`actor`) and the state
 - a status change carries `before.status` and `after.status`, what caused it
   (`after.cause`: `manual`, `order_status` or `system`), the order that caused
   it when one did (`after.causeOrderId`), and the reason somebody typed;
-- an edit carries the fields as they were and as they are.
+- an edit carries the fields as they were and as they are;
+- a creation for a document, or an order joining from its quote request, that
+  carried or skipped custom-field values carries `after.customFieldCarry`:
+  `source` (`entityType` `order` or `quote_request`, `recordId`), `carried` (the
+  keys filled) and `skipped` (one `{ key, reason, label }` per field not
+  carried). The carried values themselves are in `after.customFieldValues`,
+  for a reader who holds `custom_fields:read`.
 
 | Verb + Path | Permission | Purpose |
 | --- | --- | --- |
@@ -1522,8 +1543,15 @@ disagree with what happened — and **anybody who may read the opportunity may
 read its history**. The permission that opens the platform-wide audit log is
 not needed.
 
-Five things to know:
+Six things to know:
 
+- **Custom field values need `custom_fields:read`.** An entry's `before` and
+  `after` carry the opportunity's custom field values (`customFieldValues`) only
+  for a reader who also holds `custom_fields:read`; for anybody else the server
+  leaves that member out of every entry, and the rest of the entry is as it was
+  recorded. `customFieldCarry` stays for every reader: it names fields, reasons
+  and labels, never a value. A role holding `crm:read` alone therefore no
+  longer reads custom field values through the history.
 - A note or a message is in the history as the fact that it was written,
   edited or deleted — by whom, and how long it was. Its text is not: that is
   read on the *Notes* and *Messages* tabs.
@@ -1549,12 +1577,26 @@ Each entry is a sentence — *Opportunity status changed*, *Note added* — with
 who did it and when. A status change shows the two statuses by name; when an
 order caused it, the entry names that order and links to it. An edit lists the
 fields that changed, as they were and as they are. Custom field values are
-listed a line per field under the fields' own labels — or under their codes for
-somebody without `custom_fields:read` — and an order's status is shown by name,
+listed a line per field under the fields' own labels, to somebody holding
+`custom_fields:read`; for anybody else the history holds no custom field
+values, so none are listed. An order's status is shown by name,
 to somebody holding `orders:read` only. A description that changed is shown as
 its words, without the formatting marks: a person, an order or a product it
 mentions is shown by name, never as the token. *Show earlier changes* reads the
 next page.
+
+**Values not carried.** A creation or join entry that skipped custom-field
+values reads *Not carried from the order:* or *Not carried from the quote
+request:*, followed by one line per skipped field with the reason — the
+opportunity has no field with this key, its field has a different type, its
+field is visible to customers while the source field is internal, or the value
+is not valid for its field. A field is named by **the label of the order's or quote
+request's field, as it read when it was skipped**, in your language, and these lines are shown to **anybody who may
+read the opportunity** — `custom_fields:read` is not needed for them, and they
+hold no value. The values themselves stay behind `custom_fields:read` as above.
+An entry recorded before labels were kept names the field by its current label
+where it can, otherwise by its key. Values carried without a problem show as
+the custom-field lines of the entry, like any other change of them.
 
 ## Formatted text
 
@@ -1908,9 +1950,32 @@ button; on the create form they are saved with the opportunity.
   whenever the custom fields are saved. Editing something else on an
   opportunity — its title, its value, its status — never asks for it, so a
   field made required today does not block work on yesterday's opportunities.
-- An opportunity created automatically has no custom values until somebody
-  fills them in.
+- An opportunity created automatically has no custom values of its own until
+  somebody fills them in — except those carried from its document (below).
 - When a field is deleted, its values stop being shown.
+
+**Carrying values between an opportunity and its documents.** On **Custom
+fields**, an order or quote request field can have **Carry value to
+Opportunity** on, and an opportunity field **Carry value to Order** and **Carry
+value to Quote request**; the field on the other record must have the same key
+and a compatible type and options, and an internal field cannot carry into a
+customer-visible one. The Custom fields module's page has the whole rule. Only
+an empty field is filled, once, when the records are joined:
+
+| When | What is carried | Attributed to |
+| --- | --- | --- |
+| an opportunity is created automatically for an order or a quote request | the document's values, into the new opportunity | the system, in the creation's entry |
+| an order placed from a linked quote request joins its opportunity | the order's values, into the opportunity's empty fields | the system, in the link's entry |
+| an order or a quote request created from the opportunity is linked to it | the opportunity's values, into the document's empty fields | the system, in the document's own audit trail; the document's creation stays the administrator's |
+
+Nothing is carried when an order or a quote request is linked by hand — on the
+*Links* tab or from the document's *Linked opportunity* panel — nor when the
+records belong to different organizations. A value that cannot be carried is
+skipped, the opportunity or the document is created or linked all the same,
+and the skip is recorded **on the record that did not receive it**: in the
+opportunity's *Change history* (see *Change history*), as a system note in the
+order's comments, or in the quote request's history. While the CRM module is
+switched off nothing is carried, and nothing is caught up afterwards.
 
 **Who sees them.** Whoever can see the opportunity sees its custom values, and
 nobody else: they are part of the opportunity. Showing the fields also needs

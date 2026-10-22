@@ -12,8 +12,8 @@ import {
 } from 'lucide-react';
 import { ApiError, apiBaseUrl, apiClient, cn, formatDateTime, formatMoney, issueInvoiceNotice, readReturnTo, statusBadgeStyle, useUnsavedChangesPrompt } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Badge, Button, Card, CardContent, Label, PageHeader, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Section } from '@endora-commerce/admin-kit/ui';
-import { CustomFieldValuesPanel } from '@endora-commerce/admin-kit/components';
-import { useTranslation } from '@endora-commerce/admin-kit/i18n';
+import { CustomFieldValuesPanel, resolveCustomFieldLabel } from '@endora-commerce/admin-kit/components';
+import { useTranslation, useTranslationContext } from '@endora-commerce/admin-kit/i18n';
 import { AdminZone, useAdminZone } from '@endora-commerce/admin-kit/zones';
 import { OrderPendingEffectsNotice } from '../components/OrderPendingEffectsNotice.js';
 import { OrderShipmentsTab } from '../components/OrderShipmentsTab.js';
@@ -22,7 +22,15 @@ import {
   paymentStatusLabelKey,
   paymentStatusOptions,
 } from '../lib/paymentStatus.js';
-import { arrangeLineGroups, type IssueInvoiceEmailOutcome, type LineGroup, type OrderPendingEffect } from '@endora-commerce/contracts';
+import {
+  arrangeLineGroups,
+  customFieldCarrySkipReasonSchema,
+  orderCommentSystemNoteSchema,
+  type IssueInvoiceEmailOutcome,
+  type LineGroup,
+  type OrderCommentSystemNote,
+  type OrderPendingEffect,
+} from '@endora-commerce/contracts';
 import { OrderSectionSummary, orderSectionTotals, useOrderSectionSummaryText } from '../line-groups.js';
 
 type OrderTab = 'overview' | 'payment' | 'delivery' | 'comments';
@@ -142,7 +150,75 @@ interface OrderCommentRow {
   notifyCustomer: boolean;
   authorAdminUserId: string | null;
   authorCustomerAccountId: string | null;
+  /** Feature 162 — present on a note the platform wrote (both authors `null`). */
+  systemNote?: OrderCommentSystemNote | null;
   createdAt: string;
+}
+
+/** A field name shown to an operator is cut here. */
+const SHOWN_KEY_LIMIT = 64;
+const SKIP_REASONS: ReadonlySet<string> = new Set(customFieldCarrySkipReasonSchema.options);
+// The note's own schema names the sources, so this host page names no contributor module.
+const NOTE_SOURCES: ReadonlySet<string> = new Set(orderCommentSystemNoteSchema.shape.source.shape.entityType.options);
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+/**
+ * The name a skip line gives its field (owner ruling V3, 2026-10-21): the
+ * source field's label as stored with the skip, in the reader's language,
+ * then its default label, then — for a note written before the label was
+ * stored — the key; cut at {@link SHOWN_KEY_LIMIT}. Needs no definition read,
+ * so whoever may read the Order reads the name.
+ */
+function skippedFieldName(skip: OrderCommentSystemNote['skipped'][number], language: string): string {
+  const name = skip.label ? resolveCustomFieldLabel(skip.label.labels, skip.label.labelDefault, language) : '';
+  const shown = name === '' ? skip.key : name;
+  return shown.length > SHOWN_KEY_LIMIT ? `${shown.slice(0, SHOWN_KEY_LIMIT)}…` : shown;
+}
+
+/**
+ * A system note as the operator reads it, in their language (feature 162,
+ * `specs/162-custom-fields-value-carry/contracts/admin-surfaces.md` §2): which
+ * record the values came from, then a line per value not carried — the
+ * field's stored label, else its key — with the reason. A source or a reason
+ * this screen has no sentence for falls back to the stored English `body`,
+ * never to a code.
+ */
+function SystemNoteBody({
+  note,
+  body,
+  language,
+  t,
+}: {
+  note: OrderCommentSystemNote;
+  body: string;
+  language: string;
+  t: Translate;
+}): ReactNode {
+  const readable =
+    note.kind === 'custom_field_carry_skipped' &&
+    NOTE_SOURCES.has(note.source.entityType) &&
+    note.skipped.every((skip) => SKIP_REASONS.has(skip.reason));
+  if (!readable) return <p className="whitespace-pre-wrap break-words">{body}</p>;
+  return (
+    <div className="space-y-1">
+      <p className="break-words">
+        {t(`orderDetail.comments.systemNote.customFieldCarrySkipped.${note.source.entityType}`, {
+          reference: note.source.reference,
+        })}
+      </p>
+      <ul className="list-disc space-y-0.5 pl-5">
+        {note.skipped.map((skip) => (
+          <li key={skip.key} className="break-words">
+            {t('orderDetail.comments.carryLine', {
+              field: skippedFieldName(skip, language),
+              reason: t(`orderDetail.comments.carryReason.${skip.reason}`),
+            })}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 /** Invoice row for this order, from the admin invoices list endpoint. */
@@ -159,6 +235,8 @@ export function OrderDetail(): ReactNode {
   const t = useTranslation('core');
   const tOrders = useTranslation('orders');
   const sectionSummaryText = useOrderSectionSummaryText();
+  // Feature 162 — the system note's sentences are this module's own.
+  const { language } = useTranslationContext();
   const { id = '' } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const returnTo = readReturnTo(searchParams);
@@ -783,7 +861,9 @@ export function OrderDetail(): ReactNode {
                     <li key={c.id} className="rounded-md border p-3 text-sm" data-testid="order-comment">
                       <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
                         <span>{formatDateTime(c.createdAt)}</span>
-                        {c.authorCustomerAccountId ? (
+                        {c.systemNote ? (
+                          <span>{tOrders('orderDetail.comments.systemAuthor')}</span>
+                        ) : c.authorCustomerAccountId ? (
                           <span>{t('orderDetail.comments.byCustomer')}</span>
                         ) : (
                           <span>{t('orderDetail.comments.byStaff')}</span>
@@ -794,7 +874,16 @@ export function OrderDetail(): ReactNode {
                           </span>
                         ) : null}
                       </div>
-                      <p>{c.body}</p>
+                      {c.systemNote ? (
+                        <SystemNoteBody
+                          note={c.systemNote}
+                          body={c.body}
+                          language={language}
+                          t={tOrders}
+                        />
+                      ) : (
+                        <p>{c.body}</p>
+                      )}
                     </li>
                   ))}
                 </ul>

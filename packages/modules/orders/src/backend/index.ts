@@ -14,6 +14,8 @@ import type {
   CatalogProductReadPort,
   CreditLimitReadPort,
   CustomerAccountReadPort,
+  CustomFieldCarryPort,
+  CustomFieldCarryReceiverPort,
   CustomFieldListFilterPort,
   DeliveryMethodReadPort,
   EmailDefaultsRegistryPort,
@@ -81,6 +83,7 @@ import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import type { SettingsReadPort } from '@endora-commerce/platform/kernel';
 import type { OrderPaymentStatusApplyPort } from '../ports/index.js';
 import { commerceModule, type OrdersModuleOptions } from './plugin.js';
+import { OrderCustomFieldCarryReceiver } from './services/order-custom-field-carry-receiver.js';
 import { PurchaseConversionService } from './services/purchase-conversion-service.js';
 import { emitOrderStatusAfter } from './events/order-status-events.js';
 import { OrderPaymentStatusApplyService } from './services/order-payment-status-apply-port.js';
@@ -640,6 +643,9 @@ export function registerModule(ctx: ModuleContext): void {
               effectiveState.isPresent('quote_requests')
                 ? lazyPort<QuoteRequestReadPort>(ctx, 'quoteRequestReadPort')
                 : null,
+            // Feature 162 — the custom-field values a vouched Quote Request
+            // carries into the Order (`custom_fields` is not deactivatable).
+            customFieldCarry: () => lazyPort<CustomFieldCarryPort>(ctx, 'customFieldCarryPort'),
             // The payment row placement opens (feature 080, T048; D-179). **No
             // presence question**, unlike every other switchable owner on this
             // list — and the difference is a fallback rather than a lock. An
@@ -862,6 +868,24 @@ export function registerModule(ctx: ModuleContext): void {
   // a `null` accessor is indistinguishable from a wiring mistake, and
   // `quick_order` already translates it into a 503 by hand.
   // ---------------------------------------------------------------------------
+
+  /**
+   * Feature 162 — a Sales Opportunity's custom-field values received into an
+   * Order created from it (`specs/162-custom-fields-value-carry/`, contract
+   * `carry-api.md` §4.2). The carry is planned by `custom_fields`.
+   */
+  ctx.di.providePort<CustomFieldCarryReceiverPort>(
+    'orderCustomFieldCarryPort',
+    ctx
+      .asFunction(
+        ({ commandBus }: OrdersCradle) =>
+          new OrderCustomFieldCarryReceiver({
+            commandBus,
+            customFieldCarry: lazyPort<CustomFieldCarryPort>(ctx, 'customFieldCarryPort'),
+          }),
+      )
+      .singleton(),
+  );
 
   ctx.di.providePort<OrderReadPort>(
     'orderReadPort',

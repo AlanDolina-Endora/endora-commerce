@@ -9,6 +9,8 @@ import {
   adminOrderPreviewRequestSchema,
   createOrderSavedViewRequestSchema,
   orderItemSchema,
+  orderCommentSchema,
+  orderCommentSystemNoteSchema,
   orderSavedViewSchema,
   orderSchema,
   updateOrderSavedViewRequestSchema,
@@ -420,5 +422,54 @@ describe('order line groups (T007)', () => {
     expect(orderSchema.parse(ORDER).itemGroups).toEqual([]);
     const groups = [{ id: ID(40), name: 'Hall A', position: 0 }];
     expect(orderSchema.parse({ ...ORDER, itemGroups: groups }).itemGroups).toEqual(groups);
+  });
+});
+
+describe('feature 162 — the order comment system note', () => {
+  const NOTE = {
+    kind: 'custom_field_carry_skipped',
+    source: {
+      entityType: 'quote_request',
+      recordId: '0b8f5f0e-2a0e-4f55-8a53-0f3f7cbe0a02',
+      reference: 'QR-1042',
+    },
+    skipped: [{ key: 'order_source', reason: 'value_invalid' }],
+  };
+  const COMMENT = {
+    id: '0b8f5f0e-2a0e-4f55-8a53-0f3f7cbe0a03',
+    orderId: '0b8f5f0e-2a0e-4f55-8a53-0f3f7cbe0a04',
+    authorAdminUserId: null,
+    authorCustomerAccountId: null,
+    body: 'Custom field values were not carried.',
+    isCustomerVisible: false,
+    notifyCustomer: false,
+    createdAt: '2026-10-20T10:00:00.000Z',
+  };
+
+  it("parses the contract's example", () => {
+    expect(orderCommentSystemNoteSchema.parse(NOTE)).toEqual(NOTE);
+  });
+
+  it('refuses a note that skipped nothing', () => {
+    expect(orderCommentSystemNoteSchema.safeParse({ ...NOTE, skipped: [] }).success).toBe(false);
+  });
+
+  it('refuses an unknown reason', () => {
+    expect(
+      orderCommentSystemNoteSchema.safeParse({ ...NOTE, skipped: [{ key: 'order_source', reason: 'other' }] })
+        .success,
+    ).toBe(false);
+  });
+
+  it('refuses a source of another entity type', () => {
+    expect(
+      orderCommentSystemNoteSchema.safeParse({ ...NOTE, source: { ...NOTE.source, entityType: 'order' } }).success,
+    ).toBe(false);
+  });
+
+  it('a comment carries a note, no note, or no key at all', () => {
+    expect(orderCommentSchema.parse({ ...COMMENT, systemNote: NOTE }).systemNote).toEqual(NOTE);
+    expect(orderCommentSchema.parse({ ...COMMENT, systemNote: null }).systemNote).toBeNull();
+    expect(Object.hasOwn(orderCommentSchema.parse(COMMENT), 'systemNote')).toBe(false);
   });
 });

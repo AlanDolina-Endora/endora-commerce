@@ -164,5 +164,12 @@
   "lineGroups.announce.atStart": "{name} is already first.",
   "lineGroups.announce.atEnd": "{name} is already last.",
   "lineGroups.announce.handle": "Move line {name}",
-  "lineGroups.announce.groupHandle": "Move group {name}"
+  "lineGroups.announce.groupHandle": "Move group {name}",
+  "history.carrySource": "Sales opportunity {reference}",
+  "history.carryLine": "{field} — {reason}",
+  "history.carryReason.target_missing": "the quote request has no field with this key",
+  "history.carryReason.value_type_mismatch": "the quote request's field has a different value type",
+  "history.carryReason.audience_mismatch": "the quote request's field is visible to customers, but the sales opportunity's field is internal",
+  "history.carryReason.value_invalid": "the value is not valid for the quote request's field",
+  "history.carryReasonUnknown": "the value could not be carried"
 }

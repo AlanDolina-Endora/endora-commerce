@@ -111,5 +111,13 @@
   "lineGroups.announce.atEnd": "{name}: to już ostatnie miejsce.",
   "lineGroups.announce.handle": "Przenieś pozycję {name}",
   "lineGroups.announce.groupHandle": "Przenieś grupę {name}",
-  "lineGroups.otherItems": "Pozostałe pozycje"
+  "lineGroups.otherItems": "Pozostałe pozycje",
+  "orderDetail.comments.systemAuthor": "System",
+  "orderDetail.comments.systemNote.customFieldCarrySkipped.quote_request": "Nie przeniesiono z zapytania ofertowego {reference}:",
+  "orderDetail.comments.systemNote.customFieldCarrySkipped.opportunity": "Nie przeniesiono z szansy sprzedażowej {reference}:",
+  "orderDetail.comments.carryLine": "{field} — {reason}",
+  "orderDetail.comments.carryReason.target_missing": "zamówienie nie ma pola o tym kluczu",
+  "orderDetail.comments.carryReason.value_type_mismatch": "pole zamówienia ma inny typ wartości",
+  "orderDetail.comments.carryReason.audience_mismatch": "pole zamówienia jest widoczne dla klientów, a pole źródłowe jest wewnętrzne",
+  "orderDetail.comments.carryReason.value_invalid": "wartość nie pasuje do pola zamówienia"
 }

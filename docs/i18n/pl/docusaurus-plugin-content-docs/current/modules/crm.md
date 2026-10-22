@@ -465,6 +465,10 @@ organizacji szansy, a jedno zamówienie należy do **co najwyżej jednej**
 szansy — próba powiązania zamówienia już powiązanego jest odrzucana ze
 wskazaniem szansy, do której ono należy.
 
+Ręczne powiązanie zamówienia nie przenosi żadnej wartości pola niestandardowego
+w żadną stronę — przenosi je tylko zamówienie złożone z powiązanego zapytania
+ofertowego albo utworzone z poziomu szansy (zob. *Pola niestandardowe*).
+
 Każde powiązanie ma przełącznik **podążaj za statusem szansy**, domyślnie
 włączony. Wyłącz go dla zamówienia, które ma pozostać powiązane — dla
 informacji albo ze względu na jego wartość — ale nie ma być przenoszone.
@@ -1332,7 +1336,10 @@ szansą, zamówienie zostaje powiązane z tą samą szansą (`linkSource:
 otwarta, czy już zamknięta, i niezależnie od ustawienia
 `crm.auto_create_from_orders`: takie zamówienie nigdy nie dostaje własnej
 szansy. Od tej chwili jest powiązanym zamówieniem jak każde inne: obejmują je
-mapowania statusów zamówień, a wartość szansy je uwzględnia.
+mapowania statusów zamówień, a wartość szansy je uwzględnia. Dołączenie
+wypełnia też **puste** pola niestandardowe szansy wartościami zamówienia, dla
+każdego pola zamówienia, które przenosi wartość do szans sprzedażowych; wartość,
+którą szansa już ma, zostaje (zob. *Pola niestandardowe*).
 
 Zamówienie zapisuje swoje zapytanie ofertowe, gdy zostaje złożone z koszyka,
 który klient wypełnił przyciskiem *Złóż zamówienie z tej oferty* na stronie
@@ -1479,7 +1486,10 @@ Szansa utworzona w ten sposób:
 - ma w tytule numer dokumentu i nazwę organizacji;
 - jest powiązana z dokumentem, a jej wartość jest z niego **wyliczana** (patrz
   *Zapytania ofertowe i wartość wyliczana*), w walucie dokumentu;
-- zapisuje, skąd pochodzi: `source` ma wartość `order` albo `quote_request`.
+- zapisuje, skąd pochodzi: `source` ma wartość `order` albo `quote_request`;
+- otrzymuje wartości pól niestandardowych dokumentu dla każdego pola zamówienia
+  lub zapytania ofertowego z włączoną opcją **Przenoś wartość do: Szansa
+  sprzedażowa** (zob. *Pola niestandardowe*).
 
 Co **nie** jest tworzone:
 
@@ -1487,8 +1497,6 @@ Co **nie** jest tworzone:
 - nic dla zamówienia, które zapisuje zapytanie ofertowe powiązane z szansą —
   zamówienie dołącza do tej szansy, niezależnie od ustawień (zob. *Wiązanie
   zapytań ofertowych*);
-  zamówienie nie zapisuje swojego zapytania ofertowego, więc to jeszcze nie
-  działa (zob. *Wiązanie zapytań ofertowych*);
 - nic dla dokumentów, które istniały przed włączeniem ustawienia;
 - nic, gdy moduł CRM jest wyłączony, i nic później dla dokumentów złożonych w
   tym czasie;
@@ -1523,6 +1531,10 @@ dokument jest właśnie wiązany, a potem — że został powiązany; od tej chw
 jest na jej liście, a w historii zmian ma oznaczenie *Utworzono z tej szansy*.
 Tak utworzone zamówienie podąża za statusem szansy jak każde powiązane
 zamówienie, a oba rodzaje dokumentów liczą się do wartości wyliczanej.
+Po powiązaniu dokument otrzymuje wartości pól niestandardowych szansy dla
+każdego pola szansy z włączoną opcją **Przenoś wartość do: Zamówienie** albo
+**Przenoś wartość do: Zapytanie ofertowe**, wyłącznie do swoich pustych pól
+(zob. *Pola niestandardowe*).
 
 Czego się spodziewać:
 
@@ -1533,11 +1545,18 @@ Czego się spodziewać:
   klienta, którego widzisz. Jeśli zapiszesz dokument dla klienta innej
   organizacji, dokument powstanie, ale **nie** zostanie powiązany: po powrocie
   szansa o tym informuje i podaje odnośnik do dokumentu. W samej szansie nic
-  się nie zmienia.
+  się nie zmienia i żadna wartość pola niestandardowego nie jest przenoszona.
 - **Kto widzi przyciski.** *Utwórz zamówienie* wymaga `crm:write` i
   `orders:write`; *Utwórz zapytanie ofertowe* wymaga `crm:write` i
   `rfqs:handle`. Ekrany tworzenia wyszukują też klientów, co wymaga
   `customers:read`.
+- **Wersja zapytania ofertowego zmienia się jeszcze raz.** Wartości są
+  przenoszone tuż po tym, jak żądanie utworzenia odpowiedziało, w osobnym
+  zapisie zapytania ofertowego, a przeniesienie, które wypełnia pole, podnosi
+  `version` zapytania. Klient, który edytuje nowe zapytanie z wersją zwróconą w
+  odpowiedzi na utworzenie, dostaje wtedy `409 VERSION_CONFLICT`: odczytaj
+  zapytanie ponownie i wyślij wersję, którą zwraca teraz. Przeniesienie, które
+  niczego nie wypełnia, nie zmienia wersji.
 - **Gdy moduł Zapytań ofertowych jest wyłączony**, przycisku *Utwórz zapytanie
   ofertowe* nie ma. *Utwórz zamówienie* działa bez zmian.
 - **Gdy moduł CRM jest wyłączony**, ekrany tworzenia działają dokładnie tak
@@ -1573,7 +1592,14 @@ stan **przed** i **po**:
   (`after.cause`: `manual`, `order_status` albo `system`), zamówienie, które ją
   spowodowało, jeśli było nim zamówienie (`after.causeOrderId`), oraz wpisany
   przez kogoś powód;
-- edycja zawiera pola w brzmieniu sprzed zmiany i po niej.
+- edycja zawiera pola w brzmieniu sprzed zmiany i po niej;
+- utworzenie szansy dla dokumentu albo dołączenie zamówienia z jego zapytania
+  ofertowego, które przeniosło lub pominęło wartości pól niestandardowych,
+  zawiera `after.customFieldCarry`: `source` (`entityType` `order` albo
+  `quote_request`, `recordId`), `carried` (wypełnione klucze) i `skipped` (po
+  jednym `{ key, reason, label }` na każde nieprzeniesione pole). Same
+  przeniesione wartości są w `after.customFieldValues` — dla czytającego z
+  uprawnieniem `custom_fields:read`.
 
 | Metoda + ścieżka | Uprawnienie | Cel |
 | --- | --- | --- |
@@ -1584,8 +1610,16 @@ rozminąć się z tym, co się wydarzyło — a **każdy, kto może czytać szan
 czytać jej historię**. Uprawnienie otwierające dziennik audytu całej platformy
 nie jest potrzebne.
 
-Pięć rzeczy, o których warto wiedzieć:
+Sześć rzeczy, o których warto wiedzieć:
 
+- **Wartości pól niestandardowych wymagają `custom_fields:read`.** `before` i
+  `after` wpisu zawierają wartości pól niestandardowych szansy
+  (`customFieldValues`) tylko dla czytającego, który ma także
+  `custom_fields:read`; dla każdego innego serwer pomija ten element w każdym
+  wpisie, a reszta wpisu jest taka, jak została zapisana. `customFieldCarry`
+  zostaje dla każdego czytającego: nazywa pola, powody i etykiety, nigdy
+  wartości. Rola z samym `crm:read` nie odczytuje więc już wartości pól
+  niestandardowych przez historię zmian.
 - Notatka albo wiadomość jest w historii jako fakt, że została napisana,
   zmieniona albo usunięta — przez kogo i jak była długa. Jej treści tam nie
   ma: czyta się ją na kartach *Notatki* i *Wiadomości*.
@@ -1611,13 +1645,29 @@ wpis jest zdaniem — *Zmieniono status szansy sprzedażowej*, *Dodano notatkę*
 z informacją, kto i kiedy to zrobił. Zmiana statusu pokazuje oba statusy z
 nazwy; jeśli spowodowało ją zamówienie, wpis wskazuje to zamówienie i prowadzi
 do niego. Edycja wymienia zmienione pola: jak było i jak jest. Wartości pól
-niestandardowych są wymienione po jednej w wierszu, pod własnymi etykietami pól
-— albo pod ich kodami dla osoby bez `custom_fields:read` — a status zamówienia
+niestandardowych są wymienione po jednej w wierszu, pod własnymi etykietami pól,
+osobie z uprawnieniem `custom_fields:read`; dla każdego innego historia nie
+zawiera wartości pól niestandardowych, więc nie są wymieniane. Status zamówienia
 jest pokazywany z nazwy, wyłącznie osobie z uprawnieniem `orders:read`.
 Zmieniony opis jest pokazywany jako same słowa, bez znaczników formatowania:
 wspomniana w nim osoba, zamówienie albo produkt są pokazywane z nazwy, nigdy
 jako znacznik. Przycisk
 *Pokaż wcześniejsze zmiany* wczytuje kolejną stronę.
+
+**Wartości nieprzeniesione.** Wpis utworzenia albo dołączenia, w którym
+pominięto wartości pól niestandardowych, brzmi *Nie przeniesiono z
+zamówienia:* albo *Nie przeniesiono z zapytania ofertowego:*, a pod nim jest po
+jednej linii na każde pominięte pole, z powodem — szansa sprzedażowa nie ma
+pola o tym kluczu, jej pole ma inny typ, jej pole jest widoczne dla klientów, a
+pole źródłowe jest wewnętrzne, albo wartość nie pasuje do jej pola. Pole jest
+nazwane **etykietą pola zamówienia lub zapytania ofertowego z chwili
+pominięcia**, w Twoim języku, a te linie widzi
+**każdy, kto może czytać szansę** — nie potrzeba do nich `custom_fields:read` i
+nie zawierają żadnej wartości. Same wartości pozostają, jak wyżej, dostępne
+tylko z `custom_fields:read`. Wpis zapisany, zanim zaczęto przechowywać
+etykiety, nazywa pole jego obecną etykietą, gdy to możliwe, a w przeciwnym
+razie kluczem. Wartości przeniesione bez problemu widać jako linie pól
+niestandardowych wpisu, jak każdą inną ich zmianę.
 
 ## Tekst sformatowany
 
@@ -1979,9 +2029,35 @@ w formularzu tworzenia zapisują się razem z szansą.
   zapisie pól niestandardowych. Zmiana czegokolwiek innego — tytułu, wartości,
   statusu — nigdy go nie wymaga, więc pole oznaczone dziś jako wymagane nie
   blokuje pracy nad wczorajszymi szansami.
-- Szansa utworzona automatycznie nie ma wartości niestandardowych, dopóki ktoś
-  ich nie uzupełni.
+- Szansa utworzona automatycznie nie ma własnych wartości niestandardowych,
+  dopóki ktoś ich nie uzupełni — poza tymi, które przeniesiono z jej dokumentu
+  (niżej).
 - Po usunięciu pola jego wartości przestają być pokazywane.
+
+**Przenoszenie wartości między szansą a jej dokumentami.** Na ekranie **Pola
+niestandardowe** pole zamówienia lub zapytania ofertowego może mieć włączoną
+opcję **Przenoś wartość do: Szansa sprzedażowa**, a pole szansy — **Przenoś
+wartość do: Zamówienie** i **Przenoś wartość do: Zapytanie ofertowe**; pole w
+drugim rekordzie musi mieć ten sam klucz oraz zgodny typ i opcje, a pole
+wewnętrzne nie może przenosić wartości do pola widocznego dla klientów. Całą
+regułę opisuje strona modułu pól niestandardowych. Wypełniane jest tylko puste
+pole, raz, w chwili połączenia rekordów:
+
+| Kiedy | Co jest przenoszone | Komu przypisane |
+| --- | --- | --- |
+| szansa jest tworzona automatycznie dla zamówienia lub zapytania ofertowego | wartości dokumentu, do nowej szansy | systemowi, we wpisie utworzenia |
+| zamówienie złożone z powiązanego zapytania ofertowego dołącza do jego szansy | wartości zamówienia, do pustych pól szansy | systemowi, we wpisie powiązania |
+| zamówienie lub zapytanie ofertowe utworzone z poziomu szansy zostaje z nią powiązane | wartości szansy, do pustych pól dokumentu | systemowi, we własnym śladzie audytowym dokumentu; utworzenie dokumentu pozostaje przypisane administratorowi |
+
+Nic nie jest przenoszone, gdy zamówienie lub zapytanie ofertowe jest wiązane
+ręcznie — na karcie *Powiązania* albo z panelu *Powiązana szansa* dokumentu —
+ani gdy rekordy należą do różnych organizacji. Wartość, której nie da się
+przenieść, jest pomijana, szansa albo dokument i tak powstaje lub zostaje
+powiązany, a pominięcie jest zapisywane **w rekordzie, który jej nie
+otrzymał**: w *Historii zmian* szansy (zob. *Historia zmian*), jako notatka
+systemowa w komentarzach zamówienia albo w historii zapytania ofertowego. Gdy
+moduł CRM jest wyłączony, nic nie jest przenoszone i nic nie jest później
+nadrabiane.
 
 **Kto je widzi.** Wartości niestandardowe widzi każdy, kto widzi szansę, i nikt
 inny: są częścią szansy. Do wyświetlenia pól potrzebne jest także uprawnienie

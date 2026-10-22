@@ -10,7 +10,7 @@ import type {
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import { CustomFieldDefinition } from '../entities/custom-field-definition.entity.js';
 import { CustomFieldOption } from '../entities/custom-field-option.entity.js';
-import { isSupportedEntityType } from './custom-field-registry.js';
+import { isEntityTypeServed, isSupportedEntityType } from './custom-field-registry.js';
 import type {
   CustomFieldDefinitionsCache,
   CachedDefinition,
@@ -47,13 +47,32 @@ import type { DefinitionSource } from './custom-field-value.service.js';
 // decision on and which this file — exporting the service class and an error
 // class beside it — cannot have. Imported here so `implements` still proves the
 // class satisfies what the one host module names.
-import type { CustomFieldDefinitionApplyApi } from '../../ports/index.js';
+import type {
+  CustomFieldDefinitionApplyApi,
+  CustomFieldDefinitionApplyCreateInput,
+} from '../../ports/index.js';
 
 // Feature 061 — the error class moved next to the shared apply functions;
 // re-exported here so existing imports keep working.
 export { CustomFieldDefinitionError };
 
 const SELECT_TYPES = new Set(['select', 'multiselect']);
+
+/**
+ * A patch's `carryTo` with the stored targets it could not see merged back
+ * (feature 162, research R-12): a carry to a type whose owner module is off is
+ * not served, so a save made meanwhile must not read as turning it off.
+ */
+function retainHiddenCarryTargets(
+  patch: UpdateCustomFieldDefinitionRequest,
+  current: CustomFieldDefinition,
+): UpdateCustomFieldDefinitionRequest {
+  if (patch.carryTo === undefined) return patch;
+  const hidden = current.carryTo.filter(
+    (target) => !isEntityTypeServed(target) && !patch.carryTo!.includes(target),
+  );
+  return hidden.length === 0 ? patch : { ...patch, carryTo: [...patch.carryTo, ...hidden] };
+}
 
 /**
  * CustomFieldDefinitionService (feature 055) — CRUD over definitions and options.
@@ -200,7 +219,9 @@ export class CustomFieldDefinitionService implements DefinitionSource, CustomFie
         );
       }
     }
-    const def = await this.commandBus.run(updateDefinitionCommand(id, patch, this.valueService));
+    const def = await this.commandBus.run(
+      updateDefinitionCommand(id, retainHiddenCarryTargets(patch, current), this.valueService),
+    );
     await this.cache.publishInvalidate(current.entityType);
     return def;
   }
@@ -264,7 +285,7 @@ export class CustomFieldDefinitionService implements DefinitionSource, CustomFie
 
   async applyCreate(
     em: EntityManager,
-    input: CreateCustomFieldDefinitionRequest,
+    input: CustomFieldDefinitionApplyCreateInput,
   ): Promise<CustomFieldDefinitionRecord> {
     return toCustomFieldDefinitionRecord(await applyCreateDefinition(em, input));
   }

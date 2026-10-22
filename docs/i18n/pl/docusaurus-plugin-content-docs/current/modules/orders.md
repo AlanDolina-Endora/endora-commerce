@@ -358,6 +358,8 @@ złożenie zamówienia niczego nie ogłasza.
   `…/bulk/print-invoices`.
 - **Komentarze** — `…/:id/comments` dla administratora i klienta, z flagą widoczności dla klienta i
   powiadomieniem; zablokowane w zamówieniach o statusie końcowym.
+  Platforma zapisuje tu też wewnętrzne **notatki systemowe** o wartościach pól niestandardowych,
+  których nie przeniesiono do zamówienia — zob. *Notatka systemowa* niżej.
 - **Ponowne zamówienie** — `…/:id/reorder` odtwarza koszyk (zależnie od ustawienia
   `orders.reorder_enabled`); **kopia jako zapytanie ofertowe** — `…/:id/clone-to-quote`.
 
@@ -431,6 +433,50 @@ pozycję*. Pyta on o ilość do przeniesienia na nową pozycję (od 1 do ilości
 nowej pozycji — domyślnie tę samą — po czym dodaje pozycję tego samego produktu z tą ilością,
 zmniejszając pierwotną. Tak jeden produkt trafia do dwóch grup: na przykład 5 sztuk do *Hali A* i 3
 do *Hali B*. Każda pozycja jest wyceniana według własnej ilości.
+
+## Wartości pól niestandardowych przeniesione do zamówienia
+
+Zamówienie może otrzymać wartości pól niestandardowych z rekordu, z którego powstało — dla każdego
+pola z włączoną opcją **Przenoś wartość do: Zamówienie** (ustawianą na ekranie **Pola
+niestandardowe**; reguły — ten sam klucz, zgodny typ i opcje, zasada widoczności — opisuje strona
+tamtego modułu). Wypełniane jest tylko puste pole zamówienia i tylko raz.
+
+- **Z zapytania ofertowego, przy składaniu zamówienia.** Gdy klient składa zamówienie z koszyka
+  wypełnionego zamówieniem zaakceptowanego zapytania ofertowego, a zamówienie zapisuje to zapytanie
+  (decydują te same reguły co dotąd: zapytanie nadal zatwierdzone, niewykorzystane przez inne
+  zamówienie, z organizacji klienta, co najmniej jedna uzgodniona pozycja nadal w koszyku), wartości
+  zapytania — w stanie z tej chwili — są zapisywane razem z samym zamówieniem. Są częścią jego
+  utworzenia, a nie późniejszą edycją. Nic nie jest przenoszone, gdy zamówienie nie zapisuje
+  zapytania ofertowego albo gdy moduł zapytań ofertowych jest wyłączony.
+- **Z szansy sprzedażowej.** Zamówienie, które administrator tworzy z szansy sprzedażowej (**Utwórz
+  zamówienie** na jej karcie *Powiązania*), otrzymuje wartości szansy, gdy moduł CRM powiąże je z tą
+  szansą — w osobnej zmianie przypisanej **systemowi**; utworzenie zamówienia pozostaje przypisane
+  administratorowi. Zamówienie powiązane z szansą ręcznie nie otrzymuje niczego.
+- **Nie w drugą stronę.** **Kopia jako zapytanie ofertowe** nie przenosi żadnej wartości.
+- **Nic nie kończy się błędem.** Wartość, której nie da się przenieść, jest pomijana, a zamówienie i
+  tak zostaje złożone lub powiązane.
+
+Przy zamówieniu złożonym w imieniu klienta wpis audytu `order.place_on_behalf` wymienia przeniesione
+klucze jako `carriedCustomFieldKeys`. Zamówienie złożone przez samego klienta, jak dotąd, nie tworzy
+wpisu audytu. Przeniesione wartości są w zamówieniu od początku, więc odczytują je subskrybenci
+`order.created.v1`.
+
+### Notatka systemowa
+
+Gdy wartość zostanie pominięta, karta **Komentarze** zamówienia zawiera jedną notatkę autorstwa
+**System** dla danego złożenia lub powiązania, oznaczoną jako *Wewnętrzny*: *Nie przeniesiono z
+zapytania ofertowego …:* lub *Nie przeniesiono z szansy sprzedażowej …:*, a pod spodem po jednej
+linii na każde pominięte pole — nazwa pola, z którego pochodzi, z chwili pominięcia, i powód (zamówienie nie ma pola o tym
+kluczu, pole ma inny typ, pole widoczne dla klientów miałoby dostać wartość pola wewnętrznego,
+wartość nie pasuje do pola). Może ją przeczytać każdy, kto może otworzyć zamówienie; nie pokazuje
+żadnej wartości.
+
+Notatka nigdy nie jest pokazywana klientowi — ani w sklepie, ani w endpoincie komentarzy klienta — i
+nie wysyła powiadomień. Nie ma autora: `systemNote` w odpowiedzi z komentarzami dla administratora
+(`GET /api/v1/admin/orders/:id/comments`) zawiera jej strukturę — `kind`
+(`custom_field_carry_skipped`), `source` (`entityType`, `recordId`, `reference`) i `skipped`
+(`key`, `reason`, `label`) — a `body` zawiera angielskie zdanie dla odbiorcy, który go nie tłumaczy.
+Każdy inny komentarz zwraca `systemNote: null`.
 
 ## Filtry pól niestandardowych
 

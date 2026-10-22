@@ -101,6 +101,7 @@ export function toCustomFieldDefinitionRecord(
     sortOrder: definition.sortOrder,
     config: definition.config ?? {},
     listFilter: definition.listFilter,
+    carryTo: [...(definition.carryTo ?? [])],
     createdAt: definition.createdAt,
     updatedAt: definition.updatedAt,
   };

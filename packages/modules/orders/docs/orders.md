@@ -373,7 +373,9 @@ that fails announces nothing.
 - **Bulk** — `POST …/bulk/status` (eligible orders move; skipped reported with
   reason — a skipped order has not moved) and `…/bulk/print-invoices`.
 - **Comments** — admin/customer `…/:id/comments` with customer-visibility +
-  notify flags; closed on terminal orders.
+  notify flags; closed on terminal orders. The platform also writes internal
+  **system notes** here for custom-field values not carried into the order —
+  see *The system note* below.
 - **Reorder** — `…/:id/reorder` rebuilds the cart (gated by
   `orders.reorder_enabled`); **clone-to-quote** — `…/:id/clone-to-quote`.
 
@@ -456,6 +458,49 @@ line's quantity minus 1) and the group of the new line — the line's own by
 default — and adds a line of the same product with that quantity, reducing the
 original. This is how one product goes into two groups: for example 5 pieces in
 *Hall A* and 3 in *Hall B*. Each line is priced at its own quantity.
+
+## Custom-field values carried into an order
+
+An order can receive custom-field values from the record it came from, for every field whose
+**Carry value to Order** option is on (set on **Custom Fields**; the rules — same key, compatible
+type and options, the audience rule — are on that module's page). Only an empty order field is
+filled, and only once.
+
+- **From a quote request, at placement.** When the customer places an order from the basket filled
+  by ordering an accepted quote request, and the order records that quote request (the same rules
+  that decide whether it does: the request still approved, used by no other order, in the
+  customer's organization, at least one agreed line still in the basket), the request's values —
+  as they are at that moment — are written with the order itself. They are part of its creation,
+  not a later edit. Nothing is carried when the order does not record a quote request, or while
+  the Quote Requests module is switched off.
+- **From a sales opportunity.** An order an administrator creates from an opportunity (**Create
+  order** on its *Links* tab) receives the opportunity's values once the CRM module has linked it
+  to that opportunity, in a separate change attributed to the **system**; the order's creation
+  stays attributed to the administrator. An order linked to an opportunity by hand receives nothing.
+- **Not the other way.** Cloning an order into a quote request carries no value.
+- **Nothing fails.** A value that cannot be carried is skipped, and the order is placed or linked
+  all the same.
+
+For an order placed on a customer's behalf, the `order.place_on_behalf` audit entry lists the
+carried keys as `carriedCustomFieldKeys`. A customer's own checkout writes no audit entry, as
+before. The carried values are on the order from the start, so subscribers of `order.created.v1`
+read them.
+
+### The system note
+
+When a value is skipped, the order's **Comments** tab holds one note by **System** for that
+placement or link, marked *Internal*: *Not carried from quote request …:* or *Not carried from
+sales opportunity …:*, followed by one line per skipped field — the name of the field it came from, as it
+read when it was skipped, and the reason (no such field on the order, a different type, a field visible to
+customers fed by an internal one, a value the field does not accept). Anybody who can open the
+order can read it; it shows no value.
+
+The note is never shown to the customer — not in the storefront and not on the customer's comments
+endpoint — and sends no notification. It has no author: `systemNote` on the admin comment reply
+(`GET /api/v1/admin/orders/:id/comments`) holds its structure — `kind`
+(`custom_field_carry_skipped`), `source` (`entityType`, `recordId`, `reference`) and `skipped`
+(`key`, `reason`, `label`) — and `body` holds an English sentence for any reader that does not
+translate it. Every other comment answers `systemNote: null`.
 
 ## Custom-field filters
 
