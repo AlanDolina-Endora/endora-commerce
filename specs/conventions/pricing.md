@@ -94,10 +94,12 @@ Polish.
   API price through the batch, so wrapping the single call alone leaves them on core
   (`backend/src/apps/example/modules/example_overlay/backend.ts` is the reference).
 - **The pricing cache is per process, keyed by pricing profile, invalidated after commit and
-  announced to every process.** Every audited price-book write, every status sweep that flips a
-  book, and the catalogue and channel events `price_lists` subscribes to (`product.*.v1`,
-  `category.updated.v1`, `attribute.updated.v1`, `sales_channels.identity_changed`,
-  `sales_channels.lifecycle_changed`) bump `PricingGeneration`: the writer's layers are cleared once
+  announced to every process.** Every audited price-book write, every display-mode override and
+  `pricing.*` display-mode setting (`settings.value_changed`: the engine memoises the viewer's
+  display-mode tail under the generation), every status sweep that flips a book, and the catalogue
+  and channel events `price_lists` subscribes to (`product.*.v1`, `category.updated.v1`,
+  `attribute.updated.v1`, `sales_channels.identity_changed`, `sales_channels.lifecycle_changed`)
+  bump `PricingGeneration`: the writer's layers are cleared once
   the write has committed, a bump is published on the Redis channel
   `b2b:price_lists:pricing-generation`, every process clears its own on receipt, and the writer's
   bump hands the price surface a `SurfaceChange` saying what moved, which marks only that.
