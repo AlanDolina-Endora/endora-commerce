@@ -221,7 +221,12 @@ pojedyncze wywołanie zostawia je na rdzeniu. Wzorcem jest
 
 - **W procesie**: `PricingCache`, LRU na 5 000 wpisów z TTL 60 s (`DEFAULT_PRICING_CACHE_TTL_MS`), z
   kluczem: profil cenowy, produkt, wariant i ilość; oraz zapamiętany profil dla łańcucha organizacji,
-  grupy, kanału, waluty i wersji kolejności. Środowisko testowe ustawia TTL na 0.
+  grupy, kanału, waluty i wersji kolejności. Środowisko testowe ustawia TTL na 0. Wpis w pamięci
+  podręcznej zawiera tylko to, o czym rozstrzyga profil: cenę oraz kroki produktu i kategorii w
+  łańcuchu trybu wyświetlania. Kroki organizacji i ustawień są stosowane przy każdym żądaniu, bo
+  jeden profil dzielą widzowie o różnych trybach wyświetlania (gość i organizacja bez własnego
+  cennika). Worker powierzchni cen, który wylicza profil bez konkretnego kupującego, nie czyta tej
+  pamięci podręcznej ani do niej nie zapisuje.
 - **Po zatwierdzeniu, wszędzie**: każdy audytowany zapis cennika przechodzi przez `CommandBus.run`, a
   po jego zatwierdzeniu `PricingGeneration.bump()` czyści warstwy tego procesu i publikuje
   komunikat na kanale Redis `b2b:price_lists:pricing-generation`; każdy proces API i workera

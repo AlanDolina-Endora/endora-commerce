@@ -219,7 +219,11 @@ them on core. `backend/src/apps/example/modules/example_overlay/backend.ts` is t
 - **Per process**: `PricingCache`, an LRU of 5 000 entries with a 60 s TTL
   (`DEFAULT_PRICING_CACHE_TTL_MS`), keyed by pricing profile, product, variant and quantity; and a
   memo of the profile per organization chain, group, channel, currency and precedence version. The
-  test harness sets the TTL to 0.
+  test harness sets the TTL to 0. A cached answer holds only what the profile decides: the price
+  and the product and category steps of the display-mode chain. The organization and settings
+  steps are applied per request, because one profile is shared by viewers whose display modes
+  differ (a guest and an organization with no buyer book). The price surface's worker, which
+  resolves a profile with no buyer in hand, neither reads nor writes this cache.
 - **After commit, everywhere**: every audited price-book write runs through `CommandBus.run`, and
   once it has committed `PricingGeneration.bump()` clears this process's layers and publishes on the
   Redis channel `b2b:price_lists:pricing-generation`; every API and worker process subscribes on boot

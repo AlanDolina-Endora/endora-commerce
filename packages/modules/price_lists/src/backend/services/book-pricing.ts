@@ -89,11 +89,29 @@ export interface ChannelBridgeSubquery {
   entityIdsInChannelSubquery(channelId: string, entityType: 'price-list'): { sql: string; params: string[] };
 }
 
-/** What one resolved line is, as the engine caches it. */
+/** What one resolved line is, for the viewer who asked. */
 export interface BookLineAnswer {
   resolution: BookResolution;
   displayMode: DisplayMode;
   currencyCode: string;
+}
+
+/**
+ * What one resolved line is, as the engine caches it under the pricing
+ * profile: everything the profile decides, and **nothing the viewer does**.
+ *
+ * The profile is shared by every buyer who meets the same books — a guest and
+ * an organization with no buyer book share the everyone profile — while the
+ * display mode's tail is the viewer's own: the organization's override, and
+ * which settings key answers (guest or signed-in). So only the product and
+ * category steps of the chain, which no viewer moves, are cached
+ * (`productDisplayMode`, `null` when neither decides); the tail is applied per
+ * request (review finding 1 of release 0.108.0).
+ */
+export interface CachedBookLine {
+  resolution: BookResolution;
+  currencyCode: string;
+  productDisplayMode: DisplayMode | null;
 }
 
 export interface BookPricingViewer {
@@ -112,14 +130,22 @@ export interface BookPricingDeps {
   attributeRead: () => CatalogAttributeReadPort;
   /** `catalog`'s variants, for a variant's axis values (FR-016) and a listing's variant range (FR-024). */
   variantRead: () => Pick<CatalogProductReadPort, 'listVariantsByProductIds'>;
-  displayModes: (input: {
+  /**
+   * The display-mode chain's product and category steps (FR-039): the mode of
+   * each product one of them decides; a product neither decides is absent.
+   * Viewer-independent, so cached with the price.
+   */
+  productDisplayModes: (input: {
     productIds: readonly string[];
+    categoryIdsByProduct: ReadonlyMap<string, ReadonlySet<string>>;
+  }) => Promise<Map<string, DisplayMode>>;
+  /** The chain's tail — organization override, then settings — for the viewer. Never cached here. */
+  viewerDisplayMode: (input: {
     organizationId: string | null;
     salesChannelId: string;
     customerKind: 'guest' | 'signed_in';
-    categoryIdsByProduct: ReadonlyMap<string, ReadonlySet<string>>;
-  }) => Promise<Map<string, DisplayMode>>;
-  cache?: PricingCache<BookLineAnswer, ProfilePricingCacheKey>;
+  }) => Promise<DisplayMode>;
+  cache?: PricingCache<CachedBookLine, ProfilePricingCacheKey>;
   profileMemo?: PricingCache<PricingProfile, ProfileMemoKey>;
 }
 
@@ -186,7 +212,14 @@ export class BookPricing {
     this.precedence.invalidateAll();
   }
 
-  /** The answer for every line, keyed by the line's key; `null` when nothing prices it. */
+  /**
+   * The answer for every line, keyed by the line's key; `null` when nothing prices it.
+   *
+   * A resolution of a `fixedProfile` — the price surface's worker building a
+   * profile with no buyer in hand, a feed's catalogue reference — neither
+   * reads nor writes the cache: it is not a viewer's request, so it must not
+   * seed what viewers are served, nor evict it (review finding 1).
+   */
   async resolve(
     lines: readonly PricingLineRequest[],
     viewer: BookPricingViewer,
@@ -209,7 +242,7 @@ export class BookPricing {
       ? emptyProfile(viewer.salesChannelId, currencyCode, precedence.version)
       : (fixedProfile ?? (await this.#profileOf(viewer, currencyCode, precedence.version)));
 
-    const cache = this.deps.cache;
+    const cache = fixedProfile ? undefined : this.deps.cache;
     const generation = cache?.generation;
     const keyOf = (line: PricingLineRequest): ProfilePricingCacheKey => ({
       profileKey: profile.key,
@@ -226,62 +259,76 @@ export class BookPricing {
       if (item) item.keys.push(line.key);
       else items.set(id, { line, keys: [line.key] });
     }
+    const answered: Array<{ cached: CachedBookLine; keys: string[] }> = [];
     const pending: Array<{ line: PricingLineRequest; keys: string[] }> = [];
     for (const item of items.values()) {
       const cached = cache?.get(keyOf(item.line));
-      if (cached) for (const key of item.keys) out.set(key, cached);
+      if (cached) answered.push({ cached, keys: item.keys });
       else pending.push(item);
     }
-    if (pending.length === 0) return out;
 
-    const productIds = [...new Set(pending.map((p) => p.line.product.id))];
-    const variantIds = [
-      ...new Set(pending.map((p) => p.line.variantId).filter((v): v is string => typeof v === 'string')),
-    ];
-    const books = [...profile.books];
-    const rows = await this.#loadRows(
-      em,
-      books.map((b) => b.id),
-      productIds,
-      variantIds,
-    );
-    const categoryIdsByProduct = await this.#categoryMemberships(productIds);
-    // FR-016 — a variant line matches attribute rows on the product's values
-    // overlaid by the variant's axis values: one read of the batch's variants.
-    let variants = prefetchedVariants ?? new Map<string, CatalogProductVariantRecord>();
-    if (!prefetchedVariants && variantIds.length > 0) {
-      const withVariant = [...new Set(pending.filter((p) => p.line.variantId).map((p) => p.line.product.id))];
-      variants = new Map(
-        (await this.deps.variantRead().listVariantsByProductIds(withVariant)).map((v) => [v.id, v]),
+    if (pending.length > 0) {
+      const productIds = [...new Set(pending.map((p) => p.line.product.id))];
+      const variantIds = [
+        ...new Set(pending.map((p) => p.line.variantId).filter((v): v is string => typeof v === 'string')),
+      ];
+      const books = [...profile.books];
+      const rows = await this.#loadRows(
+        em,
+        books.map((b) => b.id),
+        productIds,
+        variantIds,
       );
-    }
-    let eligibleAttributes: ReadonlyMap<string, EligibleAttribute> = new Map();
-    if (rows.some((r) => r.attributeKey !== null)) {
-      eligibleAttributes = buildEligibleAttributes(await this.deps.attributeRead().listByFlag('isPriceRule'));
-    }
-    const resolver = createBookResolver({ books, rows, precedence, eligibleAttributes });
-    const displayModes = await this.deps.displayModes({
-      productIds,
-      organizationId: viewer.organizationId,
-      salesChannelId: viewer.salesChannelId,
-      customerKind: viewer.signedIn ? 'signed_in' : 'guest',
-      categoryIdsByProduct,
-    });
+      const categoryIdsByProduct = await this.#categoryMemberships(productIds);
+      // FR-016 — a variant line matches attribute rows on the product's values
+      // overlaid by the variant's axis values: one read of the batch's variants.
+      let variants = prefetchedVariants ?? new Map<string, CatalogProductVariantRecord>();
+      if (!prefetchedVariants && variantIds.length > 0) {
+        const withVariant = [...new Set(pending.filter((p) => p.line.variantId).map((p) => p.line.product.id))];
+        variants = new Map(
+          (await this.deps.variantRead().listVariantsByProductIds(withVariant)).map((v) => [v.id, v]),
+        );
+      }
+      let eligibleAttributes: ReadonlyMap<string, EligibleAttribute> = new Map();
+      if (rows.some((r) => r.attributeKey !== null)) {
+        eligibleAttributes = buildEligibleAttributes(await this.deps.attributeRead().listByFlag('isPriceRule'));
+      }
+      const resolver = createBookResolver({ books, rows, precedence, eligibleAttributes });
+      const productModes = await this.deps.productDisplayModes({ productIds, categoryIdsByProduct });
 
-    for (const { line, keys } of pending) {
-      const resolution = resolver.resolve({
-        productId: line.product.id,
-        variantId: line.variantId ?? null,
-        quantity: line.quantity,
-        categoryIds: categoryIdsByProduct.get(line.product.id) ?? new Set<string>(),
-        attributes: effectiveAttributes(line, variants),
-      });
+      for (const { line, keys } of pending) {
+        const resolution = resolver.resolve({
+          productId: line.product.id,
+          variantId: line.variantId ?? null,
+          quantity: line.quantity,
+          categoryIds: categoryIdsByProduct.get(line.product.id) ?? new Set<string>(),
+          attributes: effectiveAttributes(line, variants),
+        });
+        const cached: CachedBookLine = {
+          resolution,
+          currencyCode,
+          productDisplayMode: productModes.get(line.product.id) ?? null,
+        };
+        cache?.set(keyOf(line), cached, generation);
+        answered.push({ cached, keys });
+      }
+    }
+
+    // The viewer's tail of the display-mode chain, once for the batch, and
+    // only when a product step left a line undecided.
+    const viewerMode = answered.some((a) => a.cached.productDisplayMode === null)
+      ? await this.deps.viewerDisplayMode({
+          organizationId: viewer.organizationId,
+          salesChannelId: viewer.salesChannelId,
+          customerKind: viewer.signedIn ? 'signed_in' : 'guest',
+        })
+      : null;
+    for (const { cached, keys } of answered) {
       const answer: BookLineAnswer = {
-        resolution,
-        displayMode: displayModes.get(line.product.id) ?? 'gross_only',
-        currencyCode,
+        resolution: cached.resolution,
+        displayMode: cached.productDisplayMode ?? viewerMode ?? 'gross_only',
+        currencyCode: cached.currencyCode,
       };
-      cache?.set(keyOf(line), answer, generation);
       for (const key of keys) out.set(key, answer);
     }
     return out;
