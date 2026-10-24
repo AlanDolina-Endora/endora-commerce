@@ -46,6 +46,38 @@ export interface ListingAnswer {
   variesByVariant: boolean;
 }
 
+/** A profile's listing answer as the price surface stores it: no display mode (`BookPricing.resolveProfileListing`). */
+export interface ProfileListingAnswer {
+  resolution: BookResolution | null;
+  maxAmount: string | null;
+  variesByVariant: boolean;
+}
+
+/**
+ * Which line answers a listing card, and the range beside it: the product's
+ * own line when it has no variants; otherwise the lowest-priced variant's
+ * ("from"), the highest variant price, and whether the variants differ.
+ */
+function rangeOverVariants(
+  productId: string,
+  variants: readonly CatalogProductVariantRecord[],
+  resolutionOf: (key: string) => BookResolution | null,
+): { key: string | null; maxAmount: string | null; variesByVariant: boolean } {
+  if (variants.length === 0) return { key: productId, maxAmount: null, variesByVariant: false };
+  let lowest: { key: string; amount: string } | null = null;
+  let highest: string | null = null;
+  const distinct = new Set<string>();
+  for (const v of variants) {
+    const key = `${productId}|${v.id}`;
+    const amount = resolutionOf(key)?.price?.amount;
+    if (amount === undefined) continue;
+    distinct.add(amount);
+    if (!lowest || compareDecimal(amount, lowest.amount) < 0) lowest = { key, amount };
+    if (highest === null || compareDecimal(amount, highest) > 0) highest = amount;
+  }
+  return { key: lowest?.key ?? null, maxAmount: highest, variesByVariant: distinct.size > 1 };
+}
+
 /** The product's attribute values overlaid by the line's variant's axis values (FR-016). */
 function effectiveAttributes(
   line: PricingLineRequest,
@@ -267,13 +299,49 @@ export class BookPricing {
   ): Promise<Map<string, BookLineAnswer | null>> {
     const out = new Map<string, BookLineAnswer | null>();
     if (lines.length === 0) return out;
+    const { currencyCode, answered } = await this.#resolveLines(lines, viewer, prefetchedVariants, fixedProfile, {
+      explain: options.explain === true,
+      displayModes: true,
+    });
+
+    // The viewer's tail of the display-mode chain, once for the batch, and
+    // only when a product step left a line undecided.
+    const viewerMode = answered.some((a) => a.cached.productDisplayMode === null)
+      ? await this.#viewerMode(viewer)
+      : null;
+    for (const { cached, keys } of answered) {
+      const answer: BookLineAnswer = {
+        resolution: cached.resolution,
+        displayMode: cached.productDisplayMode ?? viewerMode ?? 'gross_only',
+        currencyCode,
+      };
+      for (const key of keys) out.set(key, answer);
+    }
+    return out;
+  }
+
+  /**
+   * The resolutions of a batch, each with the product step of its display-mode
+   * chain when `displayModes` asks for it (`null` otherwise) — what
+   * {@link resolve} answers before it applies the viewer's tail, and what the
+   * price surface's worker stores without either (issue #416).
+   */
+  async #resolveLines(
+    lines: readonly PricingLineRequest[],
+    viewer: BookPricingViewer,
+    prefetchedVariants: ReadonlyMap<string, CatalogProductVariantRecord> | undefined,
+    fixedProfile: PricingProfile | undefined,
+    options: { explain: boolean; displayModes: boolean },
+  ): Promise<{ currencyCode: string; answered: Array<{ cached: CachedBookLine; keys: string[] }> }> {
     const currencyCode = viewer.currencyCode.toUpperCase();
     const em = this.deps.emFactory();
     // Read before the first statement (`pricing-cache.ts`): a write that
     // commits while this resolution reads the channel, the precedence or the
     // profile invalidates, and the answer built on what was read before it is
     // then not stored (review finding 6 of release 0.108.0).
-    const cache = fixedProfile || options.explain ? undefined : this.deps.cache;
+    // A line resolved without its display-mode step is never cached: a cached
+    // line carries that step for every viewer it is served to.
+    const cache = fixedProfile || options.explain || !options.displayModes ? undefined : this.deps.cache;
     const generation = cache?.generation;
 
     // K3.2 — a currency the channel does not offer prices nothing (the lines
@@ -334,8 +402,10 @@ export class BookPricing {
       if (rows.some((r) => r.attributeKey !== null)) {
         eligibleAttributes = buildEligibleAttributes(await this.deps.attributeRead().listByFlag('isPriceRule'));
       }
-      const resolver = createBookResolver({ books, rows, precedence, eligibleAttributes, explain: options.explain === true });
-      const productModes = await this.deps.productDisplayModes({ productIds, categoryIdsByProduct });
+      const resolver = createBookResolver({ books, rows, precedence, eligibleAttributes, explain: options.explain });
+      const productModes = options.displayModes
+        ? await this.deps.productDisplayModes({ productIds, categoryIdsByProduct })
+        : new Map<string, DisplayMode | null>();
 
       for (const { line, keys } of pending) {
         const resolution = resolver.resolve({
@@ -353,21 +423,7 @@ export class BookPricing {
         answered.push({ cached, keys });
       }
     }
-
-    // The viewer's tail of the display-mode chain, once for the batch, and
-    // only when a product step left a line undecided.
-    const viewerMode = answered.some((a) => a.cached.productDisplayMode === null)
-      ? await this.#viewerMode(viewer)
-      : null;
-    for (const { cached, keys } of answered) {
-      const answer: BookLineAnswer = {
-        resolution: cached.resolution,
-        displayMode: cached.productDisplayMode ?? viewerMode ?? 'gross_only',
-        currencyCode,
-      };
-      for (const key of keys) out.set(key, answer);
-    }
-    return out;
+    return { currencyCode, answered };
   }
 
   /**
@@ -507,6 +563,60 @@ export class BookPricing {
   ): Promise<Map<string, ListingAnswer>> {
     const out = new Map<string, ListingAnswer>();
     if (products.length === 0) return out;
+    const { lines, records, variantsByProduct } = await this.#listingLines(products);
+    const answers = await this.resolve(lines, viewer, new Map(records.map((v) => [v.id, v])), fixedProfile);
+    for (const product of products) {
+      const ranged = rangeOverVariants(product.id, variantsByProduct.get(product.id) ?? [], (key) => answers.get(key)?.resolution ?? null);
+      out.set(product.id, { answer: ranged.key === null ? null : (answers.get(ranged.key) ?? null), maxAmount: ranged.maxAmount, variesByVariant: ranged.variesByVariant });
+    }
+    return out;
+  }
+
+  /**
+   * The listing of a fixed profile as the price surface stores it (issue
+   * #416): the resolutions {@link resolveListing} answers for the profile's
+   * guest viewer on its channel and currency — the same lines, the same
+   * variant ranging — without the display-mode chain, which the surface does
+   * not store and which cost a whole build about 7 % of its time. Uncached,
+   * like every fixed-profile resolution.
+   */
+  async resolveProfileListing(
+    products: readonly PricedProductRef[],
+    profile: PricingProfile,
+  ): Promise<Map<string, ProfileListingAnswer>> {
+    const out = new Map<string, ProfileListingAnswer>();
+    if (products.length === 0) return out;
+    const { lines, records, variantsByProduct } = await this.#listingLines(products);
+    const viewer: BookPricingViewer = {
+      organizationId: null,
+      customerGroupId: null,
+      signedIn: false,
+      salesChannelId: profile.channelId,
+      currencyCode: profile.currencyCode,
+    };
+    const { answered } = await this.#resolveLines(lines, viewer, new Map(records.map((v) => [v.id, v])), profile, {
+      explain: false,
+      displayModes: false,
+    });
+    const resolutions = new Map<string, BookResolution>();
+    for (const { cached, keys } of answered) for (const key of keys) resolutions.set(key, cached.resolution);
+    for (const product of products) {
+      const ranged = rangeOverVariants(product.id, variantsByProduct.get(product.id) ?? [], (key) => resolutions.get(key) ?? null);
+      out.set(product.id, {
+        resolution: ranged.key === null ? null : (resolutions.get(ranged.key) ?? null),
+        maxAmount: ranged.maxAmount,
+        variesByVariant: ranged.variesByVariant,
+      });
+    }
+    return out;
+  }
+
+  /** A listing's lines: one per product without variants, one per variant otherwise — one read of the variants. */
+  async #listingLines(products: readonly PricedProductRef[]): Promise<{
+    lines: PricingLineRequest[];
+    records: CatalogProductVariantRecord[];
+    variantsByProduct: Map<string, CatalogProductVariantRecord[]>;
+  }> {
     const variantsByProduct = new Map<string, CatalogProductVariantRecord[]>();
     const records = await this.deps.variantRead().listVariantsByProductIds(products.map((p) => p.id));
     for (const v of records) {
@@ -520,27 +630,7 @@ export class BookPricing {
       if (variants.length === 0) lines.push({ key: product.id, product, quantity: 1 });
       for (const v of variants) lines.push({ key: `${product.id}|${v.id}`, product, variantId: v.id, quantity: 1 });
     }
-    const answers = await this.resolve(lines, viewer, new Map(records.map((v) => [v.id, v])), fixedProfile);
-    for (const product of products) {
-      const variants = variantsByProduct.get(product.id) ?? [];
-      if (variants.length === 0) {
-        out.set(product.id, { answer: answers.get(product.id) ?? null, maxAmount: null, variesByVariant: false });
-        continue;
-      }
-      let lowest: BookLineAnswer | null = null;
-      let highest: string | null = null;
-      const distinct = new Set<string>();
-      for (const v of variants) {
-        const answer = answers.get(`${product.id}|${v.id}`) ?? null;
-        const amount = answer?.resolution.price?.amount;
-        if (!answer || amount === undefined) continue;
-        distinct.add(amount);
-        if (!lowest || compareDecimal(amount, lowest.resolution.price!.amount) < 0) lowest = answer;
-        if (highest === null || compareDecimal(amount, highest) > 0) highest = amount;
-      }
-      out.set(product.id, { answer: lowest, maxAmount: highest, variesByVariant: distinct.size > 1 });
-    }
-    return out;
+    return { lines, records, variantsByProduct };
   }
 
   /**
