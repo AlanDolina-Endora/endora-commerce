@@ -69,3 +69,11 @@ describe('summarize — totalAtCustomerPrice (FR-009)', () => {
     expect(summary.lineCount).toBe(2);
   });
 });
+
+describe('summarize — exact totals (#417 review)', () => {
+  it('publishes 3 × 9.05 as 27.15, not the binary 27.150000000000002', () => {
+    const s = summarize(rfq, [item(3, '9.05', { agreedUnitPrice: '9.05' })], {});
+    expect(s.totalAtCustomerPrice).toBe(27.15);
+    expect(s.totalAtAgreedPrice).toBe(27.15);
+  });
+});

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
-import { AMOUNT_PRECISION_EXCEEDED, promotionActionSchema, upsertPromotionRequestSchema } from '../src/index.js';
+import {
+  AMOUNT_PRECISION_EXCEEDED,
+  adminCreateQuoteRequestLineSchema,
+  adminPatchQuoteRequestLineSchema,
+  createQuoteRequestLineSchema,
+  promotionActionSchema,
+  upsertPromotionRequestSchema,
+} from '../src/index.js';
 
 /**
  * Owner ruling of 2026-10-24 (issue #417) — every money field a person or an
@@ -32,5 +39,16 @@ describe('promotions', () => {
   it('leaves a percentage alone and accepts two places', () => {
     expect(refusedPaths(upsertPromotionRequestSchema, { ...base, kind: 'percentage_off', value: 12.345 })).toEqual([]);
     expect(upsertPromotionRequestSchema.safeParse({ ...base, kind: 'amount_off', value: 1.05 }).success).toBe(true);
+  });
+});
+
+describe('quote requests', () => {
+  const line = { productId: '00000000-0000-4000-8000-000000000101', quantity: 1 };
+
+  it('refuses a desired or an agreed unit price with three places', () => {
+    expect(refusedPaths(createQuoteRequestLineSchema, { ...line, desiredUnitPrice: 1.005 })).toEqual(['desiredUnitPrice']);
+    expect(refusedPaths(adminCreateQuoteRequestLineSchema, { ...line, agreedUnitPrice: 1.005 })).toEqual(['agreedUnitPrice']);
+    expect(refusedPaths(adminPatchQuoteRequestLineSchema, { ...line, agreedUnitPrice: 2.675 })).toEqual(['agreedUnitPrice']);
+    expect(adminPatchQuoteRequestLineSchema.safeParse({ ...line, agreedUnitPrice: null }).success).toBe(true);
   });
 });
