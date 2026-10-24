@@ -388,6 +388,8 @@ export async function registerPriceBookRoutes(app: FastifyInstance, deps: PriceB
     );
     // G16 of 161 — every runner-up named: its book (from the resolution) and
     // its selection (one batched label read across every line's candidates).
+    // The cap comes after the scope filter, so hidden books use up no visible
+    // slot (review 2, finding 5): the resolver hands over every candidate.
     const shown = answers.map(
       (answer) =>
         answer.explanation?.candidates.filter((c) => visible.has(c.bookId)).slice(0, PRICE_BOOK_MAX_EXPLANATION_CANDIDATES) ?? [],

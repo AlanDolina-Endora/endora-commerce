@@ -149,8 +149,9 @@ change flow exists.
 ### Explanation
 
 Every resolution carries its explanation (`BookExplanation`): the tier, the cell, the book and row,
-the reference price used, the precedence version and up to ten ranked candidates of the deciding
-tier. It is internal to the module's contract; `POST /api/v1/admin/price-books/resolve` publishes it.
+the reference price used, the precedence version and every ranked candidate of the deciding tier.
+It is internal to the module's contract; `POST /api/v1/admin/price-books/resolve` publishes it, with
+the candidates cut to ten after the books outside the caller's scope are left out.
 
 ## The one read path
 
@@ -346,7 +347,7 @@ are `price_list.create`, `update`, `channels_replace`, `activate`, `draftify`, `
 | `PUT /:id/rows?dryRun=true` | The same body, writing nothing: `{ version, resolved, diff { added, changed, removed, unchangedCount }, errors }`. Confirm by sending the same body without `dryRun`, with the version the preview answered. |
 | `GET /base-prices?productId=`, `PUT /base-prices/:productId` | A product's base prices per currency, `{ byCurrency: { CODE: { product: Tier[], variants: { [variantId]: VariantBaseRow \| null } } } }`; one command across currencies, creating a currency's base book on first use. A sales representative is `403` on the write. |
 | `GET /targets/organizations?search=` or `?ids=`, `…/customer-groups`, `…/categories`, `…/attributes`, `…/sales-channels?currency=`, `…/currencies` | The pickers. Organizations are filtered to the caller's scope; attributes are only the eligible `isPriceRule` ones, with their options. |
-| `POST /resolve` | The explanation: `{ salesChannelId?, currencyCode?, buyer { organizationId?, customerAccountId? }, lines [{ key, productId, variantId?, quantity }] }` (≤ 200 lines; no channel = the system default channel). Each line: `price { amount, currency, source, compareAt? }` or `null`, and `explanation { tier, cell, bookId, bookName, rowId, reference, precedenceVersion, candidates[] }`. An organization or customer the caller may not see answers the same `404` as an unknown one. A book outside the caller's scope (a representative meeting a parent organization's book through the chain, say) is not identified: when it set the price, the price, `tier`, `cell` and `reference` stay and `bookId`, `bookName` and `rowId` are `null`; as a runner-up it is left out of `candidates`. |
+| `POST /resolve` | The explanation: `{ salesChannelId?, currencyCode?, buyer { organizationId?, customerAccountId? }, lines [{ key, productId, variantId?, quantity }] }` (≤ 200 lines; no channel = the system default channel). Each line: `price { amount, currency, source, compareAt? }` or `null`, and `explanation { tier, cell, bookId, bookName, rowId, reference, precedenceVersion, candidates[] }`. An organization or customer the caller may not see answers the same `404` as an unknown one. A book outside the caller's scope (a representative meeting a parent organization's book through the chain, say) is not identified: when it set the price, the price, `tier`, `cell` and `reference` stay and `bookId`, `bookName` and `rowId` are `null`; as a runner-up it is left out of `candidates` before the list is cut to ten, so it takes no visible runner-up's place. |
 | `GET /precedence` | The active version: `version`, `cells`, `categoryBeforeAttribute`, `depthMode`, `preset`. |
 | `GET /settings/show-list-price`, `PUT /settings/show-list-price` | The `pricing.show_list_price` setting, `{ value: boolean }`; the write is one audited command. |
 | `POST /internal/sweep` | Test-only: one status-sweep tick. |

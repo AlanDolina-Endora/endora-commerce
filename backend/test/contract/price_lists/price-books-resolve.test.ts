@@ -172,6 +172,44 @@ describe('admin price explanation (feature 160 US7)', () => {
     }
   });
 
+  /**
+   * Review 2, finding 5 (release 0.108.0) — the runner-up cap was applied in
+   * the resolver, before the route left out the books the caller may not see,
+   * so hidden books used up visible slots. Fourteen candidates, six of the top
+   * ten out of the representative's scope: the representative sees every
+   * visible one, in rank order — exactly what the list would be had the hidden
+   * books not existed.
+   */
+  it('FR-034 — books outside the scope do not use up the runner-up cap', async () => {
+    await f.clearBooks();
+    const hidden: string[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      hidden.push(
+        (await f.book({ name: `Acme hidden ${i}`, priority: 100 - i, audience: { organizations: [f.orgs.Acme] }, rows: [{ product: f.products.P1, percent: `-${10 + i}` }] })).id,
+      );
+    }
+    const visible: string[] = [];
+    for (let i = 0; i < 8; i += 1) {
+      visible.push(
+        (await f.book({ name: `VIP visible ${i}`, priority: 50 - i, audience: { groups: [f.groups.VIP] }, rows: [{ product: f.products.P1, percent: `-${1 + i}` }] })).id,
+      );
+    }
+    const childRep = await createSalesRep(h, { assignedOrganizationIds: [f.orgs.AcmeW.id], otherOrganizationIds: [f.orgs.Acme.id, f.orgs.Beta.id] });
+    try {
+      const body = { buyer: { organizationId: f.orgs.AcmeW.id }, lines: [{ key: 'w', productId: f.products.P1.id }] };
+      const admin = await resolve(body);
+      expect(admin.status, admin.raw).toBe(200);
+      // The precondition: six of the top ten are the hidden books.
+      expect(admin.body.data[0]!.explanation.candidates!.map((c) => c.bookId)).toEqual([...hidden, ...visible.slice(0, 4)]);
+
+      const scoped = await resolve(body, childRep.cookies);
+      expect(scoped.status, scoped.raw).toBe(200);
+      expect(scoped.body.data[0]!.explanation.candidates!.map((c) => c.bookId)).toEqual(visible);
+    } finally {
+      childRep.release();
+    }
+  });
+
   it('refuses more than 200 lines and an unknown channel', async () => {
     const many = Array.from({ length: 201 }, (_, i) => ({ key: String(i), productId: f.products.P1.id }));
     expect((await resolve({ lines: many })).status).toBe(400);

@@ -151,8 +151,9 @@ powstanie proces zmiany.
 ### Wyjaśnienie
 
 Każda wycena niesie swoje wyjaśnienie (`BookExplanation`): krok, komórkę, cennik i wiersz, użytą cenę
-odniesienia, wersję kolejności i do dziesięciu uszeregowanych kandydatów kroku, który zdecydował. Jest
-wewnętrzne dla kontraktu modułu; publikuje je `POST /api/v1/admin/price-books/resolve`.
+odniesienia, wersję kolejności i wszystkich uszeregowanych kandydatów kroku, który zdecydował. Jest
+wewnętrzne dla kontraktu modułu; publikuje je `POST /api/v1/admin/price-books/resolve`, przycinając
+listę kandydatów do dziesięciu dopiero po pominięciu cenników spoza zakresu wywołującego.
 
 ## Jedyna ścieżka odczytu
 
@@ -354,7 +355,7 @@ i po niej; audytowane akcje to `price_list.create`, `update`, `channels_replace`
 | `PUT /:id/rows?dryRun=true` | Ta sama treść, bez zapisu: `{ version, resolved, diff { added, changed, removed, unchangedCount }, errors }`. Zatwierdzenie to ta sama treść bez `dryRun`, z wersją zwróconą przez podgląd. |
 | `GET /base-prices?productId=`, `PUT /base-prices/:productId` | Ceny bazowe produktu w każdej walucie, `{ byCurrency: { CODE: { product: Tier[], variants: { [variantId]: VariantBaseRow \| null } } } }`; jedno polecenie dla wszystkich walut, tworzące cennik cen bazowych waluty przy pierwszym użyciu. Handlowiec dostaje przy zapisie `403`. |
 | `GET /targets/organizations?search=` albo `?ids=`, `…/customer-groups`, `…/categories`, `…/attributes`, `…/sales-channels?currency=`, `…/currencies` | Listy wyboru. Organizacje są zawężone do zakresu wywołującego; atrybuty to tylko kwalifikujące się atrybuty z `isPriceRule`, z ich opcjami. |
-| `POST /resolve` | Wyjaśnienie: `{ salesChannelId?, currencyCode?, buyer { organizationId?, customerAccountId? }, lines [{ key, productId, variantId?, quantity }] }` (≤ 200 pozycji; bez kanału = domyślny kanał systemu). Każda pozycja: `price { amount, currency, source, compareAt? }` albo `null` oraz `explanation { tier, cell, bookId, bookName, rowId, reference, precedenceVersion, candidates[] }`. Organizacja albo klient, których wywołujący nie może zobaczyć, dają ten sam `404` co nieznane. Cennik spoza zakresu wywołującego (na przykład cennik organizacji nadrzędnej, do którego handlowiec dociera przez łańcuch organizacji) nie jest wskazywany: jeśli to on ustalił cenę, cena, `tier`, `cell` i `reference` zostają, a `bookId`, `bookName` i `rowId` mają wartość `null`; jako przegrany kandydat jest pomijany w `candidates`. |
+| `POST /resolve` | Wyjaśnienie: `{ salesChannelId?, currencyCode?, buyer { organizationId?, customerAccountId? }, lines [{ key, productId, variantId?, quantity }] }` (≤ 200 pozycji; bez kanału = domyślny kanał systemu). Każda pozycja: `price { amount, currency, source, compareAt? }` albo `null` oraz `explanation { tier, cell, bookId, bookName, rowId, reference, precedenceVersion, candidates[] }`. Organizacja albo klient, których wywołujący nie może zobaczyć, dają ten sam `404` co nieznane. Cennik spoza zakresu wywołującego (na przykład cennik organizacji nadrzędnej, do którego handlowiec dociera przez łańcuch organizacji) nie jest wskazywany: jeśli to on ustalił cenę, cena, `tier`, `cell` i `reference` zostają, a `bookId`, `bookName` i `rowId` mają wartość `null`; jako przegrany kandydat jest pomijany w `candidates` przed przycięciem listy do dziesięciu, więc nie zajmuje miejsca widocznego kandydata. |
 | `GET /precedence` | Aktywna wersja: `version`, `cells`, `categoryBeforeAttribute`, `depthMode`, `preset`. |
 | `GET /settings/show-list-price`, `PUT /settings/show-list-price` | Ustawienie `pricing.show_list_price`, `{ value: boolean }`; zapis to jedno audytowane polecenie. |
 | `POST /internal/sweep` | Tylko dla testów: jedno wykonanie aktualizacji statusów. |

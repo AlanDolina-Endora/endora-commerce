@@ -313,6 +313,6 @@ Handlowiec pracuje na tych samych ekranach, z tymi różnicami:
   odbiorców i wybór kupującego w wyjaśnieniu ceny wymieniają tylko jego organizacje. W wyjaśnieniu
   ceny cena ustalona przez cennik spoza jego zakresu — na przykład cennik organizacji nadrzędnej — jest
   pokazana tak, jak jest naliczana, z napisem *Cennik spoza Twojego zakresu* w miejscu cennika, a
-  przegrani kandydaci z takich cenników nie są wymieniani. Cennik, który
+  przegrani kandydaci z takich cenników nie są wymieniani i nie zajmują żadnego z dziesięciu miejsc. Cennik, który
   tworzy, duplikuje albo zmienia, musi wskazywać co najmniej jedną z nich, a jego odbiorców nie można
   zmienić na wszystkich ani na grupy klientów.

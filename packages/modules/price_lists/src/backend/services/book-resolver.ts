@@ -1,5 +1,4 @@
 import type { PriceSource } from '@endora-commerce/contracts';
-import { PRICE_BOOK_MAX_EXPLANATION_CANDIDATES } from '@endora-commerce/contracts';
 import { matchesAttributeValue, type EligibleAttribute } from './attribute-eligibility.js';
 import {
   applyAmountAdjustment,
@@ -132,7 +131,12 @@ export interface BookExplanation {
   rowId: string | null;
   reference: string | null;
   precedenceVersion: number;
-  /** The deciding tier's priced candidates in rank order, at most ten. */
+  /**
+   * The deciding tier's priced candidates in rank order, **all** of them. The
+   * explainer route caps the list at `PRICE_BOOK_MAX_EXPLANATION_CANDIDATES`
+   * after leaving out the books its caller may not see (FR-034): a cap applied
+   * here let hidden books use up the visible slots (review 2, finding 5).
+   */
   candidates: Array<{ cell: CellCode | null; bookId: string; bookName: string; rowId: string; amount: string }>;
 }
 
@@ -418,9 +422,7 @@ export function createBookResolver(input: BookResolverInput): BookResolver {
           rowId: deciding?.answer.rowId ?? null,
           reference: deciding?.answer.reference ?? null,
           precedenceVersion: precedence.version,
-          candidates: (deciding?.candidates ?? [])
-            .slice(0, PRICE_BOOK_MAX_EXPLANATION_CANDIDATES)
-            .map((cand) => ({ cell: cand.cell, bookId: cand.book.id, bookName: cand.book.name, rowId: cand.row.id, amount: cand.amount })),
+          candidates: (deciding?.candidates ?? []).map((cand) => ({ cell: cand.cell, bookId: cand.book.id, bookName: cand.book.name, rowId: cand.row.id, amount: cand.amount })),
         },
       };
     },

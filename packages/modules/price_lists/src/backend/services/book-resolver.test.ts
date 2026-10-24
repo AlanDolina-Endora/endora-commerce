@@ -318,12 +318,12 @@ describe('book resolver — buyer tier', () => {
     });
   });
 
-  it('lists the ranked candidates, at most ten', () => {
+  it('lists every ranked candidate: the cap is the explainer route\'s, after its scope filter', () => {
     const books = Array.from({ length: 12 }, () => book(org(0)));
     const rows = [base100, ...books.map((b, i) => fixed(b, String(50 + i), { productId: P1 }))];
     const r = resolve(books, rows);
     expect(r.price?.amount).toBe('50.0000');
-    expect(r.explanation.candidates).toHaveLength(10);
+    expect(r.explanation.candidates).toHaveLength(12);
     expect(r.explanation.candidates[0]).toMatchObject({ cell: 'org.product', amount: '50.0000' });
   });
 });

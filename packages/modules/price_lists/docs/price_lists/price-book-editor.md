@@ -301,6 +301,6 @@ A sales representative works in the same screens with these differences:
   pickers and the explainer's buyer picker list only their organizations. In the explainer, a price
   set by a book outside their scope — for example the parent organization's — is shown as it is
   charged, with *A price book outside your scope* in place of the book, and the runner-ups from such
-  books are not listed. A book they create,
+  books are not listed and take none of the ten places. A book they create,
   duplicate or change must name at least one of them, and its audience cannot be changed to everyone
   or to customer groups.
