@@ -25,6 +25,7 @@ export type MessageKey =
   | 'catalog.heading'
   | 'catalog.filters'
   | 'catalog.empty'
+  | 'catalog.emptyPageMore'
   | 'catalog.loadMore'
   | 'catalog.sort.priceAsc'
   | 'catalog.sort.priceDesc'
@@ -432,6 +433,7 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'catalog.heading': 'Catalog',
     'catalog.filters': 'Filters',
     'catalog.empty': 'No products match your filters.',
+    'catalog.emptyPageMore': 'No products on this page. More follow on the next page.',
     'catalog.loadMore': 'Load more',
     'catalog.sort.priceAsc': 'Price: lowest first',
     'catalog.sort.priceDesc': 'Price: highest first',
@@ -818,6 +820,7 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'catalog.heading': 'Katalog',
     'catalog.filters': 'Filtry',
     'catalog.empty': 'Zaden produkt nie pasuje do filtrow.',
+    'catalog.emptyPageMore': 'Na tej stronie nie ma produktów. Kolejne są na następnej stronie.',
     'catalog.loadMore': 'Pokaz wiecej',
     'catalog.sort.priceAsc': 'Cena: od najniższej',
     'catalog.sort.priceDesc': 'Cena: od najwyższej',
