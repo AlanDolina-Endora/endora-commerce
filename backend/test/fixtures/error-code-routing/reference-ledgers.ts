@@ -90,6 +90,14 @@ import type {
  * author of one claim is two answers waiting to disagree.
  */
 export const MINTED_ERROR_CODES: MintedErrorCodes = {
+  INVOICE_ORDER_REFUNDED: {
+    to: 'invoices',
+    reason:
+      'Minted by issue #417 (owner ruling of 2026-10-24) for the refusal an operator meets when ' +
+      'they issue a VAT invoice for an order whose payments were refunded in full before it was ' +
+      'invoiced: there is no sale left to document. The noun is the invoice, which `invoices` ' +
+      'owns, and `invoices` raises it; the automatic issuance skips the order and logs the code.',
+  },
   AMOUNT_PRECISION_EXCEEDED: {
     to: '_i18n',
     reason:

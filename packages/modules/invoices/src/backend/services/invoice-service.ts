@@ -31,13 +31,13 @@ export interface IssueInvoiceOptions {
 }
 
 /**
- * What was kept from what was captured for an order — each captured payment
- * attempt's amount less what was refunded from it, summed, as a two-place
- * decimal — or `null` when no attempt was captured, or the `payments` module
- * is absent and nothing can say (issue #417, review of PR #423).
+ * What was captured for an order and what was refunded from it, each summed
+ * over the captured payment attempts as a two-place decimal — or `null` when no
+ * attempt was captured, or the `payments` module is absent and nothing can say
+ * (issue #417, review of PR #423).
  */
 export interface CapturedPaymentsLookup {
-  capturedFor(orderId: string): Promise<string | null>;
+  capturedFor(orderId: string): Promise<{ captured: string; refunded: string } | null>;
 }
 
 /** Minimal audit-log seam (FR-035). */
@@ -160,10 +160,25 @@ export class InvoiceService {
     // paid. What `payments` captured, less its refunds; an order recorded as paid
     // with nothing captured (a transfer an operator confirmed), or with
     // `payments` absent, is paid its stored total.
-    // A captured attempt decides, refunds deducted — an order refunded in full
-    // before invoicing is still invoiced (the sale happened; its return is a
-    // correction's to document) and records nothing as paid.
-    const kept = (await this.capturedPayments?.capturedFor(orderId)) ?? null;
+    // A captured attempt decides, refunds deducted.
+    const payments = (await this.capturedPayments?.capturedFor(orderId)) ?? null;
+    const kept = payments ? moneyDifference(payments.captured, payments.refunded) : null;
+    // An order whose payments were refunded in full before it was invoiced —
+    // nothing kept, and the refunds cover the whole order — has no sale left to
+    // document, so it is not invoiced (owner ruling of 2026-10-24). One refunded
+    // in part is invoiced, with what was kept as paid.
+    if (
+      payments &&
+      kind === 'invoice' &&
+      compareDecimals(payments.refunded, payments.captured) >= 0 &&
+      compareDecimals(payments.refunded, order.total) >= 0
+    ) {
+      throw new HttpError(
+        422,
+        ERROR_CODES.INVOICE_ORDER_REFUNDED,
+        'The order was refunded in full before it was invoiced, so there is no sale left to invoice.',
+      );
+    }
     const paidTotal =
       kept != null ? roundHalfUp(kept) : order.paymentStatus === 'paid' ? roundHalfUp(order.total) : '0.00';
     const buyer = {

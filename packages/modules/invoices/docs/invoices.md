@@ -25,6 +25,20 @@ dependency-light renderer, persists the bytes through the `assets` module,
 and writes the asset id back onto the Order. Failures emit
 `invoice.generation_failed.v1` for an admin retry queue.
 
+### What a VAT invoice records as paid, and when it is not issued
+
+A VAT invoice records as paid what was kept from the order's payments: each
+captured payment attempt less what was refunded from it. An order recorded as
+paid with nothing captured (a confirmed bank transfer), or with `payments`
+absent, is paid its stored total.
+
+An order whose payments were **refunded in full before it was invoiced** — the
+refunds equal what was captured and cover the whole order total — is not
+invoiced: there is no sale left to document. Issuing answers
+`422 INVOICE_ORDER_REFUNDED` and draws no number; automatic issuance skips the
+order and logs the reason. An order refunded only in part is invoiced, with
+what was kept as paid.
+
 ## Entities
 
 `Invoice` (number, issued/dated timestamps, asset reference,

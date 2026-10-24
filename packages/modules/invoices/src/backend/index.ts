@@ -25,7 +25,7 @@ import type {
   SettingsAdminPort,
   TransactionalEmailSender,
 } from '@endora-commerce/contracts';
-import { moneyDifference, moneySum } from '@endora-commerce/contracts';
+import { moneySum } from '@endora-commerce/contracts';
 
 /**
  * A payment attempt whose amount was captured: paid, or paid and since
@@ -250,8 +250,11 @@ export function registerModule(ctx: ModuleContext): void {
                 (p) => CAPTURED.has(p.status),
               );
               if (captured.length === 0) return null;
-              // Each captured attempt once, less what was refunded from it (review of PR #423).
-              return moneySum(captured.map((p) => moneyDifference(p.amount, p.refundedAmount)));
+              // Each captured attempt once, and what was refunded from it (review of PR #423).
+              return {
+                captured: moneySum(captured.map((p) => p.amount)),
+                refunded: moneySum(captured.map((p) => p.refundedAmount)),
+              };
             },
           },
           ledgerRouting: {

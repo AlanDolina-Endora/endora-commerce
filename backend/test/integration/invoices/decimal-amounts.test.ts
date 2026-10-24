@@ -1,8 +1,9 @@
 import { randomUUID } from 'crypto';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ERROR_CODES } from '@endora-commerce/contracts';
 import { ensureSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
-import { Order, OrderItem, Payment } from '../../helpers/package-entities.js';
+import { Invoice, Order, OrderItem, Payment } from '../../helpers/package-entities.js';
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import {
   setupBackendServer,
@@ -190,7 +191,7 @@ describe('invoices — exact decimal amounts (#417)', () => {
   });
 
   // Review of PR #423 — paid is what was captured minus what was refunded, each attempt once.
-  async function invoicedPaid(payments: Array<{ status: string; amount: string; refundedAmount?: string }>) {
+  async function issueAfterPayments(payments: Array<{ status: string; amount: string; refundedAmount?: string }>) {
     const orderId = await seedPlacedOrder(
       h.em(),
       CH,
@@ -216,6 +217,10 @@ describe('invoices — exact decimal amounts (#417)', () => {
       cookies: ADMIN_COOKIE,
       payload: { kind: 'invoice' },
     });
+    return { res, orderId };
+  }
+  async function invoicedPaid(payments: Array<{ status: string; amount: string; refundedAmount?: string }>) {
+    const { res } = await issueAfterPayments(payments);
     expect(res.statusCode, res.body).toBe(201);
     const { data } = res.json() as IssueResponse;
     return [data.grossTotal, data.paidTotal, data.amountDue];
@@ -237,7 +242,33 @@ describe('invoices — exact decimal amounts (#417)', () => {
     ).toEqual([40.8, 40.8, 0]);
   });
 
-  it('records nothing as paid for an order refunded in full before invoicing', async () => {
-    expect(await invoicedPaid([{ status: 'refunded', amount: '40.80', refundedAmount: '40.80' }])).toEqual([40.8, 0, 40.8]);
+  // Owner ruling of 2026-10-24 — an order refunded in full before it is
+  // invoiced has no sale left to document, so it is not invoiced.
+  it('refuses to invoice an order refunded in full before invoicing', async () => {
+    const { res, orderId } = await issueAfterPayments([
+      { status: 'refunded', amount: '40.80', refundedAmount: '40.80' },
+    ]);
+    expect(res.statusCode, res.body).toBe(422);
+    const body = res.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe(ERROR_CODES.INVOICE_ORDER_REFUNDED);
+    expect(body.error.message).toBeTruthy();
+    const issued = await h.em().fork().find(Invoice, { orderId, kind: 'invoice' });
+    expect(issued, 'nothing issued, no number drawn').toHaveLength(0);
+  });
+
+  it('refuses it as well when the full refund came from two attempts', async () => {
+    const { res } = await issueAfterPayments([
+      { status: 'refunded', amount: '20.00', refundedAmount: '20.00' },
+      { status: 'refunded', amount: '20.80', refundedAmount: '20.80' },
+    ]);
+    expect(res.statusCode, res.body).toBe(422);
+    expect((res.json() as { error: { code: string } }).error.code).toBe(ERROR_CODES.INVOICE_ORDER_REFUNDED);
+  });
+
+  it('still invoices an order whose refunds do not cover it, recording nothing as paid', async () => {
+    // 20.00 captured of 40.80 and refunded: nothing kept, but the refunds are not the whole order.
+    expect(await invoicedPaid([{ status: 'refunded', amount: '20.00', refundedAmount: '20.00' }])).toEqual([
+      40.8, 0, 40.8,
+    ]);
   });
 });

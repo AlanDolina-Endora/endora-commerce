@@ -199,6 +199,10 @@ export const ERROR_CODES = {
   // configuration, the second refuses the document.
   INVOICE_NUMBER_PATTERN_COLLIDES: 'INVOICE_NUMBER_PATTERN_COLLIDES',
   INVOICE_NUMBER_ALREADY_ISSUED: 'INVOICE_NUMBER_ALREADY_ISSUED',
+  // Invoices — an order whose payments were refunded in full before it was
+  // invoiced has no sale left to document (issue #417, owner ruling of
+  // 2026-10-24), so issuance refuses it.
+  INVOICE_ORDER_REFUNDED: 'INVOICE_ORDER_REFUNDED',
   INVALID_TRANSITION: 'INVALID_TRANSITION',
 
   // Returns 155 — a `return`-kind case naming an order line recorded as not
