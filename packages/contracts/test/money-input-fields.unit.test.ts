@@ -112,6 +112,10 @@ describe('methods, returns, orders, credit limits and ERP documents', () => {
     expect(erpSaleDocumentUpsertInputSchema.safeParse({ ...doc, grossTotal: '123.4500' }).success).toBe(true);
     expect(refusedPaths(erpSaleDocumentUpsertInputSchema, { ...doc, grossTotal: '1e3' })).toEqual([]);
     expect(erpSaleDocumentUpsertInputSchema.safeParse({ ...doc, grossTotal: '1e3' }).success).toBe(false);
+    // Surrounding whitespace was accepted before the grammar and still is, stored trimmed.
+    const padded = erpSaleDocumentUpsertInputSchema.safeParse({ ...doc, grossTotal: ' 123.45 ', netTotal: '\t100.00\n' });
+    expect(padded.success).toBe(true);
+    expect([padded.data?.grossTotal, padded.data?.netTotal]).toEqual(['123.45', '100.00']);
   });
 });
 

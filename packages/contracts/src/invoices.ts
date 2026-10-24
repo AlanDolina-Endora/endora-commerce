@@ -596,11 +596,12 @@ export const erpSaleDocumentUpsertInputSchema = z.object({
   saleDate: z.string().nullable().optional(),
   paymentDueDate: z.string().nullable().optional(),
   paymentMethod: z.string().max(64).nullable().optional(),
-  // An integration's amounts: decimal strings with at most two places (issue #417).
-  netTotal: twoDecimalAmountString(z.string()).nullable().optional(),
-  taxTotal: twoDecimalAmountString(z.string()).nullable().optional(),
-  grossTotal: twoDecimalAmountString(z.string()),
-  paidTotal: twoDecimalAmountString(z.string()).optional(),
+  // An integration's amounts: decimal strings with at most two places (issue #417),
+  // trimmed first — surrounding whitespace was accepted before and is stored trimmed.
+  netTotal: twoDecimalAmountString(z.string().trim()).nullable().optional(),
+  taxTotal: twoDecimalAmountString(z.string().trim()).nullable().optional(),
+  grossTotal: twoDecimalAmountString(z.string().trim()),
+  paidTotal: twoDecimalAmountString(z.string().trim()).optional(),
   buyerSnapshot: invoiceBuyerSchema.nullable().optional(),
   attachments: z.array(erpSaleDocumentAttachmentInputSchema).optional(),
 });
