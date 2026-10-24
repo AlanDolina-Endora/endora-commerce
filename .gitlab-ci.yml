@@ -277,11 +277,12 @@ quality:
     # programs, both named by `-p` in its `typecheck` script —
     # `backend/tsconfig.json` (`src`, `scripts`, `test/unit` and the shared test
     # helpers) and `backend/test/tsconfig.json` (`test/contract`,
-    # `test/integration`, `test/perf`). Their roots are exactly the old
-    # program's 2123, and `test/unit/harness/workspace-resolution.test.ts` holds
-    # every `.ts` file under `backend/` to exactly one of them, which is the
-    # missing invariant named above. Bracketed under Node 22.20 the same way:
-    # the first dies at 1664 and passes at 1792 (5279 files), the second dies at
+    # `test/integration`, `test/perf`). Their roots are the old program's 2123
+    # plus the four `vitest*.ts` configurations, which no program read before,
+    # and `test/unit/harness/workspace-resolution.test.ts` holds every `.ts`
+    # file under `backend/` to exactly one of them, which is the missing
+    # invariant named above. Bracketed under Node 22.20 the same way:
+    # the first dies at 1664 and passes at 1792 (5283 files), the second dies at
     # 1920 and passes at 2048 (5368 files, 3.19M instantiations) — a requirement
     # of ~2048 against ~2816 before, 27% off. 2560 keeps ~512 MB over the larger
     # one and ~1150 MB under the container's usable ~3840. The cost is wall
