@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ForeignKeyConstraintViolationException, UniqueConstraintViolationException } from '@mikro-orm/core';
 import type { EntityManager } from '@mikro-orm/postgresql';
-import { BUILD_CHUNK, PriceSurface } from './price-surface.js';
+import { BUILD_CHUNK, PriceSurface, isVanishedProduct } from './price-surface.js';
 import type { BookPricing } from './book-pricing.js';
 import type { PricingProfile, ProfileVectorEntry } from './pricing-profile.js';
 import type { PricedProductRef } from './pricing-service.interface.js';
@@ -20,8 +21,11 @@ import type { PricedProductRef } from './pricing-service.interface.js';
  *   priced a product deleted mid-pass, failing on the foreign key, and resolved
  *   attribute values a change had already replaced);
  * - a product deleted between its read and its insert costs the build a retry
- *   on a fresh read, never the pass; a profile whose products keep vanishing
- *   keeps its mark for the next pass, and the pass goes on;
+ *   on a fresh read; a build whose products still vanish after three attempts
+ *   fails the pass — nothing swapped, every mark kept, no buyer of the channel
+ *   built against an everyone surface that failed — so the job fails and the
+ *   queue's own retry runs it again (review 2 of #424); a retry starts only
+ *   once the attempt it replaces has settled its reads;
  * - a whole-profile mark landing after the build read the catalogue survives
  *   the swap, also for a build no pass asked for (an everyone profile built
  *   because a buyer needs it);
@@ -145,12 +149,15 @@ function harness(options: Options): Harness {
   const byKey = (key: unknown) => state.profiles.find((p) => p.key === key);
   const byId = (id: unknown) => state.profiles.find((p) => p.id === id);
 
+  // What the driver answers, wrapped as MikroORM wraps it.
   const fkViolation = (productId: string) =>
-    Object.assign(
-      new Error(
-        `insert or update on table "price_profile_prices" violates foreign key constraint "price_profile_prices_product_id_foreign" (${productId})`,
+    new ForeignKeyConstraintViolationException(
+      Object.assign(
+        new Error(
+          `insert or update on table "price_profile_prices" violates foreign key constraint "price_profile_prices_product_id_foreign" (${productId})`,
+        ),
+        { code: '23503', constraint: 'price_profile_prices_product_id_foreign', table: 'price_profile_prices' },
       ),
-      { code: '23503', constraint: 'price_profile_prices_product_id_foreign' },
     );
 
   let h: Harness;
@@ -415,28 +422,62 @@ describe('PriceSurface — a whole build prices the catalogue as it is when the 
     expect(unhandled).toEqual([]);
   });
 
-  it('a profile whose products keep vanishing keeps its mark; the pass builds the others, and a later pass that one', async () => {
+  /** A catalogue that loses one product the build just read, after every read in `reads`. */
+  const vanishing = (reads: (n: number) => boolean) => {
     let fresh = 0;
+    return (n: number, harness: Harness) => {
+      if (!reads(n)) return;
+      harness.catalogue.delete([...harness.catalogue.keys()][0]!);
+      harness.catalogue.set(`new${fresh++}`, { price: 10 });
+    };
+  };
+
+  it('an everyone build whose products keep vanishing fails the pass after three attempts; no buyer of the channel is built against it', async () => {
+    const h = harness({ products: 3, buyers: 2, afterCatalogueRead: vanishing(() => true) });
+    await expect(h.surface.rebuildStale()).rejects.toThrow(/vanished/);
+    expect(h.reads.catalogue).toBe(3);
+    expect(h.log.some((l) => l.startsWith('swap:'))).toBe(false);
+    for (const id of ['e', 'b0', 'b1']) expect(h.profile(id), id).toMatchObject({ state: 'building', generation: 0 });
+    expect(unhandled).toEqual([]);
+  });
+
+  it('an everyone surface built on a buyer’s demand that keeps vanishing costs three attempts in all, not three per buyer', async () => {
+    const h = harness({ products: 3, buyers: 3, everyoneRegistered: false, afterCatalogueRead: vanishing(() => true) });
+    await expect(h.surface.rebuildStale()).rejects.toThrow(/vanished/);
+    expect(h.reads.catalogue).toBe(3);
+    expect(h.log.some((l) => l.startsWith('swap:'))).toBe(false);
+  });
+
+  it('a buyer whose products keep vanishing fails the pass: what was built before it stays, it and the rest keep their marks', async () => {
+    // The everyone build is read 1; b0's three attempts are reads 2–4.
+    const h = harness({ products: 3, buyers: 2, afterCatalogueRead: vanishing((n) => n >= 2 && n <= 4) });
+    await expect(h.surface.rebuildStale()).rejects.toThrow(/vanished/);
+    expect(h.profile('e')).toMatchObject({ state: 'ready', generation: 1 });
+    expect(h.profile('b0')).toMatchObject({ state: 'building', generation: 0 });
+    expect(h.profile('b1')).toMatchObject({ state: 'building', generation: 0 });
+    // The job's retry — another call — finishes the work.
+    await expect(h.surface.rebuildStale()).resolves.toBe(2);
+    expect(h.profile('b0').state).toBe('ready');
+    expect(h.profile('b1').state).toBe('ready');
+  });
+
+  it('a retry starts only once the attempt it replaces has settled the reads it had in flight', async () => {
     const h = harness({
-      products: 3,
-      buyers: 2,
+      products: BUILD_CHUNK * 3,
+      buyers: 0,
+      insertMs: 2,
+      resolveMs: 60,
       afterCatalogueRead: (n, harness) => {
-        // The everyone build reads once; b0's attempts are the next reads: one of the products it
-        // just read vanishes after each, while a new one arrives.
-        if (n >= 2 && n <= 4) {
-          const victim = [...harness.catalogue.keys()][0]!;
-          harness.catalogue.delete(victim);
-          harness.catalogue.set(`new${fresh++}`, { price: 10 });
-        }
+        if (n === 1) harness.catalogue.delete('p1');
       },
     });
-    await expect(h.surface.rebuildStale()).resolves.toBeGreaterThanOrEqual(3);
-    // b1 was built in the first pass, after b0 gave up for that pass; b0 in a later one.
-    expect(h.log.indexOf('swap:b1')).toBeGreaterThan(-1);
-    expect(h.log.indexOf('swap:b1')).toBeLessThan(h.log.indexOf('swap:b0'));
-    for (const id of ['e', 'b0', 'b1']) expect(h.profile(id).state, id).toBe('ready');
-    expect([...h.served('b0').keys()].sort()).toEqual([...h.catalogue.keys()].sort());
-    expect(unhandled).toEqual([]);
+    await h.surface.rebuildStale();
+    // Attempt 1: resolution 1, insert 1 fails on the key while resolution 2 runs; attempt 2 reads afresh.
+    expect(h.log.indexOf('insert:fk:1')).toBeGreaterThan(-1);
+    expect(h.log.indexOf('rollback')).toBeLessThan(h.log.indexOf('resolve:end:2'));
+    expect(h.log.indexOf('catalogue:2')).toBeGreaterThan(h.log.indexOf('resolve:end:2'));
+    expect(h.profile('e')).toMatchObject({ state: 'ready', generation: 1 });
+    expect(h.served('e').has('p1')).toBe(false);
   });
 
   it('attribute values changed mid-pass: a later build resolves the new ones, and the mark the change left is done by the next pass', async () => {
@@ -507,7 +548,7 @@ describe('PriceSurface — the pipeline of a whole build', () => {
     expect([...h.served('b0').values()].every((a) => a === '9.0000')).toBe(true);
   });
 
-  it('a write failing swaps nothing, rolls back, and fails before the batch resolving beside it ends', async () => {
+  it('a write failing swaps nothing, and rolls back before the batch resolving beside it ends', async () => {
     const h = harness({ products: BUILD_CHUNK * 3, buyers: 0, failInsert: 1, insertMs: 2, resolveMs: 60 });
     const failed = h.surface.rebuildStale().then(
       () => 'resolved',
@@ -519,7 +560,8 @@ describe('PriceSurface — the pipeline of a whole build', () => {
     expect(await failed).toBe('insert 1 failed');
     await sleep(120);
     expect(h.log.indexOf('resolve:start:2')).toBeGreaterThan(-1);
-    expect(h.log.indexOf('rejected')).toBeLessThan(h.log.indexOf('resolve:end:2'));
+    // The transaction is rolled back at once, not after the batch resolving beside the write.
+    expect(h.log.indexOf('rollback')).toBeLessThan(h.log.indexOf('resolve:end:2'));
     expect(h.log.some((l) => l.startsWith('swap:'))).toBe(false);
     expect(h.profile('e')).toMatchObject({ state: 'building', generation: 0 });
     expect(h.state.rows).toEqual([]);
@@ -534,5 +576,27 @@ describe('PriceSurface — the pipeline of a whole build', () => {
     expect(h.profile('e')).toMatchObject({ state: 'building', generation: 0 });
     expect(h.state.rows).toEqual([]);
     expect(unhandled).toEqual([]);
+  });
+});
+
+describe('isVanishedProduct — what the driver answers for a product deleted under a build', () => {
+  const pg = (code: string, constraint: string) =>
+    Object.assign(new Error(`violates constraint "${constraint}"`), { code, constraint, table: 'price_profile_prices' });
+
+  it('is the foreign key of price_profile_prices.product_id, as MikroORM wraps it', () => {
+    expect(isVanishedProduct(new ForeignKeyConstraintViolationException(pg('23503', 'price_profile_prices_product_id_foreign')))).toBe(true);
+  });
+
+  it('reads the constraint from the error’s cause when the wrapper does not carry it', () => {
+    const wrapped = new ForeignKeyConstraintViolationException(new Error('fk'));
+    Object.defineProperty(wrapped, 'cause', { value: pg('23503', 'price_profile_prices_product_id_foreign') });
+    expect(isVanishedProduct(wrapped)).toBe(true);
+  });
+
+  it('is not another foreign key, another violation or another error', () => {
+    expect(isVanishedProduct(new ForeignKeyConstraintViolationException(pg('23503', 'price_profile_prices_profile_id_foreign')))).toBe(false);
+    expect(isVanishedProduct(new UniqueConstraintViolationException(pg('23505', 'price_profile_prices_pkey')))).toBe(false);
+    expect(isVanishedProduct(new Error('price_profile_prices_product_id_foreign'))).toBe(false);
+    expect(isVanishedProduct(null)).toBe(false);
   });
 });

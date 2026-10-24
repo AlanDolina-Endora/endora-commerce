@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { ForeignKeyConstraintViolationException } from '@mikro-orm/core';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
   ListingPriceOrderChunk,
@@ -124,21 +125,31 @@ interface DueProfile {
  * A build that meets a product deleted after it read the catalogue — the
  * insert fails on `price_profile_prices_product_id_foreign` and the build's
  * transaction rolls back — is run again on a fresh read, at most this many
- * times; then the profile keeps its marks for a later pass, and this pass goes
- * on with the next profile (issue #416, review of #424).
+ * times. If its products still vanish, the build throws out of the pass:
+ * nothing swapped, every mark kept, and no later profile of the pass built —
+ * so no buyer is ever compared with an everyone surface that failed — and the
+ * queue's own retry runs the job again (issue #416, review 2 of #424). Each
+ * attempt reads the catalogue afresh, so failing all three needs a delete to
+ * land inside each attempt's window of one build.
  */
 const VANISHED_ATTEMPTS = 3;
 
-/** A product the build read is gone; the profile was left as it was, marks included. */
+/** A build's products kept vanishing under it: the pass ends here, the profile as it was, marks included. */
 class ProductsVanished extends Error {}
 
-function isVanishedProduct(err: unknown): boolean {
-  const e = err as { code?: unknown; constraint?: unknown; message?: unknown } | null;
-  return (
-    e?.code === '23503' &&
-    (e.constraint === 'price_profile_prices_product_id_foreign' ||
-      String(e.message ?? '').includes('price_profile_prices_product_id_foreign'))
-  );
+const PRODUCT_KEY = 'price_profile_prices_product_id_foreign';
+
+/**
+ * Whether an error is the product foreign key of `price_profile_prices` — a
+ * product deleted after the build read it. MikroORM wraps the driver's error
+ * as a `ForeignKeyConstraintViolationException` carrying the driver's fields;
+ * the constraint name is read from it, else from what it wraps.
+ */
+export function isVanishedProduct(err: unknown): boolean {
+  if (!(err instanceof ForeignKeyConstraintViolationException) && (err as { code?: unknown } | null)?.code !== '23503') return false;
+  const named = (e: unknown): boolean => (e as { constraint?: unknown } | null | undefined)?.constraint === PRODUCT_KEY;
+  const e = err as { cause?: unknown; previous?: unknown };
+  return named(err) || named(e.cause) || named(e.previous);
 }
 
 /** What the read path finds for a profile: a served surface, a live ordering, or nothing yet. */
@@ -436,7 +447,6 @@ export class PriceSurface {
     for (let n = 0; n < REBUILD_PASSES; n += 1) {
       const due = await this.#due();
       if (due.length === 0) break;
-      let progressed = false;
       for (const item of due) {
         const profile = await this.deps.books.profileFromVector({
           channelId: item.channelId,
@@ -445,19 +455,12 @@ export class PriceSurface {
           vector: item.vector,
         });
         const everyone = item.vector.length === 0 ? null : await this.#everyoneOf(profile);
-        try {
-          if (item.state === 'building' || item.stale) await this.#build(profile, everyone, item);
-          else await this.#refresh(item, profile, everyone);
-        } catch (err) {
-          // Its products kept vanishing under it: it keeps its marks, and the pass goes on.
-          if (err instanceof ProductsVanished) continue;
-          throw err;
-        }
+        // A failure — products that kept vanishing included — ends the pass:
+        // a buyer must not be built against an everyone surface that failed.
+        if (item.state === 'building' || item.stale) await this.#build(profile, everyone, item);
+        else await this.#refresh(item, profile, everyone);
         done += 1;
-        progressed = true;
       }
-      // Nothing but vanishing products this pass: leave the marks to the next job rather than spin.
-      if (!progressed) break;
     }
     return done;
   }
@@ -664,16 +667,20 @@ export class PriceSurface {
    * failure of either — in any chunk — is this call's failure, and a failed
    * write fails it at once, not after the chunk resolving beside it: the
    * caller's transaction is aborted by then, and rolls back, so a
-   * half-written generation is never swapped in (§3). A resolution left behind
-   * by a failure finishes on its own connection and is dropped.
+   * half-written generation is never swapped in (§3). A read left behind by a
+   * failure goes to `leftovers`, which the caller settles before it tries
+   * again, so two attempts never hold the pool at once.
    */
   async #rowsOf(
     profile: PricingProfile,
     products: readonly PricedProductRef[],
     everyone: ReadySurface | null,
     write: (rows: SurfaceRow[]) => Promise<void>,
+    /** Reads still in flight when this call failed: the caller settles them before another attempt. */
+    leftovers: Array<Promise<unknown>>,
   ): Promise<void> {
     let writing: Promise<void> = Promise.resolve();
+    let reading: Promise<unknown> | null = null;
     let abort!: (err: unknown) => void;
     const aborted = new Promise<never>((_, reject) => {
       abort = reject;
@@ -687,7 +694,9 @@ export class PriceSurface {
           everyone ? this.#servedRows(everyone, chunk) : null,
         ]);
         reads.catch(() => undefined);
+        reading = reads;
         const [listed, base] = await Promise.race([reads, aborted]);
+        reading = null;
         let rows = chunk
           .map((p) => {
             const answer = listed.get(p.id);
@@ -715,6 +724,7 @@ export class PriceSurface {
       }
       await writing;
     } catch (err) {
+      if (reading) leftovers.push(reading);
       await writing.catch(() => undefined);
       throw err;
     }
@@ -824,6 +834,24 @@ export class PriceSurface {
     const candidates = isBuyer ? await this.#buyerCandidates(profile) : 'all';
     const products =
       candidates === 'all' ? await this.deps.listProducts() : candidates.size === 0 ? [] : await this.deps.productsByIds([...candidates]);
+    const leftovers: Array<Promise<unknown>> = [];
+    try {
+      await this.#buildTransaction(id, profile, products, everyoneServed, due, cutoff, leftovers);
+    } finally {
+      // After the rollback, before anything else: the reads a failure left running.
+      await Promise.allSettled(leftovers);
+    }
+  }
+
+  async #buildTransaction(
+    id: string,
+    profile: PricingProfile,
+    products: readonly PricedProductRef[],
+    everyoneServed: ReadySurface | null,
+    due: DueProfile | undefined,
+    cutoff: string | null,
+    leftovers: Array<Promise<unknown>>,
+  ): Promise<void> {
     await this.deps.emFactory().transactional(async (em) => {
       await em.execute(`select pg_advisory_xact_lock(hashtext(?))`, [`price_lists.surface:${id}`]);
       const [current] = await em.execute<Array<{ state: string; stale: boolean; serving_generation: number; marked_at: string | null }>>(
@@ -835,10 +863,16 @@ export class PriceSurface {
       const next = Number(current?.serving_generation ?? 0) + 1;
       await em.execute(`delete from "price_profile_prices" where "profile_id" = ? and "generation" = ?`, [id, next]);
       let written = 0;
-      await this.#rowsOf(profile, products, everyoneServed, async (rows) => {
-        written += rows.length;
-        await this.#insertRows(em, id, next, rows);
-      });
+      await this.#rowsOf(
+        profile,
+        products,
+        everyoneServed,
+        async (rows) => {
+          written += rows.length;
+          await this.#insertRows(em, id, next, rows);
+        },
+        leftovers,
+      );
       await this.#analyzeIfStale(em, written);
       // The swap: readers move to the new generation at commit. A whole mark
       // made after the pass read the profile (or, for a build the pass did not
@@ -900,6 +934,22 @@ export class PriceSurface {
   /** One attempt at {@link #refresh}: the marked products as they are now, then the transaction. */
   async #refreshOnce(due: DueProfile, profile: PricingProfile, ids: readonly string[], everyoneServed: ReadySurface | null): Promise<void> {
     const products = await this.deps.productsByIds(ids);
+    const leftovers: Array<Promise<unknown>> = [];
+    try {
+      await this.#refreshTransaction(due, profile, ids, products, everyoneServed, leftovers);
+    } finally {
+      await Promise.allSettled(leftovers);
+    }
+  }
+
+  async #refreshTransaction(
+    due: DueProfile,
+    profile: PricingProfile,
+    ids: readonly string[],
+    products: readonly PricedProductRef[],
+    everyoneServed: ReadySurface | null,
+    leftovers: Array<Promise<unknown>>,
+  ): Promise<void> {
     await this.deps.emFactory().transactional(async (em) => {
       await em.execute(`select pg_advisory_xact_lock(hashtext(?))`, [`price_lists.surface:${due.id}`]);
       const [current] = await em.execute<Array<{ state: string; serving_generation: number }>>(
@@ -910,9 +960,15 @@ export class PriceSurface {
       if (!current || current.state !== 'ready') return;
       const generation = Number(current.serving_generation);
       const rows: SurfaceRow[] = [];
-      await this.#rowsOf(profile, products, everyoneServed, async (chunk) => {
-        rows.push(...chunk);
-      });
+      await this.#rowsOf(
+        profile,
+        products,
+        everyoneServed,
+        async (chunk) => {
+          rows.push(...chunk);
+        },
+        leftovers,
+      );
       for (let start = 0; start < ids.length; start += MARK_CHUNK) {
         await em.execute(
           `delete from "price_profile_prices" where "profile_id" = ? and "generation" = ? and "product_id" = any(?::uuid[])`,
