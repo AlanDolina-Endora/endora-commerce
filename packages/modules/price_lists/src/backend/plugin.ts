@@ -199,6 +199,8 @@ export function priceListsModule(options: PriceListsModuleOptions): {
       invalidateAll: () => {
         bookCache.invalidateAll();
         profileMemo.invalidateAll();
+        // The one clear of the viewer-mode memo; its key's generation is the
+        // guard for a write committing mid-read (review 3, B2).
         viewerModeMemo.invalidateAll();
         pricingEngine?.bookPricing.invalidateAll();
       },

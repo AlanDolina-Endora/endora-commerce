@@ -151,6 +151,8 @@ export interface BookPricingDeps {
   /**
    * The viewer's tail, memoised under the pricing generation (review 2,
    * finding 4): see {@link ViewerModeKey}. Absent, the tail is read per call.
+   * Its owner clears it on a bump; the generation in the key is the guard
+   * against a write that commits while the tail is read.
    */
   viewerModeMemo?: PricingCache<DisplayMode, ViewerModeKey>;
 }
@@ -233,10 +235,14 @@ export class BookPricing {
     this.profiles = new PricingProfileResolver((query) => this.#loadApplicableBooks(query), deps.profileMemo);
   }
 
-  /** Drop every in-process layer this engine holds. */
+  /**
+   * Drop every in-process layer this engine holds — its precedence memo. The
+   * layers it is handed (`cache`, `profileMemo`, `viewerModeMemo`) are cleared
+   * by their owner, the plugin's pricing generation, once per bump (review 3
+   * of release 0.108.0, B2).
+   */
   invalidateAll(): void {
     this.precedence.invalidateAll();
-    this.deps.viewerModeMemo?.invalidateAll();
   }
 
   /**

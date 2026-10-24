@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type { DisplayMode } from '@endora-commerce/contracts';
 import { PricingCache, type ProfilePricingCacheKey } from './pricing-cache.js';
@@ -48,6 +48,7 @@ describe('BookPricing — the display mode is applied per viewer, never cached u
       !signedIn ? 'gross_only' : ((organizationId !== null ? overrides.get(organizationId) : undefined) ?? 'both');
     const tailReads: Array<{ organizationId: string | null; customerKind: string }> = [];
     const cache = new PricingCache<CachedBookLine, ProfilePricingCacheKey>({ ttlMs: 60_000 });
+    const viewerModeMemo = new PricingCache<DisplayMode, ViewerModeKey>({ ttlMs: 60_000 });
     const books = new BookPricing({
       emFactory: () => em,
       channelBridge: { entityIdsInChannelSubquery: () => ({ sql: 'select 1', params: [] }) },
@@ -60,7 +61,7 @@ describe('BookPricing — the display mode is applied per viewer, never cached u
         return viewerMode(organizationId, customerKind === 'signed_in');
       },
       cache,
-      viewerModeMemo: new PricingCache<DisplayMode, ViewerModeKey>({ ttlMs: 60_000 }),
+      viewerModeMemo,
       profileMemo: new PricingCache<PricingProfile, ProfileMemoKey>({ ttlMs: 60_000 }),
     });
     const guest: BookPricingViewer = { organizationId: null, customerGroupId: null, signedIn: false, salesChannelId: 'ch', currencyCode: 'PLN' };
@@ -73,7 +74,7 @@ describe('BookPricing — the display mode is applied per viewer, never cached u
     });
     const ask = async (viewer: BookPricingViewer) =>
       (await books.resolve([{ key: 'k', product: { id: 'p1', attributeValues: {} }, quantity: 1 }], viewer)).get('k');
-    return { books, cache, reads, guest, org, ask, overrides, tailReads };
+    return { books, cache, viewerModeMemo, reads, guest, org, ask, overrides, tailReads };
   }
 
   it('a guest first, then an organization with no buyer book: each reads its own display mode', async () => {
@@ -160,14 +161,28 @@ describe('BookPricing — the display mode is applied per viewer, never cached u
   });
 
   it('a pricing generation bump drops the memoised tail, so a changed override takes effect', async () => {
-    const { books, cache, ask, org, overrides } = engine();
+    const { books, cache, viewerModeMemo, ask, org, overrides } = engine();
     expect((await ask(org('acme')))?.displayMode).toBe('net_only');
     overrides.set('acme', 'none');
     // What `PricingGeneration.bump` does to this process's layers
-    // (`plugin.ts`): the answer cache, then the engine's own memos.
+    // (`plugin.ts`): each layer its owner holds, then the engine's own memos.
     cache.invalidateAll();
+    viewerModeMemo.invalidateAll();
     books.invalidateAll();
     expect((await ask(org('acme')))?.displayMode).toBe('none');
+  });
+
+  // Review 3 of release 0.108.0, B2 — the memo had three invalidations: the
+  // plugin's clear on a bump, `BookPricing.invalidateAll` clearing it again,
+  // and the generation in its key. The memo is the plugin's, like the answer
+  // cache and the profile memo, so the plugin's clear is the one clear; the
+  // generation in `ViewerModeKey` stays as the guard against a write that
+  // commits while the tail is read.
+  it('the engine leaves the memo it was handed to its owner to clear', async () => {
+    const { books, viewerModeMemo } = engine();
+    const cleared = vi.spyOn(viewerModeMemo, 'invalidateAll');
+    books.invalidateAll();
+    expect(cleared).not.toHaveBeenCalled();
   });
 
   it('a generation bump alone is enough, whoever clears the engine', async () => {
