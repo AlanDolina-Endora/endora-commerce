@@ -605,12 +605,12 @@ export interface OrderReturnContextLine {
   productId: string;
   name: string;
   purchasedQty: number;
-  /** Amount paid per unit, including its proportional tax — the line's amount over its quantity, informational. */
+  /** The line's stored gross over its quantity, at four places — informational. */
   paidUnitAmount: number;
   /**
-   * Amount paid for the whole purchased line, including tax: its net plus its
-   * share of its rate's VAT under the one VAT method (`vatByRate`, issue #417)
-   * over the whole order — what the order line and the invoice charged for it.
+   * The line's gross as the order stored it (`lineTotal`), never recomputed
+   * (issue #417): what an order placed before 0.108.0 charged for the line, and
+   * the line's own rounding of its gross for one placed after.
    */
   paidLineAmount: number;
   /** The line's net unit price, as stored (a two-place decimal string). */
@@ -632,6 +632,15 @@ export interface OrderReturnContext {
   currency: string;
   /** When the order entered its fulfilment-completing status; null if it has not. */
   completingStatusEnteredAt: Date | null;
+  /**
+   * The VAT method the order was placed under (issue #417): `per_rate` — VAT
+   * per rate on the sum of the nets — from 0.108.0; `null` before, when the
+   * stored totals followed the rule of their day. Decides how a return groups
+   * what was paid.
+   */
+  vatMethod: 'per_rate' | null;
+  /** What the order charged for its products, as stored: subtotal + tax total (two places). */
+  productsPaidTotal: string;
   lines: OrderReturnContextLine[];
 }
 

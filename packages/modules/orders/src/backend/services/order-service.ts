@@ -1207,8 +1207,9 @@ export class OrderService {
       }
     }
 
-    // Exact decimal arithmetic under the order's rule (issue #417): the lines'
-    // exact taxes summed and rounded once, the total rounded once.
+    // The one VAT method (issue #417, owner ruling of 2026-10-24): VAT per rate
+    // on the sum of the nets at that rate (`vatByRate`), rounded once per rate;
+    // the total rounded once.
     const money = orderTotalsMoney({
       lines: items.map((it) => ({
         unitPrice: it.unitPrice,
@@ -2158,6 +2159,8 @@ export class OrderService {
         // second write. The column's `false` default is the opposite answer
         // on purpose, and only for rows that predate it — see the migration.
         purchaseConversionOwed: true,
+        // Issue #417 — placed under the per-rate VAT method.
+        vatMethod: 'per_rate',
         ...(carry && carry.carried.length > 0 ? { customFieldValues: { ...carry.values } } : {}),
       });
       await tx.persistAndFlush(order);

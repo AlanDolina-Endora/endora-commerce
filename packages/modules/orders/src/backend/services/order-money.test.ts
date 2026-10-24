@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { orderTotalsMoney, paidAmounts } from './order-money.js';
+import { orderTotalsMoney } from './order-money.js';
 
 /**
  * Issue #417 — an order's amounts in exact decimal arithmetic, under the one
  * VAT method (owner ruling of 2026-10-24, `vatByRate`): per rate, VAT on the
  * sum of the nets at that rate, rounded half-up once; the total is the
  * products' net + VAT + delivery + surcharge − discount. A line's stored gross
- * (`lineTotal`) is its share, and the line grosses add up to the products'
- * gross. `specs/pricing/worked-examples.md` §10.17.
+ * (`lineTotal`) is its own rounding, `round(net × (1 + rate))`, informational
+ * (owner ruling of 2026-10-24). `specs/pricing/worked-examples.md` §10.17.
  */
 const totals = (lines: Array<{ unitPrice: string; quantity: number; taxRate: string | number }>, extra = {}) =>
   orderTotalsMoney({ lines, deliveryTotal: 0, paymentSurcharge: 0, discountTotal: 0, ...extra });
@@ -44,7 +44,17 @@ describe('orderTotalsMoney', () => {
     const line = { unitPrice: '0.02', quantity: 1, taxRate: '0.23' };
     const t = totals([line, line, line]);
     expect([t.subtotal, t.taxTotal, t.total]).toEqual(['0.06', '0.01', '0.07']);
-    expect(t.lines.map((l) => l.gross)).toEqual(['0.03', '0.02', '0.02']);
+    // Each line shows its own 0.0246 → 0.02; the lines sum to 0.06 beside a 0.07 total.
+    expect(t.lines.map((l) => l.gross)).toEqual(['0.02', '0.02', '0.02']);
+  });
+
+  it('shows 29.50 at 23 % as 36.29 beside another 23 % line (owner ruling)', () => {
+    const t = totals([
+      { unitPrice: '29.50', quantity: 1, taxRate: '0.23' },
+      { unitPrice: '16.50', quantity: 1, taxRate: '0.23' },
+    ]);
+    expect([t.taxTotal, t.total]).toEqual(['10.58', '56.58']);
+    expect(t.lines.map((l) => l.gross)).toEqual(['36.29', '20.30']);
   });
 
   it('adds many amounts without a binary residue', () => {
@@ -53,21 +63,5 @@ describe('orderTotalsMoney', () => {
       { deliveryTotal: '0.20', discountTotal: '0.30' },
     );
     expect([t.subtotal, t.total]).toEqual(['0.30', '0.20']);
-  });
-});
-
-describe('paidAmounts — what a return refunds by default', () => {
-  it('V3 — the whole of 9.05 × 3 at 8 % refunds 29.32, what the order line and the invoice charged', () => {
-    const [line] = paidAmounts([{ unitPrice: '9.05', quantity: 3, taxRate: '0.0800' }]);
-    expect(line).toEqual({ paidLineAmount: '29.32', paidUnitAmount: '9.7733' });
-  });
-
-  it('gives each line its share of its rate’s VAT', () => {
-    expect(
-      paidAmounts([
-        { unitPrice: '29.50', quantity: 1, taxRate: '0.23' },
-        { unitPrice: '16.50', quantity: 1, taxRate: '0.23' },
-      ]).map((l) => l.paidLineAmount),
-    ).toEqual(['36.28', '20.30']);
   });
 });

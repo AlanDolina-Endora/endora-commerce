@@ -2,7 +2,6 @@ import {
   decimalDifference,
   decimalSum,
   lineAmountHalfUp,
-  quotientHalfUp,
   roundHalfUp,
   vatByRate,
 } from '@endora-commerce/contracts';
@@ -18,7 +17,7 @@ export interface OrderMoneyLine {
 export interface OrderLineMoney {
   /** `unitPrice × quantity`, two places. */
   net: string;
-  /** `lineTotal`: the net plus the line's share of its rate's VAT — informational. */
+  /** `lineTotal`: the line's own rounding of its gross, `round(net × (1 + rate))` — informational. */
   gross: string;
   /** The rate at four places. */
   taxRate: string;
@@ -35,8 +34,10 @@ export interface OrderLineMoney {
  * the invoice computes the same figures with the same function — so the paid
  * amount, the proforma, the order total and the invoice gross are one number.
  *
- * `lines` is each line's stored amounts: a line's gross is its net plus its
- * share of its rate's VAT, so the line grosses add up to the products' gross.
+ * `lines` is each line's stored amounts: a line's gross is its own rounding,
+ * `round(net × (1 + rate))` — what the shop shows (owner ruling of
+ * 2026-10-24) — so the line grosses may differ from the products' gross by a
+ * cent; the VAT and the totals are the per-rate figures.
  */
 export function orderTotalsMoney(input: {
   lines: readonly OrderMoneyLine[];
@@ -76,22 +77,4 @@ export function orderTotalsMoney(input: {
       taxRate: roundHalfUp(l.taxRate, 4),
     })),
   };
-}
-
-/**
- * What a buyer paid for each line, as a return refunds it by default
- * (`OrderReturnContextPort`): the line's gross under the one VAT method — its
- * net plus its share of its rate's VAT, over the lines given — and that over
- * the quantity at four places, for display. Given the whole order, a line's
- * amount is what the order line and the invoice charged for it (V3: 9.05 × 3
- * at 8 % is 29.32, where the paid unit gross × 3 was 29.31).
- */
-export function paidAmounts(
-  lines: readonly OrderMoneyLine[],
-): Array<{ paidLineAmount: string; paidUnitAmount: string }> {
-  const { lines: money } = orderTotalsMoney({ lines, deliveryTotal: 0, paymentSurcharge: 0, discountTotal: 0 });
-  return money.map((m, i) => ({
-    paidLineAmount: m.gross,
-    paidUnitAmount: quotientHalfUp(m.gross, lines[i]!.quantity || 1, 4),
-  }));
 }

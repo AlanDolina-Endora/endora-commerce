@@ -1086,9 +1086,9 @@ export async function registerOrderRoutes(
       }
       // Feature 159 (FR-060) — the create screen sums a group's VAT from these.
       for (const { line, productType } of pricedLines) line.taxRate = rateByProductType.get(productType) ?? 0;
-      // The totals placement computes, in the same exact decimal arithmetic and
-      // under the same rule (issue #417): the lines' exact taxes summed and
-      // rounded once, the total rounded once.
+      // The totals placement computes, with the same function (issue #417): VAT
+      // per rate on the sum of the nets at that rate (`vatByRate`), rounded once
+      // per rate, and the total rounded once.
       const money = orderTotalsMoney({
         lines: pricedLines.map(({ line, productType, unitPrice }) => ({
           unitPrice,
