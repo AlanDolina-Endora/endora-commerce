@@ -152,14 +152,20 @@ export class InvoiceService {
     const built = buildInvoiceLines(raw);
 
     const issuedAt = new Date();
-    // What was actually captured for the order — never the invoice gross (issue
+    // What was actually paid for the order — never the invoice gross (issue
     // #417, review of PR #423). An order placed before 0.108.0 charged its own
     // total (40.80), and its invoice, issued now under the per-rate method, may
     // be a cent more (40.81): the cent is shown as still due, not invented as
-    // paid. Without `payments`, a paid order's stored total stands for it.
-    const captured = await this.capturedPayments?.capturedFor(orderId);
+    // paid. What `payments` captured; an order recorded as paid with nothing
+    // captured (a transfer an operator confirmed), or with `payments` absent, is
+    // paid its stored total.
+    const captured = (await this.capturedPayments?.capturedFor(orderId)) ?? null;
     const paidTotal =
-      captured != null ? roundHalfUp(captured) : order.paymentStatus === 'paid' ? roundHalfUp(order.total) : '0.00';
+      captured != null && compareDecimals(captured, 0) > 0
+        ? roundHalfUp(captured)
+        : order.paymentStatus === 'paid'
+          ? roundHalfUp(order.total)
+          : '0.00';
     const buyer = {
       name: order.billingAddress.companyName ?? order.billingAddress.recipientName,
       taxId: order.billingAddress.taxId ?? '',
