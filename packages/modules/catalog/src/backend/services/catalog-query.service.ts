@@ -1242,10 +1242,18 @@ export class CatalogQueryService {
       );
     }
 
-    const hasMore = orderLost || collected.length > params.limit;
+    // A page cut by the scan budget continues from where its scan stopped —
+    // in the tail once the tail has been read, else in the priced stream,
+    // whose exhaustion the next page then finds and goes on into the tail —
+    // never from its last card, and never ends the walk (review 3 of release
+    // 0.108.0, A1).
     const page = collected.slice(0, params.limit);
-    const nextCursor =
-      hasMore && page.length > 0 ? encodeObjectCursor(cursors[page.length - 1]!) : null;
+    let resumeAt: PriceListingCursor | null = null;
+    if (collected.length > params.limit || orderLost) resumeAt = cursors[page.length - 1] ?? null;
+    else if (bound && tailCursor) resumeAt = { stream: 'tail', ...tailCursor };
+    else if (bound && priceCursor) resumeAt = { stream: 'priced', ...priceCursor };
+    const hasMore = resumeAt !== null;
+    const nextCursor = resumeAt === null ? null : encodeObjectCursor(resumeAt);
 
     const resolvedPrices = await this.#listingPricesFor(page, ctx, context);
     const cardReads = await this.#listingCardReadsFor(
@@ -1537,10 +1545,17 @@ export class CatalogQueryService {
       );
     }
 
-    const hasMore = collected.length > params.limit;
+    // A page cut by the scan budget has more after it, and continues from
+    // where its scan stopped — not from its last card, which would read the
+    // same rows again — so a budget makes a page short, or empty, but never
+    // ends the walk (review 3 of release 0.108.0, A1). The scan moves forward
+    // by at least one chunk a page, so the walk still ends.
+    const full = collected.length > params.limit;
     const page = collected.slice(0, params.limit);
     const last = page[page.length - 1];
-    const nextCursor = hasMore && last ? walk.cursorOf(keyset.of(last)) : null;
+    const resumeAt = full && last ? keyset.of(last) : bound ? cursor : null;
+    const hasMore = resumeAt !== null;
+    const nextCursor = resumeAt === null ? null : walk.cursorOf(resumeAt);
     const cardReads = await this.#listingCardReadsFor(
       em,
       page.map((p) => p.id),

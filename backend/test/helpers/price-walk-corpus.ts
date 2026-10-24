@@ -41,6 +41,8 @@ export interface PriceWalkOptions {
   limit: number;
   cookies?: Record<string, string> | undefined;
   start?: string;
+  /** More of the query string, e.g. `&maxPrice=200`. */
+  query?: string;
   /** Runs after each page that has more, with everything served so far and the next cursor. */
   between?: (served: readonly string[], cursor: string) => Promise<void>;
 }
@@ -157,7 +159,7 @@ export function priceWalkCorpus(h: BackendServerHandle) {
       let cursor: string | undefined = options.start;
       for (let n = 0; n < 400; n += 1) {
         const body = await corpus.page(
-          `&limit=${options.limit}${options.sort ? `&sort=${options.sort}` : ''}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+          `&limit=${options.limit}${options.sort ? `&sort=${options.sort}` : ''}${options.query ?? ''}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
           options.cookies,
         );
         skus.push(...body.data.map((d) => d.sku));

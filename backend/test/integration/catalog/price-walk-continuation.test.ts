@@ -40,6 +40,66 @@ describe('a price-sorted walk meets every product once and ends', () => {
     await teardownBackendServer(h);
   });
 
+  // ---- a scan budget never ends a walk ----------------------------------------
+
+  it('a remainder page that runs out of its scan budget hands on a cursor rather than ending the walk', async () => {
+    // Cheapest is newest, so the default order the remainder walks meets the
+    // ten products already served first: more than a page's budget (8 rows).
+    const items = w.priced(14, (i) => ({ price: `${100 + i}.00`, age: i }));
+    await w.seed(items);
+    const { skus, ended } = await w.walk({ sort: 'price', limit: 1, between: w.dropOnceAt(10) });
+    expect(ended).toBe(true);
+    expect(skus.slice(0, 10)).toEqual(items.slice(0, 10).map((i) => w.skuOf(i.key)));
+    expect([...skus].sort()).toEqual(w.visibleSkus(items).sort());
+  });
+
+  it('a priced or tail page that runs out of its scan budget hands on a cursor rather than ending the walk', async () => {
+    const items: PriceWalkItem[] = [
+      // Ten hidden products lead the price order, ten hidden unpriced ones lead the tail.
+      ...w.priced(10, (i) => ({ price: `${10 + i}.00`, age: 100 + i }), 'HP').map((i) => ({ ...i, hidden: true })),
+      ...w.priced(3, (i) => ({ price: `${50 + i}.00`, age: 200 + i }), 'VP'),
+      ...Array.from({ length: 10 }, (_, i): PriceWalkItem => ({ key: `HU${i}`, price: null, hidden: true, age: i })),
+      ...Array.from({ length: 2 }, (_, i): PriceWalkItem => ({ key: `VU${i}`, price: null, age: 50 + i })),
+    ];
+    await w.seed(items);
+    for (const sort of ['price', '-price'] as const) {
+      const { skus, ended } = await w.walk({ sort, limit: 1 });
+      expect(ended, sort).toBe(true);
+      expect([...skus].sort(), sort).toEqual(w.visibleSkus(items).sort());
+      expect(skus.slice(-2), `${sort}: the unpriced come last`).toEqual([w.skuOf('VU0'), w.skuOf('VU1')]);
+    }
+  });
+
+  it('a price-filtered page that runs out of its scan budget hands on a cursor rather than ending the walk', async () => {
+    // Ten products outside the range lead the default order.
+    const items: PriceWalkItem[] = [
+      ...w.priced(10, (i) => ({ price: `${500 + i}.00`, age: i }), 'OUT'),
+      ...w.priced(3, (i) => ({ price: `${100 + i}.00`, age: 20 + i }), 'IN'),
+    ];
+    await w.seed(items);
+    const { skus, ended } = await w.walk({ limit: 1, query: '&maxPrice=200' });
+    expect(ended).toBe(true);
+    expect([...skus].sort()).toEqual(['IN00', 'IN01', 'IN02'].map(w.skuOf));
+  });
+
+  it('a long walk whose price order goes missing at 90 % ends and meets every product once', async () => {
+    // A default order unrelated to the price order, three hidden priced
+    // products among the visible ones, four unpriced.
+    const items: PriceWalkItem[] = [
+      ...w.priced(30, (i) => ({ price: `${100 + 2 * i}.00`, age: (i * 7) % 30 })),
+      ...w.priced(3, (i) => ({ price: `${101 + 20 * i}.00`, age: 40 + i }), 'H').map((i) => ({ ...i, hidden: true })),
+      ...Array.from({ length: 4 }, (_, i): PriceWalkItem => ({ key: `U${i}`, price: null, age: 10 + 3 * i })),
+    ];
+    for (const sort of ['price', '-price'] as const) {
+      for (const limit of [1, 3]) {
+        await w.seed(items);
+        const { skus, ended } = await w.walk({ sort, limit, between: w.dropOnceAt(30) });
+        expect(ended, `${sort}, limit ${limit}`).toBe(true);
+        expect([...skus].sort(), `${sort}, limit ${limit}`).toEqual(w.visibleSkus(items).sort());
+      }
+    }
+  });
+
   // ---- no channel loses the remainder of a walk -------------------------------
 
   it('on a channel that publishes no prices, the remainder of a walk still meets every product once', async () => {
