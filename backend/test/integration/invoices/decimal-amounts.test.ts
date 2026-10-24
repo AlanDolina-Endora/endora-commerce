@@ -69,6 +69,7 @@ async function seedPlacedOrder(
         productId: randomUUID(),
         productSnapshot: { sku: `DEC-${i}`, name: `Line ${i + 1}`, primaryAssetUrl: null },
         quantity: l.quantity,
+        position: i,
         unitPrice: l.unitPrice,
         taxRate: l.taxRate,
         lineTotal: l.lineTotal,
