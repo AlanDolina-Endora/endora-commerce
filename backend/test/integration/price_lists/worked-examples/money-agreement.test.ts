@@ -63,6 +63,10 @@ interface Vector {
   returns: number[][];
   /** What the correction for each return credits: gross, net, VAT. */
   credited: Array<[string, string, string]>;
+  /** An order-level discount, taken off the gross without VAT. */
+  discount?: string;
+  /** Lines that are not returnable: they come back through a complaint. */
+  complaints?: number[];
 }
 
 const VECTORS: Vector[] = [
@@ -180,6 +184,54 @@ const VECTORS: Vector[] = [
       ['36.28', '29.50', '6.78'],
     ],
   },
+  {
+    // D1 (review of PR #423): a 10.00 order-level discount on 2 × 29.50 at 23 %.
+    // The products were charged 72.57 − 10.00 = 62.57; each return refunds its
+    // half less the 5.00 of discount it carries, and the correction credits the
+    // goods as invoiced (29.50 + 6.79 / 6.78 VAT) and the 5.00 back on 0 %.
+    id: 'D1',
+    lines: [{ productId: SEED_PRODUCT_101_ID, quantity: 2 }],
+    rates: { simple: 0.23 },
+    expectedLines: [['29.50', '59.00', '72.57']],
+    rows: [[0.23, '59.00', '13.57', '72.57']],
+    net: '59.00',
+    tax: '13.57',
+    total: '65.07',
+    discount: '10.00',
+    returns: [[1], [1]],
+    credited: [
+      ['31.29', '24.50', '6.79'],
+      ['31.28', '24.50', '6.78'],
+    ],
+  },
+  {
+    // C1 (review of PR #423): the second line is not returnable and comes back
+    // through a complaint; it is in the same accounting, so together the two
+    // refund 40.59, what the products were charged.
+    id: 'C1',
+    lines: [
+      { productId: SEED_PRODUCT_101_ID, quantity: 1 },
+      { productId: SEED_PRODUCT_102_ID, quantity: 5 },
+    ],
+    rates: { simple: 0.23, virtual: 0.23 },
+    expectedLines: [
+      ['29.50', '29.50', '36.29'],
+      ['0.70', '3.50', '4.31'],
+    ],
+    rows: [[0.23, '33.00', '7.59', '40.59']],
+    net: '33.00',
+    tax: '7.59',
+    total: '43.09',
+    complaints: [1],
+    returns: [
+      [1, 0],
+      [0, 5],
+    ],
+    credited: [
+      ['36.29', '29.50', '6.79'],
+      ['4.30', '3.50', '0.80'],
+    ],
+  },
 ];
 
 const two = (n: number | string) => Number(n).toFixed(2);
@@ -222,7 +274,21 @@ describe('worked examples — §10.17 every document an order produces agrees', 
         paymentAdapters: () => registry,
         orderStatusRegistry: () => new EnumOrderStatusRegistry(),
         mailer,
-      });
+        // An order-level discount, as the promotions engine answers one.
+        ...(v.discount
+          ? {
+              promotion: {
+                applyToCart: async (snapshot: { deliveryTotal: number }) => ({
+                  subtotal: 0,
+                  discountTotal: Number(v.discount),
+                  deliveryTotal: snapshot.deliveryTotal,
+                  total: 0,
+                  appliedPromotions: [],
+                }),
+              },
+            }
+          : {}),
+      } as never);
       const ctx = { customerAccountId: TEST_CUSTOMER_ID, organizationId: TEST_ORGANIZATION_ID };
       const methods = { deliveryMethodId: SEED_DELIVERY_METHOD_ID, paymentMethodId: SEED_PAYMENT_METHOD_ID };
 
@@ -327,7 +393,7 @@ describe('worked examples — §10.17 every document an order produces agrees', 
       // Net + the 0 % surcharge line; VAT; gross and the amount recorded as paid
       // are the order total — the amount the payment and the proforma carry.
       expect([inv.netTotal, inv.taxTotal, inv.grossTotal, inv.paidTotal].map(two)).toEqual([
-        two(Number(v.net) + Number(SURCHARGE)),
+        two(Number(v.net) + Number(SURCHARGE) - Number(v.discount ?? 0)),
         v.tax,
         v.total,
         v.total,
@@ -345,28 +411,31 @@ describe('worked examples — §10.17 every document an order produces agrees', 
         const current = v.lines
           .map((line, i) => ({ orderItemId: context.lines.find((l) => l.productId === line.productId)!.orderItemId, quantity: quantities[i]! }))
           .filter((c) => c.quantity > 0);
+        const complained = new Set((v.complaints ?? []).map((i) => context.lines.find((l) => l.productId === v.lines[i]!.productId)!.orderItemId));
         const refunds = caseDefaultRefunds({
           vatMethod: context.vatMethod,
           productsPaidTotal: context.productsPaidTotal,
+          discountTotal: context.discountTotal,
           orderLines: context.lines.map((l) => ({
             orderItemId: l.orderItemId,
             unitNetPrice: l.unitNetPrice,
             taxRate: l.taxRate,
             purchasedQty: l.purchasedQty,
             paidLineAmount: l.paidLineAmount.toFixed(2),
-            returnable: true,
+            returnable: !complained.has(l.orderItemId),
           })),
           earlier,
           current,
         });
-        const refundTotal = refunds.reduce((sum, r) => sum + Math.round(Number(r) * 100), 0) / 100;
+        const refundTotal = refunds.reduce((sum, r) => sum + Math.round(Number(r.refund) * 100), 0) / 100;
         const correction = await cradle.correctiveInvoicePort.createCorrection({
           orderId,
           lines: current.map((c, i) => ({
             orderItemId: c.orderItemId,
             productName: context.lines.find((l) => l.orderItemId === c.orderItemId)!.name,
             quantity: c.quantity,
-            amount: Number(refunds[i]),
+            amount: Number(refunds[i]!.refund),
+            ...(Number(refunds[i]!.discount) > 0 ? { discount: Number(refunds[i]!.discount) } : {}),
           })),
           total: refundTotal,
           currency: 'PLN',
@@ -381,7 +450,7 @@ describe('worked examples — §10.17 every document an order produces agrees', 
         expect(corrected.statusCode, corrected.body).toBe(200);
         const c = (corrected.json() as { data: { netTotal: number; taxTotal: number; grossTotal: number } }).data;
         credited.push([two(c.grossTotal), two(c.netTotal), two(c.taxTotal)]);
-        current.forEach((cur, i) => earlier.push({ ...cur, defaultRefundAmount: refunds[i]! }));
+        current.forEach((cur, i) => earlier.push({ ...cur, defaultRefundAmount: refunds[i]!.refund }));
       }
       expect(credited).toEqual(v.credited);
 
@@ -472,6 +541,7 @@ describe('worked examples — §10.17 every document an order produces agrees', 
     const refunds = caseDefaultRefunds({
       vatMethod: context.vatMethod,
       productsPaidTotal: context.productsPaidTotal,
+      discountTotal: context.discountTotal,
       orderLines: context.lines.map((l) => ({
         orderItemId: l.orderItemId,
         unitNetPrice: l.unitNetPrice,
@@ -484,10 +554,10 @@ describe('worked examples — §10.17 every document an order produces agrees', 
       current: [lineA, lineB].map((l) => ({ orderItemId: l.id, quantity: 1 })),
     });
     // The line totals add up to 40.81; the order charged 40.80, and a complete return refunds exactly that.
-    expect(refunds).toEqual(['36.28', '4.52']);
+    expect(refunds.map((r) => r.refund)).toEqual(['36.28', '4.52']);
     const correction = await cradle.correctiveInvoicePort.createCorrection({
       orderId: order.id,
-      lines: [lineA, lineB].map((l, i) => ({ orderItemId: l.id, productName: l.productSnapshot.name, quantity: 1, amount: Number(refunds[i]) })),
+      lines: [lineA, lineB].map((l, i) => ({ orderItemId: l.id, productName: l.productSnapshot.name, quantity: 1, amount: Number(refunds[i]!.refund) })),
       total: 40.8,
       currency: 'PLN',
       idempotencyKey: `money-agreement-L0-${order.id}`,
