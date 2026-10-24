@@ -40,7 +40,7 @@ describe('returns — concurrent cases on one order', () => {
     const results = await Promise.all([create(), create(), create()]);
     expect(results.map((r) => r.statusCode).sort()).toEqual([201, 422, 422]);
     const items = await withSystemScope('test: count the cases', () =>
-      h.em().fork().find(ReturnCaseItem, { orderItemId: itemIds[1] }),
+      h.em().fork().find(ReturnCaseItem, { orderItemId: itemIds[1]! }),
     );
     expect(items, 'one case holds the last unit').toHaveLength(1);
   });
