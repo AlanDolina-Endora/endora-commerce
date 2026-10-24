@@ -370,6 +370,9 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
       net: l.netValue,
       gross: l.grossValue,
     });
+    // The invoice's own discount line: the discount credit mirrors its name and
+    // unit, and an invoice that itemized no discount credits none separately.
+    const discountLine = originalLines.find((l) => !l.orderItemId && compareDecimals(l.grossValue, 0) < 0);
     let amounts: ReturnType<typeof correctionAmounts>;
     try {
       amounts = correctionAmounts({
@@ -384,7 +387,7 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
         earlierLines: earlierLines.filter((l) => l.orderItemId).map(asCredited),
         lines: input.lines.map((l, index) => ({
           amount: l.amount,
-          ...(l.discount !== undefined ? { discount: l.discount } : {}),
+          ...(l.discount !== undefined && discountLine ? { discount: l.discount } : {}),
           quantity: l.quantity,
           rate: mirrored[index]!.rate,
           orderItemId: l.orderItemId,
@@ -407,8 +410,6 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
       unit: mirrored[index]!.unit,
       ...amounts.lines[index]!,
     }));
-    // The invoice's own discount line, mirrored by the discount credit's name and unit.
-    const discountLine = originalLines.find((l) => !l.orderItemId && compareDecimals(l.grossValue, 0) < 0);
     return { original, salesChannelId, amounts, snapshots, discountLine };
   }
 
@@ -502,12 +503,12 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
       }
       // The order-level discount the returned goods carried, credited back on
       // a 0 % line of its own, as the invoice charged it (issue #417).
-      if (compareDecimals(amounts.discountCredit, 0) !== 0) {
+      if (discountLine && compareDecimals(amounts.discountCredit, 0) !== 0) {
         tx.create(InvoiceLine, {
           invoiceId: inv.id,
           ordinal: snapshots.length + 1,
-          name: discountLine?.name ?? 'Rabat',
-          unit: discountLine?.unit ?? 'usł.',
+          name: discountLine.name,
+          unit: discountLine.unit,
           quantity: '1',
           unitNetPrice: roundHalfUp(amounts.discountCredit, 4),
           taxRate: '0.0000',
