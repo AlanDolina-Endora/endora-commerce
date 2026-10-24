@@ -3,7 +3,9 @@ import { ANONYMOUS_PRODUCT_AUDIENCE } from '@endora-commerce/contracts';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
 import { encodeCursor } from '@endora-commerce/platform/http';
 import type { CatalogQueryService } from '../../../../packages/modules/catalog/src/backend/services/catalog-query.service.js';
+import { settlePriceSurface, warmPriceSort } from '../../helpers/price-surface.js';
 import {
+  PRICE_WALK_CHANNEL,
   PRICE_WALK_ORG_A,
   PRICE_WALK_PREFIX,
   priceWalkCorpus,
@@ -171,6 +173,69 @@ describe('a price-sorted walk meets every product once and ends', () => {
     const first = await w.page('&limit=2');
     const again = await w.page(`&limit=2&cursor=${encodeURIComponent(encodeCursor(JSON.stringify({ createdAt: at, id: 'nope' })))}`);
     expect(again.data.map((d) => d.sku)).toEqual(first.data.map((d) => d.sku));
+  });
+
+  // ---- prices that change, and cursors issued before they did ---------------
+
+  it('a long walk repriced while its order goes missing meets every product it did not reprice exactly once', async () => {
+    const items: PriceWalkItem[] = [
+      ...w.priced(30, (i) => ({ price: `${100 + 2 * i}.00`, age: (i * 7) % 30 })),
+      ...Array.from({ length: 4 }, (_, i): PriceWalkItem => ({ key: `U${i}`, price: null, age: 10 + 3 * i })),
+    ];
+    for (const sort of ['price', '-price'] as const) {
+      await w.seed(items);
+      // At 90 %: the first product served moves to the far end of the order,
+      // and a product not served yet moves to its start. Then the order goes.
+      const [first, last] = sort === 'price' ? ['P00', 'P29'] : ['P29', 'P00'];
+      const { skus, ended } = await w.walk({
+        sort,
+        limit: 3,
+        between: w.dropOnceAt(27, async () => {
+          await w.reprice(first, sort === 'price' ? '999.00' : '1.00');
+          await w.reprice(last, sort === 'price' ? '1.00' : '999.00');
+        }),
+      });
+      expect(ended, sort).toBe(true);
+      const seen = w.counts(skus);
+      for (const sku of w.visibleSkus(items)) {
+        if (sku === w.skuOf(first) || sku === w.skuOf(last)) continue;
+        expect(seen.get(sku), `${sort}: ${sku}`).toBe(1);
+      }
+    }
+  });
+
+  it('a remainder cursor stays a remainder walk after the price order is rebuilt, and meets every product once', async () => {
+    const items: PriceWalkItem[] = [
+      ...w.priced(10, (i) => ({ price: `${100 + i}.00`, age: (i * 3) % 10 })),
+      { key: 'U0', price: null, age: 4 },
+    ];
+    await w.seed(items);
+    let pages = 0;
+    const { skus, ended } = await w.walk({
+      sort: 'price',
+      limit: 2,
+      between: async () => {
+        pages += 1;
+        if (pages === 2) await w.dropRetailProfiles();
+        // The order is back two pages later; the walk holds a remainder cursor by then.
+        if (pages === 4) await warmPriceSort(h, [{ headers: PRICE_WALK_CHANNEL }]);
+      },
+    });
+    expect(ended).toBe(true);
+    expect([...skus].sort()).toEqual(w.visibleSkus(items).sort());
+  });
+
+  it('a priced cursor whose boundary product was repriced and the order rebuilt meets every other product once', async () => {
+    const items = w.priced(10, (i) => ({ price: `${100 + i}.00`, age: (i * 3) % 10 }));
+    await w.seed(items);
+    const first = await w.page('&limit=3&sort=price');
+    const boundary = first.data[first.data.length - 1]!.sku.slice(PRICE_WALK_PREFIX.length);
+    await w.reprice(boundary, '1.00');
+    await settlePriceSurface(h);
+    const { skus, ended } = await w.walk({ sort: 'price', limit: 3, start: first.pagination.cursor! });
+    expect(ended).toBe(true);
+    const seen = w.counts([...first.data.map((d) => d.sku), ...skus]);
+    for (const sku of w.visibleSkus(items)) if (sku !== w.skuOf(boundary)) expect(seen.get(sku), sku).toBe(1);
   });
 
   // ---- the viewer's pricing context is built once per page ------------------

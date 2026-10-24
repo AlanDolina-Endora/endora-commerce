@@ -72,7 +72,11 @@ Na stronie modułu `price_lists` opisano, jak wybierana jest cena, którą płac
   w `GET /api/v1/catalog/products` — porządkują i wybierają według tej samej ceny dla ilości 1, którą
   karty pokazują temu oglądającemu, a dla produktu z wariantami według ceny *od*. Produkty z ceną
   zawsze są przed produktami bez ceny. Porządek według ceny zawsze pochodzi z PostgreSQL, nigdy z
-  indeksu wyszukiwania.
+  indeksu wyszukiwania. Przechodzenie kursorem przez porządek według ceny pokazuje każdy produkt raz,
+  o ile jego cena się w tym czasie nie zmienia; produkt, którego cena zmieni się w trakcie, może
+  pojawić się dwa razy albo wcale, jak przy każdym kursorze po bieżącej cenie. Strona może być krótsza,
+  a nawet pusta, i mimo to mieć dalszy ciąg (`hasMore: true`), gdy większość odczytanych wierszy jest
+  ukryta przed oglądającym; wtedy należy podążyć za jej kursorem.
 - **Szczegóły produktu w niepublicznym kanale sprzedaży** nie zawierają ceny.
 
 Dla programistów: ścieżki list wyceniają całą stronę jednym zbiorczym wywołaniem —

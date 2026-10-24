@@ -164,7 +164,11 @@ a bounded restriction (≤ 5 000 products), from the everyone surface for an unr
 or `unordered` (the catalogue's default order, whose walk carries that listing's cursor and keeps
 that order to its end) when nothing is built. A walk already on a price order that finds it gone
 continues from the last price it served (`rest`: the products whose live price sorts after it,
-then the unpriced, in the default order), never from page 1. **No request builds a
+then the unpriced, in the default order), never from page 1. A walk meets every product whose
+price does not change during it exactly once; a product repriced meanwhile may be met twice or not
+at all, as on any keyset walk over a live price — the order goes missing *because* pricing changed
+more often than not. A page cut by its scan budget is short, possibly empty, and hands on a cursor
+at its scan position, so a budget never ends a walk (review 3 of 0.108.0, A1/A2). **No request builds a
 surface**: the order may lag a change by the worker's turnaround (SC-005: ≤ 60 s for a targeted
 change, ≤ 300 s at 200 profiles for a catalogue-wide one), a displayed
 price never — cards are always resolved live. Measured in

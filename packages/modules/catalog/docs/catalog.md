@@ -74,7 +74,11 @@ buyer pays is chosen.
 - **Sorting and filtering by price** — `?sort=price`, `?sort=-price`, `minPrice`, `maxPrice` on
   `GET /api/v1/catalog/products` — order and select by the same quantity-1 price the cards show to
   that viewer, the *from* price for a variant product. Priced products always come before unpriced
-  ones. A price ordering is always answered from PostgreSQL, never from the search index.
+  ones. A price ordering is always answered from PostgreSQL, never from the search index. Paging
+  through a price ordering with the cursor meets every product once, provided its price does not
+  change meanwhile; a product repriced during the walk may be met twice or not at all, as with any
+  cursor over a live price. A page may be short, or even empty, and still have more after it
+  (`hasMore: true`) when most of the rows it read are hidden from the viewer; follow its cursor.
 - **The product detail on a non-public sales channel** omits the price.
 
 For developers: the listing paths price a whole page in one batched call —

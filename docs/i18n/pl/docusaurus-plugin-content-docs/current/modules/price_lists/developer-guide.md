@@ -271,8 +271,12 @@ wstępnie wyliczoną **powierzchnię cen**.
   także gdy powierzchnia zostanie w międzyczasie zbudowana. Przeglądanie rozpoczęte w porządku cen,
   którego powierzchnia potem znika (profil wycofany albo przebudowywany), nie zaczyna się od nowa:
   trwa od ostatniej podanej ceny, z produktami, które jeszcze nie padły — wycenionymi dalej w
-  kierunku przeglądania według bieżącej ceny, potem bez ceny — w domyślnym porządku, więc nic się
-  nie powtarza ani nie ginie.
+  kierunku przeglądania według bieżącej ceny, potem bez ceny — w domyślnym porządku. Przeglądanie
+  pokazuje dokładnie raz każdy produkt, którego cena nie zmienia się w jego trakcie; produkt, którego
+  cena zmieni się w międzyczasie, może pojawić się dwa razy albo wcale, jak przy każdym
+  stronicowaniu kursorem po bieżącej cenie. Strona, która wyczerpie swój limit odczytu, jest krótsza,
+  może być pusta, a jej kursor prowadzi dalej od miejsca, w którym odczyt się zatrzymał, więc limit
+  nigdy nie kończy przeglądania.
   Ceny na kartach są zawsze wyliczane na bieżąco, więc opóźniać się może tylko porządek.
 - **Zapis oznacza tylko to, co może przesunąć**, na dwóch poziomach szczegółowości. Każdy zapisujący
   opisuje swoją zmianę jako `SurfaceChange` (`src/backend/services/surface-change.ts`), a

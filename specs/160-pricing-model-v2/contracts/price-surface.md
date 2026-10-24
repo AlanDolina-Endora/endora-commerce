@@ -53,7 +53,11 @@ turnaround (SC-005: ≤ 60 s for a targeted change, ≤ 300 s at 200 profiles fo
   - unrestricted, no everyone surface either — `unordered: true` on the chunk; the catalogue serves
     its default order, cards priced live. A walk that is already on a price order when this happens
     (review 2 of 0.108.0, finding 6) continues from the last price it served — the products whose
-    live price sorts after it, then the unpriced, in the default order — and never restarts.
+    live price sorts after it, then the unpriced, in the default order — and never restarts. The
+    guarantee is per product: one whose price does not change during the walk is met exactly once;
+    one repriced meanwhile may be met twice or not at all, as on any keyset walk over a live price,
+    the surface walk included (review 3 of 0.108.0, A2). A page cut by its scan budget answers
+    `hasMore: true` with a cursor at its scan position, never an end.
 - The bench (§5) asserts that no request path writes the surface.
 
 ## 4. Refresh

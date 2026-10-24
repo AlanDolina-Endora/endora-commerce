@@ -227,7 +227,9 @@ export interface ListProductsParams {
  * an operator restricts most of a catalogue from most viewers, and the answer
  * there is a short page — the two price paths narrow each chunk they fetch by
  * channel and audience, where the default path has those in its statement
- * (issue #151) — rather than an unbounded scan.
+ * (issue #151) — rather than an unbounded scan. A short page, even an empty
+ * one, has `hasMore: true` and a cursor at the position its scan reached, so
+ * the budget shortens pages and never ends a walk.
  *
  * A setting was rejected because nobody has the number yet: the value it should
  * take is a function of how much of a catalogue a deployment hides, and shipping
@@ -1399,15 +1401,24 @@ export class CatalogQueryService {
    * being rebuilt, and nothing on this request can rebuild it
    * (`contracts/price-surface.md` §3).
    *
-   * What the walk has served is known exactly without the surface: every
-   * priced product up to the last price it served, `boundary`, in the walk's
-   * direction and `(amount, productId)` keyset — the price order's own — and
-   * none of the unpriced tail, which comes after every priced product. So the
-   * rest is every product the listing shows whose live price (the one its card
-   * is rendered with) sorts **after** `boundary`, and every unpriced one unless
-   * a price range excludes them (FR-012), walked in the default order. Nothing
-   * is repeated and nothing is lost; what changes is the order of the rest,
-   * which there is no surface to give.
+   * What the walk has served is, by price, every priced product up to the last
+   * price it served, `boundary`, in the walk's direction and `(amount,
+   * productId)` keyset — the price order's own — and none of the unpriced
+   * tail, which comes after every priced product. So the rest is every product
+   * the listing shows whose live price (the figure its card is rendered with,
+   * and the one the order is built from) sorts **after** `boundary`, and every
+   * unpriced one unless a price range excludes them (FR-012), walked in the
+   * default order — the order of the rest is the one thing there is no
+   * surface to give.
+   *
+   * **The guarantee, stated honestly** (review 3 of release 0.108.0, A2): the
+   * boundary is a price the order held, compared with a price resolved now.
+   * A product whose price changed while the walk was under way — and an order
+   * usually goes missing *because* pricing changed — can sort onto the other
+   * side of the boundary, so it may be met twice or not at all. That is true
+   * of any keyset walk over a live price, the surface walk included: the
+   * surface follows a repricing too. Every product whose price did not change
+   * is met exactly once, scan budget or not (`#walkKeepingByPrice`).
    *
    * Chosen over answering "the order changed, start again" because neither the
    * listing contract nor the storefront can carry that signal: `pagination` is
@@ -1457,7 +1468,8 @@ export class CatalogQueryService {
    * A listing walked in a keyset ordering, chunk by chunk, each chunk narrowed
    * by everything a page is narrowed by and then by the live listing price its
    * cards are rendered with — `keep` decides on that price. Bounded by the scan
-   * budget; a bound answers a short page.
+   * budget; a bound answers a short, possibly empty, page whose cursor
+   * continues from the scan position.
    */
   async #walkKeepingByPrice(
     em: EntityManager,
