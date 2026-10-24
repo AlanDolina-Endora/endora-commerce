@@ -129,4 +129,46 @@ describe('correctionAmounts — an order-level discount (review of PR #423)', ()
       { taxRate: '0.2300', netTotal: '100.00', vatAmount: '23.00', grossTotal: '123.00' },
     ]);
   });
+
+  // Review of PR #423 (B1): 2 × 100.00 net at 23 % and a 20.00 order discount,
+  // each line carrying 10.00 of it and refunding 113.00. A total below what the
+  // lines add up to must not credit every line at amount + discount.
+  const discounted = (total: string) =>
+    correctionAmounts({
+      total,
+      originalGross: '226.00',
+      perRate: true,
+      originalLines: [],
+      earlierLines: [],
+      lines: [
+        { amount: '113.00', discount: '10.00', quantity: 1, rate: '0.2300', orderItemId: 'a' },
+        { amount: '113.00', discount: '10.00', quantity: 1, rate: '0.2300', orderItemId: 'b' },
+      ],
+    });
+
+  it('credits a total below its lines as goods only, never more VAT than the total carries', () => {
+    const r = discounted('113.00');
+    expect(r.lines.map((l) => l.gross)).toEqual(['113.00', '0.00']);
+    expect(r.discountCredit).toBe('0.00');
+    expect([r.credited, r.netTotal, r.taxTotal]).toEqual(['113.00', '91.87', '21.13']);
+    expect(r.vatSummary).toEqual([{ taxRate: '0.2300', netTotal: '91.87', vatAmount: '21.13', grossTotal: '113.00' }]);
+  });
+
+  it('credits nothing — no goods, no VAT, no discount — for a total of zero', () => {
+    const r = discounted('0.00');
+    expect(r.lines.map((l) => [l.gross, l.net])).toEqual([
+      ['0.00', '0.00'],
+      ['0.00', '0.00'],
+    ]);
+    expect([r.credited, r.netTotal, r.taxTotal, r.discountCredit]).toEqual(['0.00', '0.00', '0.00', '0.00']);
+  });
+
+  it('still credits the goods and the discount separately when the total is what the lines add up to', () => {
+    const r = discounted('226.00');
+    expect(r.lines.map((l) => [l.gross, l.net])).toEqual([
+      ['123.00', '100.00'],
+      ['123.00', '100.00'],
+    ]);
+    expect([r.credited, r.netTotal, r.taxTotal, r.discountCredit]).toEqual(['226.00', '180.00', '46.00', '-20.00']);
+  });
 });

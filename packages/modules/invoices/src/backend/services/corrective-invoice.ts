@@ -135,9 +135,16 @@ export function correctionAmounts(input: CorrectionInput): {
   // the goods at their full value and the discount on a 0 % line of its own, so
   // the goods are credited at `amount + discount` and the discount comes back as
   // a negative 0 % amount — the correction totals the refund, and the goods'
-  // VAT is credited as it was charged. A correction capped below its total
-  // (an anomaly) credits its amounts as goods and no discount.
-  const withDiscount = compareDecimals(credited, total) === 0 && discounts.some((d) => compareDecimals(d, 0) > 0);
+  // VAT is credited as it was charged. That holds only when the correction
+  // credits exactly what its lines add up to: a total below the lines (a short
+  // settlement, an empty one) or a credit capped below the total credits its
+  // amounts as goods, in line order, and no discount — crediting every line at
+  // `amount + discount` there would credit more VAT than the total carries
+  // (review of PR #423, B1).
+  const withDiscount =
+    compareDecimals(credited, total) === 0 &&
+    compareDecimals(credited, linesTotal) === 0 &&
+    discounts.some((d) => compareDecimals(d, 0) > 0);
   let remaining = credited;
   const grosses = asked.map((a, i) => {
     if (withDiscount) return moneySum([a, discounts[i]!]);
