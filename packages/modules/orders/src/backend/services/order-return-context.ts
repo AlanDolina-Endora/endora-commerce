@@ -2,7 +2,7 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import { Order } from '../entities/order.entity.js';
 import type { OrderReturnContext, OrderReturnContextPort } from '@endora-commerce/contracts';
 import { loadArrangedOrderLines } from './order-line-order.js';
-import { decimalSum, quotientHalfUp, roundHalfUp } from '@endora-commerce/contracts';
+import { decimalDifference, decimalSum, quotientHalfUp, roundHalfUp } from '@endora-commerce/contracts';
 
 /**
  * Orders-side implementation of `OrderReturnContextPort` (feature 046, R4).
@@ -53,6 +53,7 @@ export function returnContextFrom(
     | 'updatedAt'
     | 'subtotal'
     | 'taxTotal'
+    | 'discountTotal'
   > & { vatMethod?: 'per_rate' | null | undefined },
   items: ReadonlyArray<{
     id: string;
@@ -73,7 +74,11 @@ export function returnContextFrom(
     currency: order.currency,
     completingStatusEnteredAt: completing ? order.updatedAt : null,
     vatMethod: order.vatMethod ?? null,
-    productsPaidTotal: roundHalfUp(decimalSum(order.subtotal, order.taxTotal)),
+    // The order's discount is taken off its gross, without tax of its own (the
+    // invoice carries it as a 0 % line): the products were charged their net
+    // plus VAT less the discount. Delivery and the surcharge are not products.
+    productsPaidTotal: roundHalfUp(decimalDifference(decimalSum(order.subtotal, order.taxTotal), order.discountTotal ?? '0')),
+    discountTotal: roundHalfUp(order.discountTotal ?? '0'),
     lines: items.map((it) => ({
       orderItemId: it.id,
       productId: it.productId,

@@ -651,8 +651,14 @@ export interface OrderReturnContext {
    * what was paid.
    */
   vatMethod: 'per_rate' | null;
-  /** What the order charged for its products, as stored: subtotal + tax total (two places). */
+  /**
+   * What the order charged for its products, as stored: subtotal + tax total −
+   * discount total (two places). The discount is taken off the gross without tax
+   * of its own; delivery and the payment surcharge are not products.
+   */
   productsPaidTotal: string;
+  /** The order-level discount, as stored (two places) — the part of it a return carries is credited back as a discount. */
+  discountTotal: string;
   lines: OrderReturnContextLine[];
 }
 

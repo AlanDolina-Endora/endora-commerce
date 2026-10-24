@@ -6,7 +6,7 @@ import { returnContextFrom } from './order-return-context.js';
  * stored, never recomputed with today's VAT method: a legacy order (placed
  * before 0.108.0, `vatMethod: null`) refunds what it actually charged.
  */
-const order = (vatMethod: 'per_rate' | null, subtotal: string, taxTotal: string) =>
+const order = (vatMethod: 'per_rate' | null, subtotal: string, taxTotal: string, discountTotal = '0.00') =>
   ({
     salesChannelId: 'ch',
     placedByCustomerAccountId: 'acc',
@@ -17,6 +17,7 @@ const order = (vatMethod: 'per_rate' | null, subtotal: string, taxTotal: string)
     vatMethod,
     subtotal,
     taxTotal,
+    discountTotal,
   }) as never;
 
 const item = (id: string, unitPrice: string, quantity: number, taxRate: string, lineTotal: string) =>
@@ -52,5 +53,12 @@ describe('returnContextFrom', () => {
     expect(ctx.vatMethod).toBe('per_rate');
     expect(ctx.productsPaidTotal).toBe('29.32');
     expect(ctx.lines[0]).toMatchObject({ paidLineAmount: 29.32, paidUnitAmount: 9.7733 });
+  });
+
+  it('takes the order-level discount off what the products were charged (review of PR #423)', () => {
+    // 100.00 net + 23.00 VAT, a 50.00 discount on the gross, 10.00 delivery: 83.00 captured.
+    // The products were charged 73.00 — not 123.00, and not the 83.00 that includes the delivery.
+    const ctx = returnContextFrom(order('per_rate', '100.00', '23.00', '50.00'), [item('a', '100.00', 1, '0.2300', '123.00')]);
+    expect([ctx.productsPaidTotal, ctx.discountTotal]).toEqual(['73.00', '50.00']);
   });
 });
