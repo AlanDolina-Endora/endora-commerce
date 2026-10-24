@@ -42,7 +42,7 @@ import type { RfqEventService } from './rfq-event-service.js';
 import type { RfqRevisionService } from './rfq-revision-service.js';
 import type { RfqNotificationService } from './rfq-notification-service.js';
 import { raisedOnChannelId } from './raised-on-channel.js';
-import { hasUnpricedLine, quoteIncompleteError } from './agreed-price.js';
+import { hasUnpricedLine, quoteIncompleteError, unitPriceText } from './agreed-price.js';
 import { pairLines } from './line-carry-over.js';
 import { LINE_STORAGE_ORDER, loadArrangedQuoteLines } from './line-order.js';
 import { groupingShape, planLineGrouping, type GroupingShapeEntry, type LineGroupingPlan } from './line-grouping.js';
@@ -798,7 +798,7 @@ export class RfqAdminService {
               desiredUnitPrice: row?.desiredUnitPrice ?? null,
               agreedUnitPrice:
                 lineInput.agreedUnitPrice !== undefined && lineInput.agreedUnitPrice !== null
-                  ? lineInput.agreedUnitPrice.toFixed(2)
+                  ? unitPriceText(lineInput.agreedUnitPrice)
                   : null,
               lineNote:
                 lineInput.lineNote !== undefined ? lineInput.lineNote : (row?.lineNote ?? null),
@@ -980,7 +980,7 @@ export class RfqAdminService {
           productSlug: product.slug,
           variantId: lineInput.variantId ?? null,
           quantity: lineInput.quantity,
-          agreedUnitPrice: lineInput.agreedUnitPrice.toFixed(2),
+          agreedUnitPrice: unitPriceText(lineInput.agreedUnitPrice),
           lineNote: lineInput.lineNote ?? null,
           lineCurrency: 'PLN',
           groupId: groupIds(plan.lines[index]!.group),
