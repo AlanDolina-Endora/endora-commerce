@@ -12,6 +12,7 @@ import {
   type PromotionCriterion,
   type PromotionRule,
 } from '@endora-commerce/contracts';
+import { percentOf, round2 } from '../actions/util.js';
 import { HttpError } from '@endora-commerce/platform/http';
 import { recordAuditFromContext } from '@endora-commerce/platform/commands';
 import type { AuditPort, SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
@@ -532,7 +533,7 @@ export class PromotionService {
 
       let amount = 0;
       if (promotion.kind === 'percentage_off') {
-        amount = round2((lineBase * Number(promotion.value)) / 100);
+        amount = percentOf(lineBase, promotion.value ?? 0);
       } else if (promotion.kind === 'amount_off') {
         if (promotion.currency && promotion.currency !== snapshot.currency) continue;
         amount = round2(Math.min(Number(promotion.value), lineBase));
@@ -788,9 +789,6 @@ function validateValuesShape(
 }
 
 
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
-}
 
 export interface UpsertPromotionInput {
   code?: string | null;
