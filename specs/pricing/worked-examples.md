@@ -2,7 +2,7 @@
 
 The product owner's three target scenarios (E1–E3) and the cases that chose the precedence (F, S, T, Q vectors), and the cases the owner's rulings of 2026-10-21 decide (C∩, configurable precedence, H, A, K, U, V, D vectors), each as **inputs → expected price → which row wins and why**, under the proposed model, with today's answer where it differs. They are written to become the failing-first tests of the pricing-model feature (Constitution III) and to answer "what should this cost?" without re-deriving the algorithm.
 
-**Verified against** `master` at `b1021c71b` on 2026-10-21; §10.11 re-checked for the P0 read-path hardening (branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21; §10.16 re-checked at `e3f456957` on 2026-10-24 (vectors G1–G4). File:line citations are as of `b1021c71b`; re-check them before relying on one.
+**Verified against** `master` at `b1021c71b` on 2026-10-21; §10.11 re-checked for the P0 read-path hardening (branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21; §10.16 re-checked at `e3f456957` on 2026-10-24 (vectors G1–G4). §10.17 written against `2716908b3` on 2026-10-24 (issue #417). File:line citations are as of `b1021c71b`; re-check them before relying on one.
 
 **The "Today" lines** under each vector record what the **pre-160** engine (the Application rule
 and the Default list) answered, as the comparison the model was decided against. Since feature 160
@@ -322,4 +322,48 @@ binary double is not this rule: 29.50 × 1.23 is the double 36.28499…, and
 
 Tests: `packages/contracts/test/price-book-decimal.unit.test.ts`,
 `packages/modules/product_feeds/src/backend/services/feed-gross-price.test.ts`,
-`storefront/test/lib/gross-derivation.test.ts`. Invoice and tax totals are issue #417.
+`storefront/test/lib/gross-derivation.test.ts`. Tax, totals and the documents an order produces
+are §10.17.
+
+### 10.17 Money computed from a price — lines, tax, totals and documents (issue #417)
+
+Every amount computed from a price — a line's net and gross, a tax, a total, a correction, a refund,
+an available credit, a discount — is computed in exact decimal arithmetic and rounded half-up (half
+away from zero for a negative amount) once, where its rule says (`CON/money-decimal.ts`, beside
+`price-book-decimal.ts`). The **rules** were not changed by #417, only the arithmetic:
+
+| Document | Rule |
+| --- | --- |
+| Order line (`order_items.line_total`) | the line's **gross**: `unitPrice × quantity × (1 + rate)`, rounded per line |
+| Order totals, checkout preview, admin preview | tax = the lines' **exact** taxes summed, rounded once; total = subtotal + tax + delivery + surcharge − discount, rounded once (delivery, surcharge and discount carry no tax) |
+| VAT invoice | a line's net = `unitPrice × quantity`; its gross = net × (1 + rate), rounded per line; per rate, VAT = Σ gross − Σ net; delivery, surcharge and discount are 0 % lines |
+| Correction | the credited gross is capped at the original gross and shared over the lines in order; a line's net = gross ÷ (1 + rate), half-up; VAT = Σ (gross − net) |
+| Return (default refund) | the paid unit gross (unit price × (1 + rate), half-up) × quantity |
+| Quote screens and PDF | a line's VAT on its net; the summary's VAT on the net total, at the quote's one rate |
+
+The resolver amount is rounded to the cart line's two places first (§10.16). At 8 % no two-place net
+has an exact half cent of tax (8 × cents ÷ 100 never ends in .5), so 8 % agrees on doubles as well;
+the binary failures are at 23 % and 5 %. Each order carries a 2.50 payment surcharge, delivery 0.00.
+
+| Vector | Resolver × qty | Rate | Cart line | Order: line gross / tax / total | Invoice: line net / gross, VAT, gross total | Full correction: gross / net / VAT | CSV, e-mail | Before #417 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A1 | 29.4950 × 1 | 23 % | **29.50** | **36.29** / **6.79** / **38.79** | 29.50 / 36.29, 6.79, 38.79 | 36.29 / 29.50 / 6.79 | 38.79 | order line gross 36.28 (`toFixed`) |
+| A2 | 9.0450 × 3 | 8 % | **27.15** | **29.32** / **2.17** / **31.82** | 27.15 / 29.32, 2.17, 31.82 | 29.31 / 27.14 / 2.17 (V3) | 31.82 | cart line `27.150000000000002` |
+| A3 | 0.6950 × 1 | 5 % | **0.70** | **0.74** / **0.04** / **3.24** | 0.70 / 0.74, 0.04, 3.24 | 0.74 / 0.70 / 0.04 | 3.24 | tax 0.03, total 3.23, line gross 0.73 |
+
+Before #417 every invoice of a VAT-payer order also read the order line's **gross** `line_total` as
+its net and taxed it again (D1): 100.00 net at 23 % was invoiced at 123.00 net, 151.29 gross. Invoices
+issued before the fix are not rewritten.
+
+**Where the rules themselves disagree** — open questions for the owner, pinned as they stand:
+
+| Vector | Case | Order | Invoice / return | Difference |
+| --- | --- | --- | --- | --- |
+| V2 | one order: 29.50 at 23 % + 4.30 at 5 % | tax 6.785 + 0.215 = **7.00**; total 33.80 + 7.00 = **40.80**; its line grosses 36.29 + 4.52 = 40.81 | VAT 6.79 + 0.22 = **7.01**; gross **40.81** | the invoice is a cent above the order total the buyer paid |
+| V3 | 9.05 × 3 at 8 % | line gross 9.05 × 3 × 1.08 = 29.322 → **29.32** | default refund 9.774 → 9.77 × 3 = **29.31** | a full return credits a cent less than was invoiced |
+
+Tests: `backend/test/integration/price_lists/worked-examples/money-agreement.test.ts` (A1–A3, every
+document); `packages/contracts/test/money-decimal.unit.test.ts`;
+`packages/modules/orders/src/backend/services/order-money.test.ts` (T1, V2, V3);
+`packages/modules/invoices/src/backend/services/vat-summary.test.ts` (G1, G2, G4, V2) and
+`correction-amounts.test.ts`; `backend/test/integration/invoices/decimal-amounts.test.ts` (D1, V2).

@@ -78,6 +78,10 @@ Polish.
   The published money fields that stay numbers — `ProductSummary.price`, the cart's `Money`, the
   external tier ladder — hold a `numeric(14,4)` amount losslessly (at most 14 significant digits),
   so a consumer of one rounds it with the same helpers, which read a number as its shortest decimal.
+  An amount **computed** from a price — a line's net or gross, a tax, a total, a correction, a
+  refund, a discount, an available credit — uses `money-decimal.ts` beside it (exact sums,
+  products, quotients, rounded half-up once where the rule says); which rule applies to which
+  document is `worked-examples.md` §10.17.
 - **The precedence is data, read from the active version.** Consumers never encode a cell order;
   the resolver reads `price_list_precedence` through `PrecedenceStore`. A change to presets or
   invariants goes through `validatePrecedence` and keeps `precedence.test.ts` exhaustive. The write

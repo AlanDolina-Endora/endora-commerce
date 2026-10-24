@@ -91,6 +91,11 @@ describe('paidAmounts — what a return refunds by default', () => {
     });
   });
 
+  it('V3 — a full return of 9.05 × 3 at 8 % refunds 29.31 where the line gross is 29.32', () => {
+    expect(paidAmounts({ unitPrice: '9.05', taxRate: '0.0800', quantity: 3 }).paidLineAmount).toBe('29.31');
+    expect(orderLineMoney({ unitPrice: '9.05', quantity: 3, taxRate: '0.0800' }).gross).toBe('29.32');
+  });
+
   it('keeps the rule: the paid unit gross times the quantity', () => {
     // Not the order line's own gross (3 × 0.50 at 23 % is 1.845 → 1.85).
     expect(paidAmounts({ unitPrice: '0.50', taxRate: '0.2300', quantity: 3 })).toEqual({
