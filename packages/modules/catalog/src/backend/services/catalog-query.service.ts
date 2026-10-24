@@ -677,6 +677,15 @@ export class CatalogQueryService {
     params: ListProductsParams,
     ctx: CatalogQueryContext,
   ): Promise<ListResult<ProductSummary>> {
+    // A price walk that began in the default order, for want of a price order,
+    // continues in it to its end — the default listing's page, so nothing the
+    // price path would read first is read (review 2, finding 7).
+    if (isPriceSort(params.sort) && params.cursor) {
+      const decoded = decodeObjectCursor<PriceListingCursor>(params.cursor);
+      if (decoded?.stream === 'unordered' && typeof decoded.cursor === 'string') {
+        return this.#listUnordered(params, ctx, decoded.cursor);
+      }
+    }
     const em = this.emFactory();
     const channel = ctx.resolvedChannel;
 
@@ -1029,20 +1038,12 @@ export class CatalogQueryService {
   ): Promise<ListResult<ProductSummary>> {
     const channel = ctx.resolvedChannel;
     const direction = sort === 'price' ? 'asc' : 'desc';
-    const context = await this.#viewerPricingContext(ctx);
-    const amountRange = this.#amountRange(params);
-    const restrictToProductIds = params.categorySlug
-      ? [...(await this.productIdsInCategoryTree(em, params.categorySlug))]
-      : undefined;
-
     const decoded = params.cursor ? decodeObjectCursor<PriceListingCursor>(params.cursor) : null;
-    // A walk that began in the default order, for want of a price order,
-    // continues in it to its end.
-    if (decoded?.stream === 'unordered' && typeof decoded.cursor === 'string') {
-      return this.#listUnordered(params, ctx, decoded.cursor);
-    }
     // A walk whose price order went missing carries on in the default order
-    // from the last price it served, to its end.
+    // from the last price it served, to its end. Decided before the viewer's
+    // pricing context and the category tree are read, since that walk uses
+    // neither (review 2, finding 7); an `unordered` walk is decided earlier
+    // still, in `listProducts`.
     if (
       decoded?.stream === 'rest' &&
       typeof decoded.amount === 'string' &&
@@ -1052,6 +1053,12 @@ export class CatalogQueryService {
       const keyset = this.keysetFor(undefined);
       return this.#listRemainder(em, params, ctx, where, direction, decoded, keyset.parse(decoded.after));
     }
+    const context = await this.#viewerPricingContext(ctx);
+    const amountRange = this.#amountRange(params);
+    const restrictToProductIds = params.categorySlug
+      ? [...(await this.productIdsInCategoryTree(em, params.categorySlug))]
+      : undefined;
+
     // A cursor issued under another sort is discarded rather than
     // reinterpreted: the existing behaviour for a cursor that does not parse.
     const startInTail = decoded?.stream === 'tail';

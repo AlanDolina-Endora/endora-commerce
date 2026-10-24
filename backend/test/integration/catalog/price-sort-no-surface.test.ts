@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { encodeCursor } from '@endora-commerce/platform/http';
 import { pricingEngineOf, settlePriceSurface, warmPriceSort } from '../../helpers/price-surface.js';
 import {
   setupBackendServer,
@@ -161,5 +162,53 @@ describe('a price-sorted listing with no price surface pages to the end', () => 
       });
       expect(skus[0]).toBe(ALPHA.sku);
     });
+  });
+
+  /**
+   * Review 2, finding 7 — an `unordered` cursor is served by the default
+   * listing, so what the price path read before it (the viewer's pricing
+   * context, the category tree, the search's attribute keys) was thrown away.
+   * A page on such a cursor issues exactly the statements the default
+   * listing's page on the same cursor does.
+   */
+  it.each([
+    ['organization A', { cookies: PRICE_SORT_ORG_A, filter: 'q=PRICE-SORT' }],
+    // A category of at most 5 000 products is ordered live, never unordered:
+    // its unordered cursor is built here, as a category above that size gets one.
+    ['a guest in a category', { cookies: undefined, filter: `${encodeURIComponent('filter[category]')}=widgets` }],
+  ] as const)('%s: an unordered page costs what the default page costs', async (_name, viewer) => {
+    await dropRetailProfiles();
+    const get = (query: string) =>
+      h.app.inject({
+        method: 'GET',
+        url: `/api/v1/catalog/products?${viewer.filter}&limit=1${query}`,
+        headers: PRICE_SORT_CHANNEL,
+        ...(viewer.cookies ? { cookies: viewer.cookies } : {}),
+      });
+    const firstDefault = await get('');
+    expect(firstDefault.statusCode, firstDefault.body).toBe(200);
+    const defaultCursor = (firstDefault.json() as { pagination: { cursor: string | null } }).pagination.cursor;
+    expect(defaultCursor, 'the listing has a second page').not.toBeNull();
+    const priceCursor = encodeCursor(JSON.stringify({ stream: 'unordered', cursor: defaultCursor }));
+    const statementsOf = async (query: string): Promise<string[]> => {
+      const knex = h.em().getConnection().getKnex();
+      const seen: string[] = [];
+      const listen = (q: { sql: string }) => seen.push(q.sql);
+      knex.on('query', listen);
+      try {
+        const res = await get(query);
+        expect(res.statusCode, res.body).toBe(200);
+      } finally {
+        knex.off('query', listen);
+      }
+      return seen;
+    };
+    // The same page twice over, so caches on either path are as warm as each other.
+    const cursorOf = (c: string | null) => `&cursor=${encodeURIComponent(c!)}`;
+    await statementsOf(`&sort=price${cursorOf(priceCursor)}`);
+    await statementsOf(cursorOf(defaultCursor));
+    const viaPrice = await statementsOf(`&sort=price${cursorOf(priceCursor)}`);
+    const viaDefault = await statementsOf(cursorOf(defaultCursor));
+    expect(viaPrice.join('\n')).toEqual(viaDefault.join('\n'));
   });
 });
