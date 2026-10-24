@@ -293,8 +293,14 @@ A sales representative works in the same screens with these differences:
 
 - The list shows organization books whose every member is one of their organizations, and the books
   for everyone and for customer groups. A book naming any other organization is missing from the
-  list, and its address shows *Price book not found*, exactly as for a book that does not exist.
+  list, and its address shows *Price book not found*, exactly as for a book that does not exist. An
+  organization book that names no organization yet is missing from their list in the same way.
 - Books for everyone, customer-group books and the base books open read-only, with no edit, save,
   import, duplicate or delete action.
 - Creating or duplicating a book offers only *Organizations*, and only their own; the member
-  pickers and the explainer's buyer picker list only their organizations.
+  pickers and the explainer's buyer picker list only their organizations. In the explainer, a price
+  set by a book outside their scope — for example the parent organization's — is shown as it is
+  charged, with *A price book outside your scope* in place of the book, and the runner-ups from such
+  books are not listed. A book they create,
+  duplicate or change must name at least one of them, and its audience cannot be changed to everyone
+  or to customer groups.

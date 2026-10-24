@@ -125,6 +125,7 @@
   "errors.reason.variant_unknown": "Ten wariant już nie istnieje.",
   "explainer.addLine": "Dodaj linię",
   "explainer.book": "Cennik",
+  "explainer.bookOutOfScope": "Cennik spoza Twojego zakresu",
   "explainer.buyer": "Kupujący",
   "explainer.buyer.customer": "Klient",
   "explainer.buyer.guest": "Gość",

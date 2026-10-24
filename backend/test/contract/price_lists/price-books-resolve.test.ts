@@ -131,6 +131,47 @@ describe('admin price explanation (feature 160 US7)', () => {
     ]);
   });
 
+  /**
+   * Review finding 7 (release 0.108.0) — FR-034: a book outside a
+   * representative's scope answers exactly as a missing one, and the explainer
+   * named it. A representative of AcmeW (a child of Acme) explaining AcmeW
+   * meets Acme's book through the organization chain, and a book of Acme and
+   * Beta: the price stays honest (it is what AcmeW pays), the out-of-scope
+   * winner is not identified (no book, no row) and out-of-scope runner-ups are
+   * left out, as a missing book would be.
+   */
+  it('FR-034 — a book outside the representative’s scope is not identified in an explanation', async () => {
+    await f.clearBooks();
+    const acme = await f.book({ name: 'Acme parent terms', audience: { organizations: [f.orgs.Acme] }, rows: [{ product: f.products.P1, percent: '-5' }] });
+    const shared = await f.book({ name: 'Acme and Beta terms', audience: { organizations: [f.orgs.Acme, f.orgs.Beta] }, rows: [{ category: f.categories.screws, percent: '-3' }] });
+    const vip = (await f.book({ name: 'VIP visible terms', audience: { groups: [f.groups.VIP] }, rows: [{ product: f.products.P1, percent: '-8' }] })).id;
+    const childRep = await createSalesRep(h, { assignedOrganizationIds: [f.orgs.AcmeW.id], otherOrganizationIds: [f.orgs.Acme.id, f.orgs.Beta.id] });
+    try {
+      const body = { buyer: { organizationId: f.orgs.AcmeW.id }, lines: [{ key: 'w', productId: f.products.P1.id }] };
+      const admin = await resolve(body);
+      expect(admin.status, admin.raw).toBe(200);
+      expect(admin.body.data[0]).toMatchObject({
+        price: { amount: '95.0000', source: 'buyer' },
+        explanation: { tier: 'buyer', cell: 'org.product', bookId: acme.id, bookName: 'Acme parent terms', rowId: acme.rowIds[0] },
+      });
+      expect(admin.body.data[0]!.explanation.candidates!.map((c) => c.bookId)).toEqual([acme.id, shared.id, vip]);
+
+      const scoped = await resolve(body, childRep.cookies);
+      expect(scoped.status, scoped.raw).toBe(200);
+      const [line] = scoped.body.data;
+      expect(line).toMatchObject({
+        price: { amount: '95.0000', currency: 'PLN', source: 'buyer' },
+        explanation: { tier: 'buyer', cell: 'org.product', bookId: null, bookName: null, rowId: null, reference: '100.0000' },
+      });
+      expect(line!.explanation.candidates).toEqual([expect.objectContaining({ bookId: vip, bookName: 'VIP visible terms', amount: '92.0000' })]);
+      for (const hidden of [acme.id, shared.id, ...acme.rowIds, ...shared.rowIds, 'Acme parent terms', 'Acme and Beta terms']) {
+        expect(scoped.raw).not.toContain(hidden);
+      }
+    } finally {
+      childRep.release();
+    }
+  });
+
   it('refuses more than 200 lines and an unknown channel', async () => {
     const many = Array.from({ length: 201 }, (_, i) => ({ key: String(i), productId: f.products.P1.id }));
     expect((await resolve({ lines: many })).status).toBe(400);

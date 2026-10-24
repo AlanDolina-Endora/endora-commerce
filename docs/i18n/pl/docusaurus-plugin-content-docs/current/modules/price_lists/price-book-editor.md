@@ -305,8 +305,14 @@ Handlowiec pracuje na tych samych ekranach, z tymi różnicami:
 - Lista pokazuje cenniki organizacji, w których każdy odbiorca jest jedną z jego organizacji, oraz
   cenniki dla wszystkich i dla grup klientów. Cennika wskazującego jakąkolwiek inną organizację nie
   ma na liście, a jego adres pokazuje *Nie znaleziono cennika*, dokładnie tak jak dla cennika, który
-  nie istnieje.
+  nie istnieje. Tak samo brakuje na liście cennika organizacji, który nie wskazuje jeszcze żadnej
+  organizacji.
 - Cenniki dla wszystkich, cenniki grup klientów i cenniki cen bazowych otwierają się tylko do
   odczytu, bez akcji edycji, zapisu, importu, duplikowania i usuwania.
 - Tworzenie albo duplikowanie cennika oferuje tylko *Organizacje*, i tylko własne; listy wyboru
-  odbiorców i wybór kupującego w wyjaśnieniu ceny wymieniają tylko jego organizacje.
+  odbiorców i wybór kupującego w wyjaśnieniu ceny wymieniają tylko jego organizacje. W wyjaśnieniu
+  ceny cena ustalona przez cennik spoza jego zakresu — na przykład cennik organizacji nadrzędnej — jest
+  pokazana tak, jak jest naliczana, z napisem *Cennik spoza Twojego zakresu* w miejscu cennika, a
+  przegrani kandydaci z takich cenników nie są wymieniani. Cennik, który
+  tworzy, duplikuje albo zmienia, musi wskazywać co najmniej jedną z nich, a jego odbiorców nie można
+  zmienić na wszystkich ani na grupy klientów.

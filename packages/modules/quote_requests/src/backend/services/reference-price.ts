@@ -1,4 +1,4 @@
-import { ERROR_CODES, type BuyerLinePricePort } from '@endora-commerce/contracts';
+import { ERROR_CODES, roundAmountHalfUp, type BuyerLinePricePort } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import { rethrowIfModuleDisabled } from '@endora-commerce/platform/kernel';
 
@@ -108,7 +108,7 @@ export async function resolveReferencePrices(
         // What `numeric(12,2)` holds, checked on the stored text: a larger
         // amount would fail the insert. Such a line stores no reference
         // (research R2) rather than failing the customer's request.
-        const stored = amount.toFixed(2);
+        const stored = roundAmountHalfUp(amount);
         if (!AMOUNT_PATTERN.test(stored)) continue;
         resolved.set(Number(answer.key), {
           amount: stored,

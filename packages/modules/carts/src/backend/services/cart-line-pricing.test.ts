@@ -312,3 +312,34 @@ describe('CartLinePricing.contextFor — the basket’s own channel', () => {
     expect(context.channel).toBeNull();
   });
 });
+
+/**
+ * Review finding 2 (release 0.108.0) — the cart stores the resolver's
+ * four-place amount at two places half-up on its decimal digits, which is what
+ * the card shows; `Number(amount).toFixed(2)` rounded the binary double, so
+ * 9.0450 was stored as 9.04 and 1.0050 as 1.00 (`specs/pricing/worked-examples.md`
+ * §10.16).
+ */
+describe('CartLinePricing — an x.xx50 amount is stored half-up, as the card shows it', () => {
+  const at = (amount: string): LinePricesPort =>
+    batched(() => ({ amount, currency: 'PLN', priceListId: 'b', isSale: false, bracketStartQuantity: 1, displayMode: 'gross_only' }));
+
+  it.each([
+    ['9.0450', '9.05'],
+    ['1.0050', '1.01'],
+    ['2.6750', '2.68'],
+    ['9.0449', '9.04'],
+  ])('%s is stored as %s', async (amount, stored) => {
+    const pricing = new CartLinePricing(at(amount), displayModes('gross_only'), noOrganizations);
+    expect(await pricing.orderablePrice(ctx, { product: product(), variantId: null, quantity: 1 })).toMatchObject({
+      ok: true,
+      unitPrice: stored,
+    });
+  });
+
+  it('a stored price equal to the half-up figure is not drift; the binary figure is', () => {
+    expect(storedPriceDiffers({ unitPrice: '9.05', currency: 'PLN' }, { unitPrice: '9.0450', currency: 'PLN' })).toBe(false);
+    expect(storedPriceDiffers({ unitPrice: '9.04', currency: 'PLN' }, { unitPrice: '9.0450', currency: 'PLN' })).toBe(true);
+    expect(storedPriceDiffers({ unitPrice: '1.01', currency: 'PLN' }, { unitPrice: '1.0050', currency: 'PLN' })).toBe(false);
+  });
+});

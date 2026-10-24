@@ -123,7 +123,11 @@ is still cleared whole on every bump.
 
 **Display mode** is resolved independently: product → category → organization → settings
 (`pricing.default_display_mode`, `pricing.unauthenticated_display_mode`), batched per page
-(`PriceListService.resolveDisplayModes`).
+(`PriceListService.resolveDisplayModes`). The price-book engine caches only the viewer-independent
+product and category steps with the answer (`CachedBookLine`) and applies the organization →
+settings tail per request (`resolvePageDisplayMode`): the profile is shared by viewers whose tails
+differ, so a cached display mode would be served to the wrong one. A resolution of a fixed profile
+(the surface worker, a feed's catalogue reference) neither reads nor writes the answer cache.
 
 **Consumers.** Catalogue listing, product page, product links, home cards, search hits and
 suggestions, comparisons, the cart read and placement (one chain, `CartLinePricing.orderablePrices`:
@@ -152,7 +156,8 @@ products and replaced their rows of the served generation in one transaction, or
 whole-marked profile's next generation and swapped it in (`contracts/price-surface.md` §4,
 `research.md` R17); a profile never built is answered without one — live over
 a bounded restriction (≤ 5 000 products), from the everyone surface for an unrestricted buyer page,
-or `unordered` (the catalogue's default order) when nothing is built. **No request builds a
+or `unordered` (the catalogue's default order, whose walk carries that listing's cursor and keeps
+that order to its end) when nothing is built. **No request builds a
 surface**: the order may lag a change by the worker's turnaround (SC-005: ≤ 60 s for a targeted
 change, ≤ 300 s at 200 profiles for a catalogue-wide one), a displayed
 price never — cards are always resolved live. Measured in

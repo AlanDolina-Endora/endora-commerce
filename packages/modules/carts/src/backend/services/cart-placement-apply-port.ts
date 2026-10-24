@@ -1,3 +1,4 @@
+import { roundAmountHalfUp } from '@endora-commerce/contracts';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
   CartCustomerContext,
@@ -187,7 +188,7 @@ export class CartPlacementApplyService implements CartPlacementApplyPort {
           productId: item.productId,
           variantId: item.variantId ?? null,
           quantity: item.quantity,
-          storedUnitPrice: Number(item.unitPrice).toFixed(2),
+          storedUnitPrice: roundAmountHalfUp(item.unitPrice),
           storedCurrency: item.currency,
           currentUnitPrice: current?.unitPrice ?? null,
           currentCurrency: current?.currency ?? null,

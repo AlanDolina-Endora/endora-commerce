@@ -5,7 +5,7 @@ import {
   type PricingCacheKey,
   type ProfilePricingCacheKey,
 } from './pricing-cache.js';
-import { BookPricing, type BookLineAnswer } from './book-pricing.js';
+import { BookPricing, type CachedBookLine } from './book-pricing.js';
 import { PricingGeneration } from './pricing-generation.js';
 import { PRECEDENCE_PRESETS } from './precedence.js';
 import type { PricingProfile, ProfileMemoKey } from './pricing-profile.js';
@@ -139,7 +139,7 @@ describe('PricingCache — keyed by pricing profile (feature 160)', () => {
         ];
       },
     } as unknown as EntityManager;
-    const cache = new PricingCache<BookLineAnswer, ProfilePricingCacheKey>({ ttlMs: 60_000 });
+    const cache = new PricingCache<CachedBookLine, ProfilePricingCacheKey>({ ttlMs: 60_000 });
     const profileMemo = new PricingCache<PricingProfile, ProfileMemoKey>({ ttlMs: 60_000 });
     const books = new BookPricing({
       emFactory: () => em,
@@ -147,7 +147,8 @@ describe('PricingCache — keyed by pricing profile (feature 160)', () => {
       categoryRead: () => ({ listAssignmentsForProducts: async () => [] }) as never,
       attributeRead: () => ({ listByFlag: async () => [] }) as never,
       variantRead: () => ({ listVariantsByProductIds: async () => [] }),
-      displayModes: async () => new Map(),
+      productDisplayModes: async () => new Map(),
+      viewerDisplayMode: async () => 'gross_only',
       cache,
       profileMemo,
     });

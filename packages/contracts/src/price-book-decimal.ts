@@ -85,3 +85,44 @@ export function applyAmountAdjustment(reference: string, delta: string): string 
 export function normaliseAmount(value: string): string {
   return formatUnits(parseUnits(value));
 }
+
+const DECIMAL = /^(-)?(\d+)(?:\.(\d+))?$/;
+
+/**
+ * An amount at two places, rounded **half-up on its decimal digits** (half
+ * away from zero for a negative amount) — the one rule every surface that
+ * shows or stores a price at two places applies to a resolver amount: the
+ * cart line (which the order copies), the admin order preview, a quote's
+ * reference price and the product feed, and what the storefront shows, since
+ * `Intl.NumberFormat` rounds the same decimal digits half-expand.
+ *
+ * `Number(amount).toFixed(2)` is not this rule: it rounds the binary double,
+ * and 9.0450 is the double 9.04499…, so it answered 9.04 where the card showed
+ * 9,05 (review finding 2 of release 0.108.0; `specs/pricing/worked-examples.md`
+ * §10.16). A number is read as the shortest decimal that round-trips it —
+ * `String(9.045)` is `"9.045"` — which is the decimal a four-place amount
+ * string parsed with `Number` came from.
+ */
+export function roundAmountHalfUp(value: string | number): string {
+  let text: string;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error(`Not a finite amount: ${value}`);
+    text = String(value);
+    // A magnitude `String` writes in exponent form is far outside any price,
+    // but is still a number: a large one is an integer (every double from 2^53
+    // up is), a tiny one is read at twelve places.
+    if (/e/i.test(text)) text = Math.abs(value) >= 1 ? BigInt(value).toString() : value.toFixed(12);
+  } else {
+    text = value.trim();
+  }
+  const match = DECIMAL.exec(text);
+  if (!match) throw new Error(`Not a decimal amount: "${String(value)}"`);
+  const fraction = (match[3] ?? '').padEnd(3, '0');
+  // Hundredths, plus one when the dropped digits are at least half of one.
+  let hundredths = BigInt(match[2]!) * 100n + BigInt(fraction.slice(0, 2));
+  if (Number(fraction[2]) >= 5) hundredths += 1n;
+  const negative = match[1] === '-' && hundredths !== 0n;
+  const whole = hundredths / 100n;
+  const cents = (hundredths % 100n).toString().padStart(2, '0');
+  return `${negative ? '-' : ''}${whole.toString()}.${cents}`;
+}

@@ -1,4 +1,5 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
+import { pgArray } from './sql-array.js';
 
 /**
  * What a pricing change concerns on the price surface — feature 160,
@@ -216,15 +217,13 @@ export function planMarks(input: {
   return plan;
 }
 
-const uuidArray = (ids: readonly string[]): string => `{${ids.join(',')}}`;
-
 /** The distinct row selections of these books, now — one statement. */
 export async function storedSelections(em: EntityManager, bookIds: readonly string[]): Promise<RowSelection[]> {
   if (bookIds.length === 0) return [];
   const rows = await em.execute<Array<{ product_id: string | null; category_id: string | null; attribute_key: string | null }>>(
     `select distinct "product_id", "category_id", "attribute_key"
        from "price_list_matrix_entries" where "price_list_id" = any(?::uuid[])`,
-    [uuidArray(bookIds)],
+    [pgArray(bookIds)],
   );
   return rows.map((r) => ({ productId: r.product_id, categoryId: r.category_id, attributeKey: r.attribute_key }));
 }
@@ -254,7 +253,7 @@ export async function selectingBooks(
        from "price_list_matrix_entries"
       where "price_list_id" = any(?::uuid[])
         and ("product_id" = any(?::uuid[]) or "product_id" is null)`,
-    [uuidArray(bookIds), uuidArray(productIds)],
+    [pgArray(bookIds), pgArray(productIds)],
   );
   const byCategory = new Map<string, Set<string>>();
   for (const r of rows) {

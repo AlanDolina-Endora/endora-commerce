@@ -497,3 +497,26 @@ describe('resolveFeedItem — transforms (FR-067)', () => {
     expect(valueOf(out.fields, 'u')).toBe('https://shop.example.com/files/manual.pdf');
   });
 });
+
+/**
+ * Review finding 2 (release 0.108.0) — a feed shows the resolver's four-place
+ * amount at two places half-up on its decimal digits, as the card and the cart
+ * do (`specs/pricing/worked-examples.md` §10.16). `amount.toFixed(2)` rounded
+ * the binary double: 9.0450 became `9.04 PLN`, 1.0050 `1.00 PLN`.
+ */
+describe('resolveFeedItem — an x.xx50 price is emitted half-up', () => {
+  it.each([
+    ['9.0450', '9.05 PLN'],
+    ['1.0050', '1.01 PLN'],
+    ['2.6750', '2.68 PLN'],
+  ])('%s → %s', (amount, emitted) => {
+    const net = Number(amount);
+    const out = resolveFeedItem({
+      fields: [field({ outputName: 'p', sourceKind: 'price' }), field({ outputName: 's', sourceKind: 'sale_price' })],
+      item: { ...ITEM, price: { net, gross: net, taxResolved: true }, salePrice: { net, gross: net, taxResolved: true } },
+      context: { ...CONTEXT, pricePresentation: 'net', taxCountry: null },
+    });
+    expect(valueOf(out.fields, 'p')).toBe(emitted);
+    expect(valueOf(out.fields, 's')).toBe(emitted);
+  });
+});

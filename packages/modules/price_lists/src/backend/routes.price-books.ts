@@ -374,9 +374,24 @@ export async function registerPriceBookRoutes(app: FastifyInstance, deps: PriceB
       })),
     });
     const version = (await deps.activePrecedence()).version;
+    // FR-034 (review finding 7 of release 0.108.0) — a book outside the
+    // caller's scope answers as a missing one here too. The price stays what
+    // the buyer pays, with its tier, cell and reference; a winning book the
+    // caller may not see is not identified (no book, no row), and runner-ups
+    // from such books are left out, as a missing book would be.
+    const visible = await deps.reads.visibleBookIds(
+      answers.flatMap((answer) => [
+        ...(answer.explanation?.bookId ? [answer.explanation.bookId] : []),
+        ...(answer.explanation?.candidates.map((c) => c.bookId) ?? []),
+      ]),
+      currentPriceBookScope(),
+    );
     // G16 of 161 — every runner-up named: its book (from the resolution) and
     // its selection (one batched label read across every line's candidates).
-    const shown = answers.map((answer) => answer.explanation?.candidates.slice(0, PRICE_BOOK_MAX_EXPLANATION_CANDIDATES) ?? []);
+    const shown = answers.map(
+      (answer) =>
+        answer.explanation?.candidates.filter((c) => visible.has(c.bookId)).slice(0, PRICE_BOOK_MAX_EXPLANATION_CANDIDATES) ?? [],
+    );
     const labelsOf = await deps.reads.rowLabels(
       shown.flatMap((candidates) => candidates.map((c) => c.rowId)),
       labelLanguage(request),
@@ -396,9 +411,9 @@ export async function registerPriceBookRoutes(app: FastifyInstance, deps: PriceB
         ? {
             tier: answer.explanation.tier,
             cell: answer.explanation.cell,
-            bookId: answer.explanation.bookId,
-            bookName: answer.explanation.bookName,
-            rowId: answer.explanation.rowId,
+            ...(answer.explanation.bookId && !visible.has(answer.explanation.bookId)
+              ? { bookId: null, bookName: null, rowId: null }
+              : { bookId: answer.explanation.bookId, bookName: answer.explanation.bookName, rowId: answer.explanation.rowId }),
             reference: answer.explanation.reference,
             precedenceVersion: answer.explanation.precedenceVersion,
             candidates: shown[index]!.map((c) => ({ ...c, labels: labelsOf.get(c.rowId) ?? NO_LABELS })),

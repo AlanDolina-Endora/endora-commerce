@@ -31,6 +31,12 @@ describe('price-book scope (feature 160)', () => {
     expect(bookVisible(ALL, book('organizations', ['b']))).toBe(true);
   });
 
+  it('review finding 4 — an organization book naming no organization is not a representative’s', () => {
+    expect(bookVisible(REP, book('organizations', []))).toBe(false);
+    expect(bookWritable(REP, book('organizations', []))).toBe(false);
+    expect(bookVisible(ALL, book('organizations', []))).toBe(true);
+  });
+
   it('A3.3 — everyone, customer-group and base books are visible and read-only for a representative', () => {
     for (const b of [book('everyone'), book('customer_groups'), book('everyone', [], true)]) {
       expect(bookVisible(REP, b)).toBe(true);
@@ -50,6 +56,6 @@ describe('price-book scope (feature 160)', () => {
 
   it('the list predicate is absent for a platform administrator and binds the scope otherwise', () => {
     expect(visibleBookSql(ALL)).toBeNull();
-    expect(visibleBookSql(REP)).toMatchObject({ params: ['{a}'] });
+    expect(visibleBookSql(REP)).toMatchObject({ params: ['{"a"}'] });
   });
 });

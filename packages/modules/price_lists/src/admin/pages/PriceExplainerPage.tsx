@@ -451,6 +451,13 @@ function Answer(props: {
                 </Link>
               </dd>
             </>
+          ) : explanation.tier ? (
+            // FR-034 — the book that set this price is outside the caller's
+            // scope: the price is shown, the book is not identified.
+            <>
+              <dt className="text-muted-foreground">{t('explainer.book')}</dt>
+              <dd>{t('explainer.bookOutOfScope')}</dd>
+            </>
           ) : null}
           {explanation.reference ? (
             <>

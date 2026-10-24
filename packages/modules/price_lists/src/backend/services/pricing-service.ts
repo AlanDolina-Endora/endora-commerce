@@ -21,6 +21,7 @@ import {
   listingDetailFromBook,
   listingPriceFromBook,
   type BookLineAnswer,
+  type CachedBookLine,
   type BookPricingViewer,
   type ChannelBridgeSubquery,
   type ListingAnswer,
@@ -65,7 +66,7 @@ export interface PricingServiceOptions {
   /** The registered `price-list` bridge's sanctioned subquery (Principle XII). Required to resolve. */
   channelBridge?: ChannelBridgeSubquery;
   /** The price-book answers, keyed by pricing profile (research R6). */
-  bookCache?: PricingCache<BookLineAnswer, ProfilePricingCacheKey>;
+  bookCache?: PricingCache<CachedBookLine, ProfilePricingCacheKey>;
   /** The profile memo, per organization chain, group, channel and currency. */
   profileMemo?: PricingCache<PricingProfile, ProfileMemoKey>;
   /** Ask the `price_lists.surface` worker to rebuild stale profiles (best effort). */
@@ -159,7 +160,8 @@ export class PricingService implements PricingServiceContract {
       categoryRead: () => this.#categoryRead(),
       attributeRead: () => this.#attributeRead(),
       variantRead: () => this.#productRead(),
-      displayModes: async (input) => (await this.#displayModes()).resolveDisplayModes(input),
+      productDisplayModes: async (input) => (await this.#displayModes()).resolveProductDisplayModes(input),
+      viewerDisplayMode: async (input) => (await this.#displayModes()).resolvePageDisplayMode(input),
       ...(this.options.bookCache ? { cache: this.options.bookCache } : {}),
       ...(this.options.profileMemo ? { profileMemo: this.options.profileMemo } : {}),
     });

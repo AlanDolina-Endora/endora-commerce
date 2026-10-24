@@ -1,3 +1,4 @@
+import { roundAmountHalfUp } from '@endora-commerce/contracts';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type { CatalogProductReadPort } from '@endora-commerce/contracts';
 import type { CartRecomputeCache, CachedCartRecompute } from './cart-recompute-cache.js';
@@ -178,7 +179,7 @@ export class CartPricingRecompute {
     for (const item of items) {
       const price = byId.get(item.id);
       if (!price || price.amount === null) continue;
-      item.recomputedUnitPrice = price.amount.toFixed(2);
+      item.recomputedUnitPrice = roundAmountHalfUp(price.amount);
       item.recomputedAt = now;
       item.recomputedCurrency = price.currency;
     }

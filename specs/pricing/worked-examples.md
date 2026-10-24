@@ -222,6 +222,7 @@ Chain depth (N6):
 | A3.1 | rep scoped to {Acme}; L10 organizations {Acme} | — | — | editable | all members in scope |
 | A3.2 | same rep; L8 {Acme, Beta} | — | — | **not visible** (answers as missing, N3) | a member out of scope |
 | A3.3 | same rep; L9 groups {VIP, Gold} | — | — | read-only | not an organization list |
+| A3.4 | same rep; a draft organization book naming no organization | — | — | **not visible** (answers as missing) | names none of the rep's organizations; a rep cannot create, duplicate or patch to such an audience (`400`), nor patch their own draft to everyone or groups (`403`) — review finding 4 |
 | A4 | create a list with members of two kinds (Acme and VIP) | — | — | refused `400 VALIDATION_FAILED` | one kind per list |
 
 The effective-group rule of A2.1–A2.3 (the customer's own group, else the organization's — one
@@ -290,3 +291,17 @@ percent +10 (off the parent's base).
 | D4 | true | guest / P1 (no lists) | **100.00** only — list price equals your price |
 | D5 | true | Acme / P1 (E3) with a sale of **80.00** charged | list ~~**100.00**~~ / your price **80.00** — two prices only: Acme's regular 95.00 is not shown (owner ruling 2026-10-23) |
 | D6 | false | Acme / P1 (E3) with the same sale | ~~**95.00**~~ **80.00** — unchanged: the sale strikes the buyer's own price |
+
+### 10.16 Two-place rounding of an x.xx50 amount
+
+A resolver amount is four places; every surface that shows or stores it at two rounds it **half-up
+on its decimal digits** (`roundAmountHalfUp`, `CON/price-book-decimal.ts`), which is also what the
+storefront's `Intl.NumberFormat` shows. `Number(amount).toFixed(2)` rounds the binary double and
+is not this rule: 9.0450 is the double 9.04499…, so it gave 9.04.
+
+| Vector | Config | Buyer / product | Resolver | Card, product page, cart line, order (copied from the cart), order preview, quote reference, feed |
+| --- | --- | --- | --- | --- |
+| R1 | everyone catalogue book: product fixed 10.05; everyone sale: product −10 % | any / product | **9.0450** | **9.05** (`toFixed`: 9.04) |
+| R2 | everyone sale: product fixed 1.005 | any / product | **1.0050** | **1.01** (`toFixed`: 1.00) |
+
+Test: `backend/test/integration/price_lists/worked-examples/rounding.test.ts`.

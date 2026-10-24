@@ -361,7 +361,9 @@ Gaps still open (code-verified unless marked):
    batched `resolveLinePrices` call for every line without an agreement, P0) → own `defaultPrice`
    labelled with the **basket channel's default currency** (P0; it was hard-coded `PLN`; a basket
    whose channel is gone is unpriced for it) → unpriced. Display mode `none` = quote-only. Amount
-   rounded to 2 dp while brackets store 4 dp. Used on add/merge/qty change, the batch add, the
+   rounded to 2 dp half-up on its decimal digits (`roundAmountHalfUp`, `CON/price-book-decimal.ts`;
+   it was `Number(amount).toFixed(2)`, which rounds the binary double — `worked-examples.md` §10.16)
+   while brackets store 4 dp. Used on add/merge/qty change, the batch add, the
    login/reorder reprice and at placement; it passes the basket's customer account (P0).
 2. `CartPricingRecompute.recompute` (`cart-pricing-recompute.ts`) for `GET /api/v1/cart` runs
    **chain (1)** — `CartLinePricing.orderablePrices` over the lines with their agreements, one

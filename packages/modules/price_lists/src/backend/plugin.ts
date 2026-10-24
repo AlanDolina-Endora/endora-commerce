@@ -4,7 +4,7 @@ import type { CustomerAccountReadPort, SalesRepAssignmentPort, SettingsAdminPort
 import { SalesChannel } from '@endora-commerce/platform/kernel';
 import { PriceListService } from './services/price-list-service.js';
 import { PricingService } from './services/pricing-service.js';
-import type { BookLineAnswer, ChannelBridgeSubquery } from './services/book-pricing.js';
+import type { CachedBookLine, ChannelBridgeSubquery } from './services/book-pricing.js';
 import type { ProfilePricingCacheKey } from './services/pricing-cache.js';
 import type { PricingProfile, ProfileMemoKey } from './services/pricing-profile.js';
 import { PriceBookService } from './services/price-book-service.js';
@@ -182,7 +182,7 @@ export function priceListsModule(options: PriceListsModuleOptions): {
   // Feature 160 — the price-book engine's layers: answers keyed by pricing
   // profile, and the profile memo per organization chain, group, channel and
   // currency (research R6). Same TTL, same generation.
-  const bookCache = new PricingCache<BookLineAnswer, ProfilePricingCacheKey>(ttl);
+  const bookCache = new PricingCache<CachedBookLine, ProfilePricingCacheKey>(ttl);
   const profileMemo = new PricingCache<PricingProfile, ProfileMemoKey>(ttl);
   let pricingEngine: PricingService | undefined;
   // Every writer tells the generation, never the LRU directly: a bump clears

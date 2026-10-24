@@ -47,7 +47,7 @@ Nagłówek ustala:
 | **Dla kogo są ceny** (odbiorcy) | *Wszyscy*, zbiór *grup klientów* albo zbiór *organizacji* — jeden rodzaj na cennik, nigdy mieszanka. Rodzaj nie zmienia się, odkąd cennik był aktywny. |
 | **Harmonogram** | Opcjonalny początek i koniec. Cennik obowiązuje dokładnie od chwili początku do chwili końca. |
 | **Priorytet** | Liczba całkowita. Rozstrzyga tylko między cennikami, które wyceniają ten sam rodzaj linii dla tego samego kupującego — wygrywa wyższa liczba — i nigdy nie pozwala ogólnej linii wygrać z bardziej szczegółową. |
-| **Stan** | *Szkic*, *Zaplanowany*, *Aktywny* albo *Wygasły*. Szkic nigdy nie obowiązuje. Aktywacja zmienia stan cennika na *Aktywny*, a na *Zaplanowany*, gdy jego początek jest w przyszłości. *Przenieś do szkiców* znów wyłącza cennik z użycia. |
+| **Stan** | *Szkic*, *Zaplanowany*, *Aktywny* albo *Wygasły*. Szkic nigdy nie obowiązuje. Aktywacja zmienia stan cennika na *Aktywny*, a na *Zaplanowany*, gdy jego początek jest w przyszłości. Zmiana dat aktywnego albo zaplanowanego cennika ustala jego stan w ten sam sposób od nowa, a gdy jego koniec już minął, zmienia stan na *Wygasły*. *Przenieś do szkiców* znów wyłącza cennik z użycia. |
 
 Cennik można aktywować tylko wtedy, gdy obowiązywałby gdzieś i kogoś: potrzebuje co najmniej jednego
 kanału sprzedaży, który sprzedaje w jego walucie, a cennik grup klientów lub organizacji — co
@@ -143,8 +143,11 @@ sprzedaje w tej walucie) i dla tego kupującego. Cena powstaje potem w czterech 
 Ponieważ procenty dla kupujących są liczone od ceny katalogowej, rabat kontraktowy podąża za ceną
 kanału: jeśli kanał sprzedaje produkt za 120 zamiast 100, rabat kontraktowy 20 % daje 96.
 
-Procenty są zaokrąglane połówkowo w górę do czterech miejsc po przecinku; koszyk zaokrągla kwoty
-pozycji do dwóch, jak zawsze.
+Procenty są zaokrąglane połówkowo w górę do czterech miejsc po przecinku. Wszędzie, gdzie cena jest
+pokazywana lub zapisywana z dwoma miejscami po przecinku — na karcie produktu, w pozycji koszyka i w
+zamówieniu, które ją przejmuje, w podglądzie zamówienia, w cenie referencyjnej zapytania ofertowego i
+w pliku produktowym — jest zaokrąglana połówkowo w górę z tych czterech miejsc, więc ta sama cena
+wszędzie wygląda tak samo: 9,0450 to 9,05, a 1,0050 to 1,01.
 
 ### Kolejność cen
 
@@ -306,8 +309,9 @@ odniesienia i przegrane linie.
 tylko cenniki organizacji, w których **każdy** odbiorca jest jedną z ich organizacji. Cenniki dla
 wszystkich, cenniki grup klientów i ceny bazowe są dla nich tylko do odczytu. Cennik, który wskazuje
 jakąkolwiek organizację spoza ich zakresu, dla nich nie istnieje: nie ma go na liście, a jego adres
-pokazuje tę samą stronę co cennik, którego nigdy nie utworzono. Tworząc cennik, mogą wybrać tylko
-*Organizacje*, i tylko własne.
+pokazuje tę samą stronę co cennik, którego nigdy nie utworzono; tak samo jest z cennikiem organizacji,
+który nie wskazuje jeszcze żadnej organizacji. Tworząc, duplikując albo zmieniając cennik, mogą wybrać
+tylko *Organizacje*, tylko własne i co najmniej jedną.
 
 Każda zmiana cennika — jego ustawień, kanałów, odbiorców, wierszy, aktywacji, duplikat, usunięcie — oraz
 każda zmiana cen bazowych i ustawienia ceny katalogowej jest zapisywana w dzienniku audytu z

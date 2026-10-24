@@ -219,7 +219,11 @@ them on core. `backend/src/apps/example/modules/example_overlay/backend.ts` is t
 - **Per process**: `PricingCache`, an LRU of 5 000 entries with a 60 s TTL
   (`DEFAULT_PRICING_CACHE_TTL_MS`), keyed by pricing profile, product, variant and quantity; and a
   memo of the profile per organization chain, group, channel, currency and precedence version. The
-  test harness sets the TTL to 0.
+  test harness sets the TTL to 0. A cached answer holds only what the profile decides: the price
+  and the product and category steps of the display-mode chain. The organization and settings
+  steps are applied per request, because one profile is shared by viewers whose display modes
+  differ (a guest and an organization with no buyer book). The price surface's worker, which
+  resolves a profile with no buyer in hand, neither reads nor writes this cache.
 - **After commit, everywhere**: every audited price-book write runs through `CommandBus.run`, and
   once it has committed `PricingGeneration.bump()` clears this process's layers and publishes on the
   Redis channel `b2b:price_lists:pricing-generation`; every API and worker process subscribes on boot
@@ -255,7 +259,9 @@ too slow, so price sorting and price-range filtering read a precomputed **price 
   registered and its build requested, and the request is answered at once: a restriction of up to
   5 000 products (a category, a search result) is ordered from a live resolution, an unrestricted
   page from the everyone surface (an approximation), and with no surface at all the chunk is
-  `unordered` and the catalogue serves its default order. Prices on cards are always resolved live,
+  `unordered` and the catalogue serves its default order; a walk begun that way carries the default
+  listing's cursor and continues in that order to its end, even once the surface is built. Prices on
+  cards are always resolved live,
   so only the order can lag.
 - **A write marks only what it can move**, at two granularities. Each writer describes its change
   as a `SurfaceChange` (`src/backend/services/surface-change.ts`) and `PricingGeneration.bump`
@@ -307,7 +313,11 @@ products, 1 000 organizations): the figures are in `specs/pricing/read-paths-and
 skipped while the module is absent) and moves a book's **status** — `scheduled → active` at its
 start, `active → expired` at its end — for the admin's display. It decides no price: applicability
 is evaluated at request time. A sweep that flips a book bumps the pricing generation. The test-only
-hook is `POST /api/v1/admin/price-books/internal/sweep`.
+hook is `POST /api/v1/admin/price-books/internal/sweep`. A `PATCH` that moves an `active` or
+`scheduled` book's dates re-decides its status as activation does (`expired` once ended, `scheduled`
+before its start, `active` otherwise), so a book moved to a future start is `scheduled` and the
+sweep starts it — and marks the price surface — at its instant; a draft and an expired book keep
+their status.
 
 ## Admin API
 
@@ -333,7 +343,7 @@ are `price_list.create`, `update`, `channels_replace`, `activate`, `draftify`, `
 | `PUT /:id/rows?dryRun=true` | The same body, writing nothing: `{ version, resolved, diff { added, changed, removed, unchangedCount }, errors }`. Confirm by sending the same body without `dryRun`, with the version the preview answered. |
 | `GET /base-prices?productId=`, `PUT /base-prices/:productId` | A product's base prices per currency, `{ byCurrency: { CODE: { product: Tier[], variants: { [variantId]: VariantBaseRow \| null } } } }`; one command across currencies, creating a currency's base book on first use. A sales representative is `403` on the write. |
 | `GET /targets/organizations?search=` or `?ids=`, `…/customer-groups`, `…/categories`, `…/attributes`, `…/sales-channels?currency=`, `…/currencies` | The pickers. Organizations are filtered to the caller's scope; attributes are only the eligible `isPriceRule` ones, with their options. |
-| `POST /resolve` | The explanation: `{ salesChannelId?, currencyCode?, buyer { organizationId?, customerAccountId? }, lines [{ key, productId, variantId?, quantity }] }` (≤ 200 lines; no channel = the system default channel). Each line: `price { amount, currency, source, compareAt? }` or `null`, and `explanation { tier, cell, bookId, bookName, rowId, reference, precedenceVersion, candidates[] }`. An organization or customer the caller may not see answers the same `404` as an unknown one. |
+| `POST /resolve` | The explanation: `{ salesChannelId?, currencyCode?, buyer { organizationId?, customerAccountId? }, lines [{ key, productId, variantId?, quantity }] }` (≤ 200 lines; no channel = the system default channel). Each line: `price { amount, currency, source, compareAt? }` or `null`, and `explanation { tier, cell, bookId, bookName, rowId, reference, precedenceVersion, candidates[] }`. An organization or customer the caller may not see answers the same `404` as an unknown one. A book outside the caller's scope (a representative meeting a parent organization's book through the chain, say) is not identified: when it set the price, the price, `tier`, `cell` and `reference` stay and `bookId`, `bookName` and `rowId` are `null`; as a runner-up it is left out of `candidates`. |
 | `GET /precedence` | The active version: `version`, `cells`, `categoryBeforeAttribute`, `depthMode`, `preset`. |
 | `GET /settings/show-list-price`, `PUT /settings/show-list-price` | The `pricing.show_list_price` setting, `{ value: boolean }`; the write is one audited command. |
 | `POST /internal/sweep` | Test-only: one status-sweep tick. |
@@ -367,10 +377,11 @@ of `PRICE_BOOK_ROW_ERROR_REASONS` (`fixed_on_all`, `rows_overlap`, `product_unkn
 `message` is for logs.
 
 **Sales-representative scope.** Read off the request's tenant context, never from the request body
-(`price-book-scope.ts`): an organization book with any member outside the caller's scope answers
-exactly as a missing book — `404`, absent from lists and counts — on every route; everyone and
-customer-group books are read-only (`403`); a representative may create and name only organizations
-in scope. `writable` on a book and `meta.creatableAudienceKinds` on the list tell a client what to
+(`price-book-scope.ts`): an organization book with any member outside the caller's scope, or with no
+member at all, answers exactly as a missing book — `404`, absent from lists and counts — on every
+route; everyone and customer-group books are read-only (`403`); a representative may create,
+duplicate and patch only an organization audience (`403` for another kind, on `PATCH` too) naming at
+least one organization (`400 PRICE_BOOK_AUDIENCE_KIND` for none), all in scope. `writable` on a book and `meta.creatableAudienceKinds` on the list tell a client what to
 offer.
 
 ## Storefront API

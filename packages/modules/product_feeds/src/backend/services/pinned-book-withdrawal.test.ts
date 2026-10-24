@@ -29,12 +29,16 @@ interface Finished {
 function generationFor(options: {
   priceListId: string | null;
   publishability: () => Promise<PinnedPriceBookPublishability>;
+  /** `unreachable` (default) refuses every write; `honest` takes the bytes. */
+  storage?: 'unreachable' | 'honest';
 }) {
   const finished: Finished[] = [];
   const notified: unknown[] = [];
   const withdrawn: string[] = [];
   const asked: unknown[] = [];
   const puts: unknown[] = [];
+  /** The catalogue walks the run asked for — none of them yields a product. */
+  const walks: unknown[] = [];
 
   const feed = {
     id: 'feed-1',
@@ -65,7 +69,12 @@ function generationFor(options: {
 
   const service = new FeedGenerationService({
     emFactory: () => em,
-    selection: { validateRule: async () => undefined } as never,
+    selection: {
+      validateRule: async () => undefined,
+      iterateProductIds: async function* (scope: unknown) {
+        walks.push(scope);
+      },
+    } as never,
     runs: {
       claim: async () => ({ acquired: true, skipReason: null }),
       finish: async (input: {
@@ -90,9 +99,13 @@ function generationFor(options: {
     },
     artefactStore: {
       newLocator: () => 'product-feeds/ar/te/artefact-1234.csv',
-      put: async (input: unknown) => {
+      put: async (input: { locator: string; stream: AsyncIterable<unknown> }) => {
         puts.push(input);
-        throw new Error('the bucket is unreachable');
+        if ((options.storage ?? 'unreachable') === 'unreachable') throw new Error('the bucket is unreachable');
+        for await (const _chunk of input.stream) {
+          // An honest store consumes the stream, which is what walks the catalogue.
+        }
+        return { backend: 'local', locator: input.locator };
       },
       open: async () => {
         throw new Error('unused');
@@ -112,7 +125,7 @@ function generationFor(options: {
     listActiveLanguages: async () => [],
   } as never);
 
-  return { service, finished, notified, withdrawn, asked, puts };
+  return { service, finished, notified, withdrawn, asked, puts, walks };
 }
 
 describe('product_feeds generation — a pinned book that does not apply withdraws the file', () => {
@@ -182,12 +195,20 @@ describe('product_feeds generation — a pinned book that does not apply withdra
   });
 
   it('walks a pinned feed whose book publishes', async () => {
-    const g = generationFor({ priceListId: 'book-1', publishability: async () => ({ publishable: true }) });
+    const g = generationFor({
+      priceListId: 'book-1',
+      publishability: async () => ({ publishable: true }),
+      storage: 'honest',
+    });
 
     await g.service.generateNow('feed-1', { trigger: 'manual', runId: 'run-1' });
 
+    expect(g.asked).toHaveLength(1);
+    expect(g.walks).toHaveLength(1);
     expect(g.puts).toHaveLength(1);
-    expect(g.finished.map((f) => f.status)).toEqual(['failed']);
+    // The fake catalogue is empty, so the walk ends `empty` — neither withdrawn nor failed.
+    expect(g.finished.map((f) => [f.status, f.withdrawalReason])).toEqual([['empty', null]]);
     expect(g.withdrawn).toEqual([]);
+    expect(g.notified).toEqual([]);
   });
 });

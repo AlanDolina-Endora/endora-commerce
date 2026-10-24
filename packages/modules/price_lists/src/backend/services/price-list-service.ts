@@ -373,23 +373,52 @@ export class PriceListService {
     customerKind: 'guest' | 'signed_in';
     categoryIdsByProduct?: ReadonlyMap<string, ReadonlySet<string>>;
   }): Promise<Map<string, DisplayMode>> {
+    const productIds = [...new Set(input.productIds)];
+    const out = await this.resolveProductDisplayModes({
+      productIds,
+      ...(input.categoryIdsByProduct ? { categoryIdsByProduct: input.categoryIdsByProduct } : {}),
+    });
+    const undecided = productIds.filter((id) => !out.has(id));
+    if (undecided.length === 0) return out;
+    // The Organization → Settings tail is the page's mode: one answer for the set.
+    const tail = await this.resolvePageDisplayMode({
+      organizationId: input.organizationId,
+      salesChannelId: input.salesChannelId,
+      customerKind: input.customerKind,
+    });
+    for (const productId of undecided) out.set(productId, tail);
+    return out;
+  }
+
+  /**
+   * The chain's product and category steps for a set of products — the part no
+   * viewer moves. A product neither step decides is absent; its mode is the
+   * viewer's tail, {@link resolvePageDisplayMode}. The price-book engine caches
+   * this half under the pricing profile and applies the tail per request, since
+   * the profile is shared by viewers whose tails differ (a guest and an
+   * organization with no buyer book).
+   */
+  async resolveProductDisplayModes(input: {
+    productIds: readonly string[];
+    categoryIdsByProduct?: ReadonlyMap<string, ReadonlySet<string>>;
+  }): Promise<Map<string, DisplayMode>> {
     const out = new Map<string, DisplayMode>();
     const productIds = [...new Set(input.productIds)];
     if (productIds.length === 0) return out;
     const em = this.emFactory();
 
     // 1. Product-scope overrides for the whole set.
-    const productOverrides = new Map<string, DisplayMode>();
     for (const row of await em.find(PriceDisplayModeOverride, {
       scope: 'product',
       targetId: { $in: productIds },
     })) {
-      productOverrides.set(row.targetId, row.mode as DisplayMode);
+      out.set(row.targetId, row.mode as DisplayMode);
     }
 
     // 2. Category memberships, then the category-scope overrides over their
     //    union — one lookup for the page rather than one per card.
-    const undecided = productIds.filter((id) => !productOverrides.has(id));
+    const undecided = productIds.filter((id) => !out.has(id));
+    if (undecided.length === 0) return out;
     const categoryIdsByProduct =
       input.categoryIdsByProduct ?? (await this.loadCategoryMemberships(undecided));
     const categoryUnion = new Set<string>();
@@ -398,49 +427,29 @@ export class PriceListService {
         categoryUnion.add(categoryId);
       }
     }
+    if (categoryUnion.size === 0) return out;
     const rankedByCategory = new Map<string, DisplayModeCategoryCandidate>();
-    if (categoryUnion.size > 0) {
-      const overrides = await em.find(PriceDisplayModeOverride, {
-        scope: 'category',
-        targetId: { $in: [...categoryUnion] },
-      });
-      for (const candidate of await this.rankCategoryOverrides(overrides)) {
-        rankedByCategory.set(candidate.categoryId, candidate);
-      }
+    const overrides = await em.find(PriceDisplayModeOverride, {
+      scope: 'category',
+      targetId: { $in: [...categoryUnion] },
+    });
+    for (const candidate of await this.rankCategoryOverrides(overrides)) {
+      rankedByCategory.set(candidate.categoryId, candidate);
     }
 
-    // 3. The organization row is one row for the whole set.
-    let organizationOverride: DisplayMode | null = null;
-    if (input.customerKind === 'signed_in' && input.organizationId) {
-      const row = await em.findOne(PriceDisplayModeOverride, {
-        scope: 'organization',
-        targetId: input.organizationId,
-      });
-      organizationOverride = (row?.mode as DisplayMode | undefined) ?? null;
-    }
-
-    // 4. Decide, and read the settings pair once if anything still needs it.
-    const needingSettings: string[] = [];
-    for (const productId of productIds) {
+    // 3. Decide with no organization step: what is left is the viewer's tail.
+    for (const productId of undecided) {
       const candidates: DisplayModeCategoryCandidate[] = [];
       for (const categoryId of categoryIdsByProduct.get(productId) ?? []) {
         const ranked = rankedByCategory.get(categoryId);
         if (ranked) candidates.push(ranked);
       }
       const decision = decideDisplayMode({
-        productOverride: productOverrides.get(productId) ?? null,
+        productOverride: null,
         categoryCandidates: candidates,
-        organizationOverride,
+        organizationOverride: null,
       });
-      if (decision.source === 'settings') needingSettings.push(productId);
-      else out.set(productId, decision.mode);
-    }
-    if (needingSettings.length > 0) {
-      const fallback = await this.readSettingsDisplayMode(
-        settingsDisplayModeKey(input.customerKind),
-        input.salesChannelId,
-      );
-      for (const productId of needingSettings) out.set(productId, fallback);
+      if (decision.source !== 'settings') out.set(productId, decision.mode);
     }
     return out;
   }

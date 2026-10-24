@@ -28,6 +28,7 @@ import { priceOfStored, type StoredRow } from './price-book-batch.js';
 import { selectionKey } from './price-book-rules.js';
 import { priceBookMembership } from './price-book-membership.js';
 import { audienceKindWritable, bookVisible, bookWritable, visibleBookSql, type PriceBookScope } from './price-book-scope.js';
+import { pgArray } from './sql-array.js';
 
 /**
  * The admin reads of price books — feature 160 (US7,
@@ -160,6 +161,30 @@ export class PriceBookReads {
     }
   }
 
+  /**
+   * Which of these books exist for the caller (FR-034) — every one for a
+   * platform administrator, one statement otherwise. A book that does not
+   * exist is not in the answer either.
+   */
+  async visibleBookIds(ids: readonly string[], scope: PriceBookScope): Promise<Set<string>> {
+    const unique = [...new Set(ids)];
+    if (scope.all || unique.length === 0) return new Set(unique);
+    const rows = (await this.deps.emFactory().execute(
+      `select l."id", l."audience_kind", l."is_system",
+              array(select m."organization_id" from "price_list_audience_members" m
+                     where m."price_list_id" = l."id" and m."organization_id" is not null) as "member_org_ids"
+         from "price_lists" l where l."id" = any(?::uuid[])`,
+      [pgArray(unique)],
+    )) as Array<Pick<BookHeaderRow, 'id' | 'audience_kind' | 'is_system' | 'member_org_ids'>>;
+    return new Set(
+      rows
+        .filter((row) =>
+          bookVisible(scope, { audienceKind: row.audience_kind, isSystem: row.is_system, organizationIds: row.member_org_ids ?? [] }),
+        )
+        .map((row) => row.id),
+    );
+  }
+
   async get(id: string, scope: PriceBookScope): Promise<PriceBook> {
     const header = await this.header(id, scope);
     const [bindings] = [await this.#bindings([header])];
@@ -175,11 +200,11 @@ export class PriceBookReads {
     const params: unknown[] = [];
     if (query.type?.length) {
       where.push(`l."type" = any(?::text[])`);
-      params.push(`{${query.type.join(',')}}`);
+      params.push(pgArray(query.type));
     }
     if (query.status?.length) {
       where.push(`l."status" = any(?::text[])`);
-      params.push(`{${query.status.join(',')}}`);
+      params.push(pgArray(query.status));
     }
     if (query.currency) {
       where.push(`l."currency_code" = ?`);
@@ -277,7 +302,7 @@ export class PriceBookReads {
         where e."price_list_id" = any(?::uuid[])
           and ${variantId ? `e."variant_id" = ?::uuid` : `e."product_id" = ?::uuid and e."variant_id" is null`}
         order by e."min_quantity" asc`,
-      [`{${bookIds.join(',')}}`, variantId ?? productId],
+      [pgArray(bookIds), variantId ?? productId],
     )) as MatrixRecord[];
     for (const record of rows) {
       const row = storedOf(record);
@@ -308,7 +333,7 @@ export class PriceBookReads {
     for (const channel of channels) {
       const sub = bridge.entityIdsInChannelSubquery(channel.id, 'price-list');
       parts.push(`select ?::uuid as "channel_id", b."id" as "book_id" from unnest(?::uuid[]) b("id") where b."id" in (${sub.sql})`);
-      params.push(channel.id, `{${nonSystem.map((b) => b.id).join(',')}}`, ...sub.params);
+      params.push(channel.id, pgArray(nonSystem.map((b) => b.id)), ...sub.params);
     }
     const rows = (await em.execute(parts.join(' union all '), params)) as Array<{ channel_id: string; book_id: string }>;
     const byId = new Map(channels.map((c) => [c.id, c]));
@@ -336,7 +361,7 @@ export class PriceBookReads {
       `select e."id", e."price_list_id", e."variant_id", e."product_id", e."category_id", e."attribute_key",
               e."attribute_value", e."min_quantity", e."max_quantity", e."price_type", e."amount", e."percent"
          from "price_list_matrix_entries" e where e."id" = any(?::uuid[])`,
-      [`{${ids.join(',')}}`],
+      [pgArray(ids)],
     )) as MatrixRecord[];
     const labelled = await this.label(rows.map(storedOf), language);
     return new Map(labelled.map((row) => [row.id, row.labels]));
@@ -424,7 +449,7 @@ export class PriceBookReads {
     await this.#visible(bookId, scope);
     const rows = (await this.deps.emFactory().execute(
       `select l."product_id" from "price_list_product_lines" l where l."price_list_id" = ? and l."product_id" = any(?::uuid[])`,
-      [bookId, `{${productIds.join(',')}}`],
+      [bookId, pgArray(productIds)],
     )) as Array<{ product_id: string }>;
     const present = new Set(rows.map((r) => r.product_id));
     return productIds.filter((id) => present.has(id));
@@ -520,7 +545,7 @@ export class PriceBookReads {
                     and coalesce(r."category_id"::text, '') || '|' || coalesce(r."attribute_key", '') || '|' || coalesce(r."attribute_value", '') = any(?::text[])
                ) e
               order by e."min_quantity" asc, e."id" asc`,
-            [`{${productPage.ids.join(',')}}`, bookId, bookId, toTextArray(smallKeys)],
+            [pgArray(productPage.ids), bookId, bookId, pgArray(smallKeys)],
           )) as MatrixRecord[]).map(storedOf);
     const productSelections = productPage.ids.map((id) => selectionRow(null, id, null, null, null));
     const labelled = await this.label([...pageRows, ...productSelections], language);
@@ -763,10 +788,6 @@ function smallKeyOf(categoryId: string | null, attributeKey: string | null, attr
   return `${categoryId ?? ''}|${attributeKey ?? ''}|${attributeValue ?? ''}`;
 }
 
-/** A Postgres text-array literal, every element quoted. */
-function toTextArray(values: readonly string[]): string {
-  return `{${values.map((v) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`;
-}
 
 interface MatrixRecord {
   id: string;

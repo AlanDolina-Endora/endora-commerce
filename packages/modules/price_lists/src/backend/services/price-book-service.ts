@@ -50,6 +50,7 @@ import {
   type SurfaceBookFacts,
   type SurfaceChange,
 } from './surface-change.js';
+import { pgArray } from './sql-array.js';
 
 /**
  * The price-book write service — feature 160 (D-287 P1,
@@ -147,6 +148,17 @@ const stale = (currentVersion: number): never => {
     currentVersion,
   });
 };
+
+/**
+ * The status a live book's dates give it at `now`: `expired` once it has
+ * ended, `scheduled` before its start, `active` otherwise — what activation
+ * decides, and what a patch of the dates re-decides.
+ */
+function statusForDates(startsAt: Date | null, endsAt: Date | null, now: number): 'active' | 'scheduled' | 'expired' {
+  if (endsAt && endsAt.getTime() <= now) return 'expired';
+  if (startsAt && startsAt.getTime() > now) return 'scheduled';
+  return 'active';
+}
 
 export class PriceBookService {
   constructor(private readonly deps: PriceBookServiceDeps) {}
@@ -444,7 +456,7 @@ export class PriceBookService {
    * channel offers the currency (FR-003, K2).
    */
   async createBook(input: PriceBookCreate, scope: PriceBookScope = ALL_BOOKS_SCOPE): Promise<PriceBookView> {
-    if (!audienceKindWritable(scope, input.audience.kind)) readOnly();
+    this.#assertAudienceWritable(input.audience, scope);
     const currencyCode = input.currencyCode.toUpperCase();
     await this.#assertAudience(input.audience, scope);
     const em = this.deps.emFactory();
@@ -537,7 +549,12 @@ export class PriceBookService {
         'The audience kind of a book that has been active cannot change.',
       );
     }
-    if (patch.audience) await this.#assertAudience(patch.audience, scope);
+    if (patch.audience) {
+      // As create and duplicate ask (review finding 4 of release 0.108.0): a
+      // representative keeps a book an organization book of their own.
+      this.#assertAudienceWritable(patch.audience, scope);
+      await this.#assertAudience(patch.audience, scope);
+    }
     if (patch.channelIds) {
       // The bridge holds no empty set (a membership is a binding, not a
       // restriction): a book leaves every channel by being drafted or deleted.
@@ -551,6 +568,16 @@ export class PriceBookService {
     if (startsAt && endsAt && Date.parse(endsAt) <= Date.parse(startsAt)) {
       validation([{ path: ['endsAt'], message: 'endsAt must be after startsAt.' }], 'The price book was refused.');
     }
+    // Review finding 5 of release 0.108.0 — new dates re-decide a live book's
+    // status by `activate()`'s rule, so a start moved into the future makes it
+    // `scheduled` again (the sweep then starts it, and marks the price surface,
+    // at its instant) and an end moved into the past expires it now. A draft
+    // stays a draft and an expired book stays expired until it is activated.
+    const datesMoved = patch.startsAt !== undefined || patch.endsAt !== undefined;
+    const nextStatus: PriceList['status'] =
+      datesMoved && isLiveStatus(book.status)
+        ? statusForDates(startsAt ? new Date(startsAt) : null, endsAt ? new Date(endsAt) : null, Date.now())
+        : book.status;
     const channelsBefore = patch.channelIds
       ? (await this.#membership().listChannelsForEntity('price-list', bookId)).map((c) => c.id).sort()
       : null;
@@ -570,7 +597,11 @@ export class PriceBookService {
           {
             facts: [
               this.#facts(book, { channelIds: channelsBefore ?? now }),
-              this.#facts(book, { channelIds: now, ...(patch.audience ? { audienceKind: patch.audience.kind } : {}) }),
+              this.#facts(book, {
+                channelIds: now,
+                live: isLiveStatus(nextStatus),
+                ...(patch.audience ? { audienceKind: patch.audience.kind } : {}),
+              }),
             ],
             selections: 'stored',
           },
@@ -599,6 +630,11 @@ export class PriceBookService {
         before['endsAt'] = row.endsAt?.toISOString() ?? null;
         after['endsAt'] = patch.endsAt;
         row.endsAt = patch.endsAt ? new Date(patch.endsAt) : null;
+      }
+      if (nextStatus !== row.status) {
+        before['status'] = row.status;
+        after['status'] = nextStatus;
+        row.status = nextStatus;
       }
       if (patch.audience) {
         before['audience'] = { kind: row.audienceKind, memberIds: members.map(memberIdOf).sort() };
@@ -822,13 +858,7 @@ export class PriceBookService {
         issues.map((i) => ({ path: i.path.join('.'), issue: i.message })),
       );
     }
-    const now = Date.now();
-    const next: PriceList['status'] =
-      book.endsAt && book.endsAt.getTime() <= now
-        ? 'expired'
-        : book.startsAt && book.startsAt.getTime() > now
-          ? 'scheduled'
-          : 'active';
+    const next = statusForDates(book.startsAt ?? null, book.endsAt ?? null, Date.now());
     const action = next === 'expired' ? 'price_list.expire' : 'price_list.activate';
     return this.#command(action, bookId, async (txEm) => {
       const row = await txEm.findOneOrFail(PriceList, { id: bookId });
@@ -896,7 +926,7 @@ export class PriceBookService {
   async duplicate(bookId: string, input: PriceBookDuplicate, scope: PriceBookScope = ALL_BOOKS_SCOPE): Promise<PriceBookView> {
     const em = this.deps.emFactory();
     await this.#visibleBook(em, bookId, scope);
-    if (!audienceKindWritable(scope, input.audience.kind)) readOnly();
+    this.#assertAudienceWritable(input.audience, scope);
     const currencyCode = input.currencyCode.toUpperCase();
     await this.#assertAudience(input.audience, scope);
     await this.#assertChannelsOffer(em, currencyCode, input.channelIds);
@@ -1001,7 +1031,7 @@ export class PriceBookService {
                or e."variant_id" = any(?::uuid[])
                or (e."product_id" is null
                    and coalesce(e."category_id"::text, '') || '|' || coalesce(e."attribute_key", '') || '|' || coalesce(e."attribute_value", '') = any(?::text[])))`,
-      [bookId, uuidArray(uuidIds), uuidArray(productIds), uuidArray(variantIds), textArray(generalKeys)],
+      [bookId, pgArray(uuidIds), pgArray(productIds), pgArray(variantIds), pgArray(generalKeys)],
       'all',
       em.getTransactionContext(),
     )) as Array<Record<string, unknown>>;
@@ -1072,6 +1102,23 @@ export class PriceBookService {
   }
 
   /** FR-002, A4 — every member exists, is of the set's kind and (for a representative) in scope. */
+  /**
+   * Whether the caller may give a book this audience (FR-034): a representative
+   * only an organization set, and one naming at least one organization — an
+   * empty set names none of theirs, so the book would vanish from them on save
+   * (`bookVisible`). `403` for a kind they may not write, `400` for the empty set.
+   */
+  #assertAudienceWritable(audience: PriceBookAudience, scope: PriceBookScope): void {
+    if (!audienceKindWritable(scope, audience.kind)) readOnly();
+    if (!scope.all && audience.kind === 'organizations' && audience.memberIds.length === 0) {
+      validation(
+        [{ path: ['audience', 'memberIds'], message: 'Name at least one of your organizations.' }],
+        'The audience set was refused.',
+        ERROR_CODES.PRICE_BOOK_AUDIENCE_KIND,
+      );
+    }
+  }
+
   async #assertAudience(audience: PriceBookAudience, scope: PriceBookScope): Promise<void> {
     if (audience.kind === 'everyone' || audience.memberIds.length === 0) return;
     const ids = audience.memberIds;
@@ -1118,15 +1165,7 @@ export class PriceBookService {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** A Postgres uuid-array literal. */
-function uuidArray(ids: readonly string[]): string {
-  return `{${ids.join(',')}}`;
-}
 
-/** A Postgres text-array literal, every element quoted. */
-function textArray(values: readonly string[]): string {
-  return `{${values.map((v) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`;
-}
 
 /** A refused batch: overlaps alone are a conflict (409); anything else is a bad request (400). */
 function refuseRows(errors: readonly PriceBookRowError[]): never {

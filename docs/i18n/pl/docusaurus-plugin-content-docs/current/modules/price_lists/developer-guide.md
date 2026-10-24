@@ -221,7 +221,12 @@ pojedyncze wywołanie zostawia je na rdzeniu. Wzorcem jest
 
 - **W procesie**: `PricingCache`, LRU na 5 000 wpisów z TTL 60 s (`DEFAULT_PRICING_CACHE_TTL_MS`), z
   kluczem: profil cenowy, produkt, wariant i ilość; oraz zapamiętany profil dla łańcucha organizacji,
-  grupy, kanału, waluty i wersji kolejności. Środowisko testowe ustawia TTL na 0.
+  grupy, kanału, waluty i wersji kolejności. Środowisko testowe ustawia TTL na 0. Wpis w pamięci
+  podręcznej zawiera tylko to, o czym rozstrzyga profil: cenę oraz kroki produktu i kategorii w
+  łańcuchu trybu wyświetlania. Kroki organizacji i ustawień są stosowane przy każdym żądaniu, bo
+  jeden profil dzielą widzowie o różnych trybach wyświetlania (gość i organizacja bez własnego
+  cennika). Worker powierzchni cen, który wylicza profil bez konkretnego kupującego, nie czyta tej
+  pamięci podręcznej ani do niej nie zapisuje.
 - **Po zatwierdzeniu, wszędzie**: każdy audytowany zapis cennika przechodzi przez `CommandBus.run`, a
   po jego zatwierdzeniu `PricingGeneration.bump()` czyści warstwy tego procesu i publikuje
   komunikat na kanale Redis `b2b:price_lists:pricing-generation`; każdy proces API i workera
@@ -257,7 +262,9 @@ wstępnie wyliczoną **powierzchnię cen**.
   podaje swoje wiersze, dopóki worker ich nie odświeży w jednej transakcji. Profil nigdy niezbudowany jest rejestrowany, jego budowa jest zlecana, a żądanie dostaje odpowiedź
   od razu: zawężenie do najwyżej 5 000 produktów (kategoria, wynik wyszukiwania) jest porządkowane na
   podstawie bieżącej wyceny, strona bez zawężenia — z powierzchni dla wszystkich (przybliżenie), a
-  gdy nie ma żadnej powierzchni, fragment jest `unordered` i katalog podaje swój domyślny porządek.
+  gdy nie ma żadnej powierzchni, fragment jest `unordered` i katalog podaje swój domyślny porządek;
+  przeglądanie rozpoczęte w ten sposób niesie kursor domyślnej listy i trwa w tym porządku do końca,
+  także gdy powierzchnia zostanie w międzyczasie zbudowana.
   Ceny na kartach są zawsze wyliczane na bieżąco, więc opóźniać się może tylko porządek.
 - **Zapis oznacza tylko to, co może przesunąć**, na dwóch poziomach szczegółowości. Każdy zapisujący
   opisuje swoją zmianę jako `SurfaceChange` (`src/backend/services/surface-change.ts`), a
@@ -314,6 +321,10 @@ gdy modułu nie ma) i zmienia **stan** cennika — `scheduled → active` w chwi
 `active → expired` w chwili końca — na potrzeby widoku w panelu. Nie decyduje o żadnej cenie:
 obowiązywanie jest sprawdzane w chwili żądania. Aktualizacja, która zmienia stan cennika, podbija
 generację cen. Punktem wywołania dla testów jest `POST /api/v1/admin/price-books/internal/sweep`.
+`PATCH`, który przesuwa daty cennika w stanie `active` albo `scheduled`, ustala jego stan od nowa tak
+jak aktywacja (`expired` po końcu, `scheduled` przed początkiem, `active` w pozostałych przypadkach),
+więc cennik przesunięty na przyszły początek jest `scheduled`, a aktualizacja statusów uruchamia go — i
+oznacza powierzchnię cen — w chwili początku; szkic i cennik wygasły zachowują swój stan.
 
 ## API administracyjne
 
@@ -340,7 +351,7 @@ i po niej; audytowane akcje to `price_list.create`, `update`, `channels_replace`
 | `PUT /:id/rows?dryRun=true` | Ta sama treść, bez zapisu: `{ version, resolved, diff { added, changed, removed, unchangedCount }, errors }`. Zatwierdzenie to ta sama treść bez `dryRun`, z wersją zwróconą przez podgląd. |
 | `GET /base-prices?productId=`, `PUT /base-prices/:productId` | Ceny bazowe produktu w każdej walucie, `{ byCurrency: { CODE: { product: Tier[], variants: { [variantId]: VariantBaseRow \| null } } } }`; jedno polecenie dla wszystkich walut, tworzące cennik cen bazowych waluty przy pierwszym użyciu. Handlowiec dostaje przy zapisie `403`. |
 | `GET /targets/organizations?search=` albo `?ids=`, `…/customer-groups`, `…/categories`, `…/attributes`, `…/sales-channels?currency=`, `…/currencies` | Listy wyboru. Organizacje są zawężone do zakresu wywołującego; atrybuty to tylko kwalifikujące się atrybuty z `isPriceRule`, z ich opcjami. |
-| `POST /resolve` | Wyjaśnienie: `{ salesChannelId?, currencyCode?, buyer { organizationId?, customerAccountId? }, lines [{ key, productId, variantId?, quantity }] }` (≤ 200 pozycji; bez kanału = domyślny kanał systemu). Każda pozycja: `price { amount, currency, source, compareAt? }` albo `null` oraz `explanation { tier, cell, bookId, bookName, rowId, reference, precedenceVersion, candidates[] }`. Organizacja albo klient, których wywołujący nie może zobaczyć, dają ten sam `404` co nieznane. |
+| `POST /resolve` | Wyjaśnienie: `{ salesChannelId?, currencyCode?, buyer { organizationId?, customerAccountId? }, lines [{ key, productId, variantId?, quantity }] }` (≤ 200 pozycji; bez kanału = domyślny kanał systemu). Każda pozycja: `price { amount, currency, source, compareAt? }` albo `null` oraz `explanation { tier, cell, bookId, bookName, rowId, reference, precedenceVersion, candidates[] }`. Organizacja albo klient, których wywołujący nie może zobaczyć, dają ten sam `404` co nieznane. Cennik spoza zakresu wywołującego (na przykład cennik organizacji nadrzędnej, do którego handlowiec dociera przez łańcuch organizacji) nie jest wskazywany: jeśli to on ustalił cenę, cena, `tier`, `cell` i `reference` zostają, a `bookId`, `bookName` i `rowId` mają wartość `null`; jako przegrany kandydat jest pomijany w `candidates`. |
 | `GET /precedence` | Aktywna wersja: `version`, `cells`, `categoryBeforeAttribute`, `depthMode`, `preset`. |
 | `GET /settings/show-list-price`, `PUT /settings/show-list-price` | Ustawienie `pricing.show_list_price`, `{ value: boolean }`; zapis to jedno audytowane polecenie. |
 | `POST /internal/sweep` | Tylko dla testów: jedno wykonanie aktualizacji statusów. |
@@ -375,10 +386,12 @@ jedna z wartości `PRICE_BOOK_ROW_ERROR_REASONS` (`fixed_on_all`, `rows_overlap`
 dziennikom.
 
 **Zakres handlowca.** Odczytywany z kontekstu izolacji żądania, nigdy z treści żądania
-(`price-book-scope.ts`): cennik organizacji z jakimkolwiek odbiorcą spoza zakresu wywołującego
-odpowiada na każdej trasie dokładnie tak jak brakujący cennik — `404`, bez obecności na listach i w
-licznikach; cenniki dla wszystkich i grup klientów są tylko do odczytu (`403`); handlowiec może
-tworzyć i wskazywać tylko organizacje ze swojego zakresu. `writable` w cenniku i
+(`price-book-scope.ts`): cennik organizacji z jakimkolwiek odbiorcą spoza zakresu wywołującego albo
+bez żadnego odbiorcy odpowiada na każdej trasie dokładnie tak jak brakujący cennik — `404`, bez
+obecności na listach i w licznikach; cenniki dla wszystkich i grup klientów są tylko do odczytu
+(`403`); handlowiec może tworzyć, duplikować i zmieniać (`PATCH`) tylko cenniki z odbiorcami typu
+organizacje (`403` dla innego typu, także przy `PATCH`), wskazujące co najmniej jedną organizację
+(`400 PRICE_BOOK_AUDIENCE_KIND`, gdy żadnej), wszystkie z jego zakresu. `writable` w cenniku i
 `meta.creatableAudienceKinds` na liście mówią klientowi, co oferować.
 
 ## API storefrontu

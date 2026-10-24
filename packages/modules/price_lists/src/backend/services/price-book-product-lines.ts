@@ -1,4 +1,5 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
+import { pgArray } from './sql-array.js';
 
 /**
  * Keeping `price_list_product_lines` equal to the books' rows — feature 161,
@@ -19,8 +20,8 @@ export async function syncProductLines(
   if (bookIds.length === 0 || (productIds !== 'all' && productIds.length === 0)) return;
   const conn = em.getConnection();
   const ctx = em.getTransactionContext();
-  const books = `{${[...new Set(bookIds)].join(',')}}`;
-  const products = productIds === 'all' ? null : `{${[...new Set(productIds)].join(',')}}`;
+  const books = pgArray([...new Set(bookIds)]);
+  const products = productIds === 'all' ? null : pgArray([...new Set(productIds)]);
   const narrow = (alias: string) => (products ? `and ${alias}."product_id" = any(?::uuid[])` : '');
   await conn.execute(
     `insert into "price_list_product_lines" ("price_list_id", "product_id")
