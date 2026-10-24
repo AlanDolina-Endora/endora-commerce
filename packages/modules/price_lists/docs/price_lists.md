@@ -46,7 +46,7 @@ The header fixes:
 | **Who the prices are for** (audience) | *Everyone*, a set of *customer groups*, or a set of *organizations* — one kind per book, never a mix. The kind is fixed once the book has been active. |
 | **Schedule** | Optional start and end. A book applies from the exact start instant until the exact end instant. |
 | **Priority** | A whole number. It only decides between books that price the same kind of line for the same buyer — the higher number wins — and never lets a general line beat a more specific one. |
-| **Status** | *Draft*, *Scheduled*, *Active* or *Expired*. A draft never applies. Activating a book makes it *Active*, or *Scheduled* when its start is in the future. *Move to draft* takes it out of use again. |
+| **Status** | *Draft*, *Scheduled*, *Active* or *Expired*. A draft never applies. Activating a book makes it *Active*, or *Scheduled* when its start is in the future. Changing the dates of an active or scheduled book decides its status again the same way, and makes it *Expired* when its end has passed. *Move to draft* takes it out of use again. |
 
 A book can be activated only when it would apply somewhere and to someone: it needs at least one
 sales channel that sells in its currency, and a customer-group or organization book needs at least

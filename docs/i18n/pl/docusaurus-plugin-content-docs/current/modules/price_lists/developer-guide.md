@@ -321,6 +321,10 @@ gdy modułu nie ma) i zmienia **stan** cennika — `scheduled → active` w chwi
 `active → expired` w chwili końca — na potrzeby widoku w panelu. Nie decyduje o żadnej cenie:
 obowiązywanie jest sprawdzane w chwili żądania. Aktualizacja, która zmienia stan cennika, podbija
 generację cen. Punktem wywołania dla testów jest `POST /api/v1/admin/price-books/internal/sweep`.
+`PATCH`, który przesuwa daty cennika w stanie `active` albo `scheduled`, ustala jego stan od nowa tak
+jak aktywacja (`expired` po końcu, `scheduled` przed początkiem, `active` w pozostałych przypadkach),
+więc cennik przesunięty na przyszły początek jest `scheduled`, a aktualizacja statusów uruchamia go — i
+oznacza powierzchnię cen — w chwili początku; szkic i cennik wygasły zachowują swój stan.
 
 ## API administracyjne
 

@@ -47,7 +47,7 @@ Nagłówek ustala:
 | **Dla kogo są ceny** (odbiorcy) | *Wszyscy*, zbiór *grup klientów* albo zbiór *organizacji* — jeden rodzaj na cennik, nigdy mieszanka. Rodzaj nie zmienia się, odkąd cennik był aktywny. |
 | **Harmonogram** | Opcjonalny początek i koniec. Cennik obowiązuje dokładnie od chwili początku do chwili końca. |
 | **Priorytet** | Liczba całkowita. Rozstrzyga tylko między cennikami, które wyceniają ten sam rodzaj linii dla tego samego kupującego — wygrywa wyższa liczba — i nigdy nie pozwala ogólnej linii wygrać z bardziej szczegółową. |
-| **Stan** | *Szkic*, *Zaplanowany*, *Aktywny* albo *Wygasły*. Szkic nigdy nie obowiązuje. Aktywacja zmienia stan cennika na *Aktywny*, a na *Zaplanowany*, gdy jego początek jest w przyszłości. *Przenieś do szkiców* znów wyłącza cennik z użycia. |
+| **Stan** | *Szkic*, *Zaplanowany*, *Aktywny* albo *Wygasły*. Szkic nigdy nie obowiązuje. Aktywacja zmienia stan cennika na *Aktywny*, a na *Zaplanowany*, gdy jego początek jest w przyszłości. Zmiana dat aktywnego albo zaplanowanego cennika ustala jego stan w ten sam sposób od nowa, a gdy jego koniec już minął, zmienia stan na *Wygasły*. *Przenieś do szkiców* znów wyłącza cennik z użycia. |
 
 Cennik można aktywować tylko wtedy, gdy obowiązywałby gdzieś i kogoś: potrzebuje co najmniej jednego
 kanału sprzedaży, który sprzedaje w jego walucie, a cennik grup klientów lub organizacji — co

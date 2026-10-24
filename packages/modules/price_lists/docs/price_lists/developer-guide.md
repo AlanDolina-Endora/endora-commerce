@@ -313,7 +313,11 @@ products, 1 000 organizations): the figures are in `specs/pricing/read-paths-and
 skipped while the module is absent) and moves a book's **status** — `scheduled → active` at its
 start, `active → expired` at its end — for the admin's display. It decides no price: applicability
 is evaluated at request time. A sweep that flips a book bumps the pricing generation. The test-only
-hook is `POST /api/v1/admin/price-books/internal/sweep`.
+hook is `POST /api/v1/admin/price-books/internal/sweep`. A `PATCH` that moves an `active` or
+`scheduled` book's dates re-decides its status as activation does (`expired` once ended, `scheduled`
+before its start, `active` otherwise), so a book moved to a future start is `scheduled` and the
+sweep starts it — and marks the price surface — at its instant; a draft and an expired book keep
+their status.
 
 ## Admin API
 

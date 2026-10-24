@@ -148,6 +148,17 @@ const stale = (currentVersion: number): never => {
   });
 };
 
+/**
+ * The status a live book's dates give it at `now`: `expired` once it has
+ * ended, `scheduled` before its start, `active` otherwise — what activation
+ * decides, and what a patch of the dates re-decides.
+ */
+function statusForDates(startsAt: Date | null, endsAt: Date | null, now: number): 'active' | 'scheduled' | 'expired' {
+  if (endsAt && endsAt.getTime() <= now) return 'expired';
+  if (startsAt && startsAt.getTime() > now) return 'scheduled';
+  return 'active';
+}
+
 export class PriceBookService {
   constructor(private readonly deps: PriceBookServiceDeps) {}
 
@@ -556,6 +567,16 @@ export class PriceBookService {
     if (startsAt && endsAt && Date.parse(endsAt) <= Date.parse(startsAt)) {
       validation([{ path: ['endsAt'], message: 'endsAt must be after startsAt.' }], 'The price book was refused.');
     }
+    // Review finding 5 of release 0.108.0 — new dates re-decide a live book's
+    // status by `activate()`'s rule, so a start moved into the future makes it
+    // `scheduled` again (the sweep then starts it, and marks the price surface,
+    // at its instant) and an end moved into the past expires it now. A draft
+    // stays a draft and an expired book stays expired until it is activated.
+    const datesMoved = patch.startsAt !== undefined || patch.endsAt !== undefined;
+    const nextStatus: PriceList['status'] =
+      datesMoved && isLiveStatus(book.status)
+        ? statusForDates(startsAt ? new Date(startsAt) : null, endsAt ? new Date(endsAt) : null, Date.now())
+        : book.status;
     const channelsBefore = patch.channelIds
       ? (await this.#membership().listChannelsForEntity('price-list', bookId)).map((c) => c.id).sort()
       : null;
@@ -575,7 +596,11 @@ export class PriceBookService {
           {
             facts: [
               this.#facts(book, { channelIds: channelsBefore ?? now }),
-              this.#facts(book, { channelIds: now, ...(patch.audience ? { audienceKind: patch.audience.kind } : {}) }),
+              this.#facts(book, {
+                channelIds: now,
+                live: isLiveStatus(nextStatus),
+                ...(patch.audience ? { audienceKind: patch.audience.kind } : {}),
+              }),
             ],
             selections: 'stored',
           },
@@ -604,6 +629,11 @@ export class PriceBookService {
         before['endsAt'] = row.endsAt?.toISOString() ?? null;
         after['endsAt'] = patch.endsAt;
         row.endsAt = patch.endsAt ? new Date(patch.endsAt) : null;
+      }
+      if (nextStatus !== row.status) {
+        before['status'] = row.status;
+        after['status'] = nextStatus;
+        row.status = nextStatus;
       }
       if (patch.audience) {
         before['audience'] = { kind: row.audienceKind, memberIds: members.map(memberIdOf).sort() };
@@ -827,13 +857,7 @@ export class PriceBookService {
         issues.map((i) => ({ path: i.path.join('.'), issue: i.message })),
       );
     }
-    const now = Date.now();
-    const next: PriceList['status'] =
-      book.endsAt && book.endsAt.getTime() <= now
-        ? 'expired'
-        : book.startsAt && book.startsAt.getTime() > now
-          ? 'scheduled'
-          : 'active';
+    const next = statusForDates(book.startsAt ?? null, book.endsAt ?? null, Date.now());
     const action = next === 'expired' ? 'price_list.expire' : 'price_list.activate';
     return this.#command(action, bookId, async (txEm) => {
       const row = await txEm.findOneOrFail(PriceList, { id: bookId });
