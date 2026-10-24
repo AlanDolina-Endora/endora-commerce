@@ -25,7 +25,7 @@ import type {
   SettingsAdminPort,
   TransactionalEmailSender,
 } from '@endora-commerce/contracts';
-import { moneySum } from '@endora-commerce/contracts';
+import { moneyDifference, moneySum } from '@endora-commerce/contracts';
 
 /**
  * A payment attempt whose amount was captured: paid, or paid and since
@@ -246,8 +246,12 @@ export function registerModule(ctx: ModuleContext): void {
           capturedPayments: {
             capturedFor: async (orderId) => {
               if (!effectiveState.isPresent('payments')) return null;
-              const payments = await lazyPort<PaymentReadPort>(ctx, 'paymentReadPort').listByOrderId(orderId);
-              return moneySum(payments.filter((p) => CAPTURED.has(p.status)).map((p) => p.amount));
+              const captured = (await lazyPort<PaymentReadPort>(ctx, 'paymentReadPort').listByOrderId(orderId)).filter(
+                (p) => CAPTURED.has(p.status),
+              );
+              if (captured.length === 0) return null;
+              // Each captured attempt once, less what was refunded from it (review of PR #423).
+              return moneySum(captured.map((p) => moneyDifference(p.amount, p.refundedAmount)));
             },
           },
           ledgerRouting: {

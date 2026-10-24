@@ -31,9 +31,10 @@ export interface IssueInvoiceOptions {
 }
 
 /**
- * What was captured for an order — the sum of its paid payment attempts'
- * amounts, as a two-place decimal — or `null` when the `payments` module is
- * absent and nothing can say (issue #417).
+ * What was kept from what was captured for an order — each captured payment
+ * attempt's amount less what was refunded from it, summed, as a two-place
+ * decimal — or `null` when no attempt was captured, or the `payments` module
+ * is absent and nothing can say (issue #417, review of PR #423).
  */
 export interface CapturedPaymentsLookup {
   capturedFor(orderId: string): Promise<string | null>;
@@ -156,16 +157,15 @@ export class InvoiceService {
     // #417, review of PR #423). An order placed before 0.108.0 charged its own
     // total (40.80), and its invoice, issued now under the per-rate method, may
     // be a cent more (40.81): the cent is shown as still due, not invented as
-    // paid. What `payments` captured; an order recorded as paid with nothing
-    // captured (a transfer an operator confirmed), or with `payments` absent, is
-    // paid its stored total.
-    const captured = (await this.capturedPayments?.capturedFor(orderId)) ?? null;
+    // paid. What `payments` captured, less its refunds; an order recorded as paid
+    // with nothing captured (a transfer an operator confirmed), or with
+    // `payments` absent, is paid its stored total.
+    // A captured attempt decides, refunds deducted — an order refunded in full
+    // before invoicing is still invoiced (the sale happened; its return is a
+    // correction's to document) and records nothing as paid.
+    const kept = (await this.capturedPayments?.capturedFor(orderId)) ?? null;
     const paidTotal =
-      captured != null && compareDecimals(captured, 0) > 0
-        ? roundHalfUp(captured)
-        : order.paymentStatus === 'paid'
-          ? roundHalfUp(order.total)
-          : '0.00';
+      kept != null ? roundHalfUp(kept) : order.paymentStatus === 'paid' ? roundHalfUp(order.total) : '0.00';
     const buyer = {
       name: order.billingAddress.companyName ?? order.billingAddress.recipientName,
       taxId: order.billingAddress.taxId ?? '',

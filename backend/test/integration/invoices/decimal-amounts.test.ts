@@ -188,4 +188,56 @@ describe('invoices — exact decimal amounts (#417)', () => {
     const { data } = res.json() as IssueResponse;
     expect([data.grossTotal, data.paidTotal, data.amountDue]).toEqual([40.81, 40.8, 0.01]);
   });
+
+  // Review of PR #423 — paid is what was captured minus what was refunded, each attempt once.
+  async function invoicedPaid(payments: Array<{ status: string; amount: string; refundedAmount?: string }>) {
+    const orderId = await seedPlacedOrder(
+      h.em(),
+      CH,
+      [{ unitPrice: '33.17', quantity: 1, taxRate: '0.2300', lineTotal: '40.80' }],
+      { subtotal: '33.17', taxTotal: '7.63', total: '40.80' },
+    );
+    const em = h.em().fork();
+    for (const p of payments) {
+      em.create(Payment, {
+        orderId,
+        paymentMethodId: randomUUID(),
+        status: p.status,
+        amount: p.amount,
+        refundedAmount: p.refundedAmount ?? '0',
+        currency: 'PLN',
+        paidAt: new Date(),
+      } as never);
+    }
+    await em.flush();
+    const res = await h.app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/orders/${orderId}/invoices`,
+      cookies: ADMIN_COOKIE,
+      payload: { kind: 'invoice' },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    const { data } = res.json() as IssueResponse;
+    return [data.grossTotal, data.paidTotal, data.amountDue];
+  }
+
+  it('records as paid what was kept after a refund made before invoicing', async () => {
+    expect(await invoicedPaid([{ status: 'partially_refunded', amount: '40.80', refundedAmount: '10.00' }])).toEqual([
+      40.8, 30.8, 10,
+    ]);
+  });
+
+  it('counts each of two paid attempts once', async () => {
+    expect(
+      await invoicedPaid([
+        { status: 'paid', amount: '20.00' },
+        { status: 'paid', amount: '20.80' },
+        { status: 'failed', amount: '40.80' },
+      ]),
+    ).toEqual([40.8, 40.8, 0]);
+  });
+
+  it('records nothing as paid for an order refunded in full before invoicing', async () => {
+    expect(await invoicedPaid([{ status: 'refunded', amount: '40.80', refundedAmount: '40.80' }])).toEqual([40.8, 0, 40.8]);
+  });
 });
