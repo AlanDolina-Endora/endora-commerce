@@ -140,7 +140,10 @@ describe('price_lists reads category memberships through catalog’s port [unit]
     expect(mode).toBe('net_only');
   });
 
-  it('resolveDisplayModes asks the port once for the whole page', async () => {
+  // The engine's composition (`pricing-service.ts`) wires the two halves of
+  // the chain as `BookPricing`'s `productDisplayModes` and `viewerDisplayMode`:
+  // the product and category steps for the batch, and the viewer's tail once.
+  it('the product and category steps ask the port once for the whole page', async () => {
     const { em, statements } = fakeEm([{ scope: 'category', targetId: 'cat-1', mode: 'both' }]);
     const spy = categoryPortSpy(
       new Map([
@@ -151,8 +154,8 @@ describe('price_lists reads category memberships through catalog’s port [unit]
     );
     const service = new PriceListService(em, undefined, spy.targetReads);
 
-    const modes = await service.resolveDisplayModes({
-      productIds: ['prod-1', 'prod-2', 'prod-3'],
+    const modes = await service.resolveProductDisplayModes({ productIds: ['prod-1', 'prod-2', 'prod-3'] });
+    const tail = await service.resolvePageDisplayMode({
       organizationId: null,
       salesChannelId: CHANNEL.id,
       customerKind: 'guest',
@@ -162,8 +165,9 @@ describe('price_lists reads category memberships through catalog’s port [unit]
     expect(spy.reads).toEqual([['prod-1', 'prod-2', 'prod-3']]);
     expect(modes.get('prod-1')).toBe('both');
     expect(modes.get('prod-2')).toBe('both');
-    // No membership, so no category override applies and the chain falls
-    // through to the settings tier.
-    expect(modes.get('prod-3')).toBe('gross_only');
+    // No membership, so no category override decides it: the product is left
+    // to the viewer's tail, which falls through to the settings tier.
+    expect(modes.has('prod-3')).toBe(false);
+    expect(tail).toBe('gross_only');
   });
 });

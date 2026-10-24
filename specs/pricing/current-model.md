@@ -122,10 +122,11 @@ it flips a book; catalogue events (product, category, attribute) and the channel
 is still cleared whole on every bump.
 
 **Display mode** is resolved independently: product → category → organization → settings
-(`pricing.default_display_mode`, `pricing.unauthenticated_display_mode`), batched per page
-(`PriceListService.resolveDisplayModes`). The price-book engine caches only the viewer-independent
-product and category steps with the answer (`CachedBookLine`) and applies the organization →
-settings tail per request (`resolvePageDisplayMode`): the profile is shared by viewers whose tails
+(`pricing.default_display_mode`, `pricing.unauthenticated_display_mode`), batched per page: the
+product and category steps for the batch (`PriceListService.resolveProductDisplayModes`), the
+organization → settings tail once (`resolvePageDisplayMode`). The price-book engine caches only the
+viewer-independent product and category steps with the answer (`CachedBookLine`) and applies the
+tail per request: the profile is shared by viewers whose tails
 differ, so a cached display mode would be served to the wrong one. A resolution of a fixed profile
 (the surface worker, a feed's catalogue reference) neither reads nor writes the answer cache.
 

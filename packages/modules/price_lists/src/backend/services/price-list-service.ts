@@ -349,48 +349,6 @@ export class PriceListService {
   }
 
   /**
-   * The same chain for a **set** of products (issue #132 follow-up).
-   *
-   * A catalogue listing asked this question once per product, which cost four
-   * to six queries per card on the page's hottest read. Every step is a set
-   * lookup — the product-scope overrides, the category memberships, the
-   * category-scope overrides, the one organization row and the one settings
-   * pair — so the whole page costs what a single product used to.
-   *
-   * The *decision* is not duplicated: both this method and `resolveDisplayMode`
-   * hand their four inputs to `decideDisplayMode`, so a batched page cannot
-   * rank an override differently from a product page. Only the loading differs.
-   *
-   * `categoryIdsByProduct` is an optional prefetch for a caller that has
-   * already read the memberships — `PricingService.resolveListingPrices` needs
-   * them for the application rules and would otherwise read the same table
-   * twice per page.
-   */
-  async resolveDisplayModes(input: {
-    productIds: readonly string[];
-    organizationId: string | null;
-    salesChannelId: string;
-    customerKind: 'guest' | 'signed_in';
-    categoryIdsByProduct?: ReadonlyMap<string, ReadonlySet<string>>;
-  }): Promise<Map<string, DisplayMode>> {
-    const productIds = [...new Set(input.productIds)];
-    const out = await this.resolveProductDisplayModes({
-      productIds,
-      ...(input.categoryIdsByProduct ? { categoryIdsByProduct: input.categoryIdsByProduct } : {}),
-    });
-    const undecided = productIds.filter((id) => !out.has(id));
-    if (undecided.length === 0) return out;
-    // The Organization → Settings tail is the page's mode: one answer for the set.
-    const tail = await this.resolvePageDisplayMode({
-      organizationId: input.organizationId,
-      salesChannelId: input.salesChannelId,
-      customerKind: input.customerKind,
-    });
-    for (const productId of undecided) out.set(productId, tail);
-    return out;
-  }
-
-  /**
    * The chain's product and category steps for a set of products — the part no
    * viewer moves. A product neither step decides is absent; its mode is the
    * viewer's tail, {@link resolvePageDisplayMode}. The price-book engine caches
