@@ -61,7 +61,7 @@ import type { PriceBookWritePort } from '@endora-commerce/contracts';
  *
  * And, since the owner ruling of 2026-10-24 (SC-005's 60 s is for targeted
  * changes; a catalogue-wide change has ≤ 300 s at 200 profiles,
- * `contracts/price-surface.md` §5; speeding the full rebuild up is #416):
+ * `contracts/price-surface.md` §5; issue #416 made the full rebuild faster):
  *   - an all-products percentage row on the everyone book through the audited
  *     path, and a `sales_channels.identity_changed`, each until the guest's
  *     first page equals the live cards — asserted ≤ 300 s each
@@ -112,6 +112,20 @@ import type { PriceBookWritePort } from '@endora-commerce/contracts';
  * marked and rebuilt whole, write → visible 275.43 s; a
  * `sales_channels.identity_changed`: 201 marked and rebuilt whole, 270.53 s.
  * Both within the 300 s bound, with about 25 s to spare.
+ *
+ * **Measured 2026-10-24, after the faster whole rebuild** (issue #416,
+ * research R19: one catalogue read per pass, no display mode on the surface's
+ * resolution, the next batch resolved while the previous one is written; same
+ * machine, the default fixture, the whole bench, each run started once the
+ * 1-minute load had stayed below 3; load median 2.3, max 3.8, the bench
+ * included). Before, the same day (load 1.2 → 1.5): 201 profiles built in
+ * 281.9 s, an all-products row visible after 275.64 s, a channel identity
+ * event after 273.47 s, a full rebuild 277.6 s. After: 197 profiles built in
+ * 84.2 s (202 ready, 1 131 693 rows, 273 MB); the all-products row 90.89 s, the
+ * channel identity event 90.62 s (202 rebuilt whole), a full rebuild 92.0 s;
+ * targeted writes visible after 0.21–0.39 s; the import's 29 probes p95 0.51 s;
+ * every page p95 ≤ 26.8 ms; the five profiles built in 9.7 s and a
+ * single-book change through `markStale` visible after 9.2 s.
  */
 
 const productCount = Number(process.env['PERF_SURFACE_PRODUCTS'] ?? '50000');
@@ -648,8 +662,8 @@ describe.skipIf(!shouldRun)('price surface — SC-005', () => {
   // all-products or attribute-only row on an everyone or base book, a channel
   // identity or lifecycle event, a change touching more than 10 000 products —
   // has its own bound: ≤ 300 s at 200 profiles (`contracts/price-surface.md`
-  // §5). Speeding the full rebuild up is issue #416; this asserts the bound,
-  // it does not move it.
+  // §5). Issue #416 (research R19) made the full rebuild faster; this asserts
+  // the bound, it does not move it.
 
   const catalogueWideBudget = Number(process.env['PERF_SURFACE_CATALOGUE_WIDE_MS'] ?? '300000');
 

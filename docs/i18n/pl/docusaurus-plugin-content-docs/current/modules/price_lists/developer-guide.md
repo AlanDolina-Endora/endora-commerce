@@ -315,7 +315,11 @@ wstępnie wyliczoną **powierzchnię cen**.
   zostawia przebieg. Przebieg usuwa tylko znaczniki, które przeczytał, według id, więc zapis, który
   nastąpi w trakcie przebiegu, obsłuży następny; przebiegi powtarzają się, dopóki jest praca.
   Budowa całego profilu, która zapisuje dużą część `price_profile_prices` albo zapisuje do tabeli bez
-  statystyk, wykonuje na niej `ANALYZE` we własnej transakcji. Bez działającego workera
+  statystyk, wykonuje na niej `ANALYZE` we własnej transakcji. Przebieg czyta katalog raz, dla
+  wszystkich swoich budów całych profili, które potrzebują każdego produktu. Wiersze powierzchni
+  wylicza `BookPricing.resolveProfileListing`, czyli wycena listingu bez trybu wyświetlania, którego
+  powierzchnia nie przechowuje. Budowa wycenia kolejną partię produktów, gdy poprzednia jest
+  zapisywana, a błąd jednego albo drugiego niczego nie podmienia (zgłoszenie #416). Bez działającego workera
   powierzchnia nigdy nie powstaje, a strony sortowane według ceny korzystają z opisanych wyżej
   rozwiązań zastępczych.
 
@@ -324,8 +328,9 @@ obejmująca cały katalog — taka, która oznacza swoje profile w całości: wi
 produktów albo tylko dla atrybutu w cenniku dla wszystkich lub cenniku cen bazowych, zdarzenie
 `sales_channels.identity_changed` albo `lifecycle_changed`, zmiana ponad 10 000 produktów — w ciągu
 300 s przy 200 zbudowanych profilach (decyzja właściciela z 24.10.2026). Benchmark sprawdza obie
-granice (drugą przez `PERF_SURFACE_CATALOGUE_WIDE_MS`) i zmierzył przy 201 profilach 275,43 s dla
-wiersza dla wszystkich produktów i 270,53 s dla zdarzenia tożsamości kanału. Przyspieszenie pełnej przebudowy opisuje zgłoszenie #416.
+granice (drugą przez `PERF_SURFACE_CATALOGUE_WIDE_MS`). Przy 202 profilach zmierzył 90,89 s dla
+wiersza dla wszystkich produktów i 90,62 s dla zdarzenia tożsamości kanału. Zanim zgłoszenie #416
+przyspieszyło pełną przebudowę, tego samego dnia trwało to 275,64 s i 273,47 s.
 Zmierzone z `PERF_RUN=true` w `backend/test/perf/price_lists/price-surface.bench.ts` (50 000
 produktów, 1 000 organizacji): wyniki są w `specs/pricing/read-paths-and-performance.md` §7.
 

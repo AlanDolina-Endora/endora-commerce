@@ -118,7 +118,14 @@ transaction. SC-005's freshness bound is the worker's turnaround, measured by th
 for a targeted change, unchanged by the ruling, and — owner ruling 2026-10-24 — ≤ 300 s at 200
 built profiles for a **catalogue-wide** change, one that marks its profiles whole (an all-products or
 attribute-only row on an everyone or base book, a channel identity or lifecycle event, a change over
-10 000 products). Issue #416 tracks making the whole rebuild faster.
+10 000 products).
+
+**A whole build** (issue #416, `research.md` R19). A pass reads the catalogue once, after it read
+its work, for every whole build of the pass that needs every product. The surface's rows are
+resolved by `BookPricing.resolveProfileListing`, which is the listing resolution of the profile
+without the display mode the surface does not store. A build resolves its next batch of products
+while the previous batch is written, and writes stay in order. A failure of either fails the build
+before its swap, so the profile keeps the generation it served and keeps its mark.
 
 ## 5. Measurement — `backend/test/perf/price_lists/price-surface.bench.ts`
 
@@ -132,8 +139,8 @@ organizations, 500 with books of three kinds, 20 groups). Assertions:
 | profile-miss page (restricted build) | recorded, not asserted; reported against the budget |
 | single-book refresh → visible in sort | p95 ≤ **60 s** (SC-005) |
 | at ≥ 200 built profiles: write → visible for an everyone row, an organization row, a base price through `priceBookWritePort`, a `product.updated.v1`; probe writes during a PIM-like import | each ≤ **60 s** (SC-005) |
-| at ≥ 200 built profiles: a catalogue-wide change → visible in sort (whole rebuild of the profiles it reaches) | ≤ **300 s** (SC-005, owner ruling 2026-10-24), asserted for an all-products row on the everyone book and a `sales_channels.identity_changed` (`PERF_SURFACE_CATALOGUE_WIDE_MS`); 275.43 s and 270.53 s at 201 profiles (2026-10-24) |
-| full rebuild | recorded (input to P3's precedence flow) |
+| at ≥ 200 built profiles: a catalogue-wide change → visible in sort (whole rebuild of the profiles it reaches) | ≤ **300 s** (SC-005, owner ruling 2026-10-24), asserted for an all-products row on the everyone book and a `sales_channels.identity_changed` (`PERF_SURFACE_CATALOGUE_WIDE_MS`); 90.89 s and 90.62 s at 202 profiles after R19 (2026-10-24; 275.64 s and 273.47 s before it, the same day) |
+| full rebuild | recorded (input to P3's precedence flow): 92.0 s at 202 profiles after R19, 277.6 s at 201 before |
 | `price_profile_prices` rows and index size | recorded; above 10 M rows triggers the profile-factor task (`research.md` R7) |
 
 The listing-page budget of SC-004 is kept by the existing benches re-run on the new model:

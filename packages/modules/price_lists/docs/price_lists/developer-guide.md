@@ -307,15 +307,20 @@ too slow, so price sorting and price-range filtering read a precomputed **price 
   only the marks it read, by id, so a write landing during a pass is done by the next one; passes
   repeat while one finds work. A whole build that writes a large share of `price_profile_prices`,
   or writes into a table with no statistics, runs `ANALYZE` on it inside its own transaction.
+  A pass reads the catalogue once, for all of its whole builds that need every product. The
+  surface's rows are resolved by `BookPricing.resolveProfileListing`, which is the listing
+  resolution without the display mode the surface does not store. A build resolves its next batch
+  of products while the previous batch is written, and a failure of either swaps nothing
+  (issue #416).
   Without a running worker the surface is never built and price-sorted pages fall back as above.
 
 **Freshness bound (SC-005).** A targeted change is visible in the sort within 60 s; a
 catalogue-wide one — a change that marks its profiles whole: an all-products or attribute-only row
 on an everyone or base book, a `sales_channels.identity_changed` or `lifecycle_changed` event, a
 change over 10 000 products — within 300 s at 200 built profiles (owner ruling 2026-10-24). The
-bench asserts both (`PERF_SURFACE_CATALOGUE_WIDE_MS` for the second) and measured, at 201 profiles,
-275.43 s for an all-products row and 270.53 s for a channel identity event. Issue #416 tracks
-making the whole rebuild faster.
+bench asserts both (`PERF_SURFACE_CATALOGUE_WIDE_MS` for the second). At 202 profiles it measured
+90.89 s for an all-products row and 90.62 s for a channel identity event. Before issue #416 made
+the whole rebuild faster, the same day, they took 275.64 s and 273.47 s.
 Measured with `PERF_RUN=true` in `backend/test/perf/price_lists/price-surface.bench.ts` (50 000
 products, 1 000 organizations): the figures are in `specs/pricing/read-paths-and-performance.md` §7.
 

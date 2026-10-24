@@ -552,3 +552,112 @@ owns their removal.
 organization: a feed has no buyer identity and no organization field, and its token is a
 capability anyone holding the link can use. Channel binding as a warning only: FR-029 names the
 channel, and a book that does not apply on the feed's channel is not the channel's price.
+
+## R19. A faster whole rebuild of the price surface (issue #416, `contracts/price-surface.md` §4–§5)
+
+**Problem.** A catalogue-wide change rebuilds every profile it reaches whole (R17, §4): an
+all-products or attribute-only row on an everyone or base book, a channel identity or lifecycle
+event, a change over 10 000 products. On the SC-005 fixture at 201 profiles that took 270–275 s,
+against the separate 300 s bound the owner ruled for 0.108.0 (§5): about 25 s of headroom.
+
+**Profile.** One whole build of the 201-profile fixture, timed per phase (2026-10-24, the default
+fixture, load 2.5 at the start and 4.0 at the end, the run itself included): **262.7 s**. 1.13 M
+rows, almost all of them in 21 profiles that price every product (the everyone profile and 20
+all-products buyers, 50 000 rows each). The 180 other buyer profiles resolve only the products
+their own books select (R17), so they cost about 8 s together.
+
+| Phase | Time | Note |
+| --- | --- | --- |
+| the catalogue through `catalog`'s port (`listAll`, 50 000 hydrated products) | **79.4 s** | read again for each of the 21 profiles: 3.8 s each |
+| inserts (`unnest`, 500 rows a statement, both indexes, both foreign keys) | **83.6 s** | 74 µs a row |
+| resolution (`resolveListing`, 500 products a batch) | 76.5 s | below |
+| — category assignments, variants, rows | 21.5 / 10.0 / 12.5 s | one call each per batch |
+| — the display-mode chain (product step, viewer tail) | 14.2 + 4.7 s | the surface stores no display mode |
+| — the resolver itself (pure JS) | 4.1 s | |
+| — channel offer, precedence, eligible attributes | 6.0 s | |
+| the everyone surface's rows, for a buyer's comparison | 11.5 s | |
+| `ANALYZE`, dropping the old generation, the swap, the commit | 1.2 s | |
+
+The SQL reads, the inserts and the hydration of the catalogue, not the resolver, are what a
+whole build spends its time on.
+
+**Decision — three changes, no contract change, no new connection, no new dependency.**
+
+1. **One catalogue read per pass.** A pass reads the catalogue the first time a whole build
+   needs every product, and every later whole build of the pass reuses it. It is read after the
+   pass read its work, so every product change committed before the pass is in it. A change
+   committed during the pass marks its products (§4), and the next pass does those marks, as
+   before.
+2. **The surface's resolution skips the display mode.** `BookPricing.resolveProfileListing` is
+   `resolveListing` for a fixed profile, with the same lines, variant ranging and resolver, but
+   without the display-mode chain, which the surface never stored. It caches nothing, like every
+   fixed-profile resolution. A line resolved without its display-mode step is never cached.
+3. **The next batch resolves while the previous one is written.** Resolution reads on pool
+   connections and the insert runs on the build's transaction connection, so they overlap. The
+   everyone rows a buyer is compared with are read on a pool connection too: they were committed
+   by an earlier build. Writes stay one at a time and in order. A failure of a write or of a
+   resolution, in any batch, fails the build after the write in flight has settled, so the
+   transaction rolls back and nothing is swapped. The profile keeps serving what it served, and
+   keeps its mark.
+
+The generation swap, the advisory lock per profile, the marks cleared by id and the
+everyone-before-buyer order are untouched. Every row is still computed by the resolver the cards
+use. Tests:
+`PL/backend/services/price-surface.whole-build.test.ts` (one catalogue read per pass, after the
+work read, afresh each pass; overlap; a write or a resolution failing in a later batch swaps
+nothing and leaves no unhandled rejection),
+`PL/backend/services/book-pricing.profile-listing.test.ts` (same resolutions as
+`resolveListing`, no display-mode read), and the identity tests, unchanged and green
+(`price-surface-identity`, `price-surface-targeted-refresh`, `price-surface-refresh`,
+`price-surface-plans`, `catalog/price-sort-viewer-scope`, `catalog/price-walk-continuation`).
+
+**Measured** (`backend/test/perf/price_lists/price-surface.bench.ts`, same machine, same day, the
+default fixture; each run started only after the 1-minute load had stayed below 3 for a minute):
+
+| Scenario | Before (load 1.2 → 1.5) | After (load median 2.3, max 3.8) |
+| --- | --- | --- |
+| whole build of the 200-profile fixture | 281.9 s (201 profiles) | 84.2 s (197 new profiles beside 5 built) |
+| an all-products −30 % row on the everyone book → visible | 275.64 s | **90.89 s** |
+| `sales_channels.identity_changed` → visible | 273.47 s | **90.62 s** |
+| full rebuild of every profile | 277.6 s (201) | 92.0 s (202) |
+| targeted writes → visible (everyone row, organization row, base price, `product.updated.v1`) | 0.20–0.49 s (R17) | 0.21–0.39 s |
+| PIM-like import probes, p95 / max | 0.50 / 0.55 s (R17) | 0.51 / 0.51 s |
+| page p95, every buyer, first / desc / range | ≤ 27.4 ms (R17) | ≤ 26.8 ms |
+
+The "after" run is the whole bench, every scenario green. The load figures include the bench
+itself.
+
+**What a build spends its time on now** (the same per-phase timing, 201 profiles, 95.0 s): the
+inserts 75.7 s, overlapped with resolution 50.6 s, the everyone rows 10.5 s and 12.9 s spent
+waiting for a write. The catalogue now takes 3.5 s. A whole build is now bound by its inserts.
+
+**Considered and rejected or deferred.**
+
+- *A larger batch* (2 000 products): 100.6 s against 95.0 s at 500, no gain once batches
+  overlap. The batch stays 500.
+- *Parallel profile builds*, as concurrent builds within a pass or several worker concurrency
+  slots: a build holds its transaction connection for the whole build, and its resolution needs
+  another. With a write-bound build, the gain needs concurrent writers, which means more
+  long-held connections from a pool the worker shares with the other queue consumers (and, in a
+  `BACKEND_ROLE=all` process, with the API). That is an owner decision about production
+  connections. It is not needed for the headroom this entry buys, so it is not taken.
+- *A targeted diff of all-products and attribute-only rows*: such a row may select any product,
+  so every product of its profiles must still be resolved. An all-products row on an everyone
+  book also moves nearly every row of it. A diff saves only the writes of unchanged rows, and it
+  would replace the generation swap of a whole profile with in-place updates of up to every row
+  (the inverse of what R17 rejected).
+- *Building buyer profiles incrementally from the everyone surface*: a buyer's whole build
+  already resolves only the products its own books select (R17). What remains is the
+  all-products buyers, every product of which differs from the everyone surface. Storing them as
+  a factor is R7's *profile factor*, a change to the read path and to §2. Its measured trigger
+  (10 M rows) is not met: 1.13 M.
+- *Cheaper writes*: COPY needs a new dependency (`pg-copy-streams`, Principle IV) or the raw
+  driver. Unlogged staging or dropping indexes does not apply, because the next generation
+  shares its table and indexes with the generation being served. The insert's cost is mostly on
+  the server: dropping `price_profile_prices_product_id_foreign` in a measurement-only run took
+  the inserts from 75.7 s to 45.3 s and the build from 95.0 s to 80.2 s (now resolution-bound).
+  That foreign key is an integrity guarantee, with its delete cascade. Removing it, and what
+  would replace it (the `product.deleted.v1` mark already removes a deleted product's rows on
+  the next pass), is a data-model decision for the owner, not taken here. A side note from reading
+  the schema, not measured: no index of `price_profile_prices` leads with `product_id`, so that
+  cascade scans the table on every product delete.
