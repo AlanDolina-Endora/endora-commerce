@@ -18,7 +18,7 @@ import { ReturnReason } from '../entities/return-reason.entity.js';
 import { Refund } from '../entities/refund.entity.js';
 import { RETURN_STATUS_CANCELLED } from '../domain/return-status-graph.js';
 import { isWithinFreeWindow } from '../domain/free-return-window.js';
-import { defaultRefundForQuantity } from '../domain/refund-math.js';
+import { approvedAmount, defaultRefundForQuantity } from '../domain/refund-math.js';
 import type { ReturnStatusGraphService } from './return-status-graph-service.js';
 import type { ReturnTransitionService } from './return-transition-service.js';
 import {
@@ -199,8 +199,8 @@ export class ReturnCaseService {
           quantity: line.quantity,
           reasonId: line.reasonId,
           description: line.description ?? null,
-          defaultRefundAmount: defaultRefund.toFixed(2),
-          approvedRefundAmount: approvedRefund.toFixed(2),
+          defaultRefundAmount: approvedAmount(defaultRefund),
+          approvedRefundAmount: approvedAmount(approvedRefund),
         }),
       );
     }
