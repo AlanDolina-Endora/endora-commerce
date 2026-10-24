@@ -267,6 +267,9 @@ type PriceListingCursor =
  * every price of the page is resolved with, and the category filter's product
  * ids (`null` without a category filter).
  */
+/** A listing price that is a figure: the `price_list` arm. */
+type PricedListingPrice = Extract<ListingPrice, { source: 'price_list' }>;
+
 interface PriceWalkScope {
   context: ListingPriceViewerContext;
   categoryIds: ReadonlySet<string> | null;
@@ -1370,7 +1373,7 @@ export class CatalogQueryService {
       sort: params.sort,
       start: params.cursor ? keyset.parse(decodeObjectCursor<unknown>(params.cursor)) : null,
       keep: (price) => {
-        if (price.source !== 'price_list') return false;
+        if (price === null) return false;
         const amount = Number(price.amount);
         if (!Number.isFinite(amount)) return false;
         if (min !== undefined && amount < min) return false;
@@ -1426,7 +1429,7 @@ export class CatalogQueryService {
       sort: undefined,
       start: after,
       keep: (price, product) => {
-        if (price.source !== 'price_list') return range === undefined;
+        if (price === null) return range === undefined;
         if (range?.min !== undefined && compareDecimal(price.amount, range.min) < 0) return false;
         if (range?.max !== undefined && compareDecimal(price.amount, range.max) > 0) return false;
         return afterBoundary(price.amount, product.id);
@@ -1457,7 +1460,8 @@ export class CatalogQueryService {
     walk: {
       sort: ListProductsParams['sort'];
       start: ListingKeysetCursor | null;
-      keep: (price: ListingPrice, product: Product) => boolean;
+      /** `price` is `null` for a product no price book prices for this viewer. */
+      keep: (price: PricedListingPrice | null, product: Product) => boolean;
       cursorOf: (after: ListingKeysetCursor) => string;
       what: string;
     },
@@ -1502,13 +1506,25 @@ export class CatalogQueryService {
           this.#passesPageFilters(r, params, ctx) &&
           (categoryFilteredIds === null || categoryFilteredIds.has(r.id)),
       );
-      const chunkPrices = await this.#listingPricesFor(candidates, ctx, scope.context);
+      // The walk decides on the viewer's own price — the figure the price
+      // order is made of — whether or not the channel publishes it; the cards
+      // below withhold it where the channel does. `#listingPricesFor` answers
+      // no price at all on a non-public channel, which read here as "no
+      // detail" and dropped every product, priced and unpriced alike (review 3
+      // of release 0.108.0, A3).
+      const chunkPrices =
+        candidates.length === 0
+          ? new Map<string, ListingPriceDetail>()
+          : await this.#requireListingPrices().resolveListingPriceDetails({
+              products: candidates,
+              context: scope.context,
+            });
       for (const product of candidates) {
         const detail = chunkPrices.get(product.id);
-        const price = detail?.price;
-        if (detail === undefined || price === undefined || !walk.keep(price, product)) continue;
+        const price = detail?.price.source === 'price_list' ? detail.price : null;
+        if (!walk.keep(price, product)) continue;
         collected.push(product);
-        prices.set(product.id, detail);
+        if (detail !== undefined) prices.set(product.id, detail);
         if (collected.length >= target) break;
       }
       if (rows.length < chunkSize) break;
@@ -1530,9 +1546,11 @@ export class CatalogQueryService {
       page.map((p) => p.id),
       channel.id,
     );
+    // A channel that publishes no prices renders none, as `#listingPricesFor` would.
+    const shown = (channel.isPublic ?? true) ? prices : new Map<string, ListingPriceDetail>();
     return {
       data: page.map((p) =>
-        this.toSummary(p, channel, ctx.preferredLanguage, prices, cardReads),
+        this.toSummary(p, channel, ctx.preferredLanguage, shown, cardReads),
       ),
       pagination: { cursor: nextCursor, hasMore, limit: params.limit },
     };
