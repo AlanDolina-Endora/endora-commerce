@@ -107,11 +107,11 @@ export interface BookLineAnswer {
  * which settings key answers (guest or signed-in). So only the product and
  * category steps of the chain, which no viewer moves, are cached
  * (`productDisplayMode`, `null` when neither decides); the tail is applied per
- * request (review finding 1 of release 0.108.0).
+ * request (review finding 1 of release 0.108.0). The currency is not stored
+ * either: the profile key carries it, so it is always the request's.
  */
 export interface CachedBookLine {
   resolution: BookResolution;
-  currencyCode: string;
   productDisplayMode: DisplayMode | null;
 }
 
@@ -308,7 +308,6 @@ export class BookPricing {
         });
         const cached: CachedBookLine = {
           resolution,
-          currencyCode,
           productDisplayMode: productModes.get(line.product.id) ?? null,
         };
         cache?.set(keyOf(line), cached, generation);
@@ -329,7 +328,7 @@ export class BookPricing {
       const answer: BookLineAnswer = {
         resolution: cached.resolution,
         displayMode: cached.productDisplayMode ?? viewerMode ?? 'gross_only',
-        currencyCode: cached.currencyCode,
+        currencyCode,
       };
       for (const key of keys) out.set(key, answer);
     }

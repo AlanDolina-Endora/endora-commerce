@@ -45,6 +45,7 @@ describe('BookPricing — the display mode is applied per viewer, never cached u
     // any other signed-in buyer reads the default, `both`.
     const viewerMode = (organizationId: string | null, signedIn: boolean): DisplayMode =>
       !signedIn ? 'gross_only' : organizationId === 'acme' ? 'net_only' : 'both';
+    const cache = new PricingCache<CachedBookLine, ProfilePricingCacheKey>({ ttlMs: 60_000 });
     const books = new BookPricing({
       emFactory: () => em,
       channelBridge: { entityIdsInChannelSubquery: () => ({ sql: 'select 1', params: [] }) },
@@ -53,7 +54,7 @@ describe('BookPricing — the display mode is applied per viewer, never cached u
       variantRead: () => ({ listVariantsByProductIds: async () => [] }),
       productDisplayModes: async () => new Map(),
       viewerDisplayMode: async ({ organizationId, customerKind }) => viewerMode(organizationId, customerKind === 'signed_in'),
-      cache: new PricingCache<CachedBookLine, ProfilePricingCacheKey>({ ttlMs: 60_000 }),
+      cache,
       profileMemo: new PricingCache<PricingProfile, ProfileMemoKey>({ ttlMs: 60_000 }),
     });
     const guest: BookPricingViewer = { organizationId: null, customerGroupId: null, signedIn: false, salesChannelId: 'ch', currencyCode: 'PLN' };
@@ -66,7 +67,7 @@ describe('BookPricing — the display mode is applied per viewer, never cached u
     });
     const ask = async (viewer: BookPricingViewer) =>
       (await books.resolve([{ key: 'k', product: { id: 'p1', attributeValues: {} }, quantity: 1 }], viewer)).get('k');
-    return { books, reads, guest, org, ask };
+    return { books, cache, reads, guest, org, ask };
   }
 
   it('a guest first, then an organization with no buyer book: each reads its own display mode', async () => {
@@ -111,5 +112,16 @@ describe('BookPricing — the display mode is applied per viewer, never cached u
     expect(answer?.displayMode).toBe('net_only');
     // The worker's resolution was not stored: the buyer resolved on its own.
     expect(reads.rows).toBe(2);
+  });
+
+  it('a cached line holds what the profile decides and nothing the request already says', async () => {
+    const { books, cache, ask, guest } = engine();
+    await ask(guest);
+    const profiles = await books.profilesFor(guest);
+    const cached = cache.get({ profileKey: profiles!.buyer.key, productId: 'p1', variantId: null, quantity: 1 });
+    // The currency is the profile key's (and so the request's): a copy in the
+    // value could only ever disagree with it (review 2, finding 10).
+    expect(Object.keys(cached ?? {}).sort()).toEqual(['productDisplayMode', 'resolution']);
+    expect((await ask(guest))?.currencyCode).toBe('PLN');
   });
 });
