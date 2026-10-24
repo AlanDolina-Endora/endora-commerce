@@ -125,8 +125,8 @@ export class PricingService implements PricingServiceContract {
     this.#surface ??= new PriceSurface({
       emFactory: this.emFactory,
       books: this.bookPricing,
-      listProducts: () => this.#productRead().listAll(),
-      productsByIds: (ids) => this.#productRead().findByIds(ids),
+      listProducts: () => this.#productRead().listPricingRefs(),
+      productsByIds: (ids) => this.#productRead().findPricingRefsByIds(ids),
       categories: {
         listProductIdsInCategory: (id) => this.#categoryRead().listProductIdsInCategory(id),
         listProductIdsInSubtree: (id) => this.#categoryRead().listProductIdsInSubtree(id),

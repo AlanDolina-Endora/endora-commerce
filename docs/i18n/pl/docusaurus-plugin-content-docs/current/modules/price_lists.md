@@ -227,9 +227,9 @@ cennika, cena bazowa albo edycja produktu pojawia się w porządku w ciągu oko�
 pomiarach platformy, także w trakcie dużego importu produktów. Zmiana, która sięga całego katalogu —
 linia dla wszystkich produktów albo tylko dla wartości atrybutu, zmiana ponad 10 000 produktów naraz
 albo zmiana kanału sprzedaży — przelicza porządek w całości dla każdej grupy kupujących, do której
-sięga, co w dużym katalogu z wieloma cennikami kontraktowymi trwa kilka minut: platforma zakłada
-dla niej pięć minut przy około 200 takich grupach (zmierzono około 4 min 35 s przy 201), wobec jednej
-minuty dla każdej innej zmiany. Przyspieszenie tego opisuje zgłoszenie #416.
+sięga, co w dużym katalogu z wieloma cennikami kontraktowymi może trwać minutę lub dwie. Platforma
+zakłada dla niej dwie i pół minuty przy około 200 takich grupach, wobec jednej minuty dla każdej
+innej zmiany. Platforma zmierzyła około 1 min 25 s przy 202 grupach.
 
 **Cena katalogowa obok ceny kupującego.** Po włączeniu ustawienia *Pokazuj cenę katalogową obok ceny
 kupującego* (*Ustawienia cenowe*, domyślnie wyłączone) kupujący, którego cena jest niższa od ceny
@@ -340,8 +340,8 @@ administratorem i stanem przed zmianą i po niej; *Zobacz historię* w cenniku o
 - **Czytniki ekranu odczytują znaczek promocji w sklepie jako „Zapytaj o ofertę”**; widoczny tekst jest
   poprawny (zgłoszenie #411).
 - **Porządek sortowania opóźnia się względem zmiany ceny** o czas odświeżania w tle — zwykle poniżej
-  sekundy, a do około pięciu minut przy zmianie, która sięga całego katalogu (zob. *Gdzie
-  pojawiają się ceny*; zgłoszenie #416); ceny na kartach nigdy się nie opóźniają. Sortowanie według
+  sekundy, a do około dwóch i pół minuty przy zmianie, która sięga całego katalogu (zob. *Gdzie
+  pojawiają się ceny*); ceny na kartach nigdy się nie opóźniają. Sortowanie według
   ceny wymaga działających workerów platformy.
 - **Zewnętrzne API katalogu** wycenia organizację klucza API z grupą klientów tej organizacji, a nie
   z własną grupą powiązanego konta klienta, a jego zbiorcze żądanie cen wskazuje wyłącznie SKU

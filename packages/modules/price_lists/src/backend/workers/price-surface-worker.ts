@@ -16,6 +16,12 @@ import { enterSystemScope, type PlatformLogger } from '@endora-commerce/platform
  * harmless. Requests never wait for it (`contracts/price-surface.md` §3): a
  * stale profile keeps serving its previous surface meanwhile.
  *
+ * A pass that cannot finish — a build whose products keep vanishing under it
+ * after three fresh reads — throws, swapping nothing and keeping every mark,
+ * so the job fails and BullMQ's own attempts and backoff run it again. A job
+ * that fails for good is logged and removed, so the next request is a new job
+ * rather than a duplicate of the failed one (issue #416, review 2 of #424).
+ *
  * Attached with `ctx.worker`, so it stops with the module (Principle XVII), and
  * built only where the host says this process consumes queues.
  */
@@ -42,7 +48,11 @@ export function createPriceSurfaceProducer(redis: Redis | undefined): PriceSurfa
         connection: redis,
         defaultJobOptions: {
           removeOnComplete: true,
-          removeOnFail: { count: 100 },
+          // A failed job is not kept: its id is the one fixed id every request
+          // uses, and BullMQ refuses an id it still holds, so a kept failure
+          // would swallow every later request and leave the marks to nobody
+          // (review 2 of #424). The worker logs each failure instead.
+          removeOnFail: true,
           attempts: JOB_ATTEMPTS,
           backoff: JOB_BACKOFF,
         },
@@ -74,7 +84,12 @@ export function startPriceSurfaceWorker(input: {
           if (rebuilt > 0) input.log.info({ rebuilt }, 'price_lists: price surface profiles rebuilt');
         }),
       { connection: input.moduleQueueRedis, concurrency: 1 },
-    ),
+    ).on('failed', (job, err) => {
+      input.log.error(
+        { err, attemptsMade: job?.attemptsMade, attempts: job?.opts.attempts },
+        'price_lists: price surface rebuild failed; its marks are kept for the next attempt or request',
+      );
+    }),
   );
   return true;
 }
