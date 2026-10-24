@@ -310,6 +310,18 @@ export const settlementRequestSchema = z.object({
         approvedRefundAmount: twoDecimalAmount(z.number().finite().nonnegative()),
       }),
     )
+    // A case line named twice is refused before anything moves (issue #417,
+    // review of PR #423): the refund would sum both entries and the correction
+    // keep one, refusing only after the gateway had refunded.
+    .superRefine((lines, ctx) => {
+      const seen = new Set<string>();
+      lines.forEach((line, index) => {
+        if (seen.has(line.returnCaseItemId)) {
+          ctx.addIssue({ code: 'custom', path: [index, 'returnCaseItemId'], message: 'duplicate_line' });
+        }
+        seen.add(line.returnCaseItemId);
+      });
+    })
     .default([]),
   refundPaymentMethodId: uuidSchema.optional(),
   createCorrectiveInvoice: z.boolean().optional(),
