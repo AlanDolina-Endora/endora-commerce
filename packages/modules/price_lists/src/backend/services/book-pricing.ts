@@ -245,7 +245,10 @@ export class BookPricing {
    * A resolution of a `fixedProfile` — the price surface's worker building a
    * profile with no buyer in hand, a feed's catalogue reference — neither
    * reads nor writes the cache: it is not a viewer's request, so it must not
-   * seed what viewers are served, nor evict it (review finding 1).
+   * seed what viewers are served, nor evict it (review finding 1). Nor does an
+   * `explain` resolution, the only one that lists every runner-up: a cached
+   * line carries the capped list, and the full one is not worth a place in the
+   * shared cache (review 3, B1).
    */
   async resolve(
     lines: readonly PricingLineRequest[],
@@ -253,6 +256,8 @@ export class BookPricing {
     prefetchedVariants?: ReadonlyMap<string, CatalogProductVariantRecord>,
     /** A profile already resolved (the price surface builds a profile, not a buyer). */
     fixedProfile?: PricingProfile,
+    /** `explain`: list every ranked runner-up (`BookExplanation.candidates`), uncached. */
+    options: { explain?: boolean } = {},
   ): Promise<Map<string, BookLineAnswer | null>> {
     const out = new Map<string, BookLineAnswer | null>();
     if (lines.length === 0) return out;
@@ -262,7 +267,7 @@ export class BookPricing {
     // commits while this resolution reads the channel, the precedence or the
     // profile invalidates, and the answer built on what was read before it is
     // then not stored (review finding 6 of release 0.108.0).
-    const cache = fixedProfile ? undefined : this.deps.cache;
+    const cache = fixedProfile || options.explain ? undefined : this.deps.cache;
     const generation = cache?.generation;
 
     // K3.2 — a currency the channel does not offer prices nothing (the lines
@@ -323,7 +328,7 @@ export class BookPricing {
       if (rows.some((r) => r.attributeKey !== null)) {
         eligibleAttributes = buildEligibleAttributes(await this.deps.attributeRead().listByFlag('isPriceRule'));
       }
-      const resolver = createBookResolver({ books, rows, precedence, eligibleAttributes });
+      const resolver = createBookResolver({ books, rows, precedence, eligibleAttributes, explain: options.explain === true });
       const productModes = await this.deps.productDisplayModes({ productIds, categoryIdsByProduct });
 
       for (const { line, keys } of pending) {

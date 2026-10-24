@@ -95,7 +95,11 @@ export class BuyerLinePriceService implements BuyerLinePricePort {
     return detailed.map(({ key, price }) => ({ key, price }));
   }
 
-  async resolveDetailed(query: BuyerLinePriceQuery): Promise<BuyerLinePriceDetailedAnswer[]> {
+  /** `explain` — the explainer route: every ranked runner-up per line, resolved past the answer cache. */
+  async resolveDetailed(
+    query: BuyerLinePriceQuery,
+    options: { explain?: boolean } = {},
+  ): Promise<BuyerLinePriceDetailedAnswer[]> {
     // The channel first: an unknown one is refused before anything is read.
     const salesChannel = await this.#channel(query.salesChannelId);
     if (query.lines.length === 0) return [];
@@ -159,6 +163,7 @@ export class BuyerLinePriceService implements BuyerLinePricePort {
           salesChannel,
           currencyCode,
         },
+        ...(options.explain ? { explain: true } : {}),
       });
       for (const [index, line] of chunk.entries()) {
         if (!byId.has(line.productId)) {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PRICE_BOOK_MAX_EXPLANATION_CANDIDATES } from '@endora-commerce/contracts';
 import {
   createBookResolver,
   type BookAudience,
@@ -318,13 +319,33 @@ describe('book resolver — buyer tier', () => {
     });
   });
 
-  it('lists every ranked candidate: the cap is the explainer route\'s, after its scope filter', () => {
+  /**
+   * Review 3 of release 0.108.0, B1 — the full ranked list is built only for
+   * an explanation. Every other resolution (listing, cart, surface build) is
+   * stored in the shared answer cache, where an unbounded runner-up array
+   * would cost memory on every line; it keeps the cap it always had.
+   */
+  it('lists at most ten ranked candidates on an ordinary resolution', () => {
     const books = Array.from({ length: 12 }, () => book(org(0)));
     const rows = [base100, ...books.map((b, i) => fixed(b, String(50 + i), { productId: P1 }))];
     const r = resolve(books, rows);
     expect(r.price?.amount).toBe('50.0000');
-    expect(r.explanation.candidates).toHaveLength(12);
+    expect(r.explanation.candidates).toHaveLength(PRICE_BOOK_MAX_EXPLANATION_CANDIDATES);
     expect(r.explanation.candidates[0]).toMatchObject({ cell: 'org.product', amount: '50.0000' });
+  });
+
+  it('lists every ranked candidate for an explanation: the explainer route caps after its scope filter', () => {
+    const books = Array.from({ length: 12 }, () => book(org(0)));
+    const rows = [base100, ...books.map((b, i) => fixed(b, String(50 + i), { productId: P1 }))];
+    const r = createBookResolver({
+      books: [BASE, ...books],
+      rows,
+      precedence: { version: 1, config: PRECEDENCE_PRESETS.HY },
+      eligibleAttributes: ELIGIBLE,
+      explain: true,
+    }).resolve(line());
+    expect(r.explanation.candidates).toHaveLength(12);
+    expect(r.explanation.candidates.map((c) => c.amount)).toEqual(books.map((_, i) => `${50 + i}.0000`));
   });
 });
 

@@ -202,8 +202,10 @@ export class PricingService implements PricingServiceContract {
   async #bookAnswers(
     lines: readonly PricingLineRequest[],
     context: Omit<PricingResolutionInput['context'], 'quantity'>,
+    explain = false,
   ): Promise<Map<string, BookLineAnswer | null>> {
-    return this.bookPricing.resolve(lines, this.#engineViewer(await this.#viewer(context)));
+    const viewer = this.#engineViewer(await this.#viewer(context));
+    return explain ? this.bookPricing.resolve(lines, viewer, undefined, undefined, { explain }) : this.bookPricing.resolve(lines, viewer);
   }
 
   /**
@@ -373,7 +375,9 @@ export class PricingService implements PricingServiceContract {
   async resolveLinePrices(input: LinePricesInput): Promise<Map<string, PricingLineResult | null>> {
     const out = new Map<string, PricingLineResult | null>();
     if (input.lines.length === 0) return out;
-    for (const [key, answer] of await this.#bookAnswers(input.lines, input.context)) out.set(key, lineFromBook(answer));
+    for (const [key, answer] of await this.#bookAnswers(input.lines, input.context, input.explain === true)) {
+      out.set(key, lineFromBook(answer));
+    }
     return out;
   }
 

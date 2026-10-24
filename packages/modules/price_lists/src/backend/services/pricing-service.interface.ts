@@ -171,6 +171,12 @@ export interface PricingLineRequest {
 export interface LinePricesInput {
   lines: readonly PricingLineRequest[];
   context: Omit<PricingResolutionInput['context'], 'quantity'>;
+  /**
+   * The admin explainer only: each line's explanation lists every ranked
+   * runner-up rather than the capped list, and the resolution bypasses the
+   * answer cache (review 3 of release 0.108.0, B1).
+   */
+  explain?: boolean;
 }
 
 export interface PricingServiceContract {

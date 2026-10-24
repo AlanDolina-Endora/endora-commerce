@@ -1,4 +1,5 @@
 import type { PriceSource } from '@endora-commerce/contracts';
+import { PRICE_BOOK_MAX_EXPLANATION_CANDIDATES } from '@endora-commerce/contracts';
 import { matchesAttributeValue, type EligibleAttribute } from './attribute-eligibility.js';
 import {
   applyAmountAdjustment,
@@ -95,6 +96,12 @@ export interface BookResolverInput {
   precedence: ActivePrecedence;
   /** `isPriceRule` attributes of an eligible value type, not language- or channel-scoped. */
   eligibleAttributes: ReadonlyMap<string, EligibleAttribute>;
+  /**
+   * An explanation is being asked for: list **every** ranked candidate rather
+   * than the first `PRICE_BOOK_MAX_EXPLANATION_CANDIDATES` (review 3 of
+   * release 0.108.0, B1). See {@link BookExplanation.candidates}.
+   */
+  explain?: boolean;
 }
 
 /** What one tier answered. */
@@ -132,10 +139,14 @@ export interface BookExplanation {
   reference: string | null;
   precedenceVersion: number;
   /**
-   * The deciding tier's priced candidates in rank order, **all** of them. The
-   * explainer route caps the list at `PRICE_BOOK_MAX_EXPLANATION_CANDIDATES`
-   * after leaving out the books its caller may not see (FR-034): a cap applied
-   * here let hidden books use up the visible slots (review 2, finding 5).
+   * The deciding tier's priced candidates in rank order: the first
+   * `PRICE_BOOK_MAX_EXPLANATION_CANDIDATES`, or **all** of them when the
+   * resolver was asked to `explain`. Only the explainer asks, and it caps the
+   * list itself after leaving out the books its caller may not see (FR-034):
+   * a cap applied before that let hidden books use up the visible slots
+   * (review 2, finding 5). Every other resolution is stored in the shared
+   * answer cache, where an unbounded list would be paid for on every line
+   * (review 3, B1).
    */
   candidates: Array<{ cell: CellCode | null; bookId: string; bookName: string; rowId: string; amount: string }>;
 }
@@ -422,7 +433,9 @@ export function createBookResolver(input: BookResolverInput): BookResolver {
           rowId: deciding?.answer.rowId ?? null,
           reference: deciding?.answer.reference ?? null,
           precedenceVersion: precedence.version,
-          candidates: (deciding?.candidates ?? []).map((cand) => ({ cell: cand.cell, bookId: cand.book.id, bookName: cand.book.name, rowId: cand.row.id, amount: cand.amount })),
+          candidates: (deciding?.candidates ?? [])
+            .slice(0, input.explain ? undefined : PRICE_BOOK_MAX_EXPLANATION_CANDIDATES)
+            .map((cand) => ({ cell: cand.cell, bookId: cand.book.id, bookName: cand.book.name, rowId: cand.row.id, amount: cand.amount })),
         },
       };
     },

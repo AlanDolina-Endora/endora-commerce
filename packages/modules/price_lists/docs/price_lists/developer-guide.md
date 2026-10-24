@@ -149,9 +149,11 @@ change flow exists.
 ### Explanation
 
 Every resolution carries its explanation (`BookExplanation`): the tier, the cell, the book and row,
-the reference price used, the precedence version and every ranked candidate of the deciding tier.
-It is internal to the module's contract; `POST /api/v1/admin/price-books/resolve` publishes it, with
-the candidates cut to ten after the books outside the caller's scope are left out.
+the reference price used, the precedence version and the first ten ranked candidates of the deciding
+tier. It is internal to the module's contract; `POST /api/v1/admin/price-books/resolve` publishes
+it. That route alone asks the resolver to `explain`, which lists every ranked candidate and bypasses
+the answer cache, and it cuts the list to ten after the books outside the caller's scope are left
+out; every other resolution (listings, carts, the surface build) is cached with the ten.
 
 ## The one read path
 

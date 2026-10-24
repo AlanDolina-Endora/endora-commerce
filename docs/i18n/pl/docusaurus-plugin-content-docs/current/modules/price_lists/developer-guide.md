@@ -151,9 +151,12 @@ powstanie proces zmiany.
 ### Wyjaśnienie
 
 Każda wycena niesie swoje wyjaśnienie (`BookExplanation`): krok, komórkę, cennik i wiersz, użytą cenę
-odniesienia, wersję kolejności i wszystkich uszeregowanych kandydatów kroku, który zdecydował. Jest
-wewnętrzne dla kontraktu modułu; publikuje je `POST /api/v1/admin/price-books/resolve`, przycinając
-listę kandydatów do dziesięciu dopiero po pominięciu cenników spoza zakresu wywołującego.
+odniesienia, wersję kolejności i dziesięciu pierwszych uszeregowanych kandydatów kroku, który
+zdecydował. Jest wewnętrzne dla kontraktu modułu; publikuje je `POST /api/v1/admin/price-books/resolve`.
+Tylko ta trasa prosi algorytm o `explain`, który wymienia wszystkich uszeregowanych kandydatów i omija
+pamięć podręczną odpowiedzi, a listę przycina do dziesięciu dopiero po pominięciu cenników spoza
+zakresu wywołującego; każda inna wycena (listy, koszyki, budowa powierzchni) trafia do pamięci
+podręcznej z dziesięcioma.
 
 ## Jedyna ścieżka odczytu
 
