@@ -80,8 +80,12 @@ Polish.
   so a consumer of one rounds it with the same helpers, which read a number as its shortest decimal.
   An amount **computed** from a price — a line's net or gross, a tax, a total, a correction, a
   refund, a discount, an available credit — uses `money-decimal.ts` beside it (exact sums,
-  products, quotients, rounded half-up once where the rule says); which rule applies to which
-  document is `worked-examples.md` §10.17.
+  products, quotients, rounded half-up once where the rule says). **VAT has one method,
+  `vatByRate`** — per rate, on the sum of the net amounts, rounded once (owner ruling of
+  2026-10-24) — and every document computes it there rather than per line; `worked-examples.md`
+  §10.17 says which document computes what. A money amount a person or an integration types takes
+  `twoDecimalAmount` from `money-input.ts`: more than two places is `400 AMOUNT_PRECISION_EXCEEDED`,
+  never rounded.
 - **The precedence is data, read from the active version.** Consumers never encode a cell order;
   the resolver reads `price_list_precedence` through `PrecedenceStore`. A change to presets or
   invariants goes through `validatePrecedence` and keeps `precedence.test.ts` exhaustive. The write

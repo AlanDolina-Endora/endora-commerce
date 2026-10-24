@@ -2587,6 +2587,31 @@ W dowolnym momencie:
   sprzedawane tylko na zapytanie, i informuje o nich; wcześniej taka pozycja trafiała do koszyka w
   cenie ze starego zamówienia, a koszyk był potem odrzucany przy składaniu zamówienia.
 
+##### Kwoty, VAT i faktury
+
+- **VAT jest liczony w jeden sposób na każdym dokumencie**: dla każdej stawki od sumy kwot netto w
+  tej stawce, z zaokrągleniem „połówkowym w górę” jeden raz, a kwota brutto to netto plus ten VAT
+  (art. 106e ust. 1 pkt 13–14 ustawy o VAT). Te same kwoty pokazują checkout, zamówienie, otwarta
+  przez nie płatność i proforma, faktura, korekta i zwrot. Koszyk z pozycjami w dwóch stawkach VAT
+  może kosztować o grosz więcej lub mniej niż przed aktualizacją: 29,50 w stawce 23 % z 4,30 w
+  stawce 5 % dawało 40,80 brutto, a daje 40,81 — tyle samo, ile mówi jego faktura. Kwota brutto
+  pozycji w zamówieniu lub na fakturze to jej udział w VAT jej stawki, pokazywany informacyjnie;
+  wiążące są podsumowanie według stawek i sumy.
+- **Faktury wystawione przed aktualizacją dla zamówień czynnych podatników VAT zawyżały kwotę netto,
+  VAT i brutto.** Przy wystawianiu kwota brutto każdej pozycji zamówienia była odczytywana jako jej
+  kwota netto i opodatkowana ponownie: pozycja 100,00 netto w stawce 23 % trafiała na fakturę jako
+  123,00 netto i 151,29 brutto. Aktualizacja zmienia sposób wystawiania faktur od teraz. **Nie
+  poprawia faktur już wystawionych, a platforma nie wystawia do nich korekt**; zachowują kwoty, z
+  którymi je wystawiono.
+- **Zwrot domyślnie oddaje to, co naliczyła faktura** za zwracane pozycje, a zwrot częściowy stosuje
+  tę samą metodę do zwróconej ilości: pełny zwrot 9,05 × 3 w stawce 8 % oddaje 29,32, a oddawał
+  29,31.
+- **Kwota z więcej niż dwoma miejscami po przecinku jest odrzucana, a nie zaokrąglana** — koszt
+  dostawy, dopłata do metody płatności, uzgodniona lub proponowana cena w zapytaniu ofertowym,
+  zatwierdzona kwota zwrotu, koszt zwrotu, limit kredytowy, wartość szansy sprzedaży oraz kwota
+  stała, próg i minimalna wartość koszyka w promocji. Ekran odpowiada komunikatem *Kwota może mieć
+  najwyżej dwa miejsca po przecinku.*
+
 ##### Minimalne ilości zamówienia i produkty podlegające zwrotowi
 
 - **Produkt może mieć minimalną ilość zamówienia** (w sztukach, dla produktów prostych i
@@ -2700,6 +2725,29 @@ W dowolnym momencie:
 - **`POST /api/v1/orders/:id/reorder`** zgłasza pozycję pominiętą, bo nic jej nie wycenia, z
   `reason: 'no_price'` w `unavailableItems`.
 
+##### Kwoty i VAT
+
+- **Wpisana kwota pieniężna z więcej niż dwoma miejscami po przecinku zwraca
+  `400 AMOUNT_PRECISION_EXCEEDED`** (nowy kod) i nie jest zapisywana; wcześniej była zaokrąglana.
+  Dotyczy to pól: `cost` metody dostawy, `additionalPrice` metody płatności, `desiredUnitPrice` i
+  `agreedUnitPrice` pozycji zapytania ofertowego, `approvedRefundAmount` rozliczenia,
+  `returnCost` metody dostawy zwrotu, `amount` zwrotu zamówienia w panelu, `grantedAmount` limitu
+  kredytowego, `manualValue` szansy sprzedaży, `amount`, `spendStep`, `minCartSubtotal` promocji i
+  `value` promocji `amount_off`, a także `netTotal`, `taxTotal`, `grossTotal` i `paidTotal`
+  dokumentu sprzedaży z integracji ERP. `details` wskazuje każde pole z problemem
+  `AMOUNT_PRECISION_EXCEEDED`, a komunikat jest w języku czytelnika. Żądanie, które nie spełnia
+  także innych warunków, zwraca `400 VALIDATION_FAILED` z tym samym problemem wśród szczegółów.
+- **VAT jest liczony dla każdej stawki od sumy kwot netto w tej stawce**, z jednym zaokrągleniem
+  „połówkowym w górę”: `taxTotal` i `total` zamówienia, `lineTotal` jego pozycji (udział każdej
+  pozycji, sumujący się do brutto produktów), podglądy w checkoucie i w panelu, `vatSummary`,
+  `taxTotal`, `grossTotal`, `paidTotal` faktury i `grossValue` jej pozycji oraz kwoty korekty.
+  Kształty się nie zmieniają. Zamówienie w dwóch stawkach może różnić się o grosz od tego samego
+  koszyka sprzed aktualizacji.
+- **Faktury wystawione przed aktualizacją się nie zmieniają.** Faktura wystawiona dla zamówienia
+  czynnego podatnika VAT zawyża `netTotal`, `taxTotal` i `grossTotal` (netto każdej pozycji było
+  kwotą brutto pozycji zamówienia); jej podsumowanie według stawek jest pokazywane tak, jak ją
+  wystawiono.
+
 ##### Minimalne ilości zamówienia i produkty podlegające zwrotowi
 
 - **Nowe odmowy.** `422 PRODUCT_BELOW_MINIMUM_QUANTITY` i
@@ -2790,6 +2838,18 @@ W dowolnym momencie:
   niego sprawia, że powierzchnia cen przebudowuje każdy profil.
 - **Własny port wyceny feedów** musi implementować `namedListPublishability` obok
   `namedListPrices`, która przyjmuje teraz `salesChannelId` feedu.
+
+##### Arytmetyka kwot
+
+- **`@endora-commerce/contracts` zawiera arytmetykę kwot platformy**: `money-decimal`
+  (`roundHalfUp`, dokładne sumy i iloczyny, `vatByRate` — jedyna metoda VAT, dla każdej stawki od
+  sumy kwot netto — oraz jej odwrotność `netForGrossAtRate`) i `money-input` (`twoDecimalAmount`,
+  `twoDecimalAmountString`, `addAmountPrecisionIssue` i `ERROR_CODES.AMOUNT_PRECISION_EXCEEDED`).
+  Moduł nakładkowy, który liczy kwotę z ceny, używa ich zamiast `Number#toFixed(2)` czy
+  `Math.round(x * 100) / 100`, a nowe pole kwoty wpisywanej przez człowieka używa tego zawężenia.
+- **`OrderReturnContextLine` zyskuje `unitNetPrice` i `taxRate`**, a jego `paidLineAmount` to
+  kwota brutto pozycji według jedynej metody VAT dla całego zamówienia; implementacja
+  `OrderReturnContextPort` w module nakładkowym musi podawać oba pola.
 
 ##### Inne porty i kształty
 
