@@ -130,6 +130,11 @@ promocyjna, gdy jest niższa. Produkt bez ceny w walucie feedu jest pomijany z p
 `missing_price`. Pozycje feedu to produkty: produkt z wariantami jest publikowany w cenie samego
 produktu, a nie osobno dla każdego wariantu.
 
+Cena jest zapisywana z dwoma miejscami po przecinku, zaokrąglona połówkowo w górę. Feed brutto —
+domyślna prezentacja — dolicza do ceny netto stawkę podatku kraju podatkowego feedu i zaokrągla
+dokładny wynik: 29,50 przy 23 % trafia do pliku jako 36.29, ta sama cena brutto, którą storefront
+pokazuje obok tej samej ceny netto.
+
 Feed można zamiast tego **przypiąć do jednego cennika** — pole `priceListId` feedu, ustawiane przez
 API administracyjne przy tworzeniu albo zmianie feedu (`POST /api/v1/admin/product-feeds`,
 `PATCH /api/v1/admin/product-feeds/:id`); ekrany feedu pokazują opisane niżej ostrzeżenie, ale nie

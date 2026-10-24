@@ -9,6 +9,8 @@
  * locale so the number/symbol conventions still match the money's currency.
  */
 
+import { grossAmountHalfUp } from '@endora-commerce/contracts';
+
 /**
  * Representative BCP-47 locale per ISO-4217 currency. Keeps amounts in the
  * conventions of the currency's home country (decimal separator, grouping,
@@ -86,10 +88,31 @@ export const DEFAULT_VAT_RATE = 0.23;
  * A net of `0` derives a gross of `0`. That is not a detail: one of the three
  * copies this replaces tested the derived amount for truthiness, so a free
  * product silently lost its gross line while every other product kept one.
+ *
+ * The gross is the exact decimal product rounded half-up to two places —
+ * `grossAmountHalfUp`, the rule a gross product feed publishes with (review 2,
+ * finding 2 of release 0.108.0; `specs/pricing/worked-examples.md` §10.16).
+ * `net * (1 + vatRate)` on doubles made 16.50 at 23 % the double 20.29499…,
+ * shown as 20,29 where the feed says 20,30.
  */
 export function grossFromNet(net: number, vatRate: number | null): number | null {
   if (vatRate === null || !Number.isFinite(net) || !Number.isFinite(vatRate)) return null;
-  return net * (1 + vatRate);
+  if (net < 0 || vatRate < 0) return net * (1 + vatRate);
+  return Number(grossAmountHalfUp(net, percentOf(vatRate)));
+}
+
+/**
+ * A fractional rate (`0.23`) as the percentage it writes (`"23"`), by moving
+ * the decimal point of its shortest decimal — `0.23 * 100` is the double
+ * 23.000000000000004, which is not the rate.
+ */
+function percentOf(fraction: number): string {
+  const text = /e/i.test(String(fraction)) ? fraction.toFixed(12) : String(fraction);
+  const [whole = '0', decimals = ''] = text.split('.');
+  const digits = `${whole}${decimals.padEnd(2, '0')}`;
+  const point = whole.length + 2;
+  const percent = `${digits.slice(0, point)}.${digits.slice(point)}`.replace(/\.$/, '');
+  return percent.replace(/^0+(?=\d)/, '');
 }
 
 /**

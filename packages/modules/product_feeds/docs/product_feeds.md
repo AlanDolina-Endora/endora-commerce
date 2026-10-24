@@ -124,6 +124,10 @@ or a sale when it is lower. A product with no price in the feed's currency is sk
 `missing_price`. Feed items are products: a product with variants is published at the product's own
 price, not per variant.
 
+A price is written at two places, rounded half-up. A gross feed — the default presentation — adds
+the tax rate of the feed's tax country to the net price and rounds the exact result: 29.50 at 23 %
+is published as 36.29, the gross the storefront shows beside the same net price.
+
 A feed can instead be **pinned to one price book** — the feed's `priceListId`, set through the
 admin API when the feed is created or updated (`POST /api/v1/admin/product-feeds`,
 `PATCH /api/v1/admin/product-feeds/:id`); the feed's screens show the warning below but have no

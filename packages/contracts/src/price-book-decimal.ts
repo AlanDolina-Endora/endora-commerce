@@ -126,3 +126,50 @@ export function roundAmountHalfUp(value: string | number): string {
   const cents = (hundredths % 100n).toString().padStart(2, '0');
   return `${negative ? '-' : ''}${whole.toString()}.${cents}`;
 }
+
+const UNSIGNED_DECIMAL = /^(\d+)(?:\.(\d+))?$/;
+
+/** A non-negative decimal (string, or number read as its shortest round-tripping decimal) as an integer and a scale. */
+function decimalParts(value: string | number, what: string): { digits: bigint; scale: number } {
+  let text: string;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error(`Not a finite ${what}: ${value}`);
+    text = String(value);
+    if (/e/i.test(text)) text = Math.abs(value) >= 1 ? BigInt(value).toString() : value.toFixed(12);
+  } else {
+    text = value.trim();
+  }
+  const match = UNSIGNED_DECIMAL.exec(text);
+  if (!match) throw new Error(`Not a non-negative decimal ${what}: "${String(value)}"`);
+  const fraction = match[2] ?? '';
+  return { digits: BigInt(match[1]! + fraction), scale: fraction.length };
+}
+
+/**
+ * The gross of a net amount at a tax rate in percent — `net × (1 + rate / 100)`
+ * — at two places, rounded **half-up on the exact decimal product** (review 2,
+ * finding 2 of release 0.108.0; `specs/pricing/worked-examples.md` §10.16).
+ *
+ * The companion of {@link roundAmountHalfUp} for a figure that is computed
+ * rather than read: a product feed's gross price, and the gross the storefront
+ * shows beside a net one. Computed on integers — `net` and `rate` as written,
+ * one multiplication, one half-up step — because `29.50 × 1.23` is the double
+ * 36.28499…, so binary arithmetic published 36.28 where the price is 36.29.
+ * Both arguments are non-negative decimals; a number is read as the shortest
+ * decimal that round-trips it, as `roundAmountHalfUp` reads one.
+ */
+export function grossAmountHalfUp(net: string | number, ratePercent: string | number): string {
+  const amount = decimalParts(net, 'amount');
+  const rate = decimalParts(ratePercent, 'rate');
+  // (100 + rate) at the rate's scale, over 100 at that scale.
+  const factor = 100n * 10n ** BigInt(rate.scale) + rate.digits;
+  const product = amount.digits * factor;
+  // The product's scale is the amount's plus the rate's plus two (the percent).
+  const scale = amount.scale + rate.scale + 2;
+  // Hundredths, half-up: add half of the dropped unit, then truncate.
+  const drop = 10n ** BigInt(scale - 2);
+  const hundredths = drop === 1n ? product : (product + drop / 2n) / drop;
+  const whole = hundredths / 100n;
+  const cents = (hundredths % 100n).toString().padStart(2, '0');
+  return `${whole.toString()}.${cents}`;
+}

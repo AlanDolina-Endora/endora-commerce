@@ -305,3 +305,21 @@ is not this rule: 9.0450 is the double 9.04499…, so it gave 9.04.
 | R2 | everyone sale: product fixed 1.005 | any / product | **1.0050** | **1.01** (`toFixed`: 1.00) |
 
 Test: `backend/test/integration/price_lists/worked-examples/rounding.test.ts`.
+
+**Gross at two places** (review 2 of release 0.108.0, finding 2). A gross price is computed, not
+read: `net × (1 + rate / 100)`, rounded to two places **half-up on the exact decimal product**
+(`grossAmountHalfUp`, beside `roundAmountHalfUp`). Gross is the default product-feed presentation,
+and the storefront's gross beside a net price is the same function, so the two agree. Rounding the
+binary double is not this rule: 29.50 × 1.23 is the double 36.28499…, and
+`Math.round(x * 100) / 100` gave 36.28.
+
+| Vector | Net | Rate | Exact product | Gross (feed, storefront) | Binary (`Math.round`) |
+| --- | --- | --- | --- | --- | --- |
+| G1 | 29.50 | 23 % | 36.2850 | **36.29** | 36.28 |
+| G2 | 4.30 | 5 % | 4.5150 | **4.52** | 4.51 |
+| G3 | 31.50 | 23 % | 38.7450 | **38.75** | 38.74 |
+| G4 | 16.50 | 23 % | 20.2950 | **20.30** | 20.29 (also what `Intl.NumberFormat` showed) |
+
+Tests: `packages/contracts/test/price-book-decimal.unit.test.ts`,
+`packages/modules/product_feeds/src/backend/services/feed-gross-price.test.ts`,
+`storefront/test/lib/gross-derivation.test.ts`. Invoice and tax totals are issue #417.

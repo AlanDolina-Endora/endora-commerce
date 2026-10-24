@@ -1,15 +1,16 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
-import type {
-  CatalogCategoryReadPort,
-  CatalogCategoryRecord,
-  CatalogGalleryPort,
-  CatalogProductReadPort,
-  CatalogProductRecord,
-  CatalogProductVariantRecord,
-  FeedRunFailureCode,
-  FeedRunTrigger,
-  PinnedPriceBookPublishability,
-  PinnedPriceBookUnpublishableReason,
+import {
+  grossAmountHalfUp,
+  type CatalogCategoryReadPort,
+  type CatalogCategoryRecord,
+  type CatalogGalleryPort,
+  type CatalogProductReadPort,
+  type CatalogProductRecord,
+  type CatalogProductVariantRecord,
+  type FeedRunFailureCode,
+  type FeedRunTrigger,
+  type PinnedPriceBookPublishability,
+  type PinnedPriceBookUnpublishableReason,
 } from '@endora-commerce/contracts';
 import { withSystemScope } from '@endora-commerce/platform/tenancy';
 import { rethrowIfModuleDisabled, SalesChannel } from '@endora-commerce/platform/kernel';
@@ -937,7 +938,9 @@ export class FeedGenerationService {
       // raises `zero_tax_rate_on_gross_feed` from this flag.
       return { net, gross: net, taxResolved: false };
     }
-    return { net, gross: round2(net * (1 + rate / 100)), taxResolved: true };
+    // The exact decimal product, rounded half-up — never on doubles, where
+    // 29.50 × 1.23 is 36.28499… (review 2, finding 2; worked examples §10.16).
+    return { net, gross: Number(grossAmountHalfUp(net, rate)), taxResolved: true };
   }
 }
 
@@ -1050,6 +1053,3 @@ function pickChannelName(channel: SalesChannel, languageCode: string): string {
   return pickLocalizedName(channel.name ?? {}, languageCode) || channel.code;
 }
 
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
-}

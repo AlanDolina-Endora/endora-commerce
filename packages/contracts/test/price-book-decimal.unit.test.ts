@@ -4,6 +4,7 @@ import {
   applySignedPercent,
   compareDecimal,
   formatUnits,
+  grossAmountHalfUp,
   normaliseAmount,
   parseSignedPercentHundredths,
   parseSignedUnits,
@@ -168,5 +169,43 @@ describe('roundAmountHalfUp — two places, half-up on the decimal digits', () =
     expect(() => roundAmountHalfUp('1e3')).toThrow();
     expect(() => roundAmountHalfUp('abc')).toThrow();
     expect(() => roundAmountHalfUp(Number.NaN)).toThrow();
+  });
+});
+
+/**
+ * Review 2, finding 2 (release 0.108.0) — a gross price is `net × (1 + rate)`,
+ * rounded to two places half-up on the **exact** decimal product. A gross feed
+ * computed `Math.round(net * (1 + rate / 100) * 100) / 100` on doubles, and
+ * 29.50 × 1.23 is the double 36.28499…, so it published 36.28.
+ * `specs/pricing/worked-examples.md` §10.16 G1–G4.
+ */
+describe('grossAmountHalfUp — net at a rate, two places, half-up on the decimal digits', () => {
+  it.each([
+    ['29.50', '23', '36.29'],
+    ['4.30', '5', '4.52'],
+    ['31.50', '23', '38.75'],
+    ['16.50', '23', '20.30'],
+    ['9.0450', '23', '11.13'],
+    ['0', '23', '0.00'],
+    ['100', '0', '100.00'],
+    ['10', '8.5', '10.85'],
+    ['0.01', '23', '0.01'],
+    ['99999999.9999', '23', '123000000.00'],
+  ])('%s at %s %% is %s', (net, rate, gross) => {
+    expect(grossAmountHalfUp(net, rate)).toBe(gross);
+  });
+
+  it('reads a number as the shortest decimal that round-trips it', () => {
+    expect(grossAmountHalfUp(29.5, 23)).toBe('36.29');
+    expect(grossAmountHalfUp(4.3, 5)).toBe('4.52');
+    expect(grossAmountHalfUp(31.5, 23)).toBe('38.75');
+    expect(grossAmountHalfUp(10, 8.5)).toBe('10.85');
+  });
+
+  it('refuses what is not a non-negative decimal', () => {
+    expect(() => grossAmountHalfUp('-1', '23')).toThrow();
+    expect(() => grossAmountHalfUp('1', '-5')).toThrow();
+    expect(() => grossAmountHalfUp('abc', '23')).toThrow();
+    expect(() => grossAmountHalfUp(Number.NaN, 23)).toThrow();
   });
 });
