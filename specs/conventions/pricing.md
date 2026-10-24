@@ -109,7 +109,7 @@ Polish.
   or cached answers and the price surface will disagree with it — and should describe what it
   moved (`packages/modules/price_lists/src/backend/services/surface-change.ts`): a bump that
   describes nothing marks every profile whole, which is correct but a full rebuild per write
-  (92.0 s at 202 profiles since issue #416, research R19), and `{ kind: 'none' }` is only for a fact the surface does not store
+  (84.0 s at 202 profiles since issue #416, research R19), and `{ kind: 'none' }` is only for a fact the surface does not store
   (a display mode, a name).
 - **The price surface is written only by its worker.** Price sort and price range read
   `price_profiles` / `price_profile_prices` through `ListingPriceOrderPort`; no request and no admin

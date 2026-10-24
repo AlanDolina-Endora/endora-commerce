@@ -60,11 +60,12 @@ import type { PriceBookWritePort } from '@endora-commerce/contracts';
  *   - a full rebuild of every profile — recorded (the input to P3).
  *
  * And, since the owner ruling of 2026-10-24 (SC-005's 60 s is for targeted
- * changes; a catalogue-wide change has ≤ 300 s at 200 profiles,
- * `contracts/price-surface.md` §5; issue #416 made the full rebuild faster):
+ * changes; a catalogue-wide change has its own bound at 200 profiles — 300 s,
+ * tightened to 150 s once issue #416 made the full rebuild faster —
+ * `contracts/price-surface.md` §5):
  *   - an all-products percentage row on the everyone book through the audited
  *     path, and a `sales_channels.identity_changed`, each until the guest's
- *     first page equals the live cards — asserted ≤ 300 s each
+ *     first page equals the live cards — asserted ≤ 150 s each
  *     (`PERF_SURFACE_CATALOGUE_WIDE_MS`).
  *
  * PERF_RUN=true to run.
@@ -114,18 +115,21 @@ import type { PriceBookWritePort } from '@endora-commerce/contracts';
  * Both within the 300 s bound, with about 25 s to spare.
  *
  * **Measured 2026-10-24, after the faster whole rebuild** (issue #416,
- * research R19: one catalogue read per pass, no display mode on the surface's
+ * research R19: each build reads the catalogue through the port's lean
+ * pricing projection at its own start, no display mode on the surface's
  * resolution, the next batch resolved while the previous one is written; same
  * machine, the default fixture, the whole bench, each run started once the
- * 1-minute load had stayed below 3; load median 2.3, max 3.8, the bench
+ * 1-minute load had stayed below 3; load median 2.35, max 3.5, the bench
  * included). Before, the same day (load 1.2 → 1.5): 201 profiles built in
  * 281.9 s, an all-products row visible after 275.64 s, a channel identity
  * event after 273.47 s, a full rebuild 277.6 s. After: 197 profiles built in
- * 84.2 s (202 ready, 1 131 693 rows, 273 MB); the all-products row 90.89 s, the
- * channel identity event 90.62 s (202 rebuilt whole), a full rebuild 92.0 s;
- * targeted writes visible after 0.21–0.39 s; the import's 29 probes p95 0.51 s;
- * every page p95 ≤ 26.8 ms; the five profiles built in 9.7 s and a
- * single-book change through `markStale` visible after 9.2 s.
+ * 75.8 s (202 ready, 1 131 693 rows, 319 MB); the all-products row 84.84 s, the
+ * channel identity event 83.23 s (202 rebuilt whole), a full rebuild 84.0 s;
+ * targeted writes visible after 0.19–0.50 s; the import's 29 probes p95 0.40 s;
+ * every page p95 ≤ 7.2 ms; the five profiles built in 5.7 s and a single-book
+ * change through `markStale` visible after 5.7 s. The owner then tightened the
+ * catalogue-wide bound to 150 s (ruling 2026-10-24), which is what
+ * `PERF_SURFACE_CATALOGUE_WIDE_MS` defaults to now.
  */
 
 const productCount = Number(process.env['PERF_SURFACE_PRODUCTS'] ?? '50000');
@@ -661,11 +665,12 @@ describe.skipIf(!shouldRun)('price surface — SC-005', () => {
   // SC-005's 60 s holds for targeted changes only. A catalogue-wide change — an
   // all-products or attribute-only row on an everyone or base book, a channel
   // identity or lifecycle event, a change touching more than 10 000 products —
-  // has its own bound: ≤ 300 s at 200 profiles (`contracts/price-surface.md`
-  // §5). Issue #416 (research R19) made the full rebuild faster; this asserts
+  // has its own bound: ≤ 150 s at 200 profiles (`contracts/price-surface.md`
+  // §5; 300 s until issue #416, research R19, made the full rebuild faster and
+  // the owner tightened it, 2026-10-24); this asserts
   // the bound, it does not move it.
 
-  const catalogueWideBudget = Number(process.env['PERF_SURFACE_CATALOGUE_WIDE_MS'] ?? '300000');
+  const catalogueWideBudget = Number(process.env['PERF_SURFACE_CATALOGUE_WIDE_MS'] ?? '150000');
 
   /** The guest's first page as the sort serves it, and whether every row equals the live card price. */
   async function guestPageMatchesLive(): Promise<{ matches: boolean; rows: Array<{ productId: string; amount: string }> }> {
@@ -687,7 +692,7 @@ describe.skipIf(!shouldRun)('price surface — SC-005', () => {
     return { matches, rows };
   }
 
-  it('catalogue-wide changes on 200+ profiles: each is visible in the sort within 300 s', async () => {
+  it('catalogue-wide changes on 200+ profiles: each is visible in the sort within 150 s', async () => {
     const samples: number[] = [];
     const [{ code: channelCode }] = (await sql<{ code: string }>(`select "code" from "sales_channels" where "id" = ?`, [
       channel.id,
