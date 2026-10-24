@@ -123,6 +123,29 @@ describe('price explainer — the answer', () => {
     expect(line).toHaveTextContent('Below the regular price it beat: 95.00 PLN');
   });
 
+  // Review finding 7 (release 0.108.0, FR-034): the API leaves a book outside
+  // the caller's scope unnamed — no book, no row, no such runner-up.
+  it('shows the price a book outside the caller’s scope set, without naming the book', async () => {
+    const user = userEvent.setup();
+    resolved = [
+      {
+        ...E31,
+        explanation: { ...E31.explanation, bookId: null, bookName: null, rowId: null, candidates: [E31.explanation.candidates![2]!] },
+      },
+    ];
+    await open(`/price-lists/explain?productId=${P1}`, SALES_REP_ACME);
+    const line = await explain(user);
+    expect(line).toHaveTextContent('95.00 PLN');
+    expect(line).toHaveTextContent('Organization book, product line');
+    expect(line).toHaveTextContent('A price book outside your scope');
+    expect(within(line).queryByRole('link', { name: 'Open the row' })).toBeNull();
+    expect(line).not.toHaveTextContent('Acme contract');
+    const runnerUps = within(line).getByRole('list', { name: 'Runner-ups' });
+    expect(within(runnerUps).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'VIP prices · Customer group book, product line · Screws 0200 (P1) · 90.00',
+    ]);
+  });
+
   it('explains an unpriced line and suggests setting a base price', async () => {
     const user = userEvent.setup();
     resolved = [{ key: '1', price: null, explanation: { tier: null, precedenceVersion: 1 } }];
