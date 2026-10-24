@@ -691,6 +691,13 @@ export interface CorrectiveInvoiceLine {
   quantity: number;
   /** Credited amount for this line, gross (as paid, including its tax). */
   amount: number;
+  /**
+   * The part of the order-level discount `amount` carries (issue #417). The
+   * invoice charged the goods in full and the discount on a 0 % line, so the
+   * correction credits the goods at `amount + discount` and the discount back on
+   * a 0 % line; it still totals `amount`. Absent: no discount.
+   */
+  discount?: number;
 }
 
 export interface CorrectiveInvoiceInput {

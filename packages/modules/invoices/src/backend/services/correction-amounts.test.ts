@@ -109,3 +109,24 @@ describe('correctionAmounts — cumulative over an invoice’s corrections (revi
     expect(() => first('50.00', '100.00', [line('20.00', 1, '0.23')])).toThrow(/exceeds/);
   });
 });
+
+describe('correctionAmounts — an order-level discount (review of PR #423)', () => {
+  it('credits the goods as invoiced and the discount back on its own 0 % line, totalling the refund', () => {
+    // Invoiced: 100.00 net at 23 % (123.00) and a 0 % discount line of −50.00. A full return refunds 73.00.
+    const r = correctionAmounts({
+      total: '73.00',
+      originalGross: '83.00',
+      perRate: true,
+      originalLines: [],
+      earlierLines: [],
+      lines: [{ amount: '73.00', discount: '50.00', quantity: 1, rate: '0.2300', orderItemId: 'a' }],
+    });
+    expect(r.lines.map((l) => [l.gross, l.net])).toEqual([['123.00', '100.00']]);
+    expect(r.discountCredit).toBe('-50.00');
+    expect([r.credited, r.netTotal, r.taxTotal]).toEqual(['73.00', '50.00', '23.00']);
+    expect(r.vatSummary).toEqual([
+      { taxRate: '0.0000', netTotal: '-50.00', vatAmount: '0.00', grossTotal: '-50.00' },
+      { taxRate: '0.2300', netTotal: '100.00', vatAmount: '23.00', grossTotal: '123.00' },
+    ]);
+  });
+});

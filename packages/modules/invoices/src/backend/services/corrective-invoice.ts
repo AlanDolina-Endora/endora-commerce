@@ -81,7 +81,14 @@ export interface CorrectionInput {
   originalLines: readonly CreditedLine[];
   /** The lines of earlier corrections of the same invoice. */
   earlierLines: readonly CreditedLine[];
-  lines: ReadonlyArray<{ amount: string | number; quantity: number; rate: string | number; orderItemId: string }>;
+  lines: ReadonlyArray<{
+    amount: string | number;
+    /** The part of the order-level discount `amount` carries: the goods are credited at `amount + discount`. */
+    discount?: string | number;
+    quantity: number;
+    rate: string | number;
+    orderItemId: string;
+  }>;
 }
 
 /**
@@ -112,6 +119,8 @@ export function correctionAmounts(input: CorrectionInput): {
   lines: CorrectionLineAmounts[];
   /** The correction's per-rate summary, as `invoices.vat_summary` stores it. */
   vatSummary: Array<{ taxRate: string; netTotal: string; vatAmount: string; grossTotal: string }>;
+  /** The order-level discount credited back, as a negative 0 % amount (`0.00` when none). */
+  discountCredit: string;
 } {
   const asked = input.lines.map((l) => (compareDecimals(l.amount, 0) < 0 ? '0.00' : roundHalfUp(l.amount)));
   const linesTotal = moneySum(asked);
@@ -119,12 +128,24 @@ export function correctionAmounts(input: CorrectionInput): {
   if (compareDecimals(total, linesTotal) > 0) throw new CorrectionTotalExceedsLinesError(total, linesTotal);
   const remainingOfInvoice = moneyDifference(input.originalGross, input.creditedBefore ?? '0');
   const credited = compareDecimals(remainingOfInvoice, 0) <= 0 ? '0.00' : minDecimal(total, remainingOfInvoice);
+  const discounts = input.lines.map((l) =>
+    l.discount === undefined || compareDecimals(l.discount, 0) <= 0 ? '0.00' : roundHalfUp(l.discount),
+  );
+  // An order-level discount (issue #417, review of PR #423): the invoice charged
+  // the goods at their full value and the discount on a 0 % line of its own, so
+  // the goods are credited at `amount + discount` and the discount comes back as
+  // a negative 0 % amount — the correction totals the refund, and the goods'
+  // VAT is credited as it was charged. A correction capped below its total
+  // (an anomaly) credits its amounts as goods and no discount.
+  const withDiscount = compareDecimals(credited, total) === 0 && discounts.some((d) => compareDecimals(d, 0) > 0);
   let remaining = credited;
-  const grosses = asked.map((a) => {
+  const grosses = asked.map((a, i) => {
+    if (withDiscount) return moneySum([a, discounts[i]!]);
     const gross = minDecimal(a, remaining);
     remaining = roundHalfUp(decimalDifference(remaining, gross));
     return gross;
   });
+  const discountCredit = withDiscount ? moneyDifference('0', moneySum(discounts)) : '0.00';
 
   const groupOf = (l: { orderItemId: string; rate: string | number }) =>
     input.perRate ? roundHalfUp(l.rate, 4) : l.orderItemId;
@@ -176,13 +197,14 @@ export function correctionAmounts(input: CorrectionInput): {
 
   const taxTotal = moneySum(grosses.map((g, i) => moneyDifference(g, nets[i]!)));
   const rates = new Map<string, { net: string[]; gross: string[] }>();
-  input.lines.forEach((l, i) => {
-    const key = roundHalfUp(l.rate, 4);
+  const addToRate = (key: string, net: string, gross: string) => {
     const sums = rates.get(key) ?? { net: [], gross: [] };
-    sums.net.push(nets[i]!);
-    sums.gross.push(grosses[i]!);
+    sums.net.push(net);
+    sums.gross.push(gross);
     rates.set(key, sums);
-  });
+  };
+  input.lines.forEach((l, i) => addToRate(roundHalfUp(l.rate, 4), nets[i]!, grosses[i]!));
+  if (compareDecimals(discountCredit, 0) !== 0) addToRate('0.0000', discountCredit, discountCredit);
   return {
     credited,
     netTotal: roundHalfUp(decimalDifference(credited, taxTotal)),
@@ -199,6 +221,7 @@ export function correctionAmounts(input: CorrectionInput): {
         const grossTotal = moneySum(sums.gross);
         return { taxRate, netTotal, vatAmount: moneyDifference(grossTotal, netTotal), grossTotal };
       }),
+    discountCredit,
   };
 }
 
@@ -355,10 +378,13 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
         creditedBefore: moneySum(earlierCorrections.map((c) => c.total)),
         // Issued under the per-rate method exactly when it stored its summary.
         perRate: original.vatSummary != null,
-        originalLines: originalLines.map(asCredited),
-        earlierLines: earlierLines.map(asCredited),
+        // Goods lines only: a delivery, surcharge or discount line names no order
+        // item, and an earlier correction's discount credit is not goods.
+        originalLines: originalLines.filter((l) => l.orderItemId).map(asCredited),
+        earlierLines: earlierLines.filter((l) => l.orderItemId).map(asCredited),
         lines: input.lines.map((l, index) => ({
           amount: l.amount,
+          ...(l.discount !== undefined ? { discount: l.discount } : {}),
           quantity: l.quantity,
           rate: mirrored[index]!.rate,
           orderItemId: l.orderItemId,
@@ -381,7 +407,9 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
       unit: mirrored[index]!.unit,
       ...amounts.lines[index]!,
     }));
-    return { original, salesChannelId, amounts, snapshots };
+    // The invoice's own discount line, mirrored by the discount credit's name and unit.
+    const discountLine = originalLines.find((l) => !l.orderItemId && compareDecimals(l.grossValue, 0) < 0);
+    return { original, salesChannelId, amounts, snapshots, discountLine };
   }
 
   async createCorrection(input: CorrectiveInvoiceInput): Promise<CorrectiveInvoiceResult> {
@@ -411,7 +439,7 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
     const plan = await this.#prepare(em, input);
     // No original, no correction (#135).
     if (!plan) return { issued: false, reason: 'order_not_invoiced' };
-    const { original, salesChannelId, amounts, snapshots } = plan;
+    const { original, salesChannelId, amounts, snapshots, discountLine } = plan;
     const { credited: creditedTotal, netTotal, taxTotal } = amounts;
 
     const issuedAt = new Date();
@@ -470,6 +498,22 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
           netValue: s.net,
           grossValue: s.gross,
           orderItemId: s.orderItemId,
+        });
+      }
+      // The order-level discount the returned goods carried, credited back on
+      // a 0 % line of its own, as the invoice charged it (issue #417).
+      if (compareDecimals(amounts.discountCredit, 0) !== 0) {
+        tx.create(InvoiceLine, {
+          invoiceId: inv.id,
+          ordinal: snapshots.length + 1,
+          name: discountLine?.name ?? 'Rabat',
+          unit: discountLine?.unit ?? 'usł.',
+          quantity: '1',
+          unitNetPrice: roundHalfUp(amounts.discountCredit, 4),
+          taxRate: '0.0000',
+          netValue: amounts.discountCredit,
+          grossValue: amounts.discountCredit,
+          orderItemId: null,
         });
       }
       await tx.flush();
