@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { CorrectiveInvoicePort, OrderReturnContextPort } from '@endora-commerce/contracts';
 import { EventBus } from '@endora-commerce/platform/events';
@@ -6,9 +7,9 @@ import { OrderService, type OrderEventBus } from '../../../../../packages/module
 import { PaymentAdapterRegistry } from '../../../../../packages/modules/payment_methods/src/backend/services/payment-adapter-registry.js';
 import { EnumOrderStatusRegistry } from '../../../../../packages/modules/payment_methods/src/backend/services/order-status-registry.port.js';
 import { builtInPaymentAdapters } from '../../../../../packages/modules/payments/src/backend/adapters/built-in-adapters.js';
-import { defaultRefunds } from '../../../../../packages/modules/returns/dist/backend/domain/refund-math.js';
+import { caseDefaultRefunds } from '../../../../../packages/modules/returns/dist/backend/domain/refund-math.js';
 import { orderServiceNeighbours } from '../../../helpers/orders-neighbour-ports.js';
-import { Invoice, Order, Payment, PaymentMethod, StockLevel } from '../../../helpers/package-entities.js';
+import { Invoice, Order, OrderItem, Payment, PaymentMethod, StockLevel } from '../../../helpers/package-entities.js';
 import { seedBasePriceSql } from '../../../helpers/price-book-sql.js';
 import { SEED_DELIVERY_METHOD_ID, SEED_PAYMENT_METHOD_ID } from '../../../helpers/seed-commerce.js';
 import { SEED_PRODUCT_101_ID, SEED_PRODUCT_102_ID, SEED_PRODUCT_103_ID } from '../../../helpers/seed-catalog.js';
@@ -58,10 +59,10 @@ interface Vector {
   tax: string;
   /** Products' gross + the 2.50 surcharge. */
   total: string;
-  /** The quantity of each line a return sends back. */
-  returned: number[];
-  /** What the correction for that return credits: gross, net, VAT. */
-  credited: [string, string, string];
+  /** Return cases, in order: the quantity of each line each one sends back. */
+  returns: number[][];
+  /** What the correction for each return credits: gross, net, VAT. */
+  credited: Array<[string, string, string]>;
 }
 
 const VECTORS: Vector[] = [
@@ -74,8 +75,8 @@ const VECTORS: Vector[] = [
     net: '29.50',
     tax: '6.79',
     total: '38.79',
-    returned: [1],
-    credited: ['36.29', '29.50', '6.79'],
+    returns: [[1]],
+    credited: [['36.29', '29.50', '6.79']],
   },
   {
     // V3, full return: 9.05 × 3 at 8 % is refunded at what was invoiced, 29.32.
@@ -87,8 +88,8 @@ const VECTORS: Vector[] = [
     net: '27.15',
     tax: '2.17',
     total: '31.82',
-    returned: [3],
-    credited: ['29.32', '27.15', '2.17'],
+    returns: [[3]],
+    credited: [['29.32', '27.15', '2.17']],
   },
   {
     id: 'A3',
@@ -99,8 +100,8 @@ const VECTORS: Vector[] = [
     net: '0.70',
     tax: '0.04',
     total: '3.24',
-    returned: [1],
-    credited: ['0.74', '0.70', '0.04'],
+    returns: [[1]],
+    credited: [['0.74', '0.70', '0.04']],
   },
   {
     // V2: two rates in one order. VAT per rate: 6.785 → 6.79 and 0.035 → 0.04.
@@ -121,11 +122,12 @@ const VECTORS: Vector[] = [
     net: '30.20',
     tax: '6.83',
     total: '39.53',
-    returned: [1, 1],
-    credited: ['37.03', '30.20', '6.83'],
+    returns: [[1, 1]],
+    credited: [['37.03', '30.20', '6.83']],
   },
   {
-    // V3, partial return: 2 of 3 refunds 18.10 net + 1.45 VAT.
+    // V3, partial returns: 2 of 3 refunds 18.10 net + 1.45 VAT, then the last
+    // one the rest of what was invoiced — 9.05 net + 0.72 VAT.
     id: 'V3p',
     lines: [{ productId: SEED_PRODUCT_103_ID, quantity: 3 }],
     rates: { simple: 0.08 },
@@ -134,8 +136,49 @@ const VECTORS: Vector[] = [
     net: '27.15',
     tax: '2.17',
     total: '31.82',
-    returned: [2],
-    credited: ['19.55', '18.10', '1.45'],
+    returns: [[2], [1]],
+    credited: [
+      ['19.55', '18.10', '1.45'],
+      ['9.77', '9.05', '0.72'],
+    ],
+  },
+  {
+    // L1 (owner ruling: a line's gross is its own rounding): two lines at 23 %.
+    // The rate's VAT is 33.00 × 0.23 = 7.59; the lines show 36.29 and 4.31 —
+    // 40.60 beside a 40.59 products' gross, the accepted cent.
+    id: 'L1',
+    lines: [
+      { productId: SEED_PRODUCT_101_ID, quantity: 1 },
+      { productId: SEED_PRODUCT_102_ID, quantity: 5 },
+    ],
+    rates: { simple: 0.23, virtual: 0.23 },
+    expectedLines: [
+      ['29.50', '29.50', '36.29'],
+      ['0.70', '3.50', '4.31'],
+    ],
+    rows: [[0.23, '33.00', '7.59', '40.59']],
+    net: '33.00',
+    tax: '7.59',
+    total: '43.09',
+    returns: [[1, 5]],
+    credited: [['40.59', '33.00', '7.59']],
+  },
+  {
+    // R2 (review of PR #423): two returns of 1 of 2 × 29.50 at 23 %. Paid 72.57;
+    // each case on its own would refund 36.29 twice, 72.58. Cumulatively: 36.29, then 36.28.
+    id: 'R2',
+    lines: [{ productId: SEED_PRODUCT_101_ID, quantity: 2 }],
+    rates: { simple: 0.23 },
+    expectedLines: [['29.50', '59.00', '72.57']],
+    rows: [[0.23, '59.00', '13.57', '72.57']],
+    net: '59.00',
+    tax: '13.57',
+    total: '75.07',
+    returns: [[1], [1]],
+    credited: [
+      ['36.29', '29.50', '6.79'],
+      ['36.28', '29.50', '6.78'],
+    ],
   },
 ];
 
@@ -268,7 +311,8 @@ describe('worked examples — §10.17 every document an order produces agrees', 
         };
       }).data;
       v.lines.forEach((line, i) => {
-        const invLine = inv.lines[i]!;
+        // The invoice lists the lines in the order's arrangement: find each by its unit price.
+        const invLine = inv.lines.find((l) => two(l.unitNetPrice) === v.expectedLines[i]![0])!;
         expect([invLine.quantity, two(invLine.unitNetPrice), two(invLine.netValue), two(invLine.grossValue)]).toEqual([
           line.quantity,
           v.expectedLines[i]![0],
@@ -289,42 +333,57 @@ describe('worked examples — §10.17 every document an order produces agrees', 
         v.total,
       ]);
 
-      // What a return refunds by default, and the correction crediting it.
+      // What each return refunds by default — cumulatively — and the correction crediting it.
       const cradle = h.container.cradle as unknown as {
         orderReturnContextPort: OrderReturnContextPort;
         correctiveInvoicePort: CorrectiveInvoicePort;
       };
       const context = (await cradle.orderReturnContextPort.getReturnContext(orderId))!;
-      const returned = v.lines.map((line, i) => ({
-        ctxLine: context.lines.find((l) => l.productId === line.productId)!,
-        quantity: v.returned[i]!,
-      }));
-      const refunds = defaultRefunds(
-        returned.map((r) => ({ unitNetPrice: r.ctxLine.unitNetPrice, taxRate: r.ctxLine.taxRate, quantity: r.quantity })),
-      );
-      const refundTotal = refunds.reduce((sum, r) => sum + Math.round(Number(r) * 100), 0) / 100;
-      expect(two(refundTotal)).toBe(v.credited[0]);
-      const correction = await cradle.correctiveInvoicePort.createCorrection({
-        orderId,
-        lines: returned.map((r, i) => ({
-          orderItemId: r.ctxLine.orderItemId,
-          productName: r.ctxLine.name,
-          quantity: r.quantity,
-          amount: Number(refunds[i]),
-        })),
-        total: refundTotal,
-        currency: 'PLN',
-        idempotencyKey: `money-agreement-${v.id}-${orderId}`,
-      });
-      expect(correction.issued).toBe(true);
-      const corrected = await h.app.inject({
-        method: 'GET',
-        url: `/api/v1/admin/invoices/${(correction as { invoiceId: string }).invoiceId}`,
-        cookies: ADMIN_COOKIE,
-      });
-      expect(corrected.statusCode, corrected.body).toBe(200);
-      const c = (corrected.json() as { data: { netTotal: number; taxTotal: number; grossTotal: number } }).data;
-      expect([c.grossTotal, c.netTotal, c.taxTotal].map(two)).toEqual(v.credited);
+      const earlier: Array<{ orderItemId: string; quantity: number; defaultRefundAmount: string }> = [];
+      const credited: Array<[string, string, string]> = [];
+      for (const [caseIndex, quantities] of v.returns.entries()) {
+        const current = v.lines
+          .map((line, i) => ({ orderItemId: context.lines.find((l) => l.productId === line.productId)!.orderItemId, quantity: quantities[i]! }))
+          .filter((c) => c.quantity > 0);
+        const refunds = caseDefaultRefunds({
+          vatMethod: context.vatMethod,
+          productsPaidTotal: context.productsPaidTotal,
+          orderLines: context.lines.map((l) => ({
+            orderItemId: l.orderItemId,
+            unitNetPrice: l.unitNetPrice,
+            taxRate: l.taxRate,
+            purchasedQty: l.purchasedQty,
+            paidLineAmount: l.paidLineAmount.toFixed(2),
+            returnable: true,
+          })),
+          earlier,
+          current,
+        });
+        const refundTotal = refunds.reduce((sum, r) => sum + Math.round(Number(r) * 100), 0) / 100;
+        const correction = await cradle.correctiveInvoicePort.createCorrection({
+          orderId,
+          lines: current.map((c, i) => ({
+            orderItemId: c.orderItemId,
+            productName: context.lines.find((l) => l.orderItemId === c.orderItemId)!.name,
+            quantity: c.quantity,
+            amount: Number(refunds[i]),
+          })),
+          total: refundTotal,
+          currency: 'PLN',
+          idempotencyKey: `money-agreement-${v.id}-${orderId}-${caseIndex}`,
+        });
+        expect(correction.issued).toBe(true);
+        const corrected = await h.app.inject({
+          method: 'GET',
+          url: `/api/v1/admin/invoices/${(correction as { invoiceId: string }).invoiceId}`,
+          cookies: ADMIN_COOKIE,
+        });
+        expect(corrected.statusCode, corrected.body).toBe(200);
+        const c = (corrected.json() as { data: { netTotal: number; taxTotal: number; grossTotal: number } }).data;
+        credited.push([two(c.grossTotal), two(c.netTotal), two(c.taxTotal)]);
+        current.forEach((cur, i) => earlier.push({ ...cur, defaultRefundAmount: refunds[i]! }));
+      }
+      expect(credited).toEqual(v.credited);
 
       // The admin CSV export.
       const csv = await h.app.inject({ method: 'GET', url: '/api/v1/admin/orders/export', cookies: ADMIN_COOKIE });
@@ -335,4 +394,111 @@ describe('worked examples — §10.17 every document an order produces agrees', 
       expect(row?.[columns.indexOf('total')]).toBe(v.total);
     });
   }
+
+  it('L0 — an order placed before 0.108.0 refunds and credits what it charged, and its new invoice shows the cent still due', async () => {
+    // Stored by the rule of its day: line grosses 36.29 and 4.52, the lines'
+    // exact taxes summed and rounded once (7.00), total 40.80 — and 40.80 captured.
+    const em = h.em().fork();
+    const order = em.create(Order, {
+      organizationId: TEST_ORGANIZATION_ID,
+      placedByCustomerAccountId: TEST_CUSTOMER_ID,
+      salesChannelId: await systemDefaultSalesChannelId(em),
+      status: 'completed',
+      paymentStatus: 'paid',
+      deliveryAddress: { recipientName: 'Buyer', street: 'ul. Testowa 1', city: 'Warszawa', postalCode: '00-002', country: 'PL' },
+      billingAddress: {
+        recipientName: 'Buyer',
+        street: 'ul. Testowa 1',
+        city: 'Warszawa',
+        postalCode: '00-002',
+        country: 'PL',
+        companyName: 'Buyer Sp. z o.o.',
+        taxId: '1231231230',
+      },
+      deliveryMethodId: randomUUID(),
+      deliveryMethodSnapshot: { code: 'dm', name: 'Kurier', cost: 0 },
+      paymentMethodId: randomUUID(),
+      paymentMethodSnapshot: { code: 'pm', name: 'Przelew', kind: 'bank_transfer' },
+      subtotal: '33.80',
+      taxTotal: '7.00',
+      deliveryTotal: '0.00',
+      discountTotal: '0.00',
+      total: '40.80',
+      currency: 'PLN',
+      placedAt: new Date('2026-09-01T10:00:00Z'),
+    });
+    await em.persistAndFlush(order);
+    const lineA = em.create(OrderItem, {
+      orderId: order.id,
+      productId: randomUUID(),
+      productSnapshot: { sku: 'L0-A', name: 'A', primaryAssetUrl: null },
+      quantity: 1,
+      position: 0,
+      unitPrice: '29.50',
+      taxRate: '0.2300',
+      lineTotal: '36.29',
+    });
+    const lineB = em.create(OrderItem, {
+      orderId: order.id,
+      productId: randomUUID(),
+      productSnapshot: { sku: 'L0-B', name: 'B', primaryAssetUrl: null },
+      quantity: 1,
+      position: 1,
+      unitPrice: '4.30',
+      taxRate: '0.0500',
+      lineTotal: '4.52',
+    });
+    em.create(Payment, { orderId: order.id, paymentMethodId: randomUUID(), status: 'paid', amount: '40.80', currency: 'PLN', paidAt: new Date() });
+    await em.flush();
+
+    // The invoice, issued now, takes VAT per rate: 7.01, gross 40.81 — 40.80 was paid.
+    const issued = await h.app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/orders/${order.id}/invoices`,
+      cookies: ADMIN_COOKIE,
+      payload: { kind: 'invoice' },
+    });
+    expect(issued.statusCode, issued.body).toBe(201);
+    const inv = (issued.json() as { data: { taxTotal: number; grossTotal: number; paidTotal: number; amountDue: number } }).data;
+    expect([inv.taxTotal, inv.grossTotal, inv.paidTotal, inv.amountDue].map(two)).toEqual(['7.01', '40.81', '40.80', '0.01']);
+
+    // A full return refunds what the order charged, read from what it stored.
+    const cradle = h.container.cradle as unknown as {
+      orderReturnContextPort: OrderReturnContextPort;
+      correctiveInvoicePort: CorrectiveInvoicePort;
+    };
+    const context = (await cradle.orderReturnContextPort.getReturnContext(order.id))!;
+    expect([context.vatMethod, context.productsPaidTotal]).toEqual([null, '40.80']);
+    const refunds = caseDefaultRefunds({
+      vatMethod: context.vatMethod,
+      productsPaidTotal: context.productsPaidTotal,
+      orderLines: context.lines.map((l) => ({
+        orderItemId: l.orderItemId,
+        unitNetPrice: l.unitNetPrice,
+        taxRate: l.taxRate,
+        purchasedQty: l.purchasedQty,
+        paidLineAmount: l.paidLineAmount.toFixed(2),
+        returnable: true,
+      })),
+      earlier: [],
+      current: [lineA, lineB].map((l) => ({ orderItemId: l.id, quantity: 1 })),
+    });
+    // The line totals add up to 40.81; the order charged 40.80, and a complete return refunds exactly that.
+    expect(refunds).toEqual(['36.28', '4.52']);
+    const correction = await cradle.correctiveInvoicePort.createCorrection({
+      orderId: order.id,
+      lines: [lineA, lineB].map((l, i) => ({ orderItemId: l.id, productName: l.productSnapshot.name, quantity: 1, amount: Number(refunds[i]) })),
+      total: 40.8,
+      currency: 'PLN',
+      idempotencyKey: `money-agreement-L0-${order.id}`,
+    });
+    const corrected = await h.app.inject({
+      method: 'GET',
+      url: `/api/v1/admin/invoices/${(correction as { invoiceId: string }).invoiceId}`,
+      cookies: ADMIN_COOKIE,
+    });
+    const c = (corrected.json() as { data: { netTotal: number; taxTotal: number; grossTotal: number } }).data;
+    // The credit is what was paid: the 0.01 of VAT never paid is never credited.
+    expect([c.grossTotal, c.netTotal, c.taxTotal].map(two)).toEqual(['40.80', '33.80', '7.00']);
+  });
 });
