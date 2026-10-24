@@ -10,7 +10,8 @@ proposal — the ratified target is `decision-record.md`, and the test vectors a
 conversion and removal phase (tasks T114–T133), and re-checked at `e1758312e` on 2026-10-23 for
 the documentation rebuild (feature 160, Phase 13): §1.2's caching paragraph, §1.3 and §1.4; and
 at `91e8c1907` on 2026-10-23 after the owner rulings of that day (targeted surface refresh, pinned
-feeds): §1.2's caching and consumers paragraphs, §1.3 and §1.4 item 7. The old model — the Application rule, the per-list
+feeds): §1.2's caching and consumers paragraphs, §1.3 and §1.4 item 7; and at `e3f456957` on
+2026-10-24 for the second review of release 0.108.0: §1.2's display-mode paragraph and §1.3. The old model — the Application rule, the per-list
 product roster and brackets, the `Default` list, the product *default price* and the variant price
 override — is gone from the code and, after the conversion migration, from the database. How it
 worked is recorded in this file's history (`git log -- specs/pricing/current-model.md`); the
