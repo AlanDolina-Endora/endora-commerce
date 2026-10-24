@@ -299,9 +299,10 @@ export class BookPricing {
   ): Promise<Map<string, BookLineAnswer | null>> {
     const out = new Map<string, BookLineAnswer | null>();
     if (lines.length === 0) return out;
-    const { currencyCode, answered } = await this.#resolveLines(lines, viewer, prefetchedVariants, fixedProfile, {
+    const { currencyCode, answered } = await this.#resolveLines(lines, viewer, prefetchedVariants, {
+      kind: 'viewer',
+      fixedProfile,
       explain: options.explain === true,
-      displayModes: true,
     });
 
     // The viewer's tail of the display-mode chain, once for the batch, and
@@ -321,27 +322,32 @@ export class BookPricing {
   }
 
   /**
-   * The resolutions of a batch, each with the product step of its display-mode
-   * chain when `displayModes` asks for it (`null` otherwise) — what
-   * {@link resolve} answers before it applies the viewer's tail, and what the
-   * price surface's worker stores without either (issue #416).
+   * The resolutions of a batch — what {@link resolve} answers before it applies
+   * the viewer's tail of the display-mode chain, and what the price surface's
+   * worker stores (issue #416). One switch says which:
+   *
+   * - `viewer` — a resolution for someone looking: each line carries the
+   *   product step of its display-mode chain, and the line is cached unless it
+   *   is a fixed profile's or an explanation;
+   * - `surface` — the surface's worker resolving a whole profile: no display
+   *   mode (the surface stores amounts), nothing read from or written to the
+   *   cache (`productDisplayMode` is `null` on every line).
    */
   async #resolveLines(
     lines: readonly PricingLineRequest[],
     viewer: BookPricingViewer,
     prefetchedVariants: ReadonlyMap<string, CatalogProductVariantRecord> | undefined,
-    fixedProfile: PricingProfile | undefined,
-    options: { explain: boolean; displayModes: boolean },
+    mode: { kind: 'viewer'; fixedProfile: PricingProfile | undefined; explain: boolean } | { kind: 'surface'; profile: PricingProfile },
   ): Promise<{ currencyCode: string; answered: Array<{ cached: CachedBookLine; keys: string[] }> }> {
+    const fixedProfile = mode.kind === 'surface' ? mode.profile : mode.fixedProfile;
+    const explain = mode.kind === 'viewer' && mode.explain;
     const currencyCode = viewer.currencyCode.toUpperCase();
     const em = this.deps.emFactory();
     // Read before the first statement (`pricing-cache.ts`): a write that
     // commits while this resolution reads the channel, the precedence or the
     // profile invalidates, and the answer built on what was read before it is
     // then not stored (review finding 6 of release 0.108.0).
-    // A line resolved without its display-mode step is never cached: a cached
-    // line carries that step for every viewer it is served to.
-    const cache = fixedProfile || options.explain || !options.displayModes ? undefined : this.deps.cache;
+    const cache = mode.kind === 'viewer' && !fixedProfile && !explain ? this.deps.cache : undefined;
     const generation = cache?.generation;
 
     // K3.2 — a currency the channel does not offer prices nothing (the lines
@@ -402,8 +408,8 @@ export class BookPricing {
       if (rows.some((r) => r.attributeKey !== null)) {
         eligibleAttributes = buildEligibleAttributes(await this.deps.attributeRead().listByFlag('isPriceRule'));
       }
-      const resolver = createBookResolver({ books, rows, precedence, eligibleAttributes, explain: options.explain });
-      const productModes = options.displayModes
+      const resolver = createBookResolver({ books, rows, precedence, eligibleAttributes, explain });
+      const productModes = mode.kind === 'viewer'
         ? await this.deps.productDisplayModes({ productIds, categoryIdsByProduct })
         : new Map<string, DisplayMode | null>();
 
@@ -594,10 +600,7 @@ export class BookPricing {
       salesChannelId: profile.channelId,
       currencyCode: profile.currencyCode,
     };
-    const { answered } = await this.#resolveLines(lines, viewer, new Map(records.map((v) => [v.id, v])), profile, {
-      explain: false,
-      displayModes: false,
-    });
+    const { answered } = await this.#resolveLines(lines, viewer, new Map(records.map((v) => [v.id, v])), { kind: 'surface', profile });
     const resolutions = new Map<string, BookResolution>();
     for (const { cached, keys } of answered) for (const key of keys) resolutions.set(key, cached.resolution);
     for (const product of products) {
