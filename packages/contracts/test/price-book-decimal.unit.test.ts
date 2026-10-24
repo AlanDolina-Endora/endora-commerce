@@ -3,6 +3,7 @@ import {
   applyAmountAdjustment,
   applySignedPercent,
   compareDecimal,
+  decimalText,
   formatUnits,
   grossAmountHalfUp,
   normaliseAmount,
@@ -207,5 +208,55 @@ describe('grossAmountHalfUp — net at a rate, two places, half-up on the decima
     expect(() => grossAmountHalfUp('1', '-5')).toThrow();
     expect(() => grossAmountHalfUp('abc', '23')).toThrow();
     expect(() => grossAmountHalfUp(Number.NaN, 23)).toThrow();
+  });
+});
+
+/**
+ * Review 3 of release 0.108.0, D1 — one reading of a number as decimal text,
+ * shared by the rounding helpers and the storefront's gross, instead of a copy
+ * in each and a hand-shifted decimal point for a fractional rate.
+ */
+describe('decimalText — a number as the shortest decimal that round-trips it', () => {
+  it.each([
+    [9.045, '9.045'],
+    [0.23, '0.23'],
+    [100, '100'],
+    [1e21, '1000000000000000000000'],
+    [1e-7, '0.000000100000'],
+    [-2.5, '-2.5'],
+  ])('%s is %s', (value, text) => {
+    expect(decimalText(value)).toBe(text);
+  });
+
+  it('trims a string and leaves it otherwise as written', () => {
+    expect(decimalText(' 9.0450 ')).toBe('9.0450');
+  });
+
+  it('refuses a number that is not finite', () => {
+    expect(() => decimalText(Number.NaN)).toThrow();
+    expect(() => decimalText(Number.POSITIVE_INFINITY)).toThrow();
+  });
+});
+
+describe('grossAmountHalfUp — a fractional rate', () => {
+  it.each([
+    [29.5, 0.23, '36.29'],
+    [4.3, 0.05, '4.52'],
+    [16.5, 0.23, '20.30'],
+    [10, 0.085, '10.85'],
+    [10, 0, '10.00'],
+    [0, 0.23, '0.00'],
+  ])('%s at %s is %s', (net, rate, gross) => {
+    expect(grossAmountHalfUp(net, rate, 'fraction')).toBe(gross);
+  });
+
+  it('answers what the same rate in percent answers', () => {
+    for (const [net, fraction, percent] of [
+      ['29.50', '0.23', '23'],
+      ['9.0450', '0.235', '23.5'],
+      ['99999999.9999', '0.23', '23'],
+    ] as const) {
+      expect(grossAmountHalfUp(net, fraction, 'fraction')).toBe(grossAmountHalfUp(net, percent));
+    }
   });
 });

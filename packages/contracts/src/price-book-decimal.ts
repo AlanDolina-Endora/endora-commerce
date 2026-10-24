@@ -89,6 +89,23 @@ export function normaliseAmount(value: string): string {
 const DECIMAL = /^(-)?(\d+)(?:\.(\d+))?$/;
 
 /**
+ * A decimal as text: a string trimmed, a number as the shortest decimal that
+ * round-trips it — `String(9.045)` is `"9.045"`, which is the decimal a
+ * four-place amount string parsed with `Number` came from. A magnitude
+ * `String` writes in exponent form is far outside any price, but is still a
+ * number: a large one is an integer (every double from 2^53 up is), a tiny one
+ * is read at twelve places. The one reading every helper here and the
+ * storefront's gross share (review 3 of release 0.108.0, D1).
+ */
+export function decimalText(value: string | number): string {
+  if (typeof value === 'string') return value.trim();
+  if (!Number.isFinite(value)) throw new Error(`Not a finite number: ${value}`);
+  const text = String(value);
+  if (!/e/i.test(text)) return text;
+  return Math.abs(value) >= 1 ? BigInt(value).toString() : value.toFixed(12);
+}
+
+/**
  * An amount at two places, rounded **half-up on its decimal digits** (half
  * away from zero for a negative amount) — the one rule every surface that
  * shows or stores a price at two places applies to a resolver amount: the
@@ -104,17 +121,7 @@ const DECIMAL = /^(-)?(\d+)(?:\.(\d+))?$/;
  * string parsed with `Number` came from.
  */
 export function roundAmountHalfUp(value: string | number): string {
-  let text: string;
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) throw new Error(`Not a finite amount: ${value}`);
-    text = String(value);
-    // A magnitude `String` writes in exponent form is far outside any price,
-    // but is still a number: a large one is an integer (every double from 2^53
-    // up is), a tiny one is read at twelve places.
-    if (/e/i.test(text)) text = Math.abs(value) >= 1 ? BigInt(value).toString() : value.toFixed(12);
-  } else {
-    text = value.trim();
-  }
+  const text = decimalText(value);
   const match = DECIMAL.exec(text);
   if (!match) throw new Error(`Not a decimal amount: "${String(value)}"`);
   const fraction = (match[3] ?? '').padEnd(3, '0');
@@ -129,16 +136,9 @@ export function roundAmountHalfUp(value: string | number): string {
 
 const UNSIGNED_DECIMAL = /^(\d+)(?:\.(\d+))?$/;
 
-/** A non-negative decimal (string, or number read as its shortest round-tripping decimal) as an integer and a scale. */
+/** A non-negative decimal ({@link decimalText}) as an integer and a scale. */
 function decimalParts(value: string | number, what: string): { digits: bigint; scale: number } {
-  let text: string;
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) throw new Error(`Not a finite ${what}: ${value}`);
-    text = String(value);
-    if (/e/i.test(text)) text = Math.abs(value) >= 1 ? BigInt(value).toString() : value.toFixed(12);
-  } else {
-    text = value.trim();
-  }
+  const text = decimalText(value);
   const match = UNSIGNED_DECIMAL.exec(text);
   if (!match) throw new Error(`Not a non-negative decimal ${what}: "${String(value)}"`);
   const fraction = match[2] ?? '';
@@ -146,8 +146,8 @@ function decimalParts(value: string | number, what: string): { digits: bigint; s
 }
 
 /**
- * The gross of a net amount at a tax rate in percent — `net × (1 + rate / 100)`
- * — at two places, rounded **half-up on the exact decimal product** (review 2,
+ * The gross of a net amount at a tax rate — `net × (1 + rate / 100)` for a
+ * rate in percent — at two places, rounded **half-up on the exact decimal product** (review 2,
  * finding 2 of release 0.108.0; `specs/pricing/worked-examples.md` §10.16).
  *
  * The companion of {@link roundAmountHalfUp} for a figure that is computed
@@ -155,20 +155,29 @@ function decimalParts(value: string | number, what: string): { digits: bigint; s
  * shows beside a net one. Computed on integers — `net` and `rate` as written,
  * one multiplication, one half-up step — because `29.50 × 1.23` is the double
  * 36.28499…, so binary arithmetic published 36.28 where the price is 36.29.
- * Both arguments are non-negative decimals; a number is read as the shortest
- * decimal that round-trips it, as `roundAmountHalfUp` reads one.
+ * Both arguments are non-negative decimals ({@link decimalText}). The rate is
+ * in percent (`23`) unless `unit` says it is a fraction (`0.23`, the
+ * storefront's `DEFAULT_VAT_RATE`), which is read as written rather than
+ * multiplied by 100 on a double.
  */
-export function grossAmountHalfUp(net: string | number, ratePercent: string | number): string {
+export function grossAmountHalfUp(
+  net: string | number,
+  rate: string | number,
+  unit: 'percent' | 'fraction' = 'percent',
+): string {
   const amount = decimalParts(net, 'amount');
-  const rate = decimalParts(ratePercent, 'rate');
-  // (100 + rate) at the rate's scale, over 100 at that scale.
-  const factor = 100n * 10n ** BigInt(rate.scale) + rate.digits;
+  const parts = decimalParts(rate, 'rate');
+  // A percent is a fraction written two places further right.
+  const shift = unit === 'percent' ? 2 : 0;
+  // (1 + rate) as an integer at the rate's scale plus the shift.
+  const factor = 10n ** BigInt(parts.scale + shift) + parts.digits;
   const product = amount.digits * factor;
-  // The product's scale is the amount's plus the rate's plus two (the percent).
-  const scale = amount.scale + rate.scale + 2;
+  const scale = amount.scale + parts.scale + shift;
   // Hundredths, half-up: add half of the dropped unit, then truncate.
-  const drop = 10n ** BigInt(scale - 2);
-  const hundredths = drop === 1n ? product : (product + drop / 2n) / drop;
+  const hundredths =
+    scale <= 2
+      ? product * 10n ** BigInt(2 - scale)
+      : (product + 10n ** BigInt(scale - 2) / 2n) / 10n ** BigInt(scale - 2);
   const whole = hundredths / 100n;
   const cents = (hundredths % 100n).toString().padStart(2, '0');
   return `${whole.toString()}.${cents}`;

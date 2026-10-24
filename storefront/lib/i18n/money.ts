@@ -98,21 +98,7 @@ export const DEFAULT_VAT_RATE = 0.23;
 export function grossFromNet(net: number, vatRate: number | null): number | null {
   if (vatRate === null || !Number.isFinite(net) || !Number.isFinite(vatRate)) return null;
   if (net < 0 || vatRate < 0) return net * (1 + vatRate);
-  return Number(grossAmountHalfUp(net, percentOf(vatRate)));
-}
-
-/**
- * A fractional rate (`0.23`) as the percentage it writes (`"23"`), by moving
- * the decimal point of its shortest decimal — `0.23 * 100` is the double
- * 23.000000000000004, which is not the rate.
- */
-function percentOf(fraction: number): string {
-  const text = /e/i.test(String(fraction)) ? fraction.toFixed(12) : String(fraction);
-  const [whole = '0', decimals = ''] = text.split('.');
-  const digits = `${whole}${decimals.padEnd(2, '0')}`;
-  const point = whole.length + 2;
-  const percent = `${digits.slice(0, point)}.${digits.slice(point)}`.replace(/\.$/, '');
-  return percent.replace(/^0+(?=\d)/, '');
+  return Number(grossAmountHalfUp(net, vatRate, 'fraction'));
 }
 
 /**
