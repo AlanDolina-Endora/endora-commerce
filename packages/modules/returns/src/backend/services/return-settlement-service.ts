@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { EntityManager } from '@mikro-orm/postgresql';
-import { ERROR_CODES } from '@endora-commerce/contracts';
+import { ERROR_CODES, compareDecimals } from '@endora-commerce/contracts';
 import type {
   CorrectiveInvoiceInput,
   CorrectiveInvoicePort,
@@ -17,7 +17,7 @@ import { ReturnCase } from '../entities/return-case.entity.js';
 import { ReturnCaseItem } from '../entities/return-case-item.entity.js';
 import { Refund } from '../entities/refund.entity.js';
 import { RETURN_STATUS_RESOLVED } from '../domain/return-status-graph.js';
-import { approvedAmount, exceedsCap, sumApproved } from '../domain/refund-math.js';
+import { approvedAmount, carriedDiscount, exceedsCap, sumApproved } from '../domain/refund-math.js';
 import type { ReturnTransitionService } from './return-transition-service.js';
 import type { ReturnStatusGraphService } from './return-status-graph-service.js';
 
@@ -153,16 +153,22 @@ export class ReturnSettlementService {
     const wantsCorrection = movesMoney && (input.createCorrectiveInvoice ?? true);
     const correctionInput: CorrectiveInvoiceInput = {
       orderId: rc.orderId,
-      lines: items.map((it) => ({
-        // The order item is what ties this credit to the invoice line it
-        // corrects, so the correction can mirror that line's VAT rate.
-        orderItemId: it.orderItemId,
-        productName: it.productName,
-        quantity: it.quantity,
+      lines: items.map((it) => {
         // The approved amount for this settlement, which is not on the row
         // yet: the rows are written in step 4.
-        amount: approvedByItemId.get(it.id) ?? Number(it.approvedRefundAmount),
-      })),
+        const amount = approvedByItemId.get(it.id) ?? Number(it.approvedRefundAmount);
+        const discount = carriedDiscount(it.defaultDiscountAmount, it.defaultRefundAmount, amount);
+        return {
+          // The order item is what ties this credit to the invoice line it
+          // corrects, so the correction can mirror that line's VAT rate.
+          orderItemId: it.orderItemId,
+          productName: it.productName,
+          quantity: it.quantity,
+          amount,
+          // The order-level discount this amount carries (issue #417).
+          ...(compareDecimals(discount, 0) > 0 ? { discount: Number(discount) } : {}),
+        };
+      }),
       total,
       currency: rc.currency,
       // One correction per return case, however often the settlement is

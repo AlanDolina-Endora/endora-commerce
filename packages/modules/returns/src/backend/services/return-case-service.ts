@@ -112,152 +112,162 @@ export class ReturnCaseService {
     }
 
     const byOrderItem = new Map(ctx.lines.map((l) => [l.orderItemId, l]));
-    const consumed = await this.consumedQuantities(input.orderId);
-    const reasons = new Map(
-      (await this.deps.emFactory().find(ReturnReason, { isActive: true })).map((r) => [r.id, r]),
-    );
-
-    // Feature 155 (FR-033, SC-006) — judged on the per-line sum, for both
-    // kinds, so a request cannot exceed a line's remaining quantity by naming
-    // it more than once. The entries are still stored as sent.
-    const quantityRefusal = checkRequestedQuantities(input.lines, ctx.lines, consumed);
-    if (quantityRefusal?.code === 'unknown_line') {
-      throw new HttpError(422, ERROR_CODES.VALIDATION_FAILED, 'Unknown order line.', {
-        code: 'unknown_line',
-      });
-    }
-    if (quantityRefusal?.code === 'qty_exceeds_returnable') {
-      throw new HttpError(
-        422,
-        ERROR_CODES.VALIDATION_FAILED,
-        `Requested quantity (${quantityRefusal.requested}) exceeds the returnable quantity (${quantityRefusal.remaining}).`,
-        { code: 'qty_exceeds_returnable' },
+    // One case at a time per order (issue #417, review of PR #423): the
+    // quantity check and the cumulative refunds read the order's earlier
+    // cases, so a concurrent case must wait for this one and then see it. A
+    // transaction-scoped advisory lock keyed by the order, read once.
+    const caseId = await this.deps.emFactory().transactional(async (em) => {
+      await em.execute('select pg_advisory_xact_lock(hashtext(?))', [`return_cases:${input.orderId}`]);
+      const live = await this.liveCaseItems(input.orderId, em);
+      const consumed = consumedFrom(live);
+      const reasons = new Map(
+        (await this.deps.emFactory().find(ReturnReason, { isActive: true })).map((r) => [r.id, r]),
       );
-    }
-    for (const line of input.lines) {
-      if (!reasons.has(line.reasonId)) {
-        throw new HttpError(422, ERROR_CODES.VALIDATION_FAILED, 'Unknown or inactive reason.', {
-          code: 'unknown_reason',
+
+      // Feature 155 (FR-033, SC-006) — judged on the per-line sum, for both
+      // kinds, so a request cannot exceed a line's remaining quantity by naming
+      // it more than once. The entries are still stored as sent.
+      const quantityRefusal = checkRequestedQuantities(input.lines, ctx.lines, consumed);
+      if (quantityRefusal?.code === 'unknown_line') {
+        throw new HttpError(422, ERROR_CODES.VALIDATION_FAILED, 'Unknown order line.', {
+          code: 'unknown_line',
         });
       }
-    }
+      if (quantityRefusal?.code === 'qty_exceeds_returnable') {
+        throw new HttpError(
+          422,
+          ERROR_CODES.VALIDATION_FAILED,
+          `Requested quantity (${quantityRefusal.requested}) exceeds the returnable quantity (${quantityRefusal.remaining}).`,
+          { code: 'qty_exceeds_returnable' },
+        );
+      }
+      for (const line of input.lines) {
+        if (!reasons.has(line.reasonId)) {
+          throw new HttpError(422, ERROR_CODES.VALIDATION_FAILED, 'Unknown or inactive reason.', {
+            code: 'unknown_reason',
+          });
+        }
+      }
 
-    // Feature 155 (FR-019, FR-020) — a `return` case may not include a line
-    // recorded as not returnable; a complaint is never checked. Existing
-    // cases are never re-evaluated (FR-022).
-    const notReturnable = nonReturnableRequestedLines(input.kind, input.lines, ctx.lines);
-    const firstNotReturnable = notReturnable[0];
-    if (firstNotReturnable) {
-      throw new HttpError(
-        422,
-        ERROR_CODES.RETURN_LINE_NOT_RETURNABLE,
-        `"${firstNotReturnable.productName}" cannot be returned. You can still file a complaint.`,
-        {
-          productName: firstNotReturnable.productName,
-          orderItemIds: notReturnable.map((l) => l.orderItemId),
-          lines: notReturnable,
-        },
-      );
-    }
+      // Feature 155 (FR-019, FR-020) — a `return` case may not include a line
+      // recorded as not returnable; a complaint is never checked. Existing
+      // cases are never re-evaluated (FR-022).
+      const notReturnable = nonReturnableRequestedLines(input.kind, input.lines, ctx.lines);
+      const firstNotReturnable = notReturnable[0];
+      if (firstNotReturnable) {
+        throw new HttpError(
+          422,
+          ERROR_CODES.RETURN_LINE_NOT_RETURNABLE,
+          `"${firstNotReturnable.productName}" cannot be returned. You can still file a complaint.`,
+          {
+            productName: firstNotReturnable.productName,
+            orderItemIds: notReturnable.map((l) => l.orderItemId),
+            lines: notReturnable,
+          },
+        );
+      }
 
-    const em = this.deps.emFactory();
-    const graph = await this.deps.graphService.loadGraph();
-    const now = this.now();
-    const freeReturnEligible =
-      input.kind === 'return'
-        ? await this.isWithinFreeWindow(ctx.salesChannelId, ctx.completingStatusEnteredAt)
-        : false;
+      const graph = await this.deps.graphService.loadGraph();
+      const now = this.now();
+      const freeReturnEligible =
+        input.kind === 'return'
+          ? await this.isWithinFreeWindow(ctx.salesChannelId, ctx.completingStatusEnteredAt)
+          : false;
 
-    const rc = em.create(ReturnCase, {
-      kind: input.kind,
-      orderId: input.orderId,
-      salesChannelId: ctx.salesChannelId,
-      customerAccountId,
-      organizationId: ctx.organizationId,
-      statusCode: graph.initialCode(),
-      currency: ctx.currency,
-      freeReturnEligible,
-      submittedAt: now,
-    });
-    em.persist(rc);
-
-    // What each returned line refunds by default — cumulatively over the
-    // order's live cases (issue #417, review of PR #423): no sequence of
-    // returns refunds more than the order charged, and a complete return
-    // refunds exactly that. Read from what the order stored, never recomputed.
-    const defaults = caseDefaultRefunds({
-      vatMethod: ctx.vatMethod,
-      productsPaidTotal: ctx.productsPaidTotal,
-      orderLines: ctx.lines.map((l) => ({
-        orderItemId: l.orderItemId,
-        unitNetPrice: l.unitNetPrice,
-        taxRate: l.taxRate,
-        purchasedQty: l.purchasedQty,
-        paidLineAmount: approvedAmount(l.paidLineAmount),
-        returnable: isLineReturnable(l.returnableAtPurchase),
-      })),
-      earlier: (await this.liveCaseItems(input.orderId)).map((it) => ({
-        orderItemId: it.orderItemId,
-        quantity: it.quantity,
-        defaultRefundAmount: it.defaultRefundAmount,
-      })),
-      current: input.lines.map((line) => ({ orderItemId: line.orderItemId, quantity: line.quantity })),
-    });
-    for (const [index, line] of input.lines.entries()) {
-      const ctxLine = byOrderItem.get(line.orderItemId)!;
-      const defaultRefund = defaults[index]!;
-      // Owner ruling R1 (feature 155, FR-020) — a complaint may name a line that
-      // was not returnable at purchase, but nothing refunds it by default: its
-      // approved amount starts at 0 for the operator to set. The default refund
-      // stays the amount paid, because it is the cap settlement lets the
-      // operator approve up to (`exceedsCap`).
-      const approvedRefund = isLineReturnable(ctxLine.returnableAtPurchase) ? defaultRefund : '0.00';
-      em.persist(
-        em.create(ReturnCaseItem, {
-          returnCaseId: rc.id,
-          orderItemId: line.orderItemId,
-          productId: ctxLine.productId,
-          productName: ctxLine.name,
-          quantity: line.quantity,
-          reasonId: line.reasonId,
-          description: line.description ?? null,
-          defaultRefundAmount: approvedAmount(defaultRefund),
-          approvedRefundAmount: approvedAmount(approvedRefund),
-        }),
-      );
-    }
-
-    for (const assetId of input.attachmentAssetIds ?? []) {
-      em.persist(em.create(ReturnCaseAttachment, { returnCaseId: rc.id, assetId }));
-    }
-    if (input.comment) {
-      em.persist(
-        em.create(ReturnCaseComment, {
-          returnCaseId: rc.id,
-          authorCustomerAccountId: customerAccountId,
-          body: input.comment,
-          isCustomerVisible: true,
-          notifyCustomer: false,
-        }),
-      );
-    }
-
-    if (this.deps.auditLog) {
-      recordAuditFromContext(this.deps.auditLog, em, {
-        action: 'return_case.create',
-        objectType: 'return_case',
-        objectId: rc.id,
-        stateBefore: null,
-        stateAfter: {
-          kind: rc.kind,
-          orderId: rc.orderId,
-          statusCode: rc.statusCode,
-          lineCount: input.lines.length,
-        },
+      const rc = em.create(ReturnCase, {
+        kind: input.kind,
+        orderId: input.orderId,
+        salesChannelId: ctx.salesChannelId,
+        customerAccountId,
+        organizationId: ctx.organizationId,
+        statusCode: graph.initialCode(),
+        currency: ctx.currency,
+        freeReturnEligible,
+        submittedAt: now,
       });
-    }
-    await em.flush();
-    return this.mapDetail(em, rc.id, { customerView: true });
+      em.persist(rc);
+
+      // What each returned line refunds by default — cumulatively over the
+      // order's live cases (issue #417, review of PR #423): no sequence of
+      // returns refunds more than the order charged, and a complete return
+      // refunds exactly that. Read from what the order stored, never recomputed.
+      const defaults = caseDefaultRefunds({
+        vatMethod: ctx.vatMethod,
+        productsPaidTotal: ctx.productsPaidTotal,
+        discountTotal: ctx.discountTotal,
+        orderLines: ctx.lines.map((l) => ({
+          orderItemId: l.orderItemId,
+          unitNetPrice: l.unitNetPrice,
+          taxRate: l.taxRate,
+          purchasedQty: l.purchasedQty,
+          paidLineAmount: approvedAmount(l.paidLineAmount),
+          returnable: isLineReturnable(l.returnableAtPurchase),
+        })),
+        earlier: live.map((it) => ({
+          orderItemId: it.orderItemId,
+          quantity: it.quantity,
+          defaultRefundAmount: it.defaultRefundAmount,
+        })),
+        current: input.lines.map((line) => ({ orderItemId: line.orderItemId, quantity: line.quantity })),
+      });
+      for (const [index, line] of input.lines.entries()) {
+        const ctxLine = byOrderItem.get(line.orderItemId)!;
+        const { refund: defaultRefund, discount: defaultDiscount } = defaults[index]!;
+        // Owner ruling R1 (feature 155, FR-020) — a complaint may name a line that
+        // was not returnable at purchase, but nothing refunds it by default: its
+        // approved amount starts at 0 for the operator to set. The default refund
+        // stays the amount paid, because it is the cap settlement lets the
+        // operator approve up to (`exceedsCap`).
+        const approvedRefund = isLineReturnable(ctxLine.returnableAtPurchase) ? defaultRefund : '0.00';
+        em.persist(
+          em.create(ReturnCaseItem, {
+            returnCaseId: rc.id,
+            orderItemId: line.orderItemId,
+            productId: ctxLine.productId,
+            productName: ctxLine.name,
+            quantity: line.quantity,
+            reasonId: line.reasonId,
+            description: line.description ?? null,
+            defaultRefundAmount: approvedAmount(defaultRefund),
+            defaultDiscountAmount: approvedAmount(defaultDiscount),
+            approvedRefundAmount: approvedAmount(approvedRefund),
+          }),
+        );
+      }
+
+      for (const assetId of input.attachmentAssetIds ?? []) {
+        em.persist(em.create(ReturnCaseAttachment, { returnCaseId: rc.id, assetId }));
+      }
+      if (input.comment) {
+        em.persist(
+          em.create(ReturnCaseComment, {
+            returnCaseId: rc.id,
+            authorCustomerAccountId: customerAccountId,
+            body: input.comment,
+            isCustomerVisible: true,
+            notifyCustomer: false,
+          }),
+        );
+      }
+
+      if (this.deps.auditLog) {
+        recordAuditFromContext(this.deps.auditLog, em, {
+          action: 'return_case.create',
+          objectType: 'return_case',
+          objectId: rc.id,
+          stateBefore: null,
+          stateAfter: {
+            kind: rc.kind,
+            orderId: rc.orderId,
+            statusCode: rc.statusCode,
+            lineCount: input.lines.length,
+          },
+        });
+      }
+      await em.flush();
+      return rc.id;
+    });
+    return this.mapDetail(this.deps.emFactory(), caseId, { customerView: true });
   }
 
   async listForCustomer(customerAccountId: string): Promise<ReturnCaseSummary[]> {
@@ -298,16 +308,11 @@ export class ReturnCaseService {
   // --- internals ----------------------------------------------------------
 
   private async consumedQuantities(orderId: string): Promise<Map<string, number>> {
-    const out = new Map<string, number>();
-    for (const it of await this.liveCaseItems(orderId)) {
-      out.set(it.orderItemId, (out.get(it.orderItemId) ?? 0) + it.quantity);
-    }
-    return out;
+    return consumedFrom(await this.liveCaseItems(orderId));
   }
 
   /** The lines of the order's live (non-void) cases — what was already returned and refunded. */
-  private async liveCaseItems(orderId: string): Promise<ReturnCaseItem[]> {
-    const em = this.deps.emFactory();
+  private async liveCaseItems(orderId: string, em: EntityManager = this.deps.emFactory()): Promise<ReturnCaseItem[]> {
     const cases = await em.find(ReturnCase, { orderId });
     const liveCaseIds = cases.filter((c) => !VOID_STATUS_CODES.has(c.statusCode)).map((c) => c.id);
     if (liveCaseIds.length === 0) return [];
@@ -400,4 +405,11 @@ export class ReturnCaseService {
         : null,
     };
   }
+}
+
+/** Quantities already named per order item, by the order's live cases. */
+function consumedFrom(items: readonly ReturnCaseItem[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const it of items) out.set(it.orderItemId, (out.get(it.orderItemId) ?? 0) + it.quantity);
+  return out;
 }

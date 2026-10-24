@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decimalSum, grossFromNetHalfUp, lineAmountHalfUp, roundHalfUp, taxAmountExact, vatByRate } from '@endora-commerce/contracts';
+import { decimalSum, grossFromNetHalfUp, lineAmountHalfUp, moneyDifference, roundHalfUp, taxAmountExact, vatByRate } from '@endora-commerce/contracts';
 import { caseDefaultRefunds, type RefundOrderLine } from './refund-math.js';
 
 /**
@@ -25,10 +25,11 @@ function rng(seed: number) {
 interface Order {
   vatMethod: 'per_rate' | null;
   productsPaidTotal: string;
+  discountTotal: string;
   lines: RefundOrderLine[];
 }
 
-function randomOrder(next: () => number, vatMethod: 'per_rate' | null): Order {
+function randomOrder(next: () => number, vatMethod: 'per_rate' | null, withDiscount = false): Order {
   const rates = ['0.23', '0.08', '0.05', '0'];
   const lines: RefundOrderLine[] = Array.from({ length: 1 + Math.floor(next() * 4) }, (_, i) => {
     const unitNetPrice = roundHalfUp((1 + Math.floor(next() * 5000)) / 100);
@@ -43,7 +44,8 @@ function randomOrder(next: () => number, vatMethod: 'per_rate' | null): Order {
       // Under the per-rate method the stored line total is the line's own rounding;
       // before it, it was the same per-line rounding of the gross.
       paidLineAmount: grossFromNetHalfUp(net, taxRate, 'fraction'),
-      returnable: true,
+      // Some lines are not returnable: a complaint names them, and it counts all the same.
+      returnable: next() < 0.75,
     };
   });
   const nets = lines.map((l) => ({ net: lineAmountHalfUp(l.unitNetPrice, l.purchasedQty), rate: l.taxRate }));
@@ -58,14 +60,17 @@ function randomOrder(next: () => number, vatMethod: 'per_rate' | null): Order {
             roundHalfUp(decimalSum(...nets.map((n) => taxAmountExact(n.net, n.rate, 'fraction')))),
           ),
         );
-  return { vatMethod, productsPaidTotal, lines };
+  // An order-level discount of up to half the products, taken off the gross.
+  const discountTotal = withDiscount ? roundHalfUp(Math.floor(next() * cents(productsPaidTotal) * 0.5) / 100) : '0.00';
+  return { vatMethod, productsPaidTotal: moneyDifference(productsPaidTotal, discountTotal), discountTotal, lines };
 }
 
 /** Return everything in random partial cases; answer every case's refunds. */
-function returnAll(order: Order, next: () => number): string[][] {
+function returnAll(order: Order, next: () => number): string[][] & { discounts: string[] } {
   const remaining = new Map(order.lines.map((l) => [l.orderItemId, l.purchasedQty]));
   const earlier: Array<{ orderItemId: string; quantity: number; defaultRefundAmount: string }> = [];
   const cases: string[][] = [];
+  const discounts: string[] = [];
   while ([...remaining.values()].some((q) => q > 0)) {
     const current = order.lines
       .filter((l) => remaining.get(l.orderItemId)! > 0 && next() < 0.6)
@@ -74,11 +79,12 @@ function returnAll(order: Order, next: () => number): string[][] {
     const refunds = caseDefaultRefunds({ ...order, orderLines: order.lines, earlier, current });
     current.forEach((c, i) => {
       remaining.set(c.orderItemId, remaining.get(c.orderItemId)! - c.quantity);
-      earlier.push({ ...c, defaultRefundAmount: refunds[i]! });
+      earlier.push({ ...c, defaultRefundAmount: refunds[i]!.refund });
     });
-    cases.push(refunds);
+    cases.push(refunds.map((r) => r.refund));
+    discounts.push(...refunds.map((r) => r.discount));
   }
-  return cases;
+  return Object.assign(cases, { discounts });
 }
 
 describe('caseDefaultRefunds — the reviewer’s cases', () => {
@@ -87,6 +93,7 @@ describe('caseDefaultRefunds — the reviewer’s cases', () => {
     return {
       vatMethod: 'per_rate',
       productsPaidTotal: vatByRate([{ net, rate: taxRate }], 'fraction').gross,
+      discountTotal: '0.00',
       lines: [
         {
           orderItemId: 'a',
@@ -107,10 +114,10 @@ describe('caseDefaultRefunds — the reviewer’s cases', () => {
     const second = caseDefaultRefunds({
       ...o,
       orderLines: o.lines,
-      earlier: [{ orderItemId: 'a', quantity: 1, defaultRefundAmount: first[0]! }],
+      earlier: [{ orderItemId: 'a', quantity: 1, defaultRefundAmount: first[0]!.refund }],
       current: [{ orderItemId: 'a', quantity: 1 }],
     });
-    expect([first[0], second[0]]).toEqual(['1.32', '1.31']);
+    expect([first[0]!.refund, second[0]!.refund]).toEqual(['1.32', '1.31']);
   });
 
   it('two returns of 1 × 0.03 at 23 % refund 0.04 + 0.03 = 0.07, not 0.04 twice', () => {
@@ -120,38 +127,67 @@ describe('caseDefaultRefunds — the reviewer’s cases', () => {
     const second = caseDefaultRefunds({
       ...o,
       orderLines: o.lines,
-      earlier: [{ orderItemId: 'a', quantity: 1, defaultRefundAmount: first[0]! }],
+      earlier: [{ orderItemId: 'a', quantity: 1, defaultRefundAmount: first[0]!.refund }],
       current: [{ orderItemId: 'a', quantity: 1 }],
     });
-    expect(cents(first[0]!) + cents(second[0]!)).toBe(7);
+    expect(cents(first[0]!.refund) + cents(second[0]!.refund)).toBe(7);
   });
 
-  it('keeps a non-returnable complaint line out of the returnable lines’ refunds', () => {
-    const o = order('1.07', 2, '0.23');
-    const lines: RefundOrderLine[] = [
-      ...o.lines,
-      { orderItemId: 'b', unitNetPrice: '0.99', taxRate: '0.23', purchasedQty: 1, paidLineAmount: '1.22', returnable: false },
-    ];
-    const refunds = caseDefaultRefunds({
-      ...o,
-      orderLines: lines,
-      earlier: [],
-      current: [
-        { orderItemId: 'a', quantity: 1 },
-        { orderItemId: 'b', quantity: 1 },
+  it('keeps a complaint inside the order’s accounting: a return and a complaint of 1 × 0.03 refund 0.07, not 0.08', () => {
+    // Two lines at 23 %, one not returnable: 0.06 net, 0.01 VAT, 0.07 paid.
+    const o: Order = {
+      vatMethod: 'per_rate',
+      productsPaidTotal: '0.07',
+      discountTotal: '0.00',
+      lines: [
+        { orderItemId: 'a', unitNetPrice: '0.03', taxRate: '0.23', purchasedQty: 1, paidLineAmount: '0.04', returnable: true },
+        { orderItemId: 'b', unitNetPrice: '0.03', taxRate: '0.23', purchasedQty: 1, paidLineAmount: '0.04', returnable: false },
       ],
+    };
+    const returned = caseDefaultRefunds({ ...o, orderLines: o.lines, earlier: [], current: [{ orderItemId: 'a', quantity: 1 }] });
+    const complaint = caseDefaultRefunds({
+      ...o,
+      orderLines: o.lines,
+      earlier: [{ orderItemId: 'a', quantity: 1, defaultRefundAmount: returned[0]!.refund }],
+      current: [{ orderItemId: 'b', quantity: 1 }],
     });
-    // `a` alone: 1.07 + 0.25 = 1.32; `b` is the cap an operator may approve up to, on its own.
-    expect(refunds).toEqual(['1.32', '1.22']);
+    expect([returned[0]!.refund, complaint[0]!.refund]).toEqual(['0.04', '0.03']);
+  });
+
+  it('refunds what the products were charged after an order-level discount: 73.00 of 83.00 captured, not 123.00', () => {
+    // 100.00 net + 23.00 VAT, a 50.00 discount on the gross, 10.00 delivery: 83.00 captured.
+    const o: Order = {
+      vatMethod: 'per_rate',
+      productsPaidTotal: '73.00',
+      discountTotal: '50.00',
+      lines: [{ orderItemId: 'a', unitNetPrice: '50.00', taxRate: '0.23', purchasedQty: 2, paidLineAmount: '123.00', returnable: true }],
+    };
+    const first = caseDefaultRefunds({ ...o, orderLines: o.lines, earlier: [], current: [{ orderItemId: 'a', quantity: 1 }] });
+    const second = caseDefaultRefunds({
+      ...o,
+      orderLines: o.lines,
+      earlier: [{ orderItemId: 'a', quantity: 1, defaultRefundAmount: first[0]!.refund }],
+      current: [{ orderItemId: 'a', quantity: 1 }],
+    });
+    // Each half carries half the discount: 61.50 − 25.00, twice.
+    expect([first[0], second[0]]).toEqual([
+      { refund: '36.50', discount: '25.00' },
+      { refund: '36.50', discount: '25.00' },
+    ]);
   });
 });
 
 describe('caseDefaultRefunds — any sequence of partial returns (property)', () => {
-  for (const vatMethod of ['per_rate', null] as const) {
-    it(`never refunds more than was paid, and a complete return refunds it exactly (${vatMethod ?? 'legacy'})`, () => {
-      for (let seed = 1; seed <= 400; seed += 1) {
+  for (const [vatMethod, withDiscount] of [
+    ['per_rate', false],
+    [null, false],
+    ['per_rate', true],
+    [null, true],
+  ] as const) {
+    it(`never refunds more than was paid, and a complete return refunds it exactly (${vatMethod ?? 'legacy'}${withDiscount ? ', discounted' : ''}, returns and complaints)`, () => {
+      for (let seed = 1; seed <= 300; seed += 1) {
         const next = rng(seed);
-        const order = randomOrder(next, vatMethod);
+        const order = randomOrder(next, vatMethod, withDiscount);
         const cases = returnAll(order, next);
         let refunded = 0;
         for (const refunds of cases) {
@@ -162,6 +198,10 @@ describe('caseDefaultRefunds — any sequence of partial returns (property)', ()
           expect(refunded, `seed ${seed}: refunded more than was paid`).toBeLessThanOrEqual(cents(order.productsPaidTotal));
         }
         expect(refunded, `seed ${seed}: a complete return`).toBe(cents(order.productsPaidTotal));
+        // The discount the returns carried adds up to the order's discount, never more.
+        expect(cases.discounts.reduce((sum, d) => sum + cents(d), 0), `seed ${seed}: the discount`).toBe(
+          cents(order.discountTotal),
+        );
       }
     });
   }

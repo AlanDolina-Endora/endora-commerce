@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   approvedAmount,
+  carriedDiscount,
   exceedsCap,
   sumApproved,
 } from './refund-math.js';
@@ -43,4 +44,14 @@ describe('refund math — exact decimal amounts (#417)', () => {
     expect(exceedsCap('100.00', '100.00')).toBe(false);
   });
 
+});
+
+describe('carriedDiscount (#417)', () => {
+  it('scales the discount a default refund carries to the amount approved', () => {
+    expect(carriedDiscount('25.00', '36.50', 36.5)).toBe('25.00');
+    expect(carriedDiscount('25.00', '36.50', 18.25)).toBe('12.50');
+    expect(carriedDiscount('25.00', '36.50', 0)).toBe('0.00');
+    expect(carriedDiscount('0', '36.50', 36.5)).toBe('0.00');
+    expect(carriedDiscount('25.00', '0.00', 0)).toBe('0.00');
+  });
 });
