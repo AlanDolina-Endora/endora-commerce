@@ -255,8 +255,8 @@ function rateKey(rate: Exact): Exact {
  * cents the rounding gained or lost handed back one at a time — to the parts
  * rounded furthest below their exact value when cents are missing, to those
  * rounded furthest above when there are too many, the earlier part first on a
- * tie. The result adds up to `total` exactly. Used to show a line's share of a
- * total that is computed once for many lines.
+ * tie. The result adds up to `total` exactly. Used where exact shares are owed:
+ * a refund of a rate group split over the lines it came from.
  */
 export function allocateHalfUp(
   total: string | number,
@@ -298,7 +298,10 @@ export interface VatRateRow {
 export interface VatByRate {
   /** One row per rate, ascending. */
   rows: VatRateRow[];
-  /** Per input line, in input order: its share of its rate's VAT, and its net plus that share. */
+  /**
+   * Per input line, in input order: its own gross, `round(net × (1 + rate))`, and that minus its
+   * net — informational: the line grosses may differ from the total by a cent.
+   */
   lines: Array<{ vat: string; gross: string }>;
   net: string;
   vat: string;
@@ -314,10 +317,13 @@ export interface VatByRate {
  * the checkout preview, the order, the invoice, a correction, a refund — so
  * they cannot disagree.
  *
- * A line's VAT and gross (`lines`) are informational: its rate's VAT shared
- * over the rate's lines with {@link allocateHalfUp}, so the line grosses add up
- * to the total exactly. Nets are two-place amounts; a 0 % line (delivery, a
- * discount) is a row of its own with no VAT.
+ * A line's gross (`lines`) is informational and is **the line's own rounding**,
+ * `round(net × (1 + rate))` — what the shop shows (owner ruling of
+ * 2026-10-24): 29.50 at 23 % shows 36.29 even beside 16.50 at the same rate,
+ * whose rate VAT is 10.58. A document's line grosses may therefore add up to a
+ * cent more or less than its total; the VAT and the totals are the rows'.
+ * Nets are two-place amounts; a 0 % line (delivery, a discount) is a row of its
+ * own with no VAT.
  */
 export function vatByRate(
   lines: ReadonlyArray<{ net: string | number; rate: string | number }>,
@@ -338,12 +344,11 @@ export function vatByRate(
       const nets = group.indexes.map((i) => roundHalfUp(lines[i]!.net));
       const net = moneySum(nets);
       const vat = render(round(product(exact(net), group.rate), 2));
-      const shares = allocateHalfUp(
-        vat,
-        nets.map((n) => render(product(exact(n), group.rate))),
-      );
+      const onePlusRate: Exact = { digits: 10n ** BigInt(group.rate.scale) + group.rate.digits, scale: group.rate.scale };
       group.indexes.forEach((lineIndex, k) => {
-        lineShares[lineIndex] = { vat: shares[k]!, gross: moneySum([nets[k]!, shares[k]!]) };
+        // The line's own rounding — informational (owner ruling of 2026-10-24).
+        const gross = render(round(product(exact(nets[k]!), onePlusRate), 2));
+        lineShares[lineIndex] = { vat: moneyDifference(gross, nets[k]!), gross };
       });
       return { rate: key, net, vat, gross: moneySum([net, vat]) };
     });

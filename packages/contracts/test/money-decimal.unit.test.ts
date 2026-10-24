@@ -183,10 +183,11 @@ describe('wholeMultiples', () => {
 });
 
 /**
- * Owner ruling of 2026-10-24 (issue #417) — one VAT method everywhere: per
+ * Owner rulings of 2026-10-24 (issue #417) — one VAT method everywhere: per
  * rate, VAT on the sum of the nets at that rate, rounded half-up once; gross
- * = net + VAT (art. 106e ust. 1 pkt 13–14). A line's VAT and gross are an
- * allocation of its rate's VAT, informational, summing exactly to it.
+ * = net + VAT (art. 106e ust. 1 pkt 13–14). A line's gross is informational and
+ * is the line's own rounding, `round(net × (1 + rate))` — what the shop shows —
+ * so the line grosses may differ from the total by a cent.
  */
 describe('vatByRate', () => {
   it('takes VAT per rate on the sum of the nets (V2: 7.01, gross 40.81)', () => {
@@ -215,11 +216,11 @@ describe('vatByRate', () => {
       'fraction',
     );
     expect(r.rows).toEqual([{ rate: '0.23', net: '0.06', vat: '0.01', gross: '0.07' }]);
-    expect(r.lines.map((l) => l.vat)).toEqual(['0.01', '0.00', '0.00']);
-    expect(r.lines.map((l) => l.gross)).toEqual(['0.03', '0.02', '0.02']);
+    // Each line its own rounding: 0.0246 → 0.02; the lines sum to 0.06, the total is 0.07.
+    expect(r.lines.map((l) => l.gross)).toEqual(['0.02', '0.02', '0.02']);
   });
 
-  it('allocates a rate’s VAT over its lines so the line grosses add up to the total', () => {
+  it('shows each line’s own rounding, which may not add up to the total', () => {
     // 9.05 × 3 at 8 % as three one-piece lines: 0.724 each, 2.172 → 2.17 for the rate.
     const r = vatByRate(
       [
@@ -230,7 +231,7 @@ describe('vatByRate', () => {
       'fraction',
     );
     expect(r.vat).toBe('2.17');
-    expect(r.lines.map((l) => l.gross)).toEqual(['9.78', '9.77', '9.77']);
+    expect(r.lines.map((l) => l.gross)).toEqual(['9.77', '9.77', '9.77']);
   });
 
   it('keys a rate by its value, whatever its notation, and carries 0 % lines', () => {
@@ -247,6 +248,10 @@ describe('vatByRate', () => {
     expect(r.gross).toBe('16.45');
     expect(vatByRate([{ net: '100', rate: '23' }], 'percent').vat).toBe('23.00');
     expect(vatByRate([], 'fraction')).toEqual({ rows: [], lines: [], net: '0.00', vat: '0.00', gross: '0.00' });
+    // 29.50 and 16.50 at 23 %: the rate's VAT is 10.58, and each line shows its own 36.29 and 20.30.
+    const shared = vatByRate([{ net: '29.50', rate: '0.23' }, { net: '16.50', rate: '0.23' }], 'fraction');
+    expect([shared.vat, shared.gross]).toEqual(['10.58', '56.58']);
+    expect(shared.lines.map((l) => l.gross)).toEqual(['36.29', '20.30']);
   });
 });
 
