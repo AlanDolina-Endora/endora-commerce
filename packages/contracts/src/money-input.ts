@@ -23,9 +23,8 @@ export function hasAtMostTwoDecimals(value: number | string): boolean {
   if (typeof value === 'number' && !Number.isFinite(value)) return false;
   const match = DECIMAL.exec(decimalText(value));
   if (!match) return false;
-  const fraction = match[1] ?? '';
-  // A string keeps its trailing zeros: `1.000` was typed with three places.
-  return (typeof value === 'number' ? fraction.replace(/0+$/, '') : fraction).length <= 2;
+  // Trailing zeros are not significant: `123.4500` is 123.45 (review of PR #423).
+  return (match[1] ?? '').replace(/0+$/, '').length <= 2;
 }
 
 /** A fresh object each time: Zod normalises a refinement's params in place. */
@@ -38,9 +37,30 @@ export function twoDecimalAmount<T extends z.ZodNumber>(schema: T): T {
   return schema.refine((value) => hasAtMostTwoDecimals(value), precisionIssue()) as T;
 }
 
-/** A decimal-string schema refusing more than two decimal places with the precision issue. */
-export function twoDecimalAmountString<T extends z.ZodString>(schema: T): T {
-  return schema.refine((value) => hasAtMostTwoDecimals(value), precisionIssue()) as T;
+/** A plain decimal string: an optional minus, digits, and optionally a point and digits. */
+const DECIMAL_STRING = /^-?\d+(?:\.\d+)?$/;
+
+/**
+ * A decimal-string schema: a string that is not a decimal is refused with a
+ * **format** issue (`options.message`, `Not a decimal amount` by default) and
+ * nothing else; a decimal with a significant digit beyond the second place is
+ * refused with the precision issue. Trailing zeros are not significant
+ * (`"123.4500"` is 123.45). `options.pattern` narrows the format (a
+ * non-negative amount, a bounded number of digits).
+ */
+export function twoDecimalAmountString<T extends z.ZodString>(
+  schema: T,
+  options: { pattern?: RegExp; message?: string } = {},
+): T {
+  const pattern = options.pattern ?? DECIMAL_STRING;
+  const message = options.message ?? 'Not a decimal amount';
+  return schema.superRefine((value, ctx) => {
+    if (!pattern.test(value) || !DECIMAL_STRING.test(value)) {
+      ctx.addIssue({ code: 'custom', message });
+      return;
+    }
+    if (!hasAtMostTwoDecimals(value)) ctx.addIssue({ code: 'custom', ...precisionIssue() });
+  }) as T;
 }
 
 /** The precision issue, for a `superRefine` that decides per field (a promotion's value is money only for `amount_off`). */

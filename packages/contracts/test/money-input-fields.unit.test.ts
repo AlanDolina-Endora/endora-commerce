@@ -103,11 +103,15 @@ describe('methods, returns, orders, credit limits and ERP documents', () => {
       currency: 'PLN',
       issuedAt: '2026-10-24T10:00:00.000Z',
     };
-    expect(refusedPaths(erpSaleDocumentUpsertInputSchema, { ...doc, grossTotal: '123.456', netTotal: '100.000' })).toEqual([
+    expect(refusedPaths(erpSaleDocumentUpsertInputSchema, { ...doc, grossTotal: '123.456', netTotal: '100.001' })).toEqual([
       'netTotal',
       'grossTotal',
     ]);
     expect(erpSaleDocumentUpsertInputSchema.safeParse({ ...doc, grossTotal: '123.45' }).success).toBe(true);
+    // Trailing zeros are not significant; a malformed total is a format failure (review of PR #423).
+    expect(erpSaleDocumentUpsertInputSchema.safeParse({ ...doc, grossTotal: '123.4500' }).success).toBe(true);
+    expect(refusedPaths(erpSaleDocumentUpsertInputSchema, { ...doc, grossTotal: '1e3' })).toEqual([]);
+    expect(erpSaleDocumentUpsertInputSchema.safeParse({ ...doc, grossTotal: '1e3' }).success).toBe(false);
   });
 });
 

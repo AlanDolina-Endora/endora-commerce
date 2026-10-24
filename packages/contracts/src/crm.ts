@@ -121,9 +121,10 @@ const currencyCodeSchema = z
  * everywhere: the shape here, and more than two decimal places refused with the
  * platform's one precision code (`money-input.ts`, issue #417).
  */
-const decimalAmountSchema = twoDecimalAmountString(
-  z.string().regex(/^\d{1,12}(\.\d+)?$/, 'Amount must be a non-negative decimal with at most two places'),
-);
+const decimalAmountSchema = twoDecimalAmountString(z.string(), {
+  pattern: /^\d{1,12}(\.\d+)?$/,
+  message: 'Amount must be a non-negative decimal with at most two places',
+});
 
 const isoTimestampSchema = z.string();
 
