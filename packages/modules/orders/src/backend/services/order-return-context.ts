@@ -2,6 +2,7 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import { Order } from '../entities/order.entity.js';
 import type { OrderReturnContext, OrderReturnContextPort } from '@endora-commerce/contracts';
 import { loadArrangedOrderLines } from './order-line-order.js';
+import { paidAmounts } from './order-money.js';
 
 /**
  * Orders-side implementation of `OrderReturnContextPort` (feature 046, R4).
@@ -32,14 +33,15 @@ export class OrderReturnContextProvider implements OrderReturnContextPort {
 
     const completing = order.status === COMPLETING_STATUS;
     const lines = items.map((it) => {
-      const unitPaid = round2(Number(it.unitPrice) * (1 + Number(it.taxRate)));
+      const paid = paidAmounts({ unitPrice: it.unitPrice, taxRate: it.taxRate, quantity: it.quantity });
       return {
         orderItemId: it.id,
         productId: it.productId,
         name: it.productSnapshot.name,
         purchasedQty: it.quantity,
-        paidUnitAmount: unitPaid,
-        paidLineAmount: round2(unitPaid * it.quantity),
+        // Two-place decimals, read as numbers losslessly.
+        paidUnitAmount: Number(paid.paidUnitAmount),
+        paidLineAmount: Number(paid.paidLineAmount),
         // Feature 155 (FR-016a) — the stamp placement recorded, reported as
         // it is: `null` only on a line placed before the feature. What `null`
         // means for a return (FR-025) is `returns`' policy, not this port's.
@@ -56,8 +58,4 @@ export class OrderReturnContextProvider implements OrderReturnContextPort {
       lines,
     };
   }
-}
-
-function round2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
 }
