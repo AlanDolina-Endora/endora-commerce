@@ -1101,7 +1101,6 @@ export class PriceBookService {
     return (row) => byId.get(row.id) ?? {};
   }
 
-  /** FR-002, A4 — every member exists, is of the set's kind and (for a representative) in scope. */
   /**
    * Whether the caller may give a book this audience (FR-034): a representative
    * only an organization set, and one naming at least one organization — an
@@ -1119,6 +1118,7 @@ export class PriceBookService {
     }
   }
 
+  /** FR-002, A4 — every member exists, is of the set's kind and (for a representative) in scope. */
   async #assertAudience(audience: PriceBookAudience, scope: PriceBookScope): Promise<void> {
     if (audience.kind === 'everyone' || audience.memberIds.length === 0) return;
     const ids = audience.memberIds;
