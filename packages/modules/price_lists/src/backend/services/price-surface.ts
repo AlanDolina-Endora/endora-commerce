@@ -235,13 +235,29 @@ export class PriceSurface {
       }
       case 'books': {
         let plan = emptyPlan();
+        // Read once per change (review finding 9 of release 0.108.0): every
+        // profile — again only after a retire has dropped some — and each
+        // book's current channel set.
+        let profiles: SurfaceProfileRef[] | null = null;
+        const channelsOf = new Map<string, Promise<readonly string[]>>();
+        const currentChannels = (bookId: string): Promise<readonly string[]> => {
+          let held = channelsOf.get(bookId);
+          if (!held) {
+            held = this.deps.bookChannels(bookId);
+            channelsOf.set(bookId, held);
+          }
+          return held;
+        };
         for (const book of change.books) {
-          if (book.retire) await this.#retire(book.facts.map((f) => f.bookId));
-          const profiles = await this.#profileRefs();
+          if (book.retire) {
+            await this.#retire(book.facts.map((f) => f.bookId));
+            profiles = null;
+          }
+          profiles ??= await this.#profileRefs();
           if (profiles.length === 0) break;
           const facts: ResolvedBookFacts[] = [];
           for (const f of book.facts) {
-            facts.push({ ...f, channelIds: f.channelIds ?? (f.live && !f.isSystem ? await this.deps.bookChannels(f.bookId) : []) });
+            facts.push({ ...f, channelIds: f.channelIds ?? (f.live && !f.isSystem ? await currentChannels(f.bookId) : []) });
           }
           const targets = targetsForBooks(facts, profiles);
           if (targets.own.length === 0 && targets.shared.length === 0) continue;
