@@ -31,6 +31,7 @@ import {
   ERROR_CODES,
   compareDecimal,
   isOrderMinimumEligibleType,
+  normaliseAmount,
   isPriceSort,
   isProductVisibleTo,
   listingPriceChannelContext,
@@ -59,8 +60,11 @@ import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kerne
 import { HttpError } from '@endora-commerce/platform/http';
 import { encodeCursor, decodeCursor } from '@endora-commerce/platform/http';
 
+/** A uuid as the database spells one — anything else is a 404 or a discarded cursor, not a query. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** A category id as the database spells one — anything else is a 404, not a query. */
-const CATEGORY_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CATEGORY_ID_RE = UUID_RE;
 
 /** The deepest ancestor chain {@link CatalogQueryService.getCategoryPageContent} walks. */
 const MAX_CATEGORY_DEPTH = 64;
@@ -95,6 +99,25 @@ function decodeObjectCursor<T>(cursor: string): T | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isUuidText(value: unknown): value is string {
+  return typeof value === 'string' && UUID_RE.test(value);
+}
+
+/**
+ * A price a cursor carries, normalised to four places, or `null` when it is not
+ * one. Read with the contracts' own decimal parser — the grammar
+ * `compareDecimal` reads and the price order writes — rather than with a
+ * second pattern that can drift from it (review 3 of release 0.108.0, A4).
+ */
+function cursorAmount(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  try {
+    return normaliseAmount(value);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -225,16 +248,19 @@ export const PRICE_PAGE_SCAN_BUDGET_MULTIPLE = 8;
  * `rest` is the opposite transition: a walk begun on a price order whose
  * surface then went missing. It carries the last price served (`amount`,
  * `productId`, the price order's own keyset) and the default listing's keyset
- * (`after`, `null` before the first page of the rest): see `#listRemainder`.
+ * (`after`): see `#listRemainder`.
+ *
+ * Every field is checked when the cursor is read (`#priceCursor`): a cursor that
+ * does not parse, or names a value of the wrong shape, is discarded and the
+ * walk starts at its first page — what the default listing does with a cursor
+ * it cannot read — rather than reaching a statement as a value the database
+ * refuses.
  */
-/** A price as a cursor may carry it: what `compareDecimal` reads. Anything else discards the cursor. */
-const CURSOR_AMOUNT = /^\d{1,14}(?:\.\d{1,4})?$/;
-
 type PriceListingCursor =
   | { stream: 'priced'; amount: string; productId: string }
   | { stream: 'tail'; createdAt: string; id: string }
   | { stream: 'unordered'; cursor: string }
-  | { stream: 'rest'; amount: string; productId: string; after: unknown };
+  | { stream: 'rest'; amount: string; productId: string; after: ListingKeysetCursor };
 
 /**
  * The cursor a listing that pages by a keyset issues. Opaque to every caller,
@@ -680,12 +706,8 @@ export class CatalogQueryService {
     // A price walk that began in the default order, for want of a price order,
     // continues in it to its end — the default listing's page, so nothing the
     // price path would read first is read (review 2, finding 7).
-    if (isPriceSort(params.sort) && params.cursor) {
-      const decoded = decodeObjectCursor<PriceListingCursor>(params.cursor);
-      if (decoded?.stream === 'unordered' && typeof decoded.cursor === 'string') {
-        return this.#listUnordered(params, ctx, decoded.cursor);
-      }
-    }
+    const priceCursor = isPriceSort(params.sort) && params.cursor ? this.#priceCursor(params.cursor) : null;
+    if (priceCursor?.stream === 'unordered') return this.#listUnordered(params, ctx, priceCursor.cursor);
     const em = this.emFactory();
     const channel = ctx.resolvedChannel;
 
@@ -744,7 +766,7 @@ export class CatalogQueryService {
     // chunked and both are bounded; everything else takes the single fetch it
     // always took.
     if (isPriceSort(params.sort)) {
-      return this.#listByViewerPrice(em, params, ctx, where, params.sort);
+      return this.#listByViewerPrice(em, params, ctx, where, params.sort, priceCursor);
     }
     if (params.minPrice !== undefined || params.maxPrice !== undefined) {
       return this.#listWithPriceRange(em, params, ctx, where);
@@ -1035,23 +1057,18 @@ export class CatalogQueryService {
     ctx: CatalogQueryContext,
     where: Record<string, unknown>,
     sort: 'price' | '-price',
+    /** The request's cursor as `#priceCursor` read it: `null` starts the walk. */
+    decoded: PriceListingCursor | null,
   ): Promise<ListResult<ProductSummary>> {
     const channel = ctx.resolvedChannel;
     const direction = sort === 'price' ? 'asc' : 'desc';
-    const decoded = params.cursor ? decodeObjectCursor<PriceListingCursor>(params.cursor) : null;
     // A walk whose price order went missing carries on in the default order
     // from the last price it served, to its end. Decided before the viewer's
     // pricing context and the category tree are read, since that walk uses
     // neither (review 2, finding 7); an `unordered` walk is decided earlier
     // still, in `listProducts`.
-    if (
-      decoded?.stream === 'rest' &&
-      typeof decoded.amount === 'string' &&
-      CURSOR_AMOUNT.test(decoded.amount) &&
-      typeof decoded.productId === 'string'
-    ) {
-      const keyset = this.keysetFor(undefined);
-      return this.#listRemainder(em, params, ctx, where, direction, decoded, keyset.parse(decoded.after));
+    if (decoded?.stream === 'rest') {
+      return this.#listRemainder(em, params, ctx, where, direction, decoded, decoded.after);
     }
     const context = await this.#viewerPricingContext(ctx);
     const amountRange = this.#amountRange(params);
@@ -1232,6 +1249,43 @@ export class CatalogQueryService {
       // not be allowed to see.
       pagination: { cursor: nextCursor, hasMore, limit: params.limit },
     };
+  }
+
+  /**
+   * The cursor of a price-sorted page, every field checked, or `null` — which
+   * starts the walk at its first page, as the default listing does with a
+   * cursor it cannot read (review 3 of release 0.108.0, A4). A price is read
+   * with the contracts' decimal parser, an id must be a uuid and a position
+   * the default listing's keyset; an `unordered` cursor wraps the default
+   * listing's own, which that listing checks.
+   */
+  #priceCursor(cursor: string): PriceListingCursor | null {
+    const decoded = decodeObjectCursor<unknown>(cursor);
+    if (!isRecord(decoded)) return null;
+    const keyset = this.keysetFor(undefined);
+    switch (decoded['stream']) {
+      case 'priced': {
+        const amount = cursorAmount(decoded['amount']);
+        const productId = decoded['productId'];
+        return amount !== null && isUuidText(productId) ? { stream: 'priced', amount, productId } : null;
+      }
+      case 'tail': {
+        const at = keyset.parse(decoded);
+        return at !== null && 'createdAt' in at ? { stream: 'tail', createdAt: at.createdAt, id: at.id } : null;
+      }
+      case 'rest': {
+        const amount = cursorAmount(decoded['amount']);
+        const productId = decoded['productId'];
+        const after = keyset.parse(decoded['after']);
+        return amount !== null && isUuidText(productId) && after !== null
+          ? { stream: 'rest', amount, productId, after }
+          : null;
+      }
+      case 'unordered':
+        return typeof decoded['cursor'] === 'string' ? { stream: 'unordered', cursor: decoded['cursor'] } : null;
+      default:
+        return null;
+    }
   }
 
   /**
@@ -2455,9 +2509,7 @@ export class CatalogQueryService {
       return {
         of: (product) => ({ slug: product.slug, id: product.id }),
         parse: (decoded) =>
-          isRecord(decoded) &&
-          typeof decoded['slug'] === 'string' &&
-          typeof decoded['id'] === 'string'
+          isRecord(decoded) && typeof decoded['slug'] === 'string' && isUuidText(decoded['id'])
             ? { slug: decoded['slug'], id: decoded['id'] }
             : null,
         after: (cursor) => afterKeysetCursor(cursor, op),
@@ -2468,10 +2520,12 @@ export class CatalogQueryService {
     // one is — it has nothing to read.
     return {
       of: (product) => ({ createdAt: product.createdAt.toISOString(), id: product.id }),
+      // The id is compared with a uuid column: a cursor naming anything else is
+      // discarded here rather than refused by the database as a 500.
       parse: (decoded) =>
         isRecord(decoded) &&
         typeof decoded['createdAt'] === 'string' &&
-        typeof decoded['id'] === 'string' &&
+        isUuidText(decoded['id']) &&
         !Number.isNaN(new Date(decoded['createdAt']).getTime())
           ? { createdAt: decoded['createdAt'], id: decoded['id'] }
           : null,
