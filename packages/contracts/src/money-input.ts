@@ -28,21 +28,24 @@ export function hasAtMostTwoDecimals(value: number | string): boolean {
   return (typeof value === 'number' ? fraction.replace(/0+$/, '') : fraction).length <= 2;
 }
 
-const PRECISION_ISSUE = { message: AMOUNT_PRECISION_EXCEEDED, params: { code: AMOUNT_PRECISION_EXCEEDED } };
+/** A fresh object each time: Zod normalises a refinement's params in place. */
+function precisionIssue() {
+  return { message: AMOUNT_PRECISION_EXCEEDED, params: { code: AMOUNT_PRECISION_EXCEEDED } };
+}
 
 /** A number schema refusing more than two decimal places with the precision issue. */
 export function twoDecimalAmount<T extends z.ZodNumber>(schema: T): T {
-  return schema.refine((value) => hasAtMostTwoDecimals(value), PRECISION_ISSUE) as T;
+  return schema.refine((value) => hasAtMostTwoDecimals(value), precisionIssue()) as T;
 }
 
 /** A decimal-string schema refusing more than two decimal places with the precision issue. */
 export function twoDecimalAmountString<T extends z.ZodString>(schema: T): T {
-  return schema.refine((value) => hasAtMostTwoDecimals(value), PRECISION_ISSUE) as T;
+  return schema.refine((value) => hasAtMostTwoDecimals(value), precisionIssue()) as T;
 }
 
 /** The precision issue, for a `superRefine` that decides per field (a promotion's value is money only for `amount_off`). */
 export function addAmountPrecisionIssue(ctx: z.RefinementCtx, path: PropertyKey[]): void {
-  ctx.addIssue({ code: 'custom', path, ...PRECISION_ISSUE });
+  ctx.addIssue({ code: 'custom', path, ...precisionIssue() });
 }
 
 /** Whether a Zod issue (or a Fastify-wrapped one, whose `params` carry the issue's) is the precision issue. */
