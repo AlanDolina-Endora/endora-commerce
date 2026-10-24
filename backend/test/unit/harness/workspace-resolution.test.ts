@@ -1348,14 +1348,6 @@ const OUTSIDE_EVERY_BACKEND_PROGRAM: Readonly<Record<string, string>> = {
     'own `tsconfig.json`, and the acceptance scripts compile it with that configuration ' +
     '(`scripts/acceptance/package-schema.ts`, `block-renderers.ts`); in a backend program ' +
     'they would be read with `paths` pointing at sources no installed consumer has.',
-  'vitest.config.ts': 'See `vitest.shared.ts`.',
-  'vitest.release.config.ts': 'See `vitest.shared.ts`.',
-  'vitest.unit.config.ts': 'See `vitest.shared.ts`.',
-  'vitest.shared.ts':
-    'The vitest configurations sit at the member root, outside every `include` since before ' +
-    'issue #421, which kept the split to the population the single program had. ' +
-    '`vitest.shared.ts` is reached through a test that imports it; the other three are read ' +
-    'by no `tsc` invocation. Adding them to a program retires these four entries.',
 };
 
 /** Whether a {@link OUTSIDE_EVERY_BACKEND_PROGRAM} key describes `relative`. */

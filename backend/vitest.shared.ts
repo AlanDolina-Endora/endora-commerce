@@ -216,9 +216,9 @@ export function backendTestOptions(): NonNullable<UserConfig['test']> {
     // Both were inert for the same reason — `mergeConfig` concatenates the
     // first and skips a nullish override outright — and the CI log settles it:
     // `JUNIT report written to …/test-results.junit.xml` appears in every shard
-    // of 11478. Removing them changes nothing at runtime and is what lets this
-    // file be type-checked at all: it is outside `tsconfig.json`'s `include`,
-    // so `outputFile: undefined` had never been held to
+    // of 11478. Removing them changes nothing at runtime and is what let this
+    // file be type-checked at all: it was outside `tsconfig.json`'s `include`
+    // until issue #421, so `outputFile: undefined` had never been held to
     // `exactOptionalPropertyTypes` until a test imported this function.
     reporters: ['default', new RunCompletenessReporter()],
     ...(isCi
