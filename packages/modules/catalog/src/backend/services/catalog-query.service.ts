@@ -212,10 +212,18 @@ export interface ListProductsParams {
  */
 export const PRICE_PAGE_SCAN_BUDGET_MULTIPLE = 8;
 
-/** The cursor a price-ordered listing issues. Opaque to every caller. */
+/**
+ * The cursor a price-ordered listing issues. Opaque to every caller.
+ *
+ * `unordered` is a walk begun while no price order existed for the viewer
+ * (`contracts/price-surface.md` §3): it was served in the default order, and
+ * it carries that listing's own cursor so the walk continues in the order it
+ * began — even once the surface has been built — and ends.
+ */
 type PriceListingCursor =
   | { stream: 'priced'; amount: string; productId: string }
-  | { stream: 'tail'; createdAt: string; id: string };
+  | { stream: 'tail'; createdAt: string; id: string }
+  | { stream: 'unordered'; cursor: string };
 
 /**
  * The cursor a listing that pages by a keyset issues. Opaque to every caller,
@@ -1017,6 +1025,11 @@ export class CatalogQueryService {
       : undefined;
 
     const decoded = params.cursor ? decodeObjectCursor<PriceListingCursor>(params.cursor) : null;
+    // A walk that began in the default order, for want of a price order,
+    // continues in it to its end.
+    if (decoded?.stream === 'unordered' && typeof decoded.cursor === 'string') {
+      return this.#listUnordered(params, ctx, decoded.cursor);
+    }
     // A cursor issued under another sort is discarded rather than
     // reinterpreted: the existing behaviour for a cursor that does not parse.
     const startInTail = decoded?.stream === 'tail';
@@ -1056,10 +1069,10 @@ export class CatalogQueryService {
       // Feature 160 (`specs/160-pricing-model-v2/contracts/price-surface.md` §3)
       // — no price order exists yet for this channel and currency, and none is
       // built for a request: the page is served in the default order, cards
-      // priced live, until the worker has built one.
+      // priced live, until the worker has built one. Its cursor is the default
+      // listing's, wrapped so the next page continues that walk.
       if (chunk.unordered && collected.length === 0) {
-        const { sort: _sort, cursor: _cursor, ...rest } = params;
-        return this.listProducts(rest, ctx);
+        return this.#listUnordered(params, ctx, null);
       }
       spent += Math.max(chunk.sourceRowsRead, chunk.rows.length);
       pricedExhausted = chunk.exhausted;
@@ -1176,6 +1189,30 @@ export class CatalogQueryService {
       // aggregate over the priced set is an aggregate over rows the viewer may
       // not be allowed to see.
       pagination: { cursor: nextCursor, hasMore, limit: params.limit },
+    };
+  }
+
+  /**
+   * A price-sorted page served in the default order, because no price order
+   * exists for the viewer yet (`contracts/price-surface.md` §3): the default
+   * listing's page, with its cursor wrapped as an `unordered` price cursor so
+   * the walk pages through every product once and ends (review finding 3 of
+   * release 0.108.0 — dropping the cursor served page 1 forever).
+   */
+  async #listUnordered(
+    params: ListProductsParams,
+    ctx: CatalogQueryContext,
+    cursor: string | null,
+  ): Promise<ListResult<ProductSummary>> {
+    const { sort: _sort, cursor: _cursor, ...rest } = params;
+    const page = await this.listProducts(cursor ? { ...rest, cursor } : rest, ctx);
+    const next = page.pagination.cursor;
+    return {
+      ...page,
+      pagination: {
+        ...page.pagination,
+        cursor: next ? encodeObjectCursor({ stream: 'unordered', cursor: next } satisfies PriceListingCursor) : null,
+      },
     };
   }
 

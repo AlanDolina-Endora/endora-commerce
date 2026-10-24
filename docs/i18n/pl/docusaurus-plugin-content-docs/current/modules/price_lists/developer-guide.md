@@ -262,7 +262,9 @@ wstępnie wyliczoną **powierzchnię cen**.
   podaje swoje wiersze, dopóki worker ich nie odświeży w jednej transakcji. Profil nigdy niezbudowany jest rejestrowany, jego budowa jest zlecana, a żądanie dostaje odpowiedź
   od razu: zawężenie do najwyżej 5 000 produktów (kategoria, wynik wyszukiwania) jest porządkowane na
   podstawie bieżącej wyceny, strona bez zawężenia — z powierzchni dla wszystkich (przybliżenie), a
-  gdy nie ma żadnej powierzchni, fragment jest `unordered` i katalog podaje swój domyślny porządek.
+  gdy nie ma żadnej powierzchni, fragment jest `unordered` i katalog podaje swój domyślny porządek;
+  przeglądanie rozpoczęte w ten sposób niesie kursor domyślnej listy i trwa w tym porządku do końca,
+  także gdy powierzchnia zostanie w międzyczasie zbudowana.
   Ceny na kartach są zawsze wyliczane na bieżąco, więc opóźniać się może tylko porządek.
 - **Zapis oznacza tylko to, co może przesunąć**, na dwóch poziomach szczegółowości. Każdy zapisujący
   opisuje swoją zmianę jako `SurfaceChange` (`src/backend/services/surface-change.ts`), a
