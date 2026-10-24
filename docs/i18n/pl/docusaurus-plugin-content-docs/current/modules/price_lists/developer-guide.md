@@ -382,10 +382,12 @@ jedna z wartości `PRICE_BOOK_ROW_ERROR_REASONS` (`fixed_on_all`, `rows_overlap`
 dziennikom.
 
 **Zakres handlowca.** Odczytywany z kontekstu izolacji żądania, nigdy z treści żądania
-(`price-book-scope.ts`): cennik organizacji z jakimkolwiek odbiorcą spoza zakresu wywołującego
-odpowiada na każdej trasie dokładnie tak jak brakujący cennik — `404`, bez obecności na listach i w
-licznikach; cenniki dla wszystkich i grup klientów są tylko do odczytu (`403`); handlowiec może
-tworzyć i wskazywać tylko organizacje ze swojego zakresu. `writable` w cenniku i
+(`price-book-scope.ts`): cennik organizacji z jakimkolwiek odbiorcą spoza zakresu wywołującego albo
+bez żadnego odbiorcy odpowiada na każdej trasie dokładnie tak jak brakujący cennik — `404`, bez
+obecności na listach i w licznikach; cenniki dla wszystkich i grup klientów są tylko do odczytu
+(`403`); handlowiec może tworzyć, duplikować i zmieniać (`PATCH`) tylko cenniki z odbiorcami typu
+organizacje (`403` dla innego typu, także przy `PATCH`), wskazujące co najmniej jedną organizację
+(`400 PRICE_BOOK_AUDIENCE_KIND`, gdy żadnej), wszystkie z jego zakresu. `writable` w cenniku i
 `meta.creatableAudienceKinds` na liście mówią klientowi, co oferować.
 
 ## API storefrontu

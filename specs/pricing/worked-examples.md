@@ -222,6 +222,7 @@ Chain depth (N6):
 | A3.1 | rep scoped to {Acme}; L10 organizations {Acme} | — | — | editable | all members in scope |
 | A3.2 | same rep; L8 {Acme, Beta} | — | — | **not visible** (answers as missing, N3) | a member out of scope |
 | A3.3 | same rep; L9 groups {VIP, Gold} | — | — | read-only | not an organization list |
+| A3.4 | same rep; a draft organization book naming no organization | — | — | **not visible** (answers as missing) | names none of the rep's organizations; a rep cannot create, duplicate or patch to such an audience (`400`), nor patch their own draft to everyone or groups (`403`) — review finding 4 |
 | A4 | create a list with members of two kinds (Acme and VIP) | — | — | refused `400 VALIDATION_FAILED` | one kind per list |
 
 The effective-group rule of A2.1–A2.3 (the customer's own group, else the organization's — one

@@ -305,8 +305,9 @@ price and the runner-ups.
 and edit only organization books whose **every** member is one of their organizations. Books for
 everyone, customer-group books and the base prices are read-only for them. A book naming any
 organization outside their scope does not exist for them: it is missing from the list, and its
-address shows the same page as a book that was never created. When they create a book, they can
-choose only *Organizations*, and only their own.
+address shows the same page as a book that was never created, and so does an organization book that
+names no organization yet. When they create, duplicate or change a book, they can choose only
+*Organizations*, only their own, and at least one.
 
 Every change to a book — its settings, channels, members, rows, activation, a duplicate, a deletion
 — and every change to base prices and to the list-price switch is written to the audit log with the

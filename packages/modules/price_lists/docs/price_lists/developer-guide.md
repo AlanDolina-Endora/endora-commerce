@@ -373,10 +373,11 @@ of `PRICE_BOOK_ROW_ERROR_REASONS` (`fixed_on_all`, `rows_overlap`, `product_unkn
 `message` is for logs.
 
 **Sales-representative scope.** Read off the request's tenant context, never from the request body
-(`price-book-scope.ts`): an organization book with any member outside the caller's scope answers
-exactly as a missing book — `404`, absent from lists and counts — on every route; everyone and
-customer-group books are read-only (`403`); a representative may create and name only organizations
-in scope. `writable` on a book and `meta.creatableAudienceKinds` on the list tell a client what to
+(`price-book-scope.ts`): an organization book with any member outside the caller's scope, or with no
+member at all, answers exactly as a missing book — `404`, absent from lists and counts — on every
+route; everyone and customer-group books are read-only (`403`); a representative may create,
+duplicate and patch only an organization audience (`403` for another kind, on `PATCH` too) naming at
+least one organization (`400 PRICE_BOOK_AUDIENCE_KIND` for none), all in scope. `writable` on a book and `meta.creatableAudienceKinds` on the list tell a client what to
 offer.
 
 ## Storefront API

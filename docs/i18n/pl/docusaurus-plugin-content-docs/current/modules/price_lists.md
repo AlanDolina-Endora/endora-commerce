@@ -309,8 +309,9 @@ odniesienia i przegrane linie.
 tylko cenniki organizacji, w których **każdy** odbiorca jest jedną z ich organizacji. Cenniki dla
 wszystkich, cenniki grup klientów i ceny bazowe są dla nich tylko do odczytu. Cennik, który wskazuje
 jakąkolwiek organizację spoza ich zakresu, dla nich nie istnieje: nie ma go na liście, a jego adres
-pokazuje tę samą stronę co cennik, którego nigdy nie utworzono. Tworząc cennik, mogą wybrać tylko
-*Organizacje*, i tylko własne.
+pokazuje tę samą stronę co cennik, którego nigdy nie utworzono; tak samo jest z cennikiem organizacji,
+który nie wskazuje jeszcze żadnej organizacji. Tworząc, duplikując albo zmieniając cennik, mogą wybrać
+tylko *Organizacje*, tylko własne i co najmniej jedną.
 
 Każda zmiana cennika — jego ustawień, kanałów, odbiorców, wierszy, aktywacji, duplikat, usunięcie — oraz
 każda zmiana cen bazowych i ustawienia ceny katalogowej jest zapisywana w dzienniku audytu z

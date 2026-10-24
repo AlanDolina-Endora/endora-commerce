@@ -159,6 +159,83 @@ describe('price_lists — price books and a sales representative’s scope (feat
     expect(created.status).toBe(400);
   });
 
+  /**
+   * Review finding 4 (release 0.108.0) — `patchBook` did not ask whether the
+   * caller may give a book the audience kind it names, as create and duplicate
+   * do, so a representative turned a draft organization book of their own into
+   * an everyone or a customer-group book.
+   */
+  it('A3.3 — a representative cannot patch a draft of their own to everyone or to a customer group', async () => {
+    const draft = (await f.book({ name: 'Scope draft', audience: { organizations: [f.orgs.Acme] }, activate: false })).id;
+    for (const audience of [
+      { kind: 'everyone', memberIds: [] },
+      { kind: 'customer_groups', memberIds: [f.groups.VIP] },
+    ]) {
+      const book = (await api.get<{ data: PriceBook }>(`/api/v1/admin/price-books/${draft}`, rep.cookies)).body.data;
+      const res = await api.patch(`/api/v1/admin/price-books/${draft}`, { audience, expectedVersion: book.version }, rep.cookies);
+      expect(res.status, `${audience.kind}: ${res.raw}`).toBe(403);
+      const after = (await api.get<{ data: PriceBook }>(`/api/v1/admin/price-books/${draft}`)).body.data;
+      expect(after.audience, audience.kind).toEqual({ kind: 'organizations', memberIds: [f.orgs.Acme.id] });
+    }
+  });
+
+  /**
+   * Review finding 4 — an organization book that names no organization named
+   * none outside the scope, so `every()` over its empty member list made it
+   * visible and writable to every representative. It names none of theirs
+   * either: it answers as a missing book, and a representative cannot give a
+   * book such an audience (it would vanish from them on save).
+   */
+  it('A3.2 — an organization book naming no organization does not exist for a representative', async () => {
+    const empty = (await f.book({ name: 'Scope empty', audience: { organizations: [] }, activate: false })).id;
+    for (const [method, suffix, body] of [
+      ['get', '', undefined],
+      ['patch', '', { audience: { kind: 'organizations', memberIds: [f.orgs.Acme.id] }, expectedVersion: 1 }],
+      ['post', '/activate', {}],
+      ['delete', '', undefined],
+    ] as const) {
+      const call = (target: string) =>
+        method === 'get' || method === 'delete'
+          ? api[method](`/api/v1/admin/price-books/${target}${suffix}`, rep.cookies)
+          : api[method](`/api/v1/admin/price-books/${target}${suffix}`, body, rep.cookies);
+      const hidden = await call(empty);
+      const unknown = await call(UNKNOWN);
+      expect(hidden.status, `${method} ${suffix}`).toBe(404);
+      expect(refusal(hidden.body), `${method} ${suffix}`).toEqual(refusal(unknown.body));
+    }
+    const list = await api.get<{ data: PriceBookSummary[]; meta: { totalCount: number } }>(
+      '/api/v1/admin/price-books?search=Scope%20empty&pageSize=100',
+      rep.cookies,
+    );
+    expect(list.body.data.map((b) => b.id)).not.toContain(empty);
+    expect(list.body.meta.totalCount).toBe(0);
+    // A platform administrator still sees and edits it.
+    expect((await api.get(`/api/v1/admin/price-books/${empty}`)).status).toBe(200);
+  });
+
+  it('A4 — a representative cannot create, duplicate or patch to an organization audience naming no one', async () => {
+    const created = await api.post(
+      '/api/v1/admin/price-books',
+      { name: 'Rep empty', type: 'regular', currencyCode: 'PLN', channelIds: [f.channels.CH1.id], audience: { kind: 'organizations', memberIds: [] } },
+      rep.cookies,
+    );
+    expect(created.status, created.raw).toBe(400);
+    const duplicated = await api.post(
+      `/api/v1/admin/price-books/${own}/duplicate`,
+      { name: 'Rep empty copy', channelIds: [f.channels.CH1.id], currencyCode: 'PLN', audience: { kind: 'organizations', memberIds: [] } },
+      rep.cookies,
+    );
+    expect(duplicated.status, duplicated.raw).toBe(400);
+    const draft = (await f.book({ name: 'Scope draft 2', audience: { organizations: [f.orgs.Acme] }, activate: false })).id;
+    const book = (await api.get<{ data: PriceBook }>(`/api/v1/admin/price-books/${draft}`, rep.cookies)).body.data;
+    const patched = await api.patch(
+      `/api/v1/admin/price-books/${draft}`,
+      { audience: { kind: 'organizations', memberIds: [] }, expectedVersion: book.version },
+      rep.cookies,
+    );
+    expect(patched.status, patched.raw).toBe(400);
+  });
+
   it('a platform administrator sees every book', async () => {
     const res = await api.get<{ data: PriceBookSummary[] }>('/api/v1/admin/price-books?search=Scope&pageSize=100');
     expect(res.body.data.map((b) => b.id)).toEqual(expect.arrayContaining([own, mixed, foreign, everyone, groups]));

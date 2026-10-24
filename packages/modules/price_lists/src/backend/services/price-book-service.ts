@@ -444,7 +444,7 @@ export class PriceBookService {
    * channel offers the currency (FR-003, K2).
    */
   async createBook(input: PriceBookCreate, scope: PriceBookScope = ALL_BOOKS_SCOPE): Promise<PriceBookView> {
-    if (!audienceKindWritable(scope, input.audience.kind)) readOnly();
+    this.#assertAudienceWritable(input.audience, scope);
     const currencyCode = input.currencyCode.toUpperCase();
     await this.#assertAudience(input.audience, scope);
     const em = this.deps.emFactory();
@@ -537,7 +537,12 @@ export class PriceBookService {
         'The audience kind of a book that has been active cannot change.',
       );
     }
-    if (patch.audience) await this.#assertAudience(patch.audience, scope);
+    if (patch.audience) {
+      // As create and duplicate ask (review finding 4 of release 0.108.0): a
+      // representative keeps a book an organization book of their own.
+      this.#assertAudienceWritable(patch.audience, scope);
+      await this.#assertAudience(patch.audience, scope);
+    }
     if (patch.channelIds) {
       // The bridge holds no empty set (a membership is a binding, not a
       // restriction): a book leaves every channel by being drafted or deleted.
@@ -896,7 +901,7 @@ export class PriceBookService {
   async duplicate(bookId: string, input: PriceBookDuplicate, scope: PriceBookScope = ALL_BOOKS_SCOPE): Promise<PriceBookView> {
     const em = this.deps.emFactory();
     await this.#visibleBook(em, bookId, scope);
-    if (!audienceKindWritable(scope, input.audience.kind)) readOnly();
+    this.#assertAudienceWritable(input.audience, scope);
     const currencyCode = input.currencyCode.toUpperCase();
     await this.#assertAudience(input.audience, scope);
     await this.#assertChannelsOffer(em, currencyCode, input.channelIds);
@@ -1072,6 +1077,23 @@ export class PriceBookService {
   }
 
   /** FR-002, A4 — every member exists, is of the set's kind and (for a representative) in scope. */
+  /**
+   * Whether the caller may give a book this audience (FR-034): a representative
+   * only an organization set, and one naming at least one organization — an
+   * empty set names none of theirs, so the book would vanish from them on save
+   * (`bookVisible`). `403` for a kind they may not write, `400` for the empty set.
+   */
+  #assertAudienceWritable(audience: PriceBookAudience, scope: PriceBookScope): void {
+    if (!audienceKindWritable(scope, audience.kind)) readOnly();
+    if (!scope.all && audience.kind === 'organizations' && audience.memberIds.length === 0) {
+      validation(
+        [{ path: ['audience', 'memberIds'], message: 'Name at least one of your organizations.' }],
+        'The audience set was refused.',
+        ERROR_CODES.PRICE_BOOK_AUDIENCE_KIND,
+      );
+    }
+  }
+
   async #assertAudience(audience: PriceBookAudience, scope: PriceBookScope): Promise<void> {
     if (audience.kind === 'everyone' || audience.memberIds.length === 0) return;
     const ids = audience.memberIds;
