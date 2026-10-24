@@ -36,7 +36,11 @@ export function cartTotalsByCart(
   items: ReadonlyArray<{ cartId: string; unitPrice: string | number; quantity: number; currency: string }>,
 ): Map<string, { count: number; total: number; currency: string }> {
   const byCart = new Map<string, Array<(typeof items)[number]>>();
-  for (const item of items) byCart.set(item.cartId, [...(byCart.get(item.cartId) ?? []), item]);
+  for (const item of items) {
+    const lines = byCart.get(item.cartId);
+    if (lines) lines.push(item);
+    else byCart.set(item.cartId, [item]);
+  }
   return new Map(
     [...byCart].map(([cartId, lines]) => [
       cartId,
