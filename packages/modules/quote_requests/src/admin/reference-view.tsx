@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { roundAmountHalfUp } from '@endora-commerce/contracts';
 import { apiClient } from '@endora-commerce/admin-kit/lib';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { useRfqNumberFormat } from './number-format.js';
@@ -104,8 +105,11 @@ export async function probeCustomerPrice(
     );
     const resolved = res.data[0]?.price ?? null;
     if (!resolved) return null;
-    const amount = Number(resolved.amount);
-    return Number.isFinite(amount) ? { amount, currency: resolved.currency } : null;
+    // The resolver's four-place decimal, at the two places a quote line stores
+    // a reference at, by the one rule (`roundAmountHalfUp`) — rounded before it
+    // is a number, so 9.0450 is 9.05 and not the double 9.04499… (review 2,
+    // finding 3 of release 0.108.0).
+    return { amount: Number(roundAmountHalfUp(resolved.amount)), currency: resolved.currency };
   } catch {
     return null;
   }

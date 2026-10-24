@@ -142,6 +142,26 @@ describe('RfqDetail Modify — reference, proposal, live difference, payload', (
     expect(getSpy.mock.calls.some((c) => String(c[0]).includes('/storefront/'))).toBe(false);
   });
 
+  /**
+   * Review 2, finding 3 (release 0.108.0) — the prefill wrote
+   * `Number(amount).toFixed(2)`, which rounds the binary double: a resolver
+   * amount of 9.0450 is the double 9.04499…, so the operator was offered 9.04
+   * and, accepting it, the customer was charged 9.04 against the 9.05 the
+   * storefront shows. The prefill is the decimal string rounded half-up
+   * (`roundAmountHalfUp`; worked examples §10.16).
+   */
+  it.each([
+    ['9.0450', '9.05'],
+    ['1.0050', '1.01'],
+    ['118.0000', '118.00'],
+  ])('prefills %s as %s, half-up on its decimal digits', async (amount, shown) => {
+    const input = await openModify(
+      { customerProposedUnitPrice: null, desiredUnitPrice: null, agreedUnitPrice: null },
+      { amount, currency: 'PLN' },
+    );
+    await waitFor(() => expect(input.value).toBe(shown));
+  });
+
   it('sends id, variantId and lineNote for every kept line (FR-034)', async () => {
     const input = await openModify({}, 'reject');
     await userEvent.clear(input);
