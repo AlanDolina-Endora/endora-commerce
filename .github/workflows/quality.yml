@@ -84,7 +84,13 @@ jobs:
       # nobody bracketed. The remedy differs when it is reached: on GitLab the
       # answer was "raise the runner's container memory first", and here there
       # is no container to raise, so the answer is this line.
-      NODE_OPTIONS: --max-old-space-size=2560
+      #
+      # Raised to 3072 on 2026-10-24 (D-287 release, PR #419): under Node 22.20
+      # the backend program died at 2560 (`heap out of memory`) and passed at
+      # 2816 and 3072, with tsc's `Memory used` at 2.74 GB. 3072 keeps ~250 MB
+      # over the measured requirement. The structural answer when this is
+      # reached again is issue #421.
+      NODE_OPTIONS: --max-old-space-size=3072
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7

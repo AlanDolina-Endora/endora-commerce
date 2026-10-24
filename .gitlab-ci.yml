@@ -267,7 +267,13 @@ quality:
     # only when the container can no longer grow. Do **not** raise this number
     # past ~2816 while the container is 3 GB: above that the named error is
     # lost and the job starts failing as a SIGKILL instead.
-    NODE_OPTIONS: --max-old-space-size=2560
+    #
+    # **2026-10-24: reached, raised to 3072** (D-287 release, PR #419). Under
+    # Node 22.20 the program now dies at 2560 and passes at 2816 and 3072
+    # (tsc `Memory used` 2.74 GB). The container is 4096 MB (above), so the
+    # usable ceiling is ~3840 and 3072 plus the ~130 MB outside the old space
+    # stays clear of a cgroup SIGKILL. The split described above is issue #421.
+    NODE_OPTIONS: --max-old-space-size=3072
   before_script:
     # `node:22.18-slim` carries no git, and `check:release-intent` below asks
     # it. The line was first written for `check:root-dispositions`, which died
