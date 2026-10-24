@@ -5896,6 +5896,15 @@
         }
       }
     },
+    "/api/v1/admin/quote-requests/{id}/prepare-customer-basket": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/returns": {
       "get": {
         "responses": {
