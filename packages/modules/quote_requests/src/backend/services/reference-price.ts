@@ -103,12 +103,14 @@ export async function resolveReferencePrices(
       });
       for (const answer of answers) {
         if (!answer.price) continue;
-        const amount = Number(answer.price.amount);
-        if (!Number.isFinite(amount) || amount < 0) continue;
+        // The resolver's decimal string, rounded as a decimal — never through a
+        // JS number (review 2, finding 1 of release 0.108.0). Anything but a
+        // non-negative decimal stores no reference.
+        if (!RESOLVER_AMOUNT.test(answer.price.amount)) continue;
         // What `numeric(12,2)` holds, checked on the stored text: a larger
         // amount would fail the insert. Such a line stores no reference
         // (research R2) rather than failing the customer's request.
-        const stored = roundAmountHalfUp(amount);
+        const stored = roundAmountHalfUp(answer.price.amount);
         if (!AMOUNT_PATTERN.test(stored)) continue;
         resolved.set(Number(answer.key), {
           amount: stored,
@@ -127,6 +129,9 @@ export async function resolveReferencePrices(
   for (const [index, reference] of resolved) out[index] = reference;
   return out;
 }
+
+/** A non-negative decimal string, as a resolver answers an amount. */
+const RESOLVER_AMOUNT = /^\d+(?:\.\d+)?$/;
 
 /** At most ten integer digits — what `numeric(12,2)` holds — and at most two decimals. */
 const AMOUNT_PATTERN = /^\d{1,10}(\.\d{1,2})?$/;

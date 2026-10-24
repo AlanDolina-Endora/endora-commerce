@@ -54,7 +54,7 @@ describe('a gross feed price is the exact decimal product, rounded half-up', () 
   it.each(Object.entries(PRODUCTS))('%s: %o', async (id, expected) => {
     const items = await generation().hydrateItems(Object.keys(PRODUCTS), scope('gross'));
     const item = items.find((i) => i.productId === id)!;
-    expect(String(item.price?.gross)).toBe(String(Number(expected.gross)));
+    expect(item.price?.gross).toBe(expected.gross);
     expect(item.price?.taxResolved).toBe(true);
   });
 });

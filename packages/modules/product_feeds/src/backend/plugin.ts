@@ -543,7 +543,7 @@ export function productFeedsModule(
    * left to be re-derived by whoever widens the port.
    */
   const resolveAnonymousPrice: AnonymousPriceResolver = async (input) => {
-    const out = new Map<string, { amount: number; isSale: boolean }>();
+    const out = new Map<string, { amount: string; isSale: boolean }>();
     if (input.products.length === 0) return out;
     const resolved = await options.pricingService.resolveLinePrices({
       lines: input.products.map((product) => ({ key: product.id, product, variantId: null, quantity: 1 })),
@@ -555,7 +555,7 @@ export function productFeedsModule(
       },
     });
     for (const [productId, price] of resolved) {
-      if (price) out.set(productId, { amount: Number(price.amount), isSale: price.isSale });
+      if (price) out.set(productId, { amount: price.amount, isSale: price.isSale });
     }
     return out;
   };
@@ -567,7 +567,7 @@ export function productFeedsModule(
    * is computed from the prices the next run will actually emit (FR-028).
    */
   const resolveSelectionPrices: SelectionPricePort = async (input) => {
-    const out = new Map<string, number>();
+    const out = new Map<string, string>();
     if (input.productIds.length === 0) return out;
     const em = options.emFactory();
 

@@ -31,6 +31,7 @@ import type {
   ComparisonDisplayMode,
   ComparisonProductSummary,
 } from '@endora-commerce/contracts';
+import { roundAmountHalfUp } from '@endora-commerce/contracts';
 import { AssetByteFetcher } from './asset-byte-fetcher.js';
 import { filterRowsByMode, imageDataUri, pickOrientation } from './comparison-pdf-shared.js';
 
@@ -197,7 +198,8 @@ function buildHeaderRow(
     }
     stack.push({ text: localised(p.name), style: 'productName', alignment: 'center' });
     stack.push({
-      text: p.price ? `${p.price.amount} ${p.price.currency}` : '—',
+      // Two places, half-up on the decimal digits (review 2, finding 1).
+      text: p.price ? `${roundAmountHalfUp(p.price.amount)} ${p.price.currency}` : '—',
       style: 'productPrice',
       alignment: 'center',
     });

@@ -25,20 +25,23 @@ export interface NamedListPricePort {
 }
 
 export interface NamedListPriceResolvers {
-  /** One product's amount on the list, or `null` when the list does not price it. */
+  /**
+   * One product's amount on the list — the decimal string `price_lists`
+   * answers with — or `null` when the list does not price it.
+   */
   one(input: {
     priceListId: string;
     productId: string;
     currencyCode: string;
     salesChannelId?: string;
-  }): Promise<number | null>;
+  }): Promise<string | null>;
   /** The same read for a batch; unpriced products are absent from the map. */
   many(input: {
     priceListId: string;
     productIds: readonly string[];
     currencyCode: string;
     salesChannelId?: string;
-  }): Promise<Map<string, number>>;
+  }): Promise<Map<string, string>>;
 }
 
 export function createNamedListPriceResolver(
@@ -49,19 +52,17 @@ export function createNamedListPriceResolver(
     productIds: readonly string[];
     currencyCode: string;
     salesChannelId?: string;
-  }): Promise<Map<string, number>> {
-    const out = new Map<string, number>();
-    if (input.productIds.length === 0) return out;
-    const amounts = await pricing.namedListPrices({
+  }): Promise<Map<string, string>> {
+    if (input.productIds.length === 0) return new Map();
+    // The decimal strings verbatim (review 2, finding 1 of release 0.108.0): a
+    // feed rounds them with the decimal helpers, never as a JS number. A list
+    // amount of `0` is a price, so nothing here tests one for truthiness.
+    return pricing.namedListPrices({
       priceListId: input.priceListId,
       currencyCode: input.currencyCode,
       productIds: input.productIds,
       ...(input.salesChannelId ? { salesChannelId: input.salesChannelId } : {}),
     });
-    // `Number(amount)` and not a truthiness test: a list amount of `0` is a
-    // price, and dropping it here would republish the product as unpriced.
-    for (const [productId, amount] of amounts) out.set(productId, Number(amount));
-    return out;
   }
 
   return {

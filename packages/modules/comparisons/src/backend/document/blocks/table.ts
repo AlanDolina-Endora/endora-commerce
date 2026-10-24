@@ -1,4 +1,4 @@
-import type { ComparisonAttributeRow, ComparisonProductSummary } from '@endora-commerce/contracts';
+import { roundAmountHalfUp, type ComparisonAttributeRow, type ComparisonProductSummary } from '@endora-commerce/contracts';
 import { filterRowsByMode, localisedIn } from '../../services/comparison-pdf-shared.js';
 import { bool, color, num, str } from '../props.js';
 import type { ComparisonBlockRenderer } from '../types.js';
@@ -28,7 +28,7 @@ function money(amount: number, currency: string, language: string): string {
   try {
     return new Intl.NumberFormat(language, { style: 'currency', currency }).format(amount);
   } catch {
-    return `${amount} ${currency}`;
+    return `${roundAmountHalfUp(amount)} ${currency}`;
   }
 }
 

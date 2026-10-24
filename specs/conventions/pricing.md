@@ -70,6 +70,14 @@ Polish.
   book's `version` moved; an admin write names the version it was made against (`expectedVersion`
   or `If-Match`). A book's channel set is read and written only through
   `SalesChannelMembershipService` (the `price-list` bridge, Principle XII).
+- **A resolver amount is a decimal string, and it is rounded as one.** Ports and admin API shapes
+  carry the four-place string `price_lists` answers with; a consumer rounds it to two places with
+  `roundAmountHalfUp` and computes a gross with `grossAmountHalfUp` (`@endora-commerce/contracts`,
+  `price-book-decimal.ts`), never with `Number(…).toFixed(2)`, `Math.round` or `net * (1 + rate)`:
+  9.0450 is the double 9.04499…, and 29.50 × 1.23 the double 36.28499… (worked examples §10.16).
+  The published money fields that stay numbers — `ProductSummary.price`, the cart's `Money`, the
+  external tier ladder — hold a `numeric(14,4)` amount losslessly (at most 14 significant digits),
+  so a consumer of one rounds it with the same helpers, which read a number as its shortest decimal.
 - **The precedence is data, read from the active version.** Consumers never encode a cell order;
   the resolver reads `price_list_precedence` through `PrecedenceStore`. A change to presets or
   invariants goes through `validatePrecedence` and keeps `precedence.test.ts` exhaustive. The write

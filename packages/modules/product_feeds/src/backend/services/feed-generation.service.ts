@@ -81,15 +81,16 @@ const STOREFRONT_URL_SETTING = 'sales_channels.storefront_url';
 
 /**
  * The unit prices a pinned price book gives a batch of products (FR-020, and
- * feature 160's FR-029: the book's rows over the channel's catalogue price).
- * Unpriced products are absent.
+ * feature 160's FR-029: the book's rows over the channel's catalogue price),
+ * as the decimal strings `price_lists` answers with. Unpriced products are
+ * absent.
  */
 export type NamedListPriceResolver = (input: {
   priceListId: string;
   productIds: readonly string[];
   currencyCode: string;
   salesChannelId: string;
-}) => Promise<Map<string, number>>;
+}) => Promise<Map<string, string>>;
 
 /**
  * The anonymous channel price of a batch of products — organization-less, the
@@ -100,7 +101,7 @@ export type AnonymousPriceResolver = (input: {
   products: readonly CatalogProductRecord[];
   salesChannel: { id: string; defaultCurrency: string };
   currencyCode: string;
-}) => Promise<Map<string, { amount: number; isSale: boolean }>>;
+}) => Promise<Map<string, { amount: string; isSale: boolean }>>;
 
 /**
  * Whether the price book a feed is pinned to publishes prices now, and why not
@@ -895,11 +896,15 @@ export class FeedGenerationService {
     return best;
   }
 
-  /** The net unit price of every product of a batch: the pinned book verbatim, else the channel's. */
+  /**
+   * The net unit price of every product of a batch: the pinned book verbatim,
+   * else the channel's — decimal strings, rounded only by the decimal helpers
+   * (review 2, finding 1 of release 0.108.0).
+   */
   private async netPrices(
     products: readonly CatalogProductRecord[],
     prepared: FeedItemHydrationScope,
-  ): Promise<Map<string, number>> {
+  ): Promise<Map<string, string>> {
     const currencyCode = prepared.context.currencyCode;
     if (prepared.context.priceListId) {
       // A named list is used verbatim (FR-020) — no buyer is resolved, so the
@@ -921,7 +926,7 @@ export class FeedGenerationService {
 
   private async priceOf(
     product: CatalogProductRecord,
-    net: number | null,
+    net: string | null,
     prepared: FeedItemHydrationScope,
   ): Promise<FeedItemPrice | null> {
     if (net === null) return null;
@@ -940,7 +945,7 @@ export class FeedGenerationService {
     }
     // The exact decimal product, rounded half-up — never on doubles, where
     // 29.50 × 1.23 is 36.28499… (review 2, finding 2; worked examples §10.16).
-    return { net, gross: Number(grossAmountHalfUp(net, rate)), taxResolved: true };
+    return { net, gross: grossAmountHalfUp(net, rate), taxResolved: true };
   }
 }
 

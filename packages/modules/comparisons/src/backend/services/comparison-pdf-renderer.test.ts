@@ -183,3 +183,22 @@ describe('ComparisonPdfRenderer.buildDocumentDefinition', () => {
     expect(def.content).toBeDefined();
   });
 });
+
+/**
+ * Review 2, finding 1 (release 0.108.0) — a comparison's price is a resolver
+ * amount, and the PDF wrote it as the bare number: 9.0450 came out as
+ * "9.045 PLN". It is written at two places, half-up on its decimal digits
+ * (`roundAmountHalfUp`; worked examples §10.16).
+ */
+describe('ComparisonPdfRenderer — the price is written at two places, half-up', () => {
+  it.each([
+    [9.045, '9.05 PLN'],
+    [1.005, '1.01 PLN'],
+    [1900, '1900.00 PLN'],
+  ])('%s is written as %s', async (amount, text) => {
+    const view = fixtureView({ products: [productSummary('p1', 'Red Widget', null, amount)] });
+    const def = await new ComparisonPdfRenderer().buildDocumentDefinition(view, new StubAssetFetcher());
+    expect(JSON.stringify(def.content)).toContain(JSON.stringify(text));
+  });
+});
+

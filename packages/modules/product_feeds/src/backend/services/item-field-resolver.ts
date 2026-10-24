@@ -91,7 +91,7 @@ function stringifyValue(value: unknown): string {
 }
 
 /** `123.00 PLN` — the "amount currency" form both Google and Meta parse. */
-function formatMoney(amount: number, currencyCode: string): string {
+function formatMoney(amount: string, currencyCode: string): string {
   return `${roundAmountHalfUp(amount)} ${currencyCode}`;
 }
 

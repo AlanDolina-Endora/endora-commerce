@@ -147,7 +147,7 @@ describe('worked examples — §10.16 an x.xx50 amount agrees on every surface',
       context: { organization: null, salesChannel: { id: retailId, defaultCurrency: 'PLN' } },
     });
     for (const productId of productIds) {
-      const net = Number(anonymous.get(productId)?.amount);
+      const net = anonymous.get(productId)!.amount;
       const item = resolveFeedItem({
         fields: [
           {

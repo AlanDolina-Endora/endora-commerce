@@ -99,13 +99,13 @@ export type SelectionAvailabilityPort = (
   salesChannelId: string,
 ) => Promise<Map<string, { inStock: boolean }>>;
 
-/** Net unit price per product, in the feed's currency and price basis. */
+/** Net unit price per product, in the feed's currency and price basis, as a decimal string. */
 export type SelectionPricePort = (input: {
   productIds: string[];
   salesChannelId: string;
   currencyCode: string;
   priceListId: string | null;
-}) => Promise<Map<string, number>>;
+}) => Promise<Map<string, string>>;
 
 export interface SelectionScope {
   salesChannelId: string;
@@ -307,7 +307,7 @@ export class ProductSelectionService {
             currencyCode: scope.currencyCode,
             priceListId: scope.priceListId ?? null,
           })
-        : new Map<string, number>();
+        : new Map<string, string>();
 
     const matched: string[] = [];
     for (const row of rows) {
