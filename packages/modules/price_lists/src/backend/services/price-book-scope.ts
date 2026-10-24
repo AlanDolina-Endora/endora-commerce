@@ -1,4 +1,5 @@
 import { orgConstraintFor } from '@endora-commerce/platform/tenancy';
+import { pgArray } from './sql-array.js';
 
 /**
  * Which price books an administrator's request may see and change — feature
@@ -79,6 +80,6 @@ export function visibleBookSql(scope: PriceBookScope): { sql: string; params: un
            and (l."audience_kind" <> 'organizations'
                 or exists (select 1 from "price_list_audience_members" sn
                             where sn."price_list_id" = l."id" and sn."organization_id" is not null)))`,
-    params: [`{${[...scope.organizationIds].join(',')}}`],
+    params: [pgArray([...scope.organizationIds])],
   };
 }

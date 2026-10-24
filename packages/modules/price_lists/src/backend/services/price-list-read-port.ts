@@ -5,6 +5,7 @@ import type {
   PriceListRecord,
 } from '@endora-commerce/contracts';
 import { PriceList } from '../entities/price-list.entity.js';
+import { pgArray } from './sql-array.js';
 
 /**
  * The row-level read model `price_lists` publishes (feature 075, Phase P).
@@ -76,7 +77,7 @@ export class PriceListReadService implements PriceListReadPort {
           and (l."starts_at" is null or l."starts_at" <= now())
           and (l."ends_at" is null or l."ends_at" > now())
           and (m."organization_id" = any(?::uuid[]) or m."customer_group_id" = ?::uuid)`,
-      [`{${chain.join(',')}}`, input.customerGroupId],
+      [pgArray(chain), input.customerGroupId],
     );
     const byBook = new Map<string, OrganizationPriceBookRecord>();
     for (const row of rows) {

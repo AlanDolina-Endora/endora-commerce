@@ -50,6 +50,7 @@ import {
   type SurfaceBookFacts,
   type SurfaceChange,
 } from './surface-change.js';
+import { pgArray } from './sql-array.js';
 
 /**
  * The price-book write service — feature 160 (D-287 P1,
@@ -1030,7 +1031,7 @@ export class PriceBookService {
                or e."variant_id" = any(?::uuid[])
                or (e."product_id" is null
                    and coalesce(e."category_id"::text, '') || '|' || coalesce(e."attribute_key", '') || '|' || coalesce(e."attribute_value", '') = any(?::text[])))`,
-      [bookId, uuidArray(uuidIds), uuidArray(productIds), uuidArray(variantIds), textArray(generalKeys)],
+      [bookId, pgArray(uuidIds), pgArray(productIds), pgArray(variantIds), pgArray(generalKeys)],
       'all',
       em.getTransactionContext(),
     )) as Array<Record<string, unknown>>;
@@ -1164,15 +1165,7 @@ export class PriceBookService {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** A Postgres uuid-array literal. */
-function uuidArray(ids: readonly string[]): string {
-  return `{${ids.join(',')}}`;
-}
 
-/** A Postgres text-array literal, every element quoted. */
-function textArray(values: readonly string[]): string {
-  return `{${values.map((v) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`;
-}
 
 /** A refused batch: overlaps alone are a conflict (409); anything else is a bad request (400). */
 function refuseRows(errors: readonly PriceBookRowError[]): never {

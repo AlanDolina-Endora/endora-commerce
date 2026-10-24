@@ -56,6 +56,6 @@ describe('price-book scope (feature 160)', () => {
 
   it('the list predicate is absent for a platform administrator and binds the scope otherwise', () => {
     expect(visibleBookSql(ALL)).toBeNull();
-    expect(visibleBookSql(REP)).toMatchObject({ params: ['{a}'] });
+    expect(visibleBookSql(REP)).toMatchObject({ params: ['{"a"}'] });
   });
 });

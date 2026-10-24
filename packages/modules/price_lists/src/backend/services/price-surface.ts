@@ -26,6 +26,7 @@ import {
   type SurfaceChange,
   type SurfaceProfileRef,
 } from './surface-change.js';
+import { pgArray } from './sql-array.js';
 
 /**
  * The price surface — feature 160, research R7, `contracts/price-surface.md`.
@@ -148,8 +149,6 @@ interface SurfaceRow {
   sourceTier: 'base' | 'catalogue' | 'buyer' | 'sale';
 }
 
-const uuidArray = (ids: readonly string[]): string => `{${ids.join(',')}}`;
-
 function rowOf(productId: string, listed: ListingAnswer | undefined): SurfaceRow | null {
   const price = listed?.answer?.resolution.price;
   if (!listed || !price) return null;
@@ -230,7 +229,7 @@ export class PriceSurface {
           for (const c of channels) ids.add(c.id);
         }
         if (ids.size === 0) return;
-        await this.#markEvery(`"sales_channel_id" = any(?::uuid[])`, [uuidArray([...ids])]);
+        await this.#markEvery(`"sales_channel_id" = any(?::uuid[])`, [pgArray([...ids])]);
         return;
       }
       case 'books': {
@@ -294,7 +293,7 @@ export class PriceSurface {
                   e."product_id", e."category_id", e."attribute_key"
              from "price_list_matrix_entries" e join "price_lists" l on l."id" = e."price_list_id"
             where e."attribute_key" = any(?::text[])`,
-          [`{${change.attributeKeys.map((k) => `"${k.replaceAll('"', '\\"')}"`).join(',')}}`],
+          [pgArray(change.attributeKeys)],
         );
         const books = new Map<string, { facts: { bookId: string; currencyCode: string; audienceKind: ResolvedBookFacts['audienceKind']; isSystem: boolean; live: boolean }; selections: RowSelection[] }>();
         for (const r of rows) {
@@ -357,7 +356,7 @@ export class PriceSurface {
            from "price_profile_prices" pp
            join "price_profiles" f on f."id" = pp."profile_id" and pp."generation" = f."serving_generation"
           where pp."profile_id" = any(?::uuid[]) and pp."product_id" = any(?::uuid[])`,
-        [uuidArray(buyers.map((p) => p.id)), uuidArray(ids)],
+        [pgArray(buyers.map((p) => p.id)), pgArray(ids)],
       );
       for (const r of rows) {
         const set = held.get(r.profile_id);
@@ -382,7 +381,7 @@ export class PriceSurface {
     await this.deps.emFactory().transactional(async (em) => {
       if (plan.full.size > 0) {
         await em.execute(`update "price_profiles" set "stale" = true, "marked_at" = clock_timestamp() where "id" = any(?::uuid[])`, [
-          uuidArray([...plan.full]),
+          pgArray([...plan.full]),
         ]);
       }
       for (let start = 0; start < profileIds.length; start += MARK_CHUNK) {
@@ -391,7 +390,7 @@ export class PriceSurface {
            select m."profile_id", m."product_id"
              from unnest(?::uuid[], ?::uuid[]) as m("profile_id", "product_id")
             where exists (select 1 from "price_profiles" f where f."id" = m."profile_id")`,
-          [uuidArray(profileIds.slice(start, start + MARK_CHUNK)), uuidArray(productIds.slice(start, start + MARK_CHUNK))],
+          [pgArray(profileIds.slice(start, start + MARK_CHUNK)), pgArray(productIds.slice(start, start + MARK_CHUNK))],
         );
       }
     });
@@ -646,7 +645,7 @@ export class PriceSurface {
                  from "price_profile_prices"
                 where "profile_id" = ? and "generation" = (select "serving_generation" from "price_profiles" where "id" = ?)
                   and "product_id" = any(?::uuid[])`,
-              [everyone.id, everyone.id, uuidArray(chunk.map((p) => p.id))],
+              [everyone.id, everyone.id, pgArray(chunk.map((p) => p.id))],
             )
           ).map((r) => [
             r.product_id,
@@ -675,11 +674,11 @@ export class PriceSurface {
       [
         id,
         generation,
-        uuidArray(rows.map((r) => r.productId)),
-        `{${rows.map((r) => r.amount).join(',')}}`,
-        `{${rows.map((r) => r.maxAmount).join(',')}}`,
-        `{${rows.map((r) => (r.compareAt === null ? 'NULL' : r.compareAt)).join(',')}}`,
-        `{${rows.map((r) => r.sourceTier).join(',')}}`,
+        pgArray(rows.map((r) => r.productId)),
+        pgArray(rows.map((r) => r.amount)),
+        pgArray(rows.map((r) => r.maxAmount)),
+        pgArray(rows.map((r) => r.compareAt)),
+        pgArray(rows.map((r) => r.sourceTier)),
       ],
     );
   }
@@ -688,10 +687,7 @@ export class PriceSurface {
   async #clearMarks(em: EntityManager, marks: DueProfile['marks']): Promise<void> {
     for (let start = 0; start < marks.length; start += MARK_CHUNK) {
       await em.execute(`delete from "price_profile_stale_products" where "id" = any(?::bigint[])`, [
-        `{${marks
-          .slice(start, start + MARK_CHUNK)
-          .map((m) => m.id)
-          .join(',')}}`,
+        pgArray(marks.slice(start, start + MARK_CHUNK).map((m) => m.id)),
       ]);
     }
   }
@@ -794,7 +790,7 @@ export class PriceSurface {
       for (let start = 0; start < ids.length; start += MARK_CHUNK) {
         await em.execute(
           `delete from "price_profile_prices" where "profile_id" = ? and "generation" = ? and "product_id" = any(?::uuid[])`,
-          [due.id, generation, uuidArray(ids.slice(start, start + MARK_CHUNK))],
+          [due.id, generation, pgArray(ids.slice(start, start + MARK_CHUNK))],
         );
       }
       for (let start = 0; start < rows.length; start += MARK_CHUNK) {
@@ -841,7 +837,7 @@ export class PriceSurface {
       }
       if (query.restrictToProductIds !== undefined) {
         out.push(`${alias}."product_id" = any(?::uuid[])`);
-        params.push(uuidArray(query.restrictToProductIds));
+        params.push(pgArray(query.restrictToProductIds));
       }
       return out.map((c) => ` and ${c}`).join('');
     };

@@ -37,6 +37,7 @@ import type {
   PricingLineResult,
 } from './pricing-service.interface.js';
 import { compareDecimal } from './matrix-decimal.js';
+import { pgArray } from './sql-array.js';
 
 /** A listing card's answer: the lowest variant's (or the product's) resolution, and the range. */
 export interface ListingAnswer {
@@ -148,8 +149,6 @@ export interface BookPricingDeps {
   cache?: PricingCache<CachedBookLine, ProfilePricingCacheKey>;
   profileMemo?: PricingCache<PricingProfile, ProfileMemoKey>;
 }
-
-const uuidArray = (ids: readonly string[]): string => `{${ids.join(',')}}`;
 
 /**
  * Whether a channel offers a currency: its `currencies`, and its default
@@ -403,7 +402,7 @@ export class BookPricing {
                    and (l."ends_at" is null or l."ends_at" > now())
                    and l."id" in (${bridge.sql})
                    and (l."audience_kind" = 'everyone' or l."id" = any(?::uuid[]))))`,
-      [input.currencyCode, ...bridge.params, uuidArray(input.vector.map((v) => v.bookId))],
+      [input.currencyCode, ...bridge.params, pgArray(input.vector.map((v) => v.bookId))],
     );
     const entries = new Map(input.vector.map((v) => [v.bookId, v]));
     const books: ResolverBook[] = [];
@@ -695,7 +694,7 @@ export class BookPricing {
               and (l."audience_kind" = 'everyone' or m."id" is not null)
             )
           )`,
-      [uuidArray(query.organizationIds), query.customerGroupId, query.currencyCode, ...bridge.params],
+      [pgArray(query.organizationIds), query.customerGroupId, query.currencyCode, ...bridge.params],
     );
     return rows.map((r) => ({
       id: r.id,
@@ -725,7 +724,7 @@ export class BookPricing {
           and "price_type" in ('fixed', 'percent', 'amount')
           and ("product_id" is null or "product_id" = any(?::uuid[]))
           and ("variant_id" is null or "variant_id" = any(?::uuid[]))`,
-      [uuidArray(bookIds), uuidArray(productIds), uuidArray(variantIds)],
+      [pgArray(bookIds), pgArray(productIds), pgArray(variantIds)],
     );
     return rows.map((r) => ({
       id: r.id,
