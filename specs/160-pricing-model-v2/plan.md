@@ -39,7 +39,7 @@ backend integration and contract suites, perf benches (`PERF_RUN=true`)
 **Performance Goals**: SC-004 — listing and PDP no slower than the baselines of
 `specs/pricing/read-paths-and-performance.md` §7; SC-005 — price-sorted first page ≤ 150 ms p95 at
 50 000 products × 1 000 organizations, a price change visible in sort ≤ 60 s (a catalogue-wide
-change ≤ 300 s at 200 profiles, owner ruling 2026-10-24)
+change ≤ 150 s at 200 profiles, owner rulings 2026-10-24: 300 s, tightened to 150 s after issue #416)
 **Constraints**: batched entry points only (`specs/conventions/pricing.md`); live resolution for cart,
 checkout, PDP, quotes and order intake; constant statements per batch; channel-bridge access only
 through `SalesChannelMembershipService`

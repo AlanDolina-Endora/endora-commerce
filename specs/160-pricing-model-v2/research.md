@@ -552,3 +552,164 @@ owns their removal.
 organization: a feed has no buyer identity and no organization field, and its token is a
 capability anyone holding the link can use. Channel binding as a warning only: FR-029 names the
 channel, and a book that does not apply on the feed's channel is not the channel's price.
+
+## R19. A faster whole rebuild of the price surface (issue #416, `contracts/price-surface.md` §4–§5)
+
+**Problem.** A catalogue-wide change rebuilds every profile it reaches whole (R17, §4): an
+all-products or attribute-only row on an everyone or base book, a channel identity or lifecycle
+event, a change over 10 000 products. On the SC-005 fixture at 201 profiles that took 270–275 s,
+against the separate 300 s bound the owner ruled for 0.108.0 (§5): about 25 s of headroom.
+(Since then the owner has tightened that bound to 150 s, after this work; see the end of this entry.)
+
+**Profile.** One whole build of the 201-profile fixture, timed per phase (2026-10-24, the default
+fixture, load 2.5 at the start and 4.0 at the end, the run itself included): **262.7 s**. 1.13 M
+rows, almost all of them in 21 profiles that price every product (the everyone profile and 20
+all-products buyers, 50 000 rows each). The 180 other buyer profiles resolve only the products
+their own books select (R17), so they cost about 8 s together.
+
+| Phase | Time | Note |
+| --- | --- | --- |
+| the catalogue through `catalog`'s port (`listAll`, 50 000 hydrated products) | **79.4 s** | read again for each of the 21 profiles: 3.8 s each |
+| inserts (`unnest`, 500 rows a statement, both indexes, both foreign keys) | **83.6 s** | 74 µs a row |
+| resolution (`resolveListing`, 500 products a batch) | 76.5 s | below |
+| — category assignments, variants, rows | 21.5 / 10.0 / 12.5 s | one call each per batch |
+| — the display-mode chain (product step, viewer tail) | 14.2 + 4.7 s | the surface stores no display mode |
+| — the resolver itself (pure JS) | 4.1 s | |
+| — channel offer, precedence, eligible attributes | 6.0 s | |
+| the everyone surface's rows, for a buyer's comparison | 11.5 s | |
+| `ANALYZE`, dropping the old generation, the swap, the commit | 1.2 s | |
+
+The SQL reads, the inserts and the hydration of the catalogue, not the resolver, are what a
+whole build spends its time on.
+
+**Decision — changes that need no contract change, no new connection and no new dependency.**
+
+1. **A cheap, fresh catalogue read per build.** `catalog`'s product read port answers products
+   the way pricing resolves them: `listPricingRefs()` and `findPricingRefsByIds(ids)`, which return
+   `{ id, attributeValues }` for the products `listAll()` and `findByIds()` answer, from one
+   statement and with no entity hydration. A whole build reads it at its own start, as before.
+   The first version of this entry shared one read between all builds of a pass instead. The review
+   of #424 rejected that: the snapshot stretched three staleness windows from one build to the
+   whole pass (below).
+2. **The surface's resolution skips the display mode.** `BookPricing.resolveProfileListing` is
+   `resolveListing` for a fixed profile, with the same lines, variant ranging and resolver, but
+   without the display-mode chain, which the surface never stored. The engine's batch core takes
+   one explicit mode: a `viewer` resolution carries the display-mode step and may be cached; a
+   `surface` resolution has no display mode and never touches the cache.
+3. **The next batch resolves while the previous one is written.** Resolution reads on pool
+   connections and the insert runs on the build's transaction connection, so they overlap. A
+   buyer's comparison rows, the everyone surface's served rows, are read on a pool connection
+   beside the resolution. Writes stay one at a time and in order. A failure of a write or of a
+   resolution, in any batch, fails the build, and a failed write fails it at once rather than
+   after the batch resolving beside it. The transaction rolls back and nothing is swapped. The
+   profile keeps serving what it served, and keeps its mark.
+
+**What the review of #424 found in the per-pass snapshot**, and what replaced it:
+
+- *(a) a product deleted mid-pass* was still priced by a later build. Its insert failed on
+  `price_profile_prices_product_id_foreign`, and the error aborted the pass. Now every build
+  reads the catalogue itself. A product deleted between a build's read and its insert
+  (`23503` on that key) rolls the build back, and the build runs again on a fresh read, at most
+  three times. If its products still vanish, the build fails the pass: nothing swapped, every
+  mark kept, no later profile of the pass built, and the job fails so the queue's own retry runs
+  it again. A first version skipped the profile and went on instead. Review 2 of #424 showed that a
+  skipped everyone profile let its buyers build against the stale everyone surface. It also
+  completed the job, so nothing re-ran the kept marks, and every buyer re-tried the failed everyone
+  build. Failing the job needs one more change: a failed job was kept, and since every request uses
+  one fixed job id, which BullMQ refuses while it holds it, the kept failure swallowed every later
+  request. Failed jobs are now removed and logged. Failing all three attempts needs a delete to land
+  inside each attempt's one-build window; an attempt settles the reads a failure left in flight
+  before the next starts. The existence check is the foreign key itself:
+  `price_lists` may not name `catalog`'s table in SQL (`check:module-boundary`), and a savepoint per
+  batch would put about a hundred subtransactions into one whole build, past PostgreSQL's
+  per-backend subtransaction cache. No index was added: the retry needs none.
+- *(b) a whole-profile mark landing after the snapshot* was cleared, unseen, by an everyone build
+  no pass asked for (`#everyoneServed`), whose cutoff was read inside its transaction. Such a
+  build now reads its cutoff before it reads the catalogue.
+- *(c) attribute values* from the snapshot were resolved against categories, variants and rows
+  read fresh. Now they are read at the start of the build that resolves them. A change committed
+  during a build marks its products, and the next pass does those marks.
+
+The generation swap, the advisory lock per profile, the marks cleared by id and the
+everyone-before-buyer order are untouched. Every row is still computed by the resolver the cards
+use. The tests were red before the changes they hold:
+
+- `PL/backend/services/price-surface.whole-build.test.ts`: a scripted database whose transaction
+  rolls back, with the product key and the swap's cutoff. It covers a product deleted after an
+  earlier build of the pass, a product deleted between a build's read and its insert, a profile
+  whose products keep vanishing (the pass fails; nothing of the channel built after it; three attempts in
+  all, not three per buyer), a retry waiting for the reads its failed attempt left, attribute values
+  changed mid-pass (resolved by the later build;
+  the mark done by the next pass), a whole mark after the read of a build no pass asked for, the
+  overlap on the everyone and the buyer path, a failed write failing at once, and a failed
+  resolution, each with no swap and no unhandled rejection.
+- `PL/backend/services/book-pricing.profile-listing.test.ts`: the same resolutions as
+  `resolveListing`, with no display-mode read.
+- `IT/price_lists/price-surface-vanished-product.test.ts`: a product deleted on the real
+  database while the first whole build writes; the pass completes, no row is left for it, and
+  every sorted surface equals the live cards.
+- `IT/catalog/product-pricing-refs.test.ts`: the projection answers what `listAll` and
+  `findByIds` answer.
+- The identity tests are unchanged and green: `price-surface-identity`,
+  `price-surface-targeted-refresh`, `price-surface-refresh`, `price-surface-plans`,
+  `catalog/price-sort-viewer-scope` and `catalog/price-walk-continuation`.
+
+**Measured** (`backend/test/perf/price_lists/price-surface.bench.ts`, same machine, same day, the
+default fixture; each run started only after the 1-minute load had stayed below 3 for a minute;
+the load figures include the bench itself):
+
+| Scenario | Before (load 1.2 → 1.5) | After (load median 2.35, max 3.5) |
+| --- | --- | --- |
+| whole build of the 200-profile fixture | 281.9 s (201 profiles) | 75.8 s (197 new profiles beside 5 built) |
+| an all-products −30 % row on the everyone book → visible | 275.64 s | **84.84 s** |
+| `sales_channels.identity_changed` → visible | 273.47 s | **83.23 s** |
+| full rebuild of every profile | 277.6 s (201) | 84.0 s (202) |
+| targeted writes → visible: everyone row / organization row / base price / `product.updated.v1` | 0.20–0.49 s (R17) | 0.50 / 0.19 / 0.35 / 0.37 s |
+| PIM-like import probes, p95 / max | 0.50 / 0.55 s (R17) | 0.40 / 0.51 s |
+| page p95, every buyer, first / desc / range | ≤ 27.4 ms (R17) | ≤ 7.2 ms |
+
+The "after" column is one run of the whole bench, with every scenario green. The first version of
+this entry, with the per-pass snapshot, measured 90.89 s and 90.62 s. After review 2 of #424
+(vanished products fail the pass; one array parameter for `findPricingRefsByIds`), a re-run of the
+200-profile, targeted and catalogue-wide scenarios (load median 2.04, max 3.57; 201 profiles) gave
+89.86 s and 84.08 s, a full rebuild of 87.7 s and targeted writes of 0.19–0.39 s, all within the
+budgets.
+
+SC-004 (`catalog/listing-price-viewer-cost.bench.ts`, three runs, load 0.5–1.2): statement counts
+are unchanged (anonymous 20 cold / 16 warm, signed-in 24 / 23). p95 is 23.6–25.0 ms anonymous and
+28.1–29.4 ms signed-in, against 24.2 and 25.2 ms in T173. That is not this change: two runs of the
+same tree with the three changed packages at `origin/master` measured 23.6 and 37.7 ms anonymous,
+and 40.4 and 29.2 ms signed-in.
+
+**What a build spends its time on now** (the per-phase timing of the first version, 201
+profiles, 95.0 s): the inserts 75.7 s, overlapped with resolution 50.6 s, the everyone rows
+10.5 s and 12.9 s spent waiting for a write. A whole build is bound by its inserts.
+
+**Considered and rejected or deferred.**
+
+- *A larger batch* (2 000 products): 100.6 s against 95.0 s at 500, no gain once batches
+  overlap. The batch stays 500.
+- *Sharing one catalogue read between the builds of a pass*: it saved about the same time as
+  the lean read does, and opened the staleness windows above.
+- *Parallel profile builds*, as concurrent builds within a pass or several worker concurrency
+  slots: **rejected by the owner (2026-10-24)**. A build holds its transaction connection for the
+  whole build and its resolution needs another. A write-bound build needs concurrent writers to
+  gain, which means more long-held connections from the pool the worker shares.
+- *A targeted diff of all-products and attribute-only rows*: such a row may select any product,
+  so every product must still be resolved. A diff saves only the writes of unchanged rows, and it
+  would replace the swap of a whole profile with in-place updates of up to every row.
+- *Building buyer profiles incrementally from the everyone surface*: a buyer's whole build
+  already resolves only the products its own books select (R17). What remains is the
+  all-products buyers, which is R7's profile factor, a change to the read path. Its trigger
+  (10 M rows) is not met.
+- *Cheaper writes*: COPY needs a new dependency (Principle IV). Unlogged staging or dropped
+  indexes do not apply, because the next generation shares its table with the served one.
+  Dropping `price_profile_prices_product_id_foreign` in a measurement-only run took the build
+  from 95.0 s to 80.2 s; **the owner kept the key (2026-10-24)**. That key's delete cascade has
+  no index leading with `product_id` (read from the schema, not measured); it is tracked
+  separately.
+
+**The bound, after this entry** (owner ruling 2026-10-24, spec Clarifications Session
+2026-10-24). SC-005's catalogue-wide bound is **≤ 150 s at 200 built profiles**, down from 300 s.
+The bench asserts it (`PERF_SURFACE_CATALOGUE_WIDE_MS`, default 150 000). At 84.84 s the largest
+measured case leaves about 65 s.

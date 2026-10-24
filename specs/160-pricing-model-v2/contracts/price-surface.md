@@ -30,7 +30,7 @@ price), FR-026. The SQL is built in `unit-price-ordering.ts` (rewritten, same th
 ## 3. Profile miss and staleness — a request never waits on a build
 
 Owner decision (2026-10-22): no request builds a surface. The order may lag a change by the worker's
-turnaround (SC-005: ≤ 60 s for a targeted change, ≤ 300 s at 200 profiles for a catalogue-wide one,
+turnaround (SC-005: ≤ 60 s for a targeted change, ≤ 150 s at 200 profiles for a catalogue-wide one,
 §4); a displayed price never lags, because cards are always resolved live.
 
 - **Marked profile** (a pricing write since its last build or refresh): keeps serving its surface.
@@ -115,10 +115,30 @@ second row — so a write during a pass is done by the next, and a writer and th
 the same mark. Passes repeat while a pass finds work. A whole build that writes a large share of
 `price_profile_prices`, or into a table with no statistics, runs `ANALYZE` on it inside its own
 transaction. SC-005's freshness bound is the worker's turnaround, measured by the bench (§5): 60 s
-for a targeted change, unchanged by the ruling, and — owner ruling 2026-10-24 — ≤ 300 s at 200
-built profiles for a **catalogue-wide** change, one that marks its profiles whole (an all-products or
+for a targeted change, unchanged by the ruling, and — owner rulings 2026-10-24: 300 s for 0.108.0,
+tightened to 150 s after issue #416 — ≤ 150 s at 200 built profiles for a **catalogue-wide** change, one that marks its profiles whole (an all-products or
 attribute-only row on an everyone or base book, a channel identity or lifecycle event, a change over
-10 000 products). Issue #416 tracks making the whole rebuild faster.
+10 000 products).
+
+**A whole build** (issue #416, `research.md` R19). A build reads the catalogue at its own start,
+through `catalogProductReadPort.listPricingRefs()` (one statement, no entity hydration), so it prices
+the catalogue as it is then and never as an earlier build of the pass read it. A build no pass asked
+for (an everyone profile built because a buyer needs it) reads its cutoff before the catalogue, so a
+whole mark landing after that read survives the swap. The surface's rows are resolved by
+`BookPricing.resolveProfileListing`, which is the listing resolution of the profile without the
+display mode the surface does not store. A build resolves its next batch of products while the
+previous batch is written, and reads a buyer's comparison rows beside the resolution. Writes stay in
+order. A failure of either fails the build before its swap, at once for a failed write, so the
+profile keeps the generation it served and keeps its mark.
+
+**A product deleted under a build.** `price_profile_prices.product_id` keeps its foreign key to
+`products` (owner ruling 2026-10-24). A build or a refresh whose insert meets a product deleted after
+its read (`23503` on `price_profile_prices_product_id_foreign`) rolls back and runs again on a fresh
+read, at most three times. If its products still vanish, the build fails the pass: nothing is
+swapped, every mark is kept, and no later profile of the pass is built, so no buyer is compared with
+an everyone surface that failed. The job fails, and the queue's own attempts and backoff run it again.
+A job that fails for good is removed and logged, so the next request starts a new one; the fixed job
+id would otherwise keep refusing it (review 2 of #424).
 
 ## 5. Measurement — `backend/test/perf/price_lists/price-surface.bench.ts`
 
@@ -132,8 +152,8 @@ organizations, 500 with books of three kinds, 20 groups). Assertions:
 | profile-miss page (restricted build) | recorded, not asserted; reported against the budget |
 | single-book refresh → visible in sort | p95 ≤ **60 s** (SC-005) |
 | at ≥ 200 built profiles: write → visible for an everyone row, an organization row, a base price through `priceBookWritePort`, a `product.updated.v1`; probe writes during a PIM-like import | each ≤ **60 s** (SC-005) |
-| at ≥ 200 built profiles: a catalogue-wide change → visible in sort (whole rebuild of the profiles it reaches) | ≤ **300 s** (SC-005, owner ruling 2026-10-24), asserted for an all-products row on the everyone book and a `sales_channels.identity_changed` (`PERF_SURFACE_CATALOGUE_WIDE_MS`); 275.43 s and 270.53 s at 201 profiles (2026-10-24) |
-| full rebuild | recorded (input to P3's precedence flow) |
+| at ≥ 200 built profiles: a catalogue-wide change → visible in sort (whole rebuild of the profiles it reaches) | ≤ **150 s** (SC-005, owner rulings 2026-10-24: 300 s, tightened to 150 s after R19), asserted for an all-products row on the everyone book and a `sales_channels.identity_changed` (`PERF_SURFACE_CATALOGUE_WIDE_MS`, default 150 000); 84.84 s and 83.23 s at 202 profiles after R19 (2026-10-24; 275.64 s and 273.47 s before it, the same day) |
+| full rebuild | recorded (input to P3's precedence flow): 84.0 s at 202 profiles after R19, 277.6 s at 201 before |
 | `price_profile_prices` rows and index size | recorded; above 10 M rows triggers the profile-factor task (`research.md` R7) |
 
 The listing-page budget of SC-004 is kept by the existing benches re-run on the new model:

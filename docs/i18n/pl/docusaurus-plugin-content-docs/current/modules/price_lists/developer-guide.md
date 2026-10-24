@@ -315,7 +315,16 @@ wstępnie wyliczoną **powierzchnię cen**.
   zostawia przebieg. Przebieg usuwa tylko znaczniki, które przeczytał, według id, więc zapis, który
   nastąpi w trakcie przebiegu, obsłuży następny; przebiegi powtarzają się, dopóki jest praca.
   Budowa całego profilu, która zapisuje dużą część `price_profile_prices` albo zapisuje do tabeli bez
-  statystyk, wykonuje na niej `ANALYZE` we własnej transakcji. Bez działającego workera
+  statystyk, wykonuje na niej `ANALYZE` we własnej transakcji. Budowa całego profilu czyta katalog
+  na swoim początku przez `catalogProductReadPort.listPricingRefs()`, jednym zapytaniem, bez
+  tworzenia encji. Wiersze powierzchni wylicza `BookPricing.resolveProfileListing`, czyli wycena
+  listingu bez trybu wyświetlania, którego powierzchnia nie przechowuje. Budowa wycenia kolejną
+  partię produktów, gdy poprzednia jest zapisywana, a błąd jednego albo drugiego niczego nie
+  podmienia. Budowa, której zapis trafi na produkt usunięty po jej odczycie, wycofuje się i rusza
+  ponownie na świeżym odczycie, najwyżej trzy razy. Jeśli produkty nadal znikają, przebieg kończy
+  się błędem: wszystkie znaczniki zostają, żaden kolejny profil nie jest budowany, a zadanie
+  ponawia sama kolejka. Zadanie, które ostatecznie się nie powiodło, jest usuwane i zapisywane w
+  logu na poziomie `error`, więc następne żądanie uruchamia nowe (zgłoszenie #416). Bez działającego workera
   powierzchnia nigdy nie powstaje, a strony sortowane według ceny korzystają z opisanych wyżej
   rozwiązań zastępczych.
 
@@ -323,9 +332,11 @@ wstępnie wyliczoną **powierzchnię cen**.
 obejmująca cały katalog — taka, która oznacza swoje profile w całości: wiersz dla wszystkich
 produktów albo tylko dla atrybutu w cenniku dla wszystkich lub cenniku cen bazowych, zdarzenie
 `sales_channels.identity_changed` albo `lifecycle_changed`, zmiana ponad 10 000 produktów — w ciągu
-300 s przy 200 zbudowanych profilach (decyzja właściciela z 24.10.2026). Benchmark sprawdza obie
-granice (drugą przez `PERF_SURFACE_CATALOGUE_WIDE_MS`) i zmierzył przy 201 profilach 275,43 s dla
-wiersza dla wszystkich produktów i 270,53 s dla zdarzenia tożsamości kanału. Przyspieszenie pełnej przebudowy opisuje zgłoszenie #416.
+150 s przy 200 zbudowanych profilach. Właściciel ustalił tę granicę na 300 s i zaostrzył ją do
+150 s, gdy zgłoszenie #416 przyspieszyło pełną przebudowę (decyzje z 24.10.2026). Benchmark sprawdza
+obie granice (drugą przez `PERF_SURFACE_CATALOGUE_WIDE_MS`, domyślnie 150 000). Przy 202 profilach
+zmierzył 84,84 s dla wiersza dla wszystkich produktów i 83,23 s dla zdarzenia tożsamości kanału.
+Przed zgłoszeniem #416, tego samego dnia, trwało to 275,64 s i 273,47 s.
 Zmierzone z `PERF_RUN=true` w `backend/test/perf/price_lists/price-surface.bench.ts` (50 000
 produktów, 1 000 organizacji): wyniki są w `specs/pricing/read-paths-and-performance.md` §7.
 

@@ -11,7 +11,9 @@ conversion and removal phase (tasks T114–T133), and re-checked at `e1758312e` 
 the documentation rebuild (feature 160, Phase 13): §1.2's caching paragraph, §1.3 and §1.4; and
 at `91e8c1907` on 2026-10-23 after the owner rulings of that day (targeted surface refresh, pinned
 feeds): §1.2's caching and consumers paragraphs, §1.3 and §1.4 item 7; and at `e3f456957` on
-2026-10-24 for the second review of release 0.108.0: §1.2's display-mode paragraph and §1.3. The old model — the Application rule, the per-list
+2026-10-24 for the second review of release 0.108.0: §1.2's display-mode paragraph and §1.3; and
+on `perf/416-surface-rebuild` (from `2716908b3`) on 2026-10-24 for the faster whole rebuild
+(issue #416): §1.4 item 7. The old model — the Application rule, the per-list
 product roster and brackets, the `Default` list, the product *default price* and the variant price
 override — is gone from the code and, after the conversion migration, from the database. How it
 worked is recorded in this file's history (`git log -- specs/pricing/current-model.md`); the
@@ -170,7 +172,7 @@ at all, as on any keyset walk over a live price — the order goes missing *beca
 more often than not. A page cut by its scan budget is short, possibly empty, and hands on a cursor
 at its scan position, so a budget never ends a walk (review 3 of 0.108.0, A1/A2). **No request builds a
 surface**: the order may lag a change by the worker's turnaround (SC-005: ≤ 60 s for a targeted
-change, ≤ 300 s at 200 profiles for a catalogue-wide one), a displayed
+change, ≤ 150 s at 200 profiles for a catalogue-wide one), a displayed
 price never — cards are always resolved live. Measured in
 `backend/test/perf/price_lists/price-surface.bench.ts` and `read-paths-and-performance.md` §7.
 
@@ -200,6 +202,10 @@ price never — cards are always resolved live. Measured in
    in place; measured at 202 profiles in `read-paths-and-performance.md` §7. What remains: a change
    that concerns every product of its profiles — a row selecting by attribute alone or every
    product, a change to more than 10 000 products, a channel event, the precedence — still rebuilds
-   those profiles whole (at 201 profiles an all-products row took 275.43 s and a channel event
-   270.53 s to show). SC-005 gives that case its
-   own bound, ≤ 300 s at 200 profiles (owner ruling 2026-10-24); making it faster is issue #416.
+   those profiles whole. SC-005 gives that case its own bound, ≤ 150 s at 200 profiles (owner
+   rulings 2026-10-24: 300 s, tightened to 150 s after issue #416). Issue #416 (research R19) made a
+   whole build about three times faster. Each build reads the catalogue through a lean port
+   projection at its own start, skips the display mode the surface does not store, and resolves the
+   next batch while the previous one is written. A product deleted under a build costs that build a
+   retry, not the pass. At 202 profiles an all-products row now takes 84.84 s to show, and a channel
+   event 83.23 s; before the change they took 275.64 s and 273.47 s.

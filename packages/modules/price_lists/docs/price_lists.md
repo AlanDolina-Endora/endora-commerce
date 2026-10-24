@@ -223,9 +223,9 @@ book line, a base price or a product edit shows in the order within about half a
 platform's measurements, even during a large product import. A change that reaches the whole
 catalogue — a line for all products or for an attribute value alone, a change to more than 10 000
 products at once, or a change to a sales channel — recomputes the order whole for every group of
-buyers it reaches, which takes minutes on a large catalogue with many contract price books: the
-platform's target for it is five minutes with about 200 such groups (measured: about 4 min 35 s at 201),
-against one minute for any other change. Making it faster is tracked in issue #416.
+buyers it reaches, which can take a minute or two on a large catalogue with many contract price
+books. The platform's target for it is two and a half minutes with about 200 such groups, against
+one minute for any other change. The platform measured about 1 min 25 s with 202 groups.
 
 **List price beside the buyer's price.** With *Show list price beside the buyer's price* switched on
 (*Pricing settings*, off by default), a buyer whose price is below the catalogue price sees both on
@@ -335,8 +335,8 @@ administrator and the state before and after; *View history* on a book opens its
 - **Screen readers announce the storefront's sale badge as "Request a quote"**; the visible text is
   correct (issue #411).
 - **The sorted order lags a price change** by the background refresh — usually under a second, and
-  up to about five minutes for a change that reaches the whole catalogue (see *Where prices
-  appear*; issue #416); the prices on the cards never lag. Price sorting needs the platform's background workers running.
+  up to about two and a half minutes for a change that reaches the whole catalogue (see *Where prices
+  appear*); the prices on the cards never lag. Price sorting needs the platform's background workers running.
 - **The external catalogue API** prices the API key's organization with that organization's
   customer group, not the bound customer account's own group, and its bulk pricing request names
   product SKUs only.

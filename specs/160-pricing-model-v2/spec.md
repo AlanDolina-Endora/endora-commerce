@@ -106,6 +106,11 @@ most; development price books dropped and reseeded; demo books reproduce E1–E3
   profiles** (owner ruling 2026-10-24, SC-005). Catalogue-wide: an all-products or attribute-only
   row on an everyone or base book, a sales-channel identity or lifecycle event, a change concerning
   more than 10 000 products. Making the whole rebuild faster is issue #416.
+- Q: Issue #416 (research R19) brought a catalogue-wide change on 202 profiles from about 275 s to
+  about 85 s. Should SC-005's catalogue-wide bound follow it? → A: **yes — ≤ 150 s at 200 built
+  profiles** (owner ruling 2026-10-24, on pull request #424), asserted by the SC-005 bench
+  (`PERF_SURFACE_CATALOGUE_WIDE_MS`, default 150 000). Measured at 202 profiles, after the change:
+  84.84 s for an all-products row on the everyone book and 83.23 s for a channel identity event.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -571,8 +576,9 @@ storefront.
   change is reflected in sorted listings within 60 seconds. A **catalogue-wide** change — an
   all-products or attribute-only row on an everyone or base book, a sales-channel identity or
   lifecycle event, or a change concerning more than 10 000 products — is reflected within
-  **300 seconds at 200 built profiles** instead (owner ruling 2026-10-24, Clarifications Session
-  2026-10-24; issue #416 tracks making it faster).
+  **150 seconds at 200 built profiles** instead (owner rulings 2026-10-24, Clarifications Session
+  2026-10-24: 300 s for release 0.108.0, tightened to 150 s once issue #416 made the whole rebuild
+  faster).
 - **SC-006**: After installation, nothing of the old model listed in FR-042 remains, and no product or
   variant that had a price before has none afterwards in the currency it had it in.
 - **SC-007**: A freshly reset demo reproduces E3, and with only E1's or only E2's books active

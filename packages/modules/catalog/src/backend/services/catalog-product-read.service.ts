@@ -1,5 +1,6 @@
 import type { EntityManager, FilterQuery } from '@mikro-orm/postgresql';
 import type {
+  CatalogProductPricingRef,
   CatalogAttributeValueQuery,
   CatalogAdminNamePageQuery,
   CatalogPackagingUnitRecord,
@@ -111,6 +112,29 @@ export class CatalogProductReadService implements CatalogProductReadPort {
       { orderBy: { sku: 'asc' } },
     );
     return products.map(toCatalogProductRecord);
+  }
+
+  /**
+   * Issue #416 — one statement over `products`, no entity built: the price
+   * surface's worker reads it per whole build, and `listAll` hydrated every
+   * product (3.8 s for 50 000) to use two fields.
+   */
+  async listPricingRefs(): Promise<CatalogProductPricingRef[]> {
+    const rows = await this.emFactory().execute<Array<{ id: string; attribute_values: Record<string, unknown> | null }>>(
+      `select "id", "attribute_values" from "products" order by "id"`,
+    );
+    return rows.map(toPricingRef);
+  }
+
+  async findPricingRefsByIds(ids: readonly string[]): Promise<CatalogProductPricingRef[]> {
+    if (ids.length === 0) return [];
+    // One array parameter, whatever the size of the set: a whole build's
+    // candidates can be the catalogue (review 2 of #424).
+    const rows = await this.emFactory().execute<Array<{ id: string; attribute_values: Record<string, unknown> | null }>>(
+      `select "id", "attribute_values" from "products" where "id" = any(?::uuid[]) order by "id"`,
+      [uuidArrayLiteral([...new Set(ids)])],
+    );
+    return rows.map(toPricingRef);
   }
 
   async listVariantsByProductIds(
@@ -345,6 +369,19 @@ function productFilter(
   if (options?.activeOnly) return { deletedAt: null, status: 'active' };
   if (options?.liveOnly) return { deletedAt: null };
   return {};
+}
+
+/**
+ * A Postgres array literal of ids for one bound parameter. `em.execute` formats
+ * a JavaScript array as a list of values, not one array, so the literal is
+ * built here: every element double-quoted, `\` and `"` escaped.
+ */
+function uuidArrayLiteral(ids: readonly string[]): string {
+  return `{${ids.map((id) => `"${id.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`).join(',')}}`;
+}
+
+function toPricingRef(row: { id: string; attribute_values: Record<string, unknown> | null }): CatalogProductPricingRef {
+  return { id: row.id, attributeValues: row.attribute_values ?? {} };
 }
 
 export function toCatalogProductRecord(product: Product): CatalogProductRecord {
