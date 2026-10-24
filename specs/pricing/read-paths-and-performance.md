@@ -549,6 +549,9 @@ Profiled per phase at 201 profiles: before, 262.7 s, of which 79.4 s went to hyd
 catalogue once per all-products profile, 83.6 s to inserts and 76.5 s to resolution (18.9 s of it
 the unused display mode). After the first version of the change, 95.0 s: inserts 75.7 s,
 overlapped with resolution 50.6 s. Breakdown, the review of #424 and the alternatives are in R19.
+After review 2 of #424, a re-run of the 200-profile, targeted and catalogue-wide scenarios (load
+median 2.04, max 3.57; 201 profiles) gave 89.86 s and 84.08 s, a full rebuild of 87.7 s and
+targeted writes of 0.19–0.39 s.
 
 **SC-004 on the price-book engine (T173, 2026-10-23, idle).**
 `catalog/listing-price-viewer-cost.bench.ts`, page of 50:

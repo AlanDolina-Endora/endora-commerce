@@ -321,8 +321,10 @@ wstępnie wyliczoną **powierzchnię cen**.
   listingu bez trybu wyświetlania, którego powierzchnia nie przechowuje. Budowa wycenia kolejną
   partię produktów, gdy poprzednia jest zapisywana, a błąd jednego albo drugiego niczego nie
   podmienia. Budowa, której zapis trafi na produkt usunięty po jej odczycie, wycofuje się i rusza
-  ponownie na świeżym odczycie, najwyżej trzy razy. Potem profil zachowuje swoje znaczniki na
-  późniejszy przebieg, a przebieg idzie dalej (zgłoszenie #416). Bez działającego workera
+  ponownie na świeżym odczycie, najwyżej trzy razy. Jeśli produkty nadal znikają, przebieg kończy
+  się błędem: wszystkie znaczniki zostają, żaden kolejny profil nie jest budowany, a zadanie
+  ponawia sama kolejka. Zadanie, które ostatecznie się nie powiodło, jest usuwane i zapisywane w
+  logu na poziomie `error`, więc następne żądanie uruchamia nowe (zgłoszenie #416). Bez działającego workera
   powierzchnia nigdy nie powstaje, a strony sortowane według ceny korzystają z opisanych wyżej
   rozwiązań zastępczych.
 

@@ -134,9 +134,11 @@ profile keeps the generation it served and keeps its mark.
 **A product deleted under a build.** `price_profile_prices.product_id` keeps its foreign key to
 `products` (owner ruling 2026-10-24). A build or a refresh whose insert meets a product deleted after
 its read (`23503` on `price_profile_prices_product_id_foreign`) rolls back and runs again on a fresh
-read, at most three times. After that the profile keeps its marks for a later pass, and the pass goes
-on with the other profiles. A pass that did nothing but give up ends, leaving the marks to the next
-job.
+read, at most three times. If its products still vanish, the build fails the pass: nothing is
+swapped, every mark is kept, and no later profile of the pass is built, so no buyer is compared with
+an everyone surface that failed. The job fails, and the queue's own attempts and backoff run it again.
+A job that fails for good is removed and logged, so the next request starts a new one; the fixed job
+id would otherwise keep refusing it (review 2 of #424).
 
 ## 5. Measurement — `backend/test/perf/price_lists/price-surface.bench.ts`
 

@@ -610,8 +610,16 @@ whole build spends its time on.
   `price_profile_prices_product_id_foreign`, and the error aborted the pass. Now every build
   reads the catalogue itself. A product deleted between a build's read and its insert
   (`23503` on that key) rolls the build back, and the build runs again on a fresh read, at most
-  three times. After that the profile keeps its marks for a later pass and the pass goes on. A
-  pass that only gave up ends rather than spinning. The existence check is the foreign key itself:
+  three times. If its products still vanish, the build fails the pass: nothing swapped, every
+  mark kept, no later profile of the pass built, and the job fails so the queue's own retry runs
+  it again. A first version skipped the profile and went on instead. Review 2 of #424 showed that a
+  skipped everyone profile let its buyers build against the stale everyone surface. It also
+  completed the job, so nothing re-ran the kept marks, and every buyer re-tried the failed everyone
+  build. Failing the job needs one more change: a failed job was kept, and since every request uses
+  one fixed job id, which BullMQ refuses while it holds it, the kept failure swallowed every later
+  request. Failed jobs are now removed and logged. Failing all three attempts needs a delete to land
+  inside each attempt's one-build window; an attempt settles the reads a failure left in flight
+  before the next starts. The existence check is the foreign key itself:
   `price_lists` may not name `catalog`'s table in SQL (`check:module-boundary`), and a savepoint per
   batch would put about a hundred subtransactions into one whole build, past PostgreSQL's
   per-backend subtransaction cache. No index was added: the retry needs none.
@@ -629,7 +637,9 @@ use. The tests were red before the changes they hold:
 - `PL/backend/services/price-surface.whole-build.test.ts`: a scripted database whose transaction
   rolls back, with the product key and the swap's cutoff. It covers a product deleted after an
   earlier build of the pass, a product deleted between a build's read and its insert, a profile
-  whose products keep vanishing, attribute values changed mid-pass (resolved by the later build;
+  whose products keep vanishing (the pass fails; nothing of the channel built after it; three attempts in
+  all, not three per buyer), a retry waiting for the reads its failed attempt left, attribute values
+  changed mid-pass (resolved by the later build;
   the mark done by the next pass), a whole mark after the read of a build no pass asked for, the
   overlap on the everyone and the buyer path, a failed write failing at once, and a failed
   resolution, each with no swap and no unhandled rejection.
@@ -659,7 +669,11 @@ the load figures include the bench itself):
 | page p95, every buyer, first / desc / range | ≤ 27.4 ms (R17) | ≤ 7.2 ms |
 
 The "after" column is one run of the whole bench, with every scenario green. The first version of
-this entry, with the per-pass snapshot, measured 90.89 s and 90.62 s.
+this entry, with the per-pass snapshot, measured 90.89 s and 90.62 s. After review 2 of #424
+(vanished products fail the pass; one array parameter for `findPricingRefsByIds`), a re-run of the
+200-profile, targeted and catalogue-wide scenarios (load median 2.04, max 3.57; 201 profiles) gave
+89.86 s and 84.08 s, a full rebuild of 87.7 s and targeted writes of 0.19–0.39 s, all within the
+budgets.
 
 SC-004 (`catalog/listing-price-viewer-cost.bench.ts`, three runs, load 0.5–1.2): statement counts
 are unchanged (anonymous 20 cold / 16 warm, signed-in 24 / 23). p95 is 23.6–25.0 ms anonymous and

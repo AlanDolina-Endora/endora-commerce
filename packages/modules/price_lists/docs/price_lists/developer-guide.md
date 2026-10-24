@@ -313,7 +313,9 @@ too slow, so price sorting and price-range filtering read a precomputed **price 
   the display mode the surface does not store. A build resolves its next batch of products while
   the previous batch is written, and a failure of either swaps nothing. A build whose insert meets
   a product deleted after its read rolls back and runs again on a fresh read, up to three times.
-  After that the profile keeps its marks for a later pass, and the pass goes on (issue #416).
+  If its products still vanish, the pass fails with every mark kept and no later profile built,
+  and the queue's own retry runs the job again. A job that fails for good is removed and logged at
+  `error`, so the next request starts a new one (issue #416).
   Without a running worker the surface is never built and price-sorted pages fall back as above.
 
 **Freshness bound (SC-005).** A targeted change is visible in the sort within 60 s; a
