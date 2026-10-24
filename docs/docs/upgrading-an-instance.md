@@ -2653,8 +2653,14 @@ Whenever it suits you:
 - **An invoice's `paidTotal` is what was paid for the order** — each captured payment attempt less
   what was refunded from it, or the order's stored total when it is recorded as paid with nothing
   captured — never the invoice's own gross, so `amountDue` can be `0.01` for an order placed before
-  the upgrade. An order refunded before it is invoiced is still invoiced, with only what was kept as
-  paid.
+  the upgrade. An order refunded in part before it is invoiced is invoiced, with only what was kept
+  as paid.
+- **An order refunded in full before it is invoiced is not invoiced.** When its payments' refunds
+  equal what was captured and cover the whole order total, there is no sale left to document:
+  issuing a VAT invoice answers `422 INVOICE_ORDER_REFUNDED` (*This order's payments were refunded
+  in full before it was invoiced, so there is no sale left to invoice. Nothing was issued.*) and draws
+  no number, and automatic issuance on an order status skips the order and logs
+  `[invoices] the order was not auto-invoiced: its payments were refunded in full`.
 - **A settlement naming one case line twice answers `400 VALIDATION_FAILED`** (issue `duplicate_line`)
   and moves nothing; a settlement whose correction would be refused is refused before the refund.
 - **A settlement's `totalRefundAmount` covers every line of the case**, not only the lines in

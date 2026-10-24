@@ -24,6 +24,19 @@ zapisaną kopię adresu kupującego, generuje PDF lekkim mechanizmem bez ciężk
 plik przez moduł `assets` i zapisuje identyfikator pliku w zamówieniu. Błędy emitują
 `invoice.generation_failed.v1` do kolejki ponowień w panelu administracyjnym.
 
+### Co faktura VAT zapisuje jako zapłacone i kiedy nie jest wystawiana
+
+Faktura VAT zapisuje jako zapłacone to, co zostało z płatności za zamówienie: każdą pobraną próbę
+płatności pomniejszoną o to, co z niej zwrócono. Zamówienie oznaczone jako zapłacone bez pobranej
+płatności (potwierdzony przelew) albo przy braku modułu `payments` jest zapłacone w zapisanej
+kwocie całkowitej.
+
+Zamówienie, którego płatności **zwrócono w całości przed wystawieniem faktury** — zwroty są równe
+temu, co pobrano, i pokrywają całą kwotę zamówienia — nie jest fakturowane: nie ma już sprzedaży do
+udokumentowania. Wystawienie zwraca `422 INVOICE_ORDER_REFUNDED` i nie pobiera numeru; automatyczne
+wystawianie pomija zamówienie i zapisuje powód w logu. Zamówienie zwrócone tylko częściowo jest
+fakturowane, z zatrzymaną kwotą jako zapłaconą.
+
 ## Encje
 
 `Invoice` (numer, daty wystawienia i dokumentu, odwołanie do pliku, `type ∈ {proforma, final}`).

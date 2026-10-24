@@ -2770,8 +2770,15 @@ W dowolnym momencie:
 - **`paidTotal` faktury to to, co zapłacono za zamówienie** — każda przechwycona płatność
   pomniejszona o to, co z niej zwrócono, albo zapisana suma zamówienia, gdy jest ono oznaczone jako
   opłacone bez przechwyconej płatności — nigdy własna kwota brutto faktury, więc `amountDue` może
-  wynosić `0.01` dla zamówienia sprzed aktualizacji. Zamówienie zwrócone przed wystawieniem faktury
-  nadal dostaje fakturę, z zapłaconą kwotą równą temu, co zatrzymano.
+  wynosić `0.01` dla zamówienia sprzed aktualizacji. Zamówienie zwrócone częściowo przed wystawieniem
+  faktury dostaje fakturę, z zapłaconą kwotą równą temu, co zatrzymano.
+- **Zamówienie zwrócone w całości przed wystawieniem faktury nie jest fakturowane.** Gdy zwroty jego
+  płatności są równe temu, co pobrano, i pokrywają całą kwotę zamówienia, nie ma już sprzedaży do
+  udokumentowania: wystawienie faktury VAT zwraca `422 INVOICE_ORDER_REFUNDED` (*Płatności za to
+  zamówienie zostały w całości zwrócone przed wystawieniem faktury, więc nie ma sprzedaży do
+  zafakturowania. Niczego nie wystawiono.*) i nie pobiera numeru, a automatyczne wystawianie po
+  zmianie statusu zamówienia pomija je i zapisuje w logu
+  `[invoices] the order was not auto-invoiced: its payments were refunded in full`.
 - **Rozliczenie, które podaje tę samą pozycję zgłoszenia dwa razy, zwraca `400 VALIDATION_FAILED`**
   (problem `duplicate_line`) i niczego nie przesuwa; rozliczenie, którego korekta zostałaby
   odrzucona, jest odrzucane przed zwrotem.
