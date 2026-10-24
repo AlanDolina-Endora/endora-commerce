@@ -342,9 +342,9 @@ produces calls it:
 | --- | --- |
 | Checkout preview, admin preview, placed order | `taxTotal` over the lines' nets; `total` = net + VAT + delivery + surcharge − discount (those three carry no VAT); the payment, the proforma and the credit reservation take that `total`; `orders.vat_method = 'per_rate'` records it |
 | Order line (`order_items.line_total`), confirmation, order screens | the line's **own rounding**, `round(net × (1 + rate))` — informational (owner ruling of 2026-10-24): the line grosses may add up to a cent more or less than the total |
-| VAT invoice | the per-rate summary and the totals over the lines' nets (delivery, surcharge and discount are 0 % lines), stored as issued in `invoices.vat_summary`; a line's `grossValue` is its own rounding, informational — the law requires the net per line, the gross per line is optional; `paidTotal` is what was paid for the order (the captured payments, or a paid order's stored total), never the invoice gross |
-| Return (default refund) | **cumulative** over the order's returns: per group of what the order charged — a rate (`vat_method = 'per_rate'`) or a line (an order placed before) — the amount of everything returned so far (`vatByRate` over the returned nets, or the stored line total in proportion) minus what earlier returns refunded in the group; capped at what remains of the stored products total, and a completing return refunds exactly what remains |
-| Correction | **cumulative** over the corrections of one invoice: per rate (per line for an invoice issued before) the net of everything credited so far — `netForGrossAtRate`, `N` with `N + round(N × rate) = gross`, or the invoiced line net in proportion — minus the nets earlier corrections credited; capped at what remains of the invoice; a total above the lines' sum is refused |
+| VAT invoice | the per-rate summary and the totals over the lines' nets (delivery, surcharge and discount are 0 % lines), stored as issued in `invoices.vat_summary`; a line's `grossValue` is its own rounding, informational — the law requires the net per line, the gross per line is optional; `paidTotal` is what was paid for the order — each captured payment attempt less what was refunded from it, or a paid order's stored total when nothing was captured — never the invoice gross |
+| Return (default refund) | **cumulative** over the order's returns **and complaints**: per group of what the order charged — a rate (`vat_method = 'per_rate'`) or a line (an order placed before) — the amount of everything returned so far (`vatByRate` over the returned nets, or the stored line total in proportion), less the share of the order-level discount it carries (the discount shared over the groups by their amounts), minus what earlier cases refunded in the group; capped at what remains of the products paid (stored subtotal + tax − discount), and a case completing the order refunds exactly what remains. Cases on one order are created one at a time (a per-order advisory lock) |
+| Correction | **cumulative** over the effective (not cancelled) corrections of one invoice: per rate (per line for an invoice issued before) the net of everything credited so far — `netForGrossAtRate`, `N` with `N + round(N × rate) = gross`, or the invoiced line net in proportion — minus the nets earlier corrections credited; the goods at `refund + discount share` and the discount back on a 0 % line, so the correction totals the refund and credits the goods' VAT as charged; capped at what remains of the invoice; a total above the lines' sum is refused, and a settlement validates its correction before any money moves |
 | Quote screens and PDF | the quote has one rate: the summary's VAT on the net total; a line's own VAT column is rounded per line, informational |
 
 A typed money amount has at most two decimal places; more is refused with
@@ -365,6 +365,8 @@ product, which is how one order carries two rates.
 | V3 partial | 9.0450 × 3, 8 %; 2 returned, then 1 | 27.15 | as A2 | as A2 | 2 of 3: **19.55** / 18.10 / 1.45; then 1: **9.77** / 9.05 / 0.72 | the default refund was 9.77 × 2 = 19.54 |
 | L1 | 29.4950 × 1 + 0.6950 × 5, both 23 % | 29.50, 3.50 | **36.29**, **4.31** (= 40.60) / **7.59** / **43.09** | 23 %: 33.00 / 7.59 / 40.59 | all: 40.59 / 33.00 / 7.59 | the line grosses were the allocated 36.28, 4.31 |
 | R2 | 29.4950 × 2, 23 %; 1 returned, then 1 | 59.00 | **72.57** / **13.57** / **75.07** | 23 %: 59.00 / 13.57 / 72.57 | 1: **36.29** / 29.50 / 6.79; then 1: **36.28** / 29.50 / 6.78 | each case alone refunded 36.29, 72.58 against 72.57 paid |
+| DC1 | 29.4950 × 2, 23 %, 10.00 order discount; 1 returned, then 1 | 59.00 | **72.57** / **13.57** / **65.07** (72.57 − 10.00 + 2.50) | 0 %: −7.50 (discount, surcharge); 23 %: 59.00 / 13.57 / 72.57 | 1: **31.29** (carries 5.00) → 31.29 / 24.50 / 6.79; then 1: **31.28** (5.00) → 31.28 / 24.50 / 6.78 | a full return refunded 72.57 against 62.57 charged for the goods |
+| C1 | as L1, the 0.6950 × 5 line not returnable; 1 returned, then 5 by a complaint | 29.50, 3.50 | as L1 | as L1 | return: **36.29** / 29.50 / 6.79; complaint: **4.30** / 3.50 / 0.80 | a complaint was outside the cap and could refund on top of what was paid |
 | L0 | placed before 0.108.0: 29.50 at 23 % (stored 36.29) + 4.30 at 5 % (4.52); stored VAT 7.00, total 40.80, 40.80 paid | — | as stored | issued now: 23 %: 29.50 / 6.79; 5 %: 4.30 / 0.22 — **7.01**, **40.81**; paid **40.80**, due **0.01** | all: refunds 36.28, 4.52 = **40.80** (what was paid) → **40.80** / 33.80 / 7.00 | the context recomputed what was paid; `paidTotal` was the invoice gross, 40.81 |
 
 V2 is the case the two rules disagreed on: the order summed every line's exact tax across all rates
@@ -380,14 +382,21 @@ its net and taxed it again (D1): 100.00 net at 23 % was invoiced at 123.00 net, 
 Invoices issued before the fix are not rewritten or corrected (owner ruling of 2026-10-24); they are
 shown with the per-rate summary derived from their stored lines, as they were issued
 (`readModelVatSummary`, decided by `invoices.vat_summary` being `null`). An order placed before is
-read from what it stored (`orders.vat_method` `null`): L0.
+read from what it stored (`orders.vat_method` `null`): L0. **The refund is the money charged**: a
+case completing such an order refunds the stored products total even where the stored line totals
+add up to a cent more or less, and the correction credits exactly that refund — at most what
+remains of the invoice. An invoice whose gross was below what was paid leaves the excess as the
+overpayment it already shows (a negative amount due); one whose gross was above (a pre-upgrade
+invoice of a VAT payer, D1) keeps the uncredited rest.
 
 Tests: `backend/test/integration/price_lists/worked-examples/money-agreement.test.ts` (A1–A3, V2,
-V3 full and partial, L1, R2, L0, every document, and the identity of the payment, the proforma, the
+V3 full and partial, L1, R2, DC1, C1, L0, every document, and the identity of the payment, the proforma, the
 order total and the invoice's gross and paid total); `packages/contracts/test/money-decimal.unit.test.ts`
 (`vatByRate`, `allocateHalfUp`, `netForGrossAtRate`) and `money-input*.unit.test.ts`;
 `packages/modules/orders/src/backend/services/order-money.test.ts` and `order-return-context.test.ts`;
 `packages/modules/invoices/src/backend/services/vat-summary.test.ts` and `correction-amounts.test.ts`;
-`packages/modules/returns/src/backend/domain/cumulative-refunds.test.ts` (800 random return
-sequences never over-refund, and a complete return refunds exactly what was paid);
+`packages/modules/returns/src/backend/domain/cumulative-refunds.test.ts` (1200 random sequences of
+returns and complaints, with and without an order discount, never over-refund, a complete return
+refunds exactly what was paid, and the discount carried adds up to the order's);
+`backend/test/integration/returns/concurrent-cases.test.ts` and `settlement-ordering.test.ts`;
 `backend/test/integration/invoices/decimal-amounts.test.ts` (D1, V2).

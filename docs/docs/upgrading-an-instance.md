@@ -2508,8 +2508,15 @@ Whenever it suits you:
   what everything returned so far is worth, minus what earlier returns already refunded, so no
   sequence of returns refunds more than the order charged and a complete return refunds exactly
   that: two returns of one of two items at 29.50 + 23 % refund 36.29 and then 36.28 (72.57 paid),
-  where each used to refund 36.29. A correction credits the same way, so all corrections of an
-  invoice together credit exactly what it charged.
+  where each used to refund 36.29. A complaint about a line that cannot be returned counts in the same
+  total, and an order-level discount is taken off what the goods refund — the order charged the goods
+  less the discount, so a full return refunds that, never the goods' full price. A correction credits
+  the same way: the goods' VAT as the invoice charged it, and the discount back on a line of its own,
+  so all corrections of an invoice together credit exactly what it charged. For an order placed
+  before the upgrade, the refund is what the order charged and the correction credits exactly that.
+- **A settlement checks its correction before it moves any money.** A refusal — a case line named
+  twice, an invoice line the correction cannot match, `invoices` switched off — leaves the case
+  unsettled with nothing refunded or credited.
 - **An amount with more than two decimal places is refused, not rounded** — a delivery cost, a
   payment method's surcharge, a quote's agreed or proposed price, an approved refund, a return
   cost, a credit limit, an opportunity's value, and a promotion's fixed amount, step or minimum
@@ -2641,9 +2648,15 @@ Whenever it suits you:
   invoice line's `grossValue` are the line's own rounding, `round(net × (1 + rate))`, and may add up
   to a cent more or less than the total. The shapes are unchanged. An order at two rates can differ
   by a cent from the same basket before the upgrade.
-- **An invoice's `paidTotal` is what was paid for the order** — the captured payment attempts, or
-  the order's stored total when it is recorded as paid with nothing captured — never the invoice's
-  own gross, so `amountDue` can be `0.01` for an order placed before the upgrade.
+- **An invoice's `paidTotal` is what was paid for the order** — each captured payment attempt less
+  what was refunded from it, or the order's stored total when it is recorded as paid with nothing
+  captured — never the invoice's own gross, so `amountDue` can be `0.01` for an order placed before
+  the upgrade. An order refunded before it is invoiced is still invoiced, with only what was kept as
+  paid.
+- **A settlement naming one case line twice answers `400 VALIDATION_FAILED`** (issue `duplicate_line`)
+  and moves nothing; a settlement whose correction would be refused is refused before the refund.
+- **A correction of a discounted order** credits the goods at their invoiced value and the discount
+  back on a negative 0 % line; a cancelled correction no longer counts against later ones.
 - **A correction refuses a `total` above the sum of its lines** with `400 VALIDATION_FAILED`
   (`details.code: correction_total_exceeds_lines`), and corrections of one invoice credit
   cumulatively: together never more than it charged.
@@ -2747,13 +2760,17 @@ Whenever it suits you:
   `twoDecimalAmountString`, `addAmountPrecisionIssue` and `ERROR_CODES.AMOUNT_PRECISION_EXCEEDED`).
   An overlay that computes an amount from a price uses them rather than `Number#toFixed(2)` or
   `Math.round(x * 100) / 100`, and a new money input field uses the refinement.
-- **`OrderReturnContext` gains `vatMethod` and `productsPaidTotal`, and `OrderReturnContextLine`
-  gains `unitNetPrice` and `taxRate`**; `paidLineAmount` is the line total the order stored. An
-  implementation of `OrderReturnContextPort` in an overlay owes the four fields and reads them from
-  what the order stored, never recomputes them.
+- **`OrderReturnContext` gains `vatMethod`, `productsPaidTotal` (stored subtotal + tax − discount)
+  and `discountTotal`, and `OrderReturnContextLine` gains `unitNetPrice` and `taxRate`**;
+  `paidLineAmount` is the line total the order stored. An implementation of `OrderReturnContextPort`
+  in an overlay owes these fields and reads them from what the order stored, never recomputes them.
+- **`CorrectiveInvoicePort` gains `validateCorrection(input)`**, which refuses what
+  `createCorrection` would refuse without writing anything, and `CorrectiveInvoiceLine` gains an
+  optional `discount`; an implementation in an overlay owes the method.
 - **Two new nullable columns record which method a document was made under**: `orders.vat_method`
   (`per_rate` from 0.108.0) and `invoices.vat_summary` (the per-rate summary an invoice or a
-  correction was issued with). `null` is a document from before; nothing is backfilled.
+  correction was issued with). `null` is a document from before; nothing is backfilled. A third,
+  `return_case_items.default_discount_amount` (default `0`), records the discount a refund carries.
 
 ##### Other ports and shapes
 

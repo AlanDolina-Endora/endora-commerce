@@ -185,11 +185,11 @@ const VECTORS: Vector[] = [
     ],
   },
   {
-    // D1 (review of PR #423): a 10.00 order-level discount on 2 × 29.50 at 23 %.
+    // DC1 (review of PR #423): a 10.00 order-level discount on 2 × 29.50 at 23 %.
     // The products were charged 72.57 − 10.00 = 62.57; each return refunds its
     // half less the 5.00 of discount it carries, and the correction credits the
     // goods as invoiced (29.50 + 6.79 / 6.78 VAT) and the 5.00 back on 0 %.
-    id: 'D1',
+    id: 'DC1',
     lines: [{ productId: SEED_PRODUCT_101_ID, quantity: 2 }],
     rates: { simple: 0.23 },
     expectedLines: [['29.50', '59.00', '72.57']],

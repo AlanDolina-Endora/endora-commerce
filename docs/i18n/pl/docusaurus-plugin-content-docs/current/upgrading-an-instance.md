@@ -2614,8 +2614,16 @@ W dowolnym momencie:
   zwrot oddaje wartość wszystkiego, co dotąd zwrócono, pomniejszoną o to, co oddały wcześniejsze
   zwroty, więc żaden ciąg zwrotów nie odda więcej, niż naliczyło zamówienie, a zwrot całości oddaje
   dokładnie tyle: dwa zwroty po jednej z dwóch sztuk po 29,50 w stawce 23 % oddają 36,29, a potem
-  36,28 (zapłacono 72,57), gdzie każdy oddawał 36,29. Korekta uznaje tak samo, więc wszystkie
-  korekty jednej faktury razem uznają dokładnie to, co naliczyła.
+  36,28 (zapłacono 72,57), gdzie każdy oddawał 36,29. Reklamacja pozycji, której nie można zwrócić,
+  liczy się do tej samej sumy, a rabat na całe zamówienie jest odejmowany od tego, co oddaje zwrot
+  towaru — zamówienie naliczyło towar pomniejszony o rabat, więc zwrot całości oddaje tyle, nigdy
+  pełnej ceny towaru. Korekta uznaje tak samo: VAT towaru tak, jak naliczyła go faktura, a rabat na
+  osobnej pozycji, więc wszystkie korekty jednej faktury razem uznają dokładnie to, co naliczyła. Dla
+  zamówienia złożonego przed aktualizacją zwrot oddaje to, co naliczyło zamówienie, a korekta uznaje
+  dokładnie tyle.
+- **Rozliczenie sprawdza korektę, zanim przesunie jakiekolwiek pieniądze.** Odmowa — ta sama pozycja
+  zgłoszenia podana dwa razy, pozycja faktury, której korekta nie może dopasować, wyłączony moduł
+  `invoices` — zostawia zgłoszenie nierozliczone, bez zwrotu i bez uznania.
 - **Kwota z więcej niż dwoma miejscami po przecinku jest odrzucana, a nie zaokrąglana** — koszt
   dostawy, dopłata do metody płatności, uzgodniona lub proponowana cena w zapytaniu ofertowym,
   zatwierdzona kwota zwrotu, koszt zwrotu, limit kredytowy, wartość szansy sprzedaży oraz kwota
@@ -2756,9 +2764,16 @@ W dowolnym momencie:
   `round(net × (1 + rate))`, i mogą sumować się do grosza więcej lub mniej niż suma. Kształty się nie
   zmieniają. Zamówienie w dwóch stawkach może różnić się o grosz od tego samego koszyka sprzed
   aktualizacji.
-- **`paidTotal` faktury to to, co zapłacono za zamówienie** — przechwycone płatności albo zapisana
-  suma zamówienia, gdy jest ono oznaczone jako opłacone bez przechwyconej płatności — nigdy własna
-  kwota brutto faktury, więc `amountDue` może wynosić `0.01` dla zamówienia sprzed aktualizacji.
+- **`paidTotal` faktury to to, co zapłacono za zamówienie** — każda przechwycona płatność
+  pomniejszona o to, co z niej zwrócono, albo zapisana suma zamówienia, gdy jest ono oznaczone jako
+  opłacone bez przechwyconej płatności — nigdy własna kwota brutto faktury, więc `amountDue` może
+  wynosić `0.01` dla zamówienia sprzed aktualizacji. Zamówienie zwrócone przed wystawieniem faktury
+  nadal dostaje fakturę, z zapłaconą kwotą równą temu, co zatrzymano.
+- **Rozliczenie, które podaje tę samą pozycję zgłoszenia dwa razy, zwraca `400 VALIDATION_FAILED`**
+  (problem `duplicate_line`) i niczego nie przesuwa; rozliczenie, którego korekta zostałaby
+  odrzucona, jest odrzucane przed zwrotem.
+- **Korekta zamówienia z rabatem** uznaje towar według wartości z faktury, a rabat na ujemnej
+  pozycji 0 %; anulowana korekta nie liczy się już do kolejnych.
 - **Korekta odrzuca `total` wyższy od sumy jej pozycji** odpowiedzią `400 VALIDATION_FAILED`
   (`details.code: correction_total_exceeds_lines`), a korekty jednej faktury uznają narastająco:
   razem nigdy więcej, niż naliczyła.
@@ -2866,14 +2881,19 @@ W dowolnym momencie:
   `twoDecimalAmountString`, `addAmountPrecisionIssue` i `ERROR_CODES.AMOUNT_PRECISION_EXCEEDED`).
   Moduł nakładkowy, który liczy kwotę z ceny, używa ich zamiast `Number#toFixed(2)` czy
   `Math.round(x * 100) / 100`, a nowe pole kwoty wpisywanej przez człowieka używa tego zawężenia.
-- **`OrderReturnContext` zyskuje `vatMethod` i `productsPaidTotal`, a `OrderReturnContextLine`
-  zyskuje `unitNetPrice` i `taxRate`**; `paidLineAmount` to suma pozycji zapisana w zamówieniu.
-  Implementacja `OrderReturnContextPort` w module nakładkowym musi podawać te cztery pola i czytać
-  je z tego, co zamówienie zapisało, nigdy ich nie przeliczając.
+- **`OrderReturnContext` zyskuje `vatMethod`, `productsPaidTotal` (zapisane netto + podatek −
+  rabat) i `discountTotal`, a `OrderReturnContextLine` zyskuje `unitNetPrice` i `taxRate`**;
+  `paidLineAmount` to suma pozycji zapisana w zamówieniu. Implementacja `OrderReturnContextPort` w
+  module nakładkowym musi podawać te pola i czytać je z tego, co zamówienie zapisało, nigdy ich nie
+  przeliczając.
+- **`CorrectiveInvoicePort` zyskuje `validateCorrection(input)`**, które odrzuca to, co odrzuciłoby
+  `createCorrection`, niczego nie zapisując, a `CorrectiveInvoiceLine` zyskuje opcjonalne pole
+  `discount`; implementacja w module nakładkowym musi dostarczać tę metodę.
 - **Dwie nowe kolumny dopuszczające `null` zapisują, według której metody powstał dokument**:
   `orders.vat_method` (`per_rate` od 0.108.0) i `invoices.vat_summary` (podsumowanie według stawek,
   z którym wystawiono fakturę lub korektę). `null` oznacza dokument sprzed aktualizacji; nic nie
-  jest uzupełniane wstecz.
+  jest uzupełniane wstecz. Trzecia, `return_case_items.default_discount_amount` (domyślnie `0`),
+  zapisuje rabat, który niesie zwrot.
 
 ##### Inne porty i kształty
 
