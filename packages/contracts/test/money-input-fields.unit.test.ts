@@ -2,8 +2,17 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 import {
   AMOUNT_PRECISION_EXCEEDED,
+  adjustCreditLimitRequestSchema,
   adminCreateQuoteRequestLineSchema,
+  adminOrderRefundRequestSchema,
   adminPatchQuoteRequestLineSchema,
+  deliveryMethodUpsertSchema,
+  erpSaleDocumentUpsertInputSchema,
+  grantCreditLimitRequestSchema,
+  paymentMethodUpsertSchema,
+  returnDeliveryMethodCreateSchema,
+  returnDeliveryMethodUpdateSchema,
+  settlementRequestSchema,
   createQuoteRequestLineSchema,
   promotionActionSchema,
   upsertPromotionRequestSchema,
@@ -50,5 +59,53 @@ describe('quote requests', () => {
     expect(refusedPaths(adminCreateQuoteRequestLineSchema, { ...line, agreedUnitPrice: 1.005 })).toEqual(['agreedUnitPrice']);
     expect(refusedPaths(adminPatchQuoteRequestLineSchema, { ...line, agreedUnitPrice: 2.675 })).toEqual(['agreedUnitPrice']);
     expect(adminPatchQuoteRequestLineSchema.safeParse({ ...line, agreedUnitPrice: null }).success).toBe(true);
+  });
+});
+
+describe('methods, returns, orders, credit limits and ERP documents', () => {
+  const id = '00000000-0000-4000-8000-000000000101';
+
+  it('refuses a delivery cost and a payment surcharge with three places', () => {
+    expect(refusedPaths(deliveryMethodUpsertSchema, { name: { 'en-US': 'D' }, cost: 1.005, currency: 'PLN' })).toEqual(['cost']);
+    expect(
+      refusedPaths(paymentMethodUpsertSchema, { name: { 'en-US': 'P' }, kind: 'bank_transfer', additionalPrice: 2.675 }),
+    ).toEqual(['additionalPrice']);
+  });
+
+  it('refuses a return cost and an approved refund with three places', () => {
+    expect(refusedPaths(returnDeliveryMethodCreateSchema, { deliveryMethodId: id, returnCost: 1.005, currency: 'PLN' })).toEqual([
+      'returnCost',
+    ]);
+    expect(refusedPaths(returnDeliveryMethodUpdateSchema, { returnCost: 1.005 })).toEqual(['returnCost']);
+    expect(
+      refusedPaths(settlementRequestSchema, {
+        resolutionType: 'refund',
+        lines: [{ returnCaseItemId: id, approvedRefundAmount: 10.005 }],
+      }),
+    ).toEqual(['lines.0.approvedRefundAmount']);
+  });
+
+  it('refuses an admin refund amount and credit limit amounts with three places', () => {
+    expect(refusedPaths(adminOrderRefundRequestSchema, { amount: 1.005 })).toEqual(['amount']);
+    expect(refusedPaths(grantCreditLimitRequestSchema, { organizationId: id, grantedAmount: 1000.001, currency: 'PLN' })).toEqual([
+      'grantedAmount',
+    ]);
+    expect(refusedPaths(adjustCreditLimitRequestSchema, { grantedAmount: 0.005 })).toEqual(['grantedAmount']);
+  });
+
+  it('refuses an ERP sale document total with three places', () => {
+    const doc = {
+      organizationId: id,
+      externalDocumentRef: { system: 'erp', externalId: 'ERP-1', documentKind: 'invoice' },
+      kind: 'invoice',
+      number: 'FV 1',
+      currency: 'PLN',
+      issuedAt: '2026-10-24T10:00:00.000Z',
+    };
+    expect(refusedPaths(erpSaleDocumentUpsertInputSchema, { ...doc, grossTotal: '123.456', netTotal: '100.000' })).toEqual([
+      'netTotal',
+      'grossTotal',
+    ]);
+    expect(erpSaleDocumentUpsertInputSchema.safeParse({ ...doc, grossTotal: '123.45' }).success).toBe(true);
   });
 });

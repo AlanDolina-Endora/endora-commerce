@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isoDateTimeSchema, uuidSchema } from './common.js';
+import { twoDecimalAmount } from './money-input.js';
 
 /**
  * Returns & Complaints (Refunds, RMA) — feature 046.
@@ -306,7 +307,7 @@ export const settlementRequestSchema = z.object({
     .array(
       z.object({
         returnCaseItemId: uuidSchema,
-        approvedRefundAmount: z.number().finite().nonnegative(),
+        approvedRefundAmount: twoDecimalAmount(z.number().finite().nonnegative()),
       }),
     )
     .default([]),
@@ -368,13 +369,13 @@ export type ReturnDeliveryMethodDto = z.infer<typeof returnDeliveryMethodSchema>
 
 export const returnDeliveryMethodCreateSchema = z.object({
   deliveryMethodId: uuidSchema,
-  returnCost: z.number().finite().nonnegative(),
+  returnCost: twoDecimalAmount(z.number().finite().nonnegative()),
   currency: z.string().length(3),
   isActive: z.boolean().optional(),
 });
 
 export const returnDeliveryMethodUpdateSchema = z.object({
-  returnCost: z.number().finite().nonnegative().optional(),
+  returnCost: twoDecimalAmount(z.number().finite().nonnegative()).optional(),
   currency: z.string().length(3).optional(),
   isActive: z.boolean().optional(),
 });
