@@ -2516,7 +2516,9 @@ Whenever it suits you:
   before the upgrade, the refund is what the order charged and the correction credits exactly that.
 - **A settlement checks its correction before it moves any money.** A refusal — a case line named
   twice, an invoice line the correction cannot match, `invoices` switched off — leaves the case
-  unsettled with nothing refunded or credited.
+  unsettled with nothing refunded or credited. A settlement refunds every line of the case: a line
+  the request leaves out is refunded and credited at its stored approved amount, so the refund and
+  the correction always agree. Two returns of one order are settled one after the other.
 - **An amount with more than two decimal places is refused, not rounded** — a delivery cost, a
   payment method's surcharge, a quote's agreed or proposed price, an approved refund, a return
   cost, a credit limit, an opportunity's value, and a promotion's fixed amount, step or minimum
@@ -2655,6 +2657,11 @@ Whenever it suits you:
   paid.
 - **A settlement naming one case line twice answers `400 VALIDATION_FAILED`** (issue `duplicate_line`)
   and moves nothing; a settlement whose correction would be refused is refused before the refund.
+- **A settlement's `totalRefundAmount` covers every line of the case**, not only the lines in
+  `lines`: a line left out counts at its stored `approvedRefundAmount`, and the correction credits
+  the same lines. Settlements of one order run one at a time; one that waits more than 15 seconds
+  for another answers `409 VALIDATION_FAILED` (`details.code: settlement_in_progress`), with nothing
+  moved, and can be retried.
 - **A correction of a discounted order** credits the goods at their invoiced value and the discount
   back on a negative 0 % line; a cancelled correction no longer counts against later ones.
 - **A correction refuses a `total` above the sum of its lines** with `400 VALIDATION_FAILED`

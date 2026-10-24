@@ -2623,7 +2623,10 @@ W dowolnym momencie:
   dokładnie tyle.
 - **Rozliczenie sprawdza korektę, zanim przesunie jakiekolwiek pieniądze.** Odmowa — ta sama pozycja
   zgłoszenia podana dwa razy, pozycja faktury, której korekta nie może dopasować, wyłączony moduł
-  `invoices` — zostawia zgłoszenie nierozliczone, bez zwrotu i bez uznania.
+  `invoices` — zostawia zgłoszenie nierozliczone, bez zwrotu i bez uznania. Rozliczenie zwraca
+  wszystkie pozycje zgłoszenia: pozycja pominięta w żądaniu jest zwracana i uznawana w zapisanej
+  zatwierdzonej kwocie, więc zwrot i korekta zawsze się zgadzają. Dwa zwroty jednego zamówienia są
+  rozliczane jeden po drugim.
 - **Kwota z więcej niż dwoma miejscami po przecinku jest odrzucana, a nie zaokrąglana** — koszt
   dostawy, dopłata do metody płatności, uzgodniona lub proponowana cena w zapytaniu ofertowym,
   zatwierdzona kwota zwrotu, koszt zwrotu, limit kredytowy, wartość szansy sprzedaży oraz kwota
@@ -2772,6 +2775,11 @@ W dowolnym momencie:
 - **Rozliczenie, które podaje tę samą pozycję zgłoszenia dwa razy, zwraca `400 VALIDATION_FAILED`**
   (problem `duplicate_line`) i niczego nie przesuwa; rozliczenie, którego korekta zostałaby
   odrzucona, jest odrzucane przed zwrotem.
+- **`totalRefundAmount` rozliczenia obejmuje wszystkie pozycje zgłoszenia**, nie tylko te z
+  `lines`: pozycja pominięta liczy się w zapisanej kwocie `approvedRefundAmount`, a korekta uznaje
+  te same pozycje. Rozliczenia jednego zamówienia wykonują się jedno po drugim; rozliczenie, które
+  czeka na inne dłużej niż 15 sekund, zwraca `409 VALIDATION_FAILED`
+  (`details.code: settlement_in_progress`), niczego nie przesuwa i można je ponowić.
 - **Korekta zamówienia z rabatem** uznaje towar według wartości z faktury, a rabat na ujemnej
   pozycji 0 %; anulowana korekta nie liczy się już do kolejnych.
 - **Korekta odrzuca `total` wyższy od sumy jej pozycji** odpowiedzią `400 VALIDATION_FAILED`
