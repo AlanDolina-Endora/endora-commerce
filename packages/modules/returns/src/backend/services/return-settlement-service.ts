@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { ERROR_CODES } from '@endora-commerce/contracts';
 import type {
+  CorrectiveInvoiceInput,
   CorrectiveInvoicePort,
   CreditTopupPort,
   PaymentRefundPort,
@@ -146,6 +147,31 @@ export class ReturnSettlementService {
 
     const movesMoney = input.resolutionType === 'refund' || input.resolutionType === 'credit';
 
+    // The correction this settlement will ask for, built once and validated
+    // **before** any money moves (issue #417, review of PR #423): a correction
+    // that cannot be made must never follow a refund that was.
+    const wantsCorrection = movesMoney && (input.createCorrectiveInvoice ?? true);
+    const correctionInput: CorrectiveInvoiceInput = {
+      orderId: rc.orderId,
+      lines: items.map((it) => ({
+        // The order item is what ties this credit to the invoice line it
+        // corrects, so the correction can mirror that line's VAT rate.
+        orderItemId: it.orderItemId,
+        productName: it.productName,
+        quantity: it.quantity,
+        // The approved amount for this settlement, which is not on the row
+        // yet: the rows are written in step 4.
+        amount: approvedByItemId.get(it.id) ?? Number(it.approvedRefundAmount),
+      })),
+      total,
+      currency: rc.currency,
+      // One correction per return case, however often the settlement is
+      // retried. Not per order: a second partial return against the same
+      // order is a different case and gets its own document.
+      idempotencyKey: rc.id,
+    };
+    if (wantsCorrection) await this.deps.correctiveInvoice.validateCorrection(correctionInput);
+
     // Step 2 — every external effect, money first, then the document. A refusal
     // from any of them propagates with the case still in `received` and nothing
     // written, which is what makes the settlement retryable.
@@ -188,27 +214,7 @@ export class ReturnSettlementService {
         creditApplied = credit.applied;
       }
 
-      if (input.createCorrectiveInvoice ?? true) {
-        correction = await this.deps.correctiveInvoice.createCorrection({
-          orderId: rc.orderId,
-          lines: items.map((it) => ({
-            // The order item is what ties this credit to the invoice line it
-            // corrects, so the correction can mirror that line's VAT rate.
-            orderItemId: it.orderItemId,
-            productName: it.productName,
-            quantity: it.quantity,
-            // The approved amount for this settlement, which is not on the row
-            // yet: the rows are written in step 4.
-            amount: approvedByItemId.get(it.id) ?? Number(it.approvedRefundAmount),
-          })),
-          total,
-          currency: rc.currency,
-          // One correction per return case, however often the settlement is
-          // retried. Not per order: a second partial return against the same
-          // order is a different case and gets its own document.
-          idempotencyKey: rc.id,
-        });
-      }
+      if (wantsCorrection) correction = await this.deps.correctiveInvoice.createCorrection(correctionInput);
     }
 
     // Step 3 — the outcomes, as the values the row and the response carry.

@@ -744,4 +744,10 @@ export type CorrectiveInvoiceResult = CorrectiveInvoiceIssued | CorrectiveInvoic
  */
 export interface CorrectiveInvoicePort {
   createCorrection(input: CorrectiveInvoiceInput): Promise<CorrectiveInvoiceResult>;
+  /**
+   * Refuse, writing nothing, what `createCorrection` would refuse for the same
+   * input (issue #417): a settlement asks before it moves any money, so a
+   * correction that cannot be made never follows a refund that was made.
+   */
+  validateCorrection(input: CorrectiveInvoiceInput): Promise<void>;
 }

@@ -267,35 +267,33 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
     private readonly ledgerRouting?: LedgerNumberingLookup,
   ) {}
 
-  async createCorrection(input: CorrectiveInvoiceInput): Promise<CorrectiveInvoiceResult> {
+  /**
+   * Refuse, without writing anything, exactly what {@link createCorrection}
+   * would refuse for this input (issue #417, review of PR #423): a settlement
+   * asks before it moves any money, so a correction that cannot be made never
+   * follows a refund that was. An order with no invoice is not a refusal — its
+   * settlement records the refund without a document.
+   */
+  async validateCorrection(input: CorrectiveInvoiceInput): Promise<void> {
     const em = this.emFactory();
-
-    // The same correction, asked for twice (D-91). A settlement attempts every
-    // external effect before it writes any state, so a refusal from a later
-    // step leaves a retryable case and the retry arrives here with the key of
-    // the correction this call already issued. Answering with that document is
-    // what keeps one return case to one credit note; the partial unique index
-    // on the column is what keeps two concurrent retries to one as well.
     if (input.idempotencyKey) {
-      const already = await em.findOne(Invoice, {
-        correctionIdempotencyKey: input.idempotencyKey,
-        kind: 'correction',
-      });
-      if (already) {
-        return {
-          issued: true,
-          invoiceId: already.id,
-          number: already.number,
-          status: already.status,
-        };
-      }
+      const already = await em.findOne(Invoice, { correctionIdempotencyKey: input.idempotencyKey, kind: 'correction' });
+      if (already) return;
     }
+    await this.#prepare(em, input);
+  }
 
+  /**
+   * Everything a correction is computed from, and every refusal, before a
+   * number is drawn: the original invoice (or `null` when the order was never
+   * invoiced), its channel, the amounts and the line snapshots.
+   */
+  async #prepare(em: EntityManager, input: CorrectiveInvoiceInput) {
     const original = await em.findOne(Invoice, { orderId: input.orderId, kind: 'invoice' });
     // No original, no correction (#135). The caller records the refund on the
     // return case and the payment; only the VAT document is skipped, and the
     // reason is stated so the caller reports it rather than reporting nothing.
-    if (!original) return { issued: false, reason: 'order_not_invoiced' };
+    if (!original) return null;
 
     // A correction is denominated in the corrected document's currency: the cap
     // below compares the credited amount with the original gross, and two
@@ -334,7 +332,11 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
     const mirrored = input.lines.map((l) => mirrorFor(original, mirrorByOrderItem, l.orderItemId));
     // What earlier corrections of this invoice already credited: the cap and
     // the cumulative rule both read it (review of PR #423).
-    const earlierCorrections = await em.find(Invoice, { originalInvoiceId: original.id, kind: 'correction' });
+    // A cancelled correction credits nothing, so it is neither in the cap nor in
+    // the cumulative nets (review of PR #423).
+    const earlierCorrections = (await em.find(Invoice, { originalInvoiceId: original.id, kind: 'correction' })).filter(
+      (c) => c.status !== 'cancelled',
+    );
     const earlierLines =
       earlierCorrections.length > 0
         ? await em.find(InvoiceLine, { invoiceId: { $in: earlierCorrections.map((c) => c.id) } })
@@ -370,7 +372,6 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
         linesTotal: err.linesTotal,
       });
     }
-    const { credited: creditedTotal, netTotal, taxTotal } = amounts;
     const snapshots = input.lines.map((l, index) => ({
       ordinal: index + 1,
       orderItemId: l.orderItemId,
@@ -380,6 +381,38 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
       unit: mirrored[index]!.unit,
       ...amounts.lines[index]!,
     }));
+    return { original, salesChannelId, amounts, snapshots };
+  }
+
+  async createCorrection(input: CorrectiveInvoiceInput): Promise<CorrectiveInvoiceResult> {
+    const em = this.emFactory();
+
+    // The same correction, asked for twice (D-91). A settlement attempts every
+    // external effect before it writes any state, so a refusal from a later
+    // step leaves a retryable case and the retry arrives here with the key of
+    // the correction this call already issued. Answering with that document is
+    // what keeps one return case to one credit note; the partial unique index
+    // on the column is what keeps two concurrent retries to one as well.
+    if (input.idempotencyKey) {
+      const already = await em.findOne(Invoice, {
+        correctionIdempotencyKey: input.idempotencyKey,
+        kind: 'correction',
+      });
+      if (already) {
+        return {
+          issued: true,
+          invoiceId: already.id,
+          number: already.number,
+          status: already.status,
+        };
+      }
+    }
+
+    const plan = await this.#prepare(em, input);
+    // No original, no correction (#135).
+    if (!plan) return { issued: false, reason: 'order_not_invoiced' };
+    const { original, salesChannelId, amounts, snapshots } = plan;
+    const { credited: creditedTotal, netTotal, taxTotal } = amounts;
 
     const issuedAt = new Date();
     const holdForVendor = await shouldHoldForVendorNumber(this.ledgerRouting, salesChannelId);
