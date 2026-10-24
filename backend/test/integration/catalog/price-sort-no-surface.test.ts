@@ -30,12 +30,19 @@ describe('a price-sorted listing with no price surface pages to the end', () => 
   beforeAll(async () => {
     h = await setupBackendServer();
     await seedPriceSortFixture(h.em());
-    await h.em().getConnection().execute(`delete from "price_profiles"`);
+    await dropRetailProfiles();
   }, 60_000);
 
   afterAll(async () => {
     await teardownBackendServer(h);
   });
+
+  /** No price order for the listing's channel: its profiles, and only those, go. */
+  const dropRetailProfiles = () =>
+    h
+      .em()
+      .getConnection()
+      .execute(`delete from "price_profiles" where "sales_channel_id" = (select "id" from "sales_channels" where "code" = 'pl_retail')`);
 
   async function walk(
     limit: number,
@@ -76,7 +83,7 @@ describe('a price-sorted listing with no price surface pages to the end', () => 
   });
 
   it('a walk begun without a surface keeps its own order when the surface is built midway', async () => {
-    await h.em().getConnection().execute(`delete from "price_profiles"`);
+    await dropRetailProfiles();
     const { skus, ended } = await walk(1, {
       between: async (page) => {
         if (page === 0) await settlePriceSurface(h);
