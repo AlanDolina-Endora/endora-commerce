@@ -18,7 +18,7 @@ import { ReturnReason } from '../entities/return-reason.entity.js';
 import { Refund } from '../entities/refund.entity.js';
 import { RETURN_STATUS_CANCELLED } from '../domain/return-status-graph.js';
 import { isWithinFreeWindow } from '../domain/free-return-window.js';
-import { approvedAmount, defaultRefundForQuantity } from '../domain/refund-math.js';
+import { approvedAmount, defaultRefunds } from '../domain/refund-math.js';
 import type { ReturnStatusGraphService } from './return-status-graph-service.js';
 import type { ReturnTransitionService } from './return-transition-service.js';
 import {
@@ -181,15 +181,24 @@ export class ReturnCaseService {
     });
     em.persist(rc);
 
-    for (const line of input.lines) {
+    // What each returned line refunds by default: the one VAT method over the
+    // returned quantities (issue #417), so a full return refunds what the
+    // invoice charged and a partial one the same rule on what came back.
+    const defaults = defaultRefunds(
+      input.lines.map((line) => {
+        const ctxLine = byOrderItem.get(line.orderItemId)!;
+        return { unitNetPrice: ctxLine.unitNetPrice, taxRate: ctxLine.taxRate, quantity: line.quantity };
+      }),
+    );
+    for (const [index, line] of input.lines.entries()) {
       const ctxLine = byOrderItem.get(line.orderItemId)!;
-      const defaultRefund = defaultRefundForQuantity(ctxLine.paidUnitAmount, line.quantity);
+      const defaultRefund = defaults[index]!;
       // Owner ruling R1 (feature 155, FR-020) — a complaint may name a line that
       // was not returnable at purchase, but nothing refunds it by default: its
       // approved amount starts at 0 for the operator to set. The default refund
       // stays the amount paid, because it is the cap settlement lets the
       // operator approve up to (`exceedsCap`).
-      const approvedRefund = isLineReturnable(ctxLine.returnableAtPurchase) ? defaultRefund : 0;
+      const approvedRefund = isLineReturnable(ctxLine.returnableAtPurchase) ? defaultRefund : '0.00';
       em.persist(
         em.create(ReturnCaseItem, {
           returnCaseId: rc.id,

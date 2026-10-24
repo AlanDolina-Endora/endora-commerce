@@ -1,11 +1,10 @@
-import { compareDecimals, lineAmountHalfUp, moneySum, roundHalfUp } from '@endora-commerce/contracts';
+import { compareDecimals, lineAmountHalfUp, moneySum, roundHalfUp, vatByRate } from '@endora-commerce/contracts';
 
 /**
  * Refund math — pure domain (feature 046, US5 / FR-031/032).
  *
- * The default refund for a returned quantity is the amount paid for that
- * quantity in the original order (the per-unit paid amount already includes its
- * proportional tax, resolved by the OrderReturnContextPort). The approved amount
+ * The default refund for a returned quantity is what was paid for it, under the
+ * platform's one VAT method over the returned lines ({@link defaultRefunds}). The approved amount
  * an admin settles per line may never exceed that default; the case total is the
  * sum of the approved per-line amounts.
  *
@@ -20,10 +19,24 @@ export function approvedAmount(value: string | number): string {
   return roundHalfUp(value);
 }
 
-/** Default refund for a returned quantity = paid-per-unit (incl. tax) × quantity. */
-export function defaultRefundForQuantity(paidUnitAmount: string | number, quantity: number): number {
-  return Number(lineAmountHalfUp(paidUnitAmount, quantity));
+/**
+ * The default refund of each returned line, under **the one VAT method**
+ * (`vatByRate`, owner ruling of 2026-10-24, issue #417): the returned nets
+ * (net unit price × returned quantity), per rate VAT on their sum rounded
+ * once, and each line its net plus its share of that VAT. A full return
+ * refunds exactly what the invoice charged for those lines (9.05 × 3 at 8 % is
+ * 29.32); a partial return applies the same rule to the returned quantity. Two-
+ * place decimal strings, in the order given.
+ */
+export function defaultRefunds(
+  lines: ReadonlyArray<{ unitNetPrice: string | number; taxRate: string | number; quantity: number }>,
+): string[] {
+  return vatByRate(
+    lines.map((l) => ({ net: lineAmountHalfUp(l.unitNetPrice, l.quantity), rate: l.taxRate })),
+    'fraction',
+  ).lines.map((l) => l.gross);
 }
+
 
 /**
  * True when an approved amount, at the two places it would be stored at,

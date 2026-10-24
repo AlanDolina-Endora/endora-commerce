@@ -1,17 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   approvedAmount,
-  defaultRefundForQuantity,
+  defaultRefunds,
   exceedsCap,
   sumApproved,
 } from './refund-math.js';
 
 describe('refund math (US5 / FR-031/032)', () => {
-  it('defaults the refund to paid-per-unit (incl. tax) × quantity', () => {
-    // 100.00 net @ 23% tax = 123.00 gross per unit (resolved upstream) × 2 = 246.00
-    expect(defaultRefundForQuantity(123, 2)).toBe(246);
-    expect(defaultRefundForQuantity(49.99, 3)).toBe(149.97);
-  });
 
   it('rejects an approved amount above the paid cap', () => {
     expect(exceedsCap(100.01, 100)).toBe(true);
@@ -49,8 +44,34 @@ describe('refund math — exact decimal amounts (#417)', () => {
     expect(exceedsCap('100.00', '100.00')).toBe(false);
   });
 
-  it('multiplies the paid unit amount by the quantity exactly', () => {
-    expect(defaultRefundForQuantity('20.30', 3)).toBe(60.9);
-    expect(defaultRefundForQuantity(0.1, 3)).toBe(0.3);
+});
+
+/**
+ * Owner ruling of 2026-10-24 (issue #417): a return refunds under the one VAT
+ * method — per rate, VAT on the sum of the returned nets — so a full return
+ * refunds exactly what was invoiced for those lines, and a partial return
+ * applies the same rule to the returned quantity.
+ */
+describe('defaultRefunds — the one VAT method', () => {
+  it('V3 full: all of 9.05 × 3 at 8 % refunds 29.32, as invoiced (not 9.77 × 3 = 29.31)', () => {
+    expect(defaultRefunds([{ unitNetPrice: '9.05', taxRate: '0.0800', quantity: 3 }])).toEqual(['29.32']);
+  });
+
+  it('V3 partial: 2 of 3 refunds 18.10 net + 1.45 VAT = 19.55', () => {
+    expect(defaultRefunds([{ unitNetPrice: '9.05', taxRate: '0.0800', quantity: 2 }])).toEqual(['19.55']);
+  });
+
+  it('V2: a full return of 29.50 at 23 % and 4.30 at 5 % refunds 40.81, the invoice gross', () => {
+    expect(
+      defaultRefunds([
+        { unitNetPrice: '29.50', taxRate: '0.2300', quantity: 1 },
+        { unitNetPrice: '4.30', taxRate: '0.0500', quantity: 1 },
+      ]),
+    ).toEqual(['36.29', '4.52']);
+  });
+
+  it('takes the lines of one rate together: three 0.02 lines at 23 % refund 0.07', () => {
+    const line = { unitNetPrice: '0.02', taxRate: '0.23', quantity: 1 };
+    expect(defaultRefunds([line, line, line])).toEqual(['0.03', '0.02', '0.02']);
   });
 });
