@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildInvoiceLines } from './invoice-line-builder.js';
+import { buildInvoiceLines, readModelVatSummary } from './invoice-line-builder.js';
 
 describe('buildInvoiceLines — VAT summary & reconciliation', () => {
   it('computes gross from net per line and reconciles totals (single rate)', () => {
@@ -56,17 +56,24 @@ describe('buildInvoiceLines — exact decimal amounts (#417)', () => {
     expect(r.vatSummary[0]?.vatAmount).toBe(6.79);
   });
 
-  it('rounds a line gross half-up on the exact product (G1, G4 at 23 %, G2 at 5 %)', () => {
+  it('rounds a lone line gross half-up on the exact product (G1, G4 at 23 %, G2 at 5 %)', () => {
+    const one = (net: string, rate: string) =>
+      buildInvoiceLines([{ name: 'A', unit: 'szt.', quantity: 1, unitNetPrice: net, taxRate: rate, netValue: net }]).lines[0]!.stored
+        .grossValue;
+    expect([one('29.50', '0.2300'), one('16.50', '0.2300'), one('4.30', '0.0500')]).toEqual(['36.29', '20.30', '4.52']);
+  });
+
+  it('takes two lines at one rate together: 29.50 + 16.50 at 23 % is 46.00 net, 10.58 VAT', () => {
     const r = buildInvoiceLines([
       { name: 'A', unit: 'szt.', quantity: 1, unitNetPrice: '29.50', taxRate: '0.2300', netValue: '29.50' },
       { name: 'B', unit: 'szt.', quantity: 1, unitNetPrice: '16.50', taxRate: '0.2300', netValue: '16.50' },
-      { name: 'C', unit: 'szt.', quantity: 1, unitNetPrice: '4.30', taxRate: '0.0500', netValue: '4.30' },
     ]);
-    expect(r.lines.map((l) => l.grossValue)).toEqual([36.29, 20.3, 4.52]);
-    expect(r.lines.map((l) => l.stored.grossValue)).toEqual(['36.29', '20.30', '4.52']);
+    expect([r.netTotal, r.taxTotal, r.grossTotal]).toEqual(['46.00', '10.58', '56.58']);
+    // Each line's share of the 10.58: the exact 6.785 and 3.795 cannot both round up.
+    expect(r.lines.map((l) => l.stored.grossValue)).toEqual(['36.28', '20.30']);
   });
 
-  it('keeps the per-rate rule: VAT is the rate group gross minus its net (V1)', () => {
+  it('takes VAT per rate on each rate’s nets (V1)', () => {
     const r = buildInvoiceLines([
       { name: 'A', unit: 'szt.', quantity: 1, unitNetPrice: '29.50', taxRate: '0.2300', netValue: '29.50' },
       { name: 'B', unit: 'szt.', quantity: 1, unitNetPrice: '4.30', taxRate: '0.0500', netValue: '4.30' },
@@ -102,5 +109,48 @@ describe('buildInvoiceLines — exact decimal amounts (#417)', () => {
     ]);
     expect(r.grossTotal).toBe('31.29');
     expect(r.lines[1]?.stored).toEqual({ unitNetPrice: '-5.0000', taxRate: '0.0000', netValue: '-5.00', grossValue: '-5.00' });
+  });
+});
+
+/**
+ * Owner ruling of 2026-10-24 (issue #417): VAT per rate on the sum of the nets
+ * at that rate, rounded once; gross = net + VAT. A line's gross is its share,
+ * informational, and the line grosses add up to the total. The builder used to
+ * round each line's gross and take a rate's VAT as Σ gross − Σ net.
+ */
+describe('buildInvoiceLines — VAT per rate on the sum of the nets (owner ruling)', () => {
+  it('takes three 0.02 lines at 23 % to 0.01 VAT, not the per-line 0.00', () => {
+    const line = { name: 'A', unit: 'szt.', quantity: 1, unitNetPrice: '0.02', taxRate: '0.2300', netValue: '0.02' };
+    const r = buildInvoiceLines([line, line, line]);
+    expect(r.vatSummary).toEqual([{ taxRate: 0.23, netTotal: 0.06, vatAmount: 0.01, grossTotal: 0.07 }]);
+    expect([r.netTotal, r.taxTotal, r.grossTotal]).toEqual(['0.06', '0.01', '0.07']);
+    expect(r.lines.map((l) => l.stored.grossValue)).toEqual(['0.03', '0.02', '0.02']);
+  });
+
+  it('makes the line grosses add up to the gross total', () => {
+    const r = buildInvoiceLines([
+      { name: 'A', unit: 'szt.', quantity: 1, unitNetPrice: '9.05', taxRate: '0.08', netValue: '9.05' },
+      { name: 'B', unit: 'szt.', quantity: 1, unitNetPrice: '9.05', taxRate: '0.08', netValue: '9.05' },
+      { name: 'C', unit: 'szt.', quantity: 1, unitNetPrice: '9.05', taxRate: '0.08', netValue: '9.05' },
+    ]);
+    expect(r.grossTotal).toBe('29.32');
+    expect(r.lines.reduce((sum, l) => sum + Math.round(l.grossValue * 100), 0)).toBe(2932);
+  });
+});
+
+describe('readModelVatSummary — an invoice issued before the ruling', () => {
+  it('shows a stored invoice whose totals the per-rate rule reproduces under that rule', () => {
+    const lines = [{ taxRate: '0.2300', netValue: '0.02', grossValue: '0.03' }, { taxRate: '0.2300', netValue: '0.02', grossValue: '0.02' }];
+    expect(readModelVatSummary(lines, { taxTotal: '0.01', total: '0.05' })).toEqual([
+      { taxRate: 0.23, netTotal: 0.04, vatAmount: 0.01, grossTotal: 0.05 },
+    ]);
+  });
+
+  it('shows a stored invoice issued under the per-line rule as it was issued', () => {
+    // Three 0.02 lines at 23 % were issued with line grosses 0.02 and VAT 0.00.
+    const line = { taxRate: '0.2300', netValue: '0.02', grossValue: '0.02' };
+    expect(readModelVatSummary([line, line, line], { taxTotal: '0.00', total: '0.06' })).toEqual([
+      { taxRate: 0.23, netTotal: 0.06, vatAmount: 0, grossTotal: 0.06 },
+    ]);
   });
 });

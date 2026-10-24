@@ -128,7 +128,7 @@ describe('invoices — exact decimal amounts (#417)', () => {
         { unitPrice: '29.50', quantity: 1, taxRate: '0.2300', lineTotal: '36.29' },
         { unitPrice: '4.30', quantity: 1, taxRate: '0.0500', lineTotal: '4.52' },
       ],
-      { subtotal: '33.80', taxTotal: '7.00', total: '40.80' },
+      { subtotal: '33.80', taxTotal: '7.01', total: '40.81' },
     );
     const res = await h.app.inject({
       method: 'POST',
@@ -146,9 +146,9 @@ describe('invoices — exact decimal amounts (#417)', () => {
       { taxRate: 0.05, netTotal: 4.3, vatAmount: 0.22, grossTotal: 4.52 },
       { taxRate: 0.23, netTotal: 29.5, vatAmount: 6.79, grossTotal: 36.29 },
     ]);
-    // The invoice's per-line rule gives 7.01 VAT where the order's rule (the
-    // lines' exact taxes summed, rounded once) gives 7.00 — vector V2 of
-    // `specs/pricing/worked-examples.md` §10.17, an open owner question.
+    // VAT per rate on the sum of the nets (owner ruling of 2026-10-24): 6.79 + 0.22.
+    // The order computes the same 7.01 and 40.81 — vector V2 of
+    // `specs/pricing/worked-examples.md` §10.17.
     expect([data.netTotal, data.taxTotal, data.grossTotal]).toEqual([33.8, 7.01, 40.81]);
   });
 });

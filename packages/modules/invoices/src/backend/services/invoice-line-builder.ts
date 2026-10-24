@@ -1,10 +1,9 @@
 import {
   compareDecimals,
   decimalDifference,
-  decimalSum,
-  grossFromNetHalfUp,
   moneySum,
   roundHalfUp,
+  vatByRate,
   type InvoiceLine,
   type VatSummaryRow,
 } from '@endora-commerce/contracts';
@@ -44,29 +43,29 @@ export interface BuiltInvoiceTotals {
   grossTotal: string;
 }
 
-/** One line's rate, net and gross, as two-place decimals. */
+/** One stored line's rate, net and gross, as two-place decimals. */
 export interface VatSummaryInput {
   taxRate: string | number;
   netValue: string | number;
   grossValue: string | number;
 }
 
-export interface VatSummary {
-  rows: Array<{ taxRate: string; netTotal: string; vatAmount: string; grossTotal: string }>;
-  netTotal: string;
-  taxTotal: string;
-  grossTotal: string;
+/** A per-rate VAT summary in the contract's number shape — each figure a two-place decimal, read losslessly. */
+function summaryRows(rows: ReadonlyArray<{ rate: string; net: string; vat: string; gross: string }>): VatSummaryRow[] {
+  return rows.map((r) => ({
+    taxRate: Number(r.rate),
+    netTotal: Number(r.net),
+    vatAmount: Number(r.vat),
+    grossTotal: Number(r.gross),
+  }));
 }
 
 /**
- * The per-rate VAT summary of an invoice's lines, and its totals — the one
- * rule both issuance and the read model apply. Per rate: the net is the sum of
- * the lines' nets, the gross the sum of the lines' grosses (each rounded on its
- * own line), and the VAT the difference. The totals are the sums of the rows.
- * Exact decimal arithmetic throughout (issue #417); every input is already at
- * two places, so a sum is exact and the half-up step only normalises.
+ * The rule invoices were issued under before the owner's ruling of
+ * 2026-10-24: per rate, the sum of the lines' own rounded grosses minus the
+ * sum of their nets. Kept only to show such an invoice as it was issued.
  */
-export function summarizeVat(lines: readonly VatSummaryInput[]): VatSummary {
+function legacyVatSummary(lines: readonly VatSummaryInput[]): VatSummaryRow[] {
   const byRate = new Map<string, { net: Array<string | number>; gross: Array<string | number> }>();
   for (const l of lines) {
     const key = roundHalfUp(l.taxRate, 4);
@@ -75,29 +74,36 @@ export function summarizeVat(lines: readonly VatSummaryInput[]): VatSummary {
     cur.gross.push(l.grossValue);
     byRate.set(key, cur);
   }
-  const rows = [...byRate.entries()]
-    .sort((a, b) => compareDecimals(a[0], b[0]))
-    .map(([taxRate, v]) => {
-      const netTotal = moneySum(v.net);
-      const grossTotal = moneySum(v.gross);
-      return { taxRate, netTotal, vatAmount: roundHalfUp(decimalDifference(grossTotal, netTotal)), grossTotal };
-    });
-  return {
-    rows,
-    netTotal: roundHalfUp(decimalSum(...rows.map((r) => r.netTotal))),
-    taxTotal: roundHalfUp(decimalSum(...rows.map((r) => r.vatAmount))),
-    grossTotal: roundHalfUp(decimalSum(...rows.map((r) => r.grossTotal))),
-  };
+  return summaryRows(
+    [...byRate.entries()]
+      .sort((a, b) => compareDecimals(a[0], b[0]))
+      .map(([rate, v]) => {
+        const net = moneySum(v.net);
+        const gross = moneySum(v.gross);
+        return { rate, net, vat: roundHalfUp(decimalDifference(gross, net)), gross };
+      }),
+  );
 }
 
-/** The summary rows in the contract's number shape — each a two-place decimal, read losslessly. */
-export function vatSummaryRows(rows: VatSummary['rows']): VatSummaryRow[] {
-  return rows.map((r) => ({
-    taxRate: Number(r.taxRate),
-    netTotal: Number(r.netTotal),
-    vatAmount: Number(r.vatAmount),
-    grossTotal: Number(r.grossTotal),
-  }));
+/**
+ * The per-rate VAT summary a stored invoice is shown with. An invoice is a
+ * document that was issued, and its summary must add up to the totals it was
+ * issued with: the summary is the one VAT method (`vatByRate`) when that
+ * reproduces the stored VAT and gross, and otherwise — an invoice issued
+ * before the ruling under the per-line rule — the rule it was issued under.
+ */
+export function readModelVatSummary(
+  lines: readonly VatSummaryInput[],
+  stored: { taxTotal: string | null | undefined; total: string },
+): VatSummaryRow[] {
+  const current = vatByRate(
+    lines.map((l) => ({ net: l.netValue, rate: l.taxRate })),
+    'fraction',
+  );
+  const reproduces =
+    compareDecimals(current.gross, stored.total) === 0 &&
+    (stored.taxTotal == null || compareDecimals(current.vat, stored.taxTotal) === 0);
+  return reproduces ? summaryRows(current.rows) : legacyVatSummary(lines);
 }
 
 /**
@@ -105,18 +111,25 @@ export function vatSummaryRows(rows: VatSummary['rows']): VatSummaryRow[] {
  * from raw order lines. Pure + deterministic so it can be unit-tested in
  * isolation (SC-003: net + VAT = gross per rate; Σ gross = grand total).
  *
- * A line's gross is `net × (1 + rate)` rounded half-up on the exact decimal
- * product (issue #417, `specs/pricing/worked-examples.md` §10.17); rounding the
- * double made 29.50 at 23 % the gross 36.28.
+ * **The VAT method is the platform's one** (`vatByRate`, owner ruling of
+ * 2026-10-24, issue #417; art. 106e ust. 1 pkt 13–14): per rate, VAT on the sum
+ * of the lines' nets, rounded half-up once; gross = net + VAT. A line's gross
+ * is informational — its share of its rate's VAT added to its net — so the
+ * line grosses add up to the invoice gross. The net per line is what the law
+ * requires on the line; the gross per line is optional.
  */
 export function buildInvoiceLines(raw: RawOrderLine[]): BuiltInvoiceTotals {
+  const nets = raw.map((r) => roundHalfUp(r.netValue));
+  const vat = vatByRate(
+    raw.map((r, i) => ({ net: nets[i]!, rate: r.taxRate })),
+    'fraction',
+  );
   const lines = raw.map((r, i): BuiltInvoiceLine => {
-    const netValue = roundHalfUp(r.netValue);
     const stored: StoredInvoiceLineAmounts = {
       unitNetPrice: roundHalfUp(r.unitNetPrice, 4),
       taxRate: roundHalfUp(r.taxRate, 4),
-      netValue,
-      grossValue: grossFromNetHalfUp(netValue, r.taxRate, 'fraction'),
+      netValue: nets[i]!,
+      grossValue: vat.lines[i]!.gross,
     };
     return {
       ordinal: i + 1,
@@ -132,12 +145,11 @@ export function buildInvoiceLines(raw: RawOrderLine[]): BuiltInvoiceTotals {
     };
   });
 
-  const summary = summarizeVat(lines.map((l) => l.stored));
   return {
     lines,
-    vatSummary: vatSummaryRows(summary.rows),
-    netTotal: summary.netTotal,
-    taxTotal: summary.taxTotal,
-    grossTotal: summary.grossTotal,
+    vatSummary: summaryRows(vat.rows),
+    netTotal: vat.net,
+    taxTotal: vat.vat,
+    grossTotal: vat.gross,
   };
 }

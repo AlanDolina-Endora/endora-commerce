@@ -3,9 +3,11 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   ERROR_CODES,
   compareDecimals,
+  allocateHalfUp,
   decimalDifference,
   decimalSum,
-  netFromGrossHalfUp,
+  moneySum,
+  netForGrossAtRate,
   quotientHalfUp,
   roundHalfUp,
 } from '@endora-commerce/contracts';
@@ -45,9 +47,15 @@ export interface CorrectionLineAmounts {
  * A correction's amounts, in exact decimal arithmetic (issue #417). The
  * credited amount is gross (a return credits what was paid, tax included),
  * capped at the original invoice's gross (FR-020) and shared out over the lines
- * in order; each line's net is backed out of its gross at the mirrored rate,
- * half-up; the document's VAT is the sum of the lines' (gross − net) and its
- * net the credited gross minus that VAT, so net + tax = the credited gross.
+ * in order.
+ *
+ * **The VAT method is the invoice's** (`vatByRate`, owner ruling of
+ * 2026-10-24): per rate, the net is the one the credited gross at that rate
+ * came from (`netForGrossAtRate`: `N` with `N + round(N × rate) = gross`) and
+ * the VAT is the rest — so a return refunded at what the invoice charged
+ * credits exactly the invoiced net and VAT. A gross the rule cannot produce (an
+ * operator's own amount) takes the nearest net, with the VAT as the remainder.
+ * Each line's net is its share of its rate's net (`allocateHalfUp`).
  */
 export function correctionAmounts(
   total: string | number,
@@ -56,15 +64,42 @@ export function correctionAmounts(
 ): { credited: string; netTotal: string; taxTotal: string; lines: CorrectionLineAmounts[] } {
   const credited = minDecimal(roundHalfUp(total), roundHalfUp(originalGross));
   let remaining = credited;
-  const amounts = lines.map((l) => {
+  const grosses = lines.map((l) => {
     const asked = compareDecimals(l.amount, 0) < 0 ? '0.00' : roundHalfUp(l.amount);
     const gross = minDecimal(asked, remaining);
     remaining = roundHalfUp(decimalDifference(remaining, gross));
-    const net = netFromGrossHalfUp(gross, l.rate, 'fraction');
-    return { gross, net, unitNetPrice: quotientHalfUp(net, l.quantity || 1, 4) };
+    return gross;
   });
-  const taxTotal = roundHalfUp(decimalSum(...amounts.map((a) => decimalDifference(a.gross, a.net))));
-  return { credited, netTotal: roundHalfUp(decimalDifference(credited, taxTotal)), taxTotal, lines: amounts };
+  const nets: string[] = lines.map(() => '0.00');
+  const vats: string[] = [];
+  const byRate = new Map<string, number[]>();
+  lines.forEach((l, i) => {
+    const key = roundHalfUp(l.rate, 4);
+    byRate.set(key, [...(byRate.get(key) ?? []), i]);
+  });
+  for (const [rate, indexes] of byRate) {
+    const gross = moneySum(indexes.map((i) => grosses[i]!));
+    const { net, vat } = netForGrossAtRate(gross, rate, 'fraction');
+    vats.push(vat);
+    const shares = allocateHalfUp(
+      net,
+      indexes.map((i) => quotientHalfUp(grosses[i]!, decimalSum(1, rate), 6)),
+    );
+    indexes.forEach((lineIndex, k) => {
+      nets[lineIndex] = shares[k]!;
+    });
+  }
+  const taxTotal = moneySum(vats);
+  return {
+    credited,
+    netTotal: roundHalfUp(decimalDifference(credited, taxTotal)),
+    taxTotal,
+    lines: lines.map((l, i) => ({
+      gross: grosses[i]!,
+      net: nets[i]!,
+      unitNetPrice: quotientHalfUp(nets[i]!, l.quantity || 1, 4),
+    })),
+  };
 }
 
 /** What a corrected line inherits from the original line it credits. */

@@ -50,3 +50,28 @@ describe('correctionAmounts', () => {
     expect(r.lines[0]?.net).toBe('0.00');
   });
 });
+
+/**
+ * Owner ruling of 2026-10-24 (issue #417): a correction applies the invoice's
+ * VAT method — per rate, the net behind the credited gross and VAT on that
+ * net — so a full return credits exactly what was invoiced (V3).
+ */
+describe('correctionAmounts — VAT per rate (owner ruling)', () => {
+  it('credits 9.05 × 3 at 8 % as the invoice charged it: 27.15 net, 2.17 VAT', () => {
+    const r = correctionAmounts('29.32', '100.00', [
+      { amount: '9.78', quantity: 1, rate: '0.0800' },
+      { amount: '9.77', quantity: 1, rate: '0.0800' },
+      { amount: '9.77', quantity: 1, rate: '0.0800' },
+    ]);
+    expect([r.credited, r.netTotal, r.taxTotal]).toEqual(['29.32', '27.15', '2.17']);
+    expect(r.lines.map((l) => l.net)).toEqual(['9.05', '9.05', '9.05']);
+  });
+
+  it('keeps each rate apart (V2: 29.50 at 23 % and 4.30 at 5 %)', () => {
+    const r = correctionAmounts('40.81', '100.00', [
+      { amount: '36.29', quantity: 1, rate: '0.23' },
+      { amount: '4.52', quantity: 1, rate: '0.05' },
+    ]);
+    expect([r.netTotal, r.taxTotal]).toEqual(['33.80', '7.01']);
+  });
+});

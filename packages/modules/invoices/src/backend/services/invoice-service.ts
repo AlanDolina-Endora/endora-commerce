@@ -18,12 +18,7 @@ import { rethrowIfModuleDisabled } from '@endora-commerce/platform/kernel';
 import { refuseDuplicateInvoiceNumber } from './duplicate-number-refusal.js';
 import type { InvoiceNumberGenerator } from './invoice-number-generator.js';
 import type { SellerSettingsResolver } from './seller-settings.js';
-import {
-  buildInvoiceLines,
-  summarizeVat,
-  vatSummaryRows,
-  type RawOrderLine,
-} from './invoice-line-builder.js';
+import { buildInvoiceLines, readModelVatSummary, type RawOrderLine } from './invoice-line-builder.js';
 import {
   shouldHoldForVendorNumber,
   type LedgerNumberingLookup,
@@ -374,8 +369,9 @@ export class InvoiceService {
       grossValue: Number(l.grossValue),
     }));
 
-    // The same per-rate rule issuance applied, on the stored line strings.
-    const vatSummary = vatSummaryRows(summarizeVat(lineRows).rows);
+    // The VAT method on the stored lines — or, for an invoice issued before the
+    // owner's ruling of 2026-10-24, the rule it was issued under.
+    const vatSummary = readModelVatSummary(lineRows, { taxTotal: inv.taxTotal, total: inv.total });
 
     const grossTotal = Number(inv.total);
     const paidTotal = Number(inv.paidTotal);
