@@ -59,4 +59,10 @@ describe('catalogProductReadPort — the pricing projection', () => {
     expect(refs.find((r) => r.id === ids[3])?.attributeValues).toEqual({ tags: ['a', 'b'], flag: true });
     expect(await port.findPricingRefsByIds([])).toEqual([]);
   });
+
+  it('findPricingRefsByIds takes a set larger than a statement can bind one parameter per id (a candidate set of 70 000)', async () => {
+    const asked = [...Array.from({ length: 70_000 }, () => randomUUID()), ...ids];
+    const refs = await port.findPricingRefsByIds(asked);
+    expect(refs.map((r) => r.id).sort()).toEqual([...ids].sort());
+  }, 60_000);
 });

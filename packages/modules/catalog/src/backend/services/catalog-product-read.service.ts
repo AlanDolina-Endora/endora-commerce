@@ -128,10 +128,11 @@ export class CatalogProductReadService implements CatalogProductReadPort {
 
   async findPricingRefsByIds(ids: readonly string[]): Promise<CatalogProductPricingRef[]> {
     if (ids.length === 0) return [];
-    const unique = [...new Set(ids)];
+    // One array parameter, whatever the size of the set: a whole build's
+    // candidates can be the catalogue (review 2 of #424).
     const rows = await this.emFactory().execute<Array<{ id: string; attribute_values: Record<string, unknown> | null }>>(
-      `select "id", "attribute_values" from "products" where "id" in (${unique.map(() => '?').join(',')}) order by "id"`,
-      unique,
+      `select "id", "attribute_values" from "products" where "id" = any(?::uuid[]) order by "id"`,
+      [uuidArrayLiteral([...new Set(ids)])],
     );
     return rows.map(toPricingRef);
   }
@@ -368,6 +369,15 @@ function productFilter(
   if (options?.activeOnly) return { deletedAt: null, status: 'active' };
   if (options?.liveOnly) return { deletedAt: null };
   return {};
+}
+
+/**
+ * A Postgres array literal of ids for one bound parameter. `em.execute` formats
+ * a JavaScript array as a list of values, not one array, so the literal is
+ * built here: every element double-quoted, `\` and `"` escaped.
+ */
+function uuidArrayLiteral(ids: readonly string[]): string {
+  return `{${ids.map((id) => `"${id.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`).join(',')}}`;
 }
 
 function toPricingRef(row: { id: string; attribute_values: Record<string, unknown> | null }): CatalogProductPricingRef {
