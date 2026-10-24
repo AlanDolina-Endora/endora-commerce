@@ -21,6 +21,11 @@ import { approvedAmount, carriedDiscount, exceedsCap, sumApproved } from '../dom
 import type { ReturnTransitionService } from './return-transition-service.js';
 import type { ReturnStatusGraphService } from './return-status-graph-service.js';
 
+/** How long a settlement waits for another settlement of the same order. */
+const SETTLEMENT_LOCK_TIMEOUT = '15s';
+/** PostgreSQL's `lock_not_available`, raised when `lock_timeout` elapses. */
+const LOCK_NOT_AVAILABLE = '55P03';
+
 export interface ReturnSettlementServiceDeps {
   emFactory: () => EntityManager;
   events: EventBus;
@@ -96,7 +101,41 @@ export class ReturnSettlementService {
     };
   }
 
+  /**
+   * One settlement of an order at a time (issue #417, review of PR #423): a
+   * correction reads the earlier corrections of the invoice — the cap and the
+   * cumulative nets — so two cases of one order settled at once would both read
+   * the same ones. The lock is the one case creation takes, keyed by the order,
+   * held on a connection of its own for the whole settlement: the ports keep
+   * their own units of work, so the ordering law below is unchanged. A
+   * settlement that waits longer than {@link SETTLEMENT_LOCK_TIMEOUT} for it is
+   * refused as retryable, with nothing written, rather than holding a
+   * connection the one it waits for may need.
+   */
   async settle(id: string, adminUserId: string, input: SettlementRequest): Promise<SettlementResult> {
+    const em = this.deps.emFactory();
+    const rc = await em.findOne(ReturnCase, { id });
+    if (!rc) throw new HttpError(404, ERROR_CODES.NOT_FOUND, 'Return case not found.');
+    return em.getKnex().transaction(async (lock) => {
+      await lock.raw(`set local lock_timeout = '${SETTLEMENT_LOCK_TIMEOUT}'`);
+      try {
+        await lock.raw('select pg_advisory_xact_lock(hashtext(?))', [`return_cases:${rc.orderId}`]);
+      } catch (err) {
+        if ((err as { code?: string }).code !== LOCK_NOT_AVAILABLE) throw err;
+        throw new HttpError(
+          409,
+          ERROR_CODES.VALIDATION_FAILED,
+          'Another return of this order is being settled. Try again in a moment.',
+          { code: 'settlement_in_progress' },
+        );
+      }
+      return this.#settle(id, adminUserId, input);
+    });
+  }
+
+  async #settle(id: string, adminUserId: string, input: SettlementRequest): Promise<SettlementResult> {
+    // Read again under the lock: a settlement that waited sees what the one it
+    // waited for wrote — the case it may have resolved, the correction it issued.
     const em = this.deps.emFactory();
     const rc = await em.findOne(ReturnCase, { id });
     if (!rc) throw new HttpError(404, ERROR_CODES.NOT_FOUND, 'Return case not found.');
@@ -122,7 +161,6 @@ export class ReturnSettlementService {
     const items = await em.find(ReturnCaseItem, { returnCaseId: id });
     const byId = new Map(items.map((it) => [it.id, it]));
     const approvedByItemId = new Map<string, number>();
-    const perLine: number[] = [];
     for (const line of input.lines) {
       const item = byId.get(line.returnCaseItemId);
       if (!item) {
@@ -141,9 +179,13 @@ export class ReturnSettlementService {
       // At the two places it is stored at, half-up (issue #417).
       const approved = Number(approvedAmount(line.approvedRefundAmount));
       approvedByItemId.set(line.returnCaseItemId, approved);
-      perLine.push(approved);
     }
-    const total = sumApproved(perLine);
+    // What this settlement refunds, over **every** line of the case: a line the
+    // request leaves out keeps its stored approved amount, and the correction
+    // below credits it at that amount, so the refund and the correction come
+    // from one set of lines (review of PR #423, B1).
+    const approvedOf = (it: ReturnCaseItem): number => approvedByItemId.get(it.id) ?? Number(it.approvedRefundAmount);
+    const total = sumApproved(items.map(approvedOf));
 
     const movesMoney = input.resolutionType === 'refund' || input.resolutionType === 'credit';
 
@@ -156,7 +198,7 @@ export class ReturnSettlementService {
       lines: items.map((it) => {
         // The approved amount for this settlement, which is not on the row
         // yet: the rows are written in step 4.
-        const amount = approvedByItemId.get(it.id) ?? Number(it.approvedRefundAmount);
+        const amount = approvedOf(it);
         const discount = carriedDiscount(it.defaultDiscountAmount, it.defaultRefundAmount, amount);
         return {
           // The order item is what ties this credit to the invoice line it
