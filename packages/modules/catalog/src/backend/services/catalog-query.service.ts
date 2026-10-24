@@ -30,6 +30,8 @@ import {
 import {
   ERROR_CODES,
   compareDecimal,
+  decimalText,
+  formatUnits,
   isOrderMinimumEligibleType,
   normaliseAmount,
   isPriceSort,
@@ -263,6 +265,41 @@ type PriceListingCursor =
   | { stream: 'tail'; createdAt: string; id: string }
   | { stream: 'unordered'; cursor: string }
   | { stream: 'rest'; amount: string; productId: string; after: ListingKeysetCursor };
+
+/**
+ * A price range's bounds as four-place decimal strings — the one conversion
+ * every price path reads them through (review 3 of release 0.108.0, B3).
+ *
+ * An amount has four places, so the exact bound is the minimum rounded **up**
+ * and the maximum rounded **down** to four places: `minPrice=9.04504` keeps
+ * 9.0451 and not 9.0450, which is what comparing with the number as typed
+ * answers. `toFixed(4)` rounded the double instead, and the range walk under
+ * any other sort compared `Number(amount)` with the bound as typed, so the same
+ * filter selected different products under different sorts.
+ */
+interface AmountRange {
+  min?: string;
+  max?: string;
+}
+
+function amountBound(value: number, side: 'min' | 'max'): string {
+  const [whole = '0', fraction = ''] = decimalText(value).split('.');
+  let units = BigInt(whole) * 10_000n + BigInt(fraction.slice(0, 4).padEnd(4, '0'));
+  if (side === 'min' && /[1-9]/.test(fraction.slice(4))) units += 1n;
+  return formatUnits(units);
+}
+
+/** Whether a resolved amount lies in the range, compared as decimals; an amount that does not parse does not. */
+function withinAmountRange(amount: string, range: AmountRange | undefined): boolean {
+  if (range === undefined) return true;
+  try {
+    if (range.min !== undefined && compareDecimal(amount, range.min) < 0) return false;
+    if (range.max !== undefined && compareDecimal(amount, range.max) > 0) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * What a price walk reads once per page for its viewer: the pricing context
@@ -1030,12 +1067,12 @@ export class CatalogQueryService {
     return true;
   }
 
-  /** The two range bounds as decimal strings — the comparison happens in `numeric`. */
-  #amountRange(params: ListProductsParams): { min?: string; max?: string } | undefined {
+  /** The two range bounds as four-place decimal strings ({@link amountBound}), for every price path. */
+  #amountRange(params: ListProductsParams): AmountRange | undefined {
     if (params.minPrice === undefined && params.maxPrice === undefined) return undefined;
     return {
-      ...(params.minPrice !== undefined ? { min: params.minPrice.toFixed(4) } : {}),
-      ...(params.maxPrice !== undefined ? { max: params.maxPrice.toFixed(4) } : {}),
+      ...(params.minPrice !== undefined ? { min: amountBound(params.minPrice, 'min') } : {}),
+      ...(params.maxPrice !== undefined ? { max: amountBound(params.maxPrice, 'max') } : {}),
     };
   }
 
@@ -1374,22 +1411,14 @@ export class CatalogQueryService {
     ctx: CatalogQueryContext,
     where: Record<string, unknown>,
   ): Promise<ListResult<ProductSummary>> {
-    const min = params.minPrice;
-    const max = params.maxPrice;
+    const range = this.#amountRange(params);
     // The chunk walk and the page it hands back page by the same keyset, and
     // that keyset is the one this ordering sorts on — `keysetFor`.
     const keyset = this.keysetFor(params.sort);
     return this.#walkKeepingByPrice(em, params, ctx, where, await this.#priceWalkScope(em, params, ctx), {
       sort: params.sort,
       start: params.cursor ? keyset.parse(decodeObjectCursor<unknown>(params.cursor)) : null,
-      keep: (price) => {
-        if (price === null) return false;
-        const amount = Number(price.amount);
-        if (!Number.isFinite(amount)) return false;
-        if (min !== undefined && amount < min) return false;
-        if (max !== undefined && amount > max) return false;
-        return true;
-      },
+      keep: (price) => price !== null && withinAmountRange(price.amount, range),
       cursorOf: (after) => encodeObjectCursor(after),
       what: 'price-filtered',
     });
@@ -1449,9 +1478,7 @@ export class CatalogQueryService {
       start: after,
       keep: (price, product) => {
         if (price === null) return range === undefined;
-        if (range?.min !== undefined && compareDecimal(price.amount, range.min) < 0) return false;
-        if (range?.max !== undefined && compareDecimal(price.amount, range.max) > 0) return false;
-        return afterBoundary(price.amount, product.id);
+        return withinAmountRange(price.amount, range) && afterBoundary(price.amount, product.id);
       },
       cursorOf: (next) =>
         encodeObjectCursor({
