@@ -161,7 +161,9 @@ whole-marked profile's next generation and swapped it in (`contracts/price-surfa
 `research.md` R17); a profile never built is answered without one — live over
 a bounded restriction (≤ 5 000 products), from the everyone surface for an unrestricted buyer page,
 or `unordered` (the catalogue's default order, whose walk carries that listing's cursor and keeps
-that order to its end) when nothing is built. **No request builds a
+that order to its end) when nothing is built. A walk already on a price order that finds it gone
+continues from the last price it served (`rest`: the products whose live price sorts after it,
+then the unpriced, in the default order), never from page 1. **No request builds a
 surface**: the order may lag a change by the worker's turnaround (SC-005: ≤ 60 s for a targeted
 change, ≤ 300 s at 200 profiles for a catalogue-wide one), a displayed
 price never — cards are always resolved live. Measured in

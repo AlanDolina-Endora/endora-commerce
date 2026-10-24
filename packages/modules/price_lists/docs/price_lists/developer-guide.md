@@ -264,8 +264,11 @@ too slow, so price sorting and price-range filtering read a precomputed **price 
   5 000 products (a category, a search result) is ordered from a live resolution, an unrestricted
   page from the everyone surface (an approximation), and with no surface at all the chunk is
   `unordered` and the catalogue serves its default order; a walk begun that way carries the default
-  listing's cursor and continues in that order to its end, even once the surface is built. Prices on
-  cards are always resolved live,
+  listing's cursor and continues in that order to its end, even once the surface is built. A walk
+  begun on a price order whose surface then goes missing (a profile retired or rebuilt) does not
+  start again: it carries on from the last price it served, with the products still to come —
+  priced after it in the walk's direction by their live price, then the unpriced — in the default
+  order, so nothing is repeated or lost. Prices on cards are always resolved live,
   so only the order can lag.
 - **A write marks only what it can move**, at two granularities. Each writer describes its change
   as a `SurfaceChange` (`src/backend/services/surface-change.ts`) and `PricingGeneration.bump`

@@ -51,7 +51,9 @@ turnaround (SC-005: ≤ 60 s for a targeted change, ≤ 300 s at 200 profiles fo
   - unrestricted, the everyone surface of the channel and currency served — ordered from it, an
     approximation until the buyer's own surface exists;
   - unrestricted, no everyone surface either — `unordered: true` on the chunk; the catalogue serves
-    its default order, cards priced live.
+    its default order, cards priced live. A walk that is already on a price order when this happens
+    (review 2 of 0.108.0, finding 6) continues from the last price it served — the products whose
+    live price sorts after it, then the unpriced, in the default order — and never restarts.
 - The bench (§5) asserts that no request path writes the surface.
 
 ## 4. Refresh

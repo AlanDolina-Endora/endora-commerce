@@ -29,6 +29,7 @@ import {
 } from './storefront-value-overrides.js';
 import {
   ERROR_CODES,
+  compareDecimal,
   isOrderMinimumEligibleType,
   isPriceSort,
   isProductVisibleTo,
@@ -42,6 +43,7 @@ import {
   type FilterDefinition,
   type ListingPriceOrderCursor,
   type ListingPriceOrderPort,
+  type ListingPrice,
   type ListingPriceDetail,
   type ListingPriceDetailPort,
   type ListingPriceViewerContext,
@@ -219,11 +221,20 @@ export const PRICE_PAGE_SCAN_BUDGET_MULTIPLE = 8;
  * (`contracts/price-surface.md` §3): it was served in the default order, and
  * it carries that listing's own cursor so the walk continues in the order it
  * began — even once the surface has been built — and ends.
+ *
+ * `rest` is the opposite transition: a walk begun on a price order whose
+ * surface then went missing. It carries the last price served (`amount`,
+ * `productId`, the price order's own keyset) and the default listing's keyset
+ * (`after`, `null` before the first page of the rest): see `#listRemainder`.
  */
+/** A price as a cursor may carry it: what `compareDecimal` reads. Anything else discards the cursor. */
+const CURSOR_AMOUNT = /^\d{1,14}(?:\.\d{1,4})?$/;
+
 type PriceListingCursor =
   | { stream: 'priced'; amount: string; productId: string }
   | { stream: 'tail'; createdAt: string; id: string }
-  | { stream: 'unordered'; cursor: string };
+  | { stream: 'unordered'; cursor: string }
+  | { stream: 'rest'; amount: string; productId: string; after: unknown };
 
 /**
  * The cursor a listing that pages by a keyset issues. Opaque to every caller,
@@ -1030,6 +1041,17 @@ export class CatalogQueryService {
     if (decoded?.stream === 'unordered' && typeof decoded.cursor === 'string') {
       return this.#listUnordered(params, ctx, decoded.cursor);
     }
+    // A walk whose price order went missing carries on in the default order
+    // from the last price it served, to its end.
+    if (
+      decoded?.stream === 'rest' &&
+      typeof decoded.amount === 'string' &&
+      CURSOR_AMOUNT.test(decoded.amount) &&
+      typeof decoded.productId === 'string'
+    ) {
+      const keyset = this.keysetFor(undefined);
+      return this.#listRemainder(em, params, ctx, where, direction, decoded, keyset.parse(decoded.after));
+    }
     // A cursor issued under another sort is discarded rather than
     // reinterpreted: the existing behaviour for a cursor that does not parse.
     const startInTail = decoded?.stream === 'tail';
@@ -1051,6 +1073,8 @@ export class CatalogQueryService {
     const collected: Product[] = [];
     const cursors: PriceListingCursor[] = [];
     let pricedExhausted = startInTail;
+    // The price order went missing after this page had collected from it.
+    let orderLost = false;
 
     // --- the priced stream -------------------------------------------------
     while (!pricedExhausted && collected.length < target) {
@@ -1071,8 +1095,19 @@ export class CatalogQueryService {
       // built for a request: the page is served in the default order, cards
       // priced live, until the worker has built one. Its cursor is the default
       // listing's, wrapped so the next page continues that walk.
-      if (chunk.unordered && collected.length === 0) {
-        return this.#listUnordered(params, ctx, null);
+      //
+      // Review 2, finding 6 — a walk that is already **on** the price order
+      // (a `priced` cursor, or a chunk of this page) and finds it gone does not
+      // start again: page 1 of the default order would repeat what it served.
+      // It carries on from the last price read (`#listRemainder`); a page that
+      // has collected some rows ends with them, its cursor naming the last.
+      if (chunk.unordered) {
+        if (collected.length > 0) {
+          orderLost = true;
+          break;
+        }
+        if (priceCursor === null) return this.#listUnordered(params, ctx, null);
+        return this.#listRemainder(em, params, ctx, where, direction, priceCursor, null);
       }
       spent += Math.max(chunk.sourceRowsRead, chunk.rows.length);
       pricedExhausted = chunk.exhausted;
@@ -1170,10 +1205,10 @@ export class CatalogQueryService {
       );
     }
 
-    const hasMore = collected.length > params.limit;
+    const hasMore = orderLost || collected.length > params.limit;
     const page = collected.slice(0, params.limit);
     const nextCursor =
-      hasMore && page.length > 0 ? encodeObjectCursor(cursors[params.limit - 1]!) : null;
+      hasMore && page.length > 0 ? encodeObjectCursor(cursors[page.length - 1]!) : null;
 
     const resolvedPrices = await this.#listingPricesFor(page, ctx);
     const cardReads = await this.#listingCardReadsFor(
@@ -1238,19 +1273,111 @@ export class CatalogQueryService {
     ctx: CatalogQueryContext,
     where: Record<string, unknown>,
   ): Promise<ListResult<ProductSummary>> {
-    const channel = ctx.resolvedChannel;
     const min = params.minPrice;
     const max = params.maxPrice;
-    const categoryFilteredIds = params.categorySlug
-      ? await this.productIdsInCategoryTree(em, params.categorySlug)
-      : null;
-
     // The chunk walk and the page it hands back page by the same keyset, and
     // that keyset is the one this ordering sorts on — `keysetFor`.
     const keyset = this.keysetFor(params.sort);
-    let cursor: ListingKeysetCursor | null = params.cursor
-      ? keyset.parse(decodeObjectCursor<unknown>(params.cursor))
+    return this.#walkKeepingByPrice(em, params, ctx, where, {
+      sort: params.sort,
+      start: params.cursor ? keyset.parse(decodeObjectCursor<unknown>(params.cursor)) : null,
+      keep: (price) => {
+        if (price.source !== 'price_list') return false;
+        const amount = Number(price.amount);
+        if (!Number.isFinite(amount)) return false;
+        if (min !== undefined && amount < min) return false;
+        if (max !== undefined && amount > max) return false;
+        return true;
+      },
+      cursorOf: (after) => encodeObjectCursor(after),
+      what: 'price-filtered',
+    });
+  }
+
+  /**
+   * The rest of a price-ordered walk whose price order went missing midway
+   * (review 2, finding 6 of release 0.108.0): the surface was retired or is
+   * being rebuilt, and nothing on this request can rebuild it
+   * (`contracts/price-surface.md` §3).
+   *
+   * What the walk has served is known exactly without the surface: every
+   * priced product up to the last price it served, `boundary`, in the walk's
+   * direction and `(amount, productId)` keyset — the price order's own — and
+   * none of the unpriced tail, which comes after every priced product. So the
+   * rest is every product the listing shows whose live price (the one its card
+   * is rendered with) sorts **after** `boundary`, and every unpriced one unless
+   * a price range excludes them (FR-012), walked in the default order. Nothing
+   * is repeated and nothing is lost; what changes is the order of the rest,
+   * which there is no surface to give.
+   *
+   * Chosen over answering "the order changed, start again" because neither the
+   * listing contract nor the storefront can carry that signal: `pagination` is
+   * `{ cursor, hasMore, limit }`, the storefront's pages are server-rendered
+   * links that hold only the cursor, and a restart is a repeat by definition.
+   * Continuing from the last served position needs no wire change, and a walk
+   * started this way stays on it to its end, like an `unordered` one.
+   */
+  async #listRemainder(
+    em: EntityManager,
+    params: ListProductsParams,
+    ctx: CatalogQueryContext,
+    where: Record<string, unknown>,
+    direction: 'asc' | 'desc',
+    boundary: ListingPriceOrderCursor,
+    after: ListingKeysetCursor | null,
+  ): Promise<ListResult<ProductSummary>> {
+    const range = this.#amountRange(params);
+    const sign = direction === 'asc' ? 1 : -1;
+    const afterBoundary = (amount: string, productId: string): boolean => {
+      const byAmount = compareDecimal(amount, boundary.amount);
+      const byId = productId < boundary.productId ? -1 : productId > boundary.productId ? 1 : 0;
+      return sign * (byAmount || byId) > 0;
+    };
+    return this.#walkKeepingByPrice(em, params, ctx, where, {
+      sort: undefined,
+      start: after,
+      keep: (price, product) => {
+        if (price.source !== 'price_list') return range === undefined;
+        if (range?.min !== undefined && compareDecimal(price.amount, range.min) < 0) return false;
+        if (range?.max !== undefined && compareDecimal(price.amount, range.max) > 0) return false;
+        return afterBoundary(price.amount, product.id);
+      },
+      cursorOf: (next) =>
+        encodeObjectCursor({
+          stream: 'rest',
+          amount: boundary.amount,
+          productId: boundary.productId,
+          after: next,
+        } satisfies PriceListingCursor),
+      what: 'price-ordered (order lost)',
+    });
+  }
+
+  /**
+   * A listing walked in a keyset ordering, chunk by chunk, each chunk narrowed
+   * by everything a page is narrowed by and then by the live listing price its
+   * cards are rendered with — `keep` decides on that price. Bounded by the scan
+   * budget; a bound answers a short page.
+   */
+  async #walkKeepingByPrice(
+    em: EntityManager,
+    params: ListProductsParams,
+    ctx: CatalogQueryContext,
+    where: Record<string, unknown>,
+    walk: {
+      sort: ListProductsParams['sort'];
+      start: ListingKeysetCursor | null;
+      keep: (price: ListingPrice, product: Product) => boolean;
+      cursorOf: (after: ListingKeysetCursor) => string;
+      what: string;
+    },
+  ): Promise<ListResult<ProductSummary>> {
+    const channel = ctx.resolvedChannel;
+    const categoryFilteredIds = params.categorySlug
+      ? await this.productIdsInCategoryTree(em, params.categorySlug)
       : null;
+    const keyset = this.keysetFor(walk.sort);
+    let cursor: ListingKeysetCursor | null = walk.start;
     const budget = PRICE_PAGE_SCAN_BUDGET_MULTIPLE * params.limit;
     const target = params.limit + 1;
     // Over-fetch by one, for the same reason the price path does: a full page
@@ -1270,7 +1397,7 @@ export class CatalogQueryService {
       const chunkWhere = cursor ? { $and: [where, keyset.after(cursor)] } : where;
       const rows = await em.find(Product, chunkWhere, {
         limit: chunkSize,
-        orderBy: this.orderForSort(params.sort),
+        orderBy: this.orderForSort(walk.sort),
       });
       spent += rows.length;
       if (rows.length === 0) break;
@@ -1291,11 +1418,7 @@ export class CatalogQueryService {
       for (const product of candidates) {
         const detail = chunkPrices.get(product.id);
         const price = detail?.price;
-        if (detail === undefined || price === undefined || price.source !== 'price_list') continue;
-        const amount = Number(price.amount);
-        if (!Number.isFinite(amount)) continue;
-        if (min !== undefined && amount < min) continue;
-        if (max !== undefined && amount > max) continue;
+        if (detail === undefined || price === undefined || !walk.keep(price, product)) continue;
         collected.push(product);
         prices.set(product.id, detail);
         if (collected.length >= target) break;
@@ -1306,14 +1429,14 @@ export class CatalogQueryService {
     if (bound) {
       this.log?.warn(
         { budget, spent, limit: params.limit, sort: params.sort ?? 'relevance' },
-        'catalog: price-filtered page hit its scan budget and is returning short',
+        `catalog: ${walk.what} page hit its scan budget and is returning short`,
       );
     }
 
     const hasMore = collected.length > params.limit;
     const page = collected.slice(0, params.limit);
     const last = page[page.length - 1];
-    const nextCursor = hasMore && last ? encodeObjectCursor(keyset.of(last)) : null;
+    const nextCursor = hasMore && last ? walk.cursorOf(keyset.of(last)) : null;
     const cardReads = await this.#listingCardReadsFor(
       em,
       page.map((p) => p.id),

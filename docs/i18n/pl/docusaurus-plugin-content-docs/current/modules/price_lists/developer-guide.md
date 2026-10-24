@@ -268,7 +268,11 @@ wstępnie wyliczoną **powierzchnię cen**.
   podstawie bieżącej wyceny, strona bez zawężenia — z powierzchni dla wszystkich (przybliżenie), a
   gdy nie ma żadnej powierzchni, fragment jest `unordered` i katalog podaje swój domyślny porządek;
   przeglądanie rozpoczęte w ten sposób niesie kursor domyślnej listy i trwa w tym porządku do końca,
-  także gdy powierzchnia zostanie w międzyczasie zbudowana.
+  także gdy powierzchnia zostanie w międzyczasie zbudowana. Przeglądanie rozpoczęte w porządku cen,
+  którego powierzchnia potem znika (profil wycofany albo przebudowywany), nie zaczyna się od nowa:
+  trwa od ostatniej podanej ceny, z produktami, które jeszcze nie padły — wycenionymi dalej w
+  kierunku przeglądania według bieżącej ceny, potem bez ceny — w domyślnym porządku, więc nic się
+  nie powtarza ani nie ginie.
   Ceny na kartach są zawsze wyliczane na bieżąco, więc opóźniać się może tylko porządek.
 - **Zapis oznacza tylko to, co może przesunąć**, na dwóch poziomach szczegółowości. Każdy zapisujący
   opisuje swoją zmianę jako `SurfaceChange` (`src/backend/services/surface-change.ts`), a

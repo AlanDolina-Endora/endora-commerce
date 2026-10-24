@@ -1,5 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { settlePriceSurface } from '../../helpers/price-surface.js';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { pricingEngineOf, settlePriceSurface, warmPriceSort } from '../../helpers/price-surface.js';
 import {
   setupBackendServer,
   teardownBackendServer,
@@ -46,14 +46,14 @@ describe('a price-sorted listing with no price surface pages to the end', () => 
 
   async function walk(
     limit: number,
-    options: { cookies?: Record<string, string>; between?: (page: number) => Promise<void> } = {},
+    options: { cookies?: Record<string, string>; between?: (page: number) => Promise<void>; sort?: 'price' | '-price' } = {},
   ): Promise<{ skus: string[]; pages: number; ended: boolean }> {
     const skus: string[] = [];
     let cursor: string | undefined;
     for (let page = 0; page < 20; page += 1) {
       const res = await h.app.inject({
         method: 'GET',
-        url: `/api/v1/catalog/products?q=PRICE-SORT&limit=${limit}&sort=price${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+        url: `/api/v1/catalog/products?q=PRICE-SORT&limit=${limit}&sort=${options.sort ?? 'price'}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
         headers: PRICE_SORT_CHANNEL,
         ...(options.cookies ? { cookies: options.cookies } : {}),
       });
@@ -91,5 +91,75 @@ describe('a price-sorted listing with no price surface pages to the end', () => 
     });
     expect(ended).toBe(true);
     expect([...skus].sort()).toEqual([ALPHA.sku, BETA.sku, GAMMA.sku].sort());
+  });
+
+  /**
+   * Review 2, finding 6 (release 0.108.0) — the other transition: a walk that
+   * began on a price order whose surface then goes missing (a profile retired,
+   * a precedence change, a rebuild) restarted at the default listing's page 1,
+   * so the buyer met the products already served again. The walk now carries
+   * on from the last price it served: the products still to come — priced
+   * after it in the walk's direction, then the unpriced — in the default order.
+   */
+  describe('a walk begun on a price order whose surface goes missing midway', () => {
+    const guest = { skus: [ALPHA.sku, BETA.sku, GAMMA.sku] };
+    const orgA = { skus: [ALPHA.sku, BETA.sku, DELTA.sku, GAMMA.sku], cookies: PRICE_SORT_ORG_A };
+    for (const [name, viewer] of [['a guest', guest], ['organization A', orgA]] as const) {
+      for (const sort of ['price', '-price'] as const) {
+        for (const limit of [1, 2]) {
+          it(`${name}, sort=${sort}, limit ${limit}: no product is repeated or lost`, async () => {
+            await dropRetailProfiles();
+            await warmPriceSort(h, [{ headers: PRICE_SORT_CHANNEL, cookies: 'cookies' in viewer ? viewer.cookies : undefined }]);
+            const { skus, ended } = await walk(limit, {
+              sort,
+              ...('cookies' in viewer ? { cookies: viewer.cookies } : {}),
+              between: async (page) => {
+                if (page === 0) await dropRetailProfiles();
+              },
+            });
+            expect(ended).toBe(true);
+            expect([...skus].sort()).toEqual([...viewer.skus].sort());
+          });
+        }
+      }
+    }
+
+    it('a page that loses the order between two chunks ends with what it collected, and the walk goes on', async () => {
+      await dropRetailProfiles();
+      await warmPriceSort(h, [{ headers: PRICE_SORT_CHANNEL }]);
+      const engine = pricingEngineOf(h);
+      const real = engine.orderByUnitPrice.bind(engine);
+      let calls = 0;
+      const spy = vi.spyOn(engine, 'orderByUnitPrice').mockImplementation(async (query) => {
+        calls += 1;
+        // The first chunk is cut to this listing's first row so the page asks
+        // again, and the order is gone by then — and for the rest of the walk.
+        if (calls === 1) {
+          const chunk = await real({ ...query, limit: 100 });
+          return { ...chunk, rows: chunk.rows.filter((r) => r.productId === ALPHA.id), exhausted: false };
+        }
+        return { rows: [], exhausted: false, sourceRowsRead: 0, unordered: true };
+      });
+      try {
+        const { skus, ended } = await walk(2);
+        expect(calls).toBeGreaterThan(1);
+        expect(ended).toBe(true);
+        expect(skus[0]).toBe(ALPHA.sku);
+        expect([...skus].sort()).toEqual([ALPHA.sku, BETA.sku, GAMMA.sku].sort());
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('the first page still comes from the price order', async () => {
+      await dropRetailProfiles();
+      await warmPriceSort(h, [{ headers: PRICE_SORT_CHANNEL }]);
+      const { skus } = await walk(1, {
+        between: async () => {
+          await dropRetailProfiles();
+        },
+      });
+      expect(skus[0]).toBe(ALPHA.sku);
+    });
   });
 });
