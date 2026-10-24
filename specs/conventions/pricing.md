@@ -82,8 +82,10 @@ Polish.
   refund, a discount, an available credit — uses `money-decimal.ts` beside it (exact sums,
   products, quotients, rounded half-up once where the rule says). **VAT has one method,
   `vatByRate`** — per rate, on the sum of the net amounts, rounded once (owner ruling of
-  2026-10-24) — and every document computes it there rather than per line; `worked-examples.md`
-  §10.17 says which document computes what. A money amount a person or an integration types takes
+  2026-10-24) — and every document computes it there rather than per line; a line's gross is
+  informational and is the line's own rounding. A refund and a correction are cumulative over an
+  order's returns and an invoice's corrections, and what an order charged is read from what it
+  stored, never recomputed. `worked-examples.md` §10.17 says which document computes what. A money amount a person or an integration types takes
   `twoDecimalAmount` from `money-input.ts`: more than two places is `400 AMOUNT_PRECISION_EXCEEDED`,
   never rounded.
 - **The precedence is data, read from the active version.** Consumers never encode a cell order;

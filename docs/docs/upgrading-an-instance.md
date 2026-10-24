@@ -2490,17 +2490,26 @@ Whenever it suits you:
   the Polish VAT Act). The checkout, the order, the payment and proforma it opens, the invoice, a
   correction and a refund show the same figures. A basket whose lines carry two VAT rates can come
   to a cent more or less than before the upgrade: 29.50 at 23 % with 4.30 at 5 % was 40.80 gross
-  and is 40.81, which is also what its invoice says. A line's gross on an order or an invoice is its
-  share of its rate's VAT, shown for information; the per-rate summary and the totals are the
-  figures that count.
+  and is 40.81, which is also what its invoice says. A line's gross on an order, its confirmation,
+  an invoice and the order screens is **the line's own rounding** — 29.50 at 23 % shows 36.29 —
+  shown for information; the VAT and the totals are the per-rate figures, so a document's line
+  grosses may add up to a cent more or less than its total.
 - **Invoices issued before the upgrade for orders of VAT payers overstated their net, VAT and
   gross.** Issuance read each order line's gross amount as its net amount and taxed it again: a line
   of 100.00 net at 23 % was invoiced as 123.00 net and 151.29 gross. The upgrade changes how
   invoices are issued from now on. **It does not correct the invoices already issued, and the
-  platform does not issue corrections for them**; they keep the amounts they were issued with.
-- **A return refunds by default what the invoice charged** for the returned lines, and a partial
-  return applies the same method to the quantity that came back: a full return of 9.05 × 3 at 8 %
-  refunds 29.32, where it refunded 29.31.
+  platform does not issue corrections for them**; they keep the amounts they were issued with, and
+  their per-rate summary is shown as they were issued.
+- **An order placed before the upgrade keeps what it charged.** Its returns refund what it stored
+  and was paid. An invoice issued for it after the upgrade takes VAT per rate and can be a cent
+  above what was paid — 40.81 for an order that charged 40.80 — and records as paid only what was
+  paid, so it shows the cent as still due (*Do zapłaty: 0.01*) rather than as paid.
+- **Returns refund by default what was paid, across all of an order's returns.** Each return refunds
+  what everything returned so far is worth, minus what earlier returns already refunded, so no
+  sequence of returns refunds more than the order charged and a complete return refunds exactly
+  that: two returns of one of two items at 29.50 + 23 % refund 36.29 and then 36.28 (72.57 paid),
+  where each used to refund 36.29. A correction credits the same way, so all corrections of an
+  invoice together credit exactly what it charged.
 - **An amount with more than two decimal places is refused, not rounded** — a delivery cost, a
   payment method's surcharge, a quote's agreed or proposed price, an approved refund, a return
   cost, a credit limit, an opportunity's value, and a promotion's fixed amount, step or minimum
@@ -2624,11 +2633,20 @@ Whenever it suits you:
   `grossTotal` and `paidTotal` of a sale document. `details` names each field with the issue
   `AMOUNT_PRECISION_EXCEEDED`, and the message is in the reader's language. A request that also
   fails anything else answers `400 VALIDATION_FAILED`, with the same issue among its details.
+  Trailing zeros are not significant (`"123.4500"` is 123.45); a string that is not a decimal at
+  all is `400 VALIDATION_FAILED` with a format issue.
 - **VAT is taken per rate on the sum of the net amounts at that rate**, rounded half-up once: an
-  order's `taxTotal` and `total`, its lines' `lineTotal` (each line's share, which add up to the
-  products' gross), the checkout and admin previews, an invoice's `vatSummary`, `taxTotal`,
-  `grossTotal`, `paidTotal` and its lines' `grossValue`, and a correction's amounts. The shapes are
-  unchanged. An order at two rates can differ by a cent from the same basket before the upgrade.
+  order's `taxTotal` and `total`, the checkout and admin previews, an invoice's `vatSummary`,
+  `taxTotal` and `grossTotal`, and a correction's amounts. An order line's `lineTotal` and an
+  invoice line's `grossValue` are the line's own rounding, `round(net × (1 + rate))`, and may add up
+  to a cent more or less than the total. The shapes are unchanged. An order at two rates can differ
+  by a cent from the same basket before the upgrade.
+- **An invoice's `paidTotal` is what was paid for the order** — the captured payment attempts, or
+  the order's stored total when it is recorded as paid with nothing captured — never the invoice's
+  own gross, so `amountDue` can be `0.01` for an order placed before the upgrade.
+- **A correction refuses a `total` above the sum of its lines** with `400 VALIDATION_FAILED`
+  (`details.code: correction_total_exceeds_lines`), and corrections of one invoice credit
+  cumulatively: together never more than it charged.
 - **Invoices issued before the upgrade are not changed.** One issued for an order of a VAT payer
   overstates `netTotal`, `taxTotal` and `grossTotal` (each line's net was the order line's gross);
   its per-rate summary is shown as it was issued.
@@ -2729,9 +2747,13 @@ Whenever it suits you:
   `twoDecimalAmountString`, `addAmountPrecisionIssue` and `ERROR_CODES.AMOUNT_PRECISION_EXCEEDED`).
   An overlay that computes an amount from a price uses them rather than `Number#toFixed(2)` or
   `Math.round(x * 100) / 100`, and a new money input field uses the refinement.
-- **`OrderReturnContextLine` gains `unitNetPrice` and `taxRate`**, and its `paidLineAmount` is the
-  line's gross under the one VAT method over the whole order; an implementation of
-  `OrderReturnContextPort` in an overlay owes both fields.
+- **`OrderReturnContext` gains `vatMethod` and `productsPaidTotal`, and `OrderReturnContextLine`
+  gains `unitNetPrice` and `taxRate`**; `paidLineAmount` is the line total the order stored. An
+  implementation of `OrderReturnContextPort` in an overlay owes the four fields and reads them from
+  what the order stored, never recomputes them.
+- **Two new nullable columns record which method a document was made under**: `orders.vat_method`
+  (`per_rate` from 0.108.0) and `invoices.vat_summary` (the per-rate summary an invoice or a
+  correction was issued with). `null` is a document from before; nothing is backfilled.
 
 ##### Other ports and shapes
 

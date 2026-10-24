@@ -2595,17 +2595,27 @@ W dowolnym momencie:
   przez nie płatność i proforma, faktura, korekta i zwrot. Koszyk z pozycjami w dwóch stawkach VAT
   może kosztować o grosz więcej lub mniej niż przed aktualizacją: 29,50 w stawce 23 % z 4,30 w
   stawce 5 % dawało 40,80 brutto, a daje 40,81 — tyle samo, ile mówi jego faktura. Kwota brutto
-  pozycji w zamówieniu lub na fakturze to jej udział w VAT jej stawki, pokazywany informacyjnie;
-  wiążące są podsumowanie według stawek i sumy.
+  pozycji w zamówieniu, jego potwierdzeniu, na fakturze i na ekranach zamówień to **własne
+  zaokrąglenie pozycji** — 29,50 w stawce 23 % pokazuje 36,29 — podawane informacyjnie; VAT i sumy
+  to kwoty według stawek, więc kwoty brutto pozycji dokumentu mogą sumować się do grosza więcej
+  lub mniej niż jego suma.
 - **Faktury wystawione przed aktualizacją dla zamówień czynnych podatników VAT zawyżały kwotę netto,
   VAT i brutto.** Przy wystawianiu kwota brutto każdej pozycji zamówienia była odczytywana jako jej
   kwota netto i opodatkowana ponownie: pozycja 100,00 netto w stawce 23 % trafiała na fakturę jako
   123,00 netto i 151,29 brutto. Aktualizacja zmienia sposób wystawiania faktur od teraz. **Nie
   poprawia faktur już wystawionych, a platforma nie wystawia do nich korekt**; zachowują kwoty, z
-  którymi je wystawiono.
-- **Zwrot domyślnie oddaje to, co naliczyła faktura** za zwracane pozycje, a zwrot częściowy stosuje
-  tę samą metodę do zwróconej ilości: pełny zwrot 9,05 × 3 w stawce 8 % oddaje 29,32, a oddawał
-  29,31.
+  którymi je wystawiono, a ich podsumowanie według stawek jest pokazywane tak, jak je wystawiono.
+- **Zamówienie złożone przed aktualizacją zachowuje to, co naliczyło.** Jego zwroty oddają to, co
+  zapisało i co zostało zapłacone. Faktura wystawiona do niego po aktualizacji liczy VAT według
+  stawek i może być o grosz wyższa od zapłaconej kwoty — 40,81 dla zamówienia, które naliczyło
+  40,80 — a jako zapłacone zapisuje tylko to, co zapłacono, więc grosz pokazuje jako należny
+  (*Do zapłaty: 0,01*), a nie jako zapłacony.
+- **Zwroty domyślnie oddają to, co zapłacono, łącznie ze wszystkich zwrotów zamówienia.** Każdy
+  zwrot oddaje wartość wszystkiego, co dotąd zwrócono, pomniejszoną o to, co oddały wcześniejsze
+  zwroty, więc żaden ciąg zwrotów nie odda więcej, niż naliczyło zamówienie, a zwrot całości oddaje
+  dokładnie tyle: dwa zwroty po jednej z dwóch sztuk po 29,50 w stawce 23 % oddają 36,29, a potem
+  36,28 (zapłacono 72,57), gdzie każdy oddawał 36,29. Korekta uznaje tak samo, więc wszystkie
+  korekty jednej faktury razem uznają dokładnie to, co naliczyła.
 - **Kwota z więcej niż dwoma miejscami po przecinku jest odrzucana, a nie zaokrąglana** — koszt
   dostawy, dopłata do metody płatności, uzgodniona lub proponowana cena w zapytaniu ofertowym,
   zatwierdzona kwota zwrotu, koszt zwrotu, limit kredytowy, wartość szansy sprzedaży oraz kwota
@@ -2737,12 +2747,21 @@ W dowolnym momencie:
   dokumentu sprzedaży z integracji ERP. `details` wskazuje każde pole z problemem
   `AMOUNT_PRECISION_EXCEEDED`, a komunikat jest w języku czytelnika. Żądanie, które nie spełnia
   także innych warunków, zwraca `400 VALIDATION_FAILED` z tym samym problemem wśród szczegółów.
+  Końcowe zera nie są znaczące (`"123.4500"` to 123,45); ciąg, który w ogóle nie jest liczbą
+  dziesiętną, zwraca `400 VALIDATION_FAILED` z problemem formatu.
 - **VAT jest liczony dla każdej stawki od sumy kwot netto w tej stawce**, z jednym zaokrągleniem
-  „połówkowym w górę”: `taxTotal` i `total` zamówienia, `lineTotal` jego pozycji (udział każdej
-  pozycji, sumujący się do brutto produktów), podglądy w checkoucie i w panelu, `vatSummary`,
-  `taxTotal`, `grossTotal`, `paidTotal` faktury i `grossValue` jej pozycji oraz kwoty korekty.
-  Kształty się nie zmieniają. Zamówienie w dwóch stawkach może różnić się o grosz od tego samego
-  koszyka sprzed aktualizacji.
+  „połówkowym w górę”: `taxTotal` i `total` zamówienia, podglądy w checkoucie i w panelu,
+  `vatSummary`, `taxTotal` i `grossTotal` faktury oraz kwoty korekty. `lineTotal` pozycji
+  zamówienia i `grossValue` pozycji faktury to własne zaokrąglenie pozycji,
+  `round(net × (1 + rate))`, i mogą sumować się do grosza więcej lub mniej niż suma. Kształty się nie
+  zmieniają. Zamówienie w dwóch stawkach może różnić się o grosz od tego samego koszyka sprzed
+  aktualizacji.
+- **`paidTotal` faktury to to, co zapłacono za zamówienie** — przechwycone płatności albo zapisana
+  suma zamówienia, gdy jest ono oznaczone jako opłacone bez przechwyconej płatności — nigdy własna
+  kwota brutto faktury, więc `amountDue` może wynosić `0.01` dla zamówienia sprzed aktualizacji.
+- **Korekta odrzuca `total` wyższy od sumy jej pozycji** odpowiedzią `400 VALIDATION_FAILED`
+  (`details.code: correction_total_exceeds_lines`), a korekty jednej faktury uznają narastająco:
+  razem nigdy więcej, niż naliczyła.
 - **Faktury wystawione przed aktualizacją się nie zmieniają.** Faktura wystawiona dla zamówienia
   czynnego podatnika VAT zawyża `netTotal`, `taxTotal` i `grossTotal` (netto każdej pozycji było
   kwotą brutto pozycji zamówienia); jej podsumowanie według stawek jest pokazywane tak, jak ją
@@ -2847,9 +2866,14 @@ W dowolnym momencie:
   `twoDecimalAmountString`, `addAmountPrecisionIssue` i `ERROR_CODES.AMOUNT_PRECISION_EXCEEDED`).
   Moduł nakładkowy, który liczy kwotę z ceny, używa ich zamiast `Number#toFixed(2)` czy
   `Math.round(x * 100) / 100`, a nowe pole kwoty wpisywanej przez człowieka używa tego zawężenia.
-- **`OrderReturnContextLine` zyskuje `unitNetPrice` i `taxRate`**, a jego `paidLineAmount` to
-  kwota brutto pozycji według jedynej metody VAT dla całego zamówienia; implementacja
-  `OrderReturnContextPort` w module nakładkowym musi podawać oba pola.
+- **`OrderReturnContext` zyskuje `vatMethod` i `productsPaidTotal`, a `OrderReturnContextLine`
+  zyskuje `unitNetPrice` i `taxRate`**; `paidLineAmount` to suma pozycji zapisana w zamówieniu.
+  Implementacja `OrderReturnContextPort` w module nakładkowym musi podawać te cztery pola i czytać
+  je z tego, co zamówienie zapisało, nigdy ich nie przeliczając.
+- **Dwie nowe kolumny dopuszczające `null` zapisują, według której metody powstał dokument**:
+  `orders.vat_method` (`per_rate` od 0.108.0) i `invoices.vat_summary` (podsumowanie według stawek,
+  z którym wystawiono fakturę lub korektę). `null` oznacza dokument sprzed aktualizacji; nic nie
+  jest uzupełniane wstecz.
 
 ##### Inne porty i kształty
 
