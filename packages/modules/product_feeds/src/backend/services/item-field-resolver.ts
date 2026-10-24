@@ -1,3 +1,4 @@
+import { roundAmountHalfUp } from '@endora-commerce/contracts';
 import type { FeedRunIssueReason } from '@endora-commerce/contracts';
 import type { FeedItemField } from './serializers/serializer.interface.js';
 import type {
@@ -91,7 +92,7 @@ function stringifyValue(value: unknown): string {
 
 /** `123.00 PLN` — the "amount currency" form both Google and Meta parse. */
 function formatMoney(amount: number, currencyCode: string): string {
-  return `${amount.toFixed(2)} ${currencyCode}`;
+  return `${roundAmountHalfUp(amount)} ${currencyCode}`;
 }
 
 function priceValue(

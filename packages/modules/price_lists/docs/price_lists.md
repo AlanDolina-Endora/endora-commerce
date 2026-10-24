@@ -140,8 +140,10 @@ steps:
 Because buyer percentages are taken off the catalogue price, a contract discount follows a channel
 price: if the channel sells a product at 120 instead of 100, a 20 % contract discount gives 96.
 
-Percentages are rounded half-up to four decimal places; the basket rounds line amounts to two, as it
-always has.
+Percentages are rounded half-up to four decimal places. Wherever a price is shown or stored at two
+decimal places — the product card, the basket line and the order that copies it, the order preview,
+a quote's reference price and a product feed — it is rounded half-up on those four places, so the
+same price reads the same everywhere: 9.0450 is 9.05 and 1.0050 is 1.01.
 
 ### The price precedence
 

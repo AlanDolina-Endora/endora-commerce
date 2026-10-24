@@ -1,3 +1,4 @@
+import { roundAmountHalfUp } from '@endora-commerce/contracts';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
   CatalogProductRecord,
@@ -194,7 +195,7 @@ export class CartLinePricing {
       if (price) {
         out.set(line.key, {
           ok: true,
-          unitPrice: Number(price.amount).toFixed(2),
+          unitPrice: roundAmountHalfUp(price.amount),
           currency: price.currency,
           source: 'price_list',
           priceSource: price.source ?? null,
@@ -219,7 +220,7 @@ export function agreedUnitPriceFor(
     return null;
   }
   if (agreed.quantity !== quantity) return null;
-  return { unitPrice: Number(agreed.unitPrice).toFixed(2), currency: agreed.currency };
+  return { unitPrice: roundAmountHalfUp(agreed.unitPrice), currency: agreed.currency };
 }
 
 
@@ -230,7 +231,7 @@ export function storedPriceDiffers(
 ): boolean {
   if (!current) return true;
   if (stored.currency.toUpperCase() !== current.currency.toUpperCase()) return true;
-  return Number(stored.unitPrice).toFixed(2) !== Number(current.unitPrice).toFixed(2);
+  return roundAmountHalfUp(stored.unitPrice) !== roundAmountHalfUp(current.unitPrice);
 }
 
 /** The agreement a line carries, in the shape `CartLinePricing` reads. */

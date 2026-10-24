@@ -143,8 +143,11 @@ sprzedaje w tej walucie) i dla tego kupującego. Cena powstaje potem w czterech 
 Ponieważ procenty dla kupujących są liczone od ceny katalogowej, rabat kontraktowy podąża za ceną
 kanału: jeśli kanał sprzedaje produkt za 120 zamiast 100, rabat kontraktowy 20 % daje 96.
 
-Procenty są zaokrąglane połówkowo w górę do czterech miejsc po przecinku; koszyk zaokrągla kwoty
-pozycji do dwóch, jak zawsze.
+Procenty są zaokrąglane połówkowo w górę do czterech miejsc po przecinku. Wszędzie, gdzie cena jest
+pokazywana lub zapisywana z dwoma miejscami po przecinku — na karcie produktu, w pozycji koszyka i w
+zamówieniu, które ją przejmuje, w podglądzie zamówienia, w cenie referencyjnej zapytania ofertowego i
+w pliku produktowym — jest zaokrąglana połówkowo w górę z tych czterech miejsc, więc ta sama cena
+wszędzie wygląda tak samo: 9,0450 to 9,05, a 1,0050 to 1,01.
 
 ### Kolejność cen
 

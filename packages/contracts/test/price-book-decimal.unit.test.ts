@@ -8,6 +8,7 @@ import {
   parseSignedPercentHundredths,
   parseSignedUnits,
   parseUnits,
+  roundAmountHalfUp,
 } from '../src/index.js';
 
 /**
@@ -116,5 +117,56 @@ describe('normaliseAmount', () => {
     expect(normaliseAmount('12.5')).toBe('12.5000');
     expect(normaliseAmount('0')).toBe('0.0000');
     expect(() => normaliseAmount('-1')).toThrow();
+  });
+});
+
+/**
+ * Review finding 2 (release 0.108.0) — a price shown or stored at two places
+ * is the four-place resolver amount rounded half-up **on its decimal digits**.
+ * `Number(amount).toFixed(2)` rounds the binary double instead, so 9.0450
+ * became 9.04 (the double is 9.04499…) while the card, formatted through
+ * `Intl.NumberFormat`, showed 9,05; and 1.0050 was charged 1.00 but shown 1,01.
+ */
+describe('roundAmountHalfUp — two places, half-up on the decimal digits', () => {
+  it.each([
+    ['9.0450', '9.05'],
+    ['1.0050', '1.01'],
+    ['0.0050', '0.01'],
+    ['9.0449', '9.04'],
+    ['10.0050', '10.01'],
+    ['2.6750', '2.68'],
+    ['17.9910', '17.99'],
+    ['100', '100.00'],
+    ['0', '0.00'],
+    ['12.5', '12.50'],
+    ['99999999.9950', '100000000.00'],
+  ])('%s → %s', (amount, expected) => {
+    expect(roundAmountHalfUp(amount)).toBe(expected);
+  });
+
+  it('agrees with the binary-free reading of a number (the shortest decimal that round-trips)', () => {
+    expect(roundAmountHalfUp(9.045)).toBe('9.05');
+    expect(roundAmountHalfUp(1.005)).toBe('1.01');
+    expect(roundAmountHalfUp(Number('2.6750'))).toBe('2.68');
+    expect(roundAmountHalfUp(1e21)).toBe('1000000000000000000000.00');
+    expect(roundAmountHalfUp(1e-7)).toBe('0.00');
+  });
+
+  it('rounds a negative amount half away from zero', () => {
+    expect(roundAmountHalfUp('-1.005')).toBe('-1.01');
+    expect(roundAmountHalfUp('-0.004')).toBe('0.00');
+  });
+
+  it('agrees with what the storefront shows through Intl.NumberFormat', () => {
+    const shown = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false });
+    for (const amount of ['9.0450', '1.0050', '0.0050', '2.6750', '10.0050', '123.4550', '0.1250']) {
+      expect(roundAmountHalfUp(amount), amount).toBe(shown.format(Number(amount)));
+    }
+  });
+
+  it('refuses what is not a decimal amount', () => {
+    expect(() => roundAmountHalfUp('1e3')).toThrow();
+    expect(() => roundAmountHalfUp('abc')).toThrow();
+    expect(() => roundAmountHalfUp(Number.NaN)).toThrow();
   });
 });

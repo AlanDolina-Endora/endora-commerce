@@ -21,6 +21,7 @@ import {
   setOrderTransitionsRequestSchema,
   updateOrderSavedViewRequestSchema,
   updateOrderStatusRequestSchema,
+  roundAmountHalfUp,
 } from '@endora-commerce/contracts';
 import type {
   AdminOrderDetail,
@@ -1019,7 +1020,7 @@ export async function registerOrderRoutes(
           item: it,
           code: null,
           product,
-          unitPrice: Number(resolved.amount).toFixed(2),
+          unitPrice: roundAmountHalfUp(resolved.amount),
           currency: resolved.currency,
         });
       }
