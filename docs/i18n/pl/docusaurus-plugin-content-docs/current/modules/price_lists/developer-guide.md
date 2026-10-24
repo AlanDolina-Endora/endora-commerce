@@ -223,9 +223,11 @@ pojedyncze wywołanie zostawia je na rdzeniu. Wzorcem jest
   kluczem: profil cenowy, produkt, wariant i ilość; oraz zapamiętany profil dla łańcucha organizacji,
   grupy, kanału, waluty i wersji kolejności. Środowisko testowe ustawia TTL na 0. Wpis w pamięci
   podręcznej zawiera tylko to, o czym rozstrzyga profil: cenę oraz kroki produktu i kategorii w
-  łańcuchu trybu wyświetlania. Kroki organizacji i ustawień są stosowane przy każdym żądaniu, bo
-  jeden profil dzielą widzowie o różnych trybach wyświetlania (gość i organizacja bez własnego
-  cennika). Worker powierzchni cen, który wylicza profil bez konkretnego kupującego, nie czyta tej
+  łańcuchu trybu wyświetlania. Kroki organizacji i ustawień nie wchodzą do wpisu, bo jeden profil
+  dzielą widzowie o różnych trybach wyświetlania (gość i organizacja bez własnego cennika): są
+  zapamiętywane osobno — dla kanału, gościa lub zalogowanego i (po zalogowaniu) organizacji — w tej
+  samej generacji i z tym samym TTL, więc ponowne wyliczenie przy rozgrzanej pamięci nie czyta ani
+  nadpisania, ani ustawień. Worker powierzchni cen, który wylicza profil bez konkretnego kupującego, nie czyta tej
   pamięci podręcznej ani do niej nie zapisuje.
 - **Po zatwierdzeniu, wszędzie**: każdy audytowany zapis cennika przechodzi przez `CommandBus.run`, a
   po jego zatwierdzeniu `PricingGeneration.bump()` czyści warstwy tego procesu i publikuje
@@ -235,10 +237,11 @@ pojedyncze wywołanie zostawia je na rdzeniu. Wzorcem jest
   prosi workera o odświeżenie; podbicie bez opisu oznacza każdy profil. Publikowanie działa w miarę możliwości: gdy komunikat
   przepadnie, nieaktualność w innym procesie ogranicza TTL 60 s.
 - **Co podbija generację**: każdy zapis cennika (nagłówek, kanały, odbiorcy, wiersze, aktywacja,
-  duplikat, usunięcie, ceny bazowe), aktualizacja statusów, która zmienia stan cennika, oraz zdarzenia
-  katalogu i kanałów, które ten moduł subskrybuje — `product.created.v1`, `product.updated.v1`,
-  `product.archived.v1`, `product.deleted.v1`, `category.updated.v1`, `attribute.updated.v1`,
-  `sales_channels.identity_changed`, `sales_channels.lifecycle_changed`.
+  duplikat, usunięcie, ceny bazowe), nadpisanie trybu wyświetlania, aktualizacja statusów, która
+  zmienia stan cennika, oraz zdarzenia, które ten moduł subskrybuje — `product.created.v1`,
+  `product.updated.v1`, `product.archived.v1`, `product.deleted.v1`, `category.updated.v1`,
+  `attribute.updated.v1`, `sales_channels.identity_changed`, `sales_channels.lifecycle_changed` oraz
+  `settings.value_changed` dla `pricing.default_display_mode` i `pricing.unauthenticated_display_mode`.
 
 ## Powierzchnia cen — sortowanie i zakres cen
 

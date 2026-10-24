@@ -204,6 +204,8 @@ export class PriceListService {
       em.create(SettingValue, { setting, salesChannel: channel, value: mode });
     }
     await em.flush();
+    // The engine memoises the display-mode tail under the pricing generation.
+    await this.invalidatePricingCache();
   }
 
   /**

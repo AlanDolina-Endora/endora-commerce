@@ -125,9 +125,12 @@ is still cleared whole on every bump.
 (`pricing.default_display_mode`, `pricing.unauthenticated_display_mode`), batched per page: the
 product and category steps for the batch (`PriceListService.resolveProductDisplayModes`), the
 organization → settings tail once (`resolvePageDisplayMode`). The price-book engine caches only the
-viewer-independent product and category steps with the answer (`CachedBookLine`) and applies the
-tail per request: the profile is shared by viewers whose tails
-differ, so a cached display mode would be served to the wrong one. A resolution of a fixed profile
+viewer-independent product and category steps with the answer (`CachedBookLine`) and memoises the
+tail apart from it, per channel, guest or signed-in and (signed in) organization, under the same
+generation (`ViewerModeKey`): the profile is shared by viewers whose tails differ, so a display mode
+cached with the answer would be served to the wrong one. An organization override,
+`setSettingsDisplayMode` and a settings write of either display-mode key (`settings.value_changed`)
+bump the generation. A resolution of a fixed profile
 (the surface worker, a feed's catalogue reference) neither reads nor writes the answer cache.
 
 **Consumers.** Catalogue listing, product page, product links, home cards, search hits and

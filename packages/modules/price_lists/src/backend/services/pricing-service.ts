@@ -25,6 +25,7 @@ import {
   type BookPricingViewer,
   type ChannelBridgeSubquery,
   type ListingAnswer,
+  type ViewerModeKey,
 } from './book-pricing.js';
 import type { PricingProfile, ProfileMemoKey } from './pricing-profile.js';
 import { PriceSurface } from './price-surface.js';
@@ -69,6 +70,8 @@ export interface PricingServiceOptions {
   bookCache?: PricingCache<CachedBookLine, ProfilePricingCacheKey>;
   /** The profile memo, per organization chain, group, channel and currency. */
   profileMemo?: PricingCache<PricingProfile, ProfileMemoKey>;
+  /** The display-mode chain's viewer tail, per pricing generation and viewer (`ViewerModeKey`). */
+  viewerModeMemo?: PricingCache<DisplayMode, ViewerModeKey>;
   /** Ask the `price_lists.surface` worker to rebuild stale profiles (best effort). */
   requestSurfaceRebuild?: () => Promise<void>;
   /**
@@ -164,6 +167,7 @@ export class PricingService implements PricingServiceContract {
       viewerDisplayMode: async (input) => (await this.#displayModes()).resolvePageDisplayMode(input),
       ...(this.options.bookCache ? { cache: this.options.bookCache } : {}),
       ...(this.options.profileMemo ? { profileMemo: this.options.profileMemo } : {}),
+      ...(this.options.viewerModeMemo ? { viewerModeMemo: this.options.viewerModeMemo } : {}),
     });
     return this.#books;
   }

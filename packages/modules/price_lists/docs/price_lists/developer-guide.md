@@ -221,8 +221,10 @@ them on core. `backend/src/apps/example/modules/example_overlay/backend.ts` is t
   memo of the profile per organization chain, group, channel, currency and precedence version. The
   test harness sets the TTL to 0. A cached answer holds only what the profile decides: the price
   and the product and category steps of the display-mode chain. The organization and settings
-  steps are applied per request, because one profile is shared by viewers whose display modes
-  differ (a guest and an organization with no buyer book). The price surface's worker, which
+  steps are not part of the answer, because one profile is shared by viewers whose display modes
+  differ (a guest and an organization with no buyer book): they are memoised on their own, per
+  channel, guest or signed-in and (signed in) organization, under the same generation and TTL, so a
+  warm repeated resolve reads neither the override nor the settings. The price surface's worker, which
   resolves a profile with no buyer in hand, neither reads nor writes this cache.
 - **After commit, everywhere**: every audited price-book write runs through `CommandBus.run`, and
   once it has committed `PricingGeneration.bump()` clears this process's layers and publishes on the
@@ -233,10 +235,11 @@ them on core. `backend/src/apps/example/modules/example_overlay/backend.ts` is t
   Publishing is best effort: when an announcement is lost, the 60 s TTL bounds another process's
   staleness.
 - **What bumps**: every price-book write (header, channels, members, rows, activation, duplicate,
-  delete, base prices), a status sweep that flips a book, and the catalogue and channel events this
-  module subscribes to — `product.created.v1`, `product.updated.v1`, `product.archived.v1`,
+  delete, base prices), a display-mode override, a status sweep that flips a book, and the events
+  this module subscribes to — `product.created.v1`, `product.updated.v1`, `product.archived.v1`,
   `product.deleted.v1`, `category.updated.v1`, `attribute.updated.v1`,
-  `sales_channels.identity_changed`, `sales_channels.lifecycle_changed`.
+  `sales_channels.identity_changed`, `sales_channels.lifecycle_changed`, and `settings.value_changed`
+  for `pricing.default_display_mode` and `pricing.unauthenticated_display_mode`.
 
 ## The price surface — price sort and price range
 

@@ -148,6 +148,33 @@ export interface BookPricingDeps {
   }) => Promise<DisplayMode>;
   cache?: PricingCache<CachedBookLine, ProfilePricingCacheKey>;
   profileMemo?: PricingCache<PricingProfile, ProfileMemoKey>;
+  /**
+   * The viewer's tail, memoised under the pricing generation (review 2,
+   * finding 4): see {@link ViewerModeKey}. Absent, the tail is read per call.
+   */
+  viewerModeMemo?: PricingCache<DisplayMode, ViewerModeKey>;
+}
+
+/**
+ * What the display-mode chain's tail (`PriceListService.resolvePageDisplayMode`)
+ * depends on, and nothing else: the channel (its settings value), guest or
+ * signed-in (which settings key answers) and — for a signed-in viewer only —
+ * the organization (its override). A guest's organization is never read, so it
+ * is not part of a guest's key.
+ *
+ * `generation` is the answer cache's generation when the tail was read. Every
+ * write that can move the tail bumps it — an organization override
+ * (`upsertDisplayModeOverride`), `setSettingsDisplayMode`, and a settings write
+ * of either `pricing.*` display-mode key (the `settings.value_changed`
+ * subscription in `index.ts`) — and the bump also clears the memo, so the key
+ * is the second of two independent guards. Between processes the bump travels
+ * over Redis; the memo's TTL, the cache's, bounds a lost announcement.
+ */
+export interface ViewerModeKey {
+  generation: number;
+  salesChannelId: string;
+  customerKind: 'guest' | 'signed_in';
+  organizationId: string | null;
 }
 
 /**
@@ -209,6 +236,7 @@ export class BookPricing {
   /** Drop every in-process layer this engine holds. */
   invalidateAll(): void {
     this.precedence.invalidateAll();
+    this.deps.viewerModeMemo?.invalidateAll();
   }
 
   /**
@@ -318,11 +346,7 @@ export class BookPricing {
     // The viewer's tail of the display-mode chain, once for the batch, and
     // only when a product step left a line undecided.
     const viewerMode = answered.some((a) => a.cached.productDisplayMode === null)
-      ? await this.deps.viewerDisplayMode({
-          organizationId: viewer.organizationId,
-          salesChannelId: viewer.salesChannelId,
-          customerKind: viewer.signedIn ? 'signed_in' : 'guest',
-        })
+      ? await this.#viewerMode(viewer)
       : null;
     for (const { cached, keys } of answered) {
       const answer: BookLineAnswer = {
@@ -333,6 +357,33 @@ export class BookPricing {
       for (const key of keys) out.set(key, answer);
     }
     return out;
+  }
+
+  /**
+   * The chain's tail for the viewer, read once per pricing generation and
+   * viewer key ({@link ViewerModeKey}) rather than once per resolve: it costs up
+   * to three statements, and a warm resolve whose every line is a hit issues
+   * none otherwise. Memoised only while the answer cache is on (the harness
+   * turns it off to read its own writes back at once).
+   */
+  async #viewerMode(viewer: BookPricingViewer): Promise<DisplayMode> {
+    const customerKind = viewer.signedIn ? 'signed_in' : 'guest';
+    const input = {
+      organizationId: viewer.signedIn ? viewer.organizationId : null,
+      salesChannelId: viewer.salesChannelId,
+      customerKind,
+    } as const;
+    const memo = this.deps.cache?.enabled ? this.deps.viewerModeMemo : undefined;
+    if (!memo) return this.deps.viewerDisplayMode(input);
+    // Both read before the statements, so a write committing meanwhile leaves
+    // the pre-write answer unstored (`pricing-cache.ts`).
+    const key: ViewerModeKey = { generation: this.deps.cache!.generation, ...input };
+    const memoGeneration = memo.generation;
+    const memoised = memo.get(key);
+    if (memoised !== undefined) return memoised;
+    const mode = await this.deps.viewerDisplayMode(input);
+    memo.set(key, mode, memoGeneration);
+    return mode;
   }
 
   async #profileOf(viewer: BookPricingViewer, currencyCode: string, precedenceVersion: number): Promise<PricingProfile> {

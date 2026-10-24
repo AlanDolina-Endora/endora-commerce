@@ -1,10 +1,15 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { EntityManager } from '@mikro-orm/postgresql';
-import type { CustomerAccountReadPort, SalesRepAssignmentPort, SettingsAdminPort } from '@endora-commerce/contracts';
+import type {
+  CustomerAccountReadPort,
+  DisplayMode,
+  SalesRepAssignmentPort,
+  SettingsAdminPort,
+} from '@endora-commerce/contracts';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
 import { PriceListService } from './services/price-list-service.js';
 import { PricingService } from './services/pricing-service.js';
-import type { CachedBookLine, ChannelBridgeSubquery } from './services/book-pricing.js';
+import type { CachedBookLine, ChannelBridgeSubquery, ViewerModeKey } from './services/book-pricing.js';
 import type { ProfilePricingCacheKey } from './services/pricing-cache.js';
 import type { PricingProfile, ProfileMemoKey } from './services/pricing-profile.js';
 import { PriceBookService } from './services/price-book-service.js';
@@ -184,6 +189,8 @@ export function priceListsModule(options: PriceListsModuleOptions): {
   // currency (research R6). Same TTL, same generation.
   const bookCache = new PricingCache<CachedBookLine, ProfilePricingCacheKey>(ttl);
   const profileMemo = new PricingCache<PricingProfile, ProfileMemoKey>(ttl);
+  // Review 2, finding 4 — the display-mode chain's viewer tail, per generation.
+  const viewerModeMemo = new PricingCache<DisplayMode, ViewerModeKey>(ttl);
   let pricingEngine: PricingService | undefined;
   // Every writer tells the generation, never the LRU directly: a bump clears
   // this process's layers and announces itself to every other process.
@@ -192,6 +199,7 @@ export function priceListsModule(options: PriceListsModuleOptions): {
       invalidateAll: () => {
         bookCache.invalidateAll();
         profileMemo.invalidateAll();
+        viewerModeMemo.invalidateAll();
         pricingEngine?.bookPricing.invalidateAll();
       },
     },
@@ -226,6 +234,7 @@ export function priceListsModule(options: PriceListsModuleOptions): {
         : {}),
       bookCache,
       profileMemo,
+      viewerModeMemo,
       ...(options.requestSurfaceRebuild ? { requestSurfaceRebuild: options.requestSurfaceRebuild } : {}),
       ...(options.salesChannelMembership
         ? {

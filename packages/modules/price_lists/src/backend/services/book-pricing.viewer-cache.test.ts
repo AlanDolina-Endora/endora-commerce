@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type { DisplayMode } from '@endora-commerce/contracts';
 import { PricingCache, type ProfilePricingCacheKey } from './pricing-cache.js';
-import { BookPricing, type BookPricingViewer, type CachedBookLine } from './book-pricing.js';
+import { BookPricing, type BookPricingViewer, type CachedBookLine, type ViewerModeKey } from './book-pricing.js';
 import { PRECEDENCE_PRESETS } from './precedence.js';
 import type { PricingProfile, ProfileMemoKey } from './pricing-profile.js';
 
@@ -43,8 +43,10 @@ describe('BookPricing — the display mode is applied per viewer, never cached u
     } as unknown as EntityManager;
     // Guests read `gross_only`; organization `acme` overrides to `net_only`;
     // any other signed-in buyer reads the default, `both`.
+    const overrides = new Map<string, DisplayMode>([['acme', 'net_only']]);
     const viewerMode = (organizationId: string | null, signedIn: boolean): DisplayMode =>
-      !signedIn ? 'gross_only' : organizationId === 'acme' ? 'net_only' : 'both';
+      !signedIn ? 'gross_only' : ((organizationId !== null ? overrides.get(organizationId) : undefined) ?? 'both');
+    const tailReads: Array<{ organizationId: string | null; customerKind: string }> = [];
     const cache = new PricingCache<CachedBookLine, ProfilePricingCacheKey>({ ttlMs: 60_000 });
     const books = new BookPricing({
       emFactory: () => em,
@@ -53,8 +55,12 @@ describe('BookPricing — the display mode is applied per viewer, never cached u
       attributeRead: () => ({ listByFlag: async () => [] }) as never,
       variantRead: () => ({ listVariantsByProductIds: async () => [] }),
       productDisplayModes: async () => new Map(),
-      viewerDisplayMode: async ({ organizationId, customerKind }) => viewerMode(organizationId, customerKind === 'signed_in'),
+      viewerDisplayMode: async ({ organizationId, customerKind }) => {
+        tailReads.push({ organizationId, customerKind });
+        return viewerMode(organizationId, customerKind === 'signed_in');
+      },
       cache,
+      viewerModeMemo: new PricingCache<DisplayMode, ViewerModeKey>({ ttlMs: 60_000 }),
       profileMemo: new PricingCache<PricingProfile, ProfileMemoKey>({ ttlMs: 60_000 }),
     });
     const guest: BookPricingViewer = { organizationId: null, customerGroupId: null, signedIn: false, salesChannelId: 'ch', currencyCode: 'PLN' };
@@ -67,7 +73,7 @@ describe('BookPricing — the display mode is applied per viewer, never cached u
     });
     const ask = async (viewer: BookPricingViewer) =>
       (await books.resolve([{ key: 'k', product: { id: 'p1', attributeValues: {} }, quantity: 1 }], viewer)).get('k');
-    return { books, cache, reads, guest, org, ask };
+    return { books, cache, reads, guest, org, ask, overrides, tailReads };
   }
 
   it('a guest first, then an organization with no buyer book: each reads its own display mode', async () => {
@@ -123,5 +129,52 @@ describe('BookPricing — the display mode is applied per viewer, never cached u
     // value could only ever disagree with it (review 2, finding 10).
     expect(Object.keys(cached ?? {}).sort()).toEqual(['productDisplayMode', 'resolution']);
     expect((await ask(guest))?.currencyCode).toBe('PLN');
+  });
+
+  // Review 2, finding 4 — the tail costs up to three reads (the organization
+  // override, `Setting`, `SettingValue`), and a warm resolve paid them on every
+  // call although every line was a hit.
+  it('a warm repeated resolve does not read the viewer tail again', async () => {
+    const { ask, guest, org, tailReads } = engine();
+    await ask(org('acme'));
+    await ask(guest);
+    expect(tailReads).toHaveLength(2);
+    await ask(org('acme'));
+    await ask(guest);
+    await ask(org('acme'));
+    expect(tailReads).toHaveLength(2);
+  });
+
+  it('the tail is memoised per viewer, not per profile', async () => {
+    const { ask, guest, org, tailReads } = engine();
+    expect((await ask(org('acme')))?.displayMode).toBe('net_only');
+    expect((await ask(org('beta')))?.displayMode).toBe('both');
+    expect((await ask(guest))?.displayMode).toBe('gross_only');
+    // A guest of an organization is a guest: the override is not read for it.
+    expect((await ask({ ...guest, organizationId: 'acme' }))?.displayMode).toBe('gross_only');
+    expect(tailReads.map((r) => `${r.customerKind}:${r.organizationId ?? '-'}`)).toEqual([
+      'signed_in:acme',
+      'signed_in:beta',
+      'guest:-',
+    ]);
+  });
+
+  it('a pricing generation bump drops the memoised tail, so a changed override takes effect', async () => {
+    const { books, cache, ask, org, overrides } = engine();
+    expect((await ask(org('acme')))?.displayMode).toBe('net_only');
+    overrides.set('acme', 'none');
+    // What `PricingGeneration.bump` does to this process's layers
+    // (`plugin.ts`): the answer cache, then the engine's own memos.
+    cache.invalidateAll();
+    books.invalidateAll();
+    expect((await ask(org('acme')))?.displayMode).toBe('none');
+  });
+
+  it('a generation bump alone is enough, whoever clears the engine', async () => {
+    const { cache, ask, org, overrides } = engine();
+    expect((await ask(org('acme')))?.displayMode).toBe('net_only');
+    overrides.set('acme', 'both');
+    cache.invalidateAll();
+    expect((await ask(org('acme')))?.displayMode).toBe('both');
   });
 });

@@ -19,7 +19,7 @@ import type { SalesChannelMembershipPort, SettingsReadPort } from '@endora-comme
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
-import type { AuditReferenceRegistryPort, SettingsAdminPort } from '@endora-commerce/contracts';
+import { PRICING_SETTING_CODES, type AuditReferenceRegistryPort, type SettingsAdminPort } from '@endora-commerce/contracts';
 import { lazyPort } from '@endora-commerce/platform/kernel';
 import { registerPriceListAuditReferences } from './services/audit-references.js';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
@@ -445,6 +445,21 @@ export function registerModule(ctx: ModuleContext): void {
   ctx.onBoot(async () => {
     const { priceLists, redisSubscriber } = ctx.cradle<PriceListsCradle>();
     await priceLists.handle.pricingGeneration.start(redisSubscriber);
+  });
+
+  /**
+   * Review 2, finding 4 (release 0.108.0) — the engine memoises the viewer's
+   * tail of the display-mode chain under the pricing generation, and the tail
+   * reads the two `pricing.*` display-mode settings. The settings admin API is
+   * `settings`' write, so it reaches this module as `settings.value_changed`:
+   * either key bumps the generation. A display mode is not on the price surface,
+   * so nothing there is marked (`{ kind: 'none' }`).
+   */
+  const displayModeSettings: ReadonlySet<string> = new Set(Object.values(PRICING_SETTING_CODES));
+  ctx.subscribe('settings.value_changed', async (payload) => {
+    const code = (payload as { settingCode?: unknown } | null)?.settingCode;
+    if (typeof code !== 'string' || !displayModeSettings.has(code)) return;
+    await ctx.cradle<PriceListsCradle>().priceLists.handle.pricingGeneration.bump({ kind: 'none' });
   });
 
   /**
