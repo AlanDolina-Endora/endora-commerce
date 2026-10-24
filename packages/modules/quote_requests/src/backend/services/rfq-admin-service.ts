@@ -43,6 +43,7 @@ import type { RfqRevisionService } from './rfq-revision-service.js';
 import type { RfqNotificationService } from './rfq-notification-service.js';
 import { raisedOnChannelId } from './raised-on-channel.js';
 import { hasUnpricedLine, quoteIncompleteError, unitPriceText } from './agreed-price.js';
+import { listTotal } from './summarize.js';
 import { pairLines } from './line-carry-over.js';
 import { LINE_STORAGE_ORDER, loadArrangedQuoteLines } from './line-order.js';
 import { groupingShape, planLineGrouping, type GroupingShapeEntry, type LineGroupingPlan } from './line-grouping.js';
@@ -238,17 +239,12 @@ export class RfqAdminService {
       const rfqItems = itemsByRfq.get(rfq.id) ?? [];
       const customer = customerById.get(rfq.customerAccountId);
       const org = orgById.get(rfq.organizationId);
+      // Exact sums (issue #417), the customer list's helper.
       const totalAtAgreedPrice = rfqItems.every((it) => it.agreedUnitPrice != null)
-        ? rfqItems.reduce(
-            (sum, it) => sum + Number(it.agreedUnitPrice ?? 0) * it.quantity,
-            0,
-          )
+        ? listTotal(rfqItems.map((it) => ({ price: it.agreedUnitPrice ?? '0', quantity: it.quantity })))
         : null;
       const totalAtCustomerPrice = rfqItems.every((it) => it.desiredUnitPrice != null)
-        ? rfqItems.reduce(
-            (sum, it) => sum + Number(it.desiredUnitPrice ?? 0) * it.quantity,
-            0,
-          )
+        ? listTotal(rfqItems.map((it) => ({ price: it.desiredUnitPrice ?? '0', quantity: it.quantity })))
         : null;
       return {
         id: rfq.id,
