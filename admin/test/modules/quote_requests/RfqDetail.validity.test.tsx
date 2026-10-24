@@ -384,6 +384,11 @@ describe('RfqDetail — the operator sets and changes the validity deadline', ()
 
     await userEvent.click(await screen.findByRole('button', { name: /rfq\.detail\.convert\.placeOrder/ }));
 
-    expect(postSpy).not.toHaveBeenCalled();
+    // Only the basket endpoint: the reference-price probe is itself a POST
+    // (`/price-books/resolve`, feature 160), and it is a read, not a send.
+    expect(postSpy).not.toHaveBeenCalledWith(
+      `/api/v1/admin/quote-requests/${RFQ_ID}/prepare-customer-basket`,
+      expect.anything(),
+    );
   });
 });
