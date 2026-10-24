@@ -32,16 +32,25 @@ export class OrderReturnContextProvider implements OrderReturnContextPort {
     const items = (await loadArrangedOrderLines(em, orderId)).lines;
 
     const completing = order.status === COMPLETING_STATUS;
-    const lines = items.map((it) => {
-      const paid = paidAmounts({ unitPrice: it.unitPrice, taxRate: it.taxRate, quantity: it.quantity });
+    // What each line was charged under the one VAT method, over the whole
+    // order — the figure its order line and its invoice carry (issue #417).
+    const paidByLine = paidAmounts(
+      items.map((it) => ({ unitPrice: it.unitPrice, taxRate: it.taxRate, quantity: it.quantity })),
+    );
+    const lines = items.map((it, index) => {
+      const paid = paidByLine[index]!;
       return {
         orderItemId: it.id,
         productId: it.productId,
         name: it.productSnapshot.name,
         purchasedQty: it.quantity,
-        // Two-place decimals, read as numbers losslessly.
+        // Decimals read as numbers losslessly (the unit amount is informational).
         paidUnitAmount: Number(paid.paidUnitAmount),
         paidLineAmount: Number(paid.paidLineAmount),
+        // The net unit price and the rate, so `returns` prices a returned
+        // quantity under the same VAT method.
+        unitNetPrice: it.unitPrice,
+        taxRate: it.taxRate,
         // Feature 155 (FR-016a) — the stamp placement recorded, reported as
         // it is: `null` only on a line placed before the feature. What `null`
         // means for a return (FR-025) is `returns`' policy, not this port's.

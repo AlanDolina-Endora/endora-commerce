@@ -604,10 +604,18 @@ export interface OrderReturnContextLine {
   productId: string;
   name: string;
   purchasedQty: number;
-  /** Amount paid per unit, including its proportional tax. */
+  /** Amount paid per unit, including its proportional tax — the line's amount over its quantity, informational. */
   paidUnitAmount: number;
-  /** Amount paid for the whole purchased line, including tax. */
+  /**
+   * Amount paid for the whole purchased line, including tax: its net plus its
+   * share of its rate's VAT under the one VAT method (`vatByRate`, issue #417)
+   * over the whole order — what the order line and the invoice charged for it.
+   */
   paidLineAmount: number;
+  /** The line's net unit price, as stored (a two-place decimal string). */
+  unitNetPrice: string;
+  /** The line's VAT rate as a fraction, as stored (`0.2300`). */
+  taxRate: string;
   /**
    * Feature 155 (FR-016a) — the product's returnable flag recorded when the order was placed.
    * `null`: the order was placed before the flag was recorded. `orders` reports the fact; the

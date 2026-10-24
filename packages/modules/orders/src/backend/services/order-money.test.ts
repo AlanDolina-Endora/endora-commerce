@@ -1,106 +1,73 @@
 import { describe, expect, it } from 'vitest';
-import { orderLineMoney, orderTotalsMoney, paidAmounts } from './order-money.js';
+import { orderTotalsMoney, paidAmounts } from './order-money.js';
 
 /**
- * Issue #417 — an order's amounts in exact decimal arithmetic, under the rule
- * placement has always applied: a line's gross is its net × (1 + rate) rounded
- * half-up on its own; the order's tax is the sum of the lines' **exact** taxes,
- * rounded once; the total is subtotal + tax + delivery + surcharge − discount.
- * `specs/pricing/worked-examples.md` §10.17.
+ * Issue #417 — an order's amounts in exact decimal arithmetic, under the one
+ * VAT method (owner ruling of 2026-10-24, `vatByRate`): per rate, VAT on the
+ * sum of the nets at that rate, rounded half-up once; the total is the
+ * products' net + VAT + delivery + surcharge − discount. A line's stored gross
+ * (`lineTotal`) is its share, and the line grosses add up to the products'
+ * gross. `specs/pricing/worked-examples.md` §10.17.
  */
-describe('orderLineMoney', () => {
-  it('rounds a line gross half-up on the exact product, not the binary toFixed', () => {
-    // `(29.5 * 1 * 1.23).toFixed(2)` is 36.28; `(16.5 * 1.05).toFixed(2)` is 17.32.
-    expect(orderLineMoney({ unitPrice: '29.50', quantity: 1, taxRate: 0.23 })).toEqual({
-      net: '29.50',
-      gross: '36.29',
-      taxRate: '0.2300',
-    });
-    expect(orderLineMoney({ unitPrice: '16.50', quantity: 1, taxRate: 0.05 }).gross).toBe('17.33');
-    expect(orderLineMoney({ unitPrice: '0.50', quantity: 1, taxRate: 0.23 }).gross).toBe('0.62');
-  });
-
-  it('multiplies the unit price by the quantity exactly', () => {
-    expect(orderLineMoney({ unitPrice: '0.10', quantity: 3, taxRate: 0 })).toEqual({
-      net: '0.30',
-      gross: '0.30',
-      taxRate: '0.0000',
-    });
-    expect(orderLineMoney({ unitPrice: '9.05', quantity: 3, taxRate: 0.08 }).gross).toBe('29.32');
-  });
-});
+const totals = (lines: Array<{ unitPrice: string; quantity: number; taxRate: string | number }>, extra = {}) =>
+  orderTotalsMoney({ lines, deliveryTotal: 0, paymentSurcharge: 0, discountTotal: 0, ...extra });
 
 describe('orderTotalsMoney', () => {
-  it('rounds the order tax half-up on the exact sum (T1: 0.70 at 5 %)', () => {
-    // `Math.round(0.7 * 0.05 * 100) / 100` is 0.03; the exact tax is 0.035.
-    const t = orderTotalsMoney({
-      lines: [{ unitPrice: '0.70', quantity: 1, taxRate: 0.05 }],
-      deliveryTotal: 0,
-      paymentSurcharge: 0,
-      discountTotal: 0,
-    });
-    expect(t).toEqual({
-      subtotal: '0.70',
-      taxTotal: '0.04',
-      deliveryTotal: '0.00',
-      paymentSurcharge: '0.00',
-      discountTotal: '0.00',
-      total: '0.74',
-    });
+  it('rounds a lone line’s gross half-up on the exact product (G1, T1)', () => {
+    expect(totals([{ unitPrice: '29.50', quantity: 1, taxRate: 0.23 }]).lines).toEqual([
+      { net: '29.50', gross: '36.29', taxRate: '0.2300' },
+    ]);
+    const t1 = totals([{ unitPrice: '0.70', quantity: 1, taxRate: 0.05 }]);
+    expect([t1.taxTotal, t1.total, t1.lines[0]!.gross]).toEqual(['0.04', '0.74', '0.74']);
   });
 
-  it('keeps the order rule: the lines’ exact taxes are summed, then rounded once (V2)', () => {
-    const t = orderTotalsMoney({
-      lines: [
+  it('takes VAT per rate on the sum of the nets (V2: 7.01, total 40.81 — what the invoice says)', () => {
+    const t = totals(
+      [
         { unitPrice: '29.50', quantity: 1, taxRate: 0.23 },
         { unitPrice: '4.30', quantity: 1, taxRate: 0.05 },
       ],
-      deliveryTotal: '15.00',
-      paymentSurcharge: 2.5,
-      discountTotal: '1.10',
-    });
-    // 6.785 + 0.215 = 7.000 → 7.00 (each line rounded alone would be 6.79 + 0.22).
-    expect(t).toEqual({
+      { deliveryTotal: '15.00', paymentSurcharge: 2.5, discountTotal: '1.10' },
+    );
+    expect(t).toMatchObject({
       subtotal: '33.80',
-      taxTotal: '7.00',
+      taxTotal: '7.01',
       deliveryTotal: '15.00',
       paymentSurcharge: '2.50',
       discountTotal: '1.10',
-      total: '57.20',
+      total: '57.21',
     });
+    expect(t.lines.map((l) => l.gross)).toEqual(['36.29', '4.52']);
+  });
+
+  it('rounds once per rate: three 0.02 lines at 23 % carry 0.01 VAT', () => {
+    const line = { unitPrice: '0.02', quantity: 1, taxRate: '0.23' };
+    const t = totals([line, line, line]);
+    expect([t.subtotal, t.taxTotal, t.total]).toEqual(['0.06', '0.01', '0.07']);
+    expect(t.lines.map((l) => l.gross)).toEqual(['0.03', '0.02', '0.02']);
   });
 
   it('adds many amounts without a binary residue', () => {
-    const t = orderTotalsMoney({
-      lines: Array.from({ length: 3 }, () => ({ unitPrice: '0.10', quantity: 1, taxRate: 0 })),
-      deliveryTotal: '0.20',
-      paymentSurcharge: 0,
-      discountTotal: '0.30',
-    });
-    expect(t.subtotal).toBe('0.30');
-    expect(t.total).toBe('0.20');
+    const t = totals(
+      Array.from({ length: 3 }, () => ({ unitPrice: '0.10', quantity: 1, taxRate: 0 })),
+      { deliveryTotal: '0.20', discountTotal: '0.30' },
+    );
+    expect([t.subtotal, t.total]).toEqual(['0.30', '0.20']);
   });
 });
 
 describe('paidAmounts — what a return refunds by default', () => {
-  it('rounds the paid unit gross half-up on the exact product, not the binary 20.29 (G4)', () => {
-    // `Math.round((16.5 * 1.23 + Number.EPSILON) * 100) / 100` is 20.29.
-    expect(paidAmounts({ unitPrice: '16.50', taxRate: '0.2300', quantity: 3 })).toEqual({
-      paidUnitAmount: '20.30',
-      paidLineAmount: '60.90',
-    });
+  it('V3 — the whole of 9.05 × 3 at 8 % refunds 29.32, what the order line and the invoice charged', () => {
+    const [line] = paidAmounts([{ unitPrice: '9.05', quantity: 3, taxRate: '0.0800' }]);
+    expect(line).toEqual({ paidLineAmount: '29.32', paidUnitAmount: '9.7733' });
   });
 
-  it('V3 — a full return of 9.05 × 3 at 8 % refunds 29.31 where the line gross is 29.32', () => {
-    expect(paidAmounts({ unitPrice: '9.05', taxRate: '0.0800', quantity: 3 }).paidLineAmount).toBe('29.31');
-    expect(orderLineMoney({ unitPrice: '9.05', quantity: 3, taxRate: '0.0800' }).gross).toBe('29.32');
-  });
-
-  it('keeps the rule: the paid unit gross times the quantity', () => {
-    // Not the order line's own gross (3 × 0.50 at 23 % is 1.845 → 1.85).
-    expect(paidAmounts({ unitPrice: '0.50', taxRate: '0.2300', quantity: 3 })).toEqual({
-      paidUnitAmount: '0.62',
-      paidLineAmount: '1.86',
-    });
+  it('gives each line its share of its rate’s VAT', () => {
+    expect(
+      paidAmounts([
+        { unitPrice: '29.50', quantity: 1, taxRate: '0.23' },
+        { unitPrice: '16.50', quantity: 1, taxRate: '0.23' },
+      ]).map((l) => l.paidLineAmount),
+    ).toEqual(['36.28', '20.30']);
   });
 });

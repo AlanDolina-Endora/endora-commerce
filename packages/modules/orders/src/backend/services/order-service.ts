@@ -3,6 +3,8 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   ERROR_CODES,
   compareDecimals,
+  lineAmountHalfUp,
+  moneySum,
   pickLocalized,
   roundHalfUp,
   type CartSnapshot,
@@ -132,7 +134,7 @@ import {
   readBasketCatalogue,
 } from './placement-minimums.js';
 import { returnableAtPurchase } from './returnable-at-purchase.js';
-import { orderLineMoney, orderTotalsMoney } from './order-money.js';
+import { orderTotalsMoney } from './order-money.js';
 import type { InvoicePlacementApplyPort } from '@endora-commerce/mod-invoices/ports';
 import type { PaymentPlacementApplyPort } from '../../ports/index.js';
 import type { CreditLimitPort } from '@endora-commerce/mod-credit-limits/ports';
@@ -1142,7 +1144,6 @@ export class OrderService {
     currency: string;
     appliedPromotionCode: string | null;
     appliedPromotions: PromotionApplication['appliedPromotions'];
-    rateForProductId: (productId: string) => number;
   }> {
     const { items, productById, currency } = input;
 
@@ -1231,7 +1232,6 @@ export class OrderService {
       currency,
       appliedPromotionCode,
       appliedPromotions,
-      rateForProductId,
     };
   }
 
@@ -1745,12 +1745,7 @@ export class OrderService {
       if (this.resolveMinOrderValue) {
         const min = await this.resolveMinOrderValue(req.salesChannelId ?? null).catch(() => 0);
         if (min > 0) {
-          const cartSubtotal = orderTotalsMoney({
-            lines: items.map((it) => ({ unitPrice: it.unitPrice, quantity: it.quantity, taxRate: 0 })),
-            deliveryTotal: 0,
-            paymentSurcharge: 0,
-            discountTotal: 0,
-          }).subtotal;
+          const cartSubtotal = moneySum(items.map((it) => lineAmountHalfUp(it.unitPrice, it.quantity)));
           if (compareDecimals(cartSubtotal, min) < 0) {
             throw new HttpError(
               422,
@@ -2031,7 +2026,6 @@ export class OrderService {
         total,
         appliedPromotionCode,
         appliedPromotions,
-        rateForProductId,
       } = await this.computeMonetaryTotals({
         items,
         productById,
@@ -2256,12 +2250,10 @@ export class OrderService {
         const snapshotName = item.packagingUnitName
           ? `${baseName} (${item.packagingUnitName})`
           : baseName;
-        // The line's gross, half-up on the exact decimal product (issue #417).
-        const money = orderLineMoney({
-          unitPrice: item.unitPrice,
-          quantity: item.quantity,
-          taxRate: rateForProductId(item.productId),
-        });
+        // The line's stored gross: its net plus its share of its rate's VAT under
+        // the one VAT method (issue #417), from the totals computed above, so the
+        // order's line grosses add up to its products' gross.
+        const lineMoney = money.lines[index]!;
         return tx.create(OrderItem, {
           orderId: order.id,
           productId: item.productId,
@@ -2291,8 +2283,8 @@ export class OrderService {
           // Feature 159 (I-O3) — the line's group and its place in its section.
           groupId,
           position: laidOut?.position ?? index,
-          taxRate: money.taxRate,
-          lineTotal: money.gross,
+          taxRate: lineMoney.taxRate,
+          lineTotal: lineMoney.gross,
         });
       });
       await tx.persistAndFlush(orderItems);
