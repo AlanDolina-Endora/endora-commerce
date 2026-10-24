@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 import {
   AMOUNT_PRECISION_EXCEEDED,
+  CreateOpportunityRequestSchema,
   adjustCreditLimitRequestSchema,
   adminCreateQuoteRequestLineSchema,
   adminOrderRefundRequestSchema,
@@ -107,5 +108,12 @@ describe('methods, returns, orders, credit limits and ERP documents', () => {
       'grossTotal',
     ]);
     expect(erpSaleDocumentUpsertInputSchema.safeParse({ ...doc, grossTotal: '123.45' }).success).toBe(true);
+  });
+});
+
+describe('crm', () => {
+  it('refuses an opportunity value with three places with the precision issue', () => {
+    const body = { title: 'Deal', organizationId: '00000000-0000-4000-8000-000000000101', manualValue: '1000.005' };
+    expect(refusedPaths(CreateOpportunityRequestSchema, body)).toEqual(['manualValue']);
   });
 });
