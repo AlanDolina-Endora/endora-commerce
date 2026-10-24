@@ -160,6 +160,30 @@ export class PriceBookReads {
     }
   }
 
+  /**
+   * Which of these books exist for the caller (FR-034) — every one for a
+   * platform administrator, one statement otherwise. A book that does not
+   * exist is not in the answer either.
+   */
+  async visibleBookIds(ids: readonly string[], scope: PriceBookScope): Promise<Set<string>> {
+    const unique = [...new Set(ids)];
+    if (scope.all || unique.length === 0) return new Set(unique);
+    const rows = (await this.deps.emFactory().execute(
+      `select l."id", l."audience_kind", l."is_system",
+              array(select m."organization_id" from "price_list_audience_members" m
+                     where m."price_list_id" = l."id" and m."organization_id" is not null) as "member_org_ids"
+         from "price_lists" l where l."id" = any(?::uuid[])`,
+      [`{${unique.join(',')}}`],
+    )) as Array<Pick<BookHeaderRow, 'id' | 'audience_kind' | 'is_system' | 'member_org_ids'>>;
+    return new Set(
+      rows
+        .filter((row) =>
+          bookVisible(scope, { audienceKind: row.audience_kind, isSystem: row.is_system, organizationIds: row.member_org_ids ?? [] }),
+        )
+        .map((row) => row.id),
+    );
+  }
+
   async get(id: string, scope: PriceBookScope): Promise<PriceBook> {
     const header = await this.header(id, scope);
     const [bindings] = [await this.#bindings([header])];

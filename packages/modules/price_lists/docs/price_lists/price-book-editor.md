@@ -298,6 +298,9 @@ A sales representative works in the same screens with these differences:
 - Books for everyone, customer-group books and the base books open read-only, with no edit, save,
   import, duplicate or delete action.
 - Creating or duplicating a book offers only *Organizations*, and only their own; the member
-  pickers and the explainer's buyer picker list only their organizations. A book they create,
+  pickers and the explainer's buyer picker list only their organizations. In the explainer, a price
+  set by a book outside their scope — for example the parent organization's — is shown as it is
+  charged, with *A price book outside your scope* in place of the book, and the runner-ups from such
+  books are not listed. A book they create,
   duplicate or change must name at least one of them, and its audience cannot be changed to everyone
   or to customer groups.

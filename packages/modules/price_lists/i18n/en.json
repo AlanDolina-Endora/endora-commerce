@@ -125,6 +125,7 @@
   "errors.reason.variant_unknown": "This variant no longer exists.",
   "explainer.addLine": "Add line",
   "explainer.book": "Price book",
+  "explainer.bookOutOfScope": "A price book outside your scope",
   "explainer.buyer": "Buyer",
   "explainer.buyer.customer": "Customer",
   "explainer.buyer.guest": "Guest",
