@@ -71,6 +71,7 @@ import { Migration20260830T112911CartsOrganizationAttributionCheck } from '@endo
 import { Migration20261008T061751CartsCartSourceQuoteRequest } from '@endora-commerce/mod-carts/migrations';
 import { Migration20261018T074021CartsCartItemAgreedPrice } from '@endora-commerce/mod-carts/migrations';
 import { Migration20261019T043854CartsChannelBackfill } from '@endora-commerce/mod-carts/migrations';
+import { Migration20261021T165244CartsCartItemsPriceSource } from '@endora-commerce/mod-carts/migrations';
 
 // ── catalog ─────────────────────────────────────────────────────────────────
 import { Migration20260429T064146CatalogAttributeSetsInit } from '@endora-commerce/mod-catalog/migrations';
@@ -101,6 +102,8 @@ import { Migration20261008T080839CatalogProductAttributeIsPriceRule } from '@end
 import { Migration20261008T092714CatalogCategoryContent } from '@endora-commerce/mod-catalog/migrations';
 import { Migration20261014T170531CatalogProductListSavedViews } from '@endora-commerce/mod-catalog/migrations';
 import { Migration20261016T082008CatalogOrderRules } from '@endora-commerce/mod-catalog/migrations';
+import { Migration20261022T111811CatalogPriceFieldsRemoved } from '@endora-commerce/mod-catalog/migrations';
+import { Migration20261022T182523CatalogAdminNameKeys } from '@endora-commerce/mod-catalog/migrations';
 
 // ── cms ─────────────────────────────────────────────────────────────────────
 import { Migration20260425T162418CmsPagesInit } from '@endora-commerce/mod-cms/migrations';
@@ -249,6 +252,7 @@ import { Migration20261003T201537OrdersOrderTransitionEffects } from '@endora-co
 import { Migration20261016T082022OrdersOrderItemReturnableAtPurchase } from '@endora-commerce/mod-orders/migrations';
 import { Migration20261020T172007OrdersOrderItemGroups } from '@endora-commerce/mod-orders/migrations';
 import { Migration20261021T164807OrdersOrderCommentSystemNote } from '@endora-commerce/mod-orders/migrations';
+import { Migration20261021T165247OrdersOrderItemsPriceSource } from '@endora-commerce/mod-orders/migrations';
 
 // ── organizations ───────────────────────────────────────────────────────────
 import { Migration20260424T205317OrganizationsInit } from '@endora-commerce/mod-organizations/migrations';
@@ -280,6 +284,12 @@ import { Migration20260504T125655PriceListsEngine } from '@endora-commerce/mod-p
 import { Migration20260817T055457PriceListsSingleSystemPriceList } from '@endora-commerce/mod-price-lists/migrations';
 import { Migration20260821T135907PriceListsUnitPriceAmountIndex } from '@endora-commerce/mod-price-lists/migrations';
 import { Migration20261016T131148PriceListsPriceMatrixEntries } from '@endora-commerce/mod-price-lists/migrations';
+import { Migration20261021T165239PriceListsPriceBooksExpand } from '@endora-commerce/mod-price-lists/migrations';
+import { Migration20261021T232310PriceListsPriceBooksVersion } from '@endora-commerce/mod-price-lists/migrations';
+import { Migration20261022T012134PriceListsPriceSurfaceGenerations } from '@endora-commerce/mod-price-lists/migrations';
+import { Migration20261022T111815PriceListsPriceBooksConversion } from '@endora-commerce/mod-price-lists/migrations';
+import { Migration20261022T182527PriceListsProductLines } from '@endora-commerce/mod-price-lists/migrations';
+import { Migration20261023T152351PriceListsPriceSurfaceTargetedMarks } from '@endora-commerce/mod-price-lists/migrations';
 
 // ── product_feeds ───────────────────────────────────────────────────────────
 import { Migration20260802T073547ProductFeedsInit } from '@endora-commerce/mod-product-feeds/migrations';
@@ -289,6 +299,8 @@ import { Migration20260803T060153ProductFeedsTaxonomyRefresh } from '@endora-com
 import { Migration20260804T152741ProductFeedsWidenIssueSku } from '@endora-commerce/mod-product-feeds/migrations';
 import { Migration20260806T105956ProductFeedsFeedTokenSecret } from '@endora-commerce/mod-product-feeds/migrations';
 import { Migration20260806T125806ProductFeedsDelivery } from '@endora-commerce/mod-product-feeds/migrations';
+import { Migration20261023T195611ProductFeedsRunWithdrawalReason } from '@endora-commerce/mod-product-feeds/migrations';
+import { Migration20261023T234605ProductFeedsPriceListFkDropped } from '@endora-commerce/mod-product-feeds/migrations';
 
 // ── promotions ──────────────────────────────────────────────────────────────
 import { Migration20260505T074605PromotionsCriteria } from '@endora-commerce/mod-promotions/migrations';
@@ -403,6 +415,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('carts', Migration20261008T061751CartsCartSourceQuoteRequest),
   migration('carts', Migration20261018T074021CartsCartItemAgreedPrice),
   migration('carts', Migration20261019T043854CartsChannelBackfill),
+  migration('carts', Migration20261021T165244CartsCartItemsPriceSource),
 
   // ── catalog ─────────────────────────────────────────────────────────────────
   migration('catalog', Migration20260429T064146CatalogAttributeSetsInit),
@@ -433,6 +446,8 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('catalog', Migration20261008T092714CatalogCategoryContent),
   migration('catalog', Migration20261014T170531CatalogProductListSavedViews),
   migration('catalog', Migration20261016T082008CatalogOrderRules),
+  migration('catalog', Migration20261022T111811CatalogPriceFieldsRemoved),
+  migration('catalog', Migration20261022T182523CatalogAdminNameKeys),
 
   // ── cms ─────────────────────────────────────────────────────────────────────
   migration('cms', Migration20260425T162418CmsPagesInit),
@@ -581,6 +596,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('orders', Migration20261016T082022OrdersOrderItemReturnableAtPurchase),
   migration('orders', Migration20261020T172007OrdersOrderItemGroups),
   migration('orders', Migration20261021T164807OrdersOrderCommentSystemNote),
+  migration('orders', Migration20261021T165247OrdersOrderItemsPriceSource),
 
   // ── organizations ───────────────────────────────────────────────────────────
   migration('organizations', Migration20260424T205317OrganizationsInit),
@@ -612,6 +628,12 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('price_lists', Migration20260817T055457PriceListsSingleSystemPriceList),
   migration('price_lists', Migration20260821T135907PriceListsUnitPriceAmountIndex),
   migration('price_lists', Migration20261016T131148PriceListsPriceMatrixEntries),
+  migration('price_lists', Migration20261021T165239PriceListsPriceBooksExpand),
+  migration('price_lists', Migration20261021T232310PriceListsPriceBooksVersion),
+  migration('price_lists', Migration20261022T012134PriceListsPriceSurfaceGenerations),
+  migration('price_lists', Migration20261022T111815PriceListsPriceBooksConversion),
+  migration('price_lists', Migration20261022T182527PriceListsProductLines),
+  migration('price_lists', Migration20261023T152351PriceListsPriceSurfaceTargetedMarks),
 
   // ── product_feeds ───────────────────────────────────────────────────────────
   migration('product_feeds', Migration20260802T073547ProductFeedsInit),
@@ -621,6 +643,8 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('product_feeds', Migration20260804T152741ProductFeedsWidenIssueSku),
   migration('product_feeds', Migration20260806T105956ProductFeedsFeedTokenSecret),
   migration('product_feeds', Migration20260806T125806ProductFeedsDelivery),
+  migration('product_feeds', Migration20261023T195611ProductFeedsRunWithdrawalReason),
+  migration('product_feeds', Migration20261023T234605ProductFeedsPriceListFkDropped),
 
   // ── promotions ──────────────────────────────────────────────────────────────
   migration('promotions', Migration20260505T074605PromotionsCriteria),

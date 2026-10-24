@@ -41,8 +41,7 @@ export type ProductStatus = z.infer<typeof productStatusSchema>;
 /**
  * The most products one admin selection may carry: the cap of the admin product
  * browser (a session refuses to select a 201st row) and the `.max()` of every
- * request that submits such a selection in one call, e.g.
- * `bulkAddPriceListProductsRequestSchema`. One home for the number, so the
+ * request that submits such a selection in one call. One home for the number, so the
  * screen and the endpoint cannot disagree about it.
  */
 export const ADMIN_PRODUCT_SELECTION_MAX = 200;
@@ -248,6 +247,13 @@ export const productResolvedPriceSchema = z.object({
   basePrice: z.object({ amount: z.string(), currency: z.string().length(3) }).nullable(),
   salePrice: z.object({ amount: z.string(), currency: z.string().length(3) }).nullable(),
   displayMode: z.enum(['gross_only', 'net_only', 'both', 'none']),
+  /**
+   * Feature 161 (G14) — the catalogue price to show beside a lower buyer price
+   * ("list price / your price"). Present only while `pricing.show_list_price`
+   * is on and the channel's everyone price is above the price charged; the
+   * decision is the pricing engine's (`ListingPriceDetail.listPrice`, G9).
+   */
+  listPrice: z.object({ amount: z.string(), currency: z.string().length(3) }).optional(),
 });
 export type ProductResolvedPrice = z.infer<typeof productResolvedPriceSchema>;
 
@@ -260,6 +266,16 @@ export const productSummarySchema = z.object({
   categorySlugs: z.array(z.string()),
   primaryAssetUrl: z.string().url().nullable(),
   price: moneySchema.nullable(),
+  /**
+   * Feature 160 (FR-025) — the buyer's own price, struck through, when `price`
+   * is a charged sale. Absent otherwise.
+   */
+  compareAtPrice: moneySchema.nullable().optional(),
+  /**
+   * Feature 160 (FR-024) — the product's variants resolve to different prices
+   * for this viewer, and `price` is the lowest ("from").
+   */
+  priceVariesByVariant: z.boolean().optional(),
   stockIndicator: stockIndicatorSchema.nullable(),
   stockLevel: z.number().int().nullable(),
   /**
@@ -295,7 +311,6 @@ export const productVariantSchema = z.object({
   id: uuidSchema,
   sku: z.string().min(1).max(255),
   variantAttributeValues: z.record(z.string(), z.unknown()),
-  priceOverride: z.number().finite().nullable(),
   stockLevel: z.number().int().nullable(),
 });
 export type ProductVariant = z.infer<typeof productVariantSchema>;
@@ -947,10 +962,33 @@ export type BulkOperationsListResponse = z.infer<typeof bulkOperationsListRespon
 export const bulkOperationResponseSchema = z.object({ data: bulkOperationSchema });
 export type BulkOperationResponse = z.infer<typeof bulkOperationResponseSchema>;
 
+/**
+ * A variant's price is a row of a price book (feature 160, D-287 §5.8), not a
+ * field of the variant: a `priceOverride` in the body is refused with
+ * `400 PRICE_SET_IN_PRICE_BOOKS` by the route, before this schema strips it
+ * (FR-043; {@link PRICE_FIELDS_REFUSED_ON_VARIANTS}).
+ */
+/**
+ * A variant as the admin reads it (`serializeAdminVariant`) — the answer of
+ * `GET /api/v1/admin/catalog/products/:productId/variants` (feature 161):
+ * every variant of the product, whatever its channels, status or audience.
+ */
+export const adminProductVariantSchema = z.object({
+  id: z.string().uuid(),
+  parentProductId: z.string().uuid(),
+  sku: z.string(),
+  variantAttributeValues: z.record(z.string(), z.unknown()),
+  stockLevel: z.number().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type AdminProductVariant = z.infer<typeof adminProductVariantSchema>;
+export const adminProductVariantsResponseSchema = z.object({ data: z.array(adminProductVariantSchema) });
+export type AdminProductVariantsResponse = z.infer<typeof adminProductVariantsResponseSchema>;
+
 export const createVariantRequestSchema = z.object({
   sku: z.string().min(1).max(255),
   variantAttributeValues: z.record(z.string(), z.unknown()),
-  priceOverride: z.number().finite().optional(),
   stockLevel: z.number().int().nonnegative().optional(),
 });
 export type CreateVariantRequest = z.infer<typeof createVariantRequestSchema>;
@@ -959,6 +997,15 @@ export const updateVariantRequestSchema = createVariantRequestSchema
   .partial()
   .omit({ sku: true });
 export type UpdateVariantRequest = z.infer<typeof updateVariantRequestSchema>;
+
+/**
+ * Feature 160 (FR-043) — the old price fields a product or variant write
+ * refuses with `400 PRICE_SET_IN_PRICE_BOOKS`: prices are set in price books.
+ * On a product they are keys of `attributeValues` (the old *default price*) or,
+ * from an old client, of the body itself; on a variant, the old price override.
+ */
+export const PRICE_FIELDS_REFUSED_ON_PRODUCTS = ['defaultPrice', 'price'] as const;
+export const PRICE_FIELDS_REFUSED_ON_VARIANTS = ['priceOverride', 'defaultPrice', 'price'] as const;
 
 /**
  * Slider-numeric-kind discriminant (feature 002 T013/T021/T022). The API
@@ -2136,8 +2183,6 @@ export interface CatalogProductVariantRecord {
   parentProductId: string;
   sku: string;
   variantAttributeValues: Record<string, unknown>;
-  /** Decimal string, or `null` when the variant inherits the parent's price. */
-  priceOverride: string | null;
   stockLevel: number | null;
   createdAt: Date;
   updatedAt: Date;
@@ -2292,6 +2337,49 @@ export interface CatalogProductReadPort {
    * consulted.
    */
   listProductIdsByAttributeValue(query: CatalogAttributeValueQuery): Promise<string[]>;
+
+  /**
+   * Feature 161 (G15, `specs/161-price-book-editor/research.md` R14) — one page
+   * of the products a caller's **membership seam** names, ordered by the stored
+   * admin name key of the admin language (`en`, `pl`; any other reads `en`),
+   * then SKU, then id, and how many there are. `search` narrows to the products
+   * whose stored search key (folded shown name and SKU) or one of whose
+   * variants' SKU contains it — case- and accent-folded, taken literally. How
+   * `price_lists` pages a price book's product lines by label without either
+   * module naming the other's table.
+   *
+   * The seam is embedded as `(p.id in (<sql>)) is true`: a hashed probe while
+   * this module walks its own order index. It must select one uuid column.
+   * **Structural**: soft-deleted and inactive products answer like any other.
+   * One statement without a search (two with one: a count, then the page — by
+   * the trigram hits when they are few, by the ordered walk when many).
+   * `withTotal: false` skips the count of an unsearched page (`total` is then
+   * `null`) for a caller that counts its membership itself.
+   */
+  pageProductsByAdminName(query: CatalogAdminNamePageQuery): Promise<{ ids: string[]; total: number | null }>;
+}
+
+/**
+ * A subquery another module hands the catalogue to name a set of products
+ * (feature 161, G15): `sql` selects one uuid column, `params` bind its `?`.
+ * The precedent is `CustomFieldListFilterPort.condition`; the owner of the
+ * table the subquery reads is the module that wrote it.
+ */
+export interface CatalogProductMembership {
+  readonly sql: string;
+  readonly params: readonly unknown[];
+}
+
+/** {@link CatalogProductReadPort.pageProductsByAdminName}'s query. */
+export interface CatalogAdminNamePageQuery {
+  readonly membership: CatalogProductMembership;
+  readonly search?: string | null;
+  /** A language tag (`pl`, `pl-PL`); its primary subtag picks the key, `en` when it has none. */
+  readonly language: string | null;
+  readonly offset: number;
+  readonly limit: number;
+  /** Default `true`. Without a search, `false` skips the count. */
+  readonly withTotal?: boolean;
 }
 
 /** {@link CatalogProductReadPort.listProductIdsByAttributeValue}'s question. */

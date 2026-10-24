@@ -10,7 +10,6 @@ import type {
 import {
   CartLinePricing,
   agreedUnitPriceFor,
-  productOwnUnitPrice,
   storedPriceDiffers,
   type CartPricingContext,
 } from './cart-line-pricing.js';
@@ -73,10 +72,10 @@ describe('CartLinePricing.orderablePrice', () => {
     const pricing = new CartLinePricing(tieredPricing(), displayModes('gross_only'), noOrganizations);
     expect(
       await pricing.orderablePrice(ctx, { product: product(), variantId: null, quantity: 100 }),
-    ).toEqual({ ok: true, unitPrice: '1.00', currency: 'PLN', source: 'price_list' });
+    ).toEqual({ ok: true, unitPrice: '1.00', currency: 'PLN', source: 'price_list', priceSource: null });
     expect(
       await pricing.orderablePrice(ctx, { product: product(), variantId: null, quantity: 1 }),
-    ).toEqual({ ok: true, unitPrice: '11.49', currency: 'PLN', source: 'price_list' });
+    ).toEqual({ ok: true, unitPrice: '11.49', currency: 'PLN', source: 'price_list', priceSource: null });
   });
 
   it('keeps an agreed price only while the quantity is the agreed quantity', async () => {
@@ -95,7 +94,7 @@ describe('CartLinePricing.orderablePrice', () => {
         quantity: 10,
         agreed,
       }),
-    ).toEqual({ ok: true, unitPrice: '5.00', currency: 'PLN', source: 'agreed' });
+    ).toEqual({ ok: true, unitPrice: '5.00', currency: 'PLN', source: 'agreed', priceSource: 'agreed' });
     expect(calls).toEqual([]);
 
     expect(
@@ -105,10 +104,10 @@ describe('CartLinePricing.orderablePrice', () => {
         quantity: 11,
         agreed,
       }),
-    ).toEqual({ ok: true, unitPrice: '11.49', currency: 'PLN', source: 'price_list' });
+    ).toEqual({ ok: true, unitPrice: '11.49', currency: 'PLN', source: 'price_list', priceSource: null });
   });
 
-  it("falls back to the product's own price when no list applies", async () => {
+  it("is unpriced when no price book prices the line — the product's legacy own price is not a price (FR-018)", async () => {
     const pricing = new CartLinePricing(noListPrice, displayModes('gross_only'), noOrganizations);
     expect(
       await pricing.orderablePrice(ctx, {
@@ -116,7 +115,38 @@ describe('CartLinePricing.orderablePrice', () => {
         variantId: null,
         quantity: 3,
       }),
-    ).toEqual({ ok: true, unitPrice: '19.99', currency: 'PLN', source: 'product' });
+    ).toEqual({ ok: false, reason: 'unpriced' });
+  });
+
+  it('passes the variant and records the tier that priced the line (FR-030, FR-031)', async () => {
+    const seen: Array<string | null | undefined> = [];
+    const pricing = new CartLinePricing(
+      {
+        async resolveLinePrices({ lines }) {
+          for (const line of lines) seen.push(line.variantId);
+          return new Map(
+            lines.map((line) => [
+              line.key,
+              {
+                amount: '83.6000',
+                currency: 'PLN',
+                priceListId: 'book-1',
+                isSale: false,
+                bracketStartQuantity: 1,
+                displayMode: 'gross_only' as const,
+                source: 'buyer' as const,
+              },
+            ]),
+          );
+        },
+      },
+      displayModes('gross_only'),
+      noOrganizations,
+    );
+    expect(
+      await pricing.orderablePrice(ctx, { product: product(), variantId: 'v-red', quantity: 2 }),
+    ).toEqual({ ok: true, unitPrice: '83.60', currency: 'PLN', source: 'price_list', priceSource: 'buyer' });
+    expect(seen).toEqual(['v-red']);
   });
 
   it('answers unpriced when neither a list nor the product carries a price', async () => {
@@ -162,24 +192,12 @@ describe('CartLinePricing.orderablePrice', () => {
         quantity: 4,
         agreed: { quantity: 4, unitPrice: '0.00', currency: 'PLN' },
       }),
-    ).toEqual({ ok: true, unitPrice: '0.00', currency: 'PLN', source: 'agreed' });
+    ).toEqual({ ok: true, unitPrice: '0.00', currency: 'PLN', source: 'agreed', priceSource: 'agreed' });
   });
 });
 
 describe('CartLinePricing — D-287 P0', () => {
-  it("labels the product's own price with the basket channel's currency, not PLN (#303)", async () => {
-    const pricing = new CartLinePricing(noListPrice, displayModes('gross_only'), noOrganizations);
-    const eurBasket: CartPricingContext = { ...ctx, channel: { id: 'ch-eur', defaultCurrency: 'eur' } };
-    expect(
-      await pricing.orderablePrice(eurBasket, {
-        product: product({ defaultPrice: 19.99 }),
-        variantId: null,
-        quantity: 1,
-      }),
-    ).toEqual({ ok: true, unitPrice: '19.99', currency: 'EUR', source: 'product' });
-  });
-
-  it('answers unpriced for an own-price product on a basket whose channel is gone', async () => {
+  it('answers unpriced on a basket whose channel is gone', async () => {
     const pricing = new CartLinePricing(noListPrice, displayModes('gross_only'), noOrganizations);
     expect(
       await pricing.orderablePrice(
@@ -224,9 +242,9 @@ describe('CartLinePricing — D-287 P0', () => {
     expect(batches[0]!.quantities).toEqual([1, 100]);
     // The customer travels to the engine, which applies their own group.
     expect(batches[0]!.context['customerAccountId']).toBe('cust-1');
-    expect(answers.get('a')).toMatchObject({ unitPrice: '11.49', source: 'price_list' });
-    expect(answers.get('b')).toMatchObject({ unitPrice: '1.00', source: 'price_list' });
-    expect(answers.get('c')).toMatchObject({ unitPrice: '5.00', source: 'agreed' });
+    expect(answers.get('a')).toMatchObject({ unitPrice: '11.49', source: 'price_list', priceSource: null });
+    expect(answers.get('b')).toMatchObject({ unitPrice: '1.00', source: 'price_list', priceSource: null });
+    expect(answers.get('c')).toMatchObject({ unitPrice: '5.00', source: 'agreed', priceSource: 'agreed' });
   });
 });
 
@@ -243,17 +261,7 @@ describe('agreedUnitPriceFor', () => {
   });
 });
 
-describe('productOwnUnitPrice', () => {
-  it('reads defaultPrice, then price, and refuses what is not a non-negative number', () => {
-    expect(productOwnUnitPrice({ defaultPrice: '12.5' })).toBe('12.50');
-    expect(productOwnUnitPrice({ price: 7 })).toBe('7.00');
-    expect(productOwnUnitPrice({ defaultPrice: 0 })).toBe('0.00');
-    expect(productOwnUnitPrice({})).toBeNull();
-    expect(productOwnUnitPrice({ defaultPrice: 'abc' })).toBeNull();
-    expect(productOwnUnitPrice({ defaultPrice: -1 })).toBeNull();
-    expect(productOwnUnitPrice({ defaultPrice: null })).toBeNull();
-  });
-});
+
 
 describe('storedPriceDiffers', () => {
   it('compares amounts at two decimals and the currency', () => {
@@ -302,5 +310,36 @@ describe('CartLinePricing.contextFor — the basket’s own channel', () => {
       salesChannelId: 'ch-gone',
     });
     expect(context.channel).toBeNull();
+  });
+});
+
+/**
+ * Review finding 2 (release 0.108.0) — the cart stores the resolver's
+ * four-place amount at two places half-up on its decimal digits, which is what
+ * the card shows; `Number(amount).toFixed(2)` rounded the binary double, so
+ * 9.0450 was stored as 9.04 and 1.0050 as 1.00 (`specs/pricing/worked-examples.md`
+ * §10.16).
+ */
+describe('CartLinePricing — an x.xx50 amount is stored half-up, as the card shows it', () => {
+  const at = (amount: string): LinePricesPort =>
+    batched(() => ({ amount, currency: 'PLN', priceListId: 'b', isSale: false, bracketStartQuantity: 1, displayMode: 'gross_only' }));
+
+  it.each([
+    ['9.0450', '9.05'],
+    ['1.0050', '1.01'],
+    ['2.6750', '2.68'],
+    ['9.0449', '9.04'],
+  ])('%s is stored as %s', async (amount, stored) => {
+    const pricing = new CartLinePricing(at(amount), displayModes('gross_only'), noOrganizations);
+    expect(await pricing.orderablePrice(ctx, { product: product(), variantId: null, quantity: 1 })).toMatchObject({
+      ok: true,
+      unitPrice: stored,
+    });
+  });
+
+  it('a stored price equal to the half-up figure is not drift; the binary figure is', () => {
+    expect(storedPriceDiffers({ unitPrice: '9.05', currency: 'PLN' }, { unitPrice: '9.0450', currency: 'PLN' })).toBe(false);
+    expect(storedPriceDiffers({ unitPrice: '9.04', currency: 'PLN' }, { unitPrice: '9.0450', currency: 'PLN' })).toBe(true);
+    expect(storedPriceDiffers({ unitPrice: '1.01', currency: 'PLN' }, { unitPrice: '1.0050', currency: 'PLN' })).toBe(false);
   });
 });

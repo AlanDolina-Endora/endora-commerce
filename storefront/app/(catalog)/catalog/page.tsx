@@ -129,6 +129,7 @@ export default async function CatalogPage({ searchParams }: PageProps): Promise<
             columns={3}
             view={query.view}
             salesChannelCode={ctx.salesChannelCode}
+            more={products.pagination.hasMore}
           />
           <Pagination
             basePath="/catalog"

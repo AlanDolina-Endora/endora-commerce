@@ -9,6 +9,7 @@ import type {
   ListingPriceOrderChunk,
   ListingPriceOrderQuery,
   ListingPriceViewerContext,
+  PinnedPriceBookPublishability,
 } from '@endora-commerce/contracts';
 import { EventBus } from '@endora-commerce/platform/events';
 import {
@@ -76,7 +77,7 @@ class CorePricingService implements PricingServiceContract {
     } as PricingLineResult;
   }
 
-  async listBracketMinQuantities(_productId: string, _currencyCode: string): Promise<number[]> {
+  async listTierStarts(_productId: string, _currencyCode: string): Promise<number[]> {
     return [1, 10];
   }
 
@@ -101,6 +102,10 @@ class CorePricingService implements PricingServiceContract {
 
   async namedListPrices(): Promise<Map<string, string>> {
     return new Map();
+  }
+
+  async namedListPublishability(): Promise<PinnedPriceBookPublishability> {
+    return { publishable: true };
   }
 
   async orderByUnitPrice(): Promise<ListingPriceOrderChunk> {
@@ -137,8 +142,8 @@ class TaggingPricingService implements PricingServiceContract {
     return base === null ? null : { ...base, priceListId: `${this.tag}:${base.priceListId}` };
   }
 
-  async listBracketMinQuantities(productId: string, currencyCode: string): Promise<number[]> {
-    return this.inner.listBracketMinQuantities(productId, currencyCode);
+  async listTierStarts(productId: string, currencyCode: string): Promise<number[]> {
+    return this.inner.listTierStarts(productId, currencyCode);
   }
 
   async resolveListingPrices(
@@ -170,6 +175,14 @@ class TaggingPricingService implements PricingServiceContract {
     productIds: readonly string[];
   }): Promise<Map<string, string>> {
     return this.inner.namedListPrices(input);
+  }
+
+  async namedListPublishability(input: {
+    priceListId: string;
+    currencyCode: string;
+    salesChannelId: string;
+  }): Promise<PinnedPriceBookPublishability> {
+    return this.inner.namedListPublishability(input);
   }
 
   async orderByUnitPrice(input: ListingPriceOrderQuery): Promise<ListingPriceOrderChunk> {
@@ -278,7 +291,7 @@ describe('T062 — a client wraps core instead of replacing it', () => {
     const { container } = compose([coreModule(), decoratingModule('acme_pricing', 'acme')]);
 
     const pricing = container.cradle['pricingService'] as PricingServiceContract;
-    expect(await pricing.listBracketMinQuantities('p1', 'PLN')).toEqual([1, 10]);
+    expect(await pricing.listTierStarts('p1', 'PLN')).toEqual([1, 10]);
   });
 
   it('preserves the inner registration lifetime, so a singleton stays one instance', async () => {

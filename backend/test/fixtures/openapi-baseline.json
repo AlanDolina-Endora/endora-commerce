@@ -1492,6 +1492,13 @@
       }
     },
     "/api/v1/admin/catalog/products/{productId}/variants": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
       "post": {
         "responses": {
           "200": {
@@ -3206,6 +3213,15 @@
         }
       }
     },
+    "/api/v1/admin/feedback": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/global-search": {
       "get": {
         "responses": {
@@ -4846,7 +4862,7 @@
         }
       }
     },
-    "/api/v1/admin/price-lists-engine": {
+    "/api/v1/admin/price-books": {
       "get": {
         "responses": {
           "200": {
@@ -4862,7 +4878,25 @@
         }
       }
     },
-    "/api/v1/admin/price-lists-engine/internal/sweep": {
+    "/api/v1/admin/price-books/base-prices": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/price-books/base-prices/{productId}": {
+      "put": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/price-books/internal/sweep": {
       "post": {
         "responses": {
           "200": {
@@ -4871,7 +4905,153 @@
         }
       }
     },
-    "/api/v1/admin/price-lists-engine/{id}": {
+    "/api/v1/admin/price-books/precedence": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/price-books/precedence/*": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/price-books/resolve": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/price-books/settings/show-list-price": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/price-books/targets/attributes": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/price-books/targets/categories": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/price-books/targets/currencies": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/price-books/targets/customer-groups": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/price-books/targets/organizations": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/price-books/targets/sales-channels": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/price-books/{id}": {
       "delete": {
         "responses": {
           "200": {
@@ -4894,7 +5074,7 @@
         }
       }
     },
-    "/api/v1/admin/price-lists-engine/{id}/activate": {
+    "/api/v1/admin/price-books/{id}/activate": {
       "post": {
         "responses": {
           "200": {
@@ -4903,7 +5083,7 @@
         }
       }
     },
-    "/api/v1/admin/price-lists-engine/{id}/draftify": {
+    "/api/v1/admin/price-books/{id}/draftify": {
       "post": {
         "responses": {
           "200": {
@@ -4912,7 +5092,7 @@
         }
       }
     },
-    "/api/v1/admin/price-lists-engine/{id}/duplicate": {
+    "/api/v1/admin/price-books/{id}/duplicate": {
       "post": {
         "responses": {
           "200": {
@@ -4921,87 +5101,25 @@
         }
       }
     },
-    "/api/v1/admin/price-lists-engine/{id}/matrix": {
+    "/api/v1/admin/price-books/{id}/lines": {
       "get": {
         "responses": {
           "200": {
             "description": "OK"
           }
         }
-      },
-      "post": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
       }
     },
-    "/api/v1/admin/price-lists-engine/{id}/matrix/{entryId}": {
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      },
+    "/api/v1/admin/price-books/{id}/product-lines": {
       "get": {
         "responses": {
           "200": {
             "description": "OK"
           }
         }
-      },
-      "patch": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
       }
     },
-    "/api/v1/admin/price-lists-engine/{id}/products": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      },
-      "post": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      },
-      "put": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/admin/price-lists-engine/{id}/products/bulk-add": {
-      "post": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/admin/price-lists-engine/{id}/products/{productId}": {
-      "delete": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/admin/price-lists-engine/{id}/products/{productId}/brackets": {
+    "/api/v1/admin/price-books/{id}/rows": {
       "get": {
         "responses": {
           "200": {
@@ -5010,15 +5128,6 @@
         }
       },
       "put": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/admin/price-lists-engine/{id}/products/{productId}/brackets/copy": {
-      "post": {
         "responses": {
           "200": {
             "description": "OK"
@@ -5044,60 +5153,6 @@
         }
       },
       "put": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/admin/pricing/rule-targets/attributes": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/admin/pricing/rule-targets/categories": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/admin/pricing/rule-targets/currencies": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/admin/pricing/rule-targets/customer-groups": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/admin/pricing/rule-targets/organizations": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/admin/pricing/rule-targets/sales-channels": {
-      "get": {
         "responses": {
           "200": {
             "description": "OK"
@@ -5268,24 +5323,6 @@
     },
     "/api/v1/admin/product-feeds/{id}/token/rotate": {
       "post": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/admin/products/{id}/resolved-price": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/admin/products/{productId}/price-lists": {
-      "get": {
         "responses": {
           "200": {
             "description": "OK"
@@ -5851,6 +5888,15 @@
       }
     },
     "/api/v1/admin/quote-requests/{id}/pdf/send": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quote-requests/{id}/prepare-customer-basket": {
       "post": {
         "responses": {
           "200": {

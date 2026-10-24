@@ -2391,6 +2391,459 @@ zaktualizowana z `0.106.0` poleceniem `pnpm run upgrade 0.107.0`, do żadnej ins
 utworzonym we wcześniejszym wydaniu nie wprowadzono powyższych grup plików; kolejność kroków i
 zmiany w storefroncie nie były wypróbowane.
 
+### Po aktualizacji do wydania 0.108.0 {#after-0-108-0}
+
+`pnpm run upgrade 0.108.0` przenosi pakiety wydania z `0.107.0` i wykonuje jego migracje —
+dwadzieścia dwie, z czego dwanaście dotyczy nowego modelu cen i jego edytora. **Wydanie zastępuje
+sposób przechowywania i wyliczania cen w jednym kroku, bez okresu zgodności**: cenniki wcześniejszych
+wydań, z ich regułami stosowania (Application rule), listami produktów i przedziałami ilościowymi,
+stają się **cennikami w nowym modelu**, a produkt nie ma już własnej ceny. Ceny bazowe, które
+instancja naliczała z cennika *Default*, zostają zachowane; **każdy inny cennik aktualizacja
+usuwa** i nic go nie przenosi — jedynym wyjątkiem jest cennik, do którego przypięty jest feed
+produktowy: zostaje jako pusty, wygasły cennik (krok 3). Przeczytaj poniższe kroki, zanim
+uruchomisz polecenie. Pozostałe zmiany wydania następują w każdej części tej sekcji po zmianie cen:
+minimalne ilości zamówienia i produkty podlegające zwrotowi, grupy pozycji w zapytaniach ofertowych
+i zamówieniach, filtry list według pól niestandardowych i przenoszenie wartości pól
+niestandardowych między rekordami, edycja szans sprzedaży w miejscu, teksty produktów dla kanału
+sprzedaży w storefroncie, akcja operatora przygotowująca koszyk klienta z oferty oraz nowy moduł
+`admin_feedback`. Sekcja mówi, co zrobić i w jakiej kolejności, a potem — co działa inaczej dla
+[operatorów](#after-0-108-0-operators),
+[klientów API i integratorów](#after-0-108-0-api),
+[autorów modułów i modułów nakładkowych](#after-0-108-0-authors) oraz właściciela
+[istniejącego storefrontu](#after-0-108-0-storefront). Sam model opisuje strona
+[Cenniki](./modules/price_lists.md), a pełną listę tego, co usunięto, wraz z zamiennikami —
+[uwaga migracyjna](./modules/price_lists/developer-guide.md#upgrading-from-the-old-model-migration-note)
+w przewodniku dla deweloperów.
+
+#### Co zrobić i w jakiej kolejności {#after-0-108-0-steps}
+
+Przed aktualizacją:
+
+1. **Zapisz każdy cennik inny niż *Default*: jego ceny, kogo wyceniał i w których kanałach.**
+   `Migration20261022T111815PriceListsPriceBooksConversion` usuwa każdy cennik z regułą stosowania —
+   kontrakty grup klientów i organizacji, promocje, cenniki katalogowe — razem z listą produktów,
+   przedziałami, regułą i pozycjami macierzy cen, a potem usuwa stare tabele. Cennik, do którego
+   przypięty jest feed produktowy, zostaje zamiast tego wycofany z użycia (krok 3), ale jest pusty,
+   więc jego ceny i tak przepadają. To, co wyceniały, trzeba po aktualizacji wprowadzić ponownie jako
+   cenniki; kopia bazy danych z
+   [Zanim zaczniesz](#zanim-zaczniesz) jest jedyną kopią tych wierszy.
+2. **Zapisz cenę każdego produktu, który ma *Default unit price*, ale nie ma wiersza w cenniku
+   *Default*.** `Migration20261022T111811CatalogPriceFieldsRemoved` usuwa `defaultPrice` i `price`
+   z wartości atrybutów każdego produktu oraz kolumnę `product_variants.price_override`; żadne z nich
+   nie jest przenoszone. Produkt wyceniany tylko przez *Default unit price* po aktualizacji **nie ma
+   ceny** — koszyk odrzuca go z kodem `422 CART_PRODUCT_UNPRICED` — dopóki nie wpisze się dla niego
+   ceny bazowej. *Price override* wariantu nigdy nie był naliczany, więc jego usunięcie nie zmienia
+   żadnej ceny.
+3. **Feed produktowy przypięty do cennika innego niż *Default*: nic nie trzeba robić.** Feed
+   produktowy przypięty do cennika, który aktualizacja usuwa, pozostaje przypięty do wycofanej kopii
+   tego cennika: pustego, wygasłego cennika dla wszystkich, bez kanału sprzedaży i z tym samym id, o
+   nazwie `<name> (removed by the 0.108.0 upgrade)` (dawna nazwa jest skracana tak, by całość
+   mieściła się w 200 znakach). Strona feedu ostrzega, że jego cennik nie jest aktywny, a następne
+   generowanie feedu wycofuje opublikowany plik, więc link odpowiada tak, jakby feed nigdy nie
+   został wygenerowany — dopóki nie przypniesz feedu do cennika, który obowiązuje, albo go nie
+   odepniesz (krok 9). Wycofany cennik możesz usunąć, gdy przestanie być potrzebny; feed nadal do
+   niego przypięty ostrzega wtedy, że jego cennik już nie istnieje.
+4. **Jeśli Twoja integracja zapisuje ceny przez `priceListAdminPort`** — zwykle import cen
+   konektora PIM — przygotuj jej nową wersję: port został usunięty, a zastępuje go
+   `priceBookWritePort`. Konektor zbudowany dla starego portu nie może w tym wydaniu zapisywać cen.
+   Odpowiedniki metoda po metodzie są w
+   [uwadze migracyjnej](./modules/price_lists/developer-guide.md#upgrading-from-the-old-model-migration-note)
+   przewodnika dla deweloperów.
+
+Sama aktualizacja:
+
+5. **Uruchom `pnpm run upgrade 0.108.0`.** `setup` wykonuje migracje moduł po module, w kolejności
+   zależności modułów, a migracje jednego modułu — w kolejności ich znaczników czasu; dlatego każda
+   migracja `catalog`, w tym usunięcie pól cen, wykonuje się przed konwersją. Według modułów:
+
+   | Migracja | Moduł | Co robi |
+   | --- | --- | --- |
+   | `Migration20261016T082008CatalogOrderRules` | `catalog` | `products.min_order_quantity`, `products.returnable`, `product_packaging_units.min_order_units` |
+   | `Migration20261022T111811CatalogPriceFieldsRemoved` | `catalog` | Usuwa `product_variants.price_override`, `defaultPrice` i `price` — zob. krok 2 |
+   | `Migration20261022T182523CatalogAdminNameKeys` | `catalog` | Zapisane, zindeksowane klucze nazwy i wyszukiwania w panelu na `products` oraz rozszerzenie `pg_trgm` |
+   | `Migration20261019T103522CustomFieldsDefinitionListFilter` | `custom_fields` | `custom_field_definitions.list_filter`, `false` dla każdego istniejącego pola |
+   | `Migration20261020T110920CustomFieldsDefinitionCarryTo` | `custom_fields` | `custom_field_definitions.carry_to`, puste dla każdego istniejącego pola |
+   | `Migration20261016T082022OrdersOrderItemReturnableAtPurchase` | `orders` | `order_items.returnable_at_purchase`, może być `null` |
+   | `Migration20261020T172007OrdersOrderItemGroups` | `orders` | Tabela `order_item_groups`, `order_items.group_id` i `position` |
+   | `Migration20261021T164807OrdersOrderCommentSystemNote` | `orders` | `order_comments.system_note`, może być `null` |
+   | `Migration20261021T165247OrdersOrderItemsPriceSource` | `orders` | `order_items.price_source`, może być `null` |
+   | `Migration20261018T122118QuoteRequestsItemPackagingUnitId` | `quote_requests` | `quote_request_items.packaging_unit_id`, może być `null` |
+   | `Migration20261020T171341QuoteRequestsQuoteRequestItemGroups` | `quote_requests` | Tabela `quote_request_item_groups`, `quote_request_items.group_id` i `position` |
+   | `Migration20261021T164808QuoteRequestsQuoteRequestEventCarrySkipped` | `quote_requests` | Dopuszcza typ zdarzenia `custom-field-carry-skipped` |
+   | `Migration20261020T131018PwaPreferencesOrganizationAttributionCheck` | `pwa` | Ograniczenie `CHECK` na `push_notification_preferences` |
+   | `Migration20261021T165244CartsCartItemsPriceSource` | `carts` | `cart_items.price_source`, może być `null` |
+   | `Migration20261023T195611ProductFeedsRunWithdrawalReason` | `product_feeds` | `product_feed_runs.withdrawal_reason`, może być `null` — dla generowania, które wycofało opublikowany plik |
+   | `Migration20261023T234605ProductFeedsPriceListFkDropped` | `product_feeds` | Usuwa `product_feeds_price_list_fk`, więc wycofany cennik można później usunąć; wykonuje się po konwersji |
+   | `Migration20261021T165239PriceListsPriceBooksExpand` | `price_lists` | Nagłówek cennika, zbiory odbiorców i kanałów, rozszerzone wiersze, wersja kolejności 1, tabele powierzchni cen |
+   | `Migration20261021T232310PriceListsPriceBooksVersion` | `price_lists` | `price_lists.version` i `ever_activated` |
+   | `Migration20261022T012134PriceListsPriceSurfaceGenerations` | `price_lists` | Generacje powierzchni cen |
+   | `Migration20261022T111815PriceListsPriceBooksConversion` | `price_lists` | Konwersja — zob. krok 1 i niżej |
+   | `Migration20261022T182527PriceListsProductLines` | `price_lists` | Tabela `price_list_product_lines`, wypełniona na podstawie zapisanych wierszy |
+   | `Migration20261023T152351PriceListsPriceSurfaceTargetedMarks` | `price_lists` | Tabela `price_profile_stale_products` i `price_profiles.revision` do odświeżania powierzchni cen tylko tam, gdzie to potrzebne |
+
+   Konwersja wykonuje się w jednej transakcji: tworzy jeden **cennik cen bazowych** na każdą walutę
+   użytą w przedziale cennika *Default* oraz na domyślną walutę platformy; zamienia każdy przedział
+   cennika *Default* w stały wiersz cennika cen bazowych swojej waluty; usuwa każdy inny cennik
+   poza tym, do którego odwołuje się jeszcze inna tabela — przypięty feed — który wycofuje z użycia
+   jako pusty, wygasły cennik z tym samym id (krok 3);
+   usuwa stare tabele i kolumny. `Migration20261022T182523CatalogAdminNameKeys` dodaje do
+   `products` cztery kolumny generowane, a każda z nich przepisuje tabelę pod blokadą wyłączną —
+   w pomiarze platformy 3,5–7 s na kolumnę przy 50 000 produktów — co jest jeszcze jednym powodem,
+   by API pozostało zatrzymane.
+
+Po aktualizacji, zanim instancja znów przyjmie ruch:
+
+6. **Upewnij się, że działa konsument kolejek.** Listy sortowane i filtrowane według ceny są
+   porządkowane według cen, które z wyprzedzeniem wylicza worker `price_lists.surface`; działa on w
+   procesie, który obsługuje kolejki (`BACKEND_ROLE` nieustawione, `all` albo `worker`) i ma
+   połączenie Redis dla kolejek — [Konsumenci kolejek](./operations/queue-consumers.md).
+   Aktualizacja niczego nie buduje: pierwsze żądanie sortowane według ceny w każdym kanale
+   sprzedaży i walucie rejestruje to, czego potrzebuje, i zleca to workerowi, a do czasu, aż worker
+   to zbuduje, dostaje domyślny porządek katalogu — z poprawnymi cenami na kartach produktów. Bez
+   konsumenta sortowanie według ceny nigdy nie porządkuje według ceny.
+7. **Sprawdź ceny bazowe.** Otwórz zakładkę *Pricing* kilku produktów: ceny pochodzące z cennika
+   *Default* są tam, dla każdej waluty. Wpisz cenę bazową każdego produktu z kroku 2.
+8. **Utwórz ponownie cenniki**, które zastępują cenniki z kroku 1, w **Cennikach** (`/price-lists`
+   albo ⌘K / CTRL+K → *Cenniki*). Cennik ma jedną walutę, zbiór kanałów sprzedaży, odbiorców —
+   wszystkich, wybrane grupy klientów albo wybrane organizacje — i linie; niczego nie wycenia,
+   dopóki nie zostanie aktywowany. *Wyjaśnienie ceny* (`/price-lists/explain`) pokazuje dla
+   kupującego i produktu, która linia zdecydowała o cenie.
+9. **Przypnij ponownie feedy z kroku 3 albo je odepnij** przez API feedów produktowych
+   (`PATCH /api/v1/admin/product-feeds/:id` z `priceListId` — id cennika albo `null`); w panelu nie
+   ma jeszcze do tego kontrolki (zgłoszenie #414). Przypnij każdy do cennika, który obowiązuje
+   kogokolwiek w kanale feedu: *Aktywny* albo *Zaplanowany* w swoich datach, przypisany do kanału feedu i dla wszystkich. Feed przypięty do
+   każdego innego cennika nie publikuje z niego żadnych cen — strona feedu mówi dlaczego — a jego
+   następne generowanie kończy się stanem *Wycofany* i wycofuje opublikowany plik, więc link
+   odpowiada tak jak dla feedu nigdy niewygenerowanego, dopóki cennik znów nie zacznie obowiązywać.
+   Wycofanie nie jest błędem: nie wywołuje powiadomienia i niczego nie dostarcza.
+10. **Oznacz produkty, które kupujący mogą zwracać.** `Migration20261016T082008CatalogOrderRules`
+    dodaje każdemu produktowi flagę **Podlega zwrotowi**, wyłączoną: pozycja zamówienia złożonego po
+    aktualizacji podlega zwrotowi tylko wtedy, gdy jej produkt podlegał zwrotowi w chwili złożenia
+    zamówienia, a zwrot (`kind: 'return'`) obejmujący każdą inną pozycję jest odrzucany z kodem
+    `422 RETURN_LINE_NOT_RETURNABLE`. Zamówienia złożone przed aktualizacją się nie zmieniają — ich
+    pozycje nie mają zapisanej wartości i nadal podlegają zwrotowi — a reklamacje nigdy nie są
+    ograniczane. Zaznacz produkty na liście produktów i użyj **Edycja masowa → Podlega zwrotowi →
+    Tak — podlega zwrotowi**; flaga jednego produktu jest na karcie **Zasady zamawiania** w jego
+    zakładce *Inventory*.
+
+W dowolnym momencie:
+
+11. **Nadaj `catalog:read` każdej roli, która ma `price_lists:write`.** Dodawanie linii produktów do
+    cennika korzysta z przeglądarki produktów katalogu, którą chroni `catalog:read`; edytor ról w
+    *Admin roles* (`/admin-roles`) pokazuje brak dla roli, która go nie ma, z dodaniem jednym
+    kliknięciem. Oba kody uprawnień cenników się nie zmieniły; ich etykiety brzmią teraz *View price
+    books and display modes* oraz *Edit price books, base prices and display modes*.
+12. **W instancji z danymi sklepu demonstracyjnego** uruchom `pnpm run cli demo reset`, a potem
+    `pnpm run cli demo seed`: konwersja usunęła dawne cenniki wersji demonstracyjnej, a ponowne
+    wczytanie przywraca jej ceny bazowe i cenniki przykładów ze strony
+    [Cenniki](./modules/price_lists.md).
+13. **Zdecyduj, czy dodać `admin_feedback`.** Wydanie wprowadza nowy pakiet
+    `@endora-commerce/mod-admin-feedback`, który pozwala administratorowi wysłać opinię twórcom
+    Endora Commerce przez link *Wyślij opinię* na pasku bocznym panelu. Żaden moduł od niego nie
+    zależy, więc aktualizacja go nie deklaruje; jak to zrobić, mówi sekcja [Dodawanie modułu, który
+    jest nowy w wydaniu](#adding-a-new-module). Po zadeklarowaniu jest **włączony i wysyła dane do
+    Endora** (`admin_feedback.relay_url`, domyślnie
+    `https://commerce.endora.software/api/platform-feedback/`): każda wiadomość zawiera wpisany
+    tekst, adres e-mail nadawcy i opcjonalny telefon, język i adres panelu, wydanie, na którym
+    działa instancja, jej skonfigurowany publiczny adres API oraz imię i nazwisko i id
+    administratora, który ją wysłał. Wyłącz moduł w **Ustawienia → Feedback**
+    (`admin_feedback.module_enabled`) albo wyczyść adres przekaźnika, jeśli instancja nie może
+    wysyłać danych do Endora. Instancja niczego nie zapisuje.
+14. **Oznacz pola niestandardowe, według których listy w panelu mają filtrować.** Listy zamówień,
+    zapytań ofertowych i szans sprzedaży oferują filtr dla każdego pola niestandardowego zamówienia,
+    zapytania ofertowego albo szansy sprzedaży, które ma włączoną nową opcję *Używaj jako filtra
+    listy*, a każde istniejące pole ma ją wyłączoną. Włącz ją w edytorze pola na `/custom-fields`,
+    który teraz pozwala edytować istniejące pola.
+
+#### Dla operatorów {#after-0-108-0-operators}
+
+##### Ceny
+
+- **Cenniki działają w nowym modelu.** Pozycja paska bocznego *Cenniki* otwiera listę cenników; pole
+  *Default unit price* w edytorze produktu, kolumna *Price override* w tabeli wariantów i strefa
+  *Linked price lists* produktu zniknęły, a ceny bazowe produktu są w jego zakładce *Pricing*.
+  *Ustawienia cenowe* (⌘K / CTRL+K) zawierają tryby prezentacji, przełącznik pokazywania ceny
+  katalogowej obok ceny kupującego (`pricing.show_list_price`, domyślnie wyłączony) i kolejność cen,
+  tylko do odczytu.
+- **Jak ustalana jest cena** — cena bazowa, cena katalogowa dla wszystkich w kanale, cena
+  kontraktowa kupującego i cena promocyjna naliczana tylko wtedy, gdy jest niższa — opisuje strona
+  [Cenniki](./modules/price_lists.md), z przykładami.
+- **Zmiana ceny pojawia się na liście sortowanej według ceny w ciągu około pół sekundy** w
+  pomiarach platformy; zmiana, która sięga całego katalogu — linia dla wszystkich produktów albo
+  tylko dla wartości atrybutu, ponad 10 000 produktów naraz, zmiana kanału sprzedaży — trwa do około
+  pięciu minut przy mniej więcej 200 grupach kupujących z własnymi cennikami (zmierzono około 4 min 35 s
+  przy 201; przyspieszenie opisuje zgłoszenie #416). Ceny na kartach produktów nigdy
+  się nie opóźniają.
+- **Import produktów odrzuca plik z kolumną ceny** — `default_price`, `defaultPrice`, `price`,
+  `price_override` albo `priceOverride` — z kodem `400 PRICE_SET_IN_PRICE_BOOKS` i niczego nie
+  importuje. Ceny importuje się przez import CSV cenników albo konektorem PIM przez
+  `priceBookWritePort`.
+- **Zalogowany klient jest wyceniany według własnej grupy klientów**, gdy jego konto ma grupę inną
+  niż jego organizacja — na listach, na stronie produktu, w wyszukiwaniu i podpowiedziach, w
+  porównaniach, w koszyku i przy składaniu zamówienia. Koszyk pokazuje też cenę, jaką naliczy
+  złożenie zamówienia: pozycja z zaakceptowanej oferty pokazuje cenę uzgodnioną przy uzgodnionej
+  ilości, a pozycja, którą składanie zamówienia by odrzuciło, jest oznaczona jako niedostępna.
+- **Ponowne zamówienie pomija pozycje, których nic już nie wycenia** dla kupującego albo które są
+  sprzedawane tylko na zapytanie, i informuje o nich; wcześniej taka pozycja trafiała do koszyka w
+  cenie ze starego zamówienia, a koszyk był potem odrzucany przy składaniu zamówienia.
+
+##### Minimalne ilości zamówienia i produkty podlegające zwrotowi
+
+- **Produkt może mieć minimalną ilość zamówienia** (w sztukach, dla produktów prostych i
+  konfigurowalnych), a jednostka opakowania — minimalną liczbę jednostek: karta **Zasady
+  zamawiania** w zakładce *Inventory* produktu i kolumna **Minimum (w jednostkach)** jego jednostek
+  opakowania. Istniejące produkty nie mają minimum, więc nic się nie zmienia, dopóki go nie
+  ustawisz. Minimum jest oceniane na sumie produktu ze wszystkich pozycji i wariantów koszyka.
+- **Gdzie jest egzekwowane.** Koszyk odrzuca dodanie albo zmianę, po której produkt byłby poniżej
+  minimum, a przesłanie koszyka do akceptacji, finalizacja zamówienia, zakup jednym kliknięciem, ponowne
+  zamówienie, *Utwórz zamówienie* w panelu i zewnętrzne API zamówień odrzucają koszyk poniżej
+  minimum. Pozycja z zaakceptowanego zapytania ofertowego jest zwolniona przy uzgodnionej ilości,
+  dopóki oferta jest ważna. Zapytanie ofertowe kupującego poniżej minimum jest odrzucane; to, które
+  tworzy albo modyfikuje operator, zostaje zapisane, a pozycja dostaje znaczek *Poniżej minimum*.
+  Import szybkiego zamówienia przez operatora oznacza takie wiersze jako ostrzeżenia, a import
+  kupującego je odrzuca. Zakup jednym kliknięciem zamawia minimalną ilość produktu zamiast 1.
+- **Zwroty uwzględniają flagę Podlega zwrotowi** (krok 10): zwrot pozycji, która nie podlegała
+  zwrotowi w chwili zakupu, jest odrzucany; reklamacja takiej pozycji jest przyjmowana z
+  zatwierdzoną kwotą zwrotu `0` wpisaną domyślnie, a sprawa oznacza ją jako *Bez prawa zwrotu przy
+  zakupie*.
+- **Limity.** *Utwórz zamówienie* w panelu, zewnętrzne API zamówień i budowanie szybkiego
+  zamówienia przyjmują najwyżej 200 pozycji; `quick_order.import_max_rows` jest ograniczane do
+  1–10 000 niezależnie od zapisanej wartości.
+
+##### Grupy pozycji w zapytaniach ofertowych i zamówieniach
+
+- **Pozycje zapytania ofertowego można układać w nazwane, uporządkowane grupy** w jego zakładce
+  *Modify* i na ekranie tworzenia, z podsumowaniem każdej grupy; *Podziel pozycję* przenosi część
+  ilości pozycji na nową pozycję, a jeden produkt może być na kilku pozycjach. Zamówienie złożone z
+  zaakceptowanej oferty przejmuje jej grupy, a *Utwórz zamówienie* w panelu ma ten sam edytor. Grup
+  zamówienia nie można zmienić po jego złożeniu. PDF oferty drukuje grupy jako sekcje, podobnie jak
+  każdy szablon dokumentu, którego tabela pozycji nie ma wybranego grupowania, także szablony
+  zapisane przed aktualizacją — jej domyślnym ustawieniem są teraz *Grupy z dokumentu*. Dokument
+  bez grup drukuje się jak wcześniej; wybierz *Bez grupowania* w edytorze szablonu, aby tabela
+  pozostała płaska niezależnie od dokumentu.
+
+##### Pola niestandardowe
+
+- **Filtry list** (krok 14) na listach zamówień, zapytań ofertowych i szans sprzedaży: zapisywane
+  w adresie, w zapisanych widokach i — na liście zamówień — w eksporcie CSV.
+- **Istniejące definicje można edytować** na `/custom-fields`: etykiety, *Wymagane*, *Używaj jako
+  filtra listy* i opcje pola wyboru; klucz i typ wartości pozostają stałe.
+- **Wartości mogą być przenoszone między rekordami.** Opcje *Przenoś wartość do: …* definicji
+  przenoszą jej wartości z zapytania ofertowego do złożonego z niego zamówienia i do jego szansy
+  sprzedaży, z zamówienia do jego szansy sprzedaży oraz z szansy sprzedaży do zapytania ofertowego
+  albo zamówienia, które administrator z niej tworzy — tylko do pustych pól. Wartość, której nie da
+  się przenieść, jest wymieniona w wewnętrznej notatce systemowej zamówienia albo w historii
+  zapytania ofertowego. Żadna istniejąca definicja niczego nie przenosi.
+- **Pola niestandardowe zapytań ofertowych podlegają modułowi `quote_requests`**: gdy jest
+  wyłączony, nie są wyświetlane ani zapisywalne na `/custom-fields`, a wracają bez zmian razem z
+  nim.
+- **Historia zmian szansy sprzedaży pokazuje wartości pól niestandardowych tylko roli z
+  uprawnieniem `custom_fields:read`.**
+
+##### Szanse sprzedaży
+
+- **Ekran szansy sprzedaży jest edytowany w miejscu** — tytuł, opis, przewidywana data
+  zamknięcia, osoba kontaktowa, kanał sprzedaży i wartości typowane, każde tam, gdzie jest
+  pokazywane — a opisy, notatki, wiadomości i opisy zdarzeń pisze się w edytorze tekstu
+  sformatowanego. Odwołanie do zamówienia pokazuje jego stan, sumę, datę i klienta.
+
+##### Zapytania ofertowe
+
+- **Akcja *Przygotuj koszyk klienta*** zatwierdzonego zapytania ofertowego umieszcza jego pozycje
+  w koszyku klienta, do którego należy, po uzgodnionych cenach, zastępując zawartość tego koszyka;
+  klient kończy zamówienie przy finalizacji. Wcześniejszy przycisk *Place order* wylogowywał
+  administratora.
+
+##### Teksty produktów w storefroncie
+
+- **Teksty produktu dla kanału sprzedaży trafiają do storefrontu.** Nazwa, opis, pola SEO i
+  wartości atrybutów zapisane dla kanału sprzedaży w edytorze zakresu produktu są tym, co pokazuje
+  strona produktu w storefroncie w tym kanale, a zapisana tam nazwa — tym, co pokazują karty list,
+  wyniki wyszukiwania i podpowiedzi.
+
+##### Opinie z panelu
+
+- **`admin_feedback`** (krok 13) dodaje *Wyślij opinię* obok numeru wydania na pasku bocznym, dla
+  każdego zalogowanego administratora, najwyżej pięć wiadomości na administratora w ciągu dziesięciu
+  minut.
+
+#### Dla klientów API i integratorów {#after-0-108-0-api}
+
+##### Ceny
+
+- **Dawne trasy cen w API administracyjnym zostały usunięte**: `/api/v1/admin/price-lists-engine/…`,
+  `/api/v1/admin/pricing/rule-targets/…`, `/api/v1/admin/products/:id/price-lists` i
+  `/api/v1/admin/products/:id/resolved-price`. Zastępuje je `/api/v1/admin/price-books/…`:
+  `GET ?productId=` dla cenników produktu i `POST /api/v1/admin/price-books/resolve` dla wyliczonej
+  ceny z wyjaśnieniem.
+- **Zapis katalogu, który podaje cenę, jest odrzucany**: `POST`/`PATCH
+  /api/v1/admin/catalog/products[/:id]` z `attributeValues.defaultPrice` albo
+  `attributeValues.price` oraz zapis wariantu z `priceOverride` zwracają
+  `400 PRICE_SET_IN_PRICE_BOOKS` i niczego nie zapisują. Ceny bazowe zapisuje się przez
+  `PUT /api/v1/admin/price-books/base-prices/:productId`.
+- **`GET /api/v1/storefront/products/:id/resolved-price` uczciwie opisuje produkt bez ceny**:
+  `baseListId`, `basePrice` i `quantityBracket` mają wszystkie wartość `null`, podczas gdy wcześniej
+  `baseListId` był pustym tekstem. Kwoty są tekstami dziesiętnymi
+  (`{ "amount": "199.0000", "currency": "PLN" }`), tak jak trasa zawsze je wysyłała. Odpowiedź
+  zawiera też `source` (który krok wycenił produkt), `compareAt` oraz — gdy sklep ją pokazuje —
+  `listPrice`.
+- **Kody błędów macierzy cen zniknęły** (`PRICE_MATRIX_ENTRY_NOT_FOUND`,
+  `PRICE_MATRIX_ENTRY_OVERLAP`, `PRICE_MATRIX_ATTRIBUTE_NOT_ELIGIBLE`, `PRICE_MATRIX_ENTRY_LIMIT`);
+  zastępują je kody cenników, `PRICE_BOOK_*` i `PRECEDENCE_CHANGE_UNAVAILABLE`.
+- **Feed produktowy przypięty do cennika** publikuje tylko wtedy, gdy cennik jest *Aktywny* albo
+  *Zaplanowany* w swoich datach, w kanale feedu i dla wszystkich. Generowanie feedu, którego cennik
+  nie obowiązuje, kończy się nowym stanem `withdrawn` z `withdrawalReason` (powód; `null` w każdym
+  innym generowaniu), czyści opublikowany plik, a publiczny URL odpowiada `404`; klient, który
+  obsługuje wyczerpująco każdy stan generowania, ma jeden przypadek więcej. Kod błędu
+  `price_list_unavailable`, którego nic nie zgłaszało, został usunięty. Feed w API administracyjnym (`GET /api/v1/admin/product-feeds`, `GET …/:id`)
+  zawiera `pinnedPriceBookWarning`: powód, dla którego cennik nie jest publikowany, albo `null`.
+- **`POST /api/v1/orders/:id/reorder`** zgłasza pozycję pominiętą, bo nic jej nie wycenia, z
+  `reason: 'no_price'` w `unavailableItems`.
+
+##### Minimalne ilości zamówienia i produkty podlegające zwrotowi
+
+- **Nowe odmowy.** `422 PRODUCT_BELOW_MINIMUM_QUANTITY` i
+  `422 PACKAGING_UNIT_BELOW_MINIMUM_QUANTITY` (`details.lines[]`) przy dodawaniu i zmianie pozycji
+  koszyka, `POST /api/v1/cart/submit-for-approval`, składaniu zamówienia, w zewnętrznym API
+  zamówień i przy zapisach zapytań ofertowych kupującego; `422 PACKAGING_UNIT_MISMATCH` dla pozycji
+  zapytania ofertowego, której jednostka opakowania nie należy do produktu;
+  `422 RETURN_LINE_NOT_RETURNABLE` z `POST /api/v1/returns` z `kind: 'return'`. Nazwa produktu w
+  takiej odmowie jest w języku, w którym udzielana jest odpowiedź — według kolejności `q` w
+  `Accept-Language`, a w przeciwnym razie w domyślnym języku kanału — podobnie jak nazwy pozycji w
+  `GET /api/v1/cart`, które nie są już domyślnie po angielsku.
+- **Limit 200 pozycji.** `POST /api/v1/admin/orders`, `POST /api/v1/admin/orders/preview`,
+  `POST /api/v1/external/orders` i budowanie szybkiego zamówienia odrzucają ponad 200 pozycji z
+  kodem `422 VALIDATION_FAILED`, `details: { code: 'too_many_items', maximum: 200 }`; w zewnętrznym
+  API jest to sprawdzane, zanim wymagany jest nagłówek `Idempotency-Key`.
+- **Nowe pola.** `minOrderQuantity` w podsumowaniach produktu, wyszukiwania i porównania;
+  `minOrderUnits` w jednostkach opakowania; `minOrderQuantity` i `belowMinimum` w pozycjach
+  koszyka; `belowMinimumLines[]` w `POST /api/v1/orders/preview-total`; `returnable` i
+  `notReturnableReason` w pozycjach `GET /api/v1/orders/:orderId/returnable`, którego
+  `eligible: false` z powodem `no_returnable_lines` nadal pozwala na reklamację. Zapis produktu w
+  panelu przyjmuje `minOrderQuantity` i `returnable`.
+- **`GET /api/v1/cart` odpowiada `5xx`**, gdy nie da się odczytać katalogu, zamiast koszyka bez
+  oznaczeń minimum.
+
+##### Grupy pozycji
+
+- **Każda odpowiedź z zamówieniem i zapytaniem ofertowym** zawiera `itemGroups` oraz `groupId` i
+  `position` każdej pozycji, a `items` są w kolejności wyświetlania — wcześniej odpowiedzi nie miały
+  określonej kolejności. Panelowe `POST`/`PATCH` zapytania ofertowego i `POST /api/v1/admin/orders`
+  przyjmują `groups` i `groupKey` pozycji. `POST /api/v1/admin/orders/preview` zwraca `taxRate`
+  każdej wycenionej pozycji.
+
+##### Pola niestandardowe
+
+- **Filtry list.** Lista zamówień w panelu i jej eksport CSV, lista zapytań ofertowych i lista
+  szans sprzedaży przyjmują `customFieldFilters` (JSON z kluczami pól niestandardowych); klucz,
+  którego lista nie oferuje, jest odrzucany z kodem `400 CUSTOM_FIELD_FILTER_UNAVAILABLE`. Pola
+  oferowane przez każdą listę są pod `GET /api/v1/admin/orders/custom-field-filters`,
+  `GET /api/v1/admin/quote-requests/custom-field-filters` i
+  `GET /api/v1/admin/crm/opportunities/custom-field-filters`. W
+  `GET /api/v1/admin/crm/opportunities` bez `cardValues=true` odwołanie `custom:` w `fieldFilters`
+  podlega teraz opcji filtra listy, a nie karcie tablicy.
+- **Definicje.** Definicje mają `listFilter` i `carryTo`; trzy odmowy 409, które dzieliły kod
+  `CUSTOM_FIELD_DEFINITION_INVALID`, mają teraz własne kody (`CUSTOM_FIELD_OPTION_IN_USE`,
+  `CUSTOM_FIELD_VALUE_TYPE_LOCKED`, `CUSTOM_FIELD_STORED_VALUES_EXIST`), a `PATCH` opcji zmienia
+  tylko podane w nim pola. Włączenie przenoszenia do pola, które nie może przyjąć wartości, jest
+  odrzucane z kodem `422 CUSTOM_FIELD_CARRY_INCOMPATIBLE`.
+- **Zapisy przenoszenia.** `GET /api/v1/admin/orders/:id/comments` zwraca dla każdego komentarza
+  `systemNote` (`null` dla zwykłego); odczyt komentarzy przez klienta nigdy nie zawiera notatki
+  systemowej. Historia zapytania ofertowego w panelu zyskuje wpis `custom_field_carry_skipped`.
+  Historia szansy sprzedaży pomija `customFieldValues` dla wywołującego bez `custom_fields:read`.
+
+##### Zapytania ofertowe
+
+- **`POST /api/v1/admin/quote-requests/:id/prepare-customer-basket`** (`rfqs:handle`) przygotowuje
+  koszyk klienta, do którego należy zatwierdzone zapytanie; panel nie wywołuje już klienckiej trasy
+  `convert-to-order`.
+
+##### Odczyty produktów w storefroncie
+
+- **`GET /api/v1/catalog/products/:idOrSlug`, `GET /api/v1/catalog/products` oraz wyniki i
+  podpowiedzi wyszukiwania** zwracają nadpisanie produktu dla kanału sprzedaży i języka żądania;
+  produkt bez nadpisania odpowiada dokładnie tak jak wcześniej.
+
+##### Opinie
+
+- **`POST /api/v1/admin/feedback`**, gdy moduł `admin_feedback` jest obecny: każdy zalogowany
+  administrator; `204`, gdy przekaźnik przyjmie wiadomość, `429 RATE_LIMITED`,
+  `502 ADMIN_FEEDBACK_DELIVERY_FAILED` albo `503 ADMIN_FEEDBACK_NOT_CONFIGURED`, gdy adres
+  przekaźnika jest pusty albo nie jest adresem `http(s)`.
+
+#### Dla autorów modułów i modułów nakładkowych {#after-0-108-0-authors}
+
+##### Ceny
+
+- **`priceListAdminPort` został usunięty; zastępuje go `priceBookWritePort`** — ceny bazowe dla
+  każdej waluty, wskazywane produktem i walutą zamiast id cennika, zapisywane jednym audytowanym
+  poleceniem.
+- **`@endora-commerce/contracts` nie zawiera już reguły stosowania ani dawnych kształtów cennika,
+  przedziałów i macierzy**, `ListingPrice` traci wariant `source: 'product'`, a `PriceListRecord` /
+  `PriceListReadPort` mają nowy kształt dla cenników. Każde usunięcie jest wymienione razem z
+  zamiennikiem w dzienniku zmian pakietu.
+- **Moduł nakładkowy, który dekoruje `pricingService`,** musi dekorować także zbiorcze punkty
+  wejścia (`resolveLinePrices`, `resolveListingPrices`), a nie tylko pojedyncze wywołania; koszyk,
+  kontrola przy składaniu zamówienia i ceny referencyjne zapytań wyceniają przez partię.
+- **Moduł, którego zdarzenia decydują o cenie,** podbija `PricingGeneration` jak dotąd;
+  `bump(change?)` przyjmuje teraz `SurfaceChange`, który mówi, co zmiana przesunęła, a podbicie bez
+  niego sprawia, że powierzchnia cen przebudowuje każdy profil.
+- **Własny port wyceny feedów** musi implementować `namedListPublishability` obok
+  `namedListPrices`, która przyjmuje teraz `salesChannelId` feedu.
+
+##### Inne porty i kształty
+
+- **`CatalogProductReadPort`** zyskuje `listPackagingUnitsByProductIds`, a jego rekordy —
+  `minOrderQuantity`, `returnable` i `minOrderUnits`: typowana atrapa portu musi je dodać.
+- **`CartWritePort.addItems`** dodaje pozycje partiami do 200 (`onBelowMinimum`,
+  `replaceExisting`, `keepRepeatedLines`); nowy `OrderQuoteSourcePort` (`orderQuoteSourcePort`,
+  właściciel `orders`) mówi, czy pozycje koszyka pochodzące z oferty zachowują zwolnienie.
+- **Klucze odpowiedzi z wartością domyślną** (`itemGroups`, `groupId`, `position` oraz `groups` w
+  danych dokumentu oferty) sprawiają, że wywnioskowane typy ich wymagają: kod budujący literał
+  `QuoteRequest`, `QuoteRequestItem`, `Order`, `OrderItem` albo `QuoteRequestDocumentData` musi je
+  teraz podać. `adminPatchQuoteRequestSchema` i `adminCreateQuoteRequestSchema` są obiektami
+  z `.superRefine`, więc `.extend()` i `.omit()` nie są już na nich dostępne.
+- **`CustomFieldDefinitionRecord`** wymaga `carryTo`, a `CustomFieldEntityTypeInfo` ma
+  `carryTargets`; ręcznie budowana wartość ich potrzebuje. `customFieldListFilterPort` i
+  `customFieldCarryPort` są nowe.
+- **`request.responseLanguage()`** jest dostępne w każdym żądaniu kompozycji, która rejestruje
+  kopertę błędów; ponowna rejestracja koperty z innym resolverem języka zgłasza teraz wyjątek.
+- **Zapisane `grouping: null`** w tabeli pozycji szablonu dokumentu oznacza teraz *grupy z
+  dokumentu* (wcześniej: bez grupowania); tabela, która ma pozostać płaska, zapisuje
+  `{ by: 'none' }`.
+- **Warstwa panelu `mod-crm`** ma opcjonalne zależności równorzędne `@tiptap/react` i
+  `@tiptap/starter-kit` (`^3`), które aplikacja panelu już zawiera.
+
+#### W istniejącym storefroncie {#after-0-108-0-storefront}
+
+Trasy cen, które wywołuje storefront, zachowują swoje ścieżki, więc storefront utworzony we
+wcześniejszym wydaniu nadal pokazuje ceny. Czego nie pokazuje, dopóki nie przeniesie się do niego
+plików ze storefrontu wydania: własnej ceny wybranego wariantu na stronie produktu, ceny promocyjnej
+pokazanej jako przekreślona cena katalogowa obok *Twojej ceny*, ceny kupującego jako ceny
+porównawczej na kartach produktów i ceny katalogowej obok niższej ceny kupującego. Te pliki to
+`app/(catalog)/p/[slug]/page.tsx`, `app/page.tsx`, `components/ProductCard.tsx`,
+`components/PriceTag.tsx`, `components/VariantPicker.tsx`, `components/SearchAutocomplete.tsx`,
+`components/pricing/BaseSalePriceBlock.tsx`, `components/pricing/PdpPriceToggle.tsx`,
+`lib/api/pricing.ts` (gdzie `ResolvedPrice.baseListId` ma teraz typ `string | null`) i teksty cen w
+`lib/i18n/messages.ts`. Selektor wariantów wcześniejszego storefrontu pokazywał *Price override*
+wariantu; to pole nie jest już wysyłane, więc selektor nie pokazuje ceny wariantu, dopóki nie
+przeniesie się `VariantPicker.tsx`.
+
+Storefront wydania pokazuje też minimalne ilości zamówienia (strona produktu, karta, koszyk,
+finalizacja zamówienia, szybkie zamówienie, szkic zapytania ofertowego, lista zakupów), to, czy
+pozycja podlega zwrotowi, w formularzu zwrotu, oraz grupy pozycji oferty i zamówienia. Storefront
+utworzony wcześniej tego nie robi: jego kupujący trafiają na odmowy serwera —
+`422 PRODUCT_BELOW_MINIMUM_QUANTITY`, `422 RETURN_LINE_NOT_RETURNABLE` — z komunikatem serwera i
+widzą pozycje zamówienia albo oferty bez grup, w kolejności wyświetlania. Zmiany są we wzorcowym
+storefroncie między `v0.107.0` a `v0.108.0`: wymienia je `git diff v0.107.0 v0.108.0 -- storefront`
+w repozytorium platformy.
+
+Tę sekcję napisano 23 i 24.10.2026 na podstawie gałęzi wydania zmiany cen
+(`feat/160-pricing-model-v2`) i gałęzi `master` od `v0.107.0`, sprawdzając opisy zmian
+(changesety) wydania z jego migracjami, manifestami, trasami i historią wzorcowego storefrontu. W chwili pisania żadna instancja nie została zaktualizowana
+poleceniem `pnpm run upgrade 0.108.0`; kolejność kroków i zmiany w storefroncie nie były
+wypróbowane.
+
 ## Instancja niespójna od początku
 
 Instalator `0.101.x` lub starszy zapisywał każdy pakiet wydania z `^` poza

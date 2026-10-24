@@ -26,7 +26,7 @@ import {
   canSplitLine,
   splitLineInto,
 } from '@endora-commerce/admin-kit/components';
-import { arrangeLineGroups, type LineGroup } from '@endora-commerce/contracts';
+import { arrangeLineGroups, roundAmountHalfUp, type LineGroup } from '@endora-commerce/contracts';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { AdminZone } from '@endora-commerce/admin-kit/zones';
 import { deadlineForDays, isValidityDaysInvalid, rfqValidity } from '../validity.js';
@@ -1048,7 +1048,7 @@ function ModifyCard({
         variantId: it.variantId ?? null,
         lineNote: it.lineNote,
         quantity: String(it.quantity),
-        agreedUnitPrice: definedPrice !== null ? definedPrice.toFixed(2) : '',
+        agreedUnitPrice: definedPrice !== null ? roundAmountHalfUp(definedPrice) : '',
       };
     }),
   );
@@ -1070,7 +1070,7 @@ function ModifyCard({
                   ...l,
                   currentPrice: price,
                   ...(price !== null && l.agreedUnitPrice.trim() === ''
-                    ? { agreedUnitPrice: price.amount.toFixed(2) }
+                    ? { agreedUnitPrice: roundAmountHalfUp(price.amount) }
                     : {}),
                 }
               : l,

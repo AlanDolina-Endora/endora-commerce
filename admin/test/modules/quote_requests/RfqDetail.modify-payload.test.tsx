@@ -16,6 +16,7 @@ import {
 } from './rfq-reference-fixtures';
 
 const getSpy = vi.fn();
+const postSpy = vi.fn();
 const patchSpy = vi.fn();
 
 vi.mock('@endora-commerce/admin-kit/lib', async () => {
@@ -26,7 +27,7 @@ vi.mock('@endora-commerce/admin-kit/lib', async () => {
     ...actual,
     apiClient: {
       get: (...args: unknown[]) => getSpy(...args),
-      post: vi.fn(),
+      post: (...args: unknown[]) => postSpy(...args),
       put: vi.fn(),
       patch: (...args: unknown[]) => patchSpy(...args),
       delete: vi.fn(),
@@ -44,7 +45,7 @@ vi.mock('@endora-commerce/admin-kit/components', async () => {
 const { RfqDetail } = await import('../../../../packages/modules/quote_requests/src/admin/pages/RfqDetail');
 
 async function openModify(item: ItemOverrides, probe: ProbeAnswer | (() => unknown)): Promise<HTMLInputElement> {
-  installGet(getSpy, item, probe);
+  installGet(getSpy, item, probe, postSpy);
   renderRfqDetail(RfqDetail);
   await userEvent.click(await screen.findByRole('tab', { name: /rfq\.detail\.tabs\.modify/ }));
   return (await screen.findByRole('spinbutton', {
@@ -61,6 +62,7 @@ function modifyLine(input: HTMLElement): HTMLElement {
 
 beforeEach(() => {
   getSpy.mockReset();
+  postSpy.mockReset();
   patchSpy.mockReset();
   patchSpy.mockResolvedValue({ data: {} });
 });
@@ -102,7 +104,7 @@ describe('RfqDetail Modify — reference, proposal, live difference, payload', (
   });
 
   it('formats the Modify amounts in the admin language (review fix N3)', async () => {
-    installGet(getSpy, {}, 'reject');
+    installGet(getSpy, {}, 'reject', postSpy);
     renderRfqDetail(RfqDetail, 'pl');
     await userEvent.click(await screen.findByRole('tab', { name: /rfq\.detail\.tabs\.modify/ }));
     const input = (await screen.findByRole('spinbutton', {
@@ -130,16 +132,34 @@ describe('RfqDetail Modify — reference, proposal, live difference, payload', (
       { amount: '118.00', currency: 'PLN' },
     );
     await waitFor(() => expect(input.value).toBe('118.00'));
-    const calls = probeCalls(getSpy);
+    const calls = probeCalls(postSpy);
     expect(calls.length).toBeGreaterThan(0);
-    for (const url of calls) {
-      expect(url.pathname).toBe(`/api/v1/admin/products/${PRODUCT_ID}/resolved-price`);
-      expect(url.searchParams.get('customerAccountId')).toBe(CUSTOMER_ID);
-      expect(url.searchParams.get('salesChannelId')).toBe(CHANNEL_ID);
-      expect(url.searchParams.get('quantity')).toBe('2');
-      expect(url.searchParams.get('variantId')).toBe(VARIANT_ID);
+    for (const request of calls) {
+      expect(request.buyer.customerAccountId).toBe(CUSTOMER_ID);
+      expect(request.salesChannelId).toBe(CHANNEL_ID);
+      expect(request.lines).toEqual([expect.objectContaining({ productId: PRODUCT_ID, quantity: 2, variantId: VARIANT_ID })]);
     }
     expect(getSpy.mock.calls.some((c) => String(c[0]).includes('/storefront/'))).toBe(false);
+  });
+
+  /**
+   * Review 2, finding 3 (release 0.108.0) — the prefill wrote
+   * `Number(amount).toFixed(2)`, which rounds the binary double: a resolver
+   * amount of 9.0450 is the double 9.04499…, so the operator was offered 9.04
+   * and, accepting it, the customer was charged 9.04 against the 9.05 the
+   * storefront shows. The prefill is the decimal string rounded half-up
+   * (`roundAmountHalfUp`; worked examples §10.16).
+   */
+  it.each([
+    ['9.0450', '9.05'],
+    ['1.0050', '1.01'],
+    ['118.0000', '118.00'],
+  ])('prefills %s as %s, half-up on its decimal digits', async (amount, shown) => {
+    const input = await openModify(
+      { customerProposedUnitPrice: null, desiredUnitPrice: null, agreedUnitPrice: null },
+      { amount, currency: 'PLN' },
+    );
+    await waitFor(() => expect(input.value).toBe(shown));
   });
 
   it('sends id, variantId and lineNote for every kept line (FR-034)', async () => {
@@ -186,7 +206,7 @@ describe('RfqDetail Modify — reference, proposal, live difference, payload', (
         { referencePrice: null, customerProposedUnitPrice: null, desiredUnitPrice: null, agreedUnitPrice: null },
         failure,
       );
-      await waitFor(() => expect(probeCalls(getSpy).length).toBeGreaterThan(0));
+      await waitFor(() => expect(probeCalls(postSpy).length).toBeGreaterThan(0));
       const line = modifyLine(input);
       await waitFor(() => expect(line).toHaveTextContent('rfq.detail.reference.none'));
       expect(input.value).toBe('');

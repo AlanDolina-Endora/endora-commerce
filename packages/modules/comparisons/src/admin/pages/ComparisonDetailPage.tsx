@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { ComparisonAdminDetail } from '@endora-commerce/contracts';
+import { roundAmountHalfUp, type ComparisonAdminDetail } from '@endora-commerce/contracts';
 import { ApiError } from '@endora-commerce/admin-kit/lib';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import {
@@ -132,7 +132,7 @@ export default function ComparisonDetailPage(): ReactNode {
                   <TableHead key={p.id}>
                     <div>{localised(p.name)}</div>
                     <div className="text-xs text-muted-foreground">
-                      {p.price ? `${p.price.amount} ${p.price.currency}` : '—'}
+                      {p.price ? `${roundAmountHalfUp(p.price.amount)} ${p.price.currency}` : '—'}
                     </div>
                   </TableHead>
                 ))}

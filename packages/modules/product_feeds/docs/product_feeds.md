@@ -28,7 +28,7 @@ A feed is four choices and nothing else at creation time:
 | **Language** | Which translation of names, descriptions and category paths is written. |
 | **Name** | What you will recognise it by. The public URL is derived from the feed, not the name. |
 
-Everything else — criteria, schedule, price presentation, price list, tax country — has a working
+Everything else — criteria, schedule, price presentation, price book, tax country — has a working
 default and is edited afterwards on the feed's **Settings** tab.
 
 ### Creating your first feed
@@ -93,8 +93,7 @@ fails its run naming each one, rather than publishing a file with holes.
 
 ### Narrowing a feed to part of the catalogue
 
-The **Criteria** region on the Settings tab is the same rule builder used by promotions and price
-lists. An empty rule means "every eligible product of this channel". A category criterion includes
+The **Criteria** region on the Settings tab is the same rule builder promotions use. An empty rule means "every eligible product of this channel". A category criterion includes
 the whole subtree.
 
 The panel shows a **live match count** as you edit. That number is computed from the same prices and
@@ -114,6 +113,46 @@ Two things a rule can never do:
 
 If a rule matches nothing, the run ends as `empty` and the **previously published file keeps
 serving**. The panel warns you about that before you save, not afterwards.
+
+### Prices in a feed
+
+A feed publishes the prices **anyone** would see on its sales channel — a feed is fetched by a
+provider, which is nobody's buyer, so no organization's or customer group's contract price ever
+reaches it. Each product is priced at quantity 1, in the feed's currency, by the price books
+(the `price_lists` module): its base price, or a catalogue price book for everyone on the channel,
+or a sale when it is lower. A product with no price in the feed's currency is skipped with
+`missing_price`. Feed items are products: a product with variants is published at the product's own
+price, not per variant.
+
+A price is written at two places, rounded half-up. A gross feed — the default presentation — adds
+the tax rate of the feed's tax country to the net price and rounds the exact result: 29.50 at 23 %
+is published as 36.29, the gross the storefront shows beside the same net price.
+
+A feed can instead be **pinned to one price book** — the feed's `priceListId`, set through the
+admin API when the feed is created or updated (`POST /api/v1/admin/product-feeds`,
+`PATCH /api/v1/admin/product-feeds/:id`); the feed's screens show the warning below but have no
+control for it (issue #414). It then publishes that book's own lines — fixed prices, and percentages or
+adjustments taken off the catalogue price the channel would charge without that book — and **a
+product the book does not price is absent from the feed**. A base price book publishes its base prices. The pinned book publishes **only
+while it applies to anyone on the feed's channel at generation time**:
+
+- it is *Active* or *Scheduled*, and the run falls between its start and end dates;
+- it is assigned to the feed's sales channel, and the channel sells in the feed's currency (a base
+  price book needs no channel);
+- it is for everyone — a book for selected organizations or customer groups never publishes, for
+  the same reason an organization's price never reaches an unpinned feed;
+- it is in the feed's currency, and it still exists.
+
+While one of these does not hold, the feed's page shows a warning naming which, and the feed
+publishes no prices from the book. **When a run finds that the pinned book does not apply, it
+withdraws the feed's published file** instead of generating one: the run ends *Withdrawn*, with the
+reason on its page, and within a minute at most the feed's link answers as for a feed that has
+never been generated, until the book applies again and a later run publishes a new file. This is
+not a failed run — no failed-run notification is raised, nothing is delivered — and the last good
+file is deliberately not kept serving. The withdrawn file is not deleted: it can still be downloaded
+from the run that produced it, and the usual retention removes it after the next publish. While the
+feed's last run is the withdrawal, the feed's page says the file was withdrawn. The live match count of
+*Criteria* and the price-range criterion use the same prices the next run will publish.
 
 ### Category mapping (Google and Meta)
 
@@ -236,7 +275,7 @@ export of the full list.
 
 | Reason | What it means |
 | --- | --- |
-| `missing_price` | No price resolved for the feed's currency and price list. |
+| `missing_price` | A price field the template requires resolved empty — no price book prices the product on the feed's channel in the feed's currency, or the feed's pinned price book does not price it. The item was skipped. |
 | `missing_image` | The product has no publicly reachable image. |
 | `private_image_asset` | Images exist but are not public, so no stable URL could be published. |
 | `missing_required_field` | A field the provider requires resolved empty with no fallback — the item was skipped. |
@@ -246,7 +285,8 @@ export of the full list.
 | `stale_provider_category_mapping` | The mapped node no longer exists in the installed revision. |
 | `zero_tax_rate_on_gross_feed` | A gross feed found no tax rule for its tax country. |
 
-Failures are different from item problems: they end the run and publish nothing.
+Failures are different from item problems: they end the run and publish nothing, and the
+previously published file keeps serving.
 
 | Failure | Meaning |
 | --- | --- |
@@ -256,6 +296,11 @@ Failures are different from item problems: they end the run and publish nothing.
 | `skip_threshold_exceeded` | More than half the considered items were skipped, so a good file was not replaced by a bad one. |
 | `storage_unavailable` | The storage backend refused the file. |
 | `worker_lost` | The worker died mid-run; the claim was released and the partial file removed. |
+
+A run can also end **withdrawn**: the feed's pinned price book did not apply (*Prices in a feed*
+above), so the run removed the published file instead of producing one. It has no failure code;
+its reason is the pinned-book reason (`not_found`, `currency_mismatch`, `not_active`,
+`outside_schedule`, `not_on_channel`, `audience_restricted`), and it raises no notification.
 
 An administrator notification is raised when a run fails — **once per transition into failure**, not
 once per tick, so a feed that has been broken for a day does not fill the bell.
@@ -308,8 +353,8 @@ choice only changes the label on your screen.
 
 #### When delivery happens
 
-After a run **publishes successfully**, and only then. A failed run, an empty run, or a run skipped
-because the previous one was still going sends nothing — the file the partner already has is still
+After a run **publishes successfully**, and only then. A failed run, an empty run, a withdrawn run,
+or a run skipped because the previous one was still going sends nothing — the file the partner already has is still
 the current one, and re-sending it would announce a change that did not happen.
 
 If the upload fails, the run stays successful and the published link keeps working. The delivery is
@@ -383,7 +428,9 @@ Four properties this pipeline is responsible for:
 - **An item-level problem never aborts the run.** Skips and warnings are recorded per item; only a
   configuration failure ends the run.
 - **Publication is one pointer flip after the object is complete.** A failed, empty or
-  over-threshold run never touches `published_artefact_id`.
+  over-threshold run never touches `published_artefact_id`. The one run that clears it is a
+  `withdrawn` run — a pinned feed's whose price book does not apply (*Pricing* below) — which sets
+  the pointer to `null` in the same statement as its terminal status.
 - **Overlap is refused, not queued.** The claim is a conditional `UPDATE` on
   `product_feeds.current_run_id`; the loser records `skipped(already_running)`.
 
@@ -430,6 +477,36 @@ exact secrets in play and removes those strings, rather than guessing what a pas
 
 The test harness injects adapters that refuse every send, for the same reason it injects a taxonomy
 fetcher that cannot fetch: no test in this repository may upload a priced catalogue anywhere.
+
+### Pricing
+
+A run never reads another module's tables. An unpinned feed prices each batch through one
+`resolveLinePrices` call on `price_lists`' `pricingService` port, as a guest (`organization: null`,
+`customerGroupId: null`) on the feed's channel and currency, at quantity 1, without a variant. A
+pinned feed reads `namedListPrices({ priceListId, currencyCode, productIds, salesChannelId })` —
+the book's rows other than variant rows, at quantity 1, over the guest catalogue price of the
+channel resolved **without the pinned book**; a product the book does not price is absent from the
+answer (`services/named-list-price-resolver.ts`). The answer is empty while the book does not
+publish: `namedListPublishability({ priceListId, currencyCode, salesChannelId })` on the same
+`FeedPricingPort` (`plugin.ts`) says whether it does, and why not — a reason of
+`pinnedPriceBookUnpublishableReasonSchema` in `@endora-commerce/contracts` (`not_found`,
+`currency_mismatch`, `not_active`, `outside_schedule`, `not_on_channel`, `audience_restricted`),
+evaluated at the call, not by `price_lists`' status sweep. `ProductFeedService` asks it for every
+pinned feed it lists and puts the reason on the admin feed row as `pinnedPriceBookWarning` (`null`
+when unpinned or publishing), which the feed page shows as a warning (`feeds.pinnedBook.<reason>`
+in the module's `i18n/`). A run of a pinned feed asks `namedListPublishability` once, after the
+configuration checks (so a misconfigured feed still fails and keeps its last good file) and before
+the catalogue is walked. When the book does not apply, the run ends with status `withdrawn`
+(`feedRunStatusSchema`) and the reason in `withdrawalReason` (column
+`product_feed_runs.withdrawal_reason`), writes no artefact, and clears `published_artefact_id`, so
+the public URL answers `404` with the one not-available body, as for a feed never generated. It
+raises no failed-run notification and triggers no delivery. The earlier artefact is detached, not
+deleted — its row and bytes stay, downloadable from its own run, until the retention after the next
+publish purges them. The run drops the cached public answers for the feed that its own process
+wrote; the cache lives in Redis and is indexed by feed per process, so an entry another process
+wrote can serve the old file until its 60 s TTL expires (`services/feed-cache-invalidator.ts`). Neither path catches
+`MODULE_DISABLED`: with `price_lists` absent the run fails rather than publishing prices the platform
+is not serving.
 
 ### Channel scoping
 

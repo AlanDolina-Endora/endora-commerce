@@ -188,8 +188,10 @@ export async function registerStorefrontPricingRoutes(
 
       return {
         data: {
+          // `resolvedPriceEngineSchema`: a product no book prices (FR-018) is
+          // unpriced — no book, no price, no bracket — not an empty-string id.
           resolvedPrice: {
-            baseListId: out.base.listId,
+            baseListId: out.base.bracket ? out.base.listId : null,
             basePrice: out.base.bracket
               ? { amount: out.base.bracket.amount, currency: out.currencyCode }
               : null,
@@ -205,6 +207,12 @@ export async function registerStorefrontPricingRoutes(
                   maxQuantity: out.base.bracket.maxQuantity ?? null,
                 }
               : null,
+            // Feature 160 (FR-031) — the tier that priced the charged line for
+            // the selected variant, and the buyer price a charged sale undercut.
+            ...(out.source !== undefined ? { source: out.source } : {}),
+            ...(out.compareAt !== undefined ? { compareAt: out.compareAt } : {}),
+            // G9 — the catalogue price beside a lower buyer price, when the shop shows it.
+            ...(out.listPrice ? { listPrice: out.listPrice } : {}),
           },
         },
       };

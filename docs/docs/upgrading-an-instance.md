@@ -2294,6 +2294,440 @@ reference storefront's history between `v0.106.0` and `0.107.0`. No instance had
 groups of files above applied to it, when this section was written; the order of the steps and the
 storefront edits are untried.
 
+### After upgrading to 0.108.0 {#after-0-108-0}
+
+`pnpm run upgrade 0.108.0` moves the packages of the release from `0.107.0` and applies its
+migrations — twenty-two, twelve of them for the new pricing model and its editor. **The release
+replaces how prices are stored and resolved, in one step and with no compatibility period**: the
+price lists of earlier releases, with their Application rules, rosters and quantity brackets, become
+**price books**, and a product no longer carries a price of its own. The base prices an instance
+charged from the *Default* price list are kept; **every other price list is deleted** by the
+upgrade, and nothing converts it — the one exception being a list a product feed is pinned to,
+which is kept as an empty, expired book (step 3). Read the steps below before you run the command.
+The other changes of the release follow the pricing one in each part of this section: minimum
+order quantities and returnable products, groups of lines on quote requests and orders, custom-field
+list filters and the carrying of custom-field values between records, inline editing of sales
+opportunities, per-channel product texts on the storefront, an operator action that prepares a
+customer's basket from a quote, and a new module, `admin_feedback`. This section says what to do, in
+order, and then what behaves differently for [operators](#after-0-108-0-operators),
+[API clients and integrators](#after-0-108-0-api),
+[module and overlay authors](#after-0-108-0-authors) and the owner of
+[an existing storefront](#after-0-108-0-storefront). The model itself is described on the
+[Price books](./modules/price_lists.md) page, and the full list of what was removed with its
+replacement in the developer guide's
+[migration note](./modules/price_lists/developer-guide.md#upgrading-from-the-old-model-migration-note).
+
+#### What to do, in order {#after-0-108-0-steps}
+
+Before the upgrade:
+
+1. **Write down every price list other than *Default*: its prices, who it priced and on which
+   channels.** `Migration20261022T111815PriceListsPriceBooksConversion` deletes every price list
+   that carries an Application rule — customer-group and organization contracts, sales, catalogue
+   lists — with its roster, brackets, rule and price-matrix entries, and drops the old tables. A
+   list a product feed is pinned to is retired instead (step 3), but it is kept empty, so its prices
+   are lost all the same. What they priced has to be entered again as price books after the
+   upgrade; the database backup of [Before you start](#before-you-start) is the only copy of the
+   rows.
+2. **Write down the price of every product that has a *Default unit price* but no row on the
+   *Default* list.** `Migration20261022T111811CatalogPriceFieldsRemoved` strips `defaultPrice` and
+   `price` from every product's attribute values and drops `product_variants.price_override`;
+   neither is converted. A product that was priced only by its *Default unit price* has **no price**
+   after the upgrade — the basket refuses it with `422 CART_PRODUCT_UNPRICED` — until a base price
+   is entered for it. A variant's *Price override* was never charged, so dropping it changes no
+   price.
+3. **A product feed pinned to a price list other than *Default*: no action is needed.** A product
+   feed pinned to a price list the upgrade removes is kept pinned to a retired copy of that list: an
+   empty, expired book for everyone, with no sales channel and the list's id, named
+   `<name> (removed by the 0.108.0 upgrade)` (the old name is cut so the whole fits 200
+   characters). The feed page warns that its price book is not active, and the feed's next
+   generation run withdraws its published file, so its link answers as if the feed had never been
+   generated, until you pin the feed to a price book that applies, or unpin it (step 9). You can
+   delete the retired book once you no longer need it; a feed still pinned to it then warns that
+   its price book no longer exists.
+4. **If an integration of yours writes prices through `priceListAdminPort`** — a PIM connector's
+   price import, typically — have its new version ready: the port is removed, and
+   `priceBookWritePort` replaces it. A connector built against the old port cannot write prices on
+   this release. The method-by-method mapping is in the developer guide's
+   [migration note](./modules/price_lists/developer-guide.md#upgrading-from-the-old-model-migration-note).
+
+The upgrade itself:
+
+5. **Run `pnpm run upgrade 0.108.0`.** `setup` applies the migrations module by module, in the
+   order of the modules' dependencies, and each module's own in the order of their stamps — so
+   every `catalog` migration, the removal of the price fields included, runs before the
+   conversion. Grouped by module:
+
+   | Migration | Module | What it does |
+   | --- | --- | --- |
+   | `Migration20261016T082008CatalogOrderRules` | `catalog` | `products.min_order_quantity`, `products.returnable`, `product_packaging_units.min_order_units` |
+   | `Migration20261022T111811CatalogPriceFieldsRemoved` | `catalog` | Drops `product_variants.price_override`, strips `defaultPrice` and `price` — see step 2 |
+   | `Migration20261022T182523CatalogAdminNameKeys` | `catalog` | Stored, indexed admin name and search keys on `products`, and the `pg_trgm` extension |
+   | `Migration20261019T103522CustomFieldsDefinitionListFilter` | `custom_fields` | `custom_field_definitions.list_filter`, `false` for every existing field |
+   | `Migration20261020T110920CustomFieldsDefinitionCarryTo` | `custom_fields` | `custom_field_definitions.carry_to`, empty for every existing field |
+   | `Migration20261016T082022OrdersOrderItemReturnableAtPurchase` | `orders` | Nullable `order_items.returnable_at_purchase` |
+   | `Migration20261020T172007OrdersOrderItemGroups` | `orders` | Table `order_item_groups`, `order_items.group_id` and `position` |
+   | `Migration20261021T164807OrdersOrderCommentSystemNote` | `orders` | Nullable `order_comments.system_note` |
+   | `Migration20261021T165247OrdersOrderItemsPriceSource` | `orders` | Nullable `order_items.price_source` |
+   | `Migration20261018T122118QuoteRequestsItemPackagingUnitId` | `quote_requests` | Nullable `quote_request_items.packaging_unit_id` |
+   | `Migration20261020T171341QuoteRequestsQuoteRequestItemGroups` | `quote_requests` | Table `quote_request_item_groups`, `quote_request_items.group_id` and `position` |
+   | `Migration20261021T164808QuoteRequestsQuoteRequestEventCarrySkipped` | `quote_requests` | Admits the `custom-field-carry-skipped` event type |
+   | `Migration20261020T131018PwaPreferencesOrganizationAttributionCheck` | `pwa` | A `CHECK` on `push_notification_preferences` |
+   | `Migration20261021T165244CartsCartItemsPriceSource` | `carts` | Nullable `cart_items.price_source` |
+   | `Migration20261023T195611ProductFeedsRunWithdrawalReason` | `product_feeds` | Nullable `product_feed_runs.withdrawal_reason`, for a run that withdrew the published file |
+   | `Migration20261023T234605ProductFeedsPriceListFkDropped` | `product_feeds` | Drops `product_feeds_price_list_fk`, so a retired book can be deleted later; runs after the conversion |
+   | `Migration20261021T165239PriceListsPriceBooksExpand` | `price_lists` | The price-book header, audience and channel sets, the evolved rows, precedence version 1, the price-surface tables |
+   | `Migration20261021T232310PriceListsPriceBooksVersion` | `price_lists` | `price_lists.version` and `ever_activated` |
+   | `Migration20261022T012134PriceListsPriceSurfaceGenerations` | `price_lists` | Generations of the price surface |
+   | `Migration20261022T111815PriceListsPriceBooksConversion` | `price_lists` | The conversion — see step 1 and below |
+   | `Migration20261022T182527PriceListsProductLines` | `price_lists` | Table `price_list_product_lines`, backfilled from the stored rows |
+   | `Migration20261023T152351PriceListsPriceSurfaceTargetedMarks` | `price_lists` | Table `price_profile_stale_products` and `price_profiles.revision`, for the targeted refresh of the price surface |
+
+   The conversion runs in one transaction: it creates one **base price book** per currency a
+   *Default*-list bracket uses, plus the platform's default currency; makes every *Default* bracket
+   a fixed row of its currency's base book; deletes every other price list, except one another
+   table still refers to — a feed pinned to it — which it retires as an empty, expired book that
+   keeps its id (step 3); and drops the old tables and columns. `Migration20261022T182523CatalogAdminNameKeys` adds four generated columns
+   to `products`, and each rewrites the table under an exclusive lock — 3.5–7 s per column at
+   50 000 products in the platform's measurement — which is one more reason to keep the API stopped.
+
+After the upgrade, before the instance takes traffic again:
+
+6. **Make sure a queue consumer runs.** Price-sorted and price-filtered listings are ordered from
+   prices the `price_lists.surface` worker precomputes; it runs in a process that consumes queues
+   (`BACKEND_ROLE` unset, `all` or `worker`) with a queue Redis connection —
+   [Queue consumers](./operations/queue-consumers.md). The upgrade builds nothing: the first
+   price-sorted request on each sales channel and currency registers what it needs and asks the
+   worker for it, and is served in the catalogue's default order — product cards correctly priced —
+   until the worker has built it. Without a consumer, price sorting never orders by price.
+7. **Check the base prices.** Open a few products' *Pricing* tab: the prices that came from the
+   *Default* list are there, per currency. Enter a base price for each product of step 2.
+8. **Recreate the price books** that replace the lists of step 1, on **Price books**
+   (`/price-lists`, or ⌘K / CTRL+K → *Price books*). A book has one currency, a set of sales
+   channels, an audience — everyone, chosen customer groups or chosen organizations — and lines;
+   it prices nothing until it is activated. *Why this price?* (`/price-lists/explain`) shows, for a
+   buyer and a product, which line decided the price.
+9. **Pin the feeds of step 3 again, or unpin them**, through the product feeds API
+   (`PATCH /api/v1/admin/product-feeds/:id` with `priceListId` — the book's id, or `null`); there is
+   no admin control for it yet (issue #414). Pin each to a price book that applies to anyone on the
+   feed's channel: *Active* or *Scheduled* within its dates, assigned to the feed's channel and for
+   everyone. A feed pinned to any other book publishes no prices from it — the feed's page says
+   why — and its next run ends *Withdrawn* and withdraws the published file, so the link answers as
+   for a feed that has never been generated until the book applies again. A withdrawn run is not a
+   failure: it raises no notification and delivers nothing.
+10. **Mark the products buyers may return.** `Migration20261016T082008CatalogOrderRules` adds a
+    **Returnable** flag to every product, off: the line of an order placed after the upgrade is
+    returnable only if its product was returnable when the order was placed, and a return
+    (`kind: 'return'`) naming any other line is refused with `422 RETURN_LINE_NOT_RETURNABLE`.
+    Orders placed before the upgrade are unaffected — their lines record no value and stay
+    returnable — and complaints are never restricted. Select the products on the product list and
+    use **Bulk edit → Returnable → Yes — returnable**; one product's flag is in the **Order rules**
+    card on its *Inventory* tab.
+
+Whenever it suits you:
+
+11. **Give `catalog:read` to every role that holds `price_lists:write`.** Adding product lines to a
+    price book uses the catalogue's product browser, which `catalog:read` guards; the role editor on
+    *Admin roles* (`/admin-roles`) shows the shortfall for a role that lacks it, with a one-click
+    add. The two price-list permission codes are unchanged; their
+    labels now read *View price books and display modes* and *Edit price books, base prices and
+    display modes*.
+12. **In an instance seeded with the demo shop**, run `pnpm run cli demo reset` and then
+    `pnpm run cli demo seed`: the conversion removed the demo's old price lists, and the seed brings
+    back its base prices and the price books of the worked examples on the
+    [Price books](./modules/price_lists.md) page.
+13. **Decide whether to add `admin_feedback`.** The release brings a new package,
+    `@endora-commerce/mod-admin-feedback`, which lets an administrator send feedback to the makers
+    of Endora Commerce from a *Send feedback* link in the Admin UI sidebar. No module depends on
+    it, so the upgrade does not declare it; [Adding a module that is new in a
+    release](#adding-a-new-module) says how. Once declared it is **switched on and sends to
+    Endora** (`admin_feedback.relay_url`, by default
+    `https://commerce.endora.software/api/platform-feedback/`): each message carries the words
+    typed, the sender's e-mail and optional phone, the Admin UI's language and address, the release
+    the instance runs, its configured public API address and the sending administrator's name and
+    id. Switch it off under
+    **Settings → Feedback** (`admin_feedback.module_enabled`), or empty the relay address, if the
+    instance must not send data to Endora. Nothing is stored on the instance.
+14. **Mark the custom fields the admin lists should filter on.** The Orders, Quote Requests and
+    Opportunities lists offer a filter for each Order, Quote Request or Opportunity custom field
+    whose new *Use as list filter* option is on, and every existing field has it off. Turn it on in
+    the field's editor on `/custom-fields`, which now edits existing fields.
+
+#### For operators {#after-0-108-0-operators}
+
+##### Pricing
+
+- **Price lists are price books.** The sidebar entry *Price books* opens the list of books; the
+  product editor's *Default unit price* field, the variant table's *Price override* column and the
+  product's *Linked price lists* zone are gone, and a product's base prices are on its *Pricing*
+  tab. *Pricing settings* (⌘K / CTRL+K) holds the display modes, the *Show list price beside the
+  buyer's price* switch (`pricing.show_list_price`, off by default) and the precedence, read-only.
+- **How a price is decided** — the base price, a catalogue price for everyone on a channel, a
+  buyer's contract price, and a sale charged only when it is lower — is on the
+  [Price books](./modules/price_lists.md) page, with worked examples.
+- **A price change shows in a price-sorted listing within about half a second** in the platform's
+  measurements; a change that reaches the whole catalogue — a line for all products or for an
+  attribute value alone, more than 10 000 products at once, a sales-channel change — takes up to
+  about five minutes with some 200 groups of buyers with their own books (measured about 4 min 35 s at
+  201; issue #416 tracks making it faster). Prices on product cards never lag.
+- **The products import refuses a file with a price column** — `default_price`, `defaultPrice`,
+  `price`, `price_override` or `priceOverride` — with `400 PRICE_SET_IN_PRICE_BOOKS`, and imports
+  nothing. Prices are imported through the price books' CSV import, or by a PIM connector through
+  `priceBookWritePort`.
+- **A signed-in customer is priced on their own customer group** wherever their account has one
+  that differs from their Organization's — listings, the product page, search and its
+  suggestions, comparisons, the basket and placement. The basket also shows the price placement
+  will charge: a line from an accepted quote shows its agreed price at the agreed quantity, and a
+  line placement would refuse reads as unavailable.
+- **A reorder leaves out the lines nothing prices any more** for the buyer, or that are sold on
+  request only, and reports them; such a line used to be seeded at the old order's price and the
+  basket then refused at placement.
+
+##### Minimum order quantities and returnable products
+
+- **A product can have a minimum order quantity** (pieces, on simple and configurable products)
+  and a packaging unit a minimum number of units — the **Order rules** card on the product's
+  *Inventory* tab and the **Minimum (units)** column of its packaging units. Existing products have
+  none, so nothing changes until one is set. A minimum is judged on the product's total over every
+  line and variant of a basket.
+- **Where it is enforced.** The basket refuses an add or a change that would leave a product below
+  its minimum, and *Submit for approval*, checkout, one-click buy, reorder, admin *Create order*
+  and the external order API refuse a basket below one. A line from an accepted quote request is
+  exempt at the quote's agreed quantity while that quote is still valid. A buyer's quote request
+  is refused below a minimum; one an operator creates or modifies is saved, with a *Below minimum*
+  badge on the line. The operator's quick-order import marks such rows as warnings; the buyer's
+  rejects them. One-click buy orders the product's minimum instead of 1.
+- **Returns follow the Returnable flag** (step 10): a return of a line that was not returnable at
+  purchase is refused; a complaint about such a line is accepted, with an approved refund of `0`
+  pre-filled, and the case marks it *Not returnable at purchase*.
+- **Limits.** Admin *Create order*, the external order API and quick-order builds take at most
+  200 lines; `quick_order.import_max_rows` is held to 1–10 000 whatever its stored value.
+
+##### Groups of lines on quote requests and orders
+
+- **A quote request's lines can be arranged in named, ordered groups**, on its *Modify* tab and
+  on the create screen, with a per-group summary; *Split line* puts part of a line's quantity on
+  a new line, and one product may sit on several lines. An order placed from an accepted quote
+  takes the quote's groups, and admin *Create order* has the same editor. An order's groups cannot
+  be changed after placement. The quote PDF prints the groups as sections, and so does every
+  document template whose line-items table has no grouping chosen, templates saved before the
+  upgrade included — its default is now *Document's groups*. A document with no group prints as
+  before; choose *No grouping* in the template editor to keep a table flat whatever the document
+  says.
+
+##### Custom fields
+
+- **List filters** (step 14) on the Orders, Quote Requests and Opportunities lists: kept in the
+  address, in saved views and, on Orders, in the CSV export.
+- **Existing definitions can be edited** on `/custom-fields`: labels, *Required*, *Use as list
+  filter*, and the options of a select field; the key and the value type stay fixed.
+- **Values can be carried between records.** A definition's *Carry value to …* options carry its
+  values from a Quote Request to the Order placed from it and to its Sales Opportunity, from an
+  Order to its Opportunity, and from an Opportunity to the Quote Request or Order an administrator
+  creates from it — into empty fields only. A value that cannot be carried is named in an internal
+  system note on the Order, or in the Quote Request's history. Every existing definition carries
+  nothing.
+- **Quote Request custom fields follow the `quote_requests` module**: while it is switched off
+  they are neither listed nor writable on `/custom-fields`, and they return unchanged with it.
+- **An Opportunity's change history shows custom-field values only to a role holding
+  `custom_fields:read`.**
+
+##### Sales opportunities
+
+- **The Opportunity screen is edited in place** — title, description, expected close date,
+  contact, sales channel and typed values each where they are shown — and descriptions, notes,
+  messages and event descriptions are written in a formatted-text editor. An Order reference shows
+  the Order's status, total, date and customer.
+
+##### Quote requests
+
+- **An approved quote request's *Prepare the customer's basket*** puts its lines into the basket of
+  the customer who owns it, at the agreed prices, replacing what that basket held, for the customer
+  to complete at checkout. The earlier *Place order* button signed the administrator out.
+
+##### Storefront product texts
+
+- **A product's per-sales-channel texts reach the storefront.** The name, description, SEO fields
+  and attribute values written for a sales channel in the product's scope editor are what the
+  storefront's product page shows on that channel, and the name written there is what its listing
+  cards, search results and suggestions show.
+
+##### Feedback from the Admin UI
+
+- **`admin_feedback`** (step 13) adds *Send feedback* beside the release in the sidebar, for every
+  signed-in administrator, at most five messages per administrator in ten minutes.
+
+#### For API clients and integrators {#after-0-108-0-api}
+
+##### Pricing
+
+- **The old admin pricing routes are removed**: `/api/v1/admin/price-lists-engine/…`,
+  `/api/v1/admin/pricing/rule-targets/…`, `/api/v1/admin/products/:id/price-lists` and
+  `/api/v1/admin/products/:id/resolved-price`. Their replacement is `/api/v1/admin/price-books/…`:
+  `GET ?productId=` for a product's books and `POST /api/v1/admin/price-books/resolve` for a
+  resolved price with its explanation.
+- **A catalogue write that names a price is refused**: `POST`/`PATCH
+  /api/v1/admin/catalog/products[/:id]` with `attributeValues.defaultPrice` or
+  `attributeValues.price`, and a variant write with `priceOverride`, answer
+  `400 PRICE_SET_IN_PRICE_BOOKS` and write nothing. Base prices are written with
+  `PUT /api/v1/admin/price-books/base-prices/:productId`.
+- **`GET /api/v1/storefront/products/:id/resolved-price` answers an unpriced product honestly**:
+  `baseListId`, `basePrice` and `quantityBracket` are all `null`, where `baseListId` used to be an
+  empty string. Amounts are decimal strings (`{ "amount": "199.0000", "currency": "PLN" }`), as the
+  route always sent them. The answer also carries `source` (which tier priced it), `compareAt` and,
+  when the shop shows it, `listPrice`.
+- **The price-matrix error codes are gone** (`PRICE_MATRIX_ENTRY_NOT_FOUND`,
+  `PRICE_MATRIX_ENTRY_OVERLAP`, `PRICE_MATRIX_ATTRIBUTE_NOT_ELIGIBLE`, `PRICE_MATRIX_ENTRY_LIMIT`);
+  the price-book codes, `PRICE_BOOK_*` and `PRECEDENCE_CHANGE_UNAVAILABLE`, replace them.
+- **A product feed pinned to a price book** publishes only while the book is *Active* or
+  *Scheduled* within its dates, on the feed's channel and for everyone. A run of a feed whose book
+  does not apply ends with the new run status `withdrawn` and `withdrawalReason` (the reason; `null`
+  on every other run), clears the published file and answers the public URL with `404`; a client
+  that switches exhaustively on the run status has one more case. The failure code
+  `price_list_unavailable`, which nothing raised, is removed. An admin feed (`GET /api/v1/admin/product-feeds`, `GET …/:id`) carries
+  `pinnedPriceBookWarning`: the reason it does not publish, or `null`.
+- **`POST /api/v1/orders/:id/reorder`** reports a line it left out because nothing prices it with
+  `reason: 'no_price'` in `unavailableItems`.
+
+##### Minimum order quantities and returnable products
+
+- **New refusals.** `422 PRODUCT_BELOW_MINIMUM_QUANTITY` and
+  `422 PACKAGING_UNIT_BELOW_MINIMUM_QUANTITY` (`details.lines[]`) from cart adds and changes,
+  `POST /api/v1/cart/submit-for-approval`, placement, the external order API and a buyer's quote
+  request writes; `422 PACKAGING_UNIT_MISMATCH` from a quote request line whose packaging unit is
+  not one of the product's; `422 RETURN_LINE_NOT_RETURNABLE` from `POST /api/v1/returns` with
+  `kind: 'return'`. A product name in such a refusal is in the language the response is answered
+  in — the q-sorted `Accept-Language`, else the channel's default language — and so are the line
+  names of `GET /api/v1/cart`, which are no longer English by default.
+- **200-line bound.** `POST /api/v1/admin/orders`, `POST /api/v1/admin/orders/preview`,
+  `POST /api/v1/external/orders` and the quick-order builds refuse more than 200 lines with
+  `422 VALIDATION_FAILED`, `details: { code: 'too_many_items', maximum: 200 }`; on the external
+  API this is checked before the `Idempotency-Key` header is required.
+- **New fields.** `minOrderQuantity` on product, search and comparison summaries;
+  `minOrderUnits` on packaging units; `minOrderQuantity` and `belowMinimum` on cart lines;
+  `belowMinimumLines[]` on `POST /api/v1/orders/preview-total`; `returnable` and
+  `notReturnableReason` on the lines of `GET /api/v1/orders/:orderId/returnable`, whose `eligible:
+  false` with reason `no_returnable_lines` still allows a complaint. The admin product write takes
+  `minOrderQuantity` and `returnable`.
+- **`GET /api/v1/cart` answers `5xx`** when the catalogue cannot be read, instead of a cart without
+  the minimum flags.
+
+##### Groups of lines
+
+- **Every order and quote request reply** carries `itemGroups` and each item's `groupId` and
+  `position`, with `items` in display order — the replies had no defined order before. Admin
+  `POST`/`PATCH` of a quote request and admin `POST /api/v1/admin/orders` accept `groups` and a
+  per-line `groupKey`. `POST /api/v1/admin/orders/preview` answers each priced line's `taxRate`.
+
+##### Custom fields
+
+- **List filters.** The admin Orders list and its CSV export, the Quote Requests list and the
+  Opportunities list accept `customFieldFilters` (JSON keyed by custom-field key); a key the list
+  does not offer is refused with `400 CUSTOM_FIELD_FILTER_UNAVAILABLE`. Each list's offered fields
+  are at `GET /api/v1/admin/orders/custom-field-filters`,
+  `GET /api/v1/admin/quote-requests/custom-field-filters` and
+  `GET /api/v1/admin/crm/opportunities/custom-field-filters`. On
+  `GET /api/v1/admin/crm/opportunities` without `cardValues=true`, a `custom:` reference in
+  `fieldFilters` now follows the list-filter option instead of the board card.
+- **Definitions.** Definitions carry `listFilter` and `carryTo`; three 409 refusals that shared
+  `CUSTOM_FIELD_DEFINITION_INVALID` now have their own codes (`CUSTOM_FIELD_OPTION_IN_USE`,
+  `CUSTOM_FIELD_VALUE_TYPE_LOCKED`, `CUSTOM_FIELD_STORED_VALUES_EXIST`), and an option `PATCH`
+  changes only the members it names. Turning a carry on towards a field that cannot take the values
+  is refused with `422 CUSTOM_FIELD_CARRY_INCOMPATIBLE`.
+- **Carry records.** `GET /api/v1/admin/orders/:id/comments` gives every comment `systemNote`
+  (`null` for an ordinary one); the customer's comments read never lists a system note. The
+  admin quote-request history gains the `custom_field_carry_skipped` entry. The Opportunity history
+  leaves `customFieldValues` out for a caller without `custom_fields:read`.
+
+##### Quote requests
+
+- **`POST /api/v1/admin/quote-requests/:id/prepare-customer-basket`** (`rfqs:handle`) prepares the
+  owning customer's basket from an approved request; the Admin UI no longer calls the customer's
+  `convert-to-order` route.
+
+##### Storefront product reads
+
+- **`GET /api/v1/catalog/products/:idOrSlug`, `GET /api/v1/catalog/products` and the search
+  results and suggestions** return the product's override for the request's sales channel and
+  language; a product without one answers exactly as before.
+
+##### Feedback
+
+- **`POST /api/v1/admin/feedback`**, while `admin_feedback` is present: any signed-in
+  administrator, `204` when the relay accepts, `429 RATE_LIMITED`,
+  `502 ADMIN_FEEDBACK_DELIVERY_FAILED`, or `503 ADMIN_FEEDBACK_NOT_CONFIGURED` when the relay
+  address is empty or not an `http(s)` URL.
+
+#### For module and overlay authors {#after-0-108-0-authors}
+
+##### Pricing
+
+- **`priceListAdminPort` is removed; `priceBookWritePort` replaces it** — base prices per currency,
+  addressed by product and currency rather than by a list id, written as one audited command.
+- **`@endora-commerce/contracts` drops the Application rule and the old list, bracket and matrix
+  shapes**, `ListingPrice` loses its `source: 'product'` arm, and `PriceListRecord` /
+  `PriceListReadPort` are reshaped for books. Each removal is listed with its replacement in the
+  package's changelog.
+- **An overlay that decorates `pricingService`** must decorate the batched entry points
+  (`resolveLinePrices`, `resolveListingPrices`) as well as the single calls; the cart, the placement
+  check and quote reference prices price through the batch.
+- **A module whose events decide a price** bumps `PricingGeneration` as before; `bump(change?)` now
+  takes a `SurfaceChange` saying what it moved, and a bump without one makes the price surface
+  rebuild every profile.
+- **A feed-pricing port of your own** must implement `namedListPublishability` beside
+  `namedListPrices`, which now takes the feed's `salesChannelId`.
+
+##### Other ports and shapes
+
+- **`CatalogProductReadPort`** gains `listPackagingUnitsByProductIds`, and its records
+  `minOrderQuantity`, `returnable` and `minOrderUnits`: a typed stub of the port must add them.
+- **`CartWritePort.addItems`** adds lines in batches of up to 200 (`onBelowMinimum`,
+  `replaceExisting`, `keepRepeatedLines`); the new `OrderQuoteSourcePort` (`orderQuoteSourcePort`,
+  owner `orders`) says whether a basket's quote-seeded lines keep their exemption.
+- **Defaulted reply keys** (`itemGroups`, `groupId`, `position`, and `groups` on quote document
+  data) make the inferred types require them: code that builds a `QuoteRequest`, `QuoteRequestItem`,
+  `Order`, `OrderItem` or `QuoteRequestDocumentData` literal must now supply them.
+  `adminPatchQuoteRequestSchema` and `adminCreateQuoteRequestSchema` are refined objects, so
+  `.extend()` and `.omit()` on them are no longer available.
+- **`CustomFieldDefinitionRecord`** requires `carryTo`, and `CustomFieldEntityTypeInfo` has
+  `carryTargets`; a hand-built value needs them. `customFieldListFilterPort` and
+  `customFieldCarryPort` are new.
+- **`request.responseLanguage()`** is available on every request of a composition that registers
+  the error envelope; registering the envelope twice with different language resolvers now throws.
+- **A stored `grouping: null`** on a document template's line-items table now means *the
+  document's groups* (it meant no grouping); a table that must stay flat stores `{ by: 'none' }`.
+- **`mod-crm`'s admin layer** has optional peer dependencies `@tiptap/react` and
+  `@tiptap/starter-kit` (`^3`), which the admin application already carries.
+
+#### In an existing storefront {#after-0-108-0-storefront}
+
+The pricing routes a storefront calls keep their paths, so a storefront created by an earlier
+release keeps rendering prices. What it does not show until its files are brought over from the
+release's storefront: a selected variant's own price on the product page, a sale shown as the list
+price struck through beside *Your price*, the buyer price as compare-at on product cards, and the
+list price beside a lower buyer price. The files are `app/(catalog)/p/[slug]/page.tsx`,
+`app/page.tsx`, `components/ProductCard.tsx`, `components/PriceTag.tsx`,
+`components/VariantPicker.tsx`, `components/SearchAutocomplete.tsx`,
+`components/pricing/BaseSalePriceBlock.tsx`, `components/pricing/PdpPriceToggle.tsx`,
+`lib/api/pricing.ts` (where `ResolvedPrice.baseListId` is now `string | null`) and the pricing
+strings in `lib/i18n/messages.ts`. The variant picker of an earlier storefront showed a variant's
+*Price override*; that field is no longer sent, so the picker shows no price for a variant until
+`VariantPicker.tsx` is brought over.
+
+The release's storefront also shows minimum order quantities (product page, card, basket,
+checkout, quick order, quote draft, shopping list), the returnable state of each line in the
+return form, and a quote's and an order's line groups. A storefront created earlier does not: its
+buyers meet the server's refusals — `422 PRODUCT_BELOW_MINIMUM_QUANTITY`,
+`422 RETURN_LINE_NOT_RETURNABLE` — with the server's message, and see an order's or a quote's
+lines ungrouped, in display order. The changes are in the reference storefront between `v0.107.0`
+and `v0.108.0`: `git diff v0.107.0 v0.108.0 -- storefront` in the platform repository lists them.
+
+This section was written on 2026-10-23 and 2026-10-24 against the release branch of the pricing
+change (`feat/160-pricing-model-v2`) and `master` since `v0.107.0`, read from the changesets of the
+release against its migrations, manifests, routes and the reference storefront's history. No instance had been upgraded with
+`pnpm run upgrade 0.108.0` when it was written; the order of the steps and the storefront edits are
+untried.
+
 ## An instance that is mixed from the start
 
 The installer of `0.101.x` or earlier wrote every package of the release with a `^` except

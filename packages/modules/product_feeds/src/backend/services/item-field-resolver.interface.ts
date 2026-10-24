@@ -34,9 +34,15 @@ export interface ResolvableTemplateField {
 }
 
 /** A resolved money amount for one item, already net/gross-aware. */
+/**
+ * A feed item's price: decimal strings — the resolver's amount as `price_lists`
+ * answers it, and the gross computed from it by `grossAmountHalfUp` — written
+ * to the file at two places by `roundAmountHalfUp` (review 2, finding 1 of
+ * release 0.108.0). Never a JS number: that is how binary rounding got in.
+ */
 export interface FeedItemPrice {
-  readonly net: number;
-  readonly gross: number;
+  readonly net: string;
+  readonly gross: string;
   /**
    * False when `TaxService` fell through to `{ rate: 0, source: 'none' }`. On a
    * gross feed that is a run **warning**, not a silent zero-VAT price (R12).

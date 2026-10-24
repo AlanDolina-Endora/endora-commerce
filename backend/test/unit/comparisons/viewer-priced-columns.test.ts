@@ -191,6 +191,7 @@ const catalogProductsStub: CatalogProductReadPort = {
   listLinksBySourceIds: async () => [],
   listValueOverridesByProductIds: async () => [],
   listProductIdsByAttributeValue: async () => [],
+  pageProductsByAdminName: async () => ({ ids: [], total: 0 }),
 };
 
 /**

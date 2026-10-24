@@ -68,6 +68,8 @@ export function createSuggestionPricingEnricher(deps: {
           organization: organization ? { id: organization.id, customerGroupId: organization.customerGroupId } : null,
           ...(organization && ctx.customerAccountId ? { customerAccountId: ctx.customerAccountId } : {}),
           salesChannel: channel,
+          // Feature 160 — the request's currency, as the result cards are priced.
+          ...(ctx.currencyCode ? { currencyCode: ctx.currencyCode } : {}),
         },
       });
     } catch (error) {
@@ -83,6 +85,8 @@ export function createSuggestionPricingEnricher(deps: {
         basePrice: detail.basePrice,
         salePrice: detail.salePrice,
         priceDisplayMode: detail.displayMode,
+        // Feature 161 (G19) — the list price beside a lower buyer price, as on the result cards.
+        ...(detail.listPrice ? { listPrice: { amount: detail.listPrice.amount, currency: detail.listPrice.currency } } : {}),
       };
     });
   };

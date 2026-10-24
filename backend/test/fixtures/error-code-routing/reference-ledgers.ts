@@ -284,33 +284,75 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'The noun is the attachment and the one raise site is that route; the media library\'s ' +
       'own size limit keeps its own code.',
   },
-  PRICE_MATRIX_ENTRY_NOT_FOUND: {
+  PRICE_BOOK_CHANNEL_CURRENCY: {
     to: 'price_lists',
     reason:
-      'Minted with the price matrix (`specs/148-price-list-matrix-rules/`), which did not exist ' +
-      'when the prefix chain was deleted: the refusal of a matrix entry that is missing, on another list or outside the caller scope. ' +
-      'The noun is a matrix entry of a price list, the module\'s own entity (D-121 T1).',
+      'Minted with price books (`specs/160-pricing-model-v2/`), which did not exist when the ' +
+      'prefix chain was deleted: the refusal of a channel set naming a sales channel that does not offer the book\'s currency (FR-003). ' +
+      'The noun is a price book, the module\'s own entity (D-121 T1).',
   },
-  PRICE_MATRIX_ENTRY_OVERLAP: {
+  PRICE_BOOK_AUDIENCE_KIND: {
     to: 'price_lists',
     reason:
-      'Minted with the price matrix (`specs/148-price-list-matrix-rules/`), which did not exist ' +
-      'when the prefix chain was deleted: the refusal of an entry whose coordinates and quantity window overlap another entry. ' +
-      'The noun is a matrix entry of a price list, the module\'s own entity (D-121 T1).',
+      'Minted with price books (`specs/160-pricing-model-v2/`), which did not exist when the ' +
+      'prefix chain was deleted: the refusal of an audience set that mixes organizations and customer groups or names a member that does not exist or is out of scope (FR-002, A4). ' +
+      'The noun is a price book, the module\'s own entity (D-121 T1).',
   },
-  PRICE_MATRIX_ATTRIBUTE_NOT_ELIGIBLE: {
+  PRICE_BOOK_IMMUTABLE_FIELD: {
     to: 'price_lists',
     reason:
-      'Minted with the price matrix (`specs/148-price-list-matrix-rules/`), which did not exist ' +
-      'when the prefix chain was deleted: the refusal of an attribute that may not select prices (not flagged, wrong value type, per-language or per-channel). ' +
-      'The noun is a matrix entry of a price list, the module\'s own entity (D-121 T1).',
+      'Minted with price books (`specs/160-pricing-model-v2/`), which did not exist when the ' +
+      'prefix chain was deleted: the refusal to change a book\'s currency or type, its audience kind once it has been active, or a base book\'s header (FR-004). ' +
+      'The noun is a price book, the module\'s own entity (D-121 T1).',
   },
-  PRICE_MATRIX_ENTRY_LIMIT: {
+  PRICE_BOOK_NOT_APPLICABLE: {
     to: 'price_lists',
     reason:
-      'Minted with the price matrix (`specs/148-price-list-matrix-rules/`), which did not exist ' +
-      'when the prefix chain was deleted: the refusal of one entry more than a price list may hold. ' +
-      'The noun is a matrix entry of a price list, the module\'s own entity (D-121 T1).',
+      'Minted with price books (`specs/160-pricing-model-v2/`), which did not exist when the ' +
+      'prefix chain was deleted: the refusal to activate a book that would apply nowhere (no channel offering its currency) or to no one (no member). ' +
+      'The noun is a price book, the module\'s own entity (D-121 T1).',
+  },
+  PRICE_BOOK_ROW_OVERLAP: {
+    to: 'price_lists',
+    reason:
+      'Minted with price books (`specs/160-pricing-model-v2/`), which did not exist when the ' +
+      'prefix chain was deleted: the refusal of rows of one selection whose quantity windows overlap (FR-006); details name each row. ' +
+      'The noun is a price book, the module\'s own entity (D-121 T1).',
+  },
+  PRICE_BOOK_ROW_SHAPE: {
+    to: 'price_lists',
+    reason:
+      'Minted with price books (`specs/160-pricing-model-v2/`), which did not exist when the ' +
+      'prefix chain was deleted: the refusal of a row batch with rows that break a shape rule (FR-005 to FR-009); details name every failing row. ' +
+      'The noun is a price book, the module\'s own entity (D-121 T1).',
+  },
+  PRICE_BOOK_ROW_TARGET: {
+    to: 'price_lists',
+    reason:
+      'Minted with price books (`specs/160-pricing-model-v2/`), which did not exist when the ' +
+      'prefix chain was deleted: a row naming a product, variant, category, SKU, path or attribute value that does not exist or cannot select prices. ' +
+      'The noun is a price book, the module\'s own entity (D-121 T1).',
+  },
+  PRICE_BOOK_ROW_LIMIT: {
+    to: 'price_lists',
+    reason:
+      'Minted with price books (`specs/160-pricing-model-v2/`), which did not exist when the ' +
+      'prefix chain was deleted: the refusal of a batch that would leave a book over its row limit. ' +
+      'The noun is a price book, the module\'s own entity (D-121 T1).',
+  },
+  PRICE_BOOK_STALE: {
+    to: 'price_lists',
+    reason:
+      'Minted with price books (`specs/160-pricing-model-v2/`), which did not exist when the ' +
+      'prefix chain was deleted: the refusal of a write made against an older version of the book (G5 of `specs/161-price-book-editor/`). ' +
+      'The noun is a price book, the module\'s own entity (D-121 T1).',
+  },
+  PRECEDENCE_CHANGE_UNAVAILABLE: {
+    to: 'price_lists',
+    reason:
+      'Minted with price books (`specs/160-pricing-model-v2/`), which did not exist when the ' +
+      'prefix chain was deleted: the refusal of every precedence write until the change flow ships (FR-023). ' +
+      'The noun is a price book, the module\'s own entity (D-121 T1).',
   },
   CRM_TAG_NAME_TAKEN: {
     to: 'crm',
@@ -682,6 +724,15 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Minted by feature 156 (`specs/156-asset-stable-url/`) for ' +
       'the refusal of a permalink that breaks the shared permalink rule, the broken rule named by the `details.code` token. ' +
       'The noun is the asset, its file and its permalink — `assets_library`\' own row — and every raise site is in that module.',
+  },
+  PRICE_SET_IN_PRICE_BOOKS: {
+    to: 'catalog',
+    reason:
+      'Minted by feature 160 (`specs/160-pricing-model-v2/`, FR-043) for a product or variant ' +
+      'write — the admin create and update routes and the products import — that names the old ' +
+      '*default price* key or the variant price override. D-121 T1: the noun is the product\'s ' +
+      'own field, `catalog`\'s, so `catalog` owns the sentence; `import_export` raises it too, ' +
+      'from the products adapter.',
   },
   PRODUCT_BELOW_MINIMUM_QUANTITY: {
     to: 'catalog',

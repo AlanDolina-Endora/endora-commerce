@@ -59,6 +59,10 @@ export interface SearchAutocompleteProps {
    * `priceDisplayMode` is `none` (price hidden for this customer).
    */
   requestQuoteLabel: string;
+  /** Feature 161 (FR-026) — translated "List price" / "Your price" for a
+   *  suggestion whose buyer price is below the catalogue price. */
+  listPriceLabel: string;
+  yourPriceLabel: string;
   /**
    * Translated "see all results" link label. Kept as a plain string so
    * the prop is serialisable across the Server → Client component
@@ -300,7 +304,11 @@ export function SearchAutocomplete(props: SearchAutocompleteProps): ReactNode {
                       </span>
                     </span>
                     <span className="flex-none whitespace-nowrap text-right">
-                      {renderSuggestionPrice(p, props.locale, props.requestQuoteLabel)}
+                      {renderSuggestionPrice(p, props.locale, {
+                        requestQuote: props.requestQuoteLabel,
+                        listPrice: props.listPriceLabel,
+                        yourPrice: props.yourPriceLabel,
+                      })}
                     </span>
                   </a>
                 </li>
@@ -326,12 +334,17 @@ export function SearchAutocomplete(props: SearchAutocompleteProps): ReactNode {
  *   - a resolved sale price → show it, with the base price struck through.
  *   - otherwise → the resolved base price, falling back to the legacy
  *     `ProductSummary.price` projection when the resolver wasn't wired.
+ *   - `listPrice` present (feature 161, FR-026) → the catalogue price above
+ *     the buyer's, both labelled; whether it is present is the backend's call.
+ *
+ * Exported for the server-rendered tests (`test/catalog/list-price-pair.test.tsx`).
  */
-function renderSuggestionPrice(
+export function renderSuggestionPrice(
   p: SearchSuggestItem,
   locale: string,
-  requestQuoteLabel: string,
+  labels: { requestQuote: string; listPrice: string; yourPrice: string },
 ): ReactNode {
+  const requestQuoteLabel = labels.requestQuote;
   if (p.priceDisplayMode === 'none') {
     return (
       <span className="text-[11px] font-medium text-muted">{requestQuoteLabel}</span>
@@ -347,6 +360,22 @@ function renderSuggestionPrice(
     ? formatMoney(p.salePrice.amount, p.salePrice.currency, locale)
     : null;
 
+  const list = p.listPrice ? formatMoney(p.listPrice.amount, p.listPrice.currency, locale) : null;
+
+  if (sale && list) {
+    // Owner ruling 2026-10-23: the list price struck through and the sale as
+    // "Your price" — the buyer's regular price is not a third number.
+    return (
+      <span className="flex flex-col items-end leading-tight">
+        <span className="font-mono text-[11px] text-muted">
+          {labels.listPrice} <s>{list}</s>
+        </span>
+        <span className="font-mono text-[13px] font-semibold text-fg">
+          <span className="text-[10px] font-normal text-muted">{labels.yourPrice}</span> {sale}
+        </span>
+      </span>
+    );
+  }
   if (sale) {
     return (
       <span className="flex flex-col items-end leading-tight">
@@ -354,6 +383,18 @@ function renderSuggestionPrice(
         {base ? (
           <span className="font-mono text-[11px] text-muted line-through">{base}</span>
         ) : null}
+      </span>
+    );
+  }
+  if (base && list) {
+    return (
+      <span className="flex flex-col items-end leading-tight">
+        <span className="font-mono text-[11px] text-muted">
+          {labels.listPrice} {list}
+        </span>
+        <span className="font-mono text-[13px] font-semibold text-fg">
+          <span className="text-[10px] font-normal text-muted">{labels.yourPrice}</span> {base}
+        </span>
       </span>
     );
   }

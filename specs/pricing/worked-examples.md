@@ -2,7 +2,13 @@
 
 The product owner's three target scenarios (E1–E3) and the cases that chose the precedence (F, S, T, Q vectors), and the cases the owner's rulings of 2026-10-21 decide (C∩, configurable precedence, H, A, K, U, V, D vectors), each as **inputs → expected price → which row wins and why**, under the proposed model, with today's answer where it differs. They are written to become the failing-first tests of the pricing-model feature (Constitution III) and to answer "what should this cost?" without re-deriving the algorithm.
 
-**Verified against** `master` at `b1021c71b` on 2026-10-21; §10.11 re-checked for the P0 read-path hardening (branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21. File:line citations are as of `b1021c71b`; re-check them before relying on one.
+**Verified against** `master` at `b1021c71b` on 2026-10-21; §10.11 re-checked for the P0 read-path hardening (branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21; §10.16 re-checked at `e3f456957` on 2026-10-24 (vectors G1–G4). File:line citations are as of `b1021c71b`; re-check them before relying on one.
+
+**The "Today" lines** under each vector record what the **pre-160** engine (the Application rule
+and the Default list) answered, as the comparison the model was decided against. Since feature 160
+the shipped engine answers the **Expected** column (`current-model.md`); the vectors are its tests
+under `backend/test/integration/price_lists/worked-examples/`, and the demo reproduces E1–E3
+(`backend/test/integration/price_lists/demo-scenarios.test.ts`).
 
 **Section numbers.** `§N` references follow the numbering of the original analysis, which is split across this directory: §1 → `current-model.md`; §2 → `read-paths-and-performance.md` (its summary table); §3–§9, §11, §12 → `decision-record.md`; §10 → `worked-examples.md`. `read-paths §N` points into `read-paths-and-performance.md`, `peers §N` into `peer-platforms.md`. Path abbreviations: `PL/` = `packages/modules/price_lists/src/`, `CON/` = `packages/contracts/src/`, `CAT/` = `packages/modules/catalog/src/`, `SF/` = `storefront/`.
 
@@ -216,6 +222,7 @@ Chain depth (N6):
 | A3.1 | rep scoped to {Acme}; L10 organizations {Acme} | — | — | editable | all members in scope |
 | A3.2 | same rep; L8 {Acme, Beta} | — | — | **not visible** (answers as missing, N3) | a member out of scope |
 | A3.3 | same rep; L9 groups {VIP, Gold} | — | — | read-only | not an organization list |
+| A3.4 | same rep; a draft organization book naming no organization | — | — | **not visible** (answers as missing) | names none of the rep's organizations; a rep cannot create, duplicate or patch to such an audience (`400`), nor patch their own draft to everyone or groups (`403`) — review finding 4 |
 | A4 | create a list with members of two kinds (Acme and VIP) | — | — | refused `400 VALIDATION_FAILED` | one kind per list |
 
 The effective-group rule of A2.1–A2.3 (the customer's own group, else the organization's — one
@@ -282,3 +289,37 @@ percent +10 (off the parent's base).
 | D2 | true | Acme / P1 (E3) | list **100.00** / your price **95.00** |
 | D3 | true | Acme / P1 (U2.1, surcharge) | **110.00** only — the list price is shown only when above yours (N4) |
 | D4 | true | guest / P1 (no lists) | **100.00** only — list price equals your price |
+| D5 | true | Acme / P1 (E3) with a sale of **80.00** charged | list ~~**100.00**~~ / your price **80.00** — two prices only: Acme's regular 95.00 is not shown (owner ruling 2026-10-23) |
+| D6 | false | Acme / P1 (E3) with the same sale | ~~**95.00**~~ **80.00** — unchanged: the sale strikes the buyer's own price |
+
+### 10.16 Two-place rounding of an x.xx50 amount
+
+A resolver amount is four places; every surface that shows or stores it at two rounds it **half-up
+on its decimal digits** (`roundAmountHalfUp`, `CON/price-book-decimal.ts`), which is also what the
+storefront's `Intl.NumberFormat` shows. `Number(amount).toFixed(2)` rounds the binary double and
+is not this rule: 9.0450 is the double 9.04499…, so it gave 9.04.
+
+| Vector | Config | Buyer / product | Resolver | Card, product page, cart line, order (copied from the cart), order preview, quote reference, feed |
+| --- | --- | --- | --- | --- |
+| R1 | everyone catalogue book: product fixed 10.05; everyone sale: product −10 % | any / product | **9.0450** | **9.05** (`toFixed`: 9.04) |
+| R2 | everyone sale: product fixed 1.005 | any / product | **1.0050** | **1.01** (`toFixed`: 1.00) |
+
+Test: `backend/test/integration/price_lists/worked-examples/rounding.test.ts`.
+
+**Gross at two places** (review 2 of release 0.108.0, finding 2). A gross price is computed, not
+read: `net × (1 + rate / 100)`, rounded to two places **half-up on the exact decimal product**
+(`grossAmountHalfUp`, beside `roundAmountHalfUp`). Gross is the default product-feed presentation,
+and the storefront's gross beside a net price is the same function, so the two agree. Rounding the
+binary double is not this rule: 29.50 × 1.23 is the double 36.28499…, and
+`Math.round(x * 100) / 100` gave 36.28.
+
+| Vector | Net | Rate | Exact product | Gross (feed, storefront) | Binary (`Math.round`) |
+| --- | --- | --- | --- | --- | --- |
+| G1 | 29.50 | 23 % | 36.2850 | **36.29** | 36.28 |
+| G2 | 4.30 | 5 % | 4.5150 | **4.52** | 4.51 |
+| G3 | 31.50 | 23 % | 38.7450 | **38.75** | 38.74 |
+| G4 | 16.50 | 23 % | 20.2950 | **20.30** | 20.29 (also what `Intl.NumberFormat` showed) |
+
+Tests: `packages/contracts/test/price-book-decimal.unit.test.ts`,
+`packages/modules/product_feeds/src/backend/services/feed-gross-price.test.ts`,
+`storefront/test/lib/gross-derivation.test.ts`. Invoice and tax totals are issue #417.

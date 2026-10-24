@@ -1,3 +1,4 @@
+import { roundAmountHalfUp } from '@endora-commerce/contracts';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
   CartCustomerContext,
@@ -118,6 +119,7 @@ export class CartPlacementApplyService implements CartPlacementApplyPort {
       if (!differs || drift.currentUnitPrice === null || drift.currentCurrency === null) continue;
       item.unitPrice = drift.currentUnitPrice;
       item.currency = drift.currentCurrency;
+      item.priceSource = drift.currentPriceSource ?? null;
       changed = true;
     }
     if (changed) await em.flush();
@@ -186,10 +188,11 @@ export class CartPlacementApplyService implements CartPlacementApplyPort {
           productId: item.productId,
           variantId: item.variantId ?? null,
           quantity: item.quantity,
-          storedUnitPrice: Number(item.unitPrice).toFixed(2),
+          storedUnitPrice: roundAmountHalfUp(item.unitPrice),
           storedCurrency: item.currency,
           currentUnitPrice: current?.unitPrice ?? null,
           currentCurrency: current?.currency ?? null,
+          currentPriceSource: answer?.ok ? answer.priceSource : null,
         },
       });
     }

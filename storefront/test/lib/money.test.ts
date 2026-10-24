@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { moneyByMode, DEFAULT_VAT_RATE } from '../../lib/i18n/money';
+import { formatMoney, moneyByMode, DEFAULT_VAT_RATE } from '../../lib/i18n/money';
 
 /**
  * Unit contract for `moneyByMode` — the single place that turns a net `Money`
@@ -48,5 +48,21 @@ describe('moneyByMode', () => {
 
   it('exposes the Polish VAT default', () => {
     expect(DEFAULT_VAT_RATE).toBe(0.23);
+  });
+});
+
+/**
+ * `specs/pricing/worked-examples.md` §10.16 — the storefront shows a resolver
+ * amount half-up on its decimal digits (`Intl.NumberFormat` rounds the
+ * shortest decimal of the number half-expand), which is the figure the cart
+ * stores and the order charges: 9.0450 is 9,05 and 1.0050 is 1,01.
+ */
+describe('formatMoney — an x.xx50 amount is shown half-up', () => {
+  it.each([
+    ['9.0450', /^9,05\s*zł$/],
+    ['1.0050', /^1,01\s*zł$/],
+    ['2.6750', /^2,68\s*zł$/],
+  ])('%s', (amount, shown) => {
+    expect(formatMoney(Number(amount), 'PLN', 'pl-PL')).toMatch(shown);
   });
 });

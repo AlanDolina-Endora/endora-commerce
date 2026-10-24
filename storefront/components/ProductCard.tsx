@@ -165,10 +165,13 @@ function renderPriceSlot(args: {
         <BaseSalePriceBlock
           basePrice={resolved.basePrice}
           salePrice={resolved.salePrice}
+          listPrice={resolved.listPrice ?? null}
           displayMode={resolved.displayMode}
           locale={locale}
           vatRate={vatRate}
           variant="card"
+          listLabel={t('product.listPrice')}
+          yourPriceLabel={t('product.yourPrice')}
         />
       </>
     );
@@ -206,10 +209,59 @@ function renderPriceSlot(args: {
     );
   }
 
+  // Feature 160 — the buyer's own price, struck through, when `price` is a
+  // charged sale (FR-025); and "from" when the variants differ (FR-024).
+  const compareAtFmt = product.compareAtPrice
+    ? new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency: product.compareAtPrice.currency,
+        minimumFractionDigits: 2,
+      }).format(product.compareAtPrice.amount)
+    : null;
+
+  // Feature 161 (FR-026) — "list price / your price". The catalogue and search
+  // listings render this card without `resolved`, so the list price is read
+  // from the summary's own resolution; it is present only when the pricing
+  // engine decided to show it (setting on, catalogue price above `price`).
+  const listPrice = product.resolvedPrice?.listPrice;
+  const listFmt = listPrice
+    ? new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency: listPrice.currency,
+        minimumFractionDigits: 2,
+      }).format(Number(listPrice.amount))
+    : null;
+
   return (
     <>
-      <div className="industria-product-card__price__from">od / szt.</div>
-      <div className="font-mono text-[16px] font-semibold tracking-[-0.01em] text-fg">{priceFmt}</div>
+      <div className="industria-product-card__price__from">
+        {product.priceVariesByVariant ? t('product.priceFromVariants') : 'od / szt.'}
+      </div>
+      {/* Owner ruling 2026-10-23: beside a list price a charged sale strikes the
+          list price, not the buyer's own — two numbers, never three. */}
+      {compareAtFmt && !listFmt ? (
+        <s
+          data-testid="card-compare-at"
+          aria-label={t('product.compareAtLabel')}
+          className="font-mono text-[11px] text-muted"
+        >
+          {compareAtFmt}
+        </s>
+      ) : null}
+      {listFmt ? (
+        <div data-testid="card-list-price" className="flex items-baseline gap-[6px] font-mono text-[11px] text-muted">
+          <span className="text-[10px] uppercase tracking-[0.04em] text-subtle">{t('product.listPrice')}</span>
+          {compareAtFmt ? <s>{listFmt}</s> : <span>{listFmt}</span>}
+        </div>
+      ) : null}
+      {listFmt ? (
+        <div className="flex items-baseline gap-[6px]">
+          <span className="font-mono text-[10px] uppercase tracking-[0.04em] text-subtle">{t('product.yourPrice')}</span>
+          <div className="font-mono text-[16px] font-semibold tracking-[-0.01em] text-fg">{priceFmt}</div>
+        </div>
+      ) : (
+        <div className="font-mono text-[16px] font-semibold tracking-[-0.01em] text-fg">{priceFmt}</div>
+      )}
       {grossFmt ? (
         <div className="font-mono text-[11px] text-muted">brutto {grossFmt}</div>
       ) : null}

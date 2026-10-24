@@ -8,7 +8,9 @@ import {
   type OrganizationDetailsPort,
 } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
+import type { PriceSource } from '@endora-commerce/contracts';
 import type { PricingServiceContract } from './pricing-service.interface.js';
+import type { BookExplanation } from './book-resolver.js';
 import { effectiveCustomerGroupId } from './customer-group-rule.js';
 
 /**
@@ -52,6 +54,10 @@ export interface BuyerLinePriceDetailedAnswer extends BuyerLinePriceAnswer {
    * the published `BuyerLinePriceAnswer` is not widened (D-77).
    */
   matrixEntryId: string | null;
+  /** Feature 160 — the tier that priced the line, the buyer price a charged sale undercut, and why (FR-020). */
+  source?: PriceSource | undefined;
+  compareAt?: string | null | undefined;
+  explanation?: BookExplanation | undefined;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -89,7 +95,11 @@ export class BuyerLinePriceService implements BuyerLinePricePort {
     return detailed.map(({ key, price }) => ({ key, price }));
   }
 
-  async resolveDetailed(query: BuyerLinePriceQuery): Promise<BuyerLinePriceDetailedAnswer[]> {
+  /** `explain` — the explainer route: every ranked runner-up per line, resolved past the answer cache. */
+  async resolveDetailed(
+    query: BuyerLinePriceQuery,
+    options: { explain?: boolean } = {},
+  ): Promise<BuyerLinePriceDetailedAnswer[]> {
     // The channel first: an unknown one is refused before anything is read.
     const salesChannel = await this.#channel(query.salesChannelId);
     if (query.lines.length === 0) return [];
@@ -153,6 +163,7 @@ export class BuyerLinePriceService implements BuyerLinePricePort {
           salesChannel,
           currencyCode,
         },
+        ...(options.explain ? { explain: true } : {}),
       });
       for (const [index, line] of chunk.entries()) {
         if (!byId.has(line.productId)) {
@@ -172,6 +183,9 @@ export class BuyerLinePriceService implements BuyerLinePricePort {
             : null,
           productFound: true,
           matrixEntryId: resolved?.matrixEntryId ?? null,
+          ...(resolved?.source !== undefined ? { source: resolved.source } : {}),
+          ...(resolved?.compareAt !== undefined ? { compareAt: resolved.compareAt } : {}),
+          ...(resolved?.explanation !== undefined ? { explanation: resolved.explanation } : {}),
         });
       }
     }

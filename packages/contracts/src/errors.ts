@@ -69,6 +69,11 @@ export const ERROR_CODES = {
   PACKAGING_UNIT_BELOW_MINIMUM_QUANTITY: 'PACKAGING_UNIT_BELOW_MINIMUM_QUANTITY',
   PACKAGING_UNIT_MISMATCH: 'PACKAGING_UNIT_MISMATCH',
 
+  // Catalog 160 — a product or variant write names an old price field; prices
+  // are set in price books (owned by `catalog`, raised by its admin writes and
+  // by the products import of `import_export`)
+  PRICE_SET_IN_PRICE_BOOKS: 'PRICE_SET_IN_PRICE_BOOKS',
+
   // Catalog 002 — Product Links (US4)
   SELF_LINK_NOT_ALLOWED: 'SELF_LINK_NOT_ALLOWED',
   LINK_ALREADY_EXISTS: 'LINK_ALREADY_EXISTS',
@@ -584,14 +589,26 @@ export const ERROR_CODES = {
    * identifiers says nothing about which one was wrong.
    */
   PRICE_LIST_NOT_FOUND: 'PRICE_LIST_NOT_FOUND',
-  /** Feature 148 — a price matrix entry that does not exist on this list, or is out of scope. */
-  PRICE_MATRIX_ENTRY_NOT_FOUND: 'PRICE_MATRIX_ENTRY_NOT_FOUND',
-  /** Feature 148 — an entry with the same coordinates and an overlapping window exists (FR-005). */
-  PRICE_MATRIX_ENTRY_OVERLAP: 'PRICE_MATRIX_ENTRY_OVERLAP',
-  /** Feature 148 — the attribute may not select prices (`details.reason`, FR-008/FR-009). */
-  PRICE_MATRIX_ATTRIBUTE_NOT_ELIGIBLE: 'PRICE_MATRIX_ATTRIBUTE_NOT_ELIGIBLE',
-  /** Feature 148 — the list already holds the maximum number of entries (FR-007). */
-  PRICE_MATRIX_ENTRY_LIMIT: 'PRICE_MATRIX_ENTRY_LIMIT',
+  /** Feature 160 — a channel of a price book's set does not offer the book's currency (FR-003). */
+  PRICE_BOOK_CHANNEL_CURRENCY: 'PRICE_BOOK_CHANNEL_CURRENCY',
+  /** Feature 160 — an audience set names members of another kind, or that do not exist (FR-002, A4). */
+  PRICE_BOOK_AUDIENCE_KIND: 'PRICE_BOOK_AUDIENCE_KIND',
+  /** Feature 160 — the currency, or the audience kind of a book once active, may not change (FR-004). */
+  PRICE_BOOK_IMMUTABLE_FIELD: 'PRICE_BOOK_IMMUTABLE_FIELD',
+  /** Feature 160 — the book would apply nowhere or to no one, so it cannot be activated. */
+  PRICE_BOOK_NOT_APPLICABLE: 'PRICE_BOOK_NOT_APPLICABLE',
+  /** Feature 160 — two rows of one selection overlap in their quantity windows (FR-006); `details.errors` names them. */
+  PRICE_BOOK_ROW_OVERLAP: 'PRICE_BOOK_ROW_OVERLAP',
+  /** Feature 160 — rows break a shape rule (FR-005–FR-009); `details.errors` names every failing row. */
+  PRICE_BOOK_ROW_SHAPE: 'PRICE_BOOK_ROW_SHAPE',
+  /** Feature 160 — a row names a product, variant, category or attribute value that does not exist or cannot select prices. */
+  PRICE_BOOK_ROW_TARGET: 'PRICE_BOOK_ROW_TARGET',
+  /** Feature 160 — the book would hold more rows than its limit. */
+  PRICE_BOOK_ROW_LIMIT: 'PRICE_BOOK_ROW_LIMIT',
+  /** Feature 160 — the book changed since the version the write was made against; `details.currentVersion`. */
+  PRICE_BOOK_STALE: 'PRICE_BOOK_STALE',
+  /** Feature 160 — the precedence is read-only until the change flow ships (FR-023). */
+  PRECEDENCE_CHANGE_UNAVAILABLE: 'PRECEDENCE_CHANGE_UNAVAILABLE',
 
   // Shared PIM connector layer (feature 089).
   /** Another PIM connector is operator-active; activation refused (FR-003). */

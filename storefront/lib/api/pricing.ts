@@ -36,7 +36,8 @@ export interface PricingMoney {
 }
 
 export interface ResolvedPrice {
-  baseListId: string;
+  /** `null` when no price book prices the product for the buyer (unpriced, FR-018). */
+  baseListId: string | null;
   basePrice: PricingMoney | null;
   saleListId: string | null;
   salePrice: PricingMoney | null;
@@ -46,6 +47,16 @@ export interface ResolvedPrice {
     minQuantity: number;
     maxQuantity: number | null;
   } | null;
+  /** Feature 160 — which tier priced the charged line. */
+  source?: 'base' | 'catalogue' | 'buyer' | 'sale' | null;
+  /** Feature 160 — the buyer price a charged sale undercut. */
+  compareAt?: string | null;
+  /**
+   * Feature 161 (G9) — the catalogue price beside a lower buyer price ("list
+   * price / your price"); present only while `pricing.show_list_price` is on
+   * and it is above the price charged.
+   */
+  listPrice?: PricingMoney | undefined;
 }
 
 /**
@@ -53,7 +64,7 @@ export interface ResolvedPrice {
  * `ResolvedPrice` is one, and so is the catalogue's `ProductSummary.resolvedPrice`
  * (D-287 P0), which is what the product page and the product cards read.
  */
-export type PriceDisplay = Pick<ResolvedPrice, 'basePrice' | 'salePrice' | 'displayMode'>;
+export type PriceDisplay = Pick<ResolvedPrice, 'basePrice' | 'salePrice' | 'displayMode' | 'listPrice'>;
 
 /**
  * The pricing module is not present — issue #124.

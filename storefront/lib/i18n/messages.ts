@@ -25,6 +25,7 @@ export type MessageKey =
   | 'catalog.heading'
   | 'catalog.filters'
   | 'catalog.empty'
+  | 'catalog.emptyPageMore'
   | 'catalog.loadMore'
   | 'catalog.sort.priceAsc'
   | 'catalog.sort.priceDesc'
@@ -36,6 +37,10 @@ export type MessageKey =
   | 'catalog.price.unitNote'
   | 'product.outOfStock'
   | 'product.requestQuote'
+  | 'product.priceFromVariants'
+  | 'product.compareAtLabel'
+  | 'product.listPrice'
+  | 'product.yourPrice'
   | 'product.addToCart'
   | 'product.addToCartFailed'
   | 'product.oneClickFailed'
@@ -428,6 +433,7 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'catalog.heading': 'Catalog',
     'catalog.filters': 'Filters',
     'catalog.empty': 'No products match your filters.',
+    'catalog.emptyPageMore': 'No products on this page. More follow on the next page.',
     'catalog.loadMore': 'Load more',
     'catalog.sort.priceAsc': 'Price: lowest first',
     'catalog.sort.priceDesc': 'Price: highest first',
@@ -440,6 +446,10 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
       'Prices shown are your unit prices. Quantity discounts and promotions are applied in the cart.',
     'product.outOfStock': 'Out of stock',
     'product.requestQuote': 'Request a quote',
+    'product.priceFromVariants': 'from, depending on the variant',
+    'product.compareAtLabel': 'Your price',
+    'product.listPrice': 'List price',
+    'product.yourPrice': 'Your price',
     'product.addToCart': 'Add to cart',
     'product.addToCartFailed': 'Could not add the product to the cart.',
     'product.oneClickFailed': 'Could not place the order.',
@@ -810,6 +820,7 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'catalog.heading': 'Katalog',
     'catalog.filters': 'Filtry',
     'catalog.empty': 'Zaden produkt nie pasuje do filtrow.',
+    'catalog.emptyPageMore': 'Na tej stronie nie ma produktów. Kolejne są na następnej stronie.',
     'catalog.loadMore': 'Pokaz wiecej',
     'catalog.sort.priceAsc': 'Cena: od najniższej',
     'catalog.sort.priceDesc': 'Cena: od najwyższej',
@@ -821,7 +832,11 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'catalog.price.unitNote':
       'Pokazane ceny to Twoje ceny jednostkowe. Rabaty ilościowe i promocje naliczamy w koszyku.',
     'product.outOfStock': 'Brak w magazynie',
-    'product.requestQuote': 'Zapytaj o oferte',
+    'product.requestQuote': 'Zapytaj o ofertę',
+    'product.priceFromVariants': 'od, zależnie od wariantu',
+    'product.compareAtLabel': 'Twoja cena',
+    'product.listPrice': 'Cena katalogowa',
+    'product.yourPrice': 'Twoja cena',
     'product.addToCart': 'Dodaj do koszyka',
     'product.addToCartFailed': 'Nie udało się dodać produktu do koszyka.',
     'product.oneClickFailed': 'Nie udało się złożyć zamówienia.',

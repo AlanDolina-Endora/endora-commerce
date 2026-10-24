@@ -200,6 +200,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps):
             columns={3}
             view={parsed.view}
             salesChannelCode={ctx.salesChannelCode}
+            more={products.pagination.hasMore}
           />
           <Pagination
             basePath={`/c/${node.slug}`}

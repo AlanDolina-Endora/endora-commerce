@@ -55,6 +55,8 @@ import { Migration20261008T080839CatalogProductAttributeIsPriceRule } from './20
 import { Migration20261008T092714CatalogCategoryContent } from './20261008T092714_catalog_category_content.js';
 import { Migration20261014T170531CatalogProductListSavedViews } from './20261014T170531_catalog_product_list_saved_views.js';
 import { Migration20261016T082008CatalogOrderRules } from './20261016T082008_catalog_order_rules.js';
+import { Migration20261022T111811CatalogPriceFieldsRemoved } from './20261022T111811_catalog_price_fields_removed.js';
+import { Migration20261022T182523CatalogAdminNameKeys } from './20261022T182523_catalog_admin_name_keys.js';
 
 export const migrations = [
   Migration20260429T064146CatalogAttributeSetsInit,
@@ -85,6 +87,8 @@ export const migrations = [
   Migration20261008T092714CatalogCategoryContent,
   Migration20261014T170531CatalogProductListSavedViews,
   Migration20261016T082008CatalogOrderRules,
+  Migration20261022T111811CatalogPriceFieldsRemoved,
+  Migration20261022T182523CatalogAdminNameKeys,
 ];
 
 export {
@@ -116,4 +120,6 @@ export {
   Migration20261008T092714CatalogCategoryContent,
   Migration20261014T170531CatalogProductListSavedViews,
   Migration20261016T082008CatalogOrderRules,
+  Migration20261022T111811CatalogPriceFieldsRemoved,
+  Migration20261022T182523CatalogAdminNameKeys,
 };

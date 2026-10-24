@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { roundAmountHalfUp } from '@endora-commerce/contracts';
 import { formatMoney as formatMoneyShared } from '../../lib/i18n/money';
 import {
   clampDraftQuantity,
@@ -475,7 +476,7 @@ export function DraftLine({
               step="0.01"
               inputMode="decimal"
               value={line.proposedUnitPrice ?? ''}
-              placeholder={line.unitPrice ? line.unitPrice.amount.toFixed(2) : '—'}
+              placeholder={line.unitPrice ? roundAmountHalfUp(line.unitPrice.amount) : '—'}
               aria-label={t.proposedPriceLabel}
               className="w-full min-w-0 border-0 bg-transparent p-0 text-right font-mono text-[14px] text-fg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               onChange={(e): void => {
