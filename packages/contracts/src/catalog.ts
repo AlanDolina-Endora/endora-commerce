@@ -2211,6 +2211,15 @@ export interface CatalogProductLinkRow {
   position: number;
 }
 
+/**
+ * A product as pricing resolves it ({@link CatalogProductReadPort.listPricingRefs}):
+ * the id, and the attribute values an attribute row of a price book matches.
+ */
+export interface CatalogProductPricingRef {
+  id: string;
+  attributeValues: Record<string, unknown>;
+}
+
 /** {@link CatalogProductReadPort.listValueOverridesByProductIds}' narrowing. */
 export interface CatalogValueOverrideLookupOptions {
   /** One sales channel's rows only; absent, every channel's. */
@@ -2278,6 +2287,16 @@ export interface CatalogProductReadPort {
   countByIds(ids: readonly string[]): Promise<number>;
   /** Every product, ordered by sku — the bulk export and the price-list backfill. */
   listAll(options?: CatalogProductLookupOptions): Promise<CatalogProductRecord[]>;
+  /**
+   * Every product as pricing resolves it — its id and its own attribute values
+   * — ordered by id: the products `listAll()` answers (soft-deleted and inactive
+   * included), without building a record of each. The price surface's worker
+   * reads it at the start of every whole build of a profile that may price any
+   * product (issue #416), so it is one statement and no hydration.
+   */
+  listPricingRefs(): Promise<CatalogProductPricingRef[]>;
+  /** {@link listPricingRefs} for the given ids: the ones that exist, as `findByIds(ids)` answers them. */
+  findPricingRefsByIds(ids: readonly string[]): Promise<CatalogProductPricingRef[]>;
 
   /** Variants of the given parent products, ordered by sku. */
   listVariantsByProductIds(productIds: readonly string[]): Promise<CatalogProductVariantRecord[]>;
