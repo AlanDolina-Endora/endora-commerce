@@ -9,7 +9,7 @@ import type {
 import { HttpError } from '@endora-commerce/platform/http';
 import { Cart } from '../entities/cart.entity.js';
 import { CartItem } from '../entities/cart-item.entity.js';
-import { cartSubtotal } from './cart-money.js';
+import { cartTotalsByCart } from './cart-money.js';
 
 /**
  * Organization-Administrator visibility surface (feature 027 US4).
@@ -64,16 +64,8 @@ export class CartOrganizationVisibilityService {
 
     // Bulk item-count + total resolution.
     const cartIds = rows.map((r) => r.id);
-    const itemCounts = new Map<string, { count: number; total: number; currency: string }>();
-    if (cartIds.length > 0) {
-      const items = await em.find(CartItem, { cartId: { $in: cartIds } });
-      for (const it of items) {
-        const prev = itemCounts.get(it.cartId) ?? { count: 0, total: 0, currency: it.currency };
-        prev.count += 1;
-        prev.total = Number(cartSubtotal([{ unitPrice: prev.total, quantity: 1 }, it]));
-        itemCounts.set(it.cartId, prev);
-      }
-    }
+    const itemCounts =
+      cartIds.length > 0 ? cartTotalsByCart(await em.find(CartItem, { cartId: { $in: cartIds } })) : new Map();
 
     return {
       data: rows

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cartLineAmount, cartSubtotal, cartTotalAfterDiscount, cartShortfall } from './cart-money.js';
+import { cartLineAmount, cartShortfall, cartSubtotal, cartTotalAfterDiscount, cartTotalsByCart } from './cart-money.js';
 
 /**
  * Issue #417 — a cart's amounts in exact decimal arithmetic. A cart is net and
@@ -30,5 +30,18 @@ describe('cart money', () => {
     expect(cartShortfall('0.30', '0.30')).toBeNull();
     expect(cartShortfall('0.30', '0.31')).toBe(0.01);
     expect(cartShortfall('100.00', '99.99')).toBeNull();
+  });
+});
+
+describe('cartTotalsByCart', () => {
+  it('groups lines by cart and sums each cart once, exactly', () => {
+    const totals = cartTotalsByCart([
+      { cartId: 'a', unitPrice: '0.10', quantity: 1, currency: 'PLN' },
+      { cartId: 'b', unitPrice: '9.05', quantity: 3, currency: 'EUR' },
+      { cartId: 'a', unitPrice: '0.20', quantity: 1, currency: 'PLN' },
+    ]);
+    expect(totals.get('a')).toEqual({ count: 2, total: 0.3, currency: 'PLN' });
+    expect(totals.get('b')).toEqual({ count: 1, total: 27.15, currency: 'EUR' });
+    expect(cartTotalsByCart([]).size).toBe(0);
   });
 });

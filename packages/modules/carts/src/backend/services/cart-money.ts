@@ -27,3 +27,20 @@ export function cartTotalAfterDiscount(subtotal: string | number, discount: stri
 export function cartShortfall(subtotal: string | number, minimum: string | number): number | null {
   return compareDecimals(minimum, subtotal) > 0 ? Number(moneyDifference(minimum, subtotal)) : null;
 }
+
+/**
+ * Each cart's line count and total, from its lines: grouped by cart and summed
+ * once, exactly. The currency is the first line's, as the list views show it.
+ */
+export function cartTotalsByCart(
+  items: ReadonlyArray<{ cartId: string; unitPrice: string | number; quantity: number; currency: string }>,
+): Map<string, { count: number; total: number; currency: string }> {
+  const byCart = new Map<string, Array<(typeof items)[number]>>();
+  for (const item of items) byCart.set(item.cartId, [...(byCart.get(item.cartId) ?? []), item]);
+  return new Map(
+    [...byCart].map(([cartId, lines]) => [
+      cartId,
+      { count: lines.length, total: Number(cartSubtotal(lines)), currency: lines[0]!.currency },
+    ]),
+  );
+}
