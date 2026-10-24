@@ -231,6 +231,12 @@ export class BookPricing {
     if (lines.length === 0) return out;
     const currencyCode = viewer.currencyCode.toUpperCase();
     const em = this.deps.emFactory();
+    // Read before the first statement (`pricing-cache.ts`): a write that
+    // commits while this resolution reads the channel, the precedence or the
+    // profile invalidates, and the answer built on what was read before it is
+    // then not stored (review finding 6 of release 0.108.0).
+    const cache = fixedProfile ? undefined : this.deps.cache;
+    const generation = cache?.generation;
 
     // K3.2 — a currency the channel does not offer prices nothing (the lines
     // still carry the viewer's display mode). A channel that does not exist
@@ -241,9 +247,6 @@ export class BookPricing {
     const profile = !offered
       ? emptyProfile(viewer.salesChannelId, currencyCode, precedence.version)
       : (fixedProfile ?? (await this.#profileOf(viewer, currencyCode, precedence.version)));
-
-    const cache = fixedProfile ? undefined : this.deps.cache;
-    const generation = cache?.generation;
     const keyOf = (line: PricingLineRequest): ProfilePricingCacheKey => ({
       profileKey: profile.key,
       productId: line.product.id,
