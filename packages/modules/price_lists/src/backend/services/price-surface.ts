@@ -6,7 +6,7 @@ import type {
   ListingPriceOrderRow,
 } from '@endora-commerce/contracts';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
-import type { BookPricing, BookPricingViewer, ListingAnswer } from './book-pricing.js';
+import type { BookPricing, BookPricingViewer, ProfileListingAnswer } from './book-pricing.js';
 import { compareDecimal } from './matrix-decimal.js';
 import type { PricedProductRef } from './pricing-service.interface.js';
 import type { PricingProfile } from './pricing-profile.js';
@@ -40,8 +40,9 @@ import { pgArray } from './sql-array.js';
  * stream holds (a scalar probe per row) below the first stream's watermark —
  * so the sort costs two index-ordered streams whatever the number of books.
  *
- * Every row is computed by the batched resolver (`BookPricing.resolveListing`),
- * the same call the cards are priced with, so the surface and the cards agree
+ * Every row is computed by the batched resolver the cards are priced with
+ * (`BookPricing.resolveProfileListing`, the listing resolution of
+ * `resolveListing` without the display mode), so the surface and the cards agree
  * by construction; `price-surface-identity.test.ts` holds it.
  *
  * **Freshness — a request never waits on a build** (`contracts/price-surface.md`
@@ -67,8 +68,12 @@ import { pgArray } from './sql-array.js';
  * read the surface (FR-027).
  */
 
-/** Product rows resolved per statement batch when building a profile. */
-const BUILD_CHUNK = 500;
+/**
+ * Product rows resolved per statement batch when building a profile. 2 000
+ * measured no faster than 500 once the next batch resolves while the previous
+ * one is written (issue #416, research R19).
+ */
+export const BUILD_CHUNK = 500;
 /** A stale profile restricted to at most this many products is ordered live. */
 const LIVE_ORDER_LIMIT = 5_000;
 
@@ -115,6 +120,17 @@ interface DueProfile {
   marks: Array<{ id: string; productId: string }>;
 }
 
+/**
+ * What one worker pass reads once and shares between its builds (issue #416):
+ * the catalogue, read through `catalog`'s port the first time a whole build
+ * needs every product. It is read after the pass read its work, so every
+ * product change committed before the pass is in it; a change committed during
+ * the pass marks its products, and the next pass does those marks (§4).
+ */
+interface Pass {
+  catalogue(): Promise<PricedProductRef[]>;
+}
+
 /** What the read path finds for a profile: a served surface, a live ordering, or nothing yet. */
 type SurfaceAnswer = ReadySurface | 'live' | 'missing';
 
@@ -149,8 +165,8 @@ interface SurfaceRow {
   sourceTier: 'base' | 'catalogue' | 'buyer' | 'sale';
 }
 
-function rowOf(productId: string, listed: ListingAnswer | undefined): SurfaceRow | null {
-  const price = listed?.answer?.resolution.price;
+function rowOf(productId: string, listed: ProfileListingAnswer | undefined): SurfaceRow | null {
+  const price = listed?.resolution?.price;
   if (!listed || !price) return null;
   return {
     productId,
@@ -169,14 +185,6 @@ function sameRow(a: SurfaceRow, b: SurfaceRow): boolean {
     a.sourceTier === b.sourceTier
   );
 }
-
-const builderViewer = (profile: PricingProfile): BookPricingViewer => ({
-  organizationId: null,
-  customerGroupId: null,
-  signedIn: false,
-  salesChannelId: profile.channelId,
-  currencyCode: profile.currencyCode,
-});
 
 export class PriceSurface {
   readonly #coverage = new Map<string, boolean>();
@@ -411,9 +419,11 @@ export class PriceSurface {
    */
   async rebuildStale(): Promise<number> {
     let done = 0;
-    for (let pass = 0; pass < REBUILD_PASSES; pass += 1) {
+    for (let n = 0; n < REBUILD_PASSES; n += 1) {
       const due = await this.#due();
       if (due.length === 0) break;
+      let catalogue: Promise<PricedProductRef[]> | undefined;
+      const pass: Pass = { catalogue: () => (catalogue ??= this.deps.listProducts()) };
       for (const item of due) {
         const profile = await this.deps.books.profileFromVector({
           channelId: item.channelId,
@@ -422,8 +432,8 @@ export class PriceSurface {
           vector: item.vector,
         });
         const everyone = item.vector.length === 0 ? null : await this.#everyoneOf(profile);
-        if (item.state === 'building' || item.stale) await this.#build(profile, everyone, item);
-        else await this.#refresh(item, profile, everyone);
+        if (item.state === 'building' || item.stale) await this.#build(pass, profile, everyone, item);
+        else await this.#refresh(pass, item, profile, everyone);
         done += 1;
       }
     }
@@ -592,10 +602,10 @@ export class PriceSurface {
   }
 
   /** The everyone surface a buyer profile is stored against — built first when it has none. */
-  async #everyoneServed(everyone: PricingProfile): Promise<ReadySurface> {
+  async #everyoneServed(pass: Pass, everyone: PricingProfile): Promise<ReadySurface> {
     const held = await this.#profileRow(everyone);
     if (held && held.state === 'ready') return { id: held.id, generation: held.generation, revision: held.revision };
-    const id = await this.#build(everyone, null);
+    const id = await this.#build(pass, everyone, null);
     const [row] = await this.deps
       .emFactory()
       .execute<Array<{ serving_generation: number; revision: number }>>(
@@ -619,52 +629,83 @@ export class PriceSurface {
 
   /**
    * The surface rows of `products` for the profile, in chunks: each resolved by
-   * the batched resolver the cards use, and — for a buyer profile — only those
-   * that differ from the everyone surface's served row (sparse). A product
-   * everyone can buy and this profile cannot is not representable as a row,
-   * and cannot happen (a buyer row always has the catalogue price to fall back to).
+   * the batched resolver the cards use (`resolveProfileListing`, the listing
+   * resolution without the display mode the surface does not store), and — for
+   * a buyer profile — only those that differ from the everyone surface's served
+   * row (sparse). A product everyone can buy and this profile cannot is not
+   * representable as a row, and cannot happen (a buyer row always has the
+   * catalogue price to fall back to).
+   *
+   * The next chunk is resolved while the previous one is written (issue #416):
+   * the resolution reads on connections of its own, the write runs on the
+   * caller's, so the two overlap and neither waits for the other. Writes stay
+   * one at a time and in order. A failure of either — in any chunk — is this
+   * call's failure, after the write in flight has settled, so the caller's
+   * transaction never swaps a half-written generation in (§3).
    */
   async #rowsOf(
-    em: EntityManager,
     profile: PricingProfile,
     products: readonly PricedProductRef[],
     everyone: ReadySurface | null,
     write: (rows: SurfaceRow[]) => Promise<void>,
   ): Promise<void> {
-    for (let start = 0; start < products.length; start += BUILD_CHUNK) {
-      const chunk = products.slice(start, start + BUILD_CHUNK);
-      const listed = await this.deps.books.resolveListing(chunk, builderViewer(profile), profile);
-      let rows = chunk.map((p) => rowOf(p.id, listed.get(p.id))).filter((r): r is SurfaceRow => r !== null);
-      if (everyone) {
-        const base = new Map(
-          (
-            await em.execute<
-              Array<{ product_id: string; amount: string; max_amount: string; compare_at: string | null; source_tier: SurfaceRow['sourceTier'] }>
-            >(
-              `select "product_id", "amount", "max_amount", "compare_at", "source_tier"
-                 from "price_profile_prices"
-                where "profile_id" = ? and "generation" = (select "serving_generation" from "price_profiles" where "id" = ?)
-                  and "product_id" = any(?::uuid[])`,
-              [everyone.id, everyone.id, pgArray(chunk.map((p) => p.id))],
-            )
-          ).map((r) => [
-            r.product_id,
-            {
-              productId: r.product_id,
-              amount: String(r.amount),
-              maxAmount: String(r.max_amount),
-              compareAt: r.compare_at === null ? null : String(r.compare_at),
-              sourceTier: r.source_tier,
-            } satisfies SurfaceRow,
-          ]),
-        );
-        rows = rows.filter((r) => {
-          const held = base.get(r.productId);
-          return !held || !sameRow(held, r);
-        });
+    let writing: Promise<void> = Promise.resolve();
+    try {
+      for (let start = 0; start < products.length; start += BUILD_CHUNK) {
+        const chunk = products.slice(start, start + BUILD_CHUNK);
+        const listed = await this.deps.books.resolveProfileListing(chunk, profile);
+        let rows = chunk.map((p) => rowOf(p.id, listed.get(p.id))).filter((r): r is SurfaceRow => r !== null);
+        if (everyone) {
+          const base = await this.#servedRows(everyone, chunk);
+          rows = rows.filter((r) => {
+            const held = base.get(r.productId);
+            return !held || !sameRow(held, r);
+          });
+        }
+        await writing;
+        if (rows.length > 0) {
+          writing = write(rows);
+          // Handled now, awaited later: a write failing while the next chunk
+          // resolves is not an unhandled rejection, and is still this call's.
+          writing.catch(() => undefined);
+        } else {
+          writing = Promise.resolve();
+        }
       }
-      if (rows.length > 0) await write(rows);
+      await writing;
+    } catch (err) {
+      await writing.catch(() => undefined);
+      throw err;
     }
+  }
+
+  /**
+   * The everyone surface's served rows of `chunk`: one statement on a
+   * connection of its own, never the build's — the everyone rows were committed
+   * by an earlier build or refresh, and the build's connection is busy writing.
+   */
+  async #servedRows(everyone: ReadySurface, chunk: readonly PricedProductRef[]): Promise<Map<string, SurfaceRow>> {
+    const rows = await this.deps.emFactory().execute<
+      Array<{ product_id: string; amount: string; max_amount: string; compare_at: string | null; source_tier: SurfaceRow['sourceTier'] }>
+    >(
+      `select "product_id", "amount", "max_amount", "compare_at", "source_tier"
+         from "price_profile_prices"
+        where "profile_id" = ? and "generation" = (select "serving_generation" from "price_profiles" where "id" = ?)
+          and "product_id" = any(?::uuid[])`,
+      [everyone.id, everyone.id, pgArray(chunk.map((p) => p.id))],
+    );
+    return new Map(
+      rows.map((r) => [
+        r.product_id,
+        {
+          productId: r.product_id,
+          amount: String(r.amount),
+          maxAmount: String(r.max_amount),
+          compareAt: r.compare_at === null ? null : String(r.compare_at),
+          sourceTier: r.source_tier,
+        } satisfies SurfaceRow,
+      ]),
+    );
   }
 
   async #insertRows(em: EntityManager, id: string, generation: number, rows: readonly SurfaceRow[]): Promise<void> {
@@ -703,12 +744,12 @@ export class PriceSurface {
    * read it (`due`), and the marks the pass read go with the build. Called by
    * the worker, never by a request. Answers the id.
    */
-  async #build(profile: PricingProfile, everyone: PricingProfile | null, due?: DueProfile): Promise<string> {
-    const everyoneServed = everyone ? await this.#everyoneServed(everyone) : null;
+  async #build(pass: Pass, profile: PricingProfile, everyone: PricingProfile | null, due?: DueProfile): Promise<string> {
+    const everyoneServed = everyone ? await this.#everyoneServed(pass, everyone) : null;
     const id = await this.#ensureRow(profile);
     const candidates = everyone ? await this.#buyerCandidates(profile) : 'all';
     const products =
-      candidates === 'all' ? await this.deps.listProducts() : candidates.size === 0 ? [] : await this.deps.productsByIds([...candidates]);
+      candidates === 'all' ? await pass.catalogue() : candidates.size === 0 ? [] : await this.deps.productsByIds([...candidates]);
     await this.deps.emFactory().transactional(async (em) => {
       await em.execute(`select pg_advisory_xact_lock(hashtext(?))`, [`price_lists.surface:${id}`]);
       const [current] = await em.execute<Array<{ state: string; stale: boolean; serving_generation: number; marked_at: string | null }>>(
@@ -720,7 +761,7 @@ export class PriceSurface {
       const next = Number(current?.serving_generation ?? 0) + 1;
       await em.execute(`delete from "price_profile_prices" where "profile_id" = ? and "generation" = ?`, [id, next]);
       let written = 0;
-      await this.#rowsOf(em, profile, products, everyoneServed, async (rows) => {
+      await this.#rowsOf(profile, products, everyoneServed, async (rows) => {
         written += rows.length;
         await this.#insertRows(em, id, next, rows);
       });
@@ -769,9 +810,9 @@ export class PriceSurface {
    * statement sees the surface before or after the refresh, never a mix — and
    * move the revision. Clears the marks the pass read, if no write moved them.
    */
-  async #refresh(due: DueProfile, profile: PricingProfile, everyone: PricingProfile | null): Promise<void> {
+  async #refresh(pass: Pass, due: DueProfile, profile: PricingProfile, everyone: PricingProfile | null): Promise<void> {
     if (due.marks.length === 0) return;
-    const everyoneServed = everyone ? await this.#everyoneServed(everyone) : null;
+    const everyoneServed = everyone ? await this.#everyoneServed(pass, everyone) : null;
     const ids = [...new Set(due.marks.map((m) => m.productId))];
     const products = await this.deps.productsByIds(ids);
     await this.deps.emFactory().transactional(async (em) => {
@@ -784,7 +825,7 @@ export class PriceSurface {
       if (!current || current.state !== 'ready') return;
       const generation = Number(current.serving_generation);
       const rows: SurfaceRow[] = [];
-      await this.#rowsOf(em, profile, products, everyoneServed, async (chunk) => {
+      await this.#rowsOf(profile, products, everyoneServed, async (chunk) => {
         rows.push(...chunk);
       });
       for (let start = 0; start < ids.length; start += MARK_CHUNK) {
@@ -923,7 +964,10 @@ export class PriceSurface {
     const listed = await this.deps.books.resolveListing(products, viewer);
     const desc = query.direction === 'desc';
     let rows = products
-      .map((p) => ({ p, row: rowOf(p.id, listed.get(p.id)) }))
+      .map((p) => {
+        const answer = listed.get(p.id);
+        return { p, row: rowOf(p.id, answer && { ...answer, resolution: answer.answer?.resolution ?? null }) };
+      })
       .filter((x): x is { p: PricedProductRef; row: SurfaceRow } => x.row !== null)
       .map(({ row }) => row);
     const cmp = (a: { amount: string; productId: string }, b: { amount: string; productId: string }) => {
