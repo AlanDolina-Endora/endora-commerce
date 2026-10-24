@@ -263,6 +263,16 @@ type PriceListingCursor =
   | { stream: 'rest'; amount: string; productId: string; after: ListingKeysetCursor };
 
 /**
+ * What a price walk reads once per page for its viewer: the pricing context
+ * every price of the page is resolved with, and the category filter's product
+ * ids (`null` without a category filter).
+ */
+interface PriceWalkScope {
+  context: ListingPriceViewerContext;
+  categoryIds: ReadonlySet<string> | null;
+}
+
+/**
  * The cursor a listing that pages by a keyset issues. Opaque to every caller,
  * and **shaped by the ordering it was issued under** — see `keysetFor`.
  */
@@ -570,6 +580,8 @@ export class CatalogQueryService {
   async #listingPricesFor(
     products: readonly Product[],
     ctx: CatalogQueryContext,
+    /** The viewer's pricing context, when the caller has built it already for this request. */
+    context?: ListingPriceViewerContext,
   ): Promise<Map<string, ListingPriceDetail>> {
     if (products.length === 0) return new Map();
     if (!(ctx.resolvedChannel.isPublic ?? true)) return new Map();
@@ -578,7 +590,7 @@ export class CatalogQueryService {
     // home page's cards need no second, per-product resolution.
     return this.#requireListingPrices().resolveListingPriceDetails({
       products,
-      context: await this.#viewerPricingContext(ctx),
+      context: context ?? (await this.#viewerPricingContext(ctx)),
     });
   }
 
@@ -1062,19 +1074,19 @@ export class CatalogQueryService {
   ): Promise<ListResult<ProductSummary>> {
     const channel = ctx.resolvedChannel;
     const direction = sort === 'price' ? 'asc' : 'desc';
+    // The viewer's pricing context and the category tree, read once for the
+    // page and handed to whichever walk serves it — every chunk of it (review
+    // 3, A5). An `unordered` walk is decided earlier, in `listProducts`, and
+    // reads neither (review 2, finding 7).
+    const scope = await this.#priceWalkScope(em, params, ctx);
+    const { context } = scope;
     // A walk whose price order went missing carries on in the default order
-    // from the last price it served, to its end. Decided before the viewer's
-    // pricing context and the category tree are read, since that walk uses
-    // neither (review 2, finding 7); an `unordered` walk is decided earlier
-    // still, in `listProducts`.
+    // from the last price it served, to its end.
     if (decoded?.stream === 'rest') {
-      return this.#listRemainder(em, params, ctx, where, direction, decoded, decoded.after);
+      return this.#listRemainder(em, params, ctx, where, direction, scope, decoded, decoded.after);
     }
-    const context = await this.#viewerPricingContext(ctx);
     const amountRange = this.#amountRange(params);
-    const restrictToProductIds = params.categorySlug
-      ? [...(await this.productIdsInCategoryTree(em, params.categorySlug))]
-      : undefined;
+    const restrictToProductIds = scope.categoryIds ? [...scope.categoryIds] : undefined;
 
     // A cursor issued under another sort is discarded rather than
     // reinterpreted: the existing behaviour for a cursor that does not parse.
@@ -1131,7 +1143,7 @@ export class CatalogQueryService {
           break;
         }
         if (priceCursor === null) return this.#listUnordered(params, ctx, null);
-        return this.#listRemainder(em, params, ctx, where, direction, priceCursor, null);
+        return this.#listRemainder(em, params, ctx, where, direction, scope, priceCursor, null);
       }
       spent += Math.max(chunk.sourceRowsRead, chunk.rows.length);
       pricedExhausted = chunk.exhausted;
@@ -1164,9 +1176,7 @@ export class CatalogQueryService {
     // not imply, because the provider may have stopped on its own bound.
     const wantsTail = amountRange === undefined && pricedExhausted && !bound;
     if (wantsTail) {
-      const categoryIds = params.categorySlug
-        ? new Set(restrictToProductIds ?? [])
-        : null;
+      const categoryIds = scope.categoryIds;
       while (collected.length < target) {
         if (spent >= budget) {
           bound = true;
@@ -1234,7 +1244,7 @@ export class CatalogQueryService {
     const nextCursor =
       hasMore && page.length > 0 ? encodeObjectCursor(cursors[page.length - 1]!) : null;
 
-    const resolvedPrices = await this.#listingPricesFor(page, ctx);
+    const resolvedPrices = await this.#listingPricesFor(page, ctx, context);
     const cardReads = await this.#listingCardReadsFor(
       em,
       page.map((p) => p.id),
@@ -1248,6 +1258,23 @@ export class CatalogQueryService {
       // aggregate over the priced set is an aggregate over rows the viewer may
       // not be allowed to see.
       pagination: { cursor: nextCursor, hasMore, limit: params.limit },
+    };
+  }
+
+  /**
+   * What every chunk of a price walk reads for the same viewer: built once per
+   * page and passed down, never per chunk (review 3 of release 0.108.0, A5 — a
+   * page reads up to eight chunks, and each used to look the organization up
+   * again and, on the remainder, re-read the category tree).
+   */
+  async #priceWalkScope(
+    em: EntityManager,
+    params: ListProductsParams,
+    ctx: CatalogQueryContext,
+  ): Promise<PriceWalkScope> {
+    return {
+      context: await this.#viewerPricingContext(ctx),
+      categoryIds: params.categorySlug ? await this.productIdsInCategoryTree(em, params.categorySlug) : null,
     };
   }
 
@@ -1339,7 +1366,7 @@ export class CatalogQueryService {
     // The chunk walk and the page it hands back page by the same keyset, and
     // that keyset is the one this ordering sorts on — `keysetFor`.
     const keyset = this.keysetFor(params.sort);
-    return this.#walkKeepingByPrice(em, params, ctx, where, {
+    return this.#walkKeepingByPrice(em, params, ctx, where, await this.#priceWalkScope(em, params, ctx), {
       sort: params.sort,
       start: params.cursor ? keyset.parse(decodeObjectCursor<unknown>(params.cursor)) : null,
       keep: (price) => {
@@ -1384,6 +1411,7 @@ export class CatalogQueryService {
     ctx: CatalogQueryContext,
     where: Record<string, unknown>,
     direction: 'asc' | 'desc',
+    scope: PriceWalkScope,
     boundary: ListingPriceOrderCursor,
     after: ListingKeysetCursor | null,
   ): Promise<ListResult<ProductSummary>> {
@@ -1394,7 +1422,7 @@ export class CatalogQueryService {
       const byId = productId < boundary.productId ? -1 : productId > boundary.productId ? 1 : 0;
       return sign * (byAmount || byId) > 0;
     };
-    return this.#walkKeepingByPrice(em, params, ctx, where, {
+    return this.#walkKeepingByPrice(em, params, ctx, where, scope, {
       sort: undefined,
       start: after,
       keep: (price, product) => {
@@ -1425,6 +1453,7 @@ export class CatalogQueryService {
     params: ListProductsParams,
     ctx: CatalogQueryContext,
     where: Record<string, unknown>,
+    scope: PriceWalkScope,
     walk: {
       sort: ListProductsParams['sort'];
       start: ListingKeysetCursor | null;
@@ -1434,9 +1463,7 @@ export class CatalogQueryService {
     },
   ): Promise<ListResult<ProductSummary>> {
     const channel = ctx.resolvedChannel;
-    const categoryFilteredIds = params.categorySlug
-      ? await this.productIdsInCategoryTree(em, params.categorySlug)
-      : null;
+    const categoryFilteredIds = scope.categoryIds;
     const keyset = this.keysetFor(walk.sort);
     let cursor: ListingKeysetCursor | null = walk.start;
     const budget = PRICE_PAGE_SCAN_BUDGET_MULTIPLE * params.limit;
@@ -1475,7 +1502,7 @@ export class CatalogQueryService {
           this.#passesPageFilters(r, params, ctx) &&
           (categoryFilteredIds === null || categoryFilteredIds.has(r.id)),
       );
-      const chunkPrices = await this.#listingPricesFor(candidates, ctx);
+      const chunkPrices = await this.#listingPricesFor(candidates, ctx, scope.context);
       for (const product of candidates) {
         const detail = chunkPrices.get(product.id);
         const price = detail?.price;

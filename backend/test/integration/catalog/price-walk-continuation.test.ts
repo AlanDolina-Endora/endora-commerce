@@ -1,6 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { encodeCursor } from '@endora-commerce/platform/http';
 import {
+  PRICE_WALK_ORG_A,
   priceWalkCorpus,
 } from '../../helpers/price-walk-corpus.js';
 import {
@@ -64,5 +65,32 @@ describe('a price-sorted walk meets every product once and ends', () => {
     const first = await w.page('&limit=2');
     const again = await w.page(`&limit=2&cursor=${encodeURIComponent(encodeCursor(JSON.stringify({ createdAt: at, id: 'nope' })))}`);
     expect(again.data.map((d) => d.sku)).toEqual(first.data.map((d) => d.sku));
+  });
+
+  // ---- the viewer's pricing context is built once per page ------------------
+
+  it('a remainder page resolves the viewer organization once, however many chunks it reads', async () => {
+    // Cheapest is newest: the remainder after ten served products scans them
+    // first, four chunks of two at a page of one.
+    await w.seed(
+      w.priced(14, (i) => ({ price: `${100 + i}.00`, age: i })),
+      [PRICE_WALK_ORG_A],
+    );
+    let cursor: string | undefined;
+    for (let n = 0; n < 10; n += 1) {
+      const body = await w.page(`&limit=1&sort=price${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, PRICE_WALK_ORG_A);
+      cursor = body.pagination.cursor!;
+    }
+    await w.dropRetailProfiles();
+    const organizations = (h.container as unknown as { resolve<T>(name: string): T }).resolve<{
+      findById(id: string): Promise<unknown>;
+    }>('organizationDetailsPort');
+    const spy = vi.spyOn(organizations, 'findById');
+    try {
+      await w.page(`&limit=1&sort=price&cursor=${encodeURIComponent(cursor!)}`, PRICE_WALK_ORG_A);
+      expect(spy.mock.calls.length).toBeLessThanOrEqual(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
