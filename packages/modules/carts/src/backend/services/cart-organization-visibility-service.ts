@@ -9,6 +9,7 @@ import type {
 import { HttpError } from '@endora-commerce/platform/http';
 import { Cart } from '../entities/cart.entity.js';
 import { CartItem } from '../entities/cart-item.entity.js';
+import { cartSubtotal } from './cart-money.js';
 
 /**
  * Organization-Administrator visibility surface (feature 027 US4).
@@ -69,7 +70,7 @@ export class CartOrganizationVisibilityService {
       for (const it of items) {
         const prev = itemCounts.get(it.cartId) ?? { count: 0, total: 0, currency: it.currency };
         prev.count += 1;
-        prev.total += Number(it.unitPrice) * it.quantity;
+        prev.total = Number(cartSubtotal([{ unitPrice: prev.total, quantity: 1 }, it]));
         itemCounts.set(it.cartId, prev);
       }
     }
