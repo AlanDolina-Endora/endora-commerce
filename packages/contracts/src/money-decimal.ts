@@ -225,3 +225,17 @@ export function percentOfHalfUp(amount: string | number, percent: string | numbe
   const p = exact(percent);
   return render(round(product(exact(amount), { digits: p.digits, scale: p.scale + 2 }), checkPlaces(places)));
 }
+
+/**
+ * How many whole `step`s fit in `amount` — `floor(amount / step)` on the exact
+ * quotient, for a non-negative amount and a positive step ("for every 100.00
+ * spent"). On doubles, `Math.floor(0.3 / 0.1)` is 2.
+ */
+export function wholeMultiples(amount: string | number, step: string | number): number {
+  const x = exact(amount);
+  const y = exact(step);
+  if (x.digits < 0n) throw new Error(`Not a non-negative amount: "${String(amount)}"`);
+  if (y.digits <= 0n) throw new Error(`Not a positive step: "${String(step)}"`);
+  const scale = Math.max(x.scale, y.scale);
+  return Number(rescale(x, scale) / rescale(y, scale));
+}

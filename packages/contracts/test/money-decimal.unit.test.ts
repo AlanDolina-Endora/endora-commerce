@@ -16,6 +16,7 @@ import {
   roundHalfUp,
   taxAmountExact,
   taxAmountHalfUp,
+  wholeMultiples,
 } from '../src/index.js';
 
 /**
@@ -160,5 +161,20 @@ describe('percentOfHalfUp', () => {
     // 1.45 × 10 / 100 on doubles is below 0.145, so the promotions' round2 gave 0.14.
     expect(Math.round(((1.45 * 10) / 100) * 100) / 100).toBe(0.14);
     expect(percentOfHalfUp('100', '12.5')).toBe('12.50');
+  });
+});
+
+describe('wholeMultiples', () => {
+  it('counts the whole steps in an amount exactly, not the binary 2', () => {
+    expect(Math.floor(0.3 / 0.1)).toBe(2);
+    expect(wholeMultiples('0.30', '0.10')).toBe(3);
+    expect(wholeMultiples(0.3, 0.1)).toBe(3);
+    expect(wholeMultiples('99.99', '100')).toBe(0);
+    expect(wholeMultiples('250', '100')).toBe(2);
+  });
+
+  it('refuses a step that is not positive and an amount that is negative', () => {
+    expect(() => wholeMultiples('1', '0')).toThrow();
+    expect(() => wholeMultiples('-1', '1')).toThrow();
   });
 });
