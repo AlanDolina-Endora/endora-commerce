@@ -239,3 +239,144 @@ export function wholeMultiples(amount: string | number, step: string | number): 
   const scale = Math.max(x.scale, y.scale);
   return Number(rescale(x, scale) / rescale(y, scale));
 }
+
+/** A rate as a fraction with no trailing zeros — the key two notations of one rate share. */
+function rateKey(rate: Exact): Exact {
+  let { digits, scale } = rate;
+  while (scale > 0 && digits % 10n === 0n) {
+    digits /= 10n;
+    scale -= 1;
+  }
+  return { digits, scale };
+}
+
+/**
+ * `total` shared over `parts` at `places`: each part rounded half-up, and the
+ * cents the rounding gained or lost handed back one at a time — to the parts
+ * rounded furthest below their exact value when cents are missing, to those
+ * rounded furthest above when there are too many, the earlier part first on a
+ * tie. The result adds up to `total` exactly. Used to show a line's share of a
+ * total that is computed once for many lines.
+ */
+export function allocateHalfUp(
+  total: string | number,
+  parts: ReadonlyArray<string | number>,
+  places = 2,
+): string[] {
+  const p = checkPlaces(places);
+  const exacts = parts.map(exact);
+  const scale = Math.max(p, ...exacts.map((e) => e.scale));
+  const unit = 10n ** BigInt(scale - p);
+  const rounded = exacts.map((e) => round(e, p).digits);
+  // The remainder of each part, at the common scale: exact − rounded.
+  const remainders = exacts.map((e, i) => rescale(e, scale) - rounded[i]! * unit);
+  let missing = round(exact(total), p).digits - rounded.reduce((a, b) => a + b, 0n);
+  const order = remainders.map((r, i) => ({ r, i }));
+  if (missing > 0n) {
+    order.sort((a, b) => (a.r === b.r ? a.i - b.i : a.r > b.r ? -1 : 1));
+    for (let k = 0; missing > 0n && order.length > 0; k = (k + 1) % order.length, missing -= 1n) {
+      rounded[order[k]!.i]! += 1n;
+    }
+  } else if (missing < 0n) {
+    order.sort((a, b) => (a.r === b.r ? a.i - b.i : a.r < b.r ? -1 : 1));
+    for (let k = 0; missing < 0n && order.length > 0; k = (k + 1) % order.length, missing += 1n) {
+      rounded[order[k]!.i]! -= 1n;
+    }
+  }
+  return rounded.map((digits) => render({ digits, scale: p }));
+}
+
+/** One rate's row of a VAT summary: the rate as a fraction, and two-place amounts. */
+export interface VatRateRow {
+  rate: string;
+  net: string;
+  vat: string;
+  gross: string;
+}
+
+/** {@link vatByRate}'s answer. */
+export interface VatByRate {
+  /** One row per rate, ascending. */
+  rows: VatRateRow[];
+  /** Per input line, in input order: its share of its rate's VAT, and its net plus that share. */
+  lines: Array<{ vat: string; gross: string }>;
+  net: string;
+  vat: string;
+  gross: string;
+}
+
+/**
+ * **The VAT method — one, everywhere** (owner ruling of 2026-10-24, issue
+ * #417; art. 106e ust. 1 pkt 13–14 of the Polish VAT Act): per rate, the VAT
+ * is the sum of the nets at that rate times the rate, rounded half-up **once**;
+ * the rate's gross is its net plus its VAT; the totals are the sums of the
+ * rows. Every document an order produces computes its VAT with this function —
+ * the checkout preview, the order, the invoice, a correction, a refund — so
+ * they cannot disagree.
+ *
+ * A line's VAT and gross (`lines`) are informational: its rate's VAT shared
+ * over the rate's lines with {@link allocateHalfUp}, so the line grosses add up
+ * to the total exactly. Nets are two-place amounts; a 0 % line (delivery, a
+ * discount) is a row of its own with no VAT.
+ */
+export function vatByRate(
+  lines: ReadonlyArray<{ net: string | number; rate: string | number }>,
+  unit: 'fraction' | 'percent',
+): VatByRate {
+  const groups = new Map<string, { rate: Exact; indexes: number[] }>();
+  lines.forEach((line, index) => {
+    const rate = rateKey(rateFraction(line.rate, unit));
+    const key = render(rate);
+    const group = groups.get(key) ?? { rate, indexes: [] };
+    group.indexes.push(index);
+    groups.set(key, group);
+  });
+  const lineShares: Array<{ vat: string; gross: string }> = lines.map(() => ({ vat: '0.00', gross: '0.00' }));
+  const rows = [...groups.entries()]
+    .sort((a, b) => compareDecimals(a[0], b[0]))
+    .map(([key, group]) => {
+      const nets = group.indexes.map((i) => roundHalfUp(lines[i]!.net));
+      const net = moneySum(nets);
+      const vat = render(round(product(exact(net), group.rate), 2));
+      const shares = allocateHalfUp(
+        vat,
+        nets.map((n) => render(product(exact(n), group.rate))),
+      );
+      group.indexes.forEach((lineIndex, k) => {
+        lineShares[lineIndex] = { vat: shares[k]!, gross: moneySum([nets[k]!, shares[k]!]) };
+      });
+      return { rate: key, net, vat, gross: moneySum([net, vat]) };
+    });
+  return {
+    rows,
+    lines: lineShares,
+    net: moneySum(rows.map((r) => r.net)),
+    vat: moneySum(rows.map((r) => r.vat)),
+    gross: moneySum(rows.map((r) => r.gross)),
+  };
+}
+
+/**
+ * The net behind a gross at one rate, under {@link vatByRate}'s rule: the net
+ * `N` with `N + round(N × rate) = gross`, so a gross that rule produced gives
+ * back exactly the net it came from (`exact: true`). A gross the rule cannot
+ * produce — at 23 %, no net gives 0.03 — answers the nearest net,
+ * `round(gross ÷ (1 + rate))`, with the VAT as the remainder (`exact: false`).
+ * What a correction credits net when it is handed a gross.
+ */
+export function netForGrossAtRate(
+  gross: string | number,
+  rate: string | number,
+  unit: 'fraction' | 'percent',
+): { net: string; vat: string; exact: boolean } {
+  const target = roundHalfUp(gross);
+  const nearest = netFromGrossHalfUp(target, rate, unit);
+  const factor = rateFraction(rate, unit);
+  const centsOf = (value: string) => exact(value).digits;
+  for (const delta of [0n, -1n, 1n]) {
+    const net = render({ digits: centsOf(nearest) + delta, scale: 2 });
+    const vat = render(round(product(exact(net), factor), 2));
+    if (compareDecimals(moneySum([net, vat]), target) === 0) return { net, vat, exact: true };
+  }
+  return { net: nearest, vat: moneyDifference(target, nearest), exact: false };
+}

@@ -17,6 +17,9 @@ import {
   taxAmountExact,
   taxAmountHalfUp,
   wholeMultiples,
+  vatByRate,
+  allocateHalfUp,
+  netForGrossAtRate,
 } from '../src/index.js';
 
 /**
@@ -176,5 +179,95 @@ describe('wholeMultiples', () => {
   it('refuses a step that is not positive and an amount that is negative', () => {
     expect(() => wholeMultiples('1', '0')).toThrow();
     expect(() => wholeMultiples('-1', '1')).toThrow();
+  });
+});
+
+/**
+ * Owner ruling of 2026-10-24 (issue #417) — one VAT method everywhere: per
+ * rate, VAT on the sum of the nets at that rate, rounded half-up once; gross
+ * = net + VAT (art. 106e ust. 1 pkt 13–14). A line's VAT and gross are an
+ * allocation of its rate's VAT, informational, summing exactly to it.
+ */
+describe('vatByRate', () => {
+  it('takes VAT per rate on the sum of the nets (V2: 7.01, gross 40.81)', () => {
+    const r = vatByRate(
+      [
+        { net: '29.50', rate: '0.23' },
+        { net: '4.30', rate: '0.05' },
+      ],
+      'fraction',
+    );
+    expect(r.rows).toEqual([
+      { rate: '0.05', net: '4.30', vat: '0.22', gross: '4.52' },
+      { rate: '0.23', net: '29.50', vat: '6.79', gross: '36.29' },
+    ]);
+    expect([r.net, r.vat, r.gross]).toEqual(['33.80', '7.01', '40.81']);
+  });
+
+  it('rounds once per rate, not per line', () => {
+    // Three lines of 0.02 at 23 %: per line 0.0046 → 0.00 each; per rate 0.0138 → 0.01.
+    const r = vatByRate(
+      [
+        { net: '0.02', rate: 0.23 },
+        { net: '0.02', rate: 0.23 },
+        { net: '0.02', rate: 0.23 },
+      ],
+      'fraction',
+    );
+    expect(r.rows).toEqual([{ rate: '0.23', net: '0.06', vat: '0.01', gross: '0.07' }]);
+    expect(r.lines.map((l) => l.vat)).toEqual(['0.01', '0.00', '0.00']);
+    expect(r.lines.map((l) => l.gross)).toEqual(['0.03', '0.02', '0.02']);
+  });
+
+  it('allocates a rate’s VAT over its lines so the line grosses add up to the total', () => {
+    // 9.05 × 3 at 8 % as three one-piece lines: 0.724 each, 2.172 → 2.17 for the rate.
+    const r = vatByRate(
+      [
+        { net: '9.05', rate: '0.08' },
+        { net: '9.05', rate: '0.08' },
+        { net: '9.05', rate: '0.08' },
+      ],
+      'fraction',
+    );
+    expect(r.vat).toBe('2.17');
+    expect(r.lines.map((l) => l.gross)).toEqual(['9.78', '9.77', '9.77']);
+  });
+
+  it('keys a rate by its value, whatever its notation, and carries 0 % lines', () => {
+    const r = vatByRate(
+      [
+        { net: '10.00', rate: '0.2300' },
+        { net: '5.00', rate: 0.23 },
+        { net: '-2.00', rate: 0 },
+      ],
+      'fraction',
+    );
+    expect(r.rows.map((row) => row.rate)).toEqual(['0', '0.23']);
+    expect(r.rows[1]).toEqual({ rate: '0.23', net: '15.00', vat: '3.45', gross: '18.45' });
+    expect(r.gross).toBe('16.45');
+    expect(vatByRate([{ net: '100', rate: '23' }], 'percent').vat).toBe('23.00');
+    expect(vatByRate([], 'fraction')).toEqual({ rows: [], lines: [], net: '0.00', vat: '0.00', gross: '0.00' });
+  });
+});
+
+describe('allocateHalfUp', () => {
+  it('rounds each part and hands the difference to the parts rounded furthest from their exact value', () => {
+    expect(allocateHalfUp('0.01', ['0.0046', '0.0046', '0.0046'])).toEqual(['0.01', '0.00', '0.00']);
+    expect(allocateHalfUp('1.00', ['0.335', '0.335', '0.33'])).toEqual(['0.33', '0.34', '0.33']);
+    expect(allocateHalfUp('0.02', ['0.005', '0.005', '0.005', '0.005'])).toEqual(['0.00', '0.00', '0.01', '0.01']);
+    expect(allocateHalfUp('-0.01', ['-0.0046', '-0.0046', '-0.0046'])).toEqual(['-0.01', '0.00', '0.00']);
+  });
+});
+
+describe('netForGrossAtRate', () => {
+  it('recovers the net a gross was computed from under the per-rate rule', () => {
+    expect(netForGrossAtRate('36.29', '0.23', 'fraction')).toEqual({ net: '29.50', vat: '6.79', exact: true });
+    expect(netForGrossAtRate('29.32', '0.08', 'fraction')).toEqual({ net: '27.15', vat: '2.17', exact: true });
+  });
+
+  it('answers the nearest net, and VAT as the remainder, for a gross the rule cannot produce', () => {
+    // No net gives 0.03 at 23 %: 0.02 → 0.02 and 0.03 → 0.04.
+    expect(netForGrossAtRate('0.03', '0.23', 'fraction')).toEqual({ net: '0.02', vat: '0.01', exact: false });
+    expect(netForGrossAtRate('1.00', '0.23', 'fraction')).toEqual({ net: '0.81', vat: '0.19', exact: true });
   });
 });
