@@ -49,14 +49,18 @@ const DEFAULT_LIST_ID = '00000000-0000-4000-8000-00000000d51b';
 export class Migration20261022T111815PriceListsPriceBooksConversion extends Migration {
   override async up(): Promise<void> {
     // ── 2. a base book per currency
+    //    Its `code` (still `not null` and unique until step 5 drops it) is
+    //    derived from the new id, so no existing list's code can collide: an
+    //    old list coded `base-eur` stopped the whole upgrade on
+    //    `price_lists_code_unique` (review finding 8 of release 0.108.0).
     this.addSql(`
       insert into "price_lists"
         ("id", "code", "name", "currency_code", "is_default", "priority", "type", "status",
          "application_rule", "is_system", "audience_kind", "version", "ever_activated",
          "modified_at", "created_at", "updated_at")
-      select gen_random_uuid(), 'base-' || lower(c."currency"), 'Base prices (' || c."currency" || ')', c."currency",
+      select n."id", 'base-' || n."id"::text, 'Base prices (' || n."currency" || ')', n."currency",
              false, 0, 'regular', 'active', null, true, 'everyone', 1, true, now(), now(), now()
-        from (
+        from (select gen_random_uuid() as "id", c."currency" from (
           select distinct upper(trim("currency_code")) as "currency"
             from "price_list_price_brackets" where "price_list_id" = '${DEFAULT_LIST_ID}'
           union
@@ -66,7 +70,7 @@ export class Migration20261022T111815PriceListsPriceBooksConversion extends Migr
         ) c
        where not exists (
          select 1 from "price_lists" b where b."is_system" = true and b."currency_code" = c."currency"
-       );`);
+       )) n;`);
 
     // ── 3. the Default brackets become base rows of their currency
     this.addSql(`

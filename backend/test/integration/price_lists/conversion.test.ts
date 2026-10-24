@@ -63,6 +63,7 @@ describe('price_lists — the conversion (feature 160, SC-006)', () => {
     oldList: randomUUID(),
     book: randomUUID(),
     pinnedList: randomUUID(),
+    codedLikeBase: randomUUID(),
   };
   const ADMIN = { cookies: { b2b_session: 'stub-admin-session' } };
   const RETIRED_SUFFIX = ' (removed by the 0.108.0 upgrade)';
@@ -251,6 +252,16 @@ describe('price_lists — the conversion (feature 160, SC-006)', () => {
       [ids.oldList, ids.org],
     );
 
+    // Review finding 8 (release 0.108.0) — an old-model list whose code is the
+    // one step 2 gives the EUR base book it inserts: `price_lists_code_unique`
+    // refused the insert and the whole upgrade rolled back.
+    await sql(
+      `insert into "price_lists" ("id", "code", "name", "currency_code", "is_default", "priority", "type", "status",
+                                  "application_rule", "is_system", "audience_kind", "modified_at", "created_at", "updated_at")
+       values (?, 'base-eur', 'Old EUR list', 'EUR', false, 0, 'base', 'active', '{"kind":"all"}'::jsonb, false, 'everyone', now(), now(), now())`,
+      [ids.codedLikeBase],
+    );
+
     // An old-model list a feed is pinned to, with rows, an audience and a
     // channel: the foreign key refuses its deletion.
     await sql(
@@ -319,6 +330,12 @@ describe('price_lists — the conversion (feature 160, SC-006)', () => {
     expect(books.map((b) => b.currency_code.trim())).toEqual(['EUR', 'PLN']);
     expect(books.find((b) => b.currency_code.trim() === 'PLN')!.id).toBe(DEFAULT_LIST);
     for (const book of books) expect(book).toMatchObject({ type: 'regular', status: 'active', audience_kind: 'everyone' });
+  });
+
+  it('an old list coded like a base book does not stop the upgrade, and goes like any old list (review finding 8)', async () => {
+    expect(await sql(`select 1 from "price_lists" where "id" = ?`, [ids.codedLikeBase])).toEqual([]);
+    const eur = await sql<{ id: string }>(`select "id" from "price_lists" where "is_system" and "currency_code" = 'EUR'`);
+    expect(eur).toHaveLength(1);
   });
 
   it('a base row written before the conversion wins over the Default bracket it shadowed', async () => {
