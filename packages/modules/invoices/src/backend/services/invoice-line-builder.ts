@@ -37,6 +37,8 @@ export type BuiltInvoiceLine = InvoiceLine & {
 export interface BuiltInvoiceTotals {
   lines: BuiltInvoiceLine[];
   vatSummary: VatSummaryRow[];
+  /** The summary as `invoices.vat_summary` stores it. */
+  storedVatSummary: StoredVatRow[];
   /** Two-place decimal strings, as the `invoices` columns store them. */
   netTotal: string;
   taxTotal: string;
@@ -61,9 +63,9 @@ function summaryRows(rows: ReadonlyArray<{ rate: string; net: string; vat: strin
 }
 
 /**
- * The rule invoices were issued under before the owner's ruling of
- * 2026-10-24: per rate, the sum of the lines' own rounded grosses minus the
- * sum of their nets. Kept only to show such an invoice as it was issued.
+ * The rule invoices were issued under before 0.108.0: per rate, the sum of the
+ * lines' own rounded grosses minus the sum of their nets. Kept only to show
+ * such a document — one with no stored summary — as it was issued.
  */
 function legacyVatSummary(lines: readonly VatSummaryInput[]): VatSummaryRow[] {
   const byRate = new Map<string, { net: Array<string | number>; gross: Array<string | number> }>();
@@ -85,25 +87,38 @@ function legacyVatSummary(lines: readonly VatSummaryInput[]): VatSummaryRow[] {
   );
 }
 
+/** A per-rate summary row as `invoices.vat_summary` stores it: two-place decimal strings. */
+export interface StoredVatRow {
+  taxRate: string;
+  netTotal: string;
+  vatAmount: string;
+  grossTotal: string;
+}
+
 /**
- * The per-rate VAT summary a stored invoice is shown with. An invoice is a
- * document that was issued, and its summary must add up to the totals it was
- * issued with: the summary is the one VAT method (`vatByRate`) when that
- * reproduces the stored VAT and gross, and otherwise — an invoice issued
- * before the ruling under the per-line rule — the rule it was issued under.
+ * The per-rate VAT summary a stored document is shown with — **decided by what
+ * was stored, never guessed** (review of PR #423). A document issued from
+ * 0.108.0 stored the summary it was issued with (`invoices.vat_summary`), and
+ * that is what it shows: its line grosses are each line's own rounding and need
+ * not add up to it. A document issued before (or imported) stored none, and its
+ * summary is derived from its stored lines exactly as it was then — per rate,
+ * the lines' grosses minus their nets.
  */
 export function readModelVatSummary(
   lines: readonly VatSummaryInput[],
-  stored: { taxTotal: string | null | undefined; total: string },
+  stored: readonly StoredVatRow[] | null | undefined,
 ): VatSummaryRow[] {
-  const current = vatByRate(
-    lines.map((l) => ({ net: l.netValue, rate: l.taxRate })),
-    'fraction',
-  );
-  const reproduces =
-    compareDecimals(current.gross, stored.total) === 0 &&
-    (stored.taxTotal == null || compareDecimals(current.vat, stored.taxTotal) === 0);
-  return reproduces ? summaryRows(current.rows) : legacyVatSummary(lines);
+  if (stored) {
+    return summaryRows(
+      stored.map((r) => ({ rate: r.taxRate, net: r.netTotal, vat: r.vatAmount, gross: r.grossTotal })),
+    );
+  }
+  return legacyVatSummary(lines);
+}
+
+/** The stored form of a summary computed from rows. */
+export function storedVatRows(rows: ReadonlyArray<{ rate: string; net: string; vat: string; gross: string }>): StoredVatRow[] {
+  return rows.map((r) => ({ taxRate: r.rate, netTotal: r.net, vatAmount: r.vat, grossTotal: r.gross }));
 }
 
 /**
@@ -114,9 +129,10 @@ export function readModelVatSummary(
  * **The VAT method is the platform's one** (`vatByRate`, owner ruling of
  * 2026-10-24, issue #417; art. 106e ust. 1 pkt 13–14): per rate, VAT on the sum
  * of the lines' nets, rounded half-up once; gross = net + VAT. A line's gross
- * is informational — its share of its rate's VAT added to its net — so the
- * line grosses add up to the invoice gross. The net per line is what the law
- * requires on the line; the gross per line is optional.
+ * is informational and is the line's own rounding, `round(net × (1 + rate))`
+ * (owner ruling of 2026-10-24), so the line grosses may differ from the invoice
+ * gross by a cent. The net per line is what the law requires on the line; the
+ * gross per line is optional.
  */
 export function buildInvoiceLines(raw: RawOrderLine[]): BuiltInvoiceTotals {
   const nets = raw.map((r) => roundHalfUp(r.netValue));
@@ -148,6 +164,7 @@ export function buildInvoiceLines(raw: RawOrderLine[]): BuiltInvoiceTotals {
   return {
     lines,
     vatSummary: summaryRows(vat.rows),
+    storedVatSummary: storedVatRows(vat.rows),
     netTotal: vat.net,
     taxTotal: vat.vat,
     grossTotal: vat.gross,

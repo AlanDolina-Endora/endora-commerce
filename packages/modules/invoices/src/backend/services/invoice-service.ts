@@ -30,6 +30,15 @@ export interface IssueInvoiceOptions {
   issuedBy?: string;
 }
 
+/**
+ * What was captured for an order — the sum of its paid payment attempts'
+ * amounts, as a two-place decimal — or `null` when the `payments` module is
+ * absent and nothing can say (issue #417).
+ */
+export interface CapturedPaymentsLookup {
+  capturedFor(orderId: string): Promise<string | null>;
+}
+
 /** Minimal audit-log seam (FR-035). */
 export interface InvoiceAuditRecorder {
   record(input: {
@@ -78,6 +87,7 @@ export class InvoiceService {
     private readonly events?: InvoiceDomainEventEmitter,
     private readonly emailOnReady?: (invoiceId: string) => Promise<void>,
     private readonly ledgerRouting?: LedgerNumberingLookup,
+    private readonly capturedPayments?: CapturedPaymentsLookup,
   ) {}
 
   /** Issue an invoice/proforma for an order. Idempotent per (order, kind). */
@@ -142,7 +152,14 @@ export class InvoiceService {
     const built = buildInvoiceLines(raw);
 
     const issuedAt = new Date();
-    const paidTotal = order.paymentStatus === 'paid' ? built.grossTotal : '0.00';
+    // What was actually captured for the order — never the invoice gross (issue
+    // #417, review of PR #423). An order placed before 0.108.0 charged its own
+    // total (40.80), and its invoice, issued now under the per-rate method, may
+    // be a cent more (40.81): the cent is shown as still due, not invented as
+    // paid. Without `payments`, a paid order's stored total stands for it.
+    const captured = await this.capturedPayments?.capturedFor(orderId);
+    const paidTotal =
+      captured != null ? roundHalfUp(captured) : order.paymentStatus === 'paid' ? roundHalfUp(order.total) : '0.00';
     const buyer = {
       name: order.billingAddress.companyName ?? order.billingAddress.recipientName,
       taxId: order.billingAddress.taxId ?? '',
@@ -180,6 +197,7 @@ export class InvoiceService {
         paidTotal,
         sellerSnapshot: seller,
         buyerSnapshot: buyer,
+        vatSummary: built.storedVatSummary,
         issuedBy: opts.issuedBy ?? 'system',
         status: holdForVendor ? 'pending' : 'ready',
       });
@@ -369,9 +387,9 @@ export class InvoiceService {
       grossValue: Number(l.grossValue),
     }));
 
-    // The VAT method on the stored lines — or, for an invoice issued before the
-    // owner's ruling of 2026-10-24, the rule it was issued under.
-    const vatSummary = readModelVatSummary(lineRows, { taxTotal: inv.taxTotal, total: inv.total });
+    // The summary the document was issued with, or — issued before 0.108.0 —
+    // the one derived from its stored lines as it was then (review of PR #423).
+    const vatSummary = readModelVatSummary(lineRows, inv.vatSummary);
 
     const grossTotal = Number(inv.total);
     const paidTotal = Number(inv.paidTotal);

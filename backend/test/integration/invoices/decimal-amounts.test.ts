@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ensureSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
-import { Order, OrderItem } from '../../helpers/package-entities.js';
+import { Order, OrderItem, Payment } from '../../helpers/package-entities.js';
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import {
   setupBackendServer,
@@ -17,6 +17,8 @@ interface IssueResponse {
     netTotal: number;
     taxTotal: number;
     grossTotal: number;
+    paidTotal: number;
+    amountDue: number;
     lines: Array<{ name: string; quantity: number; unitNetPrice: number; netValue: number; grossValue: number }>;
     vatSummary: Array<{ taxRate: number; netTotal: number; vatAmount: number; grossTotal: number }>;
   };
@@ -138,7 +140,8 @@ describe('invoices — exact decimal amounts (#417)', () => {
     });
     expect(res.statusCode).toBe(201);
     const { data } = res.json() as IssueResponse;
-    expect(data.lines.map((l) => [l.netValue, l.grossValue])).toEqual([
+    // Seeded in one flush, the two lines tie on every ordering key: compare them as a set.
+    expect(data.lines.map((l) => [l.netValue, l.grossValue]).sort((x, y) => y[0]! - x[0]!)).toEqual([
       [29.5, 36.29],
       [4.3, 4.52],
     ]);
@@ -150,5 +153,39 @@ describe('invoices — exact decimal amounts (#417)', () => {
     // The order computes the same 7.01 and 40.81 — vector V2 of
     // `specs/pricing/worked-examples.md` §10.17.
     expect([data.netTotal, data.taxTotal, data.grossTotal]).toEqual([33.8, 7.01, 40.81]);
+  });
+
+  it('records as paid what was captured, not the invoice gross, for an order placed before 0.108.0', async () => {
+    // Placed before the per-rate method: the order summed the lines' exact taxes
+    // and rounded once (7.00, total 40.80), and 40.80 was captured. Its invoice,
+    // issued now, takes VAT per rate (7.01, gross 40.81): 0.01 is still due.
+    const orderId = await seedPlacedOrder(
+      h.em(),
+      CH,
+      [
+        { unitPrice: '29.50', quantity: 1, taxRate: '0.2300', lineTotal: '36.29' },
+        { unitPrice: '4.30', quantity: 1, taxRate: '0.0500', lineTotal: '4.52' },
+      ],
+      { subtotal: '33.80', taxTotal: '7.00', total: '40.80' },
+    );
+    const em = h.em().fork();
+    em.create(Payment, {
+      orderId,
+      paymentMethodId: randomUUID(),
+      status: 'paid',
+      amount: '40.80',
+      currency: 'PLN',
+      paidAt: new Date(),
+    });
+    await em.flush();
+    const res = await h.app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/orders/${orderId}/invoices`,
+      cookies: ADMIN_COOKIE,
+      payload: { kind: 'invoice' },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    const { data } = res.json() as IssueResponse;
+    expect([data.grossTotal, data.paidTotal, data.amountDue]).toEqual([40.81, 40.8, 0.01]);
   });
 });

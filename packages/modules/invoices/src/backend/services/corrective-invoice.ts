@@ -5,9 +5,11 @@ import {
   compareDecimals,
   allocateHalfUp,
   decimalDifference,
-  decimalSum,
+  decimalProduct,
+  moneyDifference,
   moneySum,
   netForGrossAtRate,
+  netFromGrossHalfUp,
   quotientHalfUp,
   roundHalfUp,
 } from '@endora-commerce/contracts';
@@ -43,62 +45,160 @@ export interface CorrectionLineAmounts {
   unitNetPrice: string;
 }
 
+/** A correction asked to credit more than its lines add up to (review of PR #423). */
+export class CorrectionTotalExceedsLinesError extends Error {
+  constructor(
+    readonly total: string,
+    readonly linesTotal: string,
+  ) {
+    super(`The correction total ${total} exceeds the sum of its lines, ${linesTotal}.`);
+    this.name = 'CorrectionTotalExceedsLinesError';
+  }
+}
+
+/** A line already credited by an earlier correction of the same invoice, or a line of that invoice. */
+export interface CreditedLine {
+  orderItemId: string;
+  rate: string;
+  net: string;
+  gross: string;
+}
+
+export interface CorrectionInput {
+  /** The gross the correction credits. Refused when above the sum of `lines`. */
+  total: string | number;
+  /** The corrected invoice's gross. */
+  originalGross: string;
+  /** What earlier corrections of the same invoice already credited, gross. */
+  creditedBefore?: string;
+  /**
+   * Whether the corrected invoice was issued under the per-rate VAT method
+   * (it stored its summary); otherwise it was issued before 0.108.0 and is
+   * credited line by line, in proportion to what each line was invoiced.
+   */
+  perRate: boolean;
+  /** The corrected invoice's lines — read for an invoice issued before the per-rate method. */
+  originalLines: readonly CreditedLine[];
+  /** The lines of earlier corrections of the same invoice. */
+  earlierLines: readonly CreditedLine[];
+  lines: ReadonlyArray<{ amount: string | number; quantity: number; rate: string | number; orderItemId: string }>;
+}
+
 /**
- * A correction's amounts, in exact decimal arithmetic (issue #417). The
- * credited amount is gross (a return credits what was paid, tax included),
- * capped at the original invoice's gross (FR-020) and shared out over the lines
- * in order.
+ * A correction's amounts, in exact decimal arithmetic, under the invoice's VAT
+ * method and **cumulatively** over the corrections of one invoice (issue #417,
+ * owner ruling of 2026-10-24, review of PR #423).
  *
- * **The VAT method is the invoice's** (`vatByRate`, owner ruling of
- * 2026-10-24): per rate, the net is the one the credited gross at that rate
- * came from (`netForGrossAtRate`: `N` with `N + round(N × rate) = gross`) and
- * the VAT is the rest — so a return refunded at what the invoice charged
- * credits exactly the invoiced net and VAT. A gross the rule cannot produce (an
- * operator's own amount) takes the nearest net, with the VAT as the remainder.
- * Each line's net is its share of its rate's net (`allocateHalfUp`).
+ * The credited amount is gross (a return credits what was paid, tax included),
+ * capped at what remains of the invoice after earlier corrections (FR-020),
+ * and shared out over the lines in order; a total above the lines' sum is
+ * refused ({@link CorrectionTotalExceedsLinesError}) rather than booked as a
+ * net with no VAT and no line.
+ *
+ * What the invoice charged is split into groups: a VAT rate of an invoice
+ * issued per rate, a line of one issued before 0.108.0. For each group, the
+ * correction credits the net of everything credited so far, this correction
+ * included, minus the nets earlier corrections already credited — per rate the
+ * net `netForGrossAtRate` gives the cumulative gross (`N` with
+ * `N + round(N × rate) = gross`), per line the invoiced line net in proportion
+ * to the cumulative gross. The differences telescope: all corrections together
+ * credit exactly the invoiced net and VAT. A group's net is shared over the
+ * correction's lines in it in proportion to their gross (`allocateHalfUp`).
  */
-export function correctionAmounts(
-  total: string | number,
-  originalGross: string,
-  lines: ReadonlyArray<{ amount: string | number; quantity: number; rate: string | number }>,
-): { credited: string; netTotal: string; taxTotal: string; lines: CorrectionLineAmounts[] } {
-  const credited = minDecimal(roundHalfUp(total), roundHalfUp(originalGross));
+export function correctionAmounts(input: CorrectionInput): {
+  credited: string;
+  netTotal: string;
+  taxTotal: string;
+  lines: CorrectionLineAmounts[];
+  /** The correction's per-rate summary, as `invoices.vat_summary` stores it. */
+  vatSummary: Array<{ taxRate: string; netTotal: string; vatAmount: string; grossTotal: string }>;
+} {
+  const asked = input.lines.map((l) => (compareDecimals(l.amount, 0) < 0 ? '0.00' : roundHalfUp(l.amount)));
+  const linesTotal = moneySum(asked);
+  const total = roundHalfUp(input.total);
+  if (compareDecimals(total, linesTotal) > 0) throw new CorrectionTotalExceedsLinesError(total, linesTotal);
+  const remainingOfInvoice = moneyDifference(input.originalGross, input.creditedBefore ?? '0');
+  const credited = compareDecimals(remainingOfInvoice, 0) <= 0 ? '0.00' : minDecimal(total, remainingOfInvoice);
   let remaining = credited;
-  const grosses = lines.map((l) => {
-    const asked = compareDecimals(l.amount, 0) < 0 ? '0.00' : roundHalfUp(l.amount);
-    const gross = minDecimal(asked, remaining);
+  const grosses = asked.map((a) => {
+    const gross = minDecimal(a, remaining);
     remaining = roundHalfUp(decimalDifference(remaining, gross));
     return gross;
   });
-  const nets: string[] = lines.map(() => '0.00');
-  const vats: string[] = [];
-  const byRate = new Map<string, number[]>();
-  lines.forEach((l, i) => {
-    const key = roundHalfUp(l.rate, 4);
-    byRate.set(key, [...(byRate.get(key) ?? []), i]);
+
+  const groupOf = (l: { orderItemId: string; rate: string | number }) =>
+    input.perRate ? roundHalfUp(l.rate, 4) : l.orderItemId;
+  const byGroup = new Map<string, number[]>();
+  input.lines.forEach((l, i) => {
+    const group = groupOf(l);
+    const indexes = byGroup.get(group);
+    if (indexes) indexes.push(i);
+    else byGroup.set(group, [i]);
   });
-  for (const [rate, indexes] of byRate) {
+  const earlier = new Map<string, { net: string[]; gross: string[] }>();
+  for (const e of input.earlierLines) {
+    const group = groupOf(e);
+    const sums = earlier.get(group) ?? { net: [], gross: [] };
+    sums.net.push(e.net);
+    sums.gross.push(e.gross);
+    earlier.set(group, sums);
+  }
+
+  const nets: string[] = input.lines.map(() => '0.00');
+  for (const [group, indexes] of byGroup) {
     const gross = moneySum(indexes.map((i) => grosses[i]!));
-    const { net, vat } = netForGrossAtRate(gross, rate, 'fraction');
-    vats.push(vat);
-    const shares = allocateHalfUp(
-      net,
-      indexes.map((i) => quotientHalfUp(grosses[i]!, decimalSum(1, rate), 6)),
-    );
+    const before = earlier.get(group) ?? { net: [], gross: [] };
+    const cumulativeGross = moneySum([...before.gross, gross]);
+    let cumulativeNet: string;
+    if (input.perRate) {
+      cumulativeNet = netForGrossAtRate(cumulativeGross, group, 'fraction').net;
+    } else {
+      const original = input.originalLines.find((o) => o.orderItemId === group);
+      cumulativeNet =
+        original && compareDecimals(original.gross, 0) > 0
+          ? quotientHalfUp(decimalProduct(original.net, cumulativeGross), original.gross)
+          : netFromGrossHalfUp(cumulativeGross, input.lines[indexes[0]!]!.rate, 'fraction');
+    }
+    let net = moneyDifference(cumulativeNet, moneySum(before.net));
+    if (compareDecimals(net, 0) < 0) net = '0.00';
+    if (compareDecimals(net, gross) > 0) net = gross;
+    const shares =
+      compareDecimals(gross, 0) === 0
+        ? indexes.map(() => '0.00')
+        : allocateHalfUp(
+            net,
+            indexes.map((i) => quotientHalfUp(decimalProduct(net, grosses[i]!), gross, 6)),
+          );
     indexes.forEach((lineIndex, k) => {
       nets[lineIndex] = shares[k]!;
     });
   }
-  const taxTotal = moneySum(vats);
+
+  const taxTotal = moneySum(grosses.map((g, i) => moneyDifference(g, nets[i]!)));
+  const rates = new Map<string, { net: string[]; gross: string[] }>();
+  input.lines.forEach((l, i) => {
+    const key = roundHalfUp(l.rate, 4);
+    const sums = rates.get(key) ?? { net: [], gross: [] };
+    sums.net.push(nets[i]!);
+    sums.gross.push(grosses[i]!);
+    rates.set(key, sums);
+  });
   return {
     credited,
     netTotal: roundHalfUp(decimalDifference(credited, taxTotal)),
     taxTotal,
-    lines: lines.map((l, i) => ({
+    lines: input.lines.map((l, i) => ({
       gross: grosses[i]!,
       net: nets[i]!,
       unitNetPrice: quotientHalfUp(nets[i]!, l.quantity || 1, 4),
     })),
+    vatSummary: [...rates.entries()]
+      .sort((a, b) => compareDecimals(a[0], b[0]))
+      .map(([taxRate, sums]) => {
+        const netTotal = moneySum(sums.net);
+        const grossTotal = moneySum(sums.gross);
+        return { taxRate, netTotal, vatAmount: moneyDifference(grossTotal, netTotal), grossTotal };
+      }),
   };
 }
 
@@ -232,14 +332,45 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
     // Resolve every line before the transaction opens, so a line that cannot
     // be mirrored refuses without having drawn a correction number.
     const mirrored = input.lines.map((l) => mirrorFor(original, mirrorByOrderItem, l.orderItemId));
-    // Cap the credited total at the original invoice gross (never credit more
-    // than was invoiced); the net follows from the mirrored rate.
-    const amounts = correctionAmounts(
-      input.total,
-      original.total,
-      input.lines.map((l, index) => ({ amount: l.amount, quantity: l.quantity, rate: mirrored[index]!.rate })),
-    );
-    const { credited, netTotal, taxTotal } = amounts;
+    // What earlier corrections of this invoice already credited: the cap and
+    // the cumulative rule both read it (review of PR #423).
+    const earlierCorrections = await em.find(Invoice, { originalInvoiceId: original.id, kind: 'correction' });
+    const earlierLines =
+      earlierCorrections.length > 0
+        ? await em.find(InvoiceLine, { invoiceId: { $in: earlierCorrections.map((c) => c.id) } })
+        : [];
+    const asCredited = (l: InvoiceLine) => ({
+      orderItemId: l.orderItemId ?? '',
+      rate: l.taxRate,
+      net: l.netValue,
+      gross: l.grossValue,
+    });
+    let amounts: ReturnType<typeof correctionAmounts>;
+    try {
+      amounts = correctionAmounts({
+        total: input.total,
+        originalGross: original.total,
+        creditedBefore: moneySum(earlierCorrections.map((c) => c.total)),
+        // Issued under the per-rate method exactly when it stored its summary.
+        perRate: original.vatSummary != null,
+        originalLines: originalLines.map(asCredited),
+        earlierLines: earlierLines.map(asCredited),
+        lines: input.lines.map((l, index) => ({
+          amount: l.amount,
+          quantity: l.quantity,
+          rate: mirrored[index]!.rate,
+          orderItemId: l.orderItemId,
+        })),
+      });
+    } catch (err) {
+      if (!(err instanceof CorrectionTotalExceedsLinesError)) throw err;
+      throw new HttpError(400, ERROR_CODES.VALIDATION_FAILED, err.message, {
+        code: 'correction_total_exceeds_lines',
+        total: err.total,
+        linesTotal: err.linesTotal,
+      });
+    }
+    const { credited: creditedTotal, netTotal, taxTotal } = amounts;
     const snapshots = input.lines.map((l, index) => ({
       ordinal: index + 1,
       orderItemId: l.orderItemId,
@@ -279,7 +410,8 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
         currency: input.currency,
         netTotal,
         taxTotal,
-        total: credited,
+        total: creditedTotal,
+        vatSummary: amounts.vatSummary,
         paidTotal: '0',
         originalInvoiceId: original.id,
         ...(input.idempotencyKey ? { correctionIdempotencyKey: input.idempotencyKey } : {}),
@@ -340,7 +472,7 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
             number: invoice.number,
             orderId: input.orderId,
             originalInvoiceId: original.id,
-            credited: Number(credited),
+            credited: Number(creditedTotal),
           },
         })
         .catch(() => undefined);

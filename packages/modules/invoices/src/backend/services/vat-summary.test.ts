@@ -69,8 +69,8 @@ describe('buildInvoiceLines — exact decimal amounts (#417)', () => {
       { name: 'B', unit: 'szt.', quantity: 1, unitNetPrice: '16.50', taxRate: '0.2300', netValue: '16.50' },
     ]);
     expect([r.netTotal, r.taxTotal, r.grossTotal]).toEqual(['46.00', '10.58', '56.58']);
-    // Each line's share of the 10.58: the exact 6.785 and 3.795 cannot both round up.
-    expect(r.lines.map((l) => l.stored.grossValue)).toEqual(['36.28', '20.30']);
+    // Each line shows its own rounding (owner ruling of 2026-10-24): 36.29 and 20.30, 56.59 beside 56.58.
+    expect(r.lines.map((l) => l.stored.grossValue)).toEqual(['36.29', '20.30']);
   });
 
   it('takes VAT per rate on each rate’s nets (V1)', () => {
@@ -113,9 +113,9 @@ describe('buildInvoiceLines — exact decimal amounts (#417)', () => {
 });
 
 /**
- * Owner ruling of 2026-10-24 (issue #417): VAT per rate on the sum of the nets
- * at that rate, rounded once; gross = net + VAT. A line's gross is its share,
- * informational, and the line grosses add up to the total. The builder used to
+ * Owner rulings of 2026-10-24 (issue #417): VAT per rate on the sum of the nets
+ * at that rate, rounded once; gross = net + VAT. A line's gross is its own
+ * rounding, informational, and may not add up to the total. The builder used to
  * round each line's gross and take a rate's VAT as Σ gross − Σ net.
  */
 describe('buildInvoiceLines — VAT per rate on the sum of the nets (owner ruling)', () => {
@@ -124,32 +124,34 @@ describe('buildInvoiceLines — VAT per rate on the sum of the nets (owner rulin
     const r = buildInvoiceLines([line, line, line]);
     expect(r.vatSummary).toEqual([{ taxRate: 0.23, netTotal: 0.06, vatAmount: 0.01, grossTotal: 0.07 }]);
     expect([r.netTotal, r.taxTotal, r.grossTotal]).toEqual(['0.06', '0.01', '0.07']);
-    expect(r.lines.map((l) => l.stored.grossValue)).toEqual(['0.03', '0.02', '0.02']);
+    // Each line its own 0.0246 → 0.02; the lines add up to 0.06 beside a 0.07 total.
+    expect(r.lines.map((l) => l.stored.grossValue)).toEqual(['0.02', '0.02', '0.02']);
   });
 
-  it('makes the line grosses add up to the gross total', () => {
+  it('shows each line its own gross, which may not add up to the total (owner ruling)', () => {
     const r = buildInvoiceLines([
       { name: 'A', unit: 'szt.', quantity: 1, unitNetPrice: '9.05', taxRate: '0.08', netValue: '9.05' },
       { name: 'B', unit: 'szt.', quantity: 1, unitNetPrice: '9.05', taxRate: '0.08', netValue: '9.05' },
       { name: 'C', unit: 'szt.', quantity: 1, unitNetPrice: '9.05', taxRate: '0.08', netValue: '9.05' },
     ]);
     expect(r.grossTotal).toBe('29.32');
-    expect(r.lines.reduce((sum, l) => sum + Math.round(l.grossValue * 100), 0)).toBe(2932);
+    expect(r.lines.map((l) => l.stored.grossValue)).toEqual(['9.77', '9.77', '9.77']);
   });
 });
 
-describe('readModelVatSummary — an invoice issued before the ruling', () => {
-  it('shows a stored invoice whose totals the per-rate rule reproduces under that rule', () => {
-    const lines = [{ taxRate: '0.2300', netValue: '0.02', grossValue: '0.03' }, { taxRate: '0.2300', netValue: '0.02', grossValue: '0.02' }];
-    expect(readModelVatSummary(lines, { taxTotal: '0.01', total: '0.05' })).toEqual([
-      { taxRate: 0.23, netTotal: 0.04, vatAmount: 0.01, grossTotal: 0.05 },
+describe('readModelVatSummary — decided by the stored summary, not guessed (review of PR #423)', () => {
+  it('shows the per-rate summary an invoice was issued with, whatever its line grosses add up to', () => {
+    // Three 0.02 lines at 23 %: each line shows its own 0.02, the rate's VAT is 0.01.
+    const line = { taxRate: '0.2300', netValue: '0.02', grossValue: '0.02' };
+    const stored = [{ taxRate: '0.2300', netTotal: '0.06', vatAmount: '0.01', grossTotal: '0.07' }];
+    expect(readModelVatSummary([line, line, line], stored)).toEqual([
+      { taxRate: 0.23, netTotal: 0.06, vatAmount: 0.01, grossTotal: 0.07 },
     ]);
   });
 
-  it('shows a stored invoice issued under the per-line rule as it was issued', () => {
-    // Three 0.02 lines at 23 % were issued with line grosses 0.02 and VAT 0.00.
+  it('shows an invoice issued before the per-rate method from its stored lines, as it was issued', () => {
     const line = { taxRate: '0.2300', netValue: '0.02', grossValue: '0.02' };
-    expect(readModelVatSummary([line, line, line], { taxTotal: '0.00', total: '0.06' })).toEqual([
+    expect(readModelVatSummary([line, line, line], null)).toEqual([
       { taxRate: 0.23, netTotal: 0.06, vatAmount: 0, grossTotal: 0.06 },
     ]);
   });
