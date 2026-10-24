@@ -1,6 +1,14 @@
 import { randomUUID } from 'crypto';
 import type { EntityManager } from '@mikro-orm/postgresql';
-import { ERROR_CODES } from '@endora-commerce/contracts';
+import {
+  ERROR_CODES,
+  compareDecimals,
+  decimalDifference,
+  decimalSum,
+  netFromGrossHalfUp,
+  quotientHalfUp,
+  roundHalfUp,
+} from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import { Invoice } from '../entities/invoice.entity.js';
 import { InvoiceLine } from '../entities/invoice-line.entity.js';
@@ -21,14 +29,48 @@ import type {
   CorrectiveInvoiceResult,
 } from '@endora-commerce/contracts';
 
-function round2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
+/** The smaller of two decimals. */
+function minDecimal(a: string, b: string): string {
+  return compareDecimals(a, b) <= 0 ? a : b;
+}
+
+/** One corrected line's amounts, as the `invoice_lines` columns store them. */
+export interface CorrectionLineAmounts {
+  gross: string;
+  net: string;
+  unitNetPrice: string;
+}
+
+/**
+ * A correction's amounts, in exact decimal arithmetic (issue #417). The
+ * credited amount is gross (a return credits what was paid, tax included),
+ * capped at the original invoice's gross (FR-020) and shared out over the lines
+ * in order; each line's net is backed out of its gross at the mirrored rate,
+ * half-up; the document's VAT is the sum of the lines' (gross − net) and its
+ * net the credited gross minus that VAT, so net + tax = the credited gross.
+ */
+export function correctionAmounts(
+  total: string | number,
+  originalGross: string,
+  lines: ReadonlyArray<{ amount: string | number; quantity: number; rate: string | number }>,
+): { credited: string; netTotal: string; taxTotal: string; lines: CorrectionLineAmounts[] } {
+  const credited = minDecimal(roundHalfUp(total), roundHalfUp(originalGross));
+  let remaining = credited;
+  const amounts = lines.map((l) => {
+    const asked = compareDecimals(l.amount, 0) < 0 ? '0.00' : roundHalfUp(l.amount);
+    const gross = minDecimal(asked, remaining);
+    remaining = roundHalfUp(decimalDifference(remaining, gross));
+    const net = netFromGrossHalfUp(gross, l.rate, 'fraction');
+    return { gross, net, unitNetPrice: quotientHalfUp(net, l.quantity || 1, 4) };
+  });
+  const taxTotal = roundHalfUp(decimalSum(...amounts.map((a) => decimalDifference(a.gross, a.net))));
+  return { credited, netTotal: roundHalfUp(decimalDifference(credited, taxTotal)), taxTotal, lines: amounts };
 }
 
 /** What a corrected line inherits from the original line it credits. */
 interface MirroredLine {
-  /** The original line's VAT rate, as a fraction (0.23 for 23%). */
-  rate: number;
+  /** The original line's VAT rate, as a fraction (`0.2300` for 23%), as stored. */
+  rate: string;
   /** The original line's unit of measure, verbatim. */
   unit: string;
 }
@@ -144,50 +186,34 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
     // numbering series it continues.
     const salesChannelId = original.salesChannelId ?? null;
 
-    // Cap the credited total at the original invoice gross (never credit more
-    // than was invoiced).
-    const originalGross = Number(original.total);
-    const requested = round2(input.total);
-    const credited = Math.min(requested, originalGross);
-
     // A correction mirrors the line it corrects. The link is `orderItemId`:
     // issuance snapshots it on every product line of the original, and a return
     // case item names the same order item.
     const mirrorByOrderItem = new Map<string, MirroredLine>();
     const originalLines = await em.find(InvoiceLine, { invoiceId: original.id });
     for (const l of originalLines) {
-      if (l.orderItemId) mirrorByOrderItem.set(l.orderItemId, { rate: Number(l.taxRate), unit: l.unit });
+      if (l.orderItemId) mirrorByOrderItem.set(l.orderItemId, { rate: l.taxRate, unit: l.unit });
     }
     // Resolve every line before the transaction opens, so a line that cannot
     // be mirrored refuses without having drawn a correction number.
-    //
-    // The credited amount is gross (a return credits what was paid, tax
-    // included), so the net follows from the mirrored rate rather than the
-    // other way round.
-    let remaining = credited;
-    const snapshots = input.lines.map((l, index) => {
-      const mirrored = mirrorFor(original, mirrorByOrderItem, l.orderItemId);
-      const gross = round2(Math.min(Math.max(l.amount, 0), remaining));
-      remaining = round2(remaining - gross);
-      const net = round2(gross / (1 + mirrored.rate));
-      const qty = l.quantity || 1;
-      return {
-        ordinal: index + 1,
-        orderItemId: l.orderItemId,
-        name: l.productName,
-        quantity: qty,
-        rate: mirrored.rate,
-        unit: mirrored.unit,
-        net,
-        gross,
-        unitNetPrice: net / qty,
-      };
-    });
-
-    // The document's own totals follow its lines: net + tax = the credited
-    // gross, which stays the FR-020 cap.
-    const taxTotal = round2(snapshots.reduce((sum, s) => sum + (s.gross - s.net), 0));
-    const netTotal = round2(credited - taxTotal);
+    const mirrored = input.lines.map((l) => mirrorFor(original, mirrorByOrderItem, l.orderItemId));
+    // Cap the credited total at the original invoice gross (never credit more
+    // than was invoiced); the net follows from the mirrored rate.
+    const amounts = correctionAmounts(
+      input.total,
+      original.total,
+      input.lines.map((l, index) => ({ amount: l.amount, quantity: l.quantity, rate: mirrored[index]!.rate })),
+    );
+    const { credited, netTotal, taxTotal } = amounts;
+    const snapshots = input.lines.map((l, index) => ({
+      ordinal: index + 1,
+      orderItemId: l.orderItemId,
+      name: l.productName,
+      quantity: l.quantity || 1,
+      rate: roundHalfUp(mirrored[index]!.rate, 4),
+      unit: mirrored[index]!.unit,
+      ...amounts.lines[index]!,
+    }));
 
     const issuedAt = new Date();
     const holdForVendor = await shouldHoldForVendorNumber(this.ledgerRouting, salesChannelId);
@@ -216,9 +242,9 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
         // date and keeps its meaning — do not collapse the two back together.
         saleDate: original.saleDate ?? issuedAt.toISOString().slice(0, 10),
         currency: input.currency,
-        netTotal: netTotal.toFixed(2),
-        taxTotal: taxTotal.toFixed(2),
-        total: credited.toFixed(2),
+        netTotal,
+        taxTotal,
+        total: credited,
         paidTotal: '0',
         originalInvoiceId: original.id,
         ...(input.idempotencyKey ? { correctionIdempotencyKey: input.idempotencyKey } : {}),
@@ -239,10 +265,10 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
           // `opak.` is credited in `opak.` and not in `szt.` (#136.1).
           unit: s.unit,
           quantity: String(s.quantity),
-          unitNetPrice: s.unitNetPrice.toFixed(4),
-          taxRate: s.rate.toFixed(4),
-          netValue: s.net.toFixed(2),
-          grossValue: s.gross.toFixed(2),
+          unitNetPrice: s.unitNetPrice,
+          taxRate: s.rate,
+          netValue: s.net,
+          grossValue: s.gross,
           orderItemId: s.orderItemId,
         });
       }
@@ -279,7 +305,7 @@ export class CorrectiveInvoiceProvider implements CorrectiveInvoicePort {
             number: invoice.number,
             orderId: input.orderId,
             originalInvoiceId: original.id,
-            credited,
+            credited: Number(credited),
           },
         })
         .catch(() => undefined);
