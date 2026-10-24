@@ -181,3 +181,15 @@ describe('exact decimal discounts (#417)', () => {
     ).toBe(0.09);
   });
 });
+
+describe('exact step percentages (#417 review)', () => {
+  it('takes 3 × 0.15 % of 10.00 as 0.05, not the binary 0.04', () => {
+    // 3 * 0.15 is the double 0.44999999999999996.
+    expect(3 * 0.15).toBe(0.44999999999999996);
+    const r = registry.apply(
+      { type: 'spend_x_percent_off', spendStep: 3, percent: 0.15, currency: 'PLN' },
+      ctx([line('p', 10, 1)]),
+    );
+    expect(r.discountSubtotalDelta).toBe(0.05);
+  });
+});
