@@ -2,7 +2,7 @@
 
 The product owner's three target scenarios (E1–E3) and the cases that chose the precedence (F, S, T, Q vectors), and the cases the owner's rulings of 2026-10-21 decide (C∩, configurable precedence, H, A, K, U, V, D vectors), each as **inputs → expected price → which row wins and why**, under the proposed model, with today's answer where it differs. They are written to become the failing-first tests of the pricing-model feature (Constitution III) and to answer "what should this cost?" without re-deriving the algorithm.
 
-**Verified against** `master` at `b1021c71b` on 2026-10-21; §10.11 re-checked for the P0 read-path hardening (branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21; §10.16 re-checked at `e3f456957` on 2026-10-24 (vectors G1–G4). §10.17 written against `2716908b3` on 2026-10-24 (issue #417) and rewritten for the owner's VAT ruling of the same day; §10.16 and §10.17 recomputed and §10.18 written for the four-place unit-price ruling of 2026-10-25 against `ad06079a4` (branch `fix/four-place-unit-prices`). File:line citations are as of `b1021c71b`; re-check them before relying on one.
+**Verified against** `master` at `b1021c71b` on 2026-10-21; §10.11 re-checked for the P0 read-path hardening (branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21; §10.16 re-checked at `e3f456957` on 2026-10-24 (vectors G1–G4). §10.17 written against `2716908b3` on 2026-10-24 (issue #417) and rewritten for the owner's VAT ruling of the same day; §10.16 and §10.17 recomputed and §10.18 written for the four-place unit-price ruling of 2026-10-25 against `ad06079a4` (branch `fix/four-place-unit-prices`); §10.17 extended for issue #428 (refunds outside `payments`, the overpayment, the on-account case, section summaries) against `9e43c3412` on 2026-10-25. File:line citations are as of `b1021c71b`; re-check them before relying on one.
 
 **The "Today" lines** under each vector record what the **pre-160** engine (the Application rule
 and the Default list) answered, as the comparison the model was decided against. Since feature 160
@@ -350,8 +350,8 @@ produces calls it:
 | Document | What it computes with `vatByRate` |
 | --- | --- |
 | Checkout preview, admin preview, placed order | `taxTotal` over the lines' nets; `total` = net + VAT + delivery + surcharge − discount (those three carry no VAT); the payment, the proforma and the credit reservation take that `total`; `orders.vat_method = 'per_rate'` records it |
-| Order line (`order_items.line_total`), confirmation, order screens | the line's **own rounding**, `round(net × (1 + rate))` — informational (owner ruling of 2026-10-24): the line grosses may add up to a cent more or less than the total |
-| VAT invoice | the per-rate summary and the totals over the lines' nets (delivery, surcharge and discount are 0 % lines), stored as issued in `invoices.vat_summary`; a line's `grossValue` is its own rounding, informational — the law requires the net per line, the gross per line is optional; `paidTotal` is what was paid for the order — each captured payment attempt less what was refunded from it, or a paid order's stored total when nothing was captured — never the invoice gross; an order whose refunds equal what was captured and cover its whole total is not invoiced (`422 INVOICE_ORDER_REFUNDED`, owner ruling of 2026-10-24; automatic issuance skips it and logs why) |
+| Order line (`order_items.line_total`), confirmation, order screens | the line's **own rounding**, `round(net × (1 + rate))` — informational (owner ruling of 2026-10-24): the line grosses may add up to a cent more or less than the total, so no screen adds them up — a line group's summary on the admin and storefront order screens is `vatByRate` over its lines' nets (issue #428) |
+| VAT invoice | the per-rate summary and the totals over the lines' nets (delivery, surcharge and discount are 0 % lines), stored as issued in `invoices.vat_summary`; a line's `grossValue` is its own rounding, informational — the law requires the net per line, the gross per line is optional; `paidTotal` is what was paid for the order and kept — what was received (each captured payment attempt, or a paid order's stored total when nothing was captured) less everything refunded, each refund once, never below 0 — never the invoice gross (`invoicePaidPosition`, issue #428: the refunds are what `payments` recorded plus the issued refunds of settled returns it never sees — every credit-limit top-up, and every money refund of an order whose method is not a gateway; an order an operator marked refunded was refunded everything received — its total with nothing captured, what was captured otherwise (a refund settled by hand, e.g. after a gateway refund anomaly; owner ruling on PR #434) — taken as the larger of the refunds already recorded and what was received, never their sum, so a gateway refund on the payment row is not counted twice); an order with something refunded whose refunds equal what was received and cover its whole total is not invoiced (a zero-total order — a 100 % coupon — refunded nothing and is invoiced, even when marked refunded) (`422 INVOICE_ORDER_REFUNDED`, owner ruling of 2026-10-24; automatic issuance skips it and logs why); `amountDue` is `max(0, gross − paidTotal)` and what was paid above the gross is the `overpayment`, `max(0, paidTotal − gross)`, printed as *Nadpłata* |
 | Return (default refund) | **cumulative** over the order's returns **and complaints**: per group of what the order charged — a rate (`vat_method = 'per_rate'`) or a line (an order placed before) — the amount of everything returned so far (`vatByRate` over the returned nets, or the stored line total in proportion), less the share of the order-level discount it carries (the discount shared over the groups by their amounts), minus what earlier cases refunded in the group; capped at what remains of the products paid (stored subtotal + tax − discount), and a case completing the order refunds exactly what remains. Cases on one order are created one at a time (a per-order advisory lock) |
 | Correction | **cumulative** over the effective (not cancelled) corrections of one invoice: per rate (per line for an invoice issued before) the net of everything credited so far — `netForGrossAtRate`, `N` with `N + round(N × rate) = gross`, or the invoiced line net in proportion — minus the nets earlier corrections credited; the goods at `refund + discount share` and the discount back on a 0 % line, so the correction totals the refund and credits the goods' VAT as charged; capped at what remains of the invoice; a total above the lines' sum is refused, and a correction whose total is not what its lines add up to credits its amounts as goods, with no discount line; a settlement refunds and corrects every line of its case (a line its request leaves out at its stored approved amount), validates its correction before any money moves, and runs under the order's advisory lock, one settlement of an order at a time |
 | Quote screens and PDF | the quote has one rate: the summary's VAT on the net total; a line's own VAT column is rounded per line, informational |
@@ -403,9 +403,20 @@ shown with the per-rate summary derived from their stored lines, as they were is
 read from what it stored (`orders.vat_method` `null`): L0. **The refund is the money charged**: a
 case completing such an order refunds the stored products total even where the stored line totals
 add up to a cent more or less, and the correction credits exactly that refund — at most what
-remains of the invoice. An invoice whose gross was below what was paid leaves the excess as the
-overpayment it already shows (a negative amount due); one whose gross was above (a pre-upgrade
-invoice of a VAT payer, D1) keeps the uncredited rest.
+remains of the invoice. An invoice whose gross was below what was paid shows nothing due and the
+excess as its overpayment (until issue #428 it showed a negative amount due); one whose gross was
+above (a pre-upgrade invoice of a VAT payer, D1) keeps the uncredited rest.
+
+**What an invoice records as paid when part of the order was on account** (issue #428). On credit
+terms the on-account part is unpaid by arrangement when the invoice is issued, so it is never
+counted as paid — the invoice states it as due. Take an order of 100.00: 40.00 captured by card,
+60.00 on account. Card part captured and kept: paid 40.00, due 60.00. Card part captured and then
+refunded in full before invoicing: the buyer has kept nothing paid and still owes the 60.00, so
+**paid 0.00, due 100.00** is right, and since the refunds (40.00) do not cover the order it is
+invoiced. The whole order on account with a return credited back to the credit limit: paid 0.00 —
+the credit reduces nothing that was paid, and paid is never negative. Checkout takes one payment
+method per order, so it does not produce this split today; `invoice-paid.test.ts` and
+`decimal-amounts.test.ts` pin the rule so that it holds wherever the split arises.
 
 Tests: `backend/test/integration/price_lists/worked-examples/money-agreement.test.ts` (A1–A3, V2,
 V3 full and partial, L1, R2, DC1, C1, L0, every document, and the identity of the payment, the proforma, the
@@ -417,7 +428,7 @@ order total and the invoice's gross and paid total); `packages/contracts/test/mo
 returns and complaints, with and without an order discount, never over-refund, a complete return
 refunds exactly what was paid, and the discount carried adds up to the order's);
 `backend/test/integration/returns/concurrent-cases.test.ts`, `settlement-scope.test.ts` and `settlement-ordering.test.ts`;
-`backend/test/integration/invoices/decimal-amounts.test.ts` (D1, V2, and the refusal to invoice an order refunded in full); `backend/test/unit/invoices/auto-issue-reactor.test.ts`.
+`backend/test/integration/invoices/decimal-amounts.test.ts` (D1, V2, the refusal to invoice an order refunded in full, the refunds of settled returns outside `payments`, the overpayment, and the on-account case); `packages/modules/invoices/src/backend/services/invoice-paid.test.ts`; `backend/test/unit/invoices/auto-issue-reactor.test.ts`.
 
 ### 10.18 Four-place unit prices — the line value is the rounding point (owner ruling of 2026-10-25)
 

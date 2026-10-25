@@ -36,17 +36,39 @@ price this precisely: the VAT Act names the unit net price without fixing its de
 
 ### What a VAT invoice records as paid, and when it is not issued
 
-A VAT invoice records as paid what was kept from the order's payments: each
-captured payment attempt less what was refunded from it. An order recorded as
+A VAT invoice records as paid what was received for the order and kept:
+each captured payment attempt, less everything refunded. An order recorded as
 paid with nothing captured (a confirmed bank transfer), or with `payments`
-absent, is paid its stored total.
+absent, was received in its stored total. An order on credit terms is unpaid by
+arrangement when it is invoiced, and nothing of it is counted as paid.
 
-An order whose payments were **refunded in full before it was invoiced** — the
-refunds equal what was captured and cover the whole order total — is not
-invoiced: there is no sale left to document. Issuing answers
-`422 INVOICE_ORDER_REFUNDED` and draws no number; automatic issuance skips the
-order and logs the reason. An order refunded only in part is invoiced, with
-what was kept as paid.
+Every refund counts once, whichever way it was made:
+
+- a refund through the payment gateway, as `payments` recorded it;
+- a return settled with a **refund by bank transfer** (any order not paid
+  through a gateway — the operator makes the transfer) or with a **credit to
+  the credit limit**, as the return recorded it. A refund still waiting for a
+  person to make it is not counted;
+- an order an operator marked as **refunded** was refunded everything that was
+  received for it: its whole total when nothing was captured, and what was
+  captured otherwise — a refund settled by hand, for example after the gateway
+  reported an amount the payment could not record. The mark is never added to
+  refunds already recorded: a gateway refund on the payment counts once.
+
+With the `returns` module switched off, only the refunds `payments` recorded
+are deducted.
+
+An order **refunded in full before it was invoiced** — the refunds equal what
+was received and cover the whole order total — is not invoiced: there is no
+sale left to document. Issuing answers `422 INVOICE_ORDER_REFUNDED` and draws
+no number; automatic issuance skips the order and logs the reason. An order
+refunded only in part is invoiced, with what was kept as paid.
+
+The **amount due** is the gross less what was paid, and never negative. When
+more was paid than the gross, the amount due is 0 and the invoice states the
+difference as the **overpayment** (`overpayment` in the API, the
+*Overpayment* row on the admin screen, *Nadpłata* on the PDF — the label is a
+setting of the totals block, and the row can be hidden there).
 
 ## Entities
 

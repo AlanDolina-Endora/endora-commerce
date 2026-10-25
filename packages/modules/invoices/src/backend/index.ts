@@ -21,6 +21,7 @@ import type {
   OrderReadPort,
   PaymentAttemptStatus,
   PaymentReadPort,
+  ReturnRefundReadPort,
   SettingWriteValidatorRegistryPort,
   SettingsAdminPort,
   TransactionalEmailSender,
@@ -255,6 +256,15 @@ export function registerModule(ctx: ModuleContext): void {
                 captured: moneySum(captured.map((p) => p.amount)),
                 refunded: moneySum(captured.map((p) => p.refundedAmount)),
               };
+            },
+          },
+          // Issue #428 — what a settled return refunded outside `payments` (a
+          // manual transfer, a credit-limit top-up), from `returns` when it is
+          // present (a `degrades-without` dependency of this manifest).
+          returnRefunds: {
+            refundsFor: async (orderId) => {
+              if (!effectiveState.isPresent('returns')) return [];
+              return lazyPort<ReturnRefundReadPort>(ctx, 'returnRefundReadPort').listForOrder(orderId);
             },
           },
           ledgerRouting: {

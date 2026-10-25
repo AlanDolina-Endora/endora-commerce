@@ -3107,6 +3107,70 @@ platformy.
   ten znacznik, gdy suma nadal wynosi zero; własny blok, który formatuje wartości inaczej, powinien
   robić to samo.
 
+#### Faktury, płatności i sumy zamówień: zasady kwot ze zgłoszenia #428 {#after-0-109-0-money}
+
+**Dla operatorów.**
+
+- **Faktura uwzględnia każdy zwrot wykonany przed jej wystawieniem** (zgłoszenie #428). Do tego
+  wydania faktura VAT odejmowała od zapłaconej kwoty tylko zwroty zgłoszone przez bramkę płatności.
+  Teraz odejmuje także zwrot towaru rozliczony przelewem, dla zamówienia nieopłaconego przez bramkę,
+  oraz zwrot rozliczony uznaniem limitu kredytowego; zamówienie, które operator oznaczył jako
+  zwrócone, liczy się jako zwrócone w całości — bez pobranej płatności, a także z pobraną płatnością
+  zwróconą ręcznie (na przykład po anomalii zwrotu, niżej), nigdy nie dodając oznaczenia do zwrotu
+  przez bramkę, który już zapisano. Zamówienie zwrócone w ten
+  sposób w całości przed wystawieniem faktury **nie jest już fakturowane** — wystawienie zwraca
+  `422 INVOICE_ORDER_REFUNDED`, a automatyczne wystawianie je pomija i zapisuje powód w logu — a
+  zwrócone częściowo jest fakturowane tylko z zatrzymaną kwotą jako zapłaconą. Faktury wystawione
+  przed aktualizacją się nie zmieniają. Gdy moduł `returns` jest wyłączony, odejmowane są tylko
+  zwroty z bramki.
+- **Faktura nigdy nie pokazuje ujemnej kwoty do zapłaty** (zgłoszenie #428). Gdy zapłacono więcej niż
+  kwota brutto faktury, do zapłaty jest 0, a różnica jest pokazana jako **nadpłata** — wiersz na
+  ekranie faktury i linia *Nadpłata* na PDF. Szablon faktury edytowany przed aktualizacją też
+  drukuje tę linię, z etykietą *Nadpłata*; etykietę i przełącznik ukrywający linię ma blok
+  podsumowania w edytorze szablonów. Korekta, której kwota brutto jest ujemna, pokazuje teraz 0 do
+  zapłaty, a kwotę do zwrotu jako nadpłatę.
+- **Minimalna wartość zamówienia ma najwyżej dwa miejsca po przecinku** (zgłoszenie #428). Zapisanie
+  `orders.min_order_value` z większą liczbą miejsc jest odrzucane z `400 AMOUNT_PRECISION_EXCEEDED`,
+  jak każda inna wpisywana kwota; zapisana już wartość jest odczytywana jak dotąd. Nic nie trzeba
+  robić, chyba że jakiś skrypt zapisuje to ustawienie z większą liczbą miejsc.
+- **Kwota zwrotu z bramki z więcej niż dwoma miejscami po przecinku jest odrzucana, a nie
+  zaokrąglana** (zgłoszenie #428). Płatność zachowuje zwróconą kwotę i status, odmowa trafia do logu
+  z płatnością, zamówieniem, zgłoszoną kwotą i identyfikatorem zwrotu w bramce, a historia płatności
+  zawiera `providerDetails.refundAnomaly`. Webhook bramki i tak zostaje potwierdzony, więc nie jest
+  wysyłany ponownie: sprawdź taki zwrot w bramce i rozlicz go ręcznie.
+- **Podsumowanie grupy pozycji zamówienia liczy VAT tą samą metodą co zamówienie** (zgłoszenie
+  #428). Podsumowania grup na ekranie zamówienia w panelu brały kwotę brutto złożonego zamówienia
+  jako sumę wartości pozycji, z których każda jest zaokrąglona osobno, co mogło różnić się o grosz
+  od VAT liczonego według stawek, który zamówienie naliczyło. Teraz biorą VAT według stawek od sumy
+  kwot netto grupy; wartości pozycji pozostają takie jak dotąd.
+
+**Dla klientów API i integratorów.**
+
+- **Faktura zawiera `overpayment`, a `amountDue` nigdy nie jest ujemne** (zgłoszenie #428): w
+  `GET /api/v1/admin/invoices/:id` i każdej odpowiedzi ze szczegółami faktury `amountDue` to
+  `max(0, grossTotal − paidTotal)`, a nowe pole `overpayment` to `max(0, paidTotal − grossTotal)`.
+  Klient, który odczytywał ujemne `amountDue` jako nadpłatę, odczytuje teraz `overpayment`. Pole
+  scalające szablonu `{{var invoice.overpayment}}` jest nowe, obok `{{var invoice.amountDue}}`.
+- **`paidTotal` faktury wystawionej po aktualizacji odejmuje zwroty wykonane poza `payments`**, a
+  `POST /api/v1/admin/orders/:orderId/invoices` zwraca `422 INVOICE_ORDER_REFUNDED` dla zamówienia
+  zwróconego w ten sposób w całości — zob. punkt dla operatorów powyżej.
+- **Moduł bramki wywołujący `receivePaymentPort.reflectRefund` z więcej niż dwoma miejscami po
+  przecinku** dostaje `{ paymentId, changed: false }` i nic nie zostaje zapisane, podczas gdy
+  wcześniej kwota była zaokrąglana połówkowo w górę. Podawaj kwotę z bramki w jednostkach głównych,
+  z najwyżej dwoma miejscami po przecinku.
+
+**W istniejącym storefroncie.**
+
+Storefront z tego wydania bierze podsumowanie grupy pozycji na stronie zamówienia z VAT według
+stawek od kwot netto grupy (`orderSectionTotals` w `components/line-groups/GroupedLineRows.tsx`,
+wywoływane przez `components/orders/OrderItemRows.tsx`), podczas gdy wcześniejszy storefront sumuje
+wartości pozycji i może pokazać podsumowanie różniące się o grosz od VAT zamówienia. Przenieś te
+dwa pliki, aby to wyrównać; bez nich nic się nie psuje.
+
+Ten wpis został napisany 2026-10-25 na podstawie `master` w `9e43c3412` i gałęzi zgłoszenia #428
+(`fix/428-money-followups`). W chwili jej pisania żadna instancja nie była zaktualizowana do
+0.109.0.
+
 ## Instancja niespójna od początku
 
 Instalator `0.101.x` lub starszy zapisywał każdy pakiet wydania z `^` poza

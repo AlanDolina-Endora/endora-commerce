@@ -569,6 +569,34 @@ export interface PaymentRefundPort {
   refund(input: PaymentRefundInput): Promise<PaymentRefundResult>;
 }
 
+/**
+ * One money-moving resolution a settled return case recorded for an order
+ * (issue #428): a refund (`resolutionType: 'refund'`) or a credit-limit top-up
+ * (`'credit'`), its two-place amount, and whether it was issued.
+ */
+export interface OrderReturnRefund {
+  resolutionType: 'refund' | 'credit';
+  /** A two-place decimal string, as stored. */
+  amount: string;
+  settlementState: 'issued' | 'pending_manual' | 'failed';
+}
+
+/**
+ * Container name: `returnRefundReadPort`. Owner: `returns`.
+ *
+ * What the order's settled return cases refunded, so a reader that states what
+ * was paid for an order — the invoice — can count a refund that never passed
+ * through `payments`: a manual bank transfer for an order paid offline, or a
+ * credit-limit top-up. A gateway order's refunds also appear here, and the
+ * reader is the one that knows `payments` reports those (issue #428).
+ *
+ * **Owner off:** the seam fails closed — resolving this port throws
+ * `ModuleDisabledError`. A reader that may degrade decides presence first.
+ */
+export interface ReturnRefundReadPort {
+  listForOrder(orderId: string): Promise<OrderReturnRefund[]>;
+}
+
 // --- the other three consumer-declared seams ---------------------------------
 //
 // The same move as `PaymentRefundPort` above, and for the same reason: this

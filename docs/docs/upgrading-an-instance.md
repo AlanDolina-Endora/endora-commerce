@@ -2971,6 +2971,67 @@ Each entry below stands on its own: read the ones for the parts of the platform 
   mark when the sum is still zero; a custom block that formats values some other way should do the
   same.
 
+#### Invoices, payments and order totals: money rules of issue #428 {#after-0-109-0-money}
+
+**For operators.**
+
+- **An invoice counts every refund made before it was issued** (issue #428). Until this release a
+  VAT invoice deducted from what was paid only the refunds the payment gateway reported. It now
+  also deducts a return settled with a refund by bank transfer, for an order not paid through a
+  gateway, and a return settled as a credit to the credit limit; an order an operator marked as
+  refunded counts as refunded in full — with nothing captured, and also with a captured payment
+  refunded by hand (for example after a refund anomaly, below), never adding the mark to a gateway
+  refund already recorded. So an order refunded in full this
+  way before it was invoiced is **not invoiced** any more — issuing answers
+  `422 INVOICE_ORDER_REFUNDED`, and automatic issuance skips it and logs why — and one refunded in
+  part is invoiced with only what was kept as paid. Invoices issued before the upgrade are not
+  changed. With the `returns` module switched off, only the gateway's refunds are deducted.
+- **An invoice never shows a negative amount due** (issue #428). When more was paid than the
+  invoice's gross, the amount due is 0 and the difference is shown as the **overpayment** — a row
+  on the invoice screen and a *Nadpłata* line on the PDF. An invoice template edited before the
+  upgrade prints the line too, labelled *Nadpłata*; the label and a switch to hide the line are in
+  the totals block of the template editor. A correction, whose gross is negative, now shows 0 due
+  and the amount to be returned as its overpayment.
+- **The minimum order value takes at most two decimal places** (issue #428). Saving
+  `orders.min_order_value` with more is refused with `400 AMOUNT_PRECISION_EXCEEDED`, as every
+  other typed amount is; a value already stored is read as before. Nothing to do unless a script
+  writes the setting with more places.
+- **A gateway refund amount with more than two decimal places is refused, not rounded** (issue
+  #428). The payment keeps its refunded amount and status, the refusal is logged with the payment,
+  the order, the reported amount and the gateway's refund reference, and the payment's history
+  carries `providerDetails.refundAnomaly`. The gateway's webhook is still acknowledged, so it is not
+  delivered again: check such a refund with the gateway and settle it by hand.
+- **A line group's summary on an order adds up to the order's own VAT method** (issue #428). The
+  admin order screen's group summaries took a placed order's gross as the sum of its line totals,
+  each line's own rounding, which could be a cent away from the VAT per rate the order charged.
+  They now take the VAT per rate on the sum of the group's net amounts; the line totals stay as
+  shown.
+
+**For API clients and integrators.**
+
+- **An invoice carries `overpayment`, and `amountDue` is never negative** (issue #428): on
+  `GET /api/v1/admin/invoices/:id` and every reply carrying an invoice detail, `amountDue` is
+  `max(0, grossTotal − paidTotal)` and the new `overpayment` is `max(0, paidTotal − grossTotal)`.
+  A client that read a negative `amountDue` as an overpayment reads `overpayment` instead. The
+  template merge field `{{var invoice.overpayment}}` is new beside `{{var invoice.amountDue}}`.
+- **`paidTotal` of an invoice issued after the upgrade deducts refunds made outside `payments`**,
+  and `POST /api/v1/admin/orders/:orderId/invoices` answers `422 INVOICE_ORDER_REFUNDED` for an order
+  refunded in full that way — see the operators' entry above.
+- **A gateway module calling `receivePaymentPort.reflectRefund` with more than two decimal
+  places** gets `{ paymentId, changed: false }` and nothing recorded, where the amount used to be
+  rounded half-up. Report the gateway's amount in major units with at most two places.
+
+**In an existing storefront.**
+
+The release's storefront takes a line group's summary on the order page from the VAT per rate on
+the group's net amounts (`orderSectionTotals` in `components/line-groups/GroupedLineRows.tsx`,
+called by `components/orders/OrderItemRows.tsx`), where an earlier storefront adds up the line
+totals and can show a summary a cent away from the order's VAT. Bring over those two files to
+match; nothing breaks without them.
+
+This entry was written on 2026-10-25 against `master` at `9e43c3412` and the branch of issue
+#428 (`fix/428-money-followups`). No instance had been upgraded to 0.109.0 when it was written.
+
 ## An instance that is mixed from the start
 
 The installer of `0.101.x` or earlier wrote every package of the release with a `^` except

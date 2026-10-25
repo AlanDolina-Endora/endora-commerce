@@ -773,7 +773,6 @@ export function OrderDetail(): ReactNode {
                                   section.items.map((it) => ({
                                     net: lineAmountHalfUp(it.unitPrice, it.quantity),
                                     taxRate: it.taxRate,
-                                    gross: it.lineTotal,
                                   })),
                                 ),
                                 order.currency,

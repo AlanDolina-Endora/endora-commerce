@@ -123,7 +123,10 @@ export const invoiceSchema = z.object({
   taxTotal: z.number().finite(),
   grossTotal: z.number().finite(),
   paidTotal: z.number().finite(),
+  /** What is still to pay: `max(0, grossTotal − paidTotal)` — never negative (issue #428). */
   amountDue: z.number().finite(),
+  /** What was paid above the gross: `max(0, paidTotal − grossTotal)` (issue #428). */
+  overpayment: z.number().finite(),
   /** Legacy alias of grossTotal kept for back-compat with the original schema. */
   total: z.number().finite(),
   originalInvoiceId: uuidSchema.nullable(),

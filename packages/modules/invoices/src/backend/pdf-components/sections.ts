@@ -73,6 +73,7 @@ export function interpolate(text: string, inv: InvoiceDetail): string {
     'invoice.issuedAt': inv.issuedAt.slice(0, 10),
     'invoice.saleDate': inv.saleDate ?? inv.issuedAt.slice(0, 10),
     'invoice.amountDue': money(inv.amountDue),
+    'invoice.overpayment': money(inv.overpayment),
     'buyer.name': inv.buyer.name,
     'seller.legalName': inv.seller.legalName,
     'seller.taxId': inv.seller.taxId ?? '',
@@ -346,6 +347,15 @@ export function vatSummarySection(inv: InvoiceDetail, props: Props = {}): Conten
   };
 }
 
+/**
+ * The overpayment row's default label, in the language the amounts are written
+ * in (issue #428). A template's `labelOverpayment` replaces it.
+ */
+const OVERPAYMENT_LABEL: Record<AmountToWordsLocale, string> = {
+  en: 'Overpayment',
+  pl: 'Nadpłata',
+};
+
 export function totalsSection(
   inv: InvoiceDetail,
   locale: AmountToWordsLocale,
@@ -371,6 +381,15 @@ export function totalsSection(
       bold: bool(props, 'amountDueBold', true),
       fontSize,
       color: amountDueColor,
+    });
+  }
+  // Issue #428 — what was paid above the gross, beside an amount due of 0.
+  if (bool(props, 'showOverpayment', true) && inv.overpayment > 0) {
+    stack.push({
+      text: `${str(props, 'labelOverpayment', OVERPAYMENT_LABEL[locale])}: ${money(inv.overpayment)} ${inv.currency}`,
+      alignment: align,
+      fontSize,
+      color,
     });
   }
   if (bool(props, 'showGross', true)) {

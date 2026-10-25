@@ -208,6 +208,15 @@ export const manifest = defineModuleManifest({
       reason:
         'InvoiceService.issue records as paid what was captured for the order (issue #417), which the payments module knows.',
     },
+    {
+      moduleId: 'returns',
+      name: 'returnRefundReadPort',
+      kind: 'degrades-without',
+      whenAbsent:
+        'An issued invoice deducts from what was paid only the refunds the payments module recorded; a return refunded by hand or credited to the credit limit is not deducted.',
+      reason:
+        'InvoiceService.issue deducts the refunds a settled return made outside payments (issue #428), which the returns module records.',
+    },
   ],
   settings: invoicesSettingsManifest,
   i18n: { bundlesDir: 'i18n' },
