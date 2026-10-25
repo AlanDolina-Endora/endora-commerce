@@ -727,9 +727,9 @@ describe('addItems — replaceExisting judges the request alone and clears only 
     );
     const lines = result.items.filter((item) => item.cartId === result.cart.id);
     expect(lines.map((item) => [item.productId, item.quantity, item.unitPrice])).toEqual([
-      [B, 5, '10.00'],
-      [C, 10, '8.00'],
-      [B, 3, '10.00'],
+      [B, 5, '10.0000'],
+      [C, 10, '8.0000'],
+      [B, 3, '10.0000'],
     ]);
     // Distinct, increasing creation times: the basket reads back in request order.
     const times = lines.map((item) => (item.createdAt as Date).getTime());
