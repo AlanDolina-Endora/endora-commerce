@@ -2680,7 +2680,8 @@ Whenever it suits you:
   price answers `400 VALIDATION_FAILED`. Responses carry the four-place unit price: the numbers
   (`unitPrice` of a cart and an order line, `agreedUnitPrice`, `unitNetPrice` of an invoice line)
   as the value — `0.0125` — and the decimal strings as four places — the admin order preview's
-  `unitPrice` is `"0.0125"` or `"29.4950"`, where it was rounded to `"29.50"`. **A line's value is
+  `unitPrice` is `"0.0125"` or `"29.4950"`, where it was rounded to `"29.50"`, and so are
+  `previousUnitPrice` and `currentUnitPrice` in the `details.lines` of `409 CART_PRICE_CHANGED`. **A line's value is
   `unitPrice × quantity` rounded half-up to two places once**: compute it that way rather than
   from a unit price rounded to two. An order placed before the upgrade keeps its two-place prices.
 - **VAT is taken per rate on the sum of the net amounts at that rate**, rounded half-up once: an

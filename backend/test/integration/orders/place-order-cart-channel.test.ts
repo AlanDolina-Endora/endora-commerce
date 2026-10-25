@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { ERROR_CODES } from '@endora-commerce/contracts';
+import { ERROR_CODES, unitPriceHalfUp } from '@endora-commerce/contracts';
 import { EventBus } from '@endora-commerce/platform/events';
 import { Cart, CartItem, Order, OrderItem } from '../../helpers/package-entities.js';
 import {
@@ -131,10 +131,11 @@ describe('order placement — the basket of the order’s channel', () => {
     expect(error.code).toBe(ERROR_CODES.CART_PRICE_CHANGED);
     expect(error.details.lines).toEqual([
       expect.objectContaining({
-        previousUnitPrice: fx.priceOnA,
+        // Unit prices at four places (owner ruling of 2026-10-25).
+        previousUnitPrice: unitPriceHalfUp(fx.priceOnA),
         // Priced on the system default this would be `null`: nothing prices the
         // product there.
-        currentUnitPrice: fx.priceOnB,
+        currentUnitPrice: unitPriceHalfUp(fx.priceOnB),
       }),
     ]);
 

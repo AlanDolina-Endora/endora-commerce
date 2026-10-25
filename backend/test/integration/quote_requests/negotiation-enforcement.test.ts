@@ -396,7 +396,7 @@ describe('146 — price-negotiation lock enforcement [integration]', () => {
       });
       try {
         const [stored] = await linesOf(id);
-        expect(stored?.desiredUnitPrice).toBe('77.00');
+        expect(stored?.desiredUnitPrice).toBe('77.0000');
 
         const res = await patch(colleagueAllowed, id, {
           headerNote: 'more pieces',
@@ -405,7 +405,7 @@ describe('146 — price-negotiation lock enforcement [integration]', () => {
         expect(res.statusCode, res.body).toBe(200);
         const [line] = await linesOf(id);
         expect(line?.quantity).toBe(4);
-        expect(line?.desiredUnitPrice).toBe('77.00');
+        expect(line?.desiredUnitPrice).toBe('77.0000');
 
         // A header-only edit carries no lines at all.
         const headerOnly = await patch(colleagueAllowed, id, { headerNote: 'note only' });
@@ -438,7 +438,7 @@ describe('146 — price-negotiation lock enforcement [integration]', () => {
       });
       expect(res.statusCode, res.body).toBe(200);
       const [line] = await linesOf(id);
-      expect(line?.desiredUnitPrice).toBe('61.00');
+      expect(line?.desiredUnitPrice).toBe('61.0000');
     });
   });
 

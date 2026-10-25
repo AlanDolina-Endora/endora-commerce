@@ -2798,7 +2798,8 @@ W dowolnym momencie:
   Odpowiedzi niosą czteromiejscową cenę jednostkową: liczby (`unitPrice` pozycji koszyka i
   zamówienia, `agreedUnitPrice`, `unitNetPrice` pozycji faktury) jako wartość — `0.0125` — a
   napisy dziesiętne z czterema miejscami — `unitPrice` podglądu zamówienia w panelu to `"0.0125"`
-  lub `"29.4950"`, gdzie wcześniej było zaokrąglone do `"29.50"`. **Wartość pozycji to
+  lub `"29.4950"`, gdzie wcześniej było zaokrąglone do `"29.50"`; tak samo `previousUnitPrice` i
+  `currentUnitPrice` w `details.lines` odpowiedzi `409 CART_PRICE_CHANGED`. **Wartość pozycji to
   `unitPrice × quantity`, zaokrąglona raz, połówkowo w górę, do dwóch miejsc**: licz ją w ten
   sposób, a nie z ceny jednostkowej zaokrąglonej do dwóch miejsc. Zamówienie złożone przed
   aktualizacją zachowuje dwumiejscowe ceny.
