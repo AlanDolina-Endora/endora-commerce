@@ -2,9 +2,9 @@ import { Fragment, type ReactNode } from 'react';
 import {
   arrangeLineGroups,
   lineAmountHalfUp,
-  moneyDifference,
   moneySum,
   taxAmountHalfUp,
+  vatByRate,
   type LineGroup,
 } from '@endora-commerce/contracts';
 import { tForLocale, type MessageKey } from '../../lib/i18n/messages';
@@ -52,18 +52,23 @@ export function quoteSectionTotals(
 }
 
 /**
- * The order page's rule (feature 159, FR-031): net from each line's unit price
- * and quantity, gross the sum of the line totals the page shows (`lineTotal` is
- * gross), VAT the difference — so a summary adds up the rows above it.
+ * The order page's rule (feature 159, FR-031, as the owner's VAT ruling of
+ * 2026-10-24 reads it — issue #428): net from each line's unit price and
+ * quantity, VAT per rate on the sum of the nets at that rate (`vatByRate`, the
+ * one method the order's own totals use), gross their sum. A line's `lineTotal`
+ * is its own rounding and informational, so the summary does not add them up:
+ * 36.29 + 4.31 is 40.60 where the section, 33.00 net at 23 %, is 40.59.
  */
 export function orderSectionTotals(
-  lines: ReadonlyArray<{ quantity: number; unitPrice: number; lineTotal: number }>,
+  lines: ReadonlyArray<{ quantity: number; unitPrice: number; taxRate: number }>,
 ): SectionTotals {
   if (lines.length === 0) return { count: 0, net: null, vat: null, gross: null };
   // Exact decimal arithmetic (issue #417).
-  const net = moneySum(lines.map((line) => lineAmountHalfUp(line.unitPrice, line.quantity)));
-  const gross = moneySum(lines.map((line) => line.lineTotal));
-  return { count: lines.length, net: Number(net), vat: Number(moneyDifference(gross, net)), gross: Number(gross) };
+  const totals = vatByRate(
+    lines.map((line) => ({ net: lineAmountHalfUp(line.unitPrice, line.quantity), rate: line.taxRate })),
+    'fraction',
+  );
+  return { count: lines.length, net: Number(totals.net), vat: Number(totals.vat), gross: Number(totals.gross) };
 }
 
 /**

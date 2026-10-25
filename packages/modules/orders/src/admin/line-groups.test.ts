@@ -4,8 +4,8 @@ import { orderSectionTotals } from './line-groups.js';
 /**
  * Issue #417 — a section summary on the admin order screens, in exact decimal
  * arithmetic under the order's own rule (`specs/pricing/worked-examples.md`
- * §10.17): a placed order's VAT is the stored line grosses minus the nets; the
- * create screen's VAT is the one VAT method — per rate, on the sum of the nets.
+ * §10.17): the one VAT method — per rate, on the sum of the nets — on the
+ * create screen and for a placed order alike (issue #428).
  */
 describe('orderSectionTotals', () => {
   it('rounds the create screen VAT half-up on the exact sum, not the binary 0.03 (T1)', () => {
@@ -24,13 +24,15 @@ describe('orderSectionTotals', () => {
     expect(orderSectionTotals([line, line, line])).toEqual({ count: 3, net: 0.06, vat: 0.01, gross: 0.07 });
   });
 
-  it('takes a placed order’s gross from its stored line totals', () => {
+  it('never adds up a placed order’s line grosses, which may be a cent away (#428, L1)', () => {
+    // The stored line totals 36.29 + 4.31 = 40.60 are each line's own rounding;
+    // the section is 33.00 net at 23 %, 7.59 VAT, 40.59 gross.
     expect(
       orderSectionTotals([
-        { net: 29.5, taxRate: 0.23, gross: 36.29 },
-        { net: 4.3, taxRate: 0.05, gross: 4.52 },
+        { net: 29.5, taxRate: 0.23 },
+        { net: 3.5, taxRate: 0.23 },
       ]),
-    ).toEqual({ count: 2, net: 33.8, vat: 7.01, gross: 40.81 });
+    ).toEqual({ count: 2, net: 33, vat: 7.59, gross: 40.59 });
   });
 
   it('is null unless every line is priced', () => {

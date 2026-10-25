@@ -36,16 +36,33 @@ cenę jednostkową netto, nie określając liczby miejsc po przecinku.
 
 ### Co faktura VAT zapisuje jako zapłacone i kiedy nie jest wystawiana
 
-Faktura VAT zapisuje jako zapłacone to, co zostało z płatności za zamówienie: każdą pobraną próbę
-płatności pomniejszoną o to, co z niej zwrócono. Zamówienie oznaczone jako zapłacone bez pobranej
-płatności (potwierdzony przelew) albo przy braku modułu `payments` jest zapłacone w zapisanej
-kwocie całkowitej.
+Faktura VAT zapisuje jako zapłacone to, co za zamówienie otrzymano i zatrzymano: każdą pobraną
+próbę płatności pomniejszoną o wszystkie zwroty. Zamówienie oznaczone jako zapłacone bez pobranej
+płatności (potwierdzony przelew) albo przy braku modułu `payments` otrzymano w zapisanej kwocie
+całkowitej. Zamówienie z odroczonym terminem płatności (kredyt kupiecki) w chwili fakturowania jest
+z założenia niezapłacone i nic z niego nie liczy się jako zapłacone.
 
-Zamówienie, którego płatności **zwrócono w całości przed wystawieniem faktury** — zwroty są równe
-temu, co pobrano, i pokrywają całą kwotę zamówienia — nie jest fakturowane: nie ma już sprzedaży do
-udokumentowania. Wystawienie zwraca `422 INVOICE_ORDER_REFUNDED` i nie pobiera numeru; automatyczne
-wystawianie pomija zamówienie i zapisuje powód w logu. Zamówienie zwrócone tylko częściowo jest
-fakturowane, z zatrzymaną kwotą jako zapłaconą.
+Każdy zwrot liczy się raz, niezależnie od tego, jak go wykonano:
+
+- zwrot przez bramkę płatności — tak, jak zapisał go moduł `payments`;
+- zwrot rozliczony **przelewem** (każde zamówienie nieopłacone przez bramkę — przelew wykonuje
+  operator) albo **uznaniem limitu kredytowego** — tak, jak zapisał go zwrot. Zwrot, który wciąż
+  czeka na wykonanie przez człowieka, się nie liczy;
+- zamówienie, które operator oznaczył jako **zwrócone**, bez pobranej płatności, zwrócono w całej
+  kwocie.
+
+Gdy moduł `returns` jest wyłączony, odejmowane są tylko zwroty zapisane przez `payments`.
+
+Zamówienie **zwrócone w całości przed wystawieniem faktury** — zwroty są równe temu, co otrzymano,
+i pokrywają całą kwotę zamówienia — nie jest fakturowane: nie ma już sprzedaży do udokumentowania.
+Wystawienie zwraca `422 INVOICE_ORDER_REFUNDED` i nie pobiera numeru; automatyczne wystawianie
+pomija zamówienie i zapisuje powód w logu. Zamówienie zwrócone tylko częściowo jest fakturowane,
+z zatrzymaną kwotą jako zapłaconą.
+
+**Kwota do zapłaty** to kwota brutto pomniejszona o to, co zapłacono, i nigdy nie jest ujemna. Gdy
+zapłacono więcej niż kwota brutto, do zapłaty jest 0, a faktura podaje różnicę jako **nadpłatę**
+(`overpayment` w API, wiersz *Nadpłata* na ekranie panelu i na PDF — etykieta jest ustawieniem
+bloku podsumowania i tam można ten wiersz ukryć).
 
 ## Encje
 

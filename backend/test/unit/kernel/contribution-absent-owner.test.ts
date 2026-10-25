@@ -204,6 +204,9 @@ const COMPOSERS: Readonly<
     compose('orders', registerOrders, ownerNames, withOwner, {
       emailDefaultsPort: { register: () => {} },
       salesChannelAttributionRegistry: { register: () => {} },
+      // Issue #428 — the minimum-order-value write validator, pushed into
+      // `settings`' registry, a module `orders` declares in `dependencies`.
+      settingWriteValidatorRegistry: { register: () => {} },
     }),
   // `crm` offers three of its events to `webhooks`' registry
   // (`specs/143-crm-sales-opportunities/`, User Story 16). Its four other boot

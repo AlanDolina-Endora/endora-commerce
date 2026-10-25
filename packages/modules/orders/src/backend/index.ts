@@ -39,10 +39,12 @@ import type {
   ResolvedTax,
   SalesChannelAttributionRegistryPort,
   SalesRepAssignmentPort,
+  SettingWriteValidatorRegistryPort,
   ShippingEmailRendererPort,
   TransactionalEmailSender,
 } from '@endora-commerce/contracts';
 import { ERROR_CODES } from '@endora-commerce/contracts';
+import { createMinOrderValueValidator } from './services/min-order-value-write-validator.js';
 /**
  * Two owners' own published interfaces, each on that owner's `./ports` subpath
  * (D-169/D-171, layout contract R8).
@@ -1152,6 +1154,19 @@ export function registerModule(ctx: ModuleContext): void {
           return service.searchForAdmin(query, scope);
         },
       }),
+    );
+  });
+
+  /**
+   * Issue #428 — the minimum order value is a typed money amount, so a write
+   * with more than two decimal places is refused (`400 AMOUNT_PRECISION_EXCEEDED`).
+   * A **contribution** hook, like the two above: it pushes an inert validator
+   * into `settings`' registry, which filters by contributor presence at
+   * enumeration, so it carries no presence probe (D-67/D-68).
+   */
+  ctx.onBoot(() => {
+    lazyPort<SettingWriteValidatorRegistryPort>(ctx, 'settingWriteValidatorRegistry').register(
+      createMinOrderValueValidator(),
     );
   });
 

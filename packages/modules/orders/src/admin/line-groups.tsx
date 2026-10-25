@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from 'react';
 import type { LineGroupsEditorLabels, SplitLineDialogLabels } from '@endora-commerce/admin-kit/components';
 import { formatMoney } from '@endora-commerce/admin-kit/lib';
 import { useTranslation, useTranslationContext } from '@endora-commerce/admin-kit/i18n';
-import { moneyDifference, moneySum, vatByRate } from '@endora-commerce/contracts';
+import { vatByRate } from '@endora-commerce/contracts';
 
 /**
  * Feature 159 — what the order screens share about line groups: the editor's
@@ -54,12 +54,6 @@ export interface OrderSummaryLine {
   /** A two-place decimal: a number, or the string the exact arithmetic answers. */
   readonly net: number | string | null;
   readonly taxRate: number | null;
-  /**
-   * The line's stored gross total, when it has one (a placed order's
-   * `lineTotal`): the summary's gross is then the sum of what the lines show,
-   * and its VAT the difference.
-   */
-  readonly gross?: number | string | null;
 }
 
 export interface OrderSectionTotals {
@@ -75,17 +69,14 @@ export interface OrderSectionTotals {
  * net totals, VAT per rate on the sum of the nets at that rate (`vatByRate`).
  * The order's totals stay authoritative — a section may differ from them by a
  * rounding cent. Exact decimal arithmetic (issue #417): the binary sum made
- * 0.70 at 5 % the VAT 0.03.
+ * 0.70 at 5 % the VAT 0.03. A placed order's line totals are each line's own
+ * rounding and informational, so they are never added up here (issue #428):
+ * 36.29 + 4.31 is 40.60 where the section, 33.00 net at 23 %, is 40.59.
  */
 export function orderSectionTotals(lines: readonly OrderSummaryLine[]): OrderSectionTotals {
   const count = lines.length;
   if (count === 0 || lines.some((line) => line.net === null || line.taxRate === null)) {
     return { count, net: null, vat: null, gross: null };
-  }
-  const net = moneySum(lines.map((line) => line.net!));
-  if (lines.every((line) => line.gross != null)) {
-    const gross = moneySum(lines.map((line) => line.gross!));
-    return { count, net: Number(net), vat: Number(moneyDifference(gross, net)), gross: Number(gross) };
   }
   // The one VAT method (owner ruling of 2026-10-24): per rate, on the sum of the nets.
   const totals = vatByRate(

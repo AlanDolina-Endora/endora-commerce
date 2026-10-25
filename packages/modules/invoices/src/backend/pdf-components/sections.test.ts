@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { InvoiceDetail } from '@endora-commerce/contracts';
-import { lineItemsSection, money, unitMoney } from './sections.js';
+import { interpolate, lineItemsSection, money, totalsSection, unitMoney } from './sections.js';
+import { sampleInvoiceDetail } from './sample.js';
 
 /**
  * Owner ruling of 2026-10-25 (`specs/pricing/worked-examples.md` §10.18) — the
@@ -26,5 +27,45 @@ describe('invoice PDF — unit net price', () => {
     const row = table.table.body[1]!.map((c) => c.text);
     expect(row).toContain('0,0125');
     expect(row).toContain(money(125));
+  });
+});
+
+/**
+ * Issue #428 point 2 — an invoice paid above its gross shows the amount due
+ * clamped at 0 and the excess as an explicit overpayment, never a negative
+ * amount due.
+ */
+describe('invoice PDF — overpayment', () => {
+  const texts = (content: unknown): string[] =>
+    ((content as { stack: Array<{ text: string }> }).stack ?? []).map((c) => c.text);
+
+  it('prints the overpayment beside an amount due of 0', () => {
+    const invoice = { ...sampleInvoiceDetail(), grossTotal: 2400, paidTotal: 2450, amountDue: 0, overpayment: 50 };
+    const lines = texts(totalsSection(invoice, 'pl', { showAmountInWords: false }));
+    expect(lines).toContain(`Do zapłaty: ${money(0)} USD`);
+    expect(lines).toContain(`Nadpłata: ${money(50)} USD`);
+  });
+
+  it('takes the label from the template, and can be hidden', () => {
+    const invoice = { ...sampleInvoiceDetail(), paidTotal: 2450, amountDue: 0, overpayment: 50 };
+    expect(texts(totalsSection(invoice, 'pl', { labelOverpayment: 'Overpayment' }))).toContain(
+      `Overpayment: ${money(50)} USD`,
+    );
+    expect(texts(totalsSection(invoice, 'pl', { showOverpayment: false })).join('\n')).not.toContain('Nadpłata');
+  });
+
+  it('labels it in English on an English document', () => {
+    const invoice = { ...sampleInvoiceDetail(), paidTotal: 2450, amountDue: 0, overpayment: 50 };
+    expect(texts(totalsSection(invoice, 'en', {}))).toContain(`Overpayment: ${money(50)} USD`);
+  });
+
+  it('prints no overpayment line when nothing was overpaid', () => {
+    const lines = texts(totalsSection(sampleInvoiceDetail(), 'pl', {}));
+    expect(lines.join('\n')).not.toContain('Nadpłata');
+  });
+
+  it('offers the overpayment as a merge field', () => {
+    const invoice = { ...sampleInvoiceDetail(), overpayment: 50 };
+    expect(interpolate('{{var invoice.overpayment}}', invoice)).toBe(money(50));
   });
 });

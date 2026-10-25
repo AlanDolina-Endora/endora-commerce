@@ -736,7 +736,8 @@ Migracja `20261016T082022_orders_order_item_returnable_at_purchase.ts` dodaje t�
 
 ## Ustawienia
 
-`orders.min_order_value` (liczba; dotyczy checkoutu i tworzenia zamówień w panelu),
+`orders.min_order_value` (liczba; dotyczy checkoutu i tworzenia zamówień w panelu; to kwota, więc
+ma najwyżej dwa miejsca po przecinku — więcej jest odrzucane z `400 AMOUNT_PRECISION_EXCEEDED`),
 `orders.reorder_enabled` (wartość logiczna), `orders.confirmation_recipients` (lista stringów) —
 wszystkie globalnie albo dla kanału sprzedaży. Do tego `order_confirmation_emails` dla każdej
 organizacji. E-mail z potwierdzeniem trafia do klienta, a w kopii do listy organizacji i listy z

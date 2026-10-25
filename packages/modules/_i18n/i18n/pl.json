@@ -691,6 +691,7 @@
   "invoiceDetail.totals.due": "Do zapłaty",
   "invoiceDetail.totals.gross": "Razem brutto",
   "invoiceDetail.totals.net": "Razem netto",
+  "invoiceDetail.totals.overpayment": "Nadpłata",
   "invoiceDetail.totals.paid": "Zapłacono",
   "invoiceDetail.totals.tax": "Razem VAT",
   "invoiceTabs.invoices": "Faktury",

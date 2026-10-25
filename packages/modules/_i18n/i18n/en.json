@@ -691,6 +691,7 @@
   "invoiceDetail.totals.due": "Amount due",
   "invoiceDetail.totals.gross": "Gross total",
   "invoiceDetail.totals.net": "Net total",
+  "invoiceDetail.totals.overpayment": "Overpayment",
   "invoiceDetail.totals.paid": "Paid",
   "invoiceDetail.totals.tax": "VAT total",
   "invoiceTabs.invoices": "Invoices",

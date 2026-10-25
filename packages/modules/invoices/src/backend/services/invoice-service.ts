@@ -10,6 +10,7 @@ import {
   type InvoiceDetail,
   type InvoiceKind,
   type OrderReadPort,
+  type OrderReturnRefund,
 } from '@endora-commerce/contracts';
 import { Invoice } from '../entities/invoice.entity.js';
 import { InvoiceLine } from '../entities/invoice-line.entity.js';
@@ -19,10 +20,16 @@ import { refuseDuplicateInvoiceNumber } from './duplicate-number-refusal.js';
 import type { InvoiceNumberGenerator } from './invoice-number-generator.js';
 import type { SellerSettingsResolver } from './seller-settings.js';
 import { buildInvoiceLines, readModelVatSummary, type RawOrderLine } from './invoice-line-builder.js';
+import { invoicePaidPosition } from './invoice-paid.js';
 import {
   shouldHoldForVendorNumber,
   type LedgerNumberingLookup,
 } from './vendor-number-hold.js';
+
+/** The greater of two decimals, as the first one's text when they are equal. */
+function maxDecimal(a: string, b: string): string {
+  return compareDecimals(a, b) >= 0 ? a : b;
+}
 
 export interface IssueInvoiceOptions {
   saleDate?: string;
@@ -38,6 +45,14 @@ export interface IssueInvoiceOptions {
  */
 export interface CapturedPaymentsLookup {
   capturedFor(orderId: string): Promise<{ captured: string; refunded: string } | null>;
+}
+
+/**
+ * What the order's settled return cases refunded — an empty list when the
+ * `returns` module is absent and nothing can say (issue #428).
+ */
+export interface ReturnRefundsLookup {
+  refundsFor(orderId: string): Promise<OrderReturnRefund[]>;
 }
 
 /** Minimal audit-log seam (FR-035). */
@@ -89,6 +104,7 @@ export class InvoiceService {
     private readonly emailOnReady?: (invoiceId: string) => Promise<void>,
     private readonly ledgerRouting?: LedgerNumberingLookup,
     private readonly capturedPayments?: CapturedPaymentsLookup,
+    private readonly returnRefunds?: ReturnRefundsLookup,
   ) {}
 
   /** Issue an invoice/proforma for an order. Idempotent per (order, kind). */
@@ -157,30 +173,30 @@ export class InvoiceService {
     // #417, review of PR #423). An order placed before 0.108.0 charged its own
     // total (40.80), and its invoice, issued now under the per-rate method, may
     // be a cent more (40.81): the cent is shown as still due, not invented as
-    // paid. What `payments` captured, less its refunds; an order recorded as paid
-    // with nothing captured (a transfer an operator confirmed), or with
-    // `payments` absent, is paid its stored total.
-    // A captured attempt decides, refunds deducted.
-    const payments = (await this.capturedPayments?.capturedFor(orderId)) ?? null;
-    const kept = payments ? moneyDifference(payments.captured, payments.refunded) : null;
+    // paid. What was received — captured by `payments`, or the stored total of
+    // an order recorded as paid with nothing captured — less everything refunded,
+    // each refund once: what `payments` recorded and, since issue #428, what a
+    // settled return refunded outside it (a manual transfer, a credit-limit
+    // top-up). `invoicePaidPosition` states the rule.
+    const position = invoicePaidPosition({
+      orderTotal: order.total,
+      paymentStatus: order.paymentStatus,
+      paymentKind: order.paymentMethodSnapshot?.kind ?? null,
+      payments: (await this.capturedPayments?.capturedFor(orderId)) ?? null,
+      returnRefunds: (await this.returnRefunds?.refundsFor(orderId)) ?? [],
+    });
     // An order whose payments were refunded in full before it was invoiced —
     // nothing kept, and the refunds cover the whole order — has no sale left to
     // document, so it is not invoiced (owner ruling of 2026-10-24). One refunded
     // in part is invoiced, with what was kept as paid.
-    if (
-      payments &&
-      kind === 'invoice' &&
-      compareDecimals(payments.refunded, payments.captured) >= 0 &&
-      compareDecimals(payments.refunded, order.total) >= 0
-    ) {
+    if (kind === 'invoice' && position.refundedInFull) {
       throw new HttpError(
         422,
         ERROR_CODES.INVOICE_ORDER_REFUNDED,
         'The order was refunded in full before it was invoiced, so there is no sale left to invoice.',
       );
     }
-    const paidTotal =
-      kept != null ? roundHalfUp(kept) : order.paymentStatus === 'paid' ? roundHalfUp(order.total) : '0.00';
+    const paidTotal = position.paid;
     const buyer = {
       name: order.billingAddress.companyName ?? order.billingAddress.recipientName,
       taxId: order.billingAddress.taxId ?? '',
@@ -431,7 +447,10 @@ export class InvoiceService {
       taxTotal: inv.taxTotal != null ? Number(inv.taxTotal) : 0,
       grossTotal,
       paidTotal,
-      amountDue: Number(moneyDifference(inv.total, inv.paidTotal)),
+      // Never negative (issue #428): what was paid above the gross is the
+      // overpayment, stated on its own, and nothing is then due.
+      amountDue: Number(maxDecimal(moneyDifference(inv.total, inv.paidTotal), '0.00')),
+      overpayment: Number(maxDecimal(moneyDifference(inv.paidTotal, inv.total), '0.00')),
       total: grossTotal,
       originalInvoiceId: inv.originalInvoiceId ?? null,
       templateId: inv.templateId ?? null,

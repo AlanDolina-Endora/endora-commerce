@@ -343,6 +343,9 @@ export function InvoiceDetail(): ReactNode {
               <Row label={t('invoiceDetail.totals.gross')} value={<strong>{money(invoice.grossTotal)}</strong>} />
               <Row label={t('invoiceDetail.totals.paid')} value={money(invoice.paidTotal)} />
               <Row label={t('invoiceDetail.totals.due')} value={money(invoice.amountDue)} />
+              {invoice.overpayment > 0 ? (
+                <Row label={t('invoiceDetail.totals.overpayment')} value={money(invoice.overpayment)} />
+              ) : null}
             </CardContent>
           </Card>
           {/*

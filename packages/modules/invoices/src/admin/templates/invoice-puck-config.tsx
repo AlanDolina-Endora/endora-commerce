@@ -38,6 +38,7 @@ const sampleInvoice = {
   grossTotal: 2400,
   paidTotal: 0,
   amountDue: 2400,
+  overpayment: 0,
   amountInWords: 'two thousand four hundred 00/100',
   ksefReferenceNumber: null as string | null,
   ksefProcessedAt: null as string | null,
@@ -109,6 +110,7 @@ function interpolate(text: string): string {
     'invoice.issuedAt': inv.issuedAt,
     'invoice.saleDate': inv.saleDate,
     'invoice.amountDue': money(inv.amountDue),
+    'invoice.overpayment': money(inv.overpayment),
     'buyer.name': inv.buyer.name,
     'seller.legalName': inv.seller.legalName,
     'seller.taxId': inv.seller.taxId,
@@ -656,10 +658,12 @@ type TotalsProps = {
   amountInWordsItalics?: boolean;
   showPaid?: boolean;
   showAmountDue?: boolean;
+  showOverpayment?: boolean;
   showGross?: boolean;
   showAmountInWords?: boolean;
   labelPaid?: string;
   labelAmountDue?: string;
+  labelOverpayment?: string;
   labelGross?: string;
   labelInWords?: string;
   marginTop?: number;
@@ -677,10 +681,12 @@ const InvoiceTotals = invoiceSection({
     amountInWordsItalics: radio('Amount in words italics'),
     showPaid: radio('Show paid'),
     showAmountDue: radio('Show amount due'),
+    showOverpayment: radio('Show overpayment'),
     showGross: radio('Show gross'),
     showAmountInWords: radio('Show amount in words'),
     labelPaid: { type: 'text', label: 'Paid label' },
     labelAmountDue: { type: 'text', label: 'Amount due label' },
+    labelOverpayment: { type: 'text', label: 'Overpayment label' },
     labelGross: { type: 'text', label: 'Gross label' },
     labelInWords: { type: 'text', label: 'In words label' },
     marginTop: { type: 'number', label: 'Margin top (px)' },
@@ -695,10 +701,13 @@ const InvoiceTotals = invoiceSection({
     amountInWordsItalics: true,
     showPaid: true,
     showAmountDue: true,
+    showOverpayment: true,
     showGross: true,
     showAmountInWords: true,
     labelPaid: 'Paid',
     labelAmountDue: 'Amount due',
+    // No default (issue #428): an empty label prints the document language's own.
+    labelOverpayment: '',
     labelGross: 'Total',
     labelInWords: 'In words',
     marginTop: 0,
@@ -726,6 +735,11 @@ const InvoiceTotals = invoiceSection({
               }}
             >
               {props.labelAmountDue || 'Amount due'}: {money(inv.amountDue)} {inv.currency}
+            </div>
+          ) : null}
+          {asBool(props.showOverpayment, true) && inv.overpayment > 0 ? (
+            <div>
+              {props.labelOverpayment || 'Overpayment'}: {money(inv.overpayment)} {inv.currency}
             </div>
           ) : null}
           {asBool(props.showGross, true) ? (

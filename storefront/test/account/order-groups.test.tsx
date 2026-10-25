@@ -10,7 +10,8 @@ import { formatMoney } from '../../lib/i18n/money';
  * Feature 159, T066 — the storefront order detail shows the order's line groups
  * read-only (`specs/159-quote-request-item-groups/contracts/ui.md` §3; FR-031,
  * FR-033, FR-063): a heading row per group, its lines, a summary of item count,
- * net, VAT and gross from the lines' `unitPrice`, `taxRate` and `lineTotal`,
+ * net, VAT and gross from the lines' `unitPrice` and `taxRate` (VAT per rate,
+ * issue #428; the `lineTotal` of each row is informational),
  * then *Other items*. An order without groups renders exactly the rows it
  * always did. Asserted on the markup the server sends.
  */
@@ -96,22 +97,24 @@ describe('storefront order detail — line groups (T066)', () => {
     expect(markup).not.toMatch(/<(button|input|select|form)\b/);
   });
 
-  it('summarises each section from unitPrice, taxRate and lineTotal', () => {
+  it('summarises each section from unitPrice and taxRate', () => {
     const markup = html(
       order([item('a', 10, 2, { groupId: HALL_A.id }), item('b', 5, 1, { groupId: HALL_A.id, position: 1 }), item('c', 100, 1)], [HALL_A]),
     );
     const pln = (n: number): string => formatMoney(n, 'PLN', 'en-US');
-    // Hall A: net 25.00, gross 24.60 + 6.15 = 30.75, VAT 5.75.
+    // Hall A: net 25.00, VAT 25.00 × 0.23 = 5.75, gross 30.75.
     expect(markup).toContain(`2 items · net ${pln(25)} · VAT ${pln(5.75)} · gross ${pln(30.75)}`);
     expect(markup).toContain(`1 item · net ${pln(100)} · VAT ${pln(23)} · gross ${pln(123)}`);
   });
 
-  it('the totals rule: gross is the sum of the line totals, VAT the difference', () => {
-    expect(orderSectionTotals([item('a', 10, 3), item('b', 0.33, 3)])).toEqual({
+  it('the totals rule: VAT per rate on the sum of the nets, not the sum of the line totals (#428)', () => {
+    // The line totals are each line's own rounding, 36.29 + 4.31 = 40.60; the
+    // section is 33.00 net at 23 %, 7.59 VAT, 40.59 gross — the order's method.
+    expect(orderSectionTotals([item('a', 29.5, 1), item('b', 3.5, 1)])).toEqual({
       count: 2,
-      net: 30.99,
-      gross: Math.round((36.9 + 1.22) * 100) / 100,
-      vat: Math.round((36.9 + 1.22 - 30.99) * 100) / 100,
+      net: 33,
+      vat: 7.59,
+      gross: 40.59,
     });
   });
 

@@ -3,7 +3,7 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ERROR_CODES } from '@endora-commerce/contracts';
 import { ensureSalesChannelId } from '../../helpers/sales-channel-fixtures.js';
-import { Invoice, Order, OrderItem, Payment } from '../../helpers/package-entities.js';
+import { Invoice, Order, OrderItem, Payment, Refund, ReturnCase } from '../../helpers/package-entities.js';
 import { TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import {
   setupBackendServer,
@@ -11,6 +11,7 @@ import {
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
 import { ADMIN_COOKIE, setSellerSettings } from './helpers.js';
+import { withModuleOff } from '../../helpers/off-state.js';
 
 interface IssueResponse {
   data: {
@@ -20,6 +21,7 @@ interface IssueResponse {
     grossTotal: number;
     paidTotal: number;
     amountDue: number;
+    overpayment: number;
     lines: Array<{ name: string; quantity: number; unitNetPrice: number; netValue: number; grossValue: number }>;
     vatSummary: Array<{ taxRate: number; netTotal: number; vatAmount: number; grossTotal: number }>;
   };
@@ -35,13 +37,14 @@ async function seedPlacedOrder(
   salesChannelId: string,
   lines: Array<{ unitPrice: string; quantity: number; taxRate: string; lineTotal: string }>,
   totals: { subtotal: string; taxTotal: string; total: string },
+  payment: { paymentStatus?: 'paid' | 'deferred' | 'refunded' | undefined; kind?: 'bank_transfer' | 'credit_limit' | 'gateway' | undefined } = {},
 ): Promise<string> {
   const order = em.create(Order, {
     organizationId: TEST_ORGANIZATION_ID,
     placedByCustomerAccountId: TEST_CUSTOMER_ID,
     salesChannelId,
     status: 'paid',
-    paymentStatus: 'paid',
+    paymentStatus: payment.paymentStatus ?? 'paid',
     deliveryAddress: { recipientName: 'Example Buyer', street: 'ul. Testowa 1', city: 'Warszawa', postalCode: '00-002', country: 'PL' },
     billingAddress: {
       recipientName: 'Jan Kowalski',
@@ -55,7 +58,7 @@ async function seedPlacedOrder(
     deliveryMethodId: randomUUID(),
     deliveryMethodSnapshot: { code: 'dm', name: 'Kurier', cost: 0 },
     paymentMethodId: randomUUID(),
-    paymentMethodSnapshot: { code: 'pm', name: 'Przelew', kind: 'bank_transfer' },
+    paymentMethodSnapshot: { code: 'pm', name: 'Przelew', kind: payment.kind ?? 'bank_transfer' },
     subtotal: totals.subtotal,
     taxTotal: totals.taxTotal,
     deliveryTotal: '0.00',
@@ -242,6 +245,21 @@ describe('invoices — exact decimal amounts (#417)', () => {
     ).toEqual([40.8, 40.8, 0]);
   });
 
+  // Issue #428 point 2 — paid above the gross: nothing is due, and the excess
+  // is an explicit overpayment rather than a negative amount due.
+  it('clamps the amount due at 0 and states the overpayment', async () => {
+    const { res } = await issueAfterPayments([{ status: 'paid', amount: '50.00' }]);
+    expect(res.statusCode, res.body).toBe(201);
+    const { data } = res.json() as IssueResponse;
+    expect([data.grossTotal, data.paidTotal, data.amountDue, data.overpayment]).toEqual([40.8, 50, 0, 9.2]);
+  });
+
+  it('states no overpayment while something is still due', async () => {
+    const { res } = await issueAfterPayments([{ status: 'partially_refunded', amount: '40.80', refundedAmount: '10.00' }]);
+    const { data } = res.json() as IssueResponse;
+    expect([data.amountDue, data.overpayment]).toEqual([10, 0]);
+  });
+
   // Owner ruling of 2026-10-24 — an order refunded in full before it is
   // invoiced has no sale left to document, so it is not invoiced.
   it('refuses to invoice an order refunded in full before invoicing', async () => {
@@ -271,4 +289,142 @@ describe('invoices — exact decimal amounts (#417)', () => {
       40.8, 0, 40.8,
     ]);
   });
+
+  // Issue #428 point 1 — a refund made outside `payments` (the settlement of a
+  // return refunded by bank transfer, or credited to the credit limit) is part
+  // of what was refunded, exactly once.
+  async function issueWithReturnRefunds(
+    options: {
+      paymentStatus?: 'paid' | 'deferred' | 'refunded';
+      kind?: 'bank_transfer' | 'credit_limit' | 'gateway';
+      payments?: Array<{ status: string; amount: string; refundedAmount?: string }>;
+      refunds: Array<{ resolutionType: 'refund' | 'credit'; amount: string; settlementState?: 'issued' | 'pending_manual' }>;
+    },
+  ) {
+    const orderId = await seedPlacedOrder(
+      h.em(),
+      CH,
+      [{ unitPrice: '33.17', quantity: 1, taxRate: '0.2300', lineTotal: '40.80' }],
+      { subtotal: '33.17', taxTotal: '7.63', total: '40.80' },
+      { paymentStatus: options.paymentStatus, kind: options.kind },
+    );
+    const em = h.em().fork();
+    for (const p of options.payments ?? []) {
+      em.create(Payment, {
+        orderId,
+        paymentMethodId: randomUUID(),
+        status: p.status,
+        amount: p.amount,
+        refundedAmount: p.refundedAmount ?? '0',
+        currency: 'PLN',
+        paidAt: new Date(),
+      } as never);
+    }
+    for (const r of options.refunds) {
+      const rc = em.create(ReturnCase, {
+        kind: 'return',
+        orderId,
+        salesChannelId: CH,
+        customerAccountId: TEST_CUSTOMER_ID,
+        organizationId: TEST_ORGANIZATION_ID,
+        statusCode: 'resolved',
+        currency: 'PLN',
+        submittedAt: new Date(),
+      } as never);
+      em.create(Refund, {
+        returnCaseId: (rc as { id: string }).id,
+        resolutionType: r.resolutionType,
+        amount: r.amount,
+        currency: 'PLN',
+        settlementState: r.settlementState ?? 'issued',
+      } as never);
+    }
+    await em.flush();
+    const res = await h.app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/orders/${orderId}/invoices`,
+      cookies: ADMIN_COOKIE,
+      payload: { kind: 'invoice' },
+    });
+    return res;
+  }
+  async function paidAfterReturns(options: Parameters<typeof issueWithReturnRefunds>[0]) {
+    const res = await issueWithReturnRefunds(options);
+    expect(res.statusCode, res.body).toBe(201);
+    const { data } = res.json() as IssueResponse;
+    return [data.grossTotal, data.paidTotal, data.amountDue];
+  }
+
+  it('deducts a manual bank-transfer refund of a return settled before invoicing', async () => {
+    expect(await paidAfterReturns({ refunds: [{ resolutionType: 'refund', amount: '15.00' }] })).toEqual([
+      40.8, 25.8, 15,
+    ]);
+  });
+
+  it('deducts a credit-limit top-up of a return settled before invoicing', async () => {
+    expect(
+      await paidAfterReturns({
+        kind: 'gateway',
+        payments: [{ status: 'paid', amount: '40.80' }],
+        refunds: [{ resolutionType: 'credit', amount: '10.00' }],
+      }),
+    ).toEqual([40.8, 30.8, 10]);
+  });
+
+  it('counts a gateway refund once although the return and the payment both record it', async () => {
+    expect(
+      await paidAfterReturns({
+        kind: 'gateway',
+        payments: [{ status: 'partially_refunded', amount: '40.80', refundedAmount: '10.00' }],
+        refunds: [{ resolutionType: 'refund', amount: '10.00' }],
+      }),
+    ).toEqual([40.8, 30.8, 10]);
+  });
+
+  it('does not deduct a refund still waiting for a person', async () => {
+    expect(
+      await paidAfterReturns({ refunds: [{ resolutionType: 'refund', amount: '15.00', settlementState: 'pending_manual' }] }),
+    ).toEqual([40.8, 40.8, 0]);
+  });
+
+  it('degrades without returns: issues the invoice and deducts only what payments recorded', async () => {
+    const res = await withModuleOff('returns', 'deactivated', () =>
+      issueWithReturnRefunds({ refunds: [{ resolutionType: 'refund', amount: '15.00' }] }),
+    );
+    expect(res.statusCode, res.body).toBe(201);
+    const { data } = res.json() as IssueResponse;
+    expect([data.grossTotal, data.paidTotal, data.amountDue]).toEqual([40.8, 40.8, 0]);
+  });
+
+  it('refuses to invoice an order refunded in full by manual refunds', async () => {
+    const res = await issueWithReturnRefunds({
+      refunds: [
+        { resolutionType: 'refund', amount: '30.00' },
+        { resolutionType: 'refund', amount: '10.80' },
+      ],
+    });
+    expect(res.statusCode, res.body).toBe(422);
+    expect((res.json() as { error: { code: string } }).error.code).toBe(ERROR_CODES.INVOICE_ORDER_REFUNDED);
+  });
+
+  it('refuses to invoice an order an operator marked refunded with nothing captured', async () => {
+    const res = await issueWithReturnRefunds({ paymentStatus: 'refunded', refunds: [] });
+    expect(res.statusCode, res.body).toBe(422);
+    expect((res.json() as { error: { code: string } }).error.code).toBe(ERROR_CODES.INVOICE_ORDER_REFUNDED);
+  });
+
+  // Issue #428 point 6 — on credit terms the on-account part is unpaid by
+  // arrangement at invoicing. A captured part refunded in full leaves nothing
+  // paid, and the refunds do not cover the order, so it is invoiced, paid 0.
+  it('invoices an on-account order whose captured part was refunded in full, with nothing paid', async () => {
+    expect(
+      await paidAfterReturns({
+        paymentStatus: 'deferred',
+        kind: 'credit_limit',
+        payments: [{ status: 'refunded', amount: '15.00', refundedAmount: '15.00' }],
+        refunds: [],
+      }),
+    ).toEqual([40.8, 0, 40.8]);
+  });
 });
+

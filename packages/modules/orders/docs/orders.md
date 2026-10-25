@@ -785,7 +785,8 @@ the column (nullable).
 
 ## Settings
 
-`orders.min_order_value` (number, gates Checkout + admin create),
+`orders.min_order_value` (number, gates Checkout + admin create; an amount, so
+at most two decimal places — more is refused with `400 AMOUNT_PRECISION_EXCEEDED`),
 `orders.reorder_enabled` (boolean), `orders.confirmation_recipients`
 (string list) — all global or per-sales-channel. Plus per-org
 `order_confirmation_emails`. The confirmation email CCs the customer + org

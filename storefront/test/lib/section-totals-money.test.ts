@@ -5,8 +5,8 @@ import { grossFromNet } from '../../lib/i18n/money';
 /**
  * Issue #417 — the storefront's quote and order summaries in exact decimal
  * arithmetic, under their rules: a quote's VAT on its net total at the quote's
- * one rate; an order's gross the sum of its stored line grosses and its VAT
- * the difference. On doubles, 0.70 at 5 % showed a VAT of 0.03.
+ * one rate; an order's VAT per rate on the sum of its line nets (`vatByRate`,
+ * issue #428). On doubles, 0.70 at 5 % showed a VAT of 0.03.
  */
 describe('quoteSectionTotals', () => {
   it('takes the VAT half-up on the exact net total, not the binary 0.03 (T1)', () => {
@@ -32,13 +32,26 @@ describe('quoteSectionTotals', () => {
 });
 
 describe('orderSectionTotals', () => {
-  it('sums the stored line grosses exactly', () => {
+  /** An order line as the reply carries it, its stored `lineTotal` included and ignored. */
+  const line = (unitPrice: number, taxRate: number, lineTotal: number) => ({ quantity: 1, unitPrice, taxRate, lineTotal });
+
+  it('takes VAT per rate on the sum of the nets (V2)', () => {
     expect(
       orderSectionTotals([
-        { quantity: 1, unitPrice: 29.5, lineTotal: 36.29 },
-        { quantity: 1, unitPrice: 4.3, lineTotal: 4.52 },
+        line(29.5, 0.23, 36.29),
+        line(4.3, 0.05, 4.52),
       ]),
     ).toEqual({ count: 2, net: 33.8, vat: 7.01, gross: 40.81 });
+  });
+
+  it('never adds up the line grosses, which may be a cent away (#428, L1)', () => {
+    // 36.29 + 4.31 = 40.60; the order's method gives 40.59.
+    expect(
+      orderSectionTotals([
+        line(29.5, 0.23, 36.29),
+        line(3.5, 0.23, 4.31),
+      ]),
+    ).toEqual({ count: 2, net: 33, vat: 7.59, gross: 40.59 });
   });
 });
 
