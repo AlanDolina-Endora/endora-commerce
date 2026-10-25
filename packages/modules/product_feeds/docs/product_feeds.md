@@ -124,9 +124,48 @@ or a sale when it is lower. A product with no price in the feed's currency is sk
 `missing_price`. Feed items are products: a product with variants is published at the product's own
 price, not per variant.
 
-A price is written at two places, rounded half-up. A gross feed — the default presentation — adds
-the tax rate of the feed's tax country to the net price and rounds the exact result: 29.50 at 23 %
-is published as 36.29, the gross the storefront shows beside the same net price.
+A price is written at two places. A gross feed — the default presentation — adds the tax rate of
+the feed's tax country to the net price and rounds the exact result half-up: 29.50 at 23 % is
+published as 36.29, the gross the storefront shows beside the same net price. A price with more
+than two decimal places is never rounded — see *A price below one cent* below.
+
+#### A price below one cent
+
+A price book holds up to four decimal places, so a screw can cost 0.0125 PLN. A feed cannot say
+that: Google Merchant Center takes at most two decimal places and rounds anything longer itself, so
+0.0125 PLN would reach the ad as 0.01 PLN while the product page shows 0,0125 PLN — a price mismatch,
+and Google disapproves products for it. So a feed **publishes such a product as a pack**:
+
+- the price is the price of **N pieces**, where N is the smallest of 10, 100, 1 000 and 10 000 that
+  makes it exact to the cent — 0.0125 PLN is published as 100 pieces at 1.25 PLN, 9.045 PLN as 10
+  pieces at 90.45 PLN. Nothing is rounded on the way;
+- a gross feed adds the tax to the pack's net price, as a basket line of that many pieces is
+  charged: 1.25 PLN at 23 % is published as 1.54 PLN;
+- the price and the price before discount of one product are of the same pack — the larger one
+  either of them needs;
+- the pack size goes in the template's **pack fields**. The Google Merchant Center template carries
+  three: `g:multipack` (N), and `g:unit_pricing_measure` and `g:unit_pricing_base_measure` (both
+  `100ct` for a pack of 100), so Google shows the unit price as *1,25 PLN / 100 ct* — the exact pack
+  price — rather than a rounded price per piece. A pack of 1 000 or 10 000, which only a price with
+  five or six decimal places needs, carries `g:multipack` alone: Google's unit-pricing base takes 1,
+  10 or 100 pieces;
+- every pack field is **empty, and so left out of the file**, for a product whose price has two
+  decimal places. Those products are published exactly as before.
+
+A template with no field bound to **Pack size (prices below one cent)** cannot say what such a price
+is the price of, so the product is **left out of that feed** and the run lists it under
+`sub_cent_price_without_pack_field`, naming the price and the pack it would need. That is the case
+for the Meta catalogue template and the three marketplace starting points, whose providers this
+version does not publish a multipack to, and for a copy of the Google template made before 0.109.0.
+To publish such products in a template of your own, add a field in the template editor with the
+source **Pack size (prices below one cent)** under *Price and stock* — and the two *pack as a count*
+sources, if the provider takes Google's unit-pricing fields. A price that would need a pack larger
+than 10 000 is left out with `sub_cent_price_beyond_pack_limit`; a price book's four places never
+need one.
+
+This applies to every feed; there is no setting for it. The storefront product page shows the price
+of one piece; Google's multipack rules ask the landing page to show the multipack's price too, so
+watch the Merchant Center diagnostics for products published this way.
 
 A feed can instead be **pinned to one price book** — the feed's `priceListId`, set through the
 admin API when the feed is created or updated (`POST /api/v1/admin/product-feeds`,
@@ -284,6 +323,8 @@ export of the full list.
 | `unmapped_provider_category` | No category mapping applied; the field was omitted. |
 | `stale_provider_category_mapping` | The mapped node no longer exists in the installed revision. |
 | `zero_tax_rate_on_gross_feed` | A gross feed found no tax rule for its tax country. |
+| `sub_cent_price_without_pack_field` | The price has more than two decimal places, and the template has no pack-size field to publish it as the price of a pack. The item was skipped (*A price below one cent*). |
+| `sub_cent_price_beyond_pack_limit` | The price has so many decimal places that no pack of up to 10 000 pieces makes it exact to the cent. The item was skipped. |
 
 Failures are different from item problems: they end the run and publish nothing, and the
 previously published file keeps serving.
@@ -507,6 +548,27 @@ wrote; the cache lives in Redis and is indexed by feed per process, so an entry 
 wrote can serve the old file until its 60 s TTL expires (`services/feed-cache-invalidator.ts`). Neither path catches
 `MODULE_DISABLED`: with `price_lists` absent the run fails rather than publishing prices the platform
 is not serving.
+
+A sub-cent unit price (issue #430) is decided in the item field resolver, which stays pure:
+`services/feed-pack.ts`'s `feedPackQuantity(net)` answers the smallest power of ten N for which
+`net × N` has at most two decimal places — 1 for a price with two significant places, `null` past
+`MAX_FEED_PACK_QUANTITY` (10 000) — read from the decimal string, never a double.
+`resolveFeedItem` takes the largest N any price the template publishes needs (`price`,
+`sale_price`); with N > 1 it skips the item as `sub_cent_price_without_pack_field` unless the
+template binds a `pack_quantity` field, and as `sub_cent_price_beyond_pack_limit` when N is `null`.
+A price field then publishes `lineAmountHalfUp(net, N)` — exact by the choice of N — and on a gross
+feed `grossAmountHalfUp` of that at `FeedItemPrice.taxRatePercent`, the rate the hydrator computed
+the unit gross at (`null` on a net feed or when no tax rule matched, when the net is published).
+The three source kinds `pack_quantity`, `pack_unit_pricing_measure` and
+`pack_unit_pricing_base_measure` (`feedFieldSourceKindSchema`) answer `N`, `${N}ct` and `${N}ct`
+(the last two only for N ≤ 100), and an empty string — an omitted field — when N is 1, which is what
+keeps a two-place price's file byte-identical (`feed-two-place-output.test.ts` pins the files of all
+five shipped templates). Whether the template can state a pack is the **whole** template's answer:
+`ResolveFeedItemInput.templateFields` carries it when `fields` is one field, as in the editor
+preview. The predefined Google template binds the three to `g:multipack`,
+`g:unit_pricing_measure` and `g:unit_pricing_base_measure`; the boot reconciler never edits an
+installed system template, so migration `20261025T145041_product_feeds_google_template_pack_fields`
+adds them, after `g:sale_price`, to one installed before 0.109.0.
 
 ### Channel scoping
 

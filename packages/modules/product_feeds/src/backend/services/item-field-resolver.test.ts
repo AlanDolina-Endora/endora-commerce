@@ -36,7 +36,7 @@ const ITEM: FeedItemSource = {
   description: { 'pl-PL': 'Opis', 'en-US': 'Description' },
   attributes: { brand: 'Acme', colour: 'blue', weight: 2.5 },
   customFields: { warranty_months: 24 },
-  price: { net: '100.0000', gross: '123.00', taxResolved: true },
+  price: { net: '100.0000', gross: '123.00', taxResolved: true, taxRatePercent: 23 },
   salePrice: null,
   inStock: true,
   stockQuantity: 7,
@@ -173,7 +173,7 @@ describe('resolveFeedItem — every source kind (FR-003)', () => {
 
     const some = resolveFeedItem({
       fields: [field({ outputName: 'sale', sourceKind: 'sale_price' })],
-      item: { ...ITEM, salePrice: { net: '80.0000', gross: '98.40', taxResolved: true } },
+      item: { ...ITEM, salePrice: { net: '80.0000', gross: '98.40', taxResolved: true, taxRatePercent: 23 } },
       context: CONTEXT,
     });
     expect(valueOf(some.fields, 'sale')).toBe('98.40 PLN');
@@ -191,7 +191,7 @@ describe('resolveFeedItem — every source kind (FR-003)', () => {
   it('warns rather than silently emitting a zero-VAT price on a gross feed (R12)', () => {
     const out = resolveFeedItem({
       fields: [field({ outputName: 'p', sourceKind: 'price' })],
-      item: { ...ITEM, price: { net: '100.0000', gross: '100.0000', taxResolved: false } },
+      item: { ...ITEM, price: { net: '100.0000', gross: '100.0000', taxResolved: false, taxRatePercent: null } },
       context: CONTEXT,
     });
     expect(valueOf(out.fields, 'p')).toBe('100.00 PLN');
@@ -499,24 +499,33 @@ describe('resolveFeedItem — transforms (FR-067)', () => {
 });
 
 /**
- * Review finding 2 (release 0.108.0) — a feed shows the resolver's four-place
- * amount at two places half-up on its decimal digits, as the card and the cart
- * do (`specs/pricing/worked-examples.md` §10.16). `amount.toFixed(2)` rounded
- * the binary double: 9.0450 became `9.04 PLN`, 1.0050 `1.00 PLN`.
+ * Review finding 2 (release 0.108.0) rounded an x.xx50 price half-up on its
+ * decimal digits, where `amount.toFixed(2)` had rounded the binary double
+ * (9.0450 became `9.04 PLN`). Issue #430 goes further: such a price has a
+ * significant third place, so it is not rounded at all — it is published as
+ * the price of ten units, exact, where the template can say so, and skipped
+ * where it cannot (`feed-sub-cent-pack.test.ts`).
  */
-describe('resolveFeedItem — an x.xx50 price is emitted half-up', () => {
+describe('resolveFeedItem — an x.xx50 price is published as a pack of ten, never rounded', () => {
   it.each([
-    ['9.0450', '9.05 PLN'],
-    ['1.0050', '1.01 PLN'],
-    ['2.6750', '2.68 PLN'],
+    ['9.0450', '90.45 PLN'],
+    ['1.0050', '10.05 PLN'],
+    ['2.6750', '26.75 PLN'],
   ])('%s → %s', (amount, emitted) => {
     const net = amount;
-    const out = resolveFeedItem({
-      fields: [field({ outputName: 'p', sourceKind: 'price' }), field({ outputName: 's', sourceKind: 'sale_price' })],
-      item: { ...ITEM, price: { net, gross: net, taxResolved: true }, salePrice: { net, gross: net, taxResolved: true } },
-      context: { ...CONTEXT, pricePresentation: 'net', taxCountry: null },
+    const prices = { price: { net, gross: net, taxResolved: true, taxRatePercent: null }, salePrice: { net, gross: net, taxResolved: true, taxRatePercent: null } };
+    const fields = [field({ outputName: 'p', sourceKind: 'price' }), field({ outputName: 's', sourceKind: 'sale_price' })];
+    const context = { ...CONTEXT, pricePresentation: 'net' as const, taxCountry: null };
+    const packed = resolveFeedItem({
+      fields: [...fields, field({ outputName: 'n', sourceKind: 'pack_quantity' })],
+      item: { ...ITEM, ...prices },
+      context,
     });
-    expect(valueOf(out.fields, 'p')).toBe(emitted);
-    expect(valueOf(out.fields, 's')).toBe(emitted);
+    expect(valueOf(packed.fields, 'p')).toBe(emitted);
+    expect(valueOf(packed.fields, 's')).toBe(emitted);
+    expect(valueOf(packed.fields, 'n')).toBe('10');
+
+    const unpackable = resolveFeedItem({ fields, item: { ...ITEM, ...prices }, context });
+    expect(unpackable.skipReason).toBe('sub_cent_price_without_pack_field');
   });
 });

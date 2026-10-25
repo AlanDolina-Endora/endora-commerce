@@ -37,6 +37,11 @@ export interface RfqNumberFormat {
   unitMoney: (n: number, currency: string) => string;
   /** `−20.00`, `+12.00`, `0.00` — the sign spelled out, never carried by colour alone. */
   signedAmount: (n: number) => string;
+  /**
+   * {@link signedAmount} for a difference of unit prices: its significant
+   * places, up to four, at least two — `−0.0001`, `+12.00` (issue #430).
+   */
+  signedUnitAmount: (n: number) => string;
   /** `−16.67 %`, `+10.00 %`, `0.00 %`. */
   signedPercent: (n: number) => string;
 }
@@ -44,12 +49,12 @@ export interface RfqNumberFormat {
 export function rfqNumberFormat(locale: string): RfqNumberFormat {
   const numbers = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const amount = (n: number): string => numbers.format(n);
-  const signed = (n: number): string => {
-    const magnitude = numbers.format(Math.abs(n));
+  const withSign = (n: number, magnitude: string): string => {
     if (n > 0) return `+${magnitude}`;
     if (n < 0) return `${MINUS}${magnitude}`;
     return magnitude;
   };
+  const signed = (n: number): string => withSign(n, numbers.format(Math.abs(n)));
   const unitAmount = (n: number): string =>
     new Intl.NumberFormat(locale, {
       minimumFractionDigits: 2,
@@ -61,6 +66,7 @@ export function rfqNumberFormat(locale: string): RfqNumberFormat {
     unitAmount,
     unitMoney: (n, currency) => `${unitAmount(n)} ${currency}`,
     signedAmount: signed,
+    signedUnitAmount: (n) => withSign(n, unitAmount(Math.abs(n))),
     signedPercent: (n) => `${signed(n)} %`,
   };
 }

@@ -39,8 +39,9 @@ describe('sectionTotals (quote screens)', () => {
 });
 
 describe('referenceDifference — exact (#417)', () => {
-  it('rounds a typed price’s difference half-up on its decimal digits', () => {
-    expect(referenceDifference(1.005, 'PLN', { amount: 1, currency: 'PLN' })).toEqual({ amount: 0.01, percent: 0.5 });
+  it('rounds a typed price’s difference half-up on its decimal digits, at a unit price’s four places (#430)', () => {
+    expect(referenceDifference(1.005, 'PLN', { amount: 1, currency: 'PLN' })).toEqual({ amount: 0.005, percent: 0.5 });
+    expect(referenceDifference(1.00005, 'PLN', { amount: 1, currency: 'PLN' })).toEqual({ amount: 0.0001, percent: 0.01 });
   });
 });
 

@@ -169,7 +169,7 @@ export function DifferenceCell({
   return (
     <div className="space-y-0.5 tabular-nums">
       <div>
-        {format.signedAmount(difference.amount)} {currency}
+        {format.signedUnitAmount(difference.amount)} {currency}
       </div>
       <div className="text-xs text-muted-foreground">
         {difference.percent !== null ? format.signedPercent(difference.percent) : '—'}

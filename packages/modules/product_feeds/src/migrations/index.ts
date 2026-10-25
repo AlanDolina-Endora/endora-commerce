@@ -33,6 +33,7 @@ import { Migration20260806T105956ProductFeedsFeedTokenSecret } from './20260806T
 import { Migration20260806T125806ProductFeedsDelivery } from './20260806T125806_product_feeds_delivery.js';
 import { Migration20261023T195611ProductFeedsRunWithdrawalReason } from './20261023T195611_product_feeds_run_withdrawal_reason.js';
 import { Migration20261023T234605ProductFeedsPriceListFkDropped } from './20261023T234605_product_feeds_price_list_fk_dropped.js';
+import { Migration20261025T145041ProductFeedsGoogleTemplatePackFields } from './20261025T145041_product_feeds_google_template_pack_fields.js';
 
 export const migrations = [
   Migration20260802T073547ProductFeedsInit,
@@ -44,6 +45,7 @@ export const migrations = [
   Migration20260806T125806ProductFeedsDelivery,
   Migration20261023T195611ProductFeedsRunWithdrawalReason,
   Migration20261023T234605ProductFeedsPriceListFkDropped,
+  Migration20261025T145041ProductFeedsGoogleTemplatePackFields,
 ];
 
 export {
@@ -56,4 +58,5 @@ export {
   Migration20260806T125806ProductFeedsDelivery,
   Migration20261023T195611ProductFeedsRunWithdrawalReason,
   Migration20261023T234605ProductFeedsPriceListFkDropped,
+  Migration20261025T145041ProductFeedsGoogleTemplatePackFields,
 };

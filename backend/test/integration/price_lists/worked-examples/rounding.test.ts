@@ -20,20 +20,21 @@ import { seedPriceBookSql } from '../../../helpers/price-book-sql.js';
  * stores or answers one: the cart line (which the order copies), the placement
  * check, the admin order preview and a quote's stored reference price; the
  * card and the product page show it with its significant places (`9,045 zł`).
- * Only a two-place surface rounds it, half-up on its decimal digits: the
- * product feed, and the line value, `unit × quantity`.
+ * Only the line value, `unit × quantity`, rounds it, half-up on its decimal
+ * digits. A product feed, whose grammar is two places, does not round it
+ * either: it publishes the price of a pack of ten, exact (issue #430).
  *
  * R1: 101 — an everyone catalogue book at 10.05 and an everyone sale of −10 %
- * → 9.0450, shown 9.045, a line of one 9.05, the feed 9.05
- * (`Number('9.0450').toFixed(2)` is 9.04).
- * R2: 102 — an everyone sale at 1.0050 → 1.005, a line of one 1.01, the feed
- * 1.01 (`toFixed` gives 1.00).
+ * → 9.0450, shown 9.045, a line of one 9.05 (`Number('9.0450').toFixed(2)` is
+ * 9.04), the feed 90.45 for a pack of 10.
+ * R2: 102 — an everyone sale at 1.0050 → 1.005, a line of one 1.01 (`toFixed`
+ * gives 1.00), the feed 10.05 for a pack of 10.
  */
 const SESSION = { b2b_session: 'stub-customer-session' };
 const RETAIL = { 'x-sales-channel': 'pl_retail' };
-const EXPECTED: Record<string, { resolver: string; shown: string; twoPlaces: string }> = {
-  [SEED_PRODUCT_101_ID]: { resolver: '9.0450', shown: '9.045', twoPlaces: '9.05' },
-  [SEED_PRODUCT_102_ID]: { resolver: '1.0050', shown: '1.005', twoPlaces: '1.01' },
+const EXPECTED: Record<string, { resolver: string; shown: string; twoPlaces: string; feed: string }> = {
+  [SEED_PRODUCT_101_ID]: { resolver: '9.0450', shown: '9.045', twoPlaces: '9.05', feed: '90.45 for 10' },
+  [SEED_PRODUCT_102_ID]: { resolver: '1.0050', shown: '1.005', twoPlaces: '1.01', feed: '10.05 for 10' },
 };
 /** How the storefront shows a unit price, without the currency sign (the one display rule). */
 const shown = (amount: string | number) => unitPriceDisplayText(amount);
@@ -167,6 +168,16 @@ describe('worked examples — §10.16 and §10.18 an x.xx50 unit price agrees on
             transform: null,
             transformArg: null,
           },
+          {
+            outputName: 'pack',
+            sourceKind: 'pack_quantity',
+            sourceKey: null,
+            constantValue: null,
+            fallbackValue: null,
+            providerRequired: false,
+            transform: null,
+            transformArg: null,
+          },
         ],
         item: {
           productId,
@@ -178,7 +189,7 @@ describe('worked examples — §10.16 and §10.18 an x.xx50 unit price agrees on
           description: {},
           attributes: {},
           customFields: {},
-          price: { net, gross: net, taxResolved: true },
+          price: { net, gross: net, taxResolved: true, taxRatePercent: null },
           salePrice: null,
           inStock: true,
           stockQuantity: 1,
@@ -200,14 +211,15 @@ describe('worked examples — §10.16 and §10.18 an x.xx50 unit price agrees on
           priceListId: null,
         },
       });
-      record('feed', productId, item.fields.find((f) => f.name === 'price')?.value.replace(' PLN', ''));
+      const value = (name: string) => item.fields.find((f) => f.name === name)?.value;
+      record('feed', productId, `${value('price')?.replace(' PLN', '')} for ${value('pack')}`);
     }
 
-    // Shown (card, product page): the significant places; carried: four; the feed: two.
+    // Shown (card, product page): the significant places; carried: four; the feed: a pack, exact.
     const expectedOn = (surface: string, productId: string): string => {
       const e = EXPECTED[productId]!;
       if (surface === 'card' || surface === 'product page') return e.shown;
-      if (surface === 'feed') return e.twoPlaces;
+      if (surface === 'feed') return e.feed;
       return e.resolver;
     };
     for (const [productId, surfaces] of Object.entries(seen)) {

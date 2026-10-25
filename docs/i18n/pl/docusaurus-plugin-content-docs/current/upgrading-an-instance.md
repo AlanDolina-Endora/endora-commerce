@@ -3050,10 +3050,66 @@ wypróbowane.
 
 ### Po aktualizacji do wydania 0.109.0 {#after-0-109-0}
 
-Każdy punkt poniżej jest samodzielny: mówi, co się zmieniło, kogo to dotyczy i co — jeśli
-cokolwiek — trzeba zrobić.
+Każdy wpis poniżej jest samodzielny: przeczytaj te, które dotyczą używanych przez ciebie części
+platformy.
 
-#### Dla operatorów {#after-0-109-0-operators}
+#### Feedy produktowe: cena poniżej jednego grosza jest publikowana jako opakowanie {#after-0-109-0-feed-packs}
+
+- **Co się zmieniło.** Do tego wydania feed produktowy zaokrąglał każdą cenę do dwóch miejsc po
+  przecinku, więc produkt w cenie 0,0125 PLN trafiał do pliku jako 0,01 PLN, podczas gdy strona
+  produktu pokazywała 0,0125 zł — niezgodność ceny, za którą Google Merchant Center odrzuca
+  produkty. Cena z więcej niż dwoma znaczącymi miejscami po przecinku jest teraz publikowana jako
+  cena **opakowania** 10, 100, 1 000 albo 10 000 sztuk — najmniejszego, przy którym jest dokładna co
+  do grosza: 0,0125 PLN trafia do pliku jako 100 sztuk za 1,25 PLN (1,54 PLN w feedzie brutto przy
+  23 %). Wielkość opakowania trafia do pól opakowania szablonu. **Cena z dwoma miejscami po przecinku
+  jest publikowana dokładnie tak jak wcześniej**, bajt w bajt.
+- **Predefiniowany szablon Google Merchant Center dostaje trzy pola**, po `g:sale_price`:
+  `g:multipack`, `g:unit_pricing_measure` i `g:unit_pricing_base_measure`. Na istniejącej instancji
+  dodaje je do zainstalowanego szablonu migracja
+  `Migration20261025T145041ProductFeedsGoogleTemplatePackFields`. Dla każdego produktu z ceną co do
+  grosza są puste i pomijane w pliku.
+- **Produkt, którego szablon nie potrafi opublikować jako opakowania, jest pomijany w feedzie**,
+  podczas gdy wcześniej trafiał do niego z zaokrągloną ceną. Dotyczy to każdego takiego produktu w
+  feedzie na szablonie Meta, Amazon, eBay albo Allegro oraz w feedzie na własnej kopii szablonu
+  Google. Wynik generowania wymienia każdy z nich pod nowym powodem
+  `sub_cent_price_without_pack_field`. Co zrobić: po aktualizacji otwórz ostatnie generowanie każdego
+  feedu; jeśli ten powód się pojawia, a produkt powinien być w tym feedzie, dodaj do szablonu pole
+  powiązane ze źródłem *Wielkość opakowania (ceny poniżej grosza)* — w kopii szablonu Google jako
+  `g:multipack`, z `g:unit_pricing_measure` i `g:unit_pricing_base_measure` powiązanymi z dwoma
+  źródłami *opakowania jako liczby sztuk*. Generowanie, które pomija więcej niż połowę pozycji,
+  kończy się błędem `skip_threshold_exceeded` i dalej udostępnia poprzedni plik — który wciąż ma
+  zaokrąglone ceny — więc nie zostawiaj takiego błędu bez reakcji.
+- **Strona docelowa.** Strona produktu w storefroncie pokazuje cenę jednej sztuki. Zasady Google dla
+  opakowań zbiorczych wymagają, by strona docelowa pokazywała cenę opakowania, więc obserwuj
+  diagnostykę Merchant Center dla produktów publikowanych jako opakowania.
+- **Dla klientów API i integratorów**: `feedFieldSourceKindSchema` dostaje `pack_quantity`,
+  `pack_unit_pricing_measure` i `pack_unit_pricing_base_measure`, a `feedRunIssueReasonSchema` —
+  `sub_cent_price_without_pack_field` i `sub_cent_price_beyond_pack_limit`. Klient, który sprawdza
+  szablon, wyeksportowany dokument szablonu albo problemy generowania względem zamkniętej listy, musi
+  je przyjmować.
+- **Dla autorów modułów nakładkowych**: `FeedItemPrice` dostaje `taxRatePercent: number | null`, a
+  `ResolveFeedItemInput` — opcjonalne `templateFields`. Moduł nakładkowy, który zastępuje resolver pól
+  pozycji, dostaje oba i publikuje to, co sam zapisze: aby opublikować cenę poniżej grosza jako
+  opakowanie, stosuje tę samą regułę, z `feedPackQuantity` z `services/feed-pack.ts`.
+
+#### Oferty: rabat poniżej jednego grosza jest drukowany jako „—” {#after-0-109-0-quote-discount}
+
+- **W PDF-ie oferty** i w podglądzie edytora szablonów dokumentów rabat pozycji albo suma rabatów,
+  które są rzeczywiste, ale zaokrąglają się do 0,00 — na przykład 0,0001 PLN na sztuce przy trzech
+  sztukach — są drukowane jako „—” zamiast „0,00 zł”, które czytało się jako „brak rabatu”. Sama
+  kwota się nie zmienia, więc na dokumencie nadal wartość katalogowa − rabat = netto. Nic nie trzeba
+  robić.
+- **Na ekranie zapytania ofertowego w panelu administracyjnym** kolumna *Różnica* pokazuje różnicę
+  cen jednostkowych z jej znaczącymi miejscami, do czterech — −0,0001 PLN — zamiast zaokrąglać ją do
+  0,00.
+- **Dla autorów modułów i modułów nakładkowych**: wartość dokumentu rodzaju `money` może mieć
+  `belowMinorUnit: true`. `formatDocumentValue` drukuje ją jako „—”, a `sumDocumentValues` zachowuje
+  ten znacznik, gdy suma nadal wynosi zero; własny blok, który formatuje wartości inaczej, powinien
+  robić to samo.
+
+#### Faktury, płatności i sumy zamówień: zasady kwot ze zgłoszenia #428 {#after-0-109-0-money}
+
+**Dla operatorów.**
 
 - **Faktura uwzględnia każdy zwrot wykonany przed jej wystawieniem** (zgłoszenie #428). Do tego
   wydania faktura VAT odejmowała od zapłaconej kwoty tylko zwroty zgłoszone przez bramkę płatności.
@@ -3086,7 +3142,7 @@ cokolwiek — trzeba zrobić.
   od VAT liczonego według stawek, który zamówienie naliczyło. Teraz biorą VAT według stawek od sumy
   kwot netto grupy; wartości pozycji pozostają takie jak dotąd.
 
-#### Dla klientów API i integratorów {#after-0-109-0-api}
+**Dla klientów API i integratorów.**
 
 - **Faktura zawiera `overpayment`, a `amountDue` nigdy nie jest ujemne** (zgłoszenie #428): w
   `GET /api/v1/admin/invoices/:id` i każdej odpowiedzi ze szczegółami faktury `amountDue` to
@@ -3101,7 +3157,7 @@ cokolwiek — trzeba zrobić.
   wcześniej kwota była zaokrąglana połówkowo w górę. Podawaj kwotę z bramki w jednostkach głównych,
   z najwyżej dwoma miejscami po przecinku.
 
-#### W istniejącym storefroncie {#after-0-109-0-storefront}
+**W istniejącym storefroncie.**
 
 Storefront z tego wydania bierze podsumowanie grupy pozycji na stronie zamówienia z VAT według
 stawek od kwot netto grupy (`orderSectionTotals` w `components/line-groups/GroupedLineRows.tsx`,
@@ -3109,7 +3165,7 @@ wywoływane przez `components/orders/OrderItemRows.tsx`), podczas gdy wcześniej
 wartości pozycji i może pokazać podsumowanie różniące się o grosz od VAT zamówienia. Przenieś te
 dwa pliki, aby to wyrównać; bez nich nic się nie psuje.
 
-Ta sekcja została napisana 2026-10-25 na podstawie `master` w `9e43c3412` i gałęzi zgłoszenia #428
+Ten wpis został napisany 2026-10-25 na podstawie `master` w `9e43c3412` i gałęzi zgłoszenia #428
 (`fix/428-money-followups`). W chwili jej pisania żadna instancja nie była zaktualizowana do
 0.109.0.
 

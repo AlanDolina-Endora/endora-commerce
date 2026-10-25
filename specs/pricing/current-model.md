@@ -158,8 +158,10 @@ agreed price (`quote_request_items.*_unit_price`) and the invoice line (`invoice
 are all `numeric(14,4)`. Placement compares the stored price with the current one at four places.
 **The line value is the rounding point**: a line's net is `unit × quantity` rounded half-up to two
 places once (`lineAmountHalfUp`), and VAT is per rate on the sum of the rounded line nets
-(`vatByRate`, §10.17). A surface that publishes two places rounds the resolver amount half-up on its
-decimal digits (`roundAmountHalfUp`): the product feed. Every other surface shows a unit price with
+(`vatByRate`, §10.17). The product feed publishes two places without rounding a unit price: one
+with a third or fourth significant place goes out as the exact price of a pack of N, with N in the
+format's pack fields, or not at all (`feed-pack.ts`, issue #430); a two-place amount is written by
+`roundAmountHalfUp`. Every other surface shows a unit price with
 its significant places, up to four, at least two (`unitPriceFractionDigits`): `0,0125 zł`,
 `1,50 zł`, `1,505 zł`.
 

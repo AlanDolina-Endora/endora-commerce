@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CatalogAttributeView, DocumentValue, QuoteRequestDocumentData } from '@endora-commerce/contracts';
 import { createQuoteLinesCollection, quoteLineItems, quoteLineSections, quoteSummary } from './quote-lines.js';
 import { sampleQuoteRequestData } from './sample.js';
-import { isValidSectionPartition } from '@endora-commerce/contracts';
+import { formatDocumentValue, isValidSectionPartition } from '@endora-commerce/contracts';
 import { QUOTE_DOCUMENT_TEXTS } from './texts.js';
 import { summarize } from '../services/summarize.js';
 import type { QuoteRequest } from '../entities/quote-request.entity.js';
@@ -60,6 +60,8 @@ const data = (lines: Line[], taxRate = 0.23): QuoteRequestDocumentData => ({
 });
 
 const money = (amount: number, currency = 'PLN'): DocumentValue => ({ kind: 'money', amount, currency });
+/** Issue #430: a discount that is real but rounds to no cent. */
+const belowCent = (currency = 'PLN'): DocumentValue => ({ kind: 'money', amount: 0, currency, belowMinorUnit: true });
 /** A unit price (§10.18): carried at four places and marked, so it is shown with its significant places. */
 const unit = (amount: number, currency = 'PLN') => ({ kind: 'money', amount, currency, unitPrice: true });
 
@@ -154,7 +156,24 @@ describe('quoteLineItems — derivations (R-11)', () => {
     });
     // 0.0150 × 3 = 0.045 → 0.05; the list value 0.0155 × 3 = 0.0465 → 0.05: no cent of discount shows.
     const [small] = quoteLineItems(data([line({ agreedUnitPrice: 0.015, quantity: 3, referenceUnitPrice: 0.0155 })]));
-    expect(small!.values).toMatchObject({ lineNet: money(0.05), lineListValue: money(0.05), lineDiscount: money(0) });
+    expect(small!.values).toMatchObject({ lineNet: money(0.05), lineListValue: money(0.05), lineDiscount: belowCent() });
+  });
+
+  it('issue #430: a discount that rounds to no cent is marked, so it prints "—" rather than 0,00', () => {
+    // 0.0125 × 3 = 0.0375 → 0.04 and 0.0124 × 3 = 0.0372 → 0.04: the unit discount is real, the line one rounds away.
+    const [item] = quoteLineItems(data([line({ agreedUnitPrice: 0.0124, quantity: 3, referenceUnitPrice: 0.0125 })]));
+    expect(item!.values['unitDiscount']).toEqual(unit(0.0001));
+    expect(item!.values['lineDiscount']).toEqual(belowCent());
+    // The arithmetic is kept: list value − discount (0) = net.
+    expect(item!.values['lineListValue']).toEqual(money(0.04));
+    expect(item!.values['lineNet']).toEqual(money(0.04));
+    expect(formatDocumentValue(item!.values['lineDiscount'], { decimals: 2 }, 'pl-PL')).toBe('—');
+    // The same line's discount at a quantity that reaches a cent is an ordinary amount.
+    const [large] = quoteLineItems(data([line({ agreedUnitPrice: 0.0124, quantity: 100, referenceUnitPrice: 0.0125 })]));
+    expect(large!.values['lineDiscount']).toEqual(money(0.01));
+    // A line without a discount still has no value at all — never a dash.
+    const [none] = quoteLineItems(data([line({ agreedUnitPrice: 10 })]));
+    expect(none!.values['lineDiscount']).toBeNull();
   });
 });
 
@@ -177,6 +196,15 @@ describe('quoteSummary — totals (R-11, FR-028)', () => {
     expect(summary['vatTotal']).toBeNull();
     expect(summary['grossTotal']).toBeNull();
     expect(summary['discountTotal']).toEqual(money(20));
+  });
+
+  it('issue #430: a discount total that rounds to no cent is marked like the line one', () => {
+    const below = quoteSummary(data([line({ agreedUnitPrice: 0.0124, quantity: 3, referenceUnitPrice: 0.0125 })]));
+    expect(below['discountTotal']).toEqual(belowCent());
+    const mixed = quoteSummary(
+      data([line({ agreedUnitPrice: 0.0124, quantity: 3, referenceUnitPrice: 0.0125 }), line({ id: 'l2' })]),
+    );
+    expect(mixed['discountTotal']).toEqual(money(20));
   });
 
   it('no discount anywhere: the discount total has no value', () => {

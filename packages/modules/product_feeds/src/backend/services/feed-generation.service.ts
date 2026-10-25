@@ -932,7 +932,7 @@ export class FeedGenerationService {
     if (net === null) return null;
 
     if (prepared.context.pricePresentation === 'net') {
-      return { net, gross: net, taxResolved: true };
+      return { net, gross: net, taxResolved: true, taxRatePercent: null };
     }
     const country = prepared.context.taxCountry;
     const rate = country
@@ -941,11 +941,11 @@ export class FeedGenerationService {
     if (rate === null) {
       // Never a silent zero-VAT price on a gross feed (R12) — the resolver
       // raises `zero_tax_rate_on_gross_feed` from this flag.
-      return { net, gross: net, taxResolved: false };
+      return { net, gross: net, taxResolved: false, taxRatePercent: null };
     }
     // The exact decimal product, rounded half-up — never on doubles, where
     // 29.50 × 1.23 is 36.28499… (review 2, finding 2; worked examples §10.16).
-    return { net, gross: grossAmountHalfUp(net, rate), taxResolved: true };
+    return { net, gross: grossAmountHalfUp(net, rate), taxResolved: true, taxRatePercent: rate };
   }
 }
 

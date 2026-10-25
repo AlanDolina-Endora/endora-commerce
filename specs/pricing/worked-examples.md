@@ -465,7 +465,15 @@ high-precision prices.
   total always show two. A gross unit price beside a sub-cent net is carried to four places
   (`grossUnitPriceHalfUp`: 0.0125 at 23 % is 0.015375, shown `0,0154 zł`); beside a net that shows
   two it keeps two (§10.16 G1–G4).
-- A **product feed** still writes two places (`roundAmountHalfUp`), the grammar its consumers read.
+- A **product feed** writes two places, the grammar its consumers read — and since issue #430 it
+  rounds no unit price to get there: a price with a third or fourth significant place is published
+  as the exact price of a pack of N, the smallest power of ten that makes it exact (0.0125 → 100 at
+  1.25; on a gross feed the gross of that pack's net, 1.54 at 23 %), with N in the template's pack
+  fields (`g:multipack`); a template with none leaves the item out with
+  `sub_cent_price_without_pack_field`. Tests: `packages/modules/product_feeds/src/backend/services/feed-sub-cent-pack.test.ts`,
+  `backend/test/integration/product_feeds/sub-cent-pack.test.ts`, and R1/R2 in
+  `backend/test/integration/price_lists/worked-examples/rounding.test.ts` (the feed: 90.45 and 10.05
+  for 10).
 
 Each order carries a 2.50 payment surcharge and no delivery cost, as in §10.17. Products: 101 at
 **0.0125** (`simple`), 102 at **0.0150** (`virtual`), 103 at **1.5050** (`simple`); the rate per
