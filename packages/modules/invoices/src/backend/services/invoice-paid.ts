@@ -43,9 +43,11 @@ export interface InvoicePaidPosition {
  *   an operator makes the transfer). A gateway order's money refund is the
  *   gateway's, and `payments` already counts it. A refund still waiting for a
  *   person (`pending_manual`) has not happened and is not counted.
- * - An order an operator marked refunded with nothing captured was refunded in
- *   full: at least its total, and the returns' manual refunds are part of that
- *   one refund, not a second one.
+ * - An order an operator marked refunded was refunded everything received —
+ *   with nothing captured, its stored total; with a captured payment, what was
+ *   captured (a refund settled by hand, e.g. after a refund anomaly). The mark
+ *   is the larger of the refunds already recorded and what was received, never
+ *   added to them, so nothing is counted twice.
  *
  * **Paid** is received less refunded, and never below 0: a credit-limit top-up
  * for an order on credit terms reduces nothing that was paid.
@@ -70,12 +72,20 @@ export function invoicePaidPosition(input: InvoicePaidInput): InvoicePaidPositio
     received = moneySum([input.orderTotal]);
     refunded = outsidePayments;
   } else if (input.paymentStatus === 'refunded') {
+    // Paid, then refunded: received its stored total (the mark below refunds it).
     received = moneySum([input.orderTotal]);
-    refunded = compareDecimals(outsidePayments, received) >= 0 ? outsidePayments : received;
+    refunded = outsidePayments;
   } else {
     received = '0.00';
     refunded = outsidePayments;
   }
+
+  // An operator's mark that the order was refunded is a refund of everything
+  // received, whichever way it was made — by hand after a refund anomaly, or a
+  // transfer outside every module (owner ruling on PR #434). It is the larger of
+  // what is already recorded and what was received, never their sum, so a
+  // gateway refund already on the payment row is not counted twice.
+  if (input.paymentStatus === 'refunded' && compareDecimals(refunded, received) < 0) refunded = received;
 
   const kept = moneyDifference(received, refunded);
   return {

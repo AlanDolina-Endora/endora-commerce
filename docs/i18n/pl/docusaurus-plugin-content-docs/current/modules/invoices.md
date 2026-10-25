@@ -48,8 +48,11 @@ Każdy zwrot liczy się raz, niezależnie od tego, jak go wykonano:
 - zwrot rozliczony **przelewem** (każde zamówienie nieopłacone przez bramkę — przelew wykonuje
   operator) albo **uznaniem limitu kredytowego** — tak, jak zapisał go zwrot. Zwrot, który wciąż
   czeka na wykonanie przez człowieka, się nie liczy;
-- zamówienie, które operator oznaczył jako **zwrócone**, bez pobranej płatności, zwrócono w całej
-  kwocie.
+- zamówienie, które operator oznaczył jako **zwrócone**, zwrócono w całości tego, co za nie
+  otrzymano: w całej kwocie, gdy nie pobrano płatności, a w przeciwnym razie w pobranej kwocie —
+  to zwrot rozliczony ręcznie, na przykład po tym, jak bramka zgłosiła kwotę, której płatność nie
+  mogła zapisać. Oznaczenie nigdy nie jest dodawane do zapisanych już zwrotów: zwrot przez bramkę
+  zapisany na płatności liczy się raz.
 
 Gdy moduł `returns` jest wyłączony, odejmowane są tylko zwroty zapisane przez `payments`.
 

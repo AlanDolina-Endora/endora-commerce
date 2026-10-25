@@ -49,8 +49,11 @@ Every refund counts once, whichever way it was made:
   through a gateway — the operator makes the transfer) or with a **credit to
   the credit limit**, as the return recorded it. A refund still waiting for a
   person to make it is not counted;
-- an order an operator marked as **refunded**, with nothing captured, was
-  refunded its whole total.
+- an order an operator marked as **refunded** was refunded everything that was
+  received for it: its whole total when nothing was captured, and what was
+  captured otherwise — a refund settled by hand, for example after the gateway
+  reported an amount the payment could not record. The mark is never added to
+  refunds already recorded: a gateway refund on the payment counts once.
 
 With the `returns` module switched off, only the refunds `payments` recorded
 are deducted.

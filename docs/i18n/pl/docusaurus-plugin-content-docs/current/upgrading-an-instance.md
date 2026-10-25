@@ -3115,7 +3115,9 @@ platformy.
   wydania faktura VAT odejmowała od zapłaconej kwoty tylko zwroty zgłoszone przez bramkę płatności.
   Teraz odejmuje także zwrot towaru rozliczony przelewem, dla zamówienia nieopłaconego przez bramkę,
   oraz zwrot rozliczony uznaniem limitu kredytowego; zamówienie, które operator oznaczył jako
-  zwrócone, bez pobranej płatności, liczy się jako zwrócone w całości. Zamówienie zwrócone w ten
+  zwrócone, liczy się jako zwrócone w całości — bez pobranej płatności, a także z pobraną płatnością
+  zwróconą ręcznie (na przykład po anomalii zwrotu, niżej), nigdy nie dodając oznaczenia do zwrotu
+  przez bramkę, który już zapisano. Zamówienie zwrócone w ten
   sposób w całości przed wystawieniem faktury **nie jest już fakturowane** — wystawienie zwraca
   `422 INVOICE_ORDER_REFUNDED`, a automatyczne wystawianie je pomija i zapisuje powód w logu — a
   zwrócone częściowo jest fakturowane tylko z zatrzymaną kwotą jako zapłaconą. Faktury wystawione

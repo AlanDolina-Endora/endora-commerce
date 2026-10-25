@@ -413,6 +413,19 @@ describe('invoices — exact decimal amounts (#417)', () => {
     expect((res.json() as { error: { code: string } }).error.code).toBe(ERROR_CODES.INVOICE_ORDER_REFUNDED);
   });
 
+  // Owner ruling on PR #434 — a captured order an operator marked refunded by
+  // hand (e.g. the manual settlement after a refund anomaly) is refunded in full.
+  it('refuses to invoice a captured order an operator marked refunded by hand', async () => {
+    const res = await issueWithReturnRefunds({
+      paymentStatus: 'refunded',
+      kind: 'gateway',
+      payments: [{ status: 'paid', amount: '40.80' }],
+      refunds: [],
+    });
+    expect(res.statusCode, res.body).toBe(422);
+    expect((res.json() as { error: { code: string } }).error.code).toBe(ERROR_CODES.INVOICE_ORDER_REFUNDED);
+  });
+
   // Issue #428 point 6 — on credit terms the on-account part is unpaid by
   // arrangement at invoicing. A captured part refunded in full leaves nothing
   // paid, and the refunds do not cover the order, so it is invoiced, paid 0.

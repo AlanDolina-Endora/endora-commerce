@@ -193,3 +193,40 @@ describe('invoicePaidPosition — a zero-total order (review of PR #434)', () =>
     });
   });
 });
+
+describe('invoicePaidPosition — a captured order marked refunded by hand (owner ruling on PR #434)', () => {
+  it('counts the mark as a refund of everything received', () => {
+    // Captured 100.00 by the gateway, refunded by hand after a refund anomaly:
+    // the payment row records nothing, the operator's mark says refunded.
+    expect(
+      invoicePaidPosition(
+        input({ paymentStatus: 'refunded', paymentKind: 'gateway', payments: { captured: '100.00', refunded: '0.00' } }),
+      ),
+    ).toEqual({ paid: '0.00', refunded: '100.00', refundedInFull: true });
+  });
+
+  it('does not add a gateway refund already on the payment row to the mark', () => {
+    // 100.00 refunded through the gateway (which also marks the order refunded):
+    // one refund, not two.
+    expect(
+      invoicePaidPosition(
+        input({ paymentStatus: 'refunded', paymentKind: 'gateway', payments: { captured: '100.00', refunded: '100.00' } }),
+      ),
+    ).toEqual({ paid: '0.00', refunded: '100.00', refundedInFull: true });
+  });
+
+  it('takes the larger of the recorded refunds and what was received, never their sum', () => {
+    // 30.00 refunded through the gateway, 10.00 credited by a return, then the
+    // rest refunded by hand and the order marked refunded: 100.00 refunded.
+    expect(
+      invoicePaidPosition(
+        input({
+          paymentStatus: 'refunded',
+          paymentKind: 'gateway',
+          payments: { captured: '100.00', refunded: '30.00' },
+          returnRefunds: [refund({ resolutionType: 'credit', amount: '10.00' })],
+        }),
+      ),
+    ).toEqual({ paid: '0.00', refunded: '100.00', refundedInFull: true });
+  });
+});

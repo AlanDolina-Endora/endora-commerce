@@ -2979,7 +2979,9 @@ Each entry below stands on its own: read the ones for the parts of the platform 
   VAT invoice deducted from what was paid only the refunds the payment gateway reported. It now
   also deducts a return settled with a refund by bank transfer, for an order not paid through a
   gateway, and a return settled as a credit to the credit limit; an order an operator marked as
-  refunded, with nothing captured, counts as refunded in full. So an order refunded in full this
+  refunded counts as refunded in full — with nothing captured, and also with a captured payment
+  refunded by hand (for example after a refund anomaly, below), never adding the mark to a gateway
+  refund already recorded. So an order refunded in full this
   way before it was invoiced is **not invoiced** any more — issuing answers
   `422 INVOICE_ORDER_REFUNDED`, and automatic issuance skips it and logs why — and one refunded in
   part is invoiced with only what was kept as paid. Invoices issued before the upgrade are not
