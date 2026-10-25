@@ -2297,8 +2297,9 @@ storefront edits are untried.
 ### After upgrading to 0.108.0 {#after-0-108-0}
 
 `pnpm run upgrade 0.108.0` moves the packages of the release from `0.107.0` and applies its
-migrations — twenty-eight, twelve of them for the new pricing model and its editor and three that
-widen unit prices to four decimal places. **The release
+migrations — twenty-eight, twelve of them for the new pricing model and its editor, three that
+widen unit prices to four decimal places and three that record how VAT and a discount were applied.
+**The release
 replaces how prices are stored and resolved, in one step and with no compatibility period**: the
 price lists of earlier releases, with their Application rules, rosters and quantity brackets, become
 **price books**, and a product no longer carries a price of its own. The base prices an instance
@@ -2371,11 +2372,17 @@ The upgrade itself:
    | `Migration20261020T172007OrdersOrderItemGroups` | `orders` | Table `order_item_groups`, `order_items.group_id` and `position` |
    | `Migration20261021T164807OrdersOrderCommentSystemNote` | `orders` | Nullable `order_comments.system_note` |
    | `Migration20261021T165247OrdersOrderItemsPriceSource` | `orders` | Nullable `order_items.price_source` |
+   | `Migration20261024T145147OrdersVatMethod` | `orders` | Nullable `orders.vat_method`, `per_rate` for an order placed on this release; nothing is backfilled |
+   | `Migration20261025T031732OrdersUnitPriceFourPlaces` | `orders` | Widens `order_items.unit_price` to `numeric(14,4)` |
    | `Migration20261018T122118QuoteRequestsItemPackagingUnitId` | `quote_requests` | Nullable `quote_request_items.packaging_unit_id` |
    | `Migration20261020T171341QuoteRequestsQuoteRequestItemGroups` | `quote_requests` | Table `quote_request_item_groups`, `quote_request_items.group_id` and `position` |
    | `Migration20261021T164808QuoteRequestsQuoteRequestEventCarrySkipped` | `quote_requests` | Admits the `custom-field-carry-skipped` event type |
+   | `Migration20261025T031736QuoteRequestsUnitPriceFourPlaces` | `quote_requests` | Widens `quote_request_items.desired_unit_price`, `agreed_unit_price` and `reference_unit_price` to `numeric(14,4)` |
    | `Migration20261020T131018PwaPreferencesOrganizationAttributionCheck` | `pwa` | A `CHECK` on `push_notification_preferences` |
    | `Migration20261021T165244CartsCartItemsPriceSource` | `carts` | Nullable `cart_items.price_source` |
+   | `Migration20261025T031727CartsUnitPriceFourPlaces` | `carts` | Widens `cart_items.unit_price`, `recomputed_unit_price` and `agreed_unit_price` to `numeric(14,4)` |
+   | `Migration20261024T145631InvoicesVatSummary` | `invoices` | Nullable `invoices.vat_summary`, the per-rate summary a document is issued with; nothing is backfilled |
+   | `Migration20261024T174052ReturnsCaseItemDiscount` | `returns` | `return_case_items.default_discount_amount`, `0` for every existing line |
    | `Migration20261023T195611ProductFeedsRunWithdrawalReason` | `product_feeds` | Nullable `product_feed_runs.withdrawal_reason`, for a run that withdrew the published file |
    | `Migration20261023T234605ProductFeedsPriceListFkDropped` | `product_feeds` | Drops `product_feeds_price_list_fk`, so a retired book can be deleted later; runs after the conversion |
    | `Migration20261021T165239PriceListsPriceBooksExpand` | `price_lists` | The price-book header, audience and channel sets, the evolved rows, precedence version 1, the price-surface tables |
@@ -2454,6 +2461,14 @@ Whenever it suits you:
     Opportunities lists offer a filter for each Order, Quote Request or Opportunity custom field
     whose new *Use as list filter* option is on, and every existing field has it off. Turn it on in
     the field's editor on `/custom-fields`, which now edits existing fields.
+15. **Raise `vite` and `nodemailer` in your own manifests.** The admin shell's optional peer range
+    for `vite` is now `^7.3.7`; an instance whose admin member still resolves an earlier `vite` 7
+    gets an *unmet peer* warning ([After it finishes](#after-it-finishes)) — raise `vite` in
+    `admin/package.json` to `^7.3.7`. `mod-email` and `mod-newsletter` still accept any
+    `nodemailer` 10, so an instance keeps the one it resolved; the platform now builds against
+    `^10.1.4` (10.2.1 in its lockfile), which tightens address parsing, strips credentials from a
+    cross-origin redirect and caps the work one message can cause. Raise `nodemailer` where the
+    instance declares it to `^10.1.4` to have those fixes, then run `pnpm install`.
 
 #### For operators {#after-0-108-0-operators}
 
@@ -2469,9 +2484,10 @@ Whenever it suits you:
   [Price books](./modules/price_lists.md) page, with worked examples.
 - **A price change shows in a price-sorted listing within about half a second** in the platform's
   measurements; a change that reaches the whole catalogue — a line for all products or for an
-  attribute value alone, more than 10 000 products at once, a sales-channel change — takes up to
-  about five minutes with some 200 groups of buyers with their own books (measured about 4 min 35 s at
-  201; issue #416 tracks making it faster). Prices on product cards never lag.
+  attribute value alone, more than 10 000 products at once, a sales-channel change — takes under
+  about a minute and a half with some 200 groups of buyers with their own books (measured 85 s at 202,
+  on 50 000 products, where it took about 4.5 minutes before issue #416). Prices on product cards
+  never lag.
 - **The products import refuses a file with a price column** — `default_price`, `defaultPrice`,
   `price`, `price_override` or `priceOverride` — with `400 PRICE_SET_IN_PRICE_BOOKS`, and imports
   nothing. Prices are imported through the price books' CSV import, or by a PIM connector through
@@ -2521,6 +2537,10 @@ Whenever it suits you:
   unsettled with nothing refunded or credited. A settlement refunds every line of the case: a line
   the request leaves out is refunded and credited at its stored approved amount, so the refund and
   the correction always agree. Two returns of one order are settled one after the other.
+- **An order refunded in full before it is invoiced is not invoiced.** Issuing its VAT invoice is
+  refused — *This order's payments were refunded in full before it was invoiced, so there is no sale
+  left to invoice.* — and draws no number, and automatic issuance on an order status skips it. An
+  order refunded in part is invoiced, with only what was kept as paid.
 - **An amount with more than two decimal places is refused, not rounded** — a delivery cost, a
   payment method's surcharge, an approved refund, a return cost, a credit limit, an opportunity's
   value, and a promotion's fixed amount, step or minimum spend. The screen answers *An amount may

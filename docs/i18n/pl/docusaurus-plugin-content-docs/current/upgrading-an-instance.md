@@ -2394,8 +2394,9 @@ zmiany w storefroncie nie były wypróbowane.
 ### Po aktualizacji do wydania 0.108.0 {#after-0-108-0}
 
 `pnpm run upgrade 0.108.0` przenosi pakiety wydania z `0.107.0` i wykonuje jego migracje —
-dwadzieścia osiem, z czego dwanaście dotyczy nowego modelu cen i jego edytora, a trzy poszerzają
-ceny jednostkowe do czterech miejsc po przecinku. **Wydanie zastępuje
+dwadzieścia osiem, z czego dwanaście dotyczy nowego modelu cen i jego edytora, trzy poszerzają
+ceny jednostkowe do czterech miejsc po przecinku, a trzy zapisują, jak naliczono VAT i rabat.
+**Wydanie zastępuje
 sposób przechowywania i wyliczania cen w jednym kroku, bez okresu zgodności**: cenniki wcześniejszych
 wydań, z ich regułami stosowania (Application rule), listami produktów i przedziałami ilościowymi,
 stają się **cennikami w nowym modelu**, a produkt nie ma już własnej ceny. Ceny bazowe, które
@@ -2469,11 +2470,17 @@ Sama aktualizacja:
    | `Migration20261020T172007OrdersOrderItemGroups` | `orders` | Tabela `order_item_groups`, `order_items.group_id` i `position` |
    | `Migration20261021T164807OrdersOrderCommentSystemNote` | `orders` | `order_comments.system_note`, może być `null` |
    | `Migration20261021T165247OrdersOrderItemsPriceSource` | `orders` | `order_items.price_source`, może być `null` |
+   | `Migration20261024T145147OrdersVatMethod` | `orders` | `orders.vat_method`, może być `null`; `per_rate` dla zamówienia złożonego w tym wydaniu, bez uzupełniania istniejących |
+   | `Migration20261025T031732OrdersUnitPriceFourPlaces` | `orders` | Poszerza `order_items.unit_price` do `numeric(14,4)` |
    | `Migration20261018T122118QuoteRequestsItemPackagingUnitId` | `quote_requests` | `quote_request_items.packaging_unit_id`, może być `null` |
    | `Migration20261020T171341QuoteRequestsQuoteRequestItemGroups` | `quote_requests` | Tabela `quote_request_item_groups`, `quote_request_items.group_id` i `position` |
    | `Migration20261021T164808QuoteRequestsQuoteRequestEventCarrySkipped` | `quote_requests` | Dopuszcza typ zdarzenia `custom-field-carry-skipped` |
+   | `Migration20261025T031736QuoteRequestsUnitPriceFourPlaces` | `quote_requests` | Poszerza `quote_request_items.desired_unit_price`, `agreed_unit_price` i `reference_unit_price` do `numeric(14,4)` |
    | `Migration20261020T131018PwaPreferencesOrganizationAttributionCheck` | `pwa` | Ograniczenie `CHECK` na `push_notification_preferences` |
    | `Migration20261021T165244CartsCartItemsPriceSource` | `carts` | `cart_items.price_source`, może być `null` |
+   | `Migration20261025T031727CartsUnitPriceFourPlaces` | `carts` | Poszerza `cart_items.unit_price`, `recomputed_unit_price` i `agreed_unit_price` do `numeric(14,4)` |
+   | `Migration20261024T145631InvoicesVatSummary` | `invoices` | `invoices.vat_summary`, może być `null` — podsumowanie według stawek, z którym wystawiono dokument; bez uzupełniania istniejących |
+   | `Migration20261024T174052ReturnsCaseItemDiscount` | `returns` | `return_case_items.default_discount_amount`, `0` dla każdej istniejącej pozycji |
    | `Migration20261023T195611ProductFeedsRunWithdrawalReason` | `product_feeds` | `product_feed_runs.withdrawal_reason`, może być `null` — dla generowania, które wycofało opublikowany plik |
    | `Migration20261023T234605ProductFeedsPriceListFkDropped` | `product_feeds` | Usuwa `product_feeds_price_list_fk`, więc wycofany cennik można później usunąć; wykonuje się po konwersji |
    | `Migration20261021T165239PriceListsPriceBooksExpand` | `price_lists` | Nagłówek cennika, zbiory odbiorców i kanałów, rozszerzone wiersze, wersja kolejności 1, tabele powierzchni cen |
@@ -2556,6 +2563,15 @@ W dowolnym momencie:
     zapytania ofertowego albo szansy sprzedaży, które ma włączoną nową opcję *Używaj jako filtra
     listy*, a każde istniejące pole ma ją wyłączoną. Włącz ją w edytorze pola na `/custom-fields`,
     który teraz pozwala edytować istniejące pola.
+15. **Podnieś `vite` i `nodemailer` we własnych manifestach.** Opcjonalny zakres peer powłoki
+    panelu dla `vite` to teraz `^7.3.7`; instancja, której człon panelu wciąż rozwiązuje wcześniejszy
+    `vite` 7, dostaje ostrzeżenie *unmet peer* ([Po zakończeniu](#po-zakończeniu)) — podnieś `vite`
+    w `admin/package.json` do `^7.3.7`. `mod-email` i `mod-newsletter` nadal przyjmują każdy
+    `nodemailer` 10, więc instancja zachowuje ten, który rozwiązała; platforma buduje się teraz z
+    `^10.1.4` (10.2.1 w jej pliku blokady), który zaostrza parsowanie adresów, usuwa dane
+    uwierzytelniające przy przekierowaniu do innego źródła i ogranicza pracę, jaką może wywołać jedna
+    wiadomość. Podnieś `nodemailer` tam, gdzie instancja go deklaruje, do `^10.1.4`, żeby mieć te
+    poprawki, a potem uruchom `pnpm install`.
 
 #### Dla operatorów {#after-0-108-0-operators}
 
@@ -2572,10 +2588,10 @@ W dowolnym momencie:
   [Cenniki](./modules/price_lists.md), z przykładami.
 - **Zmiana ceny pojawia się na liście sortowanej według ceny w ciągu około pół sekundy** w
   pomiarach platformy; zmiana, która sięga całego katalogu — linia dla wszystkich produktów albo
-  tylko dla wartości atrybutu, ponad 10 000 produktów naraz, zmiana kanału sprzedaży — trwa do około
-  pięciu minut przy mniej więcej 200 grupach kupujących z własnymi cennikami (zmierzono około 4 min 35 s
-  przy 201; przyspieszenie opisuje zgłoszenie #416). Ceny na kartach produktów nigdy
-  się nie opóźniają.
+  tylko dla wartości atrybutu, ponad 10 000 produktów naraz, zmiana kanału sprzedaży — trwa poniżej
+  około półtorej minuty przy mniej więcej 200 grupach kupujących z własnymi cennikami (zmierzono
+  85 s przy 202, na 50 000 produktów, wobec około 4,5 minuty przed zgłoszeniem #416). Ceny na
+  kartach produktów nigdy się nie opóźniają.
 - **Import produktów odrzuca plik z kolumną ceny** — `default_price`, `defaultPrice`, `price`,
   `price_override` albo `priceOverride` — z kodem `400 PRICE_SET_IN_PRICE_BOOKS` i niczego nie
   importuje. Ceny importuje się przez import CSV cenników albo konektorem PIM przez
@@ -2629,6 +2645,11 @@ W dowolnym momencie:
   wszystkie pozycje zgłoszenia: pozycja pominięta w żądaniu jest zwracana i uznawana w zapisanej
   zatwierdzonej kwocie, więc zwrot i korekta zawsze się zgadzają. Dwa zwroty jednego zamówienia są
   rozliczane jeden po drugim.
+- **Zamówienie zwrócone w całości przed wystawieniem faktury nie jest fakturowane.** Wystawienie
+  jego faktury VAT jest odrzucane — *Płatności za to zamówienie zostały w całości zwrócone przed
+  wystawieniem faktury, więc nie ma sprzedaży do zafakturowania.* — i nie pobiera numeru, a
+  automatyczne wystawianie po zmianie statusu zamówienia je pomija. Zamówienie zwrócone w części
+  jest fakturowane, a jako zapłacone wykazuje tylko to, co zostało zatrzymane.
 - **Kwota z więcej niż dwoma miejscami po przecinku jest odrzucana, a nie zaokrąglana** — koszt
   dostawy, dopłata do metody płatności, zatwierdzona kwota zwrotu, koszt zwrotu, limit kredytowy,
   wartość szansy sprzedaży oraz kwota stała, próg i minimalna wartość koszyka w promocji. Ekran
