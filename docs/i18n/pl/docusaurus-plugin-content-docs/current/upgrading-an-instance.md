@@ -2587,6 +2587,52 @@ W dowolnym momencie:
   sprzedawane tylko na zapytanie, i informuje o nich; wcześniej taka pozycja trafiała do koszyka w
   cenie ze starego zamówienia, a koszyk był potem odrzucany przy składaniu zamówienia.
 
+##### Kwoty, VAT i faktury
+
+- **VAT jest liczony w jeden sposób na każdym dokumencie**: dla każdej stawki od sumy kwot netto w
+  tej stawce, z zaokrągleniem „połówkowym w górę” jeden raz, a kwota brutto to netto plus ten VAT
+  (art. 106e ust. 1 pkt 13–14 ustawy o VAT). Te same kwoty pokazują checkout, zamówienie, otwarta
+  przez nie płatność i proforma, faktura, korekta i zwrot. Koszyk z pozycjami w dwóch stawkach VAT
+  może kosztować o grosz więcej lub mniej niż przed aktualizacją: 29,50 w stawce 23 % z 4,30 w
+  stawce 5 % dawało 40,80 brutto, a daje 40,81 — tyle samo, ile mówi jego faktura. Kwota brutto
+  pozycji w zamówieniu, jego potwierdzeniu, na fakturze i na ekranach zamówień to **własne
+  zaokrąglenie pozycji** — 29,50 w stawce 23 % pokazuje 36,29 — podawane informacyjnie; VAT i sumy
+  to kwoty według stawek, więc kwoty brutto pozycji dokumentu mogą sumować się do grosza więcej
+  lub mniej niż jego suma.
+- **Faktury wystawione przed aktualizacją dla zamówień czynnych podatników VAT zawyżały kwotę netto,
+  VAT i brutto.** Przy wystawianiu kwota brutto każdej pozycji zamówienia była odczytywana jako jej
+  kwota netto i opodatkowana ponownie: pozycja 100,00 netto w stawce 23 % trafiała na fakturę jako
+  123,00 netto i 151,29 brutto. Aktualizacja zmienia sposób wystawiania faktur od teraz. **Nie
+  poprawia faktur już wystawionych, a platforma nie wystawia do nich korekt**; zachowują kwoty, z
+  którymi je wystawiono, a ich podsumowanie według stawek jest pokazywane tak, jak je wystawiono.
+- **Zamówienie złożone przed aktualizacją zachowuje to, co naliczyło.** Jego zwroty oddają to, co
+  zapisało i co zostało zapłacone. Faktura wystawiona do niego po aktualizacji liczy VAT według
+  stawek i może być o grosz wyższa od zapłaconej kwoty — 40,81 dla zamówienia, które naliczyło
+  40,80 — a jako zapłacone zapisuje tylko to, co zapłacono, więc grosz pokazuje jako należny
+  (*Do zapłaty: 0,01*), a nie jako zapłacony.
+- **Zwroty domyślnie oddają to, co zapłacono, łącznie ze wszystkich zwrotów zamówienia.** Każdy
+  zwrot oddaje wartość wszystkiego, co dotąd zwrócono, pomniejszoną o to, co oddały wcześniejsze
+  zwroty, więc żaden ciąg zwrotów nie odda więcej, niż naliczyło zamówienie, a zwrot całości oddaje
+  dokładnie tyle: dwa zwroty po jednej z dwóch sztuk po 29,50 w stawce 23 % oddają 36,29, a potem
+  36,28 (zapłacono 72,57), gdzie każdy oddawał 36,29. Reklamacja pozycji, której nie można zwrócić,
+  liczy się do tej samej sumy, a rabat na całe zamówienie jest odejmowany od tego, co oddaje zwrot
+  towaru — zamówienie naliczyło towar pomniejszony o rabat, więc zwrot całości oddaje tyle, nigdy
+  pełnej ceny towaru. Korekta uznaje tak samo: VAT towaru tak, jak naliczyła go faktura, a rabat na
+  osobnej pozycji, więc wszystkie korekty jednej faktury razem uznają dokładnie to, co naliczyła. Dla
+  zamówienia złożonego przed aktualizacją zwrot oddaje to, co naliczyło zamówienie, a korekta uznaje
+  dokładnie tyle.
+- **Rozliczenie sprawdza korektę, zanim przesunie jakiekolwiek pieniądze.** Odmowa — ta sama pozycja
+  zgłoszenia podana dwa razy, pozycja faktury, której korekta nie może dopasować, wyłączony moduł
+  `invoices` — zostawia zgłoszenie nierozliczone, bez zwrotu i bez uznania. Rozliczenie zwraca
+  wszystkie pozycje zgłoszenia: pozycja pominięta w żądaniu jest zwracana i uznawana w zapisanej
+  zatwierdzonej kwocie, więc zwrot i korekta zawsze się zgadzają. Dwa zwroty jednego zamówienia są
+  rozliczane jeden po drugim.
+- **Kwota z więcej niż dwoma miejscami po przecinku jest odrzucana, a nie zaokrąglana** — koszt
+  dostawy, dopłata do metody płatności, uzgodniona lub proponowana cena w zapytaniu ofertowym,
+  zatwierdzona kwota zwrotu, koszt zwrotu, limit kredytowy, wartość szansy sprzedaży oraz kwota
+  stała, próg i minimalna wartość koszyka w promocji. Ekran odpowiada komunikatem *Kwota może mieć
+  najwyżej dwa miejsca po przecinku.*
+
 ##### Minimalne ilości zamówienia i produkty podlegające zwrotowi
 
 - **Produkt może mieć minimalną ilość zamówienia** (w sztukach, dla produktów prostych i
@@ -2700,6 +2746,57 @@ W dowolnym momencie:
 - **`POST /api/v1/orders/:id/reorder`** zgłasza pozycję pominiętą, bo nic jej nie wycenia, z
   `reason: 'no_price'` w `unavailableItems`.
 
+##### Kwoty i VAT
+
+- **Wpisana kwota pieniężna z więcej niż dwoma miejscami po przecinku zwraca
+  `400 AMOUNT_PRECISION_EXCEEDED`** (nowy kod) i nie jest zapisywana; wcześniej była zaokrąglana.
+  Dotyczy to pól: `cost` metody dostawy, `additionalPrice` metody płatności, `desiredUnitPrice` i
+  `agreedUnitPrice` pozycji zapytania ofertowego, `approvedRefundAmount` rozliczenia,
+  `returnCost` metody dostawy zwrotu, `amount` zwrotu zamówienia w panelu, `grantedAmount` limitu
+  kredytowego, `manualValue` szansy sprzedaży, `amount`, `spendStep`, `minCartSubtotal` promocji i
+  `value` promocji `amount_off`, a także `netTotal`, `taxTotal`, `grossTotal` i `paidTotal`
+  dokumentu sprzedaży z integracji ERP. `details` wskazuje każde pole z problemem
+  `AMOUNT_PRECISION_EXCEEDED`, a komunikat jest w języku czytelnika. Żądanie, które nie spełnia
+  także innych warunków, zwraca `400 VALIDATION_FAILED` z tym samym problemem wśród szczegółów.
+  Końcowe zera nie są znaczące (`"123.4500"` to 123,45); ciąg, który w ogóle nie jest liczbą
+  dziesiętną, zwraca `400 VALIDATION_FAILED` z problemem formatu.
+- **VAT jest liczony dla każdej stawki od sumy kwot netto w tej stawce**, z jednym zaokrągleniem
+  „połówkowym w górę”: `taxTotal` i `total` zamówienia, podglądy w checkoucie i w panelu,
+  `vatSummary`, `taxTotal` i `grossTotal` faktury oraz kwoty korekty. `lineTotal` pozycji
+  zamówienia i `grossValue` pozycji faktury to własne zaokrąglenie pozycji,
+  `round(net × (1 + rate))`, i mogą sumować się do grosza więcej lub mniej niż suma. Kształty się nie
+  zmieniają. Zamówienie w dwóch stawkach może różnić się o grosz od tego samego koszyka sprzed
+  aktualizacji.
+- **`paidTotal` faktury to to, co zapłacono za zamówienie** — każda przechwycona płatność
+  pomniejszona o to, co z niej zwrócono, albo zapisana suma zamówienia, gdy jest ono oznaczone jako
+  opłacone bez przechwyconej płatności — nigdy własna kwota brutto faktury, więc `amountDue` może
+  wynosić `0.01` dla zamówienia sprzed aktualizacji. Zamówienie zwrócone częściowo przed wystawieniem
+  faktury dostaje fakturę, z zapłaconą kwotą równą temu, co zatrzymano.
+- **Zamówienie zwrócone w całości przed wystawieniem faktury nie jest fakturowane.** Gdy zwroty jego
+  płatności są równe temu, co pobrano, i pokrywają całą kwotę zamówienia, nie ma już sprzedaży do
+  udokumentowania: wystawienie faktury VAT zwraca `422 INVOICE_ORDER_REFUNDED` (*Płatności za to
+  zamówienie zostały w całości zwrócone przed wystawieniem faktury, więc nie ma sprzedaży do
+  zafakturowania. Niczego nie wystawiono.*) i nie pobiera numeru, a automatyczne wystawianie po
+  zmianie statusu zamówienia pomija je i zapisuje w logu
+  `[invoices] the order was not auto-invoiced: its payments were refunded in full`.
+- **Rozliczenie, które podaje tę samą pozycję zgłoszenia dwa razy, zwraca `400 VALIDATION_FAILED`**
+  (problem `duplicate_line`) i niczego nie przesuwa; rozliczenie, którego korekta zostałaby
+  odrzucona, jest odrzucane przed zwrotem.
+- **`totalRefundAmount` rozliczenia obejmuje wszystkie pozycje zgłoszenia**, nie tylko te z
+  `lines`: pozycja pominięta liczy się w zapisanej kwocie `approvedRefundAmount`, a korekta uznaje
+  te same pozycje. Rozliczenia jednego zamówienia wykonują się jedno po drugim; rozliczenie, które
+  czeka na inne dłużej niż 15 sekund, zwraca `409 VALIDATION_FAILED`
+  (`details.code: settlement_in_progress`), niczego nie przesuwa i można je ponowić.
+- **Korekta zamówienia z rabatem** uznaje towar według wartości z faktury, a rabat na ujemnej
+  pozycji 0 %; anulowana korekta nie liczy się już do kolejnych.
+- **Korekta odrzuca `total` wyższy od sumy jej pozycji** odpowiedzią `400 VALIDATION_FAILED`
+  (`details.code: correction_total_exceeds_lines`), a korekty jednej faktury uznają narastająco:
+  razem nigdy więcej, niż naliczyła.
+- **Faktury wystawione przed aktualizacją się nie zmieniają.** Faktura wystawiona dla zamówienia
+  czynnego podatnika VAT zawyża `netTotal`, `taxTotal` i `grossTotal` (netto każdej pozycji było
+  kwotą brutto pozycji zamówienia); jej podsumowanie według stawek jest pokazywane tak, jak ją
+  wystawiono.
+
 ##### Minimalne ilości zamówienia i produkty podlegające zwrotowi
 
 - **Nowe odmowy.** `422 PRODUCT_BELOW_MINIMUM_QUANTITY` i
@@ -2790,6 +2887,28 @@ W dowolnym momencie:
   niego sprawia, że powierzchnia cen przebudowuje każdy profil.
 - **Własny port wyceny feedów** musi implementować `namedListPublishability` obok
   `namedListPrices`, która przyjmuje teraz `salesChannelId` feedu.
+
+##### Arytmetyka kwot
+
+- **`@endora-commerce/contracts` zawiera arytmetykę kwot platformy**: `money-decimal`
+  (`roundHalfUp`, dokładne sumy i iloczyny, `vatByRate` — jedyna metoda VAT, dla każdej stawki od
+  sumy kwot netto — oraz jej odwrotność `netForGrossAtRate`) i `money-input` (`twoDecimalAmount`,
+  `twoDecimalAmountString`, `addAmountPrecisionIssue` i `ERROR_CODES.AMOUNT_PRECISION_EXCEEDED`).
+  Moduł nakładkowy, który liczy kwotę z ceny, używa ich zamiast `Number#toFixed(2)` czy
+  `Math.round(x * 100) / 100`, a nowe pole kwoty wpisywanej przez człowieka używa tego zawężenia.
+- **`OrderReturnContext` zyskuje `vatMethod`, `productsPaidTotal` (zapisane netto + podatek −
+  rabat) i `discountTotal`, a `OrderReturnContextLine` zyskuje `unitNetPrice` i `taxRate`**;
+  `paidLineAmount` to suma pozycji zapisana w zamówieniu. Implementacja `OrderReturnContextPort` w
+  module nakładkowym musi podawać te pola i czytać je z tego, co zamówienie zapisało, nigdy ich nie
+  przeliczając.
+- **`CorrectiveInvoicePort` zyskuje `validateCorrection(input)`**, które odrzuca to, co odrzuciłoby
+  `createCorrection`, niczego nie zapisując, a `CorrectiveInvoiceLine` zyskuje opcjonalne pole
+  `discount`; implementacja w module nakładkowym musi dostarczać tę metodę.
+- **Dwie nowe kolumny dopuszczające `null` zapisują, według której metody powstał dokument**:
+  `orders.vat_method` (`per_rate` od 0.108.0) i `invoices.vat_summary` (podsumowanie według stawek,
+  z którym wystawiono fakturę lub korektę). `null` oznacza dokument sprzed aktualizacji; nic nie
+  jest uzupełniane wstecz. Trzecia, `return_case_items.default_discount_amount` (domyślnie `0`),
+  zapisuje rabat, który niesie zwrot.
 
 ##### Inne porty i kształty
 

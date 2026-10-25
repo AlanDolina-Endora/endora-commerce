@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isoDateTimeSchema, uuidSchema } from './common.js';
+import { twoDecimalAmount } from './money-input.js';
 
 /**
  * Returns & Complaints (Refunds, RMA) — feature 046.
@@ -306,9 +307,21 @@ export const settlementRequestSchema = z.object({
     .array(
       z.object({
         returnCaseItemId: uuidSchema,
-        approvedRefundAmount: z.number().finite().nonnegative(),
+        approvedRefundAmount: twoDecimalAmount(z.number().finite().nonnegative()),
       }),
     )
+    // A case line named twice is refused before anything moves (issue #417,
+    // review of PR #423): the refund would sum both entries and the correction
+    // keep one, refusing only after the gateway had refunded.
+    .superRefine((lines, ctx) => {
+      const seen = new Set<string>();
+      lines.forEach((line, index) => {
+        if (seen.has(line.returnCaseItemId)) {
+          ctx.addIssue({ code: 'custom', path: [index, 'returnCaseItemId'], message: 'duplicate_line' });
+        }
+        seen.add(line.returnCaseItemId);
+      });
+    })
     .default([]),
   refundPaymentMethodId: uuidSchema.optional(),
   createCorrectiveInvoice: z.boolean().optional(),
@@ -368,13 +381,13 @@ export type ReturnDeliveryMethodDto = z.infer<typeof returnDeliveryMethodSchema>
 
 export const returnDeliveryMethodCreateSchema = z.object({
   deliveryMethodId: uuidSchema,
-  returnCost: z.number().finite().nonnegative(),
+  returnCost: twoDecimalAmount(z.number().finite().nonnegative()),
   currency: z.string().length(3),
   isActive: z.boolean().optional(),
 });
 
 export const returnDeliveryMethodUpdateSchema = z.object({
-  returnCost: z.number().finite().nonnegative().optional(),
+  returnCost: twoDecimalAmount(z.number().finite().nonnegative()).optional(),
   currency: z.string().length(3).optional(),
   isActive: z.boolean().optional(),
 });
@@ -604,10 +617,18 @@ export interface OrderReturnContextLine {
   productId: string;
   name: string;
   purchasedQty: number;
-  /** Amount paid per unit, including its proportional tax. */
+  /** The line's stored gross over its quantity, at four places — informational. */
   paidUnitAmount: number;
-  /** Amount paid for the whole purchased line, including tax. */
+  /**
+   * The line's gross as the order stored it (`lineTotal`), never recomputed
+   * (issue #417): what an order placed before 0.108.0 charged for the line, and
+   * the line's own rounding of its gross for one placed after.
+   */
   paidLineAmount: number;
+  /** The line's net unit price, as stored (a two-place decimal string). */
+  unitNetPrice: string;
+  /** The line's VAT rate as a fraction, as stored (`0.2300`). */
+  taxRate: string;
   /**
    * Feature 155 (FR-016a) — the product's returnable flag recorded when the order was placed.
    * `null`: the order was placed before the flag was recorded. `orders` reports the fact; the
@@ -623,6 +644,21 @@ export interface OrderReturnContext {
   currency: string;
   /** When the order entered its fulfilment-completing status; null if it has not. */
   completingStatusEnteredAt: Date | null;
+  /**
+   * The VAT method the order was placed under (issue #417): `per_rate` — VAT
+   * per rate on the sum of the nets — from 0.108.0; `null` before, when the
+   * stored totals followed the rule of their day. Decides how a return groups
+   * what was paid.
+   */
+  vatMethod: 'per_rate' | null;
+  /**
+   * What the order charged for its products, as stored: subtotal + tax total −
+   * discount total (two places). The discount is taken off the gross without tax
+   * of its own; delivery and the payment surcharge are not products.
+   */
+  productsPaidTotal: string;
+  /** The order-level discount, as stored (two places) — the part of it a return carries is credited back as a discount. */
+  discountTotal: string;
   lines: OrderReturnContextLine[];
 }
 
@@ -655,6 +691,13 @@ export interface CorrectiveInvoiceLine {
   quantity: number;
   /** Credited amount for this line, gross (as paid, including its tax). */
   amount: number;
+  /**
+   * The part of the order-level discount `amount` carries (issue #417). The
+   * invoice charged the goods in full and the discount on a 0 % line, so the
+   * correction credits the goods at `amount + discount` and the discount back on
+   * a 0 % line; it still totals `amount`. Absent: no discount.
+   */
+  discount?: number;
 }
 
 export interface CorrectiveInvoiceInput {
@@ -714,4 +757,10 @@ export type CorrectiveInvoiceResult = CorrectiveInvoiceIssued | CorrectiveInvoic
  */
 export interface CorrectiveInvoicePort {
   createCorrection(input: CorrectiveInvoiceInput): Promise<CorrectiveInvoiceResult>;
+  /**
+   * Refuse, writing nothing, what `createCorrection` would refuse for the same
+   * input (issue #417): a settlement asks before it moves any money, so a
+   * correction that cannot be made never follows a refund that was made.
+   */
+  validateCorrection(input: CorrectiveInvoiceInput): Promise<void>;
 }

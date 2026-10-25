@@ -2483,6 +2483,47 @@ Whenever it suits you:
   request only, and reports them; such a line used to be seeded at the old order's price and the
   basket then refused at placement.
 
+##### Amounts, VAT and invoices
+
+- **VAT is computed one way on every document**: per rate, on the sum of the net amounts at that
+  rate, rounded half-up once, and the gross is the net plus that VAT (art. 106e ust. 1 pkt 13–14 of
+  the Polish VAT Act). The checkout, the order, the payment and proforma it opens, the invoice, a
+  correction and a refund show the same figures. A basket whose lines carry two VAT rates can come
+  to a cent more or less than before the upgrade: 29.50 at 23 % with 4.30 at 5 % was 40.80 gross
+  and is 40.81, which is also what its invoice says. A line's gross on an order, its confirmation,
+  an invoice and the order screens is **the line's own rounding** — 29.50 at 23 % shows 36.29 —
+  shown for information; the VAT and the totals are the per-rate figures, so a document's line
+  grosses may add up to a cent more or less than its total.
+- **Invoices issued before the upgrade for orders of VAT payers overstated their net, VAT and
+  gross.** Issuance read each order line's gross amount as its net amount and taxed it again: a line
+  of 100.00 net at 23 % was invoiced as 123.00 net and 151.29 gross. The upgrade changes how
+  invoices are issued from now on. **It does not correct the invoices already issued, and the
+  platform does not issue corrections for them**; they keep the amounts they were issued with, and
+  their per-rate summary is shown as they were issued.
+- **An order placed before the upgrade keeps what it charged.** Its returns refund what it stored
+  and was paid. An invoice issued for it after the upgrade takes VAT per rate and can be a cent
+  above what was paid — 40.81 for an order that charged 40.80 — and records as paid only what was
+  paid, so it shows the cent as still due (*Do zapłaty: 0.01*) rather than as paid.
+- **Returns refund by default what was paid, across all of an order's returns.** Each return refunds
+  what everything returned so far is worth, minus what earlier returns already refunded, so no
+  sequence of returns refunds more than the order charged and a complete return refunds exactly
+  that: two returns of one of two items at 29.50 + 23 % refund 36.29 and then 36.28 (72.57 paid),
+  where each used to refund 36.29. A complaint about a line that cannot be returned counts in the same
+  total, and an order-level discount is taken off what the goods refund — the order charged the goods
+  less the discount, so a full return refunds that, never the goods' full price. A correction credits
+  the same way: the goods' VAT as the invoice charged it, and the discount back on a line of its own,
+  so all corrections of an invoice together credit exactly what it charged. For an order placed
+  before the upgrade, the refund is what the order charged and the correction credits exactly that.
+- **A settlement checks its correction before it moves any money.** A refusal — a case line named
+  twice, an invoice line the correction cannot match, `invoices` switched off — leaves the case
+  unsettled with nothing refunded or credited. A settlement refunds every line of the case: a line
+  the request leaves out is refunded and credited at its stored approved amount, so the refund and
+  the correction always agree. Two returns of one order are settled one after the other.
+- **An amount with more than two decimal places is refused, not rounded** — a delivery cost, a
+  payment method's surcharge, a quote's agreed or proposed price, an approved refund, a return
+  cost, a credit limit, an opportunity's value, and a promotion's fixed amount, step or minimum
+  spend. The screen answers *An amount may have at most two decimal places.*
+
 ##### Minimum order quantities and returnable products
 
 - **A product can have a minimum order quantity** (pieces, on simple and configurable products)
@@ -2589,6 +2630,53 @@ Whenever it suits you:
 - **`POST /api/v1/orders/:id/reorder`** reports a line it left out because nothing prices it with
   `reason: 'no_price'` in `unavailableItems`.
 
+##### Amounts and VAT
+
+- **A typed money amount with more than two decimal places answers
+  `400 AMOUNT_PRECISION_EXCEEDED`** (a new code) and is not stored; it used to be rounded. The fields
+  are `cost` of a delivery method, `additionalPrice` of a payment method, `desiredUnitPrice` and
+  `agreedUnitPrice` of a quote request line, `approvedRefundAmount` of a settlement, `returnCost` of
+  a return delivery method, `amount` of an admin order refund, `grantedAmount` of a credit limit,
+  an opportunity's `manualValue`, a promotion's `amount`, `spendStep`, `minCartSubtotal` and the
+  `value` of an `amount_off` promotion, and an ERP integration's `netTotal`, `taxTotal`,
+  `grossTotal` and `paidTotal` of a sale document. `details` names each field with the issue
+  `AMOUNT_PRECISION_EXCEEDED`, and the message is in the reader's language. A request that also
+  fails anything else answers `400 VALIDATION_FAILED`, with the same issue among its details.
+  Trailing zeros are not significant (`"123.4500"` is 123.45); a string that is not a decimal at
+  all is `400 VALIDATION_FAILED` with a format issue.
+- **VAT is taken per rate on the sum of the net amounts at that rate**, rounded half-up once: an
+  order's `taxTotal` and `total`, the checkout and admin previews, an invoice's `vatSummary`,
+  `taxTotal` and `grossTotal`, and a correction's amounts. An order line's `lineTotal` and an
+  invoice line's `grossValue` are the line's own rounding, `round(net × (1 + rate))`, and may add up
+  to a cent more or less than the total. The shapes are unchanged. An order at two rates can differ
+  by a cent from the same basket before the upgrade.
+- **An invoice's `paidTotal` is what was paid for the order** — each captured payment attempt less
+  what was refunded from it, or the order's stored total when it is recorded as paid with nothing
+  captured — never the invoice's own gross, so `amountDue` can be `0.01` for an order placed before
+  the upgrade. An order refunded in part before it is invoiced is invoiced, with only what was kept
+  as paid.
+- **An order refunded in full before it is invoiced is not invoiced.** When its payments' refunds
+  equal what was captured and cover the whole order total, there is no sale left to document:
+  issuing a VAT invoice answers `422 INVOICE_ORDER_REFUNDED` (*This order's payments were refunded
+  in full before it was invoiced, so there is no sale left to invoice. Nothing was issued.*) and draws
+  no number, and automatic issuance on an order status skips the order and logs
+  `[invoices] the order was not auto-invoiced: its payments were refunded in full`.
+- **A settlement naming one case line twice answers `400 VALIDATION_FAILED`** (issue `duplicate_line`)
+  and moves nothing; a settlement whose correction would be refused is refused before the refund.
+- **A settlement's `totalRefundAmount` covers every line of the case**, not only the lines in
+  `lines`: a line left out counts at its stored `approvedRefundAmount`, and the correction credits
+  the same lines. Settlements of one order run one at a time; one that waits more than 15 seconds
+  for another answers `409 VALIDATION_FAILED` (`details.code: settlement_in_progress`), with nothing
+  moved, and can be retried.
+- **A correction of a discounted order** credits the goods at their invoiced value and the discount
+  back on a negative 0 % line; a cancelled correction no longer counts against later ones.
+- **A correction refuses a `total` above the sum of its lines** with `400 VALIDATION_FAILED`
+  (`details.code: correction_total_exceeds_lines`), and corrections of one invoice credit
+  cumulatively: together never more than it charged.
+- **Invoices issued before the upgrade are not changed.** One issued for an order of a VAT payer
+  overstates `netTotal`, `taxTotal` and `grossTotal` (each line's net was the order line's gross);
+  its per-rate summary is shown as it was issued.
+
 ##### Minimum order quantities and returnable products
 
 - **New refusals.** `422 PRODUCT_BELOW_MINIMUM_QUANTITY` and
@@ -2676,6 +2764,26 @@ Whenever it suits you:
   rebuild every profile.
 - **A feed-pricing port of your own** must implement `namedListPublishability` beside
   `namedListPrices`, which now takes the feed's `salesChannelId`.
+
+##### Money arithmetic
+
+- **`@endora-commerce/contracts` carries the platform's money arithmetic**: `money-decimal`
+  (`roundHalfUp`, exact sums and products, `vatByRate` — the one VAT method, per rate on the sum of
+  the net amounts — and its inverse `netForGrossAtRate`) and `money-input` (`twoDecimalAmount`,
+  `twoDecimalAmountString`, `addAmountPrecisionIssue` and `ERROR_CODES.AMOUNT_PRECISION_EXCEEDED`).
+  An overlay that computes an amount from a price uses them rather than `Number#toFixed(2)` or
+  `Math.round(x * 100) / 100`, and a new money input field uses the refinement.
+- **`OrderReturnContext` gains `vatMethod`, `productsPaidTotal` (stored subtotal + tax − discount)
+  and `discountTotal`, and `OrderReturnContextLine` gains `unitNetPrice` and `taxRate`**;
+  `paidLineAmount` is the line total the order stored. An implementation of `OrderReturnContextPort`
+  in an overlay owes these fields and reads them from what the order stored, never recomputes them.
+- **`CorrectiveInvoicePort` gains `validateCorrection(input)`**, which refuses what
+  `createCorrection` would refuse without writing anything, and `CorrectiveInvoiceLine` gains an
+  optional `discount`; an implementation in an overlay owes the method.
+- **Two new nullable columns record which method a document was made under**: `orders.vat_method`
+  (`per_rate` from 0.108.0) and `invoices.vat_summary` (the per-rate summary an invoice or a
+  correction was issued with). `null` is a document from before; nothing is backfilled. A third,
+  `return_case_items.default_discount_amount` (default `0`), records the discount a refund carries.
 
 ##### Other ports and shapes
 

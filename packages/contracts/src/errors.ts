@@ -15,6 +15,9 @@ export const ERROR_CODES = {
   FORBIDDEN: 'FORBIDDEN',
   RATE_LIMITED: 'RATE_LIMITED',
   VERSION_CONFLICT: 'VERSION_CONFLICT',
+  // Issue #417 — a typed money amount with more than two decimal places
+  // (`money-input.ts`). Refused, never rounded.
+  AMOUNT_PRECISION_EXCEEDED: 'AMOUNT_PRECISION_EXCEEDED',
 
   // Catalog
   FILTER_NOT_ALLOWED: 'FILTER_NOT_ALLOWED',
@@ -196,6 +199,10 @@ export const ERROR_CODES = {
   // configuration, the second refuses the document.
   INVOICE_NUMBER_PATTERN_COLLIDES: 'INVOICE_NUMBER_PATTERN_COLLIDES',
   INVOICE_NUMBER_ALREADY_ISSUED: 'INVOICE_NUMBER_ALREADY_ISSUED',
+  // Invoices — an order whose payments were refunded in full before it was
+  // invoiced has no sale left to document (issue #417, owner ruling of
+  // 2026-10-24), so issuance refuses it.
+  INVOICE_ORDER_REFUNDED: 'INVOICE_ORDER_REFUNDED',
   INVALID_TRANSITION: 'INVALID_TRANSITION',
 
   // Returns 155 — a `return`-kind case naming an order line recorded as not
