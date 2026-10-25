@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { formatMoney } from '../lib/i18n/money';
 import type { Money } from '@endora-commerce/contracts';
 import { tForLocale } from '../lib/i18n/messages';
 import { BaseSalePriceBlock } from './pricing/BaseSalePriceBlock';
@@ -51,9 +52,7 @@ export function PriceTag(props: {
   if (!price) {
     return <span className="font-mono font-normal text-muted">{t('product.requestQuote')}</span>;
   }
-  const formatted = new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: price.currency,
-  }).format(price.amount);
+  // A unit price: its significant places, up to four (owner ruling of 2026-10-25).
+  const formatted = formatMoney(price.amount, price.currency, locale, { unitPrice: true });
   return <span className="font-mono font-semibold">{formatted}</span>;
 }

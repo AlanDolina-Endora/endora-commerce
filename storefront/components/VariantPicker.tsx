@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { formatMoney } from '../lib/i18n/money';
 
 /**
  * VariantPicker — server-rendered variant selector for configurable
@@ -90,11 +91,7 @@ export function VariantPicker({
                 </span>
                 {v.price ? (
                   <span data-testid={`variant-price-${v.sku}`} className="font-mono text-[0.875rem] font-semibold">
-                    {new Intl.NumberFormat(locale, {
-                      style: 'currency',
-                      currency: v.price.currency,
-                      minimumFractionDigits: 2,
-                    }).format(Number(v.price.amount))}
+                    {formatMoney(Number(v.price.amount), v.price.currency, locale, { unitPrice: true })}
                   </span>
                 ) : null}
                 {v.stockLevel != null ? (
