@@ -9,7 +9,7 @@
  * locale so the number/symbol conventions still match the money's currency.
  */
 
-import { grossAmountHalfUp, grossFromNetHalfUp } from '@endora-commerce/contracts';
+import { grossAmountHalfUp, grossFromNetHalfUp, grossUnitPriceHalfUp, unitPriceFractionDigits } from '@endora-commerce/contracts';
 
 /**
  * Representative BCP-47 locale per ISO-4217 currency. Keeps amounts in the
@@ -35,6 +35,19 @@ export function localeForCurrency(currency: string): string {
   return LOCALE_BY_CURRENCY[currency.toUpperCase()] ?? 'en-US';
 }
 
+/** What a formatted amount is. */
+export interface FormatMoneyOptions {
+  /**
+   * The amount is a **unit price** — a product's price, a cart, order or quote
+   * line's unit price (owner ruling of 2026-10-25): two places when its third
+   * and fourth are zero, otherwise its significant places, up to four
+   * (`0,0125 zł`, `1,50 zł`, `1,505 zł`) — `unitPriceFractionDigits` from
+   * `@endora-commerce/contracts`, the one rule the admin, the documents and the
+   * e-mails share. A line value or a total is not one and shows two.
+   */
+  unitPrice?: boolean;
+}
+
 /**
  * Format a decimal money amount as a localized currency string.
  *
@@ -42,14 +55,25 @@ export function localeForCurrency(currency: string): string {
  * @param currency ISO-4217 code, e.g. `PLN`
  * @param locale   optional BCP-47 locale; defaults to the currency's home
  *                 locale so PLN renders as `1234,56 zł` regardless.
+ * @param options  `{ unitPrice: true }` for a unit price (see {@link FormatMoneyOptions}).
  */
-export function formatMoney(amount: number, currency: string, locale?: string): string {
+export function formatMoney(
+  amount: number,
+  currency: string,
+  locale?: string,
+  options: FormatMoneyOptions = {},
+): string {
   const loc = locale && locale.trim() !== '' ? locale : localeForCurrency(currency);
+  const digits = options.unitPrice && Number.isFinite(amount) ? unitPriceFractionDigits(amount) : 2;
   try {
-    return new Intl.NumberFormat(loc, { style: 'currency', currency }).format(amount);
+    return new Intl.NumberFormat(loc, {
+      style: 'currency',
+      currency,
+      ...(options.unitPrice ? { minimumFractionDigits: 2, maximumFractionDigits: digits } : {}),
+    }).format(amount);
   } catch {
     // Unknown/invalid currency code — fall back to a plain number + code.
-    return `${amount.toFixed(2)} ${currency}`;
+    return `${amount.toFixed(digits)} ${currency}`;
   }
 }
 
@@ -57,8 +81,9 @@ export function formatMoney(amount: number, currency: string, locale?: string): 
 export function formatMoneyObject(
   money: { amount: number; currency: string },
   locale?: string,
+  options: FormatMoneyOptions = {},
 ): string {
-  return formatMoney(money.amount, money.currency, locale);
+  return formatMoney(money.amount, money.currency, locale, options);
 }
 
 /**
@@ -104,6 +129,19 @@ export function grossFromNet(net: number, vatRate: number | null): number | null
 }
 
 /**
+ * The gross of a **unit price** (owner ruling of 2026-10-25): two places for a
+ * net that shows two (`29.50` → `36.29`, the same as {@link grossFromNet}), four
+ * for a sub-cent net (`0.0125` → `0.0154`) — a gross unit price rounded to the
+ * cent would misstate a sub-cent price by up to a third. `grossUnitPriceHalfUp`.
+ */
+export function grossUnitPriceFromNet(net: number, vatRate: number | null): number | null {
+  if (vatRate === null || !Number.isFinite(net) || !Number.isFinite(vatRate) || net < 0 || vatRate < 0) {
+    return grossFromNet(net, vatRate);
+  }
+  return Number(grossUnitPriceHalfUp(net, vatRate, 'fraction'));
+}
+
+/**
  * Resolve a net `Money` value into the amount(s) a given display mode should
  * render. Centralises the net/gross/both decision so the cart, product cards,
  * and PDP all agree on one settings-driven presentation:
@@ -127,10 +165,11 @@ export function moneyByMode(
   mode: 'net_only' | 'gross_only' | 'both' | 'none',
   locale?: string,
   vatRate: number = DEFAULT_VAT_RATE,
+  options: FormatMoneyOptions = {},
 ): MoneyByMode {
-  const netStr = formatMoneyObject(net, locale);
-  const gross = grossFromNet(net.amount, vatRate);
-  const grossStr = formatMoney(gross ?? net.amount, net.currency, locale);
+  const netStr = formatMoneyObject(net, locale, options);
+  const gross = options.unitPrice ? grossUnitPriceFromNet(net.amount, vatRate) : grossFromNet(net.amount, vatRate);
+  const grossStr = formatMoney(gross ?? net.amount, net.currency, locale, options);
   switch (mode) {
     case 'gross_only':
       return { primary: grossStr, primaryKind: 'gross', secondary: null, secondaryKind: null };
