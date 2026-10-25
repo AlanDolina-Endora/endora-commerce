@@ -50,8 +50,12 @@ export class CartItem {
   @Property({ type: 'integer' })
   quantity!: number;
 
-  /** The unit price the line is ordered at, for its current quantity. */
-  @Property({ type: 'decimal', precision: 12, scale: 2 })
+  /**
+   * The unit price the line is ordered at, for its current quantity — at four
+   * places, unrounded (owner ruling of 2026-10-25): only the line value
+   * `unitPrice × quantity` is rounded, to two places.
+   */
+  @Property({ type: 'decimal', precision: 14, scale: 4 })
   unitPrice!: string;
 
   @Property({ type: 'string', length: 3 })
@@ -70,7 +74,7 @@ export class CartItem {
    * Stale beyond the cache TTL → re-resolve on next read. Cleared on every
    * cart-side write so the next read forces a fresh resolution.
    */
-  @Property({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Property({ type: 'decimal', precision: 14, scale: 4, nullable: true })
   recomputedUnitPrice?: string | null;
 
   @Property({ type: 'datetime', nullable: true })
@@ -108,7 +112,7 @@ export class CartItem {
   @Property({ type: 'integer', nullable: true })
   agreedQuantity?: number | null;
 
-  @Property({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Property({ type: 'decimal', precision: 14, scale: 4, nullable: true })
   agreedUnitPrice?: string | null;
 
   @Property({ type: 'string', length: 3, nullable: true })
