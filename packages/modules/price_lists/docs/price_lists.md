@@ -145,8 +145,8 @@ to the invoice**: the basket line, the order that copies it, the order preview, 
 and agreed prices and the invoice line carry the unit price unrounded, and only a line's value —
 the unit price × the quantity — is rounded to two places, half-up, once. A screw priced 0.0125
 costs 125.00 for 10 000 pieces, and 0.0150 × 3 is 0.045, so 0.05. A unit price is shown with its
-significant places, up to four, and two when its third and fourth places are zero: 0,0125 zł,
-1,505 zł, 1,50 zł; line values and totals always show two. A product feed publishes two places,
+significant places, up to four, and two when its third and fourth places are zero: `0,0125 zł`,
+`1,505 zł`, `1,50 zł`; line values and totals always show two. A product feed publishes two places,
 rounded half-up on the four: 9.0450 is 9.05 and 1.0050 is 1.01.
 
 ### The price precedence

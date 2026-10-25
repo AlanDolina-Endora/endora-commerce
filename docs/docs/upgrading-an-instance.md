@@ -2530,8 +2530,8 @@ Whenever it suits you:
 
 - **Unit prices are no longer rounded to grosze at the cart.** A price book has always stored four
   decimal places, but until this release the basket rounded the price to two as it took it in: a
-  screw priced 0.0125 zł was charged 0.01 zł, so 10 000 of them cost 100.00 zł instead of
-  125.00 zł, and one priced 0.0150 zł was charged 0.02 zł — a third too much. A unit price now keeps
+  screw priced 0.0125 PLN was charged 0.01 PLN, so 10 000 of them cost 100.00 PLN instead of
+  125.00 PLN, and one priced 0.0150 PLN was charged 0.02 PLN — a third too much. A unit price now keeps
   its four places, unrounded, on the basket line, the order line, the quote request's lines and
   the invoice line.
 - **The line value is the rounding point.** A line's net value is the unit price × the quantity,
@@ -2543,8 +2543,8 @@ Whenever it suits you:
   `agreed_unit_price` and `reference_unit_price` are now `numeric(14,4)`, like the price books and
   `invoice_lines.unit_net_price`. Widening is lossless: no stored value changes, and orders placed
   before the upgrade keep the two-place prices they were placed at.
-- **A unit price shows its significant places, up to four**: 0,0125 zł, 1,505 zł — and two places
-  when the third and fourth are zero (1,50 zł). Line values and totals always show two. This holds
+- **A unit price shows its significant places, up to four**: `0,0125 zł`, `1,505 zł` — and two
+  places when the third and fourth are zero (`1,50 zł`). Line values and totals always show two. This holds
   in the Admin UI, the storefront, the invoice PDF's *Cena netto* column, the quote PDF and the
   e-mails. A product feed still publishes two places.
 - **A quote's agreed or proposed unit price may be typed with up to four decimal places**; a fifth
