@@ -19,7 +19,7 @@ export interface InvoicePaidPosition {
   readonly paid: string;
   /** Everything refunded for the order, each refund once. */
   readonly refunded: string;
-  /** The refunds return everything received and cover the whole order (owner ruling of 2026-10-24). */
+  /** Something was refunded, and the refunds return everything received and cover the whole order (owner ruling of 2026-10-24). */
   readonly refundedInFull: boolean;
 }
 
@@ -81,6 +81,12 @@ export function invoicePaidPosition(input: InvoicePaidInput): InvoicePaidPositio
   return {
     paid: compareDecimals(kept, 0) > 0 ? kept : '0.00',
     refunded,
-    refundedInFull: compareDecimals(refunded, received) >= 0 && compareDecimals(refunded, input.orderTotal) >= 0,
+    // Something must actually have been refunded: a zero-total order (a 100 %
+    // coupon, free delivery) has received and refunded nothing, and it is a
+    // sale to document, not an order refunded in full (review of PR #434).
+    refundedInFull:
+      compareDecimals(refunded, 0) > 0 &&
+      compareDecimals(refunded, received) >= 0 &&
+      compareDecimals(refunded, input.orderTotal) >= 0,
   };
 }

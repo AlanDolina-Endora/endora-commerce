@@ -167,3 +167,29 @@ describe('invoicePaidPosition — on account (#428 point 6)', () => {
     ).toEqual({ paid: '0.00', refunded: '30.00', refundedInFull: false });
   });
 });
+
+describe('invoicePaidPosition — a zero-total order (review of PR #434)', () => {
+  it('invoices a zero-total order with nothing paid: nothing was refunded', () => {
+    // A 100 % coupon with free delivery: received 0.00, refunded 0.00. "Refunded
+    // in full" needs a refund that happened; none did, so the sale is invoiced.
+    expect(invoicePaidPosition(input({ orderTotal: '0.00', paymentStatus: 'paid' }))).toEqual({
+      paid: '0.00',
+      refunded: '0.00',
+      refundedInFull: false,
+    });
+    expect(invoicePaidPosition(input({ orderTotal: '0.00', paymentStatus: 'awaiting_payment' }))).toMatchObject({
+      refundedInFull: false,
+    });
+  });
+
+  it('invoices a zero-total order an operator marked refunded: there was no money to return', () => {
+    // The mark says the order's total was refunded, and that total is 0.00: no
+    // money moved either way, so nothing was refunded and the sale (goods given
+    // free) is still documented — paid 0.00, due 0.00.
+    expect(invoicePaidPosition(input({ orderTotal: '0.00', paymentStatus: 'refunded' }))).toEqual({
+      paid: '0.00',
+      refunded: '0.00',
+      refundedInFull: false,
+    });
+  });
+});
