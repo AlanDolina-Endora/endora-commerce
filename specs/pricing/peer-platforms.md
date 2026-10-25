@@ -2,7 +2,7 @@
 
 Reference research on Medusa.js v2 (primary), Shopware 6, commercetools, Magento / Adobe Commerce B2B, OroCommerce, SAP Commerce and BigCommerce: data model, conflict resolution (priority vs specificity), absolute vs percentage prices, where currency and channel sit, how buyer-specific prices are made fast for listing/sort/search, and admin UX worth copying. Every claim carries its source URL; researched from public documentation and source code on 2026-10-21.
 
-**Verified against** `master` at `b1021c71b` on 2026-10-21. File:line citations are as of that commit; re-check them before relying on one.
+**Verified against** `master` at `b1021c71b` on 2026-10-21; §3.6 written on 2026-10-25 for the four-place unit-price ruling. File:line citations are as of that commit; re-check them before relying on one.
 
 **Section numbers.** `§N` references follow the numbering of the original analysis, which is split across this directory: §1 → `current-model.md`; §2 → `read-paths-and-performance.md` (its summary table); §3–§9, §11, §12 → `decision-record.md`; §10 → `worked-examples.md`. `read-paths §N` points into `read-paths-and-performance.md`, `peers §N` into `peer-platforms.md`. Path abbreviations: `PL/` = `packages/modules/price_lists/src/`, `CON/` = `packages/contracts/src/`, `CAT/` = `packages/modules/catalog/src/`, `SF/` = `storefront/`.
 
@@ -605,6 +605,26 @@ the qty-1 price, which must be a deliberate product decision.
 - **Import**: Oro and Magento treat CSV import of tier/price rows as the primary path for
   large catalogs ("use the Data Transfer import for multiple products"); Medusa v2 has none for
   price lists — the absence is a known regression from v1.
+
+### 3.6 How prices are stored and rounded
+
+Written for the four-place unit-price ruling of 2026-10-25 (`worked-examples.md` §10.18): a price
+book stores four places, and the question is where a sub-cent unit price is rounded — at the unit,
+or at the line. The facts below are the owner's, as given with the ruling; the URLs are where each
+one is read, and they were not re-fetched for this change.
+
+| Platform | Storage | Where a unit price is rounded | Source |
+| --- | --- | --- | --- |
+| **Magento / Adobe Commerce** | `decimal(20,4)` price columns (quote, order and index tables) | **At the unit**: the tax calculators round the unit price to `PriceCurrencyInterface::DEFAULT_PRECISION = 2` before multiplying it by the quantity (`AbstractAggregateCalculator`, the row- and total-based calculators) — so a 0.0125 price is charged as 0.01 per piece, the behaviour Endora had until this ruling | <https://github.com/magento/magento2/blob/2.4-develop/app/code/Magento/Tax/Model/Calculation/AbstractAggregateCalculator.php>, <https://github.com/magento/magento2/blob/2.4-develop/lib/internal/Magento/Framework/Pricing/PriceCurrencyInterface.php>, <https://github.com/magento/magento2/blob/2.4-develop/app/code/Magento/Quote/etc/db_schema.xml> |
+| **Sylius** | **Integer minor units**: `ChannelPricing.price` and `OrderItem.unitPrice` are `integer` (cents) | Nowhere — a sub-cent price cannot exist; a price is a whole number of cents | <https://github.com/Sylius/Sylius/blob/2.0/src/Sylius/Bundle/CoreBundle/Resources/config/doctrine/model/ChannelPricing.orm.xml>, <https://github.com/Sylius/Sylius/blob/2.0/src/Sylius/Bundle/OrderBundle/Resources/config/doctrine/model/OrderItem.orm.xml> |
+| **Medusa v2** | `BigNumber` in **major units**, each amount column paired with a `raw_` JSON column holding the exact value | **Not in the totals**: the line and tax total computations carry the exact `BigNumber` and do not round | <https://docs.medusajs.com/learn/fundamentals/data-models/properties#bignumber>, <https://github.com/medusajs/medusa/tree/develop/packages/core/utils/src/totals> |
+| **commercetools** | **High-precision prices**: a `highPrecision` money type with an explicit `fractionDigits` beyond the currency's, beside the centAmount rounded to the currency | **At the line**: the line total is the high-precision unit price × quantity, rounded to the currency's minor unit — the model this ruling adopts | <https://docs.commercetools.com/learning-model-b2b-commerce/configure-b2b-pricing/high-precision-pricing> |
+
+**What Endora does** (since 2026-10-25): commercetools' model on Magento's storage shape — a unit
+price is `numeric(14,4)` from the price book to the invoice line, unrounded, and only the line value
+is rounded to two places, once; VAT is per rate on the summed line nets (§10.17). Integer minor
+units (Sylius) would forbid the B2B price the ruling is about, and Magento's per-unit rounding is
+the defect it removes.
 
 ---
 

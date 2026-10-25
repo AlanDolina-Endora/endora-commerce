@@ -101,6 +101,14 @@ What this means in practice:
 - The rules are about a **missing** price. An agreed unit price of exactly
   `0` that an operator entered — a free sample line — is an agreed price like
   any other, and such a request can be accepted, approved and ordered.
+- **A unit price has up to four decimal places.** An agreed or a desired unit
+  price may be typed as `0.0125`; a fifth place is refused with
+  `400 UNIT_PRICE_PRECISION_EXCEEDED` (*A unit price may have at most four
+  decimal places.*), never rounded. The price is stored as typed
+  (`numeric(14,4)`), reaches the basket and the order unrounded, and only a
+  line's value — the unit price × the quantity — is rounded to two places,
+  once: 0.0125 for 10 000 pieces is 125.00. The screens and the PDF show a
+  unit price with its significant places, up to four.
 - `reject-revision` is not affected: a customer can still withdraw a request
   the seller has not answered yet.
 - A request that reached `Approved` with an unpriced line before these rules

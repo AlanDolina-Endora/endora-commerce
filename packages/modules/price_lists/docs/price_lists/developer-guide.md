@@ -155,6 +155,26 @@ it. That route alone asks the resolver to `explain`, which lists every ranked ca
 the answer cache, and it cuts the list to ten after the books outside the caller's scope are left
 out; every other resolution (listings, carts, the surface build) is cached with the ten.
 
+## Unit prices downstream: four places, rounded at the line value
+
+The resolver answers a four-place decimal string, and **a consumer that stores or answers a unit
+price keeps all four places** (owner ruling of 2026-10-25): `unitPriceHalfUp` from
+`@endora-commerce/contracts` writes it the way `numeric(14,4)` stores it, and every unit-price
+column from the basket to the invoice — `cart_items.unit_price`, `recomputed_unit_price`,
+`agreed_unit_price`, `order_items.unit_price`, `quote_request_items.desired_unit_price`,
+`agreed_unit_price`, `reference_unit_price`, `invoice_lines.unit_net_price` — is `numeric(14,4)`.
+**The line value is the rounding point**: `lineAmountHalfUp(unit, quantity)` rounds
+`unit × quantity` half-up to two places once, and VAT is `vatByRate` over the rounded line nets.
+Never round a unit price to two places on intake (`roundAmountHalfUp` is for a surface whose
+grammar is two places — a product feed). A typed unit price takes `fourDecimalUnitPrice`
+(`money-input`): a fifth place answers `400 UNIT_PRICE_PRECISION_EXCEEDED`. A unit price is shown
+by `unitPriceFractionDigits` — through `formatMoney(…, { unitPrice: true })` in the admin kit and the
+storefront, or a `money` document value with `unitPrice: true` — and a gross unit price beside a
+sub-cent net by `grossUnitPriceHalfUp`. The vectors are §10.18 of
+`specs/pricing/worked-examples.md`, and
+`backend/test/integration/price_lists/worked-examples/money-agreement.test.ts` holds the cart, the
+order, the invoice, the payment and the refunds to them.
+
 ## The one read path
 
 **A consumer prices in batches, through the pricing service.** The entry points

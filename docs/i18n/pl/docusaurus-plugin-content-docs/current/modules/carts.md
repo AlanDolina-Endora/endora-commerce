@@ -143,6 +143,11 @@ Pozycja koszyka jest zamawiana po zapisanej cenie `unit_price`, dlatego ta cena 
 - Pozycja wypełniona z zaakceptowanego zapytania ofertowego zachowuje uzgodnioną cenę tylko przy
   uzgodnionej ilości. Przy każdej innej ilości jest wyceniana z cenników, a po powrocie do
   uzgodnionej ilości odzyskuje uzgodnioną cenę.
+- Cena jednostkowa jest zapisywana **z czterema miejscami po przecinku, bez zaokrąglenia**
+  (`numeric(14,4)`, tak jak trzyma ją cennik): wkręt po 0,0125 jest niesiony jako 0,0125, nie 0,01.
+  Zaokrąglana jest tylko wartość pozycji — cena jednostkowa × ilość — raz, połówkowo w górę, do dwóch
+  miejsc: 10 000 sztuk to 125,00. Pozycja dodana przed wydaniem 0.108.0 ma cenę z dwoma miejscami i
+  jest przeliczana przed złożeniem zamówienia, gdy bieżąca cena ma więcej miejsc.
 - Każda pozycja zapisuje w `price_source`, **skąd pochodzi jej cena**: `agreed` (cena uzgodniona w
   ofercie), `base`, `catalogue`, `buyer` albo `sale` (krok wyceny w cennikach, który ją ustalił);
   na pozycji wycenionej przed wprowadzeniem cenników pole ma wartość `null`. Złożenie zamówienia

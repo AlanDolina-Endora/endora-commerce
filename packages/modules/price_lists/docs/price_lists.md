@@ -140,10 +140,14 @@ steps:
 Because buyer percentages are taken off the catalogue price, a contract discount follows a channel
 price: if the channel sells a product at 120 instead of 100, a 20 % contract discount gives 96.
 
-Percentages are rounded half-up to four decimal places. Wherever a price is shown or stored at two
-decimal places — the product card, the basket line and the order that copies it, the order preview,
-a quote's reference price and a product feed — it is rounded half-up on those four places, so the
-same price reads the same everywhere: 9.0450 is 9.05 and 1.0050 is 1.01.
+Percentages are rounded half-up to four decimal places. **A price keeps its four places all the way
+to the invoice**: the basket line, the order that copies it, the order preview, a quote's reference
+and agreed prices and the invoice line carry the unit price unrounded, and only a line's value —
+the unit price × the quantity — is rounded to two places, half-up, once. A screw priced 0.0125
+costs 125.00 for 10 000 pieces, and 0.0150 × 3 is 0.045, so 0.05. A unit price is shown with its
+significant places, up to four, and two when its third and fourth places are zero: 0,0125 zł,
+1,505 zł, 1,50 zł; line values and totals always show two. A product feed publishes two places,
+rounded half-up on the four: 9.0450 is 9.05 and 1.0050 is 1.01.
 
 ### The price precedence
 

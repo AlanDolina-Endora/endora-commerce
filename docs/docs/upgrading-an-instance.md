@@ -2297,7 +2297,8 @@ storefront edits are untried.
 ### After upgrading to 0.108.0 {#after-0-108-0}
 
 `pnpm run upgrade 0.108.0` moves the packages of the release from `0.107.0` and applies its
-migrations — twenty-two, twelve of them for the new pricing model and its editor. **The release
+migrations — twenty-eight, twelve of them for the new pricing model and its editor and three that
+widen unit prices to four decimal places. **The release
 replaces how prices are stored and resolved, in one step and with no compatibility period**: the
 price lists of earlier releases, with their Application rules, rosters and quantity brackets, become
 **price books**, and a product no longer carries a price of its own. The base prices an instance
@@ -2306,7 +2307,8 @@ upgrade, and nothing converts it — the one exception being a list a product fe
 which is kept as an empty, expired book (step 3). Read the steps below before you run the command.
 The other changes of the release follow the pricing one in each part of this section: minimum
 order quantities and returnable products, groups of lines on quote requests and orders, custom-field
-list filters and the carrying of custom-field values between records, inline editing of sales
+list filters and the carrying of custom-field values between records, unit prices kept at four
+decimal places from the price book to the invoice, inline editing of sales
 opportunities, per-channel product texts on the storefront, an operator action that prepares a
 customer's basket from a quote, and a new module, `admin_feedback`. This section says what to do, in
 order, and then what behaves differently for [operators](#after-0-108-0-operators),
@@ -2520,9 +2522,36 @@ Whenever it suits you:
   the request leaves out is refunded and credited at its stored approved amount, so the refund and
   the correction always agree. Two returns of one order are settled one after the other.
 - **An amount with more than two decimal places is refused, not rounded** — a delivery cost, a
-  payment method's surcharge, a quote's agreed or proposed price, an approved refund, a return
-  cost, a credit limit, an opportunity's value, and a promotion's fixed amount, step or minimum
-  spend. The screen answers *An amount may have at most two decimal places.*
+  payment method's surcharge, an approved refund, a return cost, a credit limit, an opportunity's
+  value, and a promotion's fixed amount, step or minimum spend. The screen answers *An amount may
+  have at most two decimal places.* A unit price is not an amount: see the next section.
+
+##### Unit prices at four decimal places
+
+- **Unit prices are no longer rounded to grosze at the cart.** A price book has always stored four
+  decimal places, but until this release the basket rounded the price to two as it took it in: a
+  screw priced 0.0125 zł was charged 0.01 zł, so 10 000 of them cost 100.00 zł instead of
+  125.00 zł, and one priced 0.0150 zł was charged 0.02 zł — a third too much. A unit price now keeps
+  its four places, unrounded, on the basket line, the order line, the quote request's lines and
+  the invoice line.
+- **The line value is the rounding point.** A line's net value is the unit price × the quantity,
+  rounded half-up to the grosz once: 0.0125 × 10 000 = 125.00, and 0.0150 × 3 = 0.045, so 0.05.
+  VAT stays as described above — per rate, on the sum of the line values. Refunds and corrections
+  work from what the order stored and charged, as before.
+- **The columns were widened**: `cart_items.unit_price`, `recomputed_unit_price` and
+  `agreed_unit_price`, `order_items.unit_price`, and `quote_request_items.desired_unit_price`,
+  `agreed_unit_price` and `reference_unit_price` are now `numeric(14,4)`, like the price books and
+  `invoice_lines.unit_net_price`. Widening is lossless: no stored value changes, and orders placed
+  before the upgrade keep the two-place prices they were placed at.
+- **A unit price shows its significant places, up to four**: 0,0125 zł, 1,505 zł — and two places
+  when the third and fourth are zero (1,50 zł). Line values and totals always show two. This holds
+  in the Admin UI, the storefront, the invoice PDF's *Cena netto* column, the quote PDF and the
+  e-mails. A product feed still publishes two places.
+- **A quote's agreed or proposed unit price may be typed with up to four decimal places**; a fifth
+  is refused with *A unit price may have at most four decimal places.*
+- **A basket line added before the upgrade** carries its two-place price. If the product's price
+  has a third or fourth decimal place, that is no longer the current price, and the basket reprices
+  the line before the order is placed — at 0.0125 instead of 0.01, for example.
 
 ##### Minimum order quantities and returnable products
 
@@ -2634,8 +2663,7 @@ Whenever it suits you:
 
 - **A typed money amount with more than two decimal places answers
   `400 AMOUNT_PRECISION_EXCEEDED`** (a new code) and is not stored; it used to be rounded. The fields
-  are `cost` of a delivery method, `additionalPrice` of a payment method, `desiredUnitPrice` and
-  `agreedUnitPrice` of a quote request line, `approvedRefundAmount` of a settlement, `returnCost` of
+  are `cost` of a delivery method, `additionalPrice` of a payment method, `approvedRefundAmount` of a settlement, `returnCost` of
   a return delivery method, `amount` of an admin order refund, `grantedAmount` of a credit limit,
   an opportunity's `manualValue`, a promotion's `amount`, `spendStep`, `minCartSubtotal` and the
   `value` of an `amount_off` promotion, and an ERP integration's `netTotal`, `taxTotal`,
@@ -2644,6 +2672,17 @@ Whenever it suits you:
   fails anything else answers `400 VALIDATION_FAILED`, with the same issue among its details.
   Trailing zeros are not significant (`"123.4500"` is 123.45); a string that is not a decimal at
   all is `400 VALIDATION_FAILED` with a format issue.
+- **A unit price carries up to four decimal places**.
+  A quote request line's `desiredUnitPrice` and `agreedUnitPrice` (`POST /api/v1/quote-requests`,
+  the admin create and `PATCH` routes) accept four places; a fifth answers
+  `400 UNIT_PRICE_PRECISION_EXCEEDED` (a new code, *A unit price may have at most four decimal
+  places.*), with `details` naming the field. A request refused both for an amount and for a unit
+  price answers `400 VALIDATION_FAILED`. Responses carry the four-place unit price: the numbers
+  (`unitPrice` of a cart and an order line, `agreedUnitPrice`, `unitNetPrice` of an invoice line)
+  as the value — `0.0125` — and the decimal strings as four places — the admin order preview's
+  `unitPrice` is `"0.0125"` or `"29.4950"`, where it was rounded to `"29.50"`. **A line's value is
+  `unitPrice × quantity` rounded half-up to two places once**: compute it that way rather than
+  from a unit price rounded to two. An order placed before the upgrade keeps its two-place prices.
 - **VAT is taken per rate on the sum of the net amounts at that rate**, rounded half-up once: an
   order's `taxTotal` and `total`, the checkout and admin previews, an invoice's `vatSummary`,
   `taxTotal` and `grossTotal`, and a correction's amounts. An order line's `lineTotal` and an
@@ -2773,6 +2812,16 @@ Whenever it suits you:
   `twoDecimalAmountString`, `addAmountPrecisionIssue` and `ERROR_CODES.AMOUNT_PRECISION_EXCEEDED`).
   An overlay that computes an amount from a price uses them rather than `Number#toFixed(2)` or
   `Math.round(x * 100) / 100`, and a new money input field uses the refinement.
+- **A unit price is carried at four places, and the line value is the rounding point** (owner
+  ruling of 2026-10-25). `@endora-commerce/contracts` adds `unitPriceHalfUp` (a unit price at its
+  four places, as `numeric(14,4)` stores it), `unitPriceFractionDigits` and `unitPriceDisplayText`
+  (the one display rule), `grossUnitPriceHalfUp`, and in `money-input` `fourDecimalUnitPrice`,
+  `fourDecimalUnitPriceString`, `isUnitPricePrecisionIssue` and
+  `ERROR_CODES.UNIT_PRICE_PRECISION_EXCEEDED`. An overlay that stores a resolved or typed unit
+  price keeps it with `unitPriceHalfUp` — never `roundAmountHalfUp`, which rounds to two — and
+  computes a line with `lineAmountHalfUp(unit, quantity)`. `formatMoney` in
+  `@endora-commerce/admin-kit/lib` takes `{ unitPrice: true }`, and a document value of kind `money`
+  takes `unitPrice: true`, to show a unit price by the rule.
 - **`OrderReturnContext` gains `vatMethod`, `productsPaidTotal` (stored subtotal + tax − discount)
   and `discountTotal`, and `OrderReturnContextLine` gains `unitNetPrice` and `taxRate`**;
   `paidLineAmount` is the line total the order stored. An implementation of `OrderReturnContextPort`
@@ -2822,6 +2871,17 @@ strings in `lib/i18n/messages.ts`. The variant picker of an earlier storefront s
 *Price override*; that field is no longer sent, so the picker shows no price for a variant until
 `VariantPicker.tsx` is brought over.
 
+The release's storefront also shows a unit price with its significant places, up to four
+(`0,0125 zł`) — product cards, rows, the product page, the basket, the order and quote pages —
+through `formatMoney(…, { unitPrice: true })` and `grossUnitPriceFromNet` in `lib/i18n/money.ts`,
+and lets a quote proposal be typed at four places. A storefront created earlier shows such a price
+rounded to two places, while the basket charges the four-place price: bring over
+`lib/i18n/money.ts`, `components/ProductCard.tsx`, `components/ProductRow.tsx`,
+`components/PriceTag.tsx`, `components/VariantPicker.tsx`, `components/SearchAutocomplete.tsx`,
+`components/pricing/BaseSalePriceBlock.tsx`, `components/CartLine.tsx`,
+`components/orders/OrderItemRows.tsx`, `components/rfq/RfqDraftView.tsx`,
+`app/(account)/quote-requests/[id]/page.tsx` and `lib/analytics/ecommerce.ts`.
+
 The release's storefront also shows minimum order quantities (product page, card, basket,
 checkout, quick order, quote draft, shopping list), the returnable state of each line in the
 return form, and a quote's and an order's line groups. A storefront created earlier does not: its
@@ -2830,8 +2890,8 @@ buyers meet the server's refusals — `422 PRODUCT_BELOW_MINIMUM_QUANTITY`,
 lines ungrouped, in display order. The changes are in the reference storefront between `v0.107.0`
 and `v0.108.0`: `git diff v0.107.0 v0.108.0 -- storefront` in the platform repository lists them.
 
-This section was written on 2026-10-23 and 2026-10-24 against the release branch of the pricing
-change (`feat/160-pricing-model-v2`) and `master` since `v0.107.0`, read from the changesets of the
+This section was written on 2026-10-23, 2026-10-24 and 2026-10-25 against the release branch of
+the pricing change (`feat/160-pricing-model-v2`) and `master` since `v0.107.0`, read from the changesets of the
 release against its migrations, manifests, routes and the reference storefront's history. No instance had been upgraded with
 `pnpm run upgrade 0.108.0` when it was written; the order of the steps and the storefront edits are
 untried.

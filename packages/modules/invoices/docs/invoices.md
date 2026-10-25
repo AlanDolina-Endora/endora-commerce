@@ -25,6 +25,15 @@ dependency-light renderer, persists the bytes through the `assets` module,
 and writes the asset id back onto the Order. Failures emit
 `invoice.generation_failed.v1` for an admin retry queue.
 
+### Unit prices and line values
+
+An invoice line carries the order line's **unit net price at up to four decimal places**
+(`invoice_lines.unit_net_price`, `numeric(14,4)`), and its net value is the unit price × the
+quantity rounded half-up to two places once — the order line's own net. The PDF's *Cena netto*
+column shows the unit price with its significant places, up to four (0,0125), and two when the third
+and fourth are zero; the value columns and the totals show two. A Polish invoice may state a unit
+price this precisely: the VAT Act names the unit net price without fixing its decimal places.
+
 ### What a VAT invoice records as paid, and when it is not issued
 
 A VAT invoice records as paid what was kept from the order's payments: each
