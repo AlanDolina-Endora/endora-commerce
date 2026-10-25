@@ -1,14 +1,16 @@
 import {
   arrangeLineGroups,
+  decimalDifference,
   decimalProduct,
   DOCUMENT_UNGROUPED_SECTION_KEY,
-  grossFromNetHalfUp,
+  grossUnitPriceHalfUp,
   lineAmountHalfUp,
   moneyDifference,
   moneySum,
   quotientHalfUp,
   roundHalfUp,
   taxAmountHalfUp,
+  unitPriceHalfUp,
 } from '@endora-commerce/contracts';
 import type {
   CatalogAttributeView,
@@ -51,6 +53,16 @@ export const QUOTE_LINES_COLLECTION = 'lines';
 // two-place decimal, which a number holds losslessly.
 const round2 = (value: number | string): number => Number(roundHalfUp(value));
 const money = (amount: number | string, currency: string): DocumentValue => ({ kind: 'money', amount: round2(amount), currency });
+/**
+ * A unit price (owner ruling of 2026-10-25): at its four places, unrounded,
+ * and marked so the document shows its significant places (`0,0125 zł`).
+ */
+const unitMoney = (amount: number | string, currency: string): DocumentValue => ({
+  kind: 'money',
+  amount: Number(unitPriceHalfUp(amount)),
+  currency,
+  unitPrice: true,
+});
 const ratePercent = (rate: number): DocumentValue => ({ kind: 'percent', value: round2(decimalProduct(rate, 100)) });
 const text = (value: string | null | undefined): DocumentValue =>
   typeof value === 'string' && value.trim() !== '' ? { kind: 'text', value } : null;
@@ -107,13 +119,26 @@ function definitionOf(field: StaticField, label: string): DocumentFieldDefinitio
 
 type Line = QuoteRequestDocumentData['lines'][number];
 
-/** The per-unit discount of a line, or `null` when it has none (R-11). */
-function unitDiscountOf(line: Line): number | null {
+/** The per-unit discount of a line, at four places, or `null` when it has none (R-11). */
+function unitDiscountOf(line: Line): string | null {
   const list = line.referenceUnitPrice;
   const agreed = line.agreedUnitPrice;
   if (list === null || agreed === null || list <= 0) return null;
   if (line.referenceCurrency !== line.lineCurrency) return null;
-  return agreed < list ? Number(moneyDifference(list, agreed)) : null;
+  return agreed < list ? unitPriceHalfUp(decimalDifference(list, agreed)) : null;
+}
+
+/**
+ * A line's discount: its list value less its net, each rounded once at the
+ * line (§10.18) — so list value − discount = net on the document, which
+ * `(list − agreed) × quantity` rounded on its own need not be.
+ */
+function lineDiscountOf(line: Line): string | null {
+  if (unitDiscountOf(line) === null) return null;
+  return moneyDifference(
+    lineAmountHalfUp(line.referenceUnitPrice ?? 0, line.quantity),
+    lineAmountHalfUp(line.agreedUnitPrice ?? 0, line.quantity),
+  );
 }
 
 /** The values of every line, by field path. */
@@ -136,16 +161,16 @@ export function quoteLineItems(data: QuoteRequestDocumentData): DocumentItem[] {
         line.packagingUnitName && line.packagingUnitBaseQuantity && line.packagingUnitBaseQuantity > 0
           ? { kind: 'number', value: line.quantity / line.packagingUnitBaseQuantity }
           : null,
-      listUnitPrice: list !== null && line.referenceCurrency ? money(list, line.referenceCurrency) : null,
-      proposedUnitPrice: line.proposedUnitPrice !== null ? money(line.proposedUnitPrice, currency) : null,
-      unitPrice: agreed !== null ? money(agreed, currency) : null,
-      unitGrossPrice: agreed !== null ? money(grossFromNetHalfUp(agreed, rate, 'fraction'), currency) : null,
+      listUnitPrice: list !== null && line.referenceCurrency ? unitMoney(list, line.referenceCurrency) : null,
+      proposedUnitPrice: line.proposedUnitPrice !== null ? unitMoney(line.proposedUnitPrice, currency) : null,
+      unitPrice: agreed !== null ? unitMoney(agreed, currency) : null,
+      unitGrossPrice: agreed !== null ? unitMoney(grossUnitPriceHalfUp(agreed, rate, 'fraction'), currency) : null,
       discountPercent:
         unitDiscount !== null && list !== null
           ? { kind: 'percent', value: Number(quotientHalfUp(decimalProduct(unitDiscount, 100), list)) }
           : null,
-      unitDiscount: unitDiscount !== null ? money(unitDiscount, currency) : null,
-      lineDiscount: unitDiscount !== null ? money(lineAmountHalfUp(unitDiscount, line.quantity), currency) : null,
+      unitDiscount: unitDiscount !== null ? unitMoney(unitDiscount, currency) : null,
+      lineDiscount: unitDiscount !== null ? money(lineDiscountOf(line)!, currency) : null,
       lineListValue:
         list !== null && line.referenceCurrency ? money(lineAmountHalfUp(list, line.quantity), line.referenceCurrency) : null,
       lineNet: net !== null ? money(net, currency) : null,
@@ -184,12 +209,7 @@ export function quoteSummary(data: QuoteRequestDocumentData): Record<string, Doc
     ? moneySum(lines.map((line) => lineAmountHalfUp(line.referenceUnitPrice ?? 0, line.quantity)))
     : null;
 
-  const discounts = lines
-    .map((line) => {
-      const unit = unitDiscountOf(line);
-      return unit !== null ? lineAmountHalfUp(unit, line.quantity) : null;
-    })
-    .filter((value): value is string => value !== null);
+  const discounts = lines.map(lineDiscountOf).filter((value): value is string => value !== null);
 
   return {
     listTotal: list !== null ? money(list, currency) : null,

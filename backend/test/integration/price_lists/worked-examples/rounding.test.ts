@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { BuyerLinePricePort } from '@endora-commerce/contracts';
+import { unitPriceDisplayText, unitPriceHalfUp, type BuyerLinePricePort } from '@endora-commerce/contracts';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
 import type { CartPlacementApplyPort } from '../../../../../packages/modules/carts/src/ports/index.js';
 import { resolveFeedItem } from '../../../../../packages/modules/product_feeds/src/backend/services/item-field-resolver.js';
@@ -14,31 +14,33 @@ import { CUSTOMER_COOKIES, TEST_CUSTOMER_ID, TEST_ORGANIZATION_ID } from '../../
 import { seedPriceBookSql } from '../../../helpers/price-book-sql.js';
 
 /**
- * `specs/pricing/worked-examples.md` §10.16 (review finding 2 of release
- * 0.108.0) — a resolver amount whose third and fourth places are `50` is shown
- * and stored at two places **half-up on its decimal digits**, the same figure
- * on every surface: the card (formatted by `Intl.NumberFormat`, as the
- * storefront does), the product page, the cart line (which the order copies),
- * the placement check, the admin order preview, a quote's stored reference
- * price and the product feed.
+ * `specs/pricing/worked-examples.md` §10.16 and §10.18 (owner ruling of
+ * 2026-10-25) — a resolver amount whose third and fourth places are `50` is a
+ * unit price, carried at its four places, unrounded, on every surface that
+ * stores or answers one: the cart line (which the order copies), the placement
+ * check, the admin order preview and a quote's stored reference price; the
+ * card and the product page show it with its significant places (`9,045 zł`).
+ * Only a two-place surface rounds it, half-up on its decimal digits: the
+ * product feed, and the line value, `unit × quantity`.
  *
  * R1: 101 — an everyone catalogue book at 10.05 and an everyone sale of −10 %
- * → 9.0450 → **9.05** (`Number('9.0450').toFixed(2)` is 9.04).
- * R2: 102 — an everyone sale at 1.0050 → **1.01** (`toFixed` gives 1.00).
+ * → 9.0450, shown 9.045, a line of one 9.05, the feed 9.05
+ * (`Number('9.0450').toFixed(2)` is 9.04).
+ * R2: 102 — an everyone sale at 1.0050 → 1.005, a line of one 1.01, the feed
+ * 1.01 (`toFixed` gives 1.00).
  */
 const SESSION = { b2b_session: 'stub-customer-session' };
 const RETAIL = { 'x-sales-channel': 'pl_retail' };
-const EXPECTED: Record<string, { resolver: string; shown: string }> = {
-  [SEED_PRODUCT_101_ID]: { resolver: '9.0450', shown: '9.05' },
-  [SEED_PRODUCT_102_ID]: { resolver: '1.0050', shown: '1.01' },
+const EXPECTED: Record<string, { resolver: string; shown: string; twoPlaces: string }> = {
+  [SEED_PRODUCT_101_ID]: { resolver: '9.0450', shown: '9.045', twoPlaces: '9.05' },
+  [SEED_PRODUCT_102_ID]: { resolver: '1.0050', shown: '1.005', twoPlaces: '1.01' },
 };
-/** How the storefront shows an amount, without the currency sign. */
-const shown = (amount: string | number) =>
-  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false }).format(
-    Number(amount),
-  );
+/** How the storefront shows a unit price, without the currency sign (the one display rule). */
+const shown = (amount: string | number) => unitPriceDisplayText(amount);
+/** What a surface carrying a unit price holds: its four places. */
+const carried = (amount: string | number) => unitPriceHalfUp(amount);
 
-describe('worked examples — §10.16 an x.xx50 amount agrees on every surface', () => {
+describe('worked examples — §10.16 and §10.18 an x.xx50 unit price agrees on every surface', () => {
   let h: BackendServerHandle;
   let retailId: string;
 
@@ -105,7 +107,12 @@ describe('worked examples — §10.16 an x.xx50 amount agrees on every surface',
     const cart = await h.app.inject({ method: 'GET', url: '/api/v1/cart', headers: RETAIL, cookies: SESSION });
     expect(cart.statusCode, cart.body).toBe(200);
     const cartData = (cart.json() as { data: { id: string; items: Array<{ productId: string; unitPrice: { amount: number } }> } }).data;
-    for (const line of cartData.items) if (EXPECTED[line.productId]) record('cart line', line.productId, line.unitPrice.amount.toFixed(2));
+    for (const line of cartData.items) if (EXPECTED[line.productId]) record('cart line', line.productId, carried(line.unitPrice.amount));
+    // The line value, at quantity 1, is the one rounding: half-up to two places.
+    const lineTotals = (cart.json() as { data: { items: Array<{ productId: string; lineTotal: { amount: number } }> } }).data.items;
+    for (const line of lineTotals) {
+      if (EXPECTED[line.productId]) expect(line.lineTotal.amount.toFixed(2)).toBe(EXPECTED[line.productId]!.twoPlaces);
+    }
 
     // The order copies the cart line's stored price once this check accepts it.
     const placement = (h.container.cradle as unknown as { cartPlacementApplyPort: CartPlacementApplyPort }).cartPlacementApplyPort;
@@ -123,7 +130,7 @@ describe('worked examples — §10.16 an x.xx50 amount agrees on every surface',
     });
     expect(preview.statusCode, preview.body).toBe(200);
     for (const line of (preview.json() as { data: { lines: Array<{ productId: string; unitPrice: string }> } }).data.lines) {
-      record('order preview line', line.productId, line.unitPrice);
+      record('order preview line', line.productId, carried(line.unitPrice));
     }
 
     const buyerLines = (h.container.cradle as unknown as { buyerLinePricePort: BuyerLinePricePort }).buyerLinePricePort;
@@ -133,7 +140,7 @@ describe('worked examples — §10.16 an x.xx50 amount agrees on every surface',
       salesChannelId: retailId,
       lines: productIds.map((productId) => ({ productId, variantId: null, quantity: 1 })),
     });
-    productIds.forEach((productId, i) => record('quote reference', productId, references[i]?.amount));
+    productIds.forEach((productId, i) => record('quote reference', productId, references[i] ? carried(references[i]!.amount) : undefined));
 
     // The feed: the anonymous resolution a feed generation reads, emitted by the feed's field resolver.
     const pricing = (h.container.cradle as unknown as {
@@ -196,9 +203,16 @@ describe('worked examples — §10.16 an x.xx50 amount agrees on every surface',
       record('feed', productId, item.fields.find((f) => f.name === 'price')?.value.replace(' PLN', ''));
     }
 
+    // Shown (card, product page): the significant places; carried: four; the feed: two.
+    const expectedOn = (surface: string, productId: string): string => {
+      const e = EXPECTED[productId]!;
+      if (surface === 'card' || surface === 'product page') return e.shown;
+      if (surface === 'feed') return e.twoPlaces;
+      return e.resolver;
+    };
     for (const [productId, surfaces] of Object.entries(seen)) {
       for (const [surface, value] of Object.entries(surfaces)) {
-        expect(value, `${surface} ${productId}`).toBe(EXPECTED[productId]!.shown);
+        expect(value, `${surface} ${productId}`).toBe(expectedOn(surface, productId));
       }
     }
     expect(Object.keys(seen[SEED_PRODUCT_101_ID]!).sort()).toEqual(

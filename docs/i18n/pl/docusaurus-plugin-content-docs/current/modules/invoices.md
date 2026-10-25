@@ -24,6 +24,16 @@ zapisaną kopię adresu kupującego, generuje PDF lekkim mechanizmem bez ciężk
 plik przez moduł `assets` i zapisuje identyfikator pliku w zamówieniu. Błędy emitują
 `invoice.generation_failed.v1` do kolejki ponowień w panelu administracyjnym.
 
+### Ceny jednostkowe i wartości pozycji
+
+Pozycja faktury niesie **cenę jednostkową netto pozycji zamówienia z maksymalnie czterema miejscami
+po przecinku** (`invoice_lines.unit_net_price`, `numeric(14,4)`), a jej wartość netto to cena
+jednostkowa × ilość zaokrąglona raz, połówkowo w górę, do dwóch miejsc — własna wartość netto
+pozycji zamówienia. Kolumna *Cena netto* w PDF pokazuje cenę jednostkową z jej znaczącymi miejscami,
+do czterech (0,0125), a z dwoma, gdy trzecie i czwarte są zerami; kolumny wartości i sumy mają dwa
+miejsca. Polska faktura może podawać cenę jednostkową z taką dokładnością: ustawa o VAT wymienia
+cenę jednostkową netto, nie określając liczby miejsc po przecinku.
+
 ### Co faktura VAT zapisuje jako zapłacone i kiedy nie jest wystawiana
 
 Faktura VAT zapisuje jako zapłacone to, co zostało z płatności za zamówienie: każdą pobraną próbę

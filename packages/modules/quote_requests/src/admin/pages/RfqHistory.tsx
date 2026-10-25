@@ -56,6 +56,8 @@ interface Formatters {
   /** This module's own bundle (feature 162). */
   q: T;
   amount: (n: number | null) => string;
+  /** A unit price: its significant places, up to four (owner ruling of 2026-10-25). */
+  unitAmount: (n: number | null) => string;
   dateTime: (iso: string) => string;
   /** The name a carry-skip line gives its field: stored label (reader's language, then default), else the key. */
   fieldName: (skip: CarrySkip) => string;
@@ -77,6 +79,7 @@ function useFormatters(): Formatters {
       t: h,
       q,
       amount: (n) => (n === null ? h('none') : numbers.amount(n)),
+      unitAmount: (n) => (n === null ? h('none') : numbers.unitAmount(n)),
       dateTime: (iso) => {
         const d = new Date(iso);
         return Number.isNaN(d.getTime()) ? iso : dates.format(d);
@@ -146,7 +149,7 @@ function changeSentence(f: Formatters, change: QuoteRequestHistoryChange): strin
         price:
           change.agreedUnitPrice === null
             ? t('none')
-            : t('money', { amount: f.amount(change.agreedUnitPrice), currency: change.currency }),
+            : t('money', { amount: f.unitAmount(change.agreedUnitPrice), currency: change.currency }),
       });
     case 'line_removed':
       return t('change.line_removed', { line: lineLabel(t, change.line) });
@@ -160,8 +163,8 @@ function changeSentence(f: Formatters, change: QuoteRequestHistoryChange): strin
     case 'line_proposed_unit_price':
       return t(`change.${change.kind}`, {
         line: lineLabel(t, change.line),
-        before: f.amount(change.before),
-        after: f.amount(change.after),
+        before: f.unitAmount(change.before),
+        after: f.unitAmount(change.after),
         currency: change.currency,
       });
     case 'line_note':

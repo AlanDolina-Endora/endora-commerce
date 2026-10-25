@@ -17,7 +17,7 @@ import { formatMoney } from '../../../../lib/i18n/money';
 import { rfqValidity, rfqValidityGate } from '../../../../lib/quote-requests/validity';
 import { RfqValidityMeta } from '../../../../components/rfq/RfqValidityMeta';
 import { RfqDetailActions } from '../../../../components/rfq/RfqDetailActions';
-import { lineAmountHalfUp } from '@endora-commerce/contracts';
+import { lineAmountHalfUp, unitPriceDisplayText } from '@endora-commerce/contracts';
 import { GroupedLineRows, quoteSectionTotals } from '../../../../components/line-groups/GroupedLineRows';
 import { describeRfqDiff } from '../../../../lib/quote-requests/describe-diff';
 import type { Metadata } from 'next';
@@ -223,8 +223,9 @@ export default async function QuoteRequestDetailPage({
                       {it.lineNote ? <div className="muted" style={{ fontSize: 11 }}>{it.lineNote}</div> : null}
                     </td>
                     <td>{it.quantity}</td>
-                    <td>{it.desiredUnitPrice !== null ? it.desiredUnitPrice.toFixed(2) : '—'}</td>
-                    <td>{it.agreedUnitPrice !== null ? it.agreedUnitPrice.toFixed(2) : '—'}</td>
+                    {/* Unit prices: their significant places, up to four (owner ruling of 2026-10-25). */}
+                    <td>{it.desiredUnitPrice !== null ? unitPriceDisplayText(it.desiredUnitPrice) : '—'}</td>
+                    <td>{it.agreedUnitPrice !== null ? unitPriceDisplayText(it.agreedUnitPrice) : '—'}</td>
                     <td style={{ fontWeight: 600 }}>
                       {lineTotal !== null ? formatMoney(lineTotal, it.lineCurrency) : '—'}
                     </td>

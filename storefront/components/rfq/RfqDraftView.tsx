@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { lineAmountHalfUp, roundAmountHalfUp } from '@endora-commerce/contracts';
-import { formatMoney as formatMoneyShared } from '../../lib/i18n/money';
+import { lineAmountHalfUp, moneySum, unitPriceDisplayText } from '@endora-commerce/contracts';
+import { formatMoney as formatMoneyShared, type FormatMoneyOptions } from '../../lib/i18n/money';
 import {
   clampDraftQuantity,
   clearRfqDraft,
@@ -109,11 +109,9 @@ export function RfqDraftView(props: {
   // locked buyer's proposals are not sent, so they are not counted either.
   const allPriced =
     items.length > 0 && items.every((i) => effectiveUnitPrice(i, proposalsAllowed) !== null);
+  // The sum of the line values, each `unit × quantity` rounded once (§10.18).
   const subtotal = allPriced
-    ? items.reduce(
-        (sum, i) => sum + (effectiveUnitPrice(i, proposalsAllowed) ?? 0) * i.quantity,
-        0,
-      )
+    ? Number(moneySum(items.map((i) => lineAmountHalfUp(effectiveUnitPrice(i, proposalsAllowed) ?? 0, i.quantity))))
     : null;
 
   const submit = async (): Promise<void> => {
@@ -386,7 +384,7 @@ export function DraftLine({
           </span>
         )}
         <span className="text-[11px] text-muted">
-          {line.unitPrice ? formatMoney(line.unitPrice.amount, line.unitPrice.currency) : t.onRequest}
+          {line.unitPrice ? formatMoney(line.unitPrice.amount, line.unitPrice.currency, { unitPrice: true }) : t.onRequest}
           {' / '}
           {t.unit}
         </span>
@@ -473,10 +471,10 @@ export function DraftLine({
             <input
               type="number"
               min={0}
-              step="0.01"
+              step="0.0001"
               inputMode="decimal"
               value={line.proposedUnitPrice ?? ''}
-              placeholder={line.unitPrice ? roundAmountHalfUp(line.unitPrice.amount) : '—'}
+              placeholder={line.unitPrice ? unitPriceDisplayText(line.unitPrice.amount) : '—'}
               aria-label={t.proposedPriceLabel}
               className="w-full min-w-0 border-0 bg-transparent p-0 text-right font-mono text-[14px] text-fg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               onChange={(e): void => {
@@ -499,7 +497,7 @@ export function DraftLine({
           </span>
           <span className="py-[6px] text-right font-mono text-[14px] text-fg">
             {line.unitPrice
-              ? formatMoney(line.unitPrice.amount, line.unitPrice.currency)
+              ? formatMoney(line.unitPrice.amount, line.unitPrice.currency, { unitPrice: true })
               : t.onRequest}
           </span>
         </div>
@@ -543,8 +541,8 @@ function Breadcrumbs({ t }: { t: Strings }): ReactNode {
   );
 }
 
-function formatMoney(amount: number, currency: string): string {
-  return formatMoneyShared(amount, currency);
+function formatMoney(amount: number, currency: string, options: FormatMoneyOptions = {}): string {
+  return formatMoneyShared(amount, currency, undefined, options);
 }
 
 export interface Strings {

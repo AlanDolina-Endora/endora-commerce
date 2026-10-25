@@ -13,7 +13,8 @@ at `91e8c1907` on 2026-10-23 after the owner rulings of that day (targeted surfa
 feeds): §1.2's caching and consumers paragraphs, §1.3 and §1.4 item 7; and at `e3f456957` on
 2026-10-24 for the second review of release 0.108.0: §1.2's display-mode paragraph and §1.3; and
 on `perf/416-surface-rebuild` (from `2716908b3`) on 2026-10-24 for the faster whole rebuild
-(issue #416): §1.4 item 7. The old model — the Application rule, the per-list
+(issue #416): §1.4 item 7; and on `fix/four-place-unit-prices` (from `ad06079a4`) on 2026-10-25 for
+the four-place unit-price ruling: §1.2's consumers paragraph. The old model — the Application rule, the per-list
 product roster and brackets, the `Default` list, the product *default price* and the variant price
 override — is gone from the code and, after the conversion migration, from the database. How it
 worked is recorded in this file's history (`git log -- specs/pricing/current-model.md`); the
@@ -147,6 +148,20 @@ its window, bound to the channel, audience everyone; `namedListPublishability` s
 every one through the batched entry
 points; `backend/test/integration/price_lists/pricing-surfaces-agree.test.ts` holds them to the same
 amount, currency and source.
+
+**How a consumer carries the amount** (owner ruling of 2026-10-25, `worked-examples.md` §10.18). The
+resolver answers a four-place decimal string, and a consumer that stores a unit price keeps all
+four places, unrounded (`unitPriceHalfUp`, `CON/money-decimal.ts`): the cart line
+(`cart_items.unit_price`, `recomputed_unit_price`, `agreed_unit_price`), the order line copied from
+it (`order_items.unit_price`), the admin order preview's line, a quote line's reference, desired and
+agreed price (`quote_request_items.*_unit_price`) and the invoice line (`invoice_lines.unit_net_price`)
+are all `numeric(14,4)`. Placement compares the stored price with the current one at four places.
+**The line value is the rounding point**: a line's net is `unit × quantity` rounded half-up to two
+places once (`lineAmountHalfUp`), and VAT is per rate on the sum of the rounded line nets
+(`vatByRate`, §10.17). A surface that publishes two places rounds the resolver amount half-up on its
+decimal digits (`roundAmountHalfUp`): the product feed. Every other surface shows a unit price with
+its significant places, up to four, at least two (`unitPriceFractionDigits`): `0,0125 zł`,
+`1,50 zł`, `1,505 zł`.
 
 ### 1.3 Price sort and price range
 

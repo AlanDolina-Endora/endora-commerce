@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 import {
   AMOUNT_PRECISION_EXCEEDED,
+  UNIT_PRICE_PRECISION_EXCEEDED,
   CreateOpportunityRequestSchema,
   adjustCreditLimitRequestSchema,
   adminCreateQuoteRequestLineSchema,
@@ -54,11 +55,24 @@ describe('promotions', () => {
 
 describe('quote requests', () => {
   const line = { productId: '00000000-0000-4000-8000-000000000101', quantity: 1 };
+  function refusedUnitPricePaths(schema: z.ZodType, value: unknown): string[] {
+    const result = schema.safeParse(value);
+    if (result.success) return [];
+    return result.error.issues.filter((i) => i.message === UNIT_PRICE_PRECISION_EXCEEDED).map((i) => i.path.join('.'));
+  }
 
-  it('refuses a desired or an agreed unit price with three places', () => {
-    expect(refusedPaths(createQuoteRequestLineSchema, { ...line, desiredUnitPrice: 1.005 })).toEqual(['desiredUnitPrice']);
-    expect(refusedPaths(adminCreateQuoteRequestLineSchema, { ...line, agreedUnitPrice: 1.005 })).toEqual(['agreedUnitPrice']);
-    expect(refusedPaths(adminPatchQuoteRequestLineSchema, { ...line, agreedUnitPrice: 2.675 })).toEqual(['agreedUnitPrice']);
+  // Owner ruling of 2026-10-25 — a typed unit price keeps up to four places.
+  it('accepts a desired or an agreed unit price with four places', () => {
+    expect(createQuoteRequestLineSchema.safeParse({ ...line, desiredUnitPrice: 0.0125 }).success).toBe(true);
+    expect(adminCreateQuoteRequestLineSchema.safeParse({ ...line, agreedUnitPrice: 1.505 }).success).toBe(true);
+    expect(adminPatchQuoteRequestLineSchema.safeParse({ ...line, agreedUnitPrice: 0.015 }).success).toBe(true);
+  });
+
+  it('refuses a desired or an agreed unit price with five places with the unit-price issue', () => {
+    expect(refusedUnitPricePaths(createQuoteRequestLineSchema, { ...line, desiredUnitPrice: 0.01255 })).toEqual(['desiredUnitPrice']);
+    expect(refusedUnitPricePaths(adminCreateQuoteRequestLineSchema, { ...line, agreedUnitPrice: 1.00005 })).toEqual(['agreedUnitPrice']);
+    expect(refusedUnitPricePaths(adminPatchQuoteRequestLineSchema, { ...line, agreedUnitPrice: 2.67501 })).toEqual(['agreedUnitPrice']);
+    expect(refusedPaths(adminPatchQuoteRequestLineSchema, { ...line, agreedUnitPrice: 2.67501 })).toEqual([]);
     expect(adminPatchQuoteRequestLineSchema.safeParse({ ...line, agreedUnitPrice: null }).success).toBe(true);
   });
 });

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { unitPriceHalfUp } from '@endora-commerce/contracts';
 import type { CartPlacementApplyPort } from '../../../../packages/modules/carts/src/ports/index.js';
 
 import { CartItem, PriceDisplayModeOverride, ProductVariant } from '../../helpers/package-entities.js';
@@ -150,14 +151,15 @@ describe('#168 — the cart read shows the price placement charges', () => {
         expect(line.unavailableReason).toBe('not_purchasable');
       } else {
         expect(line.unavailable, line.productId).toBe(false);
-        expect(line.unitPrice.amount.toFixed(2), line.productId).toBe(charged.currentUnitPrice);
+        // A unit price is carried at four places (owner ruling of 2026-10-25).
+        expect(unitPriceHalfUp(line.unitPrice.amount), line.productId).toBe(charged.currentUnitPrice);
         expect(line.unitPrice.currency).toBe(charged.currentCurrency);
       }
     }
 
     const byProduct = new Map(lines.map((l) => [l.productId, l]));
-    expect(byProduct.get(agreedProductId)!.unitPrice.amount.toFixed(2)).toBe(AGREED_PRICE);
-    expect(byProduct.get(agreedProductId)!.unitPrice.amount.toFixed(2)).not.toBe(TIER_UNIT_PRICE);
+    expect(unitPriceHalfUp(byProduct.get(agreedProductId)!.unitPrice.amount)).toBe(unitPriceHalfUp(AGREED_PRICE));
+    expect(unitPriceHalfUp(byProduct.get(agreedProductId)!.unitPrice.amount)).not.toBe(unitPriceHalfUp(TIER_UNIT_PRICE));
     expect(byProduct.get(ownPriceProductId)!.unitPrice.amount).toBe(BASE_PRICE);
     expect(byProduct.get(variantProductId)!.unitPrice.amount).toBe(13.2);
     expect(byProduct.get(hiddenProductId)!.unavailable).toBe(true);

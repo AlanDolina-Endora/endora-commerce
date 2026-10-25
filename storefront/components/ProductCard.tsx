@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { ProductSummary, StorefrontProductStock } from '@endora-commerce/contracts';
 import { tForLocale } from '../lib/i18n/messages';
 import { cardAddToCartLabel } from '../lib/orderMinimum';
-import { DEFAULT_VAT_RATE, grossFromNet } from '../lib/i18n/money';
+import { DEFAULT_VAT_RATE, formatMoney, grossUnitPriceFromNet } from '../lib/i18n/money';
 import { CompareToggle } from './CompareToggle';
 import { BaseSalePriceBlock } from './pricing/BaseSalePriceBlock';
 import { QuoteRequestCta } from './pricing/QuoteRequestCta';
@@ -180,25 +180,18 @@ function renderPriceSlot(args: {
   // `ProductSummary.price` — since issue #132 this is the pricing engine's own
   // answer for the listing, resolved server-side through the `pricingService`
   // port, not the catalogue's legacy `defaultPrice` projection it used to be.
+  // A unit price: its significant places, up to four (owner ruling of 2026-10-25).
   const priceFmt = product.price
-    ? new Intl.NumberFormat(locale, {
-        style: 'currency',
-        currency: product.price.currency,
-        minimumFractionDigits: 2,
-      }).format(product.price.amount)
+    ? formatMoney(product.price.amount, product.price.currency, locale, { unitPrice: true })
     : null;
   // Derived through the shared seam (issue #132). The previous form multiplied
   // by a literal `1.23` and then tested the product with `grossAmount &&`, so a
   // price of zero lost its gross line entirely — the "no price" / "price zero"
   // collapse, on the render side.
-  const grossAmount = product.price ? grossFromNet(product.price.amount, vatRate) : null;
+  const grossAmount = product.price ? grossUnitPriceFromNet(product.price.amount, vatRate) : null;
   const grossFmt =
     grossAmount !== null && product.price
-      ? new Intl.NumberFormat(locale, {
-          style: 'currency',
-          currency: product.price.currency,
-          minimumFractionDigits: 2,
-        }).format(grossAmount)
+      ? formatMoney(grossAmount, product.price.currency, locale, { unitPrice: true })
       : null;
 
   if (!priceFmt) {
@@ -212,11 +205,7 @@ function renderPriceSlot(args: {
   // Feature 160 — the buyer's own price, struck through, when `price` is a
   // charged sale (FR-025); and "from" when the variants differ (FR-024).
   const compareAtFmt = product.compareAtPrice
-    ? new Intl.NumberFormat(locale, {
-        style: 'currency',
-        currency: product.compareAtPrice.currency,
-        minimumFractionDigits: 2,
-      }).format(product.compareAtPrice.amount)
+    ? formatMoney(product.compareAtPrice.amount, product.compareAtPrice.currency, locale, { unitPrice: true })
     : null;
 
   // Feature 161 (FR-026) — "list price / your price". The catalogue and search
@@ -225,11 +214,7 @@ function renderPriceSlot(args: {
   // engine decided to show it (setting on, catalogue price above `price`).
   const listPrice = product.resolvedPrice?.listPrice;
   const listFmt = listPrice
-    ? new Intl.NumberFormat(locale, {
-        style: 'currency',
-        currency: listPrice.currency,
-        minimumFractionDigits: 2,
-      }).format(Number(listPrice.amount))
+    ? formatMoney(Number(listPrice.amount), listPrice.currency, locale, { unitPrice: true })
     : null;
 
   return (

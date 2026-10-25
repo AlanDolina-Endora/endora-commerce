@@ -59,7 +59,12 @@ export class OrderItem {
   @Property({ type: 'integer' })
   quantity!: number;
 
-  @Property({ type: 'decimal', precision: 12, scale: 2 })
+  /**
+   * The net unit price, copied from the cart line at four places, unrounded
+   * (owner ruling of 2026-10-25); the line's net is `unitPrice × quantity`
+   * rounded to two, once.
+   */
+  @Property({ type: 'decimal', precision: 14, scale: 4 })
   unitPrice!: string;
 
   /**

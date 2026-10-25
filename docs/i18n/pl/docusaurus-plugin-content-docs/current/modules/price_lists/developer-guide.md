@@ -158,6 +158,27 @@ pamięć podręczną odpowiedzi, a listę przycina do dziesięciu dopiero po pom
 zakresu wywołującego; każda inna wycena (listy, koszyki, budowa powierzchni) trafia do pamięci
 podręcznej z dziesięcioma.
 
+## Ceny jednostkowe dalej w łańcuchu: cztery miejsca, zaokrąglenie na wartości pozycji
+
+Resolver odpowiada napisem dziesiętnym z czterema miejscami, a **konsument, który zapisuje lub
+zwraca cenę jednostkową, zachowuje wszystkie cztery** (decyzja właściciela z 25.10.2026):
+`unitPriceHalfUp` z `@endora-commerce/contracts` zapisuje ją tak, jak przechowuje ją
+`numeric(14,4)`, a każda kolumna ceny jednostkowej od koszyka po fakturę — `cart_items.unit_price`,
+`recomputed_unit_price`, `agreed_unit_price`, `order_items.unit_price`,
+`quote_request_items.desired_unit_price`, `agreed_unit_price`, `reference_unit_price`,
+`invoice_lines.unit_net_price` — ma typ `numeric(14,4)`. **Zaokrąglana jest wartość pozycji**:
+`lineAmountHalfUp(unit, quantity)` zaokrągla `unit × quantity` raz, połówkowo w górę, do dwóch
+miejsc, a VAT to `vatByRate` po zaokrąglonych wartościach netto pozycji. Nigdy nie zaokrąglaj ceny
+jednostkowej do dwóch miejsc przy przyjęciu (`roundAmountHalfUp` służy powierzchni, której gramatyka
+ma dwa miejsca — plikowi produktowemu). Wpisana cena jednostkowa używa `fourDecimalUnitPrice`
+(`money-input`): piąte miejsce zwraca `400 UNIT_PRICE_PRECISION_EXCEEDED`. Cena jednostkowa jest
+pokazywana według `unitPriceFractionDigits` — przez `formatMoney(…, { unitPrice: true })` w
+admin-kit i w storefroncie albo wartość dokumentu `money` z `unitPrice: true` — a cena jednostkowa
+brutto obok netto poniżej grosza według `grossUnitPriceHalfUp`. Wektory to §10.18 w
+`specs/pricing/worked-examples.md`, a
+`backend/test/integration/price_lists/worked-examples/money-agreement.test.ts` pilnuje z nimi
+zgodności koszyka, zamówienia, faktury, płatności i zwrotów.
+
 ## Jedyna ścieżka odczytu
 
 **Konsument wycenia partiami, przez usługę wyceny.** Punkty wejścia (`PricingServiceContract`,

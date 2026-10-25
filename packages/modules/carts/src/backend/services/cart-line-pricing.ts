@@ -1,4 +1,4 @@
-import { roundAmountHalfUp } from '@endora-commerce/contracts';
+import { compareDecimals, unitPriceHalfUp } from '@endora-commerce/contracts';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
   CatalogProductRecord,
@@ -195,7 +195,9 @@ export class CartLinePricing {
       if (price) {
         out.set(line.key, {
           ok: true,
-          unitPrice: roundAmountHalfUp(price.amount),
+          // Four places, unrounded (owner ruling of 2026-10-25): only the line
+          // value, `unitPrice × quantity`, is rounded — 0.0125 × 10 000 is 125.00.
+          unitPrice: unitPriceHalfUp(price.amount),
           currency: price.currency,
           source: 'price_list',
           priceSource: price.source ?? null,
@@ -220,18 +222,22 @@ export function agreedUnitPriceFor(
     return null;
   }
   if (agreed.quantity !== quantity) return null;
-  return { unitPrice: roundAmountHalfUp(agreed.unitPrice), currency: agreed.currency };
+  return { unitPrice: unitPriceHalfUp(agreed.unitPrice), currency: agreed.currency };
 }
 
 
-/** Whether a stored line price is not the price the line may be ordered at now. */
+/**
+ * Whether a stored line price is not the price the line may be ordered at now —
+ * compared at the unit price's four places, so a line priced at two places
+ * before the owner ruling of 2026-10-25 (9.05) is not the price 9.0450 now.
+ */
 export function storedPriceDiffers(
   stored: { unitPrice: string; currency: string },
   current: { unitPrice: string; currency: string } | null,
 ): boolean {
   if (!current) return true;
   if (stored.currency.toUpperCase() !== current.currency.toUpperCase()) return true;
-  return roundAmountHalfUp(stored.unitPrice) !== roundAmountHalfUp(current.unitPrice);
+  return compareDecimals(unitPriceHalfUp(stored.unitPrice), unitPriceHalfUp(current.unitPrice)) !== 0;
 }
 
 /** The agreement a line carries, in the shape `CartLinePricing` reads. */

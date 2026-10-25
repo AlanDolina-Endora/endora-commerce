@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { quoteTotals } from '../../../../packages/modules/quote_requests/src/admin/quote-totals';
 import { sectionTotals } from '../../../../packages/modules/quote_requests/src/admin/line-groups';
 import { referenceDifference } from '../../../../packages/modules/quote_requests/src/admin/reference-difference';
+import { rfqNumberFormat } from '../../../../packages/modules/quote_requests/src/admin/number-format';
 
 /**
  * Issue #417 — the quote screens' figures in exact decimal arithmetic, under
@@ -40,5 +41,17 @@ describe('sectionTotals (quote screens)', () => {
 describe('referenceDifference — exact (#417)', () => {
   it('rounds a typed price’s difference half-up on its decimal digits', () => {
     expect(referenceDifference(1.005, 'PLN', { amount: 1, currency: 'PLN' })).toEqual({ amount: 0.01, percent: 0.5 });
+  });
+});
+
+describe('rfqNumberFormat — a unit price (§10.18)', () => {
+  it('shows its significant places, up to four, at least two', () => {
+    const f = rfqNumberFormat('pl-PL');
+    expect(f.unitAmount(0.0125)).toBe('0,0125');
+    expect(f.unitAmount(1.505)).toBe('1,505');
+    expect(f.unitAmount(1.5)).toBe('1,50');
+    expect(f.unitMoney(0.0125, 'PLN')).toBe('0,0125 PLN');
+    // An amount keeps two.
+    expect(f.amount(0.0125)).toBe('0,01');
   });
 });

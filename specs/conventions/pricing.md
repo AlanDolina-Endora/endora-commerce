@@ -70,24 +70,36 @@ Polish.
   book's `version` moved; an admin write names the version it was made against (`expectedVersion`
   or `If-Match`). A book's channel set is read and written only through
   `SalesChannelMembershipService` (the `price-list` bridge, Principle XII).
-- **A resolver amount is a decimal string, and it is rounded as one.** Ports and admin API shapes
-  carry the four-place string `price_lists` answers with; a consumer rounds it to two places with
-  `roundAmountHalfUp` and computes a gross with `grossAmountHalfUp` (`@endora-commerce/contracts`,
-  `price-book-decimal.ts`), never with `Number(…).toFixed(2)`, `Math.round` or `net * (1 + rate)`:
-  9.0450 is the double 9.04499…, and 29.50 × 1.23 the double 36.28499… (worked examples §10.16).
-  The published money fields that stay numbers — `ProductSummary.price`, the cart's `Money`, the
-  external tier ladder — hold a `numeric(14,4)` amount losslessly (at most 14 significant digits),
-  so a consumer of one rounds it with the same helpers, which read a number as its shortest decimal.
-  An amount **computed** from a price — a line's net or gross, a tax, a total, a correction, a
-  refund, a discount, an available credit — uses `money-decimal.ts` beside it (exact sums,
-  products, quotients, rounded half-up once where the rule says). **VAT has one method,
+- **A resolver amount is a decimal string, and a unit price keeps its four places.** Ports and
+  admin API shapes carry the four-place string `price_lists` answers with, and a consumer that
+  stores or answers a **unit price** keeps it at four places, unrounded — `unitPriceHalfUp`
+  (`@endora-commerce/contracts`, `money-decimal.ts`), into a `numeric(14,4)` column: the cart line,
+  the order line, the quote lines, the invoice line (owner ruling of 2026-10-25, worked examples
+  §10.18). Never round a unit price to two places at intake: a screw at 0.0125 became 0.01, and
+  10 000 of them cost 100.00 instead of 125.00. **The line value is the rounding point**:
+  `lineAmountHalfUp(unit, quantity)`, half-up to two places once. Only a surface whose grammar is
+  two places — a product feed — rounds the resolver amount itself, with `roundAmountHalfUp`
+  (`price-book-decimal.ts`), and a gross is `grossAmountHalfUp`; never `Number(…).toFixed(2)`,
+  `Math.round` or `net * (1 + rate)`: 9.0450 is the double 9.04499…, and 29.50 × 1.23 the double
+  36.28499… (§10.16). A unit price is **shown** with its significant places, up to four, at least
+  two — `unitPriceFractionDigits`, through the one formatter of each surface (`formatMoney(…,
+  { unitPrice: true })` in the admin kit and the storefront, a `unitPrice`-marked document value);
+  a gross unit price beside a sub-cent net is `grossUnitPriceHalfUp`. A line value and a total show
+  two. The published money fields that stay numbers — `ProductSummary.price`, the cart's `Money`,
+  the external tier ladder — hold a `numeric(14,4)` amount losslessly (at most 14 significant
+  digits), so a consumer of one reads it with the same helpers, which read a number as its shortest
+  decimal. An amount **computed** from a price — a line's net or gross, a tax, a total, a
+  correction, a refund, a discount, an available credit — uses `money-decimal.ts` (exact sums,
+  products, quotients, rounded half-up once where the rule says), from the four-place unit price. **VAT has one method,
   `vatByRate`** — per rate, on the sum of the net amounts, rounded once (owner ruling of
   2026-10-24) — and every document computes it there rather than per line; a line's gross is
   informational and is the line's own rounding. A refund and a correction are cumulative over an
   order's returns and an invoice's corrections, and what an order charged is read from what it
   stored, never recomputed. `worked-examples.md` §10.17 says which document computes what. A money amount a person or an integration types takes
   `twoDecimalAmount` from `money-input.ts`: more than two places is `400 AMOUNT_PRECISION_EXCEEDED`,
-  never rounded.
+  never rounded. A **unit price** a person or an integration types — a quote's desired, agreed or
+  proposed price — takes `fourDecimalUnitPrice` beside it: more than four places is
+  `400 UNIT_PRICE_PRECISION_EXCEEDED`, never rounded.
 - **The precedence is data, read from the active version.** Consumers never encode a cell order;
   the resolver reads `price_list_precedence` through `PrecedenceStore`. A change to presets or
   invariants goes through `validatePrecedence` and keeps `precedence.test.ts` exhaustive. The write

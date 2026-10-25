@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { DisplayMode } from '@endora-commerce/contracts';
 import type { PricingMoney } from '../../lib/api/pricing';
-import { DEFAULT_VAT_RATE, grossFromNet } from '../../lib/i18n/money';
+import { DEFAULT_VAT_RATE, formatMoney, grossUnitPriceFromNet } from '../../lib/i18n/money';
 
 /**
  * Renders the customer-facing price block from a resolver-provided
@@ -78,16 +78,12 @@ export function BaseSalePriceBlock(props: {
   if (!basePrice) return null;
 
   const baseNet = parseAmount(basePrice.amount);
-  const baseGross = baseNet === null ? null : grossFromNet(baseNet, vatRate);
+  const baseGross = baseNet === null ? null : grossUnitPriceFromNet(baseNet, vatRate);
   const saleNet = salePrice ? parseAmount(salePrice.amount) : null;
-  const saleGross = saleNet === null ? null : grossFromNet(saleNet, vatRate);
+  const saleGross = saleNet === null ? null : grossUnitPriceFromNet(saleNet, vatRate);
 
-  const fmt = (value: number, currency: string): string =>
-    new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 2,
-    }).format(value);
+  // A unit price: its significant places, up to four (owner ruling of 2026-10-25).
+  const fmt = (value: number, currency: string): string => formatMoney(value, currency, locale, { unitPrice: true });
 
   const blockClass =
     variant === 'card'
@@ -106,7 +102,7 @@ export function BaseSalePriceBlock(props: {
           {renderColumns({
             displayMode,
             net: listNet,
-            gross: grossFromNet(listNet, vatRate),
+            gross: grossUnitPriceFromNet(listNet, vatRate),
             currency: listPrice.currency,
             netSuffix,
             grossSuffix,

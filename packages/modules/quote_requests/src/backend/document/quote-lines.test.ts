@@ -60,6 +60,8 @@ const data = (lines: Line[], taxRate = 0.23): QuoteRequestDocumentData => ({
 });
 
 const money = (amount: number, currency = 'PLN'): DocumentValue => ({ kind: 'money', amount, currency });
+/** A unit price (§10.18): carried at four places and marked, so it is shown with its significant places. */
+const unit = (amount: number, currency = 'PLN') => ({ kind: 'money', amount, currency, unitPrice: true });
 
 describe('quoteLineItems — derivations (R-11)', () => {
   it('a line priced below its list price in the same currency has a discount', () => {
@@ -68,11 +70,11 @@ describe('quoteLineItems — derivations (R-11)', () => {
       productName: { kind: 'text', value: 'Bolt' },
       sku: { kind: 'text', value: 'B-1' },
       quantity: { kind: 'number', value: 10 },
-      listUnitPrice: money(10),
-      unitPrice: money(8),
-      unitGrossPrice: money(9.84),
+      listUnitPrice: unit(10),
+      unitPrice: unit(8),
+      unitGrossPrice: unit(9.84),
       discountPercent: { kind: 'percent', value: 20 },
-      unitDiscount: money(2),
+      unitDiscount: unit(2),
       lineDiscount: money(20),
       lineListValue: money(100),
       lineNet: money(80),
@@ -101,7 +103,7 @@ describe('quoteLineItems — derivations (R-11)', () => {
     for (const key of ['unitPrice', 'unitGrossPrice', 'lineNet', 'lineVat', 'lineGross']) {
       expect(item!.values[key]).toBeNull();
     }
-    expect(item!.values['listUnitPrice']).toEqual(money(10));
+    expect(item!.values['listUnitPrice']).toEqual(unit(10));
   });
 
   it('packaging: the unit name and the quantity in packaging units', () => {
@@ -118,7 +120,7 @@ describe('quoteLineItems — derivations (R-11)', () => {
       data([line({ proposedUnitPrice: 7.5, variantLabel: 'M8', lineNote: 'Urgent', attributes: { brand: 'Acme', lead_time: '' } })]),
     );
     expect(item!.values).toMatchObject({
-      proposedUnitPrice: money(7.5),
+      proposedUnitPrice: unit(7.5),
       variant: { kind: 'text', value: 'M8' },
       lineNote: { kind: 'text', value: 'Urgent' },
       'attributes.brand': { kind: 'text', value: 'Acme' },
@@ -131,7 +133,28 @@ describe('quoteLineItems — derivations (R-11)', () => {
     expect(item!.values['lineNet']).toEqual(money(1.01));
     expect(item!.values['lineVat']).toEqual(money(0.08));
     expect(item!.values['lineGross']).toEqual(money(1.09));
-    expect(item!.values['unitGrossPrice']).toEqual(money(0.36));
+    // A sub-cent net carries its gross unit price at four places: 0.335 × 1.08 = 0.3618.
+    expect(item!.values['unitGrossPrice']).toEqual(unit(0.3618));
+  });
+
+  it('carries a sub-cent unit price unrounded; only the line values are rounded (§10.18)', () => {
+    const [item] = quoteLineItems(data([line({ agreedUnitPrice: 0.0125, quantity: 10_000, referenceUnitPrice: 0.015 })]));
+    expect(item!.values).toMatchObject({
+      listUnitPrice: unit(0.015),
+      unitPrice: unit(0.0125),
+      // 0.0125 × 1.23 = 0.015375 → 0.0154.
+      unitGrossPrice: unit(0.0154),
+      unitDiscount: unit(0.0025),
+      lineListValue: money(150),
+      lineNet: money(125),
+      // List value less net, so the document adds up.
+      lineDiscount: money(25),
+      lineVat: money(28.75),
+      lineGross: money(153.75),
+    });
+    // 0.0150 × 3 = 0.045 → 0.05; the list value 0.0155 × 3 = 0.0465 → 0.05: no cent of discount shows.
+    const [small] = quoteLineItems(data([line({ agreedUnitPrice: 0.015, quantity: 3, referenceUnitPrice: 0.0155 })]));
+    expect(small!.values).toMatchObject({ lineNet: money(0.05), lineListValue: money(0.05), lineDiscount: money(0) });
   });
 });
 

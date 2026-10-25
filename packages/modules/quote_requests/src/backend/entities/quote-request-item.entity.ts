@@ -79,10 +79,10 @@ export class QuoteRequestItem {
   @Property({ type: 'text', nullable: true })
   lineNote?: string | null;
 
-  @Property({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Property({ type: 'decimal', precision: 14, scale: 4, nullable: true })
   desiredUnitPrice?: string | null;
 
-  @Property({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Property({ type: 'decimal', precision: 14, scale: 4, nullable: true })
   agreedUnitPrice?: string | null;
 
   @Property({ type: 'decimal', precision: 5, scale: 2, nullable: true })
@@ -99,7 +99,7 @@ export class QuoteRequestItem {
    * constraint `quote_request_items_reference_all_or_none`); all `null` means
    * no stored reference. Admin-only: never on the customer reply.
    */
-  @Property({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Property({ type: 'decimal', precision: 14, scale: 4, nullable: true })
   referenceUnitPrice?: string | null;
 
   @Property({ type: 'string', length: 3, nullable: true })

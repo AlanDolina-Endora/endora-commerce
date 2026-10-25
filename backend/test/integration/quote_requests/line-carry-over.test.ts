@@ -112,7 +112,7 @@ describe('146 — line data carried across rewrites [integration]', () => {
       const before = await linesOf(created.id);
       const withVariant = before.find((l) => l.variantId === VARIANT_V)!;
       const plain = before.find((l) => l.variantId == null)!;
-      expect(plain.referenceUnitPrice).toBe('130.00');
+      expect(plain.referenceUnitPrice).toBe('130.0000');
 
       await adminModify(created.id, created.version, {
         items: [
@@ -123,20 +123,20 @@ describe('146 — line data carried across rewrites [integration]', () => {
 
       const after = await linesOf(created.id);
       expect(after).toHaveLength(2);
-      const keptVariant = after.find((l) => l.agreedUnitPrice === '95.00')!;
+      const keptVariant = after.find((l) => l.agreedUnitPrice === '95.0000')!;
       expect(keptVariant.variantId).toBe(VARIANT_V);
       expect(keptVariant.lineNote).toBe('note A');
       expect(keptVariant.packagingUnitName).toBe(PALETA);
       expect(keptVariant.packagingUnitBaseQuantity).toBe(2);
       expect(keptVariant.productName).toBe(withVariant.productName);
       expect(keptVariant.productName.endsWith(`(${PALETA})`)).toBe(true);
-      expect(keptVariant.desiredUnitPrice).toBe('100.00');
+      expect(keptVariant.desiredUnitPrice).toBe('100.0000');
       expect(keptVariant.referenceUnitPrice ?? null).toBe(withVariant.referenceUnitPrice ?? null);
       expect(keptVariant.referenceCurrency ?? null).toBe(withVariant.referenceCurrency ?? null);
 
-      const keptPlain = after.find((l) => l.agreedUnitPrice === '85.00')!;
-      expect(keptPlain.desiredUnitPrice).toBe('90.00');
-      expect(keptPlain.referenceUnitPrice).toBe('130.00');
+      const keptPlain = after.find((l) => l.agreedUnitPrice === '85.0000')!;
+      expect(keptPlain.desiredUnitPrice).toBe('90.0000');
+      expect(keptPlain.referenceUnitPrice).toBe('130.0000');
       expect(keptPlain.referenceCurrency).toBe('PLN');
       expect(keptPlain.referenceCapturedAt?.getTime()).toBe(plain.referenceCapturedAt?.getTime());
     });
@@ -190,7 +190,7 @@ describe('146 — line data carried across rewrites [integration]', () => {
       expect(added.referenceCapturedAt ?? null).toBeNull();
       expect(added.desiredUnitPrice ?? null).toBeNull();
       // The kept line still has its reference.
-      expect(after.find((l) => l.productId === SEED_PRODUCT_101_ID)!.referenceUnitPrice).toBe('130.00');
+      expect(after.find((l) => l.productId === SEED_PRODUCT_101_ID)!.referenceUnitPrice).toBe('130.0000');
     });
   });
 
@@ -209,8 +209,8 @@ describe('146 — line data carried across rewrites [integration]', () => {
       const before = await linesOf(created.id);
       const unchanged = before.find((l) => l.packagingUnitName == null)!;
       const changing = before.find((l) => l.packagingUnitName === KARTON)!;
-      expect(unchanged.referenceUnitPrice).toBe('130.00');
-      expect(changing.referenceUnitPrice).toBe('110.00');
+      expect(unchanged.referenceUnitPrice).toBe('130.0000');
+      expect(changing.referenceUnitPrice).toBe('110.0000');
 
       // The price moves after submission: only a line whose inputs changed may
       // see the new price.
@@ -237,17 +237,17 @@ describe('146 — line data carried across rewrites [integration]', () => {
       expect(after).toHaveLength(2);
       const kept = after.find((l) => l.packagingUnitName == null)!;
       expect(kept.quantity).toBe(2);
-      expect(kept.referenceUnitPrice).toBe('130.00');
+      expect(kept.referenceUnitPrice).toBe('130.0000');
       expect(kept.referenceCapturedAt?.getTime()).toBe(unchanged.referenceCapturedAt?.getTime());
-      expect(kept.desiredUnitPrice).toBe('100.00');
+      expect(kept.desiredUnitPrice).toBe('100.0000');
 
       const reResolved = after.find((l) => l.packagingUnitName === KARTON)!;
       expect(reResolved.quantity).toBe(18);
       expect(reResolved.packagingUnitBaseQuantity).toBe(6);
       expect(reResolved.productName.endsWith(`(${KARTON})`)).toBe(true);
-      expect(reResolved.referenceUnitPrice).toBe('115.00');
+      expect(reResolved.referenceUnitPrice).toBe('115.0000');
       expect(reResolved.referenceCurrency).toBe('PLN');
-      expect(reResolved.desiredUnitPrice).toBe('88.00');
+      expect(reResolved.desiredUnitPrice).toBe('88.0000');
     });
 
     it('a line the customer adds in the edit gets a reference of its own', async () => {
@@ -260,7 +260,7 @@ describe('146 — line data carried across rewrites [integration]', () => {
       });
       const after = await linesOf(created.id);
       const added = after.find((l) => l.packagingUnitName === PALETA_10)!;
-      expect(added.referenceUnitPrice).toBe('110.00');
+      expect(added.referenceUnitPrice).toBe('110.0000');
       expect(added.desiredUnitPrice ?? null).toBeNull();
     });
   });

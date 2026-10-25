@@ -87,19 +87,19 @@ describe('146 — reference price captured at customer submission [integration]'
     );
     expect(res.statusCode, res.body).toBe(201);
     const [line] = await linesOf(idOf(res));
-    expect(line?.referenceUnitPrice).toBe('120.00');
+    expect(line?.referenceUnitPrice).toBe('120.0000');
     expect(line?.referenceCurrency).toBe('PLN');
     expect(line?.referenceCapturedAt).toBeInstanceOf(Date);
     expect(line!.referenceCapturedAt!.getTime()).toBeGreaterThanOrEqual(before - 1000);
     // The proposal is the customer's, untouched by the reference.
-    expect(line?.desiredUnitPrice).toBe('100.00');
+    expect(line?.desiredUnitPrice).toBe('100.0000');
   });
 
   it('a request on the system-default channel stores that channel’s price (130.00)', async () => {
     const res = await create({ items: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }] });
     expect(res.statusCode, res.body).toBe(201);
     const [line] = await linesOf(idOf(res));
-    expect(line?.referenceUnitPrice).toBe('130.00');
+    expect(line?.referenceUnitPrice).toBe('130.0000');
   });
 
   it('a resubmit resolves on its own channel, not the source request’s', async () => {
@@ -113,7 +113,7 @@ describe('146 — reference price captured at customer submission [integration]'
     });
     expect(resubmit.statusCode, resubmit.body).toBe(201);
     const [line] = await linesOf(idOf(resubmit));
-    expect(line?.referenceUnitPrice).toBe('130.00');
+    expect(line?.referenceUnitPrice).toBe('130.0000');
     expect(line?.referenceCurrency).toBe('PLN');
     expect(line?.desiredUnitPrice ?? null).toBeNull();
   });
@@ -128,7 +128,7 @@ describe('146 — reference price captured at customer submission [integration]'
     expect(res.statusCode, res.body).toBe(200);
     const { quoteRequestId } = (res.json() as { data: { quoteRequestId: string } }).data;
     const [line] = await linesOf(quoteRequestId);
-    expect(line?.referenceUnitPrice).toBe('130.00');
+    expect(line?.referenceUnitPrice).toBe('130.0000');
     expect(line?.referenceCurrency).toBe('PLN');
     expect(line?.desiredUnitPrice ?? null).toBeNull();
   });
@@ -156,7 +156,7 @@ describe('146 — reference price captured at customer submission [integration]'
       expect(line?.referenceUnitPrice ?? null).toBeNull();
       expect(line?.referenceCurrency ?? null).toBeNull();
       expect(line?.referenceCapturedAt ?? null).toBeNull();
-      expect(line?.desiredUnitPrice).toBe('90.00');
+      expect(line?.desiredUnitPrice).toBe('90.0000');
     } finally {
       h.container.register('buyerLinePricePort', original);
     }
@@ -182,7 +182,7 @@ describe('146 — reference price captured at customer submission [integration]'
     );
     expect(res.statusCode, res.body).toBe(201);
     const [line] = await linesOf(idOf(res));
-    expect(line?.referenceUnitPrice).toBe('120.00');
+    expect(line?.referenceUnitPrice).toBe('120.0000');
     expect(line?.referenceCurrency).toBe('PLN');
   });
 
@@ -207,7 +207,7 @@ describe('146 — reference price captured at customer submission [integration]'
     });
     expect(topLevel.statusCode, topLevel.body).toBe(400);
     const [kept] = await linesOf(id);
-    expect(kept?.referenceUnitPrice).toBe('120.00');
+    expect(kept?.referenceUnitPrice).toBe('120.0000');
 
     // Its line schema is the create line schema, which is not strict (M4): a
     // per-line key is stripped, so the edit goes through and the value sent is

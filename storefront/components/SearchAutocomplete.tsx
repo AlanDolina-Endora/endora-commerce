@@ -16,6 +16,7 @@ import {
   type SuggestResponse,
 } from '../lib/api/search';
 import { toAbsoluteAssetUrl } from '../lib/asset-url';
+import { formatMoney as formatUnitPrice } from '../lib/i18n/money';
 
 /**
  * SearchAutocomplete — feature 006 / US1 / T015.
@@ -404,20 +405,9 @@ export function renderSuggestionPrice(
   return <span className="text-[11px] font-medium text-muted">{requestQuoteLabel}</span>;
 }
 
-function formatMoney(
-  amount: string | number,
-  currency: string,
-  locale: string,
-): string {
+/** A suggestion's price is a unit price: its significant places, up to four (owner ruling of 2026-10-25). */
+function formatMoney(amount: string | number, currency: string, locale: string): string {
   const value = typeof amount === 'string' ? Number(amount) : amount;
   if (!Number.isFinite(value)) return '';
-  try {
-    return new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 2,
-    }).format(value);
-  } catch {
-    return `${value.toFixed(2)} ${currency}`;
-  }
+  return formatUnitPrice(value, currency, locale, { unitPrice: true });
 }

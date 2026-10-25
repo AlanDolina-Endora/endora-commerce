@@ -28,7 +28,7 @@ export { toAbsoluteAssetUrl } from './asset-url.js';
 export { AuthProvider, useAuth } from './auth.js';
 export type { AdminMe, AuthProviderProps } from './auth.js';
 export { formatDateTime } from './format.js';
-export { formatMoney, localeForCurrency } from './money.js';
+export { formatMoney, localeForCurrency, type FormatMoneyOptions } from './money.js';
 export { invoiceEmailNotSentReason, issueInvoiceNotice, sendInvoiceEmailMessage } from './invoice-email-outcome.js';
 export type { Translate } from './invoice-email-outcome.js';
 export { getModulePresence, ModulePresenceProvider, setModuleActivation, useModulePresence } from './module-presence/index.js';

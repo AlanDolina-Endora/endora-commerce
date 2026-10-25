@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { ERROR_CODES } from '@endora-commerce/contracts';
+import { ERROR_CODES, unitPriceHalfUp } from '@endora-commerce/contracts';
 
 import { Cart, CartItem, Order, OrderItem } from '../../helpers/package-entities.js';
 import {
@@ -130,8 +130,9 @@ describe('POST /api/v1/orders — the line price is the price for its current qu
         productId,
         variantId: null,
         quantity: 1,
-        previousUnitPrice: TIER_VOLUME_PRICE,
-        currentUnitPrice: TIER_UNIT_PRICE,
+        // Unit prices at four places (owner ruling of 2026-10-25).
+        previousUnitPrice: unitPriceHalfUp(TIER_VOLUME_PRICE),
+        currentUnitPrice: unitPriceHalfUp(TIER_UNIT_PRICE),
         currency: 'PLN',
       },
     ]);

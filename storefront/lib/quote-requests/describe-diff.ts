@@ -1,3 +1,4 @@
+import { unitPriceDisplayText } from '@endora-commerce/contracts';
 import type { RfqDiffEntry } from '../api/rfq';
 import { tForLocale } from '../i18n/messages';
 
@@ -18,13 +19,14 @@ export function describeRfqDiff(d: RfqDiffEntry, locale: string): string {
     case 'header_note':
       return `Uwagi: „${d.before ?? '—'}” → „${d.after ?? '—'}”`;
     case 'line_added':
-      return `Dodano: ${line(d)} × ${d.quantity}${d.agreedUnitPrice !== null ? ` po ${d.agreedUnitPrice.toFixed(2)}` : ''}`;
+      return `Dodano: ${line(d)} × ${d.quantity}${d.agreedUnitPrice !== null ? ` po ${unitPriceDisplayText(d.agreedUnitPrice)}` : ''}`;
     case 'line_removed':
       return `Usunięto: ${line(d)}`;
     case 'line_quantity':
       return `${line(d)}: ilość ${d.before} → ${d.after}`;
     case 'line_agreed_unit_price':
-      return `${line(d)}: cena ${d.before !== null ? d.before.toFixed(2) : '—'} → ${d.after !== null ? d.after.toFixed(2) : '—'}`;
+      // Unit prices, at their significant places up to four (owner ruling of 2026-10-25).
+      return `${line(d)}: cena ${d.before !== null ? unitPriceDisplayText(d.before) : '—'} → ${d.after !== null ? unitPriceDisplayText(d.after) : '—'}`;
     case 'grouping':
       return tForLocale(locale)('quoteRequest.diff.grouping');
   }

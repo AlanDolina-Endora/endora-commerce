@@ -72,6 +72,7 @@ import { Migration20261008T061751CartsCartSourceQuoteRequest } from '@endora-com
 import { Migration20261018T074021CartsCartItemAgreedPrice } from '@endora-commerce/mod-carts/migrations';
 import { Migration20261019T043854CartsChannelBackfill } from '@endora-commerce/mod-carts/migrations';
 import { Migration20261021T165244CartsCartItemsPriceSource } from '@endora-commerce/mod-carts/migrations';
+import { Migration20261025T031727CartsUnitPriceFourPlaces } from '@endora-commerce/mod-carts/migrations';
 
 // ── catalog ─────────────────────────────────────────────────────────────────
 import { Migration20260429T064146CatalogAttributeSetsInit } from '@endora-commerce/mod-catalog/migrations';
@@ -255,6 +256,7 @@ import { Migration20261020T172007OrdersOrderItemGroups } from '@endora-commerce/
 import { Migration20261021T164807OrdersOrderCommentSystemNote } from '@endora-commerce/mod-orders/migrations';
 import { Migration20261021T165247OrdersOrderItemsPriceSource } from '@endora-commerce/mod-orders/migrations';
 import { Migration20261024T145147OrdersVatMethod } from '@endora-commerce/mod-orders/migrations';
+import { Migration20261025T031732OrdersUnitPriceFourPlaces } from '@endora-commerce/mod-orders/migrations';
 
 // ── organizations ───────────────────────────────────────────────────────────
 import { Migration20260424T205317OrganizationsInit } from '@endora-commerce/mod-organizations/migrations';
@@ -338,6 +340,7 @@ import { Migration20261017T142121QuoteRequestsQuoteRequestEventPdfSent } from '@
 import { Migration20261018T122118QuoteRequestsItemPackagingUnitId } from '@endora-commerce/mod-quote-requests/migrations';
 import { Migration20261020T171341QuoteRequestsQuoteRequestItemGroups } from '@endora-commerce/mod-quote-requests/migrations';
 import { Migration20261021T164808QuoteRequestsQuoteRequestEventCarrySkipped } from '@endora-commerce/mod-quote-requests/migrations';
+import { Migration20261025T031736QuoteRequestsUnitPriceFourPlaces } from '@endora-commerce/mod-quote-requests/migrations';
 
 // ── returns ─────────────────────────────────────────────────────────────────
 import { Migration20260625T144227ReturnsInit } from '@endora-commerce/mod-returns/migrations';
@@ -419,6 +422,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('carts', Migration20261018T074021CartsCartItemAgreedPrice),
   migration('carts', Migration20261019T043854CartsChannelBackfill),
   migration('carts', Migration20261021T165244CartsCartItemsPriceSource),
+  migration('carts', Migration20261025T031727CartsUnitPriceFourPlaces),
 
   // ── catalog ─────────────────────────────────────────────────────────────────
   migration('catalog', Migration20260429T064146CatalogAttributeSetsInit),
@@ -602,6 +606,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('orders', Migration20261021T164807OrdersOrderCommentSystemNote),
   migration('orders', Migration20261021T165247OrdersOrderItemsPriceSource),
   migration('orders', Migration20261024T145147OrdersVatMethod),
+  migration('orders', Migration20261025T031732OrdersUnitPriceFourPlaces),
 
   // ── organizations ───────────────────────────────────────────────────────────
   migration('organizations', Migration20260424T205317OrganizationsInit),
@@ -685,6 +690,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('quote_requests', Migration20261018T122118QuoteRequestsItemPackagingUnitId),
   migration('quote_requests', Migration20261020T171341QuoteRequestsQuoteRequestItemGroups),
   migration('quote_requests', Migration20261021T164808QuoteRequestsQuoteRequestEventCarrySkipped),
+  migration('quote_requests', Migration20261025T031736QuoteRequestsUnitPriceFourPlaces),
 
   // ── returns ─────────────────────────────────────────────────────────────────
   migration('returns', Migration20260625T144227ReturnsInit),

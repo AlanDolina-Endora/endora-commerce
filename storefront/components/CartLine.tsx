@@ -91,8 +91,10 @@ export function CartLine({
 }: CartLineProps): ReactNode {
   const suffixFor = (kind: 'net' | 'gross' | null): string =>
     kind === 'net' ? strings.netSuffix : kind === 'gross' ? strings.grossSuffix : '';
-  const renderPrice = (m: { amount: number; currency: string }): ReactNode => {
-    const priced = moneyByMode(m, displayMode, locale);
+  // `unitPrice`: the line's unit price, shown with its significant places, up to
+  // four; the line total is an amount and shows two (owner ruling of 2026-10-25).
+  const renderPrice = (m: { amount: number; currency: string }, unitPrice = false): ReactNode => {
+    const priced = moneyByMode(m, displayMode, locale, undefined, { unitPrice });
     return (
       <>
         <span>
@@ -299,7 +301,7 @@ export function CartLine({
         className="text-right font-mono text-[13px] text-fg-soft max-[720px]:[grid-area:unit]"
         aria-label={strings.unitPriceLabel}
       >
-        {renderPrice(line.unitPrice)}
+        {renderPrice(line.unitPrice, true)}
       </span>
 
       <span

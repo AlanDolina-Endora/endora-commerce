@@ -2394,7 +2394,8 @@ zmiany w storefroncie nie były wypróbowane.
 ### Po aktualizacji do wydania 0.108.0 {#after-0-108-0}
 
 `pnpm run upgrade 0.108.0` przenosi pakiety wydania z `0.107.0` i wykonuje jego migracje —
-dwadzieścia dwie, z czego dwanaście dotyczy nowego modelu cen i jego edytora. **Wydanie zastępuje
+dwadzieścia osiem, z czego dwanaście dotyczy nowego modelu cen i jego edytora, a trzy poszerzają
+ceny jednostkowe do czterech miejsc po przecinku. **Wydanie zastępuje
 sposób przechowywania i wyliczania cen w jednym kroku, bez okresu zgodności**: cenniki wcześniejszych
 wydań, z ich regułami stosowania (Application rule), listami produktów i przedziałami ilościowymi,
 stają się **cennikami w nowym modelu**, a produkt nie ma już własnej ceny. Ceny bazowe, które
@@ -2404,7 +2405,8 @@ produktowy: zostaje jako pusty, wygasły cennik (krok 3). Przeczytaj poniższe k
 uruchomisz polecenie. Pozostałe zmiany wydania następują w każdej części tej sekcji po zmianie cen:
 minimalne ilości zamówienia i produkty podlegające zwrotowi, grupy pozycji w zapytaniach ofertowych
 i zamówieniach, filtry list według pól niestandardowych i przenoszenie wartości pól
-niestandardowych między rekordami, edycja szans sprzedaży w miejscu, teksty produktów dla kanału
+niestandardowych między rekordami, ceny jednostkowe z czterema miejscami po przecinku od cennika
+po fakturę, edycja szans sprzedaży w miejscu, teksty produktów dla kanału
 sprzedaży w storefroncie, akcja operatora przygotowująca koszyk klienta z oferty oraz nowy moduł
 `admin_feedback`. Sekcja mówi, co zrobić i w jakiej kolejności, a potem — co działa inaczej dla
 [operatorów](#after-0-108-0-operators),
@@ -2628,10 +2630,39 @@ W dowolnym momencie:
   zatwierdzonej kwocie, więc zwrot i korekta zawsze się zgadzają. Dwa zwroty jednego zamówienia są
   rozliczane jeden po drugim.
 - **Kwota z więcej niż dwoma miejscami po przecinku jest odrzucana, a nie zaokrąglana** — koszt
-  dostawy, dopłata do metody płatności, uzgodniona lub proponowana cena w zapytaniu ofertowym,
-  zatwierdzona kwota zwrotu, koszt zwrotu, limit kredytowy, wartość szansy sprzedaży oraz kwota
-  stała, próg i minimalna wartość koszyka w promocji. Ekran odpowiada komunikatem *Kwota może mieć
-  najwyżej dwa miejsca po przecinku.*
+  dostawy, dopłata do metody płatności, zatwierdzona kwota zwrotu, koszt zwrotu, limit kredytowy,
+  wartość szansy sprzedaży oraz kwota stała, próg i minimalna wartość koszyka w promocji. Ekran
+  odpowiada komunikatem *Kwota może mieć najwyżej dwa miejsca po przecinku.* Cena jednostkowa nie
+  jest kwotą: zob. następną sekcję.
+
+##### Ceny jednostkowe z czterema miejscami po przecinku
+
+- **Ceny jednostkowe nie są już zaokrąglane do groszy w koszyku.** Cennik zawsze przechowywał
+  cztery miejsca po przecinku, ale do tego wydania koszyk zaokrąglał cenę do dwóch, przyjmując ją:
+  wkręt w cenie 0,0125 zł był liczony po 0,01 zł, więc 10 000 sztuk kosztowało 100,00 zł zamiast
+  125,00 zł, a wkręt po 0,0150 zł był liczony po 0,02 zł — o jedną trzecią za drogo. Cena
+  jednostkowa zachowuje teraz cztery miejsca, bez zaokrąglania, w pozycji koszyka, pozycji
+  zamówienia, pozycjach zapytania ofertowego i pozycji faktury.
+- **Zaokrąglana jest wartość pozycji.** Wartość netto pozycji to cena jednostkowa × ilość,
+  zaokrąglona raz, połówkowo w górę, do grosza: 0,0125 × 10 000 = 125,00, a 0,0150 × 3 = 0,045,
+  czyli 0,05. VAT pozostaje taki, jak opisano wyżej — dla każdej stawki od sumy wartości pozycji.
+  Zwroty i korekty liczą się, jak dotąd, z tego, co zamówienie zapisało i pobrało.
+- **Kolumny zostały poszerzone**: `cart_items.unit_price`, `recomputed_unit_price` i
+  `agreed_unit_price`, `order_items.unit_price` oraz `quote_request_items.desired_unit_price`,
+  `agreed_unit_price` i `reference_unit_price` mają teraz typ `numeric(14,4)`, jak cenniki i
+  `invoice_lines.unit_net_price`. Poszerzenie jest bezstratne: żadna zapisana wartość się nie
+  zmienia, a zamówienia złożone przed aktualizacją zachowują dwumiejscowe ceny, po których je
+  złożono.
+- **Cena jednostkowa pokazuje swoje znaczące miejsca, do czterech**: 0,0125 zł, 1,505 zł — oraz
+  dwa miejsca, gdy trzecie i czwarte są zerami (1,50 zł). Wartości pozycji i sumy zawsze mają dwa
+  miejsca. Dotyczy to panelu, storefrontu, kolumny *Cena netto* na fakturze PDF, oferty PDF i
+  e-maili. Feed produktowy nadal publikuje dwa miejsca.
+- **Uzgodnioną lub proponowaną cenę jednostkową w zapytaniu ofertowym można wpisać z czterema
+  miejscami po przecinku**; piąte jest odrzucane komunikatem *Cena jednostkowa może mieć najwyżej
+  cztery miejsca po przecinku.*
+- **Pozycja koszyka dodana przed aktualizacją** ma dwumiejscową cenę. Jeśli cena produktu ma
+  trzecie lub czwarte miejsce po przecinku, nie jest to już cena bieżąca i koszyk przelicza
+  pozycję przed złożeniem zamówienia — np. po 0,0125 zamiast 0,01.
 
 ##### Minimalne ilości zamówienia i produkty podlegające zwrotowi
 
@@ -2750,8 +2781,7 @@ W dowolnym momencie:
 
 - **Wpisana kwota pieniężna z więcej niż dwoma miejscami po przecinku zwraca
   `400 AMOUNT_PRECISION_EXCEEDED`** (nowy kod) i nie jest zapisywana; wcześniej była zaokrąglana.
-  Dotyczy to pól: `cost` metody dostawy, `additionalPrice` metody płatności, `desiredUnitPrice` i
-  `agreedUnitPrice` pozycji zapytania ofertowego, `approvedRefundAmount` rozliczenia,
+  Dotyczy to pól: `cost` metody dostawy, `additionalPrice` metody płatności, `approvedRefundAmount` rozliczenia,
   `returnCost` metody dostawy zwrotu, `amount` zwrotu zamówienia w panelu, `grantedAmount` limitu
   kredytowego, `manualValue` szansy sprzedaży, `amount`, `spendStep`, `minCartSubtotal` promocji i
   `value` promocji `amount_off`, a także `netTotal`, `taxTotal`, `grossTotal` i `paidTotal`
@@ -2760,6 +2790,19 @@ W dowolnym momencie:
   także innych warunków, zwraca `400 VALIDATION_FAILED` z tym samym problemem wśród szczegółów.
   Końcowe zera nie są znaczące (`"123.4500"` to 123,45); ciąg, który w ogóle nie jest liczbą
   dziesiętną, zwraca `400 VALIDATION_FAILED` z problemem formatu.
+- **Cena jednostkowa ma do czterech miejsc po przecinku.** `desiredUnitPrice` i `agreedUnitPrice`
+  pozycji zapytania ofertowego (`POST /api/v1/quote-requests`, trasy tworzenia i `PATCH` w panelu)
+  przyjmują cztery miejsca; piąte zwraca `400 UNIT_PRICE_PRECISION_EXCEEDED` (nowy kod, *Cena
+  jednostkowa może mieć najwyżej cztery miejsca po przecinku.*), a `details` wskazuje pole.
+  Żądanie odrzucone jednocześnie za kwotę i za cenę jednostkową zwraca `400 VALIDATION_FAILED`.
+  Odpowiedzi niosą czteromiejscową cenę jednostkową: liczby (`unitPrice` pozycji koszyka i
+  zamówienia, `agreedUnitPrice`, `unitNetPrice` pozycji faktury) jako wartość — `0.0125` — a
+  napisy dziesiętne z czterema miejscami — `unitPrice` podglądu zamówienia w panelu to `"0.0125"`
+  lub `"29.4950"`, gdzie wcześniej było zaokrąglone do `"29.50"`; tak samo `previousUnitPrice` i
+  `currentUnitPrice` w `details.lines` odpowiedzi `409 CART_PRICE_CHANGED`. **Wartość pozycji to
+  `unitPrice × quantity`, zaokrąglona raz, połówkowo w górę, do dwóch miejsc**: licz ją w ten
+  sposób, a nie z ceny jednostkowej zaokrąglonej do dwóch miejsc. Zamówienie złożone przed
+  aktualizacją zachowuje dwumiejscowe ceny.
 - **VAT jest liczony dla każdej stawki od sumy kwot netto w tej stawce**, z jednym zaokrągleniem
   „połówkowym w górę”: `taxTotal` i `total` zamówienia, podglądy w checkoucie i w panelu,
   `vatSummary`, `taxTotal` i `grossTotal` faktury oraz kwoty korekty. `lineTotal` pozycji
@@ -2896,6 +2939,16 @@ W dowolnym momencie:
   `twoDecimalAmountString`, `addAmountPrecisionIssue` i `ERROR_CODES.AMOUNT_PRECISION_EXCEEDED`).
   Moduł nakładkowy, który liczy kwotę z ceny, używa ich zamiast `Number#toFixed(2)` czy
   `Math.round(x * 100) / 100`, a nowe pole kwoty wpisywanej przez człowieka używa tego zawężenia.
+- **Cena jednostkowa jest przenoszona z czterema miejscami, a zaokrąglana jest wartość pozycji**
+  (decyzja właściciela z 25.10.2026). `@endora-commerce/contracts` dodaje `unitPriceHalfUp` (cena
+  jednostkowa z czterema miejscami, tak jak zapisuje ją `numeric(14,4)`), `unitPriceFractionDigits`
+  i `unitPriceDisplayText` (jedna reguła wyświetlania), `grossUnitPriceHalfUp`, a w `money-input`
+  `fourDecimalUnitPrice`, `fourDecimalUnitPriceString`, `isUnitPricePrecisionIssue` i
+  `ERROR_CODES.UNIT_PRICE_PRECISION_EXCEEDED`. Moduł nakładkowy, który zapisuje wyliczoną lub
+  wpisaną cenę jednostkową, zachowuje ją przez `unitPriceHalfUp` — nigdy `roundAmountHalfUp`, który
+  zaokrągla do dwóch miejsc — a pozycję liczy przez `lineAmountHalfUp(unit, quantity)`.
+  `formatMoney` w `@endora-commerce/admin-kit/lib` przyjmuje `{ unitPrice: true }`, a wartość
+  dokumentu rodzaju `money` — `unitPrice: true`, by pokazać cenę jednostkową według reguły.
 - **`OrderReturnContext` zyskuje `vatMethod`, `productsPaidTotal` (zapisane netto + podatek −
   rabat) i `discountTotal`, a `OrderReturnContextLine` zyskuje `unitNetPrice` i `taxRate`**;
   `paidLineAmount` to suma pozycji zapisana w zamówieniu. Implementacja `OrderReturnContextPort` w
@@ -2948,6 +3001,17 @@ porównawczej na kartach produktów i ceny katalogowej obok niższej ceny kupuj�
 wariantu; to pole nie jest już wysyłane, więc selektor nie pokazuje ceny wariantu, dopóki nie
 przeniesie się `VariantPicker.tsx`.
 
+Storefront wydania pokazuje też cenę jednostkową z jej znaczącymi miejscami, do czterech
+(`0,0125 zł`) — karty i wiersze produktów, strona produktu, koszyk, strony zamówienia i zapytania
+ofertowego — przez `formatMoney(…, { unitPrice: true })` i `grossUnitPriceFromNet` w
+`lib/i18n/money.ts`, i pozwala wpisać propozycję ceny z czterema miejscami. Storefront utworzony
+wcześniej pokazuje taką cenę zaokrągloną do dwóch miejsc, a koszyk nalicza cenę czteromiejscową:
+przenieś `lib/i18n/money.ts`, `components/ProductCard.tsx`, `components/ProductRow.tsx`,
+`components/PriceTag.tsx`, `components/VariantPicker.tsx`, `components/SearchAutocomplete.tsx`,
+`components/pricing/BaseSalePriceBlock.tsx`, `components/CartLine.tsx`,
+`components/orders/OrderItemRows.tsx`, `components/rfq/RfqDraftView.tsx`,
+`app/(account)/quote-requests/[id]/page.tsx` i `lib/analytics/ecommerce.ts`.
+
 Storefront wydania pokazuje też minimalne ilości zamówienia (strona produktu, karta, koszyk,
 finalizacja zamówienia, szybkie zamówienie, szkic zapytania ofertowego, lista zakupów), to, czy
 pozycja podlega zwrotowi, w formularzu zwrotu, oraz grupy pozycji oferty i zamówienia. Storefront
@@ -2957,7 +3021,7 @@ widzą pozycje zamówienia albo oferty bez grup, w kolejności wyświetlania. Zm
 storefroncie między `v0.107.0` a `v0.108.0`: wymienia je `git diff v0.107.0 v0.108.0 -- storefront`
 w repozytorium platformy.
 
-Tę sekcję napisano 23 i 24.10.2026 na podstawie gałęzi wydania zmiany cen
+Tę sekcję napisano 23, 24 i 25.10.2026 na podstawie gałęzi wydania zmiany cen
 (`feat/160-pricing-model-v2`) i gałęzi `master` od `v0.107.0`, sprawdzając opisy zmian
 (changesety) wydania z jego migracjami, manifestami, trasami i historią wzorcowego storefrontu. W chwili pisania żadna instancja nie została zaktualizowana
 poleceniem `pnpm run upgrade 0.108.0`; kolejność kroków i zmiany w storefroncie nie były

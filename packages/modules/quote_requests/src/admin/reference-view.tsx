@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { roundAmountHalfUp } from '@endora-commerce/contracts';
+import { unitPriceHalfUp } from '@endora-commerce/contracts';
 import { apiClient } from '@endora-commerce/admin-kit/lib';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { useRfqNumberFormat } from './number-format.js';
@@ -105,11 +105,10 @@ export async function probeCustomerPrice(
     );
     const resolved = res.data[0]?.price ?? null;
     if (!resolved) return null;
-    // The resolver's four-place decimal, at the two places a quote line stores
-    // a reference at, by the one rule (`roundAmountHalfUp`) — rounded before it
-    // is a number, so 9.0450 is 9.05 and not the double 9.04499… (review 2,
-    // finding 3 of release 0.108.0).
-    return { amount: Number(roundAmountHalfUp(resolved.amount)), currency: resolved.currency };
+    // The resolver's four-place decimal, as a quote line stores a reference
+    // (owner ruling of 2026-10-25): unrounded, read as a decimal before it is
+    // a number (review 2, finding 3 of release 0.108.0).
+    return { amount: Number(unitPriceHalfUp(resolved.amount)), currency: resolved.currency };
   } catch {
     return null;
   }
@@ -137,7 +136,7 @@ export function ReferenceCell({
   return (
     <div className="space-y-0.5">
       <div className="tabular-nums">
-        {format.money(view.price.amount, view.price.currency)}
+        {format.unitMoney(view.price.amount, view.price.currency)}
       </div>
       <div className="flex flex-wrap gap-x-1 text-xs text-muted-foreground">
         <span>

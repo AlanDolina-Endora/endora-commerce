@@ -26,7 +26,7 @@ import {
   canSplitLine,
   splitLineInto,
 } from '@endora-commerce/admin-kit/components';
-import { arrangeLineGroups, lineAmountHalfUp, roundAmountHalfUp, type LineGroup } from '@endora-commerce/contracts';
+import { arrangeLineGroups, lineAmountHalfUp, unitPriceDisplayText, type LineGroup } from '@endora-commerce/contracts';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { AdminZone } from '@endora-commerce/admin-kit/zones';
 import { deadlineForDays, isValidityDaysInvalid, rfqValidity } from '../validity.js';
@@ -708,7 +708,7 @@ export function RfqDetail(): ReactNode {
                             <ReferenceCell view={reference} perBaseUnit={Boolean(it.packagingUnitName)} />
                           </TableCell>
                           <TableCell className="tabular-nums">
-                            {proposal !== null ? format.amount(proposal) : '—'}
+                            {proposal !== null ? format.unitAmount(proposal) : '—'}
                           </TableCell>
                           <TableCell>
                             <DifferenceCell
@@ -718,7 +718,7 @@ export function RfqDetail(): ReactNode {
                             />
                           </TableCell>
                           <TableCell className="tabular-nums">
-                            {it.agreedUnitPrice !== null ? format.amount(it.agreedUnitPrice) : '—'}
+                            {it.agreedUnitPrice !== null ? format.unitAmount(it.agreedUnitPrice) : '—'}
                           </TableCell>
                           <TableCell className="tabular-nums text-right">
                             {lineTotal !== null
@@ -958,7 +958,8 @@ function overviewSections(rfq: AdminRfqDetail): Array<{ key: string; heading: st
 /** A line's reference total, or `null` when the screen shows no reference for it. */
 function referenceTotalOf(view: ReferenceView, quantity: number): number | null {
   const price = referencePriceOf(view);
-  return price !== null ? price.amount * quantity : null;
+  // The line value, rounded once (§10.18).
+  return price !== null ? Number(lineAmountHalfUp(price.amount, quantity)) : null;
 }
 
 interface ModifyLineDraft {
@@ -1049,7 +1050,8 @@ function ModifyCard({
         variantId: it.variantId ?? null,
         lineNote: it.lineNote,
         quantity: String(it.quantity),
-        agreedUnitPrice: definedPrice !== null ? roundAmountHalfUp(definedPrice) : '',
+        // A unit price keeps its four places (owner ruling of 2026-10-25).
+        agreedUnitPrice: definedPrice !== null ? unitPriceDisplayText(definedPrice) : '',
       };
     }),
   );
@@ -1071,7 +1073,7 @@ function ModifyCard({
                   ...l,
                   currentPrice: price,
                   ...(price !== null && l.agreedUnitPrice.trim() === ''
-                    ? { agreedUnitPrice: roundAmountHalfUp(price.amount) }
+                    ? { agreedUnitPrice: unitPriceDisplayText(price.amount) }
                     : {}),
                 }
               : l,
@@ -1260,12 +1262,11 @@ function ModifyCard({
     const agreedNum = Number(l.agreedUnitPrice);
     const typedAgreed =
       l.agreedUnitPrice.trim().length > 0 && Number.isFinite(agreedNum) ? agreedNum : null;
-    const lineTotal =
-      typedAgreed !== null && qtyNum > 0
-        ? typedAgreed * qtyNum
-        : desired !== null && qtyNum > 0
-          ? desired * qtyNum
-          : null;
+    // The line value, `unit × quantity` rounded once (§10.18); a fractional
+    // quantity being typed is not a line yet.
+    const lineValue = (unit: number): number | null =>
+      Number.isInteger(qtyNum) && qtyNum > 0 ? Number(lineAmountHalfUp(unit, qtyNum)) : null;
+    const lineTotal = typedAgreed !== null ? lineValue(typedAgreed) : desired !== null ? lineValue(desired) : null;
     return { orig, desired, reference, qtyNum, typedAgreed, lineTotal };
   };
 
@@ -1452,7 +1453,7 @@ function ModifyCard({
                   </div>
                   <Input
                     type="number"
-                    step="0.01"
+                    step="0.0001"
                     min={0}
                     aria-label={t('rfq.detail.modify.agreedUnitPrice')}
                     value={l.agreedUnitPrice}
@@ -1463,7 +1464,7 @@ function ModifyCard({
                     <ReferenceCell view={reference} perBaseUnit={Boolean(orig?.packagingUnitName)} />
                   </div>
                   <span className="flex min-h-9 items-center text-sm tabular-nums text-muted-foreground">
-                    {desired !== null ? format.money(desired, currency) : '—'}
+                    {desired !== null ? format.unitMoney(desired, currency) : '—'}
                   </span>
                   <div className="flex min-h-9 items-center text-sm">
                     <DifferenceCell

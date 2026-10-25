@@ -34,7 +34,7 @@ export function OrderItemRows(props: {
             <small className="text-subtle">SKU: {it.variantSnapshot?.sku ?? it.productSnapshot.sku}</small>
           </td>
           <td>{it.quantity}</td>
-          <td>{formatMoney(it.unitPrice, order.currency, locale)}</td>
+          <td>{formatMoney(it.unitPrice, order.currency, locale, { unitPrice: true })}</td>
           <td className="text-right">{formatMoney(it.lineTotal, order.currency, locale)}</td>
         </tr>
       )}

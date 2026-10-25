@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { ERROR_CODES, isAmountPrecisionIssue, type ErrorCode, type ErrorEnvelope, type ModuleErrorCode, type SupportedLanguage } from '@endora-commerce/contracts';
+import { ERROR_CODES, isAmountPrecisionIssue, isUnitPricePrecisionIssue, type ErrorCode, type ErrorEnvelope, type ModuleErrorCode, type SupportedLanguage } from '@endora-commerce/contracts';
 import { ZodError, type core as zodCore } from 'zod';
 import { hasZodFastifySchemaValidationErrors } from '@fastify/type-provider-zod';
 import { OrgWriteOutOfScopeError } from '../tenancy/tenant-context.js';
@@ -531,11 +531,20 @@ async function localizeErrorEnvelope(
  * envelope translates — `VALIDATION_FAILED` is never translated (see
  * `localizeErrorEnvelope`). A request that fails anything else as well keeps
  * the generic code, with the precision issue listed among its details.
+ *
+ * A typed **unit price** keeps four places (owner ruling of 2026-10-25), and
+ * one with more is `UNIT_PRICE_PRECISION_EXCEEDED`, a sibling code whose
+ * sentence says four. A request refused for both kinds at once has no one
+ * sentence that is true, so it keeps the generic code.
  */
 function validationCode(issues: readonly unknown[]): { code: ErrorCode; message: string } {
-  return issues.length > 0 && issues.every(isAmountPrecisionIssue)
-    ? { code: ERROR_CODES.AMOUNT_PRECISION_EXCEEDED, message: 'An amount has more than two decimal places.' }
-    : { code: ERROR_CODES.VALIDATION_FAILED, message: 'Request failed validation.' };
+  if (issues.length > 0 && issues.every(isAmountPrecisionIssue)) {
+    return { code: ERROR_CODES.AMOUNT_PRECISION_EXCEEDED, message: 'An amount has more than two decimal places.' };
+  }
+  if (issues.length > 0 && issues.every(isUnitPricePrecisionIssue)) {
+    return { code: ERROR_CODES.UNIT_PRICE_PRECISION_EXCEEDED, message: 'A unit price has more than four decimal places.' };
+  }
+  return { code: ERROR_CODES.VALIDATION_FAILED, message: 'Request failed validation.' };
 }
 
 /**

@@ -240,17 +240,18 @@ describe('carriedProposal — threat model T5', () => {
   });
 
   it('an explicit value replaces it', () => {
-    expect(carriedProposal(80, { desiredUnitPrice: '95.00' })).toBe('80.00');
-    expect(carriedProposal(0, { desiredUnitPrice: '95.00' })).toBe('0.00');
+    expect(carriedProposal(80, { desiredUnitPrice: '95.00' })).toBe('80.0000');
+    expect(carriedProposal(0, { desiredUnitPrice: '95.00' })).toBe('0.0000');
   });
 
-  it('stores a typed proposal half-up on its decimal digits, not the binary 1.00 (#417)', () => {
-    expect(carriedProposal(1.005, null)).toBe('1.01');
+  it('stores a typed proposal at its four places, unrounded (§10.18)', () => {
+    expect(carriedProposal(1.005, null)).toBe('1.0050');
+    expect(carriedProposal(0.0125, null)).toBe('0.0125');
   });
 
   it('a new line without a proposal has none', () => {
     expect(carriedProposal(undefined, null)).toBeNull();
-    expect(carriedProposal(12.5, null)).toBe('12.50');
+    expect(carriedProposal(12.5, null)).toBe('12.5000');
   });
 });
 

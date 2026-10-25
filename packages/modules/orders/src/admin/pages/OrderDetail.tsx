@@ -756,7 +756,7 @@ export function OrderDetail(): ReactNode {
                           </TableCell>
                           <TableCell>{it.quantity}</TableCell>
                           <TableCell className="tabular-nums">
-                            {formatMoney(it.unitPrice, order.currency)}
+                            {formatMoney(it.unitPrice, order.currency, undefined, { unitPrice: true })}
                           </TableCell>
                           <TableCell>{(it.taxRate * 100).toFixed(1)}%</TableCell>
                           <TableCell className="tabular-nums text-right">

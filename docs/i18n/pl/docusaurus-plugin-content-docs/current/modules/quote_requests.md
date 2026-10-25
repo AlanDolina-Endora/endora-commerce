@@ -94,6 +94,13 @@ W praktyce oznacza to, że:
 - Reguły dotyczą **braku** ceny. Uzgodniona cena jednostkowa równa dokładnie `0`, wpisana przez
   operatora — pozycja z bezpłatną próbką — jest uzgodnioną ceną jak każda inna, a takie zapytanie
   można zaakceptować, zatwierdzić i zamówić.
+- **Cena jednostkowa ma do czterech miejsc po przecinku.** Uzgodnioną lub oczekiwaną cenę
+  jednostkową można wpisać jako `0.0125`; piąte miejsce jest odrzucane kodem
+  `400 UNIT_PRICE_PRECISION_EXCEEDED` (*Cena jednostkowa może mieć najwyżej cztery miejsca po
+  przecinku.*), nigdy zaokrąglane. Cena jest zapisywana tak, jak ją wpisano (`numeric(14,4)`),
+  trafia do koszyka i zamówienia bez zaokrąglenia, a zaokrąglana jest tylko wartość pozycji — cena
+  jednostkowa × ilość — raz, do dwóch miejsc: 0,0125 za 10 000 sztuk to 125,00. Ekrany i PDF
+  pokazują cenę jednostkową z jej znaczącymi miejscami, do czterech.
 - `reject-revision` pozostaje bez zmian: klient nadal może wycofać zapytanie, na które sprzedawca
   jeszcze nie odpowiedział.
 - Zapytania, które otrzymało status `Approved` z niewycenioną pozycją, zanim te reguły zaczęły

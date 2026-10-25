@@ -143,11 +143,15 @@ sprzedaje w tej walucie) i dla tego kupującego. Cena powstaje potem w czterech 
 Ponieważ procenty dla kupujących są liczone od ceny katalogowej, rabat kontraktowy podąża za ceną
 kanału: jeśli kanał sprzedaje produkt za 120 zamiast 100, rabat kontraktowy 20 % daje 96.
 
-Procenty są zaokrąglane połówkowo w górę do czterech miejsc po przecinku. Wszędzie, gdzie cena jest
-pokazywana lub zapisywana z dwoma miejscami po przecinku — na karcie produktu, w pozycji koszyka i w
-zamówieniu, które ją przejmuje, w podglądzie zamówienia, w cenie referencyjnej zapytania ofertowego i
-w pliku produktowym — jest zaokrąglana połówkowo w górę z tych czterech miejsc, więc ta sama cena
-wszędzie wygląda tak samo: 9,0450 to 9,05, a 1,0050 to 1,01.
+Procenty są zaokrąglane połówkowo w górę do czterech miejsc po przecinku. **Cena zachowuje cztery
+miejsca aż do faktury**: pozycja koszyka, zamówienie, które ją przejmuje, podgląd zamówienia, cena
+referencyjna i uzgodniona w zapytaniu ofertowym oraz pozycja faktury niosą cenę jednostkową bez
+zaokrąglenia, a zaokrąglana jest tylko wartość pozycji — cena jednostkowa × ilość — raz, połówkowo w
+górę, do dwóch miejsc. Wkręt po 0,0125 kosztuje 125,00 za 10 000 sztuk, a 0,0150 × 3 to 0,045, czyli
+0,05. Cena jednostkowa jest pokazywana ze swoimi znaczącymi miejscami, do czterech, a z dwoma, gdy
+trzecie i czwarte są zerami: 0,0125 zł, 1,505 zł, 1,50 zł; wartości pozycji i sumy mają zawsze dwa
+miejsca. Plik produktowy publikuje dwa miejsca, zaokrąglone połówkowo w górę z czterech: 9,0450 to
+9,05, a 1,0050 to 1,01.
 
 ### Kolejność cen
 

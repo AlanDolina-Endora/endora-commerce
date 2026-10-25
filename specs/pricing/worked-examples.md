@@ -2,7 +2,7 @@
 
 The product owner's three target scenarios (E1–E3) and the cases that chose the precedence (F, S, T, Q vectors), and the cases the owner's rulings of 2026-10-21 decide (C∩, configurable precedence, H, A, K, U, V, D vectors), each as **inputs → expected price → which row wins and why**, under the proposed model, with today's answer where it differs. They are written to become the failing-first tests of the pricing-model feature (Constitution III) and to answer "what should this cost?" without re-deriving the algorithm.
 
-**Verified against** `master` at `b1021c71b` on 2026-10-21; §10.11 re-checked for the P0 read-path hardening (branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21; §10.16 re-checked at `e3f456957` on 2026-10-24 (vectors G1–G4). §10.17 written against `2716908b3` on 2026-10-24 (issue #417) and rewritten for the owner's VAT ruling of the same day. File:line citations are as of `b1021c71b`; re-check them before relying on one.
+**Verified against** `master` at `b1021c71b` on 2026-10-21; §10.11 re-checked for the P0 read-path hardening (branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21; §10.16 re-checked at `e3f456957` on 2026-10-24 (vectors G1–G4). §10.17 written against `2716908b3` on 2026-10-24 (issue #417) and rewritten for the owner's VAT ruling of the same day; §10.16 and §10.17 recomputed and §10.18 written for the four-place unit-price ruling of 2026-10-25 against `ad06079a4` (branch `fix/four-place-unit-prices`). File:line citations are as of `b1021c71b`; re-check them before relying on one.
 
 **The "Today" lines** under each vector record what the **pre-160** engine (the Application rule
 and the Default list) answered, as the comparison the model was decided against. Since feature 160
@@ -294,15 +294,22 @@ percent +10 (off the parent's base).
 
 ### 10.16 Two-place rounding of an x.xx50 amount
 
-A resolver amount is four places; every surface that shows or stores it at two rounds it **half-up
-on its decimal digits** (`roundAmountHalfUp`, `CON/price-book-decimal.ts`), which is also what the
-storefront's `Intl.NumberFormat` shows. `Number(amount).toFixed(2)` rounds the binary double and
-is not this rule: 9.0450 is the double 9.04499…, so it gave 9.04.
+A resolver amount is four places, and since the owner's ruling of 2026-10-25 (§10.18) a **unit
+price keeps them**: the cart line, the order line (copied from the cart), the admin order preview and
+a quote's reference carry it unrounded, and the card and the product page show it with its
+significant places. A surface that has to write it at two — a product feed, and the line value
+`unit × quantity` — rounds it **half-up on its decimal digits** (`roundAmountHalfUp`,
+`CON/price-book-decimal.ts`; `lineAmountHalfUp`, `CON/money-decimal.ts`).
+`Number(amount).toFixed(2)` rounds the binary double and is not this rule: 9.0450 is the double
+9.04499…, so it gave 9.04.
 
-| Vector | Config | Buyer / product | Resolver | Card, product page, cart line, order (copied from the cart), order preview, quote reference, feed |
-| --- | --- | --- | --- | --- |
-| R1 | everyone catalogue book: product fixed 10.05; everyone sale: product −10 % | any / product | **9.0450** | **9.05** (`toFixed`: 9.04) |
-| R2 | everyone sale: product fixed 1.005 | any / product | **1.0050** | **1.01** (`toFixed`: 1.00) |
+| Vector | Config | Buyer / product | Resolver | Cart line, order line, order preview, quote reference | Card, product page | Line of 1, feed |
+| --- | --- | --- | --- | --- | --- | --- |
+| R1 | everyone catalogue book: product fixed 10.05; everyone sale: product −10 % | any / product | **9.0450** | **9.0450** | **9,045 zł** | **9.05** (`toFixed`: 9.04) |
+| R2 | everyone sale: product fixed 1.005 | any / product | **1.0050** | **1.0050** | **1,005 zł** | **1.01** (`toFixed`: 1.00) |
+
+Before the ruling of 2026-10-25 every one of those surfaces held 9.05 and 1.01: the cart rounded the
+unit price to two places as it took it in.
 
 Test: `backend/test/integration/price_lists/worked-examples/rounding.test.ts`.
 
@@ -323,7 +330,9 @@ binary double is not this rule: 29.50 × 1.23 is the double 36.28499…, and
 Tests: `packages/contracts/test/price-book-decimal.unit.test.ts`,
 `packages/modules/product_feeds/src/backend/services/feed-gross-price.test.ts`,
 `storefront/test/lib/gross-derivation.test.ts`. Tax, totals and the documents an order produces
-are §10.17.
+are §10.17. A gross **unit** price shown beside a sub-cent net is carried to four places instead
+(`grossUnitPriceHalfUp`, §10.18): 0.0125 at 23 % is 0.015375, shown 0,0154 zł, where G1–G4 — nets
+that show two places — keep two.
 
 ### 10.17 Money computed from a price — lines, tax, totals and documents (issue #417)
 
@@ -349,31 +358,40 @@ produces calls it:
 
 A typed money amount has at most two decimal places; more is refused with
 `400 AMOUNT_PRECISION_EXCEEDED`, never rounded (`CON/money-input.ts`). Price-book prices keep their
-four-place grammar (§10.16).
+four-place grammar (§10.16), and since the ruling of 2026-10-25 so does a typed unit price (§10.18).
 
-The resolver amount is rounded to the cart line's two places first (§10.16). At 8 % no two-place net
-has an exact half cent of tax (8 × cents ÷ 100 never ends in .5), so the binary failures were at 23 %
-and 5 %. Each order carries a 2.50 payment surcharge and no delivery cost; 102 is a `virtual`
-product, which is how one order carries two rates.
+Since the owner's ruling of 2026-10-25 (§10.18) the cart line carries the resolver amount at its
+four places and **the line value is the rounding point**: a line's net is `unit × quantity` rounded
+half-up once. The vectors below are recomputed under it; the *Cart lines* column is that net (the
+line's unit price is the resolver's, 29.4950, 9.0450, 0.6950). Before the ruling the unit price was
+rounded to two places first, so 9.0450 × 3 was 9.05 × 3 = **27.15** where it is now 27.135 →
+**27.14**, 0.6950 × 5 was 3.50 where it is 3.475 → **3.48**, and 29.4950 × 2 was 59.00 where it is
+**58.99**; A1, A3 and V2, whose lines hold one unit, did not change. At 8 % no two-place net has an
+exact half cent of tax (8 × cents ÷ 100 never ends in .5), so the binary failures were at 23 % and
+5 %. Each order carries a 2.50 payment surcharge and no delivery cost; 102 is a `virtual` product,
+which is how one order carries two rates.
 
-| Vector | Lines (resolver × qty, rate) | Cart lines | Order: line gross / VAT / total — = payment, proforma, invoice gross, invoice paid | Invoice rows (net / VAT / gross) | Returns → corrections (gross / net / VAT) | Before #417 |
+| Vector | Lines (resolver × qty, rate) | Cart lines (net) | Order: line gross / VAT / total — = payment, proforma, invoice gross, invoice paid | Invoice rows (net / VAT / gross) | Returns → corrections (gross / net / VAT) | Before #417 |
 | --- | --- | --- | --- | --- | --- | --- |
 | A1 | 29.4950 × 1, 23 % | **29.50** | **36.29** / **6.79** / **38.79** | 23 %: 29.50 / 6.79 / 36.29 | all: 36.29 / 29.50 / 6.79 | order line gross 36.28 (`toFixed`) |
-| A2 (V3 full) | 9.0450 × 3, 8 % | **27.15** | **29.32** / **2.17** / **31.82** | 8 %: 27.15 / 2.17 / 29.32 | all 3: **29.32** / 27.15 / 2.17 | cart `27.150000000000002`; the default refund was 9.77 × 3 = 29.31 |
+| A2 (V3 full) | 9.0450 × 3, 8 % | **27.14** | **29.31** / **2.17** / **31.81** | 8 %: 27.14 / 2.17 / 29.31 | all 3: **29.31** / 27.14 / 2.17 | cart `27.150000000000002`; the default refund was 9.77 × 3 = 29.31 |
 | A3 | 0.6950 × 1, 5 % | **0.70** | **0.74** / **0.04** / **3.24** | 5 %: 0.70 / 0.04 / 0.74 | all: 0.74 / 0.70 / 0.04 | VAT 0.03, total 3.23, line gross 0.73 |
 | V2 | 29.4950 × 1, 23 % + 0.6950 × 1, 5 % | 29.50, 0.70 | 36.29, 0.74 / **6.83** / **39.53** | 5 %: 0.70 / 0.04 / 0.74; 23 %: 29.50 / 6.79 / 36.29 | all: 37.03 / 30.20 / 6.83 | the order took 6.785 + 0.035 = 6.82 and 39.52; the invoice 6.83 and 39.53 |
-| V3 partial | 9.0450 × 3, 8 %; 2 returned, then 1 | 27.15 | as A2 | as A2 | 2 of 3: **19.55** / 18.10 / 1.45; then 1: **9.77** / 9.05 / 0.72 | the default refund was 9.77 × 2 = 19.54 |
-| L1 | 29.4950 × 1 + 0.6950 × 5, both 23 % | 29.50, 3.50 | **36.29**, **4.31** (= 40.60) / **7.59** / **43.09** | 23 %: 33.00 / 7.59 / 40.59 | all: 40.59 / 33.00 / 7.59 | the line grosses were the allocated 36.28, 4.31 |
-| R2 | 29.4950 × 2, 23 %; 1 returned, then 1 | 59.00 | **72.57** / **13.57** / **75.07** | 23 %: 59.00 / 13.57 / 72.57 | 1: **36.29** / 29.50 / 6.79; then 1: **36.28** / 29.50 / 6.78 | each case alone refunded 36.29, 72.58 against 72.57 paid |
-| DC1 | 29.4950 × 2, 23 %, 10.00 order discount; 1 returned, then 1 | 59.00 | **72.57** / **13.57** / **65.07** (72.57 − 10.00 + 2.50) | 0 %: −7.50 (discount, surcharge); 23 %: 59.00 / 13.57 / 72.57 | 1: **31.29** (carries 5.00) → 31.29 / 24.50 / 6.79; then 1: **31.28** (5.00) → 31.28 / 24.50 / 6.78 | a full return refunded 72.57 against 62.57 charged for the goods |
-| C1 | as L1, the 0.6950 × 5 line not returnable; 1 returned, then 5 by a complaint | 29.50, 3.50 | as L1 | as L1 | return: **36.29** / 29.50 / 6.79; complaint: **4.30** / 3.50 / 0.80 | a complaint was outside the cap and could refund on top of what was paid |
+| V3 partial | 9.0450 × 3, 8 %; 2 returned, then 1 | 27.14 | as A2 | as A2 | 2 of 3: **19.54** / 18.09 / 1.45; then 1: **9.77** / 9.05 / 0.72 | the default refund was 9.77 × 2 = 19.54 |
+| L1 | 29.4950 × 1 + 0.6950 × 5, both 23 % | 29.50, 3.48 | **36.29**, **4.28** (= 40.57) / **7.59** / **43.07** | 23 %: 32.98 / 7.59 / 40.57 | all: 40.57 / 32.98 / 7.59 | the line grosses were the allocated 36.28, 4.31 |
+| R2 | 29.4950 × 2, 23 %; 1 returned, then 1 | 58.99 | **72.56** / **13.57** / **75.06** | 23 %: 58.99 / 13.57 / 72.56 | 1: **36.29** / 29.50 / 6.79; then 1: **36.27** / 29.49 / 6.78 | each case alone refunded 36.29, 72.58 against 72.57 paid |
+| DC1 | 29.4950 × 2, 23 %, 10.00 order discount; 1 returned, then 1 | 58.99 | **72.56** / **13.57** / **65.06** (72.56 − 10.00 + 2.50) | 0 %: −7.50 (discount, surcharge); 23 %: 58.99 / 13.57 / 72.56 | 1: **31.29** (carries 5.00) → 31.29 / 24.50 / 6.79; then 1: **31.27** (5.00) → 31.27 / 24.49 / 6.78 | a full return refunded 72.57 against 62.57 charged for the goods |
+| C1 | as L1, the 0.6950 × 5 line not returnable; 1 returned, then 5 by a complaint | 29.50, 3.48 | as L1 | as L1 | return: **36.29** / 29.50 / 6.79; complaint: **4.28** / 3.48 / 0.80 | a complaint was outside the cap and could refund on top of what was paid |
 | L0 | placed before 0.108.0: 29.50 at 23 % (stored 36.29) + 4.30 at 5 % (4.52); stored VAT 7.00, total 40.80, 40.80 paid | — | as stored | issued now: 23 %: 29.50 / 6.79; 5 %: 4.30 / 0.22 — **7.01**, **40.81**; paid **40.80**, due **0.01** | all: refunds 36.28, 4.52 = **40.80** (what was paid) → **40.80** / 33.80 / 7.00 | the context recomputed what was paid; `paidTotal` was the invoice gross, 40.81 |
 
 V2 is the case the two rules disagreed on: the order summed every line's exact tax across all rates
 and rounded once, the invoice rounded each line's gross and took a rate's VAT as Σ gross − Σ net, so
 the invoice's gross and its recorded paid amount were a cent above what the buyer paid. Under the one
-method it is one figure, 39.53, on every document. L1 is the cent the owner accepted on 2026-10-24:
-each line shows its own rounding, and the lines may add up to a cent more or less than the total. The same order of 29.50 at 23 % and 4.30 at 5 % is
+method it is one figure, 39.53, on every document. L1 was written for the cent the owner accepted on
+2026-10-24: each line shows its own rounding, and the lines may add up to a cent more or less than the
+total — with lines of 29.50 and 3.50 at 23 % they show 36.29 + 4.31 = 40.60 beside a 40.59 total
+(the `vatByRate` unit tests in `packages/contracts/test/money-decimal.unit.test.ts` hold such a case). Recomputed under §10.18 its lines are 29.50 and
+3.48, whose grosses, 36.29 + 4.28, happen to add up to the 40.57 total. The same order of 29.50 at 23 % and 4.30 at 5 % is
 6.79 + 0.22 = **7.01** VAT and **40.81** gross, and three lines of 0.02 at 23 % carry **0.01** VAT
 (0.06 × 0.23 = 0.0138), where rounding each line gave 0.00.
 
@@ -400,3 +418,68 @@ returns and complaints, with and without an order discount, never over-refund, a
 refunds exactly what was paid, and the discount carried adds up to the order's);
 `backend/test/integration/returns/concurrent-cases.test.ts`, `settlement-scope.test.ts` and `settlement-ordering.test.ts`;
 `backend/test/integration/invoices/decimal-amounts.test.ts` (D1, V2, and the refusal to invoice an order refunded in full); `backend/test/unit/invoices/auto-issue-reactor.test.ts`.
+
+### 10.18 Four-place unit prices — the line value is the rounding point (owner ruling of 2026-10-25)
+
+A price book stores `numeric(14,4)` and takes four places, so a screw can cost 0.0125. Until this
+ruling the cart rounded the resolved price to two places as it took it in, and every unit-price
+column after it was `numeric(12,2)`: 0.0125 was charged as 0.01, so **10 000 pieces cost 100.00
+instead of 125.00**, and 0.0150 was charged as 0.02 — 33 % too much. Magento does exactly this
+(`peer-platforms.md` §*How prices are stored and rounded*); the target model is commercetools'
+high-precision prices.
+
+**The ruling.**
+
+- A **unit price keeps up to four places, unrounded**, from the price book through the cart line
+  (`cart_items.unit_price`, `recomputed_unit_price`, `agreed_unit_price`), the order line
+  (`order_items.unit_price`), the quote request lines (`quote_request_items.desired_unit_price`,
+  `agreed_unit_price`, `reference_unit_price`) and the invoice line (`invoice_lines.unit_net_price`,
+  already `numeric(14,4)`). Every one of those columns is `numeric(14,4)`; widening was lossless.
+  In code a unit price is written by `unitPriceHalfUp` (`CON/money-decimal.ts`), which normalises
+  it to four places and rounds nothing a price book can hold.
+- **Only the line value is rounded**: `line net = round_half_up(unit × quantity)` to two places,
+  exactly, by `lineAmountHalfUp`. VAT is unchanged from §10.17 — per rate, on the sum of the rounded
+  line nets, rounded once (`vatByRate`); a line's informational gross is its own rounding,
+  `round(line net × (1 + rate))`. Refunds and corrections work from what was stored and charged, as
+  in §10.17, and so agree with the order and the invoice.
+- **A typed unit price takes up to four places** (`fourDecimalUnitPrice`, `CON/money-input.ts`): a
+  quote's desired or agreed price. A fifth is refused with `400 UNIT_PRICE_PRECISION_EXCEEDED`
+  ("A unit price may have at most four decimal places."), never rounded. A typed money **amount** —
+  a delivery cost, a surcharge, a refund, a minimum order value — still takes two
+  (`twoDecimalAmount`, `400 AMOUNT_PRECISION_EXCEEDED`).
+- **Display**: a unit price shows two places when its third and fourth are zero, otherwise its
+  significant places, up to four — `0,0125 zł`, `1,50 zł`, `1,505 zł` (`unitPriceFractionDigits`,
+  used by every formatter: the admin's and the storefront's `formatMoney(…, { unitPrice: true })`,
+  the document values, the invoice PDF's unit net price column, the e-mails). A line value and a
+  total always show two. A gross unit price beside a sub-cent net is carried to four places
+  (`grossUnitPriceHalfUp`: 0.0125 at 23 % is 0.015375, shown `0,0154 zł`); beside a net that shows
+  two it keeps two (§10.16 G1–G4).
+- A **product feed** still writes two places (`roundAmountHalfUp`), the grammar its consumers read.
+
+Each order carries a 2.50 payment surcharge and no delivery cost, as in §10.17. Products: 101 at
+**0.0125** (`simple`), 102 at **0.0150** (`virtual`), 103 at **1.5050** (`simple`); the rate per
+product type is stated per vector.
+
+| Vector | Lines (unit × qty, rate) | Cart line = order line = invoice line: unit / net / gross | Order: VAT / total — = payment, proforma, invoice gross, invoice paid | Invoice rows (net / VAT / gross) | Returns → refund = correction (gross / net / VAT) | At two places on intake |
+| --- | --- | --- | --- | --- | --- | --- |
+| U1 | 0.0125 × 10 000, 23 % | 0.0125 / **125.00** / 153.75 | **28.75** / **156.25** | 23 %: 125.00 / 28.75 / 153.75 | all: **153.75** / 125.00 / 28.75 | 0.01 × 10 000 = 100.00; VAT 23.00 |
+| U2 | 0.0150 × 3, 23 % | 0.0150 / **0.05** (0.045 half-up) / 0.06 | **0.01** / **2.56** | 23 %: 0.05 / 0.01 / 0.06 | all: **0.06** / 0.05 / 0.01 | 0.02 × 3 = 0.06 |
+| U3 | 0.0125 × 10 000 and 1.5050 × 7 at 23 %, 0.0150 × 333 at 8 % | 0.0125 / 125.00 / 153.75; 1.5050 / **10.54** (10.535) / 12.96; 0.0150 / **5.00** (4.995) / 5.40 | 23 %: 135.54 × 0.23 = 31.1742 → 31.17; 8 %: 0.40 — **31.57** / **174.61** | 8 %: 5.00 / 0.40 / 5.40; 23 %: 135.54 / 31.17 / 166.71 | all: **172.11** / 140.54 / 31.57 | 100.00 + 10.57 + 6.66 = 117.23 net |
+| U4 | a quote agreed at **0.0125** for 10 000 (the buyer accepts, converts to a basket, orders) | quote, cart line, order line: 0.0125; line net **125.00** | — | — | — | the agreed price was refused unless two places; at 0.01, 100.00 |
+| U5 | 0.0150 × 333, 23 %; 111 returned, then 222 | 0.0150 / **5.00** / 6.15 | **1.15** / **8.65** | 23 %: 5.00 / 1.15 / 6.15 | 111: **2.05** / 1.67 (1.665) / 0.38; then 222: **4.10** / 3.33 / 0.77 — together 6.15, what was charged | 0.02 × 333 = 6.66 |
+
+U5 is a return of part of a sub-cent line: the first case refunds what 111 pieces are worth,
+`round(0.0150 × 111) = 1.67` net and its VAT, and the second, completing the order, refunds the rest
+of what was charged — the refund and the correction agree on both, and together they are the 6.15
+the order took. The U vectors run through the same documents as §10.17: the cart, the admin and
+checkout previews, the placed order, the payment it opens, its proforma, the VAT invoice (its lines,
+the per-rate summary, the totals and the amount recorded as paid) and cumulative refunds credited by
+corrections. U4 runs through the quote, its basket and the order.
+
+Tests: `backend/test/integration/price_lists/worked-examples/money-agreement.test.ts` (U1, U2, U3,
+U5 and every §10.17 vector recomputed), `backend/test/integration/quote_requests/conversion.test.ts`
+(U4), `backend/test/integration/price_lists/worked-examples/unit-price-columns.test.ts` (every
+unit-price column is `numeric(14,4)`), `backend/test/integration/price_lists/worked-examples/rounding.test.ts`
+(§10.16 under the ruling), `packages/contracts/test/unit-price.unit.test.ts` (the arithmetic, the
+display rule and the typed-input refusal), `packages/platform/src/http/error-envelope-amount-precision.test.ts`,
+`admin/test/admin-kit/money-unit-price.test.ts` and `storefront/test/lib/money.test.ts` (the formatters).

@@ -18,6 +18,9 @@ export const ERROR_CODES = {
   // Issue #417 — a typed money amount with more than two decimal places
   // (`money-input.ts`). Refused, never rounded.
   AMOUNT_PRECISION_EXCEEDED: 'AMOUNT_PRECISION_EXCEEDED',
+  // Owner ruling of 2026-10-25 — a typed unit price with more than four decimal
+  // places (`money-input.ts`). Refused, never rounded.
+  UNIT_PRICE_PRECISION_EXCEEDED: 'UNIT_PRICE_PRECISION_EXCEEDED',
 
   // Catalog
   FILTER_NOT_ALLOWED: 'FILTER_NOT_ALLOWED',

@@ -20,9 +20,13 @@
  * decimal, which `toFixed(2)`, `Intl.NumberFormat` and `String` all write back
  * as the same two places, so a caller that has to publish a number may.
  *
- * The minor unit is two places: every money column in the platform is
- * `numeric(…, 2)` and no currency with another minor unit is supported, so
- * `places` defaults to 2 rather than being looked up per currency.
+ * The minor unit is two places: every money **amount** column in the platform
+ * is `numeric(…, 2)` and no currency with another minor unit is supported, so
+ * `places` defaults to 2 rather than being looked up per currency. A **unit
+ * price** is not an amount: it is carried at four places, unrounded, from the
+ * price book to the invoice line (`numeric(14,4)` everywhere, owner ruling of
+ * 2026-10-25), and only the line value, `unit × quantity`, is rounded to two —
+ * once, by {@link lineAmountHalfUp} (`specs/pricing/worked-examples.md` §10.18).
  * No dependency (Constitution IV).
  */
 import { decimalText } from './price-book-decimal.js';
@@ -141,9 +145,65 @@ export function moneyDifference(a: string | number, b: string | number, places =
   return roundHalfUp(decimalDifference(a, b), places);
 }
 
-/** A line's amount: `unit price × quantity`, rounded half-up to `places`. */
+/**
+ * A line's amount: `unit price × quantity`, rounded half-up to `places` — **the
+ * rounding point** of a unit price (owner ruling of 2026-10-25). The unit price
+ * is the four-place one the line carries, never a two-place rounding of it:
+ * 0.0125 × 10 000 is 125.00, and 0.0150 × 3 is 0.045, so 0.05.
+ */
 export function lineAmountHalfUp(unitPrice: string | number, quantity: string | number, places = 2): string {
   return roundHalfUp(decimalProduct(unitPrice, quantity), places);
+}
+
+/** The places a unit price is carried at: `numeric(14,4)` from the price book to the invoice line. */
+export const UNIT_PRICE_PLACES = 4;
+
+/**
+ * A unit price at its four places (owner ruling of 2026-10-25): a resolver
+ * amount, an agreed or a typed price, written the way `numeric(14,4)` stores
+ * it. Nothing is lost for a value of at most four places — `0.0125` stays
+ * `0.0125`, `1.5` becomes `1.5000` — and a value with more is read at four,
+ * half-up. What a cart line, an order line, a quote line and an invoice line
+ * carry; never round a unit price to two places.
+ */
+export function unitPriceHalfUp(value: string | number): string {
+  return roundHalfUp(value, UNIT_PRICE_PLACES);
+}
+
+/**
+ * How many fraction digits a unit price is **shown** with — the one display
+ * rule (owner ruling of 2026-10-25): two when its third and fourth places are
+ * zero (`1.50`), otherwise its significant places, up to four (`0.0125`,
+ * `1.505`). A line value and a total always show two; this is for a unit price
+ * only. Every money formatter (the admin's and the storefront's `formatMoney`,
+ * the documents, the e-mails) asks this.
+ */
+export function unitPriceFractionDigits(value: string | number): 2 | 3 | 4 {
+  const fraction = (unitPriceHalfUp(value).split('.')[1] ?? '').replace(/0+$/, '');
+  return fraction.length <= 2 ? 2 : (fraction.length as 3 | 4);
+}
+
+/** A unit price as a decimal string at its display places ({@link unitPriceFractionDigits}): `0.0125`, `1.50`, `1.505`. */
+export function unitPriceDisplayText(value: string | number): string {
+  return roundHalfUp(unitPriceHalfUp(value), unitPriceFractionDigits(value));
+}
+
+/**
+ * The gross of a **unit** price, for display beside a net one: the exact
+ * `net × (1 + rate)` rounded half-up to two places when the net shows two
+ * (`29.50` at 23 % is `36.29`, §10.16 G1), and to four when the net carries a
+ * sub-cent place (`0.0125` at 23 % is `0.015375`, so `0.0154`) — a gross unit
+ * price of a sub-cent net rounded to the cent would misstate it by up to a
+ * third. Informational: a document's gross is computed from its line nets
+ * (`vatByRate`), never from this. `unit` is `percent` (`23`) unless said.
+ */
+export function grossUnitPriceHalfUp(
+  net: string | number,
+  rate: string | number,
+  unit: 'fraction' | 'percent' = 'percent',
+): string {
+  const places = unitPriceFractionDigits(net) === 2 ? 2 : UNIT_PRICE_PLACES;
+  return grossFromNetHalfUp(unitPriceHalfUp(net), rate, unit, places);
 }
 
 /**

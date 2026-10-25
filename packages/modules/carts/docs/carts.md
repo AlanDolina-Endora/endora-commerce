@@ -139,6 +139,11 @@ price for the line's **current** quantity:
 - A line seeded from an accepted quote keeps the agreed price only while it
   holds the agreed quantity. At any other quantity it is priced from the price
   books, and it gets the agreed price back at the agreed quantity.
+- The unit price is stored **at four decimal places, unrounded** (`numeric(14,4)`, as the price
+  book holds it): a screw at 0.0125 is carried as 0.0125, not 0.01. Only the line's value — the unit
+  price × the quantity — is rounded to two places, half-up, once: 10 000 of them are 125.00. A line
+  added before release 0.108.0 carries a two-place price and is repriced before placement when the
+  current price has more places.
 - Each line records **where its price came from** in `price_source`: `agreed`
   (a quote's agreed price), `base`, `catalogue`, `buyer` or `sale` (the price-book
   step that priced it); it is `null` on a line priced before price books existed.

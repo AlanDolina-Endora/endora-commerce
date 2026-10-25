@@ -1,0 +1,5 @@
+---
+'@endora-commerce/mod-quote-requests': minor
+---
+
+A quote line's unit prices keep four decimal places (owner ruling of 2026-10-25). `quote_request_items.desired_unit_price`, `agreed_unit_price` and `reference_unit_price` are `numeric(14,4)` (`Migration20261025T031736QuoteRequestsUnitPriceFourPlaces`, lossless). A typed desired or agreed price is stored as typed, up to four places (`unitPriceText` now writes four places; a fifth is refused with `400 UNIT_PRICE_PRECISION_EXCEEDED`), a reference price is the resolver's four-place amount, and a cart line's four-place price handed over on conversion is a valid reference. The quote document marks its unit prices (`listUnitPrice`, `proposedUnitPrice`, `unitPrice`, `unitGrossPrice`, `unitDiscount`) as unit prices, carried at four places and printed with their significant places; a line's discount is its list value less its net. The admin screens show unit prices by the same rule, take a typed price at four places, and value a line as its unit price × quantity rounded once.
