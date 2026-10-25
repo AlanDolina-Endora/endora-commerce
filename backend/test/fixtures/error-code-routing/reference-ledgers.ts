@@ -107,6 +107,14 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'the Zod issue `money-input.ts` tags. `VALIDATION_FAILED` is not reused: the envelope never ' +
       'translates that code, and the sentence has to tell the reader what to change.',
   },
+  UNIT_PRICE_PRECISION_EXCEEDED: {
+    to: '_i18n',
+    reason:
+      'Minted by the owner ruling of 2026-10-25 for a typed unit price with more than four decimal ' +
+      'places: a unit price is carried at four places from the price book to the invoice line, so ' +
+      'the two-place sentence of `AMOUNT_PRECISION_EXCEEDED` would be false for it. One code for ' +
+      'every module, raised by the error envelope from the Zod issue `money-input.ts` tags.',
+  },
   ADMIN_AUTHENTICATION_THROTTLED: {
     to: 'admin_users',
     reason:
@@ -1769,6 +1777,13 @@ export const PLATFORM_OWNED_ERROR_CODES: PlatformOwnedErrorCodes = {
       'methods, payment methods, quote requests, returns, credit limits, promotions, orders and ' +
       'invoices. The noun is the request\'s amount, which no one module owns, and the raiser is ' +
       'the error envelope reading the Zod issue `money-input.ts` tags.',
+  },
+  UNIT_PRICE_PRECISION_EXCEEDED: {
+    tier: 'T3',
+    reason:
+      'A typed unit price with more than four decimal places (owner ruling of 2026-10-25) — a ' +
+      'quote\'s desired, agreed or proposed price. The noun is the request\'s unit price, which no ' +
+      'one module owns, and the raiser is the error envelope reading the Zod issue `money-input.ts` tags.',
   },
   UNAUTHORIZED: {
     tier: 'T3',

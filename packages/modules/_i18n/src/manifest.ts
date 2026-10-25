@@ -134,8 +134,10 @@ export const manifest = defineModuleManifest({
    *
    * **What the bundle holds for these 22**: 17 `errors.*` keys in each language —
    * 15 base sentences and the two token keys above. (`AMOUNT_PRECISION_EXCEEDED`,
-   * issue #417, arrived after the measurement of 21 and is raised by the envelope
-   * itself rather than at a `new HttpError` site, so the raise-site count stands.) The seven codes with no
+   * issue #417, and its unit-price sibling `UNIT_PRICE_PRECISION_EXCEEDED`
+   * (owner ruling of 2026-10-25) arrived after the measurement of 21 and are
+   * raised by the envelope itself rather than at a `new HttpError` site, so the
+   * raise-site count stands.) The seven codes with no
    * sentence are the six `MODULE_*` refusals an operator meets through the
    * lifecycle CLI rather than through the envelope, plus `PRICE_UNAVAILABLE`,
    * which nothing raises. All seven are on `UNTRANSLATED_ERROR_CODES` under this
@@ -172,6 +174,9 @@ export const manifest = defineModuleManifest({
     // any module's money field; the error envelope raises it from the Zod issue
     // `money-input.ts` tags.
     { code: 'AMOUNT_PRECISION_EXCEEDED' },
+    // Owner ruling of 2026-10-25 — its sibling for a typed unit price, which
+    // keeps four places; the sentence has to say four, not two.
+    { code: 'UNIT_PRICE_PRECISION_EXCEEDED' },
     { code: 'UNAUTHORIZED' },
     { code: 'VALIDATION_FAILED' },
     { code: 'VERSION_CONFLICT', tokens: ['organization_version_mismatch'] },
