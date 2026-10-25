@@ -48,8 +48,8 @@ describe('product feed price ports carry decimal strings', () => {
       },
     });
     const [net] = await generation.hydrateItems(['p1'], scope('net'));
-    expect(net!.price).toEqual({ net: '9.0450', gross: '9.0450', taxResolved: true });
+    expect(net!.price).toEqual({ net: '9.0450', gross: '9.0450', taxResolved: true, taxRatePercent: null });
     const [gross] = await generation.hydrateItems(['p1'], scope('gross'));
-    expect(gross!.price).toEqual({ net: '9.0450', gross: '11.13', taxResolved: true });
+    expect(gross!.price).toEqual({ net: '9.0450', gross: '11.13', taxResolved: true, taxRatePercent: 23 });
   });
 });

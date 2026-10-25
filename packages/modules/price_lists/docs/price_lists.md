@@ -146,8 +146,10 @@ and agreed prices and the invoice line carry the unit price unrounded, and only 
 the unit price × the quantity — is rounded to two places, half-up, once. A screw priced 0.0125
 costs 125.00 for 10 000 pieces, and 0.0150 × 3 is 0.045, so 0.05. A unit price is shown with its
 significant places, up to four, and two when its third and fourth places are zero: `0,0125 zł`,
-`1,505 zł`, `1,50 zł`; line values and totals always show two. A product feed publishes two places,
-rounded half-up on the four: 9.0450 is 9.05 and 1.0050 is 1.01.
+`1,505 zł`, `1,50 zł`; line values and totals always show two. A product feed publishes two places
+and rounds no unit price to get there: a price with a third or fourth significant place goes out as
+the exact price of a pack — 9.0450 as 10 pieces at 90.45, 0.0125 as 100 at 1.25 — or, where the
+feed's template cannot state a pack, not at all (the Product Feeds module).
 
 ### The price precedence
 
