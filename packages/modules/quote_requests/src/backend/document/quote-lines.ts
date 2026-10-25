@@ -54,6 +54,14 @@ export const QUOTE_LINES_COLLECTION = 'lines';
 const round2 = (value: number | string): number => Number(roundHalfUp(value));
 const money = (amount: number | string, currency: string): DocumentValue => ({ kind: 'money', amount: round2(amount), currency });
 /**
+ * A discount: an amount, but one that is real and rounds to no cent — a unit
+ * discount of 0.0001 over three units — is marked, so it prints "—" rather than
+ * a `0,00` that reads as "no discount" (issue #430). Its amount stays the
+ * rounded zero, so list value − discount = net still holds.
+ */
+const discountMoney = (amount: string, currency: string): DocumentValue =>
+  round2(amount) === 0 ? { kind: 'money', amount: 0, currency, belowMinorUnit: true } : money(amount, currency);
+/**
  * A unit price (owner ruling of 2026-10-25): at its four places, unrounded,
  * and marked so the document shows its significant places (`0,0125 zł`).
  */
@@ -170,7 +178,7 @@ export function quoteLineItems(data: QuoteRequestDocumentData): DocumentItem[] {
           ? { kind: 'percent', value: Number(quotientHalfUp(decimalProduct(unitDiscount, 100), list)) }
           : null,
       unitDiscount: unitDiscount !== null ? unitMoney(unitDiscount, currency) : null,
-      lineDiscount: unitDiscount !== null ? money(lineDiscountOf(line)!, currency) : null,
+      lineDiscount: unitDiscount !== null ? discountMoney(lineDiscountOf(line)!, currency) : null,
       lineListValue:
         list !== null && line.referenceCurrency ? money(lineAmountHalfUp(list, line.quantity), line.referenceCurrency) : null,
       lineNet: net !== null ? money(net, currency) : null,
@@ -213,7 +221,7 @@ export function quoteSummary(data: QuoteRequestDocumentData): Record<string, Doc
 
   return {
     listTotal: list !== null ? money(list, currency) : null,
-    discountTotal: discounts.length > 0 ? money(moneySum(discounts), currency) : null,
+    discountTotal: discounts.length > 0 ? discountMoney(moneySum(discounts), currency) : null,
     netTotal: net !== null ? money(net, currency) : null,
     vatRate,
     vatTotal: vat !== null ? money(vat, currency) : null,

@@ -2917,6 +2917,60 @@ release against its migrations, manifests, routes and the reference storefront's
 `pnpm run upgrade 0.108.0` when it was written; the order of the steps and the storefront edits are
 untried.
 
+### After upgrading to 0.109.0 {#after-0-109-0}
+
+Each entry below stands on its own: read the ones for the parts of the platform you use.
+
+#### Product feeds: a price below one cent is published as a pack {#after-0-109-0-feed-packs}
+
+- **What changed.** Until this release a product feed rounded every price to two decimal places, so
+  a product priced 0.0125 PLN was published as 0.01 PLN while its product page showed 0,0125 zł — a
+  price mismatch Google Merchant Center disapproves products for. A price with more than two
+  significant decimal places is now published as the price of a **pack** of 10, 100, 1 000 or
+  10 000 pieces — the smallest that makes it exact to the grosz: 0.0125 PLN is published as 100
+  pieces at 1.25 PLN (1.54 PLN on a gross feed at 23 %). The pack size goes in the template's pack
+  fields. **A price with two decimal places is published exactly as before**, byte for byte.
+- **The predefined Google Merchant Center template gains three fields**, after `g:sale_price`:
+  `g:multipack`, `g:unit_pricing_measure` and `g:unit_pricing_base_measure`. On an existing
+  instance the migration `Migration20261025T145041ProductFeedsGoogleTemplatePackFields` adds them
+  to the installed template. They are empty, and left out of the file, for every product priced to
+  the grosz.
+- **A product the template cannot publish as a pack is left out of the feed**, where it used to be
+  published with a rounded price. That is every such product in a feed on the Meta, Amazon, eBay or
+  Allegro template, and in a feed on your own copy of the Google template. The run lists each one
+  under the new reason `sub_cent_price_without_pack_field`. What to do: after the upgrade, open the
+  latest run of each feed; if the reason appears and the product belongs in that feed, add a field
+  bound to the source *Pack size (prices below one cent)* to the template — in a copy of the Google
+  template as `g:multipack`, with `g:unit_pricing_measure` and `g:unit_pricing_base_measure` bound
+  to the two *pack as a count* sources. A run that leaves out more than half its items fails with
+  `skip_threshold_exceeded` and keeps serving the previous file, which still carries the rounded
+  prices — so do not leave such a failure alone.
+- **The landing page.** The storefront's product page shows the price of one piece. Google's
+  multipack rules ask the landing page to show the multipack's price, so watch the Merchant Center
+  diagnostics for products published as packs.
+- **For API clients and integrators**: `feedFieldSourceKindSchema` gains `pack_quantity`,
+  `pack_unit_pricing_measure` and `pack_unit_pricing_base_measure`, and `feedRunIssueReasonSchema`
+  gains `sub_cent_price_without_pack_field` and `sub_cent_price_beyond_pack_limit`. A client that
+  validates a template, an exported template document or a run's issues against a closed list must
+  accept them.
+- **For overlay authors**: `FeedItemPrice` gains `taxRatePercent: number | null`, and
+  `ResolveFeedItemInput` an optional `templateFields`. An overlay that replaces the item field
+  resolver receives both and publishes whatever it writes: to publish a sub-cent price as a pack it
+  applies the same rule, with `feedPackQuantity` from `services/feed-pack.ts`.
+
+#### Quotes: a discount below one grosz prints "—" {#after-0-109-0-quote-discount}
+
+- **On the quote PDF**, and in the document template editor's preview, a line discount or a discount
+  total that is real but rounds to 0.00 — 0.0001 PLN a unit over three units, say — prints "—"
+  instead of "0,00 zł", which read as "no discount". The amount itself is unchanged, so list value
+  − discount = net still holds on the document. Nothing to do.
+- **On the admin quote request screen**, the *Difference* column shows a difference of unit prices
+  with its significant places, up to four — −0.0001 PLN — instead of rounding it to 0.00.
+- **For module and overlay authors**: a document value of kind `money` may carry
+  `belowMinorUnit: true`. `formatDocumentValue` prints it as "—" and `sumDocumentValues` keeps the
+  mark when the sum is still zero; a custom block that formats values some other way should do the
+  same.
+
 ## An instance that is mixed from the start
 
 The installer of `0.101.x` or earlier wrote every package of the release with a `^` except

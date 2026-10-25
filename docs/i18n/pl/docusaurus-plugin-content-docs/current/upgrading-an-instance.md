@@ -3048,6 +3048,65 @@ Tę sekcję napisano 23, 24 i 25.10.2026 na podstawie gałęzi wydania zmiany ce
 poleceniem `pnpm run upgrade 0.108.0`; kolejność kroków i zmiany w storefroncie nie były
 wypróbowane.
 
+### Po aktualizacji do wydania 0.109.0 {#after-0-109-0}
+
+Każdy wpis poniżej jest samodzielny: przeczytaj te, które dotyczą używanych przez ciebie części
+platformy.
+
+#### Feedy produktowe: cena poniżej jednego grosza jest publikowana jako opakowanie {#after-0-109-0-feed-packs}
+
+- **Co się zmieniło.** Do tego wydania feed produktowy zaokrąglał każdą cenę do dwóch miejsc po
+  przecinku, więc produkt w cenie 0,0125 PLN trafiał do pliku jako 0,01 PLN, podczas gdy strona
+  produktu pokazywała 0,0125 zł — niezgodność ceny, za którą Google Merchant Center odrzuca
+  produkty. Cena z więcej niż dwoma znaczącymi miejscami po przecinku jest teraz publikowana jako
+  cena **opakowania** 10, 100, 1 000 albo 10 000 sztuk — najmniejszego, przy którym jest dokładna co
+  do grosza: 0,0125 PLN trafia do pliku jako 100 sztuk za 1,25 PLN (1,54 PLN w feedzie brutto przy
+  23 %). Wielkość opakowania trafia do pól opakowania szablonu. **Cena z dwoma miejscami po przecinku
+  jest publikowana dokładnie tak jak wcześniej**, bajt w bajt.
+- **Predefiniowany szablon Google Merchant Center dostaje trzy pola**, po `g:sale_price`:
+  `g:multipack`, `g:unit_pricing_measure` i `g:unit_pricing_base_measure`. Na istniejącej instancji
+  dodaje je do zainstalowanego szablonu migracja
+  `Migration20261025T145041ProductFeedsGoogleTemplatePackFields`. Dla każdego produktu z ceną co do
+  grosza są puste i pomijane w pliku.
+- **Produkt, którego szablon nie potrafi opublikować jako opakowania, jest pomijany w feedzie**,
+  podczas gdy wcześniej trafiał do niego z zaokrągloną ceną. Dotyczy to każdego takiego produktu w
+  feedzie na szablonie Meta, Amazon, eBay albo Allegro oraz w feedzie na własnej kopii szablonu
+  Google. Wynik generowania wymienia każdy z nich pod nowym powodem
+  `sub_cent_price_without_pack_field`. Co zrobić: po aktualizacji otwórz ostatnie generowanie każdego
+  feedu; jeśli ten powód się pojawia, a produkt powinien być w tym feedzie, dodaj do szablonu pole
+  powiązane ze źródłem *Wielkość opakowania (ceny poniżej grosza)* — w kopii szablonu Google jako
+  `g:multipack`, z `g:unit_pricing_measure` i `g:unit_pricing_base_measure` powiązanymi z dwoma
+  źródłami *opakowania jako liczby sztuk*. Generowanie, które pomija więcej niż połowę pozycji,
+  kończy się błędem `skip_threshold_exceeded` i dalej udostępnia poprzedni plik — który wciąż ma
+  zaokrąglone ceny — więc nie zostawiaj takiego błędu bez reakcji.
+- **Strona docelowa.** Strona produktu w storefroncie pokazuje cenę jednej sztuki. Zasady Google dla
+  opakowań zbiorczych wymagają, by strona docelowa pokazywała cenę opakowania, więc obserwuj
+  diagnostykę Merchant Center dla produktów publikowanych jako opakowania.
+- **Dla klientów API i integratorów**: `feedFieldSourceKindSchema` dostaje `pack_quantity`,
+  `pack_unit_pricing_measure` i `pack_unit_pricing_base_measure`, a `feedRunIssueReasonSchema` —
+  `sub_cent_price_without_pack_field` i `sub_cent_price_beyond_pack_limit`. Klient, który sprawdza
+  szablon, wyeksportowany dokument szablonu albo problemy generowania względem zamkniętej listy, musi
+  je przyjmować.
+- **Dla autorów modułów nakładkowych**: `FeedItemPrice` dostaje `taxRatePercent: number | null`, a
+  `ResolveFeedItemInput` — opcjonalne `templateFields`. Moduł nakładkowy, który zastępuje resolver pól
+  pozycji, dostaje oba i publikuje to, co sam zapisze: aby opublikować cenę poniżej grosza jako
+  opakowanie, stosuje tę samą regułę, z `feedPackQuantity` z `services/feed-pack.ts`.
+
+#### Oferty: rabat poniżej jednego grosza jest drukowany jako „—” {#after-0-109-0-quote-discount}
+
+- **W PDF-ie oferty** i w podglądzie edytora szablonów dokumentów rabat pozycji albo suma rabatów,
+  które są rzeczywiste, ale zaokrąglają się do 0,00 — na przykład 0,0001 PLN na sztuce przy trzech
+  sztukach — są drukowane jako „—” zamiast „0,00 zł”, które czytało się jako „brak rabatu”. Sama
+  kwota się nie zmienia, więc na dokumencie nadal wartość katalogowa − rabat = netto. Nic nie trzeba
+  robić.
+- **Na ekranie zapytania ofertowego w panelu administracyjnym** kolumna *Różnica* pokazuje różnicę
+  cen jednostkowych z jej znaczącymi miejscami, do czterech — −0,0001 PLN — zamiast zaokrąglać ją do
+  0,00.
+- **Dla autorów modułów i modułów nakładkowych**: wartość dokumentu rodzaju `money` może mieć
+  `belowMinorUnit: true`. `formatDocumentValue` drukuje ją jako „—”, a `sumDocumentValues` zachowuje
+  ten znacznik, gdy suma nadal wynosi zero; własny blok, który formatuje wartości inaczej, powinien
+  robić to samo.
+
 ## Instancja niespójna od początku
 
 Instalator `0.101.x` lub starszy zapisywał każdy pakiet wydania z `^` poza
