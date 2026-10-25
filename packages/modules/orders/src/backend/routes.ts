@@ -22,7 +22,7 @@ import {
   setOrderTransitionsRequestSchema,
   updateOrderSavedViewRequestSchema,
   updateOrderStatusRequestSchema,
-  roundAmountHalfUp,
+  unitPriceHalfUp,
 } from '@endora-commerce/contracts';
 import type {
   AdminOrderDetail,
@@ -1020,7 +1020,9 @@ export async function registerOrderRoutes(
           item: it,
           code: null,
           product,
-          unitPrice: roundAmountHalfUp(resolved.amount),
+          // Four places, unrounded, as the cart carries it (owner ruling of
+          // 2026-10-25); the line total below is the one rounding.
+          unitPrice: unitPriceHalfUp(resolved.amount),
           currency: resolved.currency,
         });
       }

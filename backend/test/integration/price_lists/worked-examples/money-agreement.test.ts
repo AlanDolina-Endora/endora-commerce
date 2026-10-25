@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { CorrectiveInvoicePort, OrderReturnContextPort } from '@endora-commerce/contracts';
+import { unitPriceHalfUp, type CorrectiveInvoicePort, type OrderReturnContextPort } from '@endora-commerce/contracts';
 import { EventBus } from '@endora-commerce/platform/events';
 import { InMemoryMailer } from '../../../../../packages/modules/email/src/backend/services/mailer.js';
 import { OrderService, type OrderEventBus } from '../../../../../packages/modules/orders/dist/backend/services/order-service.js';
@@ -33,6 +33,12 @@ import { ADMIN_COOKIE, setSellerSettings } from '../../invoices/helpers.js';
  * what a return refunds by default — the whole order, or part of a line — and
  * the admin CSV export.
  *
+ * §10.18 (owner ruling of 2026-10-25): a unit price is carried at four places,
+ * unrounded, from the price book through the cart line, the order line and the
+ * invoice line; only the line value, `unit × quantity`, is rounded, once. The
+ * §10.17 vectors are recomputed under it (9.0450 × 3 is 27.135, so 27.14, not
+ * 27.15), and the U vectors are sub-cent prices: 0.0125 × 10 000 is 125.00.
+ *
  * The tax rate is resolved per product type, so 102 is made a `virtual`
  * product and each vector states its rate per type; V2 is one order at two
  * rates. The payment method carries a 2.50 surcharge, which every document adds
@@ -45,13 +51,21 @@ const RESOLVER: Record<string, string> = {
   [SEED_PRODUCT_102_ID]: '0.6950',
   [SEED_PRODUCT_103_ID]: '9.0450',
 };
+/** §10.18 — sub-cent unit prices: a screw, a washer and a 1.505 part. */
+const SUB_CENT: Record<string, string> = {
+  [SEED_PRODUCT_101_ID]: '0.0125',
+  [SEED_PRODUCT_102_ID]: '0.0150',
+  [SEED_PRODUCT_103_ID]: '1.5050',
+};
 
 interface Vector {
   id: string;
+  /** The vector's resolver amounts, when they are not {@link RESOLVER}'s. */
+  resolver?: Record<string, string>;
   lines: Array<{ productId: string; quantity: number }>;
   /** The rate per product type: 101 and 103 are `simple`, 102 is `virtual`. */
   rates: Record<string, number>;
-  /** Per line: unit price, net and (informational) gross. */
+  /** Per line: unit price (four places, as carried), net and (informational) gross. */
   expectedLines: Array<[string, string, string]>;
   /** Per rate: [rate, net, VAT, gross]. */
   rows: Array<[number, string, string, string]>;
@@ -74,7 +88,7 @@ const VECTORS: Vector[] = [
     id: 'A1',
     lines: [{ productId: SEED_PRODUCT_101_ID, quantity: 1 }],
     rates: { simple: 0.23 },
-    expectedLines: [['29.50', '29.50', '36.29']],
+    expectedLines: [['29.4950', '29.50', '36.29']],
     rows: [[0.23, '29.50', '6.79', '36.29']],
     net: '29.50',
     tax: '6.79',
@@ -83,23 +97,24 @@ const VECTORS: Vector[] = [
     credited: [['36.29', '29.50', '6.79']],
   },
   {
-    // V3, full return: 9.05 × 3 at 8 % is refunded at what was invoiced, 29.32.
+    // V3, full return: 9.0450 × 3 = 27.135, so 27.14 at 8 % (§10.18: the line value is the
+    // rounding point; at two places on intake it was 9.05 × 3 = 27.15), refunded at what was invoiced.
     id: 'A2',
     lines: [{ productId: SEED_PRODUCT_103_ID, quantity: 3 }],
     rates: { simple: 0.08 },
-    expectedLines: [['9.05', '27.15', '29.32']],
-    rows: [[0.08, '27.15', '2.17', '29.32']],
-    net: '27.15',
+    expectedLines: [['9.0450', '27.14', '29.31']],
+    rows: [[0.08, '27.14', '2.17', '29.31']],
+    net: '27.14',
     tax: '2.17',
-    total: '31.82',
+    total: '31.81',
     returns: [[3]],
-    credited: [['29.32', '27.15', '2.17']],
+    credited: [['29.31', '27.14', '2.17']],
   },
   {
     id: 'A3',
     lines: [{ productId: SEED_PRODUCT_102_ID, quantity: 1 }],
     rates: { virtual: 0.05 },
-    expectedLines: [['0.70', '0.70', '0.74']],
+    expectedLines: [['0.6950', '0.70', '0.74']],
     rows: [[0.05, '0.70', '0.04', '0.74']],
     net: '0.70',
     tax: '0.04',
@@ -116,8 +131,8 @@ const VECTORS: Vector[] = [
     ],
     rates: { simple: 0.23, virtual: 0.05 },
     expectedLines: [
-      ['29.50', '29.50', '36.29'],
-      ['0.70', '0.70', '0.74'],
+      ['29.4950', '29.50', '36.29'],
+      ['0.6950', '0.70', '0.74'],
     ],
     rows: [
       [0.05, '0.70', '0.04', '0.74'],
@@ -130,26 +145,26 @@ const VECTORS: Vector[] = [
     credited: [['37.03', '30.20', '6.83']],
   },
   {
-    // V3, partial returns: 2 of 3 refunds 18.10 net + 1.45 VAT, then the last
+    // V3, partial returns: 2 of 3 is 18.09 net (9.0450 × 2) + 1.45 VAT, then the last
     // one the rest of what was invoiced — 9.05 net + 0.72 VAT.
     id: 'V3p',
     lines: [{ productId: SEED_PRODUCT_103_ID, quantity: 3 }],
     rates: { simple: 0.08 },
-    expectedLines: [['9.05', '27.15', '29.32']],
-    rows: [[0.08, '27.15', '2.17', '29.32']],
-    net: '27.15',
+    expectedLines: [['9.0450', '27.14', '29.31']],
+    rows: [[0.08, '27.14', '2.17', '29.31']],
+    net: '27.14',
     tax: '2.17',
-    total: '31.82',
+    total: '31.81',
     returns: [[2], [1]],
     credited: [
-      ['19.55', '18.10', '1.45'],
+      ['19.54', '18.09', '1.45'],
       ['9.77', '9.05', '0.72'],
     ],
   },
   {
     // L1 (owner ruling: a line's gross is its own rounding): two lines at 23 %.
-    // The rate's VAT is 33.00 × 0.23 = 7.59; the lines show 36.29 and 4.31 —
-    // 40.60 beside a 40.59 products' gross, the accepted cent.
+    // 0.6950 × 5 = 3.475, so 3.48; the rate's VAT is 32.98 × 0.23 = 7.5854 → 7.59; the
+    // lines show 36.29 and 4.28 — 40.57, the products' gross.
     id: 'L1',
     lines: [
       { productId: SEED_PRODUCT_101_ID, quantity: 1 },
@@ -157,57 +172,57 @@ const VECTORS: Vector[] = [
     ],
     rates: { simple: 0.23, virtual: 0.23 },
     expectedLines: [
-      ['29.50', '29.50', '36.29'],
-      ['0.70', '3.50', '4.31'],
+      ['29.4950', '29.50', '36.29'],
+      ['0.6950', '3.48', '4.28'],
     ],
-    rows: [[0.23, '33.00', '7.59', '40.59']],
-    net: '33.00',
+    rows: [[0.23, '32.98', '7.59', '40.57']],
+    net: '32.98',
     tax: '7.59',
-    total: '43.09',
+    total: '43.07',
     returns: [[1, 5]],
-    credited: [['40.59', '33.00', '7.59']],
+    credited: [['40.57', '32.98', '7.59']],
   },
   {
-    // R2 (review of PR #423): two returns of 1 of 2 × 29.50 at 23 %. Paid 72.57;
-    // each case on its own would refund 36.29 twice, 72.58. Cumulatively: 36.29, then 36.28.
+    // R2 (review of PR #423): two returns of 1 of 2 × 29.4950 at 23 %. Paid 72.56 (58.99 net);
+    // cumulatively the first refunds 36.29 (29.50 net), the second the rest, 36.27 (29.49 net).
     id: 'R2',
     lines: [{ productId: SEED_PRODUCT_101_ID, quantity: 2 }],
     rates: { simple: 0.23 },
-    expectedLines: [['29.50', '59.00', '72.57']],
-    rows: [[0.23, '59.00', '13.57', '72.57']],
-    net: '59.00',
+    expectedLines: [['29.4950', '58.99', '72.56']],
+    rows: [[0.23, '58.99', '13.57', '72.56']],
+    net: '58.99',
     tax: '13.57',
-    total: '75.07',
+    total: '75.06',
     returns: [[1], [1]],
     credited: [
       ['36.29', '29.50', '6.79'],
-      ['36.28', '29.50', '6.78'],
+      ['36.27', '29.49', '6.78'],
     ],
   },
   {
-    // DC1 (review of PR #423): a 10.00 order-level discount on 2 × 29.50 at 23 %.
-    // The products were charged 72.57 − 10.00 = 62.57; each return refunds its
+    // DC1 (review of PR #423): a 10.00 order-level discount on 2 × 29.4950 at 23 %.
+    // The products were charged 72.56 − 10.00 = 62.56; each return refunds its
     // half less the 5.00 of discount it carries, and the correction credits the
-    // goods as invoiced (29.50 + 6.79 / 6.78 VAT) and the 5.00 back on 0 %.
+    // goods as invoiced and the 5.00 back on 0 %.
     id: 'DC1',
     lines: [{ productId: SEED_PRODUCT_101_ID, quantity: 2 }],
     rates: { simple: 0.23 },
-    expectedLines: [['29.50', '59.00', '72.57']],
-    rows: [[0.23, '59.00', '13.57', '72.57']],
-    net: '59.00',
+    expectedLines: [['29.4950', '58.99', '72.56']],
+    rows: [[0.23, '58.99', '13.57', '72.56']],
+    net: '58.99',
     tax: '13.57',
-    total: '65.07',
+    total: '65.06',
     discount: '10.00',
     returns: [[1], [1]],
     credited: [
       ['31.29', '24.50', '6.79'],
-      ['31.28', '24.50', '6.78'],
+      ['31.27', '24.49', '6.78'],
     ],
   },
   {
     // C1 (review of PR #423): the second line is not returnable and comes back
     // through a complaint; it is in the same accounting, so together the two
-    // refund 40.59, what the products were charged.
+    // refund 40.57, what the products were charged.
     id: 'C1',
     lines: [
       { productId: SEED_PRODUCT_101_ID, quantity: 1 },
@@ -215,13 +230,13 @@ const VECTORS: Vector[] = [
     ],
     rates: { simple: 0.23, virtual: 0.23 },
     expectedLines: [
-      ['29.50', '29.50', '36.29'],
-      ['0.70', '3.50', '4.31'],
+      ['29.4950', '29.50', '36.29'],
+      ['0.6950', '3.48', '4.28'],
     ],
-    rows: [[0.23, '33.00', '7.59', '40.59']],
-    net: '33.00',
+    rows: [[0.23, '32.98', '7.59', '40.57']],
+    net: '32.98',
     tax: '7.59',
-    total: '43.09',
+    total: '43.07',
     complaints: [1],
     returns: [
       [1, 0],
@@ -229,26 +244,100 @@ const VECTORS: Vector[] = [
     ],
     credited: [
       ['36.29', '29.50', '6.79'],
-      ['4.30', '3.50', '0.80'],
+      ['4.28', '3.48', '0.80'],
+    ],
+  },
+  // §10.18 — sub-cent unit prices (owner ruling of 2026-10-25).
+  {
+    // U1: a screw at 0.0125 × 10 000 is 125.00. Rounded to two places at intake it was
+    // 0.01 × 10 000 = 100.00.
+    id: 'U1',
+    resolver: SUB_CENT,
+    lines: [{ productId: SEED_PRODUCT_101_ID, quantity: 10_000 }],
+    rates: { simple: 0.23 },
+    expectedLines: [['0.0125', '125.00', '153.75']],
+    rows: [[0.23, '125.00', '28.75', '153.75']],
+    net: '125.00',
+    tax: '28.75',
+    total: '156.25',
+    returns: [[10_000]],
+    credited: [['153.75', '125.00', '28.75']],
+  },
+  {
+    // U2: 0.0150 × 3 = 0.045, half-up 0.05 (at two places on intake: 0.02 × 3 = 0.06).
+    id: 'U2',
+    resolver: SUB_CENT,
+    lines: [{ productId: SEED_PRODUCT_102_ID, quantity: 3 }],
+    rates: { virtual: 0.23 },
+    expectedLines: [['0.0150', '0.05', '0.06']],
+    rows: [[0.23, '0.05', '0.01', '0.06']],
+    net: '0.05',
+    tax: '0.01',
+    total: '2.56',
+    returns: [[3]],
+    credited: [['0.06', '0.05', '0.01']],
+  },
+  {
+    // U3: three sub-cent lines at two rates. 23 %: 125.00 + 1.5050 × 7 (10.535 → 10.54) =
+    // 135.54, VAT 31.1742 → 31.17; 8 %: 0.0150 × 333 (4.995 → 5.00), VAT 0.40.
+    id: 'U3',
+    resolver: SUB_CENT,
+    lines: [
+      { productId: SEED_PRODUCT_101_ID, quantity: 10_000 },
+      { productId: SEED_PRODUCT_102_ID, quantity: 333 },
+      { productId: SEED_PRODUCT_103_ID, quantity: 7 },
+    ],
+    rates: { simple: 0.23, virtual: 0.08 },
+    expectedLines: [
+      ['0.0125', '125.00', '153.75'],
+      ['0.0150', '5.00', '5.40'],
+      ['1.5050', '10.54', '12.96'],
+    ],
+    rows: [
+      [0.08, '5.00', '0.40', '5.40'],
+      [0.23, '135.54', '31.17', '166.71'],
+    ],
+    net: '140.54',
+    tax: '31.57',
+    total: '174.61',
+    returns: [[10_000, 333, 7]],
+    credited: [['172.11', '140.54', '31.57']],
+  },
+  {
+    // U5: part of a sub-cent line comes back. 111 of 333 × 0.0150 at 23 %: 1.665 → 1.67 net,
+    // 0.38 VAT, 2.05; then the other 222: the rest of 6.15, 4.10 — 3.33 net, 0.77 VAT.
+    id: 'U5',
+    resolver: SUB_CENT,
+    lines: [{ productId: SEED_PRODUCT_102_ID, quantity: 333 }],
+    rates: { virtual: 0.23 },
+    expectedLines: [['0.0150', '5.00', '6.15']],
+    rows: [[0.23, '5.00', '1.15', '6.15']],
+    net: '5.00',
+    tax: '1.15',
+    total: '8.65',
+    returns: [[111], [222]],
+    credited: [
+      ['2.05', '1.67', '0.38'],
+      ['4.10', '3.33', '0.77'],
     ],
   },
 ];
 
 const two = (n: number | string) => Number(n).toFixed(2);
 
-describe('worked examples — §10.17 every document an order produces agrees', () => {
+describe('worked examples — §10.17 and §10.18 every document an order produces agrees', () => {
   let h: BackendServerHandle;
 
   beforeAll(async () => {
     h = await setupBackendServer();
     const em = h.em();
-    for (const [productId, amount] of Object.entries(RESOLVER)) await seedBasePriceSql(em, productId, amount);
     await em.getConnection().execute(`update "products" set "type" = 'virtual' where "id" = ?`, [SEED_PRODUCT_102_ID]);
-    // The seed stocks 101 only.
+    // The seed stocks 101 only, and a §10.18 screw is ordered by the ten thousand.
     for (const productId of [SEED_PRODUCT_102_ID, SEED_PRODUCT_103_ID]) {
-      em.create(StockLevel, { productId, warehouseId: '00000000-0000-4000-8000-00000000d017', onHand: 100, reserved: 0 });
+      em.create(StockLevel, { productId, warehouseId: '00000000-0000-4000-8000-00000000d017', onHand: 100_000, reserved: 0 });
     }
     await em.flush();
+    await em.getConnection().execute(`update "stock_levels" set "on_hand" = 100000 where "product_id" = ?`, [SEED_PRODUCT_101_ID]);
     const method = await em.findOneOrFail(PaymentMethod, { id: SEED_PAYMENT_METHOD_ID });
     method.additionalPrice = SURCHARGE;
     await em.persistAndFlush(method);
@@ -259,8 +348,19 @@ describe('worked examples — §10.17 every document an order produces agrees', 
     await teardownBackendServer(h);
   });
 
+  /** The vector's resolver amounts, written as base prices; the engine is told, as an audited write would. */
+  async function priceAt(resolver: Record<string, string>): Promise<void> {
+    const em = h.em();
+    for (const [productId, amount] of Object.entries(resolver)) await seedBasePriceSql(em, productId, amount);
+    await (h.container as unknown as { resolve<T>(name: string): T })
+      .resolve<{ handle: { pricingGeneration: { bump(): Promise<void> } } }>('priceLists')
+      .handle.pricingGeneration.bump();
+  }
+
   for (const v of VECTORS) {
-    it(`${v.id} — ${v.lines.map((l) => `${RESOLVER[l.productId]} × ${l.quantity}`).join(' + ')}`, async () => {
+    const resolver = v.resolver ?? RESOLVER;
+    it(`${v.id} — ${v.lines.map((l) => `${resolver[l.productId]} × ${l.quantity}`).join(' + ')}`, async () => {
+      await priceAt(resolver);
       const mailer = new InMemoryMailer();
       const registry = new PaymentAdapterRegistry();
       for (const a of builtInPaymentAdapters()) registry.register(a, 'payments');
@@ -310,10 +410,30 @@ describe('worked examples — §10.17 every document an order produces agrees', 
       }).data;
       v.lines.forEach((line, i) => {
         const item = cartData.items.find((it) => it.productId === line.productId)!;
-        expect(two(item.unitPrice.amount)).toBe(v.expectedLines[i]![0]);
+        // Four places, unrounded (§10.18): only the line value is rounded.
+        expect(unitPriceHalfUp(item.unitPrice.amount)).toBe(v.expectedLines[i]![0]);
         expect(String(item.lineTotal.amount)).toBe(String(Number(v.expectedLines[i]![1])));
       });
       expect(String(cartData.subtotal.amount)).toBe(String(Number(v.net)));
+
+      // The admin's create-order preview prices the same lines the same way.
+      const adminPreview = await h.app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/orders/preview',
+        cookies: ADMIN_COOKIE,
+        payload: {
+          customerAccountId: TEST_CUSTOMER_ID,
+          salesChannelId: await systemDefaultSalesChannelId(h.em()),
+          items: v.lines,
+        },
+      });
+      expect(adminPreview.statusCode, adminPreview.body).toBe(200);
+      const previewLines = (adminPreview.json() as { data: { lines: Array<{ productId: string; unitPrice: string; lineTotal: number }> } })
+        .data.lines;
+      v.lines.forEach((line, i) => {
+        const previewLine = previewLines.find((l) => l.productId === line.productId)!;
+        expect([previewLine.unitPrice, two(previewLine.lineTotal)]).toEqual([v.expectedLines[i]![0], v.expectedLines[i]![1]]);
+      });
 
       // The checkout preview.
       const preview = await service.previewTotal(ctx, methods);
@@ -340,7 +460,7 @@ describe('worked examples — §10.17 every document an order produces agrees', 
       expect([o.subtotal, o.taxTotal, o.total].map(two)).toEqual([v.net, v.tax, v.total]);
       v.lines.forEach((line, i) => {
         const item = o.items.find((it) => it.productId === line.productId)!;
-        expect([two(item.unitPrice), two(item.lineTotal)]).toEqual([v.expectedLines[i]![0], v.expectedLines[i]![2]]);
+        expect([unitPriceHalfUp(item.unitPrice), two(item.lineTotal)]).toEqual([v.expectedLines[i]![0], v.expectedLines[i]![2]]);
       });
       const payment = await h.em().fork().findOneOrFail(Payment, { orderId });
       const proforma = await h.em().fork().findOneOrFail(Invoice, { orderId, kind: 'proforma' });
@@ -378,8 +498,8 @@ describe('worked examples — §10.17 every document an order produces agrees', 
       }).data;
       v.lines.forEach((line, i) => {
         // The invoice lists the lines in the order's arrangement: find each by its unit price.
-        const invLine = inv.lines.find((l) => two(l.unitNetPrice) === v.expectedLines[i]![0])!;
-        expect([invLine.quantity, two(invLine.unitNetPrice), two(invLine.netValue), two(invLine.grossValue)]).toEqual([
+        const invLine = inv.lines.find((l) => unitPriceHalfUp(l.unitNetPrice) === v.expectedLines[i]![0])!;
+        expect([invLine.quantity, unitPriceHalfUp(invLine.unitNetPrice), two(invLine.netValue), two(invLine.grossValue)]).toEqual([
           line.quantity,
           v.expectedLines[i]![0],
           v.expectedLines[i]![1],

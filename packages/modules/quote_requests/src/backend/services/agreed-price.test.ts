@@ -29,11 +29,11 @@ describe('quoteIncompleteError', () => {
   });
 });
 
-describe('unitPriceText (#417)', () => {
-  it('stores a typed unit price half-up on its decimal digits, not the binary 1.00', () => {
-    expect((1.005).toFixed(2)).toBe('1.00');
-    expect(unitPriceText(1.005)).toBe('1.01');
-    expect(unitPriceText(2.675)).toBe('2.68');
-    expect(unitPriceText(0)).toBe('0.00');
+describe('unitPriceText (§10.18)', () => {
+  it('stores a typed unit price at its four places, unrounded (owner ruling of 2026-10-25)', () => {
+    expect(unitPriceText(1.005)).toBe('1.0050');
+    expect(unitPriceText(0.0125)).toBe('0.0125');
+    expect(unitPriceText(2.675)).toBe('2.6750');
+    expect(unitPriceText(0)).toBe('0.0000');
   });
 });

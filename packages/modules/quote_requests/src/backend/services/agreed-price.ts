@@ -1,4 +1,4 @@
-import { ERROR_CODES, roundHalfUp } from '@endora-commerce/contracts';
+import { ERROR_CODES, unitPriceHalfUp } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 
 /**
@@ -23,12 +23,13 @@ export function hasUnpricedLine(
 }
 
 /**
- * A unit price an operator or a buyer typed, as the `numeric(…, 2)` column
- * stores it: half-up on its decimal digits (issue #417). `toFixed(2)` rounded
- * the binary double, so a typed 1.005 was stored as 1.00.
+ * A unit price an operator or a buyer typed, as the `numeric(14,4)` column
+ * stores it: at its four places, unrounded (owner ruling of 2026-10-25) — the
+ * schema refuses a fifth (`fourDecimalUnitPrice`), so nothing is rounded here.
+ * Only the line value, `unit × quantity`, is rounded to two.
  */
 export function unitPriceText(value: number): string {
-  return roundHalfUp(value);
+  return unitPriceHalfUp(value);
 }
 
 /** The refusal the three guards answer with — one code, one sentence. */

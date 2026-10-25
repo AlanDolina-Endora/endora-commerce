@@ -61,6 +61,16 @@ describe('formatDocumentValue', () => {
     expect(formatDocumentValue(money(10), { decimals: 0 }, 'en-US')).toBe('PLN 10'.replace(' ', NBSP));
   });
 
+  it('a unit price shows its significant places, up to four, and never fewer than the format says (§10.18)', () => {
+    const unit = (amount: number) => ({ kind: 'money' as const, amount, currency: 'PLN', unitPrice: true });
+    expect(formatDocumentValue(unit(0.0125), { decimals: 2 }, 'pl-PL')).toBe(`0,0125${NBSP}zł`);
+    expect(formatDocumentValue(unit(1.505), {}, 'pl-PL')).toBe(`1,505${NBSP}zł`);
+    expect(formatDocumentValue(unit(1.5), { decimals: 2 }, 'pl-PL')).toBe(`1,50${NBSP}zł`);
+    expect(formatDocumentValue(unit(0.0125), { currencyDisplay: 'none' }, 'en-US')).toBe('0.0125');
+    // An amount (a line value, a total) keeps its two places.
+    expect(formatDocumentValue(money(0.0125), {}, 'pl-PL')).toBe(`0,01${NBSP}zł`);
+  });
+
   it('money in a currency Intl cannot format prints the number and the code', () => {
     expect(formatDocumentValue(money(5, 'X1'), {}, 'en-US')).toBe('5.00 X1');
   });
