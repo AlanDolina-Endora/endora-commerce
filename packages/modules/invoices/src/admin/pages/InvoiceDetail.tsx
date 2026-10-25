@@ -102,6 +102,8 @@ export function InvoiceDetail(): ReactNode {
     );
 
   const money = (n: number): string => formatMoney(n, invoice.currency);
+  // The unit net price carries up to four places (owner ruling of 2026-10-25).
+  const unitMoney = (n: number): string => formatMoney(n, invoice.currency, undefined, { unitPrice: true });
 
   return (
     <>
@@ -281,7 +283,7 @@ export function InvoiceDetail(): ReactNode {
                     <TableCell>{l.name}</TableCell>
                     <TableCell>{l.unit}</TableCell>
                     <TableCell className="text-right tabular-nums">{l.quantity}</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(l.unitNetPrice)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{unitMoney(l.unitNetPrice)}</TableCell>
                     <TableCell className="text-right tabular-nums">{Math.round(l.taxRate * 100)}%</TableCell>
                     <TableCell className="text-right tabular-nums">{money(l.netValue)}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(l.grossValue)}</TableCell>

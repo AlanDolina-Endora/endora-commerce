@@ -853,6 +853,9 @@ importers:
 
   packages/cms-components:
     dependencies:
+      '@endora-commerce/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@puckeditor/core':
         specifier: '*'
         version: 0.23.0(@floating-ui/dom@1.7.6)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(use-sync-external-store@1.6.0(react@19.2.5))

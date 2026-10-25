@@ -7,17 +7,25 @@ import {
   type BreakpointTier,
 } from '@endora-commerce/page-builder-core';
 import type { CmsProductSummary } from '../schema/catalog-types.js';
+import { unitPriceFractionDigits } from '@endora-commerce/contracts';
 import type { CmsProductCardProps } from '../schema/component-types.js';
 import { useCatalogBlockData } from '../hooks/use-catalog-block-data.js';
 import { productCardDataRequest } from '../utils/catalog-block-data.js';
 import { useBlockRenderEnvironment } from '@endora-commerce/page-builder-core/contributions';
 
+/**
+ * A product's price is a unit price: its significant places, up to four, at
+ * least two (owner ruling of 2026-10-25; `unitPriceFractionDigits`).
+ */
 function formatPrice(product: CmsProductSummary, locale: string): string | null {
   if (!product.price) return null;
+  const amount = product.price.amount;
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: product.price.currency,
-  }).format(product.price.amount);
+    minimumFractionDigits: 2,
+    maximumFractionDigits: Number.isFinite(amount) ? unitPriceFractionDigits(amount) : 2,
+  }).format(amount);
 }
 
 function mediaRatioClass(imageRatio: CmsProductCardProps['imageRatio']): string {

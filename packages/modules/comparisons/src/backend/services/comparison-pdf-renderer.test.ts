@@ -186,14 +186,15 @@ describe('ComparisonPdfRenderer.buildDocumentDefinition', () => {
 
 /**
  * Review 2, finding 1 (release 0.108.0) — a comparison's price is a resolver
- * amount, and the PDF wrote it as the bare number: 9.0450 came out as
- * "9.045 PLN". It is written at two places, half-up on its decimal digits
- * (`roundAmountHalfUp`; worked examples §10.16).
+ * amount, and the PDF wrote it as the bare number. Since the owner ruling of
+ * 2026-10-25 (worked examples §10.18) it is a unit price shown with its
+ * significant places, up to four, at least two (`unitPriceDisplayText`).
  */
-describe('ComparisonPdfRenderer — the price is written at two places, half-up', () => {
+describe('ComparisonPdfRenderer — the price is written by the unit-price rule', () => {
   it.each([
-    [9.045, '9.05 PLN'],
-    [1.005, '1.01 PLN'],
+    [9.045, '9.045 PLN'],
+    [0.0125, '0.0125 PLN'],
+    [1.5, '1.50 PLN'],
     [1900, '1900.00 PLN'],
   ])('%s is written as %s', async (amount, text) => {
     const view = fixtureView({ products: [productSummary('p1', 'Red Widget', null, amount)] });

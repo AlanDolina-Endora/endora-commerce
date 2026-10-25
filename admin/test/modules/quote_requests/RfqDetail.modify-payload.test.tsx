@@ -147,14 +147,17 @@ describe('RfqDetail Modify — reference, proposal, live difference, payload', (
    * `Number(amount).toFixed(2)`, which rounds the binary double: a resolver
    * amount of 9.0450 is the double 9.04499…, so the operator was offered 9.04
    * and, accepting it, the customer was charged 9.04 against the 9.05 the
-   * storefront shows. The prefill is the decimal string rounded half-up
-   * (`roundAmountHalfUp`; worked examples §10.16).
+   * storefront shows. Since the owner ruling of 2026-10-25 (worked examples
+   * §10.18) a unit price is carried at four places, so the prefill is the
+   * resolver's price itself, written with its significant places
+   * (`unitPriceDisplayText`): nothing is rounded away.
    */
   it.each([
-    ['9.0450', '9.05'],
-    ['1.0050', '1.01'],
+    ['9.0450', '9.045'],
+    ['1.0050', '1.005'],
+    ['0.0125', '0.0125'],
     ['118.0000', '118.00'],
-  ])('prefills %s as %s, half-up on its decimal digits', async (amount, shown) => {
+  ])('prefills %s as %s, unrounded', async (amount, shown) => {
     const input = await openModify(
       { customerProposedUnitPrice: null, desiredUnitPrice: null, agreedUnitPrice: null },
       { amount, currency: 'PLN' },

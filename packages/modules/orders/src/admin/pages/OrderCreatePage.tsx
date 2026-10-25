@@ -2,7 +2,13 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Copy, Info, Split, Trash2 } from 'lucide-react';
 import type { AdminOrderPreviewMessageCode } from '@endora-commerce/contracts';
-import { ApiError, apiClient, useUnsavedChangesPrompt, formatMoney as formatMoneyShared } from '@endora-commerce/admin-kit/lib';
+import {
+  ApiError,
+  apiClient,
+  useUnsavedChangesPrompt,
+  formatMoney as formatMoneyShared,
+  type FormatMoneyOptions,
+} from '@endora-commerce/admin-kit/lib';
 import {
   Alert,
   AlertDescription,
@@ -314,8 +320,8 @@ function customerLabel(c: AdminCustomerListItem): string {
   return name.length > 0 ? name : c.email;
 }
 
-function formatMoney(amount: number, currency: string): string {
-  return formatMoneyShared(amount, currency);
+function formatMoney(amount: number, currency: string, locale?: string, options?: FormatMoneyOptions): string {
+  return formatMoneyShared(amount, currency, locale, options);
 }
 
 /**
@@ -1234,7 +1240,7 @@ export function OrderCreatePage(): ReactNode {
                       ) : (
                         <>
                           <TableCell className="text-right text-muted-foreground">
-                            {line ? formatMoney(Number(line.unitPrice), line.currency) : null}
+                            {line ? formatMoney(Number(line.unitPrice), line.currency, undefined, { unitPrice: true }) : null}
                           </TableCell>
                           <TableCell className="text-right font-medium">
                             {line ? formatMoney(line.lineTotal, line.currency) : null}

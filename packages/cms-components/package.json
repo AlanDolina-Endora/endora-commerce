@@ -52,6 +52,7 @@
     "react-dom": "^19.0.0"
   },
   "dependencies": {
+    "@endora-commerce/contracts": "workspace:*",
     "@tiptap/core": "^3.31.3",
     "@tiptap/extension-color": "^3.31.3",
     "@tiptap/extension-highlight": "^3.31.3",

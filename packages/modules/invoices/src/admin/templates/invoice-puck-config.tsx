@@ -8,6 +8,7 @@ import {
 } from '@endora-commerce/page-builder-admin';
 import { fetchAssetDetail } from '@endora-commerce/admin-kit/components';
 import { toAbsoluteAssetUrl } from '@endora-commerce/admin-kit/lib';
+import { unitPriceFractionDigits } from '@endora-commerce/contracts';
 
 /**
  * Dedicated Puck config for invoice PDF templates (feature 047, US6). Kept in
@@ -89,6 +90,10 @@ const TITLES: Record<typeof sampleInvoice.kind, string> = {
 
 function money(n: number): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+/** A unit price: its significant places, up to four (owner ruling of 2026-10-25), as the PDF prints it. */
+function unitMoney(n: number): string {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: unitPriceFractionDigits(n) });
 }
 function pct(rate: number): string {
   return `${Math.round(rate * 100)}%`;
@@ -514,7 +519,7 @@ const InvoiceLineItems = invoiceSection({
                 name: l.name,
                 unit: l.unit,
                 qty: String(l.quantity),
-                unitNet: money(l.unitNetPrice),
+                unitNet: unitMoney(l.unitNetPrice),
                 tax: pct(l.taxRate),
                 net: money(l.netValue),
                 gross: money(l.grossValue),

@@ -34,7 +34,7 @@ import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { createPricePrefillQueue, type PricePrefillQueue } from '../lib/price-prefill-queue';
 import { SectionSummary, sectionTotals, useQuoteLineGroupLabels, useSectionSummaryText } from '../line-groups.js';
 import { quoteNet } from '../quote-totals.js';
-import { lineAmountHalfUp } from '@endora-commerce/contracts';
+import { lineAmountHalfUp, unitPriceDisplayText } from '@endora-commerce/contracts';
 
 /**
  * Admin "create a Quote Request on behalf of a customer" (feature 008 US4).
@@ -317,7 +317,12 @@ export function RfqCreatePage(): ReactNode {
         setLines((prev) =>
           prev.map((row) =>
             row.key === key && row.priceSource !== 'manual'
-              ? { ...row, agreedUnitPrice: amount ?? '', priceSource: amount === null ? 'none' : 'resolved' }
+              ? {
+                  ...row,
+                  // The resolver's unit price, unrounded (owner ruling of 2026-10-25).
+                  agreedUnitPrice: amount === null ? '' : unitPriceDisplayText(amount),
+                  priceSource: amount === null ? 'none' : 'resolved',
+                }
               : row,
           ),
         );
@@ -667,7 +672,7 @@ export function RfqCreatePage(): ReactNode {
                           id={`${rowId}-price`}
                           type="number"
                           min={0}
-                          step="0.01"
+                          step="0.0001"
                           aria-labelledby={`${itemsId}-price ${rowId}-name`}
                           aria-invalid={priceMissing || undefined}
                           aria-describedby={priceMissing ? `${rowId}-price-reason` : undefined}
