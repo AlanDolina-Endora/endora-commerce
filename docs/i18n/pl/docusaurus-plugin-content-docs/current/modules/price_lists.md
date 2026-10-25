@@ -150,8 +150,10 @@ zaokrąglenia, a zaokrąglana jest tylko wartość pozycji — cena jednostkowa 
 górę, do dwóch miejsc. Wkręt po 0,0125 kosztuje 125,00 za 10 000 sztuk, a 0,0150 × 3 to 0,045, czyli
 0,05. Cena jednostkowa jest pokazywana ze swoimi znaczącymi miejscami, do czterech, a z dwoma, gdy
 trzecie i czwarte są zerami: 0,0125 zł, 1,505 zł, 1,50 zł; wartości pozycji i sumy mają zawsze dwa
-miejsca. Plik produktowy publikuje dwa miejsca, zaokrąglone połówkowo w górę z czterech: 9,0450 to
-9,05, a 1,0050 to 1,01.
+miejsca. Plik produktowy publikuje dwa miejsca i nie zaokrągla przy tym żadnej ceny jednostkowej:
+cena z trzecim albo czwartym znaczącym miejscem trafia do pliku jako dokładna cena opakowania —
+9,0450 jako 10 sztuk za 90,45, 0,0125 jako 100 za 1,25 — a jeśli szablon feedu nie potrafi wyrazić
+opakowania, nie trafia wcale (moduł Feedy produktowe).
 
 ### Kolejność cen
 

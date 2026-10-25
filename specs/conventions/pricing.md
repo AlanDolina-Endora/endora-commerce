@@ -77,8 +77,11 @@ Polish.
   the order line, the quote lines, the invoice line (owner ruling of 2026-10-25, worked examples
   §10.18). Never round a unit price to two places at intake: a screw at 0.0125 became 0.01, and
   10 000 of them cost 100.00 instead of 125.00. **The line value is the rounding point**:
-  `lineAmountHalfUp(unit, quantity)`, half-up to two places once. Only a surface whose grammar is
-  two places — a product feed — rounds the resolver amount itself, with `roundAmountHalfUp`
+  `lineAmountHalfUp(unit, quantity)`, half-up to two places once. A surface whose grammar is two
+  places — a product feed — never rounds a unit price with a third or fourth significant place
+  either: it publishes the exact price of a pack of N units, N the smallest power of ten up to
+  10 000 that makes it exact, and states N in the format's pack fields, or leaves the item out with a
+  reason (`feed-pack.ts`, issue #430). A two-place amount is written with `roundAmountHalfUp`
   (`price-book-decimal.ts`), and a gross is `grossAmountHalfUp`; never `Number(…).toFixed(2)`,
   `Math.round` or `net * (1 + rate)`: 9.0450 is the double 9.04499…, and 29.50 × 1.23 the double
   36.28499… (§10.16). A unit price is **shown** with its significant places, up to four, at least

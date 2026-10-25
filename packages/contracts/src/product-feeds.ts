@@ -99,6 +99,16 @@ export const feedFieldSourceKindSchema = z.enum([
   'category_path',
   'provider_category',
   'grouping_id',
+  /**
+   * Issue #430 — a sub-cent unit price is published as the price of a pack of
+   * N units (`feed-pack.ts`). These three say what the pack is: N itself
+   * (Google's `multipack`), and the pack as a count measure and its base
+   * (`unit_pricing_measure` / `unit_pricing_base_measure`, `100ct`). Each is
+   * empty — so the field is omitted — for an item whose price needs no pack.
+   */
+  'pack_quantity',
+  'pack_unit_pricing_measure',
+  'pack_unit_pricing_base_measure',
   'constant',
 ]);
 export type FeedFieldSourceKind = z.infer<typeof feedFieldSourceKindSchema>;
@@ -150,6 +160,14 @@ export const feedRunIssueReasonSchema = z.enum([
   'stale_provider_category_mapping',
   'unsupported_product_type',
   'zero_tax_rate_on_gross_feed',
+  /**
+   * Issue #430 — the unit price has more than two significant places and the
+   * template binds no `pack_quantity` field, so the price could only be
+   * published rounded; the item is skipped instead.
+   */
+  'sub_cent_price_without_pack_field',
+  /** Issue #430 — no pack of at most 10 000 units makes the price exact to the cent. */
+  'sub_cent_price_beyond_pack_limit',
 ]);
 export type FeedRunIssueReason = z.infer<typeof feedRunIssueReasonSchema>;
 
