@@ -1,5 +1,134 @@
 # @endora-commerce/admin-kit
 
+## 0.108.0
+
+### Minor Changes
+
+- 291ec86: Custom-field filters for admin lists: one composite, its hook and the pure helpers the Orders, Quote Requests and Opportunities lists share.
+
+  **New in `@endora-commerce/admin-kit/components`.**
+
+  - `CustomFieldListFilters` — one filter control per custom field a list offers, rendered as grid
+    cells for the host's own advanced-filters grid. Props: `idPrefix`, `fields`
+    (`CustomFieldListFilterField[]`), `value` (`CustomFieldFilters`), `onChange(key, filter | null)`
+    (one key's filter, whole; `null` when nothing of it is left), `language`, and optionally
+    `status` (the hook's) with `onRetry`: a placeholder cell while the fields load, and on failure a
+    sentence with a _Try again_ button. A text field is a search box committed after a 300 ms pause;
+    a number is a minimum and a maximum, a decimal comma accepted, also paused; a date is a from and
+    a to. Both ranges stack below `sm` with a visible short label on each bound, explain a bound that
+    is not a number and an inverted range in a message linked to the input, and send nothing for
+    either. A yes/no field is _Any / Yes / No_; a select or multiselect field is a multi-select of its
+    options in their order, searchable above eight. Labels follow `label[language]`, then the base
+    language, then `labelDefault`. A pending text or number commit is dropped when the value changes
+    from outside.
+  - `useCustomFieldListFilterFields(endpoint)` — `{ fields, status: 'loading' | 'ready' | 'error',
+reload }` from one `GET` of a list's offered-fields endpoint; `reload()` reads it again.
+  - `readCustomFieldFilterParams(params)` / `writeCustomFieldFilterParams(params, filters)` — the
+    filters in an address's `cf.<key>.<op>` parameters (`in` repeated) and back, other parameters
+    untouched. A key failing the definition-key grammar and a malformed operator value are dropped;
+    an unknown well-formed key is kept for the server to refuse; at most 10 keys and 100 `in`
+    values.
+  - `sanitizeCustomFieldFilters(saved, fields)` — a saved view's filters against the offered fields:
+    `{ kept, dropped }`, removed options pruned. `pruneRemovedOptions(filters, fields)` — removes
+    options a known field no longer has from filters read from the address.
+  - `customFieldFilterChips(fields, filters, language, t)` — one `{ id, label, remove, removeLabel }`
+    chip per key, the label plain text and `removeLabel` the remove action's accessible name.
+  - `customFieldDisplayName(fields, key, language)` — how a field is named to the operator: its label
+    (language, base language, `labelDefault`), or for a key the list does not offer the key cut to
+    64 characters. `resolveCustomFieldLabel(label, labelDefault, language)` — the label rule alone.
+  - `emptyCustomFieldFilters()`, `withCustomFieldFilter(filters, key, filter | null)` and
+    `withoutCustomFieldFilter(filters, key)` — new prototype-free records with one key set or removed. `customFieldFilterRefusal(error)` — the key a
+    `CUSTOM_FIELD_FILTER_UNAVAILABLE` refusal names, else `null`. `toCustomFieldFiltersParam(filters)`
+    — the `customFieldFilters` request parameter, keys sorted, `null` when empty.
+  - Types: `CustomFieldListFiltersProps`, `CustomFieldFilterChip`, `CustomFieldFilterTranslator`,
+    `CustomFieldListFilterFieldsState`, `CustomFieldListFilterFieldsStatus`.
+
+  Every record the helpers return has a `null` prototype, so a key such as `constructor` is an
+  ordinary key and never an inherited member.
+
+  **`@endora-commerce/mod-i18n`** ships the `customFieldFilters.*` keys of the `core` namespace in
+  English and Polish, which the composite reads; a host needs that version alongside this one.
+
+  **`Input`** (`@endora-commerce/admin-kit/ui`) draws its border in the destructive colour while
+  `aria-invalid` is set.
+
+- cf7a9c0: A detail screen can lead its Back to the screen that opened it, and a page header can carry controls beside its title.
+
+  - **New in `@endora-commerce/admin-kit/lib`**: `readReturnTo(searchParams)` returns the `?returnTo=` path a screen was opened with, or `null` for anything that is not a path of the application (a scheme, a host, `//`); `withReturnTo(target, returnTo)` adds it to a link, keeping the query and the hash; `RETURN_TO_PARAM`.
+  - **`PageHeader`** takes an optional `titleActions`, drawn beside the heading but outside it, so the heading's accessible name stays its words. Pages that do not pass it render as before.
+
+- c8aa175: Line groups editor and grouped reordering in `@endora-commerce/admin-kit/components`.
+
+  - **`useGroupedReorder(options)`** — the multi-section sibling of `useReorderList`: items move within and across sections (native pointer drag, the ARIA grab-mode keyboard map crossing section boundaries, `moveItemBy` / `moveItemTo`), non-fixed sections move among themselves (`moveSectionBy`), and every move is announced through the caller's labels. The hook owns no list: it calls `onMoveItem(id, sectionKey, index)` and `onMoveSection(key, index)`.
+  - **`<LineGroupsEditor>`** — domain-free editor of named, ordered groups of a document's lines: inline group names (required, 120 characters), move up/down, delete (lines move to the ungrouped section, announced), a _Move to group_ menu per line, per-section `renderSummary` and `renderSectionFooter`, a `readOnly` mode and a `layout="table"` mode for screens whose lines are table rows. With no group it renders the bare line list. Every string is a prop (`LineGroupsEditorLabels`).
+  - **`<SplitLineDialog>`** — _Split line_: a modal dialog asking for the quantity to move to a new line (whole steps from `step` to `quantity − step`, invalid entries marked with their reason, Enter confirms) and the section of the new line; with `canSplitLine(quantity, step)` and `splitLineInto(lines, key, split, ops)`, which applies a confirmed split to a display-ordered line list. Every string is a prop (`SplitLineDialogLabels`).
+
+- e1b173f: New `EditableGrid` on `@endora-commerce/admin-kit/components` (feature 161, `specs/161-price-book-editor/research.md` R4): an ARIA data grid for spreadsheet-like editing that knows nothing about its cells' meaning. The caller supplies `columns`, `rows`, `getText(rowKey, columnKey)`, optional `getError`, `isReadOnly` and `renderCell` (keep it stable), and receives every change as one group through `onChange(changes, reason)` — `changes` are `{ rowKey, columnKey, text }`, `reason` is `'edit' | 'paste' | 'fill' | 'clear' | 'undo' | 'redo'`. The grid owns the keyboard model (one tab stop, arrows, Home/End, Ctrl+Home/End, PageUp/PageDown, Enter/F2/Escape/Tab, Shift selection), tab-separated copy and paste (a semicolon line too), fill down (Ctrl/⌘+D), clear, undo and redo of change groups, per-cell `aria-invalid` with its reason, `aria-rowcount`/`aria-rowindex` for paged sets (`totalRowCount`, `rowIndexOffset`), and a polite live region. A `ref` (`EditableGridHandle`) applies an outside change as one undoable group (`apply`), forgets the history (`clearHistory`) and reads the selection (`selection`). Types: `EditableGridProps`, `EditableGridColumn`, `EditableGridRow`, `EditableGridCellChange`, `EditableGridChangeReason`, `EditableGridRenderContext`, `EditableGridSelection`, `EditableGridHandle`. Its strings are in the `core` namespace under `editableGrid.*` (shipped by `@endora-commerce/mod-i18n`).
+- ef1318e: Two additions for the price-book grid (feature 161, Phase 5), both additive.
+
+  - **`EditableGrid` `getCellToken?(rowKey, columnKey): string`.** A cell's memo token: a cell renders again when its text, error, state or this token changes. A caller whose cell shows more than its own text (what an empty cell inherits from a neighbour) puts that in the token, so a change renders the cells it affects and no other. Without it, a cell renders on its text alone, as before.
+  - **`DropdownMenu`, `DropdownMenuTrigger`, `DropdownMenuContent`, `DropdownMenuItem` on `@endora-commerce/admin-kit/ui`** — the Radix menu `RowActionMenu` is built on, published for menus with a labelled trigger.
+
+- f42bbaf: `PaginationFooter` takes an optional `pageSizes` (feature 161): the page sizes its rows-per-page select offers, for a list whose API pages differently. Omitted, it offers `PAGE_SIZE_OPTIONS` as before. The props are generic over the size type — `PaginationFooterProps<S extends number = PageSizeOption>` — so `pageSize` and `onPageSizeChange` take the caller's sizes; existing callers are unchanged.
+- c781cd6: `useUnsavedChangesPrompt(when, message?, options?)` takes an optional third argument (feature 161, FR-020): `{ guardTabsOutside: ref }` also asks before a `role="tab"` outside the referenced element is activated, and keeps the tab when the operator cancels — for a panel contributed into a host's tabbed screen, whose tab switch unmounts it. Existing two-argument calls are unchanged. Type: `UnsavedChangesPromptOptions`.
+- 4a05f32: `formatMoney(amount, currency, locale?, options?)` takes `{ unitPrice: true }` for a unit price (owner ruling of 2026-10-25): two places when its third and fourth are zero, otherwise its significant places, up to four (`0,0125 zł`, `1,50 zł`, `1,505 zł`), by `unitPriceFractionDigits` from `@endora-commerce/contracts`. An amount (a line value, a total) still shows two. New exported type `FormatMoneyOptions`.
+
+### Patch Changes
+
+- 172597c: `ModalDialog` (`@endora-commerce/admin-kit/components`) takes an optional `aria-describedby`: the
+  id of the element that describes the dialog, set on the panel beside its `aria-labelledby`, so a
+  screen reader reads a warning or a question together with the title when focus enters the dialog.
+  Without it the panel carries no `aria-describedby`, exactly as before. Additive.
+- 53e88c7: _Send feedback_ beside the release in the Admin UI sidebar (an icon of its own when the sidebar is collapsed), shown while the `admin_feedback` module is present. It opens a dialog — the feedback (required), the sender's e-mail (the signed-in administrator's, editable) and an optional phone — that posts to `POST /api/v1/admin/feedback`, and says every outcome: thanks, sending switched off on the instance, too many messages, or not delivered, always with `support@endora.software` to write to by hand and with what was typed kept. New `appShell.feedback.*` keys in the core bundle (EN, PL); `theme.css` gains `.b2b-sidebar__feedback` and `.b2b-sidebar__feedback-rail-row`.
+- 8e10ba1: The collapsed sidebar's fly-out is drawn over the page content again. `.b2b-sidebar` now sets `z-index: 36` — above the sticky topbar (35) and the page's sticky bars, below the mobile nav backdrop (40), the scrim, drawers and command palette (50/60). A sticky box is its own stacking context, so the fly-out's own `z-index` could never lift it above content painted later in the page.
+- 3a9dc6e: Raise `vite` to `^7.3.7`. It includes a dev-server fix that keeps module ids, not URLs, in `safeModulePaths`. `@endora-commerce/admin-shell`'s generated README lists the new peer range.
+- Updated dependencies [0bd5a2b]
+- Updated dependencies [20af5d5]
+- Updated dependencies [cf7a9c0]
+- Updated dependencies [c8aa175]
+- Updated dependencies [1284428]
+- Updated dependencies [1df7a5e]
+- Updated dependencies [14bcf1d]
+- Updated dependencies [789f917]
+- Updated dependencies [d231c48]
+- Updated dependencies [e47b84b]
+- Updated dependencies [9434cbc]
+- Updated dependencies [87ac085]
+- Updated dependencies [87f673d]
+- Updated dependencies [ad341ed]
+- Updated dependencies [301a69f]
+- Updated dependencies [1377dc8]
+- Updated dependencies [af57b55]
+- Updated dependencies [49d82dd]
+- Updated dependencies [72f9cec]
+- Updated dependencies [6f1e0ec]
+- Updated dependencies [0d0a1c6]
+- Updated dependencies [61a1188]
+- Updated dependencies [56b075d]
+- Updated dependencies [53e88c7]
+- Updated dependencies [eda7da8]
+- Updated dependencies [359ee2b]
+- Updated dependencies [8f0fd0e]
+- Updated dependencies [cc98507]
+- Updated dependencies [ced7b20]
+- Updated dependencies [f3598cd]
+- Updated dependencies [6177c81]
+- Updated dependencies [2effab9]
+- Updated dependencies [c8b20f6]
+- Updated dependencies [29180cd]
+- Updated dependencies [0f09369]
+- Updated dependencies [52884d6]
+- Updated dependencies [0071cd7]
+- Updated dependencies [3e949eb]
+- Updated dependencies [403ccc1]
+- Updated dependencies [2b8bd26]
+- Updated dependencies [8a2fc1b]
+- Updated dependencies [ec14b96]
+- Updated dependencies [a4cd906]
+- Updated dependencies [5bddd11]
+- Updated dependencies [a8919dc]
+  - @endora-commerce/contracts@0.108.0
+
 ## 0.107.0
 
 ### Minor Changes

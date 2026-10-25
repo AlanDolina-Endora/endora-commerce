@@ -1,5 +1,232 @@
 # @endora-commerce/mod-orders
 
+## 0.108.0
+
+### Minor Changes
+
+- 0bd5a2b: Placement enforces minimum order quantities, records whether each line was returnable, and admin and API order intake are bounded to 200 lines.
+
+  - **Behaviour change for API clients — placement refuses a basket below a minimum.** Checkout, one-click buy, reorder, a basket filled from a quote request, admin Create order and the external order API answer `422 PRODUCT_BELOW_MINIMUM_QUANTITY` or `422 PACKAGING_UNIT_BELOW_MINIMUM_QUANTITY` with `details.lines[]`, checked right after the basket is read and **before** the order value and credit checks, the order number and any stock or credit reservation — a refusal writes nothing. A line whose product record is gone answers `404 PRODUCT_NOT_FOUND` with `details.cartItemIds`.
+  - **Quote exemption only while the quote is valid.** Lines seeded from an accepted quote request are exempt only while that quote request still exists, belongs to the buyer's organization, is `Approved` and within its validity, is recorded by no order, and still has a line at the agreed price in the basket. With `mod-quote-requests` switched off no line is exempt.
+  - **Product names in the response language.** Every minimum refusal (placement, preview, admin create, the external API) names products in the language its sentence is written in — an admin's stored preference, otherwise the q-sorted `Accept-Language`. `OrderPlacementPort.placeOrder` takes an optional `{ language }`.
+  - **New port `orderQuoteSourcePort` (`OrderQuoteSourcePort`).** `quoteSourceHonoursExemptions({ organizationId, quoteRequestId, basketLines })` answers whether a basket's quote-seeded lines keep their exemption — the checkout preview's lock-free check, published so `mod-carts` judges submit for approval as placement does. Advisory: placement confirms the source again. `false` while `mod-quote-requests` is off.
+  - **Checkout preview:** `POST /api/v1/orders/preview-total` answers `belowMinimumLines[]` with the same exemptions (`kind: 'product_unavailable'` for a vanished product).
+  - **Admin order preview:** a line whose product total is below its minimum is unavailable at zero price with the message code `BELOW_MINIMUM_QUANTITY` and its `minimum`, judged after the four existing codes.
+  - **Behaviour change for API clients — 200-line bound.** `POST /api/v1/admin/orders`, `POST /api/v1/admin/orders/preview` and the external `POST /api/v1/external/orders` refuse more than 200 lines with `422 VALIDATION_FAILED`, `details: { code: 'too_many_items', maximum: 200 }`, before any line is evaluated. On the external API this is a public API change: it is checked before the `Idempotency-Key` header is required and leaves no idempotency record. Admin create and the external API also refuse a request whose product total is below the pieces minimum, `details.lines[]` keyed by `index`. Both refusals — below a minimum, or a product the customer may not see — are decided **before** the customer's basket is replaced, so a refused request leaves the basket exactly as it was (it used to be cleared, or partly re-seeded with the lines that passed).
+  - **Returnable at purchase.** Every placement path stamps `order_items.returnable_at_purchase` from the product's **Returnable** flag (fail-closed: a product that cannot be read is recorded not returnable). Older lines hold `null`. `OrderReturnContextPort` lines carry it as `returnableAtPurchase`.
+  - **Create order screen** shows a below-minimum line's reason; `mod-i18n`'s `core` bundle gains `orderCreate.line.belowMinimum` and `orderCreate.line.belowMinimumUnknown` in English and Polish.
+  - Migration `20261016T082022_orders_order_item_returnable_at_purchase.ts`.
+
+- 21bae01: The admin Orders list and its CSV export accept `customFieldFilters`, a JSON object of filters keyed by Order custom-field key (`contains`, `in`, `is`, `min`/`max`, `from`/`to`, by the field's type). The page, the total, both count maps and the export all narrow by it, and it combines with every other filter as AND. A key the list does not offer — unknown, defined on another entity, or with its list-filter option off — is refused with 400 `CUSTOM_FIELD_FILTER_UNAVAILABLE`, whose `details` name the first refused key and all of them; more than 10 keys or 100 chosen values in total, a malformed bound, or the parameter given twice is 400 `VALIDATION_FAILED`. An operator that does not apply to a field's type, or an inverted range (a minimum above its maximum, a start date after its end), is refused with 400 `VALIDATION_FAILED` rather than ignored or answered empty.
+
+  `GET /api/v1/admin/orders/custom-field-filters` (`orders:read`) lists the Order custom fields the list offers as filters: key, value type, labels and options.
+
+- 73699ad: Custom-field filters on the admin Orders and Quote Requests lists. The fields marked as list filters appear among each list's filters, labelled in the operator's language, and are applied on the server. They are deep-linkable (`cf.<key>.<operator>` in the address), shown as removable chips and kept in saved views. A saved filter on a field that is no longer offered is dropped when the view is loaded, with a notice naming it. A filter the server refuses, for instance one carried in an old link, is reported by the field's name with a button that removes it. The Orders CSV export follows the same filters, and is not offered while a refused filter stands.
+- cf7a9c0: The Order and the Quote Request detail screens honour `?returnTo=`: opened with a path of the application, their _Back_ leads there and says only "Back" — the convention their create screens already had. Without it, _Back_ still leads to the list.
+- c8aa175: Orders store line groups and answer their lines in display order.
+
+  - **Migration** `20261020T172007_orders_order_item_groups.ts` creates `order_item_groups` and adds `order_items.group_id` (on delete set null) and `position` (default 0, no backfill).
+  - **Replies.** Every order reply — admin, customer and external — answers `itemGroups` (default `[]`) and each item's `groupId` and `position`, with `items` in display order (the read had no order before). Order confirmations, reorder, order-to-quote cloning and the return context read the lines in the same order.
+  - New orders store each line's basket order as its `position`.
+  - **Carry-over from quotes.** An order placed from a basket whose accepted-quote source placement vouches for takes the quote's grouping inside the placement transaction: each order line takes the group and place of the quote line it matches (same product, variant, agreed quantity and agreed unit price first, then product, variant and price, then product, variant and quantity, then product and variant — so one product split over several quote lines at one price keeps each line's group whatever the basket's order), unmatched lines are ungrouped after them, and quote groups that receive no line are not created. The lines are the ones the source judgement already read — the read port is asked once. A refused source, or `quote_requests` switched off, places the order without groups.
+  - **Admin order creation.** `POST /api/v1/admin/orders` accepts `groups` (`{ key, name }`) and a per-line `groupKey`; the order is created with that grouping in the same transaction, and a group no line names is not created. One product and variant may sit on several lines, in different groups or in one: the basket is seeded with `keepRepeatedLines`, so each request line becomes an order line of its own, priced at its own quantity (minimums are still judged per product on the total). The `order.place_on_behalf` audit entry's `stateAfter` gains `groups: [{ name, lineCount }]` when the order has groups.
+  - **Admin preview.** `POST /api/v1/admin/orders/preview` answers `taxRate` on every priced line.
+  - **Admin screens.** The create-order screen groups its lines with the line groups editor (summaries of item count, net, VAT and gross per group from the preview), keys its lines per line — a product already a line can be added again — and offers _Split line_ on every line of quantity 2 or more; the order screen shows the groups read-only with the same summaries, then _Other items_. An order's grouping cannot be changed after placement. New `lineGroups.*` texts in the module's bundle, English and Polish.
+
+- 14bcf1d: Every consumer prices on price books (feature 160, D-287 P1), through the one batched resolution chain.
+
+  - **carts** — `cart_items.price_source` (migration `…_carts_cart_items_price_source`) records which tier priced a line (`agreed | base | catalogue | buyer | sale`). `CartLinePricing.orderablePrices` drops the product's own price step, passes the variant, and stores the source.
+  - **orders** — `order_items.price_source` (migration `…_orders_order_items_price_source`) is copied from the cart line at placement. The admin order preview and the external order intake price through `resolveLinePrices` instead of one `resolveLinePrice` per line; a line no price book prices is refused, with no `defaultPrice` fallback.
+  - **organizations** — the effective price lists of an organization are its effective **price books**: `PriceListReadPort.listForOrganization({ organizationChain, customerGroupId })` answers the books whose audience holds the organization, an ancestor or its group, each with `reason` and `depth`. Old: `listActive()` plus `evaluateApplicationRule` per list. New: one `listForOrganization` call.
+  - **product_feeds** — a feed pinned to a price book publishes that book's rows over the channel's catalogue price (`namedListPrices` takes the feed's `salesChannelId`); a product the book does not price is absent.
+  - **search** — hits and suggestions price through the batched listing resolution; suggestions pass the request currency.
+  - **quote_requests** — reference prices are resolved in the request's currency; the RFQ create prefill and the reference probe call `POST /api/v1/admin/price-books/resolve` instead of `GET /api/v1/admin/products/:id/resolved-price`.
+
+- b0e1abd: A custom-field value that was not carried is recorded with the field's label, so its history line can name the field.
+
+  - **`customFieldCarryPort`** names every skipped key with the **source** definition's label as
+    it reads at that moment — `label: { labelDefault, labels }` — a `target_missing` skip
+    included.
+  - **Records keep the label.** The Order system note (`systemNote.skipped`), the Quote Request
+    `custom-field-carry-skipped` event and its `custom_field_carry_skipped` history entry, and the
+    Sales Opportunity audit member `customFieldCarry.skipped` store each skip's label next to its
+    key and reason. It is a snapshot: renaming the field later does not change history. Skips
+    recorded earlier have no label and read as before.
+  - An administrator who cannot read custom-field definitions can now be shown which field was
+    not carried and why. The values themselves stay visible only to readers with
+    `custom_fields:read`.
+
+- b52f453: An Order placed from a vouched Quote Request receives the request's carried custom-field values.
+
+  - **Carry at placement.** When the basket's quote source is vouched, every value whose Quote
+    Request definition carries to Orders goes into the new Order's `customFieldValues`, read at
+    placement under the request's lock. Nothing about the carry can refuse a checkout, and the
+    carried values are not re-validated against unrelated Order fields (a required field the buyer
+    never saw does not fail placement). An impersonated placement's `order.place_on_behalf` audit
+    entry names the carried keys in `stateAfter.carriedCustomFieldKeys`.
+  - **System notes in the Order's comments.** A value that cannot be carried — no matching field,
+    another value type, an internal value into a customer-visible field, or a value the field does
+    not accept — is named in one author-less, internal, non-notifying system note. New column
+    `order_comments.system_note` (migration `Migration20261021T164807OrdersOrderCommentSystemNote`).
+    `GET /api/v1/admin/orders/:id/comments` gives every comment `systemNote` (`null` for an ordinary
+    comment); `GET /api/v1/orders/:id/comments` never lists a system note and its shape is unchanged.
+  - `OrderServiceNeighbourPorts` and `OrdersModuleOptions` gain the required `customFieldCarry`
+    accessor (`() => CustomFieldCarryPort`); a composition building them by hand must supply it.
+
+- 9e0d759: An Order created from a Sales Opportunity receives the Opportunity's carried custom-field values.
+
+  - **`orderCustomFieldCarryPort`** (`CustomFieldCarryReceiverPort` from `@endora-commerce/contracts`)
+    carries a Sales Opportunity's values into an Order's **empty** fields in one
+    `order.custom_fields.carry` Command, attributed to the system. A value the Order already holds is
+    kept. A missing Order and one of another Organization both answer `not-found`, and nothing is
+    written; when nothing is carried and nothing skipped, no audit entry is written.
+  - A value that cannot be carried is named in one internal, author-less, non-notifying system note
+    in the Order's comments, as at placement.
+  - The Order is read `for update` inside that Command and the carry is planned over the values read
+    under the lock, so a concurrent write that holds the Order is waited for and its values are kept.
+
+- 61a1188: A reorder reports the lines that no longer have a price (issue #166).
+
+  - **Behaviour change — reorder.** `POST /api/v1/orders/:id/reorder` and the admin reorder seed every line at the price the buyer may order it at now, and leave out a line nothing prices for this buyer (or that is sold on request only), reporting it in `unavailableItems` with `reason: 'no_price'` beside the discontinued products. Such a line used to be seeded at the old order's price without being reported, and placement then refused the basket.
+  - **`CartSeedOptions.dropUnorderable`** (contracts): `CartWritePort.replaceItemsForCustomer` leaves out the seed lines that have no orderable price and names them in the answer's new optional `unorderable` (`CartSeedUnorderableLine[]`: `productId`, `variantId`, `reason: 'unpriced' | 'quote_only'`). Ignored for an agreed seed. Absent, behaviour is unchanged.
+  - **`CartService.repriceLinesForCustomer`** (carts) now answers the lines it could not price, by cart item id, with the reason; it still prices them all in one batched call.
+
+- b71f10c: Orders compute every amount in exact decimal arithmetic (issue #417). The rules are unchanged; only the rounding is.
+
+  - **Placement, the checkout preview and the admin preview** share one computation, `orderTotalsMoney` (new, `services/order-money.ts`): the subtotal is the sum of the lines' nets; the tax is the sum of the lines' **exact** taxes, rounded half-up once; delivery, the payment surcharge and the discount are added on the gross; the total is rounded once. On doubles, 0.70 at 5 % taxed 0.03 instead of 0.04.
+  - **An order line's `lineTotal` (its gross)** is `orderLineMoney(...).gross`: `net × (1 + rate)` rounded half-up on the exact product. `(29.5 * 1.23).toFixed(2)` stored 36.28 instead of 36.29.
+  - **`OrderReturnContextPort`** answers `paidUnitAmount` and `paidLineAmount` from `paidAmounts(...)`: the paid unit gross, half-up, times the quantity (16.50 at 23 % was 20.29 a unit, now 20.30).
+  - The channel minimum-order-value gate compares exactly; the payment opened at placement, the proforma, the credit refusal and the on-behalf audit carry the stored two-place total.
+  - The admin section summaries (`orderSectionTotals`) compute the same way and accept a net or gross as a decimal string.
+  - Orders already placed are not rewritten.
+
+- 0071cd7: Orders take VAT per rate on the sum of the nets at that rate, rounded half-up once (owner ruling of 2026-10-24, issue #417; `vatByRate`), in placement, the checkout preview and the admin preview. This replaces the sum of every line's exact tax across all rates rounded once: 29.50 at 23 % with 4.30 at 5 % now carries 7.01 VAT and a total of 40.81 — the figure the invoice carries — where it carried 7.00 and 40.80. The paid amount, the proforma, the credit reservation and the order total are that one figure. A line's stored `lineTotal` is its net plus its share of its rate's VAT, so the line totals add up to the products' gross; `orderLineMoney` is removed and `orderTotalsMoney` answers each line's amounts under `lines`.
+
+  `OrderReturnContextPort` answers `paidLineAmount` under the same method over the whole order — what the order line and the invoice charged (9.05 × 3 at 8 % is 29.32, not 29.31) — `paidUnitAmount` as that over the quantity, and two new fields on `OrderReturnContextLine` (`@endora-commerce/contracts`): `unitNetPrice` and `taxRate`, so a return prices a returned quantity under the same method.
+
+- 3e949eb: Orders record the VAT method they were placed under, and report what an order charged from what it stored (issue #417, review of PR #423, owner ruling of 2026-10-24).
+
+  - New nullable column `orders.vat_method` (migration `Migration20261024T145147OrdersVatMethod`, no backfill): placement writes `per_rate`; `null` is an order placed before 0.108.0, whose totals followed the rule of their day.
+  - A new order line's stored `lineTotal` is the line's own rounding of its gross, `round(net × (1 + rate))`; the order's VAT and total are still per rate on the net sums, so the line totals may differ from the total by a cent.
+  - `OrderReturnContextPort` no longer recomputes what was paid: `paidLineAmount` is the stored `lineTotal`, `paidUnitAmount` that over the quantity, and `OrderReturnContext` (`@endora-commerce/contracts`) gains `vatMethod` and `productsPaidTotal` (stored subtotal + tax total). `paidAmounts` is removed.
+
+- e6f3a78: An order line carries its unit price at four decimal places, unrounded (owner ruling of 2026-10-25): `order_items.unit_price` is `numeric(14,4)` (`Migration20261025T031732OrdersUnitPriceFourPlaces`, lossless), copied from the cart line as it is; the line's net is `unit price × quantity` rounded half-up to two places once, and VAT stays per rate on the summed line nets (`vatByRate`). The admin create-order preview answers a line's `unitPrice` as the four-place decimal string the cart would store (`0.0125`, `29.4950`) instead of rounding it to two. The order screens and the order-confirmation e-mail's `unitPrice` variable show a unit price with its significant places, up to four (`0.0125 PLN`, `40.00 PLN`); line values and totals keep two.
+
+### Patch Changes
+
+- ee26beb: Documentation for custom-field list filters, in English and Polish.
+
+  - `@endora-commerce/mod-custom-fields` ships its first documentation page: the records that take
+    custom fields, creating and editing a field and the limits of editing, the _Use as list
+    filter_ option, how each type filters, and the list APIs.
+  - The `orders`, `quote_requests` and `crm` pages describe the custom-field filters on their admin
+    lists. The `quote_requests` page also says that its fields follow the module's activation. The
+    `crm` page explains how the Opportunities list's filters differ from the board's card-field
+    filters.
+
+- 8d62ff8: Documentation only (feature 160, FR-048): the module pages describe how prices are determined with price books.
+
+  - `price_lists` ships three pages instead of one: _Price books_ (what a book is, base prices, the four resolution steps, the default precedence, variants, where prices appear, the demo's worked examples, permissions, known limitations and a migration note), _The price-book editor_ (every admin screen) and _Pricing for developers_ (data model, resolver, the batched read path, caching, the price surface, the admin and storefront API, the ports and the conversion from the old model).
+  - The pages of `catalog`, `carts`, `orders`, `organizations`, `product_feeds`, `quick_order`, `quote_requests` and `search` describe their prices as resolved from price books, with no product-owned price and no fallback. No code changes.
+
+- 87ac085: A price is rounded to two places the same way everywhere: half-up on its decimal digits.
+
+  - **`@endora-commerce/contracts`.** New `roundAmountHalfUp(value: string | number): string` — an amount at two places, half-up on its decimal digits (half away from zero when negative). A number is read as the shortest decimal that round-trips it.
+  - **`@endora-commerce/mod-carts`.** The basket line stores the resolver's four-place amount through `roundAmountHalfUp`, and the placement drift check (`storedPriceDiffers`) compares with it. `Number(amount).toFixed(2)` rounded the binary double, so a 9.0450 price was stored and charged as 9.04 while the card showed 9.05, and 1.0050 as 1.00 against 1.01.
+  - **`@endora-commerce/mod-orders`.** The admin order preview rounds its line prices the same way.
+  - **`@endora-commerce/mod-quote-requests`.** A quote line's stored reference price is rounded the same way.
+  - **`@endora-commerce/mod-product-feeds`.** Feed prices (`123.45 PLN`) are rounded the same way.
+
+- cec838d: The order detail's _Comments_ tab reads a custom-field carry system note in the operator's language: _System_ as its author, the _Internal_ marker, the quote request or sales opportunity the values came from, and one line per value not carried — the field's label where the Order definition can be read, else its key — with the reason. A note this screen cannot read shows its stored text.
+- 52884d6: `OrderReturnContext.productsPaidTotal` takes the order-level discount off: subtotal + tax total − discount total, which is what the products were charged (issue #417, review of PR #423). An order of 100.00 net + 23.00 VAT with a 50.00 discount and 10.00 delivery charged 83.00, of which 73.00 for the products; a full return used to read 123.00. `OrderReturnContext` gains `discountTotal` (`@endora-commerce/contracts`), the stored discount a return credits back in part.
+- Updated dependencies [0bd5a2b]
+- Updated dependencies [0bd5a2b]
+- Updated dependencies [4da88fd]
+- Updated dependencies [291ec86]
+- Updated dependencies [20af5d5]
+- Updated dependencies [cf7a9c0]
+- Updated dependencies [cf7a9c0]
+- Updated dependencies [c8aa175]
+- Updated dependencies [897a759]
+- Updated dependencies [c8aa175]
+- Updated dependencies [1284428]
+- Updated dependencies [1df7a5e]
+- Updated dependencies [14bcf1d]
+- Updated dependencies [14bcf1d]
+- Updated dependencies [789f917]
+- Updated dependencies [d231c48]
+- Updated dependencies [e47b84b]
+- Updated dependencies [8d62ff8]
+- Updated dependencies [6865b14]
+- Updated dependencies [9434cbc]
+- Updated dependencies [87ac085]
+- Updated dependencies [87f673d]
+- Updated dependencies [ad341ed]
+- Updated dependencies [e1b173f]
+- Updated dependencies [ef1318e]
+- Updated dependencies [f42bbaf]
+- Updated dependencies [c781cd6]
+- Updated dependencies [301a69f]
+- Updated dependencies [1377dc8]
+- Updated dependencies [af57b55]
+- Updated dependencies [49d82dd]
+- Updated dependencies [72f9cec]
+- Updated dependencies [172597c]
+- Updated dependencies [6f1e0ec]
+- Updated dependencies [0d0a1c6]
+- Updated dependencies [61a1188]
+- Updated dependencies [56b075d]
+- Updated dependencies [53e88c7]
+- Updated dependencies [53e88c7]
+- Updated dependencies [8e10ba1]
+- Updated dependencies [eda7da8]
+- Updated dependencies [359ee2b]
+- Updated dependencies [8f0fd0e]
+- Updated dependencies [fd4b8db]
+- Updated dependencies [24c2005]
+- Updated dependencies [849ed50]
+- Updated dependencies [cc98507]
+- Updated dependencies [ced7b20]
+- Updated dependencies [f3598cd]
+- Updated dependencies [efaf8a3]
+- Updated dependencies [6177c81]
+- Updated dependencies [2effab9]
+- Updated dependencies [c8b20f6]
+- Updated dependencies [e0ee513]
+- Updated dependencies [65daee2]
+- Updated dependencies [161e9d3]
+- Updated dependencies [97617df]
+- Updated dependencies [29180cd]
+- Updated dependencies [0f09369]
+- Updated dependencies [52884d6]
+- Updated dependencies [0071cd7]
+- Updated dependencies [3e949eb]
+- Updated dependencies [432405b]
+- Updated dependencies [403ccc1]
+- Updated dependencies [2b8bd26]
+- Updated dependencies [8a2fc1b]
+- Updated dependencies [cb35881]
+- Updated dependencies [ec14b96]
+- Updated dependencies [a4cd906]
+- Updated dependencies [3a9dc6e]
+- Updated dependencies [9979afb]
+- Updated dependencies [9fbb437]
+- Updated dependencies [5bddd11]
+- Updated dependencies [5bddd11]
+- Updated dependencies [4a05f32]
+- Updated dependencies [9b02fe7]
+- Updated dependencies [a8919dc]
+- Updated dependencies [e6f3a78]
+  - @endora-commerce/mod-carts@0.108.0
+  - @endora-commerce/contracts@0.108.0
+  - @endora-commerce/platform@0.108.0
+  - @endora-commerce/admin-kit@0.108.0
+  - @endora-commerce/mod-invoices@0.108.0
+  - @endora-commerce/mod-credit-limits@0.108.0
+  - @endora-commerce/mod-promotions@0.108.0
+  - @endora-commerce/mod-inventory@0.108.0
+  - @endora-commerce/email-components@0.108.0
+
 ## 0.107.0
 
 ### Minor Changes
