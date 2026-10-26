@@ -17,10 +17,14 @@ import type {
   ProjectTemplateBody,
   ProjectTemplateDetail,
   ProjectTemplateSummary,
+  ProjectAdminUserOption,
+  ProjectOrganizationOption,
+  ProjectVisibilitySetting,
   MaterializeStageTasksResult,
   SetProjectMovesResult,
   StageTaskDefinition,
   TaskSummary,
+  UpdateProjectBody,
   UpdateProjectRoleBody,
   UpdateProjectStageBody,
 } from '@endora-commerce/contracts';
@@ -107,9 +111,53 @@ export const projectsApi = {
     return data(apiClient.post<{ data: ProjectDetail }>(BASE, body));
   },
 
+  /**
+   * Title, description, value, start date and who sees the Project, against
+   * the `version` read; 409 `PROJECT_CHANGED` when somebody changed it since.
+   */
+  updateProject(id: string, body: UpdateProjectBody): Promise<ProjectDetail> {
+    return data(apiClient.patch<{ data: ProjectDetail }>(`${BASE}/${id}`, body));
+  },
+
   /** 409 `PROJECT_HAS_LINKS` while records are linked; the Project's Tasks go with it. */
   deleteProject(id: string): Promise<void> {
     return apiClient.delete<void>(`${BASE}/${id}`);
+  },
+
+  // --- §2.1a Lookups — what the pickers choose from (User Story 5) ----------
+  //
+  // The module's own, gated `projects:write`: the kit's pickers read
+  // `/organizations` and `/admin-users`, behind codes somebody running
+  // Projects need not hold.
+
+  /** Organizations in the caller's reach, by name. */
+  lookupOrganizations(query = ''): Promise<ProjectOrganizationOption[]> {
+    const qs = query ? `?q=${encodeURIComponent(query)}` : '';
+    return data(apiClient.get<{ data: ProjectOrganizationOption[] }>(`${BASE}/lookups/organizations${qs}`));
+  },
+
+  /** Active administrators, by name or e-mail. */
+  lookupAdminUsers(query = ''): Promise<ProjectAdminUserOption[]> {
+    const qs = query ? `?q=${encodeURIComponent(query)}` : '';
+    return data(apiClient.get<{ data: ProjectAdminUserOption[] }>(`${BASE}/lookups/admin-users${qs}`));
+  },
+
+  /**
+   * The name of one administrator, or `null` when it cannot be read — the
+   * label of a value chosen earlier (an address), never a precondition.
+   */
+  adminUserName(id: string): Promise<string | null> {
+    return apiClient
+      .get<{ data: ProjectAdminUserOption[] }>(`${BASE}/lookups/admin-users?id=${encodeURIComponent(id)}`)
+      .then((envelope) => envelope.data[0]?.name ?? null)
+      .catch(() => null);
+  },
+
+  /** The module setting `projects.visibility`, which *Follow the module setting* means. */
+  visibilitySetting(): Promise<ProjectVisibilitySetting> {
+    return data(apiClient.get<{ data: { setting: ProjectVisibilitySetting } }>(`${BASE}/visibility-setting`)).then(
+      (answer) => answer.setting,
+    );
   },
 
   // --- §2.2 Stages and moves -----------------------------------------------

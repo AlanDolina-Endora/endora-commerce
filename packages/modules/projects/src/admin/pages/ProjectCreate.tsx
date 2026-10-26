@@ -22,12 +22,14 @@ import {
   Select,
   Textarea,
 } from '@endora-commerce/admin-kit/ui';
-import { AdminUserPicker, OrganizationPickerMulti, StickyFormActions } from '@endora-commerce/admin-kit/components';
+import { StickyFormActions } from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { projectsApi } from '../api.js';
 import { errorMessage, normaliseAmount, parseDuration } from '../lib/labels.js';
 import { stageColorAt } from '../lib/stage-colors.js';
 import { StageDot } from '../components/StageDot.js';
+import { AdminUserLookup, OrganizationsLookup, type LookupChoice } from '../components/LookupPickers.js';
+import { VisibilityControl, visibilityBody, type VisibilityValue } from '../components/VisibilityControl.js';
 
 const LIST_PATH = '/projects';
 
@@ -69,8 +71,11 @@ type FieldErrors = Partial<Record<'title' | 'stageName' | 'stageDuration' | 'val
  * the Organizations are chosen. Members are chosen one row at a time, each with
  * the Project Roles they hold — a Role grants no permission.
  *
- * Visibility and custom fields are not offered yet: each arrives with its own
- * story.
+ * **Who sees it** (User Story 5) is chosen here too — following the module
+ * setting unless changed. Organizations and people are found through the
+ * module's own lookups, so a role holding only `projects:*` can fill the form.
+ *
+ * Custom fields are not offered yet: they arrive with their own story.
  */
 export function ProjectCreate(): ReactNode {
   const t = useTranslation('projects');
@@ -81,7 +86,8 @@ export function ProjectCreate(): ReactNode {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [organizationIds, setOrganizationIds] = useState<string[]>([]);
+  const [organizations, setOrganizations] = useState<LookupChoice[]>([]);
+  const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'inherit', viewers: [] });
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('');
   const [startOn, setStartOn] = useState('');
@@ -200,7 +206,8 @@ export function ProjectCreate(): ReactNode {
 
     const body: CreateProjectBody = {
       title: trimmedTitle,
-      organizationIds,
+      organizationIds: organizations.map((organization) => organization.id),
+      ...visibilityBody(visibility),
       // From a Template the Stages are its own; without one, the ones typed here.
       ...(template
         ? { templateId: template.id }
@@ -321,15 +328,16 @@ export function ProjectCreate(): ReactNode {
 
             <div className="space-y-1">
               <Label htmlFor="project-create-organizations">{t('field.organizations')}</Label>
-              <OrganizationPickerMulti
+              <OrganizationsLookup
                 id="project-create-organizations"
                 ariaLabel={t('field.organizations')}
-                value={organizationIds}
-                onChange={setOrganizationIds}
-                maxSelection={50}
+                value={organizations}
+                onChange={setOrganizations}
+                max={50}
                 placeholder={t('field.organizationsPlaceholder')}
+                removeLabel={(name): string => t('field.organizationsRemove', { name })}
               />
-              {organizationIds.length === 0 ? (
+              {organizations.length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t('create.internalNote')}</p>
               ) : null}
             </div>
@@ -542,7 +550,7 @@ export function ProjectCreate(): ReactNode {
                       <div className="flex flex-wrap items-end gap-3">
                         <div className="min-w-56 flex-1 space-y-1">
                           <Label htmlFor={personId}>{t('create.members.person', { position })}</Label>
-                          <AdminUserPicker
+                          <AdminUserLookup
                             id={personId}
                             ariaLabel={t('create.members.person', { position })}
                             value={row.adminUserId}
@@ -596,6 +604,12 @@ export function ProjectCreate(): ReactNode {
                 {t('create.members.add')}
               </Button>
             </fieldset>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <VisibilityControl value={visibility} onChange={setVisibility} disabled={busy} />
           </CardContent>
         </Card>
 

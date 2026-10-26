@@ -34,27 +34,6 @@ vi.mock('@endora-commerce/admin-kit/lib', async () => {
   };
 });
 
-/** The kit's picker searches through a module no mock reaches; a select stands in (see `ProjectCreate.test.tsx`). */
-vi.mock('@endora-commerce/admin-kit/components', async () => {
-  const actual = await vi.importActual<typeof import('@endora-commerce/admin-kit/components')>(
-    '@endora-commerce/admin-kit/components',
-  );
-  return {
-    ...actual,
-    AdminUserPicker: (props: { id?: string; ariaLabel?: string; value: string | null; onChange: (id: string | null) => void }) => (
-      <select
-        id={props.id}
-        aria-label={props.ariaLabel}
-        value={props.value ?? ''}
-        onChange={(event): void => props.onChange(event.target.value || null)}
-      >
-        <option value="">—</option>
-        <option value={ADMIN_ID}>Anna Nowak</option>
-      </select>
-    ),
-  };
-});
-
 const { ProjectsList } = await import('../../../../packages/modules/projects/src/admin/pages/ProjectsList');
 
 const LIST_PATH = '/api/v1/admin/projects';
@@ -89,6 +68,9 @@ beforeEach(() => {
       return Promise.resolve({
         data: [{ id: TEMPLATE_ID, name: 'Showroom fit-out', stageCount: 3, archivedAt: null, updatedAt: '2026-10-21T10:00:00.000Z' }],
       });
+    }
+    if (path.startsWith(`${LIST_PATH}/lookups/admin-users`)) {
+      return Promise.resolve({ data: [{ id: ADMIN_ID, name: 'Anna Nowak', email: 'anna@example.com' }] });
     }
     if (path.startsWith('/api/v1/admin/organizations')) {
       return Promise.resolve({
@@ -171,12 +153,15 @@ describe('ProjectsList', () => {
     await userEvent.selectOptions(role, ROLE_MANAGER);
     await waitFor(() => expect(lastQuery().get('roleId')).toBe(ROLE_MANAGER));
 
-    await userEvent.selectOptions(screen.getByLabelText(en('list.filter.member')), ADMIN_ID);
+    // Any member is found through the module's own lookup, never `/admin-users` (User Story 5).
+    await userEvent.click(screen.getByLabelText(en('list.filter.member')));
+    await userEvent.click(await screen.findByRole('option', { name: /^Anna Nowak/ }));
     await waitFor(() => expect(lastQuery().get('memberId')).toBe(ADMIN_ID));
+    expect(getSpy.mock.calls.some(([path]) => String(path).startsWith('/api/v1/admin/admin-users'))).toBe(false);
     // "Only mine" and a member are one filter: choosing one clears the other.
     await userEvent.click(screen.getByLabelText(en('list.filter.mine')));
     await waitFor(() => expect(lastQuery().get('memberId')).toBe('me'));
-    expect((screen.getByLabelText(en('list.filter.member')) as HTMLSelectElement).value).toBe('');
+    expect((screen.getByLabelText(en('list.filter.member')) as HTMLInputElement).value).toBe('');
 
     await userEvent.type(screen.getByLabelText(en('list.filter.stageName')), 'Build');
     await waitFor(() => expect(lastQuery().get('stageName')).toBe('Build'));

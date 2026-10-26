@@ -16,7 +16,6 @@ import {
   Select,
 } from '@endora-commerce/admin-kit/ui';
 import {
-  AdminUserPicker,
   OrganizationPicker,
   PaginationFooter,
   ResponsiveTable,
@@ -27,6 +26,7 @@ import { projectsApi, type ProjectListParams, type ProjectSort } from '../api.js
 import { StateBadge } from '../components/StateBadge.js';
 import { StageDot } from '../components/StageDot.js';
 import { calendarDateLabel, errorMessage, NO_VALUE, valueLabel } from '../lib/labels.js';
+import { AdminUserLookup } from '../components/LookupPickers.js';
 
 const STATES: readonly ProjectState[] = ['open', 'completed', 'lost'];
 
@@ -377,7 +377,7 @@ export function ProjectsList(): ReactNode {
             </div>
             <div className="space-y-1">
               <Label htmlFor="projects-member">{t('list.filter.member')}</Label>
-              <AdminUserPicker
+              <AdminUserLookup
                 id="projects-member"
                 ariaLabel={t('list.filter.member')}
                 value={filters.memberId}

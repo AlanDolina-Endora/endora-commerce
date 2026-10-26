@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { setMobileViewport } from '../../setup';
 import {
   ADMIN_ID,
+  ORGANIZATION_ID,
   PROJECT_ID,
   ROLES,
   ROLE_MANAGER,
@@ -20,14 +21,19 @@ import {
  *
  * Without a Template (`ProjectCreate.from-template.test.tsx`) `POST /projects`
  * requires its Stages, so the form carries a Stage list (name, colour, planned
- * duration; at least one). Members are chosen with the kit's
- * `AdminUserPicker`, each with the active Project Roles of `GET /projects/roles`.
- * An empty Organization list is an internal Project, and the form says what
- * that means for who sees it.
+ * duration; at least one). Members are chosen each with the active Project
+ * Roles of `GET /projects/roles`. An empty Organization list is an internal
+ * Project, and the form says what that means for who sees it.
+ *
+ * Organizations and people are found through the module's own lookups
+ * (`/projects/lookups/*`, User Story 5 — task T088): a role holding only
+ * `projects:*` may not read `/organizations` or `/admin-users`, so those reject
+ * here, and the form must neither need nor ask them.
  */
 
 const getSpy = vi.fn();
 const postSpy = vi.fn();
+const PIOTR_ID = '00000000-0000-4000-8000-000000000c02';
 
 vi.mock('@endora-commerce/admin-kit/lib', async () => {
   const actual = await vi.importActual<typeof import('@endora-commerce/admin-kit/lib')>(
@@ -45,32 +51,6 @@ vi.mock('@endora-commerce/admin-kit/lib', async () => {
   };
 });
 
-/**
- * The kit's `AdminUserPicker` searches through the kit's private `apiClient`
- * module, which no `vi.mock` of the published barrel reaches, so it is stood in
- * for here by a plain select carrying the same props. The subject is what this
- * form does with the person chosen, not the kit's search.
- */
-vi.mock('@endora-commerce/admin-kit/components', async () => {
-  const actual = await vi.importActual<typeof import('@endora-commerce/admin-kit/components')>(
-    '@endora-commerce/admin-kit/components',
-  );
-  return {
-    ...actual,
-    AdminUserPicker: (props: { id?: string; ariaLabel?: string; value: string | null; onChange: (id: string | null) => void }) => (
-      <select
-        id={props.id}
-        aria-label={props.ariaLabel}
-        value={props.value ?? ''}
-        onChange={(event): void => props.onChange(event.target.value || null)}
-      >
-        <option value="">—</option>
-        <option value={ADMIN_ID}>Anna Nowak</option>
-      </select>
-    ),
-  };
-});
-
 const { ApiError } = await import('@endora-commerce/admin-kit/lib');
 const { ProjectCreate } = await import('../../../../packages/modules/projects/src/admin/pages/ProjectCreate');
 
@@ -82,9 +62,18 @@ beforeEach(() => {
     // Every Role: a Template may offer one archived since (User Story 3); the form offers the active ones.
     if (path === '/api/v1/admin/projects/roles') return Promise.resolve({ data: ROLES });
     if (path === '/api/v1/admin/projects/templates?active=true') return Promise.resolve({ data: [] });
-    if (path.startsWith('/api/v1/admin/organizations')) {
-      return Promise.resolve({ data: [], pagination: { cursor: null, hasMore: false, limit: 20 } });
+    if (path.startsWith('/api/v1/admin/projects/lookups/organizations')) {
+      return Promise.resolve({ data: [{ id: ORGANIZATION_ID, name: 'Acme' }] });
     }
+    if (path.startsWith('/api/v1/admin/projects/lookups/admin-users')) {
+      return Promise.resolve({
+        data: [
+          { id: ADMIN_ID, name: 'Anna Nowak', email: 'anna@example.com' },
+          { id: PIOTR_ID, name: 'Piotr Wiśniewski', email: 'piotr@example.com' },
+        ],
+      });
+    }
+    if (path === '/api/v1/admin/projects/visibility-setting') return Promise.resolve({ data: { setting: 'members' } });
     return Promise.reject(new Error(`unexpected GET ${path}`));
   });
   postSpy.mockResolvedValue({ data: detail() });
@@ -104,6 +93,16 @@ async function renderForm(): Promise<void> {
     { path: '/projects/new' },
   );
   await screen.findByRole('heading', { name: en('create.title') });
+}
+
+/** Open a lookup picker and choose the option whose name starts with `name`. */
+async function pick(input: HTMLElement, name: string): Promise<void> {
+  await userEvent.click(input);
+  await userEvent.click(await screen.findByRole('option', { name: new RegExp(`^${name}`) }));
+}
+
+function requested(): string[] {
+  return getSpy.mock.calls.map(([path]) => path as string);
 }
 
 const stagesSection = (): HTMLElement => screen.getByRole('group', { name: en('create.stages.section') });
@@ -138,7 +137,7 @@ describe('ProjectCreate', () => {
 
     await userEvent.click(screen.getByRole('button', { name: en('create.members.add') }));
     const members = screen.getByRole('group', { name: en('create.members.section') });
-    await userEvent.selectOptions(within(members).getByLabelText(en('create.members.person', { position: 1 })), ADMIN_ID);
+    await pick(within(members).getByLabelText(en('create.members.person', { position: 1 })), 'Anna Nowak');
     await userEvent.click(await within(members).findByRole('checkbox', { name: 'Project Manager' }));
 
     await userEvent.click(screen.getByRole('button', { name: en('create.submit') }));
@@ -204,5 +203,36 @@ describe('ProjectCreate', () => {
     await userEvent.click(screen.getByRole('button', { name: en('create.submit') }));
     expect(await screen.findByText('One of the organizations is not available to you.')).toBeTruthy();
     expect(screen.getByTestId('address').textContent).toBe('/projects/new');
+  });
+  it('chooses Organizations and people through the module’s own lookups, never another module’s list', async () => {
+    await renderForm();
+    await userEvent.type(screen.getByLabelText(new RegExp(en('field.title'))), 'Fit-out');
+    await userEvent.type(within(stagesSection()).getByLabelText(en('stage.name', { position: 1 })), 'Design');
+    await pick(screen.getByLabelText(en('field.organizations')), 'Acme');
+    expect(screen.queryByText(en('create.internalNote'))).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: en('create.submit') }));
+
+    await waitFor(() => expect(postSpy).toHaveBeenCalledTimes(1));
+    expect((postSpy.mock.calls[0] as [string, Record<string, unknown>])[1]).toMatchObject({ organizationIds: [ORGANIZATION_ID] });
+    expect(requested().some((path) => path.startsWith('/api/v1/admin/projects/lookups/organizations'))).toBe(true);
+    expect(requested().filter((path) => /^\/api\/v1\/admin\/(organizations|admin-users)/.test(path))).toEqual([]);
+  });
+
+  it('sends who sees the Project: following the module setting by default, or members and the people listed', async () => {
+    await renderForm();
+    await userEvent.type(screen.getByLabelText(new RegExp(en('field.title'))), 'Fit-out');
+    await userEvent.type(within(stagesSection()).getByLabelText(en('stage.name', { position: 1 })), 'Design');
+    expect(screen.getByRole('radio', { name: en('visibility.option.inherit') })).toBeChecked();
+    expect(await screen.findByText(en('visibility.effect.inheritMembers'))).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('radio', { name: en('visibility.option.members_and_listed') }));
+    await pick(screen.getByLabelText(en('visibility.listed.label')), 'Piotr');
+    await userEvent.click(screen.getByRole('button', { name: en('create.submit') }));
+
+    await waitFor(() => expect(postSpy).toHaveBeenCalledTimes(1));
+    expect((postSpy.mock.calls[0] as [string, Record<string, unknown>])[1]).toMatchObject({
+      visibility: 'members_and_listed',
+      viewerIds: [PIOTR_ID],
+    });
   });
 });

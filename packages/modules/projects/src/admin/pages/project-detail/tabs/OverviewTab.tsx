@@ -1,7 +1,15 @@
-import type { ReactNode } from 'react';
-import type { ProjectMember } from '@endora-commerce/contracts';
+import { useState, type ReactNode } from 'react';
+import type { ProjectDetail, ProjectMember } from '@endora-commerce/contracts';
+import { Alert, AlertDescription, Button } from '@endora-commerce/admin-kit/ui';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
-import { calendarDateLabel } from '../../../lib/labels.js';
+import { projectsApi } from '../../../api.js';
+import {
+  VisibilityControl,
+  VisibilityEffect,
+  visibilityBody,
+  type VisibilityValue,
+} from '../../../components/VisibilityControl.js';
+import { calendarDateLabel, errorMessage } from '../../../lib/labels.js';
 import type { ProjectTabProps } from '../tabs.js';
 
 interface RoleGroup {
@@ -33,12 +41,109 @@ function groupByRole(members: readonly ProjectMember[], archived: (name: string)
   return [...groups.values(), ...(without.length > 0 ? [{ key: 'none', title: noRole, members: without }] : [])];
 }
 
+function valueOf(project: ProjectDetail): VisibilityValue {
+  return { visibility: project.visibility, viewers: project.viewers.map((viewer) => ({ ...viewer })) };
+}
+
+function sameValue(a: VisibilityValue, b: VisibilityValue): boolean {
+  const left = visibilityBody(a);
+  const right = visibilityBody(b);
+  return (
+    left.visibility === right.visibility &&
+    left.viewerIds.length === right.viewerIds.length &&
+    left.viewerIds.every((id) => right.viewerIds.includes(id))
+  );
+}
+
+/**
+ * Who sees the Project (User Story 5). A writer changes it here and saves it
+ * on its own — one `PATCH` naming the version read; anybody else is told what
+ * it is and who is listed.
+ */
+function VisibilitySection({ project, onChange }: Pick<ProjectTabProps, 'project' | 'onChange'>): ReactNode {
+  const t = useTranslation('projects');
+  const [value, setValue] = useState<VisibilityValue>(() => valueOf(project));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  if (!project.permissions.canWrite) {
+    return (
+      <section className="space-y-2" aria-labelledby="project-visibility-heading">
+        <h3 id="project-visibility-heading" className="text-sm font-semibold">
+          {t('visibility.section')}
+        </h3>
+        <p className="text-sm">{t(`visibility.option.${project.visibility}`)}</p>
+        <VisibilityEffect visibility={project.visibility} />
+        {project.viewers.length > 0 ? (
+          <ul aria-label={t('visibility.listed.label')} className="space-y-0.5 text-sm">
+            {project.viewers.map((viewer) => (
+              <li key={viewer.id} className="[overflow-wrap:anywhere]">
+                {viewer.name}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+    );
+  }
+
+  const changed = !sameValue(value, valueOf(project));
+  const save = async (): Promise<void> => {
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const next = await projectsApi.updateProject(project.id, { ...visibilityBody(value), version: project.version });
+      setValue(valueOf(next));
+      setSaved(true);
+      onChange(next);
+    } catch (failure) {
+      setError(errorMessage(failure, t('visibility.error')));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="space-y-3">
+      <VisibilityControl
+        value={value}
+        disabled={busy}
+        onChange={(next): void => {
+          setValue(next);
+          setSaved(false);
+        }}
+      />
+      {error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          type="button"
+          className="min-h-11 sm:min-h-9"
+          disabled={!changed || busy}
+          aria-busy={busy}
+          onClick={(): void => void save()}
+        >
+          {busy ? t('visibility.saving') : t('visibility.save')}
+        </Button>
+        <p role="status" className="text-sm text-muted-foreground">
+          {saved ? t('visibility.saved') : ''}
+        </p>
+      </div>
+    </section>
+  );
+}
+
 /**
  * A Project's *Overview* tab (`contracts/admin-surfaces.md` §2): the
- * description, the start date and the Members by Role. Custom fields join it
- * with their story.
+ * description, the start date, who sees the Project and the Members by Role.
+ * Custom fields join it with their story.
  */
-export function OverviewTab({ project }: ProjectTabProps): ReactNode {
+export function OverviewTab({ project, onChange }: ProjectTabProps): ReactNode {
   const t = useTranslation('projects');
   const { language } = useAppLanguage();
   const groups = groupByRole(project.members, (role) => t('overview.archivedRole', { role }), t('overview.noRole'));
@@ -58,6 +163,7 @@ export function OverviewTab({ project }: ProjectTabProps): ReactNode {
           <h3 className="text-sm font-semibold">{t('overview.startOn')}</h3>
           <p className="text-sm">{calendarDateLabel(project.startOn, language)}</p>
         </section>
+        <VisibilitySection project={project} onChange={onChange} />
       </div>
       <section className="space-y-3">
         <h3 className="text-sm font-semibold">{t('overview.members')}</h3>

@@ -36,27 +36,6 @@ vi.mock('@endora-commerce/admin-kit/lib', async () => {
   };
 });
 
-/** The kit's picker searches through a module no mock reaches; a select stands in (see `ProjectCreate.test.tsx`). */
-vi.mock('@endora-commerce/admin-kit/components', async () => {
-  const actual = await vi.importActual<typeof import('@endora-commerce/admin-kit/components')>(
-    '@endora-commerce/admin-kit/components',
-  );
-  return {
-    ...actual,
-    AdminUserPicker: (props: { id?: string; ariaLabel?: string; value: string | null; onChange: (id: string | null) => void }) => (
-      <select
-        id={props.id}
-        aria-label={props.ariaLabel}
-        value={props.value ?? ''}
-        onChange={(event): void => props.onChange(event.target.value || null)}
-      >
-        <option value="">—</option>
-        <option value={ADMIN_ID}>Anna Nowak</option>
-      </select>
-    ),
-  };
-});
-
 const { ProjectCreate } = await import('../../../../packages/modules/projects/src/admin/pages/ProjectCreate');
 
 const TEMPLATE_ID = '00000000-0000-4000-8000-0000000007a1';
@@ -121,9 +100,11 @@ beforeEach(() => {
       });
     }
     if (path === `/api/v1/admin/projects/templates/${TEMPLATE_ID}`) return Promise.resolve({ data: TEMPLATE });
-    if (path.startsWith('/api/v1/admin/organizations')) {
-      return Promise.resolve({ data: [], pagination: { cursor: null, hasMore: false, limit: 20 } });
+    if (path.startsWith('/api/v1/admin/projects/lookups/admin-users')) {
+      return Promise.resolve({ data: [{ id: ADMIN_ID, name: 'Anna Nowak', email: 'anna@example.com' }] });
     }
+    if (path.startsWith('/api/v1/admin/projects/lookups/organizations')) return Promise.resolve({ data: [] });
+    if (path === '/api/v1/admin/projects/visibility-setting') return Promise.resolve({ data: { setting: 'members' } });
     return Promise.reject(new Error(`unexpected GET ${path}`));
   });
   postSpy.mockResolvedValue({ data: detail() });
@@ -191,7 +172,8 @@ describe('ProjectCreate from a Template', () => {
     await userEvent.type(description, 'Our own words.');
     await userEvent.click(screen.getByRole('button', { name: en('create.members.add') }));
     const members = screen.getByRole('group', { name: en('create.members.section') });
-    await userEvent.selectOptions(within(members).getByLabelText(en('create.members.person', { position: 1 })), ADMIN_ID);
+    await userEvent.click(within(members).getByLabelText(en('create.members.person', { position: 1 })));
+    await userEvent.click(await screen.findByRole('option', { name: /^Anna Nowak/ }));
     await userEvent.click(within(members).getByRole('checkbox', { name: 'Installer' }));
     await userEvent.click(within(members).getByRole('checkbox', { name: 'Project Manager' }));
 
