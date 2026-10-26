@@ -206,6 +206,9 @@ importers:
       '@endora-commerce/mod-settings':
         specifier: workspace:*
         version: link:../packages/modules/settings
+      '@endora-commerce/mod-tasks':
+        specifier: workspace:*
+        version: link:../packages/modules/tasks
       '@endora-commerce/mod-taxes':
         specifier: workspace:*
         version: link:../packages/modules/taxes
@@ -3917,6 +3920,9 @@ importers:
 
   packages/modules/tasks:
     devDependencies:
+      '@endora-commerce/admin-kit':
+        specifier: workspace:*
+        version: link:../../admin-kit
       '@endora-commerce/contracts':
         specifier: workspace:*
         version: link:../../contracts
@@ -3935,9 +3941,21 @@ importers:
       '@types/node':
         specifier: ^22.9.0
         version: 22.19.17
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.3.0
       fastify:
         specifier: ^5.12.5
         version: 5.12.5
+      lucide-react:
+        specifier: ^1.11.0
+        version: 1.11.0(react@19.2.5)
+      react:
+        specifier: ^19.2.5
+        version: 19.2.5
+      react-router-dom:
+        specifier: ^7.18.2
+        version: 7.18.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

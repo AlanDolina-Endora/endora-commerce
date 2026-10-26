@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, screen, waitFor } from '@testing-library/react';
+import { cleanup, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { zoneComponent, type AdminContributions } from '@endora-commerce/admin-kit/contributions';
 import { setMobileViewport } from '../../setup';
-import { TASK_ID, historyPage, renderTasks, taskDetail } from './tasks-fixtures';
+import { TASK_ID, en, historyPage, renderTasks, taskDetail } from './tasks-fixtures';
 
 /**
  * `task.detail.after` — the stack of panels a Task's screen ends with
@@ -67,14 +67,13 @@ async function renderDetail(options: {
   });
   await screen.findByRole('heading', { name: /Order the racking/ });
   // The history is the last thing the host loads; wait for it so two renders compare.
-  await waitFor(() => expect(getSpy.mock.calls.some(([path]) => String(path).includes('/history'))).toBe(true));
-  await screen.findAllByText('Ada Min');
+  await screen.findByText(en('history.empty'));
   return container;
 }
 
 /** The screen's markup with React's per-render ids taken out, so two renders compare. */
 function markup(container: HTMLElement): string {
-  return container.innerHTML.replace(/(id|for|aria-[a-z]+)="(:r[0-9a-z]+:|«r[0-9a-z]+»)"/g, '$1="_"');
+  return container.innerHTML.replace(/(id|for|aria-[a-z]+)="(:r[0-9a-z]+:|«r[0-9a-z]+»|_r_[0-9a-z]+_)"/g, '$1="_"');
 }
 
 beforeEach(() => {

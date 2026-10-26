@@ -517,6 +517,21 @@ export const AdminZoneNameSchema = z.enum([
    * contribution of that module, through the renderer's own presence filter.
    */
   'settings.setting.after',
+  /**
+   * The stack of panels a Task's detail screen ends with.
+   *
+   * Mounted **once** per Task, below the host's own cards, on
+   * `order.detail.after`'s terms and for its reasons: every contribution
+   * renders its own card, the host puts no chrome around the zone, and an
+   * empty zone renders nothing at all, so the screen is identical to one
+   * without the member. Props: {@link TaskDetailZoneProps}, the Task's id and
+   * nothing else (Z3).
+   *
+   * The first contributor is `projects`' Project panel
+   * (`specs/163-projects-and-tasks/contracts/admin-surfaces.md` §3); `tasks`
+   * names no contributor and gains no edge.
+   */
+  'task.detail.after',
 ])
 
 export type AdminZoneName = z.infer<typeof AdminZoneNameSchema>;
@@ -651,6 +666,16 @@ export interface OrderDetailZoneProps {
  */
 export interface QuoteRequestDetailZoneProps {
   readonly quoteRequestId: string;
+}
+
+/**
+ * A zone mounted once per Task, at the end of its detail screen.
+ *
+ * The Task's own id and nothing else: a contribution reads what it shows
+ * through routes of its own, and the host hands over none of its data.
+ */
+export interface TaskDetailZoneProps {
+  readonly taskId: string;
 }
 
 /**
@@ -813,6 +838,7 @@ export interface AdminZonePropsMap extends Record<AdminZoneName, object> {
   'ledger.section.tabs': LedgerSectionTabsZoneProps;
   'category.content.editor': CategoryContentEditorZoneProps;
   'settings.setting.after': SettingsSettingAfterZoneProps;
+  'task.detail.after': TaskDetailZoneProps;
 }
 
 /** The props of one zone, by name. */

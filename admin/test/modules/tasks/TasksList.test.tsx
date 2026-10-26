@@ -69,7 +69,8 @@ describe('TasksList', () => {
     expect(screen.getByText('Order the racking')).toBeTruthy();
     expect(screen.getAllByText(en('status.todo')).length).toBeGreaterThan(0);
     expect(screen.getByText('Anna Nowak')).toBeTruthy();
-    expect(screen.getByText(en('list.unassigned'))).toBeTruthy();
+    const unassigned = screen.getByText('Sign the handover').closest('tr') as HTMLElement;
+    expect(within(unassigned).getByText(en('list.unassigned'))).toBeTruthy();
   });
 
   it('marks an overdue Task in words, not by colour alone', async () => {
