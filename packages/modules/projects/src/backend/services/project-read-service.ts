@@ -1,15 +1,25 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   ERROR_CODES,
+  pickLocalized,
   type AdminUserReadPort,
+  type AdminUserRecord,
   type OrganizationDetailsPort,
+  type ProjectDetail,
   type ProjectListQuery,
   type ProjectListResponse,
+  type ProjectLossReason,
+  type ProjectRole,
+  type ProjectStage,
+  type ProjectStageEntry,
+  type ProjectStageEntryKind,
+  type ProjectStageEntryNote,
   type ProjectSummary,
 } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { SettingsReadPort } from '@endora-commerce/platform/kernel';
 import { z } from 'zod';
+import { StageGraph } from '../domain/stage-graph.js';
 import {
   actingAdminUserId,
   isUuid,
@@ -21,17 +31,20 @@ import {
 
 /**
  * Projects — the read side of `specs/163-projects-and-tasks/contracts/admin-api.md`
- * §2.1 that the foundation phase needs: the list and one Project by id.
+ * §2.1 – §2.2: the list, one Project with everything its screen shows, its
+ * Stage history, and the two dictionaries (§2.5) its forms offer.
  *
  * **Every Project this file answers came through `ProjectAccess`**: the list
- * and its total compose `visibleProjectSql`, and the detail is
- * `loadVisible`. Stages, Organizations and Members are read only for the ids
- * of Projects those returned — which is why this file is on
+ * and its total compose `visibleProjectSql`, the detail and the history start
+ * from `loadVisible` — or, after a write that began there, from
+ * `rowAfterWrite`. Stages, moves, Organizations, Members and links are read
+ * only for the ids of Projects those returned, which is why this file is on
  * `PROJECT_ACCESS_READERS`.
  *
- * The detail answers a {@link ProjectSummary} for now. The rest of
- * `ProjectDetail` — Stages, moves, Members, links, unread messages,
- * permissions — arrives with User Story 1, which writes them.
+ * Not yet resolved, each by the story that brings it: the description's
+ * reference tokens (`references: []`, User Story 7) and Custom Field values
+ * through `custom_fields` (the stored values are answered as they are, User
+ * Story 9).
  */
 
 export const PROJECTS_ALERTS_TIME_ZONE_SETTING = 'projects.alerts_time_zone';
@@ -41,35 +54,76 @@ const PROJECT_MANAGER_ROLE = 'project_manager';
 
 const timeZoneSchema = z.string().min(1);
 
+type SortKey = 'createdAt' | 'value' | 'deadline';
+
+/**
+ * The sort column of `value` and `deadline`, over `projects p`, as text a
+ * cursor can carry and a comparison can cast back. `null` when empty.
+ */
+const SORT_EXPRESSIONS: Record<Exclude<SortKey, 'createdAt'>, { expr: string; cast: string }> = {
+  value: { expr: `p."value_amount"`, cast: 'numeric' },
+  deadline: {
+    expr: `(select ks."deadline_on" from "project_stages" ks where ks."id" = p."current_stage_id")`,
+    cast: 'date',
+  },
+};
+
 interface Cursor {
+  sort: SortKey;
   at: string;
   id: string;
+  /** The sort key as text, `null` when the row's key is empty; absent for `createdAt`. */
+  key: string | null;
 }
 
-function encodeCursor(row: VisibleProjectRow): string {
-  return Buffer.from(JSON.stringify({ a: row.cursor_at, i: row.id }), 'utf8').toString('base64url');
+interface ListRow extends VisibleProjectRow {
+  sort_key: string | null;
 }
 
-function decodeCursor(cursor: string | undefined): Cursor | null {
+function encodeCursor(sort: SortKey, row: ListRow): string {
+  return Buffer.from(
+    JSON.stringify({ s: sort, a: row.cursor_at, i: row.id, ...(sort === 'createdAt' ? {} : { k: row.sort_key }) }),
+    'utf8',
+  ).toString('base64url');
+}
+
+function badCursor(): HttpError {
+  return new HttpError(400, ERROR_CODES.VALIDATION_FAILED, 'The cursor is not one this list issued.');
+}
+
+function decodeCursor(cursor: string | undefined, sort: SortKey): Cursor | null {
   if (!cursor) return null;
+  let parsed: { s?: unknown; a?: unknown; i?: unknown; k?: unknown };
   try {
-    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as { a?: unknown; i?: unknown };
-    if (typeof parsed.a === 'string' && typeof parsed.i === 'string' && isUuid(parsed.i)) {
-      return { at: parsed.a, id: parsed.i };
-    }
+    parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as typeof parsed;
   } catch {
-    // Falls through to the refusal below: a cursor is opaque, and one this
-    // service did not issue is a malformed request rather than "page one".
+    // A cursor is opaque, and one this service did not issue is a malformed
+    // request rather than "page one".
+    throw badCursor();
   }
-  throw new HttpError(400, ERROR_CODES.VALIDATION_FAILED, 'The cursor is not one this list issued.');
+  // A cursor written before sorting existed carries no `s`: it was `createdAt`'s.
+  const issuedFor = parsed.s ?? 'createdAt';
+  if (issuedFor !== sort || typeof parsed.a !== 'string' || typeof parsed.i !== 'string' || !isUuid(parsed.i)) {
+    throw badCursor();
+  }
+  if (sort !== 'createdAt' && !(parsed.k === null || typeof parsed.k === 'string')) throw badCursor();
+  return { sort, at: parsed.a, id: parsed.i, key: sort === 'createdAt' ? null : (parsed.k as string | null) };
 }
 
 function likePattern(text: string): string {
   return `%${text.replace(/[\\%_]/g, (match) => `\\${match}`)}%`;
 }
 
-function personName(person: { firstName: string; lastName: string; email: string }): string {
+export function personName(person: { firstName: string; lastName: string; email: string }): string {
   return `${person.firstName} ${person.lastName}`.trim() || person.email;
+}
+
+function isActive(person: AdminUserRecord | undefined): boolean {
+  return person !== undefined && person.status === 'active' && person.deletedAt === null;
+}
+
+function iso(value: Date | string | null): string | null {
+  return value === null ? null : new Date(value).toISOString();
 }
 
 export interface ProjectReadServiceDeps {
@@ -90,21 +144,81 @@ interface CurrentStageRow {
   overdue: boolean;
 }
 
+interface StageRow {
+  id: string;
+  name: string;
+  color: string;
+  position: number;
+  planned_duration_days: number;
+  responsible_role_ids: string[] | string;
+  alert_offsets_days: number[] | string;
+  completion_gate: boolean;
+  completion_permitted: boolean;
+  started_on: string | null;
+  deadline_on: string | null;
+  deadline_manual: boolean;
+  tasks_materialized_at: Date | null;
+  tasks_skipped_at: Date | null;
+}
+
+interface StageTaskRow {
+  id: string;
+  stage_id: string;
+  title: string;
+  description: string;
+  responsible_role_id: string | null;
+  due_offset_days: number;
+  position: number;
+}
+
+interface EntryRow {
+  id: string;
+  kind: ProjectStageEntryKind;
+  from_stage_id: string | null;
+  to_stage_id: string | null;
+  from_stage_name: string | null;
+  to_stage_name: string | null;
+  notes: ProjectStageEntryNote[] | string;
+  actor_admin_user_id: string | null;
+  at: Date;
+}
+
+interface DictionaryRow {
+  id: string;
+  code: string;
+  name: Record<string, string>;
+  default_name: string;
+  is_system: boolean;
+  archived_at: Date | null;
+  position: number;
+}
+
+/** A Postgres array as the driver hands it: parsed, or still in its text form. */
+function pgArray(value: readonly unknown[] | string | null): string[] {
+  if (value === null) return [];
+  if (Array.isArray(value)) return value.map(String);
+  const inner = (value as string).replace(/^\{|\}$/g, '');
+  return inner === '' ? [] : inner.split(',');
+}
+
 export class ProjectReadService {
   constructor(private readonly deps: ProjectReadServiceDeps) {}
 
+  /** `projects.alerts_time_zone` — the calendar "today" is counted in. */
+  async timeZone(): Promise<string> {
+    return this.deps.settings.get(PROJECTS_ALERTS_TIME_ZONE_SETTING, null, timeZoneSchema);
+  }
+
   /**
-   * `GET /projects` — newest first on a keyset cursor `(created_at, id)`, with
-   * the total the caller may see. Out of reach and invisible Projects are
-   * excluded by `visibleProjectSql`, so a page, the next one and the total are
-   * exact.
+   * `GET /projects` — on a keyset cursor, with the total the caller may see.
+   * Newest first by default; `sort=value` and `sort=deadline` (the current
+   * Stage's) order by that column with empty ones **last in both directions**,
+   * ties broken by creation time and then id in the same direction. Out of
+   * reach and invisible Projects are excluded by `visibleProjectSql`, so a
+   * page, the next one and the total are exact.
    */
   async list(query: ProjectListQuery): Promise<ProjectListResponse> {
-    if (query.sort !== undefined && query.sort !== 'createdAt') {
-      // Sorting by value or deadline is the list screen's (User Story 1); it
-      // is refused rather than silently answered in another order.
-      throw new HttpError(400, ERROR_CODES.VALIDATION_FAILED, `Sorting by ${query.sort} is not available yet.`);
-    }
+    const sort: SortKey = query.sort ?? 'createdAt';
     const where: string[] = [];
     const params: unknown[] = [];
     const visible = await this.deps.access.visibleProjectSql();
@@ -162,34 +276,327 @@ export class ProjectReadService {
     }>;
 
     const order = query.order === 'asc' ? 'asc' : 'desc';
+    const cmp = order === 'desc' ? '<' : '>';
     const page = [...where];
     const pageParams = [...params];
-    const after = decodeCursor(query.cursor);
-    if (after) {
-      page.push(`(p."created_at", p."id") ${order === 'desc' ? '<' : '>'} (?::timestamptz, ?::uuid)`);
+    const after = decodeCursor(query.cursor, sort);
+    let keySelect = `null::text as "sort_key"`;
+    let orderBy = `p."created_at" ${order}, p."id" ${order}`;
+    if (sort !== 'createdAt') {
+      const { expr, cast } = SORT_EXPRESSIONS[sort];
+      keySelect = `(${expr})::text as "sort_key"`;
+      // Empty keys last whichever way the list runs.
+      orderBy = `(${expr}) is null, (${expr}) ${order}, p."created_at" ${order}, p."id" ${order}`;
+      if (after) {
+        if (after.key === null) {
+          // Past the last keyed row: only empty keys remain, in creation order.
+          page.push(`(${expr}) is null and (p."created_at", p."id") ${cmp} (?::timestamptz, ?::uuid)`);
+          pageParams.push(after.at, after.id);
+        } else {
+          page.push(
+            `((${expr}) is null or ((${expr}), p."created_at", p."id") ${cmp} (?::${cast}, ?::timestamptz, ?::uuid))`,
+          );
+          pageParams.push(after.key, after.at, after.id);
+        }
+      }
+    } else if (after) {
+      page.push(`(p."created_at", p."id") ${cmp} (?::timestamptz, ?::uuid)`);
       pageParams.push(after.at, after.id);
     }
     const rows = (await em.execute(
-      `select ${VISIBLE_PROJECT_COLUMNS} from "projects" p
+      `select ${VISIBLE_PROJECT_COLUMNS}, ${keySelect} from "projects" p
         ${page.length > 0 ? `where ${page.join(' and ')}` : ''}
-        order by p."created_at" ${order}, p."id" ${order}
+        order by ${orderBy}
         limit ?`,
       [...pageParams, query.limit + 1],
-    )) as VisibleProjectRow[];
+    )) as ListRow[];
     const hasMore = rows.length > query.limit;
     const items = hasMore ? rows.slice(0, query.limit) : rows;
     return {
       items: await this.#summaries(items),
-      nextCursor: hasMore ? encodeCursor(items[items.length - 1]!) : null,
+      nextCursor: hasMore ? encodeCursor(sort, items[items.length - 1]!) : null,
       total: Number(counted[0]?.n ?? 0),
     };
   }
 
   /** `GET /projects/:id` — 404 `PROJECT_NOT_FOUND` for out of reach, invisible and missing alike. */
-  async get(id: string): Promise<ProjectSummary> {
+  async get(id: string, language: string): Promise<ProjectDetail> {
+    return this.#detail(await this.deps.access.loadVisible(id), language);
+  }
+
+  /** The Project a write that began with `loadVisible` has just changed. */
+  async afterWrite(id: string, language: string): Promise<ProjectDetail> {
+    return this.#detail(await this.deps.access.rowAfterWrite(id), language);
+  }
+
+  /** One Stage of a Project the caller has just written. */
+  async stageAfterWrite(projectId: string, stageId: string): Promise<ProjectStage> {
+    const stages = await this.#stages(projectId);
+    const stage = stages.find((s) => s.id === stageId);
+    if (!stage) throw new HttpError(404, ERROR_CODES.NOT_FOUND, 'No such Stage on this Project.');
+    return stage;
+  }
+
+  /** `GET /projects/:id/stage-history` — oldest first. */
+  async stageHistory(id: string): Promise<ProjectStageEntry[]> {
     const row = await this.deps.access.loadVisible(id);
-    const [summary] = await this.#summaries([row]);
-    return summary!;
+    return this.#entries(row.id, null);
+  }
+
+  /** One history row, by id, of a Project the caller has just written. */
+  async entryAfterWrite(projectId: string, entryId: string): Promise<ProjectStageEntry> {
+    const [entry] = await this.#entries(projectId, entryId);
+    if (!entry) throw new Error(`projects: the Stage entry ${entryId} just written is gone.`);
+    return entry;
+  }
+
+  /** The Project's workflow as the domain sees it — for a Project the caller may see. */
+  async graphOf(projectId: string): Promise<{ graph: StageGraph; stages: StageRow[] }> {
+    const em = this.deps.emFactory();
+    const stages = (await em.execute(
+      `select s."id", s."name", s."position", s."completion_permitted", s."planned_duration_days",
+              to_char(s."started_on", 'YYYY-MM-DD') as "started_on", to_char(s."deadline_on", 'YYYY-MM-DD') as "deadline_on",
+              s."deadline_manual", s."color", s."responsible_role_ids", s."alert_offsets_days", s."completion_gate",
+              s."tasks_materialized_at", s."tasks_skipped_at"
+         from "project_stages" s where s."project_id" = ? order by s."position", s."id"`,
+      [projectId],
+    )) as StageRow[];
+    const moves = (await em.execute(
+      `select m."from_stage_id", m."to_stage_id" from "project_stage_moves" m where m."project_id" = ?`,
+      [projectId],
+    )) as Array<{ from_stage_id: string; to_stage_id: string }>;
+    return {
+      graph: new StageGraph(
+        stages,
+        moves.map((m) => ({ fromStageId: m.from_stage_id, toStageId: m.to_stage_id })),
+      ),
+      stages,
+    };
+  }
+
+  /** `GET /projects/roles` — by position; `activeOnly` leaves archived ones out. */
+  async roles(activeOnly: boolean, language: string): Promise<ProjectRole[]> {
+    return this.#dictionary('project_roles', activeOnly, language);
+  }
+
+  /** `GET /projects/loss-reasons` — by position; `activeOnly` leaves archived ones out. */
+  async lossReasons(activeOnly: boolean, language: string): Promise<ProjectLossReason[]> {
+    return this.#dictionary('project_loss_reasons', activeOnly, language);
+  }
+
+  async #dictionary(
+    table: 'project_roles' | 'project_loss_reasons',
+    activeOnly: boolean,
+    language: string,
+  ): Promise<ProjectRole[]> {
+    const rows = (await this.deps.emFactory().execute(
+      `select "id", "code", "name", "default_name", "is_system", "archived_at", "position" from "${table}"
+        ${activeOnly ? 'where "archived_at" is null' : ''}
+        order by "position", "default_name", "id"`,
+    )) as DictionaryRow[];
+    return rows.map((row) => ({
+      id: row.id,
+      code: row.code,
+      name: row.name,
+      defaultName: row.default_name,
+      label: pickLocalized(row.name, language) || row.default_name,
+      isSystem: row.is_system,
+      archivedAt: iso(row.archived_at),
+      position: row.position,
+    }));
+  }
+
+  async #stages(projectId: string): Promise<ProjectStage[]> {
+    const { stages } = await this.graphOf(projectId);
+    const tasks = (await this.deps.emFactory().execute(
+      `select t."id", t."stage_id", t."title", t."description", t."responsible_role_id", t."due_offset_days", t."position"
+         from "project_stage_tasks" t join "project_stages" s on s."id" = t."stage_id"
+        where s."project_id" = ? order by t."position", t."id"`,
+      [projectId],
+    )) as StageTaskRow[];
+    return stages.map((stage) => ({
+      id: stage.id,
+      name: stage.name,
+      color: stage.color,
+      position: stage.position,
+      plannedDurationDays: stage.planned_duration_days,
+      responsibleRoleIds: pgArray(stage.responsible_role_ids),
+      alertOffsetsDays: pgArray(stage.alert_offsets_days).map(Number),
+      completionGate: stage.completion_gate,
+      completionPermitted: stage.completion_permitted,
+      startedOn: stage.started_on,
+      deadlineOn: stage.deadline_on,
+      deadlineManual: stage.deadline_manual,
+      tasksMaterializedAt: iso(stage.tasks_materialized_at),
+      tasksSkippedAt: iso(stage.tasks_skipped_at),
+      stageTasks: tasks
+        .filter((task) => task.stage_id === stage.id)
+        .map((task) => ({
+          id: task.id,
+          title: task.title,
+          description: task.description,
+          responsibleRoleId: task.responsible_role_id,
+          dueOffsetDays: task.due_offset_days,
+          position: task.position,
+        })),
+    }));
+  }
+
+  async #entries(projectId: string, entryId: string | null): Promise<ProjectStageEntry[]> {
+    const rows = (await this.deps.emFactory().execute(
+      `select e."id", e."kind", e."from_stage_id", e."to_stage_id", e."from_stage_name", e."to_stage_name",
+              e."notes", e."actor_admin_user_id", e."at"
+         from "project_stage_entries" e
+        where e."project_id" = ?${entryId ? ` and e."id" = ?` : ''}
+        order by e."at", e."id"`,
+      entryId ? [projectId, entryId] : [projectId],
+    )) as EntryRow[];
+    const actorIds = [...new Set(rows.map((row) => row.actor_admin_user_id).filter((id): id is string => id !== null))];
+    const actors = actorIds.length > 0 ? await this.deps.adminUsers.findByIds(actorIds) : [];
+    const byId = new Map(actors.map((actor) => [actor.id, actor]));
+    return rows.map((row) => {
+      const actor = row.actor_admin_user_id ? byId.get(row.actor_admin_user_id) : undefined;
+      return {
+        id: row.id,
+        kind: row.kind,
+        fromStageId: row.from_stage_id,
+        toStageId: row.to_stage_id,
+        fromStageName: row.from_stage_name,
+        toStageName: row.to_stage_name,
+        notes: pgArray(row.notes) as ProjectStageEntryNote[],
+        actor: row.actor_admin_user_id
+          ? { id: row.actor_admin_user_id, name: actor ? personName(actor) : '' }
+          : null,
+        at: new Date(row.at).toISOString(),
+      };
+    });
+  }
+
+  /** Everything the Project's screen shows — for a row `ProjectAccess` let through. */
+  async #detail(row: VisibleProjectRow, language: string): Promise<ProjectDetail> {
+    const em = this.deps.emFactory();
+    const reader = actingAdminUserId();
+    const [[summary], stages, moveRows, memberRows, roleRows, viewerRows, templateRows, lossRows, linkRows, unread, permissions] =
+      await Promise.all([
+        this.#summaries([row]),
+        this.#stages(row.id),
+        em.execute(
+          `select m."from_stage_id", m."to_stage_id" from "project_stage_moves" m where m."project_id" = ?`,
+          [row.id],
+        ) as Promise<Array<{ from_stage_id: string; to_stage_id: string }>>,
+        em.execute(
+          `select pm."id", pm."admin_user_id", pm."added_at" from "project_members" pm
+            where pm."project_id" = ? order by pm."added_at", pm."id"`,
+          [row.id],
+        ) as Promise<Array<{ id: string; admin_user_id: string; added_at: Date }>>,
+        em.execute(
+          `select pmr."member_id", r."id", r."name", r."default_name", r."archived_at"
+             from "project_member_roles" pmr
+             join "project_members" pm on pm."id" = pmr."member_id"
+             join "project_roles" r on r."id" = pmr."role_id"
+            where pm."project_id" = ? order by r."position", r."id"`,
+          [row.id],
+        ) as Promise<
+          Array<{ member_id: string; id: string; name: Record<string, string>; default_name: string; archived_at: Date | null }>
+        >,
+        em.execute(`select v."admin_user_id" from "project_viewers" v where v."project_id" = ?`, [row.id]) as Promise<
+          Array<{ admin_user_id: string }>
+        >,
+        row.template_id
+          ? (em.execute(`select t."id", t."name" from "project_templates" t where t."id" = ?`, [row.template_id]) as Promise<
+              Array<{ id: string; name: string }>
+            >)
+          : Promise.resolve([]),
+        row.loss_reason_id
+          ? (em.execute(
+              `select lr."id", lr."name", lr."default_name" from "project_loss_reasons" lr where lr."id" = ?`,
+              [row.loss_reason_id],
+            ) as Promise<Array<{ id: string; name: Record<string, string>; default_name: string }>>)
+          : Promise.resolve([]),
+        em.execute(`select count(*)::int as "n" from "project_links" l where l."project_id" = ?`, [row.id]) as Promise<
+          Array<{ n: number }>
+        >,
+        this.#unreadMessages(row.id, reader),
+        this.deps.access.callerPermissions(),
+      ]);
+
+    const personIds = [...new Set([...memberRows.map((m) => m.admin_user_id), ...viewerRows.map((v) => v.admin_user_id)])];
+    const people = personIds.length > 0 ? await this.deps.adminUsers.findByIds(personIds) : [];
+    const personById = new Map(people.map((person) => [person.id, person]));
+    const nameOf = (id: string) => {
+      const person = personById.get(id);
+      return person ? personName(person) : '';
+    };
+
+    const graph = new StageGraph(
+      stages,
+      moveRows.map((m) => ({ fromStageId: m.from_stage_id, toStageId: m.to_stage_id })),
+    );
+    const positionOf = new Map(stages.map((stage) => [stage.id, stage.position]));
+    const moves = moveRows
+      .map((m) => ({ fromStageId: m.from_stage_id, toStageId: m.to_stage_id }))
+      .sort(
+        (a, b) =>
+          (positionOf.get(a.fromStageId) ?? 0) - (positionOf.get(b.fromStageId) ?? 0) ||
+          (positionOf.get(a.toStageId) ?? 0) - (positionOf.get(b.toStageId) ?? 0),
+      );
+    const loss = lossRows[0];
+
+    return {
+      ...summary!,
+      description: row.description,
+      references: [],
+      startOn: row.start_on,
+      visibility: row.visibility,
+      viewers: viewerRows.map((v) => ({ id: v.admin_user_id, name: nameOf(v.admin_user_id) })),
+      template: templateRows[0] ? { id: templateRows[0].id, name: templateRows[0].name } : null,
+      lostStageId: row.lost_stage_id,
+      lossReason: loss ? { id: loss.id, name: pickLocalized(loss.name, language) || loss.default_name } : null,
+      lossComment: row.loss_comment,
+      stages,
+      moves,
+      unreachableStageIds: graph.unreachable(),
+      members: memberRows.map((member) => ({
+        id: member.id,
+        adminUser: {
+          id: member.admin_user_id,
+          name: nameOf(member.admin_user_id),
+          active: isActive(personById.get(member.admin_user_id)),
+        },
+        roles: roleRows
+          .filter((role) => role.member_id === member.id)
+          .map((role) => ({
+            id: role.id,
+            name: pickLocalized(role.name, language) || role.default_name,
+            archived: role.archived_at !== null,
+          })),
+        addedAt: new Date(member.added_at).toISOString(),
+      })),
+      linkCount: Number(linkRows[0]?.n ?? 0),
+      unreadMessageCount: unread,
+      customFieldValues: (row.custom_field_values ?? {}) as ProjectDetail['customFieldValues'],
+      version: row.version,
+      permissions,
+    };
+  }
+
+  /**
+   * Messages somebody else wrote since the reader's marker — or, with no
+   * marker, since the module's read baseline (CRM's rule). Nobody is behind a
+   * system read, so it has none.
+   */
+  async #unreadMessages(projectId: string, reader: string | null): Promise<number> {
+    if (reader === null) return 0;
+    const rows = (await this.deps.emFactory().execute(
+      `select count(*)::int as "n" from "project_comments" c
+        where c."project_id" = ? and c."kind" = 'message' and c."author_admin_user_id" <> ?
+          and c."created_at" > coalesce(
+            (select r."last_read_at" from "project_message_reads" r where r."project_id" = ? and r."admin_user_id" = ?),
+            (select b."unread_since" from "project_message_read_baselines" b where b."id" = 1),
+            '-infinity'::timestamptz)`,
+      [projectId, reader, projectId, reader],
+    )) as Array<{ n: number }>;
+    return Number(rows[0]?.n ?? 0);
   }
 
   /** Summaries of rows `ProjectAccess` let through — their children read by those ids only. */
@@ -197,7 +604,7 @@ export class ProjectReadService {
     if (rows.length === 0) return [];
     const em = this.deps.emFactory();
     const ids = uuidArray(rows.map((row) => row.id));
-    const timeZone = await this.deps.settings.get(PROJECTS_ALERTS_TIME_ZONE_SETTING, null, timeZoneSchema);
+    const timeZone = await this.timeZone();
 
     const [stages, organizationLinks, managers] = await Promise.all([
       em.execute(

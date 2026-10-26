@@ -420,6 +420,66 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'exist when the prefix chain was deleted: a Project that does not exist, or one out of the ' +
       'caller’s Organization reach or visibility — the three answer identically (FR-004, FR-020).',
   },
+  PROJECT_HAS_LINKS: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'a Project deleted while records are linked to it (FR-021).',
+  },
+  PROJECT_ORGANIZATION_OUT_OF_SCOPE: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'an Organization named on a Project that is outside the caller’s reach or does not exist — the two answer alike (FR-004).',
+  },
+  PROJECT_STAGE_CURRENT: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'the deletion of the Stage a Project is in (spec edge case).',
+  },
+  PROJECT_STAGE_LAST: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'the deletion of a Project’s only Stage — an open Project is always in one (spec edge case).',
+  },
+  PROJECT_MOVE_NOT_PERMITTED: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'a Stage move the Project’s workflow does not permit, or a move, close or reopen its state does not allow (FR-011, FR-012).',
+  },
+  PROJECT_CHANGED: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'a write naming a stale version of a Project — somebody changed it first (spec edge case "two users move at once").',
+  },
+  PROJECT_GUARD_REFUSED: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'a Stage move, close or reopen refused by a guard another module or a deployment registered (FR-014).',
+  },
+  PROJECT_COMPLETION_NOT_PERMITTED: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'a Project closed as completed from a Stage that does not permit completion (FR-010).',
+  },
+  PROJECT_LOSS_REASON_INVALID: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'a Project closed as lost with a loss reason that does not exist or is archived (FR-005).',
+  },
+  PROJECT_MEMBER_INVALID: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'a Member or listed person who is not an active administrator, or a Project Role that does not exist or is archived (FR-008).',
+  },
   SEO_CRAWLER_TEXT_TOO_LARGE: {
     to: 'seo',
     reason:

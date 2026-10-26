@@ -705,6 +705,26 @@ export const ERROR_CODES = {
   // raise site.
   /** No such Project, or one out of the caller's reach or visibility — indistinguishable. */
   PROJECT_NOT_FOUND: 'PROJECT_NOT_FOUND',
+  /** A Project with linked records cannot be deleted; unlink them first. */
+  PROJECT_HAS_LINKS: 'PROJECT_HAS_LINKS',
+  /** An Organization outside the caller's reach, or one that does not exist — indistinguishable. */
+  PROJECT_ORGANIZATION_OUT_OF_SCOPE: 'PROJECT_ORGANIZATION_OUT_OF_SCOPE',
+  /** The Stage the Project is in cannot be deleted. */
+  PROJECT_STAGE_CURRENT: 'PROJECT_STAGE_CURRENT',
+  /** A Project's only Stage cannot be deleted. */
+  PROJECT_STAGE_LAST: 'PROJECT_STAGE_LAST',
+  /** The Project's workflow has no such move, or the Project is not in a state to make it. */
+  PROJECT_MOVE_NOT_PERMITTED: 'PROJECT_MOVE_NOT_PERMITTED',
+  /** The version sent is stale: the Project changed since it was read. */
+  PROJECT_CHANGED: 'PROJECT_CHANGED',
+  /** A registered Stage guard refused; `details.reason` is its sentence. */
+  PROJECT_GUARD_REFUSED: 'PROJECT_GUARD_REFUSED',
+  /** Completing the Project is not permitted from its current Stage. */
+  PROJECT_COMPLETION_NOT_PERMITTED: 'PROJECT_COMPLETION_NOT_PERMITTED',
+  /** The loss reason is unknown or archived. */
+  PROJECT_LOSS_REASON_INVALID: 'PROJECT_LOSS_REASON_INVALID',
+  /** A Member or listed person is not an active administrator, or a Role is unknown. */
+  PROJECT_MEMBER_INVALID: 'PROJECT_MEMBER_INVALID',
 
   // SEO — search engine robots (`specs/144-seo-search-engine-robots/`, FR-006).
   // Declared by the `seo` module's manifest.

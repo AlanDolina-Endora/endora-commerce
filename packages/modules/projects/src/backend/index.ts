@@ -5,7 +5,9 @@ import type {
   OrganizationDetailsPort,
   PermissionReadPort,
 } from '@endora-commerce/contracts';
+import type { CommandBus } from '@endora-commerce/platform/commands';
 import {
+  effectiveState,
   lazyPort,
   type ModuleContext,
   type RequireAdminFactory,
@@ -35,8 +37,13 @@ import { ProjectTemplateStageMove } from './entities/project-template-stage-move
 import { ProjectTemplateStageTask } from './entities/project-template-stage-task.entity.js';
 import { ProjectViewer } from './entities/project-viewer.entity.js';
 import { registerProjectRoutes } from './routes/routes.projects.js';
+import { registerStageRoutes } from './routes/routes.stages.js';
+import { MoveService } from './services/move-service.js';
 import { ProjectAccess } from './services/project-access.js';
 import { ProjectReadService } from './services/project-read-service.js';
+import { ProjectService } from './services/project-service.js';
+import { ProjectStageGuardRegistry } from './services/project-stage-guard-registry.js';
+import { StageService } from './services/stage-service.js';
 
 /**
  * `projects` — composed by the kernel container.
@@ -51,9 +58,14 @@ import { ProjectReadService } from './services/project-read-service.js';
 /** What this module reads from the container: the platform's services and its own. */
 interface ProjectsCradle {
   readonly emFactory: () => EntityManager;
+  readonly commandBus: CommandBus;
   readonly requireAdmin: RequireAdminFactory;
   readonly projectsAccess: ProjectAccess;
   readonly projectsReadService: ProjectReadService;
+  readonly projectsService: ProjectService;
+  readonly projectsStageService: StageService;
+  readonly projectsMoveService: MoveService;
+  readonly projectStageGuardRegistry: ProjectStageGuardRegistry;
 }
 
 export function registerModule(ctx: ModuleContext): void {
@@ -95,14 +107,81 @@ export function registerModule(ctx: ModuleContext): void {
       )
       .singleton(),
   });
+  // --- end of Projects (read side) -------------------------------------------------
+
+  // --- Projects (writes, User Story 1) -----------------------------------------------
+  // Create, edit and delete a Project, its Organizations and its Members. Every
+  // write is a Command (Constitution XIII) and starts from `ProjectAccess`.
+  ctx.di.register({
+    projectsService: ctx
+      .asFunction(
+        ({ emFactory, commandBus, projectsAccess, projectsReadService }: ProjectsCradle) =>
+          new ProjectService({
+            emFactory,
+            commandBus,
+            access: projectsAccess,
+            read: projectsReadService,
+            organizations: lazyPort<OrganizationDetailsPort>(ctx, 'organizationDetailsPort'),
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+          }),
+      )
+      .singleton(),
+  });
+  // --- end of Projects (writes) ------------------------------------------------------
+
+  // --- Stages, workflow and walking a Project (User Story 1) -------------------------
+  // The guard registry is a **contribution seam** (research R-6): other modules
+  // and deployments push a guard into it from a contribution-only boot hook,
+  // so it is registered ungated (`ctx.di.register`, never `providePort`) — a
+  // boot hook that resolved a gated name would stop the backend from starting
+  // whenever this module was switched off. Nothing reads it while the module is
+  // off: its only reader is the move service, reached through this module's
+  // gated routes.
+  //
+  // Enumeration policy: a guard whose owner module is not effectively present
+  // is skipped at dispatch. `effectiveState` is the kernel's one answer to "is
+  // this module present", on both axes.
+  ctx.di.register({
+    projectStageGuardRegistry: ctx
+      .asFunction(() => new ProjectStageGuardRegistry((moduleId) => effectiveState.isPresent(moduleId)))
+      .singleton(),
+    projectsStageService: ctx
+      .asFunction(
+        ({ emFactory, commandBus, projectsAccess, projectsReadService }: ProjectsCradle) =>
+          new StageService({ emFactory, commandBus, access: projectsAccess, read: projectsReadService }),
+      )
+      .singleton(),
+    projectsMoveService: ctx
+      .asFunction(
+        ({ emFactory, commandBus, projectsAccess, projectsReadService, projectStageGuardRegistry }: ProjectsCradle) =>
+          new MoveService({
+            emFactory,
+            commandBus,
+            access: projectsAccess,
+            read: projectsReadService,
+            guards: projectStageGuardRegistry,
+          }),
+      )
+      .singleton(),
+  });
+  // --- end of Stages -----------------------------------------------------------------
+
+  // --- Routes ------------------------------------------------------------------------
   ctx.routes(async (app) => {
     const cradle = ctx.cradle<ProjectsCradle>();
     await registerProjectRoutes(app, {
       projectReadService: cradle.projectsReadService,
+      projectService: cradle.projectsService,
+      requireAdmin: cradle.requireAdmin,
+    });
+    await registerStageRoutes(app, {
+      projectReadService: cradle.projectsReadService,
+      stageService: cradle.projectsStageService,
+      moveService: cradle.projectsMoveService,
       requireAdmin: cradle.requireAdmin,
     });
   });
-  // --- end of Projects -------------------------------------------------------------
+  // --- end of Routes -----------------------------------------------------------------
 }
 
 /**

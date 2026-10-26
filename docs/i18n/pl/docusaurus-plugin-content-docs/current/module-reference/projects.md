@@ -40,6 +40,7 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | Kod | Etykieta | Wymaga też |
 | --- | --- | --- |
 | `projects:read` | View projects | — |
+| `projects:write` | Create and run projects | `projects:read` |
 
 ## Paleta poleceń
 

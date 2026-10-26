@@ -40,6 +40,7 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | Code | Label | Also needs |
 | --- | --- | --- |
 | `projects:read` | View projects | — |
+| `projects:write` | Create and run projects | `projects:read` |
 
 ## Command palette
 

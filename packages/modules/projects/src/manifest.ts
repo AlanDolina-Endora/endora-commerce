@@ -101,13 +101,37 @@ export const manifest = defineModuleManifest({
       label: 'View projects',
       module: 'projects',
     },
+    {
+      // Creating, editing and deleting a Project, its Organizations, Members,
+      // Stages and workflow, and moving, closing and reopening it (User Story 1).
+      code: 'projects:write',
+      label: 'Create and run projects',
+      module: 'projects',
+      requires: ['projects:read'],
+    },
   ],
   /**
    * The refusals this module raises, each with its sentence under
    * `errors.<CODE>` in `i18n/{en,pl}.json`, declared by the change that added
    * its first raise site.
+   *
+   * `PROJECT_GUARD_REFUSED` carries the guard's own sentence: the raise puts it
+   * in `details.reason` and both bundle sentences are that placeholder alone
+   * (CRM's `CRM_TRANSITION_VETOED`).
    */
-  errorCodes: [{ code: 'PROJECT_NOT_FOUND' }],
+  errorCodes: [
+    { code: 'PROJECT_NOT_FOUND' },
+    { code: 'PROJECT_HAS_LINKS' },
+    { code: 'PROJECT_ORGANIZATION_OUT_OF_SCOPE' },
+    { code: 'PROJECT_STAGE_CURRENT' },
+    { code: 'PROJECT_STAGE_LAST' },
+    { code: 'PROJECT_MOVE_NOT_PERMITTED' },
+    { code: 'PROJECT_CHANGED' },
+    { code: 'PROJECT_GUARD_REFUSED' },
+    { code: 'PROJECT_COMPLETION_NOT_PERMITTED' },
+    { code: 'PROJECT_LOSS_REASON_INVALID' },
+    { code: 'PROJECT_MEMBER_INVALID' },
+  ],
   i18n: { bundlesDir: 'i18n' },
   // `docs/projects.md` at the package root: users' and developers' page.
   docs: { dir: 'docs' },

@@ -230,16 +230,27 @@ export const ProjectListQuerySchema = z.object({
 });
 export type ProjectListQuery = z.infer<typeof ProjectListQuerySchema>;
 
+/** A Stage written with the Project that holds it (`POST /projects`, `stages`). */
+export const ProjectStageInputSchema = z.object(stageAttributesShape).strict();
+export type ProjectStageInput = z.infer<typeof ProjectStageInputSchema>;
+
 /**
  * `POST /projects`. `organizationIds` may be empty — an internal Project,
  * visible only to administrators unrestricted in Organization reach (FR-004);
  * each Organization must be in the caller's reach (422
  * `PROJECT_ORGANIZATION_OUT_OF_SCOPE`). With a `templateId` the Template's
  * structure is copied (R-7) and the body's own fields win.
+ *
+ * `stages` are the Project's Stages in order — an open Project is always in
+ * one, so without a Template at least one is required (422
+ * `VALIDATION_FAILED`). The Project starts in the first; the default workflow
+ * lets each move to the next (FR-011), and completing is permitted from the
+ * last unless a Stage says otherwise (FR-010).
  */
 export const CreateProjectBodySchema = z
   .object({
     title: titleSchema,
+    stages: z.array(ProjectStageInputSchema).min(1).max(PROJECT_STAGES_MAX).optional(),
     description: descriptionSchema.optional(),
     value: ProjectValueSchema.nullable().optional(),
     startOn: calendarDateSchema.optional(),
@@ -424,6 +435,16 @@ export type ProjectDocumentLookupQuery = z.infer<typeof ProjectDocumentLookupQue
 // §2.5 Configuration — requests
 // ---------------------------------------------------------------------------
 
+/**
+ * `GET /projects/roles`, `GET /projects/loss-reasons`. `active=true` leaves
+ * archived rows out — what a picker offers; without it every row is listed,
+ * archived ones included, because a Project still shows the ones it uses.
+ */
+export const ProjectDictionaryListQuerySchema = z.object({
+  active: z.enum(['true', 'false']).optional(),
+});
+export type ProjectDictionaryListQuery = z.infer<typeof ProjectDictionaryListQuerySchema>;
+
 /** A Project Role or a loss reason — names per language and a fallback. */
 const dictionaryEntryShape = {
   name: localizedNameSchema,
@@ -538,6 +559,8 @@ const dictionaryEntrySchema = z.object({
   code: z.string(),
   name: z.record(z.string(), z.string()),
   defaultName: z.string(),
+  /** The name in the language the response is written in (`pickLocalized`, then `defaultName`). */
+  label: z.string(),
   /** Seeded rows: renamable and archivable, never deletable. */
   isSystem: z.boolean(),
   archivedAt: isoTimestampSchema.nullable(),
@@ -1030,6 +1053,8 @@ export interface ProjectStageGuard {
 }
 
 /**
+ * Container name: `projectStageGuardRegistry`. Owner: `projects`.
+ *
  * The registry a module pushes a {@link ProjectStageGuard} into (R-6, FR-014) —
  * the "before" side of a move; the "after" side is the events above.
  *
@@ -1040,6 +1065,9 @@ export interface ProjectStageGuard {
  * **Enumeration policy: skipped while the contributing module is absent** — a
  * switched-off module does not veto. A refusal answers 409
  * `PROJECT_GUARD_REFUSED` with the guard's reason.
+ *
+ * **Owner off:** no Project moves, so no guard runs; registering stays
+ * possible, so a contributor's boot hook never depends on `projects` being on.
  */
 export interface ProjectStageGuardRegistryPort {
   register(guard: ProjectStageGuard): void;

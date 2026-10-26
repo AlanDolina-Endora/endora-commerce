@@ -51,14 +51,28 @@ import type { OrgReach, ProjectViewer } from '../domain/visibility-rule.js';
  */
 export const PROJECT_ACCESS_READERS: Readonly<Record<string, string>> = {
   'services/project-read-service.ts':
-    'The list and its total compose `visibleProjectSql`; the detail starts from `loadVisible`; ' +
-    'Stages, Organizations and Members are read only for the ids of Projects those two returned.',
+    'The list and its total compose `visibleProjectSql`; the detail and the Stage history start from ' +
+    '`loadVisible`; Stages, moves, Organizations, Members and links are read only for the ids of ' +
+    'Projects those returned, or of a Project the caller has just written.',
+  'services/project-service.ts':
+    'Every write starts from `loadVisible`; inside its Command the Project is locked and its ' +
+    'Organizations, Members and links are read by that id only.',
+  'services/stage-service.ts':
+    'Every write starts from `loadVisible`; inside its Command the Project is locked and its ' +
+    'Stages and moves are read by that id only.',
+  'services/move-service.ts':
+    'A move, close or reopen starts from `loadVisible`; inside its Command the Project is locked ' +
+    'and its Stages and moves are read by that id only.',
 };
 
 /** The permission that lifts the visibility rule — never the Organization rule (R-3). */
 export const PROJECTS_SEE_ALL_PERMISSION = 'projects:see_all';
 /** The permission that gates every read route of the module. */
 export const PROJECTS_READ_PERMISSION = 'projects:read';
+/** Creating, editing, walking, closing and deleting Projects. */
+export const PROJECTS_WRITE_PERMISSION = 'projects:write';
+/** Roles, loss reasons, Templates and the module's settings (a later story declares it). */
+export const PROJECTS_CONFIGURE_PERMISSION = 'projects:configure';
 
 export const PROJECTS_VISIBILITY_SETTING = 'projects.visibility';
 
@@ -93,6 +107,10 @@ export interface VisibleProjectRow {
   start_on: string;
   visibility: ProjectVisibility;
   template_id: string | null;
+  lost_stage_id: string | null;
+  loss_reason_id: string | null;
+  loss_comment: string | null;
+  custom_field_values: Record<string, unknown>;
   version: number;
   closed_at: Date | null;
   created_at: Date;
@@ -103,7 +121,8 @@ export interface VisibleProjectRow {
 /** The columns {@link VisibleProjectRow} reads, over the alias `p`. */
 export const VISIBLE_PROJECT_COLUMNS = `p."id", p."number", p."title", p."description", p."state",
   p."current_stage_id", p."value_amount"::text as "value_amount", p."value_currency",
-  to_char(p."start_on", 'YYYY-MM-DD') as "start_on", p."visibility", p."template_id", p."version",
+  to_char(p."start_on", 'YYYY-MM-DD') as "start_on", p."visibility", p."template_id",
+  p."lost_stage_id", p."loss_reason_id", p."loss_comment", p."custom_field_values", p."version",
   p."closed_at", p."created_at", p."created_at"::text as "cursor_at"`;
 
 export function projectNotFound(): HttpError {
@@ -234,6 +253,34 @@ export class ProjectAccess {
     const row = await this.findVisible(id);
     if (!row) throw projectNotFound();
     return row;
+  }
+
+  /**
+   * The row of a Project **the caller has just written** — read by id, without
+   * the visibility predicate. Only a write that began with {@link loadVisible}
+   * calls it, to answer with the Project it changed: that write may have taken
+   * the Project out of the caller's own sight (removing themselves as a Member
+   * under *members only*), and answering 404 for a change that committed would
+   * misreport it. Never a first read.
+   */
+  async rowAfterWrite(id: string): Promise<VisibleProjectRow> {
+    const rows = (await this.deps.emFactory().execute(
+      `select ${VISIBLE_PROJECT_COLUMNS} from "projects" p where p."id" = ?`,
+      [id],
+    )) as VisibleProjectRow[];
+    if (!rows[0]) throw projectNotFound();
+    return rows[0];
+  }
+
+  /** What the caller may do to a Project they see — the detail's `permissions`. */
+  async callerPermissions(): Promise<{ canWrite: boolean; canConfigure: boolean }> {
+    const adminUserId = actingAdminUserId();
+    if (adminUserId === null) return { canWrite: false, canConfigure: false };
+    const held = await this.deps.permissions.listPermissions(adminUserId);
+    return {
+      canWrite: holds(held, PROJECTS_WRITE_PERMISSION),
+      canConfigure: holds(held, PROJECTS_CONFIGURE_PERMISSION),
+    };
   }
 
   /** Which of `ids` the caller may see. */

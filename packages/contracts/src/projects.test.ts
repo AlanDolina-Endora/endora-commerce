@@ -75,6 +75,24 @@ describe('§2.1 POST /projects — CreateProjectBody', () => {
     });
   });
 
+  it('accepts the Project’s Stages in order and refuses an empty list or a Stage without a colour', () => {
+    accepts(projects.CreateProjectBodySchema, {
+      title: 'x',
+      organizationIds: [],
+      stages: [
+        { name: 'Design', color: '#3b82f6', plannedDurationDays: 10 },
+        { name: 'Delivery', color: '#22c55e', completionPermitted: true },
+      ],
+    });
+    rejects(projects.CreateProjectBodySchema, { title: 'x', organizationIds: [], stages: [] });
+    rejects(projects.CreateProjectBodySchema, { title: 'x', organizationIds: [], stages: [{ name: 'Design' }] });
+    rejects(projects.CreateProjectBodySchema, {
+      title: 'x',
+      organizationIds: [],
+      stages: [{ name: 'Design', color: '#3b82f6', alertOffsetsDays: [3, 3] }],
+    });
+  });
+
   it('refuses a missing, empty or over-long title', () => {
     rejects(projects.CreateProjectBodySchema, { organizationIds: [] });
     rejects(projects.CreateProjectBodySchema, { title: ' ', organizationIds: [] });
@@ -294,6 +312,12 @@ describe('§2.4 collaboration', () => {
 });
 
 describe('§2.5 configuration', () => {
+  it('the Role and loss-reason lists take an `active` filter, true or false', () => {
+    expect(projects.ProjectDictionaryListQuerySchema.parse({ active: 'true' }).active).toBe('true');
+    accepts(projects.ProjectDictionaryListQuerySchema, {});
+    rejects(projects.ProjectDictionaryListQuerySchema, { active: 'yes' });
+  });
+
   it('Roles and loss reasons: a name per language and a fallback name', () => {
     accepts(projects.CreateProjectRoleBodySchema, { name: { en: 'Installer', pl: 'Monter' }, defaultName: 'Installer' });
     rejects(projects.CreateProjectRoleBodySchema, { name: { en: 'Installer' } });
