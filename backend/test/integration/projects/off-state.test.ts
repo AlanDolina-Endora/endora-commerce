@@ -52,10 +52,37 @@ describe('projects off-state (Constitution XVII)', () => {
   });
 
   it('is absent from every surface while off, and restored after', async () => {
+    // User Story 1's routes. Each write probe names a Project that does not
+    // exist, or sends a body its schema refuses, so the "on" phases write
+    // nothing: what is measured is only whether the route claims the module
+    // is absent.
+    const STAGE = '00000000-0000-4000-8000-0000000071a7';
+    const write = (method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', url: string, payload: unknown = {}) => ({
+      method,
+      url,
+      cookies: admin,
+      payload,
+    });
     await expectModuleAbsent(h, 'projects', {
       routes: [
         { url: API, cookies: admin },
         { url: `${API}/${ID}`, cookies: admin },
+        { url: `${API}/${ID}/stage-history`, cookies: admin },
+        { url: `${API}/roles`, cookies: admin },
+        { url: `${API}/loss-reasons`, cookies: admin },
+        write('POST', API),
+        write('PATCH', `${API}/${ID}`, { title: 'x', version: 1 }),
+        write('DELETE', `${API}/${ID}`, undefined),
+        write('PUT', `${API}/${ID}/organizations`, { organizationIds: [] }),
+        write('PUT', `${API}/${ID}/members`, { members: [] }),
+        write('POST', `${API}/${ID}/stages`, { name: 'x', color: '#000000' }),
+        write('PATCH', `${API}/${ID}/stages/${STAGE}`, { name: 'x' }),
+        write('DELETE', `${API}/${ID}/stages/${STAGE}`, undefined),
+        write('PUT', `${API}/${ID}/stages/order`, { stageIds: [STAGE] }),
+        write('PUT', `${API}/${ID}/moves`, { moves: [] }),
+        write('POST', `${API}/${ID}/move`, { toStageId: STAGE, version: 1 }),
+        write('POST', `${API}/${ID}/close`, { outcome: 'completed', version: 1 }),
+        write('POST', `${API}/${ID}/reopen`, { version: 1 }),
       ],
       adminPresence: { cookies: admin },
       settingWrite: { code: 'projects.visibility', value: 'everyone', cookies: admin },
