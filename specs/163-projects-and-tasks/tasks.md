@@ -334,7 +334,8 @@ ignore it, visibly, when off.
   - One `services/dictionary-service.ts` behind both (same shape, same writes); the two files contribute the table and the in-use query, and are allow-listed in `PROJECT_ACCESS_READERS` for that one `exists` across Projects. Routes in `routes/routes.dictionaries.ts`; the reads stay in `routes.projects.ts`.
 - [x] T083 [P] [US4] Admin: `pages/RolesPage.tsx`, `pages/LossReasonsPage.tsx` (name per language, archive/restore), nav entries; `admin/test/modules/projects/RolesPage.test.tsx`
   - One `components/DictionaryScreen.tsx` behind both pages (a field per admin language, the fallback language's name required and sent as `defaultName`; row menu Rename / Archive or Restore / Delete, Delete disabled with its reason on built-in rows; delete behind a confirmation). Nav icons `Users` (410) and `Tag` (420) — `KnownIconNameSchema` has no closer name for loss reasons. No palette action: the contract's §4 lists none for these screens.
-- [ ] T084 [US4] Docs *Project Roles* (EN + PL) stating Roles are not permissions; phase gate
+- [x] T084 [US4] Docs *Project Roles* (EN + PL) stating Roles are not permissions; phase gate
+  - Gate 2026-10-26: `pnpm -r run typecheck`, `pnpm -r run lint`, `test:unit:fast` (360 files / 7 717 tests), `contract/projects` + `integration/projects` + the OpenAPI baseline (18 files / 173 tests), the projects admin tests (87), every check of the brief and `pnpm install --frozen-lockfile` green. `pnpm --filter '!backend' run test`: every package green except one admin test outside this feature, `quote_requests/pdf-dialog.test.tsx` › *downloads without templateId…* (`language` null), red under the full-suite load and green alone three times.
 
 ---
 

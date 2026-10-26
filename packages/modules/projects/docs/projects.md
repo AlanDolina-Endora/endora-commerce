@@ -34,9 +34,10 @@ client*, *No decision* and *Other* — are a list the operator keeps the same wa
 ## In the Admin UI
 
 Projects are in the sidebar under **Projects & tasks → Projects** (`/projects`),
-for administrators who may view projects, and their templates under
-**Projects & tasks → Templates** (`/projects/templates`), for administrators who
-may configure projects.
+for administrators who may view projects. Their configuration is in the same
+section, for administrators who may configure projects: **Templates**
+(`/projects/templates`), **Project roles** (`/projects/roles`) and **Loss
+reasons** (`/projects/loss-reasons`).
 
 **The list** shows every project you may see: its number, title,
 Organizations — or *Internal* — the current stage with its deadline, marked
@@ -242,6 +243,50 @@ names the template it came from for as long as the template exists.
 be changed without touching the original. **Archiving** a template takes it out
 of the choices for new projects; it is kept, and can be restored.
 
+## Project roles
+
+A **project role** says what a member does on one project — *Sales Rep*,
+*Project Manager*, or one of your own such as *Designer*, *Installer* or
+*Account Manager*. Roles are used to say who does what on a project, to name
+the role responsible for a stage or a stage task, and to say which roles a
+template involves. One person can hold several roles on a project, and one
+role can be held by several people.
+
+**Project roles are not permissions.** Holding a role — even *Project Manager*
+— grants nothing and withdraws nothing: what a person may see and do is
+decided by their administrator role and its permissions alone, and by the
+rules of *Who sees a project*. Being a member of a project, whatever the role,
+is one of the ways to *see* it, never a way to change it.
+
+**Project roles** (`/projects/roles`) lists every role with its name in each
+language of the Admin UI. *Sales Rep* and *Project Manager* are there from the
+start, marked **Built-in**.
+
+- **Add role** asks for the name in each language. The English name is
+  required: it is the name shown in any language that has none of its own.
+  Two roles cannot have the same English name, whatever its case — archived
+  roles included; restore an archived role rather than adding it again.
+- **Rename** changes the names; the role stays the same role everywhere it is
+  used. Built-in roles can be renamed too.
+- **Archive** takes a role out of the choices — for a member, a stage or a
+  template — but leaves it on every project and template that uses it, marked
+  as archived. **Restore** offers it again. Tick *Show archived roles* to see
+  the archived ones.
+- **Delete** removes a role for good, and only one that nothing uses — no
+  member of any project, no stage or stage task and no template. A built-in role
+  cannot be deleted, and neither can a role in use: archive it instead.
+
+## Loss reasons
+
+**Loss reasons** (`/projects/loss-reasons`) are the reasons a project can be
+closed as lost, one of which must be chosen when someone closes one: *Price*,
+*Chose a competitor*, *Cancelled by the client*, *No decision* and *Other* are
+there from the start, marked **Built-in**. The screen works exactly as
+*Project roles*: add a reason with its name in each language, rename, archive
+and restore it, and delete one no project was lost for. An archived reason is
+no longer offered when a project is closed, and stays on the projects lost for
+it.
+
 ## Who sees a project
 
 Two rules decide it, always in this order.
@@ -279,8 +324,8 @@ off, and back on, on the **Modules** screen of the Admin UI
 
 While it is off:
 
-- the *Projects* and *Templates* entries and every project and template screen
-  are gone from the Admin UI;
+- the *Projects*, *Templates*, *Project roles* and *Loss reasons* entries and
+  every one of their screens are gone from the Admin UI;
 - every `/api/v1/admin/projects…` endpoint answers `503` with the code
   `MODULE_DISABLED`;
 - its permissions can no longer be granted to a role, and its settings cannot be
@@ -304,7 +349,10 @@ on again.
 | --- | --- |
 | `projects:read` | View projects — the list, a single project and its stage history — subject to the two rules of *Who sees a project*. |
 | `projects:write` | Create, edit and delete projects; set their Organizations, members, stages and workflow; move, close and reopen them. Requires `projects:read`. |
-| `projects:configure` | Create, edit, duplicate, archive and restore templates. Requires `projects:read`; anybody who may view projects can read the templates, to start a project from one. |
+| `projects:configure` | Create, edit, duplicate, archive and restore templates; add, rename, archive, restore and delete project roles and loss reasons. Requires `projects:read`; anybody who may view projects can read the templates, roles and loss reasons, to use them on a project. |
+
+A project role is not one of these: holding one grants no permission (see
+*Project roles*).
 
 ## Links, collaboration, deadline alerts and analytics
 
@@ -337,6 +385,10 @@ here when it does.*
 | `POST /api/v1/admin/projects/:id/stages/:stageId/materialize-tasks` | `projects:write` | Creates the stage's tasks again after a recorded failure — the stage's `tasksMaterializeFailed` — → `{ data: { created } }`; `409` `PROJECT_STAGE_TASKS_NOT_RETRYABLE` otherwise, `503` `MODULE_DISABLED` while Tasks is off. |
 | `GET /api/v1/admin/projects/:id/tasks` | `projects:read` | `{ data: { tasksAvailable, stages: [{ stageId, tasks: TaskSummary[] }] } }`, in stage order; `tasksAvailable: false` and no stages while Tasks is off or for a reader without `tasks:read`. |
 | `GET /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:read` | The dictionaries, with `label` in the reader's language; `active=true` leaves archived rows out. |
+| `POST /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:configure` | `{ defaultName, name }` (`name`: a name per language) → `201` `{ data }`. The `code` is derived from `defaultName` — `_`-separated, with `_2`, `_3`… when another row holds it — and never changes. `409` `PROJECT_DICTIONARY_NAME_TAKEN` for a default name another row of the same dictionary has, whatever its case. |
+| `PATCH /api/v1/admin/projects/roles/:id`, `…/loss-reasons/:id` | `projects:configure` | `defaultName` and/or `name`, which replaces the names per language → `{ data }`; `404` `PROJECT_DICTIONARY_ENTRY_NOT_FOUND`, `409` `PROJECT_DICTIONARY_NAME_TAKEN`. |
+| `POST …/roles/:id/archive`, `…/restore` (and the same under `loss-reasons`) | `projects:configure` | `{ data }`. |
+| `DELETE /api/v1/admin/projects/roles/:id`, `…/loss-reasons/:id` | `projects:configure` | `204`; `409` `PROJECT_DICTIONARY_ENTRY_SYSTEM` for a built-in row, `409` `PROJECT_DICTIONARY_ENTRY_IN_USE` for one a project or a template uses. |
 | `GET /api/v1/admin/projects/templates` | `projects:read` | `{ data: ProjectTemplateSummary[] }` by name; `active=true` leaves archived templates out. |
 | `GET /api/v1/admin/projects/templates/:id` | `projects:read` | `{ data: ProjectTemplateDetail }`, or `404` `PROJECT_TEMPLATE_NOT_FOUND`. |
 | `POST /api/v1/admin/projects/templates`, `PUT …/templates/:id` | `projects:configure` | The whole template in one body (`ProjectTemplateBody`: name, description, `roleIds`, `stages` each with a `key` and its `tasks`, `moves` naming stages by key — left out, each stage moves to the next) → `201` / `200` `{ data: ProjectTemplateDetail }`. A key that is the id of one of the template's stages keeps that stage's id. |
@@ -361,6 +413,11 @@ After each committed write the module emits, once:
 `projects.project.created.v1`, `projects.stage.moved.v1` (with the stage names
 as they were), `projects.project.closed.v1` (with the outcome, the stage and,
 when lost, the loss reason's code) and `projects.project.reopened.v1`.
+
+Every change to a project role or a loss reason is one audited command —
+`projects.role.create`, `.update`, `.archive`, `.restore`, `.delete` with
+`objectType: 'project_role'`, and the same under `projects.loss_reason.*` with
+`objectType: 'project_loss_reason'`.
 
 ### The `project` Task context
 

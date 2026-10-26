@@ -35,9 +35,10 @@ przez operatora w ten sam sposób.
 ## W panelu administracyjnym
 
 Projekty są w menu bocznym w sekcji **Projekty i zadania → Projekty**
-(`/projects`), dla administratorów, którzy mogą przeglądać projekty, a ich
-szablony w sekcji **Projekty i zadania → Szablony** (`/projects/templates`), dla
-administratorów, którzy mogą konfigurować projekty.
+(`/projects`), dla administratorów, którzy mogą przeglądać projekty. Ich
+konfiguracja jest w tej samej sekcji, dla administratorów, którzy mogą
+konfigurować projekty: **Szablony** (`/projects/templates`), **Role projektowe**
+(`/projects/roles`) i **Powody utraty** (`/projects/loss-reasons`).
 
 **Lista** pokazuje każdy projekt, który możesz zobaczyć: numer, tytuł,
 organizacje — albo *Wewnętrzny* — bieżący etap z terminem, oznaczonym *Po
@@ -254,6 +255,53 @@ istnieje.
 można zmieniać bez wpływu na oryginał. **Archiwizacja** szablonu usuwa go z
 wyboru dla nowych projektów; szablon zostaje zachowany i można go przywrócić.
 
+## Role projektowe
+
+**Rola projektowa** mówi, co członek robi w jednym projekcie — *Handlowiec*,
+*Kierownik Projektu* albo własna rola, na przykład *Projektant*, *Instalator*
+czy *Opiekun klienta*. Role służą do określenia, kto co robi w projekcie, do
+wskazania roli odpowiedzialnej za etap lub zadanie etapu oraz do określenia, jakie
+role obejmuje szablon. Jedna osoba może pełnić w projekcie kilka ról, a jedną
+rolę może pełnić kilka osób.
+
+**Role projektowe nie są uprawnieniami.** Pełnienie roli — nawet *Kierownika
+Projektu* — niczego nie nadaje ani niczego nie odbiera: o tym, co dana osoba
+może zobaczyć i zrobić, decydują wyłącznie jej rola administratora z jej
+uprawnieniami oraz reguły z sekcji *Kto widzi projekt*. Bycie członkiem
+projektu, w dowolnej roli, jest jednym ze sposobów, by projekt *widzieć*, ale
+nigdy sposobem, by go zmieniać.
+
+**Role projektowe** (`/projects/roles`) wymieniają wszystkie role z nazwą w
+każdym języku panelu administracyjnego. *Handlowiec* i *Kierownik Projektu* są
+dostępne od początku i oznaczone jako **Wbudowana**.
+
+- **Dodaj rolę** prosi o nazwę w każdym języku. Nazwa angielska jest wymagana:
+  to ją widać w każdym języku, który nie ma własnej nazwy. Dwie role nie mogą
+  mieć tej samej nazwy angielskiej, bez względu na wielkość liter — także jeśli
+  jedna z nich jest zarchiwizowana; zamiast dodawać zarchiwizowaną rolę
+  ponownie, przywróć ją.
+- **Zmień nazwę** zmienia nazwy; rola pozostaje tą samą rolą wszędzie, gdzie
+  jest używana. Nazwę roli wbudowanej też można zmienić.
+- **Archiwizuj** usuwa rolę z wyboru — dla członka, etapu czy szablonu — ale
+  zostawia ją w każdym projekcie i szablonie, który jej używa, oznaczoną jako
+  zarchiwizowana. **Przywróć** znów ją oferuje. Zaznacz *Pokaż zarchiwizowane
+  role*, aby je zobaczyć.
+- **Usuń** usuwa rolę na stałe, i to tylko taką, której nic nie używa — żaden
+  członek projektu, żaden etap ani zadanie etapu i żaden szablon. Roli
+  wbudowanej nie można usunąć, podobnie jak roli w użyciu: zarchiwizuj ją.
+
+## Powody utraty
+
+**Powody utraty** (`/projects/loss-reasons`) to powody, z jakich projekt może
+zostać zamknięty jako utracony; jeden z nich trzeba wybrać przy zamykaniu
+projektu. *Cena*, *Wybór konkurencji*, *Anulowany przez klienta*, *Brak
+decyzji* i *Inny powód* są dostępne od początku i oznaczone jako **Wbudowana**.
+Ekran działa tak samo jak *Role projektowe*: powód dodaje się z nazwą w każdym
+języku, można zmienić jego nazwę, zarchiwizować go i przywrócić, a usunąć taki,
+z którego nie utracono żadnego projektu. Zarchiwizowany powód nie jest już
+oferowany przy zamykaniu projektu i zostaje w projektach utraconych z jego
+powodu.
+
 ## Kto widzi projekt
 
 Decydują o tym dwie reguły, zawsze w tej kolejności.
@@ -293,8 +341,8 @@ włącza ponownie na ekranie **Moduły** panelu administracyjnego
 
 Gdy moduł jest wyłączony:
 
-- pozycje *Projekty* i *Szablony* oraz wszystkie ekrany projektów i szablonów
-  znikają z panelu administracyjnego;
+- pozycje *Projekty*, *Szablony*, *Role projektowe* i *Powody utraty* oraz
+  wszystkie ich ekrany znikają z panelu administracyjnego;
 - każdy endpoint `/api/v1/admin/projects…` odpowiada `503` z kodem
   `MODULE_DISABLED`;
 - jego uprawnień nie można już nadać żadnej roli, a jego ustawień nie można
@@ -318,7 +366,10 @@ sprzed wyłączenia.
 | --- | --- |
 | `projects:read` | Przeglądanie projektów — listy, pojedynczego projektu i jego historii etapów — z zastrzeżeniem obu reguł z sekcji *Kto widzi projekt*. |
 | `projects:write` | Tworzenie, edycja i usuwanie projektów; ustawianie ich organizacji, członków, etapów i przebiegu; przenoszenie, zamykanie i ponowne otwieranie. Wymaga `projects:read`. |
-| `projects:configure` | Tworzenie, edycja, duplikowanie, archiwizacja i przywracanie szablonów. Wymaga `projects:read`; każdy, kto może przeglądać projekty, może odczytać szablony, aby zacząć od nich projekt. |
+| `projects:configure` | Tworzenie, edycja, duplikowanie, archiwizacja i przywracanie szablonów; dodawanie, zmiana nazwy, archiwizacja, przywracanie i usuwanie ról projektowych i powodów utraty. Wymaga `projects:read`; każdy, kto może przeglądać projekty, może odczytać szablony, role i powody utraty, aby użyć ich w projekcie. |
+
+Rola projektowa nie jest jednym z tych uprawnień: jej pełnienie nie nadaje
+żadnego uprawnienia (zob. *Role projektowe*).
 
 ## Powiązania, współpraca, powiadomienia o terminach i analityka
 
@@ -351,6 +402,10 @@ opisana, gdy to nastąpi.*
 | `POST /api/v1/admin/projects/:id/stages/:stageId/materialize-tasks` | `projects:write` | Ponownie tworzy zadania etapu po zapisanym błędzie — `tasksMaterializeFailed` etapu — → `{ data: { created } }`; w innym przypadku `409` `PROJECT_STAGE_TASKS_NOT_RETRYABLE`, a przy wyłączonym module Zadania `503` `MODULE_DISABLED`. |
 | `GET /api/v1/admin/projects/:id/tasks` | `projects:read` | `{ data: { tasksAvailable, stages: [{ stageId, tasks: TaskSummary[] }] } }`, w kolejności etapów; `tasksAvailable: false` i brak etapów, gdy moduł Zadania jest wyłączony albo czytający nie ma `tasks:read`. |
 | `GET /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:read` | Słowniki z polem `label` w języku czytającego; `active=true` pomija zarchiwizowane wiersze. |
+| `POST /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:configure` | `{ defaultName, name }` (`name`: nazwa dla każdego języka) → `201` `{ data }`. `code` powstaje z `defaultName` — rozdzielany `_`, z `_2`, `_3`…, gdy inny wiersz już go ma — i nigdy się nie zmienia. `409` `PROJECT_DICTIONARY_NAME_TAKEN` dla nazwy domyślnej, którą ma inny wiersz tego samego słownika, bez względu na wielkość liter. |
+| `PATCH /api/v1/admin/projects/roles/:id`, `…/loss-reasons/:id` | `projects:configure` | `defaultName` i/lub `name`, które zastępuje nazwy we wszystkich językach → `{ data }`; `404` `PROJECT_DICTIONARY_ENTRY_NOT_FOUND`, `409` `PROJECT_DICTIONARY_NAME_TAKEN`. |
+| `POST …/roles/:id/archive`, `…/restore` (i to samo pod `loss-reasons`) | `projects:configure` | `{ data }`. |
+| `DELETE /api/v1/admin/projects/roles/:id`, `…/loss-reasons/:id` | `projects:configure` | `204`; `409` `PROJECT_DICTIONARY_ENTRY_SYSTEM` dla wiersza wbudowanego, `409` `PROJECT_DICTIONARY_ENTRY_IN_USE` dla wiersza, którego używa projekt lub szablon. |
 | `GET /api/v1/admin/projects/templates` | `projects:read` | `{ data: ProjectTemplateSummary[] }` według nazwy; `active=true` pomija zarchiwizowane szablony. |
 | `GET /api/v1/admin/projects/templates/:id` | `projects:read` | `{ data: ProjectTemplateDetail }` albo `404` `PROJECT_TEMPLATE_NOT_FOUND`. |
 | `POST /api/v1/admin/projects/templates`, `PUT …/templates/:id` | `projects:configure` | Cały szablon w jednym body (`ProjectTemplateBody`: nazwa, opis, `roleIds`, `stages` — każdy z `key` i swoimi `tasks`, `moves` wskazujące etapy po kluczu — pominięte oznacza przejście każdego etapu do następnego) → `201` / `200` `{ data: ProjectTemplateDetail }`. Klucz, który jest identyfikatorem jednego z etapów szablonu, zachowuje identyfikator tego etapu. |
@@ -376,6 +431,11 @@ Po każdym zatwierdzonym zapisie moduł emituje, jeden raz:
 `projects.project.created.v1`, `projects.stage.moved.v1` (z nazwami etapów
 takimi, jakie wtedy były), `projects.project.closed.v1` (z wynikiem, etapem i —
 przy utracie — kodem powodu utraty) oraz `projects.project.reopened.v1`.
+
+Każda zmiana roli projektowej lub powodu utraty to jedno audytowane polecenie —
+`projects.role.create`, `.update`, `.archive`, `.restore`, `.delete` z
+`objectType: 'project_role'` oraz to samo w `projects.loss_reason.*` z
+`objectType: 'project_loss_reason'`.
 
 ### Kontekst zadań `project`
 
