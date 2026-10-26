@@ -96,6 +96,15 @@ describe('projects off-state (Constitution XVII)', () => {
         write('POST', `${API}/templates/${ID}/duplicate`),
         write('POST', `${API}/templates/${ID}/archive`),
         write('POST', `${API}/templates/${ID}/restore`),
+        // User Story 4's writes — Project Roles and loss reasons. Each names an
+        // entry that does not exist, or sends a body the schema refuses.
+        ...(['roles', 'loss-reasons'] as const).flatMap((dictionary) => [
+          write('POST', `${API}/${dictionary}`, { defaultName: '' }),
+          write('PATCH', `${API}/${dictionary}/${ID}`, { defaultName: 'x' }),
+          write('POST', `${API}/${dictionary}/${ID}/archive`),
+          write('POST', `${API}/${dictionary}/${ID}/restore`),
+          write('DELETE', `${API}/${dictionary}/${ID}`, undefined),
+        ]),
         // User Story 5's routes — the pickers' lookups and the visibility setting.
         { url: `${API}/lookups/organizations`, cookies: admin },
         { url: `${API}/lookups/admin-users`, cookies: admin },
