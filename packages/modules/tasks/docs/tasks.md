@@ -37,9 +37,39 @@ deleted.
 
 ## In the Admin UI
 
-The Tasks screens — the task list, *My tasks* and a task's own screen — arrive
-in the next release of this module. Until then tasks are created, read and
-changed through the API below and by the modules that own a context.
+Tasks are in the sidebar under **Projects & tasks**, for administrators who may
+view tasks: **My tasks** (`/tasks/mine`) and **Tasks** (`/tasks`).
+
+**The list** shows every task you may see: its number, title, status, due
+date — marked *Overdue* once it has passed while the task is open — assignee,
+and the record it belongs to. That record is a link while it is available to
+you; one you may no longer see, or whose module is switched off, is named
+*Unavailable record*, without a link. Filter the list by status, by assignee —
+you, or nobody — or to overdue tasks only, and search by number or title. It
+pages forward and back, fifty tasks at a time.
+
+**My tasks** lists your own open tasks, the soonest due first and those without
+a due date last, overdue ones marked.
+
+**New task** (`/tasks/new`) asks for a title and, optionally, a description, a
+due date and an assignee — chosen by name among the active administrators, or
+with *Assign to me*. A task created here belongs to no record: a task of a
+project is added on the project's *Tasks* tab, into one of its stages.
+
+**A task's screen** shows its title, number and status, then:
+
+- **Details** — the status, changed at once from its list; the description, due
+  date and assignee, changed with *Edit* and saved together; *Assign to me*;
+  who created the task and when, and when it was done. *Delete task* asks
+  before it deletes.
+- **Belongs to** — the record the task belongs to, as its module names it: for a
+  project task, the project's number and title, linked, and its stage. A note
+  the record's module wrote when it created the task, such as the role
+  responsible for it, is shown here too.
+- **History** — every change, newest first, with who made it and when.
+
+Other modules can add panels at the end of a task's screen. Without the
+permission to create and edit tasks the screen is read-only.
 
 ## Using Tasks
 
@@ -80,6 +110,8 @@ off, and back on, on the **Modules** screen of the Admin UI
 
 While it is off:
 
+- the *My tasks* and *Tasks* entries and every task screen are gone from the
+  Admin UI, and so are a project's *Tasks* tab and its stage tasks;
 - every `/api/v1/admin/tasks…` endpoint answers `503` with the code
   `MODULE_DISABLED`;
 - its permissions can no longer be granted to a role;

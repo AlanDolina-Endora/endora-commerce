@@ -39,10 +39,43 @@ jest usuwane.
 
 ## W panelu administracyjnym
 
-Ekrany zadań — lista zadań, *Moje zadania* i ekran pojedynczego zadania —
-pojawią się w następnym wydaniu tego modułu. Do tego czasu zadania tworzy się,
-odczytuje i zmienia przez opisane niżej API oraz przez moduły będące
-właścicielami kontekstów.
+Zadania są w menu bocznym w sekcji **Projekty i zadania**, dla administratorów,
+którzy mogą przeglądać zadania: **Moje zadania** (`/tasks/mine`) i **Zadania**
+(`/tasks`).
+
+**Lista** pokazuje każde zadanie, które możesz zobaczyć: numer, tytuł, status,
+termin — oznaczony *Po terminie*, gdy minie, a zadanie jest wciąż otwarte —
+osobę przypisaną i rekord, do którego zadanie należy. Rekord jest
+odnośnikiem, dopóki jest dla ciebie dostępny; rekord, którego nie możesz już
+zobaczyć albo którego moduł jest wyłączony, jest nazwany *Niedostępny rekord*,
+bez odnośnika. Listę można zawęzić według statusu, osoby przypisanej —
+ciebie albo nikogo — albo do zadań po terminie, i przeszukać po numerze lub
+tytule. Przechodzi się po niej stronami do przodu i do tyłu, po pięćdziesiąt
+zadań.
+
+**Moje zadania** wymienia twoje otwarte zadania, najpierw te z najbliższym
+terminem, na końcu te bez terminu, z oznaczeniem zadań po terminie.
+
+**Nowe zadanie** (`/tasks/new`) wymaga tytułu, a opcjonalnie opisu, terminu i
+osoby przypisanej — wybieranej po nazwisku spośród aktywnych
+administratorów albo przyciskiem *Przypisz do mnie*. Zadanie utworzone tutaj nie
+należy do żadnego rekordu: zadanie projektu dodaje się na karcie *Zadania*
+projektu, do jednego z jego etapów.
+
+**Ekran zadania** pokazuje tytuł, numer i status, a dalej:
+
+- **Szczegóły** — status, zmieniany od razu z listy; opis, termin i osobę
+  przypisaną, zmieniane przyciskiem *Edytuj* i zapisywane razem; *Przypisz
+  do mnie*; kto i kiedy utworzył zadanie oraz kiedy zostało zrobione. *Usuń
+  zadanie* pyta przed usunięciem.
+- **Należy do** — rekord, do którego należy zadanie, tak jak nazywa go jego
+  moduł: dla zadania projektu numer i tytuł projektu jako odnośnik oraz etap.
+  Pokazana jest tu też notatka, którą moduł rekordu zapisał przy tworzeniu
+  zadania, np. odpowiedzialna rola.
+- **Historia** — każda zmiana, od najnowszych, z tym, kto ją wprowadził i kiedy.
+
+Inne moduły mogą dodawać panele na końcu ekranu zadania. Bez uprawnienia do
+tworzenia i zmieniania zadań ekran jest tylko do odczytu.
 
 ## Praca z zadaniami
 
@@ -84,6 +117,9 @@ włącza ponownie na ekranie **Moduły** panelu administracyjnego
 
 Gdy moduł jest wyłączony:
 
+- pozycje *Moje zadania* i *Zadania* oraz wszystkie ekrany zadań znikają z
+  panelu administracyjnego, a wraz z nimi karta *Zadania* projektu i jego
+  zadania etapów;
 - każdy endpoint `/api/v1/admin/tasks…` odpowiada `503` z kodem
   `MODULE_DISABLED`;
 - jego uprawnień nie można już nadać żadnej roli;

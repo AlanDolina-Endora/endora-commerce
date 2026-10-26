@@ -59,7 +59,11 @@ completion, and *Close as lost*, which asks for a loss reason and an optional
 comment. A closed project says when and in which stage it ended and offers
 *Reopen*. When somebody else changed the project in the meantime, or another
 module refuses the change, the screen says why and shows the project as it is
-now.
+now; when a completion gate refuses it, the open tasks it names are listed, each
+a link to the task.
+
+*Delete project* asks before it deletes. A project with linked records is not
+deleted: the screen says so, and the records have to be unlinked first.
 
 Its tabs:
 
@@ -67,9 +71,16 @@ Its tabs:
 - **Stages** — each stage's name, colour, planned duration, responsible roles,
   alert days, completion gate and whether the project may be completed from
   it, saved one stage at a time; stages are added at the end, moved up or down
-  and deleted here. Below them the **workflow**, drawn as a graph, where moves
-  are added and removed; a stage no move reaches from the first one is named in
-  a warning.
+  and deleted here. With the Tasks module on, each stage also lists its
+  **stage tasks** — a title, the days after the stage starts that the task is
+  due, and the responsible role — saved as one list per stage. Below the stages
+  the **workflow**, drawn as a graph, where moves are added and removed; a
+  stage no move reaches from the first one is named in a warning.
+- **Tasks** — with the Tasks module on, for administrators who may view tasks:
+  every stage in order with its tasks — number (a link to the task), title,
+  status, assignee and due date, overdue ones marked — and, for administrators
+  who may create tasks, a field under each stage that adds a task to it by its
+  title.
 - **Stage history** — every entry into a stage, every close and every reopen,
   newest first, with who did it and when.
 
@@ -176,6 +187,7 @@ but its own stages, and nothing is lost:
 - a stage entered while Tasks is off does not create its stage tasks, then or
   later — the stage history says *The stage's tasks were not created.*;
 - a stage can be deleted without its tasks being counted;
+- the *Tasks* tab and the stage tasks of the *Stages* tab are not shown;
 - the stage tasks and the gates are kept, and apply again to what happens
   after Tasks is switched back on.
 

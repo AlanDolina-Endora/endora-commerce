@@ -61,7 +61,12 @@ tam, gdzie bieżący etap pozwala zakończyć projekt, oraz *Zamknij jako
 utracony*, który pyta o powód utraty i opcjonalny komentarz. Zamknięty projekt
 mówi, kiedy i w którym etapie się zakończył, i pozwala go *Otworzyć ponownie*.
 Gdy w międzyczasie ktoś inny zmienił projekt albo inny moduł odrzuci zmianę,
-ekran mówi dlaczego i pokazuje projekt w obecnym stanie.
+ekran mówi dlaczego i pokazuje projekt w obecnym stanie; gdy zmianę odrzuci
+blokada zakończenia, wymienia też otwarte zadania, które ją zatrzymały, każde
+jako odnośnik do zadania.
+
+*Usuń projekt* pyta przed usunięciem. Projekt z powiązanymi rekordami nie jest
+usuwany: ekran to mówi, a rekordy trzeba najpierw odłączyć.
 
 Jego zakładki:
 
@@ -69,9 +74,17 @@ Jego zakładki:
 - **Etapy** — nazwa, kolor, planowany czas trwania, role odpowiedzialne, dni
   alertów, blokada zakończenia i informacja, czy z danego etapu można zakończyć
   projekt, zapisywane osobno dla każdego etapu; tutaj dodaje się etapy (na
-  końcu), przesuwa je w górę lub w dół i usuwa. Pod nimi **przebieg**
-  narysowany jako graf, w którym dodaje się i usuwa przejścia; etap, do którego
-  nie prowadzi żadne przejście od pierwszego, jest wskazany w ostrzeżeniu.
+  końcu), przesuwa je w górę lub w dół i usuwa. Gdy moduł Zadania jest
+  włączony, każdy etap ma też listę **zadań etapu** — tytuł, liczbę dni od
+  rozpoczęcia etapu do terminu zadania i odpowiedzialną rolę — zapisywaną w
+  całości dla każdego etapu. Pod etapami **przebieg** narysowany jako graf, w
+  którym dodaje się i usuwa przejścia; etap, do którego nie prowadzi żadne
+  przejście od pierwszego, jest wskazany w ostrzeżeniu.
+- **Zadania** — gdy moduł Zadania jest włączony, dla administratorów, którzy
+  mogą przeglądać zadania: wszystkie etapy w kolejności z ich zadaniami — numer
+  (odnośnik do zadania), tytuł, status, osoba przypisana i termin, z
+  oznaczeniem zadań po terminie — a dla administratorów, którzy mogą tworzyć
+  zadania, pole pod każdym etapem, które dodaje do niego zadanie po tytule.
 - **Historia etapów** — każde wejście do etapu, każde zamknięcie i każde
   ponowne otwarcie, od najnowszych, z tym, kto to zrobił i kiedy.
 
@@ -183,6 +196,7 @@ etapami i nic nie ginie:
   zadań etapu ani wtedy, ani później — historia etapów podaje *Zadania etapu
   nie zostały utworzone.*;
 - etap można usunąć bez liczenia jego zadań;
+- karta *Zadania* i zadania etapów na karcie *Etapy* nie są pokazywane;
 - zadania etapów i blokady zostają zachowane i znów działają dla tego, co
   dzieje się po ponownym włączeniu modułu Zadania.
 
