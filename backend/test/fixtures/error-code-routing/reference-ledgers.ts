@@ -413,6 +413,13 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Minted with the `tasks` module (`specs/163-projects-and-tasks/`, Phase 2A): a Task assigned ' +
       'to somebody who is not an active administrator.',
   },
+  PROJECT_NOT_FOUND: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, Phase 2B), which did not ' +
+      'exist when the prefix chain was deleted: a Project that does not exist, or one out of the ' +
+      'caller’s Organization reach or visibility — the three answer identically (FR-004, FR-020).',
+  },
   SEO_CRAWLER_TEXT_TOO_LARGE: {
     to: 'seo',
     reason:

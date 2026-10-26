@@ -110,8 +110,8 @@ describe('canSee (R-2 × R-3)', () => {
   it('an internal Project is visible in all mode by the visibility rule, and to no restricted viewer at all', () => {
     const [member, internal] = viewerAndProject('member', 'members_and_listed', ALL, []);
     expect(canSee(member, internal, 'members')).toBe(true);
-    const [other] = viewerAndProject('other', 'members_and_listed', ALL, []);
-    expect(canSee(other, internal, 'members')).toBe(false);
+    const [other, internalToOther] = viewerAndProject('other', 'members_and_listed', ALL, []);
+    expect(canSee(other, internalToOther, 'members')).toBe(false);
     const [restrictedSeeAll] = viewerAndProject('see_all', 'everyone', REACHES_A_AND_B, []);
     expect(canSee(restrictedSeeAll, internal, 'everyone')).toBe(false);
   });

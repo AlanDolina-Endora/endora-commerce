@@ -1,0 +1,11 @@
+{
+  "adminRoles.permission.projects:read": "View projects",
+  "errors.PROJECT_NOT_FOUND": "This project does not exist or is not available to you.",
+  "settingGroups.projects.name": "Projects",
+  "settingLabels.projects.enabled.name": "Projects enabled",
+  "settingLabels.projects.enabled.description": "Switches Projects on or off: the Project screens, Templates, analytics and the Project panels on Orders, Quote Requests and Opportunities. Nothing is dropped — every Project, its Stages and its history stay in the database and resume where they were.",
+  "settingLabels.projects.visibility.name": "Who sees a Project",
+  "settingLabels.projects.visibility.description": "Who may see a Project that follows this setting: \"everyone\" — every administrator who may view Projects; \"members\" — its Members and the people listed on it. Each Project can override it. Either way an administrator sees only Projects of Organizations they can reach, and holders of \"See every project\" see every one of those.",
+  "settingLabels.projects.alerts_time_zone.name": "Time zone of Stage dates and deadline alerts",
+  "settingLabels.projects.alerts_time_zone.description": "The time zone, as an IANA name such as Europe/Warsaw, in which \"today\" is counted for Projects: the day a Stage starts, whether its deadline has passed, and the day a deadline alert is sent."
+}

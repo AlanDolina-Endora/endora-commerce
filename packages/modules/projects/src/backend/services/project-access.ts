@@ -1,0 +1,294 @@
+import type { EntityManager } from '@mikro-orm/postgresql';
+import {
+  ADMIN_PERMISSION_WILDCARD,
+  ERROR_CODES,
+  projectVisibilitySettingSchema,
+  type AdminTenantScopePort,
+  type AdminUserReadPort,
+  type PermissionReadPort,
+  type ProjectState,
+  type ProjectVisibility,
+  type ProjectVisibilitySetting,
+} from '@endora-commerce/contracts';
+import { HttpError } from '@endora-commerce/platform/http';
+import type { SettingsReadPort } from '@endora-commerce/platform/kernel';
+import { getTenantContext, isOrgInScope, orgConstraintFor } from '@endora-commerce/platform/tenancy';
+import type { OrgReach, ProjectViewer } from '../domain/visibility-rule.js';
+
+/**
+ * `ProjectAccess` — **the module's only read path to a Project**
+ * (`specs/163-projects-and-tasks/research.md` R-2, R-3).
+ *
+ * Every Project-owned entity is `@RuleScoped`, and that classification has
+ * **no ORM filter behind it**: the platform's global filters scope `org` and
+ * `customer` entities and walk `transitive` chains, while a rule-scoped
+ * entity's rule lives in its owning service. The rule here is the module's
+ * own — a Project of several Organizations is visible only with **every** one
+ * in reach (owner ruling Q1 = C), and inside that the visibility rule of R-3 —
+ * and the platform's published `ruleVisibleForScope` states the opposite
+ * semantics (any-of, no Organization visible to all). So this file states the
+ * rule once, as one SQL predicate over `projects p`, and every list, count,
+ * search, panel and port of the module either composes that predicate or
+ * starts from a Project this file returned. `project-access-seam.test.ts`
+ * refuses a read of a rule-scoped table anywhere else, except in the files
+ * {@link PROJECT_ACCESS_READERS} names with their reason.
+ *
+ * Out of reach, invisible and non-existent answer alike: 404
+ * `PROJECT_NOT_FOUND` by id, absence from lists and totals (Constitution XI).
+ * `orgConstraintFor()` is asked on every path, so a request without a tenant
+ * context throws instead of seeing everything (fail-closed). The system — a
+ * worker, a subscriber — is not narrowed.
+ *
+ * The pure statement of both rules, and their truth table, is
+ * `domain/visibility-rule.ts`; this file is their SQL twin.
+ */
+
+/**
+ * Files besides this one that read rule-scoped Project tables, each with why
+ * that is safe. A file belongs here only when **every** such read either
+ * composes {@link ProjectAccess.visibleProjectSql} or is keyed by Project ids
+ * this file handed out. Paths are relative to `src/backend/`.
+ */
+export const PROJECT_ACCESS_READERS: Readonly<Record<string, string>> = {
+  'services/project-read-service.ts':
+    'The list and its total compose `visibleProjectSql`; the detail starts from `loadVisible`; ' +
+    'Stages, Organizations and Members are read only for the ids of Projects those two returned.',
+};
+
+/** The permission that lifts the visibility rule — never the Organization rule (R-3). */
+export const PROJECTS_SEE_ALL_PERMISSION = 'projects:see_all';
+/** The permission that gates every read route of the module. */
+export const PROJECTS_READ_PERMISSION = 'projects:read';
+
+export const PROJECTS_VISIBILITY_SETTING = 'projects.visibility';
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(value: string): boolean {
+  return UUID.test(value);
+}
+
+/** A Postgres array literal of uuids, for `?::uuid[]`. Only uuids reach it. */
+export function uuidArray(ids: Iterable<string>): string {
+  return `{${[...ids].filter(isUuid).join(',')}}`;
+}
+
+export interface SqlFragment {
+  sql: string;
+  params: unknown[];
+}
+
+/** One `projects` row as the access path selects it. */
+export interface VisibleProjectRow {
+  id: string;
+  number: string;
+  title: string;
+  description: string;
+  state: ProjectState;
+  current_stage_id: string | null;
+  /** `numeric(18,2)` as Postgres prints it. */
+  value_amount: string | null;
+  value_currency: string | null;
+  /** `YYYY-MM-DD`. */
+  start_on: string;
+  visibility: ProjectVisibility;
+  template_id: string | null;
+  version: number;
+  closed_at: Date | null;
+  created_at: Date;
+  /** `created_at` at full precision — a keyset cursor's key. */
+  cursor_at: string;
+}
+
+/** The columns {@link VisibleProjectRow} reads, over the alias `p`. */
+export const VISIBLE_PROJECT_COLUMNS = `p."id", p."number", p."title", p."description", p."state",
+  p."current_stage_id", p."value_amount"::text as "value_amount", p."value_currency",
+  to_char(p."start_on", 'YYYY-MM-DD') as "start_on", p."visibility", p."template_id", p."version",
+  p."closed_at", p."created_at", p."created_at"::text as "cursor_at"`;
+
+export function projectNotFound(): HttpError {
+  return new HttpError(404, ERROR_CODES.PROJECT_NOT_FOUND, 'Project not found.');
+}
+
+/**
+ * Both rules as one predicate over a Project aliased `p`, for `viewer` under
+ * the module setting; `null` when nothing narrows (the system, or an
+ * unrestricted holder of `projects:see_all`). Pure: the caller gathers the
+ * viewer and the setting.
+ */
+export function visibleProjectSqlFor(viewer: ProjectViewer, setting: ProjectVisibilitySetting): SqlFragment | null {
+  const sql: string[] = [];
+  const params: unknown[] = [];
+  if (!viewer.reach.all) {
+    // R-2: at least one Organization, and none out of reach. An empty reach
+    // sees no Project at all.
+    sql.push(`exists (select 1 from "project_organizations" po_any where po_any."project_id" = p."id")`);
+    sql.push(
+      `not exists (select 1 from "project_organizations" po_out
+                    where po_out."project_id" = p."id" and not (po_out."organization_id" = any(?::uuid[])))`,
+    );
+    params.push(uuidArray(viewer.reach.organizationIds));
+  }
+  if (!viewer.seeAll) {
+    // R-3: open to everyone by the effective visibility, or a Member, or listed.
+    const open =
+      setting === 'everyone' ? `p."visibility" in ('inherit', 'everyone')` : `p."visibility" = 'everyone'`;
+    const alternatives = [open];
+    if (viewer.adminUserId !== null) {
+      alternatives.push(
+        `exists (select 1 from "project_members" pm_me where pm_me."project_id" = p."id" and pm_me."admin_user_id" = ?)`,
+        `exists (select 1 from "project_viewers" pv_me where pv_me."project_id" = p."id" and pv_me."admin_user_id" = ?)`,
+      );
+      params.push(viewer.adminUserId, viewer.adminUserId);
+    }
+    sql.push(`(${alternatives.join(' or ')})`);
+  }
+  return sql.length === 0 ? null : { sql: `(${sql.join(' and ')})`, params };
+}
+
+/** The reach the ambient tenant context gives the caller — throws without one (fail-closed). */
+export function ambientReach(): OrgReach {
+  const constraint = orgConstraintFor();
+  switch (constraint.kind) {
+    case 'all':
+      return { all: true, organizationIds: new Set() };
+    case 'single':
+      return { all: false, organizationIds: new Set(constraint.organizationId ? [constraint.organizationId] : []) };
+    case 'set':
+      return { all: false, organizationIds: new Set(constraint.organizationIds) };
+  }
+}
+
+/** The administrator behind the current request, or `null` for the system. */
+export function actingAdminUserId(): string | null {
+  const actor = getTenantContext()?.actor;
+  return actor?.kind === 'admin' && actor.id ? actor.id : null;
+}
+
+function holds(held: readonly string[], code: string): boolean {
+  return held.includes(ADMIN_PERMISSION_WILDCARD) || held.includes(code);
+}
+
+export interface ProjectAccessDeps {
+  emFactory: () => EntityManager;
+  /** `admin_roles`' read port — lazy, resolved per call. */
+  permissions: PermissionReadPort;
+  /** `organizations`' reach of an administrator other than the caller — lazy. */
+  tenantScopes: AdminTenantScopePort;
+  /** `admin_users`' read port — lazy. */
+  adminUsers: AdminUserReadPort;
+  settings: SettingsReadPort;
+}
+
+export class ProjectAccess {
+  constructor(private readonly deps: ProjectAccessDeps) {}
+
+  /**
+   * Who is reading, from the ambient tenant context: the administrator, whether
+   * they hold `projects:see_all`, and their Organization reach. With no
+   * administrator behind the request it is the system, unrestricted — but the
+   * reach is still asked of the context, so a missing context throws.
+   */
+  async currentViewer(): Promise<ProjectViewer> {
+    const reach = ambientReach();
+    const adminUserId = actingAdminUserId();
+    if (adminUserId === null) return { adminUserId: null, seeAll: true, reach };
+    const held = await this.deps.permissions.listPermissions(adminUserId);
+    return { adminUserId, seeAll: holds(held, PROJECTS_SEE_ALL_PERMISSION), reach };
+  }
+
+  /** The module setting `projects.visibility` (default `members`). */
+  async visibilitySetting(): Promise<ProjectVisibilitySetting> {
+    return this.deps.settings.get(PROJECTS_VISIBILITY_SETTING, null, projectVisibilitySettingSchema);
+  }
+
+  /**
+   * The predicate every list, count, search and analytics query of the module
+   * carries, over `projects p`, for the caller — or for `viewer` when given.
+   * `null` when nothing narrows.
+   */
+  async visibleProjectSql(viewer?: ProjectViewer): Promise<SqlFragment | null> {
+    const resolved = viewer ?? (await this.currentViewer());
+    return visibleProjectSqlFor(resolved, await this.visibilitySetting());
+  }
+
+  /** One Project the caller may see, or `null` — out of reach, invisible and missing alike. */
+  async findVisible(id: string): Promise<VisibleProjectRow | null> {
+    if (!isUuid(id)) return null;
+    const visible = await this.visibleProjectSql();
+    const rows = (await this.deps.emFactory().execute(
+      `select ${VISIBLE_PROJECT_COLUMNS} from "projects" p
+        where p."id" = ?${visible ? ` and ${visible.sql}` : ''}`,
+      [id, ...(visible?.params ?? [])],
+    )) as VisibleProjectRow[];
+    return rows[0] ?? null;
+  }
+
+  /**
+   * The **only** way a route or a service obtains a Project: 404
+   * `PROJECT_NOT_FOUND` for a Project out of reach, invisible or missing. A
+   * child read (Stages, comments, Members, links, attachments) loads its
+   * Project here first.
+   */
+  async loadVisible(id: string): Promise<VisibleProjectRow> {
+    const row = await this.findVisible(id);
+    if (!row) throw projectNotFound();
+    return row;
+  }
+
+  /** Which of `ids` the caller may see. */
+  async visibleIds(ids: readonly string[]): Promise<Set<string>> {
+    const candidates = ids.filter(isUuid);
+    if (candidates.length === 0) return new Set();
+    const visible = await this.visibleProjectSql();
+    const rows = (await this.deps.emFactory().execute(
+      `select p."id" from "projects" p
+        where p."id" = any(?::uuid[])${visible ? ` and ${visible.sql}` : ''}`,
+      [uuidArray(candidates), ...(visible?.params ?? [])],
+    )) as Array<{ id: string }>;
+    return new Set(rows.map((row) => row.id));
+  }
+
+  /** Every Project id the caller may see — the Task context's pre-filter (research R-9). */
+  async allVisibleIds(): Promise<string[]> {
+    const visible = await this.visibleProjectSql();
+    const rows = (await this.deps.emFactory().execute(
+      `select p."id" from "projects" p${visible ? ` where ${visible.sql}` : ''}`,
+      visible?.params ?? [],
+    )) as Array<{ id: string }>;
+    return rows.map((row) => row.id);
+  }
+
+  /**
+   * Whether **another** administrator may see a Project — for a notification
+   * or an alert about it (research R-4). Active, holding `projects:read`, and
+   * passing both rules against **their own** reach, which `organizations`
+   * establishes the way the request-scope hook does for a caller. An
+   * administrator whose reach cannot be established reaches nothing.
+   */
+  async canSeeAs(adminUserId: string, projectId: string): Promise<boolean> {
+    if (!isUuid(adminUserId) || !isUuid(projectId)) return false;
+    const admin = await this.deps.adminUsers.findById(adminUserId);
+    if (!admin || admin.status !== 'active' || admin.deletedAt !== null) return false;
+    const held = await this.deps.permissions.listPermissions(adminUserId);
+    if (!holds(held, PROJECTS_READ_PERMISSION)) return false;
+    const scope = await this.deps.tenantScopes.resolveForAdmin(adminUserId);
+    const reach: OrgReach = scope.allowAll
+      ? { all: true, organizationIds: new Set() }
+      : { all: false, organizationIds: new Set(scope.allowedOrganizationIds) };
+    const visible = visibleProjectSqlFor(
+      { adminUserId, seeAll: holds(held, PROJECTS_SEE_ALL_PERMISSION), reach },
+      await this.visibilitySetting(),
+    );
+    const rows = (await this.deps.emFactory().execute(
+      `select 1 as "one" from "projects" p where p."id" = ?${visible ? ` and ${visible.sql}` : ''}`,
+      [projectId, ...(visible?.params ?? [])],
+    )) as unknown[];
+    return rows.length > 0;
+  }
+
+  /** Whether the caller may name this Organization on a Project they write (FR-004). */
+  isOrgInScope(organizationId: string): boolean {
+    return isOrgInScope(organizationId);
+  }
+}

@@ -307,6 +307,9 @@ import { Migration20261023T195611ProductFeedsRunWithdrawalReason } from '@endora
 import { Migration20261023T234605ProductFeedsPriceListFkDropped } from '@endora-commerce/mod-product-feeds/migrations';
 import { Migration20261025T145041ProductFeedsGoogleTemplatePackFields } from '@endora-commerce/mod-product-feeds/migrations';
 
+// ── projects ────────────────────────────────────────────────────────────────
+import { Migration20261026T144350ProjectsInit } from '@endora-commerce/mod-projects/migrations';
+
 // ── promotions ──────────────────────────────────────────────────────────────
 import { Migration20260505T074605PromotionsCriteria } from '@endora-commerce/mod-promotions/migrations';
 import { Migration20260618T100727PromotionsEngine } from '@endora-commerce/mod-promotions/migrations';
@@ -660,6 +663,9 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('product_feeds', Migration20261023T195611ProductFeedsRunWithdrawalReason),
   migration('product_feeds', Migration20261023T234605ProductFeedsPriceListFkDropped),
   migration('product_feeds', Migration20261025T145041ProductFeedsGoogleTemplatePackFields),
+
+  // ── projects ────────────────────────────────────────────────────────────────
+  migration('projects', Migration20261026T144350ProjectsInit),
 
   // ── promotions ──────────────────────────────────────────────────────────────
   migration('promotions', Migration20260505T074605PromotionsCriteria),

@@ -699,6 +699,13 @@ export const ERROR_CODES = {
   /** The assignee is not an active administrator. */
   TASK_ASSIGNEE_INVALID: 'TASK_ASSIGNEE_INVALID',
 
+  // Projects (`specs/163-projects-and-tasks/`, `contracts/admin-api.md` §2) —
+  // the spellings of `PROJECTS_ERROR_CODES`. Each is declared by the `projects`
+  // module's manifest and joins this block in the change that adds its first
+  // raise site.
+  /** No such Project, or one out of the caller's reach or visibility — indistinguishable. */
+  PROJECT_NOT_FOUND: 'PROJECT_NOT_FOUND',
+
   // SEO — search engine robots (`specs/144-seo-search-engine-robots/`, FR-006).
   // Declared by the `seo` module's manifest.
   /**
