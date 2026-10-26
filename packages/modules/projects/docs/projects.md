@@ -33,10 +33,51 @@ client*, *No decision* and *Other* — are a list the operator keeps the same wa
 
 ## In the Admin UI
 
-The project screens — the project list, a project's own screen with its stage
-bar, and the configuration of roles, templates and loss reasons — arrive in the
-next releases of this module. Until then projects are created, run and read
-through the API below.
+Projects are in the sidebar under **Projects & tasks → Projects** (`/projects`),
+for administrators who may view projects.
+
+**The list** shows every project you may see: its number, title,
+Organizations — or *Internal* — the current stage with its deadline, marked
+*Overdue* once it has passed, the value and the project managers. Filter it by
+state, by Organization or to the projects you are a member of, search by number
+or title, and sort it by creation date, value or the current stage's deadline;
+projects without a value or a deadline come last either way.
+
+**New project** (`/projects/new`) asks for a title and the stages, in order —
+a name, a colour and a planned duration in days for each, at least one — and
+optionally the Organizations, a value with its currency, a start date, a
+description and the members, each with the roles they hold. With no
+Organization the project is internal, and the form says who will see it. The
+project follows the module's *Who sees a Project* setting; choosing it per
+project, templates and custom fields arrive with later releases.
+
+**A project's screen** names the project, its state, value and Organizations.
+Below them is the **stage bar**: every stage in order, the current one marked,
+its deadline, and only what the project may do next — a button for each move
+its workflow permits, *Close as completed* where the current stage permits
+completion, and *Close as lost*, which asks for a loss reason and an optional
+comment. A closed project says when and in which stage it ended and offers
+*Reopen*. When somebody else changed the project in the meantime, or another
+module refuses the change, the screen says why and shows the project as it is
+now.
+
+Its tabs:
+
+- **Overview** — the description, the start date and the members by role.
+- **Stages** — each stage's name, colour, planned duration, responsible roles,
+  alert days, completion gate and whether the project may be completed from
+  it, saved one stage at a time; stages are added at the end, moved up or down
+  and deleted here. Below them the **workflow**, drawn as a graph, where moves
+  are added and removed; a stage no move reaches from the first one is named in
+  a warning.
+- **Stage history** — every entry into a stage, every close and every reopen,
+  newest first, with who did it and when.
+
+Without the permission to create and run projects the screen is read-only: the
+stages, the workflow and the history are shown, and nothing can be changed.
+
+Roles, loss reasons and templates have no screen yet; they arrive with later
+releases of this module.
 
 ## Running a project
 
@@ -130,6 +171,7 @@ off, and back on, on the **Modules** screen of the Admin UI
 
 While it is off:
 
+- the *Projects* entry and every project screen are gone from the Admin UI;
 - every `/api/v1/admin/projects…` endpoint answers `503` with the code
   `MODULE_DISABLED`;
 - its permissions can no longer be granted to a role, and its settings cannot be

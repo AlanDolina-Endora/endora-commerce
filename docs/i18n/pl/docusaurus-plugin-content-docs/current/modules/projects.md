@@ -34,10 +34,52 @@ przez operatora w ten sam sposób.
 
 ## W panelu administracyjnym
 
-Ekrany projektów — lista projektów, ekran projektu z paskiem etapów oraz
-konfiguracja ról, szablonów i powodów utraty — pojawią się w kolejnych wydaniach
-tego modułu. Do tego czasu projekty tworzy się, prowadzi i odczytuje przez
-opisane niżej API.
+Projekty są w menu bocznym w sekcji **Projekty i zadania → Projekty**
+(`/projects`), dla administratorów, którzy mogą przeglądać projekty.
+
+**Lista** pokazuje każdy projekt, który możesz zobaczyć: numer, tytuł,
+organizacje — albo *Wewnętrzny* — bieżący etap z terminem, oznaczonym *Po
+terminie*, gdy minie, wartość oraz kierowników projektu. Można ją zawęzić
+według stanu, organizacji albo do projektów, w których jesteś członkiem,
+przeszukać po numerze lub tytule i posortować według daty utworzenia, wartości
+lub terminu bieżącego etapu; projekty bez wartości lub terminu są zawsze na
+końcu.
+
+**Nowy projekt** (`/projects/new`) wymaga tytułu i etapów, w kolejności —
+każdy z nazwą, kolorem i planowanym czasem trwania w dniach, co najmniej jeden
+— a opcjonalnie organizacji, wartości z walutą, daty rozpoczęcia, opisu oraz
+członków, każdego z rolami, które pełni. Bez organizacji projekt jest
+wewnętrzny, a formularz mówi, kto go zobaczy. Projekt stosuje ustawienie modułu
+*Kto widzi projekt*; wybór dla pojedynczego projektu, szablony i pola własne
+pojawią się w kolejnych wydaniach.
+
+**Ekran projektu** pokazuje projekt, jego stan, wartość i organizacje. Pod
+nimi jest **pasek etapów**: wszystkie etapy w kolejności, z zaznaczonym
+bieżącym, jego termin i tylko to, co projekt może zrobić dalej — przycisk dla
+każdego przejścia dozwolonego przez jego przebieg, *Zamknij jako zrealizowany*
+tam, gdzie bieżący etap pozwala zakończyć projekt, oraz *Zamknij jako
+utracony*, który pyta o powód utraty i opcjonalny komentarz. Zamknięty projekt
+mówi, kiedy i w którym etapie się zakończył, i pozwala go *Otworzyć ponownie*.
+Gdy w międzyczasie ktoś inny zmienił projekt albo inny moduł odrzuci zmianę,
+ekran mówi dlaczego i pokazuje projekt w obecnym stanie.
+
+Jego zakładki:
+
+- **Przegląd** — opis, data rozpoczęcia i członkowie według ról.
+- **Etapy** — nazwa, kolor, planowany czas trwania, role odpowiedzialne, dni
+  alertów, blokada zakończenia i informacja, czy z danego etapu można zakończyć
+  projekt, zapisywane osobno dla każdego etapu; tutaj dodaje się etapy (na
+  końcu), przesuwa je w górę lub w dół i usuwa. Pod nimi **przebieg**
+  narysowany jako graf, w którym dodaje się i usuwa przejścia; etap, do którego
+  nie prowadzi żadne przejście od pierwszego, jest wskazany w ostrzeżeniu.
+- **Historia etapów** — każde wejście do etapu, każde zamknięcie i każde
+  ponowne otwarcie, od najnowszych, z tym, kto to zrobił i kiedy.
+
+Bez uprawnienia do tworzenia i prowadzenia projektów ekran jest tylko do
+odczytu: etapy, przebieg i historia są widoczne, ale niczego nie można zmienić.
+
+Role, powody utraty i szablony nie mają jeszcze ekranów; pojawią się w
+kolejnych wydaniach tego modułu.
 
 ## Prowadzenie projektu
 
@@ -136,6 +178,8 @@ włącza ponownie na ekranie **Moduły** panelu administracyjnego
 
 Gdy moduł jest wyłączony:
 
+- pozycja *Projekty* i wszystkie ekrany projektów znikają z panelu
+  administracyjnego;
 - każdy endpoint `/api/v1/admin/projects…` odpowiada `503` z kodem
   `MODULE_DISABLED`;
 - jego uprawnień nie można już nadać żadnej roli, a jego ustawień nie można
