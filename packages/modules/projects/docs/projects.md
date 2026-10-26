@@ -35,14 +35,63 @@ client*, *No decision* and *Other* — are a list the operator keeps the same wa
 
 The project screens — the project list, a project's own screen with its stage
 bar, and the configuration of roles, templates and loss reasons — arrive in the
-next releases of this module. Until then projects are read through the API
-below.
+next releases of this module. Until then projects are created, run and read
+through the API below.
 
 ## Running a project
 
-*Creating a project, editing its stages and workflow, moving it from stage to
-stage and closing it as completed or lost arrive in the next release of this
-module.*
+**Creating a project.** A project is created with a title and its stages, in
+order; optionally a description, a value with its currency, a start date (today
+if left out), its Organizations, its members with their roles, and who sees it.
+It gets its number, is **open**, and starts in its **first stage**. Every
+Organization named must be one the person creating the project can reach, and
+every member and listed person an active administrator. A member may hold any
+number of roles, none included.
+
+**Stages.** Each stage has a name, a colour, a planned duration in days, the
+roles responsible for it, and whether the project may be completed from it.
+Completing is permitted from the last stage unless the stages say otherwise. A
+stage also keeps the days before its deadline on which members are to be
+alerted and whether it is a completion gate for its tasks; both take effect
+with the later releases that bring deadline alerts and tasks. Stages can be added (at the end), renamed, recoloured,
+reordered and removed — except the stage the project is in and a project's
+only stage.
+
+**The workflow.** The moves a project may make between its stages are its own.
+By default each stage moves to the next one, and a stage added at the end is
+reached from the stage that was last before it. The workflow can be replaced
+with any set of moves — back from *Delivery* to *Design*, or skipping *Pilot*.
+A stage no move reaches from the first one is allowed; the project names it as
+**unreachable** so that the workflow can be corrected.
+
+**Moving.** A project moves only along a permitted move; any other move is
+refused and nothing changes. Entering a stage records the day it started —
+today, in the time zone of `projects.alerts_time_zone` — and its deadline: that
+day plus the stage's planned duration, or the day itself for a duration of
+zero. A deadline set by hand is kept. Entering a stage again starts it again.
+
+**Closing.** A project is closed as **completed** from a stage that permits
+completion, or as **lost** from any stage — with a loss reason from the list
+and an optional comment; the stage it was lost in is recorded. A closed project
+can be **reopened**: it returns to the stage it was closed in and its outcome
+is cleared.
+
+**Two people at once.** Every move, close, reopen and edit names the version of
+the project it was made on. If somebody else changed the project in the
+meantime, the change is refused and nothing is applied twice: reload the
+project and try again.
+
+**History.** Every entry into a stage, every close and every reopen is a row of
+the project's stage history, with the stage names as they were, who did it and
+when; every change is also in the audit log.
+
+**Logic of other modules.** Another module, or a deployment, can register a
+check that runs before a move, a close or a reopen and refuses it with a reason
+of its own; a module that is switched off is not asked. What happened is
+announced afterwards as an event.
+
+The Tasks module is not needed for any of this: a project runs through its
+stages with Tasks switched off.
 
 ## Who sees a project
 
@@ -102,7 +151,8 @@ on again.
 
 | Code | What it allows |
 | --- | --- |
-| `projects:read` | View projects — the list and a single project — subject to the two rules of *Who sees a project*. |
+| `projects:read` | View projects — the list, a single project and its stage history — subject to the two rules of *Who sees a project*. |
+| `projects:write` | Create, edit and delete projects; set their Organizations, members, stages and workflow; move, close and reopen them. Requires `projects:read`. |
 
 ## Tasks, templates, links, collaboration, deadline alerts and analytics
 
@@ -115,11 +165,42 @@ here when it does.*
 
 | Method and path | Permission | What it answers |
 | --- | --- | --- |
-| `GET /api/v1/admin/projects` | `projects:read` | A page of projects, newest first, and how many the caller may see: `{ items, nextCursor, total }`. Filters: `state` (repeatable), `organizationId`, `memberId` (an administrator's id or `me`), `roleId`, `templateId`, `stageName` (the current stage's name), `q` (number or title), `order` (`asc` or `desc`), `cursor`, `limit` (at most 100). |
-| `GET /api/v1/admin/projects/:id` | `projects:read` | `{ data: ProjectSummary }`, or `404` `PROJECT_NOT_FOUND` — for a project that does not exist and for one the caller may not see alike. |
+| `GET /api/v1/admin/projects` | `projects:read` | A page of projects and how many the caller may see: `{ items, nextCursor, total }`. Filters: `state` (repeatable), `organizationId`, `memberId` (an administrator's id or `me`), `roleId`, `templateId`, `stageName` (the current stage's name), `q` (number or title), `sort` (`createdAt` — the default, `value`, or `deadline` — the current stage's; projects without one come last either way), `order` (`asc` or `desc`, default `desc`), `cursor`, `limit` (at most 100). |
+| `POST /api/v1/admin/projects` | `projects:write` | `201` `{ data: ProjectDetail }`. Without a template, `stages` is required. |
+| `GET /api/v1/admin/projects/:id` | `projects:read` | `{ data: ProjectDetail }`, or `404` `PROJECT_NOT_FOUND` — for a project that does not exist and for one the caller may not see alike. |
+| `PATCH /api/v1/admin/projects/:id` | `projects:write` | Title, description, value, start date, with `version`. |
+| `DELETE /api/v1/admin/projects/:id` | `projects:write` | `204`; `409` `PROJECT_HAS_LINKS` while records are linked. |
+| `PUT /api/v1/admin/projects/:id/organizations` | `projects:write` | The whole set; `422` `PROJECT_ORGANIZATION_OUT_OF_SCOPE`. |
+| `PUT /api/v1/admin/projects/:id/members` | `projects:write` | The whole set of members and their roles; `422` `PROJECT_MEMBER_INVALID`. |
+| `POST /api/v1/admin/projects/:id/stages` | `projects:write` | `201` `{ data: ProjectStage }`, added at the end. |
+| `PATCH /api/v1/admin/projects/:id/stages/:stageId` | `projects:write` | Any attribute; `deadlineOn` sets the deadline by hand, `null` returns it to start + duration. |
+| `DELETE /api/v1/admin/projects/:id/stages/:stageId` | `projects:write` | `204`; `409` `PROJECT_STAGE_CURRENT` or `PROJECT_STAGE_LAST`. |
+| `PUT /api/v1/admin/projects/:id/stages/order` | `projects:write` | Every stage id, in the new order. |
+| `PUT /api/v1/admin/projects/:id/moves` | `projects:write` | The whole workflow → `{ data: { moves, unreachableStageIds } }`. |
+| `POST /api/v1/admin/projects/:id/move` | `projects:write` | `{ toStageId, version }` → `{ data: { project, entry, createdTaskIds, notes } }`; `409` `PROJECT_MOVE_NOT_PERMITTED`, `PROJECT_CHANGED` or `PROJECT_GUARD_REFUSED`. |
+| `POST /api/v1/admin/projects/:id/close` | `projects:write` | `{ outcome: 'completed', version }` or `{ outcome: 'lost', lossReasonId, comment?, version }`; `409` `PROJECT_COMPLETION_NOT_PERMITTED`, `422` `PROJECT_LOSS_REASON_INVALID`. |
+| `POST /api/v1/admin/projects/:id/reopen` | `projects:write` | `{ version }` → back into the stage it was closed in. |
+| `GET /api/v1/admin/projects/:id/stage-history` | `projects:read` | Every entry, close and reopen, oldest first. |
+| `GET /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:read` | The dictionaries, with `label` in the reader's language; `active=true` leaves archived rows out. |
 
 The request and response shapes are the Zod schemas of
 `@endora-commerce/contracts` (`projects.ts`).
+
+### Stage guards and events
+
+A module or a deployment refuses a move, a close or a reopen by registering a
+guard in `projectStageGuardRegistry` (`ProjectStageGuardRegistryPort` of
+`@endora-commerce/contracts`) from a contribution-only boot hook, declaring the
+edge as `contributes-to`. The guard is asked with the project, the stages and
+the kind (`move`, `close_completed`, `close_lost`, `reopen`) before anything is
+written, and answers `{ allow: true }` or `{ allow: false, reason }`; a refusal
+is `409` `PROJECT_GUARD_REFUSED` with the reason as its message. A guard whose
+module is switched off is skipped.
+
+After each committed write the module emits, once:
+`projects.project.created.v1`, `projects.stage.moved.v1` (with the stage names
+as they were), `projects.project.closed.v1` (with the outcome, the stage and,
+when lost, the loss reason's code) and `projects.project.reopened.v1`.
 
 ### One read path
 
