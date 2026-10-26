@@ -5,7 +5,7 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
-import { TEST_ADMIN_ID } from '../../helpers/test-actors.js';
+import { TEST_ADMIN_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 
 /**
  * `projects`' init migration, read back from the database it produced
@@ -366,11 +366,47 @@ describe('projects init migration', () => {
     it('links a record to at most one Project — unique (record_kind, record_id)', async () => {
       expectIndex(await indexDefinitions('project_links'), /CREATE UNIQUE INDEX .*\(record_kind, record_id\)$/);
       const { projectId } = await insertProject();
+      await rows(`insert into "project_organizations" ("project_id", "organization_id") values (?, ?)`, [
+        projectId,
+        TEST_ORGANIZATION_ID,
+      ]);
       await expect(
         rows(
-          `insert into "project_links" ("project_id", "record_kind", "record_id") values ('${projectId}', 'invoice', gen_random_uuid())`,
+          `insert into "project_links" ("project_id", "record_kind", "record_id", "organization_id")
+           values ('${projectId}', 'invoice', gen_random_uuid(), '${TEST_ORGANIZATION_ID}')`,
         ),
       ).rejects.toThrow(/check constraint/i);
+    });
+
+    it('keeps a link’s Organization one of its Project’s, and holds that Organization on the Project while linked (T092)', async () => {
+      const { projectId } = await insertProject();
+      const link = (organizationId: string) =>
+        rows(
+          `insert into "project_links" ("project_id", "record_kind", "record_id", "organization_id")
+           values (?, 'order', gen_random_uuid(), ?)`,
+          [projectId, organizationId],
+        );
+      // The Project does not have the Organization yet.
+      await expect(link(TEST_ORGANIZATION_ID)).rejects.toThrow(/foreign key/i);
+      await rows(`insert into "project_organizations" ("project_id", "organization_id") values (?, ?)`, [
+        projectId,
+        TEST_ORGANIZATION_ID,
+      ]);
+      await link(TEST_ORGANIZATION_ID);
+      await expect(
+        rows(`delete from "project_organizations" where "project_id" = ? and "organization_id" = ?`, [
+          projectId,
+          TEST_ORGANIZATION_ID,
+        ]),
+      ).rejects.toThrow(/foreign key/i);
+      await expect(
+        rows(`insert into "project_links" ("project_id", "record_kind", "record_id") values (?, 'order', gen_random_uuid())`, [
+          projectId,
+        ]),
+      ).rejects.toThrow(/not-null|null value/i);
+      // Deleting the Project takes both rows in one statement.
+      await rows(`delete from "projects" where "id" = ?`, [projectId]);
+      expect(await rows(`select 1 from "project_links" where "project_id" = ?`, [projectId])).toEqual([]);
     });
 
     it('settles an alert once per (Stage, offset, deadline) — unique', async () => {

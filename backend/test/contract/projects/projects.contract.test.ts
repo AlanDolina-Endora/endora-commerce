@@ -288,8 +288,9 @@ describe('projects (contract) — §2.1 Projects, §2.2 Stages and moves', () =>
           .em()
           .getConnection()
           .execute(
-            `insert into "project_links" ("id", "project_id", "record_kind", "record_id") values (?, ?, 'order', ?)`,
-            [linkId, project.id, randomUUID()],
+            `insert into "project_links" ("id", "project_id", "record_kind", "record_id", "organization_id")
+             values (?, ?, 'order', ?, ?)`,
+            [linkId, project.id, randomUUID(), orgA],
           );
         const refused = await callProjects(h, 'DELETE', `/${project.id}`);
         expect(refused.statusCode, refused.body).toBe(409);

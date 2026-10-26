@@ -40,10 +40,10 @@ import {
  *
  * FR-020 names every read of a Project. The ones that exist are measured for
  * each cell — the list and its total, the detail, the Stage history, the
- * Project's Tasks tab, its Tasks in the Tasks module — and every invisible
- * answer is byte-for-byte the answer for an id that does not exist. The reads
- * later stories bring are `todo` rows below, each naming the task that turns
- * it into a measurement.
+ * Project's Tasks tab, its Tasks in the Tasks module, the record panel of its
+ * Task — and every invisible answer is byte-for-byte the answer for an id that
+ * does not exist. The reads later stories bring are `todo` rows below, each
+ * naming the task that turns it into a measurement.
  */
 describe('projects — who sees a Project (US5)', () => {
   let h: BackendServerHandle;
@@ -194,6 +194,16 @@ describe('projects — who sees a Project (US5)', () => {
               const none = await callTasks(h, 'GET', `/${randomUUID()}`, { cookies });
               expect(task.statusCode, task.body).toBe(404);
               expect(errorShape(task.body)).toEqual(errorShape(none.body));
+            }
+            // The record panel (T093): the Project of its Task — a Project the
+            // reader may not see is the answer for a record in none.
+            const panel = await callProjects(h, 'GET', `/records/task/${tasks[visibility]}/project`, { cookies });
+            if (visible) {
+              expect(panel.statusCode, panel.body).toBe(200);
+              expect((panel.json() as { data: { id: string } }).data.id).toBe(id);
+            } else {
+              expect(panel.statusCode, panel.body).toBe(404);
+              expect(errorShape(panel.body)).toEqual(await missing(`/records/task/:id/project`, cookies));
             }
           });
         }
@@ -346,7 +356,6 @@ describe('projects — who sees a Project (US5)', () => {
 
   // The reads of FR-020 later stories bring. Each task named un-`todo`s its row.
   it.todo('global search (`projects.project` provider) answers only visible Projects — T132, Phase 13');
-  it.todo('`GET /projects/records/:kind/:id/project` answers 404 for an invisible Project, as for none — T093, Phase 8');
   it.todo('`GET /projects/lookups/mentionable` offers only people who may see the Project — T115, Phase 9');
   it.todo('analytics count only visible Projects — T127, Phase 12');
   it.todo('mention, message and Stage-deadline notifications reach only people who may see the Project — T111 and T118, Phases 9 and 10');

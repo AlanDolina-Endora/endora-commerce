@@ -528,6 +528,30 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 4): ' +
       'a Project Role or loss reason given the default name another row of the same dictionary has, whatever its case.',
   },
+  PROJECT_ORGANIZATION_IN_USE: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 6): ' +
+      'an Organization removed from a Project while a record of it is linked there (spec edge case).',
+  },
+  PROJECT_RECORD_NOT_FOUND: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 6): ' +
+      'a record to link that does not exist or is out of the caller’s reach — the two answer alike (FR-021).',
+  },
+  PROJECT_RECORD_ALREADY_LINKED: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 6): ' +
+      'a record linked to a Project while it already belongs to one, naming that one only to a caller who may see it (FR-021, US6 scenario 2).',
+  },
+  PROJECT_LINK_ORGANIZATION_MISMATCH: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 6): ' +
+      'a record linked to a Project that does not have the record’s Organization (FR-021).',
+  },
   SEO_CRAWLER_TEXT_TOO_LARGE: {
     to: 'seo',
     reason:

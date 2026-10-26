@@ -90,7 +90,10 @@ export const manifest = defineModuleManifest({
   // `_i18n` owns `adminI18nService`, which words what this module stores as a
   // key in the reader's language: a Stage Task's responsible-Role note and the
   // name of a duplicated Template.
-  dependencies: ['_i18n', 'admin_roles', 'admin_users', 'auth', 'organizations', 'settings'],
+  //
+  // `orders` owns `orderReadPort`, through which a linked Order is validated
+  // and shown (User Story 6); it cannot be switched off.
+  dependencies: ['_i18n', 'admin_roles', 'admin_users', 'auth', 'orders', 'organizations', 'settings'],
   /**
    * Edges that are real to the container and bind no operator (FR-040: a
    * Project works without Tasks).
@@ -132,6 +135,33 @@ export const manifest = defineModuleManifest({
         'Every call into this owner goes through `project-tasks.ts`, whose callers ask `present()` ' +
         'in front of the gate: a Stage entered while Tasks is off is marked skipped instead of ' +
         'creating its Stage Tasks, and a deleted Project leaves its Tasks hidden rather than deleting them.',
+    },
+    // User Story 6 — linked records of the two switchable owners. A link holds
+    // its record by value, so no table of either owner is referenced from this
+    // module's schema.
+    {
+      moduleId: 'crm',
+      name: 'opportunityReadPort',
+      kind: 'degrades-without',
+      whenAbsent:
+        'Opportunities linked to Projects show as unavailable and cannot be linked; their panels are gone. ' +
+        'The links are kept and return when CRM is back.',
+      reason:
+        'Every call into this owner goes through `linked-records.ts`, whose callers ask `isPresent()` in ' +
+        'front of the gate: a linked Opportunity renders as unavailable, and linking one or asking for its ' +
+        'Project answers 503 from that decision rather than from a caught refusal.',
+    },
+    {
+      moduleId: 'quote_requests',
+      name: 'quoteRequestReadPort',
+      kind: 'degrades-without',
+      whenAbsent:
+        'Quote Requests linked to Projects show as unavailable and cannot be linked; their panels are gone. ' +
+        'The links are kept and return when Quote Requests is back.',
+      reason:
+        'Every call into this owner goes through `linked-records.ts`, whose callers ask `isPresent()` in ' +
+        'front of the gate: a linked Quote Request renders as unavailable, and linking one or asking for ' +
+        'its Project answers 503 from that decision rather than from a caught refusal.',
     },
   ],
   settings,
@@ -185,6 +215,10 @@ export const manifest = defineModuleManifest({
   errorCodes: [
     { code: 'PROJECT_NOT_FOUND' },
     { code: 'PROJECT_HAS_LINKS' },
+    { code: 'PROJECT_ORGANIZATION_IN_USE' },
+    { code: 'PROJECT_RECORD_NOT_FOUND' },
+    { code: 'PROJECT_RECORD_ALREADY_LINKED' },
+    { code: 'PROJECT_LINK_ORGANIZATION_MISMATCH' },
     { code: 'PROJECT_ORGANIZATION_OUT_OF_SCOPE' },
     { code: 'PROJECT_STAGE_CURRENT' },
     { code: 'PROJECT_STAGE_LAST' },

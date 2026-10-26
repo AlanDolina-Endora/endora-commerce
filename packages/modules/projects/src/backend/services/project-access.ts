@@ -75,6 +75,13 @@ export const PROJECT_ACCESS_READERS: Readonly<Record<string, string>> = {
     'Deleting a loss reason asks whether any Project was lost for it: one `exists` across every ' +
     'Project, answered as a yes or no to a `projects:configure` holder, who learns no Project, id ' +
     'or count from it.',
+  'services/link-service.ts':
+    'Every read and write starts from `loadVisible`; links and Organizations are read by that ' +
+    'Project’s id. The holder of an already-linked record is looked up by record to name it, and is ' +
+    'named only through `findVisible`; otherwise it answers nothing but "linked elsewhere".',
+  'services/record-project-service.ts':
+    'Looks up the Project id a record is linked to — an id and nothing else — and answers only ' +
+    'what `findVisible` returns for it; no visible Project is the same 404 as no link.',
   'services/task-context-descriptor.ts':
     'The `project` Task context answers `allVisibleIds` / `visibleIds` and describes only the ids ' +
     '`visibleIds` handed back; Projects and their Stages are read by those ids only.',

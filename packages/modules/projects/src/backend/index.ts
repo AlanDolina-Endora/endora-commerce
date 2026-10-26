@@ -3,7 +3,11 @@ import type {
   AdminI18nTranslatePort,
   AdminTenantScopePort,
   AdminUserReadPort,
+  OpportunityReadPort,
+  OrderReadPort,
   OrganizationDetailsPort,
+  PermissionReadPort,
+  QuoteRequestReadPort,
   SettingWriteValidatorRegistryPort,
   TaskContextRegistryPort,
   TaskReadPort,
@@ -41,6 +45,7 @@ import { ProjectTemplateStageMove } from './entities/project-template-stage-move
 import { ProjectTemplateStageTask } from './entities/project-template-stage-task.entity.js';
 import { ProjectViewer } from './entities/project-viewer.entity.js';
 import { registerDictionaryRoutes } from './routes/routes.dictionaries.js';
+import { registerLinkRoutes } from './routes/routes.links.js';
 import { registerLookupRoutes } from './routes/routes.lookups.js';
 import { registerProjectRoutes } from './routes/routes.projects.js';
 import { registerStageTaskRoutes } from './routes/routes.stage-tasks.js';
@@ -48,14 +53,18 @@ import { registerStageRoutes } from './routes/routes.stages.js';
 import { registerTemplateRoutes } from './routes/routes.templates.js';
 import { createAlertsTimeZoneValidator } from './services/alerts-time-zone-validator.js';
 import type { DictionaryService } from './services/dictionary-service.js';
+import { LinkService } from './services/link-service.js';
+import { createLinkedRecordOwners, type LinkedRecordOwners } from './services/linked-records.js';
 import { ProjectLookupService } from './services/lookup-service.js';
 import { createLossReasonService } from './services/loss-reason-service.js';
 import { MoveService } from './services/move-service.js';
+import { createOwnerReadChecks, type OwnerReadChecks } from './services/owner-read-permissions.js';
 import { ProjectAccess, type ProjectAccessDeps } from './services/project-access.js';
 import { ProjectReadService } from './services/project-read-service.js';
 import { ProjectService } from './services/project-service.js';
 import { ProjectStageGuardRegistry } from './services/project-stage-guard-registry.js';
 import type { ProjectTasks } from './services/project-tasks.js';
+import { RecordProjectService } from './services/record-project-service.js';
 import { createRoleService } from './services/role-service.js';
 import { StageService } from './services/stage-service.js';
 import { StageTaskService } from './services/stage-task-service.js';
@@ -90,6 +99,10 @@ interface ProjectsCradle {
   readonly projectsRoleService: DictionaryService;
   readonly projectsLossReasonService: DictionaryService;
   readonly projectsLookupService: ProjectLookupService;
+  readonly projectsOwnerReadChecks: OwnerReadChecks;
+  readonly projectsLinkedRecordOwners: LinkedRecordOwners;
+  readonly projectsLinkService: LinkService;
+  readonly projectsRecordProjectService: RecordProjectService;
 }
 
 /** `_i18n`'s resolver over this module's own bundles. */
@@ -277,6 +290,62 @@ export function registerModule(ctx: ModuleContext): void {
   });
   // --- end of Lookups ---------------------------------------------------------------------
 
+  // --- Linked records and the record panel (User Story 6, research R-10, R-11) ------
+  // Orders, Quote Requests and Opportunities, through their owners' read
+  // ports. `orders` is binding; `crm` and `quote_requests` are switchable and
+  // this module degrades without them (`degrades-without`): every caller goes
+  // through `linked-records.ts` and decides presence there before a port is
+  // asked, and what a link shows of its record is the owner's read code's to
+  // allow (`owner-read-permissions.ts`).
+  ctx.di.register({
+    projectsOwnerReadChecks: ctx
+      .asFunction(() => createOwnerReadChecks(lazyPort<PermissionReadPort>(ctx, 'permissionService')))
+      .singleton(),
+    projectsLinkedRecordOwners: ctx
+      .asFunction(() =>
+        createLinkedRecordOwners({
+          orders: lazyPort<OrderReadPort>(ctx, 'orderReadPort'),
+          quoteRequests: lazyPort<QuoteRequestReadPort>(ctx, 'quoteRequestReadPort'),
+          opportunities: lazyPort<OpportunityReadPort>(ctx, 'opportunityReadPort'),
+        }),
+      )
+      .singleton(),
+    projectsLinkService: ctx
+      .asFunction(
+        ({ emFactory, commandBus, projectsAccess, projectsLinkedRecordOwners, projectsOwnerReadChecks }: ProjectsCradle) =>
+          new LinkService({
+            emFactory,
+            commandBus,
+            access: projectsAccess,
+            owners: projectsLinkedRecordOwners,
+            mayRead: projectsOwnerReadChecks,
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+          }),
+      )
+      .singleton(),
+    projectsRecordProjectService: ctx
+      .asFunction(
+        ({
+          emFactory,
+          projectsAccess,
+          projectsReadService,
+          projectsLinkedRecordOwners,
+          projectsTasks,
+          projectsOwnerReadChecks,
+        }: ProjectsCradle) =>
+          new RecordProjectService({
+            emFactory,
+            access: projectsAccess,
+            read: projectsReadService,
+            owners: projectsLinkedRecordOwners,
+            tasks: projectsTasks,
+            mayRead: projectsOwnerReadChecks,
+          }),
+      )
+      .singleton(),
+  });
+  // --- end of Linked records -----------------------------------------------------------
+
   // --- Stages, workflow and walking a Project (User Story 1) -------------------------
   // The guard registry is a **contribution seam** (research R-6): other modules
   // and deployments push a guard into it from a contribution-only boot hook,
@@ -369,6 +438,11 @@ export function registerModule(ctx: ModuleContext): void {
     await registerLookupRoutes(app, {
       lookupService: cradle.projectsLookupService,
       access: cradle.projectsAccess,
+      requireAdmin: cradle.requireAdmin,
+    });
+    await registerLinkRoutes(app, {
+      linkService: cradle.projectsLinkService,
+      recordProjectService: cradle.projectsRecordProjectService,
       requireAdmin: cradle.requireAdmin,
     });
     await registerDictionaryRoutes(app, {

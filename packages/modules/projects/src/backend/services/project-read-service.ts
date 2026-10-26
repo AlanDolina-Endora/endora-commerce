@@ -324,6 +324,12 @@ export class ProjectReadService {
     return this.#detail(await this.deps.access.loadVisible(id), language);
   }
 
+  /** The summary of one Project `ProjectAccess` let through — the record panel's answer (User Story 6). */
+  async summary(row: VisibleProjectRow): Promise<ProjectSummary> {
+    const [summary] = await this.#summaries([row]);
+    return summary!;
+  }
+
   /** The Project a write that began with `loadVisible` has just changed. */
   async afterWrite(id: string, language: string): Promise<ProjectDetail> {
     return this.#detail(await this.deps.access.rowAfterWrite(id), language);

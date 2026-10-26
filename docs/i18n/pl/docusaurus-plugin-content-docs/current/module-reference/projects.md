@@ -33,8 +33,11 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | `admin_roles` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `admin_users` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `auth` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `orders` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `organizations` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `settings` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `crm` | nie | degrades-without `opportunityReadPort` — szanse sprzedażowe podpięte do projektów są pokazywane jako niedostępne i nie można ich podpinać; ich panele znikają. Powiązania zostają i wracają, gdy CRM znów działa. |
+| `quote_requests` | nie | degrades-without `quoteRequestReadPort` — zapytania ofertowe podpięte do projektów są pokazywane jako niedostępne i nie można ich podpinać; ich panele znikają. Powiązania zostają i wracają, gdy zapytania ofertowe znów działają. |
 | `tasks` | nie | contributes-to `taskContextRegistry` |
 | `tasks` | nie | degrades-without `taskReadPort` — projekty działają bez zadań: bez zakładki Zadania, bez zadań etapów i bez blokad zakończenia. |
 | `tasks` | nie | degrades-without `taskWritePort` — projekty działają bez zadań: bez zakładki Zadania, bez zadań etapów i bez blokad zakończenia. |

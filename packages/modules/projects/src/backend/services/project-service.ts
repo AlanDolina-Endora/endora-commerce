@@ -56,10 +56,12 @@ import { templateNotFound, type TemplateGraph, type TemplateService } from './te
  * Stage Tasks as a move does (`stage-task-service.ts`): created after the
  * commit while Tasks is on, marked skipped while it is off.
  *
- * What this file does not do yet, each named by the story that brings it:
- * Custom Field values (User Story 9), refusing to remove an Organization a
- * linked record belongs to (User Story 6). The first is refused with 422
- * rather than silently dropped.
+ * Removing an Organization a linked record belongs to is refused (409
+ * `PROJECT_ORGANIZATION_IN_USE`, User Story 6): the link keeps its record's
+ * Organization, under a foreign key into the Project's Organizations.
+ *
+ * What this file does not do yet: Custom Field values (User Story 9) — refused
+ * with 422 rather than silently dropped.
  */
 
 export interface ProjectServiceDeps {
@@ -414,6 +416,7 @@ export class ProjectService {
     const added = organizationIds.filter((orgId) => !current.includes(orgId));
     const removed = current.filter((orgId) => !organizationIds.includes(orgId));
     await this.#assertOrganizations(added);
+    if (await hasLinksOf(this.deps.emFactory(), visible.id, removed)) throw organizationInUse();
 
     for (const organizationId of added) {
       await this.deps.commandBus.run({
@@ -439,6 +442,9 @@ export class ProjectService {
         objectId: visible.id,
         run: async ({ em }) => {
           await lockProject(em, visible.id);
+          // Again under the lock — a link may have been made since; the
+          // foreign key from `project_links` is the schema's own answer.
+          if (await hasLinksOf(em as EntityManager, visible.id, [organizationId])) throw organizationInUse();
           const deleted = await em.nativeDelete(ProjectOrganization, { projectId: visible.id, organizationId });
           if (deleted === 0) return { result: null, skipAudit: true };
           return { result: null, before: { organizationId }, after: null };
@@ -573,6 +579,24 @@ export class ProjectService {
   async #assertRolesExist(roleIds: readonly string[]): Promise<void> {
     await assertRolesExist(this.deps.emFactory(), roleIds);
   }
+}
+
+function organizationInUse(): HttpError {
+  return new HttpError(
+    409,
+    ERROR_CODES.PROJECT_ORGANIZATION_IN_USE,
+    'A record of this organization is linked to the project. Unlink it before removing the organization.',
+  );
+}
+
+/** Whether a record of any of `organizationIds` is linked to the Project (spec edge case, FR-021). */
+async function hasLinksOf(em: EntityManager, projectId: string, organizationIds: readonly string[]): Promise<boolean> {
+  if (organizationIds.length === 0) return false;
+  const rows = (await em.execute(
+    `select 1 as "one" from "project_links" l where l."project_id" = ? and l."organization_id" = any(?::uuid[]) limit 1`,
+    [projectId, `{${organizationIds.join(',')}}`],
+  )) as unknown[];
+  return rows.length > 0;
 }
 
 /** Every id names a Project Role (archived ones included — a Stage may keep one). */

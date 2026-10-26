@@ -741,6 +741,14 @@ export const ERROR_CODES = {
   PROJECT_DICTIONARY_ENTRY_IN_USE: 'PROJECT_DICTIONARY_ENTRY_IN_USE',
   /** Another Project Role (or loss reason) already has this default name, whatever its case. */
   PROJECT_DICTIONARY_NAME_TAKEN: 'PROJECT_DICTIONARY_NAME_TAKEN',
+  /** A record of the Organization being removed is linked to the Project; unlink it first. */
+  PROJECT_ORGANIZATION_IN_USE: 'PROJECT_ORGANIZATION_IN_USE',
+  /** The record to link does not exist, or is out of the caller's reach — indistinguishable. */
+  PROJECT_RECORD_NOT_FOUND: 'PROJECT_RECORD_NOT_FOUND',
+  /** The record already belongs to a Project; `details.project` names it only to a caller who may see it. */
+  PROJECT_RECORD_ALREADY_LINKED: 'PROJECT_RECORD_ALREADY_LINKED',
+  /** The record belongs to an Organization the Project does not have. */
+  PROJECT_LINK_ORGANIZATION_MISMATCH: 'PROJECT_LINK_ORGANIZATION_MISMATCH',
 
   // SEO — search engine robots (`specs/144-seo-search-engine-robots/`, FR-006).
   // Declared by the `seo` module's manifest.

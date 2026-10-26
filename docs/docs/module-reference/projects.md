@@ -33,8 +33,11 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | `admin_roles` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `admin_users` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `auth` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `orders` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `organizations` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `settings` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `crm` | no | degrades-without `opportunityReadPort` — Opportunities linked to Projects show as unavailable and cannot be linked; their panels are gone. The links are kept and return when CRM is back. |
+| `quote_requests` | no | degrades-without `quoteRequestReadPort` — Quote Requests linked to Projects show as unavailable and cannot be linked; their panels are gone. The links are kept and return when Quote Requests is back. |
 | `tasks` | no | contributes-to `taskContextRegistry` |
 | `tasks` | no | degrades-without `taskReadPort` — Projects work without Tasks: no Tasks tab, no Stage Tasks, no completion gates. |
 | `tasks` | no | degrades-without `taskWritePort` — Projects work without Tasks: no Tasks tab, no Stage Tasks, no completion gates. |

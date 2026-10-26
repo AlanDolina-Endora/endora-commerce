@@ -191,8 +191,11 @@ Deleting a Stage: refused if current (409 `PROJECT_STAGE_CURRENT`), if Tasks exi
 Index (project_id, at).
 
 **`project_links`** (R-10): id, project_id (cascade), record_kind check in
-(`order`,`quote_request`,`opportunity`), record_id uuid, linked_by_admin_user_id, linked_at;
-**unique (record_kind, record_id)**.
+(`order`,`quote_request`,`opportunity`), record_id uuid, organization_id uuid (the record's
+Organization, read from its owner when the link is made; foreign key (project_id,
+organization_id) → `project_organizations`, `no action` — added by T092's migration
+`projects_link_organization`, so an Organization a record is linked under cannot leave the
+Project), linked_by_admin_user_id, linked_at; **unique (record_kind, record_id)**.
 
 **`project_comments`**: id, project_id (cascade), kind (`note`|`message`), body (≤ 20 000,
 tokens), author_admin_user_id, edited_at, deleted_at (notes only), created_at.

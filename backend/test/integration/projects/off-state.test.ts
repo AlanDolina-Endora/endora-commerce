@@ -109,6 +109,13 @@ describe('projects off-state (Constitution XVII)', () => {
         { url: `${API}/lookups/organizations`, cookies: admin },
         { url: `${API}/lookups/admin-users`, cookies: admin },
         { url: `${API}/visibility-setting`, cookies: admin },
+        // User Story 6's routes — linked records and the record panel. The
+        // write probes name a Project that does not exist.
+        { url: `${API}/${ID}/links`, cookies: admin },
+        write('POST', `${API}/${ID}/links`, { kind: 'order', recordId: STAGE }),
+        write('DELETE', `${API}/${ID}/links/${STAGE}`, undefined),
+        { url: `${API}/records/order/${ID}/project`, cookies: admin },
+        { url: `${API}/records/task/${ID}/project`, cookies: admin },
       ],
       adminPresence: { cookies: admin },
       settingWrite: { code: 'projects.visibility', value: 'everyone', cookies: admin },

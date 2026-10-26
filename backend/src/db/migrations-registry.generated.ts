@@ -309,6 +309,7 @@ import { Migration20261025T145041ProductFeedsGoogleTemplatePackFields } from '@e
 
 // ── projects ────────────────────────────────────────────────────────────────
 import { Migration20261026T144350ProjectsInit } from '@endora-commerce/mod-projects/migrations';
+import { Migration20261026T231555ProjectsLinkOrganization } from '@endora-commerce/mod-projects/migrations';
 
 // ── promotions ──────────────────────────────────────────────────────────────
 import { Migration20260505T074605PromotionsCriteria } from '@endora-commerce/mod-promotions/migrations';
@@ -666,6 +667,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
 
   // ── projects ────────────────────────────────────────────────────────────────
   migration('projects', Migration20261026T144350ProjectsInit),
+  migration('projects', Migration20261026T231555ProjectsLinkOrganization),
 
   // ── promotions ──────────────────────────────────────────────────────────────
   migration('promotions', Migration20260505T074605PromotionsCriteria),
