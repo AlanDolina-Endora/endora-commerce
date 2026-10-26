@@ -689,6 +689,16 @@ export const ERROR_CODES = {
   /** A message on an Opportunity cannot be edited or deleted once sent. */
   CRM_MESSAGE_IMMUTABLE: 'CRM_MESSAGE_IMMUTABLE',
 
+  // Tasks (`specs/163-projects-and-tasks/`, `contracts/admin-api.md` §1) — the
+  // spellings of `TASKS_ERROR_CODES`. Each is declared by the `tasks` module's
+  // manifest and joins this block in the change that adds its first raise site.
+  /** No such Task, or one whose context the caller may not see — indistinguishable. */
+  TASK_NOT_FOUND: 'TASK_NOT_FOUND',
+  /** The context's type is not registered by a present module, or the caller may not see the id. */
+  TASK_CONTEXT_INVALID: 'TASK_CONTEXT_INVALID',
+  /** The assignee is not an active administrator. */
+  TASK_ASSIGNEE_INVALID: 'TASK_ASSIGNEE_INVALID',
+
   // SEO — search engine robots (`specs/144-seo-search-engine-robots/`, FR-006).
   // Declared by the `seo` module's manifest.
   /**

@@ -1,0 +1,6 @@
+{
+  "adminRoles.permission.tasks:read": "View tasks",
+  "errors.TASK_NOT_FOUND": "This task does not exist or is not available to you.",
+  "errors.TASK_CONTEXT_INVALID": "This task cannot belong there: the record does not exist, is not available to you, or its module is switched off.",
+  "errors.TASK_ASSIGNEE_INVALID": "This person cannot be assigned: they are not an active administrator."
+}

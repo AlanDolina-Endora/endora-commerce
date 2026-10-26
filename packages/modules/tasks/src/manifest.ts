@@ -39,11 +39,32 @@ export const manifest = defineModuleManifest({
     'Tasks assigned to admin users, with a due date and a status, which any module can own through an opaque context.',
   version: '1.0.0',
   // `auth` owns `requireAdmin`, which gates every route of this module;
-  // `settings` owns the store the activation control lives in.
-  dependencies: ['auth', 'settings'],
+  // `settings` owns the store the activation control lives in;
+  // `admin_users` owns `adminUserReadPort`, through which an assignee and a
+  // creator are named. All three are non-deactivatable.
+  dependencies: ['admin_users', 'auth', 'settings'],
   settings,
   // Constitution XVII — the operator's activation control.
   activation: { settingCode: 'tasks.enabled', default: true },
+  /**
+   * Reading Tasks. `tasks:write` arrives with the first write route (User
+   * Story 2): a code is declared by the change that adds its first
+   * `requireAdmin`, so no code is grantable before it gates anything.
+   */
+  permissions: [
+    {
+      code: 'tasks:read',
+      label: 'View tasks',
+      module: 'tasks',
+    },
+  ],
+  /**
+   * The refusals this module raises, each with its sentence under
+   * `errors.<CODE>` in `i18n/{en,pl}.json`, declared by the change that added
+   * its first raise site.
+   */
+  errorCodes: [{ code: 'TASK_NOT_FOUND' }, { code: 'TASK_CONTEXT_INVALID' }, { code: 'TASK_ASSIGNEE_INVALID' }],
+  i18n: { bundlesDir: 'i18n' },
   // Nothing to document yet: the page lands with the first operator-visible
   // surface (Phase 2).
   docs: false,

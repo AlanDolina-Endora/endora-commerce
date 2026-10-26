@@ -309,7 +309,7 @@ export interface TaskDeletedEvent extends TasksEventEnvelope {
 // ---------------------------------------------------------------------------
 // Published ports and the context registry (`contracts/ports-and-events.md` §1)
 //
-// The `Container name:` marker of each is added in the change that registers
+// The `Container name:` marker of each was added in the change that registered
 // it (`check:port-shape` refuses a marked port nothing registers — CRM
 // `research.md` N-5).
 // ---------------------------------------------------------------------------
@@ -338,6 +338,8 @@ export interface TaskContextQuery {
 }
 
 /**
+ * Container name: `taskReadPort`. Owner: `tasks`.
+ *
  * Reading Tasks from another module.
  *
  * Context visibility (R-9) is applied for an administrator's call; a call the
@@ -364,6 +366,8 @@ export interface NewContextTask {
 }
 
 /**
+ * Container name: `taskWritePort`. Owner: `tasks`.
+ *
  * Creating and deleting Tasks from another module.
  *
  * `createMany` runs one `tasks.task.create` Command per Task under the ambient
@@ -405,6 +409,8 @@ export interface TaskContextDescriptor {
 }
 
 /**
+ * Container name: `taskContextRegistry`. Owner: `tasks`.
+ *
  * The registry a module pushes its {@link TaskContextDescriptor} into.
  *
  * A **contribution seam**: registered ungated (a plain `ctx.di.register`),

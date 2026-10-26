@@ -6457,6 +6457,24 @@
         }
       }
     },
+    "/api/v1/admin/tasks": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/tasks/{id}": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/taxes": {
       "get": {
         "responses": {

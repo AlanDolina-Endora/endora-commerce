@@ -393,6 +393,26 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'did not exist when the prefix chain was deleted: the refusal to edit or delete an ' +
       'internal message on an Opportunity, which is immutable once sent, whoever asks.',
   },
+  TASK_NOT_FOUND: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module (`specs/163-projects-and-tasks/`, Phase 2A), which did not ' +
+      'exist when the prefix chain was deleted: a Task that does not exist, or one whose context ' +
+      'the caller may not see — the two answer identically (FR-031).',
+  },
+  TASK_CONTEXT_INVALID: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module (`specs/163-projects-and-tasks/`, Phase 2A): a Task created ' +
+      'into a context whose type no present module has registered, or whose id the caller may ' +
+      'not see.',
+  },
+  TASK_ASSIGNEE_INVALID: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module (`specs/163-projects-and-tasks/`, Phase 2A): a Task assigned ' +
+      'to somebody who is not an active administrator.',
+  },
   SEO_CRAWLER_TEXT_TOO_LARGE: {
     to: 'seo',
     reason:

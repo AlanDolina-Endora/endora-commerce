@@ -362,6 +362,9 @@ import { Migration20260819T171006ShipmentsStatusPendingManual } from '@endora-co
 import { Migration20260426T135443ShoppingListsInit } from '@endora-commerce/mod-shopping-lists/migrations';
 import { Migration20260611T140418ShoppingListsDefault } from '@endora-commerce/mod-shopping-lists/migrations';
 
+// ── tasks ───────────────────────────────────────────────────────────────────
+import { Migration20261026T133731TasksInit } from '@endora-commerce/mod-tasks/migrations';
+
 // ── taxes ───────────────────────────────────────────────────────────────────
 import { Migration20260426T081516TaxesPromotionsInit } from '@endora-commerce/mod-taxes/migrations';
 import { Migration20260912T094654TaxesSalesChannelTaxes } from '@endora-commerce/mod-taxes/migrations';
@@ -712,6 +715,9 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   // ── shopping_lists ──────────────────────────────────────────────────────────
   migration('shopping_lists', Migration20260426T135443ShoppingListsInit),
   migration('shopping_lists', Migration20260611T140418ShoppingListsDefault),
+
+  // ── tasks ───────────────────────────────────────────────────────────────────
+  migration('tasks', Migration20261026T133731TasksInit),
 
   // ── taxes ───────────────────────────────────────────────────────────────────
   migration('taxes', Migration20260426T081516TaxesPromotionsInit),
