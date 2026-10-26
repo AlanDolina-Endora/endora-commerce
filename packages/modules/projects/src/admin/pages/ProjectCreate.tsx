@@ -1,0 +1,514 @@
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
+import type { CreateProjectBody, ProjectRole } from '@endora-commerce/contracts';
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+  Checkbox,
+  ColorPicker,
+  Input,
+  Label,
+  PageHeader,
+  Textarea,
+} from '@endora-commerce/admin-kit/ui';
+import { AdminUserPicker, OrganizationPickerMulti, StickyFormActions } from '@endora-commerce/admin-kit/components';
+import { useTranslation } from '@endora-commerce/admin-kit/i18n';
+import { projectsApi } from '../api.js';
+import { errorMessage, normaliseAmount, parseDuration } from '../lib/labels.js';
+import { stageColorAt } from '../lib/stage-colors.js';
+
+const LIST_PATH = '/projects';
+
+interface StageRow {
+  key: number;
+  name: string;
+  color: string;
+  duration: string;
+}
+
+interface MemberRow {
+  key: number;
+  adminUserId: string | null;
+  roleIds: string[];
+}
+
+type FieldErrors = Partial<Record<'title' | 'stageName' | 'stageDuration' | 'value' | 'currency' | 'member', string>>;
+
+/**
+ * Creating a Project by hand (`specs/163-projects-and-tasks/`, User Story 1;
+ * `contracts/admin-surfaces.md` §2, `/projects/new`).
+ *
+ * A title and at least one Stage are required. The Stages are written here in
+ * order — name, colour, planned duration — because without a Template, which
+ * arrives with User Story 3, `POST /projects` takes them in its body; the
+ * Project starts in the first and the default workflow moves each to the next.
+ * Everything else a Stage has is set on the Project's *Stages* tab.
+ *
+ * An empty Organization list is an **internal** Project, which only
+ * administrators who reach every Organization can see; the form says so where
+ * the Organizations are chosen. Members are chosen one row at a time, each with
+ * the Project Roles they hold — a Role grants no permission.
+ *
+ * Visibility, custom fields and a Template are not offered yet: each arrives
+ * with its own story.
+ */
+export function ProjectCreate(): ReactNode {
+  const t = useTranslation('projects');
+  const tCore = useTranslation('core');
+  const navigate = useNavigate();
+  const nextKey = useRef(1);
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [organizationIds, setOrganizationIds] = useState<string[]>([]);
+  const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState('');
+  const [startOn, setStartOn] = useState('');
+  const [stages, setStages] = useState<StageRow[]>(() => [{ key: 0, name: '', color: stageColorAt(0), duration: '0' }]);
+  const [members, setMembers] = useState<MemberRow[]>([]);
+  const [roles, setRoles] = useState<ProjectRole[]>([]);
+  const [rolesFailed, setRolesFailed] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // The Roles a Member may be given: the active ones, labelled in the reader's language.
+  useEffect(() => {
+    let alive = true;
+    projectsApi
+      .listRoles({ active: true })
+      .then((loaded) => {
+        if (alive) setRoles(loaded);
+      })
+      .catch(() => {
+        if (alive) setRolesFailed(true);
+      });
+    return (): void => {
+      alive = false;
+    };
+  }, []);
+
+  const key = (): number => nextKey.current++;
+
+  const updateStage = (index: number, patch: Partial<StageRow>): void =>
+    setStages((previous) => previous.map((row, at) => (at === index ? { ...row, ...patch } : row)));
+
+  const moveStage = (index: number, by: -1 | 1): void =>
+    setStages((previous) => {
+      const target = index + by;
+      if (target < 0 || target >= previous.length) return previous;
+      const next = [...previous];
+      [next[index], next[target]] = [next[target] as StageRow, next[index] as StageRow];
+      return next;
+    });
+
+  const updateMember = (index: number, patch: Partial<MemberRow>): void =>
+    setMembers((previous) => previous.map((row, at) => (at === index ? { ...row, ...patch } : row)));
+
+  const toggleRole = (index: number, roleId: string, on: boolean): void =>
+    setMembers((previous) =>
+      previous.map((row, at) =>
+        at === index
+          ? { ...row, roleIds: on ? [...row.roleIds, roleId] : row.roleIds.filter((id) => id !== roleId) }
+          : row,
+      ),
+    );
+
+  const submit = async (event: FormEvent): Promise<void> => {
+    event.preventDefault();
+    const trimmedTitle = title.trim();
+    const hasValue = amount.trim() !== '' || currency.trim() !== '';
+    const normalisedAmount = hasValue ? normaliseAmount(amount) : null;
+    const currencyCode = currency.trim().toUpperCase();
+    const durations = stages.map((row) => parseDuration(row.duration));
+
+    const next: FieldErrors = {};
+    if (trimmedTitle === '') next.title = t('create.error.title');
+    if (stages.some((row) => row.name.trim() === '')) next.stageName = t('create.error.stageName');
+    if (durations.some((days) => days === null)) next.stageDuration = t('create.error.stageDuration');
+    if (hasValue && normalisedAmount === null) next.value = t('create.error.value');
+    if (hasValue && !/^[A-Z]{3}$/.test(currencyCode)) next.currency = t('create.error.currency');
+    if (members.some((row) => row.adminUserId === null)) next.member = t('create.error.member');
+    setErrors(next);
+    if (Object.keys(next).length > 0) {
+      if (next.title) titleRef.current?.focus();
+      return;
+    }
+
+    const body: CreateProjectBody = {
+      title: trimmedTitle,
+      organizationIds,
+      stages: stages.map((row, index) => ({
+        name: row.name.trim(),
+        color: row.color,
+        plannedDurationDays: durations[index] ?? 0,
+      })),
+      ...(description.trim() ? { description } : {}),
+      ...(normalisedAmount ? { value: { amount: normalisedAmount, currency: currencyCode } } : {}),
+      ...(startOn ? { startOn } : {}),
+      ...(members.length > 0
+        ? { members: members.map((row) => ({ adminUserId: row.adminUserId as string, roleIds: row.roleIds })) }
+        : {}),
+    };
+
+    setBusy(true);
+    setSubmitError(null);
+    try {
+      const created = await projectsApi.createProject(body);
+      void navigate(`/projects/${created.id}`);
+    } catch (failure) {
+      setSubmitError(errorMessage(failure, t('create.error.generic')));
+      setBusy(false);
+    }
+  };
+
+  const required = (
+    <span aria-hidden="true" className="text-destructive">
+      {' *'}
+    </span>
+  );
+
+  const fieldError = (id: string, message: string | undefined): ReactNode =>
+    message ? (
+      <p id={id} className="text-xs text-destructive">
+        {message}
+      </p>
+    ) : null;
+
+  return (
+    <>
+      <PageHeader
+        title={t('create.title')}
+        description={t('create.description')}
+        back={{ label: t('create.back'), to: LIST_PATH }}
+      />
+
+      <form noValidate onSubmit={(event): void => void submit(event)} className="space-y-4">
+        {submitError ? (
+          <Alert variant="destructive">
+            <AlertDescription>{submitError}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <Card>
+          <CardContent className="space-y-5 pt-6">
+            <p className="text-xs text-muted-foreground">{t('create.requiredHint')}</p>
+
+            <div className="space-y-1">
+              <Label htmlFor="project-create-title">
+                {t('field.title')}
+                {required}
+              </Label>
+              <Input
+                id="project-create-title"
+                ref={titleRef}
+                value={title}
+                maxLength={200}
+                required
+                aria-invalid={errors.title !== undefined}
+                aria-describedby={errors.title ? 'project-create-title-error' : undefined}
+                onChange={(event): void => setTitle(event.target.value)}
+              />
+              {fieldError('project-create-title-error', errors.title)}
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="project-create-organizations">{t('field.organizations')}</Label>
+              <OrganizationPickerMulti
+                id="project-create-organizations"
+                ariaLabel={t('field.organizations')}
+                value={organizationIds}
+                onChange={setOrganizationIds}
+                maxSelection={50}
+                placeholder={t('field.organizationsPlaceholder')}
+              />
+              {organizationIds.length === 0 ? (
+                <p className="text-xs text-muted-foreground">{t('create.internalNote')}</p>
+              ) : null}
+            </div>
+
+            <div className="grid gap-x-4 gap-y-5 md:grid-cols-3">
+              <div className="space-y-1">
+                <Label htmlFor="project-create-amount">{t('field.valueAmount')}</Label>
+                <Input
+                  id="project-create-amount"
+                  inputMode="decimal"
+                  value={amount}
+                  aria-invalid={errors.value !== undefined}
+                  aria-describedby="project-create-value-hint"
+                  onChange={(event): void => setAmount(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="project-create-currency">{t('field.valueCurrency')}</Label>
+                <Input
+                  id="project-create-currency"
+                  value={currency}
+                  maxLength={3}
+                  autoCapitalize="characters"
+                  className="uppercase"
+                  aria-invalid={errors.currency !== undefined}
+                  aria-describedby="project-create-value-hint"
+                  onChange={(event): void => setCurrency(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="project-create-start">{t('field.startOn')}</Label>
+                <Input
+                  id="project-create-start"
+                  type="date"
+                  value={startOn}
+                  aria-describedby="project-create-start-hint"
+                  onChange={(event): void => setStartOn(event.target.value)}
+                />
+                <p id="project-create-start-hint" className="text-xs text-muted-foreground">
+                  {t('field.startOnHint')}
+                </p>
+              </div>
+              <div id="project-create-value-hint" className="space-y-1 md:col-span-2">
+                {errors.value || errors.currency ? (
+                  <>
+                    {fieldError('project-create-value-error', errors.value)}
+                    {fieldError('project-create-currency-error', errors.currency)}
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{t('field.valueHint')}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="project-create-description">{t('field.description')}</Label>
+              <Textarea
+                id="project-create-description"
+                rows={4}
+                value={description}
+                maxLength={20000}
+                onChange={(event): void => setDescription(event.target.value)}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <fieldset className="space-y-3" aria-describedby="project-create-stages-hint">
+              <legend className="text-base font-semibold">
+                {t('create.stages.section')}
+                {required}
+              </legend>
+              <p id="project-create-stages-hint" className="text-sm text-muted-foreground">
+                {t('create.stages.hint')}
+              </p>
+              <ol className="space-y-3">
+                {stages.map((row, index) => {
+                  const position = index + 1;
+                  const nameInvalid = errors.stageName !== undefined && row.name.trim() === '';
+                  const durationInvalid = errors.stageDuration !== undefined && parseDuration(row.duration) === null;
+                  return (
+                    <li key={row.key} className="flex flex-wrap items-end gap-3 rounded-md border p-3">
+                      <span aria-hidden="true" className="min-h-9 pt-2 text-sm font-medium tabular-nums text-muted-foreground">
+                        {position}.
+                      </span>
+                      <div className="min-w-48 flex-1 space-y-1">
+                        <Label htmlFor={`project-create-stage-${row.key}-name`} className="text-xs text-muted-foreground">
+                          <span aria-hidden="true">{t('stage.nameShort')}</span>
+                        </Label>
+                        <Input
+                          id={`project-create-stage-${row.key}-name`}
+                          aria-label={t('stage.name', { position })}
+                          value={row.name}
+                          maxLength={80}
+                          aria-invalid={nameInvalid}
+                          onChange={(event): void => updateStage(index, { name: event.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <span aria-hidden="true" className="block text-xs text-muted-foreground">
+                          {t('stage.colorShort')}
+                        </span>
+                        <ColorPicker
+                          value={row.color}
+                          onChange={(color): void => updateStage(index, { color })}
+                          label={t('stage.color', { position })}
+                          customLabel={t('stage.colorCustom', { position })}
+                        />
+                      </div>
+                      <div className="w-24 space-y-1">
+                        <Label htmlFor={`project-create-stage-${row.key}-days`} className="text-xs text-muted-foreground">
+                          <span aria-hidden="true">{t('stage.durationShort')}</span>
+                        </Label>
+                        <Input
+                          id={`project-create-stage-${row.key}-days`}
+                          aria-label={t('stage.duration', { position })}
+                          inputMode="numeric"
+                          value={row.duration}
+                          aria-invalid={durationInvalid}
+                          onChange={(event): void => updateStage(index, { duration: event.target.value })}
+                        />
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
+                          aria-label={t('stage.moveUp', { position })}
+                          disabled={index === 0}
+                          onClick={(): void => moveStage(index, -1)}
+                        >
+                          <ArrowUp aria-hidden="true" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
+                          aria-label={t('stage.moveDown', { position })}
+                          disabled={index === stages.length - 1}
+                          onClick={(): void => moveStage(index, 1)}
+                        >
+                          <ArrowDown aria-hidden="true" />
+                        </Button>
+                        {stages.length > 1 ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="min-h-11 min-w-11 text-destructive hover:text-destructive sm:min-h-9 sm:min-w-9"
+                            aria-label={t('stage.remove', { position })}
+                            onClick={(): void => setStages((previous) => previous.filter((_, at) => at !== index))}
+                          >
+                            <Trash2 aria-hidden="true" />
+                          </Button>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+              {fieldError('project-create-stage-name-error', errors.stageName)}
+              {fieldError('project-create-stage-duration-error', errors.stageDuration)}
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 sm:min-h-9"
+                disabled={stages.length >= 50}
+                onClick={(): void =>
+                  setStages((previous) => [
+                    ...previous,
+                    { key: key(), name: '', color: stageColorAt(previous.length), duration: '0' },
+                  ])
+                }
+              >
+                <Plus aria-hidden="true" />
+                {t('create.stages.add')}
+              </Button>
+            </fieldset>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <fieldset className="space-y-3" aria-describedby="project-create-members-hint">
+              <legend className="text-base font-semibold">{t('create.members.section')}</legend>
+              <p id="project-create-members-hint" className="text-sm text-muted-foreground">
+                {t('create.members.hint')}
+              </p>
+              {rolesFailed ? (
+                <p role="alert" className="text-xs text-destructive">
+                  {t('create.members.rolesError')}
+                </p>
+              ) : null}
+              <ul className="space-y-3">
+                {members.map((row, index) => {
+                  const position = index + 1;
+                  const personId = `project-create-member-${row.key}`;
+                  return (
+                    <li key={row.key} className="space-y-2 rounded-md border p-3">
+                      <div className="flex flex-wrap items-end gap-3">
+                        <div className="min-w-56 flex-1 space-y-1">
+                          <Label htmlFor={personId}>{t('create.members.person', { position })}</Label>
+                          <AdminUserPicker
+                            id={personId}
+                            ariaLabel={t('create.members.person', { position })}
+                            value={row.adminUserId}
+                            onChange={(adminUserId): void => updateMember(index, { adminUserId })}
+                            placeholder={t('field.personPlaceholder')}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="min-h-11 min-w-11 text-destructive hover:text-destructive sm:min-h-9 sm:min-w-9"
+                          aria-label={t('create.members.remove', { position })}
+                          onClick={(): void => setMembers((previous) => previous.filter((_, at) => at !== index))}
+                        >
+                          <Trash2 aria-hidden="true" />
+                        </Button>
+                      </div>
+                      {roles.length > 0 ? (
+                        <fieldset>
+                          <legend className="sr-only">{t('create.members.roles', { position })}</legend>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1">
+                            {roles.map((role) => {
+                              const id = `${personId}-role-${role.id}`;
+                              return (
+                                <label key={role.id} htmlFor={id} className="flex min-h-11 items-center gap-2 text-sm sm:min-h-9">
+                                  <Checkbox
+                                    id={id}
+                                    checked={row.roleIds.includes(role.id)}
+                                    onChange={(event): void => toggleRole(index, role.id, event.target.checked)}
+                                  />
+                                  {role.label}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </fieldset>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+              {fieldError('project-create-member-error', errors.member)}
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 sm:min-h-9"
+                onClick={(): void => setMembers((previous) => [...previous, { key: key(), adminUserId: null, roleIds: [] }])}
+              >
+                <Plus aria-hidden="true" />
+                {t('create.members.add')}
+              </Button>
+            </fieldset>
+          </CardContent>
+        </Card>
+
+        <StickyFormActions className="flex justify-end gap-2">
+          <Button
+            className="min-h-11 sm:min-h-9"
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={(): void => void navigate(LIST_PATH)}
+          >
+            {tCore('common.action.cancel')}
+          </Button>
+          <Button className="min-h-11 sm:min-h-9" type="submit" disabled={busy} aria-busy={busy}>
+            {busy ? t('create.submitting') : t('create.submit')}
+          </Button>
+        </StickyFormActions>
+      </form>
+    </>
+  );
+}
+
+/** The default export the route declaration's dynamic-import factory resolves. */
+export default ProjectCreate;
