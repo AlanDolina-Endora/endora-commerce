@@ -12,7 +12,10 @@ import type {
   ProjectStageEntry,
   ProjectStageMove,
   ProjectState,
+  ProjectTasksResponse,
   SetProjectMovesResult,
+  StageTaskDefinition,
+  TaskSummary,
   UpdateProjectStageBody,
 } from '@endora-commerce/contracts';
 
@@ -31,6 +34,13 @@ import type {
  */
 
 const BASE = '/api/v1/admin/projects';
+
+/**
+ * The Tasks module's own create route. A Project's Task is created there, not
+ * through a Projects route: it names the Project and one of its Stages as its
+ * context, and the Tasks module asks this one whether the caller may see them.
+ */
+const TASKS_BASE = '/api/v1/admin/tasks';
 
 export type ProjectSort = 'createdAt' | 'value' | 'deadline';
 
@@ -79,6 +89,11 @@ export const projectsApi = {
     return data(apiClient.post<{ data: ProjectDetail }>(BASE, body));
   },
 
+  /** 409 `PROJECT_HAS_LINKS` while records are linked; the Project's Tasks go with it. */
+  deleteProject(id: string): Promise<void> {
+    return apiClient.delete<void>(`${BASE}/${id}`);
+  },
+
   // --- §2.2 Stages and moves -----------------------------------------------
 
   createStage(projectId: string, body: CreateProjectStageBody): Promise<ProjectStage> {
@@ -113,6 +128,26 @@ export const projectsApi = {
 
   reopen(projectId: string, version: number): Promise<ProjectDetail> {
     return data(apiClient.post<{ data: ProjectDetail }>(`${BASE}/${projectId}/reopen`, { version }));
+  },
+
+  /** The Tasks a Stage creates on entry, the whole list replaced; answers the Stage. */
+  setStageTasks(projectId: string, stageId: string, tasks: readonly StageTaskDefinition[]): Promise<ProjectStage> {
+    return data(apiClient.put<{ data: ProjectStage }>(`${BASE}/${projectId}/stages/${stageId}/tasks`, { tasks }));
+  },
+
+  /** The Project's Tasks by Stage; `tasksAvailable: false` while Tasks is off or unreadable for the caller. */
+  projectTasks(projectId: string): Promise<ProjectTasksResponse> {
+    return data(apiClient.get<{ data: ProjectTasksResponse }>(`${BASE}/${projectId}/tasks`));
+  },
+
+  /** A new Task in one of the Project's Stages. */
+  addStageTask(projectId: string, stageId: string, title: string): Promise<TaskSummary> {
+    return data(
+      apiClient.post<{ data: TaskSummary }>(TASKS_BASE, {
+        title,
+        context: { contextType: 'project', contextId: projectId, contextGroupId: stageId },
+      }),
+    );
   },
 
   stageHistory(projectId: string): Promise<ProjectStageEntry[]> {

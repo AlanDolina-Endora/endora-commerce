@@ -1,6 +1,7 @@
 import { useId, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { ArrowRight, CircleCheck, CircleX, RotateCcw } from 'lucide-react';
-import type { ProjectDetail, ProjectStage } from '@endora-commerce/contracts';
+import type { ProjectDetail, ProjectStage, ProjectStageGateOpenTasksDetails } from '@endora-commerce/contracts';
 import { ApiError, cn } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Button } from '@endora-commerce/admin-kit/ui';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
@@ -8,6 +9,25 @@ import { projectsApi } from '../api.js';
 import { calendarDateLabel, errorMessage } from '../lib/labels.js';
 import { CloseProjectDialog } from './CloseProjectDialog.js';
 import { StageDot } from './StageDot.js';
+
+type OpenTask = ProjectStageGateOpenTasksDetails['openTasks'][number];
+
+/** The open Tasks a closed completion gate names in its refusal, or none for any other failure. */
+function openTasksOf(failure: unknown): OpenTask[] {
+  if (!(failure instanceof ApiError) || failure.envelope.error.code !== 'PROJECT_STAGE_GATE_OPEN_TASKS') return [];
+  const details = (failure.envelope.error as { details?: unknown }).details;
+  const listed = (details as { openTasks?: unknown } | undefined)?.openTasks;
+  return Array.isArray(listed)
+    ? listed.filter(
+        (task): task is OpenTask =>
+          typeof task === 'object' &&
+          task !== null &&
+          typeof (task as OpenTask).id === 'string' &&
+          typeof (task as OpenTask).number === 'string' &&
+          typeof (task as OpenTask).title === 'string',
+      )
+    : [];
+}
 
 export interface StageBarProps {
   project: ProjectDetail;
@@ -30,8 +50,9 @@ export interface StageBarProps {
  *
  * Every write names the `version` the screen read; a 409 is shown in the
  * server's own words — a guard's reason included — and the Project is read
- * again, so what is on screen is what is true. Without `canWrite` the bar is a
- * picture.
+ * again, so what is on screen is what is true. A closed completion gate's
+ * refusal (`PROJECT_STAGE_GATE_OPEN_TASKS`) also lists the open Tasks it
+ * names, each linked to its screen. Without `canWrite` the bar is a picture.
  */
 export function StageBar(props: StageBarProps): ReactNode {
   const { project, onChange, reload } = props;
@@ -40,6 +61,7 @@ export function StageBar(props: StageBarProps): ReactNode {
   const headingId = useId();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [openTasks, setOpenTasks] = useState<OpenTask[]>([]);
   const [notice, setNotice] = useState('');
   const [closingAsLost, setClosingAsLost] = useState(false);
 
@@ -56,6 +78,7 @@ export function StageBar(props: StageBarProps): ReactNode {
   const run = async (action: string, write: () => Promise<ProjectDetail>, done: (next: ProjectDetail) => string): Promise<void> => {
     setBusy(action);
     setError(null);
+    setOpenTasks([]);
     setNotice('');
     try {
       const next = await write();
@@ -63,6 +86,7 @@ export function StageBar(props: StageBarProps): ReactNode {
       setNotice(done(next));
     } catch (failure) {
       setError(errorMessage(failure, t('stageBar.error')));
+      setOpenTasks(openTasksOf(failure));
       if (failure instanceof ApiError && failure.status === 409) void reload();
     } finally {
       setBusy(null);
@@ -217,7 +241,23 @@ export function StageBar(props: StageBarProps): ReactNode {
 
       {error ? (
         <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="space-y-2">
+            <p>{error}</p>
+            {openTasks.length > 0 ? (
+              <>
+                <p>{t('stageBar.openTasks')}</p>
+                <ul className="list-disc space-y-0.5 pl-5">
+                  {openTasks.map((task) => (
+                    <li key={task.id} className="[overflow-wrap:anywhere]">
+                      <Link to={`/tasks/${task.id}`} className="underline underline-offset-4">
+                        {task.number} {task.title}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </AlertDescription>
         </Alert>
       ) : null}
       {/* Mounted before it has text, so the announcement is reliable (WCAG 4.1.3). */}

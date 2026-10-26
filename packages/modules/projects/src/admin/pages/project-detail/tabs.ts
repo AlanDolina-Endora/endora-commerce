@@ -1,5 +1,6 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 import type { ProjectDetail } from '@endora-commerce/contracts';
+import type { GatedSurface } from '@endora-commerce/admin-kit/lib';
 
 /**
  * The tabs of a Project's screen, as data
@@ -12,6 +13,11 @@ import type { ProjectDetail } from '@endora-commerce/contracts';
  *
  * **A tab's `id` is part of an address**: the screen selects a tab from
  * `?tab=<id>`, so an id that is renamed breaks every link somebody saved.
+ *
+ * **A tab another module's presence decides** names that module and the code
+ * its data needs in `surface`; the page offers it only while both hold
+ * (Principle XVII), and an address naming a tab that is not offered opens the
+ * default tab — exactly as an id nobody declares does.
  */
 
 /** What the page hands every tab. */
@@ -28,6 +34,8 @@ export interface ProjectTab {
   /** Relative to the module's namespace. */
   labelKey: string;
   component: LazyExoticComponent<ComponentType<ProjectTabProps>>;
+  /** Offered only while this module is present and the operator holds this code. */
+  surface?: GatedSurface;
 }
 
 /** The tab a visit opens on when its address names none. */
@@ -48,6 +56,13 @@ export const PROJECT_TABS: readonly ProjectTab[] = [
     component: lazy(() => import('./tabs/StagesTab.js')),
   },
   {
+    // User Story 2: the Project's Tasks by Stage — only while Tasks is on and readable.
+    id: 'tasks',
+    labelKey: 'tabs.tasks',
+    component: lazy(() => import('./tabs/TasksTab.js')),
+    surface: { module: 'tasks', requiredPermission: 'tasks:read' },
+  },
+  {
     // The Stage history of User Story 1; the audit trail is a later *History* tab.
     id: 'stage-history',
     labelKey: 'tabs.history',
@@ -55,10 +70,15 @@ export const PROJECT_TABS: readonly ProjectTab[] = [
   },
 ];
 
-/** The tab an address selects; an id nobody declares is the default tab. */
-export function tabFromSearch(search: URLSearchParams): string {
+/** The tabs offered to this operator now: every tab whose `surface`, if any, is visible. */
+export function offeredTabs(isVisible: (surface: GatedSurface) => boolean): readonly ProjectTab[] {
+  return PROJECT_TABS.filter((tab) => tab.surface === undefined || isVisible(tab.surface));
+}
+
+/** The tab an address selects; an id nobody declares, or one not offered, is the default tab. */
+export function tabFromSearch(search: URLSearchParams, offered: readonly ProjectTab[] = PROJECT_TABS): string {
   const asked = search.get(TAB_PARAM);
-  return asked && PROJECT_TABS.some((tab) => tab.id === asked) ? asked : DEFAULT_TAB_ID;
+  return asked && offered.some((tab) => tab.id === asked) ? asked : DEFAULT_TAB_ID;
 }
 
 /** The query string that selects `tabId`, keeping every other parameter; the default tab is the bare address. */

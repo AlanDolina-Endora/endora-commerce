@@ -1,14 +1,16 @@
 import { Suspense, useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Trash2 } from 'lucide-react';
 import type { ProjectDetail as ProjectDetailData } from '@endora-commerce/contracts';
-import { cn } from '@endora-commerce/admin-kit/lib';
+import { cn, useSurfaceVisibility } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Button, Card, CardContent, PageHeader } from '@endora-commerce/admin-kit/ui';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { projectsApi } from '../api.js';
+import { DeleteProjectDialog } from '../components/DeleteProjectDialog.js';
 import { StageBar } from '../components/StageBar.js';
 import { StateBadge } from '../components/StateBadge.js';
 import { errorMessage, valueLabel } from '../lib/labels.js';
-import { PROJECT_TABS, searchForTab, tabFromSearch } from './project-detail/tabs.js';
+import { offeredTabs, searchForTab, tabFromSearch } from './project-detail/tabs.js';
 
 const LIST_PATH = '/projects';
 
@@ -31,7 +33,13 @@ function MetaSeparator(): ReactNode {
  * `project-detail/tabs.ts`.
  *
  * **The selected tab is in the address** (`?tab=<id>`), so it survives a reload
- * and can be linked to; the default tab is the bare address.
+ * and can be linked to; the default tab is the bare address. A tab another
+ * module's presence decides — *Tasks* — is offered only while that module is
+ * present and readable; its address otherwise opens the default tab.
+ *
+ * **Deleting the Project** is offered to a writer, behind a confirmation; a
+ * refusal (409 `PROJECT_HAS_LINKS`) is shown in the dialog, in the server's
+ * words, and a deleted Project leaves its screen for the list.
  *
  * A Project the operator may not see answers exactly as one that does not
  * exist (404 `PROJECT_NOT_FOUND`), and the screen says what the server said.
@@ -44,10 +52,14 @@ export function ProjectDetail(): ReactNode {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+  const [deleting, setDeleting] = useState(false);
+  const navigate = useNavigate();
+  const isVisible = useSurfaceVisibility();
   const sequence = useRef(0);
   const tablistRef = useRef<HTMLDivElement>(null);
 
-  const activeTab = tabFromSearch(searchParams);
+  const tabs = offeredTabs(isVisible);
+  const activeTab = tabFromSearch(searchParams, tabs);
 
   const selectTab = useCallback(
     (tabId: string): void => {
@@ -111,13 +123,13 @@ export function ProjectDetail(): ReactNode {
     );
   }
 
-  const tab = PROJECT_TABS.find((candidate) => candidate.id === activeTab) ?? PROJECT_TABS[0];
+  const tab = tabs.find((candidate) => candidate.id === activeTab) ?? tabs[0];
   const TabComponent = tab?.component;
 
   /** Arrow keys walk the strip, as the tabs pattern has it; Tab leaves it for the panel. */
   const onTabKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    const index = PROJECT_TABS.findIndex((candidate) => candidate.id === tab?.id);
-    const last = PROJECT_TABS.length - 1;
+    const index = tabs.findIndex((candidate) => candidate.id === tab?.id);
+    const last = tabs.length - 1;
     const next =
       event.key === 'ArrowRight'
         ? index === last
@@ -132,7 +144,7 @@ export function ProjectDetail(): ReactNode {
             : event.key === 'End'
               ? last
               : -1;
-    const target = PROJECT_TABS[next];
+    const target = tabs[next];
     if (!target) return;
     event.preventDefault();
     selectTab(target.id);
@@ -163,7 +175,28 @@ export function ProjectDetail(): ReactNode {
           </>
         }
         back={back}
+        actions={
+          project.permissions.canWrite ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 text-destructive hover:text-destructive sm:min-h-9"
+              onClick={(): void => setDeleting(true)}
+            >
+              <Trash2 aria-hidden="true" />
+              {t('detail.delete')}
+            </Button>
+          ) : undefined
+        }
       />
+
+      {deleting ? (
+        <DeleteProjectDialog
+          project={project}
+          onClose={(): void => setDeleting(false)}
+          onDeleted={(): void => void navigate(LIST_PATH)}
+        />
+      ) : null}
 
       {/* A later read that failed leaves the last good one on screen. */}
       {error ? (
@@ -188,7 +221,7 @@ export function ProjectDetail(): ReactNode {
               aria-label={t('tabs.label')}
               onKeyDown={onTabKeyDown}
             >
-              {PROJECT_TABS.map((candidate) => {
+              {tabs.map((candidate) => {
                 const selected = candidate.id === tab?.id;
                 return (
                   <button

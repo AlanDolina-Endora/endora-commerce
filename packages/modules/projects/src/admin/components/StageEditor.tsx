@@ -5,8 +5,10 @@ import type {
   ProjectRole,
   ProjectStage,
   ProjectStageMove,
+  StageTaskDefinition,
   UpdateProjectStageBody,
 } from '@endora-commerce/contracts';
+import { useModulePresence } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Button, Checkbox, ColorPicker, Input, Label } from '@endora-commerce/admin-kit/ui';
 import {
   StatusTransitionGraph,
@@ -18,6 +20,10 @@ import { projectsApi } from '../api.js';
 import { calendarDateLabel, errorMessage, parseAlertOffsets, parseDuration } from '../lib/labels.js';
 import { stageColorAt } from '../lib/stage-colors.js';
 import { StageDot } from './StageDot.js';
+import { StageTasksEditor } from './StageTasksEditor.js';
+
+/** The module whose presence decides whether Stage Task definitions are shown (Principle XVII). */
+const TASKS_MODULE = 'tasks';
 
 export interface StageEditorProps {
   project: ProjectDetail;
@@ -87,13 +93,17 @@ function changesOf(stage: ProjectStage, draft: StageDraft): UpdateProjectStageBo
  * (`PUT /moves`) and the answer names the Stages no move reaches from the first,
  * which the editor warns about — a warning, not an error (FR-011).
  *
- * Stage Task definitions join this editor with User Story 2, and the Template
- * editor of User Story 3 is meant to share it.
+ * **Stage Task definitions** (User Story 2) are a section of each Stage, shown
+ * only while the Tasks module is present: off, they stay stored, untouched and
+ * unseen, and come back with it. Each Stage's list is saved whole
+ * (`PUT /stages/:stageId/tasks`). The Template editor of User Story 3 is meant
+ * to share this editor.
  */
 export function StageEditor(props: StageEditorProps): ReactNode {
   const { project, onChange, reload } = props;
   const t = useTranslation('projects');
   const canWrite = project.permissions.canWrite;
+  const tasksPresent = useModulePresence().isPresent(TASKS_MODULE);
   const [roles, setRoles] = useState<ProjectRole[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -143,6 +153,12 @@ export function StageEditor(props: StageEditorProps): ReactNode {
       await projectsApi.updateStage(project.id, stage.id, body);
       await reload();
     }, t('editor.saved'));
+
+  const saveStageTasks = (stage: ProjectStage, tasks: StageTaskDefinition[]): Promise<boolean> =>
+    run(async () => {
+      await projectsApi.setStageTasks(project.id, stage.id, tasks);
+      await reload();
+    }, t('stageTasks.saved'));
 
   const deleteStage = (stage: ProjectStage): Promise<boolean> =>
     run(async () => {
@@ -207,8 +223,10 @@ export function StageEditor(props: StageEditorProps): ReactNode {
               isLast={index === stages.length - 1}
               roles={roles}
               canWrite={canWrite}
+              tasksPresent={tasksPresent}
               busy={busy}
               onSave={(body): Promise<boolean> => saveStage(stage, body)}
+              onSaveTasks={(tasks): Promise<boolean> => saveStageTasks(stage, tasks)}
               onDelete={(): Promise<boolean> => deleteStage(stage)}
               onMove={(by): Promise<boolean> => moveStage(index, by)}
             />
@@ -285,8 +303,11 @@ interface StageRowProps {
   isLast: boolean;
   roles: readonly ProjectRole[];
   canWrite: boolean;
+  /** The Tasks module is present: the Stage's Task definitions are shown. */
+  tasksPresent: boolean;
   busy: boolean;
   onSave: (body: UpdateProjectStageBody) => Promise<boolean>;
+  onSaveTasks: (tasks: StageTaskDefinition[]) => Promise<boolean>;
   onDelete: () => Promise<boolean>;
   onMove: (by: -1 | 1) => Promise<boolean>;
 }
@@ -339,6 +360,9 @@ function StageRow(props: StageRowProps): ReactNode {
         </p>
         {stage.completionPermitted ? <p className="text-muted-foreground">{t('editor.completionPermitted')}</p> : null}
         {deadline}
+        {props.tasksPresent ? (
+          <StageTasksEditor stage={stage} position={position} roles={roles} canWrite={false} busy={busy} onSave={props.onSaveTasks} />
+        ) : null}
       </div>
     );
   }
@@ -515,6 +539,10 @@ function StageRow(props: StageRowProps): ReactNode {
           {tCore('common.action.delete')}
         </Button>
       </div>
+
+      {props.tasksPresent ? (
+        <StageTasksEditor stage={stage} position={position} roles={roles} canWrite busy={busy} onSave={props.onSaveTasks} />
+      ) : null}
     </div>
   );
 }
