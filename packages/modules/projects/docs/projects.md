@@ -116,9 +116,6 @@ graph as a project's *Stages* tab; everything is saved together with *Save
 template*. *Duplicate* makes an independent copy and opens it; *Archive* takes
 the template out of the choices of *New project*, and *Restore* puts it back.
 
-Roles and loss reasons have no screen yet; they arrive with a later release of
-this module.
-
 ## Running a project
 
 **Creating a project.** A project is created with a title and its stages, in

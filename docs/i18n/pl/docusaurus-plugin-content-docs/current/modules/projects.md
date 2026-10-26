@@ -120,9 +120,6 @@ zapisuje się razem przyciskiem *Zapisz szablon*. *Duplikuj* tworzy niezależną
 kopię i ją otwiera; *Archiwizuj* usuwa szablon z wyboru w *Nowym projekcie*, a
 *Przywróć* go przywraca.
 
-Role i powody utraty nie mają jeszcze ekranów; pojawią się w kolejnym wydaniu
-tego modułu.
-
 ## Prowadzenie projektu
 
 **Tworzenie projektu.** Projekt tworzy się z tytułem i etapami, w kolejności;
