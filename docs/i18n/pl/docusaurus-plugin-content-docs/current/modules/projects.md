@@ -59,9 +59,13 @@ nazwą, kolorem i planowanym czasem trwania w dniach, co najmniej jeden. W obu
 przypadkach wymaga tytułu, a opcjonalnie organizacji, wartości z walutą, daty
 rozpoczęcia, opisu oraz członków, każdego z rolami, które pełni; wszystko, co
 wypełnił szablon, można nadal zmienić. Bez organizacji projekt jest wewnętrzny,
-a formularz mówi, kto go zobaczy. Projekt stosuje ustawienie modułu *Kto widzi
-projekt*; wybór dla pojedynczego projektu i pola własne pojawią się w
-kolejnych wydaniach.
+a formularz mówi, kto go zobaczy. Na końcu formularz pyta, **kto widzi
+projekt** — zgodnie z ustawieniem modułu (domyślnie), wszyscy, którzy mogą
+przeglądać projekty, albo jego członkowie i dopisane osoby, które wybiera się
+wtedy w tym samym miejscu — i jednym zdaniem mówi, co ten wybór teraz oznacza
+(zob. *Kto widzi projekt*). Formularz proponuje organizacje, do których masz
+dostęp, i aktywnych administratorów: jego wypełnienie nie wymaga uprawnień
+innych niż tworzenie projektów. Pola własne pojawią się w kolejnym wydaniu.
 
 **Ekran projektu** pokazuje projekt, jego stan, wartość i organizacje. Pod
 nimi jest **pasek etapów**: wszystkie etapy w kolejności, z zaznaczonym
@@ -80,7 +84,11 @@ usuwany: ekran to mówi, a rekordy trzeba najpierw odłączyć.
 
 Jego zakładki:
 
-- **Przegląd** — opis, data rozpoczęcia i członkowie według ról.
+- **Przegląd** — opis, data rozpoczęcia, **kto widzi projekt** i członkowie
+  według ról. Administrator, który może tworzyć i prowadzić projekty, zmienia
+  tu, kto widzi projekt — te same trzy możliwości co w *Nowym projekcie* — i
+  zapisuje to przyciskiem *Zapisz widoczność*; pozostali widzą, jakie jest to
+  ustawienie i kto jest dopisany.
 - **Etapy** — nazwa, kolor, planowany czas trwania, role odpowiedzialne, dni
   alertów, blokada zakończenia i informacja, czy z danego etapu można zakończyć
   projekt, zapisywane osobno dla każdego etapu; tutaj dodaje się etapy (na
@@ -317,21 +325,38 @@ niżej, nie poszerza tej reguły.
 **2. Widoczność.** W granicach swojego dostępu administrator widzi projekt,
 gdy:
 
-- ma uprawnienie do wglądu we wszystkie projekty (*Wgląd we wszystkie
-  projekty*), lub
+- ma uprawnienie *Wgląd we wszystkie projekty*, lub
 - jest członkiem projektu, lub
 - jest jedną z osób dopisanych do projektu, lub
 - projekt jest otwarty dla wszystkich.
 
-To, czy projekt jest otwarty dla wszystkich, wynika z ustawienia modułu **Kto
-widzi projekt** (`projects.visibility`) — *wszyscy*, którzy mogą przeglądać
-projekty, albo tylko jego *członkowie* i dopisane osoby (domyślnie) — chyba że
-sam projekt ustawiono na *wszyscy* albo na *członkowie i dopisane osoby*.
+To, czy projekt jest otwarty dla wszystkich, jest wyborem samego projektu,
+dokonywanym przy jego tworzeniu i zmienianym w zakładce *Przegląd* przez
+administratora, który może tworzyć i prowadzić projekty:
+
+| Wybór projektu | Kto go widzi, poza posiadaczami *Wglądu we wszystkie projekty* |
+| --- | --- |
+| *Zgodnie z ustawieniem modułu* (domyślnie) | Przy ustawieniu modułu **Kto widzi projekt** (`projects.visibility`) równym *everyone*: każdy, kto może przeglądać projekty. Przy *members* — domyślnym — jego członkowie i dopisane osoby. |
+| *Wszyscy, którzy mogą przeglądać projekty* | Każdy, kto może przeglądać projekty, niezależnie od ustawienia modułu. |
+| *Członkowie i dopisane osoby* | Jego członkowie i dopisane osoby, niezależnie od ustawienia modułu. |
+
+Dopisane osoby to administratorzy wskazani w projekcie, choć nie są jego
+członkami — ktoś, kto ma śledzić projekt, nie pracując przy nim. Wybiera się je
+przy możliwości *Członkowie i dopisane osoby*; wybór innej możliwości usuwa je z
+projektu.
+
+*Wgląd we wszystkie projekty* (`projects:see_all`) znosi tę drugą regułę,
+nigdy pierwszą: jego posiadacz widzi każdy projekt **w granicach swojego
+dostępu**, a przedstawiciel handlowy z tym uprawnieniem nadal nie widzi
+projektu organizacji, która nie jest do niego przypisana, ani żadnego projektu
+wewnętrznego.
 
 Projekt, którego ktoś nie może zobaczyć, nie istnieje dla niego nigdzie: ani na
-liście, ani w jej łącznej liczbie, ani pod swoim adresem. Adres takiego
-projektu odpowiada dokładnie tak samo jak adres projektu, którego nigdy nie
-utworzono.
+liście, ani w jej łącznej liczbie, ani pod swoim adresem, ani jako kontekst
+zadania w module Zadania. Adres takiego projektu odpowiada dokładnie tak samo
+jak adres projektu, którego nigdy nie utworzono. Nikt też nie dostaje o nim
+powiadomienia: zadanie projektu przypisane takiej osobie nie trafia do jej
+dzwonka powiadomień — dostałaby numer zadania, którego nie może otworzyć.
 
 ## Włączanie i wyłączanie
 
@@ -366,6 +391,7 @@ sprzed wyłączenia.
 | --- | --- |
 | `projects:read` | Przeglądanie projektów — listy, pojedynczego projektu i jego historii etapów — z zastrzeżeniem obu reguł z sekcji *Kto widzi projekt*. |
 | `projects:write` | Tworzenie, edycja i usuwanie projektów; ustawianie ich organizacji, członków, etapów i przebiegu; przenoszenie, zamykanie i ponowne otwieranie. Wymaga `projects:read`. |
+| `projects:see_all` | Wgląd we wszystkie projekty w granicach swojego dostępu, niezależnie od ustawienia modułu i wyboru samego projektu (zob. *Kto widzi projekt*). Wymaga `projects:read`; nigdy nie poszerza dostępu do organizacji. |
 | `projects:configure` | Tworzenie, edycja, duplikowanie, archiwizacja i przywracanie szablonów; dodawanie, zmiana nazwy, archiwizacja, przywracanie i usuwanie ról projektowych i powodów utraty. Wymaga `projects:read`; każdy, kto może przeglądać projekty, może odczytać szablony, role i powody utraty, aby użyć ich w projekcie. |
 
 Rola projektowa nie jest jednym z tych uprawnień: jej pełnienie nie nadaje
@@ -385,8 +411,11 @@ opisana, gdy to nastąpi.*
 | `GET /api/v1/admin/projects` | `projects:read` | Strona projektów oraz liczba projektów widocznych dla wywołującego: `{ items, nextCursor, total }`. Filtry: `state` (powtarzalny), `organizationId`, `memberId` (identyfikator administratora lub `me`), `roleId`, `templateId`, `stageName` (nazwa bieżącego etapu), `q` (numer lub tytuł), `sort` (`createdAt` — domyślnie, `value` albo `deadline` — termin bieżącego etapu; projekty bez wartości lub terminu są zawsze na końcu), `order` (`asc` lub `desc`, domyślnie `desc`), `cursor`, `limit` (najwyżej 100). |
 | `POST /api/v1/admin/projects` | `projects:write` | `201` `{ data: ProjectDetail }`. Bez `templateId` pole `stages` jest wymagane; z nim struktura szablonu jest kopiowana, a `stages` jest odrzucane (`422`), zaś nieznany lub zarchiwizowany szablon to `422` `PROJECT_TEMPLATE_NOT_FOUND`. |
 | `GET /api/v1/admin/projects/:id` | `projects:read` | `{ data: ProjectDetail }` albo `404` `PROJECT_NOT_FOUND` — tak samo dla projektu, który nie istnieje, jak dla takiego, którego wywołujący nie może zobaczyć. |
-| `PATCH /api/v1/admin/projects/:id` | `projects:write` | Tytuł, opis, wartość, data rozpoczęcia, razem z `version`. |
+| `PATCH /api/v1/admin/projects/:id` | `projects:write` | Tytuł, opis, wartość, data rozpoczęcia, `visibility` (`inherit`, `everyone` albo `members_and_listed`) i `viewerIds` (cała lista dopisanych osób — widzą one projekt bez względu na `visibility`; panel administracyjny dopisuje osoby tylko przy `members_and_listed`), razem z `version`; `409` `PROJECT_CHANGED`, gdy projekt zmienił się od odczytu, `422` `PROJECT_MEMBER_INVALID` dla nowo dopisanej osoby, która nie jest aktywnym administratorem. Zmiana tego, kto widzi projekt, trafia do dziennika zdarzeń osobno od zmiany treści (`projects.project.visibility_set`, `projects.project.viewers_set`). |
 | `DELETE /api/v1/admin/projects/:id` | `projects:write` | `204`; `409` `PROJECT_HAS_LINKS`, dopóki są podpięte dokumenty. |
+| `GET /api/v1/admin/projects/lookups/organizations` | `projects:write` | `{ data: { id, name }[] }` — organizacje, do których wywołujący ma dostęp, według nazwy (`q`) albo jedna według `id`; najwyżej `limit` (50). |
+| `GET /api/v1/admin/projects/lookups/admin-users` | `projects:write` | `{ data: { id, name, email }[] }` — aktywni administratorzy według imienia i nazwiska lub adresu e-mail (`q`) albo jeden według `id`; najwyżej `limit` (50). |
+| `GET /api/v1/admin/projects/visibility-setting` | `projects:read` | `{ data: { setting } }` — bieżąca wartość ustawienia modułu `projects.visibility`. |
 | `PUT /api/v1/admin/projects/:id/organizations` | `projects:write` | Cały zestaw; `422` `PROJECT_ORGANIZATION_OUT_OF_SCOPE`. |
 | `PUT /api/v1/admin/projects/:id/members` | `projects:write` | Cały zestaw członków i ich ról; `422` `PROJECT_MEMBER_INVALID`. |
 | `POST /api/v1/admin/projects/:id/stages` | `projects:write` | `201` `{ data: ProjectStage }`, dodany na końcu. |

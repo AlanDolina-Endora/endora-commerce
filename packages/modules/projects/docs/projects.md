@@ -57,9 +57,14 @@ a colour and a planned duration in days for each, at least one. Either way it
 asks for a title and optionally the Organizations, a value with its currency, a
 start date, a description and the members, each with the roles they hold;
 whatever a template filled in can still be changed. With no Organization the
-project is internal, and the form says who will see it. The project follows the
-module's *Who sees a Project* setting; choosing it per project and custom
-fields arrive with later releases.
+project is internal, and the form says who will see it. Last, it asks **who
+sees the project** — following the module setting, the default; everyone who
+may view projects; or its members and the people listed on it, who are then
+chosen there — and says in one sentence what the choice means now (see *Who
+sees a project*). The Organizations offered are the ones you can reach, and the
+people offered are the active administrators: filling the form needs no
+permission beyond creating projects. Custom fields arrive with a later
+release.
 
 **A project's screen** names the project, its state, value and Organizations.
 Below them is the **stage bar**: every stage in order, the current one marked,
@@ -77,7 +82,11 @@ deleted: the screen says so, and the records have to be unlinked first.
 
 Its tabs:
 
-- **Overview** — the description, the start date and the members by role.
+- **Overview** — the description, the start date, **who sees the project**
+  and the members by role. An administrator who may create and run projects
+  changes who sees it there — the same three choices as on *New project* — and
+  saves it with *Save who sees it*; everybody else is told what it is and who is
+  listed.
 - **Stages** — each stage's name, colour, planned duration, responsible roles,
   alert days, completion gate and whether the project may be completed from
   it, saved one stage at a time; stages are added at the end, moved up or down
@@ -307,14 +316,32 @@ they:
 - are one of the people listed on the project, or
 - the project is open to everyone.
 
-Whether a project is open to everyone follows the module setting **Who sees a
-Project** (`projects.visibility`) — *everyone* who may view projects, or only
-its *members* and listed people, the default — unless the project itself is set
-to *everyone* or to *members and listed people*.
+Whether a project is open to everyone is each project's own choice, made when
+it is created and changed on its *Overview* by an administrator who may create
+and run projects:
+
+| The project's choice | Who sees it, besides holders of *See every project* |
+| --- | --- |
+| *Follow the module setting* (the default) | Under the module setting **Who sees a Project** (`projects.visibility`) set to *everyone*: everybody who may view projects. Set to *members* — the default — its members and the people listed on it. |
+| *Everyone who may view projects* | Everybody who may view projects, whatever the module setting. |
+| *Members and listed people* | Its members and the people listed on it, whatever the module setting. |
+
+The people listed are administrators named on the project without being its
+members — somebody who needs to follow it without working on it. They are
+chosen with *Members and listed people*; choosing another option takes them off
+the project.
+
+*See every project* (`projects:see_all`) lifts this second rule, never the
+first: its holder sees every project **within their reach**, and a sales
+representative who holds it still sees no project of an Organization they are
+not assigned, nor any internal project.
 
 A project somebody may not see does not exist for them, anywhere: not in a
-list, not in its total, not by its address. An address of such a project
-answers exactly as an address of one that was never created.
+list, not in its total, not by its address, not as the context of a task in the
+Tasks module. An address of such a project answers exactly as an address of one
+that was never created. Nor are they told about it: a task of the project
+assigned to them is not announced in their notification bell — they would be
+handed the number of a task they cannot open.
 
 ## Switching it on and off
 
@@ -349,6 +376,7 @@ on again.
 | --- | --- |
 | `projects:read` | View projects — the list, a single project and its stage history — subject to the two rules of *Who sees a project*. |
 | `projects:write` | Create, edit and delete projects; set their Organizations, members, stages and workflow; move, close and reopen them. Requires `projects:read`. |
+| `projects:see_all` | See every project within your reach, whatever the module setting and each project's own choice (see *Who sees a project*). Requires `projects:read`; it never widens Organization reach. |
 | `projects:configure` | Create, edit, duplicate, archive and restore templates; add, rename, archive, restore and delete project roles and loss reasons. Requires `projects:read`; anybody who may view projects can read the templates, roles and loss reasons, to use them on a project. |
 
 A project role is not one of these: holding one grants no permission (see
@@ -368,8 +396,11 @@ here when it does.*
 | `GET /api/v1/admin/projects` | `projects:read` | A page of projects and how many the caller may see: `{ items, nextCursor, total }`. Filters: `state` (repeatable), `organizationId`, `memberId` (an administrator's id or `me`), `roleId`, `templateId`, `stageName` (the current stage's name), `q` (number or title), `sort` (`createdAt` — the default, `value`, or `deadline` — the current stage's; projects without one come last either way), `order` (`asc` or `desc`, default `desc`), `cursor`, `limit` (at most 100). |
 | `POST /api/v1/admin/projects` | `projects:write` | `201` `{ data: ProjectDetail }`. Without a `templateId`, `stages` is required; with one, the template's structure is copied and `stages` is refused (`422`), and an unknown or archived template is `422` `PROJECT_TEMPLATE_NOT_FOUND`. |
 | `GET /api/v1/admin/projects/:id` | `projects:read` | `{ data: ProjectDetail }`, or `404` `PROJECT_NOT_FOUND` — for a project that does not exist and for one the caller may not see alike. |
-| `PATCH /api/v1/admin/projects/:id` | `projects:write` | Title, description, value, start date, with `version`. |
+| `PATCH /api/v1/admin/projects/:id` | `projects:write` | Title, description, value, start date, `visibility` (`inherit`, `everyone` or `members_and_listed`) and `viewerIds` (the whole list of people listed — who see the project whatever its `visibility`; the Admin UI lists people only with `members_and_listed`), with `version`; `409` `PROJECT_CHANGED` when the project changed since it was read, `422` `PROJECT_MEMBER_INVALID` for a newly listed person who is not an active administrator. A change of who sees the project is audited apart from an edit of its text (`projects.project.visibility_set`, `projects.project.viewers_set`). |
 | `DELETE /api/v1/admin/projects/:id` | `projects:write` | `204`; `409` `PROJECT_HAS_LINKS` while records are linked. |
+| `GET /api/v1/admin/projects/lookups/organizations` | `projects:write` | `{ data: { id, name }[] }` — the Organizations the caller can reach, by name (`q`), or one by `id`; at most `limit` (50). |
+| `GET /api/v1/admin/projects/lookups/admin-users` | `projects:write` | `{ data: { id, name, email }[] }` — active administrators by name or e-mail (`q`), or one by `id`; at most `limit` (50). |
+| `GET /api/v1/admin/projects/visibility-setting` | `projects:read` | `{ data: { setting } }` — the module setting `projects.visibility` as it stands. |
 | `PUT /api/v1/admin/projects/:id/organizations` | `projects:write` | The whole set; `422` `PROJECT_ORGANIZATION_OUT_OF_SCOPE`. |
 | `PUT /api/v1/admin/projects/:id/members` | `projects:write` | The whole set of members and their roles; `422` `PROJECT_MEMBER_INVALID`. |
 | `POST /api/v1/admin/projects/:id/stages` | `projects:write` | `201` `{ data: ProjectStage }`, added at the end. |
