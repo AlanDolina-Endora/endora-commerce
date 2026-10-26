@@ -40,8 +40,41 @@ jest usuwane.
 ## W panelu administracyjnym
 
 Ekrany zadań — lista zadań, *Moje zadania* i ekran pojedynczego zadania —
-pojawią się w następnym wydaniu tego modułu. Do tego czasu zadania odczytuje się
-przez opisane niżej API, a tworzą je moduły będące właścicielami kontekstów.
+pojawią się w następnym wydaniu tego modułu. Do tego czasu zadania tworzy się,
+odczytuje i zmienia przez opisane niżej API oraz przez moduły będące
+właścicielami kontekstów.
+
+## Praca z zadaniami
+
+**Tworzenie zadania.** Zadanie potrzebuje tylko tytułu; może mieć też opis,
+osobę przypisaną — dowolnego aktywnego administratora — i termin. Dostaje
+numer, zaczyna ze statusem `todo` i zapamiętuje, kto je utworzył. Można je
+umieścić w rekordzie innego modułu — w tym wydaniu w etapie projektu, który
+tworzący może zobaczyć; zadanie projektu zawsze należy do jednego z jego
+etapów.
+
+**Zmiana zadania.** Można zmienić jego tytuł, opis, termin, osobę przypisaną,
+status i rekord, do którego należy. Po każdym statusie może nastąpić każdy
+inny: przejście do `done` zapisuje, kiedy zadanie wykonano, a wyjście z `done`
+ponownie to czyści.
+
+**Przypisywanie.** Gdy zadanie zostaje przypisane komuś innemu niż osoba,
+która je przypisuje — przy tworzeniu albo później — ta osoba dostaje
+powiadomienie w dzwonku panelu administracyjnego, tylko z numerem zadania i
+odnośnikiem do niego. Przypisanie zadania sobie albo usunięcie przypisania
+nikogo nie powiadamia. Gdy moduł **Powiadomienia administratora** jest
+wyłączony, przypisywanie działa tak samo, a nikt nie dostaje powiadomienia.
+
+**Moje zadania** to twoja otwarta praca: zadania przypisane tobie, które nie
+mają statusu `done` ani `cancelled`, najpierw te z najbliższym terminem, na
+końcu te bez terminu, z oznaczeniem przeterminowanych.
+
+**Usunięcie zadania** usuwa je na stałe.
+
+**Historia.** Każda zmiana zadania — utworzenie, zmiana, przypisanie, zmiana
+statusu, usunięcie — jest zapisywana z tym, kto ją wykonał i kiedy, a historia
+zadania wymienia je od najnowszych. Historia zapisuje długość opisu, nigdy jego
+treść.
 
 ## Włączanie i wyłączanie
 
@@ -64,7 +97,8 @@ włączeniu modułu wszystko wraca dokładnie do poprzedniego stanu.
 
 | Kod | Na co pozwala |
 | --- | --- |
-| `tasks:read` | Przeglądanie zadań — listy i pojedynczego zadania — z zastrzeżeniem widoczności kontekstu każdego zadania. |
+| `tasks:read` | Przeglądanie zadań — listy, *Moich zadań*, pojedynczego zadania i jego historii — z zastrzeżeniem widoczności kontekstu każdego zadania. |
+| `tasks:write` | Tworzenie, zmienianie, przypisywanie i usuwanie zadań. Wymaga `tasks:read`. |
 
 ## Dla programistów
 
@@ -73,7 +107,22 @@ włączeniu modułu wszystko wraca dokładnie do poprzedniego stanu.
 | Metoda i ścieżka | Uprawnienie | Odpowiedź |
 | --- | --- | --- |
 | `GET /api/v1/admin/tasks` | `tasks:read` | Strona zadań, od najnowszych: `{ items, nextCursor }`. Filtry: `status` (powtarzalny), `assignee` (identyfikator administratora, `me` albo `none`), `dueFrom`, `dueTo`, `overdue`, `contextType`, `contextId`, `q` (numer lub tytuł), `cursor`, `limit` (najwyżej 100). |
+| `GET /api/v1/admin/tasks/mine` | `tasks:read` | `{ data: TaskSummary[] }` — otwarte zadania wywołującego, według terminu, bez terminu na końcu (najwyżej 500). |
+| `POST /api/v1/admin/tasks` | `tasks:write` | `{ title, description?, assignedAdminUserId?, dueOn?, context? }` → `201` `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID`, `TASK_ASSIGNEE_INVALID`. |
 | `GET /api/v1/admin/tasks/:id` | `tasks:read` | `{ data: TaskDetail }` albo `404` `TASK_NOT_FOUND` — tak samo dla zadania, które nie istnieje, i dla zadania, którego kontekstu nie możesz zobaczyć. |
+| `PATCH /api/v1/admin/tasks/:id` | `tasks:write` | Dowolne z pól `title`, `description`, `dueOn`, `assignedAdminUserId`, `status`, `context` → `{ data: TaskDetail }`. |
+| `DELETE /api/v1/admin/tasks/:id` | `tasks:write` | `204`. |
+| `GET /api/v1/admin/tasks/lookups/assignees` | `tasks:write` | `{ data: { id, name, email }[] }` — aktywni administratorzy pasujący do `q` (imię i nazwisko lub e-mail), najwyżej 50. |
+| `GET /api/v1/admin/tasks/:id/history` | `tasks:read` | Ślad audytu zadania, od najnowszych: `{ data, pagination, truncated }` (`RecordHistoryPage`). |
+
+Kontekst (`context`) zapisywany przez API musi należeć do włączonego modułu,
+który wskazuje rekord jako widoczny dla ciebie, a gdy rekord ma grupy — jak
+etapy projektu — musi wskazywać jedną z nich; w przeciwnym razie `422`
+`TASK_CONTEXT_INVALID`. Kontekst zadania jest odczytywany jako `{ type, id,
+groupId, available, label, href, groupLabel }`. Gdy moduł będący właścicielem
+przestaje opisywać rekord, `available` ma wartość `false`, `label` brzmi
+*Niedostępny rekord* w twoim języku, a `href` i `groupLabel` mają wartość
+`null`.
 
 Kształty żądań i odpowiedzi to schematy Zod z `@endora-commerce/contracts`
 (`tasks.ts`).
@@ -145,7 +194,8 @@ zadanie jest zapisywane we własnej transakcji.
 | `tasks.task.assigned.v1` | `{ taskId, from, to }` |
 | `tasks.task.deleted.v1` | `{ taskId, contextType, contextId }` |
 
-Każde jest emitowane raz na polecenie, po jego zatwierdzeniu. W tym wydaniu
-występują tylko `tasks.task.created.v1` i `tasks.task.deleted.v1`, przez port
-zapisu; pozostałe dwa pojawią się wraz z edycją zadań w panelu
-administracyjnym.
+Każde jest emitowane raz na polecenie, po jego zatwierdzeniu. Zmiana kilku
+rodzajów naraz — `PATCH` z nowym tytułem, osobą przypisaną i statusem — to
+jedno polecenie na rodzaj (`tasks.task.update`, `tasks.task.assign`,
+`tasks.task.status_change`), każde z własnym wierszem audytu, a dwa ostatnie
+także z własnym zdarzeniem.

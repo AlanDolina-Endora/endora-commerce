@@ -29,15 +29,19 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 
 | Moduł | Wiążąca | Co to oznacza |
 | --- | --- | --- |
+| `_i18n` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `admin_users` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `audit_logs` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `auth` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `settings` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `admin_notifications` | nie | degrades-without `adminNotificationRecordPort` — osoby, którym przypisano nowe zadania, nie dostają powiadomień. |
 
 ## Uprawnienia
 
 | Kod | Etykieta | Wymaga też |
 | --- | --- | --- |
 | `tasks:read` | View tasks | — |
+| `tasks:write` | Create and edit tasks | `tasks:read` |
 
 ## Paleta poleceń
 

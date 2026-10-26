@@ -34,6 +34,9 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | `auth` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `organizations` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `settings` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `tasks` | nie | contributes-to `taskContextRegistry` |
+| `tasks` | nie | degrades-without `taskReadPort` — projekty działają bez zadań: bez zakładki Zadania, bez zadań etapów i bez blokad zakończenia. |
+| `tasks` | nie | degrades-without `taskWritePort` — projekty działają bez zadań: bez zakładki Zadania, bez zadań etapów i bez blokad zakończenia. |
 
 ## Uprawnienia
 

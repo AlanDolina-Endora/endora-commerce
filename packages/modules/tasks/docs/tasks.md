@@ -38,8 +38,39 @@ deleted.
 ## In the Admin UI
 
 The Tasks screens — the task list, *My tasks* and a task's own screen — arrive
-in the next release of this module. Until then tasks are read through the API
-below and created by the modules that own a context.
+in the next release of this module. Until then tasks are created, read and
+changed through the API below and by the modules that own a context.
+
+## Using Tasks
+
+**Creating a task.** A task needs only a title; it can also have a
+description, an assignee — any active administrator — and a due date. It gets
+its number, starts as `todo`, and remembers who created it. It can be placed
+in a record of another module — in this release, a stage of a project the
+creator may see; a task of a project always belongs to one of its stages.
+
+**Changing a task.** Its title, description, due date, assignee, status and
+the record it belongs to can all be changed. Any status may follow any other:
+moving a task to `done` records when it was done, and moving it out of `done`
+clears that again.
+
+**Assigning.** When a task is assigned to somebody other than the person
+assigning it — when it is created or later — they are told in the Admin UI's
+notification bell, by the task's number only, with a link to the task.
+Assigning a task to yourself, or unassigning it, tells nobody. While the
+*Admin notifications* module is switched off assigning works the same and
+nobody is told.
+
+**My tasks** is your own open work: the tasks assigned to you that are neither
+`done` nor `cancelled`, the ones due soonest first, the ones without a due date
+last, overdue ones marked.
+
+**Deleting a task** removes it for good.
+
+**History.** Every change of a task — created, changed, assigned, its status
+changed, deleted — is recorded with who did it and when, and the task's history
+lists them, newest first. The history records the length of a description,
+never its text.
 
 ## Switching it on and off
 
@@ -62,7 +93,8 @@ exactly as it was when the module is switched on again.
 
 | Code | What it allows |
 | --- | --- |
-| `tasks:read` | View tasks — the list and a single task — subject to the visibility of each task's context. |
+| `tasks:read` | View tasks — the list, *My tasks*, a single task and its history — subject to the visibility of each task's context. |
+| `tasks:write` | Create, change, assign and delete tasks. Requires `tasks:read`. |
 
 ## For developers
 
@@ -71,7 +103,21 @@ exactly as it was when the module is switched on again.
 | Method and path | Permission | What it answers |
 | --- | --- | --- |
 | `GET /api/v1/admin/tasks` | `tasks:read` | A page of tasks, newest first: `{ items, nextCursor }`. Filters: `status` (repeatable), `assignee` (an administrator's id, `me` or `none`), `dueFrom`, `dueTo`, `overdue`, `contextType`, `contextId`, `q` (number or title), `cursor`, `limit` (at most 100). |
+| `GET /api/v1/admin/tasks/mine` | `tasks:read` | `{ data: TaskSummary[] }` — the caller's open tasks, by due date, undated last (at most 500). |
+| `POST /api/v1/admin/tasks` | `tasks:write` | `{ title, description?, assignedAdminUserId?, dueOn?, context? }` → `201` `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID`, `TASK_ASSIGNEE_INVALID`. |
 | `GET /api/v1/admin/tasks/:id` | `tasks:read` | `{ data: TaskDetail }`, or `404` `TASK_NOT_FOUND` — for a task that does not exist and for one whose context you may not see alike. |
+| `PATCH /api/v1/admin/tasks/:id` | `tasks:write` | Any of `title`, `description`, `dueOn`, `assignedAdminUserId`, `status`, `context` → `{ data: TaskDetail }`. |
+| `DELETE /api/v1/admin/tasks/:id` | `tasks:write` | `204`. |
+| `GET /api/v1/admin/tasks/lookups/assignees` | `tasks:write` | `{ data: { id, name, email }[] }` — active administrators matching `q` (name or e-mail), at most 50. |
+| `GET /api/v1/admin/tasks/:id/history` | `tasks:read` | The task's audit trail, newest first: `{ data, pagination, truncated }` (`RecordHistoryPage`). |
+
+A `context` written through the API must belong to a switched-on module that
+lists the record as one you may see, and — when the record has groups, such as
+a project's stages — name one of them; otherwise `422` `TASK_CONTEXT_INVALID`.
+A task's `context` is read as `{ type, id, groupId, available, label, href,
+groupLabel }`. When the owning module no longer describes the record,
+`available` is `false`, `label` reads *Unavailable record* in your language and
+`href` and `groupLabel` are `null`.
 
 The request and response shapes are the Zod schemas of
 `@endora-commerce/contracts` (`tasks.ts`).
@@ -140,6 +186,7 @@ written in a transaction of its own.
 | `tasks.task.assigned.v1` | `{ taskId, from, to }` |
 | `tasks.task.deleted.v1` | `{ taskId, contextType, contextId }` |
 
-Each is emitted once per command, after it commits. In this release only
-`tasks.task.created.v1` and `tasks.task.deleted.v1` occur, through the write
-port; the other two arrive with editing tasks in the Admin UI.
+Each is emitted once per command, after it commits. A change of several kinds
+at once — a `PATCH` with a new title, assignee and status — is one command per
+kind (`tasks.task.update`, `tasks.task.assign`, `tasks.task.status_change`),
+each with its own audit row and, for the last two, its own event.

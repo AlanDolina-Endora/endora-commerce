@@ -92,11 +92,13 @@ number of roles, none included.
 **Stages.** Each stage has a name, a colour, a planned duration in days, the
 roles responsible for it, and whether the project may be completed from it.
 Completing is permitted from the last stage unless the stages say otherwise. A
-stage also keeps the days before its deadline on which members are to be
-alerted and whether it is a completion gate for its tasks; both take effect
-with the later releases that bring deadline alerts and tasks. Stages can be added (at the end), renamed, recoloured,
-reordered and removed — except the stage the project is in and a project's
-only stage.
+stage also keeps whether it is a **completion gate** for its tasks and its own
+**stage tasks** — both described under *Stage Tasks and the completion gate*
+below — and the days before its deadline on which members are to be alerted,
+which take effect with the later release that brings deadline alerts. Stages
+can be added (at the end), renamed, recoloured, reordered and removed — except
+the stage the project is in, a project's only stage, and a stage that holds
+tasks.
 
 **The workflow.** The moves a project may make between its stages are its own.
 By default each stage moves to the next one, and a stage added at the end is
@@ -133,6 +135,52 @@ announced afterwards as an event.
 
 The Tasks module is not needed for any of this: a project runs through its
 stages with Tasks switched off.
+
+## Stage Tasks and the completion gate
+
+With the Tasks module switched on, a project's stages hold **tasks** — a task
+of a project always belongs to one of its stages. A task in a project is a
+task of the Tasks module like any other (its number, assignee, due date and
+status are described on the Tasks page), and it is seen only by the people who
+may see the project: by anybody else, nowhere — not in the Tasks list, not in
+*My tasks*, not by its address, not even when it is assigned to them.
+
+**The completion gate.** A stage can be a completion gate. A project does not
+leave such a stage — by a move, or by being closed as completed from it —
+while one of the stage's tasks is neither *done* nor *cancelled*: the move is
+refused, nothing changes, and the refusal names the open tasks. A cancelled
+task counts as finished. Closing a project as **lost** is never stopped by the
+gate. A stage that is not a gate lets the project go with its tasks still
+open; they stay under that stage.
+
+**Stage tasks.** Each stage can carry a list of **stage tasks** — a title, a
+description, the role responsible for it and a due offset in days. They
+become real tasks when the project **enters** the stage: due on the day the
+stage started plus the offset, and assigned to the member who holds the
+responsible role, if exactly one active member does; otherwise the task is
+left unassigned and its note names the role. They are created once per stage:
+entering the stage again creates nothing. The tasks are created on behalf of
+the person who moved the project and recorded in the Tasks module's own
+history. A stage with no stage tasks creates none; stage tasks added to it
+later are created the next time the project enters it.
+
+If the Tasks module fails while creating them, the project is still in the new
+stage, the stage history says *Creating the stage's tasks failed.*, and they can
+be created again — once — from the stage.
+
+**With the Tasks module switched off** a project keeps working with nothing
+but its own stages, and nothing is lost:
+
+- a completion gate is not applied — the project moves on, and the stage
+  history says *The completion gate was not applied: the Tasks module is off.*;
+- a stage entered while Tasks is off does not create its stage tasks, then or
+  later — the stage history says *The stage's tasks were not created.*;
+- a stage can be deleted without its tasks being counted;
+- the stage tasks and the gates are kept, and apply again to what happens
+  after Tasks is switched back on.
+
+Deleting a project deletes its tasks with it (while Tasks is on; with Tasks
+off they stay, hidden, because nobody can see the project they belong to).
 
 ## Who sees a project
 
@@ -187,7 +235,7 @@ on again.
 | --- | --- | --- |
 | `projects.enabled` | on | Whether the module is switched on. |
 | `projects.visibility` | `members` | Who sees a project that follows the setting: `everyone` who may view projects, or its `members` and listed people. |
-| `projects.alerts_time_zone` | `Europe/Warsaw` | The time zone in which "today" is counted for projects — the day a stage starts and whether its deadline has passed. |
+| `projects.alerts_time_zone` | `Europe/Warsaw` | The time zone in which "today" is counted for projects — the day a stage starts and whether its deadline has passed. It must be an IANA time zone name such as `Europe/Warsaw`; any other value is refused when it is saved. |
 
 ## Permissions
 
@@ -196,7 +244,7 @@ on again.
 | `projects:read` | View projects — the list, a single project and its stage history — subject to the two rules of *Who sees a project*. |
 | `projects:write` | Create, edit and delete projects; set their Organizations, members, stages and workflow; move, close and reopen them. Requires `projects:read`. |
 
-## Tasks, templates, links, collaboration, deadline alerts and analytics
+## Templates, links, collaboration, deadline alerts and analytics
 
 *Each of these arrives with a later release of this module and is described
 here when it does.*
@@ -216,13 +264,16 @@ here when it does.*
 | `PUT /api/v1/admin/projects/:id/members` | `projects:write` | The whole set of members and their roles; `422` `PROJECT_MEMBER_INVALID`. |
 | `POST /api/v1/admin/projects/:id/stages` | `projects:write` | `201` `{ data: ProjectStage }`, added at the end. |
 | `PATCH /api/v1/admin/projects/:id/stages/:stageId` | `projects:write` | Any attribute; `deadlineOn` sets the deadline by hand, `null` returns it to start + duration. |
-| `DELETE /api/v1/admin/projects/:id/stages/:stageId` | `projects:write` | `204`; `409` `PROJECT_STAGE_CURRENT` or `PROJECT_STAGE_LAST`. |
+| `DELETE /api/v1/admin/projects/:id/stages/:stageId` | `projects:write` | `204`; `409` `PROJECT_STAGE_CURRENT`, `PROJECT_STAGE_LAST` or `PROJECT_STAGE_HAS_TASKS`. |
 | `PUT /api/v1/admin/projects/:id/stages/order` | `projects:write` | Every stage id, in the new order. |
 | `PUT /api/v1/admin/projects/:id/moves` | `projects:write` | The whole workflow → `{ data: { moves, unreachableStageIds } }`. |
-| `POST /api/v1/admin/projects/:id/move` | `projects:write` | `{ toStageId, version }` → `{ data: { project, entry, createdTaskIds, notes } }`; `409` `PROJECT_MOVE_NOT_PERMITTED`, `PROJECT_CHANGED` or `PROJECT_GUARD_REFUSED`. |
-| `POST /api/v1/admin/projects/:id/close` | `projects:write` | `{ outcome: 'completed', version }` or `{ outcome: 'lost', lossReasonId, comment?, version }`; `409` `PROJECT_COMPLETION_NOT_PERMITTED`, `422` `PROJECT_LOSS_REASON_INVALID`. |
+| `POST /api/v1/admin/projects/:id/move` | `projects:write` | `{ toStageId, version }` → `{ data: { project, entry, createdTaskIds, notes } }` — `createdTaskIds` are the stage tasks the move created, `notes` what the entry recorded (`gate_not_applied_tasks_off`, `stage_tasks_skipped`, `tasks_materialize_failed`); `409` `PROJECT_MOVE_NOT_PERMITTED`, `PROJECT_STAGE_GATE_OPEN_TASKS` (`details.openTasks`: `{ id, number, title }[]`), `PROJECT_CHANGED` or `PROJECT_GUARD_REFUSED`. |
+| `POST /api/v1/admin/projects/:id/close` | `projects:write` | `{ outcome: 'completed', version }` or `{ outcome: 'lost', lossReasonId, comment?, version }`; `409` `PROJECT_COMPLETION_NOT_PERMITTED` or, when completing, `PROJECT_STAGE_GATE_OPEN_TASKS`; `422` `PROJECT_LOSS_REASON_INVALID`. |
 | `POST /api/v1/admin/projects/:id/reopen` | `projects:write` | `{ version }` → back into the stage it was closed in. |
 | `GET /api/v1/admin/projects/:id/stage-history` | `projects:read` | Every entry, close and reopen, oldest first. |
+| `PUT /api/v1/admin/projects/:id/stages/:stageId/tasks` | `projects:write` | `{ tasks: StageTaskDefinition[] }` (at most 100), replacing the stage's stage tasks → `{ data: ProjectStage }`; `422` for an unknown responsible role. |
+| `POST /api/v1/admin/projects/:id/stages/:stageId/materialize-tasks` | `projects:write` | Creates the stage's tasks again after a recorded failure → `{ data: { created } }`; `409` `PROJECT_STAGE_TASKS_NOT_RETRYABLE` otherwise, `503` `MODULE_DISABLED` while Tasks is off. |
+| `GET /api/v1/admin/projects/:id/tasks` | `projects:read` | `{ data: { tasksAvailable, stages: [{ stageId, tasks: TaskSummary[] }] } }`, in stage order; `tasksAvailable: false` and no stages while Tasks is off or for a reader without `tasks:read`. |
 | `GET /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:read` | The dictionaries, with `label` in the reader's language; `active=true` leaves archived rows out. |
 
 The request and response shapes are the Zod schemas of
@@ -243,6 +294,23 @@ After each committed write the module emits, once:
 `projects.project.created.v1`, `projects.stage.moved.v1` (with the stage names
 as they were), `projects.project.closed.v1` (with the outcome, the stage and,
 when lost, the loss reason's code) and `projects.project.reopened.v1`.
+
+### The `project` Task context
+
+The module owns the Task context type `project`, registered in the Tasks
+module's `taskContextRegistry` from a contribution-only boot hook (see the
+Tasks page, *Task contexts*). A task of a project carries
+`contextType: 'project'`, the project's id as `contextId` and one of its
+stages' ids as `contextGroupId`; it is labelled `<number> <title>`, linked to
+`/projects/:id`, and its group is labelled with the stage's name. Every answer
+goes through `ProjectAccess`, so the Tasks module shows a project's tasks to
+exactly the people who may see the project. To put a task into a stage, create
+it with `POST /api/v1/admin/tasks` and that context.
+
+The module reads and writes tasks only through `taskReadPort` and
+`taskWritePort`, after deciding that Tasks is present (`degrades-without`
+edges). Stage tasks are created after the move's own transaction has
+committed, one audited `tasks.task.create` command each.
 
 ### One read path
 

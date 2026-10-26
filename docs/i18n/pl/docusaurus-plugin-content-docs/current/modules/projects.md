@@ -94,12 +94,13 @@ administratorem. Członek może pełnić dowolną liczbę ról, także żadnej.
 **Etapy.** Każdy etap ma nazwę, kolor, planowany czas trwania w dniach, role
 odpowiedzialne za niego oraz informację, czy z tego etapu można zakończyć
 projekt. Zakończenie jest dozwolone z ostatniego etapu, chyba że etapy mówią
-inaczej. Etap przechowuje też liczby dni przed terminem, w które członkowie
-mają dostać powiadomienie, oraz to, czy blokuje zakończenie do czasu wykonania
-jego zadań; obie te rzeczy zaczną działać w kolejnych wydaniach, które wprowadzą
-powiadomienia o terminach i zadania. Etapy można dodawać (na końcu), zmieniać
+inaczej. Etap przechowuje też to, czy jest **blokadą zakończenia** dla swoich
+zadań, oraz własne **zadania etapu** — jedno i drugie opisano niżej w sekcji
+*Zadania etapów i blokada zakończenia* — a także liczby dni przed terminem, w
+które członkowie mają dostać powiadomienie; te zaczną działać w wydaniu, które
+wprowadzi powiadomienia o terminach. Etapy można dodawać (na końcu), zmieniać
 im nazwę i kolor, zmieniać ich kolejność i usuwać — z wyjątkiem etapu, w którym
-projekt jest, oraz jedynego etapu projektu.
+projekt jest, jedynego etapu projektu i etapu, który zawiera zadania.
 
 **Przebieg.** Przejścia, które projekt może wykonać między etapami, są jego
 własne. Domyślnie każdy etap przechodzi do następnego, a do etapu dodanego na
@@ -138,6 +139,56 @@ się. To, co się stało, jest potem ogłaszane jako zdarzenie.
 
 Do niczego z tego nie jest potrzebny moduł Zadania: projekt przechodzi przez
 swoje etapy także przy wyłączonych zadaniach.
+
+## Zadania etapów i blokada zakończenia
+
+Gdy moduł Zadania jest włączony, etapy projektu zawierają **zadania** — zadanie
+projektu zawsze należy do jednego z jego etapów. Zadanie w projekcie jest
+zwykłym zadaniem modułu Zadania (jego numer, osobę przypisaną, termin i status
+opisuje strona Zadań) i widzą je tylko osoby, które mogą zobaczyć projekt: dla
+każdego innego nie istnieje nigdzie — ani na liście zadań, ani w *Moich
+zadaniach*, ani pod swoim adresem, nawet gdy jest mu przypisane.
+
+**Blokada zakończenia.** Etap może być blokadą zakończenia. Projekt nie opuści
+takiego etapu — przejściem ani zamknięciem jako zrealizowany z tego etapu —
+dopóki któreś z zadań etapu nie ma statusu *wykonane* ani *anulowane*:
+przejście jest odrzucane, nic się nie zmienia, a odmowa wymienia otwarte
+zadania. Anulowane zadanie liczy się jako zakończone. Zamknięcia projektu jako
+**utracony** blokada nigdy nie zatrzymuje. Etap, który nie jest blokadą,
+wypuszcza projekt mimo otwartych zadań; zostają one w tym etapie.
+
+**Zadania etapu.** Każdy etap może mieć listę **zadań etapu** — tytuł, opis,
+rolę odpowiedzialną i przesunięcie terminu w dniach. Stają się prawdziwymi
+zadaniami, gdy projekt **wchodzi** do etapu: z terminem w dniu rozpoczęcia
+etapu plus przesunięcie i przypisane członkowi, który pełni rolę
+odpowiedzialną, jeśli pełni ją dokładnie jeden aktywny członek; w przeciwnym
+razie zadanie pozostaje nieprzypisane, a jego notatka wskazuje rolę. Tworzy się
+je raz na etap: ponowne wejście do etapu niczego nie tworzy. Zadania są
+tworzone w imieniu osoby, która przeniosła projekt, i zapisywane we własnej
+historii modułu Zadania. Etap bez zadań etapu niczego nie tworzy; zadania etapu
+dodane do niego później zostaną utworzone przy następnym wejściu projektu do
+tego etapu.
+
+Jeśli moduł Zadania zawiedzie przy ich tworzeniu, projekt i tak jest w nowym
+etapie, historia etapów podaje *Tworzenie zadań etapu nie powiodło się.*, a
+zadania można utworzyć ponownie — jeden raz — z poziomu etapu.
+
+**Gdy moduł Zadania jest wyłączony**, projekt działa dalej z samymi swoimi
+etapami i nic nie ginie:
+
+- blokada zakończenia nie jest stosowana — projekt przechodzi dalej, a historia
+  etapów podaje *Blokada zakończenia nie została zastosowana: moduł Zadania
+  jest wyłączony.*;
+- etap, do którego projekt wszedł przy wyłączonych zadaniach, nie tworzy swoich
+  zadań etapu ani wtedy, ani później — historia etapów podaje *Zadania etapu
+  nie zostały utworzone.*;
+- etap można usunąć bez liczenia jego zadań;
+- zadania etapów i blokady zostają zachowane i znów działają dla tego, co
+  dzieje się po ponownym włączeniu modułu Zadania.
+
+Usunięcie projektu usuwa razem z nim jego zadania (gdy moduł Zadania jest
+włączony; przy wyłączonym zostają, ukryte, bo nikt nie może zobaczyć projektu,
+do którego należą).
 
 ## Kto widzi projekt
 
@@ -195,7 +246,7 @@ sprzed wyłączenia.
 | --- | --- | --- |
 | `projects.enabled` | włączone | Czy moduł jest włączony. |
 | `projects.visibility` | `members` | Kto widzi projekt korzystający z ustawienia: `everyone` — wszyscy, którzy mogą przeglądać projekty, albo `members` — jego członkowie i dopisane osoby. |
-| `projects.alerts_time_zone` | `Europe/Warsaw` | Strefa czasowa, w której liczony jest „dzisiejszy” dzień projektów — dzień rozpoczęcia etapu i to, czy jego termin minął. |
+| `projects.alerts_time_zone` | `Europe/Warsaw` | Strefa czasowa, w której liczony jest „dzisiejszy” dzień projektów — dzień rozpoczęcia etapu i to, czy jego termin minął. Musi to być nazwa strefy czasowej IANA, np. `Europe/Warsaw`; każda inna wartość jest odrzucana przy zapisie. |
 
 ## Uprawnienia
 
@@ -204,7 +255,7 @@ sprzed wyłączenia.
 | `projects:read` | Przeglądanie projektów — listy, pojedynczego projektu i jego historii etapów — z zastrzeżeniem obu reguł z sekcji *Kto widzi projekt*. |
 | `projects:write` | Tworzenie, edycja i usuwanie projektów; ustawianie ich organizacji, członków, etapów i przebiegu; przenoszenie, zamykanie i ponowne otwieranie. Wymaga `projects:read`. |
 
-## Zadania, szablony, powiązania, współpraca, powiadomienia o terminach i analityka
+## Szablony, powiązania, współpraca, powiadomienia o terminach i analityka
 
 *Każda z tych funkcji pojawi się w jednym z kolejnych wydań modułu i zostanie tu
 opisana, gdy to nastąpi.*
@@ -224,13 +275,16 @@ opisana, gdy to nastąpi.*
 | `PUT /api/v1/admin/projects/:id/members` | `projects:write` | Cały zestaw członków i ich ról; `422` `PROJECT_MEMBER_INVALID`. |
 | `POST /api/v1/admin/projects/:id/stages` | `projects:write` | `201` `{ data: ProjectStage }`, dodany na końcu. |
 | `PATCH /api/v1/admin/projects/:id/stages/:stageId` | `projects:write` | Dowolny atrybut; `deadlineOn` ustawia termin ręcznie, `null` przywraca termin liczony jako początek + czas trwania. |
-| `DELETE /api/v1/admin/projects/:id/stages/:stageId` | `projects:write` | `204`; `409` `PROJECT_STAGE_CURRENT` lub `PROJECT_STAGE_LAST`. |
+| `DELETE /api/v1/admin/projects/:id/stages/:stageId` | `projects:write` | `204`; `409` `PROJECT_STAGE_CURRENT`, `PROJECT_STAGE_LAST` lub `PROJECT_STAGE_HAS_TASKS`. |
 | `PUT /api/v1/admin/projects/:id/stages/order` | `projects:write` | Identyfikatory wszystkich etapów w nowej kolejności. |
 | `PUT /api/v1/admin/projects/:id/moves` | `projects:write` | Cały przebieg → `{ data: { moves, unreachableStageIds } }`. |
-| `POST /api/v1/admin/projects/:id/move` | `projects:write` | `{ toStageId, version }` → `{ data: { project, entry, createdTaskIds, notes } }`; `409` `PROJECT_MOVE_NOT_PERMITTED`, `PROJECT_CHANGED` lub `PROJECT_GUARD_REFUSED`. |
-| `POST /api/v1/admin/projects/:id/close` | `projects:write` | `{ outcome: 'completed', version }` albo `{ outcome: 'lost', lossReasonId, comment?, version }`; `409` `PROJECT_COMPLETION_NOT_PERMITTED`, `422` `PROJECT_LOSS_REASON_INVALID`. |
+| `POST /api/v1/admin/projects/:id/move` | `projects:write` | `{ toStageId, version }` → `{ data: { project, entry, createdTaskIds, notes } }` — `createdTaskIds` to zadania etapu utworzone przez przejście, `notes` to, co zapisał wpis (`gate_not_applied_tasks_off`, `stage_tasks_skipped`, `tasks_materialize_failed`); `409` `PROJECT_MOVE_NOT_PERMITTED`, `PROJECT_STAGE_GATE_OPEN_TASKS` (`details.openTasks`: `{ id, number, title }[]`), `PROJECT_CHANGED` lub `PROJECT_GUARD_REFUSED`. |
+| `POST /api/v1/admin/projects/:id/close` | `projects:write` | `{ outcome: 'completed', version }` albo `{ outcome: 'lost', lossReasonId, comment?, version }`; `409` `PROJECT_COMPLETION_NOT_PERMITTED` albo, przy zakończeniu, `PROJECT_STAGE_GATE_OPEN_TASKS`; `422` `PROJECT_LOSS_REASON_INVALID`. |
 | `POST /api/v1/admin/projects/:id/reopen` | `projects:write` | `{ version }` → powrót do etapu, w którym projekt zamknięto. |
 | `GET /api/v1/admin/projects/:id/stage-history` | `projects:read` | Każde wejście do etapu, zamknięcie i ponowne otwarcie, od najstarszych. |
+| `PUT /api/v1/admin/projects/:id/stages/:stageId/tasks` | `projects:write` | `{ tasks: StageTaskDefinition[] }` (najwyżej 100), zastępuje zadania etapu → `{ data: ProjectStage }`; `422` dla nieznanej roli odpowiedzialnej. |
+| `POST /api/v1/admin/projects/:id/stages/:stageId/materialize-tasks` | `projects:write` | Ponownie tworzy zadania etapu po zapisanym błędzie → `{ data: { created } }`; w innym przypadku `409` `PROJECT_STAGE_TASKS_NOT_RETRYABLE`, a przy wyłączonym module Zadania `503` `MODULE_DISABLED`. |
+| `GET /api/v1/admin/projects/:id/tasks` | `projects:read` | `{ data: { tasksAvailable, stages: [{ stageId, tasks: TaskSummary[] }] } }`, w kolejności etapów; `tasksAvailable: false` i brak etapów, gdy moduł Zadania jest wyłączony albo czytający nie ma `tasks:read`. |
 | `GET /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:read` | Słowniki z polem `label` w języku czytającego; `active=true` pomija zarchiwizowane wiersze. |
 
 Kształty żądań i odpowiedzi to schematy Zod z `@endora-commerce/contracts`
@@ -252,6 +306,25 @@ Po każdym zatwierdzonym zapisie moduł emituje, jeden raz:
 `projects.project.created.v1`, `projects.stage.moved.v1` (z nazwami etapów
 takimi, jakie wtedy były), `projects.project.closed.v1` (z wynikiem, etapem i —
 przy utracie — kodem powodu utraty) oraz `projects.project.reopened.v1`.
+
+### Kontekst zadań `project`
+
+Moduł jest właścicielem typu kontekstu zadań `project`, rejestrowanego w
+`taskContextRegistry` modułu Zadania z haka startowego służącego wyłącznie do
+kontrybucji (zob. stronę Zadań, *Konteksty zadań*). Zadanie projektu ma
+`contextType: 'project'`, identyfikator projektu jako `contextId` i
+identyfikator jednego z jego etapów jako `contextGroupId`; jego etykieta to
+`<numer> <tytuł>`, odnośnik prowadzi do `/projects/:id`, a etykietą grupy jest
+nazwa etapu. Każda odpowiedź przechodzi przez `ProjectAccess`, więc moduł
+Zadania pokazuje zadania projektu dokładnie tym osobom, które mogą zobaczyć
+projekt. Aby umieścić zadanie w etapie, utwórz je przez
+`POST /api/v1/admin/tasks` z tym kontekstem.
+
+Moduł odczytuje i zapisuje zadania wyłącznie przez `taskReadPort` i
+`taskWritePort`, po ustaleniu, że moduł Zadania jest obecny (krawędzie
+`degrades-without`). Zadania etapu są tworzone po zatwierdzeniu własnej
+transakcji przejścia, każde przez osobne audytowane polecenie
+`tasks.task.create`.
 
 ### Jedna ścieżka odczytu
 
