@@ -2,7 +2,7 @@
 
 All endpoints are under `/api/v1/admin`, JSON, camelCase, Zod schemas in
 `packages/contracts/src/tasks.ts` and `packages/contracts/src/projects.ts` (written before any
-route — Principle II). Every route is gated with `requireAdmin('<code>')` as a literal. Errors use
+route — Principle II). Every route is gated with `requireAdmin('<code>')` as a literal. Successful bodies are wrapped `{ data: … }`; DELETEs answer 204. Errors use
 the platform envelope `{ code, message, details? }`. A Project that is out of reach or invisible
 answers **404 `PROJECT_NOT_FOUND`**, identical to a non-existent one (Principle XI). While a
 module is off, its routes answer 503 `MODULE_DISABLED` through the platform gate.
@@ -32,7 +32,7 @@ context: { type, label, href, groupLabel } | null }`.
 | Method & path | Permission | Request → Response |
 | --- | --- | --- |
 | `GET /projects` | `projects:read` | `ProjectListQuery` (`state[]`, `organizationId`, `memberId` \| `me`, `roleId`, `templateId`, `stageName`, `q` (number/title), `cursor`, `limit ≤ 100`, `sort` ∈ createdAt\|value\|deadline) → `{ items: ProjectSummary[], nextCursor, total }` |
-| `POST /projects` | `projects:write` | `CreateProjectBody { title, description?, value?: { amount, currency }, startOn?, organizationIds[], templateId?, members?: { adminUserId, roleIds[] }[], visibility?, viewerIds?, customFieldValues? }` → `ProjectDetail` |
+| `POST /projects` | `projects:write` | `CreateProjectBody { title, description?, value?: { amount, currency }, startOn?, organizationIds[], templateId?, members?: { adminUserId, roleIds[] }[], visibility?, viewerIds?, customFieldValues?, stages?: ProjectStageInput[] (1–50, required without templateId) }` → `ProjectDetail` |
 | `GET /projects/:id` | `projects:read` | → `ProjectDetail` (incl. stages, moves, members, organizations, links count, unread messages, `permissions: { canWrite, canConfigure }`) |
 | `PATCH /projects/:id` | `projects:write` | `UpdateProjectBody` (title, description, value, startOn, visibility, viewerIds, customFieldValues, `version`) → `ProjectDetail` |
 | `DELETE /projects/:id` | `projects:write` | → 204; 409 `PROJECT_HAS_LINKS` while links exist |
@@ -89,7 +89,7 @@ createdAt, closedAt }`.
 
 | Method & path | Permission |
 | --- | --- |
-| `GET /projects/roles` | `projects:read` |
+| `GET /projects/roles` (`?active=true` leaves archived out; rows carry `label` in the reader's language) | `projects:read` |
 | `POST`/`PATCH /projects/roles[/:id]`, `POST /projects/roles/:id/archive` \| `/restore` | `projects:configure` |
 | `GET /projects/loss-reasons`; `POST`/`PATCH`/archive/restore | `projects:read`; `projects:configure` |
 | `GET /projects/templates`, `GET /projects/templates/:id` | `projects:read` |
