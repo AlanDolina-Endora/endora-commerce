@@ -305,7 +305,7 @@ ignore it, visibly, when off.
 - [ ] T076 [US3] Implement `packages/modules/projects/src/backend/services/template-service.ts` (whole-graph `PUT` in one Command `projects.template.save`, duplicate, archive/restore) and `routes/routes.templates.ts`; manifest permission `projects:configure` + labels
 - [ ] T077 [US3] Extend `project-service.ts` create with `templateId`: copy Stages, moves, gates, alerts, Stage Task definitions and description (research R-7), Roles offered from the Template's Roles; T073, T074 green; **i18n fix**: Stage Task `contextNote` is persisted as English text (`Responsible role: <name>` in `stage-task-service.ts` `#newTasks`) — store a key + params (or the Role id) and render it in the reader's language
 - [ ] T078 [P] [US3] Admin: `pages/TemplatesList.tsx`, `pages/TemplateEditor.tsx` reusing `StageEditor.tsx`; Template picker as the first step of `ProjectCreate.tsx`; nav entry *Templates* (`projects:configure`); T075 green; also the list filters still missing on `ProjectsList.tsx`: Template, Role, any member, current Stage name (API supports them)
-- [ ] T079 [US3] Docs *Templates* (EN + PL); off-state extended; phase gate
+- [ ] T079 [US3] Docs *Templates* (EN + PL); off-state extended; phase gate; also an admin *Create the Stage's Tasks again* control (StageBar or StageEditor) for a Stage in `tasks_materialize_failed`, calling `POST …/materialize-tasks` — the docs already promise it
 
 ---
 
@@ -387,7 +387,7 @@ the `@@` document list as one standard in Projects and CRM (FR-044).
 - [ ] T111 [US7] Implement `services/reference-service.ts` (five kinds, batched per kind, permission + presence per kind, `available:false`), `services/mention-service.ts` (`newlyMentioned`, `mentionable` with `ProjectAccess.canSeeAs`), `services/project-notifier.ts` (presence-first, bell titles name the number only; `nonBindingDependencies` `admin_notifications` `degrades-without`), `services/comment-service.ts` and `routes/routes.comments.ts`, lookups routes; manifest `dependencies` += `catalog` (Product labels); T108, T109 green
 - [ ] T112 [US7] Implement `services/attachment-active-content.ts` (copy, research R-17), `services/attachment-service.ts`, upload route, and register the `assetReferenceRegistry` descriptor (`ownerModuleId: 'projects'`, one batched query, label "Project PRJ-…") from an `onBoot` contribution hook; manifest `dependencies` += `assets_library`; T110 green
 - [ ] T113 [US7] Implement `services/history-service.ts` (audit read `objectType: 'project'`, cap 500, cursor, references resolved in before/after, custom-field values hidden without `custom_fields:read`) and `GET /projects/:id/history`; `auditReferenceRegistry` resolver for `project`; manifest `dependencies` += `audit_logs`, `admin_users`
-- [ ] T114 [P] [US7] Admin: Notes, Messages (unread badge), Attachments and History tabs, and the description editor, on the kit components with Projects' adapters; `admin/test/modules/projects/ProjectDetail.collaboration.test.tsx`
+- [ ] T114 [P] [US7] Admin: Notes, Messages (unread badge), Attachments and History tabs, and the description editor, on the kit components with Projects' adapters; `admin/test/modules/projects/ProjectDetail.collaboration.test.tsx`; also move Tasks' `TaskDetail.tsx` history onto the kit `RecordHistory` + `CursorPagination` (today: first 50 entries, action names only, no before/after)
 - [ ] T115 [US7] Un-`todo` T085's mentionable row; docs *Notes, messages and references* and *Attachments* (EN + PL); off-state extended; phase gate
 
 ---
@@ -452,7 +452,7 @@ by e-mail.
 - [ ] T140 Full verification set of `quickstart.md` § *Verification before reporting done*, including `pnpm --filter backend run test` (contract + integration, `TEST_DATABASE_URL` on `dev:infra:test`) and `pnpm --filter '!backend' run test`; report every result with its output
 - [ ] T141 Read-size bands: only if a band is refused, re-measure on a clean tree after reading `specs/conventions/check-estate.md` first; never widen a band
 - [ ] T142 Release intent: changesets present for every package touched (`foreign-module-changes.md` §F); `check-release-intent.ts --since origin/master`; rewrite `.changeset/projects-module.md` and `tasks-module.md` bodies to describe what actually ships (they still say "no migration, table, permission, route or screen")
-- [ ] T143 Browser walk of `quickstart.md` § *Manual walk* on a `pnpm run setup` instance with demo data, light and dark, phone width for the list and detail screens
+- [ ] T143 Browser walk of `quickstart.md` § *Manual walk* on a `pnpm run setup` instance with demo data, light and dark, phone width for the list and detail screens; check the sidebar does not highlight *Tasks* (`/tasks`) together with *My tasks* (`/tasks/mine`)
 - [ ] T144 Independent review of the tenant path (`ProjectAccess`, the Task context descriptor, analytics SQL, the sweep's recipient check) by a reviewer who did not write it; close every finding before the merge request; reviewer also judges whether `project-access-seam.test.ts` must refuse any `em.execute` in `services/` outside its allow-list (today it sees class identifiers and literal SQL only); and the two by-design visibility skips: `ProjectAccess.rowAfterWrite` (only after `loadVisible`) and `ProjectReadService.graphOf` (caller passes a visible Project)
 
 ---
