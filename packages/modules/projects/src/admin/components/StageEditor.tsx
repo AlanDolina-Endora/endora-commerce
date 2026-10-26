@@ -9,7 +9,7 @@ import type {
   UpdateProjectStageBody,
 } from '@endora-commerce/contracts';
 import { useModulePresence } from '@endora-commerce/admin-kit/lib';
-import { Alert, AlertDescription, Button, Checkbox, ColorPicker, Input, Label } from '@endora-commerce/admin-kit/ui';
+import { Alert, AlertDescription, AlertTitle, Button, Checkbox, ColorPicker, Input, Label } from '@endora-commerce/admin-kit/ui';
 import {
   StatusTransitionGraph,
   type StatusTransitionGraphStatus,
@@ -31,7 +31,8 @@ export interface StageEditorProps {
   reload: () => Promise<void>;
 }
 
-interface StageDraft {
+/** A Stage's attributes as typed — what {@link StageFields} edits. */
+export interface StageDraft {
   name: string;
   color: string;
   duration: string;
@@ -41,7 +42,19 @@ interface StageDraft {
   completionPermitted: boolean;
 }
 
-function draftOf(stage: ProjectStage): StageDraft {
+/** The attributes a Stage has in a Project and in a Template alike (FR-010). */
+export type StageAttributes = Pick<
+  ProjectStage,
+  | 'name'
+  | 'color'
+  | 'plannedDurationDays'
+  | 'responsibleRoleIds'
+  | 'alertOffsetsDays'
+  | 'completionGate'
+  | 'completionPermitted'
+>;
+
+export function draftOf(stage: StageAttributes): StageDraft {
   return {
     name: stage.name,
     color: stage.color,
@@ -96,8 +109,12 @@ function changesOf(stage: ProjectStage, draft: StageDraft): UpdateProjectStageBo
  * **Stage Task definitions** (User Story 2) are a section of each Stage, shown
  * only while the Tasks module is present: off, they stay stored, untouched and
  * unseen, and come back with it. Each Stage's list is saved whole
- * (`PUT /stages/:stageId/tasks`). The Template editor of User Story 3 is meant
- * to share this editor.
+ * (`PUT /stages/:stageId/tasks`). A Stage whose Tasks could not be created on
+ * entry (`tasksMaterializeFailed`) offers to create them again.
+ *
+ * The Template editor (User Story 3) shares its parts — {@link StageFields},
+ * {@link StageWorkflow} and `StageTasksEditor` — and saves the whole Template
+ * at once instead of one Stage at a time.
  */
 export function StageEditor(props: StageEditorProps): ReactNode {
   const { project, onChange, reload } = props;
@@ -126,11 +143,6 @@ export function StageEditor(props: StageEditorProps): ReactNode {
   }, []);
 
   const stages = useMemo(() => [...project.stages].sort((a, b) => a.position - b.position), [project.stages]);
-  const nameOf = useCallback(
-    (stageId: string): string => stages.find((stage) => stage.id === stageId)?.name ?? stageId,
-    [stages],
-  );
-
   /** Run one write: on success say so and show the server's state, on failure its sentence. */
   const run = async (write: () => Promise<void>, done: string): Promise<boolean> => {
     setBusy(true);
@@ -160,6 +172,16 @@ export function StageEditor(props: StageEditorProps): ReactNode {
       await reload();
     }, t('stageTasks.saved'));
 
+  const retryStageTasks = async (stage: ProjectStage): Promise<boolean> => {
+    let created = 0;
+    const done = await run(async () => {
+      created = (await projectsApi.retryStageTasks(project.id, stage.id)).created;
+      await reload();
+    }, '');
+    if (done) setNotice(t('editor.retry.done', { count: created }));
+    return done;
+  };
+
   const deleteStage = (stage: ProjectStage): Promise<boolean> =>
     run(async () => {
       await projectsApi.deleteStage(project.id, stage.id);
@@ -185,28 +207,6 @@ export function StageEditor(props: StageEditorProps): ReactNode {
       onChange({ ...project, moves: result.moves, unreachableStageIds: result.unreachableStageIds });
     }, t('editor.movesSaved'));
 
-  const graphStatuses = useMemo<StatusTransitionGraphStatus[]>(
-    () =>
-      stages.map((stage, index) => ({
-        code: stage.id,
-        name: {},
-        defaultName: stage.name,
-        isInitial: index === 0,
-        isTerminal: false,
-        isSystem: false,
-        weight: stage.position,
-        color: stage.color,
-        inUseCount: 0,
-      })),
-    [stages],
-  );
-  const graphTransitions = useMemo<StatusTransitionGraphTransition[]>(
-    () => project.moves.map((move) => ({ fromStatusCode: move.fromStageId, toStatusCode: move.toStageId, isSystem: false })),
-    [project.moves],
-  );
-  const statusLabel = useCallback((status: StatusTransitionGraphStatus): string => status.defaultName, []);
-
-  const unreachable = project.unreachableStageIds.map(nameOf);
 
   return (
     <div className="space-y-6">
@@ -227,6 +227,7 @@ export function StageEditor(props: StageEditorProps): ReactNode {
               busy={busy}
               onSave={(body): Promise<boolean> => saveStage(stage, body)}
               onSaveTasks={(tasks): Promise<boolean> => saveStageTasks(stage, tasks)}
+              onRetryTasks={(): Promise<boolean> => retryStageTasks(stage)}
               onDelete={(): Promise<boolean> => deleteStage(stage)}
               onMove={(by): Promise<boolean> => moveStage(index, by)}
             />
@@ -247,41 +248,13 @@ export function StageEditor(props: StageEditorProps): ReactNode {
         </Button>
       ) : null}
 
-      <section className="space-y-3">
-        <div className="space-y-1">
-          <h3 className="text-base font-semibold">{t('editor.moves')}</h3>
-          <p className="text-sm text-muted-foreground">{t('editor.movesHint')}</p>
-        </div>
-        {unreachable.length > 0 ? (
-          <Alert>
-            <AlertDescription>{t('editor.unreachable', { stages: unreachable.join(', ') })}</AlertDescription>
-          </Alert>
-        ) : null}
-        {canWrite ? (
-          <StatusTransitionGraph
-            statuses={graphStatuses}
-            transitions={graphTransitions}
-            statusLabel={statusLabel}
-            onAdd={(from, to): void => {
-              if (project.moves.some((move) => move.fromStageId === from && move.toStageId === to)) return;
-              void setMoves([...project.moves, { fromStageId: from, toStageId: to }]);
-            }}
-            onRemove={(from, to): void =>
-              void setMoves(project.moves.filter((move) => !(move.fromStageId === from && move.toStageId === to)))
-            }
-          />
-        ) : project.moves.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t('editor.noMoves')}</p>
-        ) : (
-          <ul className="space-y-1 text-sm">
-            {project.moves.map((move) => (
-              <li key={`${move.fromStageId}:${move.toStageId}`}>
-                {t('editor.move', { from: nameOf(move.fromStageId), to: nameOf(move.toStageId) })}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <StageWorkflow
+        stages={stages}
+        moves={project.moves}
+        unreachableStageIds={project.unreachableStageIds}
+        canWrite={canWrite}
+        onSetMoves={(moves): void => void setMoves(moves)}
+      />
 
       {error ? (
         <Alert variant="destructive">
@@ -308,6 +281,8 @@ interface StageRowProps {
   busy: boolean;
   onSave: (body: UpdateProjectStageBody) => Promise<boolean>;
   onSaveTasks: (tasks: StageTaskDefinition[]) => Promise<boolean>;
+  /** Create the Stage's Tasks again after creating them failed (`tasksMaterializeFailed`). */
+  onRetryTasks: () => Promise<boolean>;
   onDelete: () => Promise<boolean>;
   onMove: (by: -1 | 1) => Promise<boolean>;
 }
@@ -327,8 +302,6 @@ function StageRow(props: StageRowProps): ReactNode {
     setInvalid(false);
   };
 
-  // The Roles a Stage may name: the active ones, plus any archived one it already names.
-  const offered = roles.filter((role) => role.archivedAt === null || stage.responsibleRoleIds.includes(role.id));
   const roleLabel = (roleId: string): string => roles.find((role) => role.id === roleId)?.label ?? roleId;
 
   const deadline = stage.deadlineOn ? (
@@ -377,117 +350,37 @@ function StageRow(props: StageRowProps): ReactNode {
     await props.onSave(body);
   };
 
-  const alertsInvalid = invalid && parseAlertOffsets(draft.alerts) === null;
-
   return (
     <div className="space-y-3 rounded-md border p-3">
       {header}
       {deadline}
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-48 flex-1 space-y-1">
-          <Label htmlFor={`${idPrefix}-name`} className="text-xs text-muted-foreground">
-            <span aria-hidden="true">{t('stage.nameShort')}</span>
-          </Label>
-          <Input
-            id={`${idPrefix}-name`}
-            aria-label={t('stage.name', { position })}
-            value={draft.name}
-            maxLength={80}
-            aria-invalid={invalid && draft.name.trim() === ''}
-            onChange={(event): void => change({ name: event.target.value })}
-          />
-        </div>
-        <div className="space-y-1">
-          <span aria-hidden="true" className="block text-xs text-muted-foreground">
-            {t('stage.colorShort')}
-          </span>
-          <ColorPicker
-            value={draft.color}
-            onChange={(color): void => change({ color })}
-            label={t('stage.color', { position })}
-            customLabel={t('stage.colorCustom', { position })}
-          />
-        </div>
-        <div className="w-24 space-y-1">
-          <Label htmlFor={`${idPrefix}-days`} className="text-xs text-muted-foreground">
-            <span aria-hidden="true">{t('stage.durationShort')}</span>
-          </Label>
-          <Input
-            id={`${idPrefix}-days`}
-            aria-label={t('stage.duration', { position })}
-            inputMode="numeric"
-            value={draft.duration}
-            aria-invalid={invalid && parseDuration(draft.duration) === null}
-            onChange={(event): void => change({ duration: event.target.value })}
-          />
-        </div>
-        <div className="min-w-40 flex-1 space-y-1">
-          <Label htmlFor={`${idPrefix}-alerts`} className="text-xs text-muted-foreground">
-            {t('editor.alerts', { position })}
-          </Label>
-          <Input
-            id={`${idPrefix}-alerts`}
-            value={draft.alerts}
-            inputMode="numeric"
-            aria-invalid={alertsInvalid}
-            aria-describedby={`${idPrefix}-alerts-hint`}
-            onChange={(event): void => change({ alerts: event.target.value })}
-          />
-        </div>
-      </div>
-      <p id={`${idPrefix}-alerts-hint`} className={alertsInvalid ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
-        {alertsInvalid ? t('editor.alertsInvalid') : t('editor.alertsHint')}
-      </p>
-
-      {offered.length > 0 ? (
-        <fieldset>
-          <legend className="text-xs text-muted-foreground">{t('editor.responsibleRoles', { position })}</legend>
-          <div className="flex flex-wrap gap-x-4 gap-y-1">
-            {offered.map((role) => {
-              const id = `${idPrefix}-role-${role.id}`;
-              return (
-                <label key={role.id} htmlFor={id} className="flex min-h-11 items-center gap-2 text-sm sm:min-h-9">
-                  <Checkbox
-                    id={id}
-                    checked={draft.responsibleRoleIds.includes(role.id)}
-                    onChange={(event): void =>
-                      change({
-                        responsibleRoleIds: event.target.checked
-                          ? [...draft.responsibleRoleIds, role.id]
-                          : draft.responsibleRoleIds.filter((roleId) => roleId !== role.id),
-                      })
-                    }
-                  />
-                  {role.label}
-                </label>
-              );
-            })}
-          </div>
-        </fieldset>
+      {props.tasksPresent && stage.tasksMaterializeFailed ? (
+        <Alert variant="destructive">
+          <AlertTitle>{t('editor.retry.title')}</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p>{t('editor.retry.body', { position })}</p>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 sm:min-h-9"
+              aria-label={t('editor.retry.actionFor', { position })}
+              disabled={busy}
+              onClick={(): void => void props.onRetryTasks()}
+            >
+              {t('editor.retry.action')}
+            </Button>
+          </AlertDescription>
+        </Alert>
       ) : null}
-
-      <div className="flex flex-col gap-1">
-        <label htmlFor={`${idPrefix}-completion`} className="flex min-h-11 items-center gap-2 text-sm sm:min-h-9">
-          <Checkbox
-            id={`${idPrefix}-completion`}
-            checked={draft.completionPermitted}
-            onChange={(event): void => change({ completionPermitted: event.target.checked })}
-          />
-          {t('editor.completionPermitted')}
-        </label>
-        <label htmlFor={`${idPrefix}-gate`} className="flex min-h-11 items-center gap-2 text-sm sm:min-h-9">
-          <Checkbox
-            id={`${idPrefix}-gate`}
-            checked={draft.completionGate}
-            aria-describedby={`${idPrefix}-gate-hint`}
-            onChange={(event): void => change({ completionGate: event.target.checked })}
-          />
-          {t('editor.gate')}
-        </label>
-        <p id={`${idPrefix}-gate-hint`} className="text-xs text-muted-foreground">
-          {t('editor.gateHint')}
-        </p>
-      </div>
+      <StageFields
+        idPrefix={idPrefix}
+        position={position}
+        draft={draft}
+        onChange={change}
+        roles={roles}
+        heldRoleIds={stage.responsibleRoleIds}
+        invalid={invalid}
+      />
 
       {invalid && (draft.name.trim() === '' || parseDuration(draft.duration) === null) ? (
         <p className="text-xs text-destructive">
@@ -545,4 +438,247 @@ function StageRow(props: StageRowProps): ReactNode {
       ) : null}
     </div>
   );
+}
+
+export interface StageFieldsProps {
+  /** Prefix of the ids of the fields, unique on the page. */
+  idPrefix: string;
+  /** The Stage's 1-based place, for the labels. */
+  position: number;
+  draft: StageDraft;
+  onChange: (patch: Partial<StageDraft>) => void;
+  /** Every Role, archived ones too. */
+  roles: readonly ProjectRole[];
+  /** The Roles the Stage named when it was read: an archived one among them is still offered. */
+  heldRoleIds: readonly string[];
+  /** Show which values cannot be sent. */
+  invalid: boolean;
+}
+
+/**
+ * A Stage's attributes as fields (FR-010) — name, colour, planned days, alert
+ * offsets, responsible Roles, completion permitted and the completion gate.
+ * Controlled: the Project's Stages tab saves one Stage at a time, the Template
+ * editor the whole Template at once.
+ */
+export function StageFields(props: StageFieldsProps): ReactNode {
+  const { idPrefix, position, draft, onChange, roles, invalid } = props;
+  const t = useTranslation('projects');
+  // The Roles a Stage may name: the active ones, plus any archived one it already names.
+  const offered = roles.filter((role) => role.archivedAt === null || props.heldRoleIds.includes(role.id));
+  const alertsInvalid = invalid && parseAlertOffsets(draft.alerts) === null;
+  return (
+    <>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-48 flex-1 space-y-1">
+            <Label htmlFor={`${idPrefix}-name`} className="text-xs text-muted-foreground">
+              <span aria-hidden="true">{t('stage.nameShort')}</span>
+            </Label>
+            <Input
+              id={`${idPrefix}-name`}
+              aria-label={t('stage.name', { position })}
+              value={draft.name}
+              maxLength={80}
+              aria-invalid={invalid && draft.name.trim() === ''}
+              onChange={(event): void => onChange({ name: event.target.value })}
+            />
+          </div>
+          <div className="space-y-1">
+            <span aria-hidden="true" className="block text-xs text-muted-foreground">
+              {t('stage.colorShort')}
+            </span>
+            <ColorPicker
+              value={draft.color}
+              onChange={(color): void => onChange({ color })}
+              label={t('stage.color', { position })}
+              customLabel={t('stage.colorCustom', { position })}
+            />
+          </div>
+          <div className="w-24 space-y-1">
+            <Label htmlFor={`${idPrefix}-days`} className="text-xs text-muted-foreground">
+              <span aria-hidden="true">{t('stage.durationShort')}</span>
+            </Label>
+            <Input
+              id={`${idPrefix}-days`}
+              aria-label={t('stage.duration', { position })}
+              inputMode="numeric"
+              value={draft.duration}
+              aria-invalid={invalid && parseDuration(draft.duration) === null}
+              onChange={(event): void => onChange({ duration: event.target.value })}
+            />
+          </div>
+          <div className="min-w-40 flex-1 space-y-1">
+            <Label htmlFor={`${idPrefix}-alerts`} className="text-xs text-muted-foreground">
+              {t('editor.alerts', { position })}
+            </Label>
+            <Input
+              id={`${idPrefix}-alerts`}
+              value={draft.alerts}
+              inputMode="numeric"
+              aria-invalid={alertsInvalid}
+              aria-describedby={`${idPrefix}-alerts-hint`}
+              onChange={(event): void => onChange({ alerts: event.target.value })}
+            />
+          </div>
+        </div>
+        <p id={`${idPrefix}-alerts-hint`} className={alertsInvalid ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
+          {alertsInvalid ? t('editor.alertsInvalid') : t('editor.alertsHint')}
+        </p>
+
+        {offered.length > 0 ? (
+          <fieldset>
+            <legend className="text-xs text-muted-foreground">{t('editor.responsibleRoles', { position })}</legend>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {offered.map((role) => {
+                const id = `${idPrefix}-role-${role.id}`;
+                return (
+                  <label key={role.id} htmlFor={id} className="flex min-h-11 items-center gap-2 text-sm sm:min-h-9">
+                    <Checkbox
+                      id={id}
+                      checked={draft.responsibleRoleIds.includes(role.id)}
+                      onChange={(event): void =>
+                        onChange({
+                          responsibleRoleIds: event.target.checked
+                            ? [...draft.responsibleRoleIds, role.id]
+                            : draft.responsibleRoleIds.filter((roleId) => roleId !== role.id),
+                        })
+                      }
+                    />
+                    {role.label}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+        ) : null}
+
+        <div className="flex flex-col gap-1">
+          <label htmlFor={`${idPrefix}-completion`} className="flex min-h-11 items-center gap-2 text-sm sm:min-h-9">
+            <Checkbox
+              id={`${idPrefix}-completion`}
+              checked={draft.completionPermitted}
+              onChange={(event): void => onChange({ completionPermitted: event.target.checked })}
+            />
+            {t('editor.completionPermitted')}
+          </label>
+          <label htmlFor={`${idPrefix}-gate`} className="flex min-h-11 items-center gap-2 text-sm sm:min-h-9">
+            <Checkbox
+              id={`${idPrefix}-gate`}
+              checked={draft.completionGate}
+              aria-describedby={`${idPrefix}-gate-hint`}
+              onChange={(event): void => onChange({ completionGate: event.target.checked })}
+            />
+            {t('editor.gate')}
+          </label>
+          <p id={`${idPrefix}-gate-hint`} className="text-xs text-muted-foreground">
+            {t('editor.gateHint')}
+          </p>
+        </div>
+    </>
+  );
+}
+
+export interface StageWorkflowProps {
+  /** The Stages, in order; `id` is whatever the moves name them by. */
+  stages: ReadonlyArray<{ id: string; name: string; color: string; position: number }>;
+  moves: readonly ProjectStageMove[];
+  /** Stages no permitted move reaches from the first — warned about, not refused (FR-011). */
+  unreachableStageIds: readonly string[];
+  canWrite: boolean;
+  /** The whole set of moves after an edit. */
+  onSetMoves: (moves: ProjectStageMove[]) => void;
+}
+
+/**
+ * The permitted moves between Stages, drawn with the kit's
+ * `StatusTransitionGraph` — whose From/To form is the keyboard path — and the
+ * Stages no move reaches from the first. A reader sees the moves as a list.
+ */
+export function StageWorkflow(props: StageWorkflowProps): ReactNode {
+  const { stages, moves, canWrite } = props;
+  const t = useTranslation('projects');
+  const nameOf = useCallback(
+    (stageId: string): string => stages.find((stage) => stage.id === stageId)?.name ?? stageId,
+    [stages],
+  );
+  const graphStatuses = useMemo<StatusTransitionGraphStatus[]>(
+    () =>
+      stages.map((stage, index) => ({
+        code: stage.id,
+        name: {},
+        defaultName: stage.name,
+        isInitial: index === 0,
+        isTerminal: false,
+        isSystem: false,
+        weight: stage.position,
+        color: stage.color,
+        inUseCount: 0,
+      })),
+    [stages],
+  );
+  const graphTransitions = useMemo<StatusTransitionGraphTransition[]>(
+    () => moves.map((move) => ({ fromStatusCode: move.fromStageId, toStatusCode: move.toStageId, isSystem: false })),
+    [moves],
+  );
+  const statusLabel = useCallback((status: StatusTransitionGraphStatus): string => status.defaultName, []);
+  const unreachable = props.unreachableStageIds.map(nameOf);
+
+  return (
+    <section className="space-y-3">
+      <div className="space-y-1">
+        <h3 className="text-base font-semibold">{t('editor.moves')}</h3>
+        <p className="text-sm text-muted-foreground">{t('editor.movesHint')}</p>
+      </div>
+      {unreachable.length > 0 ? (
+        <Alert>
+          <AlertDescription>{t('editor.unreachable', { stages: unreachable.join(', ') })}</AlertDescription>
+        </Alert>
+      ) : null}
+      {canWrite ? (
+        <StatusTransitionGraph
+          statuses={graphStatuses}
+          transitions={graphTransitions}
+          statusLabel={statusLabel}
+          onAdd={(from, to): void => {
+            if (moves.some((move) => move.fromStageId === from && move.toStageId === to)) return;
+            props.onSetMoves([...moves, { fromStageId: from, toStageId: to }]);
+          }}
+          onRemove={(from, to): void =>
+            props.onSetMoves(moves.filter((move) => !(move.fromStageId === from && move.toStageId === to)))
+          }
+        />
+      ) : moves.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t('editor.noMoves')}</p>
+      ) : (
+        <ul className="space-y-1 text-sm">
+          {moves.map((move) => (
+            <li key={`${move.fromStageId}:${move.toStageId}`}>
+              {t('editor.move', { from: nameOf(move.fromStageId), to: nameOf(move.toStageId) })}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/**
+ * The Stages no permitted move reaches from the first (FR-011) — the editor's
+ * warning, worked out where the server is not asked (a Template being edited).
+ */
+export function unreachableFrom(stageIds: readonly string[], moves: readonly ProjectStageMove[]): string[] {
+  const [first] = stageIds;
+  if (first === undefined) return [];
+  const reached = new Set([first]);
+  const queue = [first];
+  while (queue.length > 0) {
+    const from = queue.shift() as string;
+    for (const move of moves) {
+      if (move.fromStageId === from && !reached.has(move.toStageId)) {
+        reached.add(move.toStageId);
+        queue.push(move.toStageId);
+      }
+    }
+  }
+  return stageIds.filter((id) => !reached.has(id));
 }

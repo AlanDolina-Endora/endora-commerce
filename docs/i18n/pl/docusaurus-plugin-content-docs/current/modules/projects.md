@@ -35,23 +35,32 @@ przez operatora w ten sam sposób.
 ## W panelu administracyjnym
 
 Projekty są w menu bocznym w sekcji **Projekty i zadania → Projekty**
-(`/projects`), dla administratorów, którzy mogą przeglądać projekty.
+(`/projects`), dla administratorów, którzy mogą przeglądać projekty, a ich
+szablony w sekcji **Projekty i zadania → Szablony** (`/projects/templates`), dla
+administratorów, którzy mogą konfigurować projekty.
 
 **Lista** pokazuje każdy projekt, który możesz zobaczyć: numer, tytuł,
 organizacje — albo *Wewnętrzny* — bieżący etap z terminem, oznaczonym *Po
 terminie*, gdy minie, wartość oraz kierowników projektu. Można ją zawęzić
-według stanu, organizacji albo do projektów, w których jesteś członkiem,
+według stanu, organizacji, do projektów, w których jesteś członkiem, albo
+projektów dowolnego członka, według roli projektowej, którą ktoś w nich pełni,
+według szablonu, z którego je utworzono, i według nazwy bieżącego etapu;
 przeszukać po numerze lub tytule i posortować według daty utworzenia, wartości
 lub terminu bieżącego etapu; projekty bez wartości lub terminu są zawsze na
 końcu.
 
-**Nowy projekt** (`/projects/new`) wymaga tytułu i etapów, w kolejności —
-każdy z nazwą, kolorem i planowanym czasem trwania w dniach, co najmniej jeden
-— a opcjonalnie organizacji, wartości z walutą, daty rozpoczęcia, opisu oraz
-członków, każdego z rolami, które pełni. Bez organizacji projekt jest
-wewnętrzny, a formularz mówi, kto go zobaczy. Projekt stosuje ustawienie modułu
-*Kto widzi projekt*; wybór dla pojedynczego projektu, szablony i pola własne
-pojawią się w kolejnych wydaniach.
+**Nowy projekt** (`/projects/new`) najpierw proponuje **szablony**: wybór
+szablonu wypełnia opis, proponuje każdemu członkowi najpierw role szablonu i
+wymienia etapy, które projekt z niego dostanie — z przebiegiem, blokadami,
+alertami i zadaniami etapów — a te zmienia się w zakładce *Etapy* projektu, gdy
+już istnieje. Bez szablonu formularz wymaga etapów, w kolejności — każdy z
+nazwą, kolorem i planowanym czasem trwania w dniach, co najmniej jeden. W obu
+przypadkach wymaga tytułu, a opcjonalnie organizacji, wartości z walutą, daty
+rozpoczęcia, opisu oraz członków, każdego z rolami, które pełni; wszystko, co
+wypełnił szablon, można nadal zmienić. Bez organizacji projekt jest wewnętrzny,
+a formularz mówi, kto go zobaczy. Projekt stosuje ustawienie modułu *Kto widzi
+projekt*; wybór dla pojedynczego projektu i pola własne pojawią się w
+kolejnych wydaniach.
 
 **Ekran projektu** pokazuje projekt, jego stan, wartość i organizacje. Pod
 nimi jest **pasek etapów**: wszystkie etapy w kolejności, z zaznaczonym
@@ -77,9 +86,11 @@ Jego zakładki:
   końcu), przesuwa je w górę lub w dół i usuwa. Gdy moduł Zadania jest
   włączony, każdy etap ma też listę **zadań etapu** — tytuł, liczbę dni od
   rozpoczęcia etapu do terminu zadania i odpowiedzialną rolę — zapisywaną w
-  całości dla każdego etapu. Pod etapami **przebieg** narysowany jako graf, w
-  którym dodaje się i usuwa przejścia; etap, do którego nie prowadzi żadne
-  przejście od pierwszego, jest wskazany w ostrzeżeniu.
+  całości dla każdego etapu; etap, którego zadań nie udało się utworzyć przy
+  wejściu projektu, mówi o tym i proponuje *Utwórz ponownie zadania etapu*.
+  Pod etapami **przebieg** narysowany jako graf, w którym dodaje się i usuwa
+  przejścia; etap, do którego nie prowadzi żadne przejście od pierwszego, jest
+  wskazany w ostrzeżeniu.
 - **Zadania** — gdy moduł Zadania jest włączony, dla administratorów, którzy
   mogą przeglądać zadania: wszystkie etapy w kolejności z ich zadaniami — numer
   (odnośnik do zadania), tytuł, status, osoba przypisana i termin, z
@@ -91,8 +102,17 @@ Jego zakładki:
 Bez uprawnienia do tworzenia i prowadzenia projektów ekran jest tylko do
 odczytu: etapy, przebieg i historia są widoczne, ale niczego nie można zmienić.
 
-Role, powody utraty i szablony nie mają jeszcze ekranów; pojawią się w
-kolejnych wydaniach tego modułu.
+**Szablony** (`/projects/templates`) wymienia szablony według nazwy z liczbą
+etapów; zarchiwizowane są pokazywane na życzenie, oznaczone jako
+*Zarchiwizowany*. Ekran szablonu — albo *Nowy szablon* — pozwala edytować jego
+nazwę, domyślny opis i role projektowe oraz etapy z tymi samymi polami,
+zadaniami etapów i grafem przebiegu co zakładka *Etapy* projektu; wszystko
+zapisuje się razem przyciskiem *Zapisz szablon*. *Duplikuj* tworzy niezależną
+kopię i ją otwiera; *Archiwizuj* usuwa szablon z wyboru w *Nowym projekcie*, a
+*Przywróć* go przywraca.
+
+Role i powody utraty nie mają jeszcze ekranów; pojawią się w kolejnym wydaniu
+tego modułu.
 
 ## Prowadzenie projektu
 
@@ -175,7 +195,8 @@ rolę odpowiedzialną i przesunięcie terminu w dniach. Stają się prawdziwymi
 zadaniami, gdy projekt **wchodzi** do etapu: z terminem w dniu rozpoczęcia
 etapu plus przesunięcie i przypisane członkowi, który pełni rolę
 odpowiedzialną, jeśli pełni ją dokładnie jeden aktywny członek; w przeciwnym
-razie zadanie pozostaje nieprzypisane, a jego notatka wskazuje rolę. Tworzy się
+razie zadanie pozostaje nieprzypisane, a jego notatka wskazuje rolę — w języku
+osoby, która czyta zadanie, i z bieżącą nazwą roli. Tworzy się
 je raz na etap: ponowne wejście do etapu niczego nie tworzy. Zadania są
 tworzone w imieniu osoby, która przeniosła projekt, i zapisywane we własnej
 historii modułu Zadania. Etap bez zadań etapu niczego nie tworzy; zadania etapu
@@ -184,7 +205,8 @@ tego etapu.
 
 Jeśli moduł Zadania zawiedzie przy ich tworzeniu, projekt i tak jest w nowym
 etapie, historia etapów podaje *Tworzenie zadań etapu nie powiodło się.*, a
-zadania można utworzyć ponownie — jeden raz — z poziomu etapu.
+zadania można utworzyć ponownie — jeden raz — przyciskiem *Utwórz ponownie
+zadania etapu* przy etapie w zakładce *Etapy*.
 
 **Gdy moduł Zadania jest wyłączony**, projekt działa dalej z samymi swoimi
 etapami i nic nie ginie:
@@ -203,6 +225,34 @@ etapami i nic nie ginie:
 Usunięcie projektu usuwa razem z nim jego zadania (gdy moduł Zadania jest
 włączony; przy wyłączonym zostają, ukryte, bo nikt nie może zobaczyć projektu,
 do którego należą).
+
+## Szablony
+
+**Szablon** to struktura, od której może zacząć się nowy projekt — na przykład
+*Aranżacja salonu* albo *Roczna umowa ramowa*: domyślny opis, role projektowe
+oraz etapy ze wszystkim, co ma etap projektu — planowanym czasem trwania,
+rolami odpowiedzialnymi, alertami o terminie, blokadą zakończenia, informacją,
+czy z etapu można zakończyć projekt, i zadaniami etapu — a także przebieg
+między nimi. Szablon nie ma organizacji, członków, wartości ani powiązanych
+rekordów.
+
+**Utworzenie projektu z szablonu** kopiuje to wszystko do nowego projektu:
+etapy, przebieg, blokady, alerty, zadania etapów i domyślny opis. Kopia należy
+do projektu. Zadania etapu **pierwszego etapu** stają się zadaniami w chwili
+utworzenia projektu, a dalszego etapu — gdy projekt do niego wchodzi, jak w
+każdym etapie. To, co wpisała osoba tworząca projekt, ma pierwszeństwo przed
+szablonem — na przykład własny opis — a każdą część kopii można potem zmienić
+w projekcie. Rolę szablonu można nadać członkowi nawet wtedy, gdy w
+międzyczasie ją zarchiwizowano.
+
+**Zmiana szablonu nie zmienia żadnego projektu.** Edycja, archiwizacja lub
+usunięcie szablonu pozostawia każdy projekt z niego utworzony dokładnie takim,
+jaki jest; projekt wskazuje szablon, z którego powstał, dopóki ten szablon
+istnieje.
+
+**Duplikowanie** szablonu tworzy niezależną kopię, nazwaną *… (kopia)*, którą
+można zmieniać bez wpływu na oryginał. **Archiwizacja** szablonu usuwa go z
+wyboru dla nowych projektów; szablon zostaje zachowany i można go przywrócić.
 
 ## Kto widzi projekt
 
@@ -243,8 +293,8 @@ włącza ponownie na ekranie **Moduły** panelu administracyjnego
 
 Gdy moduł jest wyłączony:
 
-- pozycja *Projekty* i wszystkie ekrany projektów znikają z panelu
-  administracyjnego;
+- pozycje *Projekty* i *Szablony* oraz wszystkie ekrany projektów i szablonów
+  znikają z panelu administracyjnego;
 - każdy endpoint `/api/v1/admin/projects…` odpowiada `503` z kodem
   `MODULE_DISABLED`;
 - jego uprawnień nie można już nadać żadnej roli, a jego ustawień nie można
@@ -268,8 +318,9 @@ sprzed wyłączenia.
 | --- | --- |
 | `projects:read` | Przeglądanie projektów — listy, pojedynczego projektu i jego historii etapów — z zastrzeżeniem obu reguł z sekcji *Kto widzi projekt*. |
 | `projects:write` | Tworzenie, edycja i usuwanie projektów; ustawianie ich organizacji, członków, etapów i przebiegu; przenoszenie, zamykanie i ponowne otwieranie. Wymaga `projects:read`. |
+| `projects:configure` | Tworzenie, edycja, duplikowanie, archiwizacja i przywracanie szablonów. Wymaga `projects:read`; każdy, kto może przeglądać projekty, może odczytać szablony, aby zacząć od nich projekt. |
 
-## Szablony, powiązania, współpraca, powiadomienia o terminach i analityka
+## Powiązania, współpraca, powiadomienia o terminach i analityka
 
 *Każda z tych funkcji pojawi się w jednym z kolejnych wydań modułu i zostanie tu
 opisana, gdy to nastąpi.*
@@ -281,7 +332,7 @@ opisana, gdy to nastąpi.*
 | Metoda i ścieżka | Uprawnienie | Odpowiedź |
 | --- | --- | --- |
 | `GET /api/v1/admin/projects` | `projects:read` | Strona projektów oraz liczba projektów widocznych dla wywołującego: `{ items, nextCursor, total }`. Filtry: `state` (powtarzalny), `organizationId`, `memberId` (identyfikator administratora lub `me`), `roleId`, `templateId`, `stageName` (nazwa bieżącego etapu), `q` (numer lub tytuł), `sort` (`createdAt` — domyślnie, `value` albo `deadline` — termin bieżącego etapu; projekty bez wartości lub terminu są zawsze na końcu), `order` (`asc` lub `desc`, domyślnie `desc`), `cursor`, `limit` (najwyżej 100). |
-| `POST /api/v1/admin/projects` | `projects:write` | `201` `{ data: ProjectDetail }`. Bez szablonu pole `stages` jest wymagane. |
+| `POST /api/v1/admin/projects` | `projects:write` | `201` `{ data: ProjectDetail }`. Bez `templateId` pole `stages` jest wymagane; z nim struktura szablonu jest kopiowana, a `stages` jest odrzucane (`422`), zaś nieznany lub zarchiwizowany szablon to `422` `PROJECT_TEMPLATE_NOT_FOUND`. |
 | `GET /api/v1/admin/projects/:id` | `projects:read` | `{ data: ProjectDetail }` albo `404` `PROJECT_NOT_FOUND` — tak samo dla projektu, który nie istnieje, jak dla takiego, którego wywołujący nie może zobaczyć. |
 | `PATCH /api/v1/admin/projects/:id` | `projects:write` | Tytuł, opis, wartość, data rozpoczęcia, razem z `version`. |
 | `DELETE /api/v1/admin/projects/:id` | `projects:write` | `204`; `409` `PROJECT_HAS_LINKS`, dopóki są podpięte dokumenty. |
@@ -297,9 +348,14 @@ opisana, gdy to nastąpi.*
 | `POST /api/v1/admin/projects/:id/reopen` | `projects:write` | `{ version }` → powrót do etapu, w którym projekt zamknięto. |
 | `GET /api/v1/admin/projects/:id/stage-history` | `projects:read` | Każde wejście do etapu, zamknięcie i ponowne otwarcie, od najstarszych. |
 | `PUT /api/v1/admin/projects/:id/stages/:stageId/tasks` | `projects:write` | `{ tasks: StageTaskDefinition[] }` (najwyżej 100), zastępuje zadania etapu → `{ data: ProjectStage }`; `422` dla nieznanej roli odpowiedzialnej. |
-| `POST /api/v1/admin/projects/:id/stages/:stageId/materialize-tasks` | `projects:write` | Ponownie tworzy zadania etapu po zapisanym błędzie → `{ data: { created } }`; w innym przypadku `409` `PROJECT_STAGE_TASKS_NOT_RETRYABLE`, a przy wyłączonym module Zadania `503` `MODULE_DISABLED`. |
+| `POST /api/v1/admin/projects/:id/stages/:stageId/materialize-tasks` | `projects:write` | Ponownie tworzy zadania etapu po zapisanym błędzie — `tasksMaterializeFailed` etapu — → `{ data: { created } }`; w innym przypadku `409` `PROJECT_STAGE_TASKS_NOT_RETRYABLE`, a przy wyłączonym module Zadania `503` `MODULE_DISABLED`. |
 | `GET /api/v1/admin/projects/:id/tasks` | `projects:read` | `{ data: { tasksAvailable, stages: [{ stageId, tasks: TaskSummary[] }] } }`, w kolejności etapów; `tasksAvailable: false` i brak etapów, gdy moduł Zadania jest wyłączony albo czytający nie ma `tasks:read`. |
 | `GET /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:read` | Słowniki z polem `label` w języku czytającego; `active=true` pomija zarchiwizowane wiersze. |
+| `GET /api/v1/admin/projects/templates` | `projects:read` | `{ data: ProjectTemplateSummary[] }` według nazwy; `active=true` pomija zarchiwizowane szablony. |
+| `GET /api/v1/admin/projects/templates/:id` | `projects:read` | `{ data: ProjectTemplateDetail }` albo `404` `PROJECT_TEMPLATE_NOT_FOUND`. |
+| `POST /api/v1/admin/projects/templates`, `PUT …/templates/:id` | `projects:configure` | Cały szablon w jednym body (`ProjectTemplateBody`: nazwa, opis, `roleIds`, `stages` — każdy z `key` i swoimi `tasks`, `moves` wskazujące etapy po kluczu — pominięte oznacza przejście każdego etapu do następnego) → `201` / `200` `{ data: ProjectTemplateDetail }`. Klucz, który jest identyfikatorem jednego z etapów szablonu, zachowuje identyfikator tego etapu. |
+| `POST /api/v1/admin/projects/templates/:id/duplicate` | `projects:configure` | `201` `{ data: ProjectTemplateDetail }` — niezależna kopia. |
+| `POST /api/v1/admin/projects/templates/:id/archive`, `…/restore` | `projects:configure` | `{ data: ProjectTemplateDetail }`. |
 
 Kształty żądań i odpowiedzi to schematy Zod z `@endora-commerce/contracts`
 (`projects.ts`).
@@ -338,7 +394,9 @@ Moduł odczytuje i zapisuje zadania wyłącznie przez `taskReadPort` i
 `taskWritePort`, po ustaleniu, że moduł Zadania jest obecny (krawędzie
 `degrades-without`). Zadania etapu są tworzone po zatwierdzeniu własnej
 transakcji przejścia, każde przez osobne audytowane polecenie
-`tasks.task.create`.
+`tasks.task.create`. Notatka nieprzypisanego zadania etapu jest zapisywana jako
+rola odpowiedzialna (`role:<id>`), a nie jako zdanie; `renderNote` deskryptora
+formułuje ją w języku każdego czytającego.
 
 ### Jedna ścieżka odczytu
 

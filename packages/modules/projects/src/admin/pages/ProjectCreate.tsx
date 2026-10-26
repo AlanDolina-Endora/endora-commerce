@@ -1,7 +1,13 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
-import type { CreateProjectBody, ProjectRole } from '@endora-commerce/contracts';
+import type {
+  CreateProjectBody,
+  ProjectRole,
+  ProjectTemplateDetail,
+  ProjectTemplateSummary,
+} from '@endora-commerce/contracts';
+import { useModulePresence } from '@endora-commerce/admin-kit/lib';
 import {
   Alert,
   AlertDescription,
@@ -13,6 +19,7 @@ import {
   Input,
   Label,
   PageHeader,
+  Select,
   Textarea,
 } from '@endora-commerce/admin-kit/ui';
 import { AdminUserPicker, OrganizationPickerMulti, StickyFormActions } from '@endora-commerce/admin-kit/components';
@@ -20,6 +27,7 @@ import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { projectsApi } from '../api.js';
 import { errorMessage, normaliseAmount, parseDuration } from '../lib/labels.js';
 import { stageColorAt } from '../lib/stage-colors.js';
+import { StageDot } from '../components/StageDot.js';
 
 const LIST_PATH = '/projects';
 
@@ -42,19 +50,27 @@ type FieldErrors = Partial<Record<'title' | 'stageName' | 'stageDuration' | 'val
  * Creating a Project by hand (`specs/163-projects-and-tasks/`, User Story 1;
  * `contracts/admin-surfaces.md` §2, `/projects/new`).
  *
- * A title and at least one Stage are required. The Stages are written here in
- * order — name, colour, planned duration — because without a Template, which
- * arrives with User Story 3, `POST /projects` takes them in its body; the
- * Project starts in the first and the default workflow moves each to the next.
- * Everything else a Stage has is set on the Project's *Stages* tab.
+ * **A Template first** (User Story 3): choosing one fills the form from it —
+ * the default description, the Template's Roles offered first to each Member —
+ * and lists the Stages the Project will get from it, with their workflow,
+ * gates, alerts and Stage Tasks (research R-7: copied, never referenced). Those
+ * are changed on the Project's *Stages* tab afterwards, so the request names
+ * the Template and sends no Stages. Everything typed stays editable; "no
+ * Template" brings the Stage list back. Archived Templates are not offered.
+ *
+ * Without a Template a title and at least one Stage are required. The Stages
+ * are written here in order — name, colour, planned duration — because
+ * `POST /projects` then takes them in its body; the Project starts in the first
+ * and the default workflow moves each to the next. Everything else a Stage has
+ * is set on the Project's *Stages* tab.
  *
  * An empty Organization list is an **internal** Project, which only
  * administrators who reach every Organization can see; the form says so where
  * the Organizations are chosen. Members are chosen one row at a time, each with
  * the Project Roles they hold — a Role grants no permission.
  *
- * Visibility, custom fields and a Template are not offered yet: each arrives
- * with its own story.
+ * Visibility and custom fields are not offered yet: each arrives with its own
+ * story.
  */
 export function ProjectCreate(): ReactNode {
   const t = useTranslation('projects');
@@ -73,25 +89,67 @@ export function ProjectCreate(): ReactNode {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [roles, setRoles] = useState<ProjectRole[]>([]);
   const [rolesFailed, setRolesFailed] = useState(false);
+  const [templates, setTemplates] = useState<ProjectTemplateSummary[]>([]);
+  const [templatesFailed, setTemplatesFailed] = useState(false);
+  const [templateId, setTemplateId] = useState('');
+  const [template, setTemplate] = useState<ProjectTemplateDetail | null>(null);
+  const [templateState, setTemplateState] = useState<'idle' | 'loading' | 'failed'>('idle');
+  const tasksPresent = useModulePresence().isPresent('tasks');
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // The Roles a Member may be given: the active ones, labelled in the reader's language.
+  // Every Role, labelled in the reader's language: a Member is offered the
+  // active ones, and the ones a chosen Template names — archived since or not.
   useEffect(() => {
     let alive = true;
     projectsApi
-      .listRoles({ active: true })
+      .listRoles()
       .then((loaded) => {
         if (alive) setRoles(loaded);
       })
       .catch(() => {
         if (alive) setRolesFailed(true);
       });
+    projectsApi
+      .listTemplates({ active: true })
+      .then((loaded) => {
+        if (alive) setTemplates(loaded);
+      })
+      .catch(() => {
+        if (alive) setTemplatesFailed(true);
+      });
     return (): void => {
       alive = false;
     };
   }, []);
+
+  /** The Template's Roles first, then every other active one. */
+  const offeredRoles = useMemo<ProjectRole[]>(() => {
+    const fromTemplate = (template?.roleIds ?? [])
+      .map((roleId) => roles.find((role) => role.id === roleId))
+      .filter((role): role is ProjectRole => role !== undefined);
+    const chosen = new Set(fromTemplate.map((role) => role.id));
+    return [...fromTemplate, ...roles.filter((role) => role.archivedAt === null && !chosen.has(role.id))];
+  }, [roles, template]);
+
+  const chooseTemplate = async (id: string): Promise<void> => {
+    setTemplateId(id);
+    setTemplate(null);
+    if (id === '') {
+      setTemplateState('idle');
+      return;
+    }
+    setTemplateState('loading');
+    try {
+      const loaded = await projectsApi.getTemplate(id);
+      setTemplate(loaded);
+      setDescription(loaded.description);
+      setTemplateState('idle');
+    } catch {
+      setTemplateState('failed');
+    }
+  };
 
   const key = (): number => nextKey.current++;
 
@@ -129,8 +187,8 @@ export function ProjectCreate(): ReactNode {
 
     const next: FieldErrors = {};
     if (trimmedTitle === '') next.title = t('create.error.title');
-    if (stages.some((row) => row.name.trim() === '')) next.stageName = t('create.error.stageName');
-    if (durations.some((days) => days === null)) next.stageDuration = t('create.error.stageDuration');
+    if (!template && stages.some((row) => row.name.trim() === '')) next.stageName = t('create.error.stageName');
+    if (!template && durations.some((days) => days === null)) next.stageDuration = t('create.error.stageDuration');
     if (hasValue && normalisedAmount === null) next.value = t('create.error.value');
     if (hasValue && !/^[A-Z]{3}$/.test(currencyCode)) next.currency = t('create.error.currency');
     if (members.some((row) => row.adminUserId === null)) next.member = t('create.error.member');
@@ -143,12 +201,18 @@ export function ProjectCreate(): ReactNode {
     const body: CreateProjectBody = {
       title: trimmedTitle,
       organizationIds,
-      stages: stages.map((row, index) => ({
-        name: row.name.trim(),
-        color: row.color,
-        plannedDurationDays: durations[index] ?? 0,
-      })),
-      ...(description.trim() ? { description } : {}),
+      // From a Template the Stages are its own; without one, the ones typed here.
+      ...(template
+        ? { templateId: template.id }
+        : {
+            stages: stages.map((row, index) => ({
+              name: row.name.trim(),
+              color: row.color,
+              plannedDurationDays: durations[index] ?? 0,
+            })),
+          }),
+      // From a Template the description is always sent: emptied, it stays empty.
+      ...(template || description.trim() ? { description } : {}),
       ...(normalisedAmount ? { value: { amount: normalisedAmount, currency: currencyCode } } : {}),
       ...(startOn ? { startOn } : {}),
       ...(members.length > 0
@@ -194,6 +258,44 @@ export function ProjectCreate(): ReactNode {
             <AlertDescription>{submitError}</AlertDescription>
           </Alert>
         ) : null}
+
+        <Card>
+          <CardContent className="space-y-1 pt-6">
+            <Label htmlFor="project-create-template">{t('create.template.label')}</Label>
+            <Select
+              id="project-create-template"
+              value={templateId}
+              disabled={busy}
+              aria-describedby="project-create-template-hint"
+              onChange={(event): void => void chooseTemplate(event.target.value)}
+            >
+              <option value="">{t('create.template.none')}</option>
+              {templates.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </Select>
+            <p id="project-create-template-hint" className="text-xs text-muted-foreground">
+              {t('create.template.hint')}
+            </p>
+            {templatesFailed ? (
+              <p role="alert" className="text-xs text-destructive">
+                {t('create.template.loadError')}
+              </p>
+            ) : null}
+            {templateState === 'loading' ? (
+              <p role="status" className="text-xs text-muted-foreground">
+                {t('create.template.loading')}
+              </p>
+            ) : null}
+            {templateState === 'failed' ? (
+              <p role="alert" className="text-xs text-destructive">
+                {t('create.template.detailError')}
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
 
         <Card>
           <CardContent className="space-y-5 pt-6">
@@ -297,119 +399,125 @@ export function ProjectCreate(): ReactNode {
 
         <Card>
           <CardContent className="pt-6">
-            <fieldset className="space-y-3" aria-describedby="project-create-stages-hint">
-              <legend className="text-base font-semibold">
-                {t('create.stages.section')}
-                {required}
-              </legend>
-              <p id="project-create-stages-hint" className="text-sm text-muted-foreground">
-                {t('create.stages.hint')}
-              </p>
-              <ol className="space-y-3">
-                {stages.map((row, index) => {
-                  const position = index + 1;
-                  const nameInvalid = errors.stageName !== undefined && row.name.trim() === '';
-                  const durationInvalid = errors.stageDuration !== undefined && parseDuration(row.duration) === null;
-                  return (
-                    <li key={row.key} className="flex flex-wrap items-end gap-3 rounded-md border p-3">
-                      <span aria-hidden="true" className="min-h-9 pt-2 text-sm font-medium tabular-nums text-muted-foreground">
-                        {position}.
-                      </span>
-                      <div className="min-w-48 flex-1 space-y-1">
-                        <Label htmlFor={`project-create-stage-${row.key}-name`} className="text-xs text-muted-foreground">
-                          <span aria-hidden="true">{t('stage.nameShort')}</span>
-                        </Label>
-                        <Input
-                          id={`project-create-stage-${row.key}-name`}
-                          aria-label={t('stage.name', { position })}
-                          value={row.name}
-                          maxLength={80}
-                          aria-invalid={nameInvalid}
-                          onChange={(event): void => updateStage(index, { name: event.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <span aria-hidden="true" className="block text-xs text-muted-foreground">
-                          {t('stage.colorShort')}
-                        </span>
-                        <ColorPicker
-                          value={row.color}
-                          onChange={(color): void => updateStage(index, { color })}
-                          label={t('stage.color', { position })}
-                          customLabel={t('stage.colorCustom', { position })}
-                        />
-                      </div>
-                      <div className="w-24 space-y-1">
-                        <Label htmlFor={`project-create-stage-${row.key}-days`} className="text-xs text-muted-foreground">
-                          <span aria-hidden="true">{t('stage.durationShort')}</span>
-                        </Label>
-                        <Input
-                          id={`project-create-stage-${row.key}-days`}
-                          aria-label={t('stage.duration', { position })}
-                          inputMode="numeric"
-                          value={row.duration}
-                          aria-invalid={durationInvalid}
-                          onChange={(event): void => updateStage(index, { duration: event.target.value })}
-                        />
-                      </div>
-                      <div className="flex gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
-                          aria-label={t('stage.moveUp', { position })}
-                          disabled={index === 0}
-                          onClick={(): void => moveStage(index, -1)}
-                        >
-                          <ArrowUp aria-hidden="true" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
-                          aria-label={t('stage.moveDown', { position })}
-                          disabled={index === stages.length - 1}
-                          onClick={(): void => moveStage(index, 1)}
-                        >
-                          <ArrowDown aria-hidden="true" />
-                        </Button>
-                        {stages.length > 1 ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="min-h-11 min-w-11 text-destructive hover:text-destructive sm:min-h-9 sm:min-w-9"
-                            aria-label={t('stage.remove', { position })}
-                            onClick={(): void => setStages((previous) => previous.filter((_, at) => at !== index))}
-                          >
-                            <Trash2 aria-hidden="true" />
-                          </Button>
-                        ) : null}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ol>
-              {fieldError('project-create-stage-name-error', errors.stageName)}
-              {fieldError('project-create-stage-duration-error', errors.stageDuration)}
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-11 sm:min-h-9"
-                disabled={stages.length >= 50}
-                onClick={(): void =>
-                  setStages((previous) => [
-                    ...previous,
-                    { key: key(), name: '', color: stageColorAt(previous.length), duration: '0' },
-                  ])
-                }
-              >
-                <Plus aria-hidden="true" />
-                {t('create.stages.add')}
-              </Button>
-            </fieldset>
+            {template ? (
+              <TemplateStages template={template} tasksPresent={tasksPresent} />
+            ) : (
+              <>
+                <fieldset className="space-y-3" aria-describedby="project-create-stages-hint">
+                  <legend className="text-base font-semibold">
+                    {t('create.stages.section')}
+                    {required}
+                  </legend>
+                  <p id="project-create-stages-hint" className="text-sm text-muted-foreground">
+                    {t('create.stages.hint')}
+                  </p>
+                  <ol className="space-y-3">
+                    {stages.map((row, index) => {
+                      const position = index + 1;
+                      const nameInvalid = errors.stageName !== undefined && row.name.trim() === '';
+                      const durationInvalid = errors.stageDuration !== undefined && parseDuration(row.duration) === null;
+                      return (
+                        <li key={row.key} className="flex flex-wrap items-end gap-3 rounded-md border p-3">
+                          <span aria-hidden="true" className="min-h-9 pt-2 text-sm font-medium tabular-nums text-muted-foreground">
+                            {position}.
+                          </span>
+                          <div className="min-w-48 flex-1 space-y-1">
+                            <Label htmlFor={`project-create-stage-${row.key}-name`} className="text-xs text-muted-foreground">
+                              <span aria-hidden="true">{t('stage.nameShort')}</span>
+                            </Label>
+                            <Input
+                              id={`project-create-stage-${row.key}-name`}
+                              aria-label={t('stage.name', { position })}
+                              value={row.name}
+                              maxLength={80}
+                              aria-invalid={nameInvalid}
+                              onChange={(event): void => updateStage(index, { name: event.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <span aria-hidden="true" className="block text-xs text-muted-foreground">
+                              {t('stage.colorShort')}
+                            </span>
+                            <ColorPicker
+                              value={row.color}
+                              onChange={(color): void => updateStage(index, { color })}
+                              label={t('stage.color', { position })}
+                              customLabel={t('stage.colorCustom', { position })}
+                            />
+                          </div>
+                          <div className="w-24 space-y-1">
+                            <Label htmlFor={`project-create-stage-${row.key}-days`} className="text-xs text-muted-foreground">
+                              <span aria-hidden="true">{t('stage.durationShort')}</span>
+                            </Label>
+                            <Input
+                              id={`project-create-stage-${row.key}-days`}
+                              aria-label={t('stage.duration', { position })}
+                              inputMode="numeric"
+                              value={row.duration}
+                              aria-invalid={durationInvalid}
+                              onChange={(event): void => updateStage(index, { duration: event.target.value })}
+                            />
+                          </div>
+                          <div className="flex gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
+                              aria-label={t('stage.moveUp', { position })}
+                              disabled={index === 0}
+                              onClick={(): void => moveStage(index, -1)}
+                            >
+                              <ArrowUp aria-hidden="true" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
+                              aria-label={t('stage.moveDown', { position })}
+                              disabled={index === stages.length - 1}
+                              onClick={(): void => moveStage(index, 1)}
+                            >
+                              <ArrowDown aria-hidden="true" />
+                            </Button>
+                            {stages.length > 1 ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="min-h-11 min-w-11 text-destructive hover:text-destructive sm:min-h-9 sm:min-w-9"
+                                aria-label={t('stage.remove', { position })}
+                                onClick={(): void => setStages((previous) => previous.filter((_, at) => at !== index))}
+                              >
+                                <Trash2 aria-hidden="true" />
+                              </Button>
+                            ) : null}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                  {fieldError('project-create-stage-name-error', errors.stageName)}
+                  {fieldError('project-create-stage-duration-error', errors.stageDuration)}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11 sm:min-h-9"
+                    disabled={stages.length >= 50}
+                    onClick={(): void =>
+                      setStages((previous) => [
+                        ...previous,
+                        { key: key(), name: '', color: stageColorAt(previous.length), duration: '0' },
+                      ])
+                    }
+                  >
+                    <Plus aria-hidden="true" />
+                    {t('create.stages.add')}
+                  </Button>
+                </fieldset>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -453,11 +561,11 @@ export function ProjectCreate(): ReactNode {
                           <Trash2 aria-hidden="true" />
                         </Button>
                       </div>
-                      {roles.length > 0 ? (
+                      {offeredRoles.length > 0 ? (
                         <fieldset>
                           <legend className="sr-only">{t('create.members.roles', { position })}</legend>
                           <div className="flex flex-wrap gap-x-4 gap-y-1">
-                            {roles.map((role) => {
+                            {offeredRoles.map((role) => {
                               const id = `${personId}-role-${role.id}`;
                               return (
                                 <label key={role.id} htmlFor={id} className="flex min-h-11 items-center gap-2 text-sm sm:min-h-9">
@@ -466,7 +574,7 @@ export function ProjectCreate(): ReactNode {
                                     checked={row.roleIds.includes(role.id)}
                                     onChange={(event): void => toggleRole(index, role.id, event.target.checked)}
                                   />
-                                  {role.label}
+                                  {role.archivedAt ? t('overview.archivedRole', { role: role.label }) : role.label}
                                 </label>
                               );
                             })}
@@ -507,6 +615,40 @@ export function ProjectCreate(): ReactNode {
         </StickyFormActions>
       </form>
     </>
+  );
+}
+
+/**
+ * The Stages a Project gets from its Template — shown, not typed: they are
+ * changed on the Project's *Stages* tab once it exists.
+ */
+function TemplateStages(props: { template: ProjectTemplateDetail; tasksPresent: boolean }): ReactNode {
+  const t = useTranslation('projects');
+  const stages = [...props.template.stages].sort((a, b) => a.position - b.position);
+  return (
+    <section className="space-y-3" aria-labelledby="project-create-template-stages">
+      <h2 id="project-create-template-stages" className="text-base font-semibold">
+        {t('create.template.stages')}
+      </h2>
+      <p className="text-sm text-muted-foreground">{t('create.template.stagesHint')}</p>
+      <ol aria-label={t('create.template.stages')} className="space-y-2">
+        {stages.map((stage, index) => (
+          <li key={stage.id} className="flex flex-wrap items-center gap-2 rounded-md border p-3 text-sm">
+            <span aria-hidden="true" className="font-medium tabular-nums text-muted-foreground">
+              {index + 1}.
+            </span>
+            <StageDot color={stage.color} />
+            <span className="font-medium [overflow-wrap:anywhere]">{stage.name}</span>
+            <span className="text-muted-foreground">{t('create.template.stageDays', { days: stage.plannedDurationDays })}</span>
+            {props.tasksPresent && stage.tasks.length > 0 ? (
+              <span className="text-muted-foreground">
+                {t('create.template.stageTaskCount', { count: stage.tasks.length })}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 

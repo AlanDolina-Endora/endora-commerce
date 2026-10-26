@@ -188,6 +188,11 @@ The contract a descriptor keeps:
 - `visibleContextIds(ids)` answers for a single task, or a few.
 - `describe(ids)` is how a task shows its context: a label, an address in the
   Admin UI, and the labels of the record's groups.
+- `renderNote(note, language)`, optional, words the note your module left on a
+  task when it created it (`contextNote` of `taskWritePort.createMany`) in the
+  reader's language. Store a key rather than a sentence — Projects stores the
+  responsible role — and answer the sentence here; without it the note is shown
+  as stored.
 - One context type has one owner; registering a second, different descriptor
   for a type already taken stops the backend at boot.
 - **The policy is fail-closed.** A task whose context type nobody registered,

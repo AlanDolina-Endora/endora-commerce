@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import {
   PROJECT_STAGE_TASKS_MAX,
@@ -11,15 +11,24 @@ import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { parseDuration } from '../lib/labels.js';
 
 export interface StageTasksEditorProps {
-  stage: ProjectStage;
+  /** The Stage whose definitions are edited — a Project's, or a Template's. */
+  stage: Pick<ProjectStage, 'stageTasks'>;
   /** The Stage's 1-based place, for the labels. */
   position: number;
   /** Every Role, archived ones too: a definition still names the one it uses. */
   roles: readonly ProjectRole[];
   canWrite: boolean;
   busy: boolean;
-  /** The whole list, replaced. Resolves `true` when it was saved. */
-  onSave: (tasks: StageTaskDefinition[]) => Promise<boolean>;
+  /** The whole list, replaced. Resolves `true` when it was saved. Not used with `onChange`. */
+  onSave?: (tasks: StageTaskDefinition[]) => Promise<boolean>;
+  /**
+   * Live editing (the Template editor): every change hands the whole list over
+   * — `null` while one of them cannot be sent — and there is no Save button
+   * here; whoever holds the list saves it.
+   */
+  onChange?: (tasks: StageTaskDefinition[] | null) => void;
+  /** Show which definitions cannot be sent (live editing: after a refused save). */
+  showErrors?: boolean;
 }
 
 interface Draft {
@@ -31,7 +40,7 @@ interface Draft {
   description: string | undefined;
 }
 
-function draftsOf(stage: ProjectStage): Draft[] {
+function draftsOf(stage: Pick<ProjectStage, 'stageTasks'>): Draft[] {
   return [...stage.stageTasks]
     .sort((a, b) => a.position - b.position)
     .map((task) => ({
@@ -71,7 +80,9 @@ let nextKey = 0;
  * (`PUT /stages/:stageId/tasks`, at most {@link PROJECT_STAGE_TASKS_MAX}). A
  * reader sees the list as text.
  *
- * The Stages editor renders this only while the Tasks module is present.
+ * The Stages editor renders this only while the Tasks module is present. The
+ * Template editor uses it live (`onChange`): the list is saved with the
+ * Template.
  */
 export function StageTasksEditor(props: StageTasksEditorProps): ReactNode {
   const { stage, position, roles, canWrite, busy } = props;
@@ -79,7 +90,21 @@ export function StageTasksEditor(props: StageTasksEditorProps): ReactNode {
   const tCore = useTranslation('core');
   const hintId = useId();
   const [drafts, setDrafts] = useState<Draft[]>(() => draftsOf(stage));
-  const [invalid, setInvalid] = useState(false);
+  const [refused, setRefused] = useState(false);
+  const invalid = refused || props.showErrors === true;
+  const live = props.onChange;
+  const liveRef = useRef(live);
+  liveRef.current = live;
+  const first = useRef(true);
+
+  // Live editing: hand every change over; the first render changed nothing.
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    liveRef.current?.(definitionsOf(drafts));
+  }, [drafts]);
 
   const roleLabel = (roleId: string | null | undefined): string | null =>
     roleId ? (roles.find((role) => role.id === roleId)?.label ?? null) : null;
@@ -109,16 +134,16 @@ export function StageTasksEditor(props: StageTasksEditorProps): ReactNode {
 
   const change = (key: string, patch: Partial<Draft>): void => {
     setDrafts((previous) => previous.map((draft) => (draft.key === key ? { ...draft, ...patch } : draft)));
-    setInvalid(false);
+    setRefused(false);
   };
 
   const save = async (): Promise<void> => {
     const definitions = definitionsOf(drafts);
     if (definitions === null) {
-      setInvalid(true);
+      setRefused(true);
       return;
     }
-    await props.onSave(definitions);
+    await props.onSave?.(definitions);
   };
 
   return (
@@ -187,7 +212,7 @@ export function StageTasksEditor(props: StageTasksEditorProps): ReactNode {
                 disabled={busy}
                 onClick={(): void => {
                   setDrafts((previous) => previous.filter((candidate) => candidate.key !== draft.key));
-                  setInvalid(false);
+                  setRefused(false);
                 }}
               >
                 <Trash2 aria-hidden="true" />
@@ -215,15 +240,17 @@ export function StageTasksEditor(props: StageTasksEditorProps): ReactNode {
           <Plus aria-hidden="true" />
           {t('stageTasks.add')}
         </Button>
-        <Button
-          type="button"
-          className="min-h-11 sm:min-h-9"
-          aria-label={t('stageTasks.save', { position })}
-          disabled={busy}
-          onClick={(): void => void save()}
-        >
-          {tCore('common.action.save')}
-        </Button>
+        {live ? null : (
+          <Button
+            type="button"
+            className="min-h-11 sm:min-h-9"
+            aria-label={t('stageTasks.save', { position })}
+            disabled={busy}
+            onClick={(): void => void save()}
+          >
+            {tCore('common.action.save')}
+          </Button>
+        )}
       </div>
     </fieldset>
   );

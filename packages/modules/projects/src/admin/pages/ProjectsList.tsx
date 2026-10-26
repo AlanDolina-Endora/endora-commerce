@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ClipboardList, Plus, SearchX, X } from 'lucide-react';
-import type { ProjectState, ProjectSummary } from '@endora-commerce/contracts';
+import type { ProjectRole, ProjectState, ProjectSummary, ProjectTemplateSummary } from '@endora-commerce/contracts';
 import { useAuth, usePageSizePreference, type PageSizeOption } from '@endora-commerce/admin-kit/lib';
 import {
   Alert,
@@ -16,6 +16,7 @@ import {
   Select,
 } from '@endora-commerce/admin-kit/ui';
 import {
+  AdminUserPicker,
   OrganizationPicker,
   PaginationFooter,
   ResponsiveTable,
@@ -50,10 +51,24 @@ interface Filters {
   q: string;
   state: ProjectState | '';
   organizationId: string | null;
+  /** "Only mine" and {@link memberId} are one filter (`memberId`): setting one clears the other. */
   mine: boolean;
+  memberId: string | null;
+  roleId: string;
+  templateId: string;
+  stageName: string;
 }
 
-const NO_FILTERS: Filters = { q: '', state: '', organizationId: null, mine: false };
+const NO_FILTERS: Filters = {
+  q: '',
+  state: '',
+  organizationId: null,
+  mine: false,
+  memberId: null,
+  roleId: '',
+  templateId: '',
+  stageName: '',
+};
 
 /**
  * The Projects list (`specs/163-projects-and-tasks/`, User Story 1;
@@ -61,12 +76,14 @@ const NO_FILTERS: Filters = { q: '', state: '', organizationId: null, mine: fals
  *
  * Every Project the operator may see — the server applies Organization reach
  * and visibility, so nothing here filters for safety — narrowed by state,
- * Organization, "my projects" and a search over number and title, sorted by
- * creation, value or the current Stage's deadline. The list is keyset-paged
- * and knows its total, so the kit's footer can say "21–40 of 57".
+ * Organization, "my projects" or any one Member, a Project Role some Member
+ * holds, the Template it was created from, the current Stage's name and a
+ * search over number and title; sorted by creation, value or the current
+ * Stage's deadline. The list is keyset-paged and knows its total, so the kit's
+ * footer can say "21–40 of 57".
  *
- * The filters by Role, Template and current Stage name arrive with the stories
- * that make them useful.
+ * The Role and Template choices list archived ones too, marked: a Project
+ * keeps an archived Role, and was created from a Template archived since.
  */
 export function ProjectsList(): ReactNode {
   const t = useTranslation('projects');
@@ -79,6 +96,9 @@ export function ProjectsList(): ReactNode {
 
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [search, setSearch] = useState('');
+  const [stageSearch, setStageSearch] = useState('');
+  const [roles, setRoles] = useState<ProjectRole[]>([]);
+  const [templates, setTemplates] = useState<ProjectTemplateSummary[]>([]);
   const [sort, setSort] = useState<SortOption>('createdAt:desc');
   /** The cursors that led to the page on screen; empty on the first page. */
   const [trail, setTrail] = useState<string[]>([]);
@@ -90,14 +110,38 @@ export function ProjectsList(): ReactNode {
   const [error, setError] = useState<string | null>(null);
   const sequence = useRef(0);
 
-  // The search box is typed into; the request follows once typing pauses.
+  // The search boxes are typed into; the request follows once typing pauses.
   useEffect(() => {
     const timer = setTimeout(() => {
-      setFilters((previous) => (previous.q === search ? previous : { ...previous, q: search }));
+      setFilters((previous) =>
+        previous.q === search && previous.stageName === stageSearch
+          ? previous
+          : { ...previous, q: search, stageName: stageSearch },
+      );
       setTrail((previous) => (previous.length === 0 ? previous : []));
     }, SEARCH_DEBOUNCE_MS);
     return (): void => clearTimeout(timer);
-  }, [search]);
+  }, [search, stageSearch]);
+
+  // The choices of the Role and Template filters; a failed read leaves the filter with "any" only.
+  useEffect(() => {
+    let alive = true;
+    projectsApi
+      .listRoles()
+      .then((loaded) => {
+        if (alive) setRoles(loaded);
+      })
+      .catch(() => undefined);
+    projectsApi
+      .listTemplates()
+      .then((loaded) => {
+        if (alive) setTemplates(loaded);
+      })
+      .catch(() => undefined);
+    return (): void => {
+      alive = false;
+    };
+  }, []);
 
   const params = useMemo<ProjectListParams>(() => {
     const [field, order] = sort.split(':') as [ProjectSort, 'asc' | 'desc'];
@@ -106,7 +150,10 @@ export function ProjectsList(): ReactNode {
       ...(filters.q.trim() ? { q: filters.q.trim() } : {}),
       ...(filters.state ? { state: [filters.state] } : {}),
       ...(filters.organizationId ? { organizationId: filters.organizationId } : {}),
-      ...(filters.mine ? { memberId: 'me' } : {}),
+      ...(filters.mine ? { memberId: 'me' } : filters.memberId ? { memberId: filters.memberId } : {}),
+      ...(filters.roleId ? { roleId: filters.roleId } : {}),
+      ...(filters.templateId ? { templateId: filters.templateId } : {}),
+      ...(filters.stageName.trim() ? { stageName: filters.stageName.trim() } : {}),
       sort: field,
       order,
       ...(cursor ? { cursor } : {}),
@@ -145,12 +192,20 @@ export function ProjectsList(): ReactNode {
 
   const clear = (): void => {
     setSearch('');
+    setStageSearch('');
     setFilters(NO_FILTERS);
     setTrail([]);
   };
 
   const filtered =
-    search.trim() !== '' || filters.state !== '' || filters.organizationId !== null || filters.mine;
+    search.trim() !== '' ||
+    stageSearch.trim() !== '' ||
+    filters.state !== '' ||
+    filters.organizationId !== null ||
+    filters.mine ||
+    filters.memberId !== null ||
+    filters.roleId !== '' ||
+    filters.templateId !== '';
 
   const columns: ResponsiveColumn<ProjectSummary>[] = [
     {
@@ -313,10 +368,63 @@ export function ProjectsList(): ReactNode {
                 <Checkbox
                   id="projects-mine"
                   checked={filters.mine}
-                  onChange={(event): void => change({ mine: event.target.checked })}
+                  onChange={(event): void =>
+                    change(event.target.checked ? { mine: true, memberId: null } : { mine: false })
+                  }
                 />
                 {t('list.filter.mine')}
               </label>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="projects-member">{t('list.filter.member')}</Label>
+              <AdminUserPicker
+                id="projects-member"
+                ariaLabel={t('list.filter.member')}
+                value={filters.memberId}
+                onChange={(memberId): void => change(memberId ? { memberId, mine: false } : { memberId: null })}
+                placeholder={t('list.filter.memberPlaceholder')}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="projects-role">{t('list.filter.role')}</Label>
+              <Select
+                id="projects-role"
+                value={filters.roleId}
+                onChange={(event): void => change({ roleId: event.target.value })}
+              >
+                <option value="">{t('list.filter.roleAll')}</option>
+                {roles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.archivedAt ? t('overview.archivedRole', { role: role.label }) : role.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="projects-template">{t('list.filter.template')}</Label>
+              <Select
+                id="projects-template"
+                value={filters.templateId}
+                onChange={(event): void => change({ templateId: event.target.value })}
+              >
+                <option value="">{t('list.filter.templateAll')}</option>
+                {templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.archivedAt ? `${template.name} (${t('templates.list.archived')})` : template.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="projects-stage-name">{t('list.filter.stageName')}</Label>
+              <Input
+                id="projects-stage-name"
+                type="search"
+                value={stageSearch}
+                maxLength={80}
+                placeholder={t('list.filter.stageNamePlaceholder')}
+                onChange={(event): void => setStageSearch(event.target.value)}
+              />
             </div>
           </div>
           <div className="mt-4 flex flex-wrap items-end justify-between gap-3">

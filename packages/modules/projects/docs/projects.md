@@ -34,22 +34,31 @@ client*, *No decision* and *Other* — are a list the operator keeps the same wa
 ## In the Admin UI
 
 Projects are in the sidebar under **Projects & tasks → Projects** (`/projects`),
-for administrators who may view projects.
+for administrators who may view projects, and their templates under
+**Projects & tasks → Templates** (`/projects/templates`), for administrators who
+may configure projects.
 
 **The list** shows every project you may see: its number, title,
 Organizations — or *Internal* — the current stage with its deadline, marked
 *Overdue* once it has passed, the value and the project managers. Filter it by
-state, by Organization or to the projects you are a member of, search by number
-or title, and sort it by creation date, value or the current stage's deadline;
+state, by Organization, to the projects you are a member of or those of any one
+member, by a project role somebody holds on them, by the template they were
+created from, and by the name of their current stage; search by number or
+title, and sort it by creation date, value or the current stage's deadline;
 projects without a value or a deadline come last either way.
 
-**New project** (`/projects/new`) asks for a title and the stages, in order —
-a name, a colour and a planned duration in days for each, at least one — and
-optionally the Organizations, a value with its currency, a start date, a
-description and the members, each with the roles they hold. With no
-Organization the project is internal, and the form says who will see it. The
-project follows the module's *Who sees a Project* setting; choosing it per
-project, templates and custom fields arrive with later releases.
+**New project** (`/projects/new`) first offers the **templates**: choosing one
+fills in the description and offers the template's roles first to each member,
+and lists the stages the project will get from it — with their workflow, gates,
+alerts and stage tasks — which are changed on the project's *Stages* tab once
+it exists. Without a template the form asks for the stages, in order — a name,
+a colour and a planned duration in days for each, at least one. Either way it
+asks for a title and optionally the Organizations, a value with its currency, a
+start date, a description and the members, each with the roles they hold;
+whatever a template filled in can still be changed. With no Organization the
+project is internal, and the form says who will see it. The project follows the
+module's *Who sees a Project* setting; choosing it per project and custom
+fields arrive with later releases.
 
 **A project's screen** names the project, its state, value and Organizations.
 Below them is the **stage bar**: every stage in order, the current one marked,
@@ -73,9 +82,11 @@ Its tabs:
   it, saved one stage at a time; stages are added at the end, moved up or down
   and deleted here. With the Tasks module on, each stage also lists its
   **stage tasks** — a title, the days after the stage starts that the task is
-  due, and the responsible role — saved as one list per stage. Below the stages
-  the **workflow**, drawn as a graph, where moves are added and removed; a
-  stage no move reaches from the first one is named in a warning.
+  due, and the responsible role — saved as one list per stage; a stage whose
+  tasks could not be created when the project entered it says so and offers
+  *Create the stage's tasks again*. Below the stages the **workflow**, drawn as
+  a graph, where moves are added and removed; a stage no move reaches from the
+  first one is named in a warning.
 - **Tasks** — with the Tasks module on, for administrators who may view tasks:
   every stage in order with its tasks — number (a link to the task), title,
   status, assignee and due date, overdue ones marked — and, for administrators
@@ -87,8 +98,16 @@ Its tabs:
 Without the permission to create and run projects the screen is read-only: the
 stages, the workflow and the history are shown, and nothing can be changed.
 
-Roles, loss reasons and templates have no screen yet; they arrive with later
-releases of this module.
+**Templates** (`/projects/templates`) lists the templates by name with their
+number of stages; archived ones are listed on request, marked *Archived*. A
+template's screen — or *New template* — edits its name, default description and
+project roles, and its stages with the same fields, stage tasks and workflow
+graph as a project's *Stages* tab; everything is saved together with *Save
+template*. *Duplicate* makes an independent copy and opens it; *Archive* takes
+the template out of the choices of *New project*, and *Restore* puts it back.
+
+Roles and loss reasons have no screen yet; they arrive with a later release of
+this module.
 
 ## Running a project
 
@@ -169,7 +188,8 @@ description, the role responsible for it and a due offset in days. They
 become real tasks when the project **enters** the stage: due on the day the
 stage started plus the offset, and assigned to the member who holds the
 responsible role, if exactly one active member does; otherwise the task is
-left unassigned and its note names the role. They are created once per stage:
+left unassigned and its note names the role — in the language of whoever reads
+the task, with the role's current name. They are created once per stage:
 entering the stage again creates nothing. The tasks are created on behalf of
 the person who moved the project and recorded in the Tasks module's own
 history. A stage with no stage tasks creates none; stage tasks added to it
@@ -177,7 +197,8 @@ later are created the next time the project enters it.
 
 If the Tasks module fails while creating them, the project is still in the new
 stage, the stage history says *Creating the stage's tasks failed.*, and they can
-be created again — once — from the stage.
+be created again — once — with *Create the stage's tasks again* on the stage in
+the *Stages* tab.
 
 **With the Tasks module switched off** a project keeps working with nothing
 but its own stages, and nothing is lost:
@@ -193,6 +214,33 @@ but its own stages, and nothing is lost:
 
 Deleting a project deletes its tasks with it (while Tasks is on; with Tasks
 off they stay, hidden, because nobody can see the project they belong to).
+
+## Templates
+
+A **template** is a structure a new project can start from — for example
+*Showroom fit-out* or *Annual framework contract*: a default description, the
+project roles involved, and its stages with everything a project's stage has —
+planned duration, responsible roles, deadline alerts, completion gate, whether
+the project may be completed from it, and its stage tasks — and the workflow
+between them. A template has no Organizations, members, value or linked
+records.
+
+**Creating a project from a template** copies all of it into the new project:
+its stages, workflow, gates, alerts, stage tasks and default description. The
+copy is the project's own. The **first stage's** stage tasks become tasks as the
+project is created, a later stage's when the project enters it, as for any
+stage. Whatever the person creating the project typed wins over the template —
+a description of their own, for one — and every part of the copy can be
+changed on the project afterwards. A role of the template can be given to a
+member even if it has been archived since.
+
+**Changing a template changes no project.** Editing, archiving or deleting a
+template leaves every project created from it exactly as it is; the project
+names the template it came from for as long as the template exists.
+
+**Duplicating** a template makes an independent copy, named *… (copy)*, that can
+be changed without touching the original. **Archiving** a template takes it out
+of the choices for new projects; it is kept, and can be restored.
 
 ## Who sees a project
 
@@ -231,7 +279,8 @@ off, and back on, on the **Modules** screen of the Admin UI
 
 While it is off:
 
-- the *Projects* entry and every project screen are gone from the Admin UI;
+- the *Projects* and *Templates* entries and every project and template screen
+  are gone from the Admin UI;
 - every `/api/v1/admin/projects…` endpoint answers `503` with the code
   `MODULE_DISABLED`;
 - its permissions can no longer be granted to a role, and its settings cannot be
@@ -255,8 +304,9 @@ on again.
 | --- | --- |
 | `projects:read` | View projects — the list, a single project and its stage history — subject to the two rules of *Who sees a project*. |
 | `projects:write` | Create, edit and delete projects; set their Organizations, members, stages and workflow; move, close and reopen them. Requires `projects:read`. |
+| `projects:configure` | Create, edit, duplicate, archive and restore templates. Requires `projects:read`; anybody who may view projects can read the templates, to start a project from one. |
 
-## Templates, links, collaboration, deadline alerts and analytics
+## Links, collaboration, deadline alerts and analytics
 
 *Each of these arrives with a later release of this module and is described
 here when it does.*
@@ -268,7 +318,7 @@ here when it does.*
 | Method and path | Permission | What it answers |
 | --- | --- | --- |
 | `GET /api/v1/admin/projects` | `projects:read` | A page of projects and how many the caller may see: `{ items, nextCursor, total }`. Filters: `state` (repeatable), `organizationId`, `memberId` (an administrator's id or `me`), `roleId`, `templateId`, `stageName` (the current stage's name), `q` (number or title), `sort` (`createdAt` — the default, `value`, or `deadline` — the current stage's; projects without one come last either way), `order` (`asc` or `desc`, default `desc`), `cursor`, `limit` (at most 100). |
-| `POST /api/v1/admin/projects` | `projects:write` | `201` `{ data: ProjectDetail }`. Without a template, `stages` is required. |
+| `POST /api/v1/admin/projects` | `projects:write` | `201` `{ data: ProjectDetail }`. Without a `templateId`, `stages` is required; with one, the template's structure is copied and `stages` is refused (`422`), and an unknown or archived template is `422` `PROJECT_TEMPLATE_NOT_FOUND`. |
 | `GET /api/v1/admin/projects/:id` | `projects:read` | `{ data: ProjectDetail }`, or `404` `PROJECT_NOT_FOUND` — for a project that does not exist and for one the caller may not see alike. |
 | `PATCH /api/v1/admin/projects/:id` | `projects:write` | Title, description, value, start date, with `version`. |
 | `DELETE /api/v1/admin/projects/:id` | `projects:write` | `204`; `409` `PROJECT_HAS_LINKS` while records are linked. |
@@ -284,9 +334,14 @@ here when it does.*
 | `POST /api/v1/admin/projects/:id/reopen` | `projects:write` | `{ version }` → back into the stage it was closed in. |
 | `GET /api/v1/admin/projects/:id/stage-history` | `projects:read` | Every entry, close and reopen, oldest first. |
 | `PUT /api/v1/admin/projects/:id/stages/:stageId/tasks` | `projects:write` | `{ tasks: StageTaskDefinition[] }` (at most 100), replacing the stage's stage tasks → `{ data: ProjectStage }`; `422` for an unknown responsible role. |
-| `POST /api/v1/admin/projects/:id/stages/:stageId/materialize-tasks` | `projects:write` | Creates the stage's tasks again after a recorded failure → `{ data: { created } }`; `409` `PROJECT_STAGE_TASKS_NOT_RETRYABLE` otherwise, `503` `MODULE_DISABLED` while Tasks is off. |
+| `POST /api/v1/admin/projects/:id/stages/:stageId/materialize-tasks` | `projects:write` | Creates the stage's tasks again after a recorded failure — the stage's `tasksMaterializeFailed` — → `{ data: { created } }`; `409` `PROJECT_STAGE_TASKS_NOT_RETRYABLE` otherwise, `503` `MODULE_DISABLED` while Tasks is off. |
 | `GET /api/v1/admin/projects/:id/tasks` | `projects:read` | `{ data: { tasksAvailable, stages: [{ stageId, tasks: TaskSummary[] }] } }`, in stage order; `tasksAvailable: false` and no stages while Tasks is off or for a reader without `tasks:read`. |
 | `GET /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:read` | The dictionaries, with `label` in the reader's language; `active=true` leaves archived rows out. |
+| `GET /api/v1/admin/projects/templates` | `projects:read` | `{ data: ProjectTemplateSummary[] }` by name; `active=true` leaves archived templates out. |
+| `GET /api/v1/admin/projects/templates/:id` | `projects:read` | `{ data: ProjectTemplateDetail }`, or `404` `PROJECT_TEMPLATE_NOT_FOUND`. |
+| `POST /api/v1/admin/projects/templates`, `PUT …/templates/:id` | `projects:configure` | The whole template in one body (`ProjectTemplateBody`: name, description, `roleIds`, `stages` each with a `key` and its `tasks`, `moves` naming stages by key — left out, each stage moves to the next) → `201` / `200` `{ data: ProjectTemplateDetail }`. A key that is the id of one of the template's stages keeps that stage's id. |
+| `POST /api/v1/admin/projects/templates/:id/duplicate` | `projects:configure` | `201` `{ data: ProjectTemplateDetail }` — an independent copy. |
+| `POST /api/v1/admin/projects/templates/:id/archive`, `…/restore` | `projects:configure` | `{ data: ProjectTemplateDetail }`. |
 
 The request and response shapes are the Zod schemas of
 `@endora-commerce/contracts` (`projects.ts`).
@@ -322,7 +377,9 @@ it with `POST /api/v1/admin/tasks` and that context.
 The module reads and writes tasks only through `taskReadPort` and
 `taskWritePort`, after deciding that Tasks is present (`degrades-without`
 edges). Stage tasks are created after the move's own transaction has
-committed, one audited `tasks.task.create` command each.
+committed, one audited `tasks.task.create` command each. The note of a stage
+task left unassigned is stored as the responsible role (`role:<id>`), not as a
+sentence; the descriptor's `renderNote` words it in each reader's language.
 
 ### One read path
 

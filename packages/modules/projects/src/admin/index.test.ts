@@ -20,10 +20,14 @@ function bundle(language: 'en' | 'pl'): Record<string, string> {
 }
 
 describe('projects admin contributions', () => {
-  it("declares User Story 1's three screens, each on the code its route enforces", () => {
+  it('declares its screens, each on the code its route enforces', () => {
     expect((contributions.routes ?? []).map((route) => [route.path, route.requiredPermission])).toEqual([
       ['/projects', 'projects:read'],
       ['/projects/new', 'projects:write'],
+      // User Story 3 — Templates are configuration.
+      ['/projects/templates', 'projects:configure'],
+      ['/projects/templates/new', 'projects:configure'],
+      ['/projects/templates/:id', 'projects:configure'],
       ['/projects/:id', 'projects:read'],
     ]);
     expect((contributions.routes ?? []).filter((route) => route.index)).toHaveLength(1);
@@ -37,10 +41,13 @@ describe('projects admin contributions', () => {
     expect(entry).not.toMatch(/^import .* from '\.\/(pages|components)\//m);
   });
 
-  it('puts "Projects" first in the "Projects & tasks" section, on projects:read', () => {
+  it('puts "Projects" first in the "Projects & tasks" section, on projects:read, and "Templates" after the Tasks entries', () => {
     expect(
       (contributions.nav ?? []).map((row) => [row.to, row.section, row.weight, row.requiredPermission, row.icon]),
-    ).toEqual([['/projects', 'work', 100, 'projects:read', 'ClipboardList']]);
+    ).toEqual([
+      ['/projects', 'work', 100, 'projects:read', 'ClipboardList'],
+      ['/projects/templates', 'work', 400, 'projects:configure', 'Layers'],
+    ]);
   });
 
   it('gates every route and nav row on a code its manifest declares', () => {

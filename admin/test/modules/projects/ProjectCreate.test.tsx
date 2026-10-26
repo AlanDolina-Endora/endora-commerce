@@ -18,10 +18,10 @@ import {
  * Creating a Project by hand (`specs/163-projects-and-tasks/`, User Story 1 —
  * tasks T047 and T055; `contracts/admin-surfaces.md` §2, `/projects/new`).
  *
- * Without a Template — which arrives with User Story 3 — `POST /projects`
+ * Without a Template (`ProjectCreate.from-template.test.tsx`) `POST /projects`
  * requires its Stages, so the form carries a Stage list (name, colour, planned
  * duration; at least one). Members are chosen with the kit's
- * `AdminUserPicker`, each with the Project Roles of `GET /projects/roles?active=true`.
+ * `AdminUserPicker`, each with the active Project Roles of `GET /projects/roles`.
  * An empty Organization list is an internal Project, and the form says what
  * that means for who sees it.
  */
@@ -79,7 +79,9 @@ beforeEach(() => {
   getSpy.mockReset();
   postSpy.mockReset();
   getSpy.mockImplementation((path: string) => {
-    if (path === '/api/v1/admin/projects/roles?active=true') return Promise.resolve({ data: ROLES });
+    // Every Role: a Template may offer one archived since (User Story 3); the form offers the active ones.
+    if (path === '/api/v1/admin/projects/roles') return Promise.resolve({ data: ROLES });
+    if (path === '/api/v1/admin/projects/templates?active=true') return Promise.resolve({ data: [] });
     if (path.startsWith('/api/v1/admin/organizations')) {
       return Promise.resolve({ data: [], pagination: { cursor: null, hasMore: false, limit: 20 } });
     }

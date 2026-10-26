@@ -246,6 +246,56 @@ describe('ProjectDetail — Stage Task definitions on the Stages tab', () => {
     expect((field as HTMLInputElement).value).toBe('Measure the hall');
   });
 
+  it('offers to create a Stage’s Tasks again after creating them failed, and says how many were created (T079)', async () => {
+    const failed = (flag: boolean) =>
+      detail({
+        stages: [
+          stage({ id: STAGE_DESIGN, name: 'Design', position: 0, startedOn: '2026-10-20' }),
+          stage({
+            id: STAGE_BUILD,
+            name: 'Build',
+            position: 1,
+            startedOn: '2026-10-25',
+            tasksMaterializeFailed: flag,
+            stageTasks: [
+              { id: '00000000-0000-4000-8000-000000000f92', position: 1, title: 'Book the crane', dueOffsetDays: 1, responsibleRoleId: null },
+            ],
+          }),
+          stage({ id: STAGE_HANDOVER, name: 'Handover', position: 2, completionPermitted: true }),
+        ],
+      });
+    current = failed(true);
+    postSpy.mockImplementation((path: string) => {
+      if (path === `${DETAIL_PATH}/stages/${STAGE_BUILD}/materialize-tasks`) {
+        current = failed(false);
+        return Promise.resolve({ data: { created: 1 } });
+      }
+      return Promise.reject(new Error(`unexpected POST ${path}`));
+    });
+    await renderPage({ search: '?tab=stages' });
+    const panel = await screen.findByRole('tabpanel');
+    expect(await within(panel).findByText(en('editor.retry.body', { position: 2 }))).toBeTruthy();
+    // Only the Stage whose Tasks failed offers it.
+    expect(within(panel).getAllByText(en('editor.retry.action'))).toHaveLength(1);
+    await userEvent.click(within(panel).getByRole('button', { name: en('editor.retry.actionFor', { position: 2 }) }));
+    expect(postSpy).toHaveBeenCalledWith(`${DETAIL_PATH}/stages/${STAGE_BUILD}/materialize-tasks`);
+    await waitFor(() => expect(within(panel).queryByText(en('editor.retry.body', { position: 2 }))).toBeNull());
+    expect(await screen.findByText(en('editor.retry.done', { count: 1 }))).toBeTruthy();
+  });
+
+  it('offers no retry while the Tasks module is off, nor to a reader', async () => {
+    current = detail({
+      stages: [
+        stage({ id: STAGE_DESIGN, name: 'Design', position: 0, tasksMaterializeFailed: true }),
+        stage({ id: STAGE_BUILD, name: 'Build', position: 1 }),
+      ],
+    });
+    await renderPage({ present: ['projects', 'organizations', 'admin_users'], search: '?tab=stages' });
+    const panel = await screen.findByRole('tabpanel');
+    await within(panel).findByLabelText(en('stage.name', { position: 2 }));
+    expect(within(panel).queryByText(en('editor.retry.body', { position: 1 }))).toBeNull();
+  });
+
   it('has no Task section while the Tasks module is off', async () => {
     await renderPage({ present: ['projects', 'organizations', 'admin_users'], search: '?tab=stages' });
     const panel = await screen.findByRole('tabpanel');

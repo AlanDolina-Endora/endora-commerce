@@ -198,6 +198,11 @@ Zobowiązania deskryptora:
 - `visibleContextIds(ids)` odpowiada dla jednego zadania albo kilku.
 - `describe(ids)` określa, jak zadanie pokazuje swój kontekst: etykietę, adres w
   panelu administracyjnym i etykiety grup rekordu.
+- `renderNote(note, language)`, opcjonalna, formułuje w języku czytającego
+  notatkę, którą moduł zostawił w zadaniu przy jego tworzeniu (`contextNote` w
+  `taskWritePort.createMany`). Zapisuj klucz zamiast zdania — Projekty zapisują
+  rolę odpowiedzialną — a zdanie zwracaj tutaj; bez tej metody notatka jest
+  pokazywana tak, jak ją zapisano.
 - Jeden typ kontekstu ma jednego właściciela; rejestracja drugiego, innego
   deskryptora dla zajętego już typu zatrzymuje backend przy starcie.
 - **Zasada to fail-closed.** Zadanie, którego typu kontekstu nikt nie

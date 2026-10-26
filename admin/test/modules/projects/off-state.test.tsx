@@ -113,11 +113,18 @@ const notFoundIsRendered = (): boolean => screen.queryAllByText(/app\.notFound/)
 
 const concreteUrl = (pattern: string): string => pattern.replace(/:[A-Za-z]+/g, '00000000-0000-4000-8000-0000000000f1');
 
-const READ_AND_WRITE = ['projects:read', 'projects:write'];
+const READ_AND_WRITE = ['projects:read', 'projects:write', 'projects:configure'];
 
 describe('projects admin surface', () => {
-  it('is registered: the list, the create screen and one Project', () => {
-    expect(routes.map((route) => route.path)).toEqual(['/projects', '/projects/new', '/projects/:id']);
+  it('is registered: the list, the create screen, the Templates screens and one Project', () => {
+    expect(routes.map((route) => route.path)).toEqual([
+      '/projects',
+      '/projects/new',
+      '/projects/templates',
+      '/projects/templates/new',
+      '/projects/templates/:id',
+      '/projects/:id',
+    ]);
   });
 
   it('contributes its sidebar entry and every screen while present', async () => {
@@ -125,6 +132,7 @@ describe('projects admin surface', () => {
     permissions = new Set(READ_AND_WRITE);
     const shell = renderAt('/');
     expect(sidebarHrefs()).toContain('/projects');
+    expect(sidebarHrefs()).toContain('/projects/templates');
     shell.unmount();
     for (const route of routes) {
       const rendered = renderAt(concreteUrl(route.path));
@@ -138,6 +146,7 @@ describe('projects admin surface', () => {
     permissions = new Set(READ_AND_WRITE);
     const shell = renderAt('/');
     expect(sidebarHrefs()).not.toContain('/projects');
+    expect(sidebarHrefs()).not.toContain('/projects/templates');
     shell.unmount();
     for (const route of routes) {
       const deepLink = renderAt(concreteUrl(route.path));
@@ -146,12 +155,24 @@ describe('projects admin surface', () => {
     }
   });
 
-  it('withholds the create screen from a reader, and everything from somebody without projects:read', async () => {
+  it('withholds the create screen from a reader, Templates from somebody without projects:configure, and everything from somebody without projects:read', async () => {
     presentModules = new Set(['projects']);
     permissions = new Set(['projects:read']);
     const reader = renderAt('/projects/new');
     await waitFor(() => expect(notFoundIsRendered()).toBe(true));
     reader.unmount();
+
+    // Templates are configuration: projects:write is not enough.
+    permissions = new Set(['projects:read', 'projects:write']);
+    const writer = renderAt('/');
+    expect(sidebarHrefs()).toContain('/projects');
+    expect(sidebarHrefs()).not.toContain('/projects/templates');
+    writer.unmount();
+    for (const path of ['/projects/templates', '/projects/templates/new', concreteUrl('/projects/templates/:id')]) {
+      const screen = renderAt(path);
+      await waitFor(() => expect(notFoundIsRendered(), path).toBe(true));
+      screen.unmount();
+    }
 
     permissions = new Set(['projects:write']);
     const shell = renderAt('/');

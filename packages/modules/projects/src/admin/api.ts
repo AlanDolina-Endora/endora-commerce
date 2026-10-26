@@ -13,6 +13,10 @@ import type {
   ProjectStageMove,
   ProjectState,
   ProjectTasksResponse,
+  ProjectTemplateBody,
+  ProjectTemplateDetail,
+  ProjectTemplateSummary,
+  MaterializeStageTasksResult,
   SetProjectMovesResult,
   StageTaskDefinition,
   TaskSummary,
@@ -21,7 +25,7 @@ import type {
 
 /**
  * The HTTP calls of the Projects admin screens
- * (`specs/163-projects-and-tasks/contracts/admin-api.md` §2.1, §2.2, §2.5).
+ * (`specs/163-projects-and-tasks/contracts/admin-api.md` §2.1, §2.2, §2.5 — Templates included).
  *
  * Every shape is `@endora-commerce/contracts`' — the schemas the backend
  * validates with — so a screen and a route cannot disagree about a field
@@ -50,6 +54,12 @@ export interface ProjectListParams {
   organizationId?: string;
   /** An administrator's id, or `me`. */
   memberId?: string;
+  /** Projects in which some Member holds this Project Role. */
+  roleId?: string;
+  /** Projects created from this Template. */
+  templateId?: string;
+  /** The current Stage's name, case-insensitive. */
+  stageName?: string;
   sort?: ProjectSort;
   order?: 'asc' | 'desc';
   cursor?: string;
@@ -62,6 +72,9 @@ function listQuery(params: ProjectListParams): string {
   for (const state of params.state ?? []) qs.append('state', state);
   if (params.organizationId) qs.set('organizationId', params.organizationId);
   if (params.memberId) qs.set('memberId', params.memberId);
+  if (params.roleId) qs.set('roleId', params.roleId);
+  if (params.templateId) qs.set('templateId', params.templateId);
+  if (params.stageName) qs.set('stageName', params.stageName);
   if (params.sort) qs.set('sort', params.sort);
   if (params.order) qs.set('order', params.order);
   if (params.cursor) qs.set('cursor', params.cursor);
@@ -135,6 +148,16 @@ export const projectsApi = {
     return data(apiClient.put<{ data: ProjectStage }>(`${BASE}/${projectId}/stages/${stageId}/tasks`, { tasks }));
   },
 
+  /**
+   * Create a Stage's Tasks again after creating them failed on entry
+   * (`tasksMaterializeFailed`); 409 `PROJECT_STAGE_TASKS_NOT_RETRYABLE` otherwise.
+   */
+  retryStageTasks(projectId: string, stageId: string): Promise<MaterializeStageTasksResult> {
+    return data(
+      apiClient.post<{ data: MaterializeStageTasksResult }>(`${BASE}/${projectId}/stages/${stageId}/materialize-tasks`),
+    );
+  },
+
   /** The Project's Tasks by Stage; `tasksAvailable: false` while Tasks is off or unreadable for the caller. */
   projectTasks(projectId: string): Promise<ProjectTasksResponse> {
     return data(apiClient.get<{ data: ProjectTasksResponse }>(`${BASE}/${projectId}/tasks`));
@@ -169,5 +192,39 @@ export const projectsApi = {
     return data(
       apiClient.get<{ data: ProjectLossReason[] }>(`${BASE}/loss-reasons${options.active ? '?active=true' : ''}`),
     );
+  },
+
+  // --- §2.5 Templates (User Story 3) -----------------------------------------
+
+  /** `active` leaves archived Templates out — what the create screen offers. */
+  listTemplates(options: { active?: boolean } = {}): Promise<ProjectTemplateSummary[]> {
+    return data(
+      apiClient.get<{ data: ProjectTemplateSummary[] }>(`${BASE}/templates${options.active ? '?active=true' : ''}`),
+    );
+  },
+
+  getTemplate(id: string): Promise<ProjectTemplateDetail> {
+    return data(apiClient.get<{ data: ProjectTemplateDetail }>(`${BASE}/templates/${id}`));
+  },
+
+  createTemplate(body: ProjectTemplateBody): Promise<ProjectTemplateDetail> {
+    return data(apiClient.post<{ data: ProjectTemplateDetail }>(`${BASE}/templates`, body));
+  },
+
+  /** The whole Template replaced in one request. */
+  saveTemplate(id: string, body: ProjectTemplateBody): Promise<ProjectTemplateDetail> {
+    return data(apiClient.put<{ data: ProjectTemplateDetail }>(`${BASE}/templates/${id}`, body));
+  },
+
+  duplicateTemplate(id: string): Promise<ProjectTemplateDetail> {
+    return data(apiClient.post<{ data: ProjectTemplateDetail }>(`${BASE}/templates/${id}/duplicate`));
+  },
+
+  archiveTemplate(id: string): Promise<ProjectTemplateDetail> {
+    return data(apiClient.post<{ data: ProjectTemplateDetail }>(`${BASE}/templates/${id}/archive`));
+  },
+
+  restoreTemplate(id: string): Promise<ProjectTemplateDetail> {
+    return data(apiClient.post<{ data: ProjectTemplateDetail }>(`${BASE}/templates/${id}/restore`));
   },
 };

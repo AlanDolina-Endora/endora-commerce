@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { setMobileViewport } from '../../setup';
-import { ORGANIZATION_ID, PROJECT_ID, en, renderProjects, summary } from './projects-fixtures';
+import { ADMIN_ID, ORGANIZATION_ID, PROJECT_ID, ROLES, ROLE_MANAGER, en, renderProjects, summary } from './projects-fixtures';
 
 /**
  * The Projects list (`specs/163-projects-and-tasks/`, User Story 1 — tasks
@@ -34,10 +34,32 @@ vi.mock('@endora-commerce/admin-kit/lib', async () => {
   };
 });
 
+/** The kit's picker searches through a module no mock reaches; a select stands in (see `ProjectCreate.test.tsx`). */
+vi.mock('@endora-commerce/admin-kit/components', async () => {
+  const actual = await vi.importActual<typeof import('@endora-commerce/admin-kit/components')>(
+    '@endora-commerce/admin-kit/components',
+  );
+  return {
+    ...actual,
+    AdminUserPicker: (props: { id?: string; ariaLabel?: string; value: string | null; onChange: (id: string | null) => void }) => (
+      <select
+        id={props.id}
+        aria-label={props.ariaLabel}
+        value={props.value ?? ''}
+        onChange={(event): void => props.onChange(event.target.value || null)}
+      >
+        <option value="">—</option>
+        <option value={ADMIN_ID}>Anna Nowak</option>
+      </select>
+    ),
+  };
+});
+
 const { ProjectsList } = await import('../../../../packages/modules/projects/src/admin/pages/ProjectsList');
 
 const LIST_PATH = '/api/v1/admin/projects';
 const SECOND_ID = '00000000-0000-4000-8000-0000000000f2';
+const TEMPLATE_ID = '00000000-0000-4000-8000-0000000007a1';
 
 let page: { items: unknown[]; nextCursor: string | null; total: number };
 
@@ -62,6 +84,12 @@ beforeEach(() => {
   };
   getSpy.mockImplementation((path: string) => {
     if (path === LIST_PATH || path.startsWith(`${LIST_PATH}?`)) return Promise.resolve(page);
+    if (path === `${LIST_PATH}/roles`) return Promise.resolve({ data: ROLES });
+    if (path === `${LIST_PATH}/templates`) {
+      return Promise.resolve({
+        data: [{ id: TEMPLATE_ID, name: 'Showroom fit-out', stageCount: 3, archivedAt: null, updatedAt: '2026-10-21T10:00:00.000Z' }],
+      });
+    }
     if (path.startsWith('/api/v1/admin/organizations')) {
       return Promise.resolve({
         data: [{ id: ORGANIZATION_ID, name: 'Acme', status: 'active' }],
@@ -113,6 +141,9 @@ describe('ProjectsList', () => {
     expect(query.has('state')).toBe(false);
     expect(query.has('memberId')).toBe(false);
     expect(query.has('organizationId')).toBe(false);
+    expect(query.has('templateId')).toBe(false);
+    expect(query.has('roleId')).toBe(false);
+    expect(query.has('stageName')).toBe(false);
   });
 
   it('filters by state, by "my projects" and by Organization', async () => {
@@ -126,6 +157,35 @@ describe('ProjectsList', () => {
     await userEvent.click(screen.getByLabelText(en('list.filter.organization')));
     await userEvent.click(await screen.findByRole('option', { name: /Acme/ }));
     await waitFor(() => expect(lastQuery().get('organizationId')).toBe(ORGANIZATION_ID));
+  });
+
+  it('filters by Template, Role, any member and the current Stage’s name (User Story 3)', async () => {
+    await renderList();
+    const template = screen.getByLabelText(en('list.filter.template'));
+    await within(template).findByRole('option', { name: 'Showroom fit-out' });
+    await userEvent.selectOptions(template, TEMPLATE_ID);
+    await waitFor(() => expect(lastQuery().get('templateId')).toBe(TEMPLATE_ID));
+
+    const role = screen.getByLabelText(en('list.filter.role'));
+    await within(role).findByRole('option', { name: 'Project Manager' });
+    await userEvent.selectOptions(role, ROLE_MANAGER);
+    await waitFor(() => expect(lastQuery().get('roleId')).toBe(ROLE_MANAGER));
+
+    await userEvent.selectOptions(screen.getByLabelText(en('list.filter.member')), ADMIN_ID);
+    await waitFor(() => expect(lastQuery().get('memberId')).toBe(ADMIN_ID));
+    // "Only mine" and a member are one filter: choosing one clears the other.
+    await userEvent.click(screen.getByLabelText(en('list.filter.mine')));
+    await waitFor(() => expect(lastQuery().get('memberId')).toBe('me'));
+    expect((screen.getByLabelText(en('list.filter.member')) as HTMLSelectElement).value).toBe('');
+
+    await userEvent.type(screen.getByLabelText(en('list.filter.stageName')), 'Build');
+    await waitFor(() => expect(lastQuery().get('stageName')).toBe('Build'));
+
+    await userEvent.click(screen.getByRole('button', { name: en('list.filter.clear') }));
+    await waitFor(() => {
+      const query = lastQuery();
+      expect(['templateId', 'roleId', 'memberId', 'stageName'].filter((key) => query.has(key))).toEqual([]);
+    });
   });
 
   it('searches by number or title once typing pauses', async () => {
