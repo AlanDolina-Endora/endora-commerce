@@ -197,7 +197,7 @@ Index (project_id, at).
 **`project_comments`**: id, project_id (cascade), kind (`note`|`message`), body (≤ 20 000,
 tokens), author_admin_user_id, edited_at, deleted_at (notes only), created_at.
 **`project_message_reads`**: (project_id, admin_user_id) PK, last_read_at. Global read baseline:
-the module's install time, stored in `project_message_read_baseline` (single row id = 1) — CRM
+the module's install time, stored in `project_message_read_baselines` (`@GlobalEntity`, single row id = 1) — CRM
 shape.
 **`project_references`**: id, project_id (cascade), source_kind (`description`|`comment`),
 source_id, target_type (`admin_user`|`order`|`product`|`quote_request`|`task`), target_id.
