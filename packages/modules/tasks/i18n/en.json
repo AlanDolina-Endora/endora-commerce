@@ -1,6 +1,14 @@
 {
   "adminRoles.permission.tasks:read": "View tasks",
+  "adminRoles.permission.tasks:write": "Create and edit tasks",
   "errors.TASK_NOT_FOUND": "This task does not exist or is not available to you.",
   "errors.TASK_CONTEXT_INVALID": "This task cannot belong there: the record does not exist, is not available to you, or its module is switched off.",
-  "errors.TASK_ASSIGNEE_INVALID": "This person cannot be assigned: they are not an active administrator."
+  "errors.TASK_ASSIGNEE_INVALID": "This person cannot be assigned: they are not an active administrator.",
+  "notifications.assigned.title": "Task {number} was assigned to you",
+  "context.unavailable": "Unavailable record",
+  "auditLog.tasks.task.create": "Task created",
+  "auditLog.tasks.task.update": "Task updated",
+  "auditLog.tasks.task.assign": "Task assigned",
+  "auditLog.tasks.task.status_change": "Task status changed",
+  "auditLog.tasks.task.delete": "Task deleted"
 }

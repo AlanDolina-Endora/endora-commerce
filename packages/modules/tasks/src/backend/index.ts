@@ -1,15 +1,26 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
-import type { AdminUserReadPort, TaskReadPort, TaskWritePort } from '@endora-commerce/contracts';
+import type {
+  AdminI18nTranslatePort,
+  AdminNotificationRecordPort,
+  AdminUserReadPort,
+  AuditReferenceRegistryPort,
+  TaskReadPort,
+  TaskWritePort,
+} from '@endora-commerce/contracts';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import {
   effectiveState,
   lazyPort,
+  type AuditPort,
   type ModuleContext,
   type RequireAdminFactory,
 } from '@endora-commerce/platform/kernel';
 import { Task } from './entities/task.entity.js';
 import { registerTaskRoutes } from './routes/routes.tasks.js';
+import { registerTaskAuditReferences } from './services/task-audit-references.js';
 import { TaskContextRegistry } from './services/task-context-registry.js';
+import { TaskHistoryService } from './services/task-history-service.js';
+import { createTaskNotifier, type TaskNotifier } from './services/task-notifier.js';
 import { TaskReadPortService } from './services/task-read-port.js';
 import { TaskService } from './services/task-service.js';
 import { isSystemActor, TaskVisibility } from './services/task-visibility.js';
@@ -30,9 +41,12 @@ interface TasksCradle {
   readonly emFactory: () => EntityManager;
   readonly commandBus: CommandBus;
   readonly requireAdmin: RequireAdminFactory;
+  readonly auditLogService: AuditPort;
   readonly taskContextRegistry: TaskContextRegistry;
   readonly tasksVisibility: TaskVisibility;
+  readonly tasksNotifier: TaskNotifier;
   readonly tasksTaskService: TaskService;
+  readonly tasksHistoryService: TaskHistoryService;
 }
 
 export function registerModule(ctx: ModuleContext): void {
@@ -61,17 +75,42 @@ export function registerModule(ctx: ModuleContext): void {
   });
   // --- end of Context ----------------------------------------------------------
 
-  // --- Tasks (read side) ---------------------------------------------------------
-  // `admin_users`' read port names an assignee and a creator; it is resolved
-  // lazily, per call, and never captured in this singleton.
+  // --- Tasks (User Story 2) -----------------------------------------------------
+  // The list, My Tasks, one Task, and its writes — every write a Command of
+  // `task-commands.ts` (Constitution XIII). `admin_users`' read port names an
+  // assignee and a creator; `_i18n`'s resolver words a context its owner did
+  // not describe. Both are resolved lazily, per call, never captured.
+  //
+  // The bell is `admin_notifications`', which an operator may switch off. This
+  // module degrades without it (the manifest's `degrades-without` edge): the
+  // notifier decides that module's presence before it asks, so an assignment
+  // succeeds either way and nothing here catches a refusal.
   ctx.di.register({
+    tasksNotifier: ctx
+      .asFunction(() => createTaskNotifier(lazyPort<AdminNotificationRecordPort>(ctx, 'adminNotificationRecordPort')))
+      .singleton(),
     tasksTaskService: ctx
+      .asFunction(({ emFactory, commandBus, tasksVisibility, taskContextRegistry, tasksNotifier }: TasksCradle) => {
+        const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
+        return new TaskService({
+          emFactory,
+          commandBus,
+          visibility: tasksVisibility,
+          contexts: taskContextRegistry,
+          adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+          notifier: tasksNotifier,
+          translate: (key, language) => i18n.translate('tasks', key, language),
+        });
+      })
+      .singleton(),
+    // The audit log is the history (`task-history-service.ts`).
+    // `auditLogService` is a platform service, not a module's port.
+    tasksHistoryService: ctx
       .asFunction(
-        ({ emFactory, tasksVisibility, taskContextRegistry }: TasksCradle) =>
-          new TaskService({
-            emFactory,
-            visibility: tasksVisibility,
-            contexts: taskContextRegistry,
+        ({ tasksTaskService, auditLogService }: TasksCradle) =>
+          new TaskHistoryService({
+            tasks: tasksTaskService,
+            auditLog: auditLogService,
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
           }),
       )
@@ -79,7 +118,24 @@ export function registerModule(ctx: ModuleContext): void {
   });
   ctx.routes(async (app) => {
     const cradle = ctx.cradle<TasksCradle>();
-    await registerTaskRoutes(app, { taskService: cradle.tasksTaskService, requireAdmin: cradle.requireAdmin });
+    await registerTaskRoutes(app, {
+      taskService: cradle.tasksTaskService,
+      historyService: cradle.tasksHistoryService,
+      requireAdmin: cradle.requireAdmin,
+    });
+  });
+  /**
+   * The audit-reference resolver — a **contribution** hook. It pushes an inert
+   * resolver into `auditReferenceRegistry`, an ungated registry `audit_logs`
+   * owns, and carries no presence probe: the registry's own enumeration policy
+   * skips this entry while the module is absent, and a probe here would make
+   * that survive a reactivation until the next restart.
+   */
+  ctx.onBoot(() => {
+    registerTaskAuditReferences(
+      lazyPort<AuditReferenceRegistryPort>(ctx, 'auditReferenceRegistry'),
+      () => ctx.cradle<TasksCradle>().tasksTaskService,
+    );
   });
   // --- end of Tasks ----------------------------------------------------------------
 

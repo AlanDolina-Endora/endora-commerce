@@ -29,15 +29,19 @@ An operator switches this module on and off on **/platform/modules**. The choice
 
 | Module | Binding | What it means |
 | --- | --- | --- |
+| `_i18n` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `admin_users` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `audit_logs` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `auth` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `settings` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `admin_notifications` | no | degrades-without `adminNotificationRecordPort` — Assignees are not notified of new Tasks. |
 
 ## Permissions
 
 | Code | Label | Also needs |
 | --- | --- | --- |
 | `tasks:read` | View tasks | — |
+| `tasks:write` | Create and edit tasks | `tasks:read` |
 
 ## Command palette
 

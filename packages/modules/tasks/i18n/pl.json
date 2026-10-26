@@ -1,6 +1,14 @@
 {
   "adminRoles.permission.tasks:read": "Przeglądanie zadań",
+  "adminRoles.permission.tasks:write": "Tworzenie i edycja zadań",
   "errors.TASK_NOT_FOUND": "To zadanie nie istnieje albo nie masz do niego dostępu.",
   "errors.TASK_CONTEXT_INVALID": "To zadanie nie może tam należeć: rekord nie istnieje, nie masz do niego dostępu albo jego moduł jest wyłączony.",
-  "errors.TASK_ASSIGNEE_INVALID": "Tej osoby nie można przypisać: nie jest aktywnym administratorem."
+  "errors.TASK_ASSIGNEE_INVALID": "Tej osoby nie można przypisać: nie jest aktywnym administratorem.",
+  "notifications.assigned.title": "Przypisano Ci zadanie {number}",
+  "context.unavailable": "Niedostępny rekord",
+  "auditLog.tasks.task.create": "Utworzono zadanie",
+  "auditLog.tasks.task.update": "Zmieniono zadanie",
+  "auditLog.tasks.task.assign": "Przypisano zadanie",
+  "auditLog.tasks.task.status_change": "Zmieniono status zadania",
+  "auditLog.tasks.task.delete": "Usunięto zadanie"
 }

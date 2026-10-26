@@ -41,21 +41,46 @@ export const manifest = defineModuleManifest({
   // `auth` owns `requireAdmin`, which gates every route of this module;
   // `settings` owns the store the activation control lives in;
   // `admin_users` owns `adminUserReadPort`, through which an assignee and a
-  // creator are named. All three are non-deactivatable.
-  dependencies: ['admin_users', 'auth', 'settings'],
+  // creator are named; `audit_logs` owns `auditReferenceRegistry`, through
+  // which an audit row about a Task is labelled; `_i18n` owns
+  // `adminI18nService`, which words a context its owner did not describe in
+  // the reader's language. All five are non-deactivatable.
+  dependencies: ['_i18n', 'admin_users', 'audit_logs', 'auth', 'settings'],
+  /**
+   * Edges that are real to the container and bind no operator.
+   *
+   * `admin_notifications` is operator-switchable, and telling somebody a Task
+   * is now theirs is a courtesy: the notifier asks
+   * `effectiveState.isPresent('admin_notifications')` before it resolves the
+   * port, so with the bell off an assignment succeeds and nobody is told.
+   */
+  nonBindingDependencies: [
+    {
+      moduleId: 'admin_notifications',
+      name: 'adminNotificationRecordPort',
+      kind: 'degrades-without',
+      whenAbsent: 'Assignees are not notified of new Tasks.',
+      reason:
+        'The one call into this owner is `task-notifier.ts`, which decides its presence in front ' +
+        'of the gate and answers `not-present` in its return type; nothing in this module fails ' +
+        "closed on it, and no table of that owner is referenced from this module's schema.",
+    },
+  ],
   settings,
   // Constitution XVII — the operator's activation control.
   activation: { settingCode: 'tasks.enabled', default: true },
-  /**
-   * Reading Tasks. `tasks:write` arrives with the first write route (User
-   * Story 2): a code is declared by the change that adds its first
-   * `requireAdmin`, so no code is grantable before it gates anything.
-   */
+  /** Reading Tasks, and creating, editing and deleting them (User Story 2). */
   permissions: [
     {
       code: 'tasks:read',
       label: 'View tasks',
       module: 'tasks',
+    },
+    {
+      code: 'tasks:write',
+      label: 'Create and edit tasks',
+      module: 'tasks',
+      requires: ['tasks:read'],
     },
   ],
   /**

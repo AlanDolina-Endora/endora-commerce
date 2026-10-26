@@ -176,7 +176,8 @@ describe('tasks — a Task on its own (US2)', () => {
       await patch(task.id, { assignedAdminUserId: colleague.adminUserId, title: 'Supplier negotiation' });
       await patch(task.id, { assignedAdminUserId: null });
       await patch(task.id, { assignedAdminUserId: colleague.adminUserId }, colleague.cookies);
-      await patch(task.id, { assignedAdminUserId: TEST_ADMIN_ID });
+      // …and handing it on to somebody else tells them.
+      await patch(task.id, { assignedAdminUserId: TEST_ADMIN_ID }, colleague.cookies);
       expect(await bellAbout(task.id)).toHaveLength(2);
       expect((await bellAbout(task.id))[1]).toMatchObject({ targetAdminUserId: TEST_ADMIN_ID });
 

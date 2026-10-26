@@ -6,21 +6,19 @@ import {
   TASK_DESCRIPTION_MAX,
   TASK_TITLE_MAX,
   TASK_WRITE_PORT_BATCH_MAX,
-  TASKS_EVENTS,
   TaskContextSchema,
   type AdminUserReadPort,
   type NewContextTask,
   type TaskContext,
-  type TaskCreatedEvent,
-  type TaskDeletedEvent,
   type TaskWritePort,
 } from '@endora-commerce/contracts';
-import type { Command, CommandBus } from '@endora-commerce/platform/commands';
+import type { CommandBus } from '@endora-commerce/platform/commands';
 import { HttpError } from '@endora-commerce/platform/http';
-import { randomUUID } from 'crypto';
 import { Task } from '../entities/task.entity.js';
+import { assertAssignable } from './task-checks.js';
+import { createTaskCommand, deleteTaskCommand, type NewTaskFields } from './task-commands.js';
 import type { TaskContextRegistry } from './task-context-registry.js';
-import { nextTaskNumber } from './task-number.js';
+import { taskContextInvalid } from './task-errors.js';
 
 /**
  * `taskWritePort` — another module creating and deleting Tasks in a context it
@@ -49,19 +47,11 @@ export interface TaskWritePortDeps {
   adminUsers: AdminUserReadPort;
 }
 
-interface ValidTask {
-  title: string;
-  description: string;
-  assignedAdminUserId: string | null;
-  dueOn: string | null;
-  contextNote: string | null;
-}
-
 function invalid(message: string): HttpError {
   return new HttpError(422, ERROR_CODES.VALIDATION_FAILED, message);
 }
 
-function validEntry(entry: NewContextTask, index: number): ValidTask {
+function validEntry(entry: NewContextTask, index: number): NewTaskFields {
   const title = typeof entry.title === 'string' ? entry.title.trim() : '';
   if (title.length < 1 || title.length > TASK_TITLE_MAX) {
     throw invalid(`Task ${index + 1}: a title has 1 to ${TASK_TITLE_MAX} characters.`);
@@ -81,20 +71,6 @@ function validEntry(entry: NewContextTask, index: number): ValidTask {
   return { title, description, assignedAdminUserId: entry.assignedAdminUserId ?? null, dueOn, contextNote };
 }
 
-function auditSnapshot(task: Task): Record<string, unknown> {
-  return {
-    number: task.number,
-    title: task.title,
-    status: task.status,
-    assignedAdminUserId: task.assignedAdminUserId ?? null,
-    dueOn: task.dueOn ?? null,
-    contextType: task.contextType ?? null,
-    contextId: task.contextId ?? null,
-    contextGroupId: task.contextGroupId ?? null,
-    contextNote: task.contextNote ?? null,
-  };
-}
-
 export class TaskWritePortService implements TaskWritePort {
   constructor(private readonly deps: TaskWritePortDeps) {}
 
@@ -107,17 +83,13 @@ export class TaskWritePortService implements TaskWritePort {
     }
     const tasks = input.tasks.map(validEntry);
     if (!this.deps.contexts.presentFor(context.contextType)) {
-      throw new HttpError(
-        422,
-        ERROR_CODES.TASK_CONTEXT_INVALID,
-        `No module that is switched on owns the Task context "${context.contextType}".`,
-      );
+      throw taskContextInvalid(`No module that is switched on owns the Task context "${context.contextType}".`);
     }
-    await this.#assertAssignable(tasks.map((task) => task.assignedAdminUserId));
+    await assertAssignable(this.deps.adminUsers, tasks.map((task) => task.assignedAdminUserId));
 
     const ids: string[] = [];
     for (const task of tasks) {
-      ids.push(await this.deps.commandBus.run(this.#createCommand(context, task)));
+      ids.push(await this.deps.commandBus.run(createTaskCommand(context, task)));
     }
     return { ids };
   }
@@ -132,95 +104,8 @@ export class TaskWritePortService implements TaskWritePort {
     );
     let deleted = 0;
     for (const { id } of doomed) {
-      if (await this.deps.commandBus.run(this.#deleteCommand(id))) deleted += 1;
+      if (await this.deps.commandBus.run(deleteTaskCommand(id))) deleted += 1;
     }
     return { deleted };
-  }
-
-  /** Every named assignee is an active administrator, or the whole call is refused. */
-  async #assertAssignable(adminUserIds: ReadonlyArray<string | null>): Promise<void> {
-    const named = [...new Set(adminUserIds.filter((id): id is string => id !== null))];
-    if (named.length === 0) return;
-    const found = await this.deps.adminUsers.findByIds(named, { activeOnly: true });
-    const active = new Set(found.filter((a) => a.status === 'active' && a.deletedAt === null).map((a) => a.id));
-    if (named.some((id) => !active.has(id))) {
-      throw new HttpError(
-        422,
-        ERROR_CODES.TASK_ASSIGNEE_INVALID,
-        'A Task can be assigned only to an active administrator.',
-      );
-    }
-  }
-
-  #createCommand(context: TaskContext, input: ValidTask): Command<string> {
-    const id = randomUUID();
-    let created: Task | null = null;
-    return {
-      action: 'tasks.task.create',
-      objectType: 'task',
-      objectId: id,
-      run: async ({ em, actor }) => {
-        if (actor.actorAdminUserId === null) {
-          // `created_by_admin_user_id` is not null (data-model §1): a Task is
-          // created on behalf of somebody, and the port's caller acts for them.
-          throw new Error('tasks: a Task is created by an administrator; the ambient actor is none.');
-        }
-        const task = em.create(Task, {
-          id,
-          number: await nextTaskNumber(em as EntityManager),
-          title: input.title,
-          description: input.description,
-          assignedAdminUserId: input.assignedAdminUserId,
-          dueOn: input.dueOn,
-          createdByAdminUserId: actor.actorAdminUserId,
-          contextType: context.contextType,
-          contextId: context.contextId,
-          contextGroupId: context.contextGroupId ?? null,
-          contextNote: input.contextNote,
-        });
-        created = task;
-        return { result: id, before: null, after: auditSnapshot(task) };
-      },
-      event: () => {
-        const task = created!;
-        const payload: TaskCreatedEvent = {
-          eventId: randomUUID(),
-          occurredAt: new Date().toISOString(),
-          taskId: task.id,
-          contextType: task.contextType ?? null,
-          contextId: task.contextId ?? null,
-          contextGroupId: task.contextGroupId ?? null,
-          assignedAdminUserId: task.assignedAdminUserId ?? null,
-        };
-        return { eventName: TASKS_EVENTS.CREATED, payload };
-      },
-    };
-  }
-
-  #deleteCommand(id: string): Command<boolean> {
-    let gone: { contextType: string | null; contextId: string | null } | null = null;
-    return {
-      action: 'tasks.task.delete',
-      objectType: 'task',
-      objectId: id,
-      run: async ({ em }) => {
-        const task = await em.findOne(Task, { id });
-        if (!task) return { result: false, skipAudit: true };
-        const before = auditSnapshot(task);
-        gone = { contextType: task.contextType ?? null, contextId: task.contextId ?? null };
-        em.remove(task);
-        return { result: true, before, after: null };
-      },
-      event: (deleted) => {
-        if (!deleted || !gone) return undefined;
-        const payload: TaskDeletedEvent = {
-          eventId: randomUUID(),
-          occurredAt: new Date().toISOString(),
-          taskId: id,
-          ...gone,
-        };
-        return { eventName: TASKS_EVENTS.DELETED, payload };
-      },
-    };
   }
 }
