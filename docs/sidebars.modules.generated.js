@@ -501,6 +501,14 @@ const modules = [
   },
   {
     type: 'category',
+    label: 'tasks', key: 'tasks',
+    link: { type: 'doc', id: 'modules/tasks' },
+    items: [
+      'module-reference/tasks',
+    ],
+  },
+  {
+    type: 'category',
     label: 'taxes', key: 'taxes',
     link: { type: 'doc', id: 'modules/taxes' },
     items: [

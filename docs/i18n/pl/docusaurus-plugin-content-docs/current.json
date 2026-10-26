@@ -209,6 +209,9 @@
   "sidebar.main.category.shopping_lists": {
     "message": "shopping_lists"
   },
+  "sidebar.main.category.tasks": {
+    "message": "tasks"
+  },
   "sidebar.main.category.taxes": {
     "message": "taxes"
   },

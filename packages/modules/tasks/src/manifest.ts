@@ -65,9 +65,8 @@ export const manifest = defineModuleManifest({
    */
   errorCodes: [{ code: 'TASK_NOT_FOUND' }, { code: 'TASK_CONTEXT_INVALID' }, { code: 'TASK_ASSIGNEE_INVALID' }],
   i18n: { bundlesDir: 'i18n' },
-  // Nothing to document yet: the page lands with the first operator-visible
-  // surface (Phase 2).
-  docs: false,
+  // `docs/tasks.md` at the package root: users' and developers' page.
+  docs: { dir: 'docs' },
   // `false` is a decision, absent would be "nobody has decided".
   demo: false,
 });

@@ -81,7 +81,7 @@ of the platform, not of what happens to be written.
 | [Settings](./settings/index.md) | Manifest-driven, per-sales-channel platform configuration with cached read API | @endora-commerce/mod-settings |
 | [shipments](./shipments.md) | The retryable Shipment record and its lifecycle — the delivery-side twin of payments | @endora-commerce/mod-shipments |
 | [shopping_lists](./shopping_lists.md) | Per-customer named bundles convertible to Cart or RFQ | @endora-commerce/mod-shopping-lists |
-| `tasks` | _no page yet_ | @endora-commerce/mod-tasks |
+| [tasks](./tasks.md) | Tasks assigned to administrators, with a due date and a status, which other modules can own through a Task context | @endora-commerce/mod-tasks |
 | [taxes](./taxes.md) | Tax-rate resolver narrowed by country / product type / VAT status | @endora-commerce/mod-taxes |
 | [transactional_emails](./transactional-emails.md) | Admin-editable transactional emails — subject, content and look, globally and per sales channel | @endora-commerce/mod-transactional-emails |
 | [webhooks](./webhooks.md) | Outbound HMAC-signed event subscriptions | @endora-commerce/mod-webhooks |
