@@ -138,7 +138,13 @@ describe('responses', () => {
       dueOn: '2026-11-03',
       overdue: false,
       assignee: { id: UUID_B, name: 'Anna', active: true },
-      context: { type: 'project', label: 'PRJ-000001 Showroom', href: `/projects/${UUID_C}`, groupLabel: 'Design' },
+      context: {
+        type: 'project',
+        available: true,
+        label: 'PRJ-000001 Showroom',
+        href: `/projects/${UUID_C}`,
+        groupLabel: 'Design',
+      },
     });
     accepts(tasks.TaskSummarySchema, {
       id: UUID_A,
@@ -151,6 +157,27 @@ describe('responses', () => {
       context: null,
     });
     rejects(tasks.TaskSummarySchema, { id: UUID_A, number: 'TSK-1', title: 'x', status: 'open' });
+  });
+
+  it('a context its owner does not describe is unavailable: a label to show, no link', () => {
+    const summary = {
+      id: UUID_A,
+      number: 'TSK-000003',
+      title: 'Orphan',
+      status: 'todo',
+      dueOn: null,
+      overdue: false,
+      assignee: null,
+    };
+    accepts(tasks.TaskSummarySchema, {
+      ...summary,
+      context: { type: 'project', available: false, label: 'Unavailable record', href: null, groupLabel: null },
+    });
+    // `available` is always said, so a consumer never guesses from an empty label.
+    rejects(tasks.TaskSummarySchema, {
+      ...summary,
+      context: { type: 'project', label: '', href: '', groupLabel: null },
+    });
   });
 
   it('the list page is items and a next cursor', () => {

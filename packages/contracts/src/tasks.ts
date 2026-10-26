@@ -92,11 +92,20 @@ export const TaskContextSchema = z
   .strict();
 export type TaskContext = z.infer<typeof TaskContextSchema>;
 
-/** A context as the reader is shown it: what the owner's descriptor says about it. */
+/**
+ * A context as the reader is shown it: what the owner's descriptor says about it.
+ *
+ * `available: false` when the owner's `describe()` did not describe the id —
+ * a record that went away between the visibility check and the description.
+ * The context then fails closed: `label` is the sentence "unavailable record"
+ * in the reader's language, `href` and `groupLabel` are `null`. A label is
+ * never empty.
+ */
 export const TaskContextSummarySchema = z.object({
   type: z.string(),
-  label: z.string(),
-  href: z.string(),
+  available: z.boolean(),
+  label: z.string().min(1),
+  href: z.string().nullable(),
   groupLabel: z.string().nullable(),
 });
 export type TaskContextSummary = z.infer<typeof TaskContextSummarySchema>;
