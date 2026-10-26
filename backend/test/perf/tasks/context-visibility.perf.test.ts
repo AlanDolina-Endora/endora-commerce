@@ -124,6 +124,7 @@ describe.skipIf(!shouldRun)('tasks — the context pre-filter at scale (R-9, T07
     const mine = await measure('/api/v1/admin/tasks/mine', (body) => {
       expect(MyTasksResponseSchema.parse(body).data.length).toBeGreaterThan(0);
     });
+    // eslint-disable-next-line no-console -- the measurement is the output (T070).
     console.log(
       `[perf] tasks, ${projectCount} Projects × ${tasksPerProject} Tasks, members-only viewer of all: ` +
         `GET /tasks p95 ${list.toFixed(0)} ms; GET /tasks/mine p95 ${mine.toFixed(0)} ms`,
