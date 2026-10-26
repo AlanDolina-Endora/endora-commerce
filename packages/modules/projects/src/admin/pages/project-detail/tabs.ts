@@ -63,6 +63,13 @@ export const PROJECT_TABS: readonly ProjectTab[] = [
     surface: { module: 'tasks', requiredPermission: 'tasks:read' },
   },
   {
+    // User Story 6: Orders, Quote Requests and Opportunities of the Project's
+    // Organizations. Always offered: a switched-off owner's group says so.
+    id: 'links',
+    labelKey: 'tabs.links',
+    component: lazy(() => import('./tabs/LinkedRecordsTab.js')),
+  },
+  {
     // The Stage history of User Story 1; the audit trail is a later *History* tab.
     id: 'stage-history',
     labelKey: 'tabs.history',

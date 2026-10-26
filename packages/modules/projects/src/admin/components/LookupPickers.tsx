@@ -27,7 +27,7 @@ export interface LookupChoice {
   name: string;
 }
 
-interface RemoteOptions {
+export interface RemoteOptions {
   options: ComboboxOption<string>[];
   loading: boolean;
   failed: boolean;
@@ -42,7 +42,7 @@ interface RemoteOptions {
  * Server-side search behind a combobox: one read on mount, then one per pause
  * in typing. A slower answer to an earlier query never replaces a later one.
  */
-function useRemoteOptions(load: (query: string) => Promise<ComboboxOption<string>[]>): RemoteOptions {
+export function useRemoteOptions(load: (query: string) => Promise<ComboboxOption<string>[]>): RemoteOptions {
   const [options, setOptions] = useState<ComboboxOption<string>[]>([]);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);

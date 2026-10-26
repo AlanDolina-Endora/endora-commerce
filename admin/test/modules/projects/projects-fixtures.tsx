@@ -68,6 +68,8 @@ export function renderProjects(
     readonly present?: readonly string[];
     /** Further `<Route>`s beside the subject's — a screen a write navigates to. */
     readonly routes?: ReactNode;
+    /** Modules' admin contributions, for a screen that mounts a zone. */
+    readonly contributions?: Parameters<typeof withSession>[1]['contributions'];
   } = {},
 ): RenderResult {
   return renderWithI18n(
@@ -84,6 +86,7 @@ export function renderProjects(
         session: adminSession({ permissions: options.permissions ?? EVERY_PROJECTS_PERMISSION }),
         presence: modulePresence({ present: options.present ?? ['projects', 'organizations', 'admin_users'] }),
         registry: [],
+        ...(options.contributions ? { contributions: options.contributions } : {}),
       },
     ),
     { core: CORE_BUNDLE, projects: PROJECTS_BUNDLE },

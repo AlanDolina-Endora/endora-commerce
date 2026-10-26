@@ -1,7 +1,9 @@
 /**
  * `projects`' admin surface (`specs/163-projects-and-tasks/contracts/admin-surfaces.md`
- * §1–§2): User Story 1's three routes and sidebar row, User Story 3's
- * Templates screens and row, and User Story 4's Project Roles and loss reasons.
+ * §1–§3): User Story 1's three routes and sidebar row, User Story 3's
+ * Templates screens and row, User Story 4's Project Roles and loss reasons,
+ * and User Story 6's Project panel on the screens of the records a Project
+ * holds.
  *
  * **Only what has shipped.** Analytics arrives with the story that ships its
  * page — a sidebar or
@@ -11,7 +13,7 @@
  * **This entry exports data and nothing else**; every component is a
  * dynamic-import factory, so none of the screens is in the admin's entry chunk.
  */
-import type { AdminContributions } from '@endora-commerce/admin-kit/contributions';
+import { zoneComponent, type AdminContributions } from '@endora-commerce/admin-kit/contributions';
 
 /** The code that opens the list and one Project; `GET /projects` and `GET /projects/:id` enforce it. */
 const READ_PERMISSION = 'projects:read';
@@ -111,5 +113,14 @@ export const contributions: AdminContributions = {
       weight: 420,
       requiredPermission: CONFIGURE_PERMISSION,
     },
+  ],
+  // User Story 6 — the Project a record is in, on that record's own screen.
+  // One panel, four zones; each is one line: the zone, the chunk, the code the
+  // panel's read enforces. The record's owner names no contributor.
+  zones: [
+    zoneComponent('order.detail.after', () => import('./zones/OrderProjectPanel.js'), { weight: 650, requiredPermission: READ_PERMISSION }),
+    zoneComponent('quote_request.detail.after', () => import('./zones/QuoteRequestProjectPanel.js'), { weight: 650, requiredPermission: READ_PERMISSION }),
+    zoneComponent('opportunity.detail.after', () => import('./zones/OpportunityProjectPanel.js'), { weight: 650, requiredPermission: READ_PERMISSION }),
+    zoneComponent('task.detail.after', () => import('./zones/TaskProjectPanel.js'), { weight: 650, requiredPermission: READ_PERMISSION }),
   ],
 };

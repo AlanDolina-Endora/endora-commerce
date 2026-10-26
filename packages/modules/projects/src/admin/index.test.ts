@@ -5,7 +5,7 @@ import { contributions } from './index.js';
 
 /**
  * `projects`' admin **declaration** (`specs/163-projects-and-tasks/contracts/admin-surfaces.md`
- * §1–§2, task T055).
+ * §1–§3, tasks T055 and T096).
  *
  * Answerable with no DOM — the entry file is data — so it runs under this
  * package's `environment: 'node'` configuration. How the screens behave is the
@@ -41,7 +41,7 @@ describe('projects admin contributions', () => {
       expect(typeof route.component, route.path).toBe('function');
     }
     const entry = readFileSync(new URL('index.ts', ADMIN_ROOT), 'utf8');
-    expect(entry).not.toMatch(/^import .* from '\.\/(pages|components)\//m);
+    expect(entry).not.toMatch(/^import .* from '\.\/(pages|components|zones)\//m);
   });
 
   it('puts "Projects" first in the "Projects & tasks" section, on projects:read, and the configuration after the Tasks entries', () => {
@@ -55,10 +55,21 @@ describe('projects admin contributions', () => {
     ]);
   });
 
-  it('gates every route and nav row on a code its manifest declares', () => {
+  it('contributes the Project panel to the four record screens, on projects:read, at weight 650 (User Story 6)', () => {
+    expect((contributions.zones ?? []).map((zone) => [zone.zone, zone.weight, zone.requiredPermission])).toEqual([
+      ['order.detail.after', 650, 'projects:read'],
+      ['quote_request.detail.after', 650, 'projects:read'],
+      ['opportunity.detail.after', 650, 'projects:read'],
+      ['task.detail.after', 650, 'projects:read'],
+    ]);
+    for (const zone of contributions.zones ?? []) expect(typeof zone.component, zone.zone).toBe('function');
+  });
+
+  it('gates every route, nav row and zone on a code its manifest declares', () => {
     const declared = new Set((manifest.permissions ?? []).map((permission) => permission.code));
     for (const route of contributions.routes ?? []) expect(declared.has(route.requiredPermission ?? '')).toBe(true);
     for (const row of contributions.nav ?? []) expect(declared.has(row.requiredPermission ?? '')).toBe(true);
+    for (const zone of contributions.zones ?? []) expect(declared.has(zone.requiredPermission ?? '')).toBe(true);
   });
 
   it('labels every nav row in both shipped languages', () => {

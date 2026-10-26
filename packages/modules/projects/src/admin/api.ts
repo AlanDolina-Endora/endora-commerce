@@ -18,7 +18,11 @@ import type {
   ProjectTemplateDetail,
   ProjectTemplateSummary,
   ProjectAdminUserOption,
+  ProjectLink,
   ProjectOrganizationOption,
+  ProjectPanelRecordKind,
+  ProjectRecordKind,
+  ProjectSummary,
   ProjectVisibilitySetting,
   MaterializeStageTasksResult,
   SetProjectMovesResult,
@@ -53,6 +57,36 @@ const BASE = '/api/v1/admin/projects';
 const TASKS_BASE = '/api/v1/admin/tasks';
 
 export type ProjectSort = 'createdAt' | 'value' | 'deadline';
+
+/** A record a picker offers to link: what identifies it to the person choosing. */
+export interface LinkableRecord {
+  id: string;
+  /** The record's number — `ORD-…`, `RFQ-…`, `OPP-…`. */
+  number: string;
+  /** A second line — the status, an Opportunity's title. */
+  detail: string;
+}
+
+/** How many records a link picker offers per search. */
+const LINKABLE_LIMIT = 20;
+
+/**
+ * The owners' own list routes, each gated by the owner's read code
+ * (task T094, research R-10 — verified 2026-10-27):
+ *
+ * - `GET /orders?organizationId=&q=&page=&pageSize=` — both filters, as CRM's
+ *   Order picker uses them (`orders:read`);
+ * - `GET /crm/opportunities?organizationId=&q=&limit=` — both filters
+ *   (`OpportunityListQuerySchema`, `crm:read`);
+ * - `GET /quote-requests?organizationId=` — the Organization filter only: the
+ *   route reads no `q` and answers the Organization's whole list
+ *   (`rfqs:handle`), so the number is matched here. No global search needed.
+ */
+const OWNER_LISTS = {
+  orders: '/api/v1/admin/orders',
+  quoteRequests: '/api/v1/admin/quote-requests',
+  opportunities: '/api/v1/admin/crm/opportunities',
+} as const;
 
 /** The two configuration dictionaries, by their path segment. Both have one shape (`ProjectRole`). */
 export type ProjectDictionaryKind = 'roles' | 'loss-reasons';
@@ -158,6 +192,62 @@ export const projectsApi = {
     return data(apiClient.get<{ data: { setting: ProjectVisibilitySetting } }>(`${BASE}/visibility-setting`)).then(
       (answer) => answer.setting,
     );
+  },
+
+  // --- §2.3 Links and the record panel (User Story 6) -----------------------
+
+  /** The Project's linked records, oldest first; one the reader may not read is `available: false`. */
+  listLinks(projectId: string): Promise<ProjectLink[]> {
+    return data(apiClient.get<{ data: ProjectLink[] }>(`${BASE}/${projectId}/links`));
+  },
+
+  /**
+   * 404 `PROJECT_RECORD_NOT_FOUND`; 409 `PROJECT_RECORD_ALREADY_LINKED` (its
+   * `details.project` names the holder to somebody who may see it); 422
+   * `PROJECT_LINK_ORGANIZATION_MISMATCH`; 503 while the record's module is off.
+   */
+  addLink(projectId: string, kind: ProjectRecordKind, recordId: string): Promise<ProjectLink> {
+    return data(apiClient.post<{ data: ProjectLink }>(`${BASE}/${projectId}/links`, { kind, recordId }));
+  },
+
+  removeLink(projectId: string, linkId: string): Promise<void> {
+    return apiClient.delete<void>(`${BASE}/${projectId}/links/${linkId}`);
+  },
+
+  /** The Project a record is in; rejects with 404 when it is in none the reader may see. */
+  projectOfRecord(kind: ProjectPanelRecordKind, recordId: string): Promise<ProjectSummary> {
+    return data(apiClient.get<{ data: ProjectSummary }>(`${BASE}/records/${kind}/${recordId}/project`));
+  },
+
+  /** Records of one kind and Organization a link picker offers, by number (task T094). */
+  linkableRecords(kind: ProjectRecordKind, organizationId: string, query = ''): Promise<LinkableRecord[]> {
+    const q = query.trim();
+    if (kind === 'order') {
+      const qs = new URLSearchParams({ organizationId, page: '1', pageSize: String(LINKABLE_LIMIT) });
+      if (q) qs.set('q', q);
+      return apiClient
+        .get<{ data: Array<{ id: string; businessId: string; status: string }> }>(`${OWNER_LISTS.orders}?${qs.toString()}`)
+        .then((envelope) => envelope.data.map((order) => ({ id: order.id, number: order.businessId, detail: order.status })));
+    }
+    if (kind === 'opportunity') {
+      const qs = new URLSearchParams({ organizationId, limit: String(LINKABLE_LIMIT) });
+      if (q) qs.set('q', q);
+      return apiClient
+        .get<{ data: Array<{ id: string; number: string; title: string }> }>(`${OWNER_LISTS.opportunities}?${qs.toString()}`)
+        .then((envelope) =>
+          envelope.data.map((opportunity) => ({ id: opportunity.id, number: opportunity.number, detail: opportunity.title })),
+        );
+    }
+    const qs = new URLSearchParams({ organizationId });
+    const needle = q.toLowerCase();
+    return apiClient
+      .get<{ data: Array<{ id: string; businessId: string; status: string }> }>(`${OWNER_LISTS.quoteRequests}?${qs.toString()}`)
+      .then((envelope) =>
+        envelope.data
+          .filter((request) => needle === '' || request.businessId.toLowerCase().includes(needle))
+          .slice(0, LINKABLE_LIMIT)
+          .map((request) => ({ id: request.id, number: request.businessId, detail: request.status })),
+      );
   },
 
   // --- §2.2 Stages and moves -----------------------------------------------
