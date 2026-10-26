@@ -4,7 +4,6 @@ import type {
   AdminTenantScopePort,
   AdminUserReadPort,
   OrganizationDetailsPort,
-  PermissionReadPort,
   SettingWriteValidatorRegistryPort,
   TaskContextRegistryPort,
   TaskReadPort,
@@ -52,7 +51,7 @@ import type { DictionaryService } from './services/dictionary-service.js';
 import { ProjectLookupService } from './services/lookup-service.js';
 import { createLossReasonService } from './services/loss-reason-service.js';
 import { MoveService } from './services/move-service.js';
-import { ProjectAccess } from './services/project-access.js';
+import { ProjectAccess, type ProjectAccessDeps } from './services/project-access.js';
 import { ProjectReadService } from './services/project-read-service.js';
 import { ProjectService } from './services/project-service.js';
 import { ProjectStageGuardRegistry } from './services/project-stage-guard-registry.js';
@@ -114,7 +113,7 @@ export function registerModule(ctx: ModuleContext): void {
         ({ emFactory }: ProjectsCradle) =>
           new ProjectAccess({
             emFactory,
-            permissions: lazyPort<PermissionReadPort>(ctx, 'permissionService'),
+            permissions: lazyPort<ProjectAccessDeps['permissions']>(ctx, 'permissionService'),
             tenantScopes: lazyPort<AdminTenantScopePort>(ctx, 'adminTenantScopePort'),
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
             settings: lazyPort<SettingsReadPort>(ctx, 'settingsReadPort'),

@@ -205,8 +205,12 @@ function holds(held: readonly string[], code: string): boolean {
 
 export interface ProjectAccessDeps {
   emFactory: () => EntityManager;
-  /** `admin_roles`' read port — lazy, resolved per call. */
-  permissions: PermissionReadPort;
+  /**
+   * `admin_roles`' `permissionService` — lazy, resolved per call. Its published
+   * read port, plus the capability check `hasPermission`, which the container
+   * entry carries beside it (the `organizations:rollup` precedent).
+   */
+  permissions: PermissionReadPort & { hasPermission(adminUserId: string, permission: string): Promise<boolean> };
   /** `organizations`' reach of an administrator other than the caller — lazy. */
   tenantScopes: AdminTenantScopePort;
   /** `admin_users`' read port — lazy. */
@@ -227,8 +231,10 @@ export class ProjectAccess {
     const reach = ambientReach();
     const adminUserId = actingAdminUserId();
     if (adminUserId === null) return { adminUserId: null, seeAll: true, reach };
-    const held = await this.deps.permissions.listPermissions(adminUserId);
-    return { adminUserId, seeAll: holds(held, PROJECTS_SEE_ALL_PERMISSION), reach };
+    // The capability check of `projects:see_all` — no route asks for the code,
+    // this is where it is enforced (a wildcard holder holds it).
+    const seeAll = await this.deps.permissions.hasPermission(adminUserId, PROJECTS_SEE_ALL_PERMISSION);
+    return { adminUserId, seeAll, reach };
   }
 
   /** The module setting `projects.visibility` (default `members`). */
