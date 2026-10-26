@@ -30,62 +30,63 @@ const LOSS_REASONS = '/api/v1/admin/projects/loss-reasons';
  * row has 409 `PROJECT_DICTIONARY_NAME_TAKEN`.
  */
 export async function registerDictionaryRoutes(app: FastifyInstance, deps: DictionaryRoutesDeps): Promise<void> {
-  const { requireAdmin } = deps;
-  const dictionaries: Array<{
-    base: string;
-    service: DictionaryService;
-    create: typeof CreateProjectRoleBodySchema | typeof CreateProjectLossReasonBodySchema;
-    update: typeof UpdateProjectRoleBodySchema | typeof UpdateProjectLossReasonBodySchema;
-  }> = [
-    { base: ROLES, service: deps.roleService, create: CreateProjectRoleBodySchema, update: UpdateProjectRoleBodySchema },
-    {
-      base: LOSS_REASONS,
-      service: deps.lossReasonService,
-      create: CreateProjectLossReasonBodySchema,
-      update: UpdateProjectLossReasonBodySchema,
+  registerDictionary(app, ROLES, {
+    service: deps.roleService,
+    requireAdmin: deps.requireAdmin,
+    create: CreateProjectRoleBodySchema,
+    update: UpdateProjectRoleBodySchema,
+  });
+  registerDictionary(app, LOSS_REASONS, {
+    service: deps.lossReasonService,
+    requireAdmin: deps.requireAdmin,
+    create: CreateProjectLossReasonBodySchema,
+    update: UpdateProjectLossReasonBodySchema,
+  });
+}
+
+interface DictionaryRouteSet {
+  service: DictionaryService;
+  requireAdmin: RequireAdminFactory;
+  create: typeof CreateProjectRoleBodySchema | typeof CreateProjectLossReasonBodySchema;
+  update: typeof UpdateProjectRoleBodySchema | typeof UpdateProjectLossReasonBodySchema;
+}
+
+/** The five writes of one dictionary under `base`. */
+function registerDictionary(app: FastifyInstance, base: string, routes: DictionaryRouteSet): void {
+  const { service, requireAdmin, create, update } = routes;
+
+  app.post(base, { preHandler: requireAdmin('projects:configure'), schema: { body: create } }, async (request, reply) => {
+    const created = await service.create(create.parse(request.body), await request.responseLanguage());
+    reply.code(201);
+    return { data: created };
+  });
+
+  app.patch<{ Params: { id: string } }>(
+    `${base}/:id`,
+    { preHandler: requireAdmin('projects:configure'), schema: { body: update } },
+    async (request) => ({
+      data: await service.update(request.params.id, update.parse(request.body), await request.responseLanguage()),
+    }),
+  );
+
+  app.post<{ Params: { id: string } }>(
+    `${base}/:id/archive`,
+    { preHandler: requireAdmin('projects:configure') },
+    async (request) => ({ data: await service.archive(request.params.id, await request.responseLanguage()) }),
+  );
+
+  app.post<{ Params: { id: string } }>(
+    `${base}/:id/restore`,
+    { preHandler: requireAdmin('projects:configure') },
+    async (request) => ({ data: await service.restore(request.params.id, await request.responseLanguage()) }),
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    `${base}/:id`,
+    { preHandler: requireAdmin('projects:configure') },
+    async (request, reply) => {
+      await service.delete(request.params.id);
+      return reply.code(204).send();
     },
-  ];
-
-  for (const { base, service, create, update } of dictionaries) {
-    app.post(
-      base,
-      { preHandler: requireAdmin('projects:configure'), schema: { body: create } },
-      async (request, reply) => {
-        const created = await service.create(create.parse(request.body), await request.responseLanguage());
-        reply.code(201);
-        return { data: created };
-      },
-    );
-
-    app.patch<{ Params: { id: string } }>(
-      `${base}/:id`,
-      { preHandler: requireAdmin('projects:configure'), schema: { body: update } },
-      async (request) => {
-        return {
-          data: await service.update(request.params.id, update.parse(request.body), await request.responseLanguage()),
-        };
-      },
-    );
-
-    app.post<{ Params: { id: string } }>(
-      `${base}/:id/archive`,
-      { preHandler: requireAdmin('projects:configure') },
-      async (request) => ({ data: await service.archive(request.params.id, await request.responseLanguage()) }),
-    );
-
-    app.post<{ Params: { id: string } }>(
-      `${base}/:id/restore`,
-      { preHandler: requireAdmin('projects:configure') },
-      async (request) => ({ data: await service.restore(request.params.id, await request.responseLanguage()) }),
-    );
-
-    app.delete<{ Params: { id: string } }>(
-      `${base}/:id`,
-      { preHandler: requireAdmin('projects:configure') },
-      async (request, reply) => {
-        await service.delete(request.params.id);
-        return reply.code(204).send();
-      },
-    );
-  }
+  );
 }
