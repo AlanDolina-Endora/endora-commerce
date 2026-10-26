@@ -67,6 +67,14 @@ export const PROJECT_ACCESS_READERS: Readonly<Record<string, string>> = {
     'Every route starts from `loadVisible`; the materialisation after a move and its failure record ' +
     'are handed the id of the Project the move loaded that way. Stages, Stage Task definitions, ' +
     'Members and Stage entries are read by that id only.',
+  'services/role-service.ts':
+    'Deleting a Project Role asks whether any Member, Stage or Stage Task holds it: one `exists` ' +
+    'across every Project, answered as a yes or no to a `projects:configure` holder, who learns ' +
+    'no Project, id or count from it.',
+  'services/loss-reason-service.ts':
+    'Deleting a loss reason asks whether any Project was lost for it: one `exists` across every ' +
+    'Project, answered as a yes or no to a `projects:configure` holder, who learns no Project, id ' +
+    'or count from it.',
   'services/task-context-descriptor.ts':
     'The `project` Task context answers `allVisibleIds` / `visibleIds` and describes only the ids ' +
     '`visibleIds` handed back; Projects and their Stages are read by those ids only.',

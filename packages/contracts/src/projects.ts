@@ -933,6 +933,14 @@ export const PROJECTS_ERROR_CODES = [
   'PROJECT_MEMBER_INVALID',
   /** The Template is unknown or archived. */
   'PROJECT_TEMPLATE_NOT_FOUND',
+  /** No Project Role or loss reason with that id. */
+  'PROJECT_DICTIONARY_ENTRY_NOT_FOUND',
+  /** A seeded Role or loss reason is never deleted — archive it. */
+  'PROJECT_DICTIONARY_ENTRY_SYSTEM',
+  /** A Project or Template uses the Role or loss reason — archive it. */
+  'PROJECT_DICTIONARY_ENTRY_IN_USE',
+  /** Another row of the same dictionary has this default name, whatever its case. */
+  'PROJECT_DICTIONARY_NAME_TAKEN',
   /** The uploaded file is larger than {@link PROJECT_ATTACHMENT_MAX_BYTES}. */
   'PROJECT_ATTACHMENT_TOO_LARGE',
 ] as const;

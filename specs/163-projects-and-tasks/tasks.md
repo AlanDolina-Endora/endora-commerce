@@ -327,9 +327,11 @@ ignore it, visibly, when off.
 
 **Independent Test**: `contract/projects/roles.contract.test.ts` + `integration/projects/roles-grant-nothing.test.ts`.
 
-- [ ] T080 [P] [US4] Write failing `backend/test/contract/projects/roles.contract.test.ts` and `loss-reasons.contract.test.ts`: seeded rows with en/pl names; add, rename, archive, restore; system rows not deletable (409); archived not offered by the read endpoints' `active` filter but still rendered on Projects using them
-- [ ] T081 [P] [US4] Write failing `backend/test/integration/projects/roles-grant-nothing.test.ts`: assigning any Role changes nothing in `permissionService.listPermissions` for that user
-- [ ] T082 [US4] Implement `services/role-service.ts`, `services/loss-reason-service.ts` and their write routes (`projects:configure`); T080, T081 green
+- [x] T080 [P] [US4] Write failing `backend/test/contract/projects/roles.contract.test.ts` and `loss-reasons.contract.test.ts`: seeded rows with en/pl names; add, rename, archive, restore; system rows not deletable (409); archived not offered by the read endpoints' `active` filter but still rendered on Projects using them
+  - Both files run one shared body, `contract/projects/dictionary-contract.ts`. `DELETE /projects/{roles,loss-reasons}/:id` added to `contracts/admin-api.md` §2.5 (the contract had no delete, so "not deletable" had no route to answer 409): 204 for an unused operator row, 409 `PROJECT_DICTIONARY_ENTRY_SYSTEM` / `_IN_USE`; plus 404 `PROJECT_DICTIONARY_ENTRY_NOT_FOUND` and 409 `PROJECT_DICTIONARY_NAME_TAKEN` (case-insensitive default name, archived rows included). Codes are `slugify(defaultName, '_')` with `_2`, `_3`… suffixes.
+- [x] T081 [P] [US4] Write failing `backend/test/integration/projects/roles-grant-nothing.test.ts`: assigning any Role changes nothing in `permissionService.listPermissions` for that user
+- [x] T082 [US4] Implement `services/role-service.ts`, `services/loss-reason-service.ts` and their write routes (`projects:configure`); T080, T081 green
+  - One `services/dictionary-service.ts` behind both (same shape, same writes); the two files contribute the table and the in-use query, and are allow-listed in `PROJECT_ACCESS_READERS` for that one `exists` across Projects. Routes in `routes/routes.dictionaries.ts`; the reads stay in `routes.projects.ts`.
 - [ ] T083 [P] [US4] Admin: `pages/RolesPage.tsx`, `pages/LossReasonsPage.tsx` (name per language, archive/restore), nav entries; `admin/test/modules/projects/RolesPage.test.tsx`
 - [ ] T084 [US4] Docs *Project Roles* (EN + PL) stating Roles are not permissions; phase gate
 

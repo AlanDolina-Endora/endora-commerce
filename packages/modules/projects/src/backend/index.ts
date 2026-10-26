@@ -41,17 +41,21 @@ import { ProjectTemplateStage } from './entities/project-template-stage.entity.j
 import { ProjectTemplateStageMove } from './entities/project-template-stage-move.entity.js';
 import { ProjectTemplateStageTask } from './entities/project-template-stage-task.entity.js';
 import { ProjectViewer } from './entities/project-viewer.entity.js';
+import { registerDictionaryRoutes } from './routes/routes.dictionaries.js';
 import { registerProjectRoutes } from './routes/routes.projects.js';
 import { registerStageTaskRoutes } from './routes/routes.stage-tasks.js';
 import { registerStageRoutes } from './routes/routes.stages.js';
 import { registerTemplateRoutes } from './routes/routes.templates.js';
 import { createAlertsTimeZoneValidator } from './services/alerts-time-zone-validator.js';
+import type { DictionaryService } from './services/dictionary-service.js';
+import { createLossReasonService } from './services/loss-reason-service.js';
 import { MoveService } from './services/move-service.js';
 import { ProjectAccess } from './services/project-access.js';
 import { ProjectReadService } from './services/project-read-service.js';
 import { ProjectService } from './services/project-service.js';
 import { ProjectStageGuardRegistry } from './services/project-stage-guard-registry.js';
 import type { ProjectTasks } from './services/project-tasks.js';
+import { createRoleService } from './services/role-service.js';
 import { StageService } from './services/stage-service.js';
 import { StageTaskService } from './services/stage-task-service.js';
 import { createProjectTaskContext } from './services/task-context-descriptor.js';
@@ -82,6 +86,8 @@ interface ProjectsCradle {
   readonly projectsStageTaskService: StageTaskService;
   readonly projectsTemplateService: TemplateService;
   readonly projectsTranslate: ProjectsTranslate;
+  readonly projectsRoleService: DictionaryService;
+  readonly projectsLossReasonService: DictionaryService;
 }
 
 /** `_i18n`'s resolver over this module's own bundles. */
@@ -238,6 +244,19 @@ export function registerModule(ctx: ModuleContext): void {
   });
   // --- end of Templates ----------------------------------------------------------------
 
+  // --- Project Roles and loss reasons (User Story 4) --------------------------------------
+  // Platform-wide configuration. A Role is a label a Member holds — it grants
+  // no permission (FR-009); nothing here touches `admin_roles`.
+  ctx.di.register({
+    projectsRoleService: ctx
+      .asFunction(({ emFactory, commandBus }: ProjectsCradle) => createRoleService({ emFactory, commandBus }))
+      .singleton(),
+    projectsLossReasonService: ctx
+      .asFunction(({ emFactory, commandBus }: ProjectsCradle) => createLossReasonService({ emFactory, commandBus }))
+      .singleton(),
+  });
+  // --- end of Project Roles and loss reasons ------------------------------------------------
+
   // --- Stages, workflow and walking a Project (User Story 1) -------------------------
   // The guard registry is a **contribution seam** (research R-6): other modules
   // and deployments push a guard into it from a contribution-only boot hook,
@@ -325,6 +344,11 @@ export function registerModule(ctx: ModuleContext): void {
     });
     await registerTemplateRoutes(app, {
       templateService: cradle.projectsTemplateService,
+      requireAdmin: cradle.requireAdmin,
+    });
+    await registerDictionaryRoutes(app, {
+      roleService: cradle.projectsRoleService,
+      lossReasonService: cradle.projectsLossReasonService,
       requireAdmin: cradle.requireAdmin,
     });
   });

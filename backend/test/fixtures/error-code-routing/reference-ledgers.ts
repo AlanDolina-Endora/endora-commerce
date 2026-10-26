@@ -504,6 +504,30 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 3): ' +
       'a Template that does not exist, or an archived one named to create a Project from (research R-7).',
   },
+  PROJECT_DICTIONARY_ENTRY_NOT_FOUND: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 4): ' +
+      'a Project Role or loss reason id that names no row, on a rename, archive, restore or delete.',
+  },
+  PROJECT_DICTIONARY_ENTRY_SYSTEM: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 4): ' +
+      'the deletion of a seeded Project Role or loss reason, which are renamable and archivable only (FR-007, `data-model.md` §2.1).',
+  },
+  PROJECT_DICTIONARY_ENTRY_IN_USE: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 4): ' +
+      'the deletion of a Project Role or loss reason a Project or a Template uses — archiving is how it stops being offered (US4 scenario 2).',
+  },
+  PROJECT_DICTIONARY_NAME_TAKEN: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 4): ' +
+      'a Project Role or loss reason given the default name another row of the same dictionary has, whatever its case.',
+  },
   SEO_CRAWLER_TEXT_TOO_LARGE: {
     to: 'seo',
     reason:

@@ -90,8 +90,17 @@ createdAt, closedAt }`.
 | Method & path | Permission |
 | --- | --- |
 | `GET /projects/roles` (`?active=true` leaves archived out; rows carry `label` in the reader's language) | `projects:read` |
-| `POST`/`PATCH /projects/roles[/:id]`, `POST /projects/roles/:id/archive` \| `/restore` | `projects:configure` |
-| `GET /projects/loss-reasons`; `POST`/`PATCH`/archive/restore | `projects:read`; `projects:configure` |
+| `POST`/`PATCH /projects/roles[/:id]`, `POST /projects/roles/:id/archive` \| `/restore`, `DELETE /projects/roles/:id` | `projects:configure` |
+| `GET /projects/loss-reasons`; `POST`/`PATCH`/archive/restore/`DELETE` | `projects:read`; `projects:configure` |
+
+Roles and loss reasons (User Story 4): `POST` → 201 with the row, its `code` derived from
+`defaultName` (`slugify` with `_`, `_2`, `_3`… past codes already held) and never changed; `PATCH`
+replaces `name` and/or `defaultName`. 404 `PROJECT_DICTIONARY_ENTRY_NOT_FOUND` for an unknown id;
+409 `PROJECT_DICTIONARY_NAME_TAKEN` for a `defaultName` another row of the same dictionary has
+(case-insensitive, archived rows included); `DELETE` → 204, or 409
+`PROJECT_DICTIONARY_ENTRY_SYSTEM` for a seeded row and 409 `PROJECT_DICTIONARY_ENTRY_IN_USE` for
+a row a Project or Template uses (Members, Template Roles, responsible Roles of Stages and Stage
+Tasks; a Project lost for the reason) — archiving is how such a row stops being offered.
 | `GET /projects/templates`, `GET /projects/templates/:id` | `projects:read` |
 | `POST /projects/templates`, `PUT /projects/templates/:id` (whole Template graph in one body, one Command), `POST …/:id/duplicate`, `…/archive`, `…/restore` | `projects:configure` |
 

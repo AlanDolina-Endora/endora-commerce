@@ -733,6 +733,14 @@ export const ERROR_CODES = {
   PROJECT_STAGE_TASKS_NOT_RETRYABLE: 'PROJECT_STAGE_TASKS_NOT_RETRYABLE',
   /** The Template is unknown, or archived when a Project is created from it. */
   PROJECT_TEMPLATE_NOT_FOUND: 'PROJECT_TEMPLATE_NOT_FOUND',
+  /** No Project Role or loss reason with that id. */
+  PROJECT_DICTIONARY_ENTRY_NOT_FOUND: 'PROJECT_DICTIONARY_ENTRY_NOT_FOUND',
+  /** A seeded Project Role or loss reason is renamable and archivable, never deleted. */
+  PROJECT_DICTIONARY_ENTRY_SYSTEM: 'PROJECT_DICTIONARY_ENTRY_SYSTEM',
+  /** A Project or a Template uses the Project Role or loss reason, so it is archived rather than deleted. */
+  PROJECT_DICTIONARY_ENTRY_IN_USE: 'PROJECT_DICTIONARY_ENTRY_IN_USE',
+  /** Another Project Role (or loss reason) already has this default name, whatever its case. */
+  PROJECT_DICTIONARY_NAME_TAKEN: 'PROJECT_DICTIONARY_NAME_TAKEN',
 
   // SEO — search engine robots (`specs/144-seo-search-engine-robots/`, FR-006).
   // Declared by the `seo` module's manifest.

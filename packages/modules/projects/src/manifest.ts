@@ -157,8 +157,7 @@ export const manifest = defineModuleManifest({
       requires: ['projects:read'],
     },
     {
-      // Templates (User Story 3); Project Roles and loss reasons join it with
-      // User Story 4.
+      // Templates (User Story 3), Project Roles and loss reasons (User Story 4).
       code: 'projects:configure',
       label: 'Configure projects (roles, templates, loss reasons)',
       module: 'projects',
@@ -190,6 +189,10 @@ export const manifest = defineModuleManifest({
     { code: 'PROJECT_STAGE_GATE_OPEN_TASKS' },
     { code: 'PROJECT_STAGE_TASKS_NOT_RETRYABLE' },
     { code: 'PROJECT_TEMPLATE_NOT_FOUND' },
+    { code: 'PROJECT_DICTIONARY_ENTRY_NOT_FOUND' },
+    { code: 'PROJECT_DICTIONARY_ENTRY_SYSTEM' },
+    { code: 'PROJECT_DICTIONARY_ENTRY_IN_USE' },
+    { code: 'PROJECT_DICTIONARY_NAME_TAKEN' },
   ],
   i18n: { bundlesDir: 'i18n' },
   // `docs/projects.md` at the package root: users' and developers' page.
