@@ -5330,6 +5330,24 @@
         }
       }
     },
+    "/api/v1/admin/projects": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/projects/{id}": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/promotion-rules": {
       "get": {
         "responses": {
