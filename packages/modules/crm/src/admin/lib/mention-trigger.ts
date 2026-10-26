@@ -17,9 +17,16 @@ import {
 /** Longer than a full name or a document number; past it, it is a sentence. */
 export const MENTION_QUERY_LIMIT = 40;
 
+/**
+ * The kinds a run of `@`s asks for. The shared grammar reads five reference
+ * types since `specs/163-projects-and-tasks/` (research R-14); the composer
+ * offers these three until that feature moves CRM onto the shared editor.
+ */
+export type MentionTriggerKind = Extract<OpportunityReferenceType, 'admin_user' | 'order' | 'product'>;
+
 export interface MentionTrigger {
   /** What the run asks for — one `@` a person, two an Order, three a Product. */
-  kind: OpportunityReferenceType;
+  kind: MentionTriggerKind;
   /** Where the first `@` is, and where the caret is: the stretch a choice replaces. */
   start: number;
   end: number;
@@ -27,7 +34,7 @@ export interface MentionTrigger {
   query: string;
 }
 
-const KIND_BY_LENGTH: readonly OpportunityReferenceType[] = ['admin_user', 'order', 'product'];
+const KIND_BY_LENGTH: readonly MentionTriggerKind[] = ['admin_user', 'order', 'product'];
 
 /**
  * The run of `@`s the caret is typing after, or `null`.

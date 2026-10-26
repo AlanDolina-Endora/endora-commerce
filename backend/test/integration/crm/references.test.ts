@@ -116,6 +116,29 @@ describe('crm references to Products and Orders (US12)', () => {
       );
     });
 
+    // `specs/163-projects-and-tasks/` research R-14: the shared grammar reads a
+    // Quote Request and a Task token. Until that feature widens
+    // `crm_opportunity_references_target_type_check` and adds their resolvers,
+    // CRM shows them as unavailable and stores no row for them — a save that
+    // tried would break the constraint.
+    it('reads a Quote Request and a Task token as unavailable and stores no row for either', async () => {
+      const quoteRequestId = randomUUID();
+      const taskId = randomUUID();
+      const description =
+        `See ${formatOpportunityReferenceToken('quote_request', quoteRequestId)} ` +
+        `and ${formatOpportunityReferenceToken('task', taskId)}, with ${product}.`;
+      const opportunity = await createCrmOpportunity(h, { description });
+
+      const read = await detail(opportunity.id);
+      expect(read.description).toBe(description);
+      expect(read.references).toEqual([
+        { type: 'quote_request', id: quoteRequestId, available: false, label: null, url: null },
+        { type: 'task', id: taskId, available: false, label: null, url: null },
+        expect.objectContaining({ type: 'product', id: SEED_PRODUCT_101_ID, available: true }),
+      ]);
+      expect(await storedReferences(opportunity.id)).toEqual([`description:-:product:${SEED_PRODUCT_101_ID}`]);
+    });
+
     it('replaces the stored references of the description when it is saved again', async () => {
       const first = await seedCrmOrder(h.em());
       const second = await seedCrmOrder(h.em());

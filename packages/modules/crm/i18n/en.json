@@ -696,6 +696,8 @@
   "references.inserted.admin_user": "A mention of a person was inserted into the text.",
   "references.kind.admin_user": "Person:",
   "references.unavailable.admin_user": "Person unavailable",
+  "references.unavailable.quote_request": "Quote request unavailable",
+  "references.unavailable.task": "Task unavailable",
   "origin.order.create": "Create order",
   "origin.order.linking": "Linking the new order to this opportunity…",
   "origin.order.linked": "Order {number} was created and linked to this opportunity.",

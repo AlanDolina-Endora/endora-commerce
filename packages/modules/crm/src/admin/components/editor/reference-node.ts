@@ -15,6 +15,10 @@ const CHIP_KIND_CLASS: Record<OpportunityReferenceType, string> = {
   admin_user: 'border-primary/30 bg-primary/10 font-medium text-foreground',
   order: 'border-border bg-muted/50 font-medium text-foreground',
   product: 'border-border bg-muted/50 font-medium text-foreground',
+  // Read since `specs/163-projects-and-tasks/` (research R-14): a text may carry
+  // a Quote Request or a Task token, which this editor does not insert yet.
+  quote_request: 'border-border bg-muted/50 font-medium text-foreground',
+  task: 'border-border bg-muted/50 font-medium text-foreground',
 };
 const CHIP_UNAVAILABLE_CLASS = 'border-dashed border-border text-muted-foreground';
 

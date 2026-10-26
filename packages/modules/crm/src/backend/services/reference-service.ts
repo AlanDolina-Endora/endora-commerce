@@ -8,7 +8,10 @@ import type {
 } from '@endora-commerce/contracts';
 import { getTenantContext } from '@endora-commerce/platform/tenancy';
 import { referenceTokensOf } from '../domain/reference-tokens.js';
-import type { CrmReferenceSourceKind } from '../entities/crm-opportunity-reference.entity.js';
+import type {
+  CrmReferenceSourceKind,
+  CrmReferenceTargetType,
+} from '../entities/crm-opportunity-reference.entity.js';
 import { isActiveAdministrator } from './opportunity-assignment-service.js';
 import type { OwnerReadChecks } from './owner-read-permissions.js';
 
@@ -26,8 +29,23 @@ export interface StoredReference {
   opportunityId: string;
   sourceKind: CrmReferenceSourceKind;
   sourceId: string | null;
-  targetType: OpportunityReferenceToken['type'];
+  targetType: CrmReferenceTargetType;
   targetId: string;
+}
+
+/**
+ * The target types `crm_opportunity_references` admits — its check constraint's
+ * list. The shared grammar reads five since `specs/163-projects-and-tasks/`
+ * (research R-14); a Quote Request or a Task token is not stored, and resolves
+ * as unavailable, until that feature widens the constraint and adds their
+ * resolvers (`contracts/foreign-module-changes.md` §C).
+ */
+const STORED_TARGET_TYPES: ReadonlySet<string> = new Set<CrmReferenceTargetType>(['product', 'order', 'admin_user']);
+
+function isStoredTarget(
+  token: OpportunityReferenceToken,
+): token is OpportunityReferenceToken & { type: CrmReferenceTargetType } {
+  return STORED_TARGET_TYPES.has(token.type);
 }
 
 /** Which rows belong to one source — what a save deletes before it writes the new ones. */
@@ -110,7 +128,7 @@ export class ReferenceService {
    * EntityManager.
    */
   rowsFor(source: ReferenceSource, text: string | null | undefined): StoredReference[] {
-    return referenceTokensOf(text).map((token) => ({
+    return referenceTokensOf(text).filter(isStoredTarget).map((token) => ({
       opportunityId: source.opportunityId,
       sourceKind: source.kind,
       sourceId: source.sourceId,

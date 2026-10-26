@@ -696,6 +696,8 @@
   "references.inserted.admin_user": "Wstawiono do tekstu wzmiankę o osobie.",
   "references.kind.admin_user": "Osoba:",
   "references.unavailable.admin_user": "Osoba niedostępna",
+  "references.unavailable.quote_request": "Zapytanie ofertowe niedostępne",
+  "references.unavailable.task": "Zadanie niedostępne",
   "origin.order.create": "Utwórz zamówienie",
   "origin.order.linking": "Wiążemy nowe zamówienie z tą szansą…",
   "origin.order.linked": "Zamówienie {number} zostało utworzone i powiązane z tą szansą.",

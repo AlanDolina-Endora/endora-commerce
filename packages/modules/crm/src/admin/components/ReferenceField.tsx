@@ -66,6 +66,13 @@ const PEOPLE_LIST_PERMISSION = 'crm:write';
 /** What the three kinds are called in this module's bundle keys. */
 const KIND_KEY = { admin_user: 'person', order: 'order', product: 'product' } as const;
 
+/**
+ * The kinds this field offers to pick. The shared grammar reads five types
+ * since `specs/163-projects-and-tasks/` (research R-14); this field offers the
+ * three it always offered until that feature moves CRM onto the shared editor.
+ */
+type PickableKind = keyof typeof KIND_KEY;
+
 interface Suggestion {
   id: string;
   label: string;
@@ -216,7 +223,7 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
   const goodState = useRef<Editor['state'] | null>(null);
   const [, rerender] = useReducer((count: number) => count + 1, 0);
   const [labelId, setLabelId] = useState<string | undefined>(undefined);
-  const [picker, setPicker] = useState<OpportunityReferenceType | null>(null);
+  const [picker, setPicker] = useState<PickableKind | null>(null);
   const [options, setOptions] = useState<ComboboxOption<string>[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchFailed, setSearchFailed] = useState(false);
@@ -233,14 +240,14 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
   /** The run Escape closed: it stays closed until its `@` is gone. */
   const [dismissed, setDismissed] = useState<number | null>(null);
   const [answer, setAnswer] = useState<{
-    kind: OpportunityReferenceType;
+    kind: PickableKind;
     query: string;
     found: Suggestion[];
     failed: boolean;
   } | null>(null);
   const [active, setActive] = useState(0);
   /** The kind whose list is on screen: set when a run's first search starts, not when its `@` is typed. */
-  const [shownKind, setShownKind] = useState<OpportunityReferenceType | null>(null);
+  const [shownKind, setShownKind] = useState<PickableKind | null>(null);
   const [place, setPlace] = useState<CSSProperties | null>(null);
   const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suggestSequence = useRef(0);
@@ -249,7 +256,7 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
   const canOrders = mentions && hasPermission(ORDER_LIST_PERMISSION) && organizationId !== null;
   const canPeople = mentions && hasPermission(PEOPLE_LIST_PERMISSION);
   const offered = useCallback(
-    (kind: OpportunityReferenceType): boolean =>
+    (kind: PickableKind): boolean =>
       kind === 'admin_user' ? canPeople : kind === 'order' ? canOrders : canProducts,
     [canPeople, canOrders, canProducts],
   );
@@ -422,7 +429,7 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
 
   // --- By button: a search under the field -------------------------------------
   const search = useCallback(
-    async (type: OpportunityReferenceType, query: string): Promise<void> => {
+    async (type: PickableKind, query: string): Promise<void> => {
       const current = ++sequence.current;
       setSearching(true);
       setSearchFailed(false);
@@ -468,7 +475,7 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
     };
   }, [picker, search]);
 
-  const toggle = (type: OpportunityReferenceType): void => {
+  const toggle = (type: PickableKind): void => {
     setProblem(null);
     setNotice('');
     setPicker((current) => (current === type ? null : type));
@@ -501,7 +508,7 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
     return emitted.current !== before;
   };
 
-  const insert = (type: OpportunityReferenceType, chosen: string, label: string): void => {
+  const insert = (type: PickableKind, chosen: string, label: string): void => {
     if (!putChip(type, chosen, label)) return;
     setPicker(null);
     setNotice(t(`references.inserted.${type}`));
