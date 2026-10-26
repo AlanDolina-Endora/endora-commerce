@@ -26,6 +26,7 @@ import {
   PageHeader,
 } from '@endora-commerce/admin-kit/ui';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
+import { AdminZone } from '@endora-commerce/admin-kit/zones';
 import { crmApi, type OrderStatusOption } from '../api.js';
 import { salesChannelLabel } from '../components/LookupPickers.js';
 import { ModalDialog } from '@endora-commerce/admin-kit/components';
@@ -519,6 +520,13 @@ export function OpportunityDetail(): ReactNode {
         </Card>
 
       </div>
+
+      {/*
+        Panels other modules add about this Opportunity as a whole. The zone
+        brings no chrome and renders nothing when empty; `crm` names no
+        contributor.
+      */}
+      <AdminZone name="opportunity.detail.after" props={{ opportunityId: id }} />
     </>
   );
 }
