@@ -295,7 +295,7 @@ dostępne od początku i oznaczone jako **Wbudowana**.
 **Powody utraty** (`/projects/loss-reasons`) to powody, z jakich projekt może
 zostać zamknięty jako utracony; jeden z nich trzeba wybrać przy zamykaniu
 projektu. *Cena*, *Wybór konkurencji*, *Anulowany przez klienta*, *Brak
-decyzji* i *Inny powód* są dostępne od początku i oznaczone jako **Wbudowana**.
+decyzji* i *Inny powód* są dostępne od początku i oznaczone jako **Wbudowany**.
 Ekran działa tak samo jak *Role projektowe*: powód dodaje się z nazwą w każdym
 języku, można zmienić jego nazwę, zarchiwizować go i przywrócić, a usunąć taki,
 z którego nie utracono żadnego projektu. Zarchiwizowany powód nie jest już

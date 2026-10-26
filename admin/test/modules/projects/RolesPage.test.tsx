@@ -107,9 +107,9 @@ describe('RolesPage', () => {
     expect(within(table).getByRole('columnheader', { name: en('dictionary.col.name', { language: 'Polish' }) })).toBeTruthy();
     const sales = within(table).getByText('Sales Rep').closest('tr') as HTMLElement;
     expect(within(sales).getByText('Handlowiec')).toBeTruthy();
-    expect(within(sales).getByText(en('dictionary.builtIn'))).toBeTruthy();
+    expect(within(sales).getByText(en('roles.builtIn'))).toBeTruthy();
     const installer = within(table).getByText('Installer').closest('tr') as HTMLElement;
-    expect(within(installer).queryByText(en('dictionary.builtIn'))).toBeNull();
+    expect(within(installer).queryByText(en('roles.builtIn'))).toBeNull();
     expect(within(table).queryByText('Designer')).toBeNull();
     expect(screen.getByText(en('roles.description'))).toBeTruthy();
   });
@@ -119,7 +119,7 @@ describe('RolesPage', () => {
     await screen.findByText('Installer');
     await userEvent.click(screen.getByRole('checkbox', { name: en('roles.showArchived') }));
     const retired = (await screen.findByText('Designer')).closest('tr') as HTMLElement;
-    expect(within(retired).getByText(en('dictionary.archived'))).toBeTruthy();
+    expect(within(retired).getByText(en('roles.archived'))).toBeTruthy();
     postSpy.mockResolvedValue({ data: { ...RETIRED, archivedAt: null } });
     await pick('Designer', en('dictionary.restore'));
     expect(postSpy).toHaveBeenCalledWith(`${API}/roles/${RETIRED.id}/restore`);
@@ -229,7 +229,7 @@ describe('LossReasonsPage', () => {
     });
     expect(await screen.findByRole('heading', { name: en('lossReasons.title') })).toBeTruthy();
     const price = (await screen.findByText('Price')).closest('tr') as HTMLElement;
-    expect(within(price).getByText(en('dictionary.builtIn'))).toBeTruthy();
+    expect(within(price).getByText(en('lossReasons.builtIn'))).toBeTruthy();
     expect(screen.getByRole('button', { name: en('lossReasons.add') })).toBeTruthy();
   });
 });

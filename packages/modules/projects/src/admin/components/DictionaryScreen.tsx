@@ -119,8 +119,8 @@ export function DictionaryScreen({ kind }: DictionaryScreenProps): ReactNode {
       header: t('dictionary.col.status'),
       render: (entry) => (
         <span className="flex flex-wrap gap-1">
-          {entry.isSystem ? <Badge variant="outline">{t('dictionary.builtIn')}</Badge> : null}
-          {entry.archivedAt ? <Badge variant="secondary">{t('dictionary.archived')}</Badge> : null}
+          {entry.isSystem ? <Badge variant="outline">{t(`${prefix}.builtIn`)}</Badge> : null}
+          {entry.archivedAt ? <Badge variant="secondary">{t(`${prefix}.archived`)}</Badge> : null}
         </span>
       ),
     },
