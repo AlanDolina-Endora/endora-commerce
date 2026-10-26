@@ -725,6 +725,12 @@ export const ERROR_CODES = {
   PROJECT_LOSS_REASON_INVALID: 'PROJECT_LOSS_REASON_INVALID',
   /** A Member or listed person is not an active administrator, or a Role is unknown. */
   PROJECT_MEMBER_INVALID: 'PROJECT_MEMBER_INVALID',
+  /** A Stage that holds Tasks cannot be deleted. */
+  PROJECT_STAGE_HAS_TASKS: 'PROJECT_STAGE_HAS_TASKS',
+  /** The Stage's completion gate is closed; `details.openTasks` names the open Tasks. */
+  PROJECT_STAGE_GATE_OPEN_TASKS: 'PROJECT_STAGE_GATE_OPEN_TASKS',
+  /** Creating a Stage's Tasks again was asked of a Stage whose last entry did not fail to create them. */
+  PROJECT_STAGE_TASKS_NOT_RETRYABLE: 'PROJECT_STAGE_TASKS_NOT_RETRYABLE',
 
   // SEO — search engine robots (`specs/144-seo-search-engine-robots/`, FR-006).
   // Declared by the `seo` module's manifest.

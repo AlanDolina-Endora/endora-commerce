@@ -27,6 +27,7 @@ import { ProjectViewer } from '../entities/project-viewer.entity.js';
 import type { ProjectAccess } from './project-access.js';
 import { nextProjectNumber } from './project-number.js';
 import type { ProjectReadService } from './project-read-service.js';
+import { PROJECT_TASK_CONTEXT_TYPE, type ProjectTasks } from './project-tasks.js';
 
 /**
  * A Project's own writes (`contracts/admin-api.md` §2.1, `data-model.md`
@@ -56,6 +57,7 @@ export interface ProjectServiceDeps {
   organizations: OrganizationDetailsPort;
   /** `admin_users`' read port — lazy, resolved per call. */
   adminUsers: AdminUserReadPort;
+  tasks: ProjectTasks;
 }
 
 export function projectChanged(): HttpError {
@@ -257,6 +259,12 @@ export class ProjectService {
         return { result: null, before, after: null };
       },
     });
+    // Its Tasks go with it too (spec edge case) — after the commit, through
+    // the Tasks module's own Commands. With Tasks off they stay, belonging to
+    // a Project nobody can see, and so are hidden by the Tasks module.
+    if (this.deps.tasks.present()) {
+      await this.deps.tasks.write.deleteInContext({ contextType: PROJECT_TASK_CONTEXT_TYPE, contextId: visible.id });
+    }
   }
 
   /**

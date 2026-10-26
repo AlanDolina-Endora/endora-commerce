@@ -4,6 +4,10 @@ import type {
   AdminUserReadPort,
   OrganizationDetailsPort,
   PermissionReadPort,
+  SettingWriteValidatorRegistryPort,
+  TaskContextRegistryPort,
+  TaskReadPort,
+  TaskWritePort,
 } from '@endora-commerce/contracts';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import {
@@ -37,13 +41,18 @@ import { ProjectTemplateStageMove } from './entities/project-template-stage-move
 import { ProjectTemplateStageTask } from './entities/project-template-stage-task.entity.js';
 import { ProjectViewer } from './entities/project-viewer.entity.js';
 import { registerProjectRoutes } from './routes/routes.projects.js';
+import { registerStageTaskRoutes } from './routes/routes.stage-tasks.js';
 import { registerStageRoutes } from './routes/routes.stages.js';
+import { createAlertsTimeZoneValidator } from './services/alerts-time-zone-validator.js';
 import { MoveService } from './services/move-service.js';
 import { ProjectAccess } from './services/project-access.js';
 import { ProjectReadService } from './services/project-read-service.js';
 import { ProjectService } from './services/project-service.js';
 import { ProjectStageGuardRegistry } from './services/project-stage-guard-registry.js';
+import type { ProjectTasks } from './services/project-tasks.js';
 import { StageService } from './services/stage-service.js';
+import { StageTaskService } from './services/stage-task-service.js';
+import { createProjectTaskContext } from './services/task-context-descriptor.js';
 
 /**
  * `projects` — composed by the kernel container.
@@ -66,6 +75,8 @@ interface ProjectsCradle {
   readonly projectsStageService: StageService;
   readonly projectsMoveService: MoveService;
   readonly projectStageGuardRegistry: ProjectStageGuardRegistry;
+  readonly projectsTasks: ProjectTasks;
+  readonly projectsStageTaskService: StageTaskService;
 }
 
 export function registerModule(ctx: ModuleContext): void {
@@ -109,13 +120,60 @@ export function registerModule(ctx: ModuleContext): void {
   });
   // --- end of Projects (read side) -------------------------------------------------
 
+  // --- Tasks (User Story 2, research R-8, R-9) ---------------------------------------
+  // The Tasks module is optional (FR-040): Projects only *degrades* without it
+  // (the manifest's `degrades-without` edges on both ports). Every caller asks
+  // `present()` first and only then calls a port, so a switched-off Tasks
+  // module is a decision, never a caught refusal.
+  ctx.di.register({
+    projectsTasks: ctx
+      .asFunction(
+        (): ProjectTasks => ({
+          present: () => effectiveState.isPresent('tasks'),
+          read: lazyPort<TaskReadPort>(ctx, 'taskReadPort'),
+          write: lazyPort<TaskWritePort>(ctx, 'taskWritePort'),
+        }),
+      )
+      .singleton(),
+  });
+  /**
+   * The `project` Task context — a **contribution** hook. It pushes an inert
+   * descriptor into `taskContextRegistry`, an ungated registry `tasks` owns,
+   * and carries no presence probe: the registry enumerates only descriptors
+   * whose owner is effectively present, so Project Tasks are hidden while
+   * Projects is off and back without a restart when it is on. In an instance
+   * without `tasks` the push is dropped by the platform.
+   */
+  ctx.onBoot(() => {
+    lazyPort<TaskContextRegistryPort>(ctx, 'taskContextRegistry').register(
+      createProjectTaskContext({
+        access: ctx.cradle<ProjectsCradle>().projectsAccess,
+        emFactory: ctx.cradle<ProjectsCradle>().emFactory,
+      }),
+    );
+  });
+  // --- end of Tasks ------------------------------------------------------------------
+
+  // --- Settings ----------------------------------------------------------------------
+  /**
+   * `projects.alerts_time_zone` must be a zone the runtime knows (pulled
+   * forward from T118) — a **contribution** hook into `settings`' validator
+   * registry, which filters contributors by presence when it is read.
+   */
+  ctx.onBoot(() => {
+    lazyPort<SettingWriteValidatorRegistryPort>(ctx, 'settingWriteValidatorRegistry').register(
+      createAlertsTimeZoneValidator(),
+    );
+  });
+  // --- end of Settings ---------------------------------------------------------------
+
   // --- Projects (writes, User Story 1) -----------------------------------------------
   // Create, edit and delete a Project, its Organizations and its Members. Every
   // write is a Command (Constitution XIII) and starts from `ProjectAccess`.
   ctx.di.register({
     projectsService: ctx
       .asFunction(
-        ({ emFactory, commandBus, projectsAccess, projectsReadService }: ProjectsCradle) =>
+        ({ emFactory, commandBus, projectsAccess, projectsReadService, projectsTasks }: ProjectsCradle) =>
           new ProjectService({
             emFactory,
             commandBus,
@@ -123,6 +181,7 @@ export function registerModule(ctx: ModuleContext): void {
             read: projectsReadService,
             organizations: lazyPort<OrganizationDetailsPort>(ctx, 'organizationDetailsPort'),
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+            tasks: projectsTasks,
           }),
       )
       .singleton(),
@@ -147,19 +206,49 @@ export function registerModule(ctx: ModuleContext): void {
       .singleton(),
     projectsStageService: ctx
       .asFunction(
-        ({ emFactory, commandBus, projectsAccess, projectsReadService }: ProjectsCradle) =>
-          new StageService({ emFactory, commandBus, access: projectsAccess, read: projectsReadService }),
+        ({ emFactory, commandBus, projectsAccess, projectsReadService, projectsTasks }: ProjectsCradle) =>
+          new StageService({
+            emFactory,
+            commandBus,
+            access: projectsAccess,
+            read: projectsReadService,
+            tasks: projectsTasks,
+          }),
+      )
+      .singleton(),
+    // Stage Tasks and the completion gate (User Story 2, R-7, R-8).
+    projectsStageTaskService: ctx
+      .asFunction(
+        ({ emFactory, commandBus, projectsAccess, projectsReadService, projectsTasks }: ProjectsCradle) =>
+          new StageTaskService({
+            emFactory,
+            commandBus,
+            access: projectsAccess,
+            read: projectsReadService,
+            tasks: projectsTasks,
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+          }),
       )
       .singleton(),
     projectsMoveService: ctx
       .asFunction(
-        ({ emFactory, commandBus, projectsAccess, projectsReadService, projectStageGuardRegistry }: ProjectsCradle) =>
+        ({
+          emFactory,
+          commandBus,
+          projectsAccess,
+          projectsReadService,
+          projectStageGuardRegistry,
+          projectsStageTaskService,
+          projectsTasks,
+        }: ProjectsCradle) =>
           new MoveService({
             emFactory,
             commandBus,
             access: projectsAccess,
             read: projectsReadService,
             guards: projectStageGuardRegistry,
+            stageTasks: projectsStageTaskService,
+            tasks: projectsTasks,
           }),
       )
       .singleton(),
@@ -178,6 +267,10 @@ export function registerModule(ctx: ModuleContext): void {
       projectReadService: cradle.projectsReadService,
       stageService: cradle.projectsStageService,
       moveService: cradle.projectsMoveService,
+      requireAdmin: cradle.requireAdmin,
+    });
+    await registerStageTaskRoutes(app, {
+      stageTaskService: cradle.projectsStageTaskService,
       requireAdmin: cradle.requireAdmin,
     });
   });

@@ -138,7 +138,7 @@ describe('projects — the completion gate (US2)', () => {
     expect(openTasksOf(refused.body).map((t) => t.id)).toEqual([inBuild.id]);
   });
 
-  it('a gate on a Stage with no Task lets the Project go, with no note — Tasks on or off', async () => {
+  it('a gate on a Stage with no Task lets the Project go, with no note', async () => {
     const project = await gatedProject('Empty gate');
     const moved = await moveProjectOk(h, project.id, stageNamed(project, 'Build'), project.version);
     expect(moved.entry.notes).toEqual([]);

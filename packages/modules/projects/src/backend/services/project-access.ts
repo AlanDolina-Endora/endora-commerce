@@ -63,6 +63,13 @@ export const PROJECT_ACCESS_READERS: Readonly<Record<string, string>> = {
   'services/move-service.ts':
     'A move, close or reopen starts from `loadVisible`; inside its Command the Project is locked ' +
     'and its Stages and moves are read by that id only.',
+  'services/stage-task-service.ts':
+    'Every route starts from `loadVisible`; the materialisation after a move and its failure record ' +
+    'are handed the id of the Project the move loaded that way. Stages, Stage Task definitions, ' +
+    'Members and Stage entries are read by that id only.',
+  'services/task-context-descriptor.ts':
+    'The `project` Task context answers `allVisibleIds` / `visibleIds` and describes only the ids ' +
+    '`visibleIds` handed back; Projects and their Stages are read by those ids only.',
 };
 
 /** The permission that lifts the visibility rule — never the Organization rule (R-3). */
@@ -281,6 +288,13 @@ export class ProjectAccess {
       canWrite: holds(held, PROJECTS_WRITE_PERMISSION),
       canConfigure: holds(held, PROJECTS_CONFIGURE_PERMISSION),
     };
+  }
+
+  /** Whether the caller holds `code` (wildcards included) — `false` for the system. */
+  async callerHolds(code: string): Promise<boolean> {
+    const adminUserId = actingAdminUserId();
+    if (adminUserId === null) return false;
+    return holds(await this.deps.permissions.listPermissions(adminUserId), code);
   }
 
   /** Which of `ids` the caller may see. */

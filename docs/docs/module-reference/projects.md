@@ -34,6 +34,9 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | `auth` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `organizations` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `settings` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `tasks` | no | contributes-to `taskContextRegistry` |
+| `tasks` | no | degrades-without `taskReadPort` — Projects work without Tasks: no Tasks tab, no Stage Tasks, no completion gates. |
+| `tasks` | no | degrades-without `taskWritePort` — Projects work without Tasks: no Tasks tab, no Stage Tasks, no completion gates. |
 
 ## Permissions
 

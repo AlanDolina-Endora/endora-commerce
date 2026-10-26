@@ -8,6 +8,7 @@ import {
   type ProjectDetail,
   type ProjectMoveResult,
   type ProjectReopenedEvent,
+  type ProjectStageEntryNote,
   type ProjectStageMovedEvent,
   type ReopenProjectBody,
 } from '@endora-commerce/contracts';
@@ -23,6 +24,8 @@ import type { ProjectAccess, VisibleProjectRow } from './project-access.js';
 import type { ProjectReadService } from './project-read-service.js';
 import { lockProject, projectChanged } from './project-service.js';
 import type { ProjectStageGuardRegistry } from './project-stage-guard-registry.js';
+import type { ProjectTasks } from './project-tasks.js';
+import type { StageEntryPlan, StageTaskService } from './stage-task-service.js';
 
 /**
  * Walking a Project (`contracts/admin-api.md` §2.2, FR-003, FR-005, FR-006,
@@ -38,15 +41,19 @@ import type { ProjectStageGuardRegistry } from './project-stage-guard-registry.j
  * 3. the workflow — a move the Project's moves do not permit is 409
  *    `PROJECT_MOVE_NOT_PERMITTED`; completing needs a Stage that permits it;
  *    losing needs a loss reason that is not archived;
- * 4. the registered stage guards (`projectStageGuardRegistry`, R-6), each
+ * 4. the completion gate of the Stage being left (R-8, the module's own first
+ *    guard) — 409 `PROJECT_STAGE_GATE_OPEN_TASKS` naming the open Tasks; with
+ *    Tasks off it is not applied and the entry records
+ *    `gate_not_applied_tasks_off`. Losing a Project is not gated;
+ * 5. the registered stage guards (`projectStageGuardRegistry`, R-6), each
  *    owner present — a refusal is 409 `PROJECT_GUARD_REFUSED` with its sentence;
- * 5. the Command: the Project row locked, the version and the workflow checked
+ * 6. the Command: the Project row locked, the version and the workflow checked
  *    again under the lock — two moves at once, one wins and the other is told
  *    the Project changed — then the write, the history row, the version bump.
  *
  * Entering a Stage records its start, today in `projects.alerts_time_zone`,
- * and its deadline (FR-013). The completion gate and Stage Tasks are User
- * Story 2's; this service creates no Task (`createdTaskIds: []`).
+ * and its deadline (FR-013), and decides its Stage Tasks inside the same
+ * Command; they are created **after** it commits (`stage-task-service.ts`).
  */
 
 export interface MoveServiceDeps {
@@ -55,6 +62,8 @@ export interface MoveServiceDeps {
   access: ProjectAccess;
   read: ProjectReadService;
   guards: ProjectStageGuardRegistry;
+  stageTasks: StageTaskService;
+  tasks: ProjectTasks;
 }
 
 function notPermitted(message: string, details?: Record<string, unknown>): HttpError {
@@ -81,15 +90,18 @@ export class MoveService {
     if (visible.state !== 'open') throw notPermitted('A closed project does not move between stages. Reopen it first.');
     assertVersion(visible, body.version);
     const from = visible.current_stage_id!;
-    const { graph } = await this.deps.read.graphOf(visible.id);
+    const { graph, stages: workflowStages } = await this.deps.read.graphOf(visible.id);
     if (!graph.canMove(from, body.toStageId)) {
       throw notPermitted('The project’s workflow does not allow this move.', {
         fromStageId: from,
         toStageId: body.toStageId,
       });
     }
+    const gateNotes = await this.deps.stageTasks.gate(visible.id, workflowStages.find((s) => s.id === from)!);
     await this.deps.guards.run({ projectId: visible.id, fromStageId: from, toStageId: body.toStageId, kind: 'move' });
     const today = todayIn(await this.deps.read.timeZone());
+    const tasksPresent = this.deps.tasks.present();
+    let plan: StageEntryPlan = { materialize: false, notes: [] };
 
     let moved: Omit<ProjectStageMovedEvent, 'eventId' | 'occurredAt'> | null = null;
     const entryId = await this.deps.commandBus.run({
@@ -123,6 +135,8 @@ export class MoveService {
         );
         project.currentStageId = toStage.id;
         project.version += 1;
+        plan = await this.deps.stageTasks.planEntry(em as EntityManager, toStage, tasksPresent);
+        const notes: ProjectStageEntryNote[] = [...gateNotes, ...plan.notes];
         const entry = em.create(ProjectStageEntry, {
           projectId: project.id,
           kind: 'enter',
@@ -130,6 +144,7 @@ export class MoveService {
           toStageId: toStage.id,
           fromStageName: fromStage.name,
           toStageName: toStage.name,
+          notes,
           actorAdminUserId: actor.actorAdminUserId,
         });
         moved = {
@@ -148,6 +163,7 @@ export class MoveService {
             startedOn: toStage.startedOn ?? null,
             deadlineOn: toStage.deadlineOn ?? null,
             version: project.version,
+            ...(notes.length > 0 ? { notes } : {}),
           },
         };
       },
@@ -161,11 +177,14 @@ export class MoveService {
       },
     });
 
+    const created = plan.materialize
+      ? await this.deps.stageTasks.materializeAfterCommit(visible.id, body.toStageId, entryId)
+      : { createdTaskIds: [], failed: false };
     const [project, entry] = await Promise.all([
       this.deps.read.afterWrite(visible.id, language),
       this.deps.read.entryAfterWrite(visible.id, entryId),
     ]);
-    return { project, entry, createdTaskIds: [], notes: [] };
+    return { project, entry, createdTaskIds: created.createdTaskIds, notes: entry.notes };
   }
 
   /** `POST /projects/:id/close` — completed from a Stage that permits it, or lost from any. */
@@ -190,6 +209,8 @@ export class MoveService {
       lossReasonCode = await this.#activeLossReasonCode(body.lossReasonId);
     }
     const kind = body.outcome === 'completed' ? 'close_completed' : 'close_lost';
+    // Losing a Project is not gated (FR-012).
+    const gateNotes = body.outcome === 'completed' ? await this.deps.stageTasks.gate(visible.id, stage) : [];
     await this.deps.guards.run({ projectId: visible.id, fromStageId: stageId, toStageId: null, kind });
 
     await this.deps.commandBus.run({
@@ -217,6 +238,7 @@ export class MoveService {
           toStageId: null,
           fromStageName: current.name,
           toStageName: null,
+          notes: gateNotes,
           actorAdminUserId: actor.actorAdminUserId,
         });
         return {

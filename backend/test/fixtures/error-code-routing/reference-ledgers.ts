@@ -480,6 +480,24 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
       'a Member or listed person who is not an active administrator, or a Project Role that does not exist or is archived (FR-008).',
   },
+  PROJECT_STAGE_HAS_TASKS: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 2): ' +
+      'deleting a Stage that holds Tasks (`data-model.md` §2.2).',
+  },
+  PROJECT_STAGE_GATE_OPEN_TASKS: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 2): ' +
+      'leaving or completing from a Stage whose completion gate is closed by open Tasks (FR-012).',
+  },
+  PROJECT_STAGE_TASKS_NOT_RETRYABLE: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 2): ' +
+      'creating a Stage\'s Tasks again where its last entry did not fail to create them (research R-8).',
+  },
   SEO_CRAWLER_TEXT_TOO_LARGE: {
     to: 'seo',
     reason:

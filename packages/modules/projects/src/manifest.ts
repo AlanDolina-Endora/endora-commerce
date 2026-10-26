@@ -87,6 +87,49 @@ export const manifest = defineModuleManifest({
   // holds `projects:see_all`; `admin_users` owns `adminUserReadPort`, through
   // which Members are named.
   dependencies: ['admin_roles', 'admin_users', 'auth', 'organizations', 'settings'],
+  /**
+   * Edges that are real to the container and bind no operator (FR-040: a
+   * Project works without Tasks).
+   *
+   * `tasks` is operator-switchable. Projects pushes its `project` Task context
+   * into `tasks`' registry from a contribution-only boot hook, and reads and
+   * creates Tasks through its two ports only after asking
+   * `effectiveState.isPresent('tasks')` — so with Tasks off a Project offers no
+   * Tasks, applies no completion gate and creates no Stage Task, and says so.
+   */
+  nonBindingDependencies: [
+    {
+      moduleId: 'tasks',
+      name: 'taskContextRegistry',
+      kind: 'contributes-to',
+      reason:
+        'A push, from this module’s contribution-only boot hook, of the `project` Task context. ' +
+        'The registry enumerates only contexts whose owner is effectively present, so an absent ' +
+        'contributor hides its Tasks and an absent host holds a descriptor nobody asks. Not ' +
+        '`dependencies`: that would make Tasks a reason this module cannot be switched off.',
+    },
+    {
+      moduleId: 'tasks',
+      name: 'taskReadPort',
+      kind: 'degrades-without',
+      whenAbsent: 'Projects work without Tasks: no Tasks tab, no Stage Tasks, no completion gates.',
+      reason:
+        'Every call into this owner goes through `project-tasks.ts`, whose callers ask `present()` ' +
+        'in front of the gate: the completion gate is then not applied (and the Stage entry says so), ' +
+        'a Stage is deleted without counting Tasks, and the Tasks tab answers `tasksAvailable: false`. ' +
+        'A Task is held by its context, so no table of that owner is referenced from this module’s schema.',
+    },
+    {
+      moduleId: 'tasks',
+      name: 'taskWritePort',
+      kind: 'degrades-without',
+      whenAbsent: 'Projects work without Tasks: no Tasks tab, no Stage Tasks, no completion gates.',
+      reason:
+        'Every call into this owner goes through `project-tasks.ts`, whose callers ask `present()` ' +
+        'in front of the gate: a Stage entered while Tasks is off is marked skipped instead of ' +
+        'creating its Stage Tasks, and a deleted Project leaves its Tasks hidden rather than deleting them.',
+    },
+  ],
   settings,
   // Constitution XVII — the operator's activation control.
   activation: { settingCode: PROJECTS_SETTING_CODES.ENABLED, default: true },
@@ -131,6 +174,9 @@ export const manifest = defineModuleManifest({
     { code: 'PROJECT_COMPLETION_NOT_PERMITTED' },
     { code: 'PROJECT_LOSS_REASON_INVALID' },
     { code: 'PROJECT_MEMBER_INVALID' },
+    { code: 'PROJECT_STAGE_HAS_TASKS' },
+    { code: 'PROJECT_STAGE_GATE_OPEN_TASKS' },
+    { code: 'PROJECT_STAGE_TASKS_NOT_RETRYABLE' },
   ],
   i18n: { bundlesDir: 'i18n' },
   // `docs/projects.md` at the package root: users' and developers' page.

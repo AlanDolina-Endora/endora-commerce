@@ -18,6 +18,7 @@ import { ProjectStageMove } from '../entities/project-stage-move.entity.js';
 import type { ProjectAccess } from './project-access.js';
 import type { ProjectReadService } from './project-read-service.js';
 import { assertRolesExist, lockProject } from './project-service.js';
+import { PROJECT_TASK_CONTEXT_TYPE, type ProjectTasks } from './project-tasks.js';
 
 /**
  * A Project's Stages and its workflow (`contracts/admin-api.md` §2.2,
@@ -31,10 +32,9 @@ import { assertRolesExist, lockProject } from './project-service.js';
  *
  * A Stage added at the end gets the default move from the Stage that was last
  * (FR-011: "each Stage → the next one"); one in the middle is reached by
- * whatever moves the editor sets. Deleting the only Stage, or the one the
- * Project is in, is refused. **Deleting a Stage that holds Tasks** is refused
- * by User Story 2, which brings Tasks into Stages; until then no Stage can
- * hold one.
+ * whatever moves the editor sets. Deleting the only Stage, the one the
+ * Project is in, or one that holds Tasks (`taskReadPort.countInContext`, asked
+ * only while Tasks is on) is refused.
  */
 
 export interface StageServiceDeps {
@@ -42,9 +42,10 @@ export interface StageServiceDeps {
   commandBus: CommandBus;
   access: ProjectAccess;
   read: ProjectReadService;
+  tasks: ProjectTasks;
 }
 
-function stageNotFound(): HttpError {
+export function stageNotFound(): HttpError {
   return new HttpError(404, ERROR_CODES.NOT_FOUND, 'No such stage on this project.');
 }
 
@@ -145,9 +146,21 @@ export class StageService {
     return this.deps.read.stageAfterWrite(visible.id, stageId);
   }
 
-  /** `DELETE /projects/:id/stages/:stageId` — never the only Stage, never the one the Project is in. */
+  /**
+   * `DELETE /projects/:id/stages/:stageId` — never the only Stage, never the
+   * one the Project is in, never one holding Tasks. With Tasks off nothing can
+   * be counted and the Stage goes; its Tasks then belong to no Stage the
+   * Project shows.
+   */
   async delete(projectId: string, stageId: string): Promise<void> {
     const visible = await this.deps.access.loadVisible(projectId);
+    const holdsTasks =
+      this.deps.tasks.present() &&
+      (await this.deps.tasks.read.countInContext({
+        contextType: PROJECT_TASK_CONTEXT_TYPE,
+        contextId: visible.id,
+        contextGroupId: stageId,
+      })) > 0;
     await this.deps.commandBus.run({
       action: 'projects.project.stage_delete',
       objectType: 'project',
@@ -164,6 +177,9 @@ export class StageService {
         // one — it reopens there — so that one is "current" too.
         if (project.currentStageId === stageId || project.lostStageId === stageId) {
           throw new HttpError(409, ERROR_CODES.PROJECT_STAGE_CURRENT, 'The project is in this stage.');
+        }
+        if (holdsTasks) {
+          throw new HttpError(409, ERROR_CODES.PROJECT_STAGE_HAS_TASKS, 'This stage holds tasks.');
         }
         const before = stageSnapshot(stage);
         // Its moves and Stage Task definitions go with it (`on delete cascade`);
