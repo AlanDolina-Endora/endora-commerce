@@ -309,6 +309,23 @@ describe('§2.4 collaboration', () => {
     accepts(projects.ProjectDocumentLookupQuerySchema, { projectId: UUID_A, q: 'ORD' });
     rejects(projects.ProjectDocumentLookupQuerySchema, { q: 'x'.repeat(201) });
   });
+
+  it('lookups for the pickers: a search or one id, at most 50', () => {
+    for (const schema of [projects.ProjectOrganizationLookupQuerySchema, projects.ProjectAdminUserLookupQuerySchema]) {
+      expect(schema.parse({})).toEqual({ limit: 20 });
+      accepts(schema, { q: 'acme', limit: '50' });
+      accepts(schema, { id: UUID_A });
+      rejects(schema, { id: 'acme' });
+      rejects(schema, { limit: '51' });
+    }
+    accepts(projects.ProjectAdminUserOptionSchema, { id: UUID_A, name: 'Anna Nowak', email: 'anna@example.com' });
+    rejects(projects.ProjectOrganizationOptionSchema, { id: UUID_A });
+  });
+
+  it('the module visibility setting, as a screen reads it', () => {
+    accepts(projects.ProjectVisibilitySettingSchema, { setting: 'members' });
+    rejects(projects.ProjectVisibilitySettingSchema, { setting: 'members_and_listed' });
+  });
 });
 
 describe('§2.5 configuration', () => {

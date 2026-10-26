@@ -43,6 +43,18 @@ context: { type, label, href, groupLabel } | null }`.
 overdue } | null, organizations: { id, name }[], value, projectManagers: { id, name }[],
 createdAt, closedAt }`.
 
+### 2.1a Lookups for the pickers, and the visibility setting (User Story 5)
+
+| Method & path | Permission | Request → Response |
+| --- | --- | --- |
+| `GET /projects/lookups/organizations` | `projects:write` | `ProjectOrganizationLookupQuery { q?, id?, limit ≤ 50 }` → `{ data: { id, name }[] }` — only Organizations in the caller's reach; by `id` an out-of-reach one answers `[]` |
+| `GET /projects/lookups/admin-users` | `projects:write` | `ProjectAdminUserLookupQuery { q?, id?, limit ≤ 50 }` → `{ data: { id, name, email }[] }` — active administrators by name or e-mail; by `id` the one administrator whatever their status (a label) |
+| `GET /projects/visibility-setting` | `projects:read` | → `{ data: { setting: 'everyone' \| 'members' } }` — the module setting, so a screen can say what *Follow the module setting* means |
+
+The kit's `OrganizationPicker(Multi)` and `AdminUserPicker` read `/organizations` and
+`/admin-users` behind their owners' codes; these are the module's own (the `/crm/lookups/*`
+precedent), so a role holding only `projects:*` gets working pickers.
+
 ### 2.2 Stages and moves
 
 | Method & path | Permission | Request → Response |

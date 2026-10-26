@@ -42,12 +42,14 @@ import { ProjectTemplateStageMove } from './entities/project-template-stage-move
 import { ProjectTemplateStageTask } from './entities/project-template-stage-task.entity.js';
 import { ProjectViewer } from './entities/project-viewer.entity.js';
 import { registerDictionaryRoutes } from './routes/routes.dictionaries.js';
+import { registerLookupRoutes } from './routes/routes.lookups.js';
 import { registerProjectRoutes } from './routes/routes.projects.js';
 import { registerStageTaskRoutes } from './routes/routes.stage-tasks.js';
 import { registerStageRoutes } from './routes/routes.stages.js';
 import { registerTemplateRoutes } from './routes/routes.templates.js';
 import { createAlertsTimeZoneValidator } from './services/alerts-time-zone-validator.js';
 import type { DictionaryService } from './services/dictionary-service.js';
+import { ProjectLookupService } from './services/lookup-service.js';
 import { createLossReasonService } from './services/loss-reason-service.js';
 import { MoveService } from './services/move-service.js';
 import { ProjectAccess } from './services/project-access.js';
@@ -88,6 +90,7 @@ interface ProjectsCradle {
   readonly projectsTranslate: ProjectsTranslate;
   readonly projectsRoleService: DictionaryService;
   readonly projectsLossReasonService: DictionaryService;
+  readonly projectsLookupService: ProjectLookupService;
 }
 
 /** `_i18n`'s resolver over this module's own bundles. */
@@ -257,6 +260,24 @@ export function registerModule(ctx: ModuleContext): void {
   });
   // --- end of Project Roles and loss reasons ------------------------------------------------
 
+  // --- Lookups (User Story 5) ------------------------------------------------------------
+  // What the screens' pickers choose from — Organizations, Members, listed
+  // people — read through their owners' ports and gated by this module's own
+  // codes, so running Projects needs no other module's permission (the CRM
+  // precedent). Organizations are narrowed to the caller's reach here.
+  ctx.di.register({
+    projectsLookupService: ctx
+      .asFunction(
+        () =>
+          new ProjectLookupService({
+            organizations: lazyPort<OrganizationDetailsPort>(ctx, 'organizationDetailsPort'),
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+          }),
+      )
+      .singleton(),
+  });
+  // --- end of Lookups ---------------------------------------------------------------------
+
   // --- Stages, workflow and walking a Project (User Story 1) -------------------------
   // The guard registry is a **contribution seam** (research R-6): other modules
   // and deployments push a guard into it from a contribution-only boot hook,
@@ -344,6 +365,11 @@ export function registerModule(ctx: ModuleContext): void {
     });
     await registerTemplateRoutes(app, {
       templateService: cradle.projectsTemplateService,
+      requireAdmin: cradle.requireAdmin,
+    });
+    await registerLookupRoutes(app, {
+      lookupService: cradle.projectsLookupService,
+      access: cradle.projectsAccess,
       requireAdmin: cradle.requireAdmin,
     });
     await registerDictionaryRoutes(app, {

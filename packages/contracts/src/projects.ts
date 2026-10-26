@@ -431,6 +431,32 @@ export const ProjectDocumentLookupQuerySchema = z.object({
 });
 export type ProjectDocumentLookupQuery = z.infer<typeof ProjectDocumentLookupQuerySchema>;
 
+/** At most this many options per lookup answer. */
+const lookupLimitSchema = z.coerce.number().int().positive().max(50).default(20);
+
+/**
+ * `GET /projects/lookups/organizations` — the Organizations the caller may
+ * name on a Project, by name (`q`), or one by `id` (the label of a value chosen
+ * earlier). Only Organizations in the caller's reach are ever answered.
+ */
+export const ProjectOrganizationLookupQuerySchema = z.object({
+  q: lookupSearchSchema,
+  id: uuid.optional(),
+  limit: lookupLimitSchema,
+});
+export type ProjectOrganizationLookupQuery = z.infer<typeof ProjectOrganizationLookupQuerySchema>;
+
+/**
+ * `GET /projects/lookups/admin-users` — active administrators by name or
+ * e-mail (`q`), or one by `id` — who may be a Member or a listed person.
+ */
+export const ProjectAdminUserLookupQuerySchema = z.object({
+  q: lookupSearchSchema,
+  id: uuid.optional(),
+  limit: lookupLimitSchema,
+});
+export type ProjectAdminUserLookupQuery = z.infer<typeof ProjectAdminUserLookupQuerySchema>;
+
 // ---------------------------------------------------------------------------
 // §2.5 Configuration — requests
 // ---------------------------------------------------------------------------
@@ -801,6 +827,22 @@ export const ProjectUnreadMessagesResponseSchema = dataEnvelope(ProjectUnreadMes
 export const ProjectAttachmentResponseSchema = dataEnvelope(ProjectAttachmentSchema);
 export const ProjectAttachmentListResponseSchema = dataEnvelope(z.array(ProjectAttachmentSchema));
 export const ProjectMentionableLookupResponseSchema = dataEnvelope(z.array(ProjectMentionableOptionSchema));
+
+export const ProjectOrganizationOptionSchema = z.object({ id: uuid, name: z.string() });
+export type ProjectOrganizationOption = z.infer<typeof ProjectOrganizationOptionSchema>;
+export const ProjectOrganizationLookupResponseSchema = dataEnvelope(z.array(ProjectOrganizationOptionSchema));
+
+export const ProjectAdminUserOptionSchema = z.object({ id: uuid, name: z.string(), email: z.string() });
+export type ProjectAdminUserOption = z.infer<typeof ProjectAdminUserOptionSchema>;
+export const ProjectAdminUserLookupResponseSchema = dataEnvelope(z.array(ProjectAdminUserOptionSchema));
+
+/**
+ * `GET /projects/visibility-setting` — the module setting `projects.visibility`
+ * as it stands, so a screen can say what *Follow the module setting* means.
+ */
+export const ProjectVisibilitySettingSchema = z.object({ setting: projectVisibilitySettingSchema });
+export type ProjectVisibilitySettingInfo = z.infer<typeof ProjectVisibilitySettingSchema>;
+export const ProjectVisibilitySettingResponseSchema = dataEnvelope(ProjectVisibilitySettingSchema);
 export const ProjectRoleResponseSchema = dataEnvelope(ProjectRoleSchema);
 export const ProjectRoleListResponseSchema = dataEnvelope(z.array(ProjectRoleSchema));
 export const ProjectLossReasonResponseSchema = dataEnvelope(ProjectLossReasonSchema);

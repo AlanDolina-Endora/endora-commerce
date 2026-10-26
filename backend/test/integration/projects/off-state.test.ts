@@ -96,6 +96,10 @@ describe('projects off-state (Constitution XVII)', () => {
         write('POST', `${API}/templates/${ID}/duplicate`),
         write('POST', `${API}/templates/${ID}/archive`),
         write('POST', `${API}/templates/${ID}/restore`),
+        // User Story 5's routes — the pickers' lookups and the visibility setting.
+        { url: `${API}/lookups/organizations`, cookies: admin },
+        { url: `${API}/lookups/admin-users`, cookies: admin },
+        { url: `${API}/visibility-setting`, cookies: admin },
       ],
       adminPresence: { cookies: admin },
       settingWrite: { code: 'projects.visibility', value: 'everyone', cookies: admin },

@@ -5346,6 +5346,24 @@
         }
       }
     },
+    "/api/v1/admin/projects/lookups/admin-users": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/projects/lookups/organizations": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/projects/loss-reasons": {
       "get": {
         "responses": {
@@ -5498,6 +5516,15 @@
     },
     "/api/v1/admin/projects/templates/{id}/restore": {
       "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/projects/visibility-setting": {
+      "get": {
         "responses": {
           "200": {
             "description": "OK"
