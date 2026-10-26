@@ -105,8 +105,16 @@ Jego zakładki:
   (odnośnik do zadania), tytuł, status, osoba przypisana i termin, z
   oznaczeniem zadań po terminie — a dla administratorów, którzy mogą tworzyć
   zadania, pole pod każdym etapem, które dodaje do niego zadanie po tytule.
+- **Powiązane dokumenty** — zamówienia, zapytania ofertowe i szanse sprzedażowe
+  podpięte do projektu (zob. *Podpinanie dokumentów*).
 - **Historia etapów** — każde wejście do etapu, każde zamknięcie i każde
   ponowne otwarcie, od najnowszych, z tym, kto to zrobił i kiedy.
+
+**Na ekranach dokumentów należących do projektu** — zamówienia, zapytania
+ofertowego, szansy sprzedażowej, zadania — panel **Projekt** wskazuje projekt,
+do którego dokument należy: jego numer jako odnośnik, tytuł, stan oraz bieżący
+etap z terminem. Dokument spoza projektów albo z projektu, którego nie możesz
+zobaczyć, nie pokazuje żadnego panelu.
 
 Bez uprawnienia do tworzenia i prowadzenia projektów ekran jest tylko do
 odczytu: etapy, przebieg i historia są widoczne, ale niczego nie można zmienić.
@@ -364,7 +372,9 @@ włącza ponownie na ekranie **Moduły** panelu administracyjnego
 Gdy moduł jest wyłączony:
 
 - pozycje *Projekty*, *Szablony*, *Role projektowe* i *Powody utraty* oraz
-  wszystkie ich ekrany znikają z panelu administracyjnego;
+  wszystkie ich ekrany znikają z panelu administracyjnego, podobnie jak panel
+  *Projekt* na ekranach zamówień, zapytań ofertowych, szans sprzedażowych i
+  zadań;
 - każdy endpoint `/api/v1/admin/projects…` odpowiada `503` z kodem
   `MODULE_DISABLED`;
 - jego uprawnień nie można już nadać żadnej roli, a jego ustawień nie można
@@ -387,14 +397,48 @@ sprzed wyłączenia.
 | Kod | Na co pozwala |
 | --- | --- |
 | `projects:read` | Przeglądanie projektów — listy, pojedynczego projektu i jego historii etapów — z zastrzeżeniem obu reguł z sekcji *Kto widzi projekt*; także nazw, z których wybierają filtry listy i pola formularzy (organizacji w granicach swojego dostępu, administratorów). |
-| `projects:write` | Tworzenie, edycja i usuwanie projektów; ustawianie ich organizacji, członków, etapów i przebiegu; przenoszenie, zamykanie i ponowne otwieranie. Wymaga `projects:read`. |
+| `projects:write` | Tworzenie, edycja i usuwanie projektów; ustawianie ich organizacji, członków, etapów i przebiegu; przenoszenie, zamykanie i ponowne otwieranie; podpinanie i odpinanie dokumentów — dokument danego rodzaju wymaga też uprawnienia do przeglądania tego rodzaju (zob. *Podpinanie dokumentów*). Wymaga `projects:read`. |
 | `projects:see_all` | Wgląd we wszystkie projekty w granicach swojego dostępu, niezależnie od ustawienia modułu i wyboru samego projektu (zob. *Kto widzi projekt*). Wymaga `projects:read`; nigdy nie poszerza dostępu do organizacji. |
 | `projects:configure` | Tworzenie, edycja, duplikowanie, archiwizacja i przywracanie szablonów; dodawanie, zmiana nazwy, archiwizacja, przywracanie i usuwanie ról projektowych i powodów utraty. Wymaga `projects:read`; każdy, kto może przeglądać projekty, może odczytać szablony, role i powody utraty, aby użyć ich w projekcie. |
 
 Rola projektowa nie jest jednym z tych uprawnień: jej pełnienie nie nadaje
 żadnego uprawnienia (zob. *Role projektowe*).
 
-## Powiązania, współpraca, powiadomienia o terminach i analityka
+## Podpinanie dokumentów
+
+Zakładka **Powiązane dokumenty** projektu wymienia podpięte do niego
+zamówienia, zapytania ofertowe i szanse sprzedażowe, każdy rodzaj w osobnej
+grupie: każdy dokument z numerem — odnośnikiem do niego — statusem i kwotą.
+
+- **Podpiąć można tylko dokumenty organizacji projektu.** Wybór każdego rodzaju
+  przeszukuje po numerze własną listę tego rodzaju dla wybranej organizacji —
+  przy jednej organizacji dla niej. Projekt wewnętrzny nie ma organizacji, więc
+  nie można do niego niczego podpiąć.
+- **Dokument należy najwyżej do jednego projektu.** Podpięcie dokumentu, który
+  jest już w innym projekcie, jest odrzucane z informacją, który projekt go ma —
+  jeśli możesz ten projekt zobaczyć; w przeciwnym razie tylko z informacją, że
+  należy do jakiegoś projektu.
+- **To, co pokazuje podpięty dokument, należy do jego własnego modułu.** Numer,
+  status i kwota są widoczne tylko dla osoby, która może przeglądać dokumenty
+  danego rodzaju — zamówienia, zapytania ofertowe (obsługa zapytań ofertowych)
+  albo szanse sprzedażowe (przeglądanie CRM); pozostali widzą dokument jako
+  *Niedostępny*. To samo uprawnienie jest potrzebne, aby podpiąć dokument tego
+  rodzaju.
+- **Gdy CRM albo zapytania ofertowe są wyłączone**, ich powiązania zostają i są
+  pokazywane jako niedostępne, nie można dodawać nowych, a po ponownym włączeniu
+  modułu wracają w niezmienionej postaci. Reszta projektu działa dalej.
+- **Dokument, który już nie istnieje** — szansa sprzedażowa usunięta w CRM;
+  zamówień i zapytań ofertowych nigdy się nie usuwa — jest pokazywany jako
+  niedostępny i można go odpiąć ręcznie.
+- **Odpięcie** nie wymaga niczego poza prowadzeniem projektu i działa także dla
+  niedostępnego dokumentu.
+- **Organizacji z podpiętym dokumentem nie można usunąć z projektu**, dopóki jej
+  dokumenty nie zostaną odpięte; projektu z podpiętymi dokumentami nie można
+  usunąć, dopóki wszystkie nie zostaną odpięte.
+
+Każde podpięcie i każde odpięcie jest zapisywane w historii projektu.
+
+## Współpraca, powiadomienia o terminach i analityka
 
 *Każda z tych funkcji pojawi się w jednym z kolejnych wydań modułu i zostanie tu
 opisana, gdy to nastąpi.*
@@ -413,7 +457,7 @@ opisana, gdy to nastąpi.*
 | `GET /api/v1/admin/projects/lookups/organizations` | `projects:read` | `{ data: { id, name }[] }` — organizacje, do których wywołujący ma dostęp, według nazwy (`q`) albo jedna według `id`; najwyżej `limit` (50). |
 | `GET /api/v1/admin/projects/lookups/admin-users` | `projects:read` | `{ data: { id, name, email }[] }` — aktywni administratorzy według imienia i nazwiska lub adresu e-mail (`q`) albo jeden według `id`; najwyżej `limit` (50). |
 | `GET /api/v1/admin/projects/visibility-setting` | `projects:read` | `{ data: { setting } }` — bieżąca wartość ustawienia modułu `projects.visibility`. |
-| `PUT /api/v1/admin/projects/:id/organizations` | `projects:write` | Cały zestaw; `422` `PROJECT_ORGANIZATION_OUT_OF_SCOPE`. |
+| `PUT /api/v1/admin/projects/:id/organizations` | `projects:write` | Cały zestaw; `422` `PROJECT_ORGANIZATION_OUT_OF_SCOPE`; `409` `PROJECT_ORGANIZATION_IN_USE` przy usuwaniu organizacji, do której należy podpięty dokument. |
 | `PUT /api/v1/admin/projects/:id/members` | `projects:write` | Cały zestaw członków i ich ról; `422` `PROJECT_MEMBER_INVALID`. |
 | `POST /api/v1/admin/projects/:id/stages` | `projects:write` | `201` `{ data: ProjectStage }`, dodany na końcu. |
 | `PATCH /api/v1/admin/projects/:id/stages/:stageId` | `projects:write` | Dowolny atrybut; `deadlineOn` ustawia termin ręcznie, `null` przywraca termin liczony jako początek + czas trwania. |
@@ -427,6 +471,10 @@ opisana, gdy to nastąpi.*
 | `PUT /api/v1/admin/projects/:id/stages/:stageId/tasks` | `projects:write` | `{ tasks: StageTaskDefinition[] }` (najwyżej 100), zastępuje zadania etapu → `{ data: ProjectStage }`; `422` dla nieznanej roli odpowiedzialnej. |
 | `POST /api/v1/admin/projects/:id/stages/:stageId/materialize-tasks` | `projects:write` | Ponownie tworzy zadania etapu po zapisanym błędzie — `tasksMaterializeFailed` etapu — → `{ data: { created } }`; w innym przypadku `409` `PROJECT_STAGE_TASKS_NOT_RETRYABLE`, a przy wyłączonym module Zadania `503` `MODULE_DISABLED`. |
 | `GET /api/v1/admin/projects/:id/tasks` | `projects:read` | `{ data: { tasksAvailable, stages: [{ stageId, tasks: TaskSummary[] }] } }`, w kolejności etapów; `tasksAvailable: false` i brak etapów, gdy moduł Zadania jest wyłączony albo czytający nie ma `tasks:read`. |
+| `GET /api/v1/admin/projects/:id/links` | `projects:read` | `{ data: ProjectLink[] }`, od najstarszych: `{ id, kind, recordId, available, number?, status?, amount?, currency?, href?, linkedBy, linkedAt }`. Pola dokumentu są obecne tylko przy `available` — czytający ma kod odczytu właściciela (`orders:read`, `rfqs:handle`, `crm:read`), jego moduł jest włączony, a dokument nadal istnieje. |
+| `POST /api/v1/admin/projects/:id/links` | `projects:write` | `{ kind: 'order' \| 'quote_request' \| 'opportunity', recordId }` → `201` `{ data: ProjectLink }`. `503` `MODULE_DISABLED`, gdy moduł danego rodzaju jest wyłączony; `403` bez kodu odczytu właściciela; `404` `PROJECT_RECORD_NOT_FOUND` dla dokumentu, który nie istnieje lub jest poza zasięgiem wywołującego; `422` `PROJECT_LINK_ORGANIZATION_MISMATCH` dla dokumentu organizacji, której projekt nie ma; `409` `PROJECT_RECORD_ALREADY_LINKED`, którego `details.project` (`{ id, number, title }`) wskazuje projekt zawierający dokument tylko wywołującemu, który może ten projekt zobaczyć. |
+| `DELETE /api/v1/admin/projects/:id/links/:linkId` | `projects:write` | `204`; `404` dla powiązania innego projektu albo nieistniejącego. |
+| `GET /api/v1/admin/projects/records/:kind/:recordId/project` | `projects:read` | `{ data: ProjectSummary }` — projekt, do którego należy `order`, `quote_request`, `opportunity` lub `task` (przez swój kontekst); `404` `PROJECT_NOT_FOUND` jednakowo dla dokumentu spoza projektów i dla dokumentu z projektu, którego wywołujący nie może zobaczyć. Wymaga też kodu odczytu danego rodzaju (`403`) i włączonego modułu (`503`). |
 | `GET /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:read` | Słowniki z polem `label` w języku czytającego; `active=true` pomija zarchiwizowane wiersze. |
 | `POST /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:configure` | `{ defaultName, name }` (`name`: nazwa dla każdego języka) → `201` `{ data }`. `code` powstaje z `defaultName` — rozdzielany `_`, z `_2`, `_3`…, gdy inny wiersz już go ma — i nigdy się nie zmienia. `409` `PROJECT_DICTIONARY_NAME_TAKEN` dla nazwy domyślnej, którą ma inny wiersz tego samego słownika, bez względu na wielkość liter. |
 | `PATCH /api/v1/admin/projects/roles/:id`, `…/loss-reasons/:id` | `projects:configure` | `defaultName` i/lub `name`, które zastępuje nazwy we wszystkich językach → `{ data }`; `404` `PROJECT_DICTIONARY_ENTRY_NOT_FOUND`, `409` `PROJECT_DICTIONARY_NAME_TAKEN`. |
@@ -456,7 +504,10 @@ Strażnik wyłączonego modułu jest pomijany.
 Po każdym zatwierdzonym zapisie moduł emituje, jeden raz:
 `projects.project.created.v1`, `projects.stage.moved.v1` (z nazwami etapów
 takimi, jakie wtedy były), `projects.project.closed.v1` (z wynikiem, etapem i —
-przy utracie — kodem powodu utraty) oraz `projects.project.reopened.v1`.
+przy utracie — kodem powodu utraty), `projects.project.reopened.v1` oraz
+`projects.record.linked.v1` / `projects.record.unlinked.v1` (z projektem,
+rodzajem dokumentu i jego identyfikatorem). Podpięcie i odpięcie to audytowane
+polecenia `projects.project.link_add` i `.link_remove`.
 
 Każda zmiana roli projektowej lub powodu utraty to jedno audytowane polecenie —
 `projects.role.create`, `.update`, `.archive`, `.restore`, `.delete` z
@@ -483,6 +534,16 @@ transakcji przejścia, każde przez osobne audytowane polecenie
 `tasks.task.create`. Notatka nieprzypisanego zadania etapu jest zapisywana jako
 rola odpowiedzialna (`role:<id>`), a nie jako zdanie; `renderNote` deskryptora
 formułuje ją w języku każdego czytającego.
+
+### Podpięte dokumenty i ich właściciele
+
+Powiązanie przechowuje dokument przez wartość i zapamiętuje jego organizację,
+odczytaną od właściciela raz, w chwili podpięcia; klucz obcy z `project_links`
+do organizacji projektu nie pozwala usunąć tej organizacji, dopóki dokument jest
+podpięty. Dokumenty są odczytywane przez opublikowane porty ich właścicieli —
+`orderReadPort` (zależność wiążąca), `quoteRequestReadPort` i
+`opportunityReadPort` (oba `degrades-without`) — zawsze w zasięgu wywołującego,
+a obecność wyłączalnego właściciela jest ustalana, zanim zapyta się jego port.
 
 ### Jedna ścieżka odczytu
 

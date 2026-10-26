@@ -102,8 +102,16 @@ Its tabs:
   status, assignee and due date, overdue ones marked — and, for administrators
   who may create tasks, a field under each stage that adds a task to it by its
   title.
+- **Linked records** — the Orders, Quote Requests and Opportunities linked to
+  the project (see *Linking records*).
 - **Stage history** — every entry into a stage, every close and every reopen,
   newest first, with who did it and when.
+
+**On the screens of the records a project holds** — an Order, a Quote Request,
+an Opportunity, a Task — a **Project** panel names the project it belongs to:
+its number, a link to it, its title, its state and its current stage with the
+stage's deadline. A record in no project, or in a project you may not see,
+shows no panel at all.
 
 Without the permission to create and run projects the screen is read-only: the
 stages, the workflow and the history are shown, and nothing can be changed.
@@ -349,7 +357,8 @@ off, and back on, on the **Modules** screen of the Admin UI
 While it is off:
 
 - the *Projects*, *Templates*, *Project roles* and *Loss reasons* entries and
-  every one of their screens are gone from the Admin UI;
+  every one of their screens are gone from the Admin UI, and so is the
+  *Project* panel on Order, Quote Request, Opportunity and Task screens;
 - every `/api/v1/admin/projects…` endpoint answers `503` with the code
   `MODULE_DISABLED`;
 - its permissions can no longer be granted to a role, and its settings cannot be
@@ -372,14 +381,46 @@ on again.
 | Code | What it allows |
 | --- | --- |
 | `projects:read` | View projects — the list, a single project and its stage history — subject to the two rules of *Who sees a project*; also the names the list's filters and the forms' pickers choose from (Organizations within your reach, administrators). |
-| `projects:write` | Create, edit and delete projects; set their Organizations, members, stages and workflow; move, close and reopen them. Requires `projects:read`. |
+| `projects:write` | Create, edit and delete projects; set their Organizations, members, stages and workflow; move, close and reopen them; link and unlink records — a record of a kind also needs the permission to view that kind (see *Linking records*). Requires `projects:read`. |
 | `projects:see_all` | See every project within your reach, whatever the module setting and each project's own choice (see *Who sees a project*). Requires `projects:read`; it never widens Organization reach. |
 | `projects:configure` | Create, edit, duplicate, archive and restore templates; add, rename, archive, restore and delete project roles and loss reasons. Requires `projects:read`; anybody who may view projects can read the templates, roles and loss reasons, to use them on a project. |
 
 A project role is not one of these: holding one grants no permission (see
 *Project roles*).
 
-## Links, collaboration, deadline alerts and analytics
+## Linking records
+
+A project's **Linked records** tab lists the Orders, Quote Requests and
+Opportunities linked to it, a group each: every record with its number — a
+link to it — its status and its amount.
+
+- **Only records of the project's Organizations** can be linked. The picker of
+  each kind searches that kind's own list of the Organization chosen — with one
+  Organization, that one — by number. An internal project has no Organization,
+  so nothing can be linked to it.
+- **A record belongs to at most one project.** Linking one that is already in
+  another project is refused, and you are told which project holds it — if you
+  may see that project; otherwise only that it belongs to one.
+- **What a linked record shows is its own module's to show.** Its number,
+  status and amount are shown only to somebody who may view records of its
+  kind — Orders, Quote Requests (handling quote requests) or Opportunities
+  (viewing CRM); anybody else sees it listed as *Unavailable*. The same
+  permission is needed to link a record of that kind.
+- **While CRM or Quote Requests is switched off**, their links are kept and
+  listed as unavailable, none can be added, and they are back as they were when
+  the module is on again. The rest of the project keeps working.
+- **A record that no longer exists** — an Opportunity deleted in CRM; Orders and
+  Quote Requests are never deleted — is listed as unavailable and can be
+  unlinked by hand.
+- **Unlinking** asks for nothing more than running the project, and works for an
+  unavailable record too.
+- **An Organization with a linked record cannot be removed from the project**
+  until the records of it are unlinked; a project with linked records cannot be
+  deleted until they are all unlinked.
+
+Every link and every unlink is recorded in the project's history.
+
+## Collaboration, deadline alerts and analytics
 
 *Each of these arrives with a later release of this module and is described
 here when it does.*
@@ -398,7 +439,7 @@ here when it does.*
 | `GET /api/v1/admin/projects/lookups/organizations` | `projects:read` | `{ data: { id, name }[] }` — the Organizations the caller can reach, by name (`q`), or one by `id`; at most `limit` (50). |
 | `GET /api/v1/admin/projects/lookups/admin-users` | `projects:read` | `{ data: { id, name, email }[] }` — active administrators by name or e-mail (`q`), or one by `id`; at most `limit` (50). |
 | `GET /api/v1/admin/projects/visibility-setting` | `projects:read` | `{ data: { setting } }` — the module setting `projects.visibility` as it stands. |
-| `PUT /api/v1/admin/projects/:id/organizations` | `projects:write` | The whole set; `422` `PROJECT_ORGANIZATION_OUT_OF_SCOPE`. |
+| `PUT /api/v1/admin/projects/:id/organizations` | `projects:write` | The whole set; `422` `PROJECT_ORGANIZATION_OUT_OF_SCOPE`; `409` `PROJECT_ORGANIZATION_IN_USE` for removing an Organization a linked record belongs to. |
 | `PUT /api/v1/admin/projects/:id/members` | `projects:write` | The whole set of members and their roles; `422` `PROJECT_MEMBER_INVALID`. |
 | `POST /api/v1/admin/projects/:id/stages` | `projects:write` | `201` `{ data: ProjectStage }`, added at the end. |
 | `PATCH /api/v1/admin/projects/:id/stages/:stageId` | `projects:write` | Any attribute; `deadlineOn` sets the deadline by hand, `null` returns it to start + duration. |
@@ -412,6 +453,10 @@ here when it does.*
 | `PUT /api/v1/admin/projects/:id/stages/:stageId/tasks` | `projects:write` | `{ tasks: StageTaskDefinition[] }` (at most 100), replacing the stage's stage tasks → `{ data: ProjectStage }`; `422` for an unknown responsible role. |
 | `POST /api/v1/admin/projects/:id/stages/:stageId/materialize-tasks` | `projects:write` | Creates the stage's tasks again after a recorded failure — the stage's `tasksMaterializeFailed` — → `{ data: { created } }`; `409` `PROJECT_STAGE_TASKS_NOT_RETRYABLE` otherwise, `503` `MODULE_DISABLED` while Tasks is off. |
 | `GET /api/v1/admin/projects/:id/tasks` | `projects:read` | `{ data: { tasksAvailable, stages: [{ stageId, tasks: TaskSummary[] }] } }`, in stage order; `tasksAvailable: false` and no stages while Tasks is off or for a reader without `tasks:read`. |
+| `GET /api/v1/admin/projects/:id/links` | `projects:read` | `{ data: ProjectLink[] }`, oldest first: `{ id, kind, recordId, available, number?, status?, amount?, currency?, href?, linkedBy, linkedAt }`. The record's fields are present only when `available` — the reader holds its owner's read code (`orders:read`, `rfqs:handle`, `crm:read`), its module is on and it still exists. |
+| `POST /api/v1/admin/projects/:id/links` | `projects:write` | `{ kind: 'order' \| 'quote_request' \| 'opportunity', recordId }` → `201` `{ data: ProjectLink }`. `503` `MODULE_DISABLED` while the kind's module is off; `403` without its owner's read code; `404` `PROJECT_RECORD_NOT_FOUND` for a record that does not exist or is out of the caller's reach; `422` `PROJECT_LINK_ORGANIZATION_MISMATCH` for a record of an Organization the project does not have; `409` `PROJECT_RECORD_ALREADY_LINKED`, whose `details.project` (`{ id, number, title }`) names the project holding it only to a caller who may see that project. |
+| `DELETE /api/v1/admin/projects/:id/links/:linkId` | `projects:write` | `204`; `404` for a link of another project or one that does not exist. |
+| `GET /api/v1/admin/projects/records/:kind/:recordId/project` | `projects:read` | `{ data: ProjectSummary }` — the project an `order`, `quote_request`, `opportunity` or `task` (through its context) belongs to; `404` `PROJECT_NOT_FOUND` alike for a record in no project and one in a project the caller may not see. Needs the kind's read code as well (`403`), and its module on (`503`). |
 | `GET /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:read` | The dictionaries, with `label` in the reader's language; `active=true` leaves archived rows out. |
 | `POST /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:configure` | `{ defaultName, name }` (`name`: a name per language) → `201` `{ data }`. The `code` is derived from `defaultName` — `_`-separated, with `_2`, `_3`… when another row holds it — and never changes. `409` `PROJECT_DICTIONARY_NAME_TAKEN` for a default name another row of the same dictionary has, whatever its case. |
 | `PATCH /api/v1/admin/projects/roles/:id`, `…/loss-reasons/:id` | `projects:configure` | `defaultName` and/or `name`, which replaces the names per language → `{ data }`; `404` `PROJECT_DICTIONARY_ENTRY_NOT_FOUND`, `409` `PROJECT_DICTIONARY_NAME_TAKEN`. |
@@ -440,7 +485,10 @@ module is switched off is skipped.
 After each committed write the module emits, once:
 `projects.project.created.v1`, `projects.stage.moved.v1` (with the stage names
 as they were), `projects.project.closed.v1` (with the outcome, the stage and,
-when lost, the loss reason's code) and `projects.project.reopened.v1`.
+when lost, the loss reason's code), `projects.project.reopened.v1`, and
+`projects.record.linked.v1` / `projects.record.unlinked.v1` (with the project,
+the record's kind and its id). A link and an unlink are the audited commands
+`projects.project.link_add` and `.link_remove`.
 
 Every change to a project role or a loss reason is one audited command —
 `projects.role.create`, `.update`, `.archive`, `.restore`, `.delete` with
@@ -465,6 +513,17 @@ edges). Stage tasks are created after the move's own transaction has
 committed, one audited `tasks.task.create` command each. The note of a stage
 task left unassigned is stored as the responsible role (`role:<id>`), not as a
 sentence; the descriptor's `renderNote` words it in each reader's language.
+
+### Linked records and their owners
+
+A link holds its record by value and keeps the record's Organization, read from
+the owner once, when the link is made; a foreign key from `project_links` into
+the project's Organizations is what stops that Organization being removed while
+the record is linked. Records are read through their owners' published ports —
+`orderReadPort` (a binding dependency), `quoteRequestReadPort` and
+`opportunityReadPort` (both `degrades-without`) — always under the caller's
+reach, and the presence of a switchable owner is decided before its port is
+asked.
 
 ### One read path
 
