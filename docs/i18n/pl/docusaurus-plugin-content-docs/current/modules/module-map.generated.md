@@ -68,7 +68,7 @@ platformy, a nie tego, co akurat zostało opisane.
 | `pim_connector` | _brak strony_ | @endora-commerce/mod-pim-connector |
 | [Cenniki](./price_lists.md) | Cenniki — ceny bazowe w każdej walucie, ceny katalogowe, ceny dla kupujących i ceny promocyjne w kanałach sprzedaży oraz reguły, które decydują, ile płaci każdy kupujący. | @endora-commerce/mod-price-lists |
 | [Feedy produktowe](./product_feeds.md) | Feedy produktowe w formacie dostawcy dla każdego kanału sprzedaży — generowanie według harmonogramu, adresy URL z tokenem do pobierania oraz wysyłka przez SFTP/FTP/HTTP | @endora-commerce/mod-product-feeds |
-| `projects` | _brak strony_ | @endora-commerce/mod-projects |
+| [projects](./projects.md) | Projekty dla zera lub wielu organizacji, prowadzone przez własne etapy przez członków pełniących role projektowe | @endora-commerce/mod-projects |
 | [promotions](./promotions.md) | Rabaty na poziomie koszyka — procentowe, kwotowe i darmowa dostawa — z warunkami, które muszą być spełnione | @endora-commerce/mod-promotions |
 | [Asystent AI (Prompt Actions)](./prompt-actions.md) | Polecenia w języku naturalnym w palecie poleceń panelu administracyjnego, z jawnym podglądem i potwierdzeniem przed każdą zmianą | @endora-commerce/mod-prompt-actions |
 | [PWA (Progressive Web App)](./pwa.md) | Funkcje Progressive Web App dla storefrontu i panelu administracyjnego — instalacja na ekranie głównym, opcjonalna pamięć podręczna zasobów, kontrolowane aktualizacje i opcjonalne powiadomienia push | @endora-commerce/mod-pwa |

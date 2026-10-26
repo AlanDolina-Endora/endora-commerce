@@ -403,6 +403,14 @@ const modules = [
   },
   {
     type: 'category',
+    label: 'projects', key: 'projects',
+    link: { type: 'doc', id: 'modules/projects' },
+    items: [
+      'module-reference/projects',
+    ],
+  },
+  {
+    type: 'category',
     label: 'promotions', key: 'promotions',
     link: { type: 'doc', id: 'modules/promotions' },
     items: [

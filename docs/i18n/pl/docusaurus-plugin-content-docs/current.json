@@ -167,6 +167,9 @@
   "sidebar.main.category.product_feeds": {
     "message": "Feedy produktowe"
   },
+  "sidebar.main.category.projects": {
+    "message": "projects"
+  },
   "sidebar.main.category.promotions": {
     "message": "promotions"
   },

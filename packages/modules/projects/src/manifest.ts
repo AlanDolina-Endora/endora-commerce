@@ -109,8 +109,8 @@ export const manifest = defineModuleManifest({
    */
   errorCodes: [{ code: 'PROJECT_NOT_FOUND' }],
   i18n: { bundlesDir: 'i18n' },
-  // Nothing to document yet: the page lands with the docs skeleton.
-  docs: false,
+  // `docs/projects.md` at the package root: users' and developers' page.
+  docs: { dir: 'docs' },
   // Demo data is a later story's decision (research R-20); `false` is a
   // decision, absent would be "nobody has decided".
   demo: false,

@@ -68,7 +68,7 @@ of the platform, not of what happens to be written.
 | `pim_connector` | _no page yet_ | @endora-commerce/mod-pim-connector |
 | [Price books](./price_lists.md) | Price books — base prices per currency, catalogue, buyer and sale prices on sales channels, and the rules that decide what each buyer pays. | @endora-commerce/mod-price-lists |
 | [Product Feeds](./product_feeds.md) | Provider-shaped product feeds per sales channel — scheduled generation, tokenised pull URLs and SFTP/FTP/HTTP push | @endora-commerce/mod-product-feeds |
-| `projects` | _no page yet_ | @endora-commerce/mod-projects |
+| [projects](./projects.md) | Projects for zero or more Organizations, run through their own Stages by Members holding Project Roles | @endora-commerce/mod-projects |
 | [promotions](./promotions.md) | Cart-level percentage / amount / free-delivery discounts with eligibility filters | @endora-commerce/mod-promotions |
 | [Prompt Actions (AI assistant)](./prompt-actions.md) | Natural-language prompt mode for the admin command palette, with an explicit preview-and-confirm step before any change | @endora-commerce/mod-prompt-actions |
 | [PWA (Progressive Web App)](./pwa.md) | Progressive-Web-App capabilities for the storefront and admin — installability, opt-in asset caching, a controlled update path and opt-in push | @endora-commerce/mod-pwa |
