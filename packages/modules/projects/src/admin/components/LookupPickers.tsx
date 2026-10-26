@@ -31,6 +31,8 @@ interface RemoteOptions {
   options: ComboboxOption<string>[];
   loading: boolean;
   failed: boolean;
+  /** Whether a read has answered (or failed) since the picker was mounted. */
+  settled: boolean;
   /** The label of an option seen during this visit, by id. */
   labelOf: (id: string | null) => string;
   search: (query: string) => void;
@@ -44,6 +46,7 @@ function useRemoteOptions(load: (query: string) => Promise<ComboboxOption<string
   const [options, setOptions] = useState<ComboboxOption<string>[]>([]);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [settled, setSettled] = useState(false);
   const [labels, setLabels] = useState<ReadonlyMap<string, string>>(() => new Map());
   const sequence = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -67,7 +70,10 @@ function useRemoteOptions(load: (query: string) => Promise<ComboboxOption<string
         setOptions([]);
         setFailed(true);
       } finally {
-        if (current === sequence.current) setLoading(false);
+        if (current === sequence.current) {
+          setLoading(false);
+          setSettled(true);
+        }
       }
     },
     [load],
@@ -90,7 +96,7 @@ function useRemoteOptions(load: (query: string) => Promise<ComboboxOption<string
   );
 
   const labelOf = useCallback((id: string | null): string => (id ? (labels.get(id) ?? '') : ''), [labels]);
-  return { options, loading, failed, labelOf, search };
+  return { options, loading, failed, settled, labelOf, search };
 }
 
 const loadOrganizations = async (query: string): Promise<ComboboxOption<string>[]> =>
@@ -125,10 +131,33 @@ export interface LookupPickerProps {
   selectedLabel?: string;
 }
 
+/**
+ * The name of `id` when none of the options read so far names it — a value
+ * given rather than chosen here (a restored filter, a stored Member) — asked of
+ * the lookup by that one id. `''` while unknown, and when it cannot be read.
+ */
+function useResolvedName(id: string | null, known: string): string {
+  const [resolved, setResolved] = useState<{ id: string; name: string } | null>(null);
+  useEffect(() => {
+    if (!id || known) return undefined;
+    let alive = true;
+    void projectsApi.adminUserName(id).then((name) => {
+      if (alive && name) setResolved({ id, name });
+    });
+    return (): void => {
+      alive = false;
+    };
+  }, [id, known]);
+  return resolved && resolved.id === id ? resolved.name : '';
+}
+
 /** One active administrator — a Member, or the list's "any member" filter. */
 export function AdminUserLookup(props: LookupPickerProps): ReactNode {
   const t = useTranslation('projects');
   const remote = useRemoteOptions(loadAdminUsers);
+  const known = remote.labelOf(props.value) || (props.selectedLabel ?? '');
+  // Only once the first read has answered: the value is usually among its options.
+  const resolved = useResolvedName(remote.settled ? props.value : null, known);
   return (
     <>
       <Combobox<string>
@@ -145,7 +174,7 @@ export function AdminUserLookup(props: LookupPickerProps): ReactNode {
         disabled={props.disabled ?? false}
         placeholder={props.placeholder ?? ''}
         emptyMessage={t('picker.empty')}
-        selectedLabel={remote.labelOf(props.value) || (props.selectedLabel ?? '')}
+        selectedLabel={known || resolved}
       />
       <LoadError shown={remote.failed} />
     </>
