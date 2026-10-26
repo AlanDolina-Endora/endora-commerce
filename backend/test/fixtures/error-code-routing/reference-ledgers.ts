@@ -498,6 +498,12 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 2): ' +
       'creating a Stage\'s Tasks again where its last entry did not fail to create them (research R-8).',
   },
+  PROJECT_TEMPLATE_NOT_FOUND: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 3): ' +
+      'a Template that does not exist, or an archived one named to create a Project from (research R-7).',
+  },
   SEO_CRAWLER_TEXT_TOO_LARGE: {
     to: 'seo',
     reason:

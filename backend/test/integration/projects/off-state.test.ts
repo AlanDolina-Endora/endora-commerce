@@ -87,6 +87,15 @@ describe('projects off-state (Constitution XVII)', () => {
         { url: `${API}/${ID}/tasks`, cookies: admin },
         write('PUT', `${API}/${ID}/stages/${STAGE}/tasks`, { tasks: [] }),
         write('POST', `${API}/${ID}/stages/${STAGE}/materialize-tasks`),
+        // User Story 3's routes — Templates; the write probes name a Template
+        // that does not exist or send a body the schema refuses.
+        { url: `${API}/templates`, cookies: admin },
+        { url: `${API}/templates/${ID}`, cookies: admin },
+        write('POST', `${API}/templates`, { name: '' }),
+        write('PUT', `${API}/templates/${ID}`, { name: '' }),
+        write('POST', `${API}/templates/${ID}/duplicate`),
+        write('POST', `${API}/templates/${ID}/archive`),
+        write('POST', `${API}/templates/${ID}/restore`),
       ],
       adminPresence: { cookies: admin },
       settingWrite: { code: 'projects.visibility', value: 'everyone', cookies: admin },

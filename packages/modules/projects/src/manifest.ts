@@ -86,7 +86,11 @@ export const manifest = defineModuleManifest({
   // `admin_roles` owns `permissionService`, which answers whether a reader
   // holds `projects:see_all`; `admin_users` owns `adminUserReadPort`, through
   // which Members are named.
-  dependencies: ['admin_roles', 'admin_users', 'auth', 'organizations', 'settings'],
+  //
+  // `_i18n` owns `adminI18nService`, which words what this module stores as a
+  // key in the reader's language: a Stage Task's responsible-Role note and the
+  // name of a duplicated Template.
+  dependencies: ['_i18n', 'admin_roles', 'admin_users', 'auth', 'organizations', 'settings'],
   /**
    * Edges that are real to the container and bind no operator (FR-040: a
    * Project works without Tasks).
@@ -152,6 +156,14 @@ export const manifest = defineModuleManifest({
       module: 'projects',
       requires: ['projects:read'],
     },
+    {
+      // Templates (User Story 3); Project Roles and loss reasons join it with
+      // User Story 4.
+      code: 'projects:configure',
+      label: 'Configure projects (roles, templates, loss reasons)',
+      module: 'projects',
+      requires: ['projects:read'],
+    },
   ],
   /**
    * The refusals this module raises, each with its sentence under
@@ -177,6 +189,7 @@ export const manifest = defineModuleManifest({
     { code: 'PROJECT_STAGE_HAS_TASKS' },
     { code: 'PROJECT_STAGE_GATE_OPEN_TASKS' },
     { code: 'PROJECT_STAGE_TASKS_NOT_RETRYABLE' },
+    { code: 'PROJECT_TEMPLATE_NOT_FOUND' },
   ],
   i18n: { bundlesDir: 'i18n' },
   // `docs/projects.md` at the package root: users' and developers' page.

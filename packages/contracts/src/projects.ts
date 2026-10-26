@@ -618,6 +618,11 @@ export const ProjectStageSchema = z.object({
   deadlineManual: z.boolean(),
   tasksMaterializedAt: isoTimestampSchema.nullable(),
   tasksSkippedAt: isoTimestampSchema.nullable(),
+  /**
+   * Creating the Stage's Tasks failed on its last entry and has not been done
+   * since — `POST …/stages/:stageId/materialize-tasks` creates them (R-8).
+   */
+  tasksMaterializeFailed: z.boolean(),
   /** The Stage's own Task definitions (R-7). */
   stageTasks: z.array(StageTaskDefinitionSchema.extend({ id: uuid, position: z.number().int() })),
 });

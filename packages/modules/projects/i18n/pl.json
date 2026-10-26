@@ -1,6 +1,7 @@
 {
   "adminRoles.permission.projects:read": "Przeglądanie projektów",
   "adminRoles.permission.projects:write": "Tworzenie i prowadzenie projektów",
+  "adminRoles.permission.projects:configure": "Konfigurowanie projektów (role, szablony, powody utraty)",
   "errors.PROJECT_NOT_FOUND": "Ten projekt nie istnieje lub nie jest dla Ciebie dostępny.",
   "errors.PROJECT_HAS_LINKS": "Do tego projektu są podpięte dokumenty. Odepnij je przed usunięciem projektu.",
   "errors.PROJECT_ORGANIZATION_OUT_OF_SCOPE": "Jedna z organizacji jest dla Ciebie niedostępna.",
@@ -15,6 +16,7 @@
   "errors.PROJECT_STAGE_HAS_TASKS": "Ten etap zawiera zadania. Przenieś je lub usuń przed usunięciem etapu.",
   "errors.PROJECT_STAGE_GATE_OPEN_TASKS": "Projekt nie może opuścić tego etapu, dopóki niektóre jego zadania nie są wykonane ani anulowane.",
   "errors.PROJECT_STAGE_TASKS_NOT_RETRYABLE": "Nie ma czego tworzyć ponownie: zadania tego etapu zostały utworzone lub pominięte albo ich tworzenie nie zakończyło się błędem.",
+  "errors.PROJECT_TEMPLATE_NOT_FOUND": "Ten szablon nie istnieje albo jest zarchiwizowany i nie jest już oferowany.",
   "settingGroups.projects.name": "Projekty",
   "settingLabels.projects.enabled.name": "Projekty włączone",
   "settingLabels.projects.enabled.description": "Włącza lub wyłącza Projekty: ekrany projektów, szablony, analitykę oraz panele projektu przy zamówieniach, zapytaniach ofertowych i szansach sprzedaży. Nic nie jest usuwane — każdy projekt, jego etapy i historia pozostają w bazie i wracają w stanie, w jakim były.",
@@ -227,5 +229,7 @@
   "stageTasks.invalid": "Nadaj każdemu zadaniu tytuł i podaj termin w pełnych dniach od 0 do 3650.",
   "stageTasks.item": "{title} — termin {days} dni od rozpoczęcia etapu",
   "stageTasks.itemRole": "{title} — termin {days} dni od rozpoczęcia etapu · {role}",
-  "stageBar.openTasks": "Otwarte zadania w tym etapie:"
+  "stageBar.openTasks": "Otwarte zadania w tym etapie:",
+  "stageTasks.contextNote.responsibleRole": "Odpowiedzialna rola: {role}",
+  "templates.copyName": "{name} (kopia)"
 }

@@ -129,6 +129,7 @@ export function stage(overrides: Partial<ProjectStage> & Pick<ProjectStage, 'id'
     deadlineManual: false,
     tasksMaterializedAt: null,
     tasksSkippedAt: null,
+    tasksMaterializeFailed: false,
     stageTasks: [],
     ...overrides,
   };

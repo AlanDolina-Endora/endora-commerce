@@ -23,6 +23,7 @@ import { personName, type ProjectReadService } from './project-read-service.js';
 import { assertRolesExist, lockProject } from './project-service.js';
 import { PROJECT_TASK_CONTEXT_TYPE, type ProjectTasks } from './project-tasks.js';
 import { stageNotFound } from './stage-service.js';
+import { responsibleRoleNote } from './task-context-descriptor.js';
 
 /**
  * Stage Tasks and the completion gate (research R-7, R-8; FR-012, FR-017,
@@ -298,8 +299,9 @@ export class StageTaskService {
   /**
    * Each definition as a Task: due the Stage's start plus its offset; assigned
    * to the one active Member holding its Role, or else unassigned with the
-   * Role named in the Task's note (R-8). The note is stored text, written once
-   * and read by many, so it uses the Role's default name.
+   * Role named in the Task's note (R-8). The note is stored as the Role
+   * (`responsibleRoleNote`) and worded per reader by the `project` context's
+   * `renderNote`.
    */
   async #newTasks(projectId: string, stageId: string): Promise<NewContextTask[]> {
     const em = this.deps.emFactory();
@@ -333,15 +335,6 @@ export class StageTaskService {
         .filter((admin) => admin.status === 'active' && admin.deletedAt === null)
         .map((admin) => admin.id),
     );
-    const roleNames = new Map(
-      roleIds.length
-        ? (
-            (await em.execute(`select r."id", r."default_name" from "project_roles" r where r."id" = any(?::uuid[])`, [
-              uuidArray(roleIds),
-            ])) as Array<{ id: string; default_name: string }>
-          ).map((r) => [r.id, r.default_name])
-        : [],
-    );
     const startedOn = stage.started_on;
     return definitions.map((definition) => {
       const roleId = definition.responsible_role_id;
@@ -352,7 +345,7 @@ export class StageTaskService {
         description: definition.description,
         dueOn: startedOn === null ? null : addDays(startedOn, definition.due_offset_days),
         assignedAdminUserId: assignee,
-        contextNote: roleId && assignee === null ? `Responsible role: ${roleNames.get(roleId) ?? roleId}` : null,
+        contextNote: roleId && assignee === null ? responsibleRoleNote(roleId) : null,
       };
     });
   }

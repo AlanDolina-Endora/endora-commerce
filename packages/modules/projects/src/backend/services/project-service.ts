@@ -9,13 +9,14 @@ import {
   type ProjectCreatedEvent,
   type ProjectDetail,
   type ProjectMemberInput,
+  type ProjectStageInput,
   type UpdateProjectBody,
 } from '@endora-commerce/contracts';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import { HttpError } from '@endora-commerce/platform/http';
 import { randomUUID } from 'crypto';
 import { enterStage, todayIn } from '../domain/deadline.js';
-import { defaultLinearMoves } from '../domain/stage-graph.js';
+import { defaultLinearMoves, type StageMoveDef } from '../domain/stage-graph.js';
 import { Project } from '../entities/project.entity.js';
 import { ProjectMember } from '../entities/project-member.entity.js';
 import { ProjectMemberRole } from '../entities/project-member-role.entity.js';
@@ -23,11 +24,14 @@ import { ProjectOrganization } from '../entities/project-organization.entity.js'
 import { ProjectStage } from '../entities/project-stage.entity.js';
 import { ProjectStageEntry } from '../entities/project-stage-entry.entity.js';
 import { ProjectStageMove } from '../entities/project-stage-move.entity.js';
+import { ProjectStageTask } from '../entities/project-stage-task.entity.js';
 import { ProjectViewer } from '../entities/project-viewer.entity.js';
 import type { ProjectAccess } from './project-access.js';
 import { nextProjectNumber } from './project-number.js';
 import type { ProjectReadService } from './project-read-service.js';
 import { PROJECT_TASK_CONTEXT_TYPE, type ProjectTasks } from './project-tasks.js';
+import type { StageEntryPlan, StageTaskService } from './stage-task-service.js';
+import { templateNotFound, type TemplateGraph, type TemplateService } from './template-service.js';
 
 /**
  * A Project's own writes (`contracts/admin-api.md` §2.1, `data-model.md`
@@ -40,12 +44,23 @@ import { PROJECT_TASK_CONTEXT_TYPE, type ProjectTasks } from './project-tasks.js
  * Command the Project row is locked and everything else is read by its id.
  * Every refusal happens before anything is written.
  *
+ * **From a Template** (User Story 3, research R-7) a Project is given a copy
+ * of the Template's Stages, workflow, gates, alerts, Stage Task definitions
+ * and default description — its own rows, never a reference — and names the
+ * Template as provenance. The body's own fields win; its `stages` are refused
+ * beside a Template (the Template's are what is copied, edited afterwards on
+ * the Project). A Role of the Template may be given to a Member even when it
+ * has been archived since (spec edge case).
+ *
+ * **The first Stage** is entered by the create Command, which decides its
+ * Stage Tasks as a move does (`stage-task-service.ts`): created after the
+ * commit while Tasks is on, marked skipped while it is off.
+ *
  * What this file does not do yet, each named by the story that brings it:
- * creating from a Template (User Story 3), setting visibility and listed
- * people on an existing Project (User Story 5), Custom Field values (User
- * Story 9), refusing to remove an Organization a linked record belongs to and
- * deleting a Project's Tasks with it (User Stories 6 and 2). The first three
- * are refused with 422 rather than silently dropped.
+ * setting visibility and listed people on an existing Project (User Story 5),
+ * Custom Field values (User Story 9), refusing to remove an Organization a
+ * linked record belongs to (User Story 6). The first two are refused with 422
+ * rather than silently dropped.
  */
 
 export interface ProjectServiceDeps {
@@ -58,6 +73,10 @@ export interface ProjectServiceDeps {
   /** `admin_users`' read port — lazy, resolved per call. */
   adminUsers: AdminUserReadPort;
   tasks: ProjectTasks;
+  /** The Template a Project is created from (User Story 3). */
+  templates: TemplateService;
+  /** The first Stage's Stage Tasks, decided in the create Command and created after it. */
+  stageTasks: StageTaskService;
 }
 
 export function projectChanged(): HttpError {
@@ -100,21 +119,38 @@ export class ProjectService {
 
   /** `POST /projects` — the Project in its first Stage, with Organizations, Members and workflow. */
   async create(body: CreateProjectBody, language: string): Promise<ProjectDetail> {
-    if (body.templateId) throw notYet('Creating a project from a template', 'User Story 3');
     if (body.customFieldValues && Object.keys(body.customFieldValues).length > 0) {
       throw notYet('Custom field values on a project', 'User Story 9');
     }
-    const stages = body.stages ?? [];
+    let template: TemplateGraph | null = null;
+    if (body.templateId) {
+      if (body.stages) {
+        throw new HttpError(
+          422,
+          ERROR_CODES.VALIDATION_FAILED,
+          'A project created from a template takes the template’s stages; change them on the project afterwards.',
+        );
+      }
+      template = await this.deps.templates.forCopy(body.templateId);
+      if (!template) throw templateNotFound(422);
+    }
+    const stages: StageToCreate[] = template
+      ? stagesFromTemplate(template)
+      : (body.stages ?? []).map((stage) => ({ ...stage, tasks: [] }));
     if (stages.length === 0) {
       throw new HttpError(422, ERROR_CODES.VALIDATION_FAILED, 'A project needs at least one stage.');
     }
     await this.#assertOrganizations(body.organizationIds);
     const members = body.members ?? [];
-    await this.#assertMembers(members, new Map());
+    await this.#assertMembers(members, new Map(), new Set(template?.roleIds ?? []));
     const viewerIds = body.viewerIds ?? [];
     await this.#assertAdmins(viewerIds, 'A listed person must be an active administrator.');
     await this.#assertRolesExist(stages.flatMap((stage) => stage.responsibleRoleIds ?? []));
     const today = todayIn(await this.deps.read.timeZone());
+    const tasksPresent = this.deps.tasks.present();
+    let plan: StageEntryPlan = { materialize: false, notes: [] };
+    let entryId = '';
+    let firstStageId = '';
 
     const id = randomUUID();
     await this.deps.commandBus.run({
@@ -130,11 +166,12 @@ export class ProjectService {
           id,
           number: await nextProjectNumber(em),
           title: body.title,
-          description: body.description ?? '',
+          description: body.description ?? template?.description ?? '',
           valueAmount: body.value?.amount ?? null,
           valueCurrency: body.value?.currency ?? null,
           ...(body.startOn ? { startOn: body.startOn } : { startOn: today }),
           visibility: body.visibility ?? 'inherit',
+          templateId: template?.id ?? null,
           createdByAdminUserId: actor.actorAdminUserId,
         });
         // Flushed in the order of the foreign keys: these entities hold each
@@ -158,23 +195,41 @@ export class ProjectService {
           }),
         );
         const first = rows[0]!;
+        firstStageId = first.id;
         Object.assign(first, enterStage({ ...first, startedOn: null, deadlineOn: null }, today));
         await em.flush();
-        for (const move of defaultLinearMoves(rows)) em.create(ProjectStageMove, { projectId: id, ...move });
+        const moves = template ? copiedMoves(template, rows) : defaultLinearMoves(rows);
+        for (const move of moves) em.create(ProjectStageMove, { projectId: id, ...move });
+        stages.forEach((stage, index) => {
+          stage.tasks.forEach((task, at) =>
+            em.create(ProjectStageTask, {
+              stageId: rows[index]!.id,
+              title: task.title,
+              description: task.description,
+              responsibleRoleId: task.responsibleRoleId,
+              dueOffsetDays: task.dueOffsetDays,
+              position: at + 1,
+            }),
+          );
+        });
         for (const organizationId of body.organizationIds) em.create(ProjectOrganization, { projectId: id, organizationId });
         const memberRows = members.map((member) =>
           em.create(ProjectMember, { projectId: id, adminUserId: member.adminUserId }),
         );
         for (const adminUserId of viewerIds) em.create(ProjectViewer, { projectId: id, adminUserId });
-        em.create(ProjectStageEntry, {
+        await em.flush();
+        plan = await this.deps.stageTasks.planEntry(em as EntityManager, first, tasksPresent);
+        const entry = em.create(ProjectStageEntry, {
           projectId: id,
           kind: 'enter',
           fromStageId: null,
           toStageId: first.id,
           fromStageName: null,
           toStageName: first.name,
+          notes: plan.notes,
           actorAdminUserId: actor.actorAdminUserId,
         });
+        entryId = entry.id;
         await em.flush();
         members.forEach((member, index) => {
           for (const roleId of member.roleIds) em.create(ProjectMemberRole, { memberId: memberRows[index]!.id, roleId });
@@ -188,6 +243,7 @@ export class ProjectService {
             members: members.map((m) => ({ adminUserId: m.adminUserId, roleIds: m.roleIds })),
             viewerIds,
             stages: rows.map((stage) => stage.name),
+            templateId: template?.id ?? null,
           },
         };
       },
@@ -196,11 +252,12 @@ export class ProjectService {
           eventId: randomUUID(),
           occurredAt: new Date().toISOString(),
           projectId,
-          templateId: null,
+          templateId: template?.id ?? null,
         };
         return { eventName: PROJECTS_EVENTS.PROJECT_CREATED, payload };
       },
     });
+    if (plan.materialize) await this.deps.stageTasks.materializeAfterCommit(id, firstStageId, entryId);
     return this.deps.read.afterWrite(id, language);
   }
 
@@ -408,9 +465,15 @@ export class ProjectService {
   /**
    * Members are active administrators, and each Role exists and is not
    * archived — unless the Member already holds it here: an archived Role stays
-   * on the Projects that use it (US4 sc.2), it is only not handed out again.
+   * on the Projects that use it (US4 sc.2), it is only not handed out again —
+   * or the Template the Project is created from names it (spec edge case "A
+   * Template whose Role has been archived").
    */
-  async #assertMembers(members: readonly ProjectMemberInput[], heldRoles: Map<string, Set<string>>): Promise<void> {
+  async #assertMembers(
+    members: readonly ProjectMemberInput[],
+    heldRoles: Map<string, Set<string>>,
+    templateRoles: ReadonlySet<string> = new Set(),
+  ): Promise<void> {
     await this.#assertAdmins(
       members.map((member) => member.adminUserId),
       'A member must be an active administrator.',
@@ -425,7 +488,7 @@ export class ProjectService {
     for (const member of members) {
       for (const roleId of member.roleIds) {
         if (!archived.has(roleId)) throw memberInvalid('A project role does not exist.');
-        if (archived.get(roleId) && !heldRoles.get(member.adminUserId)?.has(roleId)) {
+        if (archived.get(roleId) && !heldRoles.get(member.adminUserId)?.has(roleId) && !templateRoles.has(roleId)) {
           throw memberInvalid('An archived project role is not handed out again.');
         }
       }
@@ -448,4 +511,29 @@ export async function assertRolesExist(em: EntityManager, roleIds: readonly stri
   if (rows.length !== ids.length) {
     throw new HttpError(422, ERROR_CODES.VALIDATION_FAILED, 'A responsible role is not a project role.');
   }
+}
+
+/** A Stage the create Command writes, with the Stage Task definitions it is given. */
+type StageToCreate = ProjectStageInput & { tasks: TemplateGraph['stages'][number]['tasks'] };
+
+/** A Template's Stages as the Project's own (R-7): every attribute, explicit, and their Stage Tasks. */
+function stagesFromTemplate(template: TemplateGraph): StageToCreate[] {
+  return template.stages.map((stage) => ({
+    name: stage.name,
+    color: stage.color,
+    plannedDurationDays: stage.plannedDurationDays,
+    responsibleRoleIds: stage.responsibleRoleIds,
+    alertOffsetsDays: stage.alertOffsetsDays,
+    completionGate: stage.completionGate,
+    completionPermitted: stage.completionPermitted,
+    tasks: stage.tasks,
+  }));
+}
+
+/** The Template's moves between the Project's copies of its Stages — the n-th Stage is the n-th copy. */
+function copiedMoves(template: TemplateGraph, rows: readonly ProjectStage[]): StageMoveDef[] {
+  const copyOf = new Map(template.stages.map((stage, index) => [stage.id, rows[index]!.id]));
+  return template.moves
+    .filter((move) => copyOf.has(move.fromStageId) && copyOf.has(move.toStageId))
+    .map((move) => ({ fromStageId: copyOf.get(move.fromStageId)!, toStageId: copyOf.get(move.toStageId)! }));
 }

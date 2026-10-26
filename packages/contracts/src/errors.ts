@@ -731,6 +731,8 @@ export const ERROR_CODES = {
   PROJECT_STAGE_GATE_OPEN_TASKS: 'PROJECT_STAGE_GATE_OPEN_TASKS',
   /** Creating a Stage's Tasks again was asked of a Stage whose last entry did not fail to create them. */
   PROJECT_STAGE_TASKS_NOT_RETRYABLE: 'PROJECT_STAGE_TASKS_NOT_RETRYABLE',
+  /** The Template is unknown, or archived when a Project is created from it. */
+  PROJECT_TEMPLATE_NOT_FOUND: 'PROJECT_TEMPLATE_NOT_FOUND',
 
   // SEO — search engine robots (`specs/144-seo-search-engine-robots/`, FR-006).
   // Declared by the `seo` module's manifest.

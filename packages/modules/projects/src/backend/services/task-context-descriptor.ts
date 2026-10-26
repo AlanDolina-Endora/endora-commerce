@@ -1,6 +1,11 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
-import type { TaskContextDescription, TaskContextDescriptor } from '@endora-commerce/contracts';
-import { uuidArray, type ProjectAccess } from './project-access.js';
+import {
+  pickLocalized,
+  type SupportedLanguage,
+  type TaskContextDescription,
+  type TaskContextDescriptor,
+} from '@endora-commerce/contracts';
+import { isUuid, uuidArray, type ProjectAccess } from './project-access.js';
 import { PROJECT_TASK_CONTEXT_TYPE } from './project-tasks.js';
 
 /**
@@ -18,12 +23,26 @@ import { PROJECT_TASK_CONTEXT_TYPE } from './project-tasks.js';
  * labels each Stage — the Task's group — by its current name. It describes only
  * the Projects `visibleIds` hands back; an id it leaves out is shown by
  * `tasks` as an unavailable record.
+ *
+ * `renderNote` words the note a Stage Task leaves on a Task nobody was
+ * assigned to: it is **stored as the Role** (`role:<id>`, {@link responsibleRoleNote}),
+ * never as a sentence, so each reader sees it in their own language with the
+ * Role's current name. Any other note is shown as stored.
  */
+
+const ROLE_NOTE = /^role:([0-9a-f-]{36})$/i;
+
+/** The `contextNote` of a Stage Task's Task left unassigned: the responsible Role, as a key. */
+export function responsibleRoleNote(roleId: string): string {
+  return `role:${roleId}`;
+}
 export function createProjectTaskContext(deps: {
   access: ProjectAccess;
   emFactory: () => EntityManager;
+  /** `_i18n`'s resolver over this module's bundles. */
+  translate: (key: string, language: SupportedLanguage, params?: Record<string, string | number>) => Promise<string>;
 }): TaskContextDescriptor {
-  const { access, emFactory } = deps;
+  const { access, emFactory, translate } = deps;
   return {
     contextType: PROJECT_TASK_CONTEXT_TYPE,
     ownerModuleId: 'projects',
@@ -51,6 +70,17 @@ export function createProjectTaskContext(deps: {
         });
       }
       return out;
+    },
+    renderNote: async (note, language) => {
+      const roleId = ROLE_NOTE.exec(note)?.[1];
+      if (!roleId || !isUuid(roleId)) return note;
+      const [role] = (await emFactory().execute(
+        `select r."name", r."default_name" from "project_roles" r where r."id" = ?`,
+        [roleId],
+      )) as Array<{ name: Record<string, string>; default_name: string }>;
+      // A Role deleted since is named by a dash, never by its id.
+      const name = role ? pickLocalized(role.name, language) || role.default_name : '—';
+      return translate('stageTasks.contextNote.responsibleRole', language, { role: name });
     },
   };
 }

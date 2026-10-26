@@ -1,6 +1,7 @@
 {
   "adminRoles.permission.projects:read": "View projects",
   "adminRoles.permission.projects:write": "Create and run projects",
+  "adminRoles.permission.projects:configure": "Configure projects (roles, templates, loss reasons)",
   "errors.PROJECT_NOT_FOUND": "This project does not exist or is not available to you.",
   "errors.PROJECT_HAS_LINKS": "This project has linked records. Unlink them before deleting the project.",
   "errors.PROJECT_ORGANIZATION_OUT_OF_SCOPE": "One of the organizations is not available to you.",
@@ -15,6 +16,7 @@
   "errors.PROJECT_STAGE_HAS_TASKS": "This stage holds tasks. Move or delete them before deleting the stage.",
   "errors.PROJECT_STAGE_GATE_OPEN_TASKS": "The project cannot leave this stage while some of its tasks are neither done nor cancelled.",
   "errors.PROJECT_STAGE_TASKS_NOT_RETRYABLE": "There is nothing to create again: this stage's tasks were created or skipped, or creating them never failed.",
+  "errors.PROJECT_TEMPLATE_NOT_FOUND": "This template does not exist, or it is archived and no longer offered.",
   "settingGroups.projects.name": "Projects",
   "settingLabels.projects.enabled.name": "Projects enabled",
   "settingLabels.projects.enabled.description": "Switches Projects on or off: the Project screens, Templates, analytics and the Project panels on Orders, Quote Requests and Opportunities. Nothing is dropped — every Project, its Stages and its history stay in the database and resume where they were.",
@@ -227,5 +229,7 @@
   "stageTasks.invalid": "Give every task a title, and a due offset in whole days from 0 to 3650.",
   "stageTasks.item": "{title} — due {days} days after the stage starts",
   "stageTasks.itemRole": "{title} — due {days} days after the stage starts · {role}",
-  "stageBar.openTasks": "Open tasks in this stage:"
+  "stageBar.openTasks": "Open tasks in this stage:",
+  "stageTasks.contextNote.responsibleRole": "Responsible role: {role}",
+  "templates.copyName": "{name} (copy)"
 }

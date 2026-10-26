@@ -1,5 +1,6 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
+  AdminI18nTranslatePort,
   AdminTenantScopePort,
   AdminUserReadPort,
   OrganizationDetailsPort,
@@ -43,6 +44,7 @@ import { ProjectViewer } from './entities/project-viewer.entity.js';
 import { registerProjectRoutes } from './routes/routes.projects.js';
 import { registerStageTaskRoutes } from './routes/routes.stage-tasks.js';
 import { registerStageRoutes } from './routes/routes.stages.js';
+import { registerTemplateRoutes } from './routes/routes.templates.js';
 import { createAlertsTimeZoneValidator } from './services/alerts-time-zone-validator.js';
 import { MoveService } from './services/move-service.js';
 import { ProjectAccess } from './services/project-access.js';
@@ -53,6 +55,7 @@ import type { ProjectTasks } from './services/project-tasks.js';
 import { StageService } from './services/stage-service.js';
 import { StageTaskService } from './services/stage-task-service.js';
 import { createProjectTaskContext } from './services/task-context-descriptor.js';
+import { TemplateService } from './services/template-service.js';
 
 /**
  * `projects` — composed by the kernel container.
@@ -77,7 +80,16 @@ interface ProjectsCradle {
   readonly projectStageGuardRegistry: ProjectStageGuardRegistry;
   readonly projectsTasks: ProjectTasks;
   readonly projectsStageTaskService: StageTaskService;
+  readonly projectsTemplateService: TemplateService;
+  readonly projectsTranslate: ProjectsTranslate;
 }
+
+/** `_i18n`'s resolver over this module's own bundles. */
+type ProjectsTranslate = (
+  key: string,
+  language: Parameters<AdminI18nTranslatePort['translate']>[2],
+  params?: Record<string, string | number>,
+) => Promise<string>;
 
 export function registerModule(ctx: ModuleContext): void {
   // --- Access (research R-2, R-3) --------------------------------------------
@@ -102,6 +114,20 @@ export function registerModule(ctx: ModuleContext): void {
       .singleton(),
   });
   // --- end of Access -----------------------------------------------------------
+
+  // --- Wording (research R-7, R-8) ---------------------------------------------
+  // What this module stores as a key and words per reader — a Stage Task's
+  // responsible-Role note, a duplicated Template's name — through `_i18n`'s
+  // resolver, resolved lazily, per call.
+  ctx.di.register({
+    projectsTranslate: ctx
+      .asFunction((): ProjectsTranslate => {
+        const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
+        return (key, language, params) => i18n.translate('projects', key, language, params);
+      })
+      .singleton(),
+  });
+  // --- end of Wording ------------------------------------------------------------
 
   // --- Projects (read side) ------------------------------------------------------
   ctx.di.register({
@@ -149,6 +175,7 @@ export function registerModule(ctx: ModuleContext): void {
       createProjectTaskContext({
         access: ctx.cradle<ProjectsCradle>().projectsAccess,
         emFactory: ctx.cradle<ProjectsCradle>().emFactory,
+        translate: ctx.cradle<ProjectsCradle>().projectsTranslate,
       }),
     );
   });
@@ -173,7 +200,15 @@ export function registerModule(ctx: ModuleContext): void {
   ctx.di.register({
     projectsService: ctx
       .asFunction(
-        ({ emFactory, commandBus, projectsAccess, projectsReadService, projectsTasks }: ProjectsCradle) =>
+        ({
+          emFactory,
+          commandBus,
+          projectsAccess,
+          projectsReadService,
+          projectsTasks,
+          projectsTemplateService,
+          projectsStageTaskService,
+        }: ProjectsCradle) =>
           new ProjectService({
             emFactory,
             commandBus,
@@ -182,11 +217,26 @@ export function registerModule(ctx: ModuleContext): void {
             organizations: lazyPort<OrganizationDetailsPort>(ctx, 'organizationDetailsPort'),
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
             tasks: projectsTasks,
+            templates: projectsTemplateService,
+            stageTasks: projectsStageTaskService,
           }),
       )
       .singleton(),
   });
   // --- end of Projects (writes) ------------------------------------------------------
+
+  // --- Templates (User Story 3, research R-7) ------------------------------------------
+  // Platform-wide configuration, copied into a Project when one is created
+  // from it — never referenced — so nothing here reads a Project.
+  ctx.di.register({
+    projectsTemplateService: ctx
+      .asFunction(
+        ({ emFactory, commandBus, projectsTranslate }: ProjectsCradle) =>
+          new TemplateService({ emFactory, commandBus, translate: projectsTranslate }),
+      )
+      .singleton(),
+  });
+  // --- end of Templates ----------------------------------------------------------------
 
   // --- Stages, workflow and walking a Project (User Story 1) -------------------------
   // The guard registry is a **contribution seam** (research R-6): other modules
@@ -271,6 +321,10 @@ export function registerModule(ctx: ModuleContext): void {
     });
     await registerStageTaskRoutes(app, {
       stageTaskService: cradle.projectsStageTaskService,
+      requireAdmin: cradle.requireAdmin,
+    });
+    await registerTemplateRoutes(app, {
+      templateService: cradle.projectsTemplateService,
       requireAdmin: cradle.requireAdmin,
     });
   });

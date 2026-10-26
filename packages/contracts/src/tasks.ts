@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { calendarDateSchema } from './common.js';
 import { dataEnvelope } from './envelopes.js';
+import type { SupportedLanguage } from './platform-language.js';
 import { RecordReferenceSchema } from './record-references.js';
 
 /**
@@ -212,7 +213,10 @@ export const TaskDetailSchema = TaskSummarySchema.extend({
   /** What the description's reference tokens name for this reader (`record-references.ts`). */
   references: z.array(RecordReferenceSchema),
   context: TaskContextDetailSchema.nullable(),
-  /** Written by the context's owner when it created the Task, e.g. "Responsible role: Installer". */
+  /**
+   * Written by the context's owner when it created the Task, in the reader's
+   * language — e.g. "Responsible role: Installer" (`TaskContextDescriptor.renderNote`).
+   */
   contextNote: z.string().nullable(),
   createdBy: z.object({ id: z.string().uuid(), name: z.string() }).nullable(),
   completedAt: isoTimestampSchema.nullable(),
@@ -415,6 +419,13 @@ export interface TaskContextDescriptor {
   /** Which of `ids` the caller may see. */
   visibleContextIds(ids: readonly string[]): Promise<Set<string>>;
   describe(ids: readonly string[]): Promise<Map<string, TaskContextDescription>>;
+  /**
+   * A Task's `contextNote` in the reader's language. The note is the owner's
+   * own text, written when it created the Task; an owner that stores a key
+   * rather than a sentence (a Project stores the responsible Role) answers it
+   * here. Without this method the note is shown as it is stored.
+   */
+  renderNote?(note: string, language: SupportedLanguage): Promise<string>;
 }
 
 /**

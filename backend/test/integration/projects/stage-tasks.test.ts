@@ -170,6 +170,23 @@ describe('projects — Stage Tasks (US2)', () => {
       contextNote: 'Responsible role: Surveyor',
     });
     expect(byTitle['Tell the client']).toMatchObject({ dueOn: plusDays(start, 1), assignee: null, contextNote: null });
+    // The note is stored as the Role, not as English text, and read in the reader's language (163 T077).
+    const [stored] = (await h
+      .em()
+      .getConnection()
+      .execute(`select "context_note" from "tasks" where "id" = ?`, [byTitle['Measure again']!.id])) as Array<{
+      context_note: string;
+    }>;
+    expect(stored!.context_note).not.toMatch(/Responsible role/);
+    const bob = people[1] as unknown as { adminUserId: string; cookies: { b2b_session: string } };
+    const setLanguage = (language: string | null) =>
+      h.em().getConnection().execute(`update "admin_users" set "preferred_language" = ? where "id" = ?`, [language, bob.adminUserId]);
+    await setLanguage('pl');
+    const polish = await callTasks(h, 'GET', `/${byTitle['Measure again']!.id}`, { cookies: bob.cookies }).finally(() =>
+      setLanguage(null),
+    );
+    expect(polish.statusCode, polish.body).toBe(200);
+    expect(TaskDetailResponseSchema.parse(polish.json()).data.contextNote).toBe('Odpowiedzialna rola: Surveyor (pl)');
     for (const task of tasks) {
       expect(task.context).toMatchObject({
         type: 'project',
@@ -251,11 +268,15 @@ describe('projects — Stage Tasks (US2)', () => {
       (await callProjects(h, 'GET', `/${p.id}/stage-history`)).json(),
     ).data;
     expect(history.find((e) => e.id === moved.entry.id)!.notes).toEqual(['tasks_materialize_failed']);
+    // The Stage says so, which is what offers the retry on its screen (163 T079).
+    expect(moved.project.stages.find((s) => s.id === build)!.tasksMaterializeFailed).toBe(true);
+    expect(moved.project.stages.filter((s) => s.id !== build).map((s) => s.tasksMaterializeFailed)).toEqual([false, false]);
 
     const retry = await callProjects(h, 'POST', `/${p.id}/stages/${build}/materialize-tasks`);
     expect(retry.statusCode, retry.body).toBe(200);
     expect(MaterializeStageTasksResponseSchema.parse(retry.json()).data).toEqual({ created: 3 });
     expect(await taskRowsOf(h, p.id)).toHaveLength(3);
+    expect((await getProject(h, p.id)).stages.find((s) => s.id === build)!.tasksMaterializeFailed).toBe(false);
 
     const twice = await callProjects(h, 'POST', `/${p.id}/stages/${build}/materialize-tasks`);
     expect(twice.statusCode, twice.body).toBe(409);

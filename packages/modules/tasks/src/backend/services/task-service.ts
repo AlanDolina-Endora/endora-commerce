@@ -397,12 +397,23 @@ export class TaskService {
       references: [],
       context:
         summary!.context && row.context_id ? { ...summary!.context, id: row.context_id, groupId: row.context_group_id } : null,
-      contextNote: row.context_note,
+      contextNote: await this.#note(row, language),
       createdBy: creator ? { id: creator.id, name: personName(creator) } : null,
       completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : null,
       createdAt: new Date(row.created_at).toISOString(),
       updatedAt: new Date(row.updated_at).toISOString(),
     };
+  }
+
+  /**
+   * The Task's note in the reader's language — worded by the context's owner
+   * when it says how (`renderNote`), otherwise as it was stored. Only a present
+   * owner is asked; a Task that reached here passed visibility, so it is.
+   */
+  async #note(row: TaskRow, language: SupportedLanguage): Promise<string | null> {
+    if (row.context_note === null || !row.context_type) return row.context_note;
+    const descriptor = this.deps.contexts.presentFor(row.context_type);
+    return descriptor?.renderNote ? descriptor.renderNote(row.context_note, language) : row.context_note;
   }
 
   /** FR-032: somebody other than the caller now holds the Task. */

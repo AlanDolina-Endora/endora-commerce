@@ -414,6 +414,21 @@ export class ProjectReadService {
         where s."project_id" = ? order by t."position", t."id"`,
       [projectId],
     )) as StageTaskRow[];
+    // A Stage whose last entry recorded a failure to create its Tasks, and
+    // which has had them neither created nor skipped since (the retry's rule).
+    const failed = new Set(
+      (
+        (await this.deps.emFactory().execute(
+          `select distinct on (e."to_stage_id") e."to_stage_id", 'tasks_materialize_failed' = any(e."notes") as "failed"
+             from "project_stage_entries" e
+            where e."project_id" = ? and e."to_stage_id" is not null
+            order by e."to_stage_id", e."at" desc, e."id" desc`,
+          [projectId],
+        )) as Array<{ to_stage_id: string; failed: boolean }>
+      )
+        .filter((row) => row.failed)
+        .map((row) => row.to_stage_id),
+    );
     return stages.map((stage) => ({
       id: stage.id,
       name: stage.name,
@@ -429,6 +444,7 @@ export class ProjectReadService {
       deadlineManual: stage.deadline_manual,
       tasksMaterializedAt: iso(stage.tasks_materialized_at),
       tasksSkippedAt: iso(stage.tasks_skipped_at),
+      tasksMaterializeFailed: failed.has(stage.id) && stage.tasks_materialized_at === null && stage.tasks_skipped_at === null,
       stageTasks: tasks
         .filter((task) => task.stage_id === stage.id)
         .map((task) => ({
