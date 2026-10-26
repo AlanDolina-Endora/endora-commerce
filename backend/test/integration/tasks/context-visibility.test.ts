@@ -35,6 +35,8 @@ describe('tasks — context visibility (R-9)', () => {
   const visible = new Set<string>();
   const shown = randomUUID();
   const hidden = randomUUID();
+  /** Visible, but the probe's `describe()` leaves it out — gone since the check (T065 addendum). */
+  const undescribed = randomUUID();
   const created: string[] = [];
 
   async function seedTask(context: { type: string; id: string } | null): Promise<string> {
@@ -88,6 +90,7 @@ describe('tasks — context visibility (R-9)', () => {
   let ofShown: string;
   let ofHidden: string;
   let ofUnregistered: string;
+  let ofUndescribed: string;
 
   beforeAll(async () => {
     h = await setupBackendServer();
@@ -97,15 +100,21 @@ describe('tasks — context visibility (R-9)', () => {
       allVisibleContextIds: async () => [...visible],
       visibleContextIds: async (ids) => new Set(ids.filter((id) => visible.has(id))),
       describe: async (ids) =>
-        new Map(ids.map((id) => [id, { label: `Probe ${id.slice(0, 4)}`, href: `/probe/${id}`, groups: new Map() }])),
+        new Map(
+          ids
+            .filter((id) => id !== undescribed)
+            .map((id) => [id, { label: `Probe ${id.slice(0, 4)}`, href: `/probe/${id}`, groups: new Map() }]),
+        ),
     };
     h.container.resolve<TaskContextRegistryPort>('taskContextRegistry').register(probe);
     visible.add(shown);
+    visible.add(undescribed);
 
     free = await seedTask(null);
     ofShown = await seedTask({ type: 'probe', id: shown });
     ofHidden = await seedTask({ type: 'probe', id: hidden });
     ofUnregistered = await seedTask({ type: 'unregistered_probe', id: randomUUID() });
+    ofUndescribed = await seedTask({ type: 'probe', id: undescribed });
   });
 
   afterAll(async () => {
@@ -113,6 +122,29 @@ describe('tasks — context visibility (R-9)', () => {
       await h.orm.em.getConnection().execute(`delete from "tasks" where "id" = any(?::uuid[])`, [`{${created.join(',')}}`]);
     }
     await teardownBackendServer(h);
+  });
+
+  it('a context its owner does not describe is shown as unavailable — a label in the reader’s language, no link', async () => {
+    const response = await detail(ofUndescribed);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().data.context).toEqual({
+      type: 'probe',
+      id: undescribed,
+      groupId: null,
+      available: false,
+      label: 'Unavailable record',
+      href: null,
+      groupLabel: null,
+    });
+    const polish = await h.app.inject({
+      method: 'GET',
+      url: `${API}?limit=100`,
+      cookies: admin,
+      headers: { 'accept-language': 'pl' },
+    });
+    const item = (polish.json() as { items: TaskSummary[] }).items.find((t) => t.id === ofUndescribed);
+    expect(item?.context).toMatchObject({ available: false, href: null });
+    expect(item?.context?.label).not.toBe('');
   });
 
   it('shows a Task without a context to a holder of tasks:read', async () => {

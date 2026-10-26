@@ -3,9 +3,11 @@ import { expect } from 'vitest';
 import {
   ProjectDetailResponseSchema,
   ProjectMoveResponseSchema,
+  TaskDetailResponseSchema,
   type CreateProjectBody,
   type ProjectDetail,
   type ProjectMoveResult,
+  type TaskDetail,
 } from '@endora-commerce/contracts';
 import type { BackendServerHandle } from '../../helpers/test-server.js';
 import { withModulesDeactivated } from '../../helpers/modules-deactivated.js';
@@ -137,4 +139,83 @@ export async function deleteProjects(h: BackendServerHandle, ids: readonly strin
  */
 export function withTasksOff<T>(body: () => Promise<T>): Promise<T> {
   return withModulesDeactivated(['tasks'], body);
+}
+
+// ---------------------------------------------------------------------------
+// User Story 2 — Tasks in a Project's Stages
+// ---------------------------------------------------------------------------
+
+export const TASKS_API = '/api/v1/admin/tasks';
+
+export function callTasks(
+  h: BackendServerHandle,
+  method: Method,
+  path: string,
+  options: { payload?: unknown; cookies?: Cookies | null } = {},
+): Promise<LightMyRequestResponse> {
+  return h.app.inject({
+    method,
+    url: `${TASKS_API}${path}`,
+    ...(options.cookies === null ? {} : { cookies: options.cookies ?? PROJECTS_ADMIN }),
+    ...(options.payload === undefined ? {} : { payload: options.payload as Record<string, unknown> }),
+  });
+}
+
+/** `POST /tasks` into one Stage of a Project; fails the test on anything but 201. */
+export async function createStageTask(
+  h: BackendServerHandle,
+  projectId: string,
+  stageId: string,
+  body: Record<string, unknown> = {},
+  cookies?: Cookies,
+): Promise<TaskDetail> {
+  const response = await callTasks(h, 'POST', '', {
+    payload: { title: 'A stage task', ...body, context: { contextType: 'project', contextId: projectId, contextGroupId: stageId } },
+    ...(cookies ? { cookies } : {}),
+  });
+  expect(response.statusCode, response.body).toBe(201);
+  return TaskDetailResponseSchema.parse(response.json()).data;
+}
+
+/** `PATCH /tasks/:id` with a new status; fails the test on anything but 200. */
+export async function setTaskStatus(h: BackendServerHandle, taskId: string, status: string): Promise<void> {
+  const response = await callTasks(h, 'PATCH', `/${taskId}`, { payload: { status } });
+  expect(response.statusCode, response.body).toBe(200);
+}
+
+/** `PATCH /projects/:id/stages/:stageId`; fails the test on anything but 200. */
+export async function patchStage(
+  h: BackendServerHandle,
+  projectId: string,
+  stageId: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const response = await callProjects(h, 'PATCH', `/${projectId}/stages/${stageId}`, { payload: body });
+  expect(response.statusCode, response.body).toBe(200);
+}
+
+/** The Tasks rows of a Project, read directly — what remains whatever anybody may see. */
+export async function taskRowsOf(
+  h: BackendServerHandle,
+  projectId: string,
+): Promise<Array<{ id: string; title: string; status: string; context_group_id: string | null }>> {
+  return (await h
+    .em()
+    .getConnection()
+    .execute(
+      `select "id", "title", "status", "context_group_id" from "tasks"
+        where "context_type" = 'project' and "context_id" = ? order by "created_at", "id"`,
+      [projectId],
+    )) as Array<{ id: string; title: string; status: string; context_group_id: string | null }>;
+}
+
+/** Delete the Tasks of the Projects a file created. */
+export async function deleteProjectTasks(h: BackendServerHandle, projectIds: readonly string[]): Promise<void> {
+  if (projectIds.length === 0) return;
+  await h
+    .em()
+    .getConnection()
+    .execute(`delete from "tasks" where "context_type" = 'project' and "context_id" = any(?::uuid[])`, [
+      `{${projectIds.join(',')}}`,
+    ]);
 }
