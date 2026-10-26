@@ -2,6 +2,7 @@ import { apiClient } from '@endora-commerce/admin-kit/lib';
 import type {
   CloseProjectBody,
   CreateProjectBody,
+  CreateProjectRoleBody,
   CreateProjectStageBody,
   ProjectDetail,
   ProjectListResponse,
@@ -20,6 +21,7 @@ import type {
   SetProjectMovesResult,
   StageTaskDefinition,
   TaskSummary,
+  UpdateProjectRoleBody,
   UpdateProjectStageBody,
 } from '@endora-commerce/contracts';
 
@@ -47,6 +49,9 @@ const BASE = '/api/v1/admin/projects';
 const TASKS_BASE = '/api/v1/admin/tasks';
 
 export type ProjectSort = 'createdAt' | 'value' | 'deadline';
+
+/** The two configuration dictionaries, by their path segment. Both have one shape (`ProjectRole`). */
+export type ProjectDictionaryKind = 'roles' | 'loss-reasons';
 
 export interface ProjectListParams {
   q?: string;
@@ -192,6 +197,30 @@ export const projectsApi = {
     return data(
       apiClient.get<{ data: ProjectLossReason[] }>(`${BASE}/loss-reasons${options.active ? '?active=true' : ''}`),
     );
+  },
+
+  // --- §2.5 Project Roles and loss reasons — writes (User Story 4) -----------
+
+  /** `kind` is the dictionary's path segment; every write is `projects:configure`. */
+  createDictionaryEntry(kind: ProjectDictionaryKind, body: CreateProjectRoleBody): Promise<ProjectRole> {
+    return data(apiClient.post<{ data: ProjectRole }>(`${BASE}/${kind}`, body));
+  },
+
+  updateDictionaryEntry(kind: ProjectDictionaryKind, id: string, body: UpdateProjectRoleBody): Promise<ProjectRole> {
+    return data(apiClient.patch<{ data: ProjectRole }>(`${BASE}/${kind}/${id}`, body));
+  },
+
+  archiveDictionaryEntry(kind: ProjectDictionaryKind, id: string): Promise<ProjectRole> {
+    return data(apiClient.post<{ data: ProjectRole }>(`${BASE}/${kind}/${id}/archive`));
+  },
+
+  restoreDictionaryEntry(kind: ProjectDictionaryKind, id: string): Promise<ProjectRole> {
+    return data(apiClient.post<{ data: ProjectRole }>(`${BASE}/${kind}/${id}/restore`));
+  },
+
+  /** 409 for a built-in row or one a Project or Template uses. */
+  deleteDictionaryEntry(kind: ProjectDictionaryKind, id: string): Promise<void> {
+    return apiClient.delete<void>(`${BASE}/${kind}/${id}`);
   },
 
   // --- §2.5 Templates (User Story 3) -----------------------------------------

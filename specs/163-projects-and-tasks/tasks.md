@@ -332,7 +332,8 @@ ignore it, visibly, when off.
 - [x] T081 [P] [US4] Write failing `backend/test/integration/projects/roles-grant-nothing.test.ts`: assigning any Role changes nothing in `permissionService.listPermissions` for that user
 - [x] T082 [US4] Implement `services/role-service.ts`, `services/loss-reason-service.ts` and their write routes (`projects:configure`); T080, T081 green
   - One `services/dictionary-service.ts` behind both (same shape, same writes); the two files contribute the table and the in-use query, and are allow-listed in `PROJECT_ACCESS_READERS` for that one `exists` across Projects. Routes in `routes/routes.dictionaries.ts`; the reads stay in `routes.projects.ts`.
-- [ ] T083 [P] [US4] Admin: `pages/RolesPage.tsx`, `pages/LossReasonsPage.tsx` (name per language, archive/restore), nav entries; `admin/test/modules/projects/RolesPage.test.tsx`
+- [x] T083 [P] [US4] Admin: `pages/RolesPage.tsx`, `pages/LossReasonsPage.tsx` (name per language, archive/restore), nav entries; `admin/test/modules/projects/RolesPage.test.tsx`
+  - One `components/DictionaryScreen.tsx` behind both pages (a field per admin language, the fallback language's name required and sent as `defaultName`; row menu Rename / Archive or Restore / Delete, Delete disabled with its reason on built-in rows; delete behind a confirmation). Nav icons `Users` (410) and `Tag` (420) — `KnownIconNameSchema` has no closer name for loss reasons. No palette action: the contract's §4 lists none for these screens.
 - [ ] T084 [US4] Docs *Project Roles* (EN + PL) stating Roles are not permissions; phase gate
 
 ---

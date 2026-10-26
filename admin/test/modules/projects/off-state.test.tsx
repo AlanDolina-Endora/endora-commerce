@@ -116,13 +116,15 @@ const concreteUrl = (pattern: string): string => pattern.replace(/:[A-Za-z]+/g, 
 const READ_AND_WRITE = ['projects:read', 'projects:write', 'projects:configure'];
 
 describe('projects admin surface', () => {
-  it('is registered: the list, the create screen, the Templates screens and one Project', () => {
+  it('is registered: the list, the create screen, the Templates screens, Roles, loss reasons and one Project', () => {
     expect(routes.map((route) => route.path)).toEqual([
       '/projects',
       '/projects/new',
       '/projects/templates',
       '/projects/templates/new',
       '/projects/templates/:id',
+      '/projects/roles',
+      '/projects/loss-reasons',
       '/projects/:id',
     ]);
   });
@@ -133,6 +135,8 @@ describe('projects admin surface', () => {
     const shell = renderAt('/');
     expect(sidebarHrefs()).toContain('/projects');
     expect(sidebarHrefs()).toContain('/projects/templates');
+    expect(sidebarHrefs()).toContain('/projects/roles');
+    expect(sidebarHrefs()).toContain('/projects/loss-reasons');
     shell.unmount();
     for (const route of routes) {
       const rendered = renderAt(concreteUrl(route.path));
@@ -147,6 +151,8 @@ describe('projects admin surface', () => {
     const shell = renderAt('/');
     expect(sidebarHrefs()).not.toContain('/projects');
     expect(sidebarHrefs()).not.toContain('/projects/templates');
+    expect(sidebarHrefs()).not.toContain('/projects/roles');
+    expect(sidebarHrefs()).not.toContain('/projects/loss-reasons');
     shell.unmount();
     for (const route of routes) {
       const deepLink = renderAt(concreteUrl(route.path));
@@ -167,8 +173,16 @@ describe('projects admin surface', () => {
     const writer = renderAt('/');
     expect(sidebarHrefs()).toContain('/projects');
     expect(sidebarHrefs()).not.toContain('/projects/templates');
+    expect(sidebarHrefs()).not.toContain('/projects/roles');
+    expect(sidebarHrefs()).not.toContain('/projects/loss-reasons');
     writer.unmount();
-    for (const path of ['/projects/templates', '/projects/templates/new', concreteUrl('/projects/templates/:id')]) {
+    for (const path of [
+      '/projects/templates',
+      '/projects/templates/new',
+      concreteUrl('/projects/templates/:id'),
+      '/projects/roles',
+      '/projects/loss-reasons',
+    ]) {
       const screen = renderAt(path);
       await waitFor(() => expect(notFoundIsRendered(), path).toBe(true));
       screen.unmount();

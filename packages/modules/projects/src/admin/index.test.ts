@@ -28,6 +28,9 @@ describe('projects admin contributions', () => {
       ['/projects/templates', 'projects:configure'],
       ['/projects/templates/new', 'projects:configure'],
       ['/projects/templates/:id', 'projects:configure'],
+      // User Story 4 — Project Roles and loss reasons are configuration too.
+      ['/projects/roles', 'projects:configure'],
+      ['/projects/loss-reasons', 'projects:configure'],
       ['/projects/:id', 'projects:read'],
     ]);
     expect((contributions.routes ?? []).filter((route) => route.index)).toHaveLength(1);
@@ -41,12 +44,14 @@ describe('projects admin contributions', () => {
     expect(entry).not.toMatch(/^import .* from '\.\/(pages|components)\//m);
   });
 
-  it('puts "Projects" first in the "Projects & tasks" section, on projects:read, and "Templates" after the Tasks entries', () => {
+  it('puts "Projects" first in the "Projects & tasks" section, on projects:read, and the configuration after the Tasks entries', () => {
     expect(
       (contributions.nav ?? []).map((row) => [row.to, row.section, row.weight, row.requiredPermission, row.icon]),
     ).toEqual([
       ['/projects', 'work', 100, 'projects:read', 'ClipboardList'],
       ['/projects/templates', 'work', 400, 'projects:configure', 'Layers'],
+      ['/projects/roles', 'work', 410, 'projects:configure', 'Users'],
+      ['/projects/loss-reasons', 'work', 420, 'projects:configure', 'Tag'],
     ]);
   });
 
