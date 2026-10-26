@@ -416,12 +416,25 @@ export class TaskService {
     return descriptor?.renderNote ? descriptor.renderNote(row.context_note, language) : row.context_note;
   }
 
-  /** FR-032: somebody other than the caller now holds the Task. */
+  /**
+   * FR-032: somebody other than the caller now holds the Task. Told only when
+   * they may see the Task: a Task in a context is theirs to hear about only if
+   * the context's owner says they may see that context (FR-020 — a bell is read
+   * outside any visibility, and the number would name a Task they cannot open).
+   * An owner that is not present cannot vouch for anybody, so nobody is told.
+   */
   async #tellAssignee(assignee: string, task: TaskDetail): Promise<void> {
     if (assignee === actingAdminUserId()) return;
-    await tellAfterCommit(task.id, () =>
-      this.deps.notifier.assigned({ targetAdminUserId: assignee, taskId: task.id, number: task.number }),
-    );
+    await tellAfterCommit(task.id, async () => {
+      if (!(await this.#assigneeMaySee(assignee, task))) return;
+      await this.deps.notifier.assigned({ targetAdminUserId: assignee, taskId: task.id, number: task.number });
+    });
+  }
+
+  async #assigneeMaySee(assignee: string, task: TaskDetail): Promise<boolean> {
+    if (task.context === null) return true;
+    const descriptor = this.deps.contexts.presentFor(task.context.type);
+    return descriptor !== null && (await descriptor.canSeeAs(assignee, task.context.id));
   }
 
   /**

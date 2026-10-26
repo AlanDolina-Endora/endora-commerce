@@ -99,6 +99,7 @@ describe('tasks — context visibility (R-9)', () => {
       ownerModuleId: 'crm',
       allVisibleContextIds: async () => [...visible],
       visibleContextIds: async (ids) => new Set(ids.filter((id) => visible.has(id))),
+      canSeeAs: async (_adminUserId, id) => visible.has(id),
       describe: async (ids) =>
         new Map(
           ids

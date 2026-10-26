@@ -58,6 +58,7 @@ describe('tasks — the write port', () => {
       ownerModuleId: 'crm',
       allVisibleContextIds: async () => [...visible],
       visibleContextIds: async (ids) => new Set(ids.filter((id) => visible.has(id))),
+      canSeeAs: async (_adminUserId, id) => visible.has(id),
       describe: async () => new Map(),
     };
     h.container.resolve<TaskContextRegistryPort>('taskContextRegistry').register(probe);

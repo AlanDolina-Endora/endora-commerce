@@ -95,8 +95,10 @@ ponownie to czyści.
 która je przypisuje — przy tworzeniu albo później — ta osoba dostaje
 powiadomienie w dzwonku panelu administracyjnego, tylko z numerem zadania i
 odnośnikiem do niego. Przypisanie zadania sobie albo usunięcie przypisania
-nikogo nie powiadamia. Gdy moduł **Powiadomienia administratora** jest
-wyłączony, przypisywanie działa tak samo, a nikt nie dostaje powiadomienia.
+nikogo nie powiadamia. Nikt też nie dostaje powiadomienia o zadaniu, którego nie
+może zobaczyć: o zadaniu projektu dowiaduje się tylko ktoś, kto może zobaczyć
+ten projekt. Gdy moduł **Powiadomienia administratora** jest wyłączony,
+przypisywanie działa tak samo, a nikt nie dostaje powiadomienia.
 
 **Moje zadania** to twoja otwarta praca: zadania przypisane tobie, które nie
 mają statusu `done` ani `cancelled`, najpierw te z najbliższym terminem, na
@@ -184,6 +186,7 @@ ctx.onBoot(() => {
     allVisibleContextIds: () => /* every record id the caller may see */,
     visibleContextIds: (ids) => /* which of these ids the caller may see */,
     describe: (ids) => /* id → { label, href, groups: groupId → label } */,
+    canSeeAs: (adminUserId, id) => /* may that administrator see this record? */,
   });
 });
 ```
@@ -198,6 +201,11 @@ Zobowiązania deskryptora:
 - `visibleContextIds(ids)` odpowiada dla jednego zadania albo kilku.
 - `describe(ids)` określa, jak zadanie pokazuje swój kontekst: etykietę, adres w
   panelu administracyjnym i etykiety grup rekordu.
+- `canSeeAs(adminUserId, id)` to jedyna metoda, która odpowiada za **kogoś
+  innego**: czy ten administrator, według własnych uprawnień i zasięgu, może
+  zobaczyć rekord. Moduł pyta o nią, zanim powiadomi osobę przypisaną o zadaniu
+  tego rekordu; `false` — albo wyłączony właściciel — oznacza, że nikt nie
+  dostaje powiadomienia.
 - `renderNote(note, language)`, opcjonalna, formułuje w języku czytającego
   notatkę, którą moduł zostawił w zadaniu przy jego tworzeniu (`contextNote` w
   `taskWritePort.createMany`). Zapisuj klucz zamiast zdania — Projekty zapisują

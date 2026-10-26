@@ -45,6 +45,7 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | --- | --- | --- |
 | `projects:configure` | Configure projects (roles, templates, loss reasons) | `projects:read` |
 | `projects:read` | View projects | — |
+| `projects:see_all` | See every project regardless of visibility | `projects:read` |
 | `projects:write` | Create and run projects | `projects:read` |
 
 ## Paleta poleceń

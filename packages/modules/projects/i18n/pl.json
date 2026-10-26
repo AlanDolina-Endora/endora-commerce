@@ -2,6 +2,7 @@
   "adminRoles.permission.projects:read": "Przeglądanie projektów",
   "adminRoles.permission.projects:write": "Tworzenie i prowadzenie projektów",
   "adminRoles.permission.projects:configure": "Konfigurowanie projektów (role, szablony, powody utraty)",
+  "adminRoles.permission.projects:see_all": "Przeglądanie wszystkich projektów niezależnie od widoczności",
   "errors.PROJECT_NOT_FOUND": "Ten projekt nie istnieje lub nie jest dla Ciebie dostępny.",
   "errors.PROJECT_HAS_LINKS": "Do tego projektu są podpięte dokumenty. Odepnij je przed usunięciem projektu.",
   "errors.PROJECT_ORGANIZATION_OUT_OF_SCOPE": "Jedna z organizacji jest dla Ciebie niedostępna.",

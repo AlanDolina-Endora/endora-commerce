@@ -420,6 +420,14 @@ export interface TaskContextDescriptor {
   visibleContextIds(ids: readonly string[]): Promise<Set<string>>;
   describe(ids: readonly string[]): Promise<Map<string, TaskContextDescription>>;
   /**
+   * Whether **another** administrator — not the caller — may see context `id`:
+   * asked before somebody is told about a Task of it (the assignment bell),
+   * because a bell is read outside the context's visibility and a Task's
+   * number must not reach somebody its context hides it from. Answered against
+   * that administrator's own permissions and reach; `false` when unsure.
+   */
+  canSeeAs(adminUserId: string, id: string): Promise<boolean>;
+  /**
    * A Task's `contextNote` in the reader's language. The note is the owner's
    * own text, written when it created the Task; an owner that stores a key
    * rather than a sentence (a Project stores the responsible Role) answers it

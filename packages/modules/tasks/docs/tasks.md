@@ -87,9 +87,10 @@ clears that again.
 **Assigning.** When a task is assigned to somebody other than the person
 assigning it — when it is created or later — they are told in the Admin UI's
 notification bell, by the task's number only, with a link to the task.
-Assigning a task to yourself, or unassigning it, tells nobody. While the
-*Admin notifications* module is switched off assigning works the same and
-nobody is told.
+Assigning a task to yourself, or unassigning it, tells nobody. Nor is
+anybody told about a task they may not see: a task of a project goes to the
+bell only of somebody who may see that project. While the *Admin notifications*
+module is switched off assigning works the same and nobody is told.
 
 **My tasks** is your own open work: the tasks assigned to you that are neither
 `done` nor `cancelled`, the ones due soonest first, the ones without a due date
@@ -174,6 +175,7 @@ ctx.onBoot(() => {
     allVisibleContextIds: () => /* every record id the caller may see */,
     visibleContextIds: (ids) => /* which of these ids the caller may see */,
     describe: (ids) => /* id → { label, href, groups: groupId → label } */,
+    canSeeAs: (adminUserId, id) => /* may that administrator see this record? */,
   });
 });
 ```
@@ -188,6 +190,10 @@ The contract a descriptor keeps:
 - `visibleContextIds(ids)` answers for a single task, or a few.
 - `describe(ids)` is how a task shows its context: a label, an address in the
   Admin UI, and the labels of the record's groups.
+- `canSeeAs(adminUserId, id)` is the one method that answers for **somebody
+  else**: whether that administrator, by their own permissions and reach, may
+  see the record. It is asked before an assignee is told about a task of the
+  record; `false` — or an owner that is switched off — means nobody is told.
 - `renderNote(note, language)`, optional, words the note your module left on a
   task when it created it (`contextNote` of `taskWritePort.createMany`) in the
   reader's language. Store a key rather than a sentence — Projects stores the

@@ -157,6 +157,15 @@ export const manifest = defineModuleManifest({
       requires: ['projects:read'],
     },
     {
+      // Lifts the visibility rule — the module setting, the Project's own
+      // visibility, membership — but never Organization reach (User Story 5,
+      // research R-3). No route asks for it: `ProjectAccess` reads it.
+      code: 'projects:see_all',
+      label: 'See every project regardless of visibility',
+      module: 'projects',
+      requires: ['projects:read'],
+    },
+    {
       // Templates (User Story 3), Project Roles and loss reasons (User Story 4).
       code: 'projects:configure',
       label: 'Configure projects (roles, templates, loss reasons)',

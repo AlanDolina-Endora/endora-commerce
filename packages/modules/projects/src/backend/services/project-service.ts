@@ -57,9 +57,8 @@ import { templateNotFound, type TemplateGraph, type TemplateService } from './te
  * commit while Tasks is on, marked skipped while it is off.
  *
  * What this file does not do yet, each named by the story that brings it:
- * setting visibility and listed people on an existing Project (User Story 5),
  * Custom Field values (User Story 9), refusing to remove an Organization a
- * linked record belongs to (User Story 6). The first two are refused with 422
+ * linked record belongs to (User Story 6). The first is refused with 422
  * rather than silently dropped.
  */
 
@@ -261,35 +260,110 @@ export class ProjectService {
     return this.deps.read.afterWrite(id, language);
   }
 
-  /** `PATCH /projects/:id` — title, description, value and start date, against `version`. */
+  /**
+   * `PATCH /projects/:id` — title, description, value and start date, and who
+   * sees the Project (User Story 5), against `version`.
+   *
+   * Up to three Commands, each only when it changes something, in this order:
+   * `projects.project.update` (the fields), `.visibility_set` and
+   * `.viewers_set` — so the trail names a change of who sees a Project apart
+   * from an edit of its text. Every refusal is checked before the first; each
+   * Command locks the Project and checks the version the one before left, and
+   * bumps it.
+   */
   async update(id: string, body: UpdateProjectBody, language: string): Promise<ProjectDetail> {
-    if (body.visibility !== undefined || body.viewerIds !== undefined) {
-      throw notYet('Changing who sees a project', 'User Story 5');
-    }
     if (body.customFieldValues && Object.keys(body.customFieldValues).length > 0) {
       throw notYet('Custom field values on a project', 'User Story 9');
     }
     const visible = await this.deps.access.loadVisible(id);
     if (visible.version !== body.version) throw projectChanged();
-    await this.deps.commandBus.run({
-      action: 'projects.project.update',
-      objectType: 'project',
-      objectId: visible.id,
-      run: async ({ em }) => {
-        const project = await lockProject(em, visible.id);
-        if (project.version !== body.version) throw projectChanged();
-        const before = snapshot(project);
-        if (body.title !== undefined) project.title = body.title;
-        if (body.description !== undefined) project.description = body.description;
-        if (body.value !== undefined) {
-          project.valueAmount = body.value?.amount ?? null;
-          project.valueCurrency = body.value?.currency ?? null;
-        }
-        if (body.startOn !== undefined) project.startOn = body.startOn;
-        project.version += 1;
-        return { result: null, before, after: snapshot(project) };
-      },
-    });
+    const currentViewers = (
+      (await this.deps.emFactory().execute(
+        `select v."admin_user_id" from "project_viewers" v where v."project_id" = ?`,
+        [visible.id],
+      )) as Array<{ admin_user_id: string }>
+    ).map((row) => row.admin_user_id);
+    const viewerIds = body.viewerIds === undefined ? null : [...new Set(body.viewerIds)];
+    const viewersChange = viewerIds !== null && !sameSet(viewerIds, currentViewers);
+    if (viewersChange) {
+      // Only somebody newly listed must be active: a person listed before and
+      // deactivated since does not stop the Project being saved.
+      await this.#assertAdmins(
+        viewerIds.filter((adminUserId) => !currentViewers.includes(adminUserId)),
+        'A listed person must be an active administrator.',
+      );
+    }
+    const fieldsChange =
+      body.title !== undefined || body.description !== undefined || body.value !== undefined || body.startOn !== undefined;
+    const visibilityChange = body.visibility !== undefined && body.visibility !== visible.visibility;
+
+    let expected = body.version;
+    /** Lock the Project, hold it to the version the previous Command left, and bump it. */
+    const claim = async (em: EntityManager): Promise<Project> => {
+      const project = await lockProject(em, visible.id);
+      if (project.version !== expected) throw projectChanged();
+      return project;
+    };
+    const bumped = (project: Project): void => {
+      project.version += 1;
+      expected = project.version;
+    };
+
+    if (fieldsChange) {
+      await this.deps.commandBus.run({
+        action: 'projects.project.update',
+        objectType: 'project',
+        objectId: visible.id,
+        run: async ({ em }) => {
+          const project = await claim(em as EntityManager);
+          const before = snapshot(project);
+          if (body.title !== undefined) project.title = body.title;
+          if (body.description !== undefined) project.description = body.description;
+          if (body.value !== undefined) {
+            project.valueAmount = body.value?.amount ?? null;
+            project.valueCurrency = body.value?.currency ?? null;
+          }
+          if (body.startOn !== undefined) project.startOn = body.startOn;
+          bumped(project);
+          return { result: null, before, after: snapshot(project) };
+        },
+      });
+    }
+    if (visibilityChange) {
+      await this.deps.commandBus.run({
+        action: 'projects.project.visibility_set',
+        objectType: 'project',
+        objectId: visible.id,
+        run: async ({ em }) => {
+          const project = await claim(em as EntityManager);
+          const before = { visibility: project.visibility };
+          project.visibility = body.visibility!;
+          bumped(project);
+          return { result: null, before, after: { visibility: project.visibility } };
+        },
+      });
+    }
+    if (viewersChange) {
+      await this.deps.commandBus.run({
+        action: 'projects.project.viewers_set',
+        objectType: 'project',
+        objectId: visible.id,
+        run: async ({ em }) => {
+          const project = await claim(em as EntityManager);
+          const before = (
+            (await em.execute(`select v."admin_user_id" from "project_viewers" v where v."project_id" = ?`, [
+              visible.id,
+            ])) as Array<{ admin_user_id: string }>
+          )
+            .map((row) => row.admin_user_id)
+            .sort();
+          await em.nativeDelete(ProjectViewer, { projectId: visible.id });
+          for (const adminUserId of viewerIds) em.create(ProjectViewer, { projectId: visible.id, adminUserId });
+          bumped(project);
+          return { result: null, before: { viewerIds: before }, after: { viewerIds: [...viewerIds].sort() } };
+        },
+      });
+    }
     return this.deps.read.afterWrite(visible.id, language);
   }
 
@@ -511,6 +585,12 @@ export async function assertRolesExist(em: EntityManager, roleIds: readonly stri
   if (rows.length !== ids.length) {
     throw new HttpError(422, ERROR_CODES.VALIDATION_FAILED, 'A responsible role is not a project role.');
   }
+}
+
+function sameSet(a: readonly string[], b: readonly string[]): boolean {
+  const left = new Set(a);
+  const right = new Set(b);
+  return left.size === right.size && [...left].every((id) => right.has(id));
 }
 
 /** A Stage the create Command writes, with the Stage Task definitions it is given. */

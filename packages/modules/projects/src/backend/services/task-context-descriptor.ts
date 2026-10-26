@@ -19,6 +19,10 @@ import { PROJECT_TASK_CONTEXT_TYPE } from './project-tasks.js';
  * off the registry stops enumerating this descriptor and the Tasks are hidden
  * (fail-closed); they return when Projects is back.
  *
+ * `canSeeAs` answers for somebody else — the assignee the Tasks module is
+ * about to tell — through `ProjectAccess.canSeeAs` (research R-4), so the bell
+ * never names a Task of a Project its recipient may not see.
+ *
  * `describe` names a Project by number and title, links to its screen, and
  * labels each Stage — the Task's group — by its current name. It describes only
  * the Projects `visibleIds` hands back; an id it leaves out is shown by
@@ -48,6 +52,9 @@ export function createProjectTaskContext(deps: {
     ownerModuleId: 'projects',
     allVisibleContextIds: () => access.allVisibleIds(),
     visibleContextIds: (ids) => access.visibleIds(ids),
+    // Another administrator — an assignee about to be told — by their own
+    // reach, permissions and the visibility rule (research R-4).
+    canSeeAs: (adminUserId, id) => access.canSeeAs(adminUserId, id),
     describe: async (ids) => {
       const visible = [...(await access.visibleIds(ids))];
       const out = new Map<string, TaskContextDescription>();

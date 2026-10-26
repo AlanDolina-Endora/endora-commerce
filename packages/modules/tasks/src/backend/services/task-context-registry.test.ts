@@ -8,6 +8,7 @@ function descriptor(contextType: string, ownerModuleId: string): TaskContextDesc
     ownerModuleId,
     allVisibleContextIds: async () => [],
     visibleContextIds: async () => new Set(),
+    canSeeAs: async () => false,
     describe: async () => new Map(),
   };
 }
