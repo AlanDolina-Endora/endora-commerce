@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import type { RenderResult } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type {
@@ -60,7 +60,15 @@ export const EVERY_PROJECTS_PERMISSION = ['projects:read', 'projects:write', 'or
 /** Mount a screen at `path` (matched against `pattern`) under the real session and presence providers. */
 export function renderProjects(
   ui: ReactElement,
-  options: { readonly permissions?: readonly string[]; readonly path?: string; readonly pattern?: string } = {},
+  options: {
+    readonly permissions?: readonly string[];
+    readonly path?: string;
+    readonly pattern?: string;
+    /** The modules the presence projection names; the default leaves `tasks` absent (User Story 1). */
+    readonly present?: readonly string[];
+    /** Further `<Route>`s beside the subject's — a screen a write navigates to. */
+    readonly routes?: ReactNode;
+  } = {},
 ): RenderResult {
   return renderWithI18n(
     withSession(
@@ -68,12 +76,13 @@ export function renderProjects(
         <MemoryRouter initialEntries={[options.path ?? '/']}>
           <Routes>
             <Route path={options.pattern ?? '*'} element={ui} />
+            {options.routes}
           </Routes>
         </MemoryRouter>
       </AppLanguageContext.Provider>,
       {
         session: adminSession({ permissions: options.permissions ?? EVERY_PROJECTS_PERMISSION }),
-        presence: modulePresence({ present: ['projects', 'organizations', 'admin_users'] }),
+        presence: modulePresence({ present: options.present ?? ['projects', 'organizations', 'admin_users'] }),
         registry: [],
       },
     ),
