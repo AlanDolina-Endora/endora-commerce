@@ -52,7 +52,7 @@ createdAt, closedAt }`.
 | `DELETE /projects/:id/stages/:stageId` | `projects:write` | → 204; 409 `PROJECT_STAGE_CURRENT` \| `PROJECT_STAGE_HAS_TASKS` \| `PROJECT_STAGE_LAST` |
 | `PUT /projects/:id/stages/order` | `projects:write` | `{ stageIds[] }` |
 | `PUT /projects/:id/moves` | `projects:write` | `{ moves: { fromStageId, toStageId }[] }` → `{ moves, unreachableStageIds[] }` |
-| `PUT /projects/:id/stages/:stageId/tasks` | `projects:write` | `{ tasks: StageTaskDefinition[] }` (Stage Task definitions, R-7) |
+| `PUT /projects/:id/stages/:stageId/tasks` | `projects:write` | `{ tasks: StageTaskDefinition[] }` (Stage Task definitions, R-7) → `ProjectStage` |
 | `POST /projects/:id/stages/:stageId/materialize-tasks` | `projects:write` | retry after `tasks_materialize_failed` only → `{ created }`; 409 otherwise |
 | `POST /projects/:id/move` | `projects:write` | `{ toStageId, version }` → `MoveResult { project, entry, createdTaskIds[], notes[] }`; 409 `PROJECT_MOVE_NOT_PERMITTED` \| `PROJECT_STAGE_GATE_OPEN_TASKS { openTasks[] }` \| `PROJECT_CHANGED` \| `PROJECT_GUARD_REFUSED { reason }` |
 | `POST /projects/:id/close` | `projects:write` | `{ outcome: 'completed' } \| { outcome: 'lost', lossReasonId, comment? }` + `version` → `ProjectDetail`; 409 `PROJECT_COMPLETION_NOT_PERMITTED` \| gate as above |
@@ -67,7 +67,7 @@ createdAt, closedAt }`.
 | `POST /projects/:id/links` | `projects:write` | `{ kind, recordId }` → `ProjectLink`; 404 `PROJECT_RECORD_NOT_FOUND`; 409 `PROJECT_RECORD_ALREADY_LINKED { project? }`; 422 `PROJECT_LINK_ORGANIZATION_MISMATCH`; 503 `MODULE_DISABLED` (crm / quote_requests off) |
 | `DELETE /projects/:id/links/:linkId` | `projects:write` | → 204 |
 | `GET /projects/records/:kind/:recordId/project` | `projects:read` (+ owner's read permission for the kind) | → `ProjectSummary` \| 404 (R-11) |
-| `GET /projects/:id/tasks` | `projects:read` | → `{ stageId, tasks: TaskSummary[] }[]` via `taskReadPort`; 200 with `tasksAvailable: false` when `tasks` is off |
+| `GET /projects/:id/tasks` | `projects:read` | → `{ tasksAvailable, stages: { stageId, tasks: TaskSummary[] }[] }` via `taskReadPort`; `tasksAvailable: false` when `tasks` is off or the reader lacks `tasks:read` |
 
 ### 2.4 Collaboration
 

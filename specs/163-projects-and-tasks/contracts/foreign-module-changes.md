@@ -77,6 +77,9 @@ No CRM table other than the constraint above, no permission and no event changes
 | `backend/test/{contract,integration}/{tasks,projects}/` | **new** test trees |
 | `backend/test/fixtures/error-code-routing/reference-ledgers.ts` | + every minted `TASK_*` / `PROJECT_*` code in `MINTED_ERROR_CODES` |
 | `backend/test/unit/_i18n/error-code-migration-progress.test.ts` | + `tasks`, `projects` in the roster |
+| `backend/scripts/check-port-dependencies.ts` | ledger the `taskContextRegistry` contribution policy |
+| `backend/test/unit/kernel/contribution-absent-owner.test.ts` | + a `projects` composer |
+| `backend/test/integration/audit_logs/reference-contributions.test.ts` | + `tasks` among audit-reference owners |
 | `backend/test/fixtures/openapi-baseline.json` | regenerated with `UPDATE_OPENAPI_BASELINE=1` whenever a phase adds routes |
 | `admin/test/modules/{tasks,projects}/` | **new** |
 | `admin/test/modules/admin-kit/…` (or the kit's own test dir) | tests for the promoted components, moved from CRM's where they existed |
