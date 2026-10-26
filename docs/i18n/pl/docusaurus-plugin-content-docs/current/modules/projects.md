@@ -386,7 +386,7 @@ sprzed wyłączenia.
 
 | Kod | Na co pozwala |
 | --- | --- |
-| `projects:read` | Przeglądanie projektów — listy, pojedynczego projektu i jego historii etapów — z zastrzeżeniem obu reguł z sekcji *Kto widzi projekt*. |
+| `projects:read` | Przeglądanie projektów — listy, pojedynczego projektu i jego historii etapów — z zastrzeżeniem obu reguł z sekcji *Kto widzi projekt*; także nazw, z których wybierają filtry listy i pola formularzy (organizacji w granicach swojego dostępu, administratorów). |
 | `projects:write` | Tworzenie, edycja i usuwanie projektów; ustawianie ich organizacji, członków, etapów i przebiegu; przenoszenie, zamykanie i ponowne otwieranie. Wymaga `projects:read`. |
 | `projects:see_all` | Wgląd we wszystkie projekty w granicach swojego dostępu, niezależnie od ustawienia modułu i wyboru samego projektu (zob. *Kto widzi projekt*). Wymaga `projects:read`; nigdy nie poszerza dostępu do organizacji. |
 | `projects:configure` | Tworzenie, edycja, duplikowanie, archiwizacja i przywracanie szablonów; dodawanie, zmiana nazwy, archiwizacja, przywracanie i usuwanie ról projektowych i powodów utraty. Wymaga `projects:read`; każdy, kto może przeglądać projekty, może odczytać szablony, role i powody utraty, aby użyć ich w projekcie. |
@@ -410,8 +410,8 @@ opisana, gdy to nastąpi.*
 | `GET /api/v1/admin/projects/:id` | `projects:read` | `{ data: ProjectDetail }` albo `404` `PROJECT_NOT_FOUND` — tak samo dla projektu, który nie istnieje, jak dla takiego, którego wywołujący nie może zobaczyć. |
 | `PATCH /api/v1/admin/projects/:id` | `projects:write` | Tytuł, opis, wartość, data rozpoczęcia, `visibility` (`inherit`, `everyone` albo `members_and_listed`) i `viewerIds` (cała lista dopisanych osób — widzą one projekt bez względu na `visibility`; panel administracyjny dopisuje osoby tylko przy `members_and_listed`), razem z `version`; `409` `PROJECT_CHANGED`, gdy projekt zmienił się od odczytu, `422` `PROJECT_MEMBER_INVALID` dla nowo dopisanej osoby, która nie jest aktywnym administratorem. Zmiana tego, kto widzi projekt, trafia do dziennika zdarzeń osobno od zmiany treści (`projects.project.visibility_set`, `projects.project.viewers_set`). |
 | `DELETE /api/v1/admin/projects/:id` | `projects:write` | `204`; `409` `PROJECT_HAS_LINKS`, dopóki są podpięte dokumenty. |
-| `GET /api/v1/admin/projects/lookups/organizations` | `projects:write` | `{ data: { id, name }[] }` — organizacje, do których wywołujący ma dostęp, według nazwy (`q`) albo jedna według `id`; najwyżej `limit` (50). |
-| `GET /api/v1/admin/projects/lookups/admin-users` | `projects:write` | `{ data: { id, name, email }[] }` — aktywni administratorzy według imienia i nazwiska lub adresu e-mail (`q`) albo jeden według `id`; najwyżej `limit` (50). |
+| `GET /api/v1/admin/projects/lookups/organizations` | `projects:read` | `{ data: { id, name }[] }` — organizacje, do których wywołujący ma dostęp, według nazwy (`q`) albo jedna według `id`; najwyżej `limit` (50). |
+| `GET /api/v1/admin/projects/lookups/admin-users` | `projects:read` | `{ data: { id, name, email }[] }` — aktywni administratorzy według imienia i nazwiska lub adresu e-mail (`q`) albo jeden według `id`; najwyżej `limit` (50). |
 | `GET /api/v1/admin/projects/visibility-setting` | `projects:read` | `{ data: { setting } }` — bieżąca wartość ustawienia modułu `projects.visibility`. |
 | `PUT /api/v1/admin/projects/:id/organizations` | `projects:write` | Cały zestaw; `422` `PROJECT_ORGANIZATION_OUT_OF_SCOPE`. |
 | `PUT /api/v1/admin/projects/:id/members` | `projects:write` | Cały zestaw członków i ich ról; `422` `PROJECT_MEMBER_INVALID`. |

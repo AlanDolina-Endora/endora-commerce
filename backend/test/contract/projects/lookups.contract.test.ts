@@ -22,6 +22,8 @@ import { PROJECTS_ADMIN, callProjects } from '../../integration/projects/helpers
  * owner's code; a role holding only `projects:*` got empty pickers. These are
  * the module's own, gated by its own codes, modelled on `/crm/lookups/*`:
  * Organizations only within the caller's reach, administrators only active.
+ * Both are `projects:read` — the list's Organization and member filters are a
+ * reader's, as CRM gates its filter lookups on `crm:read`.
  */
 describe('projects (contract) — lookups for the pickers', () => {
   let h: BackendServerHandle;
@@ -30,6 +32,8 @@ describe('projects (contract) — lookups for the pickers', () => {
   let writer: { cookies: { b2b_session: string }; adminUserId: string; undo: () => void };
   let reader: { cookies: { b2b_session: string }; adminUserId: string; undo: () => void };
   let rep: { cookies: { b2b_session: string }; adminUserId: string; undo: () => void };
+  /** No code of this module at all. */
+  let outsider: { cookies: { b2b_session: string }; adminUserId: string; undo: () => void };
   let inactiveId: string;
   const token = `lk${randomUUID().slice(0, 6)}`;
 
@@ -41,6 +45,7 @@ describe('projects (contract) — lookups for the pickers', () => {
     writer = await seedCrmAdmin(h.em(), `${token}-writer`, ['projects:read', 'projects:write']);
     reader = await seedCrmAdmin(h.em(), `${token}-reader`, ['projects:read']);
     rep = await seedCrmSalesRep(h.em(), [orgA], ['projects:read', 'projects:write']);
+    outsider = await seedCrmAdmin(h.em(), `${token}-outsider`, ['crm:read']);
     const inactive = await seedCrmAdmin(h.em(), `${token}-gone`, ['projects:read']);
     inactive.undo();
     inactiveId = inactive.adminUserId;
@@ -51,14 +56,23 @@ describe('projects (contract) — lookups for the pickers', () => {
     writer?.undo();
     reader?.undo();
     rep?.undo();
+    outsider?.undo();
     await teardownBackendServer(h);
   });
 
   describe('GET /projects/lookups/organizations', () => {
-    it('401 without a session, 403 to a reader without projects:write', async () => {
+    it('401 without a session, 403 without projects:read', async () => {
       expect((await callProjects(h, 'GET', '/lookups/organizations', { cookies: null })).statusCode).toBe(401);
-      const forbidden = await callProjects(h, 'GET', '/lookups/organizations', { cookies: reader.cookies });
+      const forbidden = await callProjects(h, 'GET', '/lookups/organizations', { cookies: outsider.cookies });
       expect(forbidden.statusCode, forbidden.body).toBe(403);
+    });
+
+    it('answers a projects:read-only holder too — the list’s Organization and member filters are a reader’s', async () => {
+      const response = await callProjects(h, 'GET', `/lookups/organizations?q=${token}`, { cookies: reader.cookies });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(ProjectOrganizationLookupResponseSchema.parse(response.json()).data.map((o) => o.id).sort()).toEqual(
+        [orgA, orgB].sort(),
+      );
     });
 
     it('answers a projects:write holder by name, without any Organizations permission', async () => {
@@ -87,10 +101,20 @@ describe('projects (contract) — lookups for the pickers', () => {
   });
 
   describe('GET /projects/lookups/admin-users', () => {
-    it('401 without a session, 403 to a reader without projects:write', async () => {
+    it('401 without a session, 403 without projects:read', async () => {
       expect((await callProjects(h, 'GET', '/lookups/admin-users', { cookies: null })).statusCode).toBe(401);
-      const forbidden = await callProjects(h, 'GET', '/lookups/admin-users', { cookies: reader.cookies });
+      const forbidden = await callProjects(h, 'GET', '/lookups/admin-users', { cookies: outsider.cookies });
       expect(forbidden.statusCode, forbidden.body).toBe(403);
+    });
+
+    it('answers a projects:read-only holder too — the list’s any-member filter is a reader’s', async () => {
+      const response = await callProjects(h, 'GET', `/lookups/admin-users?id=${writer.adminUserId}`, {
+        cookies: reader.cookies,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(ProjectAdminUserLookupResponseSchema.parse(response.json()).data.map((a) => a.id)).toEqual([
+        writer.adminUserId,
+      ]);
     });
 
     it('answers active administrators by name or e-mail, without any administrators permission', async () => {

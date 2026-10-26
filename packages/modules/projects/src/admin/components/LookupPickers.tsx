@@ -11,7 +11,7 @@ import { projectsApi } from '../api.js';
  * **Why the module has its own.** The kit's `OrganizationPickerMulti` and
  * `AdminUserPicker` read `/organizations` and `/admin-users`, each behind its
  * owner's code, so a role holding only `projects:*` got empty pickers. These
- * read the module's own `GET /projects/lookups/*` (gated `projects:write`) on
+ * read the module's own `GET /projects/lookups/*` (gated `projects:read`) on
  * the kit's `Combobox` — the CRM precedent, `crm/…/LookupPickers.tsx`.
  *
  * Every picker has its three states: *loading* is the combobox's own, *empty*
@@ -129,6 +129,33 @@ export interface LookupPickerProps {
 export function AdminUserLookup(props: LookupPickerProps): ReactNode {
   const t = useTranslation('projects');
   const remote = useRemoteOptions(loadAdminUsers);
+  return (
+    <>
+      <Combobox<string>
+        id={props.id ?? ''}
+        ariaLabel={props.ariaLabel}
+        options={remote.options}
+        value={props.value}
+        onChange={props.onChange}
+        onSearchChange={remote.search}
+        manualFilter
+        loading={remote.loading}
+        loadingMessage={t('picker.loading')}
+        clearable={props.clearable ?? true}
+        disabled={props.disabled ?? false}
+        placeholder={props.placeholder ?? ''}
+        emptyMessage={t('picker.empty')}
+        selectedLabel={remote.labelOf(props.value) || (props.selectedLabel ?? '')}
+      />
+      <LoadError shown={remote.failed} />
+    </>
+  );
+}
+
+/** One Organization in the caller's reach — the list's Organization filter. */
+export function OrganizationLookup(props: LookupPickerProps): ReactNode {
+  const t = useTranslation('projects');
+  const remote = useRemoteOptions(loadOrganizations);
   return (
     <>
       <Combobox<string>

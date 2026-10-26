@@ -371,7 +371,7 @@ on again.
 
 | Code | What it allows |
 | --- | --- |
-| `projects:read` | View projects — the list, a single project and its stage history — subject to the two rules of *Who sees a project*. |
+| `projects:read` | View projects — the list, a single project and its stage history — subject to the two rules of *Who sees a project*; also the names the list's filters and the forms' pickers choose from (Organizations within your reach, administrators). |
 | `projects:write` | Create, edit and delete projects; set their Organizations, members, stages and workflow; move, close and reopen them. Requires `projects:read`. |
 | `projects:see_all` | See every project within your reach, whatever the module setting and each project's own choice (see *Who sees a project*). Requires `projects:read`; it never widens Organization reach. |
 | `projects:configure` | Create, edit, duplicate, archive and restore templates; add, rename, archive, restore and delete project roles and loss reasons. Requires `projects:read`; anybody who may view projects can read the templates, roles and loss reasons, to use them on a project. |
@@ -395,8 +395,8 @@ here when it does.*
 | `GET /api/v1/admin/projects/:id` | `projects:read` | `{ data: ProjectDetail }`, or `404` `PROJECT_NOT_FOUND` — for a project that does not exist and for one the caller may not see alike. |
 | `PATCH /api/v1/admin/projects/:id` | `projects:write` | Title, description, value, start date, `visibility` (`inherit`, `everyone` or `members_and_listed`) and `viewerIds` (the whole list of people listed — who see the project whatever its `visibility`; the Admin UI lists people only with `members_and_listed`), with `version`; `409` `PROJECT_CHANGED` when the project changed since it was read, `422` `PROJECT_MEMBER_INVALID` for a newly listed person who is not an active administrator. A change of who sees the project is audited apart from an edit of its text (`projects.project.visibility_set`, `projects.project.viewers_set`). |
 | `DELETE /api/v1/admin/projects/:id` | `projects:write` | `204`; `409` `PROJECT_HAS_LINKS` while records are linked. |
-| `GET /api/v1/admin/projects/lookups/organizations` | `projects:write` | `{ data: { id, name }[] }` — the Organizations the caller can reach, by name (`q`), or one by `id`; at most `limit` (50). |
-| `GET /api/v1/admin/projects/lookups/admin-users` | `projects:write` | `{ data: { id, name, email }[] }` — active administrators by name or e-mail (`q`), or one by `id`; at most `limit` (50). |
+| `GET /api/v1/admin/projects/lookups/organizations` | `projects:read` | `{ data: { id, name }[] }` — the Organizations the caller can reach, by name (`q`), or one by `id`; at most `limit` (50). |
+| `GET /api/v1/admin/projects/lookups/admin-users` | `projects:read` | `{ data: { id, name, email }[] }` — active administrators by name or e-mail (`q`), or one by `id`; at most `limit` (50). |
 | `GET /api/v1/admin/projects/visibility-setting` | `projects:read` | `{ data: { setting } }` — the module setting `projects.visibility` as it stands. |
 | `PUT /api/v1/admin/projects/:id/organizations` | `projects:write` | The whole set; `422` `PROJECT_ORGANIZATION_OUT_OF_SCOPE`. |
 | `PUT /api/v1/admin/projects/:id/members` | `projects:write` | The whole set of members and their roles; `422` `PROJECT_MEMBER_INVALID`. |

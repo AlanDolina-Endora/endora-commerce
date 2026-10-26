@@ -15,19 +15,22 @@ export interface LookupRoutesDeps {
  * (`specs/163-projects-and-tasks/contracts/admin-api.md` §2.1a), and the module
  * visibility setting the visibility control explains.
  *
- * The two lookups are `projects:write`: Organizations, Members and listed
- * people are chosen on the forms that write a Project. The setting is
- * `projects:read` — whoever sees a Project's visibility may be told what
- * *Follow the module setting* means.
+ * All three are `projects:read`. The two lookups serve the forms that write a
+ * Project — Organizations, Members, listed people — and also the list's
+ * Organization and any-member filters, which are a reader's (the CRM
+ * precedent: its filter lookups are `crm:read`). They answer names and nothing
+ * else, and Organizations only within the caller's reach. The setting —
+ * whoever sees a Project's visibility may be told what *Follow the module
+ * setting* means.
  */
 export async function registerLookupRoutes(app: FastifyInstance, deps: LookupRoutesDeps): Promise<void> {
   const { requireAdmin, lookupService: lookups, access } = deps;
 
-  app.get('/api/v1/admin/projects/lookups/organizations', { preHandler: requireAdmin('projects:write') }, async (request) => ({
+  app.get('/api/v1/admin/projects/lookups/organizations', { preHandler: requireAdmin('projects:read') }, async (request) => ({
     data: await lookups.organizations(ProjectOrganizationLookupQuerySchema.parse(request.query ?? {})),
   }));
 
-  app.get('/api/v1/admin/projects/lookups/admin-users', { preHandler: requireAdmin('projects:write') }, async (request) => ({
+  app.get('/api/v1/admin/projects/lookups/admin-users', { preHandler: requireAdmin('projects:read') }, async (request) => ({
     data: await lookups.adminUsers(ProjectAdminUserLookupQuerySchema.parse(request.query ?? {})),
   }));
 

@@ -126,7 +126,7 @@ export const projectsApi = {
 
   // --- §2.1a Lookups — what the pickers choose from (User Story 5) ----------
   //
-  // The module's own, gated `projects:write`: the kit's pickers read
+  // The module's own, gated `projects:read` (the list's filters are a reader's): the kit's pickers read
   // `/organizations` and `/admin-users`, behind codes somebody running
   // Projects need not hold.
 

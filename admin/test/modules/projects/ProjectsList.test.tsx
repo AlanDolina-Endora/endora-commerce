@@ -69,6 +69,9 @@ beforeEach(() => {
         data: [{ id: TEMPLATE_ID, name: 'Showroom fit-out', stageCount: 3, archivedAt: null, updatedAt: '2026-10-21T10:00:00.000Z' }],
       });
     }
+    if (path.startsWith(`${LIST_PATH}/lookups/organizations`)) {
+      return Promise.resolve({ data: [{ id: ORGANIZATION_ID, name: 'Acme' }] });
+    }
     if (path.startsWith(`${LIST_PATH}/lookups/admin-users`)) {
       return Promise.resolve({ data: [{ id: ADMIN_ID, name: 'Anna Nowak', email: 'anna@example.com' }] });
     }
@@ -139,6 +142,15 @@ describe('ProjectsList', () => {
     await userEvent.click(screen.getByLabelText(en('list.filter.organization')));
     await userEvent.click(await screen.findByRole('option', { name: /Acme/ }));
     await waitFor(() => expect(lastQuery().get('organizationId')).toBe(ORGANIZATION_ID));
+  });
+
+  it('a reader holding only projects:read filters by Organization through the module’s own lookup', async () => {
+    await renderList(['projects:read']);
+    await userEvent.click(screen.getByLabelText(en('list.filter.organization')));
+    await userEvent.click(await screen.findByRole('option', { name: /Acme/ }));
+    await waitFor(() => expect(lastQuery().get('organizationId')).toBe(ORGANIZATION_ID));
+    const paths = getSpy.mock.calls.map(([path]) => path as string);
+    expect(paths.some((path) => path.startsWith('/api/v1/admin/organizations'))).toBe(false);
   });
 
   it('filters by Template, Role, any member and the current Stage’s name (User Story 3)', async () => {
