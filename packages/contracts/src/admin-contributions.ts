@@ -97,6 +97,11 @@ export const AdminNavSectionNameSchema = z.enum([
   // R-19): the CRM screens get a group of their own. The section is the
   // shell's, declared here and in `AppShell.tsx`; the `crm` module joins it.
   'crm',
+  // `specs/163-projects-and-tasks/` research R-16: Projects and Tasks get a
+  // group of their own, after CRM — they are not a sales or CRM sub-feature,
+  // and Tasks is meant for every module. The `projects` and `tasks` modules
+  // join it.
+  'work',
   'catalog',
   'inventory',
   'pricing',

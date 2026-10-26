@@ -153,6 +153,16 @@ const NAV: NavSection[] = [
     items: [],
   },
   {
+    // The "Projects & tasks" group (`specs/163-projects-and-tasks/` research
+    // R-16). It holds no host-declared row: every entry is the `projects` or
+    // the `tasks` module's contribution, each gated by its own module's
+    // permission, so the heading shows only Tasks entries while `projects` is
+    // off and disappears when both modules are.
+    key: 'work',
+    labelKey: 'appShell.section.work',
+    items: [],
+  },
+  {
     key: 'catalog',
     labelKey: 'appShell.section.catalog',
     items: [
