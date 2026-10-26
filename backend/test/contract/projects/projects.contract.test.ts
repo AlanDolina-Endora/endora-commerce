@@ -38,8 +38,9 @@ import {
  * against its schema, each gate (401 without a session, 403 without the code),
  * and each refusal by its code.
  *
- * Stage Task definitions and their retry (`PUT …/stages/:stageId/tasks`,
- * `…/materialize-tasks`) are User Story 2's and are not served yet.
+ * User Story 2's three routes — Stage Task definitions, their retry and the
+ * Tasks by Stage — are gated here; their behaviour is
+ * `integration/projects/stage-tasks.test.ts`.
  */
 describe('projects (contract) — §2.1 Projects, §2.2 Stages and moves', () => {
   let h: BackendServerHandle;
@@ -112,8 +113,10 @@ describe('projects (contract) — §2.1 Projects, §2.2 Stages and moves', () =>
       ['POST', `/${ID}/move`],
       ['POST', `/${ID}/close`],
       ['POST', `/${ID}/reopen`],
+      ['PUT', `/${ID}/stages/${STAGE}/tasks`],
+      ['POST', `/${ID}/stages/${STAGE}/materialize-tasks`],
     ];
-    const reads = ['', `/${ID}`, `/${ID}/stage-history`, '/roles', '/loss-reasons'];
+    const reads = ['', `/${ID}`, `/${ID}/stage-history`, '/roles', '/loss-reasons', `/${ID}/tasks`];
 
     it('every route answers 401 without a session', async () => {
       for (const path of reads) {

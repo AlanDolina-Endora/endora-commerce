@@ -42,10 +42,25 @@ describe('tasks off-state (Constitution XVII)', () => {
   });
 
   it('is absent from every surface while off, and restored after', async () => {
+    // Each write probe names a Task that does not exist, or sends a body its
+    // schema refuses, so the "on" phases write nothing: what is measured is
+    // only whether the route claims the module is absent.
+    const write = (method: 'POST' | 'PATCH' | 'DELETE', url: string, payload: unknown = {}) => ({
+      method,
+      url,
+      cookies: admin,
+      payload,
+    });
     await expectModuleAbsent(h, 'tasks', {
       routes: [
         { url: API, cookies: admin },
+        { url: `${API}/mine`, cookies: admin },
+        { url: `${API}/lookups/assignees`, cookies: admin },
         { url: `${API}/${ID}`, cookies: admin },
+        { url: `${API}/${ID}/history`, cookies: admin },
+        write('POST', API),
+        write('PATCH', `${API}/${ID}`, { title: 'x' }),
+        write('DELETE', `${API}/${ID}`, undefined),
       ],
       adminPresence: { cookies: admin },
     });

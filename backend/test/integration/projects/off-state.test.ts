@@ -83,6 +83,10 @@ describe('projects off-state (Constitution XVII)', () => {
         write('POST', `${API}/${ID}/move`, { toStageId: STAGE, version: 1 }),
         write('POST', `${API}/${ID}/close`, { outcome: 'completed', version: 1 }),
         write('POST', `${API}/${ID}/reopen`, { version: 1 }),
+        // User Story 2's routes.
+        { url: `${API}/${ID}/tasks`, cookies: admin },
+        write('PUT', `${API}/${ID}/stages/${STAGE}/tasks`, { tasks: [] }),
+        write('POST', `${API}/${ID}/stages/${STAGE}/materialize-tasks`),
       ],
       adminPresence: { cookies: admin },
       settingWrite: { code: 'projects.visibility', value: 'everyone', cookies: admin },

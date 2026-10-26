@@ -29,8 +29,9 @@ const PROJECT = '/api/v1/admin/projects/:id';
  * Stage history is `projects:read`. Every route loads its Project through
  * `ProjectAccess` first, so a Project the caller may not see answers 404.
  *
- * Stage Task definitions (`PUT …/stages/:stageId/tasks`) and their retry
- * (`POST …/materialize-tasks`) arrive with User Story 2.
+ * Stage Task definitions (`PUT …/stages/:stageId/tasks`), their retry
+ * (`POST …/materialize-tasks`) and the Tasks by Stage are in
+ * `routes.stage-tasks.ts`.
  */
 export async function registerStageRoutes(app: FastifyInstance, deps: StageRoutesDeps): Promise<void> {
   const { requireAdmin, projectReadService: read, stageService: stages, moveService: moves } = deps;
