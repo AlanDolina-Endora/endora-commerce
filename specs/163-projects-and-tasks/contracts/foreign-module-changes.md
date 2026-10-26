@@ -14,6 +14,7 @@ unchanged, proving existing behaviour is untouched.
 | `crm.ts`, `crm-rich-text.ts` | the §9 grammar becomes aliases of the above, **widened** to five types; exported names unchanged | additive; guard: `crm` contract tests, plus new cases for the two types |
 | `admin-contributions.ts` | + `'work'` in `AdminNavSectionNameSchema`; + zones `opportunity.detail.after`, `task.detail.after` with props types and `AdminZonePropsMap` entries | R-11, R-16 |
 | `custom-fields.ts` | + `'project'` in `supportedEntityTypeSchema` | R-18 |
+| `errors.ts` | + each `TASKS_ERROR_CODES` / `PROJECTS_ERROR_CODES` entry joins `ERROR_CODES` in the same change that first raises it (with its manifest declaration and en/pl translation) | `check:error-translations` refuses an undeclared code |
 
 Before changing either enum: grep `admin/test`, `backend/test` and every package for exhaustive
 uses of the enum and repair them in the same change (CRM plan risk row, same trap).
@@ -84,6 +85,8 @@ No CRM table other than the constraint above, no permission and no event changes
 `backend/test/entities.generated.ts`, `admin/src/modules.generated.ts`,
 `admin/src/tailwind.generated.css`, `docs/sidebars.modules.generated.js`,
 `docs/docs/modules/module-map.generated.md`, both packages' `package.json` and `tailwind.css`,
+`backend/package.json` (+ `mod-tasks`, `mod-projects` as `workspace:*` — hand-written, no generator
+writes it; issue #445),
 `pnpm-lock.yaml` (`pnpm install --lockfile-only`). Changesets: one per meaning — `mod-tasks`
 (minor, new), `mod-projects` (minor, new), `admin-kit` (minor: promoted components + Tiptap
 peer), `contracts` (minor), `mod-crm` (minor: `@@` document list with Quote Requests and Tasks, kit components, new zone),
