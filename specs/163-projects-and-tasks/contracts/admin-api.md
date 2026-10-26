@@ -20,6 +20,8 @@ module is off, its routes answer 503 `MODULE_DISABLED` through the platform gate
 | `GET /tasks/lookups/assignees?q=` | `tasks:write` | → `{ id, name, email }[]` active admins | |
 | `GET /tasks/:id/history` | `tasks:read` | → `RecordHistoryPage` | audit read, `objectType: 'task'` |
 
+`GET /tasks` orders newest first, keyset-paged by `(createdAt, id)`; it returns no total.
+
 `TaskSummary { id, number, title, status, dueOn, overdue, assignee: { id, name, active } | null,
 context: { type, label, href, groupLabel } | null }`.
 

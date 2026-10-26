@@ -75,6 +75,9 @@ No CRM table other than the constraint above, no permission and no event changes
 | `backend/test/unit/tenancy/…` parity test for `scheduled-work-probe.ts` copies | + the projects copy |
 | `backend/test/helpers/package-entities.ts` | + both modules' entities if the helper enumerates packages by hand **[unverified]** — read first |
 | `backend/test/{contract,integration}/{tasks,projects}/` | **new** test trees |
+| `backend/test/fixtures/error-code-routing/reference-ledgers.ts` | + every minted `TASK_*` / `PROJECT_*` code in `MINTED_ERROR_CODES` |
+| `backend/test/unit/_i18n/error-code-migration-progress.test.ts` | + `tasks`, `projects` in the roster |
+| `backend/test/fixtures/openapi-baseline.json` | regenerated with `UPDATE_OPENAPI_BASELINE=1` whenever a phase adds routes |
 | `admin/test/modules/{tasks,projects}/` | **new** |
 | `admin/test/modules/admin-kit/…` (or the kit's own test dir) | tests for the promoted components, moved from CRM's where they existed |
 
