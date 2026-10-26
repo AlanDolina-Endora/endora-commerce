@@ -63,9 +63,19 @@ function sameValue(a: VisibilityValue, b: VisibilityValue): boolean {
 function VisibilitySection({ project, onChange }: Pick<ProjectTabProps, 'project' | 'onChange'>): ReactNode {
   const t = useTranslation('projects');
   const [value, setValue] = useState<VisibilityValue>(() => valueOf(project));
+  /** What `value` started from: the Project as last put on screen. */
+  const [base, setBase] = useState<VisibilityValue>(() => valueOf(project));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  // A newer read of the Project — another write's answer — moves the starting
+  // point; the choice on screen follows it unless somebody is changing it here.
+  const current = valueOf(project);
+  if (!sameValue(base, current)) {
+    setBase(current);
+    if (sameValue(value, base)) setValue(current);
+  }
 
   if (!project.permissions.canWrite) {
     return (
@@ -88,7 +98,7 @@ function VisibilitySection({ project, onChange }: Pick<ProjectTabProps, 'project
     );
   }
 
-  const changed = !sameValue(value, valueOf(project));
+  const changed = !sameValue(value, current);
   const save = async (): Promise<void> => {
     setBusy(true);
     setError(null);

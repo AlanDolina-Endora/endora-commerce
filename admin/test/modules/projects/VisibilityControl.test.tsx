@@ -180,6 +180,42 @@ describe('Overview — who sees this project', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  /** The Overview under a page that may put a newer read of the Project on screen — another write's answer. */
+  function Page(props: { first: ProjectDetail; later: ProjectDetail }): ReactElement {
+    const [project, setProject] = useState(props.first);
+    return (
+      <>
+        <button type="button" onClick={(): void => setProject(props.later)}>
+          another write
+        </button>
+        <OverviewTab project={project} onChange={setProject} reload={vi.fn(async () => {})} />
+      </>
+    );
+  }
+
+  it('follows a newer read of the Project while nothing is changed here — no stale choice, nothing to save', async () => {
+    renderProjects(<Page first={detail()} later={detail({ visibility: 'everyone', version: 4 })} />);
+    expect(screen.getByRole('radio', { name: en('visibility.option.inherit') })).toBeChecked();
+    await userEvent.click(screen.getByRole('button', { name: 'another write' }));
+    expect(screen.getByRole('radio', { name: en('visibility.option.everyone') })).toBeChecked();
+    expect(screen.getByRole('button', { name: en('visibility.save') })).toBeDisabled();
+  });
+
+  it('keeps a change somebody is making when a newer read arrives, and saves it against the newer version', async () => {
+    patchSpy.mockResolvedValue({ data: detail({ visibility: 'members_and_listed', version: 5 }) });
+    renderProjects(<Page first={detail()} later={detail({ title: 'Renamed', version: 4 })} />);
+    await userEvent.click(screen.getByRole('radio', { name: en('visibility.option.everyone') }));
+    await userEvent.click(screen.getByRole('button', { name: 'another write' }));
+    expect(screen.getByRole('radio', { name: en('visibility.option.everyone') })).toBeChecked();
+    await userEvent.click(screen.getByRole('button', { name: en('visibility.save') }));
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+    expect(patchSpy).toHaveBeenCalledWith(`/api/v1/admin/projects/${PROJECT_ID}`, {
+      visibility: 'everyone',
+      viewerIds: [],
+      version: 4,
+    });
+  });
+
   it('a reader is told who sees it and who is listed, with nothing to change', async () => {
     renderOverview(
       detail({
