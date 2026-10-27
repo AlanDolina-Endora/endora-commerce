@@ -295,6 +295,9 @@ function StageRow(props: StageRowProps): ReactNode {
   const { language } = useAppLanguage();
   const [draft, setDraft] = useState<StageDraft>(() => draftOf(stage));
   const [invalid, setInvalid] = useState(false);
+  /** The deadline set by hand, as typed — empty for one counted from the start (FR-013). */
+  const manualDeadline = stage.deadlineManual ? (stage.deadlineOn ?? '') : '';
+  const [deadlineDraft, setDeadlineDraft] = useState(manualDeadline);
   const idPrefix = `project-stage-${stage.id}`;
 
   const change = (patch: Partial<StageDraft>): void => {
@@ -346,8 +349,11 @@ function StageRow(props: StageRowProps): ReactNode {
       setInvalid(true);
       return;
     }
-    if (Object.keys(body).length === 0) return;
-    await props.onSave(body);
+    // Set by hand, or — emptied — counted from the start plus the planned days again.
+    const withDeadline: UpdateProjectStageBody =
+      deadlineDraft !== manualDeadline ? { ...body, deadlineOn: deadlineDraft === '' ? null : deadlineDraft } : body;
+    if (Object.keys(withDeadline).length === 0) return;
+    await props.onSave(withDeadline);
   };
 
   return (
@@ -381,6 +387,23 @@ function StageRow(props: StageRowProps): ReactNode {
         heldRoleIds={stage.responsibleRoleIds}
         invalid={invalid}
       />
+
+      <div className="max-w-xs space-y-1">
+        <Label htmlFor={`${idPrefix}-deadline`} className="text-xs text-muted-foreground">
+          {t('editor.deadlineField', { position })}
+        </Label>
+        <Input
+          id={`${idPrefix}-deadline`}
+          type="date"
+          className="min-h-11 sm:min-h-9"
+          value={deadlineDraft}
+          aria-describedby={`${idPrefix}-deadline-hint`}
+          onChange={(event): void => setDeadlineDraft(event.target.value)}
+        />
+        <p id={`${idPrefix}-deadline-hint`} className="text-xs text-muted-foreground">
+          {t('editor.deadlineFieldHint')}
+        </p>
+      </div>
 
       {invalid && (draft.name.trim() === '' || parseDuration(draft.duration) === null) ? (
         <p className="text-xs text-destructive">

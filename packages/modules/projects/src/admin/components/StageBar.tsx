@@ -149,6 +149,9 @@ export function StageBar(props: StageBarProps): ReactNode {
       {open && project.currentStage?.deadlineOn ? (
         <p className={project.currentStage.overdue ? 'text-sm font-medium text-destructive' : 'text-sm text-muted-foreground'}>
           {t('stageBar.deadline', { date: calendarDateLabel(project.currentStage.deadlineOn, language) })}
+          {project.stages.find((stage) => stage.id === project.currentStage?.id)?.deadlineManual
+            ? ` (${t('stageBar.deadlineManualNote')})`
+            : null}
           {project.currentStage.overdue ? ` · ${t('list.overdue')}` : null}
         </p>
       ) : null}

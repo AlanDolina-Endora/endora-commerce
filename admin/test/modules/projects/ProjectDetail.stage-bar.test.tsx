@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ProjectDetail } from '@endora-commerce/contracts';
 import { setMobileViewport } from '../../setup';
@@ -274,6 +274,52 @@ describe('ProjectDetail — the tabs', () => {
     const [path, body] = patchSpy.mock.calls[0] as [string, Record<string, unknown>];
     expect(path).toBe(`${DETAIL_PATH}/stages/${STAGE_BUILD}`);
     expect(body).toMatchObject({ name: 'Build out' });
+  });
+
+  it('sets a Stage deadline by hand, sending that alone (User Story 8)', async () => {
+    patchSpy.mockResolvedValue({ data: stage({ id: STAGE_DESIGN, name: 'Design', position: 0 }) });
+    await renderPage({ search: '?tab=stages' });
+    const panel = await screen.findByRole('tabpanel');
+    const field = (await within(panel).findByLabelText(en('editor.deadlineField', { position: 1 }))) as HTMLInputElement;
+    // A computed deadline is shown, not held in the field: empty means "start + planned days".
+    expect(field.value).toBe('');
+    expect(within(panel).getAllByText(en('editor.deadlineFieldHint')).length).toBeGreaterThan(0);
+    fireEvent.change(field, { target: { value: '2026-11-30' } });
+    await userEvent.click(within(panel).getByRole('button', { name: en('editor.save', { position: 1 }) }));
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+    const [path, body] = patchSpy.mock.calls[0] as [string, Record<string, unknown>];
+    expect(path).toBe(`${DETAIL_PATH}/stages/${STAGE_DESIGN}`);
+    expect(body).toEqual({ deadlineOn: '2026-11-30' });
+  });
+
+  it('clears a deadline set by hand, so it is counted from the start again', async () => {
+    current = detail({
+      stages: [
+        stage({ id: STAGE_DESIGN, name: 'Design', position: 0, startedOn: '2026-10-20', deadlineOn: '2026-11-30', deadlineManual: true }),
+        stage({ id: STAGE_BUILD, name: 'Build', position: 1 }),
+      ],
+    });
+    patchSpy.mockResolvedValue({ data: stage({ id: STAGE_DESIGN, name: 'Design', position: 0 }) });
+    await renderPage({ search: '?tab=stages' });
+    const panel = await screen.findByRole('tabpanel');
+    const field = (await within(panel).findByLabelText(en('editor.deadlineField', { position: 1 }))) as HTMLInputElement;
+    expect(field.value).toBe('2026-11-30');
+    fireEvent.change(field, { target: { value: '' } });
+    await userEvent.click(within(panel).getByRole('button', { name: en('editor.save', { position: 1 }) }));
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+    expect((patchSpy.mock.calls[0] as [string, Record<string, unknown>])[1]).toEqual({ deadlineOn: null });
+  });
+
+  it('says on the Stage bar when the current deadline was set by hand', async () => {
+    current = detail({
+      currentStage: { id: STAGE_DESIGN, name: 'Design', color: '#3b82f6', deadlineOn: '2026-11-30', overdue: false },
+      stages: [
+        stage({ id: STAGE_DESIGN, name: 'Design', position: 0, startedOn: '2026-10-20', deadlineOn: '2026-11-30', deadlineManual: true }),
+        stage({ id: STAGE_BUILD, name: 'Build', position: 1 }),
+      ],
+    });
+    await renderPage();
+    expect(within(bar()).getByText(new RegExp(en('stageBar.deadlineManualNote')))).toBeTruthy();
   });
 
   it('lists the Stage history on its tab', async () => {
