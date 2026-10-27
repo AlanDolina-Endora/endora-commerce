@@ -477,6 +477,30 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'the owner is `carts`, as for `CART_EMPTY`; the one raise site is `orders`\' `placeOrder`, ' +
       'after `carts` has brought the cart up to date.',
   },
+  CMS_DUPLICATE_ANCHOR: {
+    to: 'cms',
+    reason:
+      'Minted by feature 163 (`specs/163-page-builder-marketing-pages/`) for the refusal a ' +
+      'content save meets when one anchor names two sections or headings of the same page ' +
+      'tree, so an in-page link could only ever reach the first. The noun is the Page Builder ' +
+      'canvas, which `cms` owns along with the rest of the `CMS_*` family.',
+  },
+  CMS_PAGE_PARENT_CYCLE: {
+    to: 'cms',
+    reason:
+      'Minted by feature 163 (`specs/163-page-builder-marketing-pages/`) for the refusal a ' +
+      'page update meets when its new parent would make the page its own ancestor, or nest ' +
+      'the tree deeper than eight levels, which the breadcrumb trail cannot walk. The noun is ' +
+      'a CMS page, which `cms` owns along with the rest of the `CMS_*` family.',
+  },
+  CMS_RESERVED_ANCHOR: {
+    to: 'cms',
+    reason:
+      'Minted by feature 163 (`specs/163-page-builder-marketing-pages/`) for the refusal a ' +
+      'content save meets when an anchor is one the storefront layout already renders as an ' +
+      'id, such as `main-content`, so the link would jump somewhere else. The noun is the ' +
+      'Page Builder canvas, which `cms` owns along with the rest of the `CMS_*` family.',
+  },
   CMS_SLUG_RESERVED: {
     to: 'cms',
     reason:

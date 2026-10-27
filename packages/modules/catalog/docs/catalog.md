@@ -389,6 +389,47 @@ Five product types are now supported: `simple`, `configurable`,
 `grouped`, `bundle`, `virtual`. `simple` and `configurable` are the
 original pair; the other three were added later.
 
+## Page Builder blocks
+
+The catalog declares the Page Builder's product and category blocks. Their
+data is read on the server, so the products are in the page's HTML.
+
+**Product grid and product slider** (`catalog.ProductGrid`,
+`catalog.ProductSlider`) keep every option they had — the product source
+(picked products, a category, a search), the limit, columns, gap and view —
+and add:
+
+| Option | Meaning |
+| --- | --- |
+| Header | An optional heading, lead text and button (for example "See all") above the products. |
+| Card style | Default, compact, horizontal, or **showcase**: the product image on a neutral backdrop, its name, a short summary and a "more" link — no price or SKU. |
+| Text under the product name | The one line under each card's name: the card style's default (the SKU on the default, compact and horizontal cards, the short description on showcase), the **Short description** (the first words of the product's description, at most 160 characters), the SKU, or none. The page editor's preview shows the same line as the storefront. |
+| Card title weight | The weight of each card's product name: **Default** (the card style's own) or 300–800. |
+| Card image background | The colour of the box behind each card's image: a brand colour or a hex value. Empty keeps the card style's own light grey. |
+| Divider under each card | **None** (as before) or **Line**: a 1 px line under each card, in the **Divider color** you pick or the neutral border colour. A bordered card's bottom edge becomes the line; a showcase card gets it 16 px below its text. |
+| Card link label | The text of the showcase card's link; "More" when empty. |
+| Gap (grid) | A spacing step or **Custom gap (px)**, per breakpoint. A grid saved with a gap in pixels opens on Custom with that number and looks as before. The category grid's gap works the same way. |
+| Equal items height (grid) | Per breakpoint, next to the columns and the view, on the **Responsive** tab; a value saved before applies at every width. The category grid's works the same way. |
+| Button below the products | An optional button under the grid or slider. |
+
+The slider takes the Page Builder carousel's options: slides per view per
+breakpoint, gap, slide or fade effect, arrow and dot placement, bleed to the
+viewport edge and optional autoplay. A grid or slider saved before these
+options existed renders as it did. To give any of these blocks an anchor, a
+colour scheme, a background, spacing or a width, place it inside a **Section**
+block (`cms.Section`). The header texts, the card
+link label and the footer button label are translatable with the Page
+Builder's **Translate** action.
+
+**The product summary.** The storefront product list and product detail
+(`GET /api/v1/catalog/products`, `GET /api/v1/catalog/products/:idOrSlug`)
+return `summary`: the product description in the request language as plain
+text, cut at a word boundary to at most 160 characters with `…`, or `null`
+when the product has no description. It is derived from the description the
+read already loads, so it costs no extra query per product (the module's
+`src/backend/services/product-summary-text.ts`).
+The showcase card shows it.
+
 ## Attribute extensions on the Catalog read paths
 
 The Attributes work added the operational surface the storefront

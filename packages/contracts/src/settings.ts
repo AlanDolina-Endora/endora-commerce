@@ -333,9 +333,9 @@ export const SettingDetailResponseSchema = SettingDtoSchema;
 /**
  * Public shop / company contact information resolved for the active sales
  * channel. Backs the storefront footer, the 404 "need help?" block and the
- * contact form. Every field is a string; an unset (or not-yet-registered)
- * setting resolves to an empty string so the storefront can decide what to
- * render. The contact-form recipient list is intentionally omitted — it is
+ * contact form. Every text field is a string; an unset (or not-yet-registered)
+ * setting resolves to an empty string (`logoUrl` to `null`, `socialProfiles`
+ * to `[]`) so the storefront can decide what to render. The contact-form recipient list is intentionally omitted — it is
  * an internal routing concern, not public information.
  */
 export const ShopInfoSchema = z.object({
@@ -344,6 +344,13 @@ export const ShopInfoSchema = z.object({
   contactEmail: z.string(),
   supportEmail: z.string(),
   phone: z.string(),
+  /**
+   * The public URL of the asset `shop.logo_asset_id` names, or `null` while it
+   * is unset or unresolvable (feature 163, FR-035).
+   */
+  logoUrl: z.string().nullable(),
+  /** `shop.social_profiles` — `https:` URLs only, for `sameAs` (feature 163, FR-035). */
+  socialProfiles: z.array(z.string()),
 });
 export type ShopInfo = z.infer<typeof ShopInfoSchema>;
 

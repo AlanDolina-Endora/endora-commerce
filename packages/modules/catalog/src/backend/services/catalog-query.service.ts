@@ -61,6 +61,7 @@ import {
 import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
 import { HttpError } from '@endora-commerce/platform/http';
 import { encodeCursor, decodeCursor } from '@endora-commerce/platform/http';
+import { productSummaryText } from './product-summary-text.js';
 
 /** A uuid as the database spells one — anything else is a 404 or a discarded cursor, not a query. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -2784,12 +2785,23 @@ export class CatalogQueryService {
       this.pickLang(product.name, preferredLanguage, channel),
     );
 
+    // Feature 163 (R-16) — the card's summary, from the description this row
+    // already holds, through the same override and language pick as the PDP's.
+    const descriptionText = effectiveSystemText(
+      cardReads.overridesByProduct.get(product.id),
+      'description',
+      this.#overrideContext(channel, preferredLanguage),
+      product.description,
+      this.pickLang(product.description, preferredLanguage, channel),
+    );
+
     return {
       id: product.id,
       sku: product.sku,
       type: product.type,
       name: nameText,
       slug: product.slug,
+      summary: productSummaryText(descriptionText),
       categorySlugs: cardReads.categorySlugsByProduct.get(product.id) ?? [],
       primaryAssetUrl: cardReads.assetUrlByProduct.get(product.id) ?? null,
       price,

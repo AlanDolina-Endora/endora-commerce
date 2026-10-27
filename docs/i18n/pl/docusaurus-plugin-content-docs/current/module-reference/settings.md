@@ -29,6 +29,7 @@ Strona wygenerowana z manifestu modułu, bez żadnych ręcznych zmian. Co moduł
 
 | Moduł | Wiążąca | Co to oznacza |
 | --- | --- | --- |
+| `assets_library` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `auth` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 
 ## Uprawnienia
@@ -54,8 +55,10 @@ Strona wygenerowana z manifestu modułu, bez żadnych ręcznych zmian. Co moduł
 | `shop.address` | Shop address | `string` |
 | `shop.contact_email` | Main contact email | `string` |
 | `shop.contact_form_recipient_emails` | Contact form recipient emails | `string` |
+| `shop.logo_asset_id` | Shop logo | `string` |
 | `shop.name` | Shop name | `string` |
 | `shop.phone` | Shop phone number | `string` |
+| `shop.social_profiles` | Social profiles | `string_list` |
 | `shop.support_email` | Support / customer service email | `string` |
 | `storefront.product_card.show_add_to_cart` | Show "Add to cart" on product cards | `boolean` |
 | `storefront.product_card.show_add_to_shopping_list` | Show "Add to shopping list" on product cards | `boolean` |

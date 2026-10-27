@@ -32,6 +32,12 @@ export const CMS_STOREFRONT_CACHE_TAGS = {
   hooks: 'cms:hook',
   /** One hook's reads. */
   hook: (code: string): string => `cms:hook:${code}`,
+  /**
+   * The brand-token read every storefront page is styled from (feature 163,
+   * research R-3). One tag for every channel's set: a write to any scope can
+   * change what an inheriting channel resolves.
+   */
+  brand: 'cms:brand',
 } as const;
 
 /** The resolved megamenu of a channel and language — it inlines CMS blocks. */

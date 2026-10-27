@@ -10,16 +10,35 @@ import { CmsPageRenderer } from '../components/CmsPageRenderer';
 import { HomeMobileStrip } from '../components/mobile/HomeMobileStrip';
 import { Hook } from '../components/Hook';
 import { OrganizationJsonLd } from '../components/seo/OrganizationJsonLd';
+import { cmsSocialMetadata } from '../lib/seo/cms-share-metadata';
+import { cmsRenderLocation, type PageSearchParams } from '../lib/page-builder/render-location';
 import { seo } from './seo';
 
 /**
  * Indexable (`specs/098-storefront-ssr-seo-a11y-suite/`, FR-010/FR-012). The
  * canonical is the route pattern itself; `metadataBase` in the root layout
  * turns it into an absolute URL.
+ *
+ * Feature 163 (FR-033, FR-034): a CMS-backed home page carries the same title,
+ * description and sharing card as that page has at its own route, at `/`. The
+ * page read is the one the component below makes, deduplicated by Next's
+ * fetch cache.
  */
-export const metadata: Metadata = {
-  alternates: { canonical: seo.route },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { ctx } = await getServerContext();
+  const { cmsPageSlug } = await getHomepageConfig(ctx);
+  const cmsPage = cmsPageSlug ? await getCmsPageBySlug(cmsPageSlug, ctx).catch(() => null) : null;
+  if (!cmsPage) return { alternates: { canonical: seo.route } };
+  const social = cmsSocialMetadata(cmsPage, seo.route);
+  return {
+    title: social.title,
+    description: cmsPage.meta.description ?? undefined,
+    keywords: cmsPage.meta.keywords ?? undefined,
+    alternates: { canonical: seo.route },
+    openGraph: social.openGraph,
+    twitter: social.twitter,
+  };
+}
 
 interface CatTile {
   href: string;
@@ -34,8 +53,12 @@ interface CatTile {
  * → "Home page CMS page"), that page is rendered here. Otherwise we fall back
  * to the built-in Industria-themed landing page below.
  */
-export default async function HomePage(): Promise<ReactNode> {
-  const { ctx, locale } = await getServerContext();
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams?: Promise<PageSearchParams>;
+}): Promise<ReactNode> {
+  const { ctx, locale, modules } = await getServerContext();
 
   // Operator-selected CMS home page takes precedence when it resolves to a
   // published page; any miss (unset, unpublished, deleted) falls through to
@@ -50,7 +73,12 @@ export default async function HomePage(): Promise<ReactNode> {
       return (
         <>
           <OrganizationJsonLd ctx={ctx} />
-          <CmsPageRenderer page={cmsPage} ctx={ctx} />
+          <CmsPageRenderer
+            page={cmsPage}
+            ctx={ctx}
+            modules={modules}
+            location={cmsRenderLocation('/', (await searchParams) ?? {})}
+          />
         </>
       );
     }

@@ -415,7 +415,20 @@ export type MessageKey =
   | 'serviceUnavailable.body'
   | 'serviceUnavailable.reassurance'
   | 'serviceUnavailable.retry'
-  | 'serviceUnavailable.retryHint';
+  | 'serviceUnavailable.retryHint'
+  // Feature 163 (T095): the words a page-builder carousel speaks to assistive
+  // technology. `{n}` and `{m}` are filled in by the carousel.
+  | 'cms.carousel.label'
+  | 'cms.carousel.previous'
+  | 'cms.carousel.next'
+  | 'cms.carousel.slide'
+  | 'cms.carousel.goToSlide'
+  | 'cms.carousel.goToPage'
+  | 'cms.carousel.pause'
+  | 'cms.carousel.play'
+  | 'cms.carousel.filter'
+  | 'cms.carousel.filterAll'
+  | 'cms.carousel.filterCount';
 
 const MESSAGES: Record<string, Record<MessageKey, string>> = {
   'en-US': {
@@ -804,6 +817,17 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
       'Nothing has been lost. Your cart, your account and any order you have already placed are untouched.',
     'serviceUnavailable.retry': 'Try again',
     'serviceUnavailable.retryHint': 'It is usually worth trying again in about a minute.',
+    'cms.carousel.label': 'Carousel',
+    'cms.carousel.previous': 'Previous slide',
+    'cms.carousel.next': 'Next slide',
+    'cms.carousel.slide': '{n} of {m}',
+    'cms.carousel.goToSlide': 'Go to slide {n}',
+    'cms.carousel.goToPage': 'Go to page {n}',
+    'cms.carousel.pause': 'Pause autoplay',
+    'cms.carousel.play': 'Start autoplay',
+    'cms.carousel.filter': 'Filter',
+    'cms.carousel.filterAll': 'All',
+    'cms.carousel.filterCount': '{n} of {m} shown',
   },
   'pl-PL': {
     'a11y.skipToContent': 'Przejdz do tresci',
@@ -1191,6 +1215,17 @@ const MESSAGES: Record<string, Record<MessageKey, string>> = {
       'Nic nie zginęło. Twój koszyk, konto i wszystkie złożone wcześniej zamówienia są nienaruszone.',
     'serviceUnavailable.retry': 'Spróbuj ponownie',
     'serviceUnavailable.retryHint': 'Zwykle warto spróbować ponownie za około minutę.',
+    'cms.carousel.label': 'Karuzela',
+    'cms.carousel.previous': 'Poprzedni slajd',
+    'cms.carousel.next': 'Następny slajd',
+    'cms.carousel.slide': '{n} z {m}',
+    'cms.carousel.goToSlide': 'Przejdź do slajdu {n}',
+    'cms.carousel.goToPage': 'Przejdź do strony {n}',
+    'cms.carousel.pause': 'Wstrzymaj automatyczne przewijanie',
+    'cms.carousel.play': 'Włącz automatyczne przewijanie',
+    'cms.carousel.filter': 'Filtruj',
+    'cms.carousel.filterAll': 'Wszystkie',
+    'cms.carousel.filterCount': 'Pokazano {n} z {m}',
   },
 };
 

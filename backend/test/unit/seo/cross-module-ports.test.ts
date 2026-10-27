@@ -117,6 +117,8 @@ function pageRecord(id: string, overrides: Partial<CmsPageRecord> = {}): CmsPage
     archivedAt: null,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    // Feature 163 (T080): the record carries the breadcrumb parent.
+    parentPageId: null,
     ...overrides,
   };
 }

@@ -229,6 +229,40 @@ export const manifest = defineModuleManifest({
     { code: 'BLOG_URL_PREFIX_INVALID' },
     { code: 'BLOG_URL_PREFIX_RESERVED' },
   ],
+  /**
+   * Feature 163 (US6, FR-026, research R-15) — the latest-posts block. Declared
+   * here, by the module whose data it shows, as `catalog` declares its blocks;
+   * its React code is `@endora-commerce/cms-components`' `LatestPosts`. While
+   * `blog` is off the block is filtered from every palette and render, and the
+   * storefront skips its read.
+   */
+  blocks: [
+    {
+      name: 'blog.LatestPosts',
+      translatable: [
+        { path: 'header.heading', format: 'tiptap' },
+        { path: 'header.lead' },
+        { path: 'header.button.label' },
+        { path: 'readMoreLabel' },
+      ],
+      labelKey: 'blocks.latestPosts.label',
+      descriptionKey: 'blocks.latestPosts.description',
+      category: 'content',
+      contexts: ['cms'],
+      fields: {},
+      responsiveFields: [
+        'headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'columns', 'slidesPerView', 'gap', 'gapPx', 'controlsPlacement', 'controlsAlign',
+        // T189: the post card's look, the lead's size and the header button's place and width, per breakpoint.
+        'cardPadding', 'cardPaddingPx', 'cardTextPadding', 'cardTextPaddingPx', 'imageRatio', 'cardTitleSize', 'cardTitleSizePx', 'cardTitleWeight',
+        'leadSize', 'leadSizePx', 'headerButtonPlacement', 'headerButtonFullWidth',
+        'headingWeight',
+      ],
+      weight: 60,
+    },
+  ],
+  // The palette section the block sits in, declared beside it (as `catalog`
+  // declares `content` for its e-mail blocks); merged by key with `cms`'s.
+  blockCategories: [{ key: 'content', titleKey: 'blocks.category.content', contexts: ['cms'], weight: 20 }],
   i18n: { bundlesDir: 'i18n' },
   docs: { dir: 'docs' },
   actions: [

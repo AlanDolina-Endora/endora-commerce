@@ -18,6 +18,8 @@ export * from './catalog.js';
 // Feature 155 — the minimum-order rule (specs/155-catalog-order-constraints/).
 export * from './order-minimums.js';
 export * from './localized-name.js';
+// Feature 163, T196 — the product card's summary, shared by the catalogue and the page editor's preview.
+export * from './product-summary-text.js';
 // Feature 159 — named, ordered line groups shared by quotes and orders.
 export * from './line-groups.js';
 export * from './quote-requests.js';
@@ -67,6 +69,7 @@ export {
   cmsPageStatusSchema,
   cmsContentEnvelopeSchema,
   cmsPageSummarySchema,
+  cmsBreadcrumbsSchemeSchema,
   cmsPageDetailSchema,
   createCmsPageRequestSchema,
   patchCmsPageRequestSchema,
@@ -130,6 +133,7 @@ export {
   type CmsPageStatus,
   type CmsContentEnvelope,
   type CmsPageSummary,
+  type CmsBreadcrumbsScheme,
   type CmsPageDetail,
   type CreateCmsPageRequest,
   type PatchCmsPageRequest,
@@ -181,6 +185,10 @@ export {
   type CmsLocalizedBlockRecord,
   type CmsBlockReadPort,
 } from './cms.js';
+// Feature 163 — the prop shapes page-builder blocks share, and the brand tokens
+// (`specs/163-page-builder-marketing-pages/` data-model §2–3).
+export * from './page-builder-props.js';
+export * from './cms-brand.js';
 export * from './shopping-lists.js';
 export * from './quick-order.js';
 export * from './settings.js';
