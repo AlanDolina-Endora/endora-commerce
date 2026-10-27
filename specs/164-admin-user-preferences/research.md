@@ -747,3 +747,16 @@ changes a requirement, a contract shape or an owner ruling.
    only the lists changed since the last successful write — one list per change, as client
    contract §1.1 says, except that changes to two lists made while a write is in flight are
    sent together in the next one. Never the whole map.
+6. **The rail form of the Pinned section is not a `role="menu"`.** The other rail fly-outs are
+   menus of `menuitem` links; a pinned row holds a link *and* an unpin button, and a menu may hold
+   only menu items. The pinned fly-out is therefore a plain group of links and buttons (its
+   trigger keeps `aria-expanded`, drops `aria-haspopup="menu"`).
+7. **The pinned rows are a `list` of `listitem`s.** `useReorderList` puts `aria-posinset` /
+   `aria-setsize` on each row, which axe refuses on an element with no role
+   (`aria-allowed-attr`) — found by re-running T031's a11y file with the handles present (T053).
+8. **T032's Navigate case pins *Home*.** The palette's Navigate group holds only *Home* on this
+   tree; *Orders* reaches the palette as the `orders` module's server Action `open-orders`, which
+   is T032's server-Action case. The test exercises both groups as R-15 asks.
+9. **Rail mode is computed once as `stored && !mobile`** at the top of `AppShell`; before this
+   feature the section loop rendered rail sections from the raw value even on the mobile tier.
+   FR-013 is now true of every rail check, and T046 asserts it.
