@@ -100,6 +100,7 @@ describe('tasks — context visibility (R-9)', () => {
       allVisibleContextIds: async () => [...visible],
       visibleContextIds: async (ids) => new Set(ids.filter((id) => visible.has(id))),
       canSeeAs: async (_adminUserId, id) => visible.has(id),
+      canTakeOut: async () => false,
       describe: async (ids) =>
         new Map(
           ids

@@ -49,7 +49,7 @@ describe('projects — the completion gate (US2)', () => {
   function openTasksOf(body: string) {
     const parsed = JSON.parse(body) as { error: { code: string; details?: unknown } };
     expect(parsed.error.code).toBe('PROJECT_STAGE_GATE_OPEN_TASKS');
-    return ProjectStageGateOpenTasksDetailsSchema.parse(parsed.error.details).openTasks;
+    return ProjectStageGateOpenTasksDetailsSchema.parse(parsed.error.details).openTasks ?? [];
   }
 
   beforeAll(async () => {
