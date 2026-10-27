@@ -1069,6 +1069,12 @@ export const CONTRIBUTION_POLICY_STATED: Readonly<Record<string, 'skip' | 'honou
   // when the owner is back. `owners()` stays presence-blind
   // (`specs/143-crm-sales-opportunities/`, research R-27).
   'webhooks:webhookEventRegistry': 'skip',
+  // Skipped, and fail-closed: `TaskContextRegistry.present` / `presentFor`
+  // leave out a descriptor whose owner is not effectively present, asked on
+  // every read, so the Tasks of that context are hidden from every list, count
+  // and read by id — and return unchanged, without a restart, when the owner is
+  // back. Nothing is deleted (`specs/163-projects-and-tasks/`, research R-9).
+  'tasks:taskContextRegistry': 'skip',
 };
 
 /**

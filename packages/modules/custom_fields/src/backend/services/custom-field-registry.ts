@@ -101,6 +101,14 @@ export const SUPPORTED_ENTITIES: Record<SupportedEntityType, SupportedEntityMeta
     listFilter: true,
     carryTargets: ['quote_request', 'order'],
   },
+  // Feature 163 — a Project belongs to `projects`, and its definitions follow
+  // that module's presence. No carry targets: nothing is created from a Project.
+  project: {
+    labelKey: 'customFields.entity.project',
+    orgOwned: true,
+    ownerModuleId: 'projects',
+    listFilter: true,
+  },
 };
 
 /** All registered entity-type codes. */

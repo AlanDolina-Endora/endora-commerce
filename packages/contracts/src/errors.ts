@@ -695,6 +695,73 @@ export const ERROR_CODES = {
   /** A message on an Opportunity cannot be edited or deleted once sent. */
   CRM_MESSAGE_IMMUTABLE: 'CRM_MESSAGE_IMMUTABLE',
 
+  // Tasks (`specs/163-projects-and-tasks/`, `contracts/admin-api.md` §1) — the
+  // spellings of `TASKS_ERROR_CODES`. Each is declared by the `tasks` module's
+  // manifest and joins this block in the change that adds its first raise site.
+  /** No such Task, or one whose context the caller may not see — indistinguishable. */
+  TASK_NOT_FOUND: 'TASK_NOT_FOUND',
+  /** The context's type is not registered by a present module, or the caller may not see the id. */
+  TASK_CONTEXT_INVALID: 'TASK_CONTEXT_INVALID',
+  /** The assignee is not an active administrator. */
+  TASK_ASSIGNEE_INVALID: 'TASK_ASSIGNEE_INVALID',
+
+  // Projects (`specs/163-projects-and-tasks/`, `contracts/admin-api.md` §2) —
+  // the spellings of `PROJECTS_ERROR_CODES`. Each is declared by the `projects`
+  // module's manifest and joins this block in the change that adds its first
+  // raise site.
+  /** No such Project, or one out of the caller's reach or visibility — indistinguishable. */
+  PROJECT_NOT_FOUND: 'PROJECT_NOT_FOUND',
+  /** A Project with linked records cannot be deleted; unlink them first. */
+  PROJECT_HAS_LINKS: 'PROJECT_HAS_LINKS',
+  /** An Organization outside the caller's reach, or one that does not exist — indistinguishable. */
+  PROJECT_ORGANIZATION_OUT_OF_SCOPE: 'PROJECT_ORGANIZATION_OUT_OF_SCOPE',
+  /** The Stage the Project is in cannot be deleted. */
+  PROJECT_STAGE_CURRENT: 'PROJECT_STAGE_CURRENT',
+  /** A Project's only Stage cannot be deleted. */
+  PROJECT_STAGE_LAST: 'PROJECT_STAGE_LAST',
+  /** The Project's workflow has no such move, or the Project is not in a state to make it. */
+  PROJECT_MOVE_NOT_PERMITTED: 'PROJECT_MOVE_NOT_PERMITTED',
+  /** The version sent is stale: the Project changed since it was read. */
+  PROJECT_CHANGED: 'PROJECT_CHANGED',
+  /** A registered Stage guard refused; `details.reason` is its sentence. */
+  PROJECT_GUARD_REFUSED: 'PROJECT_GUARD_REFUSED',
+  /** Completing the Project is not permitted from its current Stage. */
+  PROJECT_COMPLETION_NOT_PERMITTED: 'PROJECT_COMPLETION_NOT_PERMITTED',
+  /** The loss reason is unknown or archived. */
+  PROJECT_LOSS_REASON_INVALID: 'PROJECT_LOSS_REASON_INVALID',
+  /** A Member or listed person is not an active administrator, or a Role is unknown. */
+  PROJECT_MEMBER_INVALID: 'PROJECT_MEMBER_INVALID',
+  /** A Stage that holds Tasks cannot be deleted. */
+  PROJECT_STAGE_HAS_TASKS: 'PROJECT_STAGE_HAS_TASKS',
+  /** The Stage's completion gate is closed; `details.openTaskCount` counts the open Tasks, `details.openTasks` names them to a reader of Tasks. */
+  PROJECT_STAGE_GATE_OPEN_TASKS: 'PROJECT_STAGE_GATE_OPEN_TASKS',
+  /** Creating a Stage's Tasks again was asked of a Stage whose last entry did not fail to create them. */
+  PROJECT_STAGE_TASKS_NOT_RETRYABLE: 'PROJECT_STAGE_TASKS_NOT_RETRYABLE',
+  /** The Template is unknown, or archived when a Project is created from it. */
+  PROJECT_TEMPLATE_NOT_FOUND: 'PROJECT_TEMPLATE_NOT_FOUND',
+  /** No Project Role or loss reason with that id. */
+  PROJECT_DICTIONARY_ENTRY_NOT_FOUND: 'PROJECT_DICTIONARY_ENTRY_NOT_FOUND',
+  /** A seeded Project Role or loss reason is renamable and archivable, never deleted. */
+  PROJECT_DICTIONARY_ENTRY_SYSTEM: 'PROJECT_DICTIONARY_ENTRY_SYSTEM',
+  /** A Project or a Template uses the Project Role or loss reason, so it is archived rather than deleted. */
+  PROJECT_DICTIONARY_ENTRY_IN_USE: 'PROJECT_DICTIONARY_ENTRY_IN_USE',
+  /** Another Project Role (or loss reason) already has this default name, whatever its case. */
+  PROJECT_DICTIONARY_NAME_TAKEN: 'PROJECT_DICTIONARY_NAME_TAKEN',
+  /** A record of the Organization being removed is linked to the Project; unlink it first. */
+  PROJECT_ORGANIZATION_IN_USE: 'PROJECT_ORGANIZATION_IN_USE',
+  /** The record to link does not exist, or is out of the caller's reach — indistinguishable. */
+  PROJECT_RECORD_NOT_FOUND: 'PROJECT_RECORD_NOT_FOUND',
+  /** The record already belongs to a Project; `details.project` names it only to a caller who may see it. */
+  PROJECT_RECORD_ALREADY_LINKED: 'PROJECT_RECORD_ALREADY_LINKED',
+  /** The record belongs to an Organization the Project does not have. */
+  PROJECT_LINK_ORGANIZATION_MISMATCH: 'PROJECT_LINK_ORGANIZATION_MISMATCH',
+  /** Only a note's author edits or deletes it — whatever else the caller holds. */
+  PROJECT_NOTE_NOT_AUTHOR: 'PROJECT_NOTE_NOT_AUTHOR',
+  /** A message of a Project is never edited or deleted, by anybody. */
+  PROJECT_MESSAGE_IMMUTABLE: 'PROJECT_MESSAGE_IMMUTABLE',
+  /** The uploaded file is larger than an attachment of a Project may be; `details.maxMb` names the limit. */
+  PROJECT_ATTACHMENT_TOO_LARGE: 'PROJECT_ATTACHMENT_TOO_LARGE',
+
   // SEO — search engine robots (`specs/144-seo-search-engine-robots/`, FR-006).
   // Declared by the `seo` module's manifest.
   /**

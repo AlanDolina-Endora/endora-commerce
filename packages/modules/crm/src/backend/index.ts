@@ -19,6 +19,7 @@ import type {
   EmailDefaultsRegistryPort,
   OpportunityReadPort,
   OpportunityTransitionPort,
+  OrderListPort,
   OrderReadPort,
   OrderTransitionPort,
   OrganizationDetailsPort,
@@ -27,6 +28,7 @@ import type {
   SalesChannelAttributionRegistryPort,
   SalesRepAssignmentPort,
   SettingsAdminPort,
+  TaskReadPort,
   TransactionalEmailSender,
 } from '@endora-commerce/contracts';
 import { CRM_WEBHOOK_EVENT_TYPES, type WebhookEventRegistryPort } from '@endora-commerce/contracts';
@@ -72,6 +74,7 @@ import { createAdminReach } from './services/admin-reach.js';
 import { createOwnerReadChecks, type OwnerReadChecks } from './services/owner-read-permissions.js';
 import { createCrmNotifier, type CrmNotifier } from './services/crm-notifier.js';
 import { createCrmQuoteRequests, type CrmQuoteRequests } from './services/crm-quote-requests.js';
+import { createCrmTasks, type CrmTasks } from './services/crm-tasks.js';
 import { createCarryIntoDocument } from './services/opportunity-document-carry.js';
 import { DocumentOpportunityService } from './services/document-opportunity-service.js';
 import { createEventReminderEmail } from './services/event-reminder-email.js';
@@ -788,19 +791,29 @@ export function registerModule(ctx: ModuleContext): void {
   // --- end of Created from an Opportunity ----------------------------------------
 
   // --- References (User Story 12) -------------------------------------------
-  // Products, Orders and people mentioned in a description, a note or a message. The
-  // Opportunity and the comment services store a text's references in the
-  // Command that saves the text and resolve them when they render it; the
-  // names come from `catalog`'s, `orders`' and `admin_users`' read ports, under
+  // Products, Orders, people, Quote Requests and Tasks mentioned in a
+  // description, a note or a message (the last two since
+  // `specs/163-projects-and-tasks/` FR-044). The Opportunity and the comment
+  // services store a text's references in the Command that saves the text and
+  // resolve them when they render it; the names come from `catalog`'s,
+  // `orders`', `admin_users`', `quote_requests`' and `tasks`' read ports, under
   // the reader's scope, every time.
+  //
+  // `tasks` is operator-switchable and this module degrades without it (the
+  // manifest's `degrades-without` edge on `taskReadPort`): `crmTasks` is the one
+  // door to its read port, and every caller asks `isPresent()` before it goes
+  // through — as `crmQuoteRequests` is for the quote desk.
   ctx.di.register({
+    crmTasks: ctx.asFunction(() => createCrmTasks(lazyPort<TaskReadPort>(ctx, 'taskReadPort'))).singleton(),
     crmReferenceService: ctx
       .asFunction(
-        ({ crmOwnerReadChecks }: CrmCradle) =>
+        ({ crmOwnerReadChecks, crmQuoteRequests, crmTasks }: CrmCradle & ValueCradle & ReferencesCradle) =>
           new ReferenceService({
             products: lazyPort<CatalogProductReadPort>(ctx, 'catalogProductReadPort'),
             orders: lazyPort<OrderReadPort>(ctx, 'orderReadPort'),
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+            quoteRequests: crmQuoteRequests,
+            tasks: crmTasks,
             mayRead: crmOwnerReadChecks,
           }),
       )
@@ -1029,14 +1042,23 @@ export function registerModule(ctx: ModuleContext): void {
   // The Quote Requests an Opportunity's link picker chooses from, through
   // `quote_requests`' read port and behind `crm:write` — the quote desk's own
   // list asks for the right to handle quotes. Absent with that module off.
+  //
+  // And the `@@` document list of an Opportunity's texts
+  // (`specs/163-projects-and-tasks/` FR-044): the Organization's Orders through
+  // `orders`' published list, its Quote Requests as above, and Tasks through
+  // `crmTasks` — each group only for a holder of its owner's read code and only
+  // while its owner is present.
   ctx.di.register({
     crmDocumentLookupService: ctx
       .asFunction(
-        ({ crmQuoteRequests, crmOwnerReadChecks }: CrmCradle & ValueCradle) =>
+        ({ emFactory, crmQuoteRequests, crmOwnerReadChecks, crmTasks }: CrmCradle & ValueCradle & ReferencesCradle) =>
           new CrmDocumentLookupService({
+            emFactory,
             quoteRequestPresence: crmQuoteRequests,
             quoteRequests: lazyPort<QuoteRequestReadPort>(ctx, 'quoteRequestReadPort'),
-            mayReadQuoteRequests: crmOwnerReadChecks.quoteRequests,
+            orders: lazyPort<OrderListPort>(ctx, 'orderListPort'),
+            tasks: crmTasks,
+            mayRead: crmOwnerReadChecks,
           }),
       )
       .singleton(),
@@ -1269,6 +1291,8 @@ interface BoardCardCradle {
 /** What the references section registers. */
 interface ReferencesCradle {
   readonly crmReferenceService: ReferenceService;
+  /** The one door to `tasks`' read port (`specs/163-projects-and-tasks/` FR-044). */
+  readonly crmTasks: CrmTasks;
 }
 
 /** What the change-history section reads from the container. */

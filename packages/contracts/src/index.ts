@@ -52,6 +52,14 @@ export * from './credit-limits.js';
 // CRM — Sales Opportunities (specs/143-crm-sales-opportunities/).
 export * from './crm.js';
 export * from './crm-rich-text.js';
+// The reference standard shared by CRM and Projects, and its formatted text
+// (specs/163-projects-and-tasks/ research R-14, FR-044). CRM's names above are
+// aliases of these.
+export * from './record-references.js';
+export * from './record-rich-text.js';
+// Tasks and Projects (specs/163-projects-and-tasks/).
+export * from './tasks.js';
+export * from './projects.js';
 export * from './api-keys.js';
 export * from './webhooks.js';
 export * from './analytics.js';

@@ -179,6 +179,9 @@ importers:
       '@endora-commerce/mod-product-feeds':
         specifier: workspace:*
         version: link:../packages/modules/product_feeds
+      '@endora-commerce/mod-projects':
+        specifier: workspace:*
+        version: link:../packages/modules/projects
       '@endora-commerce/mod-promotions':
         specifier: workspace:*
         version: link:../packages/modules/promotions
@@ -203,6 +206,9 @@ importers:
       '@endora-commerce/mod-settings':
         specifier: workspace:*
         version: link:../packages/modules/settings
+      '@endora-commerce/mod-tasks':
+        specifier: workspace:*
+        version: link:../packages/modules/tasks
       '@endora-commerce/mod-taxes':
         specifier: workspace:*
         version: link:../packages/modules/taxes
@@ -492,6 +498,9 @@ importers:
       '@endora-commerce/mod-product-feeds':
         specifier: workspace:*
         version: link:../packages/modules/product_feeds
+      '@endora-commerce/mod-projects':
+        specifier: workspace:*
+        version: link:../packages/modules/projects
       '@endora-commerce/mod-promotions':
         specifier: workspace:*
         version: link:../packages/modules/promotions
@@ -528,6 +537,9 @@ importers:
       '@endora-commerce/mod-shopping-lists':
         specifier: workspace:*
         version: link:../packages/modules/shopping_lists
+      '@endora-commerce/mod-tasks':
+        specifier: workspace:*
+        version: link:../packages/modules/tasks
       '@endora-commerce/mod-taxes':
         specifier: workspace:*
         version: link:../packages/modules/taxes
@@ -752,6 +764,12 @@ importers:
       '@radix-ui/react-slot':
         specifier: ^1.2.4
         version: 1.2.4(@types/react@19.2.14)(react@19.2.5)
+      '@tiptap/react':
+        specifier: ^3.22.5
+        version: 3.31.3(@floating-ui/dom@1.7.6)(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))(@tiptap/pm@3.31.3)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@tiptap/starter-kit':
+        specifier: ^3.22.5
+        version: 3.31.3
       '@types/react':
         specifier: ^19.2.14
         version: 19.2.14
@@ -991,6 +1009,12 @@ importers:
       '@endora-commerce/mod-price-lists':
         specifier: workspace:*
         version: link:../modules/price_lists
+      '@endora-commerce/mod-projects':
+        specifier: workspace:*
+        version: link:../modules/projects
+      '@endora-commerce/mod-tasks':
+        specifier: workspace:*
+        version: link:../modules/tasks
       '@endora-commerce/platform':
         specifier: workspace:*
         version: link:../platform
@@ -1358,6 +1382,9 @@ importers:
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@22.19.17)(happy-dom@20.14.5)(jsdom@29.1.1(@noble/hashes@2.0.1))(vite@7.3.7(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.2)(tsx@4.23.15)(yaml@2.9.0))
+      zod:
+        specifier: ^4.2.0
+        version: 4.3.6
 
   packages/modules/api_keys:
     devDependencies:
@@ -1958,12 +1985,6 @@ importers:
       '@mikro-orm/postgresql':
         specifier: ^6.6.13
         version: 6.6.16(@mikro-orm/core@6.6.16)
-      '@tiptap/react':
-        specifier: ^3.22.5
-        version: 3.31.3(@floating-ui/dom@1.7.6)(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))(@tiptap/pm@3.31.3)(@types/react-dom@19.2.3(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      '@tiptap/starter-kit':
-        specifier: ^3.22.5
-        version: 3.31.3
       '@types/node':
         specifier: ^22.9.0
         version: 22.19.17
@@ -3324,6 +3345,66 @@ importers:
         specifier: ^4.2.0
         version: 4.3.6
 
+  packages/modules/projects:
+    devDependencies:
+      '@endora-commerce/admin-kit':
+        specifier: workspace:*
+        version: link:../../admin-kit
+      '@endora-commerce/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@endora-commerce/email-components':
+        specifier: workspace:*
+        version: link:../../email-components
+      '@endora-commerce/platform':
+        specifier: workspace:*
+        version: link:../../platform
+      '@fastify/multipart':
+        specifier: ^10.0.0
+        version: 10.0.0
+      '@mikro-orm/core':
+        specifier: ^6.6.13
+        version: 6.6.16
+      '@mikro-orm/migrations':
+        specifier: ^6.6.13
+        version: 6.6.16(@mikro-orm/core@6.6.16)(@types/node@22.19.17)(pg@8.20.0)
+      '@mikro-orm/postgresql':
+        specifier: ^6.6.13
+        version: 6.6.16(@mikro-orm/core@6.6.16)
+      '@types/node':
+        specifier: ^22.9.0
+        version: 22.19.17
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.3.0
+      bullmq:
+        specifier: ^5.76.1
+        version: 5.76.1
+      fastify:
+        specifier: ^5.12.5
+        version: 5.12.5
+      ioredis:
+        specifier: ^5.10.1
+        version: 5.10.1
+      lucide-react:
+        specifier: ^1.11.0
+        version: 1.11.0(react@19.2.5)
+      react:
+        specifier: ^19.2.5
+        version: 19.2.5
+      react-router-dom:
+        specifier: ^7.18.2
+        version: 7.18.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@22.19.17)(happy-dom@20.14.5)(jsdom@29.1.1(@noble/hashes@2.0.1))(vite@7.3.7(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.2)(tsx@4.23.15)(yaml@2.9.0))
+      zod:
+        specifier: ^4.2.0
+        version: 4.3.6
+
   packages/modules/promotions:
     devDependencies:
       '@endora-commerce/admin-kit':
@@ -3857,6 +3938,51 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+
+  packages/modules/tasks:
+    devDependencies:
+      '@endora-commerce/admin-kit':
+        specifier: workspace:*
+        version: link:../../admin-kit
+      '@endora-commerce/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@endora-commerce/platform':
+        specifier: workspace:*
+        version: link:../../platform
+      '@mikro-orm/core':
+        specifier: ^6.6.13
+        version: 6.6.16
+      '@mikro-orm/migrations':
+        specifier: ^6.6.13
+        version: 6.6.16(@mikro-orm/core@6.6.16)(@types/node@22.19.17)(pg@8.20.0)
+      '@mikro-orm/postgresql':
+        specifier: ^6.6.13
+        version: 6.6.16(@mikro-orm/core@6.6.16)
+      '@types/node':
+        specifier: ^22.9.0
+        version: 22.19.17
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.3.0
+      fastify:
+        specifier: ^5.12.5
+        version: 5.12.5
+      lucide-react:
+        specifier: ^1.11.0
+        version: 1.11.0(react@19.2.5)
+      react:
+        specifier: ^19.2.5
+        version: 19.2.5
+      react-router-dom:
+        specifier: ^7.18.2
+        version: 7.18.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@22.19.17)(happy-dom@20.14.5)(jsdom@29.1.1(@noble/hashes@2.0.1))(vite@7.3.7(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.2)(tsx@4.23.15)(yaml@2.9.0))
 
   packages/modules/taxes:
     devDependencies:
@@ -18831,7 +18957,7 @@ snapshots:
       '@tiptap/extension-underline': 3.31.3(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))
       '@tiptap/html': 3.31.3(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))(@tiptap/pm@3.31.3)(happy-dom@20.14.5)
       '@tiptap/pm': 3.31.3
-      '@tiptap/react': 3.31.3(@floating-ui/dom@1.7.6)(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))(@tiptap/pm@3.31.3)(@types/react-dom@19.2.3(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@tiptap/react': 3.31.3(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))(@tiptap/pm@3.31.3)(@types/react-dom@19.2.3(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       deep-diff: 1.0.2
       fast-equals: 5.2.2
       flat: 5.0.2
@@ -20473,7 +20599,7 @@ snapshots:
     transitivePeerDependencies:
       - '@floating-ui/dom'
 
-  '@tiptap/react@3.31.3(@floating-ui/dom@1.7.6)(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))(@tiptap/pm@3.31.3)(@types/react-dom@19.2.3(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
+  '@tiptap/react@3.31.3(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))(@tiptap/pm@3.31.3)(@types/react-dom@19.2.3(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
     dependencies:
       '@tiptap/core': 3.31.3(@tiptap/pm@3.31.3)
       '@tiptap/pm': 3.31.3

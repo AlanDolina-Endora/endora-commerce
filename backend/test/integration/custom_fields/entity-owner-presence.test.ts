@@ -134,9 +134,18 @@ describe('custom_fields — a host type follows its owner module', () => {
 
   it('offers every owned type while its owner is on, labelled from this module’s bundle', async () => {
     const rows = await entityTypes();
+    // `project` (feature 163) is owned by `projects` and carries nothing, so it
+    // is not a row of the carry-shaped table above; its absence while
+    // `projects` is off is proven in `integration/projects/custom-fields.test.ts`.
     expect(rows.map((row) => row.entityType).sort()).toEqual(
-      [...UNOWNED, ...OWNED.map((owned) => owned.entityType)].sort(),
+      [...UNOWNED, ...OWNED.map((owned) => owned.entityType), 'project'].sort(),
     );
+    expect(rows.find((row) => row.entityType === 'project')).toEqual({
+      entityType: 'project',
+      labelKey: 'customFields.entity.project',
+      listFilter: true,
+      carryTargets: [],
+    });
     expect(rows.find((row) => row.entityType === 'opportunity')).toEqual({
       entityType: 'opportunity',
       labelKey: 'customFields.entity.opportunity',

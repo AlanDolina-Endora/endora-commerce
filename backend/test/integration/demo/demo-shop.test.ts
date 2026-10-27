@@ -345,6 +345,28 @@ const SEED_DELTA: Readonly<Record<string, number>> = {
   crm_opportunity_comments: 6,
   crm_opportunity_references: 3,
   crm_opportunity_events: 8,
+  // 12 — the demo Projects (`specs/163-projects-and-tasks/` T134): the Template
+  //      *Showroom fit-out* — four Stages, its two Roles, four Stage Tasks and
+  //      four moves — and four Projects made from it, each with its own copy of
+  //      the four Stages, their Stage Tasks and moves, its Members (seven, each
+  //      with one Role), its Organization (the internal one has none) and one
+  //      history row per Stage entered and per close. No link: the demo has no
+  //      Order.
+  project_templates: 1,
+  project_template_roles: 2,
+  project_template_stages: 4,
+  project_template_stage_tasks: 4,
+  project_template_stage_moves: 4,
+  projects: 4,
+  project_organizations: 3,
+  project_members: 7,
+  project_member_roles: 7,
+  project_stages: 16,
+  project_stage_tasks: 16,
+  project_stage_moves: 16,
+  project_stage_entries: 11,
+  // 13 — their Tasks: one per Stage Task of every Stage each Project entered.
+  tasks: 12,
 };
 
 /**
@@ -678,6 +700,43 @@ describe('T226 — `endora demo seed` builds this shop', () => {
       for (const row of rows.filter((r) => r.parent_slug !== null)) {
         expect(sections).toContain(row.parent_slug);
       }
+    });
+
+    it('gives three Projects to the demo organisation and keeps one internal, each standing in a Stage of its own', async () => {
+      const projects = await query<{ state: string; organizations: string; current_ok: boolean; template: string }>(
+        shop,
+        `select p.state,
+                coalesce((select string_agg(o.tax_id, ',') from project_organizations po
+                            join organizations o on o.id = po.organization_id where po.project_id = p.id), '') as organizations,
+                exists (select 1 from project_stages s where s.id = p.current_stage_id and s.project_id = p.id) as current_ok,
+                t.name as template
+           from projects p join project_templates t on t.id = p.template_id
+          order by p.created_at`,
+      );
+      expect(projects.map((row) => [row.state, row.organizations, row.current_ok, row.template]).sort()).toEqual(
+        [
+          ['completed', 'PL5210000099', true, 'Showroom fit-out'],
+          ['lost', 'PL5210000099', true, 'Showroom fit-out'],
+          ['open', 'PL5210000099', true, 'Showroom fit-out'],
+          ['open', '', true, 'Showroom fit-out'],
+        ].sort(),
+      );
+    });
+
+    it('creates every demo Task in a Stage of a demo Project, by the demo administrator', async () => {
+      // `created_by_admin_user_id` is not null — and it is the demo
+      // administrator's, not a stand-in.
+      const tasks = await query<{ creator: string; in_stage: boolean }>(
+        shop,
+        `select a.email as creator,
+                exists (select 1 from project_stages s
+                         where s.id = t.context_group_id and s.project_id = t.context_id) as in_stage
+           from tasks t join admin_users a on a.id = t.created_by_admin_user_id
+          where t.context_type = 'project'`,
+      );
+      expect(tasks).toHaveLength(12);
+      expect(new Set(tasks.map((row) => row.creator))).toEqual(new Set(['admin@demo.local']));
+      expect(tasks.every((row) => row.in_stage)).toBe(true);
     });
 
     it('gives the whole sales pipeline to the demo organisation, two to a status', async () => {

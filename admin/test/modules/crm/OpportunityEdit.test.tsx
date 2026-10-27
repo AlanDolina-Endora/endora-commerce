@@ -192,7 +192,7 @@ describe('OpportunityDetail — editing in place (specs/158-crm-opportunity-inli
     await userEvent.click(pencil(DESCRIPTION));
     const field = screen.getByRole('textbox', { name: DESCRIPTION });
     expect(storedText(field)).toBe('Forty vans over two years.');
-    expect(screen.getByRole('toolbar', { name: en('editor.toolbar') })).toBeInTheDocument();
+    expect(screen.getByRole('toolbar', { name: core('editor.toolbar') })).toBeInTheDocument();
     editorOf(field).commands.setContent('<p><strong>Forty</strong> vans.</p>');
     await save();
     await waitFor(() =>

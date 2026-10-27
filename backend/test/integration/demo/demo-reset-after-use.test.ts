@@ -937,6 +937,106 @@ describe('demo reset on a demo that has been used (issue #143)', () => {
   }
 
   /**
+   * A Project of one tenant, with a Stage, a Task in it and what an
+   * administrator hangs on it — written in one transaction, because an open
+   * Project must have a current Stage by the time it commits
+   * (`projects_open_has_current_stage`, deferred).
+   *
+   * `organizations` is who the Project is for, each row tracked as the owner
+   * given beside it; an empty list is an internal Project.
+   */
+  async function aProject(
+    owner: Owner,
+    organizations: ReadonlyArray<readonly [Owner, string]>,
+  ): Promise<string> {
+    const add = (table: string, given: Record<string, unknown>): Promise<string> =>
+      insert(owner, table, given);
+    await db.query('begin');
+    try {
+      const projectId = await add('projects', { state: 'open', visibility: 'inherit' });
+      const stageId = await add('project_stages', {
+        project_id: projectId,
+        position: 0,
+        color: '#336699',
+      });
+      await db.query(`update projects set current_stage_id = $1 where id = $2`, [stageId, projectId]);
+      for (const [organizationOwner, organizationId] of organizations) {
+        await insert(organizationOwner, 'project_organizations', {
+          project_id: projectId,
+          organization_id: organizationId,
+        });
+      }
+      await add('project_members', { project_id: projectId });
+      await add('project_comments', { project_id: projectId, kind: 'note' });
+      await add('project_stage_entries', { project_id: projectId, to_stage_id: stageId, kind: 'enter' });
+      await add('tasks', {
+        status: 'todo',
+        context_type: 'project',
+        context_id: projectId,
+        context_group_id: stageId,
+      });
+      await db.query('commit');
+      return projectId;
+    } catch (error) {
+      await db.query('rollback');
+      throw error;
+    }
+  }
+
+  /**
+   * Projects an administrator opened for the demo organisation, for the real
+   * customer, for both at once, and for nobody (feature 163).
+   *
+   * `project_organizations.organization_id` is `on delete restrict`, so the
+   * demo's Project refuses the organisation's deletion; its Task names it by a
+   * bare `uuid` and would be left naming a Project that is gone. The Project
+   * the two organisations share is the real customer's as much as the demo's:
+   * it stays, and only what is the demo organisation's on it — its place on
+   * the Project and the link to its record — goes.
+   */
+  async function useProjects(demo: Tenant, real: Tenant): Promise<void> {
+    for (const [owner, tenant] of [
+      ['demo', demo],
+      ['real', real],
+    ] as const) {
+      const projectId = await aProject(owner, [[owner, tenant.organizationId]]);
+      await insert(owner, 'project_links', {
+        project_id: projectId,
+        record_kind: 'order',
+        record_id: tenant.orderId,
+        organization_id: tenant.organizationId,
+      });
+      await insert(owner, 'project_references', {
+        project_id: projectId,
+        source_kind: 'description',
+        target_type: 'order',
+        target_id: tenant.orderId,
+      });
+    }
+    const sharedId = await aProject('real', [
+      ['real', real.organizationId],
+      ['demo', demo.organizationId],
+    ]);
+    for (const [owner, tenant] of [
+      ['demo', demo],
+      ['real', real],
+    ] as const) {
+      const [quote] = await query<{ id: string }>(
+        `select id from quote_requests where organization_id = $1 limit 1`,
+        [tenant.organizationId],
+      );
+      await insert(owner, 'project_links', {
+        project_id: sharedId,
+        record_kind: 'quote_request',
+        record_id: quote!.id,
+        organization_id: tenant.organizationId,
+      });
+    }
+    // An internal Project: a predicate that matched "no organisation" would take it.
+    await aProject('nobody', []);
+  }
+
+  /**
    * Every usage counter of the operator's promotion, as `<scope type> <scope
    * key>` → count.
    *
@@ -1167,6 +1267,7 @@ let demoDefaultChannelCode: string;
     const real = await realTenant();
     await useEverythingElse('real', real);
     await useWithoutAnOrganization(real);
+    await useProjects(demoIs, real);
     const [channel] = await query<{ id: string }>(
       `select id from sales_channels where system_default limit 1`,
     );

@@ -147,6 +147,7 @@ import type { CrmOrderStatusMapping as CrmOrderStatusMappingRow } from '../../..
 import type { CrmStatusPropagation as CrmStatusPropagationRow } from '../../../packages/modules/crm/src/backend/entities/crm-status-propagation.entity.js';
 import type { CrmTag as CrmTagRow } from '../../../packages/modules/crm/src/backend/entities/crm-tag.entity.js';
 import type { CrmValueCountingStatus as CrmValueCountingStatusRow } from '../../../packages/modules/crm/src/backend/entities/crm-value-counting-status.entity.js';
+import type { Task as TaskRow } from '../../../packages/modules/tasks/src/backend/entities/task.entity.js';
 
 /**
  * How a test names a **module package's** entity class (D-168).
@@ -1063,6 +1064,7 @@ export const CrmOrderStatusMapping = classNamed<CrmOrderStatusMappingRow>(instal
 export const CrmStatusPropagation = classNamed<CrmStatusPropagationRow>(installedModuleEntities, 'crm', 'CrmStatusPropagation');
 export const CrmTag = classNamed<CrmTagRow>(installedModuleEntities, 'crm', 'CrmTag');
 export const CrmValueCountingStatus = classNamed<CrmValueCountingStatusRow>(installedModuleEntities, 'crm', 'CrmValueCountingStatus');
+export const Task = classNamed<TaskRow>(installedModuleEntities, 'tasks', 'Task');
 export type CrmOpportunity = CrmOpportunityRow;
 export type CrmOpportunityAttachment = CrmOpportunityAttachmentRow;
 export type CrmOpportunityComment = CrmOpportunityCommentRow;
@@ -1079,3 +1081,4 @@ export type CrmOrderStatusMapping = CrmOrderStatusMappingRow;
 export type CrmStatusPropagation = CrmStatusPropagationRow;
 export type CrmTag = CrmTagRow;
 export type CrmValueCountingStatus = CrmValueCountingStatusRow;
+export type Task = TaskRow;

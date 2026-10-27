@@ -7,16 +7,19 @@ import { SUPPORTED_ENTITIES, SUPPORTED_ENTITY_TYPES } from './custom-field-regis
  * owner module.
  */
 describe('custom-field registry', () => {
-  it('offers the list-filter option on exactly order, quote_request and opportunity', () => {
+  it('offers the list-filter option on exactly order, quote_request, opportunity and project', () => {
     const offering = SUPPORTED_ENTITY_TYPES.filter((type) => SUPPORTED_ENTITIES[type].listFilter === true);
-    expect([...offering].sort()).toEqual(['opportunity', 'order', 'quote_request']);
+    expect([...offering].sort()).toEqual(['opportunity', 'order', 'project', 'quote_request']);
   });
 
-  it('names the owner of quote_request and opportunity, and of no other type', () => {
+  it('names the owner of quote_request, opportunity and project, and of no other type', () => {
     expect(SUPPORTED_ENTITIES.quote_request.ownerModuleId).toBe('quote_requests');
     expect(SUPPORTED_ENTITIES.opportunity.ownerModuleId).toBe('crm');
+    // `specs/163-projects-and-tasks/` research R-18.
+    expect(SUPPORTED_ENTITIES.project.ownerModuleId).toBe('projects');
+    expect(SUPPORTED_ENTITIES.project.orgOwned).toBe(true);
     const owned = SUPPORTED_ENTITY_TYPES.filter((type) => SUPPORTED_ENTITIES[type].ownerModuleId !== undefined);
-    expect([...owned].sort()).toEqual(['opportunity', 'quote_request']);
+    expect([...owned].sort()).toEqual(['opportunity', 'project', 'quote_request']);
   });
 
   // `specs/162-custom-fields-value-carry/` data-model §1.1 — the carry pairs.

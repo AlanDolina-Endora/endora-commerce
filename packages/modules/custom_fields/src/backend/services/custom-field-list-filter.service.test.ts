@@ -235,7 +235,7 @@ describe('CustomFieldListFilterService.condition — refusal', () => {
 describe('CustomFieldListFilterService.condition — bound, never spliced', () => {
   const HOSTILE = ["it's", 'a"b', 'what?', '100%', 'x;--', '$1', 'a\\b', '?|'];
 
-  it.each(['order', 'quote_request', 'opportunity'] as const)(
+  it.each(['order', 'quote_request', 'opportunity', 'project'] as const)(
     'binds every key and value on %s and names the bound table',
     async (entityType) => {
       const { port } = service(EVERY_TYPE);

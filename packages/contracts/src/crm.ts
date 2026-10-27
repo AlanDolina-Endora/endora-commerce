@@ -4,6 +4,11 @@ import { collectionEnvelope, dataEnvelope } from './envelopes.js';
 import { customFieldFilterSchema, customFieldValuesSchema } from './custom-fields.js';
 import type { QuoteRequestStatus } from './quote-requests.js';
 import { twoDecimalAmountString } from './money-input.js';
+import {
+  RecordReferenceSchema as OpportunityReferenceSchema,
+  recordReferenceTypeSchema,
+  type RecordReferenceType,
+} from './record-references.js';
 
 /**
  * CRM — Sales Opportunities (`specs/143-crm-sales-opportunities/`).
@@ -86,12 +91,13 @@ export const opportunityCommentKindSchema = z.enum(['note', 'message']);
 export type OpportunityCommentKind = z.infer<typeof opportunityCommentKindSchema>;
 
 /**
- * What a free text can refer to. `admin_user` is a person — a user of the Admin
- * UI, under the name the platform has for one everywhere else (the bell's
- * audience, `assignedAdminUserId`); `user` alone would also read as a customer.
+ * What a free text can refer to — the shared reference types of
+ * `record-references.ts` (`specs/163-projects-and-tasks/` research R-14): a
+ * Product, an Order, a person (`admin_user`), and since that feature a Quote
+ * Request and a Task. An alias, not a copy: CRM and Projects read one grammar.
  */
-export const opportunityReferenceTypeSchema = z.enum(['product', 'order', 'admin_user']);
-export type OpportunityReferenceType = z.infer<typeof opportunityReferenceTypeSchema>;
+export const opportunityReferenceTypeSchema = recordReferenceTypeSchema;
+export type OpportunityReferenceType = RecordReferenceType;
 
 /** The six `QuoteRequestStatus` values — a fixed union, unlike Order statuses. */
 export const QUOTE_REQUEST_STATUS_VALUES = [
@@ -146,107 +152,27 @@ const statusNameSchema = z.record(z.string().min(2).max(16), z.string().min(1).m
 // ---------------------------------------------------------------------------
 
 /**
- * The reference-token grammar: `[[product:<uuid>]]`, `[[order:<uuid>]]`,
- * `[[admin_user:<uuid>]]`.
+ * The reference-token grammar: `[[<type>:<uuid>]]` for the five types of
+ * {@link opportunityReferenceTypeSchema}.
  *
- * Free text (`description`, a comment `body`) is stored as plain text carrying
- * these tokens. This is the one place the grammar is written; the backend
- * extracts with it and the admin's composer inserts with it. What a person
- * types to get one — `@`, `@@`, `@@@` — is the composer's and is never stored.
+ * Written once, in `record-references.ts` (`specs/163-projects-and-tasks/`
+ * research R-14, FR-044), and exported here under the names CRM has always
+ * exported — each an **alias** of the shared function or schema, never a copy,
+ * so CRM and Projects cannot drift. What a person types to get one — `@`, `@@`,
+ * `@@@` — is the composer's and is never stored.
  */
-const REFERENCE_TOKEN_SOURCE =
-  '\\[\\[(product|order|admin_user):([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\\]\\]';
-
-export interface OpportunityReferenceToken {
-  type: OpportunityReferenceType;
-  id: string;
-}
-
-export function formatOpportunityReferenceToken(type: OpportunityReferenceType, id: string): string {
-  return `[[${type}:${id}]]`;
-}
-
-/** Every well-formed token in `text`, in first-appearance order, each target once. */
-export function extractOpportunityReferenceTokens(text: string): OpportunityReferenceToken[] {
-  const seen = new Set<string>();
-  const tokens: OpportunityReferenceToken[] = [];
-  // A fresh expression per call: a shared global one carries `lastIndex`.
-  for (const match of text.matchAll(new RegExp(REFERENCE_TOKEN_SOURCE, 'g'))) {
-    const type = match[1] as OpportunityReferenceType;
-    const id = (match[2] as string).toLowerCase();
-    const key = `${type}:${id}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    tokens.push({ type, id });
-  }
-  return tokens;
-}
-
-/** A stretch of plain text, or one well-formed token, in the order they appear. */
-export type OpportunityReferenceTextPart =
-  | { kind: 'text'; text: string }
-  | ({ kind: 'reference' } & OpportunityReferenceToken);
-
-/**
- * `text` cut at its well-formed tokens, for a screen that shows each token as
- * a link: the parts, joined back, are the text. A malformed token stays text.
- */
-export function splitOpportunityReferenceText(text: string): OpportunityReferenceTextPart[] {
-  const parts: OpportunityReferenceTextPart[] = [];
-  let cursor = 0;
-  for (const match of text.matchAll(new RegExp(REFERENCE_TOKEN_SOURCE, 'g'))) {
-    const start = match.index ?? 0;
-    if (start > cursor) parts.push({ kind: 'text', text: text.slice(cursor, start) });
-    parts.push({
-      kind: 'reference',
-      type: match[1] as OpportunityReferenceType,
-      id: (match[2] as string).toLowerCase(),
-    });
-    cursor = start + match[0].length;
-  }
-  if (cursor < text.length) parts.push({ kind: 'text', text: text.slice(cursor) });
-  return parts;
-}
-
-/** The people a text mentions, each once, in first-appearance order. */
-export function mentionedAdminUserIds(text: string | null | undefined): string[] {
-  if (!text) return [];
-  return extractOpportunityReferenceTokens(text)
-    .filter((token) => token.type === 'admin_user')
-    .map((token) => token.id);
-}
-
-/**
- * A resolved reference, returned beside every free-text field. A target the
- * reader may not see, or that is gone, is `available: false` with no label.
- * A person has a `label` — their name — and never a `url`: the screen of an
- * administrator is `admin_users`', behind a permission of its own.
- */
-/**
- * What an available Order reference says beyond its number
- * (`specs/158-crm-opportunity-inline-editing/`, FR-012): its status code — the
- * screen names it from `orders`' statuses — its total, when it was placed and
- * for whom (the billing company, else the billing recipient).
- */
-export const OpportunityReferenceOrderSchema = z.object({
-  status: z.string(),
-  total: z.string(),
-  currency: z.string(),
-  placedAt: z.string(),
-  customerName: z.string().nullable(),
-});
-export type OpportunityReferenceOrder = z.infer<typeof OpportunityReferenceOrderSchema>;
-
-export const OpportunityReferenceSchema = z.object({
-  type: opportunityReferenceTypeSchema,
-  id: z.string().uuid(),
-  available: z.boolean(),
-  label: z.string().nullable(),
-  url: z.string().nullable(),
-  /** Present on an available Order only. */
-  order: OpportunityReferenceOrderSchema.optional(),
-});
-export type OpportunityReference = z.infer<typeof OpportunityReferenceSchema>;
+export {
+  extractRecordReferenceTokens as extractOpportunityReferenceTokens,
+  formatRecordReferenceToken as formatOpportunityReferenceToken,
+  mentionedAdminUserIds,
+  RecordReferenceOrderSchema as OpportunityReferenceOrderSchema,
+  RecordReferenceSchema as OpportunityReferenceSchema,
+  splitRecordReferenceText as splitOpportunityReferenceText,
+  type RecordReference as OpportunityReference,
+  type RecordReferenceOrder as OpportunityReferenceOrder,
+  type RecordReferenceTextPart as OpportunityReferenceTextPart,
+  type RecordReferenceToken as OpportunityReferenceToken,
+} from './record-references.js';
 
 // ---------------------------------------------------------------------------
 // §1 Opportunities
@@ -1026,6 +952,21 @@ export const OpportunityQuoteRequestLookupQuerySchema = z.object({
 export type OpportunityQuoteRequestLookupQuery = z.infer<
   typeof OpportunityQuoteRequestLookupQuerySchema
 >;
+
+/**
+ * `GET /crm/lookups/documents` — the `@@` document list of an Opportunity's
+ * texts (`specs/163-projects-and-tasks/` FR-044). The answer is the shared
+ * `RecordDocumentLookupResponse` (`record-references.ts`), the one Projects
+ * serves too. Orders and Quote Requests are those of the Opportunity's
+ * Organization — or, on the create form before there is an Opportunity, of the
+ * Organization chosen there; with neither, the list offers Tasks only.
+ */
+export const OpportunityDocumentLookupQuerySchema = z.object({
+  opportunityId: z.string().uuid().optional(),
+  organizationId: z.string().uuid().optional(),
+  q: lookupSearchSchema,
+});
+export type OpportunityDocumentLookupQuery = z.infer<typeof OpportunityDocumentLookupQuerySchema>;
 
 export const OpportunityQuoteRequestOptionSchema = z.object({
   id: z.string().uuid(),

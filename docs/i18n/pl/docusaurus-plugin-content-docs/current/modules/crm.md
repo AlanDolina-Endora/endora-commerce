@@ -739,7 +739,7 @@ rozmowie — poza nadawcą — z dzwonka powiadomień w Admin UI, z odnośnikiem
 szansy. Wpis nazywa szansę jej numerem i nie zawiera niczego z treści
 wiadomości, a nie powstaje dla osoby, która nie ma już dostępu do organizacji
 szansy. **Nikt inny nie jest powiadamiany, chyba że wiadomość o nim
-wspomina** (zob. *Wspominanie osoby, zamówienia albo produktu przez @*):
+wspomina** (zob. *Wspominanie osoby, dokumentu albo produktu przez @*):
 pierwsza wiadomość w szansie, która nie ma przypisanej osoby i nie wspomina
 nikogo, nie powiadamia nikogo. Wpis jest wyświetlany w języku czytającego,
 tak jak wpis o przypisaniu. Gdy moduł **Powiadomienia administratora** jest
@@ -747,8 +747,9 @@ wyłączony, wiadomość jest zapisywana tak samo, a nikt nie dostaje powiadomie
 
 **Jedno i drugie jest tekstem sformatowanym.** Notatkę i wiadomość pisze się w
 tym samym edytorze co opis — pogrubienie, kursywa, przekreślenie, listy i
-odnośniki — i mogą one wspominać osobę, zamówienie albo produkt (zob. *Tekst
-sformatowany* oraz *Wspominanie osoby, zamówienia albo produktu przez @*).
+odnośniki — i mogą one wspominać osobę, zamówienie, zapytanie ofertowe, zadanie
+albo produkt (zob. *Tekst sformatowany* oraz *Wspominanie osoby, dokumentu albo
+produktu przez @*).
 Notatka albo wiadomość mieści do 10 000 znaków.
 
 **Jedno i drugie jest wewnętrzne.** Ani notatka, ani wiadomość nie ma
@@ -1430,10 +1431,18 @@ CRM nie wymaga modułu Zapytań ofertowych. Gdy jest on wyłączony:
   numeru, statusu i wartości;
 - nie dodaje niczego do wartości wyliczanej;
 - próba powiązania zapytania ofertowego kończy się odpowiedzią
-  `503 MODULE_DISABLED`; istniejące powiązanie nadal można usunąć.
+  `503 MODULE_DISABLED`; istniejące powiązanie nadal można usunąć;
+- zapytanie ofertowe wspomniane w tekście jest pokazywane jako *Zapytanie
+  ofertowe niedostępne*, a lista dokumentów pod `@@` nie proponuje zapytań
+  ofertowych.
 
 Nic nie ginie: po ponownym włączeniu powiązania znów pokazują swoje dokumenty.
 Wartość wyliczana uwzględni zapytania ofertowe przy najbliższym przeliczeniu.
+
+Moduł **Zadania** jest opcjonalny w ten sam sposób. Gdy jest wyłączony, zadanie
+wspomniane w tekście jest pokazywane jako *Zadanie niedostępne*, a lista
+dokumentów pod `@@` nie proponuje zadań; po ponownym włączeniu wzmianki znów
+pokazują swoje zadania.
 
 ### W Admin UI
 
@@ -1690,7 +1699,7 @@ formatowanie:
 i nic nie zostaje podlinkowane.
 
 W opisie, notatce i wiadomości skróty z `@` oraz przyciski **Wspomnij osobę**,
-**Wstaw zamówienie** i **Wstaw produkt** działają jak dotąd (zob. niżej). Opis
+**Wstaw dokument** i **Wstaw produkt** działają jak dotąd (zob. niżej). Opis
 wydarzenia też jest sformatowany, ale nie przyjmuje wzmianek.
 
 Wszędzie, gdzie tekst się czyta — na karcie *Przegląd*, na kartach *Notatki*
@@ -1722,21 +1731,28 @@ znaczników — to, co pokazuje e-mail, powiadomienie albo historia zmian.
 Limity długości liczą zapisany ciąg razem ze znacznikami: opis do 20 000
 znaków, notatka albo wiadomość do 10 000, opis wydarzenia do 5000.
 
-## Odwołania do produktów i zamówień
+## Odwołania do produktów, zamówień, zapytań ofertowych i zadań
 
-Opis szansy sprzedażowej, notatka i wiadomość mogą wspominać **produkt** albo
-**zamówienie**. Wzmianka to znacznik w tekście:
+Opis szansy sprzedażowej, notatka i wiadomość mogą wspominać **produkt**,
+**zamówienie**, **zapytanie ofertowe** albo **zadanie**. Wzmianka to znacznik w
+tekście:
 
 ```text
 [[product:<identyfikator produktu>]]
 [[order:<identyfikator zamówienia>]]
+[[quote_request:<identyfikator zapytania ofertowego>]]
+[[task:<identyfikator zadania>]]
 ```
+
+To ten sam standard odwołań, którego używa moduł Projekty, więc tekst czyta się
+tak samo na obu ekranach. Teksty napisane, zanim można było wspominać zapytania
+ofertowe i zadania, pozostają bez zmian: ich znaczniki są podzbiorem powyższych.
 
 Tekst jest zapisywany i zwracany dokładnie tak, jak został napisany — jako ciąg
 znaków ze znacznikami odwołań i formatowania z sekcji *Tekst sformatowany*,
 nigdy jako HTML. Obok każdego
-takiego tekstu API zwraca `references`: jeden wpis na każdy wspomniany produkt
-lub zamówienie, w kolejności występowania, każdy raz.
+takiego tekstu API zwraca `references`: jeden wpis na każdy wspomniany cel,
+w kolejności występowania, każdy raz.
 
 ```json
 {
@@ -1749,9 +1765,10 @@ lub zamówienie, w kolejności występowania, każdy raz.
 ```
 
 - `label` to **aktualna** nazwa produktu w języku czytającego albo numer
-  zamówienia — sprawdzane przy każdym odczycie tekstu, więc produkt po zmianie
-  nazwy pokazuje nową nazwę.
-- `url` to miejsce, do którego wzmianka prowadzi w Admin UI.
+  zamówienia, zapytania ofertowego lub zadania — sprawdzane przy każdym odczycie
+  tekstu, więc produkt po zmianie nazwy pokazuje nową nazwę.
+- `url` to miejsce, do którego wzmianka prowadzi w Admin UI — `/catalog/products/…`,
+  `/orders/…`, `/quote-requests/…` albo `/tasks/…`.
 - Dostępne **zamówienie** ma także obiekt `order`: to, co czytający widzi obok
   jego numeru.
 
@@ -1774,11 +1791,15 @@ lub zamówienie, w kolejności występowania, każdy raz.
 
   `status` to kod statusu zamówienia, `total` — jego kwota jako ciąg dziesiętny,
   `customerName` — firma z danych do faktury, a gdy jej nie ma, odbiorca
-  z danych do faktury; `null`, gdy nie ma żadnego z nich. Produkt i osoba nie
-  mają takiego obiektu.
-- Produkt, który już nie istnieje, oraz zamówienie organizacji niedostępnej dla
-  czytającego wracają z `"available": false`, **bez nazwy i bez odnośnika**.
-  Wzmianka zostaje w tekście; nic o jej celu nie jest pokazywane.
+  z danych do faktury; `null`, gdy nie ma żadnego z nich. Produkt, zapytanie
+  ofertowe, zadanie i osoba nie mają takiego obiektu.
+- Produkt, który już nie istnieje, zamówienie organizacji niedostępnej dla
+  czytającego, zapytanie ofertowe albo zadanie, które zniknęło lub którego
+  czytający nie może zobaczyć, a także zapytanie ofertowe albo zadanie, gdy moduł
+  Zapytania ofertowe albo Zadania jest wyłączony, wracają z `"available": false`,
+  **bez nazwy i bez odnośnika**. Wzmianka zostaje w tekście; nic o jej celu nie
+  jest pokazywane. Zadanie jest ukryte także wtedy, gdy rekord, do którego
+  należy — na przykład projekt — jest niedostępny dla czytającego.
 
 Znacznik, który nie jest poprawny — nieznany typ, coś, co nie jest
 identyfikatorem — jest po prostu tekstem.
@@ -1787,17 +1808,19 @@ identyfikatorem — jest po prostu tekstem.
 notatce i wiadomości (dla jej `body`). Nie ma osobnego punktu końcowego.
 
 W Admin UI pole opisu oraz pola notatki i wiadomości mają pod sobą przyciski,
-wśród nich **Wstaw zamówienie** i **Wstaw produkt**. Każdy otwiera
+wśród nich **Wstaw dokument** i **Wstaw produkt**. Każdy otwiera
 wyszukiwarkę; wybranie
 wyniku wstawia go do tekstu w miejscu kursora — **jako nazwę, nigdy jako
-znacznik**: podczas pisania pole pokazuje numer zamówienia albo nazwę produktu
+znacznik**: podczas pisania pole pokazuje numer dokumentu albo nazwę produktu
 jako małą etykietę, a znacznik jest tylko tym, co zostaje zapisane. Po zapisaniu
 tekst pokazuje w tym miejscu tę nazwę jako odnośnik, a dla celu, który zniknął
 albo którego nie możesz zobaczyć — *Produkt niedostępny* /
-*Zamówienie niedostępne* — zarówno w zapisanym tekście, jak i w polu otwartym
-do edycji; to, czego nie widzisz, jest zapisywane z powrotem bez zmian. Nazwę widzi tylko osoba, która mogłaby otworzyć sam
-cel: numer zamówienia wymaga `orders:read`, a nazwa produktu —
-`catalog:read`.
+*Zamówienie niedostępne* / *Zapytanie ofertowe niedostępne* /
+*Zadanie niedostępne* — zarówno w zapisanym tekście, jak i w polu otwartym
+do edycji; to, czego nie widzisz, jest zapisywane z powrotem bez zmian. Nazwę
+widzi tylko osoba, która mogłaby otworzyć sam cel: numer zamówienia wymaga
+`orders:read`, numer zapytania ofertowego — `rfqs:handle`, numer zadania —
+`tasks:read`, a nazwa produktu — `catalog:read`.
 
 **Zamówienie mówi więcej przy odczycie.** W zapisanym tekście wspomniane
 zamówienie jest pokazywane jako jego numer — odnośnik otwierający zamówienie
@@ -1807,14 +1830,24 @@ odbiorca). Obok jest mała, osobna ikona — nazwana *Otwórz zamówienie
 ORD-2026-000184 w nowej karcie* po wskazaniu jej kursorem i dla czytnika
 ekranu — która otwiera je w nowej karcie.
 
-Obie wyszukiwarki należą do katalogu i do modułu Zamówienia, dlatego przycisk
-*Wstaw produkt* widzi rola, która ma także `catalog:read`, a *Wstaw
-zamówienie* — rola z `orders:read`; proponowane są wyłącznie zamówienia
-organizacji tej szansy. Znacznik wpisany albo wklejony ręcznie jest zapisywany
-bez żadnego z tych uprawnień, a osobie bez uprawnienia pokazuje się jako
-niedostępny.
+*Wstaw produkt* przeszukuje katalog i widzi go rola, która ma także
+`catalog:read`. *Wstaw dokument* przeszukuje **jedną listę dokumentów**,
+pogrupowaną **Zamówienia · Zapytania ofertowe · Zadania** — tę samą, którą
+oferuje moduł Projekty:
 
-## Wspominanie osoby, zamówienia albo produktu przez @
+- **Zamówienia** i **Zapytania ofertowe** wyłącznie organizacji tej szansy —
+  na formularzu tworzenia organizacji tam wybranej; bez niej żadna z tych grup
+  nie jest proponowana;
+- **Zadania** — każde, które możesz zobaczyć;
+- każda grupa tylko dla roli, która ma także uprawnienie, z jakim czyta ją jej
+  moduł — `orders:read`, `rfqs:handle`, `tasks:read` — i tylko wtedy, gdy ten
+  moduł jest włączony. Rola bez żadnego z tych trzech uprawnień nie widzi
+  przycisku.
+
+Znacznik wpisany albo wklejony ręcznie jest zapisywany bez żadnego z tych
+uprawnień, a osobie bez uprawnienia pokazuje się jako niedostępny.
+
+## Wspominanie osoby, dokumentu albo produktu przez @
 
 Te same trzy pola — opis, notatka, wiadomość — przyjmują wzmiankę prosto z
 klawiatury:
@@ -1822,15 +1855,15 @@ klawiatury:
 | Wpisz | Aby wspomnieć | Dostępne dla |
 | --- | --- | --- |
 | `@` | **osobę** — użytkownika Admin UI, który może czytać szanse sprzedażowe | każdego, kto pisze tekst |
-| `@@` | **zamówienie** organizacji tej szansy | roli, która ma także `orders:read` |
+| `@@` | **dokument** — zamówienie albo zapytanie ofertowe organizacji tej szansy albo zadanie — z pogrupowanej listy opisanej wyżej | roli, która ma także `orders:read`, `rfqs:handle` albo `tasks:read`; każdą grupę tylko z jej własnym uprawnieniem |
 | `@@@` | **produkt** | roli, która ma także `catalog:read` |
 
 Wpisz `@` na początku tekstu albo po spacji, a lista otworzy się **tam, gdzie
 piszesz** — pod tym wierszem albo nad nim, gdy poniżej nie ma miejsca; pisz
-dalej, aby ją zawęzić — imię, nazwisko, numer zamówienia, nazwa albo SKU
-produktu. **Strzałki** poruszają po liście, **Enter** albo **Tab** wybiera,
+dalej, aby ją zawęzić — imię, nazwisko, numer zamówienia, zapytania ofertowego
+albo zadania, tytuł zadania, nazwa albo SKU produktu. **Strzałki** poruszają po liście, **Enter** albo **Tab** wybiera,
 **Escape** zamyka ją i zostawia to, co wpisano. Wybór zastępuje `@` i litery
-po nim wzmianką — pokazywaną jako **@Tomasz Nowak**, jako numer zamówienia albo
+po nim wzmianką — pokazywaną jako **@Tomasz Nowak**, jako numer dokumentu albo
 jako nazwa produktu — a zdanie pisze się dalej:
 
 ```text
@@ -1854,10 +1887,13 @@ pojedynczy `@` otwiera listę osób po krótkiej chwili.
 Znak `@` w środku wyrazu — adres e-mail — niczego nie otwiera, podobnie jak
 `@`, po którym następuje spacja. Skrót, którego Twoja rola nie ma, zostawia
 znaki dokładnie tak, jak je wpisano. Wiersz pod polem wymienia skróty, które
-masz, a przycisk **Wspomnij osobę** obok *Wstaw zamówienie* i *Wstaw produkt*
+masz, a przycisk **Wspomnij osobę** obok *Wstaw dokument* i *Wstaw produkt*
 robi to samo.
 
-Wzmianka o osobie jest zapisywana tak jak dwie pozostałe, jako znacznik, i
+`@@` zastępuje swoje wcześniejsze znaczenie: przed standardem odwołań wspólnym z
+Projektami wyszukiwał wyłącznie zamówienia organizacji.
+
+Wzmianka o osobie jest zapisywana tak jak pozostałe, jako znacznik, i
 wraca w `references`:
 
 ```text
@@ -2334,6 +2370,7 @@ której się wybiera.
 | `GET /api/v1/admin/crm/lookups/mentionable?q=…&organizationId=…` | `crm:write` | Aktywni administratorzy z uprawnieniem `crm:read` — osoby, które można wspomnieć w tekście: `id`, `name`. |
 | `GET /api/v1/admin/crm/lookups/contacts?organizationId=…&q=…` | `crm:write` | Członkowie jednej organizacji widocznej dla pytającego: `id`, `name`, `email`. |
 | `GET /api/v1/admin/crm/lookups/quote-requests?organizationId=…&q=…` | `crm:write` i `rfqs:handle` | Zapytania ofertowe jednej organizacji widocznej dla pytającego, które można powiązać: otwarte oraz to, którego numer wpisano w całości. `id`, `number`, `status`. Gdy moduł Zapytania ofertowe jest wyłączony, odpowiedzią jest `503`. |
+| `GET /api/v1/admin/crm/lookups/documents?opportunityId=…&q=…` | `crm:write` | Lista dokumentów pod `@@`: `{ "groups": [{ "kind": "order" \| "quote_request" \| "task", "items": [{ "id", "label", "sublabel"? }] }] }`, najwyżej dziesięć w grupie. Zamówienia i zapytania ofertowe organizacji szansy (`organizationId=…` zamiast tego, zanim szansa powstanie); zadania widoczne dla pytającego, z tytułem zadania w `sublabel`. Grupa jest obecna tylko dla pytającego z odpowiednio `orders:read`, `rfqs:handle` albo `tasks:read` i tylko wtedy, gdy jej moduł jest włączony. Szansa niedostępna dla pytającego daje `404`. Ten sam kształt co `GET /api/v1/admin/projects/lookups/documents` modułu Projekty. |
 
 Waluty proponowane przy tworzeniu szansy to te, w których sprzedają aktywne
 kanały sprzedaży.
