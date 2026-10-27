@@ -101,6 +101,8 @@ describe('crm off-state (Constitution XVII)', () => {
     { method: 'GET', route: `${API}/lookups/contacts` },
     { method: 'GET', route: `${API}/lookups/mentionable` },
     { method: 'GET', route: `${API}/lookups/quote-requests` },
+    // `specs/163-projects-and-tasks/` FR-044 — the `@@` document list.
+    { method: 'GET', route: `${API}/lookups/documents` },
     { method: 'POST', route: `${API}/statuses`, payload: { code: 'off_state', defaultName: 'Off', kind: 'open' } },
     { method: 'PATCH', route: `${API}/statuses/:code`, payload: { defaultName: 'Renamed' } },
     { method: 'DELETE', route: `${API}/statuses/:code` },

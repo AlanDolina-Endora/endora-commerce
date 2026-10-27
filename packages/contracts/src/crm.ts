@@ -953,6 +953,21 @@ export type OpportunityQuoteRequestLookupQuery = z.infer<
   typeof OpportunityQuoteRequestLookupQuerySchema
 >;
 
+/**
+ * `GET /crm/lookups/documents` — the `@@` document list of an Opportunity's
+ * texts (`specs/163-projects-and-tasks/` FR-044). The answer is the shared
+ * `RecordDocumentLookupResponse` (`record-references.ts`), the one Projects
+ * serves too. Orders and Quote Requests are those of the Opportunity's
+ * Organization — or, on the create form before there is an Opportunity, of the
+ * Organization chosen there; with neither, the list offers Tasks only.
+ */
+export const OpportunityDocumentLookupQuerySchema = z.object({
+  opportunityId: z.string().uuid().optional(),
+  organizationId: z.string().uuid().optional(),
+  q: lookupSearchSchema,
+});
+export type OpportunityDocumentLookupQuery = z.infer<typeof OpportunityDocumentLookupQuerySchema>;
+
 export const OpportunityQuoteRequestOptionSchema = z.object({
   id: z.string().uuid(),
   number: z.string(),

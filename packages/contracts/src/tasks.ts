@@ -343,6 +343,12 @@ export interface TaskRecord {
   createdAt: Date;
 }
 
+/** What `TaskReadPort.search` is asked: the letters typed, and how many to answer. */
+export interface TaskSearchQuery {
+  q?: string;
+  limit: number;
+}
+
 /** The Tasks of one context, or of one group (a Stage) inside it. */
 export interface TaskContextQuery {
   contextType: string;
@@ -363,6 +369,18 @@ export interface TaskContextQuery {
  */
 export interface TaskReadPort {
   findById(id: string): Promise<TaskRecord | null>;
+  /**
+   * The Tasks of `ids` the caller may see, in no particular order — a hidden,
+   * missing or malformed id is simply absent. One query for a page of
+   * references (`specs/163-projects-and-tasks/` FR-044).
+   */
+  findByIds(ids: readonly string[]): Promise<TaskRecord[]>;
+  /**
+   * Tasks the caller may see whose number or title contains `q`
+   * (case-insensitively; every visible Task for an empty `q`), newest first,
+   * at most `limit` — the Tasks group of the `@@` document list (FR-044).
+   */
+  search(query: TaskSearchQuery): Promise<TaskRecord[]>;
   listInContext(q: TaskContextQuery): Promise<TaskRecord[]>;
   /** Status neither `done` nor `cancelled` — the completion gate's question. */
   listOpenInContext(q: TaskContextQuery): Promise<TaskRecord[]>;

@@ -180,6 +180,25 @@ describe('tasks — context visibility (R-9)', () => {
     expect(notFoundShape(response.body)).toMatchObject({ code: 'TASK_NOT_FOUND' });
   });
 
+  it('hides the same Task from the read port’s batch read and search (`specs/163-projects-and-tasks/` FR-044)', async () => {
+    const port = h.container.resolve<TaskReadPort>('taskReadPort');
+    const asAdmin = <T>(read: () => Promise<T>): Promise<T> =>
+      runWithTenantContext({ mode: 'all', actor: { kind: 'admin', id: TEST_ADMIN_ID } }, read);
+
+    const found = await asAdmin(() => port.findByIds([free, ofShown, ofHidden, ofUnregistered, randomUUID(), 'not-a-uuid']));
+    expect(found.map((task) => task.id).sort()).toEqual([free, ofShown].sort());
+
+    // By the number or the title, newest first, capped — the `@@` list's Tasks.
+    const searched = await asAdmin(() => port.search({ q: 'visibility', limit: 100 }));
+    expect(searched.map((task) => task.id)).toEqual(expect.arrayContaining([free, ofShown]));
+    expect(searched.map((task) => task.id)).not.toContain(ofHidden);
+    expect(searched.map((task) => task.id)).not.toContain(ofUnregistered);
+    const byNumber = await asAdmin(() => port.search({ q: `TSK-V${ofShown.slice(0, 8)}`.toLowerCase(), limit: 10 }));
+    expect(byNumber.map((task) => task.id)).toEqual([ofShown]);
+    expect(await asAdmin(() => port.search({ q: `TSK-V${ofHidden.slice(0, 8)}`, limit: 10 }))).toEqual([]);
+    expect(await asAdmin(() => port.search({ q: '', limit: 1 }))).toHaveLength(1);
+  });
+
   it('does not narrow the system: the same count asked without an administrator sees the hidden Task', async () => {
     const port = h.container.resolve<TaskReadPort>('taskReadPort');
     const count = await runWithTenantContext({ mode: 'system', actor: { kind: 'system' }, reason: 'test' }, () =>

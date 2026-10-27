@@ -45,6 +45,7 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | `admin_search` | no | contributes-to `adminSearchProviderRegistry` |
 | `quote_requests` | no | degrades-without `quoteRequestCustomFieldCarryPort` — Values of Sales Opportunities are not carried into Quote Requests created from them |
 | `quote_requests` | no | degrades-without `quoteRequestReadPort` — Quote Requests linked to Opportunities show as unavailable, stop counting toward computed values, and can no longer be linked or created from one. Opportunities and their Orders keep working |
+| `tasks` | no | degrades-without `taskReadPort` — References to Tasks show as unavailable and Tasks are not offered after @@. |
 | `webhooks` | no | contributes-to `webhookEventRegistry` |
 
 ## Permissions

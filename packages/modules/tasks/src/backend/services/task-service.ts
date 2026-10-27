@@ -301,6 +301,35 @@ export class TaskService {
     )) as TaskRow[];
   }
 
+  /**
+   * Tasks the caller may see whose number or title contains `q`, newest first,
+   * at most `limit` — `taskReadPort.search`, the `@@` document list's Tasks
+   * (`specs/163-projects-and-tasks/` FR-044). The list's own filter, narrowed
+   * by the same visibility pre-filter.
+   */
+  async searchVisibleRows(q: string | undefined, limit: number): Promise<TaskRow[]> {
+    const where: string[] = [];
+    const params: unknown[] = [];
+    const visible = await this.deps.visibility.condition('t');
+    if (visible) {
+      where.push(visible.sql);
+      params.push(...visible.params);
+    }
+    const needle = (q ?? '').trim();
+    if (needle !== '') {
+      const like = `%${needle.replace(/[\\%_]/g, (match) => `\\${match}`)}%`;
+      where.push(`(t."title" ilike ? or t."number" ilike ?)`);
+      params.push(like, like);
+    }
+    return (await this.deps.emFactory().execute(
+      `select ${COLUMNS} from "tasks" t
+        ${where.length > 0 ? `where ${where.join(' and ')}` : ''}
+        order by t."created_at" desc, t."id" desc
+        limit ?`,
+      [...params, Math.max(0, Math.trunc(limit))],
+    )) as TaskRow[];
+  }
+
   /** `POST /tasks` — a Task of the caller's, in a context they may see or in none. */
   async create(body: CreateTaskBody, language: SupportedLanguage): Promise<TaskDetail> {
     const context = body.context ?? null;

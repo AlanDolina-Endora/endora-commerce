@@ -233,6 +233,22 @@ export const manifest = defineModuleManifest({
         'than from a caught refusal. A link holds the Quote Request by value, so no table of ' +
         'that owner is referenced from this module\'s schema.',
     },
+    // `specs/163-projects-and-tasks/` FR-044 — one reference standard with
+    // Projects: a Task referred to in an Opportunity's text is resolved, and
+    // offered after `@@`, through `tasks`' read port. `tasks` is
+    // operator-switchable and must stay so with CRM on.
+    {
+      moduleId: 'tasks',
+      name: 'taskReadPort',
+      kind: 'degrades-without',
+      whenAbsent: 'References to Tasks show as unavailable and Tasks are not offered after @@.',
+      reason:
+        'Every call into this owner goes through `crm-tasks.ts`, whose callers — the reference ' +
+        'service and the `@@` document list — ask `isPresent()` in front of the gate: a Task ' +
+        'referred to resolves as unavailable and the Tasks group is left out, from that decision ' +
+        'rather than from a caught refusal. A reference holds the Task by value, so no table of ' +
+        'that owner is referenced from this module\'s schema.',
+    },
     // Feature 162 — an Opportunity's custom-field values pushed into a Quote
     // Request created from it (`specs/162-custom-fields-value-carry/`, R-16).
     {

@@ -12,6 +12,10 @@ filter contributors by `effectiveState.isPresent(ownerModuleId)` when enumerated
 ```ts
 interface TaskReadPort {
   findById(id: string): Promise<TaskRecord | null>;           // context-visibility applied (R-9)
+  findByIds(ids: readonly string[]): Promise<TaskRecord[]>;    // the same; one query per page of references
+  search(q: { q?: string; limit: number }): Promise<TaskRecord[]>;
+                                                               // the same; by number or title, newest first —
+                                                               // the `@@` list's Tasks (FR-044; added by T106)
   listInContext(q: { contextType: string; contextId: string; contextGroupId?: string }):
     Promise<TaskRecord[]>;
   listOpenInContext(q: { contextType: string; contextId: string; contextGroupId?: string }):

@@ -1,4 +1,4 @@
-import type { TaskContextQuery, TaskReadPort, TaskRecord } from '@endora-commerce/contracts';
+import type { TaskContextQuery, TaskReadPort, TaskRecord, TaskSearchQuery } from '@endora-commerce/contracts';
 import type { TaskRow, TaskService } from './task-service.js';
 
 /**
@@ -16,6 +16,14 @@ export class TaskReadPortService implements TaskReadPort {
   async findById(id: string): Promise<TaskRecord | null> {
     const row = await this.tasks.findVisibleRow(id);
     return row ? toRecord(row) : null;
+  }
+
+  async findByIds(ids: readonly string[]): Promise<TaskRecord[]> {
+    return (await this.tasks.visibleRowsByIds(ids)).map(toRecord);
+  }
+
+  async search(query: TaskSearchQuery): Promise<TaskRecord[]> {
+    return (await this.tasks.searchVisibleRows(query.q, query.limit)).map(toRecord);
   }
 
   async listInContext(q: TaskContextQuery): Promise<TaskRecord[]> {
