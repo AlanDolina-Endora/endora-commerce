@@ -376,6 +376,12 @@ to `created_at` for "opened", `closed_at` for completed/lost and durations. Figu
 Every response carries `{ from, to, projectCount, excluded: { noValue } }` (FR-038). Admin page
 on `<EChart>` from admin-kit, the CRM AnalyticsPage layout.
 
+**Days (owner decision 2026-10-27, issue #465; T146)**: a range's days are counted in the
+platform setting `reporting.time_zone`, declared by `settings` in its `general` group — not by
+`projects`, so CRM can adopt it (#474) — default `UTC`, an IANA name refused on write when the
+runtime does not know it. The range is `[from 00:00, the day after to 00:00)` with both midnights
+in that zone (`domain/analytics-range.ts`); in `UTC` it is the range the module counted before.
+
 **Alternatives considered**: grouping losses by Stage id — Stages are per Project, so ids never
 repeat; by Template Stage id — Projects without a Template, or edited Stages, would vanish.
 

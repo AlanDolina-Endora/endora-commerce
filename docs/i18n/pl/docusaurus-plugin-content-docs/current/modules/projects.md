@@ -636,7 +636,11 @@ Każdy wskaźnik:
   gdy projekt na niego wszedł albo został na nim utracony, więc późniejsza
   zmiana nazwy etapu nie przesuwa dawnych pobytów ani utrat.
 
-Pod każdym wykresem jest tabela z tymi samymi liczbami. Dni są liczone w UTC.
+Pod każdym wykresem jest tabela z tymi samymi liczbami. Dni są liczone w
+**strefie czasowej raportów** — ustawieniu *Strefa czasowa raportów* w sekcji
+*General* ekranu ustawień, domyślnie `UTC`: zakres zaczyna się o północy jego
+pierwszego dnia i kończy o północy po ostatnim, obie w tej strefie. Gotowe
+zakresy (*Ten miesiąc*, …) biorą dzisiejszą datę z Twojego komputera.
 
 Gdy moduł Projekty jest wyłączony, ekranu i jego pozycji w menu bocznym nie
 ma, a wskaźniki nie są udostępniane.
@@ -705,7 +709,8 @@ ma, a wskaźniki nie są udostępniane.
 | `GET /api/v1/admin/projects/analytics/managers` | `projects:analytics` | `{ adminUser: { id, name }, completedCount }[]` — osoby z rolą `project_manager` w projektach zakończonych w okresie, najwyżej dziesięć. |
 
 Każda ścieżka analityki przyjmuje `from` i `to` (`YYYY-MM-DD`, oba włącznie,
-UTC) oraz opcjonalnie `templateId`, `organizationId` i `projectManagerId`;
+dni w strefie czasowej raportów platformy, `reporting.time_zone`, deklarowanej
+przez `settings`, domyślnie `UTC`) oraz opcjonalnie `templateId`, `organizationId` i `projectManagerId`;
 okres kończący się przed początkiem to `400`. Każda odpowiada
 `{ from, to, projectCount, excluded: { noValue }, data }`: `projectCount` to
 liczba projektów, które okres i filtry wybierają dla danego wskaźnika spośród

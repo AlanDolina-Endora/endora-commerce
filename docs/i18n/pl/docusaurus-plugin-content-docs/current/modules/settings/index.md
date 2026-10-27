@@ -197,6 +197,17 @@ const baseUrl = await settingsService.get(
 );
 ```
 
+### Strefa czasowa raportów
+
+`reporting.time_zone` (`REPORTING_TIME_ZONE_SETTING` w `@endora-commerce/contracts`) to
+kalendarz, w którym raporty liczą dni: raport o zakres dni bierze każdy dzień od północy do
+północy w tej strefie. Deklaruje je ten moduł, w grupie `general`, żeby nie należało do żadnego
+modułu raportującego; obecnie czyta je analityka projektów. Wartość to nazwa strefy czasowej
+IANA, np. `Europe/Warsaw`, albo `UTC`, domyślnie; zapis strefy, której środowisko uruchomieniowe
+nie zna, jest odrzucany z `422 VALIDATION_FAILED` (`isIanaTimeZone` w
+`@endora-commerce/contracts`). Odczytuj je dla całej platformy —
+`settingsService.get(REPORTING_TIME_ZONE_SETTING, null, z.string())`.
+
 ### Błędy
 
 | Zgłaszany błąd | Kiedy |

@@ -1,4 +1,5 @@
 import {
+  REPORTING_TIME_ZONE_SETTING,
   defineModuleManifest,
   defineModuleSettingsManifest,
   type ModuleCliCommand,
@@ -77,6 +78,21 @@ const settings = defineModuleSettingsManifest({
       groupCode: 'general',
       valueType: 'string',
       defaultValue: '',
+    },
+    {
+      // The calendar reports count days in (owner decision 2026-10-27, issue
+      // #465): declared here rather than by a reporting module, so that none
+      // owns it — Projects analytics reads it, CRM may follow (#474). Its
+      // validator (`services/reporting-time-zone.ts`) refuses a zone the
+      // runtime does not know. Read platform-wide.
+      code: REPORTING_TIME_ZONE_SETTING,
+      name: 'Reporting time zone',
+      description:
+        'The time zone, as an IANA name such as Europe/Warsaw, in which reports count days, months ' +
+        'and other ranges of days — today, Projects analytics. Default UTC.',
+      groupCode: 'general',
+      valueType: 'string',
+      defaultValue: 'UTC',
     },
     {
       code: 'shop.name',

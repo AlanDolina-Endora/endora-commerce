@@ -412,6 +412,34 @@ export const HomepageConfigResponseSchema = z.object({ data: HomepageConfigSchem
 export type HomepageConfigResponse = z.infer<typeof HomepageConfigResponseSchema>;
 
 // ---------------------------------------------------------------------------
+// The reporting time zone (owner decision 2026-10-27, issue #465)
+// ---------------------------------------------------------------------------
+
+/**
+ * The platform's reporting time zone: the calendar in which a report counts a
+ * day, a month or any other range of days. Declared by `settings` itself, in
+ * its `general` group, so that no reporting module owns it — Projects
+ * analytics reads it, CRM may follow (#474). An IANA name; default `UTC`.
+ * Read it platform-wide (`settingsReadPort.get(code, null, …)`).
+ */
+export const REPORTING_TIME_ZONE_SETTING = 'reporting.time_zone';
+
+let knownTimeZones: Set<string> | null = null;
+
+/**
+ * Whether `value` is a time zone the runtime knows — an IANA name from
+ * `Intl.supportedValuesOf('timeZone')`, or `UTC`. A time-zone setting is held
+ * to this on write, because a zone the runtime does not know makes every
+ * calendar computation in it throw.
+ */
+export function isIanaTimeZone(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length === 0) return false;
+  if (value === 'UTC') return true;
+  knownTimeZones ??= new Set(Intl.supportedValuesOf('timeZone'));
+  return knownTimeZones.has(value);
+}
+
+// ---------------------------------------------------------------------------
 // --- ports -----------------------------------------------------------------
 //
 // The in-process **write** surface `settings` publishes (feature 075, Phase P).

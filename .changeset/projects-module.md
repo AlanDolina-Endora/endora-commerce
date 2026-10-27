@@ -25,7 +25,8 @@ Members holding Project Roles, opened, completed, lost and reopened.
   and reopen, and Stage history; Stage Tasks and the completion gate; linked Orders, Quote
   Requests and Opportunities, and the Project a record or a Task belongs to; notes, messages,
   mentions, references, attachments (multipart upload) and change history; Templates; the two
-  dictionaries; seven analytics figures; and the module's own lookups. Every read goes through
+  dictionaries; seven analytics figures, over days counted in the platform's reporting time zone
+  (`reporting.time_zone`, `UTC` by default); and the module's own lookups. Every read goes through
   the module's `ProjectAccess` — Organization reach and visibility — and an invisible Project
   answers exactly as a missing one.
 - **Admin UI.** The list, *New project*, a Project's screen with its tabs, Templates, Project

@@ -206,6 +206,16 @@ const baseUrl = await settingsService.get(
 );
 ```
 
+### The reporting time zone
+
+`reporting.time_zone` (`REPORTING_TIME_ZONE_SETTING` in `@endora-commerce/contracts`) is the
+calendar reports count days in: a report asked for a range of days takes each day from midnight
+to midnight in this zone. It is declared by this module, in the `general` group, so that no
+reporting module owns it; Projects analytics reads it today. The value is an IANA time-zone name
+such as `Europe/Warsaw`, or `UTC`, the default; a write of a zone the runtime does not know is
+refused with `422 VALIDATION_FAILED` (`isIanaTimeZone` in `@endora-commerce/contracts`). Read it
+platform-wide — `settingsService.get(REPORTING_TIME_ZONE_SETTING, null, z.string())`.
+
 ### Errors
 
 | Thrown | When |

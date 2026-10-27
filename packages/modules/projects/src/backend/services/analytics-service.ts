@@ -41,6 +41,7 @@ export interface AnalyticsFigure<T> {
 export interface ProjectAnalyticsServiceDeps {
   emFactory: () => EntityManager;
   access: ProjectAccess;
+  /** The Project Manager's names, and `reportingTimeZone()` — the calendar of every range. */
   read: ProjectReadService;
   /** `admin_users`' port — lazy, resolved per call. */
   adminUsers: AdminUserReadPort;
@@ -71,6 +72,10 @@ const IN_RANGE = (column: string) => `p."${column}" >= ? and p."${column}" < ?`;
  * the visibility rule — so no figure counts a Project the reader cannot see
  * (US10 sc. 5). A reader who reaches no Organization is answered with empty
  * figures and no statement runs.
+ *
+ * **A range is days in the reporting time zone** — the platform setting
+ * `reporting.time_zone`, `UTC` by default — from the first day's midnight to
+ * the midnight after the last, both in that zone (`domain/analytics-range.ts`).
  *
  * **Which Projects a range selects** depends on the figure and is said on each
  * method: created in it for *opened*, the average value and the most valuable
@@ -385,7 +390,8 @@ export class ProjectAnalyticsService {
    * `null` for a reader who reaches no Organization, for whom no statement runs.
    */
   async #selection(query: ProjectAnalyticsQuery): Promise<Selection | null> {
-    const { start, end } = analyticsRange(query);
+    // Days are the reporting time zone's (`reporting.time_zone`, issue #465).
+    const { start, end } = analyticsRange(query, await this.deps.read.reportingTimeZone());
     const viewer = await this.deps.access.currentViewer();
     if (!viewer.reach.all && viewer.reach.organizationIds.size === 0) return null;
     const visible = await this.deps.access.visibleProjectSql(viewer);
