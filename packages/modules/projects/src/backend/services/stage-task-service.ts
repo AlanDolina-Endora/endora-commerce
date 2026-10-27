@@ -18,6 +18,7 @@ import { addDays, todayIn } from '../domain/deadline.js';
 import { ProjectStage } from '../entities/project-stage.entity.js';
 import { ProjectStageEntry } from '../entities/project-stage-entry.entity.js';
 import { ProjectStageTask } from '../entities/project-stage-task.entity.js';
+import { TASKS_READ_PERMISSION } from './owner-read-permissions.js';
 import { uuidArray, type ProjectAccess } from './project-access.js';
 import { personName, type ProjectReadService } from './project-read-service.js';
 import { assertRolesExist, lockProject } from './project-service.js';
@@ -35,7 +36,8 @@ import { responsibleRoleNote } from './task-context-descriptor.js';
  *   the Tasks module's state: they apply again once it is on.
  * - **The gate.** Leaving a Stage whose gate is on, or completing the Project
  *   from it, is refused while one of its Tasks is neither done nor cancelled —
- *   409 `PROJECT_STAGE_GATE_OPEN_TASKS` naming them. With Tasks off the gate
+ *   409 `PROJECT_STAGE_GATE_OPEN_TASKS` counting them (naming them to a
+ *   reader of Tasks). With Tasks off the gate
  *   is not applied and the entry records `gate_not_applied_tasks_off`.
  * - **Materialisation.** On entering a Stage that has definitions and has never
  *   had them created or skipped: with Tasks on, the move's own Command stamps
@@ -138,8 +140,10 @@ export class StageTaskService {
 
   /**
    * The completion gate of the Stage being left (FR-012) — the module's own
-   * first guard, asked before the registered ones. Throws 409 naming the open
-   * Tasks; answers the note to record when the gate could not be applied.
+   * first guard, asked before the registered ones. Throws 409 counting the open
+   * Tasks — and naming them only to a caller who holds `tasks:read`, since a
+   * move needs `projects:write` alone (T144 F2); answers the note to record
+   * when the gate could not be applied.
    */
   async gate(projectId: string, stage: { id: string; completion_gate: boolean }): Promise<ProjectStageEntryNote[]> {
     if (!stage.completion_gate) return [];
@@ -150,11 +154,17 @@ export class StageTaskService {
       contextGroupId: stage.id,
     });
     if (open.length === 0) return [];
+    const mayReadTasks = await this.deps.access.callerHolds(TASKS_READ_PERMISSION);
     throw new HttpError(
       409,
       ERROR_CODES.PROJECT_STAGE_GATE_OPEN_TASKS,
       'The project cannot leave this stage while some of its tasks are neither done nor cancelled.',
-      { openTasks: open.map((task) => ({ id: task.id, number: task.number, title: task.title })) },
+      {
+        openTaskCount: open.length,
+        ...(mayReadTasks
+          ? { openTasks: open.map((task) => ({ id: task.id, number: task.number, title: task.title })) }
+          : {}),
+      },
     );
   }
 

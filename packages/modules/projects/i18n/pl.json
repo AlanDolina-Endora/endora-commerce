@@ -245,6 +245,7 @@
   "stageTasks.item": "{title} — termin {days} dni od rozpoczęcia etapu",
   "stageTasks.itemRole": "{title} — termin {days} dni od rozpoczęcia etapu · {role}",
   "stageBar.openTasks": "Otwarte zadania w tym etapie:",
+  "stageBar.openTaskCount": "Otwarte zadania w tym etapie: {count}.",
   "stageTasks.contextNote.responsibleRole": "Odpowiedzialna rola: {role}",
   "templates.copyName": "{name} (kopia)",
   "nav.templates.label": "Szablony",

@@ -963,7 +963,7 @@ export const PROJECTS_ERROR_CODES = [
   'PROJECT_STAGE_LAST',
   /** The Project's workflow has no move between the two Stages. */
   'PROJECT_MOVE_NOT_PERMITTED',
-  /** The Stage's completion gate is closed; `details.openTasks` names the open Tasks. */
+  /** The Stage's completion gate is closed; `details.openTaskCount` counts the open Tasks, `details.openTasks` names them to a reader of Tasks. */
   'PROJECT_STAGE_GATE_OPEN_TASKS',
   /** The `version` sent is stale. */
   'PROJECT_CHANGED',
@@ -1001,9 +1001,15 @@ export const PROJECTS_ERROR_CODES = [
 ] as const;
 export type ProjectsErrorCode = (typeof PROJECTS_ERROR_CODES)[number];
 
-/** `details` of 409 `PROJECT_STAGE_GATE_OPEN_TASKS`. */
+/**
+ * `details` of 409 `PROJECT_STAGE_GATE_OPEN_TASKS`: how many Tasks of the Stage
+ * are open, and — only to a caller who holds `tasks:read` — which ones. A move
+ * needs `projects:write` alone, so a Task's number and title are not the
+ * refusal's to hand to somebody who may not read Tasks.
+ */
 export const ProjectStageGateOpenTasksDetailsSchema = z.object({
-  openTasks: z.array(z.object({ id: uuid, number: z.string(), title: z.string() })),
+  openTaskCount: z.number().int().positive(),
+  openTasks: z.array(z.object({ id: uuid, number: z.string(), title: z.string() })).optional(),
 });
 export type ProjectStageGateOpenTasksDetails = z.infer<typeof ProjectStageGateOpenTasksDetailsSchema>;
 

@@ -467,10 +467,15 @@ describe('ports, events and error codes', () => {
     }
   });
 
-  it('the gate refusal names the open Tasks', () => {
+  it('the gate refusal counts the open Tasks, and names them only to a reader of Tasks', () => {
     accepts(projects.ProjectStageGateOpenTasksDetailsSchema, {
+      openTaskCount: 1,
       openTasks: [{ id: UUID_A, number: 'TSK-000001', title: 'Measure' }],
     });
-    rejects(projects.ProjectStageGateOpenTasksDetailsSchema, { openTasks: [{ id: UUID_A }] });
+    accepts(projects.ProjectStageGateOpenTasksDetailsSchema, { openTaskCount: 3 });
+    rejects(projects.ProjectStageGateOpenTasksDetailsSchema, { openTaskCount: 1, openTasks: [{ id: UUID_A }] });
+    rejects(projects.ProjectStageGateOpenTasksDetailsSchema, {
+      openTasks: [{ id: UUID_A, number: 'TSK-000001', title: 'Measure' }],
+    });
   });
 });

@@ -69,7 +69,7 @@ the list's Organization and any-member filters are a reader's (CRM gates its fil
 | `PUT /projects/:id/moves` | `projects:write` | `{ moves: { fromStageId, toStageId }[] }` → `{ moves, unreachableStageIds[] }` |
 | `PUT /projects/:id/stages/:stageId/tasks` | `projects:write` | `{ tasks: StageTaskDefinition[] }` (Stage Task definitions, R-7) → `ProjectStage` |
 | `POST /projects/:id/stages/:stageId/materialize-tasks` | `projects:write` | retry after `tasks_materialize_failed` only → `{ created }`; 409 otherwise |
-| `POST /projects/:id/move` | `projects:write` | `{ toStageId, version }` → `MoveResult { project, entry, createdTaskIds[], notes[] }`; 409 `PROJECT_MOVE_NOT_PERMITTED` \| `PROJECT_STAGE_GATE_OPEN_TASKS { openTasks[] }` \| `PROJECT_CHANGED` \| `PROJECT_GUARD_REFUSED { reason }` |
+| `POST /projects/:id/move` | `projects:write` | `{ toStageId, version }` → `MoveResult { project, entry, createdTaskIds[], notes[] }`; 409 `PROJECT_MOVE_NOT_PERMITTED` \| `PROJECT_STAGE_GATE_OPEN_TASKS { openTaskCount, openTasks[]? }` (`openTasks` only to a `tasks:read` holder — T144 F2) \| `PROJECT_CHANGED` \| `PROJECT_GUARD_REFUSED { reason }` |
 | `POST /projects/:id/close` | `projects:write` | `{ outcome: 'completed' } \| { outcome: 'lost', lossReasonId, comment? }` + `version` → `ProjectDetail`; 409 `PROJECT_COMPLETION_NOT_PERMITTED` \| gate as above |
 | `POST /projects/:id/reopen` | `projects:write` | `{ version }` → `ProjectDetail` |
 | `GET /projects/:id/stage-history` | `projects:read` | → `StageEntry[]` |

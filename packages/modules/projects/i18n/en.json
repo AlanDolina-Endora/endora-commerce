@@ -245,6 +245,7 @@
   "stageTasks.item": "{title} — due {days} days after the stage starts",
   "stageTasks.itemRole": "{title} — due {days} days after the stage starts · {role}",
   "stageBar.openTasks": "Open tasks in this stage:",
+  "stageBar.openTaskCount": "Open tasks in this stage: {count}.",
   "stageTasks.contextNote.responsibleRole": "Responsible role: {role}",
   "templates.copyName": "{name} (copy)",
   "nav.templates.label": "Templates",

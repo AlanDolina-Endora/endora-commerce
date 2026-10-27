@@ -5,6 +5,7 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
+import { seedCrmAdmin } from '../../helpers/seed-crm.js';
 import {
   callTasks,
   closeProject,
@@ -76,6 +77,38 @@ describe('projects — the completion gate (US2)', () => {
     const after = await getProject(h, project.id);
     expect(after.currentStage?.id).toBe(design);
     expect(after.version).toBe(project.version);
+  });
+
+  it('to a caller who may not read Tasks the refusal counts the open Tasks and names none (T144 F2)', async () => {
+    const writer = await seedCrmAdmin(h.em(), 'gate-no-tasks', ['projects:read', 'projects:write', 'projects:see_all']);
+    try {
+      const project = await gatedProject('Gate counts');
+      const design = stageNamed(project, 'Design');
+      await createStageTask(h, project.id, design, { title: 'Secret survey' });
+      await createStageTask(h, project.id, design, { title: 'Secret brief' });
+
+      const refused = await moveProject(h, project.id, stageNamed(project, 'Build'), project.version, writer.cookies);
+      expect(refused.statusCode, refused.body).toBe(409);
+      const details = ProjectStageGateOpenTasksDetailsSchema.parse(JSON.parse(refused.body).error.details);
+      expect(details).toEqual({ openTaskCount: 2 });
+      expect(refused.body).not.toContain('Secret');
+
+      const single = await createProject(h, {
+        title: 'Gate counts at the end',
+        stages: [{ name: 'Only', color: '#000000', completionGate: true }],
+      });
+      created.push(single.id);
+      await createStageTask(h, single.id, stageNamed(single, 'Only'), { title: 'Secret handover' });
+      await createStageTask(h, single.id, stageNamed(single, 'Only'), { title: 'Secret sign-off' });
+      const completed = await closeProject(h, single.id, { outcome: 'completed', version: single.version }, writer.cookies);
+      expect(completed.statusCode, completed.body).toBe(409);
+      expect(completed.body).not.toContain('Secret');
+      expect(ProjectStageGateOpenTasksDetailsSchema.parse(JSON.parse(completed.body).error.details)).toEqual({
+        openTaskCount: 2,
+      });
+    } finally {
+      writer.undo();
+    }
   });
 
   it('counts a cancelled Task as closed', async () => {

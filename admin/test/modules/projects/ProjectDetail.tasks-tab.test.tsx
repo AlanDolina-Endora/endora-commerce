@@ -311,7 +311,7 @@ describe('ProjectDetail — the completion gate on the Stage bar', () => {
         error: {
           code: 'PROJECT_STAGE_GATE_OPEN_TASKS',
           message: 'The project cannot leave this stage while some of its tasks are neither done nor cancelled.',
-          details: { openTasks: [{ id: TASK.id, number: TASK.number, title: TASK.title }] },
+          details: { openTaskCount: 1, openTasks: [{ id: TASK.id, number: TASK.number, title: TASK.title }] },
         },
       }),
     );
@@ -321,5 +321,22 @@ describe('ProjectDetail — the completion gate on the Stage bar', () => {
     const link = await within(bar).findByRole('link', { name: /TSK-000001/ });
     expect(link.getAttribute('href')).toBe(`/tasks/${TASK.id}`);
     expect(within(bar).getByText(en('stageBar.openTasks'))).toBeTruthy();
+  });
+
+  it('to somebody who may not read Tasks, says how many are open and names none (T144 F2)', async () => {
+    postSpy.mockRejectedValue(
+      new ApiError(409, {
+        error: {
+          code: 'PROJECT_STAGE_GATE_OPEN_TASKS',
+          message: 'The project cannot leave this stage while some of its tasks are neither done nor cancelled.',
+          details: { openTaskCount: 2 },
+        },
+      }),
+    );
+    await renderPage();
+    const bar = screen.getByRole('region', { name: en('stageBar.heading') });
+    await userEvent.click(within(bar).getByRole('button', { name: en('stageBar.moveTo', { stage: 'Build' }) }));
+    expect(await within(bar).findByText(en('stageBar.openTaskCount', { count: 2 }))).toBeTruthy();
+    expect(within(bar).queryByRole('link', { name: /TSK-/ })).toBeNull();
   });
 });

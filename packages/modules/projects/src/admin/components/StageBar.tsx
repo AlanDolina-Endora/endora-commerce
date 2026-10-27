@@ -10,13 +10,26 @@ import { calendarDateLabel, errorMessage } from '../lib/labels.js';
 import { CloseProjectDialog } from './CloseProjectDialog.js';
 import { StageDot } from './StageDot.js';
 
-type OpenTask = ProjectStageGateOpenTasksDetails['openTasks'][number];
+type OpenTask = NonNullable<ProjectStageGateOpenTasksDetails['openTasks']>[number];
 
-/** The open Tasks a closed completion gate names in its refusal, or none for any other failure. */
+/** The details of a closed completion gate's refusal, or `undefined` for any other failure. */
+function gateDetailsOf(failure: unknown): { openTaskCount?: unknown; openTasks?: unknown } | undefined {
+  if (!(failure instanceof ApiError) || failure.envelope.error.code !== 'PROJECT_STAGE_GATE_OPEN_TASKS') return undefined;
+  return (failure.envelope.error as { details?: { openTaskCount?: unknown; openTasks?: unknown } }).details;
+}
+
+/**
+ * How many Tasks a closed completion gate counts in its refusal — named or not:
+ * the Tasks are named only to a caller who may read Tasks (T144 F2).
+ */
+function openTaskCountOf(failure: unknown): number {
+  const count = gateDetailsOf(failure)?.openTaskCount;
+  return typeof count === 'number' && Number.isInteger(count) && count > 0 ? count : 0;
+}
+
+/** The open Tasks a closed completion gate names in its refusal, or none. */
 function openTasksOf(failure: unknown): OpenTask[] {
-  if (!(failure instanceof ApiError) || failure.envelope.error.code !== 'PROJECT_STAGE_GATE_OPEN_TASKS') return [];
-  const details = (failure.envelope.error as { details?: unknown }).details;
-  const listed = (details as { openTasks?: unknown } | undefined)?.openTasks;
+  const listed = gateDetailsOf(failure)?.openTasks;
   return Array.isArray(listed)
     ? listed.filter(
         (task): task is OpenTask =>
@@ -52,7 +65,8 @@ export interface StageBarProps {
  * server's own words — a guard's reason included — and the Project is read
  * again, so what is on screen is what is true. A closed completion gate's
  * refusal (`PROJECT_STAGE_GATE_OPEN_TASKS`) also lists the open Tasks it
- * names, each linked to its screen. Without `canWrite` the bar is a picture.
+ * names, each linked to its screen — or, to somebody who may not read Tasks,
+ * says how many there are. Without `canWrite` the bar is a picture.
  */
 export function StageBar(props: StageBarProps): ReactNode {
   const { project, onChange, reload } = props;
@@ -62,6 +76,7 @@ export function StageBar(props: StageBarProps): ReactNode {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openTasks, setOpenTasks] = useState<OpenTask[]>([]);
+  const [openTaskCount, setOpenTaskCount] = useState(0);
   const [notice, setNotice] = useState('');
   const [closingAsLost, setClosingAsLost] = useState(false);
 
@@ -79,6 +94,7 @@ export function StageBar(props: StageBarProps): ReactNode {
     setBusy(action);
     setError(null);
     setOpenTasks([]);
+    setOpenTaskCount(0);
     setNotice('');
     try {
       const next = await write();
@@ -87,6 +103,7 @@ export function StageBar(props: StageBarProps): ReactNode {
     } catch (failure) {
       setError(errorMessage(failure, t('stageBar.error')));
       setOpenTasks(openTasksOf(failure));
+      setOpenTaskCount(openTaskCountOf(failure));
       if (failure instanceof ApiError && failure.status === 409) void reload();
     } finally {
       setBusy(null);
@@ -259,6 +276,8 @@ export function StageBar(props: StageBarProps): ReactNode {
                   ))}
                 </ul>
               </>
+            ) : openTaskCount > 0 ? (
+              <p>{t('stageBar.openTaskCount', { count: openTaskCount })}</p>
             ) : null}
           </AlertDescription>
         </Alert>
