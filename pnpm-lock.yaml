@@ -1009,6 +1009,12 @@ importers:
       '@endora-commerce/mod-price-lists':
         specifier: workspace:*
         version: link:../modules/price_lists
+      '@endora-commerce/mod-projects':
+        specifier: workspace:*
+        version: link:../modules/projects
+      '@endora-commerce/mod-tasks':
+        specifier: workspace:*
+        version: link:../modules/tasks
       '@endora-commerce/platform':
         specifier: workspace:*
         version: link:../platform

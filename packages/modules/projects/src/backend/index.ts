@@ -840,3 +840,12 @@ export const entities = [
   ProjectAttachment,
   ProjectStageAlertDelivery,
 ];
+
+/**
+ * The door to `projects_number_seq`, published **by name** on `./backend`, as
+ * `tasks`' `nextTaskNumber` and CRM's `nextOpportunityNumber` are: the demo
+ * composition creating Projects takes its numbers here, so there is one
+ * statement of the format and one sequence. A function is not an entity class,
+ * which is what D-168 bars from this door.
+ */
+export { nextProjectNumber } from './services/project-number.js';
