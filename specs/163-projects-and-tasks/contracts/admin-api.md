@@ -78,7 +78,7 @@ the list's Organization and any-member filters are a reader's (CRM gates its fil
 | Method & path | Permission | Request → Response |
 | --- | --- | --- |
 | `GET /projects/:id/links` | `projects:read` | → `ProjectLink[] { id, kind, recordId, available, number?, status?, amount?, currency?, href? }` |
-| `POST /projects/:id/links` | `projects:write` | `{ kind, recordId }` → `ProjectLink`; 404 `PROJECT_RECORD_NOT_FOUND`; 409 `PROJECT_RECORD_ALREADY_LINKED { project? }`; 422 `PROJECT_LINK_ORGANIZATION_MISMATCH`; 503 `MODULE_DISABLED` (crm / quote_requests off) |
+| `POST /projects/:id/links` | `projects:write` (+ owner's read permission for the kind, else 403 — CRM's linking rule) | `{ kind, recordId }` → `ProjectLink`; 404 `PROJECT_RECORD_NOT_FOUND`; 409 `PROJECT_RECORD_ALREADY_LINKED { project? }`; 422 `PROJECT_LINK_ORGANIZATION_MISMATCH`; 503 `MODULE_DISABLED` (crm / quote_requests off) |
 | `DELETE /projects/:id/links/:linkId` | `projects:write` | → 204 |
 | `GET /projects/records/:kind/:recordId/project` | `projects:read` (+ owner's read permission for the kind) | → `ProjectSummary` \| 404 (R-11) |
 | `GET /projects/:id/tasks` | `projects:read` | → `{ tasksAvailable, stages: { stageId, tasks: TaskSummary[] }[] }` via `taskReadPort`; `tasksAvailable: false` when `tasks` is off or the reader lacks `tasks:read` |
