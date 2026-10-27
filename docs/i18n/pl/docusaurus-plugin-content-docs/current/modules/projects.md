@@ -38,7 +38,9 @@ Projekty są w menu bocznym w sekcji **Projekty i zadania → Projekty**
 (`/projects`), dla administratorów, którzy mogą przeglądać projekty. Ich
 konfiguracja jest w tej samej sekcji, dla administratorów, którzy mogą
 konfigurować projekty: **Szablony** (`/projects/templates`), **Role projektowe**
-(`/projects/roles`) i **Powody utraty** (`/projects/loss-reasons`).
+(`/projects/roles`) i **Powody utraty** (`/projects/loss-reasons`). Jest tam też
+**Analityka** (`/projects/analytics`), dla administratorów, którzy mogą
+przeglądać analitykę projektów (zob. *Analityka*).
 
 **Lista** pokazuje każdy projekt, który możesz zobaczyć: numer, tytuł,
 organizacje — albo *Wewnętrzny* — bieżący etap z terminem, oznaczonym *Po
@@ -411,6 +413,7 @@ sprzed wyłączenia.
 | `projects:write` | Tworzenie, edycja i usuwanie projektów; ustawianie ich organizacji, członków, etapów i przebiegu; przenoszenie, zamykanie i ponowne otwieranie; podpinanie i odpinanie dokumentów — dokument danego rodzaju wymaga też uprawnienia do przeglądania tego rodzaju (zob. *Podpinanie dokumentów*). Wymaga `projects:read`. |
 | `projects:see_all` | Wgląd we wszystkie projekty w granicach swojego dostępu, niezależnie od ustawienia modułu i wyboru samego projektu (zob. *Kto widzi projekt*). Wymaga `projects:read`; nigdy nie poszerza dostępu do organizacji. |
 | `projects:configure` | Tworzenie, edycja, duplikowanie, archiwizacja i przywracanie szablonów; dodawanie, zmiana nazwy, archiwizacja, przywracanie i usuwanie ról projektowych i powodów utraty. Wymaga `projects:read`; każdy, kto może przeglądać projekty, może odczytać szablony, role i powody utraty, aby użyć ich w projekcie. |
+| `projects:analytics` | Przeglądanie analityki projektów (zob. *Analityka*) — każdy wskaźnik liczony spośród projektów, które możesz zobaczyć. Wymaga `projects:read`. |
 
 Rola projektowa nie jest jednym z tych uprawnień: jej pełnienie nie nadaje
 żadnego uprawnienia (zob. *Role projektowe*).
@@ -572,8 +575,43 @@ zostają i wracają razem z modułem.
 
 ## Analityka
 
-*Pojawi się w jednym z kolejnych wydań modułu i zostanie tu opisana, gdy to
-nastąpi.*
+**Analityka** (`/projects/analytics`) pokazuje, jak szły projekty w wybranym
+okresie — w tym miesiącu, w poprzednim, w ostatnich 90 dniach, w tym roku albo
+we własnym zakresie dni — i można ją zawęzić do projektów utworzonych z jednego
+**szablonu**, projektów jednej **organizacji** i projektów prowadzonych przez
+jednego **kierownika projektu**.
+
+| Wskaźnik | Co liczy |
+| --- | --- |
+| **Projekty w okresie** | *Otwarte*: projekty utworzone w okresie. *Zakończone* i *utracone*: projekty zamknięte w nim w jeden lub drugi sposób. *Odsetek zakończonych* to zakończone spośród wszystkich zamkniętych — zakończonych i utraconych. |
+| **Średni czas trwania** | Od utworzenia projektu do jego zamknięcia, w dniach, osobno dla zakończonych i dla utraconych — dla projektów zamkniętych w okresie. |
+| **Średni czas na etapie** | Jak długo projekty pozostają na każdym etapie, w dniach. Pobyt trwa od wejścia na etap — przy utworzeniu projektu, przeniesieniu na ten etap albo ponownym otwarciu — do następnego przeniesienia albo zamknięcia. Liczone są pobyty rozpoczęte w okresie, które **już się zakończyły**: etap, na którym projekt nadal jest, nie jest jeszcze liczony. |
+| **Na którym etapie projekty są tracone** | Projekty utracone w okresie, według etapu, na którym były w chwili utraty — od najczęstszego, każdy z udziałem we wszystkich utratach. |
+| **Powody utraty** | Te same projekty według powodu wybranego przy zamknięciu, każdy z udziałem. |
+| **Wartość utraconych projektów** | Ile były warte projekty utracone w okresie, w każdej walucie osobno. |
+| **Średnia wartość projektu** | Średnia wartość projektów utworzonych w okresie, w każdej walucie osobno, i z ilu projektów jest liczona. |
+| **Kierownicy projektów z największą liczbą zakończonych projektów** | Członkowie z rolą *Kierownik Projektu* w projektach zakończonych w okresie, według liczby zakończonych — najwyżej dziesięciu. |
+| **Najcenniejsze otwarte projekty** | Projekty utworzone w okresie, które są nadal otwarte, pięć najcenniejszych w każdej walucie, każdy z odnośnikiem do projektu. |
+
+Każdy wskaźnik:
+
+- **liczy tylko projekty, które możesz zobaczyć** — obowiązują obie reguły z
+  sekcji *Kto widzi projekt*, więc dwie osoby mogą zobaczyć dla tego samego
+  okresu różne liczby;
+- podaje **okres i liczbę projektów, z których został policzony**, a wskaźnik
+  kwot podaje też, ile projektów **pominął, bo nie miały wartości**;
+- pokazuje **kwoty w każdej walucie osobno**: kwoty w dwóch walutach nigdy nie
+  są sumowane i nie ma wskaźnika dla wszystkich walut naraz;
+- grupuje **etapy według nazwy**, bez względu na wielkość liter i otaczające
+  spacje, bo każdy projekt ma własne etapy — *Montaż* w jednym projekcie i
+  *montaż* w innym to jeden wiersz. Etap jest nazwany tak, jak nazywał się,
+  gdy projekt na niego wszedł albo został na nim utracony, więc późniejsza
+  zmiana nazwy etapu nie przesuwa dawnych pobytów ani utrat.
+
+Pod każdym wykresem jest tabela z tymi samymi liczbami. Dni są liczone w UTC.
+
+Gdy moduł Projekty jest wyłączony, ekranu i jego pozycji w menu bocznym nie
+ma, a wskaźniki nie są udostępniane.
 
 ## Dla programistów
 
@@ -629,6 +667,22 @@ nastąpi.*
 | `POST /api/v1/admin/projects/templates`, `PUT …/templates/:id` | `projects:configure` | Cały szablon w jednym body (`ProjectTemplateBody`: nazwa, opis, `roleIds`, `stages` — każdy z `key` i swoimi `tasks`, `moves` wskazujące etapy po kluczu — pominięte oznacza przejście każdego etapu do następnego) → `201` / `200` `{ data: ProjectTemplateDetail }`. Klucz, który jest identyfikatorem jednego z etapów szablonu, zachowuje identyfikator tego etapu. |
 | `POST /api/v1/admin/projects/templates/:id/duplicate` | `projects:configure` | `201` `{ data: ProjectTemplateDetail }` — niezależna kopia. |
 | `POST /api/v1/admin/projects/templates/:id/archive`, `…/restore` | `projects:configure` | `{ data: ProjectTemplateDetail }`. |
+
+| `GET /api/v1/admin/projects/analytics/summary` | `projects:analytics` | `{ opened, completed, lost, completionRate }` — `completionRate` to `null`, gdy nic nie zostało zamknięte. |
+| `GET /api/v1/admin/projects/analytics/durations` | `projects:analytics` | `{ completedAverageDays, completedCount, lostAverageDays, lostCount }` — od utworzenia do zamknięcia, dla projektów zamkniętych w okresie. |
+| `GET /api/v1/admin/projects/analytics/time-in-stage` | `projects:analytics` | `{ stageName, averageDays, sampleCount }[]` dla każdej nazwy etapu, z pobytów rozpoczętych w okresie i zakończonych, w kolejności, w jakiej etapy są zwykle przechodzone. |
+| `GET /api/v1/admin/projects/analytics/losses` | `projects:analytics` | `{ byStage: { stageName, count, share }[], byReason: { lossReasonId, code, name, count, share }[], lostValue: { currency, amount }[] }` dla projektów utraconych w okresie; `name` w języku czytelnika. |
+| `GET /api/v1/admin/projects/analytics/value` | `projects:analytics` | `{ average: { currency, amount, count }[] }` dla projektów utworzonych w okresie. |
+| `GET /api/v1/admin/projects/analytics/top-open` | `projects:analytics` | `ProjectSummary[]` — otwarte projekty utworzone w okresie, po pięć w każdej walucie, według waluty, od najcenniejszego. |
+| `GET /api/v1/admin/projects/analytics/managers` | `projects:analytics` | `{ adminUser: { id, name }, completedCount }[]` — osoby z rolą `project_manager` w projektach zakończonych w okresie, najwyżej dziesięć. |
+
+Każda ścieżka analityki przyjmuje `from` i `to` (`YYYY-MM-DD`, oba włącznie,
+UTC) oraz opcjonalnie `templateId`, `organizationId` i `projectManagerId`;
+okres kończący się przed początkiem to `400`. Każda odpowiada
+`{ from, to, projectCount, excluded: { noValue }, data }`: `projectCount` to
+liczba projektów, które okres i filtry wybierają dla danego wskaźnika spośród
+tych, które wywołujący może zobaczyć, a `excluded.noValue` — ile z nich
+wskaźnik kwot pominął, bo nie miały wartości.
 
 Kształty żądań i odpowiedzi to schematy Zod z `@endora-commerce/contracts`
 (`projects.ts`).
@@ -766,6 +820,17 @@ pola usuniętego; filtr listy to warunek na identyfikatorach z
 `custom_fields` to zależność wiążąca i nie można go wyłączyć. Pole
 `customFieldValues` wpisu dziennika zdarzeń `GET /projects/:id/history` zwraca
 tylko czytelnikowi z uprawnieniem `custom_fields:read`.
+
+### Analityka
+
+Każdy wskaźnik to jedno zapytanie SQL z grupowaniem na `projects` — a dla czasu
+na etapie i etapu utraty także na `project_stage_entries`, których wiersze
+zachowują nazwy etapów takie, jakie były — z predykatem `ProjectAccess` dla
+czytelnika; czytelnik bez dostępu do żadnej organizacji dostaje puste wskaźniki
+i żadne zapytanie nie jest wykonywane. Nic nie jest czytane projekt po
+projekcie: nazwisko kierownika projektu i karta najcenniejszego projektu są
+czytane potem, dla kilku wierszy, które zwróciło zapytanie. Usługa to
+`services/analytics-service.ts`, zakres i proporcje — `domain/analytics-range.ts`.
 
 ### Jedna ścieżka odczytu
 

@@ -37,7 +37,9 @@ Projects are in the sidebar under **Projects & tasks → Projects** (`/projects`
 for administrators who may view projects. Their configuration is in the same
 section, for administrators who may configure projects: **Templates**
 (`/projects/templates`), **Project roles** (`/projects/roles`) and **Loss
-reasons** (`/projects/loss-reasons`).
+reasons** (`/projects/loss-reasons`). **Analytics** (`/projects/analytics`) is
+there too, for administrators who may view project analytics (see
+*Analytics*).
 
 **The list** shows every project you may see: its number, title,
 Organizations — or *Internal* — the current stage with its deadline, marked
@@ -397,6 +399,7 @@ on again.
 | `projects:write` | Create, edit and delete projects; set their Organizations, members, stages and workflow; move, close and reopen them; link and unlink records — a record of a kind also needs the permission to view that kind (see *Linking records*). Requires `projects:read`. |
 | `projects:see_all` | See every project within your reach, whatever the module setting and each project's own choice (see *Who sees a project*). Requires `projects:read`; it never widens Organization reach. |
 | `projects:configure` | Create, edit, duplicate, archive and restore templates; add, rename, archive, restore and delete project roles and loss reasons. Requires `projects:read`; anybody who may view projects can read the templates, roles and loss reasons, to use them on a project. |
+| `projects:analytics` | View project analytics (see *Analytics*) — every figure over the projects you may see. Requires `projects:read`. |
 
 A project role is not one of these: holding one grants no permission (see
 *Project roles*).
@@ -554,8 +557,41 @@ and are back when the module is.
 
 ## Analytics
 
-*Arrives with a later release of this module and is described here when it
-does.*
+**Analytics** (`/projects/analytics`) shows how projects went over a range of
+days — this month, last month, the last 90 days, this year, or days of your
+own — and can be narrowed to the projects created from one **template**, those
+of one **Organization**, and those one **project manager** runs.
+
+| Figure | What it counts |
+| --- | --- |
+| **Projects in the range** | *Opened*: projects created in the range. *Completed* and *lost*: projects closed in it either way. The *completion rate* is completed out of all closed — completed and lost. |
+| **Average duration** | From a project's creation to its closing, in days, for completed and for lost projects apart — over the projects closed in the range. |
+| **Average time in a stage** | How long projects stay in each stage, in days. A stay runs from entering the stage — when the project is created, moved there or reopened — to the next move or the close. It counts the stays that began in the range and **have ended**: a stage a project is still in is not counted yet. |
+| **Where projects are lost** | The projects lost in the range, by the stage they were in when they were lost — the most frequent first, each with its share of all the losses. |
+| **Loss reasons** | The same projects by the reason chosen when they were closed, each with its share. |
+| **Value of lost projects** | What the projects lost in the range were worth, per currency. |
+| **Average project value** | The average value of the projects created in the range, per currency, and how many it is over. |
+| **Project managers with the most completed projects** | The members holding the *Project Manager* role on the projects completed in the range, by how many they completed — at most ten. |
+| **Most valuable open projects** | The projects created in the range that are still open, the five most valuable in each currency, each a link to the project. |
+
+Every figure:
+
+- **counts only the projects you may see** — both rules of *Who sees a
+  project* apply, so two people may see different numbers for the same range;
+- says **the period and how many projects it was computed from**, and a figure
+  of amounts also says how many projects it **left out for having no value**;
+- shows **money per currency**: amounts in two currencies are never added
+  together, and there is no figure for all currencies at once;
+- groups **stages by name**, ignoring case and surrounding spaces, because
+  every project has stages of its own — *Design* on one project and *design* on
+  another are one row. A stage is named as it was when the project entered it
+  or was lost in it, so renaming a stage later does not move old stays or
+  losses.
+
+Each chart has a table with the same numbers below it. Days are counted in UTC.
+
+While Projects is switched off the screen and its sidebar entry are gone, and
+the figures are not served.
 
 ## For developers
 
@@ -611,6 +647,22 @@ does.*
 | `POST /api/v1/admin/projects/templates`, `PUT …/templates/:id` | `projects:configure` | The whole template in one body (`ProjectTemplateBody`: name, description, `roleIds`, `stages` each with a `key` and its `tasks`, `moves` naming stages by key — left out, each stage moves to the next) → `201` / `200` `{ data: ProjectTemplateDetail }`. A key that is the id of one of the template's stages keeps that stage's id. |
 | `POST /api/v1/admin/projects/templates/:id/duplicate` | `projects:configure` | `201` `{ data: ProjectTemplateDetail }` — an independent copy. |
 | `POST /api/v1/admin/projects/templates/:id/archive`, `…/restore` | `projects:configure` | `{ data: ProjectTemplateDetail }`. |
+
+| `GET /api/v1/admin/projects/analytics/summary` | `projects:analytics` | `{ opened, completed, lost, completionRate }` — `completionRate` is `null` when nothing closed. |
+| `GET /api/v1/admin/projects/analytics/durations` | `projects:analytics` | `{ completedAverageDays, completedCount, lostAverageDays, lostCount }` — creation to closing, over the projects closed in the range. |
+| `GET /api/v1/admin/projects/analytics/time-in-stage` | `projects:analytics` | `{ stageName, averageDays, sampleCount }[]` per stage name, over the stays begun in the range that have ended, in the order stages are usually walked. |
+| `GET /api/v1/admin/projects/analytics/losses` | `projects:analytics` | `{ byStage: { stageName, count, share }[], byReason: { lossReasonId, code, name, count, share }[], lostValue: { currency, amount }[] }` over the projects lost in the range; `name` in the reader's language. |
+| `GET /api/v1/admin/projects/analytics/value` | `projects:analytics` | `{ average: { currency, amount, count }[] }` over the projects created in the range. |
+| `GET /api/v1/admin/projects/analytics/top-open` | `projects:analytics` | `ProjectSummary[]` — the open projects created in the range, five per currency, by currency, the most valuable first. |
+| `GET /api/v1/admin/projects/analytics/managers` | `projects:analytics` | `{ adminUser: { id, name }, completedCount }[]` — holders of the `project_manager` role on the projects completed in the range, at most ten. |
+
+Every analytics route takes `from` and `to` (`YYYY-MM-DD`, both included,
+UTC) and optionally `templateId`, `organizationId` and `projectManagerId`; a
+range that ends before it starts is `400`. Each answers
+`{ from, to, projectCount, excluded: { noValue }, data }`: `projectCount` is
+how many projects the range and the filters select for that figure, among
+those the caller may see, and `excluded.noValue` how many of them a figure of
+amounts left out for having no value.
 
 The request and response shapes are the Zod schemas of
 `@endora-commerce/contracts` (`projects.ts`).
@@ -739,6 +791,17 @@ condition, intersected with the visible set. `custom_fields` is a binding
 dependency and cannot be switched off. An audit entry's `customFieldValues` is
 served by `GET /projects/:id/history` only to a reader holding
 `custom_fields:read`.
+
+### Analytics
+
+Each figure is one grouped SQL statement over `projects` — and, for time in a
+stage and the stage lost in, `project_stage_entries`, whose rows keep the
+stage names as they were — carrying the `ProjectAccess` predicate for the
+reader; a reader who reaches no Organization is answered with empty figures and
+no statement runs. Nothing is read project by project: a project manager's name
+and a top project's card are read afterwards, for the few rows the statement
+answered. The service is `services/analytics-service.ts`, the range and ratios
+`domain/analytics-range.ts`.
 
 ### One read path
 
