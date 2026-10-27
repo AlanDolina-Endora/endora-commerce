@@ -91,8 +91,8 @@ Jego zakładki:
   zapisuje to przyciskiem *Zapisz widoczność*; pozostali widzą, jakie jest to
   ustawienie i kto jest dopisany.
 - **Etapy** — nazwa, kolor, planowany czas trwania, role odpowiedzialne, dni
-  alertów, blokada zakończenia i informacja, czy z danego etapu można zakończyć
-  projekt, zapisywane osobno dla każdego etapu; tutaj dodaje się etapy (na
+  alertów, blokada zakończenia, informacja, czy z danego etapu można zakończyć
+  projekt, oraz termin ustawiony ręcznie, zapisywane osobno dla każdego etapu; tutaj dodaje się etapy (na
   końcu), przesuwa je w górę lub w dół i usuwa. Gdy moduł Zadania jest
   włączony, każdy etap ma też listę **zadań etapu** — tytuł, liczbę dni od
   rozpoczęcia etapu do terminu zadania i odpowiedzialną rolę — zapisywaną w
@@ -151,8 +151,7 @@ projekt. Zakończenie jest dozwolone z ostatniego etapu, chyba że etapy mówią
 inaczej. Etap przechowuje też to, czy jest **blokadą zakończenia** dla swoich
 zadań, oraz własne **zadania etapu** — jedno i drugie opisano niżej w sekcji
 *Zadania etapów i blokada zakończenia* — a także liczby dni przed terminem, w
-które członkowie mają dostać powiadomienie; te zaczną działać w wydaniu, które
-wprowadzi powiadomienia o terminach. Etapy można dodawać (na końcu), zmieniać
+które jego członkowie dostają alert (zob. *Alerty o terminach*). Etapy można dodawać (na końcu), zmieniać
 im nazwę i kolor, zmieniać ich kolejność i usuwać — z wyjątkiem etapu, w którym
 projekt jest, jedynego etapu projektu i etapu, który zawiera zadania.
 
@@ -168,8 +167,10 @@ można było poprawić przebieg.
 jest odrzucane i nic się nie zmienia. Wejście do etapu zapisuje dzień jego
 rozpoczęcia — dzisiejszy, w strefie czasowej z `projects.alerts_time_zone` —
 oraz jego termin: ten dzień plus planowany czas trwania etapu, albo ten sam
-dzień przy czasie trwania zero. Termin ustawiony ręcznie zostaje bez zmian.
-Ponowne wejście do etapu rozpoczyna go od nowa.
+dzień przy czasie trwania zero. Termin ustawiony ręcznie — w zakładce *Etapy*,
+gdzie wyczyszczenie pola przywraca termin liczony od rozpoczęcia etapu plus
+planowany czas trwania — zostaje bez zmian, a pasek etapów informuje, że
+ustawiono go ręcznie. Ponowne wejście do etapu rozpoczyna go od nowa.
 
 **Zamykanie.** Projekt zamyka się jako **zrealizowany** z etapu, z którego
 zakończenie jest dozwolone, albo jako **utracony** z dowolnego etapu — z
@@ -385,7 +386,8 @@ Gdy moduł jest wyłączony:
 - każdy endpoint `/api/v1/admin/projects…` odpowiada `503` z kodem
   `MODULE_DISABLED`;
 - jego uprawnień nie można już nadać żadnej roli, a jego ustawień nie można
-  zmieniać — z wyjątkiem samego przełącznika.
+  zmieniać — z wyjątkiem samego przełącznika;
+- nie jest wysyłany żaden alert o terminie.
 
 Nic nie jest usuwane. Każdy projekt, jego etapy i historia zostają w bazie
 danych, a po ponownym włączeniu modułu wszystko wraca dokładnie do stanu
@@ -397,7 +399,7 @@ sprzed wyłączenia.
 | --- | --- | --- |
 | `projects.enabled` | włączone | Czy moduł jest włączony. |
 | `projects.visibility` | `members` | Kto widzi projekt korzystający z ustawienia: `everyone` — wszyscy, którzy mogą przeglądać projekty, albo `members` — jego członkowie i dopisane osoby. |
-| `projects.alerts_time_zone` | `Europe/Warsaw` | Strefa czasowa, w której liczony jest „dzisiejszy” dzień projektów — dzień rozpoczęcia etapu i to, czy jego termin minął. Musi to być nazwa strefy czasowej IANA, np. `Europe/Warsaw`; każda inna wartość jest odrzucana przy zapisie. |
+| `projects.alerts_time_zone` | `Europe/Warsaw` | Strefa czasowa, w której liczony jest „dzisiejszy” dzień projektów — dzień rozpoczęcia etapu, to, czy jego termin minął, i dzień wysłania alertu o terminie, od 8:00 w tej strefie. Musi to być nazwa strefy czasowej IANA, np. `Europe/Warsaw`; każda inna wartość jest odrzucana przy zapisie. |
 
 ## Uprawnienia
 
@@ -499,10 +501,44 @@ projekt numerem — także wtedy, gdy moduł Projekty jest wyłączony. Najpierw
 odłącz plik od projektu. Odnośnik do pobrania jest przygotowywany w chwili
 kliknięcia *Pobierz* i ważny przez kilka minut.
 
-## Powiadomienia o terminach i analityka
+## Alerty o terminach
 
-*Każda z tych funkcji pojawi się w jednym z kolejnych wydań modułu i zostanie tu
-opisana, gdy to nastąpi.*
+Etap może mieć **alerty** — pełne dni przed terminem, od 1 do 365, każdy raz,
+np. `7, 1` — ustawiane w zakładce *Etapy* projektu albo w szablonie, z którego
+nowy projekt je kopiuje.
+
+**W dniu, w którym do terminu zostaje tyle dni**, od 8:00 w strefie czasowej z
+`projects.alerts_time_zone`, **każdy członek** projektu, który może go widzieć,
+dostaje informację — w dzwonku powiadomień i e-mailem — że etap ma termin w
+danym dniu i ile dni zostało. Powiadomienie w dzwonku otwiera projekt w
+zakładce *Etapy*; e-mail podaje numer projektu, etap, termin i liczbę
+pozostałych dni, w języku panelu administracyjnego członka, i nie zawiera
+linku. Każdy alert jest wysyłany **raz** dla danego terminu:
+
+- tylko dla **bieżącego etapu** **otwartego** projektu — nic dla etapu, z
+  którego projekt już wyszedł, i nic dla zamkniętego projektu;
+- **nigdy wstecz**: projekt, który wchodzi do etapu po dniu alertu, albo termin
+  przesunięty tak, że dzień alertu minął, nie wysyła nic za ten dzień; wejście
+  do etapu w dniu alertu nadal wysyła go tego dnia;
+- termin **przesunięty** na nową datę wysyła swoje alerty ponownie, raz, dla
+  nowej daty;
+- **tylko członkom** — nie osobom dopisanym do projektu i nie posiadaczom roli,
+  którzy nie są członkami; a spośród nich tylko tym, którzy w chwili wysłania
+  alertu mogą widzieć projekt: aktywnym administratorom z uprawnieniem do
+  przeglądania projektów, mającym w zasięgu każdą organizację projektu.
+  Członek dezaktywowany albo spoza zasięgu jest pomijany.
+
+Alerty są sprawdzane co piętnaście minut, więc alert przychodzi w ciągu
+kwadransa od 8:00. Przy wyłączonym module powiadomień członkowie dostają tylko
+e-mail; operator może wyłączyć lub zmienić ten e-mail na ekranie szablonów
+e-maili (*Stage deadline alert*). Gdy moduł Projekty jest wyłączony, żaden
+alert nie jest wysyłany ani zużywany: alert przypadający na ten dzień wyjdzie,
+gdy moduł zostanie włączony ponownie tego samego dnia.
+
+## Analityka
+
+*Pojawi się w jednym z kolejnych wydań modułu i zostanie tu opisana, gdy to
+nastąpi.*
 
 ## Dla programistów
 
@@ -638,6 +674,38 @@ usunie pliku, którego używa projekt (`kind` `project_attachment`, etykieta
 `Project PRJ-…`), także przy wyłączonym module Projekty — oraz w
 `auditReferenceRegistry` resolver dla `project`, dzięki któremu dziennik zmian
 nazywa numerem i tytułem projekt, który czytający może widzieć.
+
+### Alerty o terminach
+
+Jeden harmonogram zadań BullMQ, `projects-stage-alerts`, co piętnaście minut, z
+zadaniem bez danych i jednym konsumentem naraz w procesie, podłączany przez
+`ctx.worker` tylko w procesie uruchamiającym workery
+(`workers/stage-alert-worker.ts`). Każde wywołanie najpierw rozstrzyga obecność
+modułu, potem zadaje jednobitowe pytanie poza jakimkolwiek zakresem tenanta
+(`anyRowExists`, przez kopię `scheduled-work-probe.ts` w module) i wchodzi w
+zakres systemowy tylko wtedy, gdy coś przypada — wywołanie bez pracy nie
+zapisuje wpisu audytu `tenant.escape_hatch`.
+
+Przebieg (`services/stage-alert-service.ts`) rezerwuje każdy alert
+przypadający dziś w strefie alertów, od 8:00: jeden wiersz
+`project_stage_alert_deliveries` na (etap, liczba dni, termin), wstawiany z
+`on conflict do nothing` wobec tego unikalnego klucza i zatwierdzany, zanim
+cokolwiek zostanie dostarczone — dwa przebiegi naraz rezerwują więc każdy alert
+raz, a przesunięty termin to nowy klucz. Dostarczanie odbywa się poza
+transakcją: każdy członek jest sprawdzany przez `ProjectAccess.canSeeAs`,
+powiadamiany przez `adminNotificationRecordPort` (rodzaj
+`projects.project.stage_deadline`, przedmiot `project`, zdanie
+`notifications.stageDeadline.title`) oraz e-mailem transakcyjnym
+`projects_stage_deadline_alert` (zmienne `project.number`, `stage.name`,
+`stage.deadline`, `alert.daysLeft`; domyślna treść po angielsku i po polsku
+przekazywana do `emailDefaultsPort` z haka startowego służącego wyłącznie do
+wkładu). Następnie wiersz otrzymuje wynik — `bell_email`, `bell`, `email`,
+`no_recipient` albo `undeliverable` — i liczbę powiadomionych członków.
+Rezerwacja, której dostarczenie nie powiodło się, zanim cokolwiek wyszło, wraca
+do następnego wywołania; proces, który zginie między rezerwacją a zapisem
+wyniku, zostawia alert, który nigdy nie zostanie wysłany dwa razy. Instrukcje
+rezerwacji i zapisu wyniku przechodzą przez Command Bus bez wpisu audytu: to
+ewidencja, a nie zmiana projektu.
 
 ### Podpięte dokumenty i ich właściciele
 

@@ -89,8 +89,8 @@ Its tabs:
   saves it with *Save who sees it*; everybody else is told what it is and who is
   listed.
 - **Stages** — each stage's name, colour, planned duration, responsible roles,
-  alert days, completion gate and whether the project may be completed from
-  it, saved one stage at a time; stages are added at the end, moved up or down
+  alert days, completion gate, whether the project may be completed from it
+  and a deadline set by hand, saved one stage at a time; stages are added at the end, moved up or down
   and deleted here. With the Tasks module on, each stage also lists its
   **stage tasks** — a title, the days after the stage starts that the task is
   due, and the responsible role — saved as one list per stage; a stage whose
@@ -147,8 +147,8 @@ roles responsible for it, and whether the project may be completed from it.
 Completing is permitted from the last stage unless the stages say otherwise. A
 stage also keeps whether it is a **completion gate** for its tasks and its own
 **stage tasks** — both described under *Stage Tasks and the completion gate*
-below — and the days before its deadline on which members are to be alerted,
-which take effect with the later release that brings deadline alerts. Stages
+below — and the days before its deadline on which its members are alerted
+(see *Deadline alerts*). Stages
 can be added (at the end), renamed, recoloured, reordered and removed — except
 the stage the project is in, a project's only stage, and a stage that holds
 tasks.
@@ -164,7 +164,9 @@ A stage no move reaches from the first one is allowed; the project names it as
 refused and nothing changes. Entering a stage records the day it started —
 today, in the time zone of `projects.alerts_time_zone` — and its deadline: that
 day plus the stage's planned duration, or the day itself for a duration of
-zero. A deadline set by hand is kept. Entering a stage again starts it again.
+zero. A deadline set by hand — on the *Stages* tab, where emptying the field
+returns the stage to its start plus its planned duration — is kept, and the
+stage bar says it was set by hand. Entering a stage again starts it again.
 
 **Closing.** A project is closed as **completed** from a stage that permits
 completion, or as **lost** from any stage — with a loss reason from the list
@@ -370,7 +372,8 @@ While it is off:
 - every `/api/v1/admin/projects…` endpoint answers `503` with the code
   `MODULE_DISABLED`;
 - its permissions can no longer be granted to a role, and its settings cannot be
-  changed — except the switch itself.
+  changed — except the switch itself;
+- no deadline alert is sent.
 
 Nothing is deleted. Every project, its stages and its history stay in the
 database, and everything is back exactly as it was when the module is switched
@@ -382,7 +385,7 @@ on again.
 | --- | --- | --- |
 | `projects.enabled` | on | Whether the module is switched on. |
 | `projects.visibility` | `members` | Who sees a project that follows the setting: `everyone` who may view projects, or its `members` and listed people. |
-| `projects.alerts_time_zone` | `Europe/Warsaw` | The time zone in which "today" is counted for projects — the day a stage starts and whether its deadline has passed. It must be an IANA time zone name such as `Europe/Warsaw`; any other value is refused when it is saved. |
+| `projects.alerts_time_zone` | `Europe/Warsaw` | The time zone in which "today" is counted for projects — the day a stage starts, whether its deadline has passed, and the day a deadline alert is sent, from 08:00 in this zone. It must be an IANA time zone name such as `Europe/Warsaw`; any other value is refused when it is saved. |
 
 ## Permissions
 
@@ -480,10 +483,44 @@ project by its number — also while Projects is switched off. Detach it from th
 project first. A download link is prepared at the moment you press *Download*
 and is valid for a few minutes.
 
-## Deadline alerts and analytics
+## Deadline alerts
 
-*Each of these arrives with a later release of this module and is described
-here when it does.*
+A stage can carry **alerts** — whole days before its deadline, from 1 to 365,
+each once, such as `7, 1` — set on the *Stages* tab of a project or in a
+template, from which a new project copies them.
+
+**On the day a deadline is that many days away**, from 08:00 in the time zone
+of `projects.alerts_time_zone`, **every member** of the project who may see it
+is told — in the notification bell and by e-mail — that the stage is due on
+that date and how many days are left. The bell entry opens the project on its
+*Stages* tab; the e-mail says the project's number, the stage, the deadline and
+the days left, in the member's own Admin UI language, and has no link. Each
+alert is sent **once** for a deadline:
+
+- only for the **current stage** of an **open** project — nothing for a stage
+  the project has left, and nothing for a closed project;
+- **never backdated**: a project that enters a stage after its alert day, or a
+  deadline moved so that the alert day has passed, sends nothing for that day;
+  entering a stage on its alert day still sends it that day;
+- a deadline **moved** to a new date sends its alerts again, once, for the new
+  date;
+- **members only** — not the people listed on a project, and not holders of a
+  role who are not members; and of those only who may see the project when the
+  alert goes out: an active administrator who may view projects and reaches
+  every Organization of the project. A deactivated member or one out of reach
+  is skipped.
+
+Alerts are checked every fifteen minutes, so one arrives within a quarter of an
+hour of 08:00. With the notifications module switched off members get the
+e-mail only; an operator may switch the e-mail off, or edit it, on the e-mail
+templates screen (*Stage deadline alert*). While Projects is switched off no
+alert is sent, and none is used up: an alert due that day still goes out once
+the module is back on the same day.
+
+## Analytics
+
+*Arrives with a later release of this module and is described here when it
+does.*
 
 ## For developers
 
@@ -613,6 +650,34 @@ boot hook, with no presence probe — so the library refuses to delete a file a
 project uses (`kind` `project_attachment`, label `Project PRJ-…`) also while
 Projects is off — and a resolver for `project` in `auditReferenceRegistry`, so
 the audit log names a project the reader may see by its number and title.
+
+### Deadline alerts
+
+One BullMQ Job Scheduler, `projects-stage-alerts`, every fifteen minutes, with
+a data-less job and one consumer at a time per process, attached through
+`ctx.worker` only in a process that runs workers (`workers/stage-alert-worker.ts`).
+A tick decides the module's presence first, then asks a one-bit probe outside
+any tenant scope (`anyRowExists`, through the module's copy of
+`scheduled-work-probe.ts`) and enters a system scope only when something is
+due — a tick with nothing due writes no `tenant.escape_hatch` audit row.
+
+A pass (`services/stage-alert-service.ts`) claims every alert due today in the
+alert zone, from 08:00: one row of `project_stage_alert_deliveries` per
+(stage, offset, deadline), inserted with `on conflict do nothing` against that
+unique key, and committed before anything is delivered — so two passes at once
+claim each alert once, and a moved deadline is a new key. Delivery runs outside
+the transaction: every member is asked `ProjectAccess.canSeeAs`, told through
+`adminNotificationRecordPort` (kind `projects.project.stage_deadline`, subject
+`project`, sentence `notifications.stageDeadline.title`) and through the
+transactional e-mail `projects_stage_deadline_alert` (variables
+`project.number`, `stage.name`, `stage.deadline`, `alert.daysLeft`; defaults in
+English and Polish pushed into `emailDefaultsPort` from a contribution-only
+boot hook). The row is then settled with its outcome — `bell_email`, `bell`,
+`email`, `no_recipient` or `undeliverable` — and how many members were told. A
+claim whose delivery failed before anything went out is given back for the
+next tick; a process that dies between claim and settle leaves an alert that
+is never sent twice. The claim and settle statements run through the Command
+Bus with no audit entry: they are bookkeeping, not a change to a project.
 
 ### Linked records and their owners
 

@@ -107,7 +107,7 @@ payloads in `data-model.md` §2.5. Emitted once per Command on commit.
 | `taskContextRegistry` | tasks | `contributes-to` | — |
 | `opportunityReadPort` | crm | `degrades-without` | "Sales Opportunities cannot be linked to Projects; existing links show as unavailable." |
 | `quoteRequestReadPort` | quote_requests | `degrades-without` | "Quote Requests cannot be linked to Projects; existing links show as unavailable." |
-| `adminNotificationRecordPort` | admin_notifications | `degrades-without` | "Project members get deadline alerts and mentions by e-mail only." |
+| `adminNotificationRecordPort` | admin_notifications | `degrades-without` | "Project members are not notified of messages and mentions, and get Stage deadline alerts by e-mail only." |
 | `adminSearchProviderRegistry` | admin_search | `contributes-to` | — |
 | `orderReadPort` | orders | `dependencies` (binding; not deactivatable) | |
 | `assetsLibraryPort`, `assetReadPort`, `assetReferenceRegistry` | assets_library | `dependencies` | |
