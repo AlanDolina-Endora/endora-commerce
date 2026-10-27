@@ -165,8 +165,5 @@
   "nav.settings.label": "Settings",
   "nav.settingGroups.label": "Setting groups",
   "nav.cache.label": "Clear cache",
-  "editor.credentialRef.preview": "Preview",
-  "settingGroups.general.name": "General",
-  "settingLabels.reporting.time_zone.name": "Reporting time zone",
-  "settingLabels.reporting.time_zone.description": "The time zone, as an IANA name such as Europe/Warsaw, in which reports count days, months and other ranges of days — today, Projects analytics. Default UTC."
+  "editor.credentialRef.preview": "Preview"
 }

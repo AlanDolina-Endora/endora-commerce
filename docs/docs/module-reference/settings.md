@@ -51,7 +51,6 @@ Rendered from the module's own manifest, and from nothing written by hand. What 
 | `admin.idle_logout_minutes` | Admin idle logout (minutes) | `number` |
 | `homepage_cms_page_slug` | Home page CMS page | `string` |
 | `product_image_placeholder_url` | Product image placeholder | `string` |
-| `reporting.time_zone` | Reporting time zone | `string` |
 | `shop.address` | Shop address | `string` |
 | `shop.contact_email` | Main contact email | `string` |
 | `shop.contact_form_recipient_emails` | Contact form recipient emails | `string` |

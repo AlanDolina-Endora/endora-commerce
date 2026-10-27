@@ -25,8 +25,8 @@ Members holding Project Roles, opened, completed, lost and reopened.
   and reopen, and Stage history; Stage Tasks and the completion gate; linked Orders, Quote
   Requests and Opportunities, and the Project a record or a Task belongs to; notes, messages,
   mentions, references, attachments (multipart upload) and change history; Templates; the two
-  dictionaries; seven analytics figures, over days counted in the platform's reporting time zone
-  (`reporting.time_zone`, `UTC` by default); and the module's own lookups. Every read goes through
+  dictionaries; seven analytics figures, over days counted in the reporting time zone of Analytics
+  (`analytics.reporting_time_zone`, `UTC` by default, `UTC` while Analytics is off); and the module's own lookups. Every read goes through
   the module's `ProjectAccess` — Organization reach and visibility — and an invisible Project
   answers exactly as a missing one.
 - **Admin UI.** The list, *New project*, a Project's screen with its tabs, Templates, Project
@@ -54,7 +54,7 @@ Members holding Project Roles, opened, completed, lost and reopened.
   `./backend`, the door to the `PRJ-…` number sequence.
 - **Dependencies.** Binding on `_i18n`, `admin_roles`, `admin_users`, `assets_library`,
   `audit_logs`, `auth`, `catalog`, `custom_fields`, `orders`, `organizations`, `settings` and
-  `transactional_emails`; degrades without `tasks` (no Tasks tab, Stage Tasks or completion
+  `transactional_emails`; degrades without `analytics` (analytics count in UTC), `tasks` (no Tasks tab, Stage Tasks or completion
   gates), `crm`, `quote_requests` and `admin_notifications`. The package declares
   `@fastify/multipart` `^10`, `bullmq` `^5` and `ioredis` `^5` as peer dependencies, beside the
   platform's own.

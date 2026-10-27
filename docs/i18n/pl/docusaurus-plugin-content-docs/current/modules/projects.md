@@ -638,9 +638,10 @@ Każdy wskaźnik:
 
 Pod każdym wykresem jest tabela z tymi samymi liczbami. Dni są liczone w
 **strefie czasowej raportów** — ustawieniu *Strefa czasowa raportów* w sekcji
-*Ogólne* ekranu ustawień, domyślnie `UTC`: zakres zaczyna się o północy jego
-pierwszego dnia i kończy o północy po ostatnim, obie w tej strefie. Gotowe
-zakresy (*Ten miesiąc*, …) biorą dzisiejszą datę z Twojego komputera.
+*Analityka* ekranu ustawień, domyślnie `UTC`: zakres zaczyna się o północy jego
+pierwszego dnia i kończy o północy po ostatnim, obie w tej strefie. Gdy moduł
+Analityka jest wyłączony, dni są liczone w `UTC`. Gotowe zakresy (*Ten
+miesiąc*, …) biorą dzisiejszą datę z Twojego komputera.
 
 Gdy moduł Projekty jest wyłączony, ekranu i jego pozycji w menu bocznym nie
 ma, a wskaźniki nie są udostępniane.
@@ -709,8 +710,10 @@ ma, a wskaźniki nie są udostępniane.
 | `GET /api/v1/admin/projects/analytics/managers` | `projects:analytics` | `{ adminUser: { id, name }, completedCount }[]` — osoby z rolą `project_manager` w projektach zakończonych w okresie, najwyżej dziesięć. |
 
 Każda ścieżka analityki przyjmuje `from` i `to` (`YYYY-MM-DD`, oba włącznie,
-dni w strefie czasowej raportów platformy, `reporting.time_zone`, deklarowanej
-przez `settings`, domyślnie `UTC`) oraz opcjonalnie `templateId`, `organizationId` i `projectManagerId`;
+dni w strefie czasowej raportów, `analytics.reporting_time_zone`, którą moduł
+`analytics` posiada i udostępnia przez bramkowany `reportingTimeZonePort` —
+domyślnie `UTC`, a gdy `analytics` jest wyłączony, też `UTC`: krawędź
+`degrades-without`, sprawdzana przed portem w `services/reporting-time-zone.ts`) oraz opcjonalnie `templateId`, `organizationId` i `projectManagerId`;
 okres kończący się przed początkiem to `400`. Każda odpowiada
 `{ from, to, projectCount, excluded: { noValue }, data }`: `projectCount` to
 liczba projektów, które okres i filtry wybierają dla danego wskaźnika spośród

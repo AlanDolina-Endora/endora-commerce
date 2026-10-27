@@ -564,8 +564,9 @@ switchable by an operator, and invisible when off.
 - **FR-037**: System MUST provide Project analytics for a date range with the figures of User
   Story 10 scenarios 1 and 2, filterable by Template, Organization and Project Manager, each
   figure computed only over Projects the viewer may see, and money figures per currency. The
-  range's days are counted in the platform's reporting time zone — a setting the Settings module
-  owns, default `UTC` (owner decision 2026-10-27, issue #465; T146).
+  range's days are counted in the reporting time zone — a setting the Analytics module owns
+  (`analytics.reporting_time_zone`), default `UTC` — and in `UTC` while Analytics is off; Projects
+  degrades, never fails, without it (owner decisions 2026-10-27, issue #465; T146).
 - **FR-038**: Each analytics figure MUST state the period and the number of Projects it was
   computed from, and any Projects excluded (for example for missing value).
 

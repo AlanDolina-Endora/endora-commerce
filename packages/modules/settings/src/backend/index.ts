@@ -19,7 +19,6 @@ import {
   type ModulePresencePort,
 } from './services/settings-admin.service.js';
 import { SettingWriteValidatorRegistry } from './services/setting-write-validators.js';
-import { createReportingTimeZoneValidator } from './services/reporting-time-zone.js';
 import { CacheAdminService } from './services/cache-admin.service.js';
 import { ShopInfoResolver } from './services/shop-info-resolver.js';
 import { HomepageResolver } from './services/homepage-resolver.js';
@@ -205,15 +204,6 @@ export function registerModule(ctx: ModuleContext): void {
       )
       .singleton(),
   );
-
-  /**
-   * `reporting.time_zone` is this module's own setting (issue #465), so its
-   * validator goes into this module's own registry — at boot, like every
-   * contributor's.
-   */
-  ctx.onBoot(() => {
-    ctx.cradle<SettingsCradle>().settingWriteValidatorRegistry.register(createReportingTimeZoneValidator());
-  });
 
   ctx.routes(async (app) => {
     const cradle = ctx.cradle<SettingsCradle>();

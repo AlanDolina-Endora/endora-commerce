@@ -6,14 +6,17 @@ import {
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
 import { PROJECTS_ADMIN, callProjects, createProject, deleteProjects } from './helpers.js';
+import { withModulesDeactivated } from '../../helpers/modules-deactivated.js';
 
 /**
- * Project analytics count days in the reporting time zone (owner decision
+ * Project analytics count days in the reporting time zone (owner decisions
  * 2026-10-27, issue #465; `specs/163-projects-and-tasks/` T146).
  *
- * `reporting.time_zone` is the platform's, declared by `settings` so that CRM
- * can count in it later (#474); it defaults to `UTC`, in which the figures are
- * those the module answered before the setting existed. Three Projects are
+ * `analytics.reporting_time_zone` is the `analytics` module's, so CRM can count
+ * in the same zone later (#474); it defaults to `UTC`, in which the figures are
+ * those the module answered before the setting existed. `analytics` can be
+ * switched off: Projects then counts in `UTC` and never fails (its
+ * `degrades-without` edge). Three Projects are
  * dated in 2003 — a year no other file uses — around the midnights of
  * Europe/Warsaw (UTC+1 in winter):
  *
@@ -29,7 +32,7 @@ describe('projects — analytics in the reporting time zone (T146)', () => {
   const setZone = (value: unknown) =>
     h.app.inject({
       method: 'PUT',
-      url: '/api/v1/admin/settings/reporting.time_zone/value',
+      url: '/api/v1/admin/settings/analytics.reporting_time_zone/value',
       cookies: admin,
       payload: { scope: 'all', value },
     });
@@ -65,7 +68,7 @@ describe('projects — analytics in the reporting time zone (T146)', () => {
   });
 
   it('defaults to UTC, counting as the module did before the setting', async () => {
-    const setting = await h.app.inject({ method: 'GET', url: '/api/v1/admin/settings/reporting.time_zone', cookies: admin });
+    const setting = await h.app.inject({ method: 'GET', url: '/api/v1/admin/settings/analytics.reporting_time_zone', cookies: admin });
     expect(setting.statusCode, setting.body).toBe(200);
     expect(setting.body).toContain('"UTC"');
     expect(await opened('2003-01-01', '2003-01-01')).toBe(0);
@@ -80,6 +83,18 @@ describe('projects — analytics in the reporting time zone (T146)', () => {
     expect(await opened('2003-01-01', '2003-01-01')).toBe(1);
     expect(await opened('2003-01-01', '2003-01-31')).toBe(2);
     expect(await opened('2003-01-31', '2003-01-31')).toBe(0);
+    expect(await opened('2003-02-01', '2003-02-28')).toBe(1);
+  });
+
+  it('with analytics off counts in UTC whatever the setting says — degraded, never failing', async () => {
+    const accepted = await setZone('Europe/Warsaw');
+    expect(accepted.statusCode, accepted.body).toBeLessThan(400);
+    await withModulesDeactivated(['analytics'], async () => {
+      expect(await opened('2003-01-01', '2003-01-01')).toBe(0);
+      expect(await opened('2003-01-31', '2003-01-31')).toBe(1);
+      expect(await opened('2003-02-01', '2003-02-28')).toBe(0);
+    });
+    // On again, the zone is back.
     expect(await opened('2003-02-01', '2003-02-28')).toBe(1);
   });
 

@@ -15,6 +15,7 @@ unchanged, proving existing behaviour is untouched.
 | `admin-contributions.ts` | + `'work'` in `AdminNavSectionNameSchema`; + zones `opportunity.detail.after`, `task.detail.after` with props types and `AdminZonePropsMap` entries | R-11, R-16 |
 | `custom-fields.ts` | + `'project'` in `supportedEntityTypeSchema` | R-18 |
 | `assets-library.ts` | + `project_attachment` in `assetReferenceKindSchema` (additive; no exhaustive switch over it) | the Projects asset-deletion guard's descriptor (T112) |
+| `settings.ts` | + `ANALYTICS_REPORTING_TIME_ZONE_SETTING`, `ReportingTimeZonePort`, `isIanaTimeZone` (T146, owner decisions 2026-10-27) | the reporting time zone `analytics` owns and Projects reads; the IANA check shared with `projects.alerts_time_zone` |
 | `errors.ts` | + each `TASKS_ERROR_CODES` / `PROJECTS_ERROR_CODES` entry joins `ERROR_CODES` in the same change that first raises it (with its manifest declaration and en/pl translation) | `check:error-translations` refuses an undeclared code |
 
 Before changing either enum: grep `admin/test`, `backend/test` and every package for exhaustive
@@ -68,6 +69,20 @@ No CRM table other than the constraint above, no permission and no event changes
 | `src/backend/services/host-storage-binding.ts` | + `project: { table: 'projects', column: 'custom_field_values' }` |
 | `i18n/{en,pl}.json` | + `customFields.entity.project` (Project / Projekt) |
 
+## D2. `analytics` (T146, owner decisions 2026-10-27, #465; guard: `backend/test/integration/analytics/*` and its package tests)
+
+| File | Change |
+| --- | --- |
+| `src/manifest.ts` | + setting `analytics.reporting_time_zone` (group `analytics`, default `UTC`); + `settings` in `dependencies` (owner of `settingWriteValidatorRegistry`, not deactivatable) |
+| `src/backend/index.ts` | + gated `reportingTimeZonePort` (`providePort`); + boot push of the setting's validator into `settingWriteValidatorRegistry` |
+| `src/backend/services/reporting-time-zone.ts` (+ test) | **new** — the port and the IANA validator |
+| `i18n/{en,pl}.json` | + `settingGroups.analytics.name`, `settingLabels.analytics.reporting_time_zone.*` |
+| `docs/analytics.md` (+ Polish copy) | the setting and the port |
+| `package.json` | `zod` as a peer (generated: the port's settings read takes a schema) |
+
+Projects reads the port behind a `degrades-without` edge: with `analytics` off or absent its
+analytics count in `UTC`. CRM is to read the same port (#474); nothing in CRM changes here.
+
 ## E. Tests and scripts outside the modules
 
 | File | Change |
@@ -97,7 +112,8 @@ writes it; issue #445),
 `pnpm-lock.yaml` (`pnpm install --lockfile-only`). Changesets: one per meaning — `mod-tasks`
 (minor, new), `mod-projects` (minor, new), `admin-kit` (minor: promoted components + Tiptap
 peer), `contracts` (minor), `mod-crm` (minor: `@@` document list with Quote Requests and Tasks, kit components, new zone),
-`mod-custom-fields` (minor: Project host), `admin-shell` (minor: section).
+`mod-custom-fields` (minor: Project host), `admin-shell` (minor: section), `mod-analytics` (minor:
+the reporting time zone, T146).
 
 ## G. Documentation
 

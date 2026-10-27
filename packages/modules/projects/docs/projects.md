@@ -614,11 +614,11 @@ Every figure:
   losses.
 
 Each chart has a table with the same numbers below it. Days are counted in the
-**reporting time zone** — the *Reporting time zone* setting in the *General*
+**reporting time zone** — the *Reporting time zone* setting in the *Analytics*
 section of the settings screen, `UTC` unless changed: a range starts at
 midnight of its first day and ends at midnight after its last, both in that
-zone. The range presets (*This month*, …) take today's date from your own
-computer.
+zone. While the Analytics module is switched off, days are counted in `UTC`.
+The range presets (*This month*, …) take today's date from your own computer.
 
 While Projects is switched off the screen and its sidebar entry are gone, and
 the figures are not served.
@@ -687,8 +687,10 @@ the figures are not served.
 | `GET /api/v1/admin/projects/analytics/managers` | `projects:analytics` | `{ adminUser: { id, name }, completedCount }[]` — holders of the `project_manager` role on the projects completed in the range, at most ten. |
 
 Every analytics route takes `from` and `to` (`YYYY-MM-DD`, both included,
-days in the platform's reporting time zone, `reporting.time_zone`, declared by
-`settings`, `UTC` by default) and optionally `templateId`, `organizationId` and `projectManagerId`; a
+days in the reporting time zone, `analytics.reporting_time_zone`, which the
+`analytics` module owns and serves through its gated `reportingTimeZonePort` —
+`UTC` by default, and `UTC` while `analytics` is off: a `degrades-without`
+edge, asked before the port in `services/reporting-time-zone.ts`) and optionally `templateId`, `organizationId` and `projectManagerId`; a
 range that ends before it starts is `400`. Each answers
 `{ from, to, projectCount, excluded: { noValue }, data }`: `projectCount` is
 how many projects the range and the filters select for that figure, among

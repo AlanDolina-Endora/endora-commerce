@@ -3,8 +3,9 @@
  * (`specs/163-projects-and-tasks/research.md` R-15; spec FR-037, FR-038).
  *
  * A range is two calendar days, both included, counted in the **reporting
- * time zone** — the platform setting `reporting.time_zone`, `UTC` unless an
- * operator chose another (owner decision 2026-10-27, issue #465) — and is
+ * time zone** — the `analytics` module's setting `analytics.reporting_time_zone`,
+ * `UTC` unless an operator chose another, and `UTC` while `analytics` is off
+ * (owner decisions 2026-10-27, issue #465) — and is
  * answered as a half-open interval of instants an index on a `timestamptz`
  * column can use: `[from 00:00, the day after to 00:00)`, both midnights in
  * that zone. In `UTC` that is exactly the range the module counted before the

@@ -21,6 +21,7 @@ import type {
   PermissionReadPort,
   ProjectReadPort,
   QuoteRequestReadPort,
+  ReportingTimeZonePort,
   SettingWriteValidatorRegistryPort,
   TaskContextRegistryPort,
   TaskReadPort,
@@ -92,6 +93,7 @@ import { registerProjectAssetReferences } from './services/project-asset-referen
 import { registerProjectAuditReferences } from './services/project-audit-references.js';
 import { createProjectNotifier, type ProjectNotifier } from './services/project-notifier.js';
 import { ProjectReadPortService } from './services/project-read-port.js';
+import { reportingTimeZoneOf } from './services/reporting-time-zone.js';
 import { ProjectReadService } from './services/project-read-service.js';
 import { ProjectService } from './services/project-service.js';
 import { ProjectStageGuardRegistry } from './services/project-stage-guard-registry.js';
@@ -739,6 +741,11 @@ export function registerModule(ctx: ModuleContext): void {
             access: projectsAccess,
             read: projectsReadService,
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+            // `analytics`' reporting time zone, or UTC while it is off (`degrades-without`).
+            reportingTimeZone: reportingTimeZoneOf({
+              present: () => effectiveState.isPresent('analytics'),
+              port: lazyPort<ReportingTimeZonePort>(ctx, 'reportingTimeZonePort'),
+            }),
           }),
       )
       .singleton(),

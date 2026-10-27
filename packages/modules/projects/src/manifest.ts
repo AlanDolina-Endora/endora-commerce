@@ -207,6 +207,17 @@ export const manifest = defineModuleManifest({
         'offers none, and linking one or asking for its Project answers 503 from that decision rather ' +
         'than from a caught refusal.',
     },
+    // T146 (owner decisions 2026-10-27, #465) — the reporting time zone.
+    {
+      moduleId: 'analytics',
+      name: 'reportingTimeZonePort',
+      kind: 'degrades-without',
+      whenAbsent: 'Project analytics count days in UTC instead of the reporting time zone.',
+      reason:
+        'The one call into this owner is `reporting-time-zone.ts`, which asks `analytics`’ presence in front ' +
+        'of the gate and answers `UTC` without it; the figures are counted either way, and no table of that ' +
+        "owner is referenced from this module's schema.",
+    },
     // User Story 7 — the bell. A message and a mention are stored either way.
     {
       moduleId: 'admin_notifications',

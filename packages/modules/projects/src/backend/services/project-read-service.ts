@@ -19,7 +19,6 @@ import {
   type ProjectStageEntryKind,
   type ProjectStageEntryNote,
   type ProjectSummary,
-  REPORTING_TIME_ZONE_SETTING,
 } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { SettingsReadPort } from '@endora-commerce/platform/kernel';
@@ -221,14 +220,6 @@ export class ProjectReadService {
   /** `projects.alerts_time_zone` — the calendar "today" is counted in. */
   async timeZone(): Promise<string> {
     return this.deps.settings.get(PROJECTS_ALERTS_TIME_ZONE_SETTING, null, timeZoneSchema);
-  }
-
-  /**
-   * `reporting.time_zone` — the platform's calendar for reports, which
-   * `settings` declares (default `UTC`, issue #465): analytics count days in it.
-   */
-  async reportingTimeZone(): Promise<string> {
-    return this.deps.settings.get(REPORTING_TIME_ZONE_SETTING, null, timeZoneSchema);
   }
 
   /**

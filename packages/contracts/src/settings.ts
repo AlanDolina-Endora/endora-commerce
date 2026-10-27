@@ -412,17 +412,28 @@ export const HomepageConfigResponseSchema = z.object({ data: HomepageConfigSchem
 export type HomepageConfigResponse = z.infer<typeof HomepageConfigResponseSchema>;
 
 // ---------------------------------------------------------------------------
-// The reporting time zone (owner decision 2026-10-27, issue #465)
+// Time-zone names, and the reporting time zone (owner decisions 2026-10-27, #465)
 // ---------------------------------------------------------------------------
 
 /**
- * The platform's reporting time zone: the calendar in which a report counts a
- * day, a month or any other range of days. Declared by `settings` itself, in
- * its `general` group, so that no reporting module owns it — Projects
- * analytics reads it, CRM may follow (#474). An IANA name; default `UTC`.
- * Read it platform-wide (`settingsReadPort.get(code, null, …)`).
+ * The reporting time zone: the calendar in which a report counts a day, a
+ * month or any other range of days. A setting of the `analytics` module, so
+ * that no single reporting module owns it — Projects analytics reads it, CRM
+ * may follow (#474). An IANA name; default `UTC`. Read it through
+ * {@link ReportingTimeZonePort}, never by code: `analytics` can be switched
+ * off, and a reader then counts in `UTC`.
  */
-export const REPORTING_TIME_ZONE_SETTING = 'reporting.time_zone';
+export const ANALYTICS_REPORTING_TIME_ZONE_SETTING = 'analytics.reporting_time_zone';
+
+/**
+ * Container name: `reportingTimeZonePort`. Owner: `analytics`. Gated — a
+ * reader decides `analytics`' presence first and counts in `UTC` without it
+ * (a `degrades-without` edge).
+ */
+export interface ReportingTimeZonePort {
+  /** `analytics.reporting_time_zone`, platform-wide. */
+  timeZone(): Promise<string>;
+}
 
 let knownTimeZones: Set<string> | null = null;
 

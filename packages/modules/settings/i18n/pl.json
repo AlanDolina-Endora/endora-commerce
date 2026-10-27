@@ -165,8 +165,5 @@
   "nav.settings.label": "Ustawienia",
   "nav.settingGroups.label": "Grupy ustawień",
   "nav.cache.label": "Czyszczenie cache",
-  "editor.credentialRef.preview": "Podgląd",
-  "settingGroups.general.name": "Ogólne",
-  "settingLabels.reporting.time_zone.name": "Strefa czasowa raportów",
-  "settingLabels.reporting.time_zone.description": "Strefa czasowa (nazwa IANA, np. Europe/Warsaw), w której raporty liczą dni, miesiące i inne zakresy dni — obecnie analityka projektów. Domyślnie UTC."
+  "editor.credentialRef.preview": "Podgląd"
 }

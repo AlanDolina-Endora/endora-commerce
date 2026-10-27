@@ -56,30 +56,30 @@ import * as module5 from '@endora-commerce/mod-admin-actions/backend';
 import { manifest as manifest5 } from '@endora-commerce/mod-admin-actions';
 import * as module6 from '@endora-commerce/mod-admin-notifications/backend';
 import { manifest as manifest6 } from '@endora-commerce/mod-admin-notifications';
-import * as module7 from '@endora-commerce/mod-analytics/backend';
-import { manifest as manifest7 } from '@endora-commerce/mod-analytics';
-import * as module8 from '@endora-commerce/mod-assets-library/backend';
-import { manifest as manifest8 } from '@endora-commerce/mod-assets-library';
-import * as module9 from '@endora-commerce/mod-audit-logs/backend';
-import { manifest as manifest9 } from '@endora-commerce/mod-audit-logs';
-import * as module10 from '@endora-commerce/mod-currencies/backend';
-import { manifest as manifest10 } from '@endora-commerce/mod-currencies';
-import * as module11 from '@endora-commerce/mod-custom-fields/backend';
-import { manifest as manifest11 } from '@endora-commerce/mod-custom-fields';
-import * as module12 from '@endora-commerce/mod-email/backend';
-import { manifest as manifest12 } from '@endora-commerce/mod-email';
-import * as module13 from '@endora-commerce/mod-import-export/backend';
-import { manifest as manifest13 } from '@endora-commerce/mod-import-export';
-import * as module14 from '@endora-commerce/mod-languages/backend';
-import { manifest as manifest14 } from '@endora-commerce/mod-languages';
-import * as module15 from '@endora-commerce/mod-dictionaries/backend';
-import { manifest as manifest15 } from '@endora-commerce/mod-dictionaries';
-import * as module16 from '@endora-commerce/mod-settings/backend';
-import { manifest as manifest16 } from '@endora-commerce/mod-settings';
-import * as module17 from '@endora-commerce/mod-admin-feedback/backend';
-import { manifest as manifest17 } from '@endora-commerce/mod-admin-feedback';
-import * as module18 from '@endora-commerce/mod-admin-search/backend';
-import { manifest as manifest18 } from '@endora-commerce/mod-admin-search';
+import * as module7 from '@endora-commerce/mod-assets-library/backend';
+import { manifest as manifest7 } from '@endora-commerce/mod-assets-library';
+import * as module8 from '@endora-commerce/mod-audit-logs/backend';
+import { manifest as manifest8 } from '@endora-commerce/mod-audit-logs';
+import * as module9 from '@endora-commerce/mod-currencies/backend';
+import { manifest as manifest9 } from '@endora-commerce/mod-currencies';
+import * as module10 from '@endora-commerce/mod-custom-fields/backend';
+import { manifest as manifest10 } from '@endora-commerce/mod-custom-fields';
+import * as module11 from '@endora-commerce/mod-email/backend';
+import { manifest as manifest11 } from '@endora-commerce/mod-email';
+import * as module12 from '@endora-commerce/mod-import-export/backend';
+import { manifest as manifest12 } from '@endora-commerce/mod-import-export';
+import * as module13 from '@endora-commerce/mod-languages/backend';
+import { manifest as manifest13 } from '@endora-commerce/mod-languages';
+import * as module14 from '@endora-commerce/mod-dictionaries/backend';
+import { manifest as manifest14 } from '@endora-commerce/mod-dictionaries';
+import * as module15 from '@endora-commerce/mod-settings/backend';
+import { manifest as manifest15 } from '@endora-commerce/mod-settings';
+import * as module16 from '@endora-commerce/mod-admin-feedback/backend';
+import { manifest as manifest16 } from '@endora-commerce/mod-admin-feedback';
+import * as module17 from '@endora-commerce/mod-admin-search/backend';
+import { manifest as manifest17 } from '@endora-commerce/mod-admin-search';
+import * as module18 from '@endora-commerce/mod-analytics/backend';
+import { manifest as manifest18 } from '@endora-commerce/mod-analytics';
 import * as module19 from '@endora-commerce/mod-credentials/backend';
 import { manifest as manifest19 } from '@endora-commerce/mod-credentials';
 import * as module20 from '@endora-commerce/mod-document-templates/backend';
@@ -185,18 +185,18 @@ export const MODULES: readonly ModuleEntry[] = [
   { id: '_i18n', version: manifest4.version, registerModule: module4.registerModule },
   { id: 'admin_actions', version: manifest5.version, registerModule: module5.registerModule },
   { id: 'admin_notifications', version: manifest6.version, registerModule: module6.registerModule },
-  { id: 'analytics', version: manifest7.version, registerModule: module7.registerModule },
-  { id: 'assets_library', version: manifest8.version, registerModule: module8.registerModule },
-  { id: 'audit_logs', version: manifest9.version, registerModule: module9.registerModule },
-  { id: 'currencies', version: manifest10.version, registerModule: module10.registerModule },
-  { id: 'custom_fields', version: manifest11.version, registerModule: module11.registerModule },
-  { id: 'email', version: manifest12.version, registerModule: module12.registerModule },
-  { id: 'import_export', version: manifest13.version, registerModule: module13.registerModule },
-  { id: 'languages', version: manifest14.version, registerModule: module14.registerModule },
-  { id: 'dictionaries', version: manifest15.version, registerModule: module15.registerModule },
-  { id: 'settings', version: manifest16.version, registerModule: module16.registerModule },
-  { id: 'admin_feedback', version: manifest17.version, registerModule: module17.registerModule },
-  { id: 'admin_search', version: manifest18.version, registerModule: module18.registerModule },
+  { id: 'assets_library', version: manifest7.version, registerModule: module7.registerModule },
+  { id: 'audit_logs', version: manifest8.version, registerModule: module8.registerModule },
+  { id: 'currencies', version: manifest9.version, registerModule: module9.registerModule },
+  { id: 'custom_fields', version: manifest10.version, registerModule: module10.registerModule },
+  { id: 'email', version: manifest11.version, registerModule: module11.registerModule },
+  { id: 'import_export', version: manifest12.version, registerModule: module12.registerModule },
+  { id: 'languages', version: manifest13.version, registerModule: module13.registerModule },
+  { id: 'dictionaries', version: manifest14.version, registerModule: module14.registerModule },
+  { id: 'settings', version: manifest15.version, registerModule: module15.registerModule },
+  { id: 'admin_feedback', version: manifest16.version, registerModule: module16.registerModule },
+  { id: 'admin_search', version: manifest17.version, registerModule: module17.registerModule },
+  { id: 'analytics', version: manifest18.version, registerModule: module18.registerModule },
   { id: 'credentials', version: manifest19.version, registerModule: module19.registerModule },
   { id: 'document_templates', version: manifest20.version, registerModule: module20.registerModule },
   { id: 'erp_connector', version: manifest21.version, registerModule: module21.registerModule },
