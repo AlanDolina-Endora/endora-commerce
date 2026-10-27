@@ -443,6 +443,12 @@ describe('crm init migration', () => {
  * runs. It is run here from the migration class's own statements, **inside a
  * transaction that is rolled back**, so the database every other file of the
  * run shares never holds the narrower constraint.
+ *
+ * The newer `20261027T020030_crm_opportunity_reference_documents` widens the
+ * same constraint and is applied on top of this one, so its `down` runs first
+ * here, in the same transaction, as a rollback of the whole tree would: a
+ * `quote_request` or `task` reference another file left in this worker's
+ * database would otherwise make this `down` fail on rows it does not own.
  */
 describe('crm migration — a person as a reference target, up and down', () => {
   let h: BackendServerHandle;
@@ -468,6 +474,12 @@ describe('crm migration — a person as a reference target, up and down', () => 
       em.getConnection().execute(sql, params, 'all', em.getTransactionContext()) as Promise<T[]>;
     const migrate = async (direction: 'up' | 'down'): Promise<void> => {
       const migration = new Migration20261007T180600CrmOpportunityReferenceAdminUser(em.getDriver(), em.config);
+      await migration[direction]();
+      for (const query of migration.getQueries()) await run(query as string);
+    };
+    /** The newer migration on the same constraint — undone before this one, redone after it. */
+    const migrateNewer = async (direction: 'up' | 'down'): Promise<void> => {
+      const migration = new Migration20261027T020030CrmOpportunityReferenceDocuments(em.getDriver(), em.config);
       await migration[direction]();
       for (const query of migration.getQueries()) await run(query as string);
     };
@@ -508,6 +520,7 @@ describe('crm migration — a person as a reference target, up and down', () => 
       expect(await constraint()).toContain(`'admin_user'`);
       expect(await acceptsAMention()).toBe(true);
 
+      await migrateNewer('down');
       await migrate('down');
       expect(await targets()).toEqual(['product']);
       expect(await constraint()).not.toContain('admin_user');
@@ -517,6 +530,9 @@ describe('crm migration — a person as a reference target, up and down', () => 
 
       await migrate('up');
       expect(await constraint()).toContain(`'admin_user'`);
+      expect(await acceptsAMention()).toBe(true);
+      await migrateNewer('up');
+      expect(await constraint()).toContain(`'quote_request'`);
       expect(await acceptsAMention()).toBe(true);
       // The text kept its token all along: the row is derived and comes back with the next save.
       expect(
