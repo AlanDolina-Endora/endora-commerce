@@ -698,6 +698,16 @@ body,
 @media (pointer: coarse) {
   .b2b-nav-pin { opacity: 1; min-width: 44px; min-height: 44px; }
 }
+/* The Pinned section's reorder handle and touch buttons (FR-009). */
+.b2b-nav-row--pinned .b2b-nav-reorder-handle { cursor: grab; }
+.b2b-nav-row--pinned.is-grabbed .b2b-nav-reorder-handle,
+.b2b-nav-row--pinned.is-dragging .b2b-nav-reorder-handle { opacity: 1; cursor: grabbing; }
+.b2b-nav-row--pinned.is-grabbed { background: var(--bg-sidebar-hover); border-radius: var(--r-sm); }
+.b2b-nav-row--pinned.is-drop-target { box-shadow: inset 0 2px 0 hsl(var(--accent-h) 90% 75%); }
+.b2b-nav-row--pinned .b2b-touch-reorder { flex-direction: row; }
+.b2b-nav-row--pinned .b2b-touch-reorder__btn {
+  background: transparent; border-color: rgba(255,255,255,0.12); color: var(--sidebar-fg-muted);
+}
 .b2b-sidebar__rail-popover-row { display: flex; align-items: center; gap: 2px; }
 .b2b-sidebar__rail-popover-row > .b2b-sidebar__rail-popover-item { flex: 1; min-width: 0; }
 .b2b-sidebar__rail-popover-row > .b2b-nav-pin { opacity: 1; }

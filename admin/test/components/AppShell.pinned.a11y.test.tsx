@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { apiClient } from '@endora-commerce/admin-kit/lib';
 import { expectNoAxeViolations } from '../helpers/axe';
@@ -76,6 +76,15 @@ describe('Pinned section accessibility (SC-007)', () => {
     )!;
     fireEvent.mouseEnter(row);
     await expectNoAxeViolations(dialog);
+  });
+
+  it('the expanded sidebar with a pin grabbed for reordering (US4)', async () => {
+    renderShell(AppShell, { preferences: { sidebarPins: PINS } });
+    const handle = within(pinnedSection()!).getByRole('button', { name: 'Move Customers' });
+    handle.focus();
+    await act(async () => fireEvent.keyDown(handle, { key: ' ' }));
+    expect(handle.getAttribute('aria-pressed')).toBe('true');
+    await expectNoAxeViolations(sidebar());
   });
 
   it('there is a Pinned section to examine', () => {

@@ -59,6 +59,7 @@ import { PreferencesSaveNotice } from './sidebar/PreferencesSaveNotice.js';
 import { usePinActions, type PinOutcome } from './sidebar/use-pin-actions.js';
 import { useAdminPreference } from '@endora-commerce/admin-kit/lib';
 import {
+  reorderVisiblePins,
   resolvePinsFrom,
   visibleDestinations,
   type VisibleDestination,
@@ -1036,7 +1037,7 @@ export function AppShell(): ReactNode {
     () => visibleDestinations(composedNav, isVisible),
     [composedNav, isVisible],
   );
-  const { pins, isPinned, toggle: togglePin } = usePinActions();
+  const { pins, isPinned, toggle: togglePin, setPins } = usePinActions();
   const resolvedPins = useMemo(() => resolvePinsFrom(pins, pinTargets), [pins, pinTargets]);
   // One polite region for every pin and unpin in the sidebar (FR-005), mounted
   // empty and outside the sidebar, which the closed drawer hides from AT.
@@ -1214,6 +1215,7 @@ export function AppShell(): ReactNode {
               collapsed={collapsed.has('pinned')}
               onToggleCollapsed={toggleSection}
               onUnpin={(pin): void => togglePinOf(pin.item)}
+              onReorder={(visibleOrder): void => setPins(reorderVisiblePins(pins, visibleOrder))}
               navLabel={navLabel}
               touch={isMobile}
             />
