@@ -253,9 +253,14 @@ const COMPOSERS: Readonly<
   // `document_templates`' registry (`specs/152-compare-pdf-template/`), from its
   // only boot hook.
   comparisons: (withOwner, ownerNames) => compose('comparisons', registerComparisons, ownerNames, withOwner),
+  // `projects` pushes into `settings`' validator registry and — User Story 7 —
+  // the asset-reference and audit-reference registries, owners it declares in
+  // `dependencies`.
   projects: (withOwner, ownerNames) =>
     compose('projects', registerProjects, ownerNames, withOwner, {
       settingWriteValidatorRegistry: { register: () => {} },
+      assetReferenceRegistry: { register: () => {} },
+      auditReferenceRegistry: { register: () => {} },
     }),
   inventory: (withOwner, ownerNames) =>
     compose('inventory', registerInventory, ownerNames, withOwner, {

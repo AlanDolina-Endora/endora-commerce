@@ -137,19 +137,21 @@ export class ProjectCommentService {
       adminUserIds: newlyMentioned(null, written.body),
     });
     if (written.kind === 'message') {
-      await tellAfterCommit(project.id, async () => {
-        for (const recipient of await this.#members(project.id)) {
-          // Told once: a mentioned Member has their entry already.
-          if (recipient === author || mentioned.includes(recipient)) continue;
-          if (!(await this.deps.access.canSeeAs(recipient, project.id))) continue;
+      for (const recipient of await this.#members(project.id)) {
+        // Told once: a mentioned Member has their entry already.
+        if (recipient === author || mentioned.includes(recipient)) continue;
+        // One at a time, as CRM does: a bell that cannot be written for one
+        // Member costs the others nothing.
+        await tellAfterCommit(project.id, async () => {
+          if (!(await this.deps.access.canSeeAs(recipient, project.id))) return;
           await this.deps.notifier.notify({
             kind: 'projects.project.message',
             targetAdminUserId: recipient,
             projectId: project.id,
             ...projectNotificationText.message(project.number),
           });
-        }
-      });
+        });
+      }
     }
     return this.#renderOne(written);
   }

@@ -181,7 +181,7 @@ describe('projects — mentions and the reference lookups (US7)', () => {
     });
 
     it('a description tells the people it newly mentions, on create and on edit, and resolves their names', async () => {
-      const created_ = await createProject(
+      const described = await createProject(
         h,
         {
           title: 'Described',
@@ -194,9 +194,9 @@ describe('projects — mentions and the reference lookups (US7)', () => {
         },
         author.cookies,
       );
-      created.push(created_.id);
-      expect(await mentionsOf(member, created_.id)).toHaveLength(1);
-      expect(created_.references).toEqual([
+      created.push(described.id);
+      expect(await mentionsOf(member, described.id)).toHaveLength(1);
+      expect(described.references).toEqual([
         {
           type: 'admin_user',
           id: member.adminUserId,
@@ -206,23 +206,23 @@ describe('projects — mentions and the reference lookups (US7)', () => {
         },
       ]);
 
-      const patched = await callProjects(h, 'PATCH', `/${created_.id}`, {
+      const patched = await callProjects(h, 'PATCH', `/${described.id}`, {
         payload: {
           description: `Lead: ${token(member)}, with ${token(secondMember)}`,
-          version: created_.version,
+          version: described.version,
         },
         cookies: author.cookies,
       });
       expect(patched.statusCode, patched.body).toBe(200);
-      expect(await mentionsOf(member, created_.id)).toHaveLength(1);
-      expect(await mentionsOf(secondMember, created_.id)).toHaveLength(1);
-      const detail = await getProject(h, created_.id);
+      expect(await mentionsOf(member, described.id)).toHaveLength(1);
+      expect(await mentionsOf(secondMember, described.id)).toHaveLength(1);
+      const detail = await getProject(h, described.id);
       expect(detail.references.map((r) => r.id)).toEqual([member.adminUserId, secondMember.adminUserId]);
       const stored = (await h
         .em()
         .getConnection()
         .execute(`select "source_kind", "target_type", "target_id" from "project_references" where "project_id" = ?`, [
-          created_.id,
+          described.id,
         ])) as Array<{ source_kind: string; target_type: string; target_id: string }>;
       expect(stored.map((row) => `${row.source_kind}:${row.target_type}:${row.target_id}`).sort()).toEqual(
         [`description:admin_user:${member.adminUserId}`, `description:admin_user:${secondMember.adminUserId}`].sort(),
