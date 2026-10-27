@@ -54,5 +54,5 @@ pnpm --filter @endora-commerce/admin-kit run test        # promoted components
 `tasks`), `check:admin-zones`, `check:port-dependencies`, `check:port-catches`,
 `check:entry-scope`, `check:entry-presence`, `check:module-boundary`, `check:module-docs`,
 `check:docs-translations`, `check:bundle-pairing`, `check:action-route-permissions`,
-`check-entity-tenant-classification`, `overlay:check`, `composer:check`, `manifests:check`.
+`pnpm --filter backend exec tsx scripts/check-entity-tenant-classification.ts` (no package script), `overlay:check`, `composer:check`, `manifests:check`.
 Grep `backend/test/**` for every CRM admin component path the promotion moves (AGENTS.md trap).
