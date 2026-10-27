@@ -66,7 +66,7 @@ describe('canSee (R-2 × R-3)', () => {
     reach: OrgReach = ALL,
     organizationIds: string[] = [A],
   ): [ProjectViewer, ProjectVisibilityFacts] {
-    const viewer: ProjectViewer = { adminUserId: ME, seeAll: relation === 'see_all', reach };
+    const viewer: ProjectViewer = { adminUserId: ME, canRead: true, seeAll: relation === 'see_all', reach };
     const project: ProjectVisibilityFacts = {
       organizationIds,
       visibility,
@@ -116,8 +116,16 @@ describe('canSee (R-2 × R-3)', () => {
     expect(canSee(restrictedSeeAll, internal, 'everyone')).toBe(false);
   });
 
+  it.each(table)(
+    'without `projects:read` nothing is visible, whatever surface asks: setting %s, Project %s, viewer %s',
+    (setting, visibility, relation) => {
+      const [viewer, project] = viewerAndProject(relation, visibility);
+      expect(canSee({ ...viewer, canRead: false }, project, setting)).toBe(false);
+    },
+  );
+
   it('the system (no administrator, sees all, reaches all) is not narrowed', () => {
-    const system: ProjectViewer = { adminUserId: null, seeAll: true, reach: ALL };
+    const system: ProjectViewer = { adminUserId: null, canRead: true, seeAll: true, reach: ALL };
     expect(
       canSee(system, { organizationIds: [], visibility: 'members_and_listed', memberIds: [], viewerIds: [] }, 'members'),
     ).toBe(true);

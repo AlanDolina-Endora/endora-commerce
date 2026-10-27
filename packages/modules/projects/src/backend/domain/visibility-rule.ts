@@ -24,6 +24,13 @@ export interface OrgReach {
 /** Whoever is reading: an administrator, or the system (`adminUserId: null`, sees all, reaches all). */
 export interface ProjectViewer {
   readonly adminUserId: string | null;
+  /**
+   * Holds `projects:read`. Every Projects route is gated by it, but a Project
+   * is also read through other modules' surfaces — a Task's context, an audit
+   * label, `projectReadPort` — whose own gate is somebody else's code, so the
+   * rule asks it too: without it, no Project is visible (T144 F1).
+   */
+  readonly canRead: boolean;
   /** Holds `projects:see_all` (a wildcard holder does). */
   readonly seeAll: boolean;
   readonly reach: OrgReach;
@@ -62,13 +69,14 @@ export function effectiveVisibility(
 /**
  * R-2 then R-3: in reach, and then a holder of `projects:see_all`, a Member, a
  * listed person, or anybody when the effective visibility is `everyone`.
- * `projects:read` — the route gate — is assumed; this decides which Projects.
+ * Without `projects:read` nothing is visible, whatever surface asks.
  */
 export function canSee(
   viewer: ProjectViewer,
   project: ProjectVisibilityFacts,
   setting: ProjectVisibilitySetting,
 ): boolean {
+  if (!viewer.canRead) return false;
   if (!projectOrgRule(viewer.reach, project.organizationIds)) return false;
   if (viewer.seeAll) return true;
   if (viewer.adminUserId !== null) {

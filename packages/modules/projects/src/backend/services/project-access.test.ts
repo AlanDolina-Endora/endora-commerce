@@ -15,25 +15,32 @@ const reachA = { all: false, organizationIds: new Set([A]) };
 
 describe('visibleProjectSqlFor', () => {
   it('narrows nothing for the system, or for an unrestricted holder of projects:see_all', () => {
-    const system: ProjectViewer = { adminUserId: null, seeAll: true, reach: all };
+    const system: ProjectViewer = { adminUserId: null, canRead: true, seeAll: true, reach: all };
     expect(visibleProjectSqlFor(system, 'members')).toBeNull();
-    expect(visibleProjectSqlFor({ adminUserId: ME, seeAll: true, reach: all }, 'members')).toBeNull();
+    expect(visibleProjectSqlFor({ adminUserId: ME, canRead: true, seeAll: true, reach: all }, 'members')).toBeNull();
   });
 
   it('applies the Organization rule even to a holder of projects:see_all, binding the reach', () => {
-    const fragment = visibleProjectSqlFor({ adminUserId: ME, seeAll: true, reach: reachA }, 'everyone');
+    const fragment = visibleProjectSqlFor({ adminUserId: ME, canRead: true, seeAll: true, reach: reachA }, 'everyone');
     expect(fragment?.params).toEqual([`{${A}}`]);
     expect(fragment?.sql).toContain('project_organizations');
     expect(fragment?.sql).not.toContain('project_members');
   });
 
   it('opens `inherit` Projects only when the setting is `everyone`, and always lets Members and listed people in', () => {
-    const viewer: ProjectViewer = { adminUserId: ME, seeAll: false, reach: all };
+    const viewer: ProjectViewer = { adminUserId: ME, canRead: true, seeAll: false, reach: all };
     const members = visibleProjectSqlFor(viewer, 'members');
     expect(members?.sql).toContain(`p."visibility" = 'everyone'`);
     expect(members?.params).toEqual([ME, ME]);
     const everyone = visibleProjectSqlFor(viewer, 'everyone');
     expect(everyone?.sql).toContain(`p."visibility" in ('inherit', 'everyone')`);
+  });
+
+  it('matches nothing for an administrator without projects:read — not even an unrestricted see_all holder (T144 F1)', () => {
+    expect(visibleProjectSqlFor({ adminUserId: ME, canRead: false, seeAll: true, reach: all }, 'everyone')).toEqual({
+      sql: 'false',
+      params: [],
+    });
   });
 
   it('writes an array literal of uuids only', () => {

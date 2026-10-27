@@ -182,6 +182,8 @@ export function projectNotFound(): HttpError {
  * viewer and the setting.
  */
 export function visibleProjectSqlFor(viewer: ProjectViewer, setting: ProjectVisibilitySetting): SqlFragment | null {
+  // Not a reader of Projects at all: whatever surface asks, nothing is visible.
+  if (!viewer.canRead) return { sql: 'false', params: [] };
   const sql: string[] = [];
   const params: unknown[] = [];
   if (!viewer.reach.all) {
@@ -254,18 +256,29 @@ export class ProjectAccess {
 
   /**
    * Who is reading, from the ambient tenant context: the administrator, whether
-   * they hold `projects:see_all`, and their Organization reach. With no
-   * administrator behind the request it is the system, unrestricted — but the
-   * reach is still asked of the context, so a missing context throws.
+   * they hold `projects:read` and `projects:see_all`, and their Organization
+   * reach. With no administrator behind the request it is the system,
+   * unrestricted — but the reach is still asked of the context, so a missing
+   * context throws.
+   *
+   * `projects:read` is asked here and not only on the routes: a Task's context,
+   * an audit label and `projectReadPort` reach this file behind another
+   * module's gate (`tasks:read`, `audit_logs:read`, …), and a Project is not
+   * theirs to show to somebody who may not read Projects (T144 F1).
    */
   async currentViewer(): Promise<ProjectViewer> {
     const reach = ambientReach();
     const adminUserId = actingAdminUserId();
-    if (adminUserId === null) return { adminUserId: null, seeAll: true, reach };
+    if (adminUserId === null) return { adminUserId: null, canRead: true, seeAll: true, reach };
+    const held = await this.deps.permissions.listPermissions(adminUserId);
     // The capability check of `projects:see_all` — no route asks for the code,
     // this is where it is enforced (a wildcard holder holds it).
-    const seeAll = await this.deps.permissions.hasPermission(adminUserId, PROJECTS_SEE_ALL_PERMISSION);
-    return { adminUserId, seeAll, reach };
+    return {
+      adminUserId,
+      canRead: holds(held, PROJECTS_READ_PERMISSION),
+      seeAll: holds(held, PROJECTS_SEE_ALL_PERMISSION),
+      reach,
+    };
   }
 
   /** The module setting `projects.visibility` (default `members`). */
@@ -346,7 +359,9 @@ export class ProjectAccess {
   async visibleIds(ids: readonly string[]): Promise<Set<string>> {
     const candidates = ids.filter(isUuid);
     if (candidates.length === 0) return new Set();
-    const visible = await this.visibleProjectSql();
+    const viewer = await this.currentViewer();
+    if (!viewer.canRead) return new Set();
+    const visible = await this.visibleProjectSql(viewer);
     const rows = (await this.deps.emFactory().execute(
       `select p."id" from "projects" p
         where p."id" = any(?::uuid[])${visible ? ` and ${visible.sql}` : ''}`,
@@ -357,7 +372,9 @@ export class ProjectAccess {
 
   /** Every Project id the caller may see — the Task context's pre-filter (research R-9). */
   async allVisibleIds(): Promise<string[]> {
-    const visible = await this.visibleProjectSql();
+    const viewer = await this.currentViewer();
+    if (!viewer.canRead) return [];
+    const visible = await this.visibleProjectSql(viewer);
     const rows = (await this.deps.emFactory().execute(
       `select p."id" from "projects" p${visible ? ` where ${visible.sql}` : ''}`,
       visible?.params ?? [],
@@ -383,7 +400,7 @@ export class ProjectAccess {
       ? { all: true, organizationIds: new Set() }
       : { all: false, organizationIds: new Set(scope.allowedOrganizationIds) };
     const visible = visibleProjectSqlFor(
-      { adminUserId, seeAll: holds(held, PROJECTS_SEE_ALL_PERMISSION), reach },
+      { adminUserId, canRead: true, seeAll: holds(held, PROJECTS_SEE_ALL_PERMISSION), reach },
       await this.visibilitySetting(),
     );
     const rows = (await this.deps.emFactory().execute(

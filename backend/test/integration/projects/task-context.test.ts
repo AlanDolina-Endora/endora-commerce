@@ -1,5 +1,15 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { MyTasksResponseSchema, TaskListResponseSchema, type ProjectDetail } from '@endora-commerce/contracts';
+import {
+  MyTasksResponseSchema,
+  RecordDocumentLookupResponseSchema,
+  TaskListResponseSchema,
+  type AuditReferenceRegistryPort,
+  type ProjectDetail,
+  type ProjectReadPort,
+} from '@endora-commerce/contracts';
+import { resolveTenantContext } from '@endora-commerce/platform/composition';
+import { runWithTenantContext } from '../../../src/tenancy/tenant-context.js';
 import {
   setupBackendServer,
   teardownBackendServer,
@@ -117,6 +127,63 @@ describe('projects — the `project` Task context (US2)', () => {
     });
     expect(into.statusCode, into.body).toBe(422);
     expect(into.json().error.code).toBe('TASK_CONTEXT_INVALID');
+  });
+
+  it('somebody with `tasks:read` but not `projects:read` sees no Project Task, label or Stage anywhere (T144 F1)', async () => {
+    const token = `tro${randomUUID().replace(/-/g, '').slice(0, 10)}`;
+    const tasksOnly = await seedCrmAdmin(h.em(), 'ctx-tasks-only', ['tasks:read', 'tasks:write', 'crm:read', 'crm:write']);
+    try {
+      // Open to everyone who may read Projects: only the missing `projects:read` hides it.
+      const open = await createProject(h, { title: `Open ${token}`, visibility: 'everyone' });
+      created.push(open.id);
+      const task = await createStageTask(h, open.id, stageNamed(open, 'Design'), {
+        title: `Task ${token}`,
+        assignedAdminUserId: tasksOnly.adminUserId,
+      });
+
+      expect(await listed(tasksOnly.cookies)).not.toContain(task.id);
+      expect(await mine(tasksOnly.cookies)).not.toContain(task.id);
+      const one = await callTasks(h, 'GET', `/${task.id}`, { cookies: tasksOnly.cookies });
+      expect(one.statusCode, one.body).toBe(404);
+      expect(one.json().error.code).toBe('TASK_NOT_FOUND');
+
+      const search = async (cookies: { b2b_session: string }) => {
+        const response = await h.app.inject({
+          method: 'GET',
+          url: `/api/v1/admin/global-search?q=${token}&entityTypes=tasks.task&language=en&limit=25`,
+          cookies,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        const groups = (response.json() as { data: { groups: Array<{ entityType: string; hits: Array<{ id: string }> }> } })
+          .data.groups;
+        return groups.flatMap((group) => group.hits.map((hit) => hit.id));
+      };
+      // Not vacuous: the harness's administrator finds it.
+      expect(await search({ b2b_session: 'stub-admin-session' })).toContain(task.id);
+      expect(await search(tasksOnly.cookies)).not.toContain(task.id);
+
+      const documents = await h.app.inject({
+        method: 'GET',
+        url: `/api/v1/admin/crm/lookups/documents?q=${token}`,
+        cookies: tasksOnly.cookies,
+      });
+      expect(documents.statusCode, documents.body).toBe(200);
+      const groups = RecordDocumentLookupResponseSchema.parse(documents.json()).groups;
+      expect(groups.flatMap((group) => group.items.map((item) => item.id))).not.toContain(task.id);
+
+      const as = <T>(body: () => Promise<T>) =>
+        runWithTenantContext(
+          resolveTenantContext({ kind: 'admin', adminUserId: tasksOnly.adminUserId }, { allowAll: true, allowedOrganizationIds: [] }),
+          body,
+        );
+      expect(await as(() => h.container.resolve<ProjectReadPort>('projectReadPort').findById(open.id))).toBeNull();
+      const labels = await as(() =>
+        h.container.resolve<AuditReferenceRegistryPort>('auditReferenceRegistry').resolve('project', [open.id]),
+      );
+      expect(labels.has(open.id)).toBe(false);
+    } finally {
+      tasksOnly.undo();
+    }
   });
 
   it('with Projects off its Tasks are absent from Tasks; on again, they are back', async () => {
