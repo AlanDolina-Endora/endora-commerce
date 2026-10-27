@@ -749,6 +749,12 @@ export const ERROR_CODES = {
   PROJECT_RECORD_ALREADY_LINKED: 'PROJECT_RECORD_ALREADY_LINKED',
   /** The record belongs to an Organization the Project does not have. */
   PROJECT_LINK_ORGANIZATION_MISMATCH: 'PROJECT_LINK_ORGANIZATION_MISMATCH',
+  /** Only a note's author edits or deletes it — whatever else the caller holds. */
+  PROJECT_NOTE_NOT_AUTHOR: 'PROJECT_NOTE_NOT_AUTHOR',
+  /** A message of a Project is never edited or deleted, by anybody. */
+  PROJECT_MESSAGE_IMMUTABLE: 'PROJECT_MESSAGE_IMMUTABLE',
+  /** The uploaded file is larger than an attachment of a Project may be; `details.maxMb` names the limit. */
+  PROJECT_ATTACHMENT_TOO_LARGE: 'PROJECT_ATTACHMENT_TOO_LARGE',
 
   // SEO — search engine robots (`specs/144-seo-search-engine-robots/`, FR-006).
   // Declared by the `seo` module's manifest.

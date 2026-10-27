@@ -1,0 +1,123 @@
+import { randomUUID } from 'node:crypto';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { RecordHistoryPageSchema, type AuditReferenceRegistryPort, type ProjectDetail } from '@endora-commerce/contracts';
+import { resolveTenantContext } from '@endora-commerce/platform/composition';
+import { runWithTenantContext } from '../../../src/tenancy/tenant-context.js';
+import { setupBackendServer, teardownBackendServer, type BackendServerHandle } from '../../helpers/test-server.js';
+import { seedCrmAdmin } from '../../helpers/seed-crm.js';
+import { callProjects, createProject, deleteProjects, errorShape, setProjectsVisibility } from './helpers.js';
+
+/**
+ * User Story 7 — a Project's change history (`specs/163-projects-and-tasks/`
+ * FR-028, `contracts/admin-api.md` §2.4 `GET /projects/:id/history`).
+ *
+ * The audit log is the history: every Command about a Project is recorded
+ * against `project` and its id. The page is newest first, cursor-paged and
+ * capped; it is served to `projects:read`, and a Project the caller may not
+ * see answers as one that does not exist.
+ */
+describe('projects — history (US7)', () => {
+  let h: BackendServerHandle;
+  type Person = { cookies: { b2b_session: string }; adminUserId: string; undo: () => void };
+  let reader: Person;
+  let outsider: Person;
+  let project: ProjectDetail;
+  const created: string[] = [];
+
+  const page = async (query: string, who: Person = reader) => {
+    const response = await callProjects(h, 'GET', `/${project.id}/history${query}`, {
+      cookies: who.cookies,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    return RecordHistoryPageSchema.parse(response.json());
+  };
+
+  beforeAll(async () => {
+    h = await setupBackendServer();
+    await setProjectsVisibility(h, 'members');
+    reader = await seedCrmAdmin(h.em(), 'hist-reader', ['projects:read']);
+    outsider = await seedCrmAdmin(h.em(), 'hist-outsider', ['projects:read']);
+    project = await createProject(h, {
+      title: 'History',
+      members: [{ adminUserId: reader.adminUserId, roleIds: [] }],
+    });
+    created.push(project.id);
+    let version = project.version;
+    for (const title of ['History 2', 'History 3']) {
+      const response = await callProjects(h, 'PATCH', `/${project.id}`, {
+        payload: { title, version },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      version = (response.json().data as ProjectDetail).version;
+    }
+    expect(
+      (
+        await callProjects(h, 'POST', `/${project.id}/comments`, {
+          payload: { kind: 'note', body: 'A note.' },
+        })
+      ).statusCode,
+    ).toBe(201);
+  });
+
+  afterAll(async () => {
+    for (const p of [reader, outsider]) p?.undo();
+    await deleteProjects(h, created);
+    await teardownBackendServer(h);
+  });
+
+  it('lists every Command about the Project, newest first, naming who', async () => {
+    const all = await page('?limit=50');
+    expect(all.data.map((entry) => entry.action)).toEqual([
+      'projects.project.note_add',
+      'projects.project.update',
+      'projects.project.update',
+      'projects.project.create',
+    ]);
+    expect(all.data[1]?.after).toMatchObject({ title: 'History 3' });
+    expect(all.data[0]?.actor).toMatchObject({ kind: 'admin' });
+    expect(all.pagination).toMatchObject({ hasMore: false, cursor: null });
+    expect(all.truncated).toBe(false);
+  });
+
+  it('pages by cursor', async () => {
+    const first = await page('?limit=3');
+    expect(first.data).toHaveLength(3);
+    expect(first.pagination.hasMore).toBe(true);
+    const second = await page(`?limit=3&cursor=${encodeURIComponent(first.pagination.cursor!)}`);
+    expect(second.data.map((entry) => entry.action)).toEqual(['projects.project.create']);
+    expect(second.pagination.hasMore).toBe(false);
+    const refused = await callProjects(h, 'GET', `/${project.id}/history?cursor=not-ours`, {
+      cookies: reader.cookies,
+    });
+    expect(refused.statusCode, refused.body).toBe(400);
+  });
+
+  it('an audit row about the Project is labelled for a reader who may see it, and for nobody else', async () => {
+    const registry = h.container.resolve<AuditReferenceRegistryPort>('auditReferenceRegistry');
+    expect(registry.owners()).toContain('projects');
+    const as = <T>(adminUserId: string, body: () => Promise<T>) =>
+      runWithTenantContext(
+        resolveTenantContext({ kind: 'admin', adminUserId }, { allowAll: true, allowedOrganizationIds: [] }),
+        body,
+      );
+    const seen = await as(reader.adminUserId, () => registry.resolve('project', [project.id]));
+    expect(seen.get(project.id)).toEqual({
+      id: project.id,
+      label: `${project.number} History 3`,
+      url: `/projects/${project.id}`,
+    });
+    const hidden = await as(outsider.adminUserId, () => registry.resolve('project', [project.id]));
+    expect(hidden.has(project.id)).toBe(false);
+  });
+
+  it('a Project the caller may not see answers as one that does not exist', async () => {
+    const hidden = await callProjects(h, 'GET', `/${project.id}/history`, {
+      cookies: outsider.cookies,
+    });
+    const none = await callProjects(h, 'GET', `/${randomUUID()}/history`, {
+      cookies: outsider.cookies,
+    });
+    expect(hidden.statusCode, hidden.body).toBe(404);
+    expect(errorShape(hidden.body)).toEqual(errorShape(none.body));
+  });
+});

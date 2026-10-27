@@ -400,5 +400,11 @@
   "panel.stage": "Bieżący etap",
   "panel.closed": "Zamknięty",
   "panel.deadline": "Termin {date}",
-  "panel.error": "Nie udało się wczytać projektu tego dokumentu."
+  "panel.error": "Nie udało się wczytać projektu tego dokumentu.",
+  "errors.PROJECT_NOTE_NOT_AUTHOR": "Notatkę może edytować lub usunąć tylko jej autor.",
+  "errors.PROJECT_MESSAGE_IMMUTABLE": "Wysłanej wiadomości nie można edytować ani usunąć.",
+  "errors.PROJECT_ATTACHMENT_TOO_LARGE": "Plik jest za duży: załącznik może mieć najwyżej {maxMb} MB.",
+  "notifications.message.title": "Nowa wiadomość w projekcie {number}",
+  "notifications.mention.title": "Wspomniano o Tobie w projekcie {number}",
+  "notifications.mentionByAuthor.title": "{author} wspomina o Tobie w projekcie {number}"
 }

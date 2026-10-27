@@ -20,6 +20,7 @@ import { HttpError } from '@endora-commerce/platform/http';
 import type { SettingsReadPort } from '@endora-commerce/platform/kernel';
 import { z } from 'zod';
 import { StageGraph } from '../domain/stage-graph.js';
+import type { ProjectReferenceService } from './reference-service.js';
 import {
   actingAdminUserId,
   isUuid,
@@ -41,10 +42,10 @@ import {
  * only for the ids of Projects those returned, which is why this file is on
  * `PROJECT_ACCESS_READERS`.
  *
- * Not yet resolved, each by the story that brings it: the description's
- * reference tokens (`references: []`, User Story 7) and Custom Field values
- * through `custom_fields` (the stored values are answered as they are, User
- * Story 9).
+ * The description's reference tokens are resolved for the reader
+ * (`reference-service.ts`, User Story 7). Not yet resolved: Custom Field
+ * values through `custom_fields` (the stored values are answered as they are,
+ * User Story 9).
  */
 
 export const PROJECTS_ALERTS_TIME_ZONE_SETTING = 'projects.alerts_time_zone';
@@ -134,6 +135,8 @@ export interface ProjectReadServiceDeps {
   /** `admin_users`' read port — lazy, resolved per call. */
   adminUsers: AdminUserReadPort;
   settings: SettingsReadPort;
+  /** What the description's tokens name, for the reader (User Story 7). */
+  references: Pick<ProjectReferenceService, 'resolve'>;
 }
 
 interface CurrentStageRow {
@@ -498,8 +501,20 @@ export class ProjectReadService {
   async #detail(row: VisibleProjectRow, language: string): Promise<ProjectDetail> {
     const em = this.deps.emFactory();
     const reader = actingAdminUserId();
-    const [[summary], stages, moveRows, memberRows, roleRows, viewerRows, templateRows, lossRows, linkRows, unread, permissions] =
-      await Promise.all([
+    const [
+      [summary],
+      stages,
+      moveRows,
+      memberRows,
+      roleRows,
+      viewerRows,
+      templateRows,
+      lossRows,
+      linkRows,
+      unread,
+      permissions,
+      references,
+    ] = await Promise.all([
         this.#summaries([row]),
         this.#stages(row.id),
         em.execute(
@@ -540,6 +555,7 @@ export class ProjectReadService {
         >,
         this.#unreadMessages(row.id, reader),
         this.deps.access.callerPermissions(),
+        this.deps.references.resolve(row.description),
       ]);
 
     const personIds = [...new Set([...memberRows.map((m) => m.admin_user_id), ...viewerRows.map((v) => v.admin_user_id)])];
@@ -567,7 +583,7 @@ export class ProjectReadService {
     return {
       ...summary!,
       description: row.description,
-      references: [],
+      references,
       startOn: row.start_on,
       visibility: row.visibility,
       viewers: viewerRows.map((v) => ({ id: v.admin_user_id, name: nameOf(v.admin_user_id) })),

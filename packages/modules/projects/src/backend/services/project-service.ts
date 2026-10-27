@@ -21,15 +21,19 @@ import { Project } from '../entities/project.entity.js';
 import { ProjectMember } from '../entities/project-member.entity.js';
 import { ProjectMemberRole } from '../entities/project-member-role.entity.js';
 import { ProjectOrganization } from '../entities/project-organization.entity.js';
+import { ProjectReference } from '../entities/project-reference.entity.js';
 import { ProjectStage } from '../entities/project-stage.entity.js';
 import { ProjectStageEntry } from '../entities/project-stage-entry.entity.js';
 import { ProjectStageMove } from '../entities/project-stage-move.entity.js';
 import { ProjectStageTask } from '../entities/project-stage-task.entity.js';
 import { ProjectViewer } from '../entities/project-viewer.entity.js';
+import { newlyMentioned, type ProjectMentionService, type SavedProjectMentions } from './mention-service.js';
 import type { ProjectAccess } from './project-access.js';
+import { tellAfterCommit } from './project-notifier.js';
 import { nextProjectNumber } from './project-number.js';
 import type { ProjectReadService } from './project-read-service.js';
 import { PROJECT_TASK_CONTEXT_TYPE, type ProjectTasks } from './project-tasks.js';
+import { storedReferencesOf, type ProjectReferenceService, type ProjectReferenceSource } from './reference-service.js';
 import type { StageEntryPlan, StageTaskService } from './stage-task-service.js';
 import { templateNotFound, type TemplateGraph, type TemplateService } from './template-service.js';
 
@@ -78,6 +82,10 @@ export interface ProjectServiceDeps {
   templates: TemplateService;
   /** The first Stage's Stage Tasks, decided in the create Command and created after it. */
   stageTasks: StageTaskService;
+  /** The references a description carries — an index written by the Command that saves it (User Story 7). */
+  references: Pick<ProjectReferenceService, 'rowsFor'>;
+  /** Telling the people a description newly mentions, after the commit (FR-026). */
+  mentions: Pick<ProjectMentionService, 'tell'>;
 }
 
 export function projectChanged(): HttpError {
@@ -154,6 +162,7 @@ export class ProjectService {
     let firstStageId = '';
 
     const id = randomUUID();
+    const created: { mentions: SavedProjectMentions | null } = { mentions: null };
     await this.deps.commandBus.run({
       action: 'projects.project.create',
       objectType: 'project',
@@ -182,6 +191,13 @@ export class ProjectService {
         // the current-Stage key is checked per statement, the "open Project
         // has a Stage" trigger at commit.
         await em.flush();
+        // The description's references, an index written with it (User Story 7).
+        await this.#saveReferences(
+          em as EntityManager,
+          { projectId: id, kind: 'description', sourceId: null },
+          project.description,
+        );
+        created.mentions = { projectId: id, number: project.number, adminUserIds: newlyMentioned(null, project.description) };
         const rows = stages.map((stage, index) =>
           em.create(ProjectStage, {
             projectId: id,
@@ -259,6 +275,7 @@ export class ProjectService {
       },
     });
     if (plan.materialize) await this.deps.stageTasks.materializeAfterCommit(id, firstStageId, entryId);
+    if (created.mentions) await this.#tellMentioned(created.mentions);
     return this.deps.read.afterWrite(id, language);
   }
 
@@ -300,6 +317,7 @@ export class ProjectService {
     const visibilityChange = body.visibility !== undefined && body.visibility !== visible.visibility;
 
     let expected = body.version;
+    const described: { mentions: SavedProjectMentions | null } = { mentions: null };
     /** Lock the Project, hold it to the version the previous Command left, and bump it. */
     const claim = async (em: EntityManager): Promise<Project> => {
       const project = await lockProject(em, visible.id);
@@ -320,7 +338,19 @@ export class ProjectService {
           const project = await claim(em as EntityManager);
           const before = snapshot(project);
           if (body.title !== undefined) project.title = body.title;
-          if (body.description !== undefined) project.description = body.description;
+          if (body.description !== undefined && body.description !== project.description) {
+            described.mentions = {
+              projectId: visible.id,
+              number: project.number,
+              adminUserIds: newlyMentioned(project.description, body.description),
+            };
+            project.description = body.description;
+            await this.#saveReferences(
+              em as EntityManager,
+              { projectId: visible.id, kind: 'description', sourceId: null },
+              project.description,
+            );
+          }
           if (body.value !== undefined) {
             project.valueAmount = body.value?.amount ?? null;
             project.valueCurrency = body.value?.currency ?? null;
@@ -366,7 +396,27 @@ export class ProjectService {
         },
       });
     }
+    if (described.mentions) await this.#tellMentioned(described.mentions);
     return this.deps.read.afterWrite(visible.id, language);
+  }
+
+  /**
+   * Replace the stored references of the description with those its text
+   * carries now. **Call it inside the Command that saves the text, with that
+   * Command's EntityManager, for a Project it created or loaded through
+   * `ProjectAccess`** — the rows are written by that Project's id only.
+   */
+  async #saveReferences(em: EntityManager, source: ProjectReferenceSource, text: string | null | undefined): Promise<void> {
+    await em.nativeDelete(ProjectReference, storedReferencesOf(source));
+    for (const row of this.deps.references.rowsFor(source, text)) em.create(ProjectReference, row);
+  }
+
+  /** Tell the people a committed description newly mentions — a failure costs the save nothing. */
+  async #tellMentioned(saved: SavedProjectMentions): Promise<void> {
+    if (saved.adminUserIds.length === 0) return;
+    await tellAfterCommit(saved.projectId, async () => {
+      await this.deps.mentions.tell(saved);
+    });
   }
 
   /** `DELETE /projects/:id` — refused while records are linked (FR-021). */

@@ -82,6 +82,19 @@ export const PROJECT_ACCESS_READERS: Readonly<Record<string, string>> = {
   'services/record-project-service.ts':
     'Looks up the Project id a record is linked to — an id and nothing else — and answers only ' +
     'what `findVisible` returns for it; no visible Project is the same 404 as no link.',
+  'services/comment-service.ts':
+    'Every read and write starts from `loadVisible`; comments, Members and read markers are read by ' +
+    'that Project’s id only, and every person told is asked `canSeeAs` first.',
+  'services/attachment-service.ts':
+    'Every read and write starts from `loadVisible`; attachments are read by that Project’s id. Which ' +
+    'Projects hold a file is read by asset only to ask `visibleIds` of them, and answers nothing but ' +
+    '"not there" for a file held out of sight.',
+  'services/project-asset-references.ts':
+    'The asset library’s deletion guard: one batched, platform-wide "does a Project use this file" ' +
+    'answered to whoever deletes it, labelled by the Project’s number only — referential integrity, ' +
+    'which must hold for a deleter who may not see the Project and while this module is off.',
+  'services/project-audit-references.ts':
+    'Labels the audit rows of only the Projects `visibleIds` hands back for the reader, by those ids.',
   'services/task-context-descriptor.ts':
     'The `project` Task context answers `allVisibleIds` / `visibleIds` and describes only the ids ' +
     '`visibleIds` handed back; Projects and their Stages are read by those ids only.',
@@ -367,6 +380,19 @@ export class ProjectAccess {
       [projectId, ...(visible?.params ?? [])],
     )) as unknown[];
     return rows.length > 0;
+  }
+
+  /**
+   * The Organizations of a Project **this file handed out** — by
+   * {@link loadVisible} or {@link findVisible} — for a lookup keyed by them
+   * (the `@@` list's Orders and Quote Requests). Never a first read.
+   */
+  async organizationIdsOf(projectId: string): Promise<string[]> {
+    const rows = (await this.deps.emFactory().execute(
+      `select po."organization_id" from "project_organizations" po where po."project_id" = ? order by po."organization_id"`,
+      [projectId],
+    )) as Array<{ organization_id: string }>;
+    return rows.map((row) => row.organization_id);
   }
 
   /** Whether the caller may name this Organization on a Project they write (FR-004). */

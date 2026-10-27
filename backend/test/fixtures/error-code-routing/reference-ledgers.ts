@@ -552,6 +552,24 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 6): ' +
       'a record linked to a Project that does not have the record’s Organization (FR-021).',
   },
+  PROJECT_NOTE_NOT_AUTHOR: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 7): ' +
+      'a note of a Project edited or deleted by somebody other than its author, whatever they hold (FR-025).',
+  },
+  PROJECT_MESSAGE_IMMUTABLE: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 7): ' +
+      'a message of a Project edited or deleted — the thread is append-only, whoever asks (FR-025).',
+  },
+  PROJECT_ATTACHMENT_TOO_LARGE: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 7): ' +
+      'an upload larger than the bound the attachment route reads into memory (FR-027), CRM’s rule.',
+  },
   SEO_CRAWLER_TEXT_TOO_LARGE: {
     to: 'seo',
     reason:

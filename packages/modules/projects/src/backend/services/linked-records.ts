@@ -54,6 +54,17 @@ export interface LinkedRecordOwners {
   find(kind: ProjectRecordKind, id: string): Promise<LinkedRecordView | null>;
   /** Several records of one kind, by id; the ones the caller may not see are absent. Only while present. */
   findMany(kind: ProjectRecordKind, ids: readonly string[]): Promise<Map<string, LinkedRecordView>>;
+  /**
+   * The Quote Requests of `organizationIds` a person typing `typed` is offered
+   * after `@@` (FR-044): the open ones whose number holds what is typed, plus
+   * the one whose number is typed in full, whatever its status — newest first.
+   * Only while `quote_request`'s owner is present.
+   */
+  searchQuoteRequests(
+    organizationIds: readonly string[],
+    typed: string,
+    limit: number,
+  ): Promise<Array<{ id: string; number: string }>>;
 }
 
 export interface LinkedRecordPorts {
@@ -127,6 +138,29 @@ export function createLinkedRecordOwners(ports: LinkedRecordPorts): LinkedRecord
     },
     async findMany(kind, ids) {
       return new Map((await many(kind, [...new Set(ids)])).map((view) => [view.id, view]));
+    },
+    async searchQuoteRequests(organizationIds, typed, limit) {
+      if (organizationIds.length === 0) return [];
+      const allowed = new Set(organizationIds);
+      const needle = typed.trim().toLowerCase();
+      const found = new Map<string, { id: string; businessId: string; createdAt: Date }>();
+      for (const record of await ports.quoteRequests.listOpenForOrganizations([...allowed])) {
+        if (!allowed.has(record.organizationId)) continue;
+        if (needle === '' || record.businessId.toLowerCase().includes(needle)) found.set(record.id, record);
+      }
+      if (needle !== '') {
+        // Numbers are stored upper-case; a person types them either way.
+        const exact =
+          (await ports.quoteRequests.findByBusinessId(typed.trim())) ??
+          (typed.trim().toUpperCase() !== typed.trim()
+            ? await ports.quoteRequests.findByBusinessId(typed.trim().toUpperCase())
+            : null);
+        if (exact && allowed.has(exact.organizationId)) found.set(exact.id, exact);
+      }
+      return [...found.values()]
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || a.id.localeCompare(b.id))
+        .slice(0, limit)
+        .map((record) => ({ id: record.id, number: record.businessId }));
     },
   };
 }

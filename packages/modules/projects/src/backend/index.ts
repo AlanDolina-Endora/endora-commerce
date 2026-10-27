@@ -1,9 +1,16 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
   AdminI18nTranslatePort,
+  AdminNotificationRecordPort,
   AdminTenantScopePort,
   AdminUserReadPort,
+  AssetReadPort,
+  AssetReferenceRegistryPort,
+  AssetsLibraryPort,
+  AuditReferenceRegistryPort,
+  CatalogProductReadPort,
   OpportunityReadPort,
+  OrderListPort,
   OrderReadPort,
   OrganizationDetailsPort,
   PermissionReadPort,
@@ -17,6 +24,7 @@ import type { CommandBus } from '@endora-commerce/platform/commands';
 import {
   effectiveState,
   lazyPort,
+  type AuditPort,
   type ModuleContext,
   type RequireAdminFactory,
   type SettingsReadPort,
@@ -44,7 +52,10 @@ import { ProjectTemplateStage } from './entities/project-template-stage.entity.j
 import { ProjectTemplateStageMove } from './entities/project-template-stage-move.entity.js';
 import { ProjectTemplateStageTask } from './entities/project-template-stage-task.entity.js';
 import { ProjectViewer } from './entities/project-viewer.entity.js';
+import { registerAttachmentRoutes } from './routes/routes.attachments.js';
+import { registerCommentRoutes } from './routes/routes.comments.js';
 import { registerDictionaryRoutes } from './routes/routes.dictionaries.js';
+import { registerHistoryRoutes } from './routes/routes.history.js';
 import { registerLinkRoutes } from './routes/routes.links.js';
 import { registerLookupRoutes } from './routes/routes.lookups.js';
 import { registerProjectRoutes } from './routes/routes.projects.js';
@@ -52,19 +63,28 @@ import { registerStageTaskRoutes } from './routes/routes.stage-tasks.js';
 import { registerStageRoutes } from './routes/routes.stages.js';
 import { registerTemplateRoutes } from './routes/routes.templates.js';
 import { createAlertsTimeZoneValidator } from './services/alerts-time-zone-validator.js';
+import { ProjectAttachmentService } from './services/attachment-service.js';
+import { ProjectCommentService } from './services/comment-service.js';
 import type { DictionaryService } from './services/dictionary-service.js';
+import { ProjectDocumentLookupService } from './services/document-lookup-service.js';
+import { ProjectHistoryService } from './services/history-service.js';
 import { LinkService } from './services/link-service.js';
 import { createLinkedRecordOwners, type LinkedRecordOwners } from './services/linked-records.js';
 import { ProjectLookupService } from './services/lookup-service.js';
 import { createLossReasonService } from './services/loss-reason-service.js';
+import { ProjectMentionService } from './services/mention-service.js';
 import { MoveService } from './services/move-service.js';
 import { createOwnerReadChecks, type OwnerReadChecks } from './services/owner-read-permissions.js';
 import { ProjectAccess, type ProjectAccessDeps } from './services/project-access.js';
+import { registerProjectAssetReferences } from './services/project-asset-references.js';
+import { registerProjectAuditReferences } from './services/project-audit-references.js';
+import { createProjectNotifier, type ProjectNotifier } from './services/project-notifier.js';
 import { ProjectReadService } from './services/project-read-service.js';
 import { ProjectService } from './services/project-service.js';
 import { ProjectStageGuardRegistry } from './services/project-stage-guard-registry.js';
 import type { ProjectTasks } from './services/project-tasks.js';
 import { RecordProjectService } from './services/record-project-service.js';
+import { ProjectReferenceService } from './services/reference-service.js';
 import { createRoleService } from './services/role-service.js';
 import { StageService } from './services/stage-service.js';
 import { StageTaskService } from './services/stage-task-service.js';
@@ -103,6 +123,14 @@ interface ProjectsCradle {
   readonly projectsLinkedRecordOwners: LinkedRecordOwners;
   readonly projectsLinkService: LinkService;
   readonly projectsRecordProjectService: RecordProjectService;
+  readonly auditLogService: AuditPort;
+  readonly projectsReferenceService: ProjectReferenceService;
+  readonly projectsNotifier: ProjectNotifier;
+  readonly projectsMentionService: ProjectMentionService;
+  readonly projectsCommentService: ProjectCommentService;
+  readonly projectsDocumentLookupService: ProjectDocumentLookupService;
+  readonly projectsAttachmentService: ProjectAttachmentService;
+  readonly projectsHistoryService: ProjectHistoryService;
 }
 
 /** `_i18n`'s resolver over this module's own bundles. */
@@ -154,13 +182,14 @@ export function registerModule(ctx: ModuleContext): void {
   ctx.di.register({
     projectsReadService: ctx
       .asFunction(
-        ({ emFactory, projectsAccess }: ProjectsCradle) =>
+        ({ emFactory, projectsAccess, projectsReferenceService }: ProjectsCradle) =>
           new ProjectReadService({
             emFactory,
             access: projectsAccess,
             organizations: lazyPort<OrganizationDetailsPort>(ctx, 'organizationDetailsPort'),
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
             settings: lazyPort<SettingsReadPort>(ctx, 'settingsReadPort'),
+            references: projectsReferenceService,
           }),
       )
       .singleton(),
@@ -229,6 +258,8 @@ export function registerModule(ctx: ModuleContext): void {
           projectsTasks,
           projectsTemplateService,
           projectsStageTaskService,
+          projectsReferenceService,
+          projectsMentionService,
         }: ProjectsCradle) =>
           new ProjectService({
             emFactory,
@@ -240,6 +271,8 @@ export function registerModule(ctx: ModuleContext): void {
             tasks: projectsTasks,
             templates: projectsTemplateService,
             stageTasks: projectsStageTaskService,
+            references: projectsReferenceService,
+            mentions: projectsMentionService,
           }),
       )
       .singleton(),
@@ -413,6 +446,139 @@ export function registerModule(ctx: ModuleContext): void {
   });
   // --- end of Stages -----------------------------------------------------------------
 
+  // --- Collaboration (User Story 7, research R-13, R-14, R-17) ----------------------
+  // Notes, the message thread, references in texts, attachments and the
+  // history. References resolve through their owners' ports, each kind only
+  // with its owner's read code and — for the two switchable owners — only
+  // after presence is decided at their one door (`linked-records.ts`,
+  // `project-tasks.ts`). Products are `catalog`'s, a binding dependency.
+  //
+  // The bell is `admin_notifications`', which an operator may switch off; this
+  // module degrades without it (`degrades-without`): the notifier decides that
+  // module's presence before it asks, so a message or a mention is stored
+  // either way and nothing here catches a refusal. Who is told at all is
+  // `ProjectAccess.canSeeAs`.
+  //
+  // Attachments are the asset library's files, through its ports; the history
+  // is the platform's audit log (`auditLogService`, a platform service).
+  ctx.di.register({
+    projectsReferenceService: ctx
+      .asFunction(
+        ({ projectsLinkedRecordOwners, projectsTasks, projectsOwnerReadChecks }: ProjectsCradle) =>
+          new ProjectReferenceService({
+            products: lazyPort<CatalogProductReadPort>(ctx, 'catalogProductReadPort'),
+            orders: lazyPort<OrderReadPort>(ctx, 'orderReadPort'),
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+            quoteRequests: projectsLinkedRecordOwners,
+            tasks: projectsTasks,
+            mayRead: projectsOwnerReadChecks,
+          }),
+      )
+      .singleton(),
+    projectsNotifier: ctx
+      .asFunction(() =>
+        createProjectNotifier(lazyPort<AdminNotificationRecordPort>(ctx, 'adminNotificationRecordPort')),
+      )
+      .singleton(),
+    projectsMentionService: ctx
+      .asFunction(
+        ({ projectsAccess, projectsNotifier }: ProjectsCradle) =>
+          new ProjectMentionService({
+            access: projectsAccess,
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+            permissions: lazyPort<PermissionReadPort>(ctx, 'permissionService'),
+            notifier: projectsNotifier,
+          }),
+      )
+      .singleton(),
+    projectsCommentService: ctx
+      .asFunction(
+        ({
+          emFactory,
+          commandBus,
+          projectsAccess,
+          projectsNotifier,
+          projectsReferenceService,
+          projectsMentionService,
+        }: ProjectsCradle) =>
+          new ProjectCommentService({
+            emFactory,
+            commandBus,
+            access: projectsAccess,
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+            notifier: projectsNotifier,
+            references: projectsReferenceService,
+            mentions: projectsMentionService,
+          }),
+      )
+      .singleton(),
+    projectsDocumentLookupService: ctx
+      .asFunction(
+        ({ projectsAccess, projectsLinkedRecordOwners, projectsTasks, projectsOwnerReadChecks }: ProjectsCradle) =>
+          new ProjectDocumentLookupService({
+            access: projectsAccess,
+            orders: lazyPort<OrderListPort>(ctx, 'orderListPort'),
+            quoteRequests: projectsLinkedRecordOwners,
+            tasks: projectsTasks,
+            mayRead: projectsOwnerReadChecks,
+          }),
+      )
+      .singleton(),
+    projectsAttachmentService: ctx
+      .asFunction(
+        ({ emFactory, commandBus, projectsAccess }: ProjectsCradle) =>
+          new ProjectAttachmentService({
+            emFactory,
+            commandBus,
+            access: projectsAccess,
+            assets: lazyPort<AssetReadPort>(ctx, 'assetReadPort'),
+            assetsLibrary: lazyPort<AssetsLibraryPort>(ctx, 'assetsLibraryPort'),
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+          }),
+      )
+      .singleton(),
+    projectsHistoryService: ctx
+      .asFunction(
+        ({ projectsAccess, auditLogService, projectsReferenceService, projectsOwnerReadChecks }: ProjectsCradle) =>
+          new ProjectHistoryService({
+            access: projectsAccess,
+            auditLog: auditLogService,
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+            references: projectsReferenceService,
+            mayReadCustomFields: projectsOwnerReadChecks.customFields,
+          }),
+      )
+      .singleton(),
+  });
+
+  /**
+   * The asset-reference scanner — a **contribution** hook. It pushes an inert
+   * descriptor into `assetReferenceRegistry`, an ungated registry
+   * `assets_library` owns, and carries no presence probe: the attachments
+   * survive a deactivation, so a scanner registered only while the module is
+   * on would let an operator delete a file that comes back as a broken
+   * attachment when Projects is switched on again (Constitution XVII).
+   */
+  ctx.onBoot(() => {
+    registerProjectAssetReferences(
+      lazyPort<AssetReferenceRegistryPort>(ctx, 'assetReferenceRegistry'),
+      ctx.cradle<ProjectsCradle>().emFactory,
+    );
+  });
+
+  /**
+   * The audit-reference resolver — a **contribution** hook into
+   * `auditReferenceRegistry`, an ungated registry `audit_logs` owns. No
+   * presence probe: the registry skips this entry while the module is absent.
+   */
+  ctx.onBoot(() => {
+    registerProjectAuditReferences(lazyPort<AuditReferenceRegistryPort>(ctx, 'auditReferenceRegistry'), () => {
+      const cradle = ctx.cradle<ProjectsCradle>();
+      return { access: cradle.projectsAccess, emFactory: cradle.emFactory };
+    });
+  });
+  // --- end of Collaboration --------------------------------------------------------
+
   // --- Routes ------------------------------------------------------------------------
   ctx.routes(async (app) => {
     const cradle = ctx.cradle<ProjectsCradle>();
@@ -438,6 +604,20 @@ export function registerModule(ctx: ModuleContext): void {
     await registerLookupRoutes(app, {
       lookupService: cradle.projectsLookupService,
       access: cradle.projectsAccess,
+      mentionService: cradle.projectsMentionService,
+      documentLookupService: cradle.projectsDocumentLookupService,
+      requireAdmin: cradle.requireAdmin,
+    });
+    await registerCommentRoutes(app, {
+      commentService: cradle.projectsCommentService,
+      requireAdmin: cradle.requireAdmin,
+    });
+    await registerAttachmentRoutes(app, {
+      attachmentService: cradle.projectsAttachmentService,
+      requireAdmin: cradle.requireAdmin,
+    });
+    await registerHistoryRoutes(app, {
+      historyService: cradle.projectsHistoryService,
       requireAdmin: cradle.requireAdmin,
     });
     await registerLinkRoutes(app, {

@@ -92,8 +92,27 @@ export const manifest = defineModuleManifest({
   // name of a duplicated Template.
   //
   // `orders` owns `orderReadPort`, through which a linked Order is validated
-  // and shown (User Story 6); it cannot be switched off.
-  dependencies: ['_i18n', 'admin_roles', 'admin_users', 'auth', 'orders', 'organizations', 'settings'],
+  // and shown (User Story 6), and `orderListPort`, the `@@` list's Orders
+  // (User Story 7); it cannot be switched off.
+  //
+  // User Story 7: `catalog` owns `catalogProductReadPort`, which names a
+  // Product a text refers to; `assets_library` owns `assetReadPort`,
+  // `assetsLibraryPort` and `assetReferenceRegistry`, through which a file is
+  // attached, downloaded and kept from deletion while a Project uses it;
+  // `audit_logs` owns `auditReferenceRegistry`, through which an audit row
+  // about a Project is labelled. None of the three can be switched off.
+  dependencies: [
+    '_i18n',
+    'admin_roles',
+    'admin_users',
+    'assets_library',
+    'audit_logs',
+    'auth',
+    'catalog',
+    'orders',
+    'organizations',
+    'settings',
+  ],
   /**
    * Edges that are real to the container and bind no operator (FR-040: a
    * Project works without Tasks).
@@ -123,7 +142,8 @@ export const manifest = defineModuleManifest({
       reason:
         'Every call into this owner goes through `project-tasks.ts`, whose callers ask `present()` ' +
         'in front of the gate: the completion gate is then not applied (and the Stage entry says so), ' +
-        'a Stage is deleted without counting Tasks, and the Tasks tab answers `tasksAvailable: false`. ' +
+        'a Stage is deleted without counting Tasks, the Tasks tab answers `tasksAvailable: false`, ' +
+        'a Task referred to in a text renders as unavailable and the `@@` list offers no Tasks. ' +
         'A Task is held by its context, so no table of that owner is referenced from this module’s schema.',
     },
     {
@@ -160,8 +180,20 @@ export const manifest = defineModuleManifest({
         'The links are kept and return when Quote Requests is back.',
       reason:
         'Every call into this owner goes through `linked-records.ts`, whose callers ask `isPresent()` in ' +
-        'front of the gate: a linked Quote Request renders as unavailable, and linking one or asking for ' +
-        'its Project answers 503 from that decision rather than from a caught refusal.',
+        'front of the gate: a linked or referred-to Quote Request renders as unavailable, the `@@` list ' +
+        'offers none, and linking one or asking for its Project answers 503 from that decision rather ' +
+        'than from a caught refusal.',
+    },
+    // User Story 7 — the bell. A message and a mention are stored either way.
+    {
+      moduleId: 'admin_notifications',
+      name: 'adminNotificationRecordPort',
+      kind: 'degrades-without',
+      whenAbsent: 'Project members are not notified of messages and mentions.',
+      reason:
+        'The one call into this owner is `project-notifier.ts`, which decides its presence in front ' +
+        'of the gate and answers `not-present` in its return type; nothing in this module fails ' +
+        "closed on it, and no table of that owner is referenced from this module's schema.",
     },
   ],
   settings,
@@ -236,6 +268,9 @@ export const manifest = defineModuleManifest({
     { code: 'PROJECT_DICTIONARY_ENTRY_SYSTEM' },
     { code: 'PROJECT_DICTIONARY_ENTRY_IN_USE' },
     { code: 'PROJECT_DICTIONARY_NAME_TAKEN' },
+    { code: 'PROJECT_NOTE_NOT_AUTHOR' },
+    { code: 'PROJECT_MESSAGE_IMMUTABLE' },
+    { code: 'PROJECT_ATTACHMENT_TOO_LARGE' },
   ],
   i18n: { bundlesDir: 'i18n' },
   // `docs/projects.md` at the package root: users' and developers' page.

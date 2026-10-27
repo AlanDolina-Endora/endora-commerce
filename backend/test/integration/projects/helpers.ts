@@ -11,6 +11,7 @@ import {
 } from '@endora-commerce/contracts';
 import type { BackendServerHandle } from '../../helpers/test-server.js';
 import { withModulesDeactivated } from '../../helpers/modules-deactivated.js';
+import { AdminNotification } from '../../helpers/package-entities.js';
 
 /**
  * Shared fixtures of the `projects` contract and integration suites
@@ -218,4 +219,41 @@ export async function deleteProjectTasks(h: BackendServerHandle, projectIds: rea
     .execute(`delete from "tasks" where "context_type" = 'project' and "context_id" = any(?::uuid[])`, [
       `{${projectIds.join(',')}}`,
     ]);
+}
+
+// ---------------------------------------------------------------------------
+// User Story 7 — collaboration
+// ---------------------------------------------------------------------------
+
+/** Set the module setting `projects.visibility` for the platform. */
+export async function setProjectsVisibility(h: BackendServerHandle, value: 'everyone' | 'members'): Promise<void> {
+  const response = await h.app.inject({
+    method: 'PUT',
+    url: '/api/v1/admin/settings/projects.visibility/value',
+    cookies: PROJECTS_ADMIN,
+    payload: { scope: 'all', value },
+  });
+  expect(response.statusCode, response.body).toBeLessThan(400);
+}
+
+/** The bell entries about one Project, for one administrator, oldest first. */
+export async function bellAbout(
+  h: BackendServerHandle,
+  projectId: string,
+  adminUserId: string,
+): Promise<Array<{ kind: string; title: string; body: string | null; linkPath: string | null; titleMessage: unknown }>> {
+  const rows = await h
+    .em()
+    .find(
+      AdminNotification,
+      { targetAdminUserId: adminUserId, subjectId: projectId },
+      { filters: false, orderBy: { createdAt: 'asc' } },
+    );
+  return rows.map((row) => ({
+    kind: row.kind,
+    title: row.title,
+    body: row.body ?? null,
+    linkPath: row.linkPath ?? null,
+    titleMessage: row.titleMessage ?? null,
+  }));
 }
