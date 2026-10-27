@@ -189,6 +189,7 @@ describe('projects — linked records (US6)', () => {
 
   it('linking a kind needs its owner’s read code — 403 to a projects:write holder without it', async () => {
     const fresh = await seedCrmOrder(h.em(), { organizationId: TEST_ORGANIZATION_ID });
+    const before = await links(second.id);
     for (const [kind, id] of [
       ['order', fresh.id],
       ['quote_request', quoteRequest.id],
@@ -197,7 +198,8 @@ describe('projects — linked records (US6)', () => {
       const response = await link(second.id, kind, id, bare.cookies);
       expect(response.statusCode, `${kind}: ${response.body}`).toBe(403);
     }
-    expect(await links(second.id)).toEqual([]);
+    // `second` may hold the record the race above was won with; nothing more.
+    expect(await links(second.id)).toEqual(before);
   });
 
   it('a reader without an owner’s read code sees its records as unavailable — no number, status or amount', async () => {
