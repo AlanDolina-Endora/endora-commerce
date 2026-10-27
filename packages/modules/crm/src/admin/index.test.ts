@@ -207,24 +207,10 @@ describe('crm admin copy', () => {
       // came from, and every reason the contract can answer.
       'history.customFieldCarry.from.': ['order', 'quote_request'],
       'history.carryReason.': [...customFieldCarrySkipReasonSchema.options],
-      'references.kind.': ['product', 'order', 'admin_user'],
-      'references.inserted.': ['product', 'order', 'admin_user'],
-      'references.unavailable.': ['product', 'order', 'admin_user'],
-      // The search a button opens: its name, its placeholder and its empty state.
-      'references.search.': [
-        'person',
-        'personPlaceholder',
-        'personEmpty',
-        'order',
-        'orderPlaceholder',
-        'orderEmpty',
-        'product',
-        'productPlaceholder',
-        'productEmpty',
-      ],
-      // The list an `@` opens (User Story 18): one title and one empty state per kind.
-      'references.suggest.title.': ['person', 'order', 'product'],
-      'references.suggest.empty.': ['person', 'order', 'product'],
+      // The reference editor's families (`references.*`, `editor.format.*`) left
+      // this bundle with the editor, for the kit's `core` one
+      // (`specs/163-projects-and-tasks/` research R-17); `admin/test/kit/
+      // kit-collaboration-bundle.test.ts` holds them there.
       // What a board card shows (User Story 19): one name per built-in field,
       // the names of a range's two boxes, and the two groups of the section.
       'board.field.': [...OPPORTUNITY_BOARD_BUILTIN_FIELD_KEYS],
@@ -241,8 +227,6 @@ describe('crm admin copy', () => {
       'events.reminder.': [...opportunityEventReminderStateSchema.options],
       'events.channel.': [...opportunityEventReminderChannelSchema.options],
       'events.saved.': ['created', 'updated', 'deleted'],
-      // The formatted field's toolbar (specs/158-crm-opportunity-inline-editing/).
-      'editor.format.': ['bold', 'italic', 'strike', 'bulletList', 'orderedList', 'link'],
     };
     const composed = sources.flatMap(({ text }) =>
       [...text.matchAll(/\bt\(\s*`([^`$]+)\$\{/g)].map((match) => match[1] as string),

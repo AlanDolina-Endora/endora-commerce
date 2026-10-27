@@ -1,6 +1,7 @@
 ---
 '@endora-commerce/admin-kit': minor
 '@endora-commerce/mod-i18n': minor
+'@endora-commerce/mod-crm': minor
 ---
 
 CRM's collaboration components are in the kit, so any module's screen can have notes, messages,
@@ -31,3 +32,7 @@ The kit now declares `@tiptap/react` and `@tiptap/starter-kit` (`^3.22.5`) as pe
 
 **`@endora-commerce/mod-i18n`**: the components' English and Polish sentences are in the shared
 `core` bundle (`references.*`, `editor.*`, `comments.*`, `history.*`, `cursorPagination.*`).
+
+**`@endora-commerce/mod-crm`** draws its notes, messages, references, attachments, change history
+and list pager with these components; what an Opportunity's screens show and do is unchanged. It no
+longer declares `@tiptap/react` or `@tiptap/starter-kit` — the editor is the kit's.

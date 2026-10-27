@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { OpportunityReference } from '@endora-commerce/contracts';
-import { ADMIN_ID, ORDER_ID, ORGANIZATION_ID, caretAt, crmLookupResponse, editorOf, en, renderCrm, storedText } from './crm-fixtures';
+import { ADMIN_ID, ORDER_ID, ORGANIZATION_ID, caretAt, core, crmLookupResponse, editorOf, renderCrm, storedText } from './crm-fixtures';
 
 /**
  * The field a description, a note, a message or an Event's description is
@@ -126,7 +126,7 @@ describe('a text opened for editing', () => {
   it('says unavailable for a target the reader may not see, and keeps its token through an edit', async () => {
     const text = `See ${hidden} first.`;
     const field = mount({ initial: text });
-    expect(chips(field)).toEqual([en('references.unavailable.order')]);
+    expect(chips(field)).toEqual([core('references.unavailable.order')]);
     caretAt(field, text.length);
     await userEvent.type(field, ' Then call.', { skipClick: true });
     expect(sent()).toBe(`${text} Then call.`);
@@ -135,7 +135,7 @@ describe('a text opened for editing', () => {
   it('keeps a token it has no name for — as an unavailable chip — and sends it unchanged', async () => {
     const text = `Ask ${unknown}`;
     const field = mount({ initial: text });
-    expect(chips(field)).toEqual([en('references.unavailable.admin_user')]);
+    expect(chips(field)).toEqual([core('references.unavailable.admin_user')]);
     caretAt(field, text.length);
     await userEvent.type(field, '!', { skipClick: true });
     expect(sent()).toBe(`${text}!`);
@@ -181,21 +181,21 @@ describe('formatting', () => {
     const field = mount({ initial: 'Call Anna today' });
     // "Anna" selected.
     editorOf(field).commands.setTextSelection({ from: 6, to: 10 });
-    await userEvent.click(screen.getByRole('button', { name: en('editor.format.bold') }));
+    await userEvent.click(screen.getByRole('button', { name: core('editor.format.bold') }));
     expect(sent()).toBe('Call **Anna** today');
-    expect(screen.getByRole('button', { name: en('editor.format.bold') })).toHaveAttribute('aria-pressed', 'true');
-    await userEvent.click(screen.getByRole('button', { name: en('editor.format.italic') }));
+    expect(screen.getByRole('button', { name: core('editor.format.bold') })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(screen.getByRole('button', { name: core('editor.format.italic') }));
     expect(sent()).toBe('Call **_Anna_** today');
-    await userEvent.click(screen.getByRole('button', { name: en('editor.format.strike') }));
+    await userEvent.click(screen.getByRole('button', { name: core('editor.format.strike') }));
     expect(sent()).toBe('Call **_~~Anna~~_** today');
   });
 
   it('turns lines into a bulleted and a numbered list from the toolbar', async () => {
     const field = mount({ initial: 'one\ntwo' });
     editorOf(field).commands.selectAll();
-    await userEvent.click(screen.getByRole('button', { name: en('editor.format.bulletList') }));
+    await userEvent.click(screen.getByRole('button', { name: core('editor.format.bulletList') }));
     expect(sent()).toBe('- one\n- two');
-    await userEvent.click(screen.getByRole('button', { name: en('editor.format.orderedList') }));
+    await userEvent.click(screen.getByRole('button', { name: core('editor.format.orderedList') }));
     expect(sent()).toBe('1. one\n2. two');
   });
 
@@ -208,10 +208,10 @@ describe('formatting', () => {
   it('links what is selected to an address, and refuses one a reader may not follow', async () => {
     const field = mount({ initial: 'see the offer' });
     editorOf(field).commands.setTextSelection({ from: 9, to: 14 });
-    await userEvent.click(screen.getByRole('button', { name: en('editor.format.link') }));
-    const address = screen.getByRole('textbox', { name: en('editor.link.url') });
+    await userEvent.click(screen.getByRole('button', { name: core('editor.format.link') }));
+    const address = screen.getByRole('textbox', { name: core('editor.link.url') });
     await userEvent.type(address, 'javascript:alert(1){Enter}');
-    expect(screen.getByRole('alert')).toHaveTextContent(en('editor.link.invalid'));
+    expect(screen.getByRole('alert')).toHaveTextContent(core('editor.link.invalid'));
     expect(sent()).toBe('see the offer');
     await userEvent.clear(address);
     await userEvent.type(address, 'example.com/offer{Enter}');
@@ -288,17 +288,17 @@ describe('the length limit', () => {
     caretAt(field, person.length);
     await userEvent.type(field, 'abcd', { skipClick: true });
     expect(sent()).toBe(`${person}abc`);
-    expect(screen.getByRole('alert')).toHaveTextContent(en('references.error.tooLong'));
+    expect(screen.getByRole('alert')).toHaveTextContent(core('references.error.tooLong'));
     expect(chips(field)).toEqual(['@Anna Nowak']);
   });
 
   it('counts formatting markers as the characters they are stored as', async () => {
     const field = mount({ initial: 'abcd', maxLength: 6 });
     editorOf(field).commands.selectAll();
-    await userEvent.click(screen.getByRole('button', { name: en('editor.format.bold') }));
+    await userEvent.click(screen.getByRole('button', { name: core('editor.format.bold') }));
     expect(storedText(field)).toBe('abcd');
     expect(changes).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent(en('references.error.tooLong'));
+    expect(screen.getByRole('alert')).toHaveTextContent(core('references.error.tooLong'));
   });
 });
 

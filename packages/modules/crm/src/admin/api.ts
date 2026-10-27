@@ -55,6 +55,9 @@ import type {
  */
 
 const BASE = '/api/v1/admin/crm';
+
+/** The most rows the Opportunities endpoint returns in one page. */
+export const MAX_PAGE_LIMIT = 200;
 const ORDERS_BASE = '/api/v1/admin/orders';
 const PRODUCTS_BASE = '/api/v1/admin/catalog/products';
 const QUOTE_REQUESTS_BASE = '/api/v1/admin/quote-requests';
