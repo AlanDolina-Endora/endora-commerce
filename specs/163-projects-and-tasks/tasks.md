@@ -493,7 +493,8 @@ by e-mail.
 - [x] T124 [US9] Projects: `validateAndMerge` inside the create/update Commands and `project()` on read via `lazyPort<CustomFieldValuePort>(ctx, 'customFieldValueService')`; list filter via `customFieldListFilterPort`; manifest `dependencies` += `custom_fields`; T122 green
   - Validation runs in the service right **before** each Command (CRM's research N-S1: a Command reads no other module's port) and the merged bag is written **inside** it. On create the definitions are always enforced (`customFieldValues ?? {}`), so a required field is asked for when none is sent; on `PATCH` an absent `customFieldValues` consults nothing. An edit's bag is its own Command, `projects.project.custom_fields_update` (the action `data-model.md` §2.4 names), between `.update` and `.visibility_set`; it is merged against the `loadVisible` row and held to that row's version, which every write of the bag bumps. The create's audit `after` carries `customFieldValues` only when there are any.
   - The list filter needed a query parameter and a route the contract did not list: `ProjectListQuery.customFieldFilters` and `GET /projects/custom-field-filters` (`projects:read`), both added to `contracts/admin-api.md` and the OpenAPI baseline. The admin list does not offer the filters yet (FOLLOW-UP).
-- [ ] T125 [P] [US9] Admin: `components/ProjectCustomFields.tsx` on create and Overview (model `crm/…/OpportunityCustomFields.tsx`); docs section (EN + PL); phase gate
+- [x] T125 [P] [US9] Admin: `components/ProjectCustomFields.tsx` on create and Overview (model `crm/…/OpportunityCustomFields.tsx`); docs section (EN + PL); phase gate
+  - Also the change history: a custom-field change is drawn as a row per field, by the definition's label and option labels (`ProjectHistory.tsx` spreads the audited `customFieldValues`). `admin/test/modules/projects/custom-fields.test.tsx`.
 
 ---
 

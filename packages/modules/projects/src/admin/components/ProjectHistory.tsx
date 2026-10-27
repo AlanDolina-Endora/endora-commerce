@@ -9,6 +9,7 @@ import {
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { projectsApi } from '../api.js';
 import { calendarDateLabel, NO_VALUE } from '../lib/labels.js';
+import { customFieldValueLabel, useCanSeeCustomFields, useProjectFieldDefinitions } from './ProjectCustomFields.js';
 
 /**
  * The fields of an audited Project state that have a label of their own
@@ -37,8 +38,26 @@ const LABELLED_FIELDS: ReadonlySet<string> = new Set([
 ]);
 const SILENT_FIELDS: ReadonlySet<string> = new Set(['version', 'descriptionLength', 'members', 'moves', 'tasks']);
 
+/**
+ * A custom field's row: `customFieldValues` is one audited object, shown as a
+ * row per field (User Story 9). The server leaves it out for a reader without
+ * `custom_fields:read`.
+ */
+const CUSTOM_FIELD_PREFIX = 'customField:';
+
 function isSilent(field: string): boolean {
+  if (field.startsWith(CUSTOM_FIELD_PREFIX)) return false;
   return SILENT_FIELDS.has(field) || /Ids?$/.test(field);
+}
+
+/** An audited state with its custom-field bag spread into a field per key. */
+function withCustomFieldsSpread(state: unknown): unknown {
+  if (state === null || typeof state !== 'object' || Array.isArray(state)) return state;
+  const { customFieldValues, ...rest } = state as Record<string, unknown>;
+  if (customFieldValues === null || typeof customFieldValues !== 'object' || Array.isArray(customFieldValues)) return state;
+  const spread: Record<string, unknown> = { ...rest };
+  for (const [key, value] of Object.entries(customFieldValues)) spread[`${CUSTOM_FIELD_PREFIX}${key}`] = value;
+  return spread;
 }
 
 /** `stageName` → `stage name`. */
@@ -56,7 +75,7 @@ export function projectHistoryChanges(entry: { before: unknown; after: unknown }
     value === null ||
     ['string', 'number', 'boolean'].includes(typeof value) ||
     (Array.isArray(value) && value.every((item) => ['string', 'number'].includes(typeof item)));
-  return recordHistoryChanges(entry)
+  return recordHistoryChanges({ before: withCustomFieldsSpread(entry.before), after: withCustomFieldsSpread(entry.after) })
     .filter((change) => !isSilent(change.field))
     .filter((change) => plain(change.after) && (!('before' in change) || plain(change.before)));
 }
@@ -73,8 +92,21 @@ export function ProjectHistory(props: { projectId: string; reloadKey?: number })
   const { projectId } = props;
   const loadPage = useCallback((cursor: string | null) => projectsApi.history(projectId, cursor), [projectId]);
   const history = useRecordHistory<RecordHistoryEntry>(loadPage, props.reloadKey);
+  const { definitions } = useProjectFieldDefinitions(useCanSeeCustomFields());
+  const definitionOf = (field: string) =>
+    definitions.find((definition) => `${CUSTOM_FIELD_PREFIX}${definition.key}` === field);
+  const words = { yes: t('history.value.yes'), no: t('history.value.no') };
+
+  const fieldLabel = (field: string): string => {
+    if (field.startsWith(CUSTOM_FIELD_PREFIX)) {
+      const definition = definitionOf(field);
+      return definition ? (definition.label[language] ?? definition.labelDefault) : field.slice(CUSTOM_FIELD_PREFIX.length);
+    }
+    return LABELLED_FIELDS.has(field) ? t(`history.field.${field}`) : humaniseKey(field);
+  };
 
   const renderValue = (field: string, raw: unknown): ReactNode => {
+    if (field.startsWith(CUSTOM_FIELD_PREFIX)) return customFieldValueLabel(definitionOf(field), raw, language, words);
     if (raw === null || raw === undefined || raw === '') return NO_VALUE;
     if (typeof raw === 'boolean') return t(raw ? 'history.value.yes' : 'history.value.no');
     if (Array.isArray(raw)) return raw.length === 0 ? NO_VALUE : raw.join(', ');
@@ -96,7 +128,7 @@ export function ProjectHistory(props: { projectId: string; reloadKey?: number })
       }}
       heading={(entry) => t(`auditLog.${entry.action}`)}
       changes={projectHistoryChanges}
-      fieldLabel={(field) => (LABELLED_FIELDS.has(field) ? t(`history.field.${field}`) : humaniseKey(field))}
+      fieldLabel={fieldLabel}
       renderValue={renderValue}
     />
   );

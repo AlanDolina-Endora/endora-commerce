@@ -10,6 +10,7 @@ import {
   visibilityBody,
   type VisibilityValue,
 } from '../../../components/VisibilityControl.js';
+import { ProjectCustomFields } from '../../../components/ProjectCustomFields.js';
 import { calendarDateLabel, errorMessage } from '../../../lib/labels.js';
 import { useProjectReferences } from '../../../lib/references.js';
 import type { ProjectTabProps } from '../tabs.js';
@@ -275,8 +276,9 @@ function DescriptionSection({ project, onChange }: Pick<ProjectTabProps, 'projec
 
 /**
  * A Project's *Overview* tab (`contracts/admin-surfaces.md` §2): the
- * description, the start date, who sees the Project and the Members by Role.
- * Custom fields join it with their story.
+ * description, the start date, who sees the Project, the Members by Role and
+ * the custom fields (User Story 9) — for somebody who may read their
+ * definitions, editable by a writer.
  */
 export function OverviewTab({ project, onChange }: ProjectTabProps): ReactNode {
   const t = useTranslation('projects');
@@ -284,37 +286,40 @@ export function OverviewTab({ project, onChange }: ProjectTabProps): ReactNode {
   const groups = groupByRole(project.members, (role) => t('overview.archivedRole', { role }), t('overview.noRole'));
 
   return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <div className="space-y-4">
-        <DescriptionSection key={project.id} project={project} onChange={onChange} />
-        <section className="space-y-1">
-          <h3 className="text-sm font-semibold">{t('overview.startOn')}</h3>
-          <p className="text-sm">{calendarDateLabel(project.startOn, language)}</p>
+    <div className="space-y-6">
+      <div className="grid gap-6 md:grid-cols-2">
+        <div className="space-y-4">
+          <DescriptionSection key={project.id} project={project} onChange={onChange} />
+          <section className="space-y-1">
+            <h3 className="text-sm font-semibold">{t('overview.startOn')}</h3>
+            <p className="text-sm">{calendarDateLabel(project.startOn, language)}</p>
+          </section>
+          <VisibilitySection project={project} onChange={onChange} />
+        </div>
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold">{t('overview.members')}</h3>
+          {groups.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t('overview.noMembers')}</p>
+          ) : (
+            groups.map((group) => (
+              <div key={group.key} className="space-y-1">
+                <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{group.title}</h4>
+                <ul className="space-y-0.5 text-sm">
+                  {group.members.map((member) => (
+                    <li key={member.id} className="[overflow-wrap:anywhere]">
+                      <span>{member.adminUser.name}</span>
+                      {member.adminUser.active ? null : (
+                        <span className="text-muted-foreground"> ({t('overview.inactive')})</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          )}
         </section>
-        <VisibilitySection project={project} onChange={onChange} />
       </div>
-      <section className="space-y-3">
-        <h3 className="text-sm font-semibold">{t('overview.members')}</h3>
-        {groups.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t('overview.noMembers')}</p>
-        ) : (
-          groups.map((group) => (
-            <div key={group.key} className="space-y-1">
-              <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{group.title}</h4>
-              <ul className="space-y-0.5 text-sm">
-                {group.members.map((member) => (
-                  <li key={member.id} className="[overflow-wrap:anywhere]">
-                    <span>{member.adminUser.name}</span>
-                    {member.adminUser.active ? null : (
-                      <span className="text-muted-foreground"> ({t('overview.inactive')})</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))
-        )}
-      </section>
+      <ProjectCustomFields project={project} onChange={onChange} />
     </div>
   );
 }

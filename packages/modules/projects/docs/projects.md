@@ -373,7 +373,9 @@ While it is off:
   `MODULE_DISABLED`;
 - its permissions can no longer be granted to a role, and its settings cannot be
   changed — except the switch itself;
-- no deadline alert is sent.
+- no deadline alert is sent;
+- *Project* is not offered on the custom-fields screen, and its fields cannot be
+  added, changed or deleted there.
 
 Nothing is deleted. Every project, its stages and its history stay in the
 database, and everything is back exactly as it was when the module is switched
@@ -517,6 +519,39 @@ templates screen (*Stage deadline alert*). While Projects is switched off no
 alert is sent, and none is used up: an alert due that day still goes out once
 the module is back on the same day.
 
+## Custom fields
+
+An operator adds fields of their own to projects — a site region, a contract
+number, a floor area — on the **Custom fields** screen (`/custom-fields`), where
+*Project* is one of the record types, as *Order* and *Opportunity* are. Each
+field has a type (text, number, yes/no, date, a choice or several choices) and
+may be required.
+
+The fields are on the project's *Overview* tab, below the members, and on the
+**New project** form, after *Who sees this project*. A writer edits them on the
+tab and saves them with *Save custom fields*; on the form they are sent with the
+project. Anybody else who may see the project reads them. A
+value that breaks its field — a required field left empty, a number that is not
+one, a choice that is not offered — is refused, and the field is named; nothing
+is saved. A required field added after a project was created is asked for the
+next time somebody saves that project's fields, not on any other edit.
+
+- The fields' values are shown only to somebody who **may see the project**
+  (*Who sees a project*), and only to an administrator who may also view custom
+  fields (`custom_fields:read`); without that permission the fields, and their
+  values in the change history, are not shown.
+- Every change of a field is in the project's **change history** — *Custom
+  fields changed*, with each field's value before and after; the values a project
+  was created with are on its *Project created* entry.
+- A field marked as a **list filter** on the custom-fields screen can narrow the
+  projects list through the API (see *For developers*).
+- A field deleted on the custom-fields screen is no longer shown on any
+  project.
+
+While Projects is switched off, *Project* is not offered on the custom-fields
+screen and its fields cannot be changed there; they and every value are kept,
+and are back when the module is.
+
 ## Analytics
 
 *Arrives with a later release of this module and is described here when it
@@ -528,10 +563,11 @@ does.*
 
 | Method and path | Permission | What it answers |
 | --- | --- | --- |
-| `GET /api/v1/admin/projects` | `projects:read` | A page of projects and how many the caller may see: `{ items, nextCursor, total }`. Filters: `state` (repeatable), `organizationId`, `memberId` (an administrator's id or `me`), `roleId`, `templateId`, `stageName` (the current stage's name), `q` (number or title), `sort` (`createdAt` — the default, `value`, or `deadline` — the current stage's; projects without one come last either way), `order` (`asc` or `desc`, default `desc`), `cursor`, `limit` (at most 100). |
-| `POST /api/v1/admin/projects` | `projects:write` | `201` `{ data: ProjectDetail }`. Without a `templateId`, `stages` is required; with one, the template's structure is copied and `stages` is refused (`422`), and an unknown or archived template is `422` `PROJECT_TEMPLATE_NOT_FOUND`. |
+| `GET /api/v1/admin/projects` | `projects:read` | A page of projects and how many the caller may see: `{ items, nextCursor, total }`. Filters: `state` (repeatable), `organizationId`, `memberId` (an administrator's id or `me`), `roleId`, `templateId`, `stageName` (the current stage's name), `q` (number or title), `sort` (`createdAt` — the default, `value`, or `deadline` — the current stage's; projects without one come last either way), `order` (`asc` or `desc`, default `desc`), `cursor`, `limit` (at most 100), and `customFieldFilters` — custom fields marked as list filters, as JSON, the shape the Orders, Quote Requests and Opportunities lists take; a field the list does not offer is `400` `CUSTOM_FIELD_FILTER_UNAVAILABLE`, naming it. |
+| `GET /api/v1/admin/projects/custom-field-filters` | `projects:read` | `{ data: CustomFieldListFilterField[] }` — the project custom fields marked as list filters. |
+| `POST /api/v1/admin/projects` | `projects:write` | `201` `{ data: ProjectDetail }`. Without a `templateId`, `stages` is required; with one, the template's structure is copied and `stages` is refused (`422`), and an unknown or archived template is `422` `PROJECT_TEMPLATE_NOT_FOUND`. `customFieldValues` is held to the project's custom fields even when absent — a required one missing is `422` `CUSTOM_FIELD_VALUE_INVALID`, one issue per field, its `path` the field's key. |
 | `GET /api/v1/admin/projects/:id` | `projects:read` | `{ data: ProjectDetail }`, or `404` `PROJECT_NOT_FOUND` — for a project that does not exist and for one the caller may not see alike. |
-| `PATCH /api/v1/admin/projects/:id` | `projects:write` | Title, description, value, start date, `visibility` (`inherit`, `everyone` or `members_and_listed`) and `viewerIds` (the whole list of people listed — who see the project whatever its `visibility`; the Admin UI lists people only with `members_and_listed`), with `version`; `409` `PROJECT_CHANGED` when the project changed since it was read, `422` `PROJECT_MEMBER_INVALID` for a newly listed person who is not an active administrator. A change of who sees the project is audited apart from an edit of its text (`projects.project.visibility_set`, `projects.project.viewers_set`). |
+| `PATCH /api/v1/admin/projects/:id` | `projects:write` | Title, description, value, start date, `visibility` (`inherit`, `everyone` or `members_and_listed`) and `viewerIds` (the whole list of people listed — who see the project whatever its `visibility`; the Admin UI lists people only with `members_and_listed`), with `version`; `409` `PROJECT_CHANGED` when the project changed since it was read, `422` `PROJECT_MEMBER_INVALID` for a newly listed person who is not an active administrator. A change of who sees the project is audited apart from an edit of its text (`projects.project.visibility_set`, `projects.project.viewers_set`). `customFieldValues` names the fields it changes — the others keep their values, `null` clears one — and is refused like the create's; it is audited on its own (`projects.project.custom_fields_update`). |
 | `DELETE /api/v1/admin/projects/:id` | `projects:write` | `204`; `409` `PROJECT_HAS_LINKS` while records are linked. |
 | `GET /api/v1/admin/projects/lookups/organizations` | `projects:read` | `{ data: { id, name }[] }` — the Organizations the caller can reach, by name (`q`), or one by `id`; at most `limit` (50). |
 | `GET /api/v1/admin/projects/lookups/admin-users` | `projects:read` | `{ data: { id, name, email }[] }` — active administrators by name or e-mail (`q`), or one by `id`; at most `limit` (50). |
@@ -689,6 +725,20 @@ the record is linked. Records are read through their owners' published ports —
 `opportunityReadPort` (both `degrades-without`) — always under the caller's
 reach, and the presence of a switchable owner is decided before its port is
 asked.
+
+### Custom fields
+
+*Project* is the `project` record type of `custom_fields`
+(`SUPPORTED_ENTITIES.project`: owner `projects`, organisation-owned, a list
+filter, no carry targets); its values are the `custom_field_values` column of
+`projects`. The module validates and merges a bag through
+`customFieldValueService.validateAndMerge` before the Command that writes it,
+and answers a project's values through `project()`, which leaves out a value
+whose definition is gone; the list's filter is `customFieldListFilterPort`'s id
+condition, intersected with the visible set. `custom_fields` is a binding
+dependency and cannot be switched off. An audit entry's `customFieldValues` is
+served by `GET /projects/:id/history` only to a reader holding
+`custom_fields:read`.
 
 ### One read path
 

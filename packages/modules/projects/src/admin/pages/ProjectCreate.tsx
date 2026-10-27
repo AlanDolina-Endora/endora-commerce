@@ -31,6 +31,7 @@ import { stageColorAt } from '../lib/stage-colors.js';
 import { StageDot } from '../components/StageDot.js';
 import { AdminUserLookup, OrganizationsLookup, type LookupChoice } from '../components/LookupPickers.js';
 import { VisibilityControl, visibilityBody, type VisibilityValue } from '../components/VisibilityControl.js';
+import { customFieldIssues, NewProjectCustomFields } from '../components/ProjectCustomFields.js';
 
 const LIST_PATH = '/projects';
 
@@ -107,6 +108,8 @@ export function ProjectCreate(): ReactNode {
   const tasksPresent = useModulePresence().isPresent('tasks');
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown> | null>(null);
+  const [customFieldErrors, setCustomFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
   // Every Role, labelled in the reader's language: a Member is offered the
@@ -229,6 +232,7 @@ export function ProjectCreate(): ReactNode {
       ...(members.length > 0
         ? { members: members.map((row) => ({ adminUserId: row.adminUserId as string, roleIds: row.roleIds })) }
         : {}),
+      ...(customFieldValues ? { customFieldValues } : {}),
     };
 
     setBusy(true);
@@ -237,7 +241,12 @@ export function ProjectCreate(): ReactNode {
       const created = await projectsApi.createProject(body);
       void navigate(`/projects/${created.id}`);
     } catch (failure) {
-      setSubmitError(errorMessage(failure, t('create.error.generic')));
+      const issues = customFieldIssues(failure);
+      setCustomFieldErrors(issues ?? {});
+      // The server's sentence, and what it said about each field — shown here
+      // as well as at the fields, which are not on screen for somebody who may
+      // not read their definitions.
+      setSubmitError([errorMessage(failure, t('create.error.generic')), ...Object.values(issues ?? {})].join(' '));
       setBusy(false);
     }
   };
@@ -618,6 +627,8 @@ export function ProjectCreate(): ReactNode {
             <VisibilityControl value={visibility} onChange={setVisibility} disabled={busy} />
           </CardContent>
         </Card>
+
+        <NewProjectCustomFields onChange={setCustomFieldValues} fieldErrors={customFieldErrors} />
 
         <StickyFormActions className="flex justify-end gap-2">
           <Button

@@ -387,7 +387,9 @@ Gdy moduł jest wyłączony:
   `MODULE_DISABLED`;
 - jego uprawnień nie można już nadać żadnej roli, a jego ustawień nie można
   zmieniać — z wyjątkiem samego przełącznika;
-- nie jest wysyłany żaden alert o terminie.
+- nie jest wysyłany żaden alert o terminie;
+- *Projekt* nie jest oferowany na ekranie pól niestandardowych, a jego pól nie
+  można tam dodawać, zmieniać ani usuwać.
 
 Nic nie jest usuwane. Każdy projekt, jego etapy i historia zostają w bazie
 danych, a po ponownym włączeniu modułu wszystko wraca dokładnie do stanu
@@ -535,6 +537,39 @@ e-maili (*Stage deadline alert*). Gdy moduł Projekty jest wyłączony, żaden
 alert nie jest wysyłany ani zużywany: alert przypadający na ten dzień wyjdzie,
 gdy moduł zostanie włączony ponownie tego samego dnia.
 
+## Pola niestandardowe
+
+Operator dodaje do projektów własne pola — region budowy, numer umowy,
+powierzchnię — na ekranie **Pola niestandardowe** (`/custom-fields`), gdzie
+*Projekt* jest jednym z typów rekordów, tak jak *Zamówienie* i *Szansa
+sprzedażowa*. Każde pole ma typ (tekst, liczba, tak/nie, data, jeden wybór lub
+kilka wyborów) i może być wymagane.
+
+Pola są na zakładce *Przegląd* projektu, pod członkami, oraz w formularzu
+**Nowy projekt**, po sekcji *Kto widzi ten projekt*. Osoba z prawem edycji
+zmienia je na zakładce i zapisuje przyciskiem *Zapisz pola niestandardowe*; w
+formularzu są wysyłane razem z projektem. Każdy inny, kto może zobaczyć projekt,
+je odczytuje. Wartość niezgodna z polem — puste pole wymagane, liczba, która nie
+jest liczbą, wybór spoza listy — jest odrzucana, a pole zostaje wskazane; nic
+nie jest zapisywane. Pole wymagane dodane po utworzeniu projektu jest wymagane
+przy następnym zapisie pól tego projektu, a nie przy innej edycji.
+
+- Wartości pól są pokazywane tylko temu, kto **może zobaczyć projekt** (*Kto
+  widzi projekt*), i tylko administratorowi, który może też przeglądać pola
+  niestandardowe (`custom_fields:read`); bez tego uprawnienia pola ani ich
+  wartości w historii zmian nie są pokazywane.
+- Każda zmiana pola jest w **historii zmian** projektu — *Zmieniono pola
+  niestandardowe*, z wartością każdego pola przed zmianą i po niej; wartości, z
+  którymi projekt utworzono, są we wpisie *Utworzono projekt*.
+- Pole oznaczone na ekranie pól niestandardowych jako **filtr listy** może
+  zawężać listę projektów przez API (zob. *Dla programistów*).
+- Pole usunięte na ekranie pól niestandardowych nie jest już pokazywane w żadnym
+  projekcie.
+
+Gdy moduł Projekty jest wyłączony, *Projekt* nie jest oferowany na ekranie pól
+niestandardowych, a jego pól nie można tam zmieniać; one i wszystkie wartości
+zostają i wracają razem z modułem.
+
 ## Analityka
 
 *Pojawi się w jednym z kolejnych wydań modułu i zostanie tu opisana, gdy to
@@ -546,10 +581,11 @@ nastąpi.*
 
 | Metoda i ścieżka | Uprawnienie | Odpowiedź |
 | --- | --- | --- |
-| `GET /api/v1/admin/projects` | `projects:read` | Strona projektów oraz liczba projektów widocznych dla wywołującego: `{ items, nextCursor, total }`. Filtry: `state` (powtarzalny), `organizationId`, `memberId` (identyfikator administratora lub `me`), `roleId`, `templateId`, `stageName` (nazwa bieżącego etapu), `q` (numer lub tytuł), `sort` (`createdAt` — domyślnie, `value` albo `deadline` — termin bieżącego etapu; projekty bez wartości lub terminu są zawsze na końcu), `order` (`asc` lub `desc`, domyślnie `desc`), `cursor`, `limit` (najwyżej 100). |
-| `POST /api/v1/admin/projects` | `projects:write` | `201` `{ data: ProjectDetail }`. Bez `templateId` pole `stages` jest wymagane; z nim struktura szablonu jest kopiowana, a `stages` jest odrzucane (`422`), zaś nieznany lub zarchiwizowany szablon to `422` `PROJECT_TEMPLATE_NOT_FOUND`. |
+| `GET /api/v1/admin/projects` | `projects:read` | Strona projektów oraz liczba projektów widocznych dla wywołującego: `{ items, nextCursor, total }`. Filtry: `state` (powtarzalny), `organizationId`, `memberId` (identyfikator administratora lub `me`), `roleId`, `templateId`, `stageName` (nazwa bieżącego etapu), `q` (numer lub tytuł), `sort` (`createdAt` — domyślnie, `value` albo `deadline` — termin bieżącego etapu; projekty bez wartości lub terminu są zawsze na końcu), `order` (`asc` lub `desc`, domyślnie `desc`), `cursor`, `limit` (najwyżej 100) oraz `customFieldFilters` — pola niestandardowe oznaczone jako filtry listy, jako JSON, w kształcie przyjmowanym przez listy zamówień, zapytań ofertowych i szans sprzedażowych; pole, którego lista nie oferuje, to `400` `CUSTOM_FIELD_FILTER_UNAVAILABLE` z jego nazwą. |
+| `GET /api/v1/admin/projects/custom-field-filters` | `projects:read` | `{ data: CustomFieldListFilterField[] }` — pola niestandardowe projektów oznaczone jako filtry listy. |
+| `POST /api/v1/admin/projects` | `projects:write` | `201` `{ data: ProjectDetail }`. Bez `templateId` pole `stages` jest wymagane; z nim struktura szablonu jest kopiowana, a `stages` jest odrzucane (`422`), zaś nieznany lub zarchiwizowany szablon to `422` `PROJECT_TEMPLATE_NOT_FOUND`. `customFieldValues` jest sprawdzane względem pól niestandardowych projektu także wtedy, gdy go brak — brak pola wymaganego to `422` `CUSTOM_FIELD_VALUE_INVALID`, po jednym problemie na pole, z kluczem pola w `path`. |
 | `GET /api/v1/admin/projects/:id` | `projects:read` | `{ data: ProjectDetail }` albo `404` `PROJECT_NOT_FOUND` — tak samo dla projektu, który nie istnieje, jak dla takiego, którego wywołujący nie może zobaczyć. |
-| `PATCH /api/v1/admin/projects/:id` | `projects:write` | Tytuł, opis, wartość, data rozpoczęcia, `visibility` (`inherit`, `everyone` albo `members_and_listed`) i `viewerIds` (cała lista dopisanych osób — widzą one projekt bez względu na `visibility`; panel administracyjny dopisuje osoby tylko przy `members_and_listed`), razem z `version`; `409` `PROJECT_CHANGED`, gdy projekt zmienił się od odczytu, `422` `PROJECT_MEMBER_INVALID` dla nowo dopisanej osoby, która nie jest aktywnym administratorem. Zmiana tego, kto widzi projekt, trafia do dziennika zdarzeń osobno od zmiany treści (`projects.project.visibility_set`, `projects.project.viewers_set`). |
+| `PATCH /api/v1/admin/projects/:id` | `projects:write` | Tytuł, opis, wartość, data rozpoczęcia, `visibility` (`inherit`, `everyone` albo `members_and_listed`) i `viewerIds` (cała lista dopisanych osób — widzą one projekt bez względu na `visibility`; panel administracyjny dopisuje osoby tylko przy `members_and_listed`), razem z `version`; `409` `PROJECT_CHANGED`, gdy projekt zmienił się od odczytu, `422` `PROJECT_MEMBER_INVALID` dla nowo dopisanej osoby, która nie jest aktywnym administratorem. Zmiana tego, kto widzi projekt, trafia do dziennika zdarzeń osobno od zmiany treści (`projects.project.visibility_set`, `projects.project.viewers_set`). `customFieldValues` wymienia pola, które zmienia — pozostałe zachowują wartości, `null` czyści pole — i jest odrzucane tak jak przy tworzeniu; trafia do dziennika zdarzeń osobno (`projects.project.custom_fields_update`). |
 | `DELETE /api/v1/admin/projects/:id` | `projects:write` | `204`; `409` `PROJECT_HAS_LINKS`, dopóki są podpięte dokumenty. |
 | `GET /api/v1/admin/projects/lookups/organizations` | `projects:read` | `{ data: { id, name }[] }` — organizacje, do których wywołujący ma dostęp, według nazwy (`q`) albo jedna według `id`; najwyżej `limit` (50). |
 | `GET /api/v1/admin/projects/lookups/admin-users` | `projects:read` | `{ data: { id, name, email }[] }` — aktywni administratorzy według imienia i nazwiska lub adresu e-mail (`q`) albo jeden według `id`; najwyżej `limit` (50). |
@@ -716,6 +752,20 @@ podpięty. Dokumenty są odczytywane przez opublikowane porty ich właścicieli 
 `orderReadPort` (zależność wiążąca), `quoteRequestReadPort` i
 `opportunityReadPort` (oba `degrades-without`) — zawsze w zasięgu wywołującego,
 a obecność wyłączalnego właściciela jest ustalana, zanim zapyta się jego port.
+
+### Pola niestandardowe
+
+*Projekt* to typ rekordu `project` modułu `custom_fields`
+(`SUPPORTED_ENTITIES.project`: właściciel `projects`, należy do organizacji,
+filtr listy, bez celów przenoszenia); jego wartości to kolumna
+`custom_field_values` tabeli `projects`. Moduł sprawdza i scala zestaw wartości
+przez `customFieldValueService.validateAndMerge` przed poleceniem, które go
+zapisuje, a wartości projektu zwraca przez `project()`, który pomija wartość
+pola usuniętego; filtr listy to warunek na identyfikatorach z
+`customFieldListFilterPort`, przecięty ze zbiorem widocznych projektów.
+`custom_fields` to zależność wiążąca i nie można go wyłączyć. Pole
+`customFieldValues` wpisu dziennika zdarzeń `GET /projects/:id/history` zwraca
+tylko czytelnikowi z uprawnieniem `custom_fields:read`.
 
 ### Jedna ścieżka odczytu
 

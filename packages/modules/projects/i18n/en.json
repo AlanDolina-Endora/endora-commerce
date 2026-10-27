@@ -155,6 +155,8 @@
   "overview.members": "Members by role",
   "overview.noRole": "Without a role",
   "overview.noMembers": "This project has no members yet.",
+  "customFields.heading": "Custom fields",
+  "customFields.loadFailed": "The custom fields could not be loaded.",
   "overview.inactive": "inactive",
   "overview.archivedRole": "{role} (archived)",
   "editor.hint": "Changes to a stage are saved one stage at a time.",

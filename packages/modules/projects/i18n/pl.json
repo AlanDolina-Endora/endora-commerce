@@ -155,6 +155,8 @@
   "overview.members": "Członkowie według ról",
   "overview.noRole": "Bez roli",
   "overview.noMembers": "Ten projekt nie ma jeszcze członków.",
+  "customFields.heading": "Pola niestandardowe",
+  "customFields.loadFailed": "Nie udało się wczytać pól niestandardowych.",
   "overview.inactive": "nieaktywny",
   "overview.archivedRole": "{role} (zarchiwizowana)",
   "editor.hint": "Zmiany etapu zapisuje się osobno dla każdego etapu.",
