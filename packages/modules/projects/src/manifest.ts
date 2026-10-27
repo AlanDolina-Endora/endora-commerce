@@ -109,7 +109,7 @@ export const manifest = defineModuleManifest({
   //
   // User Story 9: `custom_fields` owns `customFieldValueService`, which
   // validates a Project's custom-field values and projects them for reading,
-  // and `customFieldListFilterPort`, through which the list filters on them.
+  // and its list-filter port, through which the admin list filters on them.
   // It cannot be switched off.
   dependencies: [
     '_i18n',

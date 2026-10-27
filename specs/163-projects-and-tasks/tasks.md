@@ -495,6 +495,7 @@ by e-mail.
   - The list filter needed a query parameter and a route the contract did not list: `ProjectListQuery.customFieldFilters` and `GET /projects/custom-field-filters` (`projects:read`), both added to `contracts/admin-api.md` and the OpenAPI baseline. The admin list does not offer the filters yet (FOLLOW-UP).
 - [x] T125 [P] [US9] Admin: `components/ProjectCustomFields.tsx` on create and Overview (model `crm/…/OpportunityCustomFields.tsx`); docs section (EN + PL); phase gate
   - Also the change history: a custom-field change is drawn as a row per field, by the definition's label and option labels (`ProjectHistory.tsx` spreads the audited `customFieldValues`). `admin/test/modules/projects/custom-fields.test.tsx`.
+- Carry-overs closed in Phase 11: C8 (`admin/test/modules/projects/off-state.test.tsx` answers the shell's `/i18n/bundles` request, hoisted, instead of reaching the network guard), C9 (the Stage-alert tick in `integration/tenancy/idle-worker-ticks-audit.test.ts`), C10 (`GET /projects/lookups/documents?organizationIds=` before a Project exists, limited to the caller's reach and ignored beside `projectId`; the create form passes its Organizations).
 
 ---
 
