@@ -92,6 +92,7 @@
   "detail.contextUnavailable": "The record is not available to you, or the module it belongs to is switched off.",
   "detail.contextNote": "Note from the record",
   "detail.delete": "Delete task",
+  "detail.deleteNotAllowed": "Deleting this task needs permission to change the record it belongs to.",
   "detail.history": "History",
   "delete.title": "Delete this task?",
   "delete.body": "Task {number} will be deleted. Its history stays in the audit log.",

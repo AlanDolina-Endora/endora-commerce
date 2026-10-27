@@ -114,6 +114,12 @@ export type TaskContextSummary = z.infer<typeof TaskContextSummarySchema>;
 export const TaskContextDetailSchema = TaskContextSummarySchema.extend({
   id: z.string().uuid(),
   groupId: z.string().uuid().nullable(),
+  /**
+   * The context owner's `canChangeTasks` for this reader: whether they may
+   * delete this Task or move it out of its record. `false` for an unavailable
+   * context. A screen offers neither when it is `false` (T147).
+   */
+  canChangeTasks: z.boolean(),
 });
 export type TaskContextDetail = z.infer<typeof TaskContextDetailSchema>;
 

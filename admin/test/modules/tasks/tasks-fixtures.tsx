@@ -124,6 +124,7 @@ export function taskDetail(overrides: Partial<TaskDetail> = {}): TaskDetail {
       groupLabel: 'Design',
       id: PROJECT_ID,
       groupId: STAGE_ID,
+      canChangeTasks: true,
     },
     contextNote: null,
     createdBy: { id: ME_ID, name: 'Ada Min' },

@@ -168,7 +168,16 @@ describe('tasks (contract) — §1 Tasks', () => {
         label: 'Probe record',
         href: `/probe/${shown}`,
         groupLabel: 'Group',
+        canChangeTasks: true,
       });
+      // The owner's answer is the reader's, read per request (T147 follow-up).
+      mayChangeTasks = false;
+      try {
+        const read = await call('GET', `/${task.id}`);
+        expect(TaskDetailResponseSchema.parse(read.json()).data.context?.canChangeTasks).toBe(false);
+      } finally {
+        mayChangeTasks = true;
+      }
     });
 
     it('answers 400 for a body its schema refuses', async () => {

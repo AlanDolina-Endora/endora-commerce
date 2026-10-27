@@ -486,13 +486,31 @@ export class TaskService {
       // of this feature; the field is empty until it is.
       references: [],
       context:
-        summary!.context && row.context_id ? { ...summary!.context, id: row.context_id, groupId: row.context_group_id } : null,
+        summary!.context && row.context_id
+          ? {
+              ...summary!.context,
+              id: row.context_id,
+              groupId: row.context_group_id,
+              canChangeTasks: await this.#mayChangeTasks(row, summary!.context.available),
+            }
+          : null,
       contextNote: await this.#note(row, language),
       createdBy: creator ? { id: creator.id, name: personName(creator) } : null,
       completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : null,
       createdAt: new Date(row.created_at).toISOString(),
       updatedAt: new Date(row.updated_at).toISOString(),
     };
+  }
+
+  /**
+   * The context owner's `canChangeTasks` for the reader, so a screen does not
+   * offer a Delete or a move the server would refuse (T147). An unavailable
+   * context answers `false`.
+   */
+  async #mayChangeTasks(row: TaskRow, available: boolean): Promise<boolean> {
+    if (!available || row.context_type === null || row.context_id === null) return false;
+    const descriptor = this.deps.contexts.presentFor(row.context_type);
+    return descriptor ? descriptor.canChangeTasks(row.context_id) : false;
   }
 
   /**

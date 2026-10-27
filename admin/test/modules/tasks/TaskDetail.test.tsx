@@ -111,6 +111,7 @@ describe('TaskDetail — the header and the context card', () => {
         groupLabel: null,
         id: PROJECT_ID,
         groupId: null,
+        canChangeTasks: false,
       },
     });
     await renderPage();
@@ -193,6 +194,14 @@ describe('TaskDetail — writing', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: en('delete.confirm') }));
     expect(deleteSpy).toHaveBeenCalledWith(TASK_PATH);
     expect(await screen.findByText('tasks list screen')).toBeTruthy();
+  });
+
+  it('offers no Delete for a Task whose record does not let the caller remove it, and says why (T147)', async () => {
+    current = taskDetail({ context: { ...taskDetail().context!, canChangeTasks: false } });
+    await renderPage();
+    expect(await screen.findByRole('button', { name: en('detail.edit') })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: en('detail.delete') })).toBeNull();
+    expect(screen.getByText(en('detail.deleteNotAllowed'))).toBeTruthy();
   });
 
   it('is read-only for a reader: no status control, no edit, no delete', async () => {

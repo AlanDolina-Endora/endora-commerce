@@ -67,7 +67,9 @@ projektu, do jednego z jego etapów.
 - **Szczegóły** — status, zmieniany od razu z listy; opis, termin i osobę
   przypisaną, zmieniane przyciskiem *Edytuj* i zapisywane razem; *Przypisz
   do mnie*; kto i kiedy utworzył zadanie oraz kiedy zostało zrobione. *Usuń
-  zadanie* pyta przed usunięciem.
+  zadanie* pyta przed usunięciem; nie jest oferowane dla zadania rekordu, którego
+  nie możesz zmieniać — projektu, którego nie możesz edytować — a ekran mówi
+  dlaczego.
 - **Należy do** — rekord, do którego należy zadanie, tak jak nazywa go jego
   moduł: dla zadania projektu numer i tytuł projektu jako odnośnik oraz etap.
   Pokazana jest tu też notatka, którą moduł rekordu zapisał przy tworzeniu
@@ -160,7 +162,7 @@ włączeniu modułu wszystko wraca dokładnie do poprzedniego stanu.
 | `GET /api/v1/admin/tasks` | `tasks:read` | Strona zadań, od najnowszych: `{ items, nextCursor }`. Filtry: `status` (powtarzalny), `assignee` (identyfikator administratora, `me` albo `none`), `dueFrom`, `dueTo`, `overdue`, `contextType`, `contextId`, `q` (numer lub tytuł), `cursor`, `limit` (najwyżej 100). |
 | `GET /api/v1/admin/tasks/mine` | `tasks:read` | `{ data: TaskSummary[] }` — otwarte zadania wywołującego, według terminu, bez terminu na końcu (najwyżej 500). |
 | `POST /api/v1/admin/tasks` | `tasks:write` | `{ title, description?, assignedAdminUserId?, dueOn?, context? }` → `201` `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID` (także dla rekordu, do którego jego właściciel nie pozwala dodawać, `canChangeTasks`), `TASK_ASSIGNEE_INVALID`. |
-| `GET /api/v1/admin/tasks/:id` | `tasks:read` | `{ data: TaskDetail }` albo `404` `TASK_NOT_FOUND` — tak samo dla zadania, które nie istnieje, i dla zadania, którego kontekstu nie możesz zobaczyć. |
+| `GET /api/v1/admin/tasks/:id` | `tasks:read` | `{ data: TaskDetail }` albo `404` `TASK_NOT_FOUND` — tak samo dla zadania, które nie istnieje, i dla zadania, którego kontekstu nie możesz zobaczyć. `context.canChangeTasks` to odpowiedź właściciela rekordu dla ciebie (`false` dla niedostępnego rekordu): czy możesz usunąć zadanie albo wyjąć je z rekordu. |
 | `PATCH /api/v1/admin/tasks/:id` | `tasks:write` | Dowolne z pól `title`, `description`, `dueOn`, `assignedAdminUserId`, `status`, `context` → `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID` przy umieszczaniu zadania w rekordzie albo wyjmowaniu go z rekordu, na które jego właściciel nie pozwala (`canChangeTasks`). |
 | `DELETE /api/v1/admin/tasks/:id` | `tasks:write` | `204`; `403` `FORBIDDEN` dla zadania rekordu, którego właściciel nie pozwala go usunąć (`canChangeTasks`). |
 | `GET /api/v1/admin/tasks/lookups/assignees` | `tasks:write` | `{ data: { id, name, email }[] }` — aktywni administratorzy pasujący do `q` (imię i nazwisko lub e-mail), najwyżej 50. |

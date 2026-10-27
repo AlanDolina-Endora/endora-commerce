@@ -271,6 +271,10 @@ describe('projects — the `project` Task context (US2)', () => {
       const task = await createStageTask(h, open.id, stageNamed(open, 'Design'), { title: 'Not theirs to delete' });
       const seen = await callTasks(h, 'GET', `/${task.id}`, { cookies: writer.cookies });
       expect(seen.statusCode, seen.body).toBe(200);
+      // The detail says so, so the screen offers no Delete; to a projects:write holder it says yes.
+      expect((seen.json() as { data: { context: { canChangeTasks: boolean } } }).data.context.canChangeTasks).toBe(false);
+      const asWriter = await callTasks(h, 'GET', `/${task.id}`);
+      expect((asWriter.json() as { data: { context: { canChangeTasks: boolean } } }).data.context.canChangeTasks).toBe(true);
       const removal = await callTasks(h, 'DELETE', `/${task.id}`, { cookies: writer.cookies });
       expect(removal.statusCode, removal.body).toBe(403);
       expect(removal.json().error.code).toBe('FORBIDDEN');

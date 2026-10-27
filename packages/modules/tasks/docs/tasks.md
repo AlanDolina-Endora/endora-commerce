@@ -61,7 +61,8 @@ project is added on the project's *Tasks* tab, into one of its stages.
 - **Details** — the status, changed at once from its list; the description, due
   date and assignee, changed with *Edit* and saved together; *Assign to me*;
   who created the task and when, and when it was done. *Delete task* asks
-  before it deletes.
+  before it deletes; it is not offered for a task of a record you may not
+  change — a project you may not edit — and the screen says why.
 - **Belongs to** — the record the task belongs to, as its module names it: for a
   project task, the project's number and title, linked, and its stage. A note
   the record's module wrote when it created the task, such as the role
@@ -152,7 +153,7 @@ exactly as it was when the module is switched on again.
 | `GET /api/v1/admin/tasks` | `tasks:read` | A page of tasks, newest first: `{ items, nextCursor }`. Filters: `status` (repeatable), `assignee` (an administrator's id, `me` or `none`), `dueFrom`, `dueTo`, `overdue`, `contextType`, `contextId`, `q` (number or title), `cursor`, `limit` (at most 100). |
 | `GET /api/v1/admin/tasks/mine` | `tasks:read` | `{ data: TaskSummary[] }` — the caller's open tasks, by due date, undated last (at most 500). |
 | `POST /api/v1/admin/tasks` | `tasks:write` | `{ title, description?, assignedAdminUserId?, dueOn?, context? }` → `201` `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID` (also for a record its owner does not let you add to, `canChangeTasks`), `TASK_ASSIGNEE_INVALID`. |
-| `GET /api/v1/admin/tasks/:id` | `tasks:read` | `{ data: TaskDetail }`, or `404` `TASK_NOT_FOUND` — for a task that does not exist and for one whose context you may not see alike. |
+| `GET /api/v1/admin/tasks/:id` | `tasks:read` | `{ data: TaskDetail }`, or `404` `TASK_NOT_FOUND` — for a task that does not exist and for one whose context you may not see alike. `context.canChangeTasks` is the record owner's answer for you (`false` for an unavailable record): whether you may delete the task or move it out of its record. |
 | `PATCH /api/v1/admin/tasks/:id` | `tasks:write` | Any of `title`, `description`, `dueOn`, `assignedAdminUserId`, `status`, `context` → `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID` for putting a task into, or taking it out of, a record whose owner does not let you (`canChangeTasks`). |
 | `DELETE /api/v1/admin/tasks/:id` | `tasks:write` | `204`; `403` `FORBIDDEN` for a task of a record whose owner does not let you delete it (`canChangeTasks`). |
 | `GET /api/v1/admin/tasks/lookups/assignees` | `tasks:write` | `{ data: { id, name, email }[] }` — active administrators matching `q` (name or e-mail), at most 50. |

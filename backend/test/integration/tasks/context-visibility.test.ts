@@ -137,6 +137,8 @@ describe('tasks — context visibility (R-9)', () => {
       label: 'Unavailable record',
       href: null,
       groupLabel: null,
+      // Nothing to change in a record nobody describes (T147).
+      canChangeTasks: false,
     });
     const polish = await h.app.inject({
       method: 'GET',

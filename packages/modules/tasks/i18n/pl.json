@@ -92,6 +92,7 @@
   "detail.contextUnavailable": "Rekord jest dla Ciebie niedostępny albo moduł, do którego należy, jest wyłączony.",
   "detail.contextNote": "Notatka z rekordu",
   "detail.delete": "Usuń zadanie",
+  "detail.deleteNotAllowed": "Usunięcie tego zadania wymaga uprawnienia do zmieniania rekordu, do którego należy.",
   "detail.history": "Historia",
   "delete.title": "Usunąć to zadanie?",
   "delete.body": "Zadanie {number} zostanie usunięte. Jego historia pozostaje w dzienniku audytu.",

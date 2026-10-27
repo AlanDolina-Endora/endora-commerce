@@ -25,7 +25,8 @@ four statuses — standing on their own or belonging to a record another module 
 - **For other modules.** `taskContextRegistry`, an ungated contribution seam through which a
   module owns a Task context type and decides who sees its Tasks (fail-closed: a context nobody
   present owns hides its Tasks) and who may put a Task into one of its records, take one out or
-  delete one (`canChangeTasks`; a refused delete is `403` `FORBIDDEN`); `taskReadPort` and `taskWritePort`, gated; the events
+  delete one (`canChangeTasks`; a refused delete is `403` `FORBIDDEN`, and a Task's detail carries
+  the answer as `context.canChangeTasks`, so its screen offers no Delete it would refuse); `taskReadPort` and `taskWritePort`, gated; the events
   `tasks.task.created.v1`, `tasks.task.status_changed.v1`, `tasks.task.assigned.v1` and
   `tasks.task.deleted.v1`; and `nextTaskNumber(em)` on `./backend`, the door to the `TSK-…`
   number sequence.

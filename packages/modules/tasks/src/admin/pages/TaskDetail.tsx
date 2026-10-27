@@ -64,6 +64,9 @@ export function TaskDetail(): ReactNode {
   const contextHeadingId = useId();
   const historyHeadingId = useId();
   const [task, setTask] = useState<TaskDetailData | null>(null);
+  // A Task of a record is the record owner's to delete (`canChangeTasks`, T147):
+  // no Delete the server would refuse.
+  const mayDelete = task === null || task.context === null || task.context.canChangeTasks;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [writeError, setWriteError] = useState<string | null>(null);
@@ -188,20 +191,25 @@ export function TaskDetail(): ReactNode {
                       <Pencil aria-hidden="true" />
                       {t('detail.edit')}
                     </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="min-h-11 text-destructive hover:text-destructive sm:min-h-8"
-                      disabled={busy}
-                      onClick={(): void => setDeleting(true)}
-                    >
-                      <Trash2 aria-hidden="true" />
-                      {t('detail.delete')}
-                    </Button>
+                    {mayDelete ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="min-h-11 text-destructive hover:text-destructive sm:min-h-8"
+                        disabled={busy}
+                        onClick={(): void => setDeleting(true)}
+                      >
+                        <Trash2 aria-hidden="true" />
+                        {t('detail.delete')}
+                      </Button>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
+              {canWrite && !mayDelete ? (
+                <p className="text-xs text-muted-foreground">{t('detail.deleteNotAllowed')}</p>
+              ) : null}
 
               {canWrite ? (
                 <div className="max-w-xs space-y-1">
