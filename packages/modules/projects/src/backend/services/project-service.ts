@@ -13,6 +13,7 @@ import {
   type ProjectOutOfReachAfterWrite,
   type ProjectStageInput,
   type UpdateProjectBody,
+  roundHalfUp,
 } from '@endora-commerce/contracts';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import { HttpError } from '@endora-commerce/platform/http';
@@ -171,6 +172,15 @@ type ValueSide = Pick<Project, 'valueAmount' | 'valueCurrency'>;
 const NO_VALUE: ValueSide = { valueAmount: null, valueCurrency: null };
 
 /**
+ * An amount as `numeric(18,2)` stores and prints it — `1234.5` typed is
+ * `1234.50` (T145): what a value change records and compares. The request
+ * schema has already refused more than two places, so this pads and never rounds.
+ */
+function storedAmount(amount: string | null | undefined): string | null {
+  return amount === null || amount === undefined ? null : roundHalfUp(amount, 2);
+}
+
+/**
  * What a write changed among the values the trail does not carry: `changedFields`
  * (`value`) and `changedCustomFields` (the keys whose value differs), each only
  * when non-empty.
@@ -182,7 +192,7 @@ function changedValueKeys(
   const out: { changedFields?: string[]; changedCustomFields?: string[] } = {};
   if (
     value &&
-    ((value.before.valueAmount ?? null) !== (value.after.valueAmount ?? null) ||
+    (storedAmount(value.before.valueAmount) !== storedAmount(value.after.valueAmount) ||
       (value.before.valueCurrency ?? null) !== (value.after.valueCurrency ?? null))
   ) {
     out.changedFields = ['value'];
@@ -216,9 +226,9 @@ function recordValueChange(
   const before: ProjectValueState = {};
   const after: ProjectValueState = {};
   if (keys.changedFields && value) {
-    before.valueAmount = value.before?.valueAmount ?? null;
+    before.valueAmount = storedAmount(value.before?.valueAmount);
     before.valueCurrency = value.before?.valueCurrency ?? null;
-    after.valueAmount = value.after.valueAmount ?? null;
+    after.valueAmount = storedAmount(value.after.valueAmount);
     after.valueCurrency = value.after.valueCurrency ?? null;
   }
   if (keys.changedCustomFields && customFields) {

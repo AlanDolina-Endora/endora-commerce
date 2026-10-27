@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { RecordHistoryEntry } from '@endora-commerce/contracts';
+import { formatMoney } from '@endora-commerce/admin-kit/lib';
 import { setMobileViewport } from '../../setup';
 import { EVERY_PROJECTS_PERMISSION, PROJECT_ID, ROLES, core, detail, en, renderProjects } from './projects-fixtures';
 
@@ -107,6 +108,10 @@ function historyEntry(overrides: Partial<RecordHistoryEntry> = {}): RecordHistor
     ...overrides,
   };
 }
+
+/** A formatted amount as a text matcher: `Intl` writes no-break spaces, which the DOM query folds. */
+const money = (text: string) => (_: string, element: Element | null): boolean =>
+  element?.children.length === 0 && element.textContent?.replace(/\s+/g, ' ') === text.replace(/\s+/g, ' ');
 
 const requested = (): string[] => getSpy.mock.calls.map(([path]) => String(path));
 
@@ -319,10 +324,35 @@ describe('custom fields in the change history', () => {
       return Promise.reject(new Error(`unexpected GET ${path}`));
     });
     renderProjects(<ProjectHistory projectId={PROJECT_ID} />, { permissions: WITH_FIELDS });
-    expect(await screen.findByText(en('history.field.valueAmount'))).toBeTruthy();
-    expect(screen.getByText('1234.56')).toBeTruthy();
-    expect(screen.getByText('987.65')).toBeTruthy();
-    // The currency did not change: no row of its own.
+    // One *Value* row, each side in its currency's conventions, as the Project screen shows it.
+    expect(await screen.findByText(en('history.field.value'))).toBeTruthy();
+    expect(screen.getByText(money(formatMoney(1234.56, 'PLN')))).toBeTruthy();
+    expect(screen.getByText(money(formatMoney(987.65, 'PLN')))).toBeTruthy();
+    // One row for the amount and its currency together — no *Currency* row of its own.
+    expect(screen.getAllByText(en('history.field.value'))).toHaveLength(1);
     expect(screen.queryByText(en('history.field.valueCurrency'))).toBeNull();
+  });
+
+  it('shows a change of currency alone as a change of the value (T145)', async () => {
+    getSpy.mockImplementation((path: string) => {
+      if (path === DEFINITIONS_URL) return Promise.resolve({ data: DEFINITIONS });
+      if (path.startsWith(`/api/v1/admin/projects/${PROJECT_ID}/history`)) {
+        return Promise.resolve({
+          data: [
+            historyEntry({
+              action: 'projects.project.update',
+              before: { valueAmount: '100.00', valueCurrency: 'PLN' },
+              after: { valueAmount: '100.00', valueCurrency: 'EUR' },
+            }),
+          ],
+          pagination: { cursor: null, hasMore: false, limit: 20 },
+          truncated: false,
+        });
+      }
+      return Promise.reject(new Error(`unexpected GET ${path}`));
+    });
+    renderProjects(<ProjectHistory projectId={PROJECT_ID} />, { permissions: WITH_FIELDS });
+    expect(await screen.findByText(money(formatMoney(100, 'EUR')))).toBeTruthy();
+    expect(screen.getByText(money(formatMoney(100, 'PLN')))).toBeTruthy();
   });
 });

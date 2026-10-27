@@ -8,7 +8,7 @@ import {
 } from '@endora-commerce/admin-kit/components';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { projectsApi } from '../api.js';
-import { calendarDateLabel, NO_VALUE } from '../lib/labels.js';
+import { calendarDateLabel, NO_VALUE, valueLabel } from '../lib/labels.js';
 import { customFieldValueLabel, useCanSeeCustomFields, useProjectFieldDefinitions } from './ProjectCustomFields.js';
 
 /**
@@ -21,6 +21,7 @@ const LABELLED_FIELDS: ReadonlySet<string> = new Set([
   'number',
   'title',
   'state',
+  'value',
   'valueAmount',
   'valueCurrency',
   'startOn',
@@ -73,6 +74,24 @@ function withCustomFieldsSpread(state: unknown): unknown {
   return spread;
 }
 
+/**
+ * An audited state with `valueAmount` / `valueCurrency` as one `value` field —
+ * the amount in its currency's conventions, as the Project screen shows it
+ * (`valueLabel`), or `null` for no value. A change of either is a change of
+ * the value, one row (T145).
+ */
+function withValueJoined(state: unknown): unknown {
+  if (state === null || typeof state !== 'object' || Array.isArray(state)) return state;
+  const record = state as Record<string, unknown>;
+  if (!('valueAmount' in record) && !('valueCurrency' in record)) return state;
+  const { valueAmount, valueCurrency, ...rest } = record;
+  const value =
+    typeof valueAmount === 'string' && typeof valueCurrency === 'string'
+      ? valueLabel({ amount: valueAmount, currency: valueCurrency })
+      : null;
+  return { ...rest, value };
+}
+
 /** `stageName` → `stage name`. */
 function humaniseKey(key: string): string {
   return key
@@ -88,7 +107,10 @@ export function projectHistoryChanges(entry: { before: unknown; after: unknown }
     value === null ||
     ['string', 'number', 'boolean'].includes(typeof value) ||
     (Array.isArray(value) && value.every((item) => ['string', 'number'].includes(typeof item)));
-  return recordHistoryChanges({ before: withCustomFieldsSpread(entry.before), after: withCustomFieldsSpread(entry.after) })
+  return recordHistoryChanges({
+    before: withValueJoined(withCustomFieldsSpread(entry.before)),
+    after: withValueJoined(withCustomFieldsSpread(entry.after)),
+  })
     .filter((change) => !isSilent(change.field))
     .filter((change) => plain(change.after) && (!('before' in change) || plain(change.before)));
 }

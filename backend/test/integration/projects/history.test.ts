@@ -180,6 +180,23 @@ describe('projects — history (US7)', () => {
       expect(response.body).not.toContain('valueChangeId');
     });
 
+    it('keeps an amount as the Project stores it — two places — not as it was typed (T145)', async () => {
+      const typed = await createProject(h, { title: 'Typed short', value: { amount: '1234.5', currency: 'PLN' } });
+      created.push(typed.id);
+      const edited = await callProjects(h, 'PATCH', `/${typed.id}`, {
+        payload: { value: { amount: '987', currency: 'PLN' }, version: typed.version },
+      });
+      expect(edited.statusCode, edited.body).toBe(200);
+      const entries = RecordHistoryPageSchema.parse(
+        (await callProjects(h, 'GET', `/${typed.id}/history?limit=50`)).json(),
+      ).data;
+      const create = entries.find((entry) => entry.action === 'projects.project.create');
+      const update = entries.find((entry) => entry.action === 'projects.project.update');
+      expect(create?.after).toMatchObject({ valueAmount: '1234.50' });
+      expect(update?.before).toMatchObject({ valueAmount: '1234.50' });
+      expect(update?.after).toMatchObject({ valueAmount: '987.00' });
+    });
+
     it('the values go with the Project', async () => {
       const doomed = await createProject(h, { title: 'Valued, then deleted', value: { amount: '5.00', currency: 'PLN' } });
       const count = async () =>

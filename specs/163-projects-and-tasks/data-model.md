@@ -193,7 +193,7 @@ Index (project_id, at).
 **`project_value_changes`** (the values a write changed, T145 / issue #470 decision A — added
 by the migration `projects_value_changes`): id uuid PK, project_id (cascade), before jsonb null
 (`null` for a create), after jsonb, at timestamptz. Each side holds only what changed:
-`valueAmount` / `valueCurrency`, and `customFieldValues` of the changed keys (`null` for a key
+`valueAmount` (two places, as `numeric(18,2)` prints it — `1234.5` typed is `1234.50`) / `valueCurrency`, and `customFieldValues` of the changed keys (`null` for a key
 that had or has no value). One row per Command that changed the value or a custom field
 (`projects.project.create`, `.update`, `.custom_fields_update`), written in that Command; the
 audit entry carries `changedFields` / `changedCustomFields` and the row's id as `valueChangeId`,
