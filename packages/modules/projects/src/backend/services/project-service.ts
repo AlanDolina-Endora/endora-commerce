@@ -10,6 +10,7 @@ import {
   type ProjectCreatedEvent,
   type ProjectDetail,
   type ProjectMemberInput,
+  type ProjectOutOfReachAfterWrite,
   type ProjectStageInput,
   type UpdateProjectBody,
 } from '@endora-commerce/contracts';
@@ -108,8 +109,36 @@ function memberInvalid(message: string): HttpError {
   return new HttpError(422, ERROR_CODES.PROJECT_MEMBER_INVALID, message);
 }
 
-/** Lock a Project's row for the rest of the Command — writes on one Project run one at a time. */
-export async function lockProject(em: EntityManager, id: string): Promise<Project> {
+/**
+ * Lock a Project's row for the rest of the Command — writes on one Project run
+ * one at a time — and ask again, under the lock, whether the caller may still
+ * see it (T144 F3). `loadVisible` answered before the Command; another
+ * administrator may have added an Organization out of the caller's reach, or
+ * taken them off the Project, in between, and that is refused as if the
+ * Project did not exist.
+ *
+ * `rule: 'reach'` asks the Organization rule alone — for the second and later
+ * Commands of one request (`update`), which may follow the caller's own change
+ * of who sees the Project: their own Command may take it out of their sight,
+ * never out of their reach.
+ */
+export async function lockProject(
+  em: EntityManager,
+  access: Pick<ProjectAccess, 'assertVisibleUnderLock'>,
+  id: string,
+  rule: 'visible' | 'reach' = 'visible',
+): Promise<Project> {
+  const project = await lockProjectRow(em, id);
+  await access.assertVisibleUnderLock(em, id, rule);
+  return project;
+}
+
+/**
+ * Lock a Project's row **without** asking whether the caller sees it — only
+ * for the module's own bookkeeping of a write that already committed (a Stage
+ * Task failure record), which must land whoever's sight the Project is in now.
+ */
+export async function lockProjectRow(em: EntityManager, id: string): Promise<Project> {
   const project = await em.findOne(Project, { id }, { lockMode: LockMode.PESSIMISTIC_WRITE });
   // `loadVisible` found it a moment ago; a delete in between is a change too.
   if (!project) throw projectChanged();
@@ -330,10 +359,17 @@ export class ProjectService {
     const visibilityChange = body.visibility !== undefined && body.visibility !== visible.visibility;
 
     let expected = body.version;
+    let first = true;
     const described: { mentions: SavedProjectMentions | null } = { mentions: null };
-    /** Lock the Project, hold it to the version the previous Command left, and bump it. */
+    /**
+     * Lock the Project, hold it to the version the previous Command left, and
+     * bump it. The first Command asks both rules again under its lock; a later
+     * one the Organization rule only — the one before may have been the
+     * caller's own change of who sees the Project.
+     */
     const claim = async (em: EntityManager): Promise<Project> => {
-      const project = await lockProject(em, visible.id);
+      const project = await lockProject(em, this.deps.access, visible.id, first ? 'visible' : 'reach');
+      first = false;
       if (project.version !== expected) throw projectChanged();
       return project;
     };
@@ -456,7 +492,7 @@ export class ProjectService {
       objectType: 'project',
       objectId: visible.id,
       run: async ({ em }) => {
-        const project = await lockProject(em, visible.id);
+        const project = await lockProject(em, this.deps.access, visible.id);
         const links = (await em.execute(
           `select count(*)::int as "n" from "project_links" l where l."project_id" = ?`,
           [project.id],
@@ -483,8 +519,16 @@ export class ProjectService {
    * `PUT /projects/:id/organizations` — the whole set. One Command per
    * Organization added or removed, so the trail names each; every refusal is
    * checked before the first.
+   *
+   * A caller confined to some Organizations who removes them all makes the
+   * Project internal, and so out of their own reach: the change stands, and
+   * the answer says only that (T144 F3).
    */
-  async setOrganizations(id: string, organizationIds: readonly string[], language: string): Promise<ProjectDetail> {
+  async setOrganizations(
+    id: string,
+    organizationIds: readonly string[],
+    language: string,
+  ): Promise<ProjectDetail | ProjectOutOfReachAfterWrite> {
     const visible = await this.deps.access.loadVisible(id);
     const current = (
       (await this.deps.emFactory().execute(
@@ -503,7 +547,7 @@ export class ProjectService {
         objectType: 'project',
         objectId: visible.id,
         run: async ({ em }) => {
-          await lockProject(em, visible.id);
+          await lockProject(em, this.deps.access, visible.id);
           const inserted = (await em.execute(
             `insert into "project_organizations" ("project_id", "organization_id") values (?, ?)
              on conflict do nothing returning "organization_id"`,
@@ -520,7 +564,7 @@ export class ProjectService {
         objectType: 'project',
         objectId: visible.id,
         run: async ({ em }) => {
-          await lockProject(em, visible.id);
+          await lockProject(em, this.deps.access, visible.id);
           // Again under the lock — a link may have been made since; the
           // foreign key from `project_links` is the schema's own answer.
           if (await hasLinksOf(em as EntityManager, visible.id, [organizationId])) throw organizationInUse();
@@ -530,6 +574,7 @@ export class ProjectService {
         },
       });
     }
+    if (!(await this.deps.access.inReachAfterWrite(visible.id))) return { id: visible.id, outOfReach: true };
     return this.deps.read.afterWrite(visible.id, language);
   }
 
@@ -554,7 +599,7 @@ export class ProjectService {
       objectType: 'project',
       objectId: visible.id,
       run: async ({ em: tx }) => {
-        await lockProject(tx, visible.id);
+        await lockProject(tx, this.deps.access, visible.id);
         const rows = (await tx.execute(
           `select pm."id", pm."admin_user_id", coalesce(array_agg(pmr."role_id") filter (where pmr."role_id" is not null), '{}') as "role_ids"
              from "project_members" pm left join "project_member_roles" pmr on pmr."member_id" = pm."id"

@@ -294,6 +294,16 @@ export const SetProjectOrganizationsBodySchema = z
   .strict();
 export type SetProjectOrganizationsBody = z.infer<typeof SetProjectOrganizationsBodySchema>;
 
+/**
+ * The answer of `PUT /projects/:id/organizations` when the change the caller
+ * just made took the Project out of their own Organization reach — a caller
+ * confined to some Organizations who removed them all, making the Project
+ * internal (T144 F3). The change committed; nothing else of the Project is
+ * theirs to be shown.
+ */
+export const ProjectOutOfReachAfterWriteSchema = z.object({ id: uuid, outOfReach: z.literal(true) }).strict();
+export type ProjectOutOfReachAfterWrite = z.infer<typeof ProjectOutOfReachAfterWriteSchema>;
+
 /** `PUT /projects/:id/members` — the whole set, Members and their Roles, in one Command. */
 export const SetProjectMembersBodySchema = z.object({ members: membersSchema }).strict();
 export type SetProjectMembersBody = z.infer<typeof SetProjectMembersBodySchema>;

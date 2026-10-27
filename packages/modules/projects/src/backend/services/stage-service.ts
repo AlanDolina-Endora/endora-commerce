@@ -81,7 +81,7 @@ export class StageService {
       objectType: 'project',
       objectId: visible.id,
       run: async ({ em }) => {
-        await lockProject(em, visible.id);
+        await lockProject(em, this.deps.access, visible.id);
         const stages = await stagesOf(em, visible.id);
         if (stages.length >= PROJECT_STAGES_MAX) {
           throw new HttpError(422, ERROR_CODES.VALIDATION_FAILED, `A project has at most ${PROJECT_STAGES_MAX} stages.`);
@@ -119,7 +119,7 @@ export class StageService {
       objectType: 'project',
       objectId: visible.id,
       run: async ({ em }) => {
-        await lockProject(em, visible.id);
+        await lockProject(em, this.deps.access, visible.id);
         const stage = await em.findOne(ProjectStage, { id: stageId, projectId: visible.id });
         if (!stage) throw stageNotFound();
         const before = stageSnapshot(stage);
@@ -166,7 +166,7 @@ export class StageService {
       objectType: 'project',
       objectId: visible.id,
       run: async ({ em }) => {
-        const project = await lockProject(em, visible.id);
+        const project = await lockProject(em, this.deps.access, visible.id);
         const stages = await stagesOf(em, visible.id);
         const stage = stages.find((s) => s.id === stageId);
         if (!stage) throw stageNotFound();
@@ -204,7 +204,7 @@ export class StageService {
       objectType: 'project',
       objectId: visible.id,
       run: async ({ em }) => {
-        await lockProject(em, visible.id);
+        await lockProject(em, this.deps.access, visible.id);
         const stages = await stagesOf(em, visible.id);
         const known = new Set(stages.map((s) => s.id));
         if (stageIds.length !== stages.length || stageIds.some((id) => !known.has(id))) {
@@ -230,7 +230,7 @@ export class StageService {
       objectType: 'project',
       objectId: visible.id,
       run: async ({ em }) => {
-        await lockProject(em, visible.id);
+        await lockProject(em, this.deps.access, visible.id);
         const stages = await stagesOf(em, visible.id);
         let graph: StageGraph;
         try {

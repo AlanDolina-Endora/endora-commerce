@@ -109,7 +109,7 @@ export class MoveService {
       objectType: 'project',
       objectId: visible.id,
       run: async ({ em, actor }) => {
-        const project = await lockProject(em, visible.id);
+        const project = await lockProject(em, this.deps.access, visible.id);
         if (project.version !== body.version || project.state !== 'open') throw projectChanged();
         const { graph: current, stages } = await lockedGraph(em, project.id);
         const source = project.currentStageId!;
@@ -218,7 +218,7 @@ export class MoveService {
       objectType: 'project',
       objectId: visible.id,
       run: async ({ em, actor }) => {
-        const project = await lockProject(em, visible.id);
+        const project = await lockProject(em, this.deps.access, visible.id);
         if (project.version !== body.version || project.state !== 'open') throw projectChanged();
         const current = await em.findOne(ProjectStage, { id: project.currentStageId!, projectId: project.id });
         if (!current) throw projectChanged();
@@ -283,7 +283,7 @@ export class MoveService {
       objectType: 'project',
       objectId: visible.id,
       run: async ({ em, actor }) => {
-        const project = await lockProject(em, visible.id);
+        const project = await lockProject(em, this.deps.access, visible.id);
         if (project.version !== body.version || project.state === 'open') throw projectChanged();
         const stage = await em.findOne(ProjectStage, { id: stageId, projectId: project.id });
         if (!stage) throw projectChanged();

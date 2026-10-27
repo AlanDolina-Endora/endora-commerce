@@ -124,7 +124,7 @@ export class LinkService {
         objectType: 'project',
         objectId: project.id,
         run: async ({ em, actor }) => {
-          await lockProject(em as EntityManager, project.id);
+          await lockProject(em as EntityManager, this.deps.access, project.id);
           // Again under the lock: the Organization may have been removed since.
           if (!(await this.#projectHasOrganization(em as EntityManager, project.id, record.organizationId))) {
             throw organizationMismatch();
@@ -190,7 +190,7 @@ export class LinkService {
       objectType: 'project',
       objectId: project.id,
       run: async ({ em }) => {
-        await lockProject(em as EntityManager, project.id);
+        await lockProject(em as EntityManager, this.deps.access, project.id);
         const link = await em.findOne(ProjectLinkEntity, { id: linkId, projectId: project.id });
         if (!link) throw linkNotFound();
         removed = { recordKind: link.recordKind, recordId: link.recordId };

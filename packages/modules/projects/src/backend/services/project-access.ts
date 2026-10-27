@@ -56,13 +56,13 @@ export const PROJECT_ACCESS_READERS: Readonly<Record<string, string>> = {
     '`loadVisible`; Stages, moves, Organizations, Members and links are read only for the ids of ' +
     'Projects those returned, or of a Project the caller has just written.',
   'services/project-service.ts':
-    'Every write starts from `loadVisible`; inside its Command the Project is locked and its ' +
+    'Every write starts from `loadVisible`; inside its Command the Project is locked (and asked again whether the caller sees it) and its ' +
     'Organizations, Members and links are read by that id only.',
   'services/stage-service.ts':
-    'Every write starts from `loadVisible`; inside its Command the Project is locked and its ' +
+    'Every write starts from `loadVisible`; inside its Command the Project is locked (and asked again whether the caller sees it) and its ' +
     'Stages and moves are read by that id only.',
   'services/move-service.ts':
-    'A move, close or reopen starts from `loadVisible`; inside its Command the Project is locked ' +
+    'A move, close or reopen starts from `loadVisible`; inside its Command the Project is locked (and asked again whether the caller sees it) ' +
     'and its Stages and moves are read by that id only.',
   'services/stage-task-service.ts':
     'Every route starts from `loadVisible`; the materialisation after a move and its failure record ' +
@@ -337,20 +337,67 @@ export class ProjectAccess {
   }
 
   /**
-   * The row of a Project **the caller has just written** — read by id, without
-   * the visibility predicate. Only a write that began with {@link loadVisible}
-   * calls it, to answer with the Project it changed: that write may have taken
-   * the Project out of the caller's own sight (removing themselves as a Member
-   * under *members only*), and answering 404 for a change that committed would
-   * misreport it. Never a first read.
+   * Inside a write's Command, after the Project's row is locked: whether the
+   * caller may still see it, asked on the Command's own `em` (T144 F3). 404
+   * `PROJECT_NOT_FOUND`, as {@link loadVisible} answers, when not. `reach`
+   * asks the Organization rule alone (see `lockProject`).
+   */
+  async assertVisibleUnderLock(em: EntityManager, id: string, rule: 'visible' | 'reach'): Promise<void> {
+    const viewer = await this.currentViewer();
+    const predicate = visibleProjectSqlFor(
+      rule === 'reach' ? { ...viewer, seeAll: true } : viewer,
+      await this.visibilitySetting(),
+    );
+    if (predicate === null) return;
+    const rows = (await em.execute(
+      `select 1 as "one" from "projects" p where p."id" = ? and ${predicate.sql}`,
+      [id, ...predicate.params],
+    )) as unknown[];
+    if (rows.length === 0) throw projectNotFound();
+  }
+
+  /**
+   * Whether a Project **the caller has just written** is in their Organization
+   * reach — the Organization rule alone, never the visibility rule.
+   */
+  async inReachAfterWrite(id: string): Promise<boolean> {
+    const reach = await this.#reachSql();
+    if (reach === null) return true;
+    const rows = (await this.deps.emFactory().execute(
+      `select 1 as "one" from "projects" p where p."id" = ? and ${reach.sql}`,
+      [id, ...reach.params],
+    )) as unknown[];
+    return rows.length > 0;
+  }
+
+  /**
+   * The row of a Project **the caller has just written** — read by id under
+   * the Organization rule, without the visibility rule. Only a write that began
+   * with {@link loadVisible} calls it, to answer with the Project it changed:
+   * that write may have taken the Project out of the caller's own sight
+   * (removing themselves as a Member under *members only*), and answering 404
+   * for a change that committed would misreport it. Never a first read.
+   *
+   * The Organization rule still applies (T144 F3): an Organization out of the
+   * caller's reach, added by somebody else since the write, is not theirs to be
+   * shown — 404 as for a missing Project. A Project the caller's own
+   * `PUT /organizations` made internal is answered by `setOrganizations`
+   * before this is asked.
    */
   async rowAfterWrite(id: string): Promise<VisibleProjectRow> {
+    const reach = await this.#reachSql();
     const rows = (await this.deps.emFactory().execute(
-      `select ${VISIBLE_PROJECT_COLUMNS} from "projects" p where p."id" = ?`,
-      [id],
+      `select ${VISIBLE_PROJECT_COLUMNS} from "projects" p where p."id" = ?${reach ? ` and ${reach.sql}` : ''}`,
+      [id, ...(reach?.params ?? [])],
     )) as VisibleProjectRow[];
     if (!rows[0]) throw projectNotFound();
     return rows[0];
+  }
+
+  /** The Organization rule alone for the caller, or `null` when it narrows nothing. */
+  async #reachSql(): Promise<SqlFragment | null> {
+    const viewer = await this.currentViewer();
+    return visibleProjectSqlFor({ ...viewer, seeAll: true }, await this.visibilitySetting());
   }
 
   /** What the caller may do to a Project they see — the detail's `permissions`. */

@@ -625,7 +625,7 @@ the figures are not served.
 | `GET /api/v1/admin/projects/lookups/organizations` | `projects:read` | `{ data: { id, name }[] }` — the Organizations the caller can reach, by name (`q`), or one by `id`; at most `limit` (50). |
 | `GET /api/v1/admin/projects/lookups/admin-users` | `projects:read` | `{ data: { id, name, email }[] }` — active administrators by name or e-mail (`q`), or one by `id`; at most `limit` (50). |
 | `GET /api/v1/admin/projects/visibility-setting` | `projects:read` | `{ data: { setting } }` — the module setting `projects.visibility` as it stands. |
-| `PUT /api/v1/admin/projects/:id/organizations` | `projects:write` | The whole set; `422` `PROJECT_ORGANIZATION_OUT_OF_SCOPE`; `409` `PROJECT_ORGANIZATION_IN_USE` for removing an Organization a linked record belongs to. |
+| `PUT /api/v1/admin/projects/:id/organizations` | `projects:write` | The whole set → the project's detail, or `{ data: { id, outOfReach: true } }` when a caller confined to some Organizations removed them all — the project is internal and out of their reach; `422` `PROJECT_ORGANIZATION_OUT_OF_SCOPE`; `409` `PROJECT_ORGANIZATION_IN_USE` for removing an Organization a linked record belongs to. |
 | `PUT /api/v1/admin/projects/:id/members` | `projects:write` | The whole set of members and their roles; `422` `PROJECT_MEMBER_INVALID`. |
 | `POST /api/v1/admin/projects/:id/stages` | `projects:write` | `201` `{ data: ProjectStage }`, added at the end. |
 | `PATCH /api/v1/admin/projects/:id/stages/:stageId` | `projects:write` | Any attribute; `deadlineOn` sets the deadline by hand, `null` returns it to start + duration. |

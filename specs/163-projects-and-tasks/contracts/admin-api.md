@@ -37,7 +37,7 @@ context: { type, label, href, groupLabel } | null }`.
 | `GET /projects/:id` | `projects:read` | → `ProjectDetail` (incl. stages, moves, members, organizations, links count, unread messages, `permissions: { canWrite, canConfigure }`) |
 | `PATCH /projects/:id` | `projects:write` | `UpdateProjectBody` (title, description, value, startOn, visibility, viewerIds, customFieldValues, `version`) → `ProjectDetail`; `customFieldValues` is a patch (named fields only; `null` clears one), validated by `custom_fields` — 422 `CUSTOM_FIELD_VALUE_INVALID`, one issue per field, `path` = its key — and written by its own Command `projects.project.custom_fields_update`. On `POST` the definitions are always enforced, so a required field is asked for even when `customFieldValues` is absent |
 | `DELETE /projects/:id` | `projects:write` | → 204; 409 `PROJECT_HAS_LINKS` while links exist |
-| `PUT /projects/:id/organizations` | `projects:write` | `{ organizationIds[] }` → `ProjectDetail`; 409 `PROJECT_ORGANIZATION_IN_USE`; 422 `PROJECT_ORGANIZATION_OUT_OF_SCOPE` |
+| `PUT /projects/:id/organizations` | `projects:write` | `{ organizationIds[] }` → `ProjectDetail`, or `{ id, outOfReach: true }` when the caller's own change took the Project out of their Organization reach (made it internal — T144 F3); 409 `PROJECT_ORGANIZATION_IN_USE`; 422 `PROJECT_ORGANIZATION_OUT_OF_SCOPE` |
 | `PUT /projects/:id/members` | `projects:write` | `{ members: { adminUserId, roleIds[] }[] }` → `ProjectDetail` |
 
 `ProjectSummary { id, number, title, state, currentStage: { id, name, color, deadlineOn,

@@ -21,7 +21,7 @@ import { ProjectStageTask } from '../entities/project-stage-task.entity.js';
 import { TASKS_READ_PERMISSION } from './owner-read-permissions.js';
 import { uuidArray, type ProjectAccess } from './project-access.js';
 import { personName, type ProjectReadService } from './project-read-service.js';
-import { assertRolesExist, lockProject } from './project-service.js';
+import { assertRolesExist, lockProject, lockProjectRow } from './project-service.js';
 import { PROJECT_TASK_CONTEXT_TYPE, type ProjectTasks } from './project-tasks.js';
 import { stageNotFound } from './stage-service.js';
 import { responsibleRoleNote } from './task-context-descriptor.js';
@@ -116,7 +116,7 @@ export class StageTaskService {
       objectType: 'project',
       objectId: visible.id,
       run: async ({ em }) => {
-        await lockProject(em, visible.id);
+        await lockProject(em, this.deps.access, visible.id);
         const stage = await em.findOne(ProjectStage, { id: stageId, projectId: visible.id });
         if (!stage) throw stageNotFound();
         const previous = await em.find(ProjectStageTask, { stageId }, { orderBy: { position: 'asc', id: 'asc' } });
@@ -217,7 +217,7 @@ export class StageTaskService {
       objectType: 'project',
       objectId: visible.id,
       run: async ({ em }) => {
-        await lockProject(em, visible.id);
+        await lockProject(em, this.deps.access, visible.id);
         const stage = await em.findOne(ProjectStage, { id: stageId, projectId: visible.id });
         if (!stage) throw stageNotFound();
         if (stage.tasksMaterializedAt || stage.tasksSkippedAt) throw notRetryable();
@@ -367,7 +367,7 @@ export class StageTaskService {
       objectType: 'project',
       objectId: projectId,
       run: async ({ em }) => {
-        await lockProject(em, projectId);
+        await lockProjectRow(em, projectId);
         const stage = await em.findOne(ProjectStage, { id: stageId, projectId });
         if (stage) stage.tasksMaterializedAt = null;
         const entry = await em.findOne(ProjectStageEntry, { id: entryId, projectId });

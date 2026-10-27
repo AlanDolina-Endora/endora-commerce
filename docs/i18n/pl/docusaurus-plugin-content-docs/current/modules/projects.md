@@ -646,7 +646,7 @@ ma, a wskaźniki nie są udostępniane.
 | `GET /api/v1/admin/projects/lookups/organizations` | `projects:read` | `{ data: { id, name }[] }` — organizacje, do których wywołujący ma dostęp, według nazwy (`q`) albo jedna według `id`; najwyżej `limit` (50). |
 | `GET /api/v1/admin/projects/lookups/admin-users` | `projects:read` | `{ data: { id, name, email }[] }` — aktywni administratorzy według imienia i nazwiska lub adresu e-mail (`q`) albo jeden według `id`; najwyżej `limit` (50). |
 | `GET /api/v1/admin/projects/visibility-setting` | `projects:read` | `{ data: { setting } }` — bieżąca wartość ustawienia modułu `projects.visibility`. |
-| `PUT /api/v1/admin/projects/:id/organizations` | `projects:write` | Cały zestaw; `422` `PROJECT_ORGANIZATION_OUT_OF_SCOPE`; `409` `PROJECT_ORGANIZATION_IN_USE` przy usuwaniu organizacji, do której należy podpięty dokument. |
+| `PUT /api/v1/admin/projects/:id/organizations` | `projects:write` | Cały zestaw → szczegóły projektu albo `{ data: { id, outOfReach: true } }`, gdy wywołujący ograniczony do części organizacji usunął je wszystkie — projekt jest wewnętrzny i poza jego zasięgiem; `422` `PROJECT_ORGANIZATION_OUT_OF_SCOPE`; `409` `PROJECT_ORGANIZATION_IN_USE` przy usuwaniu organizacji, do której należy podpięty dokument. |
 | `PUT /api/v1/admin/projects/:id/members` | `projects:write` | Cały zestaw członków i ich ról; `422` `PROJECT_MEMBER_INVALID`. |
 | `POST /api/v1/admin/projects/:id/stages` | `projects:write` | `201` `{ data: ProjectStage }`, dodany na końcu. |
 | `PATCH /api/v1/admin/projects/:id/stages/:stageId` | `projects:write` | Dowolny atrybut; `deadlineOn` ustawia termin ręcznie, `null` przywraca termin liczony jako początek + czas trwania. |
