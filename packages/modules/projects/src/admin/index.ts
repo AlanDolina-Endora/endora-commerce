@@ -2,13 +2,12 @@
  * `projects`' admin surface (`specs/163-projects-and-tasks/contracts/admin-surfaces.md`
  * §1–§3): User Story 1's three routes and sidebar row, User Story 3's
  * Templates screens and row, User Story 4's Project Roles and loss reasons,
- * and User Story 6's Project panel on the screens of the records a Project
- * holds.
+ * User Story 6's Project panel on the screens of the records a Project
+ * holds, and User Story 10's analytics screen and row.
  *
- * **Only what has shipped.** Analytics arrives with the story that ships its
- * page — a sidebar or
- * palette entry pointing at a route that does not exist is a defect
- * (Principle XVI). The palette actions are task T131's.
+ * **Only what has shipped** — a sidebar or palette entry pointing at a route
+ * that does not exist is a defect (Principle XVI). The palette actions are
+ * task T132's.
  *
  * **This entry exports data and nothing else**; every component is a
  * dynamic-import factory, so none of the screens is in the admin's entry chunk.
@@ -27,6 +26,9 @@ const WRITE_PERMISSION = 'projects:write';
  * `projects:configure`.
  */
 const CONFIGURE_PERMISSION = 'projects:configure';
+
+/** The code that opens analytics: every `GET /projects/analytics/*` enforces it. */
+const ANALYTICS_PERMISSION = 'projects:analytics';
 
 const PROJECTS_PATH = '/projects';
 
@@ -72,6 +74,12 @@ export const contributions: AdminContributions = {
       component: () => import('./pages/LossReasonsPage.js'),
       requiredPermission: CONFIGURE_PERMISSION,
     },
+    // User Story 10 — analytics. Declared before `/:id` too.
+    {
+      path: `${PROJECTS_PATH}/analytics`,
+      component: () => import('./pages/AnalyticsPage.js'),
+      requiredPermission: ANALYTICS_PERMISSION,
+    },
     {
       path: `${PROJECTS_PATH}/:id`,
       component: () => import('./pages/ProjectDetail.js'),
@@ -89,10 +97,18 @@ export const contributions: AdminContributions = {
       requiredPermission: READ_PERMISSION,
     },
     {
+      to: `${PROJECTS_PATH}/analytics`,
+      labelKey: 'nav.analytics.label',
+      icon: 'LineChart',
+      // After My Tasks (200) and Tasks (210), before the configuration.
+      section: 'work',
+      weight: 300,
+      requiredPermission: ANALYTICS_PERMISSION,
+    },
+    {
       to: `${PROJECTS_PATH}/templates`,
       labelKey: 'nav.templates.label',
       icon: 'Layers',
-      // After My Tasks (200) and Tasks (210); analytics will sit between (300).
       section: 'work',
       weight: 400,
       requiredPermission: CONFIGURE_PERMISSION,

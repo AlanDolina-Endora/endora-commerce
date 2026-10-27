@@ -137,10 +137,10 @@ const notFoundIsRendered = (): boolean => screen.queryAllByText(/app\.notFound/)
 
 const concreteUrl = (pattern: string): string => pattern.replace(/:[A-Za-z]+/g, '00000000-0000-4000-8000-0000000000f1');
 
-const READ_AND_WRITE = ['projects:read', 'projects:write', 'projects:configure'];
+const READ_AND_WRITE = ['projects:read', 'projects:write', 'projects:configure', 'projects:analytics'];
 
 describe('projects admin surface', () => {
-  it('is registered: the list, the create screen, the Templates screens, Roles, loss reasons and one Project', () => {
+  it('is registered: the list, the create screen, the Templates screens, Roles, loss reasons, analytics and one Project', () => {
     expect(routes.map((route) => route.path)).toEqual([
       '/projects',
       '/projects/new',
@@ -149,6 +149,7 @@ describe('projects admin surface', () => {
       '/projects/templates/:id',
       '/projects/roles',
       '/projects/loss-reasons',
+      '/projects/analytics',
       '/projects/:id',
     ]);
   });
@@ -161,6 +162,7 @@ describe('projects admin surface', () => {
     expect(sidebarHrefs()).toContain('/projects/templates');
     expect(sidebarHrefs()).toContain('/projects/roles');
     expect(sidebarHrefs()).toContain('/projects/loss-reasons');
+    expect(sidebarHrefs()).toContain('/projects/analytics');
     shell.unmount();
     for (const route of routes) {
       const rendered = renderAt(concreteUrl(route.path));
@@ -177,6 +179,7 @@ describe('projects admin surface', () => {
     expect(sidebarHrefs()).not.toContain('/projects/templates');
     expect(sidebarHrefs()).not.toContain('/projects/roles');
     expect(sidebarHrefs()).not.toContain('/projects/loss-reasons');
+    expect(sidebarHrefs()).not.toContain('/projects/analytics');
     shell.unmount();
     for (const route of routes) {
       const deepLink = renderAt(concreteUrl(route.path));
@@ -185,7 +188,7 @@ describe('projects admin surface', () => {
     }
   });
 
-  it('withholds the create screen from a reader, Templates from somebody without projects:configure, and everything from somebody without projects:read', async () => {
+  it('withholds the create screen from a reader, Templates from somebody without projects:configure, analytics from somebody without projects:analytics, and everything from somebody without projects:read', async () => {
     presentModules = new Set(['projects']);
     permissions = new Set(['projects:read']);
     const reader = renderAt('/projects/new');
@@ -199,6 +202,7 @@ describe('projects admin surface', () => {
     expect(sidebarHrefs()).not.toContain('/projects/templates');
     expect(sidebarHrefs()).not.toContain('/projects/roles');
     expect(sidebarHrefs()).not.toContain('/projects/loss-reasons');
+    expect(sidebarHrefs()).not.toContain('/projects/analytics');
     writer.unmount();
     for (const path of [
       '/projects/templates',
@@ -206,6 +210,7 @@ describe('projects admin surface', () => {
       concreteUrl('/projects/templates/:id'),
       '/projects/roles',
       '/projects/loss-reasons',
+      '/projects/analytics',
     ]) {
       const screen = renderAt(path);
       await waitFor(() => expect(notFoundIsRendered(), path).toBe(true));

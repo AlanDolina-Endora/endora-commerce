@@ -31,6 +31,8 @@ describe('projects admin contributions', () => {
       // User Story 4 — Project Roles and loss reasons are configuration too.
       ['/projects/roles', 'projects:configure'],
       ['/projects/loss-reasons', 'projects:configure'],
+      // User Story 10 — analytics, on a code of its own.
+      ['/projects/analytics', 'projects:analytics'],
       ['/projects/:id', 'projects:read'],
     ]);
     expect((contributions.routes ?? []).filter((route) => route.index)).toHaveLength(1);
@@ -49,6 +51,7 @@ describe('projects admin contributions', () => {
       (contributions.nav ?? []).map((row) => [row.to, row.section, row.weight, row.requiredPermission, row.icon]),
     ).toEqual([
       ['/projects', 'work', 100, 'projects:read', 'ClipboardList'],
+      ['/projects/analytics', 'work', 300, 'projects:analytics', 'LineChart'],
       ['/projects/templates', 'work', 400, 'projects:configure', 'Layers'],
       ['/projects/roles', 'work', 410, 'projects:configure', 'Users'],
       ['/projects/loss-reasons', 'work', 420, 'projects:configure', 'Tag'],
