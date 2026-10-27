@@ -284,15 +284,13 @@ export class ProjectAccess {
         ? { adminUserId: null, canRead: true, seeAll: true, reach }
         : { adminUserId: null, canRead: false, seeAll: false, reach };
     }
-    const held = await this.deps.permissions.listPermissions(adminUserId);
     // The capability check of `projects:see_all` — no route asks for the code,
     // this is where it is enforced (a wildcard holder holds it).
-    return {
-      adminUserId,
-      canRead: holds(held, PROJECTS_READ_PERMISSION),
-      seeAll: holds(held, PROJECTS_SEE_ALL_PERMISSION),
-      reach,
-    };
+    const [canRead, seeAll] = await Promise.all([
+      this.deps.permissions.hasPermission(adminUserId, PROJECTS_READ_PERMISSION),
+      this.deps.permissions.hasPermission(adminUserId, PROJECTS_SEE_ALL_PERMISSION),
+    ]);
+    return { adminUserId, canRead, seeAll, reach };
   }
 
   /** The module setting `projects.visibility` (default `members`). */

@@ -31,7 +31,7 @@ function access(held: string[] = []) {
   const execute = vi.fn(async () => [{ id: PROJECT }]);
   const permissions = {
     listPermissions: vi.fn(async () => held),
-    hasPermission: vi.fn(async () => false),
+    hasPermission: vi.fn(async (_adminUserId: string, code: string) => held.includes('*') || held.includes(code)),
     resolveRole: vi.fn(),
   };
   const service = new ProjectAccess({
