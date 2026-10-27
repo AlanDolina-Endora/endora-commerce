@@ -32,7 +32,7 @@ uses of the enum and repair them in the same change (CRM plan risk row, same tra
 | `packages/admin-kit/package.json` | + `@tiptap/react`, `@tiptap/starter-kit` as peer + dev (same `^3.22.5`) |
 | `packages/admin-kit` i18n bundle | the promoted components' strings move with them (en + pl) |
 
-## C. `crm` (guard: every existing `admin/test/modules/crm/*` and `backend/test/{contract,integration}/crm/*` green; only tests asserting `@@` = Orders change, and each such change is listed in the commit)
+## C. `crm` (guard: every existing `admin/test/modules/crm/*` and `backend/test/{contract,integration}/crm/*` green; only tests asserting `@@` = Orders change, and each such change is listed in the commit; a test may switch the bundle it reads a moved sentence from — same key, same text — and that is listed too)
 
 | File | Change |
 | --- | --- |
