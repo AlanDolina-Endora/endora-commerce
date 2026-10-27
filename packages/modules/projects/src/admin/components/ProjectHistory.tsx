@@ -35,6 +35,8 @@ const LABELLED_FIELDS: ReadonlySet<string> = new Set([
   'note',
   'comment',
   'deleted',
+  'changedFields',
+  'changedCustomFields',
 ]);
 const SILENT_FIELDS: ReadonlySet<string> = new Set(['version', 'descriptionLength', 'members', 'moves', 'tasks']);
 
@@ -44,6 +46,14 @@ const SILENT_FIELDS: ReadonlySet<string> = new Set(['version', 'descriptionLengt
  * `custom_fields:read`.
  */
 const CUSTOM_FIELD_PREFIX = 'customField:';
+
+/**
+ * Since T144 F4 an entry records *which* value-bearing fields a write changed —
+ * `changedFields` (`value`) and `changedCustomFields` (keys) — and never their
+ * values: the audit trail is not tenant-scoped. Each is one row naming them.
+ */
+const CHANGED_FIELDS = 'changedFields';
+const CHANGED_CUSTOM_FIELDS = 'changedCustomFields';
 
 function isSilent(field: string): boolean {
   if (field.startsWith(CUSTOM_FIELD_PREFIX)) return false;
@@ -109,6 +119,14 @@ export function ProjectHistory(props: { projectId: string; reloadKey?: number })
     if (field.startsWith(CUSTOM_FIELD_PREFIX)) return customFieldValueLabel(definitionOf(field), raw, language, words);
     if (raw === null || raw === undefined || raw === '') return NO_VALUE;
     if (typeof raw === 'boolean') return t(raw ? 'history.value.yes' : 'history.value.no');
+    if (field === CHANGED_FIELDS && Array.isArray(raw)) {
+      const named = (name: string): string =>
+        LABELLED_FIELDS.has(name) || name === 'value' ? t(`history.field.${name}`) : humaniseKey(name);
+      return raw.map((name) => named(String(name))).join(', ');
+    }
+    if (field === CHANGED_CUSTOM_FIELDS && Array.isArray(raw)) {
+      return raw.map((key) => fieldLabel(`${CUSTOM_FIELD_PREFIX}${String(key)}`)).join(', ');
+    }
     if (Array.isArray(raw)) return raw.length === 0 ? NO_VALUE : raw.join(', ');
     if (field === 'state') return t(`state.${String(raw)}`);
     if (field === 'visibility') return t(`visibility.option.${String(raw)}`);

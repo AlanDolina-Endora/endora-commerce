@@ -7,7 +7,8 @@ import {
 } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
-import type { ProjectAccess } from './project-access.js';
+import type { OrgReach } from '../domain/visibility-rule.js';
+import { ambientReach, type ProjectAccess } from './project-access.js';
 import type { ProjectReferenceService } from './reference-service.js';
 
 /** The object type every Command about a Project, or anything hanging on it, is recorded under. */
@@ -34,16 +35,44 @@ export function auditedTexts(state: unknown): string[] {
   );
 }
 
+/** The audited keys that belong to `custom_fields`: the values of old entries, the changed keys of new ones. */
+const CUSTOM_FIELD_KEYS = ['customFieldValues', 'changedCustomFields'] as const;
+
 /**
- * An audited state as the reader may see it: without `customFieldValues` for a
- * reader who may not read custom fields (`custom_fields:read`, User Story 9).
- * The audit entry itself is never rewritten.
+ * An audited state as the reader may see it: without the custom fields —
+ * `customFieldValues` (entries written before T144 F4) and `changedCustomFields`
+ * — for a reader who may not read custom fields (`custom_fields:read`, User
+ * Story 9). The audit entry itself is never rewritten.
  */
 export function visibleAuditState(state: unknown, mayReadCustomFields: boolean): unknown {
   if (mayReadCustomFields || state === null || typeof state !== 'object' || Array.isArray(state)) return state;
-  if (!Object.hasOwn(state, 'customFieldValues')) return state;
-  const { customFieldValues: _hidden, ...rest } = state as Record<string, unknown>;
+  if (!CUSTOM_FIELD_KEYS.some((key) => Object.hasOwn(state, key))) return state;
+  const rest = { ...(state as Record<string, unknown>) };
+  for (const key of CUSTOM_FIELD_KEYS) delete rest[key];
   return rest;
+}
+
+/**
+ * An audited state without any Organization out of the reader's reach (T144
+ * F4). A Project the reader sees today has every Organization in their reach,
+ * but its history remembers the ones it had: `organizationIds` keeps those in
+ * reach, an `organizationId` out of reach is blanked — and with it the
+ * `recordId` of a link that named it, which is that Organization's record.
+ */
+export function withinReach(state: unknown, reach: OrgReach): unknown {
+  if (reach.all || state === null || typeof state !== 'object' || Array.isArray(state)) return state;
+  const record = state as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...record };
+  if (Array.isArray(record.organizationIds)) {
+    out.organizationIds = record.organizationIds.filter(
+      (id) => typeof id === 'string' && reach.organizationIds.has(id),
+    );
+  }
+  if (typeof record.organizationId === 'string' && !reach.organizationIds.has(record.organizationId)) {
+    out.organizationId = null;
+    if (Object.hasOwn(record, 'recordId')) out.recordId = null;
+  }
+  return out;
 }
 
 export function encodeHistoryCursor(offset: number): string {
@@ -83,8 +112,9 @@ export interface ProjectHistoryServiceDeps {
  * reaching back {@link PROJECT_HISTORY_REACH} entries; the last page says when
  * it was cut. What the tokens of an audited text name is resolved for the
  * reader (no Project Command audits a text today — notes and messages are
- * recorded by length — so this is the standard, ready); custom-field values
- * are served only to a reader holding `custom_fields:read`.
+ * recorded by length — so this is the standard, ready); which custom fields
+ * changed is served only to a reader holding `custom_fields:read`, and no
+ * Organization out of the reader's reach is served at all (T144 F4).
  */
 export class ProjectHistoryService {
   constructor(private readonly deps: ProjectHistoryServiceDeps) {}
@@ -117,6 +147,8 @@ export class ProjectHistoryService {
     const resolved = await this.deps.references.resolveMany(texts);
     const referencesOf = (index: number): RecordReference[] => resolved[index] ?? [];
     const mayReadCustomFields = page.length > 0 ? await this.deps.mayReadCustomFields() : true;
+    const reach = ambientReach();
+    const served = (state: unknown): unknown => withinReach(visibleAuditState(state ?? null, mayReadCustomFields), reach);
 
     return {
       data: page.map((entry, index) => {
@@ -129,8 +161,8 @@ export class ProjectHistoryService {
             actorId === null
               ? { kind: 'system', id: null, name: null }
               : { kind: 'admin', id: actorId, name: names.get(actorId) ?? null },
-          before: visibleAuditState(entry.stateBefore ?? null, mayReadCustomFields),
-          after: visibleAuditState(entry.stateAfter ?? null, mayReadCustomFields),
+          before: served(entry.stateBefore),
+          after: served(entry.stateAfter),
           references: referencesOf(index),
         };
       }),

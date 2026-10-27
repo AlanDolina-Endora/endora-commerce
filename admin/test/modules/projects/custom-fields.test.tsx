@@ -272,4 +272,31 @@ describe('custom fields in the change history', () => {
     expect(screen.getByText('Contractor')).toBeTruthy();
     expect(screen.getByText('Acme')).toBeTruthy();
   });
+
+  it('names the fields a change touched when the entry records no values (T144 F4)', async () => {
+    getSpy.mockImplementation((path: string) => {
+      if (path === DEFINITIONS_URL) return Promise.resolve({ data: DEFINITIONS });
+      if (path.startsWith(`/api/v1/admin/projects/${PROJECT_ID}/history`)) {
+        return Promise.resolve({
+          data: [
+            historyEntry({ before: null, after: { changedCustomFields: ['site_region', 'contractor'] } }),
+            historyEntry({
+              id: '00000000-0000-4000-8000-0000000000ea',
+              action: 'projects.project.update',
+              before: { title: 'Old' },
+              after: { title: 'Old', changedFields: ['value'] },
+            }),
+          ],
+          pagination: { cursor: null, hasMore: false, limit: 20 },
+          truncated: false,
+        });
+      }
+      return Promise.reject(new Error(`unexpected GET ${path}`));
+    });
+    renderProjects(<ProjectHistory projectId={PROJECT_ID} />, { permissions: WITH_FIELDS });
+    expect(await screen.findByText(en('history.field.changedCustomFields'))).toBeTruthy();
+    expect(await screen.findByText('Site region, Contractor')).toBeTruthy();
+    expect(screen.getByText(en('history.field.changedFields'))).toBeTruthy();
+    expect(screen.getByText(en('history.field.value'))).toBeTruthy();
+  });
 });

@@ -109,9 +109,10 @@ export function registerModule(ctx: ModuleContext): void {
     // `auditLogService` is a platform service, not a module's port.
     tasksHistoryService: ctx
       .asFunction(
-        ({ tasksTaskService, auditLogService }: TasksCradle) =>
+        ({ tasksTaskService, auditLogService, tasksVisibility }: TasksCradle) =>
           new TaskHistoryService({
             tasks: tasksTaskService,
+            visibility: tasksVisibility,
             auditLog: auditLogService,
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
           }),

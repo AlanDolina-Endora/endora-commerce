@@ -114,7 +114,8 @@ końcu te bez terminu, z oznaczeniem przeterminowanych.
 **Historia.** Każda zmiana zadania — utworzenie, zmiana, przypisanie, zmiana
 statusu, usunięcie — jest zapisywana z tym, kto ją wykonał i kiedy, a historia
 zadania wymienia je od najnowszych. Historia zapisuje długość opisu, nigdy jego
-treść.
+treść. Projekt, który zadanie opuściło, a którego nie możesz zobaczyć, nie jest
+w niej wymieniany.
 
 ## Włączanie i wyłączanie
 

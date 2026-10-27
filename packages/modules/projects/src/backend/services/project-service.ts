@@ -145,14 +145,18 @@ export async function lockProjectRow(em: EntityManager, id: string): Promise<Pro
   return project;
 }
 
-/** The audit snapshot of a Project — no description text (the audit trail is not tenant-scoped). */
+/**
+ * The audit snapshot of a Project. The audit trail is the platform's and is not
+ * tenant-scoped, so it carries no free text and no figure a tenant owns: the
+ * description by its length only, and neither the value nor the custom-field
+ * values at all — a write says *that* they changed ({@link changedValueKeys}),
+ * never what to (T144 F4).
+ */
 function snapshot(project: Project): Record<string, unknown> {
   return {
     number: project.number,
     title: project.title,
     state: project.state,
-    valueAmount: project.valueAmount ?? null,
-    valueCurrency: project.valueCurrency ?? null,
     startOn: project.startOn ?? null,
     visibility: project.visibility,
     descriptionLength: project.description.length,
@@ -160,10 +164,33 @@ function snapshot(project: Project): Record<string, unknown> {
   };
 }
 
-/** The values of a Project's custom fields as the audit trail carries them — only once there are any. */
-function customFieldsSnapshot(values: Record<string, unknown>): { customFieldValues?: Record<string, unknown> } {
-  return Object.keys(values).length > 0 ? { customFieldValues: { ...values } } : {};
+/**
+ * What a write changed among the values the trail does not carry: `changedFields`
+ * (`value`) and `changedCustomFields` (the keys whose value differs), each only
+ * when non-empty.
+ */
+function changedValueKeys(
+  value: { before: Pick<Project, 'valueAmount' | 'valueCurrency'>; after: Pick<Project, 'valueAmount' | 'valueCurrency'> } | null,
+  customFields: { before: Record<string, unknown>; after: Record<string, unknown> } | null,
+): { changedFields?: string[]; changedCustomFields?: string[] } {
+  const out: { changedFields?: string[]; changedCustomFields?: string[] } = {};
+  if (
+    value &&
+    ((value.before.valueAmount ?? null) !== (value.after.valueAmount ?? null) ||
+      (value.before.valueCurrency ?? null) !== (value.after.valueCurrency ?? null))
+  ) {
+    out.changedFields = ['value'];
+  }
+  if (customFields) {
+    const keys = [...new Set([...Object.keys(customFields.before), ...Object.keys(customFields.after)])]
+      .filter((key) => !isDeepStrictEqual(customFields.before[key], customFields.after[key]))
+      .sort();
+    if (keys.length > 0) out.changedCustomFields = keys;
+  }
+  return out;
 }
+
+const NO_VALUE = { valueAmount: null, valueCurrency: null };
 
 export class ProjectService {
   constructor(private readonly deps: ProjectServiceDeps) {}
@@ -302,7 +329,7 @@ export class ProjectService {
             viewerIds,
             stages: rows.map((stage) => stage.name),
             templateId: template?.id ?? null,
-            ...customFieldsSnapshot(customFieldValues),
+            ...changedValueKeys({ before: NO_VALUE, after: project }, { before: {}, after: customFieldValues }),
           },
         };
       },
@@ -386,6 +413,7 @@ export class ProjectService {
         run: async ({ em }) => {
           const project = await claim(em as EntityManager);
           const before = snapshot(project);
+          const valueBefore = { valueAmount: project.valueAmount ?? null, valueCurrency: project.valueCurrency ?? null };
           if (body.title !== undefined) project.title = body.title;
           if (body.description !== undefined && body.description !== project.description) {
             described.mentions = {
@@ -406,7 +434,11 @@ export class ProjectService {
           }
           if (body.startOn !== undefined) project.startOn = body.startOn;
           bumped(project);
-          return { result: null, before, after: snapshot(project) };
+          return {
+            result: null,
+            before,
+            after: { ...snapshot(project), ...changedValueKeys({ before: valueBefore, after: project }, null) },
+          };
         },
       });
     }
@@ -419,10 +451,11 @@ export class ProjectService {
           // The version is what holds the bag to the one merged above: every
           // write of the bag bumps it.
           const project = await claim(em as EntityManager);
-          const before = { customFieldValues: { ...(project.customFieldValues ?? {}) } };
+          const before = { ...(project.customFieldValues ?? {}) };
           project.customFieldValues = customFieldValues;
           bumped(project);
-          return { result: null, before, after: { customFieldValues: { ...customFieldValues } } };
+          // Which fields changed, never their values (T144 F4).
+          return { result: null, before: null, after: changedValueKeys(null, { before, after: customFieldValues }) };
         },
       });
     }

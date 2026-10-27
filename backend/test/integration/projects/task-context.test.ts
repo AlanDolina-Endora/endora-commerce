@@ -186,6 +186,27 @@ describe('projects — the `project` Task context (US2)', () => {
     }
   });
 
+  it('a Task that left a Project keeps no trace of it in the history of a reader who may not see the Project (T144 F4)', async () => {
+    const leaving = await createStageTask(h, project.id, stageNamed(project, 'Design'), { title: 'Leaves the project' });
+    const detached = await callTasks(h, 'PATCH', `/${leaving.id}`, { payload: { context: null } });
+    expect(detached.statusCode, detached.body).toBe(200);
+    const historyOf = async (cookies: { b2b_session: string }) => {
+      const response = await callTasks(h, 'GET', `/${leaving.id}/history?limit=50`, { cookies });
+      expect(response.statusCode, response.body).toBe(200);
+      return response;
+    };
+    const theirs = await historyOf(outsider.cookies);
+    expect(theirs.body).not.toContain(project.id);
+    expect(theirs.body).not.toContain(stageNamed(project, 'Design'));
+    const create = (theirs.json() as { data: Array<{ action: string; after: Record<string, unknown> | null }> }).data.find(
+      (entry) => entry.action === 'tasks.task.create',
+    );
+    expect(create?.after).toMatchObject({ contextId: null, contextGroupId: null });
+    // Somebody who sees the Project sees where the Task was.
+    expect((await historyOf(member.cookies)).body).toContain(project.id);
+    await h.em().getConnection().execute(`delete from "tasks" where "id" = ?`, [leaving.id]);
+  });
+
   it('with Projects off its Tasks are absent from Tasks; on again, they are back', async () => {
     await withModulesDeactivated(['projects'], async () => {
       expect(await listed(member.cookies)).not.toContain(forMember);

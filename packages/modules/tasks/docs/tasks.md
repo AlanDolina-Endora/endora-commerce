@@ -106,7 +106,8 @@ last, overdue ones marked.
 **History.** Every change of a task — created, changed, assigned, its status
 changed, deleted — is recorded with who did it and when, and the task's history
 lists them, newest first. The history records the length of a description,
-never its text.
+never its text. A project the task has left, and you may not see, is not named
+in it.
 
 ## Switching it on and off
 

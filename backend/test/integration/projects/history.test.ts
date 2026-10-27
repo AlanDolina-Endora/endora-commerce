@@ -4,7 +4,7 @@ import { RecordHistoryPageSchema, type AuditReferenceRegistryPort, type ProjectD
 import { resolveTenantContext } from '@endora-commerce/platform/composition';
 import { runWithTenantContext } from '../../../src/tenancy/tenant-context.js';
 import { setupBackendServer, teardownBackendServer, type BackendServerHandle } from '../../helpers/test-server.js';
-import { seedCrmAdmin } from '../../helpers/seed-crm.js';
+import { seedCrmAdmin, seedCrmOrganization, seedCrmSalesRep } from '../../helpers/seed-crm.js';
 import { callProjects, createProject, deleteProjects, errorShape, setProjectsVisibility } from './helpers.js';
 
 /**
@@ -119,5 +119,65 @@ describe('projects — history (US7)', () => {
     });
     expect(hidden.statusCode, hidden.body).toBe(404);
     expect(errorShape(hidden.body)).toEqual(errorShape(none.body));
+  });
+
+  describe('what the audit trail keeps, and what a reader is served (T144 F4)', () => {
+    let orgA: string;
+    let orgB: string;
+    let rep: Person;
+    let audited: ProjectDetail;
+
+    beforeAll(async () => {
+      orgA = await seedCrmOrganization(h.em(), `History A ${randomUUID().slice(0, 8)}`);
+      orgB = await seedCrmOrganization(h.em(), `History B ${randomUUID().slice(0, 8)}`);
+      rep = await seedCrmSalesRep(h.em(), [orgA], ['projects:read']);
+      audited = await createProject(h, {
+        title: 'Audited value',
+        organizationIds: [orgA, orgB],
+        visibility: 'everyone',
+        value: { amount: '1234.56', currency: 'PLN' },
+      });
+      created.push(audited.id);
+      const edited = await callProjects(h, 'PATCH', `/${audited.id}`, {
+        payload: { value: { amount: '987.65', currency: 'PLN' }, version: audited.version },
+      });
+      expect(edited.statusCode, edited.body).toBe(200);
+      // Organization B goes: the Project is now in the representative's reach.
+      const narrowed = await callProjects(h, 'PUT', `/${audited.id}/organizations`, { payload: { organizationIds: [orgA] } });
+      expect(narrowed.statusCode, narrowed.body).toBe(200);
+    });
+
+    afterAll(() => rep?.undo());
+
+    it('the platform audit log holds no amount — only that the value changed', async () => {
+      const rows = (await h
+        .em()
+        .getConnection()
+        .execute(`select "action", "state_before", "state_after" from "audit_log_entries" where "object_id" = ?`, [
+          audited.id,
+        ])) as Array<{ action: string; state_before: unknown; state_after: unknown }>;
+      const text = JSON.stringify(rows);
+      expect(text).not.toContain('1234');
+      expect(text).not.toContain('987');
+      expect(text).not.toContain('valueAmount');
+      const create = rows.find((row) => row.action === 'projects.project.create');
+      const update = rows.find((row) => row.action === 'projects.project.update');
+      expect(create?.state_after).toMatchObject({ changedFields: ['value'] });
+      expect(update?.state_after).toMatchObject({ changedFields: ['value'] });
+    });
+
+    it('a reader is served no Organization out of their reach, in any entry', async () => {
+      const response = await callProjects(h, 'GET', `/${audited.id}/history?limit=50`, { cookies: rep.cookies });
+      expect(response.statusCode, response.body).toBe(200);
+      const entries = RecordHistoryPageSchema.parse(response.json()).data;
+      expect(response.body).not.toContain(orgB);
+      const create = entries.find((entry) => entry.action === 'projects.project.create');
+      expect(create?.after).toMatchObject({ organizationIds: [orgA] });
+      const removal = entries.find((entry) => entry.action === 'projects.project.organization_remove');
+      expect(removal?.before).toEqual({ organizationId: null });
+      // An administrator reaching both is served both.
+      const full = await callProjects(h, 'GET', `/${audited.id}/history?limit=50`);
+      expect(full.body).toContain(orgB);
+    });
   });
 });

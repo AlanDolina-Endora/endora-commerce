@@ -268,16 +268,19 @@ describe('projects — custom fields (US9)', () => {
       expect(again.statusCode, again.body).toBe(200);
     });
 
-    it('records the values of a create and each change, in one Command per write', async () => {
+    it('records which fields a create and each change set, in one Command per write — never their values (T144 F4)', async () => {
       const entries = await history(member);
       expect(entries.map((entry) => entry.action)).toEqual([
         'projects.project.custom_fields_update',
         'projects.project.create',
       ]);
       const [update, create] = entries;
-      expect(create!.after).toMatchObject({ customFieldValues: { site_region: 'north' } });
-      expect(update!.before).toEqual({ customFieldValues: { site_region: 'north' } });
-      expect(update!.after).toEqual({ customFieldValues: { site_region: 'north', floor_area: 40 } });
+      expect(create!.after).toMatchObject({ changedCustomFields: ['site_region'] });
+      expect(update!.before).toBeNull();
+      expect(update!.after).toEqual({ changedCustomFields: ['floor_area'] });
+      // The platform audit log is not tenant-scoped: no value reaches it.
+      expect(JSON.stringify(entries)).not.toContain('north');
+      expect(JSON.stringify(entries)).not.toContain('customFieldValues');
     });
 
     it('hides the values from a reader without custom_fields:read', async () => {
@@ -287,7 +290,7 @@ describe('projects — custom fields (US9)', () => {
         'projects.project.create',
       ]);
       for (const entry of entries) {
-        expect(JSON.stringify([entry.before, entry.after])).not.toContain('customFieldValues');
+        expect(JSON.stringify([entry.before, entry.after])).not.toContain('changedCustomFields');
       }
       expect(JSON.stringify(entries)).not.toContain('floor_area');
     });

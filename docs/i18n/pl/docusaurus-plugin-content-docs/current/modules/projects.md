@@ -118,7 +118,11 @@ Jego zakładki:
 - **Załączniki** — zob. *Załączniki*.
 - **Historia zmian** — wszystko, co zrobiono z projektem, od najnowszych: kto,
   kiedy i jakie pola zmienił, wczytywane partiami przyciskiem *Pokaż wcześniejsze
-  zmiany*. Notatka i wiadomość są odnotowywane przez długość, nigdy przez treść.
+  zmiany*. Notatka i wiadomość są odnotowywane przez długość, nigdy przez treść;
+  wartość i pola niestandardowe — przez to, *które* się zmieniły, nigdy na co —
+  bo historia to dziennik zdarzeń platformy, który nie jest prowadzony osobno dla
+  każdej organizacji. Organizacja spoza Twojego zasięgu, do której projekt
+  kiedyś należał, nie jest w niej wymieniana.
 
 **Na ekranach dokumentów należących do projektu** — zamówienia, zapytania
 ofertowego, szansy sprzedażowej, zadania — panel **Projekt** wskazuje projekt,
@@ -577,8 +581,10 @@ przy następnym zapisie pól tego projektu, a nie przy innej edycji.
   niestandardowe (`custom_fields:read`); bez tego uprawnienia pola ani ich
   wartości w historii zmian nie są pokazywane.
 - Każda zmiana pola jest w **historii zmian** projektu — *Zmieniono pola
-  niestandardowe*, z wartością każdego pola przed zmianą i po niej; wartości, z
-  którymi projekt utworzono, są we wpisie *Utworzono projekt*.
+  niestandardowe*, z nazwami zmienionych pól, ale bez ich wartości (historia to
+  dziennik zdarzeń platformy, który nie jest prowadzony osobno dla każdej
+  organizacji); pola, z którymi projekt utworzono, są wymienione we wpisie
+  *Utworzono projekt*.
 - Pole oznaczone na ekranie pól niestandardowych jako **filtr listy** jest
   oferowane jako filtr listy projektów, obok jej własnych filtrów — administratorowi,
   który może też przeglądać pola niestandardowe (`custom_fields:read`). Filtr,
@@ -672,7 +678,7 @@ ma, a wskaźniki nie są udostępniane.
 | `POST /api/v1/admin/projects/:id/attachments/upload` | `projects:write` | `multipart/form-data` z jedną częścią `file` → `201`; zapisany jako prywatny, potem dołączony — plik, którego nie udało się dołączyć, jest wycofywany. `415` dla treści aktywnej lub typu odrzucanego przez bibliotekę, `413` `PROJECT_ATTACHMENT_TOO_LARGE` powyżej 25 MB oraz własny limit rozmiaru biblioteki. |
 | `POST /api/v1/admin/projects/:id/attachments` | `projects:write` **i** `assets.read` | `{ assetId }` prywatnego, istniejącego pliku, który nie jest treścią aktywną → `201` (`200` dla pliku już dołączonego); `422` dla pliku publicznego lub takiego, którego nie ma — także dołączonego do projektu, którego wywołujący nie może widzieć. |
 | `DELETE /api/v1/admin/projects/:id/attachments/:attachmentId` | `projects:write` | `204`; plik zostaje w bibliotece. |
-| `GET /api/v1/admin/projects/:id/history` | `projects:read` | `RecordHistoryPage` — dziennik zmian projektu, od najnowszych, `limit` i nieprzezroczysty `cursor`, sięgający 499 wpisów wstecz (`truncated` na ostatniej stronie, gdy jest ich więcej); wartości pól własnych tylko dla posiadacza `custom_fields:read`. |
+| `GET /api/v1/admin/projects/:id/history` | `projects:read` | `RecordHistoryPage` — dziennik zmian projektu, od najnowszych, `limit` i nieprzezroczysty `cursor`, sięgający 499 wpisów wstecz (`truncated` na ostatniej stronie, gdy jest ich więcej). Wpis zapisuje wartość i pola niestandardowe jako `changedFields` / `changedCustomFields` (nazwy, nigdy wartości); `changedCustomFields` — oraz `customFieldValues` wpisów zapisanych wcześniej — tylko dla posiadacza `custom_fields:read`; żadnej organizacji spoza zasięgu czytelnika ani dokumentu podpięcia, które ją wskazywało. |
 | `GET /api/v1/admin/projects/lookups/mentionable` | `projects:write` | `?projectId=&q=` → `{ data: { id, name, email }[] }` — aktywni administratorzy z `projects:read`, którzy mogą widzieć projekt (bez `projectId` — każdy posiadacz `projects:read`); najwyżej 20. |
 | `GET /api/v1/admin/projects/lookups/documents` | `projects:write` | `?projectId=&q=` → `RecordDocumentLookupResponse` (`{ groups: { kind, items }[] }`, bez opakowania w `data`) — lista `@@`, w schemacie, który odpowiada też `GET /crm/lookups/documents` w CRM; grupa tylko z jej uprawnieniem do odczytu i włączonym modułem, najwyżej 10 w grupie. Zanim projekt powstanie, `organizationIds` (powtarzalny) wskazuje organizacje, których zamówienia i zapytania ofertowe są oferowane — liczą się tylko te w zasięgu wywołującego, a organizacja poza zasięgiem jest pomijana bez słowa; obok `projectId` jest ignorowany. |
 | `GET /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:read` | Słowniki z polem `label` w języku czytającego; `active=true` pomija zarchiwizowane wiersze. |
@@ -835,9 +841,11 @@ przez `customFieldValueService.validateAndMerge` przed poleceniem, które go
 zapisuje, a wartości projektu zwraca przez `project()`, który pomija wartość
 pola usuniętego; filtr listy to warunek na identyfikatorach z
 `customFieldListFilterPort`, przecięty ze zbiorem widocznych projektów.
-`custom_fields` to zależność wiążąca i nie można go wyłączyć. Pole
-`customFieldValues` wpisu dziennika zdarzeń `GET /projects/:id/history` zwraca
-tylko czytelnikowi z uprawnieniem `custom_fields:read`.
+`custom_fields` to zależność wiążąca i nie można go wyłączyć. Wpis dziennika
+zdarzeń wymienia pola niestandardowe zmienione przez zapis
+(`changedCustomFields`), nigdy ich wartości, a `GET /projects/:id/history` zwraca
+go — tak jak `customFieldValues` wpisów zapisanych wcześniej — tylko czytelnikowi
+z uprawnieniem `custom_fields:read`.
 
 ### Analityka
 
