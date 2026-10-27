@@ -354,6 +354,47 @@ Katalog zyskał kilka dodatkowych możliwości, każda z własną stroną:
 Obsługiwanych jest pięć typów produktu: `simple`, `configurable`, `grouped`, `bundle`, `virtual`.
 `simple` i `configurable` to pierwotna para; pozostałe trzy dodano później.
 
+## Bloki Page Buildera
+
+Katalog deklaruje bloki produktów i kategorii Page Buildera. Ich dane są
+odczytywane po stronie serwera, więc produkty są w HTML strony.
+
+**Siatka produktów i slider produktów** (`catalog.ProductGrid`,
+`catalog.ProductSlider`) zachowują wszystkie dotychczasowe opcje — źródło
+produktów (wybrane produkty, kategoria, wyszukiwanie), limit, kolumny, odstęp i
+widok — i dodają:
+
+| Opcja | Znaczenie |
+| --- | --- |
+| Nagłówek | Opcjonalny tytuł, tekst wstępu i przycisk (np. „Zobacz wszystkie”) nad produktami. |
+| Styl karty | Domyślna, kompaktowa, pozioma albo **showcase**: zdjęcie produktu na neutralnym tle, nazwa, krótki opis i link „więcej” — bez ceny i SKU. |
+| Tekst pod nazwą produktu | Jeden wiersz pod nazwą na każdej karcie: domyślny dla stylu karty (SKU na karcie domyślnej, kompaktowej i poziomej, krótki opis na karcie showcase), **Krótki opis** (pierwsze słowa opisu produktu, najwyżej 160 znaków), SKU albo nic. Podgląd w edytorze stron pokazuje ten sam wiersz co sklep. |
+| Grubość nazwy na karcie | Grubość nazwy produktu na każdej karcie: **Domyślna** (właściwa stylowi karty) albo 300–800. |
+| Tło obrazu karty | Kolor pola za obrazem każdej karty: kolor marki albo wartość szesnastkowa. Puste pole zostawia jasnoszare tło właściwe stylowi karty. |
+| Linia pod każdą kartą | **Brak** (jak dotąd) albo **Linia**: linia o grubości 1 px pod każdą kartą, w wybranym **kolorze linii** albo w neutralnym kolorze obramowania. W karcie z obramowaniem linią staje się jej dolna krawędź; karta „showcase” dostaje ją 16 px pod tekstem. |
+| Etykieta linku karty | Tekst linku na karcie showcase; „More”, gdy pole jest puste. |
+| Odstęp (siatka) | Stopień skali odstępów albo **Własny odstęp (px)**, dla każdego progu. Siatka zapisana z odstępem w pikselach otwiera się z wartością własną o tej liczbie i wygląda jak dotąd. Odstęp siatki kategorii działa tak samo. |
+| Równa wysokość elementów (siatka) | Dla każdego progu, obok kolumn i widoku, na karcie **Responsive**; wartość zapisana wcześniej obowiązuje na każdej szerokości. Tak samo działa w siatce kategorii. |
+| Przycisk pod produktami | Opcjonalny przycisk pod siatką lub sliderem. |
+
+Slider przejmuje opcje karuzeli Page Buildera: liczbę slajdów w widoku dla
+każdego progu, odstęp, efekt przesuwania lub przenikania, położenie strzałek i
+kropek, wyjście do krawędzi okna i opcjonalne automatyczne przewijanie. Siatka
+lub slider zapisane, zanim te opcje istniały, wyświetlają się jak wcześniej.
+Aby nadać któremuś z tych bloków kotwicę, schemat kolorów, tło, odstępy lub
+szerokość, umieść go w bloku **Sekcja** (`cms.Section`). Teksty nagłówka,
+etykietę linku karty i etykietę
+przycisku pod produktami można tłumaczyć akcją **Przetłumacz** w Page Builderze.
+
+**Krótki opis produktu.** Lista produktów i szczegóły produktu w storefroncie
+(`GET /api/v1/catalog/products`, `GET /api/v1/catalog/products/:idOrSlug`)
+zwracają `summary`: opis produktu w języku żądania jako zwykły tekst, przycięty
+na granicy słowa do najwyżej 160 znaków z `…`, albo `null`, gdy produkt nie ma
+opisu. Powstaje z opisu, który odczyt i tak wczytuje, więc nie kosztuje
+dodatkowego zapytania na produkt (`src/backend/services/product-summary-text.ts`
+w pakiecie modułu).
+Pokazuje go karta showcase.
+
 ## Rozszerzenia atrybutów na ścieżkach odczytu katalogu
 
 Prace nad atrybutami dodały elementy, których storefront potrzebuje do wyświetlania rozbudowanych

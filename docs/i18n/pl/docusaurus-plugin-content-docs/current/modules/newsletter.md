@@ -119,6 +119,58 @@ Komponent formularza zapisu wielokrotnego użytku (server action, z możliwości
 strona potwierdzenia podwójnej zgody, strona wypisania (z opcjonalnym powodem) oraz panel na koncie
 klienta pokazujący stan subskrypcji i tagi, z przyciskami zapisu i wypisania.
 
+### Blok zapisu w Page Builderze
+
+Moduł deklaruje blok Page Buildera `newsletter.Signup` (sekcja palety
+*Formularze*, etykieta **Zapis do newslettera**), dzięki któremu redaktor może
+umieścić formularz zapisu na dowolnej stronie CMS:
+
+| Opcja | Znaczenie |
+| --- | --- |
+| Nagłówek, tekst | Opcjonalny nagłówek (z poziomem) i tekst sformatowany nad formularzem. |
+| Etykieta pola e-mail, tekst zastępczy, etykieta przycisku | Własne teksty formularza. |
+| Tematy | Do 12 pól wyboru, każde z etykietą i **kodem tagu** newslettera; zaznaczone trafiają do subskrybenta jako tagi. **Topics required** wymaga zaznaczenia co najmniej jednego. Temat z nieprawidłowym kodem tagu nie jest pokazywany. |
+| Etykieta zgody | Tekst pola zgody, które jest zawsze pokazywane i zawsze wymagane. To tekst sformatowany w jednej linii, więc może zawierać link do polityki prywatności. |
+| Układ | W linii (pole i przycisk obok siebie) albo w ramce. |
+| Komunikaty | Teksty pokazywane po zapisie: oczekiwanie na potwierdzenie, zapisano oraz odmowy (brak zgody, nieprawidłowy e-mail, nie wybrano tematu, usługa niedostępna). |
+
+Każdy tekst można przetłumaczyć akcją **Przetłumacz** w Page Builderze. Na
+najwyższym poziomie strony blok ma też ustawienia sekcji (kotwicę, schemat
+kolorów, tło, odstępy, szerokość).
+
+**Droga zapisu.** Blok to zwykły formularz HTML wysyłany do własnego handlera
+storefrontu, `POST /newsletter/subscribe`
+(`storefront/app/newsletter/subscribe/route.ts`), więc działa bez JavaScriptu.
+Handler:
+
+- odpowiada `404`, dopóki moduł newslettera nie jest obecny;
+- sprawdza adres e-mail tą samą regułą co backend, wymaga `consent=on`,
+  zachowuje najwyżej 12 kodów tematów zgodnych z `^[a-z0-9_-]{1,64}$` i pomija
+  pozostałe, a jako `returnTo` przyjmuje tylko ścieżkę w tym samym źródle
+  (wszystko inne wraca na `/`);
+- zapisuje przez istniejący `POST /api/v1/newsletter/subscribe` w kanale
+  sprzedaży żądania, z zaznaczonymi tematami jako `tags` i
+  `source: 'cms-block'`;
+- bez JavaScriptu przekierowuje (`303`) z powrotem na stronę z
+  `?newsletter=pending|active|error&reason=consent|email|topics|unavailable`
+  i kotwicą sekcji jako fragmentem, a blok pokazuje odpowiedni komunikat;
+- z JavaScriptem blok wysyła formularz z `Accept: application/json` i dostaje
+  `{status: 'pending' | 'active'}` (200) albo `{error: …}` (400); komunikat
+  pojawia się na miejscu, a wpisany adres zostaje.
+
+To, czy odpowiedzią jest `pending` czy `active`, zależy od trybu potwierdzania
+zapisu w kanale. Subskrypcja jest zapisywana jak każda inna: ustawiane jest
+`consentAt`, wpis audytu `newsletter_subscribe` zawiera `source: 'cms-block'`,
+więc te zapisy można odróżnić od pozostałych, a kod tematu, który nie pasuje do
+żadnego istniejącego tagu, jest pomijany — storefront nie tworzy tagów.
+
+Gdy moduł jest wyłączony, blok nie jest oferowany w palecie, zapisany blok nic
+nie wyświetla, a handler odpowiada `404`.
+
+`newsletter.Signup` to własny newsletter platformy. Moduł CMS zachowuje osobny
+formularz **Zapis do newslettera**, `cms.NewsletterSignup`, który wysyła dane do
+dowolnego zewnętrznego endpointu, dla usługi newslettera spoza platformy.
+
 ## Schemat
 
 Migracja `20260629T200954_newsletter_init.ts` tworzy `newsletter_subscribers`, `newsletter_tags`,

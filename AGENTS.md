@@ -290,5 +290,5 @@ See "Repo map" above.
 
 ## Recent Changes
 - 163-projects-and-tasks
+- 163-page-builder-marketing-pages
 - 161-price-book-editor
-- 160-pricing-model-v2

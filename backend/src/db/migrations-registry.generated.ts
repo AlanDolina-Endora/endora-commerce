@@ -62,6 +62,7 @@ import { Migration20261018T141739AssetsLibraryAssetVersionsPermalinks } from '@e
 // ── blog ────────────────────────────────────────────────────────────────────
 import { Migration20260506T081055BlogInit } from '@endora-commerce/mod-blog/migrations';
 import { Migration20260903T101744BlogNamespaceBlockNames } from '@endora-commerce/mod-blog/migrations';
+import { Migration20261023T063013BlogPostMainImage } from '@endora-commerce/mod-blog/migrations';
 
 // ── carts ───────────────────────────────────────────────────────────────────
 import { Migration20260611T140352CartsConsolidation } from '@endora-commerce/mod-carts/migrations';
@@ -112,6 +113,8 @@ import { Migration20260505T130214CmsInit } from '@endora-commerce/mod-cms/migrat
 import { Migration20260903T101741CmsNamespaceBlockNames } from '@endora-commerce/mod-cms/migrations';
 import { Migration20260912T094733CmsSalesChannelCmsPages } from '@endora-commerce/mod-cms/migrations';
 import { Migration20260912T125709CmsPageBodyAssetRefIndex } from '@endora-commerce/mod-cms/migrations';
+import { Migration20261022T163218CmsBrandTokens } from '@endora-commerce/mod-cms/migrations';
+import { Migration20261023T052237CmsPageTreeAndShare } from '@endora-commerce/mod-cms/migrations';
 
 // ── comparisons ─────────────────────────────────────────────────────────────
 import { Migration20260501T185834ComparisonsInit } from '@endora-commerce/mod-comparisons/migrations';
@@ -422,6 +425,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   // ── blog ────────────────────────────────────────────────────────────────────
   migration('blog', Migration20260506T081055BlogInit),
   migration('blog', Migration20260903T101744BlogNamespaceBlockNames),
+  migration('blog', Migration20261023T063013BlogPostMainImage),
 
   // ── carts ───────────────────────────────────────────────────────────────────
   migration('carts', Migration20260611T140352CartsConsolidation),
@@ -472,6 +476,8 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('cms', Migration20260903T101741CmsNamespaceBlockNames),
   migration('cms', Migration20260912T094733CmsSalesChannelCmsPages),
   migration('cms', Migration20260912T125709CmsPageBodyAssetRefIndex),
+  migration('cms', Migration20261022T163218CmsBrandTokens),
+  migration('cms', Migration20261023T052237CmsPageTreeAndShare),
 
   // ── comparisons ─────────────────────────────────────────────────────────────
   migration('comparisons', Migration20260501T185834ComparisonsInit),

@@ -105,6 +105,11 @@ export const CHANNEL_ACCESS_OPEN_ROUTES: Readonly<Record<string, OpenRouteEntry>
     owner: 'dictionaries',
     reason: 'The business registration form reads its lists anonymously, also on a closed store.',
   },
+  'GET /api/v1/storefront/cms/brand-tokens': {
+    owner: 'cms',
+    reason:
+      "A closed store's sign-in pages are styled with its brand; brand tokens are presentation, not data (feature 163).",
+  },
   'GET /api/v1/storefront/seo/robots-policy': {
     owner: 'seo',
     reason: "A closed store's crawler policy is still served.",

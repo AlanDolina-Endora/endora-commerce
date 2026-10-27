@@ -170,6 +170,49 @@ export const manifest = defineModuleManifest({
   errorCodes: [{ code: 'ALREADY_SUBSCRIBED' }],
   i18n: { bundlesDir: 'i18n' },
   docs: { dir: 'docs' },
+  /**
+   * Feature 163 (US7, FR-029, research R-17) — the sign-up block that
+   * subscribes through this module. Declared here, by the module whose data it
+   * writes, as `blog` declares `blog.LatestPosts`; its React code is
+   * `@endora-commerce/cms-components`' `NewsletterSignupForm.tsx`, and it posts
+   * to the storefront's `/newsletter/subscribe`, which calls this module's
+   * public subscribe with `source: 'cms-block'`. While `newsletter` is off the
+   * block is filtered from every palette and render, and the handler answers
+   * 404. `cms.NewsletterSignup`, a form posting to any external endpoint,
+   * stays `cms`' (owner decision (a), 2026-10-23).
+   */
+  blocks: [
+    {
+      name: 'newsletter.Signup',
+      translatable: [
+        { path: 'heading', format: 'tiptap' },
+        { path: 'text', format: 'tiptap' },
+        { path: 'emailLabel' },
+        { path: 'placeholder' },
+        { path: 'buttonLabel' },
+        { path: 'topicsLegend' },
+        { path: 'topics[].label' },
+        { path: 'consentLabel', format: 'tiptap' },
+        { path: 'messages.pending' },
+        { path: 'messages.active' },
+        { path: 'messages.consent' },
+        { path: 'messages.email' },
+        { path: 'messages.topics' },
+        { path: 'messages.unavailable' },
+      ],
+      labelKey: 'blocks.signup.label',
+      descriptionKey: 'blocks.signup.description',
+      category: 'forms',
+      contexts: ['cms'],
+      fields: {},
+      responsiveFields: [],
+      weight: 5,
+    },
+  ],
+  // The palette section the block sits in, declared beside it (the manifest
+  // validator refuses a block whose section its manifest does not declare);
+  // merged by key with `cms`'s.
+  blockCategories: [{ key: 'forms', titleKey: 'blocks.category.forms', contexts: ['cms'], weight: 70 }],
   permissions: [
     { code: 'newsletter:read', label: 'View newsletter' },
     {

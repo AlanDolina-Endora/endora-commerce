@@ -194,7 +194,7 @@ export default async function RootLayout({
     );
   }
 
-  const { config, locale, currency, ctx, theme, modules } = await getServerContext();
+  const { config, locale, currency, ctx, theme, modules, brandTokens } = await getServerContext();
   const t = tForLocale(locale);
   // Feature 036 US5 — checkout uses a minimal, logo-only header. The full vs
   // minimal switch is decided per-route by the <HeaderSwitch> client component
@@ -258,7 +258,9 @@ export default async function RootLayout({
     // carries `data-theme-requested` when the channel named a theme this
     // storefront does not have, and deriving that inside the component is what
     // stops a caller from forgetting it (feature 102).
-    <StorefrontDocument lang={locale} theme={theme}>
+    // `brandTokens` (feature 163): the channel's brand as `<style id="cmsb">` in
+    // the head, server-rendered so the first paint is already on brand.
+    <StorefrontDocument lang={locale} theme={theme} brandTokens={brandTokens}>
       {robotsDefault !== null ? <meta name="robots" content={robotsDefault} /> : null}
       {/* Feature 141 — every Page Builder tree below renders the installed
           modules' blocks under one presence answer: the modules the backend

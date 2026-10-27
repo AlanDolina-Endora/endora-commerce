@@ -1,5 +1,6 @@
 import { cookies, headers } from 'next/headers';
-import type { I18nConfigResponse } from '@endora-commerce/contracts';
+import type { CmsBrandTokens, I18nConfigResponse } from '@endora-commerce/contracts';
+import { getBrandTokens } from './api/brand';
 import { getI18nConfig } from './api/i18n';
 import { getPublicSalesChannel } from './api/sales-channel';
 import { themeForChannel, type ResolvedStorefrontTheme } from './theme/theme';
@@ -55,6 +56,12 @@ export interface ServerContext {
    * refuses on its own and the storefront must not invent a closed store.
    */
   anonymousAccess: boolean;
+  /**
+   * The channel's effective brand tokens (feature 163, research R-3), which the
+   * root layout writes into `<style id="cmsb">`. `null` while `cms` is off or
+   * when the read failed: the page builder then renders on its built-in look.
+   */
+  brandTokens: CmsBrandTokens | null;
 }
 
 export async function getServerContext(input?: { langOverride?: string | null }): Promise<ServerContext> {
@@ -69,12 +76,15 @@ export async function getServerContext(input?: { langOverride?: string | null })
   // because the channel read is the one that has to carry `X-Sales-Channel` —
   // asking the backend which channel this is, without telling it, would get the
   // system default on every host.
-  const [config, modules, channel] = await Promise.all([
+  //
+  // The brand tokens ride along (feature 163): the same channel signal, and a
+  // read the first byte of HTML needs, so it is not a round-trip of its own.
+  const channelSignal = stampedChannelCode !== undefined ? { salesChannelCode: stampedChannelCode } : {};
+  const [config, modules, channel, brandTokens] = await Promise.all([
     getI18nConfig(),
     getModulePresence(),
-    getPublicSalesChannel(
-      stampedChannelCode !== undefined ? { salesChannelCode: stampedChannelCode } : {},
-    ),
+    getPublicSalesChannel(channelSignal),
+    getBrandTokens(channelSignal),
   ]);
   const salesChannelCode = stampedChannelCode ?? channel?.code;
   // A channel that could not be read is not a channel with no theme, but the
@@ -107,6 +117,7 @@ export async function getServerContext(input?: { langOverride?: string | null })
     modules,
     theme,
     anonymousAccess: channel?.anonymousAccess !== false,
+    brandTokens,
     ctx: {
       ...(salesChannelCode !== undefined ? { salesChannelCode } : {}),
       locale,

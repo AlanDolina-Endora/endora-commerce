@@ -151,6 +151,7 @@ const modules = [
     label: 'CMS', key: 'cms',
     link: { type: 'doc', id: 'modules/cms/index' },
     items: [
+      'modules/cms/brand',
       'modules/cms/extending-page-builder',
       'module-reference/cms',
     ],
