@@ -3,6 +3,7 @@ import type { Redis } from 'ioredis';
 import type {
   AdminI18nTranslatePort,
   AdminNotificationRecordPort,
+  AdminSearchProviderRegistryPort,
   AdminTenantScopePort,
   AdminUserReadPort,
   AssetReadPort,
@@ -18,6 +19,7 @@ import type {
   OrderReadPort,
   OrganizationDetailsPort,
   PermissionReadPort,
+  ProjectReadPort,
   QuoteRequestReadPort,
   SettingWriteValidatorRegistryPort,
   TaskContextRegistryPort,
@@ -34,6 +36,7 @@ import {
   type RequireAdminFactory,
   type SettingsReadPort,
 } from '@endora-commerce/platform/kernel';
+import { createProjectAdminSearchProvider } from './admin-search-provider.js';
 import { STAGE_ALERT_DEFAULT, STAGE_ALERT_EMAIL_CODE } from './email-templates/stage-alert-defaults.js';
 import { Project } from './entities/project.entity.js';
 import { ProjectAttachment } from './entities/project-attachment.entity.js';
@@ -87,6 +90,7 @@ import { ProjectAccess, type ProjectAccessDeps } from './services/project-access
 import { registerProjectAssetReferences } from './services/project-asset-references.js';
 import { registerProjectAuditReferences } from './services/project-audit-references.js';
 import { createProjectNotifier, type ProjectNotifier } from './services/project-notifier.js';
+import { ProjectReadPortService } from './services/project-read-port.js';
 import { ProjectReadService } from './services/project-read-service.js';
 import { ProjectService } from './services/project-service.js';
 import { ProjectStageGuardRegistry } from './services/project-stage-guard-registry.js';
@@ -408,6 +412,43 @@ export function registerModule(ctx: ModuleContext): void {
       .singleton(),
   });
   // --- end of Linked records -----------------------------------------------------------
+
+  // --- Platform integration (User Story 11) ----------------------------------------
+  /**
+   * `projectReadPort` (`contracts/ports-and-events.md` §2) — `providePort`:
+   * gated, so a consumer resolving it while this module is off gets
+   * `ModuleDisabledError` (503 `MODULE_DISABLED`). Every answer starts from
+   * `ProjectAccess` under the caller's context (`project-read-port.ts`).
+   */
+  ctx.di.providePort<ProjectReadPort>(
+    'projectReadPort',
+    ctx
+      .asFunction(
+        ({ projectsAccess, projectsReadService, projectsRecordProjectService }: ProjectsCradle) =>
+          new ProjectReadPortService({
+            access: projectsAccess,
+            read: projectsReadService,
+            records: projectsRecordProjectService,
+          }),
+      )
+      .singleton(),
+  );
+  /**
+   * The Project record type for admin global search (`contracts/admin-surfaces.md`
+   * §6) — a **contribution** hook: it pushes an inert provider into
+   * `admin_search`'s ungated registry and does nothing else, so it carries no
+   * presence probe. The registry leaves it out at enumeration while this module
+   * is switched off, and switching it back on needs no restart.
+   */
+  ctx.onBoot(() => {
+    lazyPort<AdminSearchProviderRegistryPort>(ctx, 'adminSearchProviderRegistry').register(
+      createProjectAdminSearchProvider({
+        search: (query) => ctx.cradle<ProjectsCradle>().projectsReadService.searchForAdmin(query),
+        translate: (key, language) => ctx.cradle<ProjectsCradle>().projectsTranslate(key, language),
+      }),
+    );
+  });
+  // --- end of Platform integration ---------------------------------------------------
 
   // --- Stages, workflow and walking a Project (User Story 1) -------------------------
   // The guard registry is a **contribution seam** (research R-6): other modules

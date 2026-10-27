@@ -46,9 +46,9 @@ import {
  * FR-020 names every read of a Project. The ones that exist are measured for
  * each cell — the list and its total, the detail, the Stage history, the
  * Project's Tasks tab, its Tasks in the Tasks module, the record panel of its
- * Task, the mention list, analytics — and every invisible answer is byte-for-byte the
- * answer for an id that does not exist. The reads later stories bring are `todo` rows below, each
- * naming the task that turns it into a measurement.
+ * Task, the mention list, analytics, global search — and every invisible answer is
+ * byte-for-byte the answer for an id that does not exist. No `todo` row is left: each read a
+ * later story brought was turned into a measurement by the task that brought it.
  */
 describe('projects — who sees a Project (US5)', () => {
   let h: BackendServerHandle;
@@ -405,8 +405,36 @@ describe('projects — who sees a Project (US5)', () => {
     });
   });
 
-  // The reads of FR-020 later stories bring. Each task named un-`todo`s its row.
-  it.todo('global search (`projects.project` provider) answers only visible Projects — T132, Phase 13');
+  it('global search (`projects.project`) answers only visible Projects (T132)', async () => {
+    const found = async (cookies: Person['cookies'], q: string): Promise<string[]> => {
+      const response = await h.app.inject({
+        method: 'GET',
+        url: `/api/v1/admin/global-search?q=${encodeURIComponent(q)}&entityTypes=projects.project&language=en&limit=25`,
+        cookies,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const groups = (response.json() as { data: { groups: Array<{ entityType: string; hits: Array<{ id: string }> }> } })
+        .data.groups;
+      return groups.find((group) => group.entityType === 'projects.project')?.hits.map((hit) => hit.id) ?? [];
+    };
+    for (const setting of SETTINGS) {
+      await setSetting(setting);
+      for (const reader of READERS) {
+        const { cookies } = person(reader);
+        const matrix = new Set(VISIBILITIES.map((v) => projects[v].id));
+        const hits = (await found(cookies, token)).filter((id) => matrix.has(id));
+        const wanted = VISIBILITIES.filter((v) => expected(setting, v, reader)).map((v) => projects[v].id);
+        expect(new Set(hits), `${setting} × ${reader}`).toEqual(new Set(wanted));
+        // By number and by id: an invisible Project is not found either way.
+        for (const visibility of VISIBILITIES) {
+          const visible = expected(setting, visibility, reader);
+          const { id, number } = projects[visibility];
+          expect((await found(cookies, number)).includes(id), `${setting} × ${reader} × ${visibility} by number`).toBe(visible);
+          expect((await found(cookies, id)).includes(id), `${setting} × ${reader} × ${visibility} by id`).toBe(visible);
+        }
+      }
+    }
+  });
 
   it('analytics count only visible Projects (T127)', async () => {
     // Three Projects of their own, one per visibility, from a Template of this

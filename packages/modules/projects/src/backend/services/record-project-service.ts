@@ -1,10 +1,15 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
-import { ERROR_CODES, type ProjectPanelRecordKind, type ProjectSummary } from '@endora-commerce/contracts';
+import {
+  ERROR_CODES,
+  type ProjectPanelRecordKind,
+  type ProjectRecordKind,
+  type ProjectSummary,
+} from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import { ModuleDisabledError } from '@endora-commerce/platform/kernel';
 import { RECORD_OWNER, type LinkedRecordOwners } from './linked-records.js';
 import type { OwnerReadCheck, OwnerReadChecks } from './owner-read-permissions.js';
-import { projectNotFound, type ProjectAccess } from './project-access.js';
+import { isUuid, projectNotFound, type ProjectAccess, type VisibleProjectRow } from './project-access.js';
 import type { ProjectReadService } from './project-read-service.js';
 import { PROJECT_TASK_CONTEXT_TYPE, type ProjectTasks } from './project-tasks.js';
 
@@ -55,6 +60,23 @@ export class RecordProjectService {
           ? this.deps.mayRead.quoteRequests
           : this.deps.mayRead.opportunities;
     await this.#assert(check);
+    return this.#linkedProjectId(kind, recordId);
+  }
+
+  /**
+   * `projectReadPort.findByRecord`: the Project a linked record is in, if the
+   * caller may see it — `null` for a record in no Project and for one in a
+   * Project out of sight alike. The port answers another module's code, which
+   * owns its own gates, so neither the record owner's presence nor its read
+   * code is asked here; the link holds the record by value either way.
+   */
+  async findByRecord(kind: ProjectRecordKind, recordId: string): Promise<VisibleProjectRow | null> {
+    if (!isUuid(recordId)) return null;
+    const projectId = await this.#linkedProjectId(kind, recordId);
+    return projectId === null ? null : this.deps.access.findVisible(projectId);
+  }
+
+  async #linkedProjectId(kind: ProjectRecordKind, recordId: string): Promise<string | null> {
     const rows = (await this.deps.emFactory().execute(
       `select l."project_id" from "project_links" l where l."record_kind" = ? and l."record_id" = ?`,
       [kind, recordId],

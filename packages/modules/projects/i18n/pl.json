@@ -591,5 +591,9 @@
   "actions.openProjectTemplates.label": "Szablony projektów",
   "actions.openProjectTemplates.description": "Otwórz szablony projektów: etapy, przepływ i zadania etapów",
   "actions.openProjectAnalytics.label": "Analityka projektów",
-  "actions.openProjectAnalytics.description": "Zobacz, jak idą projekty: wartość, etapy i wyniki"
+  "actions.openProjectAnalytics.description": "Zobacz, jak idą projekty: wartość, etapy i wyniki",
+  "adminSearch.group.label": "Projekty",
+  "adminSearch.field.number": "Numer projektu",
+  "adminSearch.field.title": "Tytuł",
+  "adminSearch.field.organizationName": "Nazwa organizacji"
 }

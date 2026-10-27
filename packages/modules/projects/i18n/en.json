@@ -591,5 +591,9 @@
   "actions.openProjectTemplates.label": "Project templates",
   "actions.openProjectTemplates.description": "Open the project templates: stages, workflow and stage tasks",
   "actions.openProjectAnalytics.label": "Project analytics",
-  "actions.openProjectAnalytics.description": "See how projects are going: value, stages and outcomes"
+  "actions.openProjectAnalytics.description": "See how projects are going: value, stages and outcomes",
+  "adminSearch.group.label": "Projects",
+  "adminSearch.field.number": "Project number",
+  "adminSearch.field.title": "Title",
+  "adminSearch.field.organizationName": "Organization name"
 }

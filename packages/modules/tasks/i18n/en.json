@@ -112,5 +112,8 @@
   "actions.openMyTasks.label": "My tasks",
   "actions.openMyTasks.description": "Open the tasks assigned to you",
   "actions.newTask.label": "New task",
-  "actions.newTask.description": "Create a task and assign it"
+  "actions.newTask.description": "Create a task and assign it",
+  "adminSearch.group.label": "Tasks",
+  "adminSearch.field.number": "Task number",
+  "adminSearch.field.title": "Title"
 }

@@ -112,5 +112,8 @@
   "actions.openMyTasks.label": "Moje zadania",
   "actions.openMyTasks.description": "Otwórz zadania przypisane do Ciebie",
   "actions.newTask.label": "Nowe zadanie",
-  "actions.newTask.description": "Utwórz zadanie i przypisz je"
+  "actions.newTask.description": "Utwórz zadanie i przypisz je",
+  "adminSearch.group.label": "Zadania",
+  "adminSearch.field.number": "Numer zadania",
+  "adminSearch.field.title": "Tytuł"
 }

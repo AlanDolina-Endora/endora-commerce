@@ -20,6 +20,7 @@ import {
 } from '@endora-commerce/contracts';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import { HttpError } from '@endora-commerce/platform/http';
+import type { TaskAdminSearchQuery } from '../admin-search-provider.js';
 import { getTenantContext } from '@endora-commerce/platform/tenancy';
 import { assertAssignable, assertContextForCaller } from './task-checks.js';
 import {
@@ -328,6 +329,52 @@ export class TaskService {
         limit ?`,
       [...params, Math.max(0, Math.trunc(limit))],
     )) as TaskRow[];
+  }
+
+  /**
+   * Admin global search (`contracts/admin-surfaces.md` §6): the Tasks the
+   * caller may see whose number or title — whichever `fields` selects —
+   * contains the text, or whose id it is. The exact number ranks first, then a
+   * number it begins, then the newest; `limit + 1` rows are read to answer
+   * `hasMore`. The same visibility pre-filter as the list.
+   */
+  async searchForAdmin(query: TaskAdminSearchQuery): Promise<{ rows: TaskRow[]; hasMore: boolean }> {
+    const fields = new Set(query.fields);
+    const like = `%${query.likeEscaped}%`;
+    const or: string[] = [];
+    const params: unknown[] = [];
+    if (fields.has('number')) {
+      or.push(`t."number" ilike ?`);
+      params.push(like);
+    }
+    if (fields.has('title')) {
+      or.push(`t."title" ilike ?`);
+      params.push(like);
+    }
+    if (query.isUuid && UUID.test(query.text)) {
+      or.push(`t."id" = ?::uuid`);
+      params.push(query.text);
+    }
+    if (or.length === 0) return { rows: [], hasMore: false };
+    const where = [`(${or.join(' or ')})`];
+    const visible = await this.deps.visibility.condition('t');
+    if (visible) {
+      where.push(visible.sql);
+      params.push(...visible.params);
+    }
+    const rank = fields.has('number')
+      ? `case when lower(t."number") = lower(?) then 0 when t."number" ilike ? then 1 else 2 end, `
+      : '';
+    const rankParams = fields.has('number') ? [query.text, `${query.likeEscaped}%`] : [];
+    const rows = (await this.deps.emFactory().execute(
+      `select ${COLUMNS} from "tasks" t
+        where ${where.join(' and ')}
+        order by ${rank}t."created_at" desc, t."id" desc
+        limit ?`,
+      [...params, ...rankParams, query.limit + 1],
+    )) as TaskRow[];
+    const hasMore = rows.length > query.limit;
+    return { rows: hasMore ? rows.slice(0, query.limit) : rows, hasMore };
   }
 
   /** `POST /tasks` — a Task of the caller's, in a context they may see or in none. */

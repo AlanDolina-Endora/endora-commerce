@@ -23,6 +23,7 @@ import {
 import { HttpError } from '@endora-commerce/platform/http';
 import type { SettingsReadPort } from '@endora-commerce/platform/kernel';
 import { z } from 'zod';
+import type { ProjectAdminSearchQuery } from '../admin-search-provider.js';
 import { StageGraph } from '../domain/stage-graph.js';
 import type { ProjectReferenceService } from './reference-service.js';
 import {
@@ -337,6 +338,64 @@ export class ProjectReadService {
       nextCursor: hasMore ? encodeCursor(sort, items[items.length - 1]!) : null,
       total: Number(counted[0]?.n ?? 0),
     };
+  }
+
+  /**
+   * Admin global search (`contracts/admin-surfaces.md` §6): the Projects the
+   * caller may see whose number, title or Organization name — whichever
+   * `fields` selects — contains the text, or whose id it is. The exact number
+   * ranks first, then a number it begins, then the newest; `limit + 1` rows are
+   * read to answer `hasMore`. The same `visibleProjectSql` as the list.
+   */
+  async searchForAdmin(query: ProjectAdminSearchQuery): Promise<{ rows: ProjectSummary[]; hasMore: boolean }> {
+    const fields = new Set(query.fields);
+    const like = `%${query.likeEscaped}%`;
+    const or: string[] = [];
+    const orParams: unknown[] = [];
+    if (fields.has('number')) {
+      or.push(`p."number" ilike ?`);
+      orParams.push(like);
+    }
+    if (fields.has('title')) {
+      or.push(`p."title" ilike ?`);
+      orParams.push(like);
+    }
+    if (fields.has('organizationName')) {
+      const organizationIds = await this.deps.organizations.searchIdsByName(query.text);
+      if (organizationIds.length > 0) {
+        or.push(
+          `exists (select 1 from "project_organizations" s_po
+                    where s_po."project_id" = p."id" and s_po."organization_id" = any(?::uuid[]))`,
+        );
+        orParams.push(uuidArray(organizationIds));
+      }
+    }
+    if (query.isUuid && isUuid(query.text)) {
+      or.push(`p."id" = ?::uuid`);
+      orParams.push(query.text);
+    }
+    if (or.length === 0) return { rows: [], hasMore: false };
+
+    const where = [`(${or.join(' or ')})`];
+    const params = [...orParams];
+    const visible = await this.deps.access.visibleProjectSql();
+    if (visible) {
+      where.push(visible.sql);
+      params.push(...visible.params);
+    }
+    const rank = fields.has('number')
+      ? `case when lower(p."number") = lower(?) then 0 when p."number" ilike ? then 1 else 2 end, `
+      : '';
+    const rankParams = fields.has('number') ? [query.text, `${query.likeEscaped}%`] : [];
+    const rows = (await this.deps.emFactory().execute(
+      `select ${VISIBLE_PROJECT_COLUMNS} from "projects" p
+        where ${where.join(' and ')}
+        order by ${rank}p."created_at" desc, p."id" desc
+        limit ?`,
+      [...params, ...rankParams, query.limit + 1],
+    )) as VisibleProjectRow[];
+    const hasMore = rows.length > query.limit;
+    return { rows: await this.#summaries(hasMore ? rows.slice(0, query.limit) : rows), hasMore };
   }
 
   /** `GET /projects/custom-field-filters` — the Project custom fields the list offers as filters. */

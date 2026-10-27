@@ -1088,6 +1088,8 @@ export interface ProjectRecord {
 }
 
 /**
+ * Container name: `projectReadPort`. Owner: `projects`.
+ *
  * Reading Projects from another module — overlays and later modules.
  *
  * Every read goes through the module's access seam: a Project out of the

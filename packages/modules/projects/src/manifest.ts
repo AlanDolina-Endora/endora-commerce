@@ -137,6 +137,17 @@ export const manifest = defineModuleManifest({
    */
   nonBindingDependencies: [
     {
+      moduleId: 'admin_search',
+      name: 'adminSearchProviderRegistry',
+      kind: 'contributes-to',
+      reason:
+        'A push, from this module’s contribution-only boot hook, of the Project provider for the ' +
+        'admin global search, built over its own read service. Nothing is read back: the registry ' +
+        'enumerates only providers whose module is effectively present, so an absent contributor ' +
+        'costs the host nothing and an absent host holds a table nobody walks. Not `dependencies`: ' +
+        'that would make global search a reason this module cannot be switched off.',
+    },
+    {
       moduleId: 'tasks',
       name: 'taskContextRegistry',
       kind: 'contributes-to',

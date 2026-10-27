@@ -2,6 +2,7 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
   AdminI18nTranslatePort,
   AdminNotificationRecordPort,
+  AdminSearchProviderRegistryPort,
   AdminUserReadPort,
   AuditReferenceRegistryPort,
   TaskReadPort,
@@ -15,6 +16,7 @@ import {
   type ModuleContext,
   type RequireAdminFactory,
 } from '@endora-commerce/platform/kernel';
+import { createTaskAdminSearchProvider } from './admin-search-provider.js';
 import { Task } from './entities/task.entity.js';
 import { registerTaskRoutes } from './routes/routes.tasks.js';
 import { registerTaskAuditReferences } from './services/task-audit-references.js';
@@ -135,6 +137,22 @@ export function registerModule(ctx: ModuleContext): void {
     registerTaskAuditReferences(
       lazyPort<AuditReferenceRegistryPort>(ctx, 'auditReferenceRegistry'),
       () => ctx.cradle<TasksCradle>().tasksTaskService,
+    );
+  });
+  /**
+   * The Task record type for admin global search (`contracts/admin-surfaces.md`
+   * §6) — a **contribution** hook: it pushes an inert provider into
+   * `admin_search`'s ungated registry and does nothing else, so it carries no
+   * presence probe. The registry leaves it out at enumeration while this module
+   * is switched off, and switching it back on needs no restart.
+   */
+  ctx.onBoot(() => {
+    const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
+    lazyPort<AdminSearchProviderRegistryPort>(ctx, 'adminSearchProviderRegistry').register(
+      createTaskAdminSearchProvider({
+        search: (query) => ctx.cradle<TasksCradle>().tasksTaskService.searchForAdmin(query),
+        translate: (key, language) => i18n.translate('tasks', key, language),
+      }),
     );
   });
   // --- end of Tasks ----------------------------------------------------------------

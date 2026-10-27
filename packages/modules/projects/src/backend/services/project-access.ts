@@ -51,7 +51,8 @@ import type { OrgReach, ProjectViewer } from '../domain/visibility-rule.js';
  */
 export const PROJECT_ACCESS_READERS: Readonly<Record<string, string>> = {
   'services/project-read-service.ts':
-    'The list and its total compose `visibleProjectSql`; the detail and the Stage history start from ' +
+    'The list, its total and the global-search provider’s query compose `visibleProjectSql`; the ' +
+    'detail and the Stage history start from ' +
     '`loadVisible`; Stages, moves, Organizations, Members and links are read only for the ids of ' +
     'Projects those returned, or of a Project the caller has just written.',
   'services/project-service.ts':
@@ -81,7 +82,8 @@ export const PROJECT_ACCESS_READERS: Readonly<Record<string, string>> = {
     'named only through `findVisible`; otherwise it answers nothing but "linked elsewhere".',
   'services/record-project-service.ts':
     'Looks up the Project id a record is linked to — an id and nothing else — and answers only ' +
-    'what `findVisible` returns for it; no visible Project is the same 404 as no link.',
+    'what `findVisible` returns for it; no visible Project is the same 404 as no link, and the ' +
+    'same `null` to `projectReadPort.findByRecord`.',
   'services/comment-service.ts':
     'Every read and write starts from `loadVisible`; comments, Members and read markers are read by ' +
     'that Project’s id only, and every person told is asked `canSeeAs` first.',
