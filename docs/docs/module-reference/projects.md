@@ -52,6 +52,7 @@ An operator switches this module on and off on **/platform/modules**. The choice
 
 | Code | Label | Also needs |
 | --- | --- | --- |
+| `projects:analytics` | View project analytics | `projects:read` |
 | `projects:configure` | Configure projects (roles, templates, loss reasons) | `projects:read` |
 | `projects:read` | View projects | — |
 | `projects:see_all` | See every project regardless of visibility | `projects:read` |

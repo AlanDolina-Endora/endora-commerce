@@ -52,6 +52,7 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 
 | Kod | Etykieta | Wymaga też |
 | --- | --- | --- |
+| `projects:analytics` | View project analytics | `projects:read` |
 | `projects:configure` | Configure projects (roles, templates, loss reasons) | `projects:read` |
 | `projects:read` | View projects | — |
 | `projects:see_all` | See every project regardless of visibility | `projects:read` |
