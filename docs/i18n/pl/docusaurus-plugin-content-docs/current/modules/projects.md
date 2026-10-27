@@ -108,7 +108,10 @@ Jego zakładki:
   mogą przeglądać zadania: wszystkie etapy w kolejności z ich zadaniami — numer
   (odnośnik do zadania), tytuł, status, osoba przypisana i termin, z
   oznaczeniem zadań po terminie — a dla administratorów, którzy mogą tworzyć
-  zadania, pole pod każdym etapem, które dodaje do niego zadanie po tytule.
+  zadania i edytować projekt, pole pod każdym etapem, które dodaje do niego
+  zadanie po tytule. Dodanie zadania do projektu, wyjęcie go z projektu i
+  usunięcie jednego z jego zadań — tutaj albo na ekranach zadań — wymaga
+  uprawnienia do edycji projektów obok uprawnienia do zmieniania zadań.
 - **Powiązane dokumenty** — zamówienia, zapytania ofertowe i szanse sprzedażowe
   podpięte do projektu (zob. *Podpinanie dokumentów*).
 - **Historia etapów** — każde wejście do etapu, każde zamknięcie i każde
@@ -430,7 +433,7 @@ sprzed wyłączenia.
 | Kod | Na co pozwala |
 | --- | --- |
 | `projects:read` | Przeglądanie projektów — listy, pojedynczego projektu i jego historii etapów — z zastrzeżeniem obu reguł z sekcji *Kto widzi projekt*; także nazw, z których wybierają filtry listy i pola formularzy (organizacji w granicach swojego dostępu, administratorów). |
-| `projects:write` | Tworzenie, edycja i usuwanie projektów; ustawianie ich organizacji, członków, etapów i przebiegu; przenoszenie, zamykanie i ponowne otwieranie; podpinanie i odpinanie dokumentów — dokument danego rodzaju wymaga też uprawnienia do przeglądania tego rodzaju (zob. *Podpinanie dokumentów*). Wymaga `projects:read`. |
+| `projects:write` | Tworzenie, edycja i usuwanie projektów; ustawianie ich organizacji, członków, etapów i przebiegu; przenoszenie, zamykanie i ponowne otwieranie; podpinanie i odpinanie dokumentów — dokument danego rodzaju wymaga też uprawnienia do przeglądania tego rodzaju (zob. *Podpinanie dokumentów*); razem z `tasks:write` dodawanie zadania do projektu, wyjmowanie go z projektu i usuwanie jego zadań. Wymaga `projects:read`. |
 | `projects:see_all` | Wgląd we wszystkie projekty w granicach swojego dostępu, niezależnie od ustawienia modułu i wyboru samego projektu (zob. *Kto widzi projekt*). Wymaga `projects:read`; nigdy nie poszerza dostępu do organizacji. |
 | `projects:configure` | Tworzenie, edycja, duplikowanie, archiwizacja i przywracanie szablonów; dodawanie, zmiana nazwy, archiwizacja, przywracanie i usuwanie ról projektowych i powodów utraty. Wymaga `projects:read`; każdy, kto może przeglądać projekty, może odczytać szablony, role i powody utraty, aby użyć ich w projekcie. |
 | `projects:analytics` | Przeglądanie analityki projektów (zob. *Analityka*) — każdy wskaźnik liczony spośród projektów, które możesz zobaczyć. Wymaga `projects:read`. |
@@ -748,7 +751,11 @@ identyfikator jednego z jego etapów jako `contextGroupId`; jego etykieta to
 nazwa etapu. Każda odpowiedź przechodzi przez `ProjectAccess`, więc moduł
 Zadania pokazuje zadania projektu dokładnie tym osobom, które mogą zobaczyć
 projekt. Aby umieścić zadanie w etapie, utwórz je przez
-`POST /api/v1/admin/tasks` z tym kontekstem.
+`POST /api/v1/admin/tasks` z tym kontekstem. `canChangeTasks` deskryptora
+odpowiada „tak” tylko posiadaczowi `projects:write`, który widzi projekt, więc
+umieszczenie zadania w projekcie, wyjęcie go z projektu i usunięcie jednego z
+jego zadań wymagają tego uprawnienia obok `tasks:write`; przeniesienie zadania
+między etapami projektu — nie.
 
 Moduł odczytuje i zapisuje zadania wyłącznie przez `taskReadPort` i
 `taskWritePort`, po ustaleniu, że moduł Zadania jest obecny (krawędzie

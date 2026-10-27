@@ -117,7 +117,7 @@ describe('crm references to Quote Requests and Tasks (FR-044)', () => {
       allVisibleContextIds: async () => [...visibleContexts],
       visibleContextIds: async (ids) => new Set(ids.filter((id) => visibleContexts.has(id))),
       canSeeAs: async (_adminUserId, id) => visibleContexts.has(id),
-      canTakeOut: async () => false,
+      canChangeTasks: async () => false,
       describe: async (ids) =>
         new Map(ids.map((id) => [id, { label: `Probe ${id.slice(0, 4)}`, href: `/probe/${id}`, groups: new Map() }])),
     };

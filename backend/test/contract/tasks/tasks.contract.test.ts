@@ -36,6 +36,8 @@ describe('tasks (contract) — §1 Tasks', () => {
   const API = '/api/v1/admin/tasks';
   const shown = randomUUID();
   const shownGroup = randomUUID();
+  /** The probe owner's answer to `canChangeTasks` — whether a Task may go into, out of or be deleted from its record. */
+  let mayChangeTasks = true;
   const created: string[] = [];
 
   type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -74,7 +76,7 @@ describe('tasks (contract) — §1 Tasks', () => {
       allVisibleContextIds: async () => [shown],
       visibleContextIds: async (ids) => new Set(ids.filter((id) => id === shown)),
       canSeeAs: async (_adminUserId, id) => id === shown,
-      canTakeOut: async () => false,
+      canChangeTasks: async () => mayChangeTasks,
       describe: async (ids) =>
         new Map(
           ids
@@ -190,6 +192,19 @@ describe('tasks (contract) — §1 Tasks', () => {
       }
     });
 
+    it('refuses a context whose owner does not let the caller add to it — 422 TASK_CONTEXT_INVALID (T147)', async () => {
+      mayChangeTasks = false;
+      try {
+        const response = await call('POST', '', {
+          payload: { title: 'Not let in', context: { contextType: 'contract_probe', contextId: shown, contextGroupId: shownGroup } },
+        });
+        expect(response.statusCode, response.body).toBe(422);
+        expect(code(response)).toBe('TASK_CONTEXT_INVALID');
+      } finally {
+        mayChangeTasks = true;
+      }
+    });
+
     it('refuses an assignee who is no active administrator — 422 TASK_ASSIGNEE_INVALID', async () => {
       const response = await call('POST', '', { payload: { title: 'Nobody', assignedAdminUserId: randomUUID() } });
       expect(response.statusCode, response.body).toBe(422);
@@ -266,6 +281,22 @@ describe('tasks (contract) — §1 Tasks', () => {
       const gone = await call('DELETE', `/${task.id}`);
       expect(gone.statusCode).toBe(404);
       expect(code(gone)).toBe('TASK_NOT_FOUND');
+    });
+
+    it('refuses deleting a Task of a record whose owner does not let the caller — 403 FORBIDDEN (T147)', async () => {
+      const task = await create({
+        title: 'Held by the probe',
+        context: { contextType: 'contract_probe', contextId: shown, contextGroupId: shownGroup },
+      });
+      mayChangeTasks = false;
+      try {
+        const refused = await call('DELETE', `/${task.id}`);
+        expect(refused.statusCode, refused.body).toBe(403);
+        expect(code(refused)).toBe('FORBIDDEN');
+      } finally {
+        mayChangeTasks = true;
+      }
+      expect((await call('DELETE', `/${task.id}`)).statusCode).toBe(204);
     });
   });
 

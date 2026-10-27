@@ -54,7 +54,8 @@ interface TaskContextDescriptor {
   describe(ids: readonly string[]): Promise<Map<string, { label: string; href: string;
     groups: Map<string, string> }>>;                     // groupId → label (Stage names)
   canSeeAs(adminUserId: string, id: string): Promise<boolean>;   // another admin (assignee bell)
-  canTakeOut(id: string): Promise<boolean>;  // ambient caller may detach / move a Task out (T144)
+  canChangeTasks(id: string): Promise<boolean>;  // ambient caller may put a Task in, take one out
+                                                 // (detach / move to another record) or delete one (T144, T147)
   renderNote?(note: string, language: SupportedLanguage): Promise<string>;
 }
 interface TaskContextRegistryPort { register(d: TaskContextDescriptor): void }

@@ -24,7 +24,8 @@ four statuses — standing on their own or belonging to a record another module 
   (`admin_notifications`, optional) — and only when they may see the Task's context.
 - **For other modules.** `taskContextRegistry`, an ungated contribution seam through which a
   module owns a Task context type and decides who sees its Tasks (fail-closed: a context nobody
-  present owns hides its Tasks) and who may take a Task out of one of its records; `taskReadPort` and `taskWritePort`, gated; the events
+  present owns hides its Tasks) and who may put a Task into one of its records, take one out or
+  delete one (`canChangeTasks`; a refused delete is `403` `FORBIDDEN`); `taskReadPort` and `taskWritePort`, gated; the events
   `tasks.task.created.v1`, `tasks.task.status_changed.v1`, `tasks.task.assigned.v1` and
   `tasks.task.deleted.v1`; and `nextTaskNumber(em)` on `./backend`, the door to the `TSK-…`
   number sequence.

@@ -103,8 +103,10 @@ Its tabs:
 - **Tasks** — with the Tasks module on, for administrators who may view tasks:
   every stage in order with its tasks — number (a link to the task), title,
   status, assignee and due date, overdue ones marked — and, for administrators
-  who may create tasks, a field under each stage that adds a task to it by its
-  title.
+  who may create tasks and edit the project, a field under each stage that adds
+  a task to it by its title. Adding a task to a project, taking one out of it
+  and deleting one of its tasks — here or on the Tasks screens — needs the
+  permission to edit projects as well as the one to change tasks.
 - **Linked records** — the Orders, Quote Requests and Opportunities linked to
   the project (see *Linking records*).
 - **Stage history** — every entry into a stage, every close and every reopen,
@@ -415,7 +417,7 @@ on again.
 | Code | What it allows |
 | --- | --- |
 | `projects:read` | View projects — the list, a single project and its stage history — subject to the two rules of *Who sees a project*; also the names the list's filters and the forms' pickers choose from (Organizations within your reach, administrators). |
-| `projects:write` | Create, edit and delete projects; set their Organizations, members, stages and workflow; move, close and reopen them; link and unlink records — a record of a kind also needs the permission to view that kind (see *Linking records*). Requires `projects:read`. |
+| `projects:write` | Create, edit and delete projects; set their Organizations, members, stages and workflow; move, close and reopen them; link and unlink records — a record of a kind also needs the permission to view that kind (see *Linking records*); with `tasks:write`, add a task to a project, take one out of it or delete one of its tasks. Requires `projects:read`. |
 | `projects:see_all` | See every project within your reach, whatever the module setting and each project's own choice (see *Who sees a project*). Requires `projects:read`; it never widens Organization reach. |
 | `projects:configure` | Create, edit, duplicate, archive and restore templates; add, rename, archive, restore and delete project roles and loss reasons. Requires `projects:read`; anybody who may view projects can read the templates, roles and loss reasons, to use them on a project. |
 | `projects:analytics` | View project analytics (see *Analytics*) — every figure over the projects you may see. Requires `projects:read`. |
@@ -724,7 +726,11 @@ stages' ids as `contextGroupId`; it is labelled `<number> <title>`, linked to
 `/projects/:id`, and its group is labelled with the stage's name. Every answer
 goes through `ProjectAccess`, so the Tasks module shows a project's tasks to
 exactly the people who may see the project. To put a task into a stage, create
-it with `POST /api/v1/admin/tasks` and that context.
+it with `POST /api/v1/admin/tasks` and that context. The descriptor's
+`canChangeTasks` answers yes only to a holder of `projects:write` who sees the
+project, so putting a task into a project, taking one out of it and deleting one
+of its tasks need that permission as well as `tasks:write`; moving a task
+between the project's stages does not.
 
 The module reads and writes tasks only through `taskReadPort` and
 `taskWritePort`, after deciding that Tasks is present (`degrades-without`

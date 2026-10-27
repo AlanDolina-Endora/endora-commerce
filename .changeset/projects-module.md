@@ -46,7 +46,8 @@ Members holding Project Roles, opened, completed, lost and reopened.
   the platform audit log, which is not kept per Organization, names the changed fields only.
 - **For other modules.** `projectReadPort` (`findById`, `findByRecord`), gated;
   `projectStageGuardRegistry`, through which a guard refuses a move, close or reopen; the `project`
-  Task context in Tasks' registry; the events `projects.project.created.v1`,
+  Task context in Tasks' registry, which lets a Task into a Project, out of one or be deleted from
+  one only for a holder of `projects:write` who sees the Project; the events `projects.project.created.v1`,
   `projects.stage.moved.v1`, `projects.project.closed.v1`, `projects.project.reopened.v1`,
   `projects.record.linked.v1` and `projects.record.unlinked.v1`; and `nextProjectNumber(em)` on
   `./backend`, the door to the `PRJ-…` number sequence.

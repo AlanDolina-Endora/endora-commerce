@@ -243,6 +243,52 @@ describe('projects — the `project` Task context (US2)', () => {
     }
   });
 
+  it('putting a Task into a Project, and deleting a Project Task, need projects:write on it too (T147, #472)', async () => {
+    const writer = await seedCrmAdmin(h.em(), 'ctx-task-putter', ['projects:read', 'tasks:read', 'tasks:write']);
+    try {
+      const open = await createProject(h, { title: 'Open to every reader, again', visibility: 'everyone' });
+      created.push(open.id);
+      const into = { contextType: 'project', contextId: open.id, contextGroupId: stageNamed(open, 'Design') };
+
+      // Created inside the Project: refused.
+      const create = await callTasks(h, 'POST', '', {
+        cookies: writer.cookies,
+        payload: { title: 'Created into a project', context: into },
+      });
+      expect(create.statusCode, create.body).toBe(422);
+      expect(create.json().error.code).toBe('TASK_CONTEXT_INVALID');
+
+      // A Task of nobody's, moved into the Project: refused, and it stays where it was.
+      const loose = await callTasks(h, 'POST', '', { cookies: writer.cookies, payload: { title: 'Loose' } });
+      expect(loose.statusCode, loose.body).toBe(201);
+      const looseId = (loose.json() as { data: { id: string } }).data.id;
+      const attach = await callTasks(h, 'PATCH', `/${looseId}`, { cookies: writer.cookies, payload: { context: into } });
+      expect(attach.statusCode, attach.body).toBe(422);
+      expect(attach.json().error.code).toBe('TASK_CONTEXT_INVALID');
+      expect(await taskRowsOf(h, open.id)).toEqual([]);
+
+      // A Project Task they see: deleting it is refused, and it stays.
+      const task = await createStageTask(h, open.id, stageNamed(open, 'Design'), { title: 'Not theirs to delete' });
+      const seen = await callTasks(h, 'GET', `/${task.id}`, { cookies: writer.cookies });
+      expect(seen.statusCode, seen.body).toBe(200);
+      const removal = await callTasks(h, 'DELETE', `/${task.id}`, { cookies: writer.cookies });
+      expect(removal.statusCode, removal.body).toBe(403);
+      expect(removal.json().error.code).toBe('FORBIDDEN');
+      expect((await taskRowsOf(h, open.id)).map((row) => row.id)).toEqual([task.id]);
+
+      // A Task of nobody's is theirs to delete; a holder of projects:write may do all three.
+      expect((await callTasks(h, 'DELETE', `/${looseId}`, { cookies: writer.cookies })).statusCode).toBe(204);
+      const putIn = await callTasks(h, 'POST', '', { payload: { title: 'Put in by a projects writer', context: into } });
+      expect(putIn.statusCode, putIn.body).toBe(201);
+      for (const id of [task.id, (putIn.json() as { data: { id: string } }).data.id]) {
+        const deleted = await callTasks(h, 'DELETE', `/${id}`);
+        expect(deleted.statusCode, deleted.body).toBe(204);
+      }
+    } finally {
+      writer.undo();
+    }
+  });
+
   it('with Projects off its Tasks are absent from Tasks; on again, they are back', async () => {
     await withModulesDeactivated(['projects'], async () => {
       expect(await listed(member.cookies)).not.toContain(forMember);

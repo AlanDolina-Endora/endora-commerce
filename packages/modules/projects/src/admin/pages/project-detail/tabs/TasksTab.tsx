@@ -29,7 +29,8 @@ const TASKS_WRITE = 'tasks:write';
 export function TasksTab({ project }: ProjectTabProps): ReactNode {
   const t = useTranslation('projects');
   const { hasPermission } = useAuth();
-  const canAdd = hasPermission(TASKS_WRITE);
+  // Adding to a Project's work needs both: Tasks' write and this Project's (T147, #472).
+  const canAdd = hasPermission(TASKS_WRITE) && project.permissions.canWrite;
   const [answer, setAnswer] = useState<ProjectTasksResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');

@@ -82,7 +82,8 @@ tasks you may see.
 description, an assignee — any active administrator — and a due date. It gets
 its number, starts as `todo`, and remembers who created it. It can be placed
 in a record of another module — in this release, a stage of a project the
-creator may see; a task of a project always belongs to one of its stages.
+creator may see and edit; a task of a project always belongs to one of its
+stages.
 
 **Changing a task.** Its title, description, due date, assignee, status and
 the record it belongs to can all be changed. Any status may follow any other:
@@ -102,6 +103,12 @@ module is switched off assigning works the same and nobody is told.
 last, overdue ones marked.
 
 **Deleting a task** removes it for good.
+
+Adding a task to a record, taking one out of it — to no record or to another
+one — and deleting a task of a record are changes to that record's work, so
+the record's module decides who may make them: for a project, somebody who may
+edit the project. Moving a task between the stages of one project, and every
+other change to a task, needs only the permission to change tasks.
 
 **History.** Every change of a task — created, changed, assigned, its status
 changed, deleted — is recorded with who did it and when, and the task's history
@@ -144,10 +151,10 @@ exactly as it was when the module is switched on again.
 | --- | --- | --- |
 | `GET /api/v1/admin/tasks` | `tasks:read` | A page of tasks, newest first: `{ items, nextCursor }`. Filters: `status` (repeatable), `assignee` (an administrator's id, `me` or `none`), `dueFrom`, `dueTo`, `overdue`, `contextType`, `contextId`, `q` (number or title), `cursor`, `limit` (at most 100). |
 | `GET /api/v1/admin/tasks/mine` | `tasks:read` | `{ data: TaskSummary[] }` — the caller's open tasks, by due date, undated last (at most 500). |
-| `POST /api/v1/admin/tasks` | `tasks:write` | `{ title, description?, assignedAdminUserId?, dueOn?, context? }` → `201` `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID`, `TASK_ASSIGNEE_INVALID`. |
+| `POST /api/v1/admin/tasks` | `tasks:write` | `{ title, description?, assignedAdminUserId?, dueOn?, context? }` → `201` `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID` (also for a record its owner does not let you add to, `canChangeTasks`), `TASK_ASSIGNEE_INVALID`. |
 | `GET /api/v1/admin/tasks/:id` | `tasks:read` | `{ data: TaskDetail }`, or `404` `TASK_NOT_FOUND` — for a task that does not exist and for one whose context you may not see alike. |
-| `PATCH /api/v1/admin/tasks/:id` | `tasks:write` | Any of `title`, `description`, `dueOn`, `assignedAdminUserId`, `status`, `context` → `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID` for taking a task out of a record its owner does not let you (`canTakeOut`). |
-| `DELETE /api/v1/admin/tasks/:id` | `tasks:write` | `204`. |
+| `PATCH /api/v1/admin/tasks/:id` | `tasks:write` | Any of `title`, `description`, `dueOn`, `assignedAdminUserId`, `status`, `context` → `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID` for putting a task into, or taking it out of, a record whose owner does not let you (`canChangeTasks`). |
+| `DELETE /api/v1/admin/tasks/:id` | `tasks:write` | `204`; `403` `FORBIDDEN` for a task of a record whose owner does not let you delete it (`canChangeTasks`). |
 | `GET /api/v1/admin/tasks/lookups/assignees` | `tasks:write` | `{ data: { id, name, email }[] }` — active administrators matching `q` (name or e-mail), at most 50. |
 | `GET /api/v1/admin/tasks/:id/history` | `tasks:read` | The task's audit trail, newest first: `{ data, pagination, truncated }` (`RecordHistoryPage`). |
 
@@ -183,7 +190,7 @@ ctx.onBoot(() => {
     visibleContextIds: (ids) => /* which of these ids the caller may see */,
     describe: (ids) => /* id → { label, href, groups: groupId → label } */,
     canSeeAs: (adminUserId, id) => /* may that administrator see this record? */,
-    canTakeOut: (id) => /* may the caller take a task out of this record? */,
+    canChangeTasks: (id) => /* may the caller add, take out or delete a task of this record? */,
   });
 });
 ```
@@ -202,12 +209,16 @@ The contract a descriptor keeps:
   else**: whether that administrator, by their own permissions and reach, may
   see the record. It is asked before an assignee is told about a task of the
   record; `false` — or an owner that is switched off — means nobody is told.
-- `canTakeOut(id)` decides whether the caller may take a task **out of** the
-  record — detach it (`context: null`) or move it to another record; moving it
-  between the record's own groups is not asked. Without it a holder of
+- `canChangeTasks(id)` decides whether the caller may change which tasks the
+  record holds: put a task **into** it (create it there, or move it there), take
+  one **out of** it (detach it with `context: null`, or move it to another
+  record) or **delete** one of its tasks. Moving a task between the record's own
+  groups, and editing a task where it is, are not asked. Without it a holder of
   `tasks:write` who merely sees the record could publish its tasks to everyone
-  who reads tasks. Projects answers yes to a holder of `projects:write` who sees
-  the project; `false` refuses with `422` `TASK_CONTEXT_INVALID`.
+  who reads tasks, or add to and remove from its work. Projects answers yes to a
+  holder of `projects:write` who sees the project; `false` refuses putting in
+  and taking out with `422` `TASK_CONTEXT_INVALID`, and deleting with `403`
+  `FORBIDDEN`.
 - `renderNote(note, language)`, optional, words the note your module left on a
   task when it created it (`contextNote` of `taskWritePort.createMany`) in the
   reader's language. Store a key rather than a sentence — Projects stores the

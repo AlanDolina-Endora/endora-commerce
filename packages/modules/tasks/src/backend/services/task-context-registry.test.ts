@@ -9,7 +9,7 @@ function descriptor(contextType: string, ownerModuleId: string): TaskContextDesc
     allVisibleContextIds: async () => [],
     visibleContextIds: async () => new Set(),
     canSeeAs: async () => false,
-    canTakeOut: async () => false,
+    canChangeTasks: async () => false,
     describe: async () => new Map(),
   };
 }

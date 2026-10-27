@@ -22,7 +22,7 @@ import type { CommandBus } from '@endora-commerce/platform/commands';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { TaskAdminSearchQuery } from '../admin-search-provider.js';
 import { getTenantContext } from '@endora-commerce/platform/tenancy';
-import { assertAssignable, assertContextForCaller, assertMayTakeOut } from './task-checks.js';
+import { assertAssignable, assertContextForCaller, assertMayDelete, assertMayPutIn, assertMayTakeOut } from './task-checks.js';
 import {
   assignTaskCommand,
   changeTaskStatusCommand,
@@ -380,7 +380,10 @@ export class TaskService {
   /** `POST /tasks` — a Task of the caller's, in a context they may see or in none. */
   async create(body: CreateTaskBody, language: SupportedLanguage): Promise<TaskDetail> {
     const context = body.context ?? null;
-    if (context) await assertContextForCaller(this.deps.contexts, context);
+    if (context) {
+      await assertContextForCaller(this.deps.contexts, context);
+      await assertMayPutIn(this.deps.contexts, null, context);
+    }
     const assignee = body.assignedAdminUserId ?? null;
     await assertAssignable(this.deps.adminUsers, [assignee]);
     const id = await this.deps.commandBus.run(
@@ -411,7 +414,10 @@ export class TaskService {
         body.context,
       );
     }
-    if (body.context) await assertContextForCaller(this.deps.contexts, body.context);
+    if (body.context) {
+      await assertContextForCaller(this.deps.contexts, body.context);
+      await assertMayPutIn(this.deps.contexts, { contextType: row.context_type, contextId: row.context_id }, body.context);
+    }
     if (body.assignedAdminUserId !== undefined) await assertAssignable(this.deps.adminUsers, [body.assignedAdminUserId]);
 
     const fields: TaskFieldChanges = {};
@@ -437,6 +443,7 @@ export class TaskService {
   async delete(id: string): Promise<void> {
     const row = await this.findVisibleRow(id);
     if (!row) throw taskNotFound();
+    await assertMayDelete(this.deps.contexts, { contextType: row.context_type, contextId: row.context_id });
     if (!(await this.deps.commandBus.run(deleteTaskCommand(row.id)))) throw taskNotFound();
   }
 

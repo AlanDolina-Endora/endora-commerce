@@ -205,6 +205,14 @@ describe('ProjectDetail — the Tasks tab', () => {
     await waitFor(() => stageSection(panel, 'Design'));
     expect(within(panel).queryByRole('button', { name: en('tasks.quickAdd.submitTo', { stage: 'Build' }) })).toBeNull();
   });
+
+  it('offers no quick-add to an operator who may write Tasks but not this Project (T147, #472)', async () => {
+    current = detail({ permissions: { canWrite: false, canConfigure: false } });
+    await renderPage({ search: '?tab=tasks' });
+    const panel = await screen.findByRole('tabpanel');
+    await waitFor(() => stageSection(panel, 'Design'));
+    expect(within(panel).queryByRole('button', { name: en('tasks.quickAdd.submitTo', { stage: 'Build' }) })).toBeNull();
+  });
 });
 
 describe('ProjectDetail — Stage Task definitions on the Stages tab', () => {

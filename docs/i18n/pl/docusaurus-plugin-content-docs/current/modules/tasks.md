@@ -88,8 +88,8 @@ numerze lub tytule — wyłącznie wśród zadań, które możesz zobaczyć.
 osobę przypisaną — dowolnego aktywnego administratora — i termin. Dostaje
 numer, zaczyna ze statusem `todo` i zapamiętuje, kto je utworzył. Można je
 umieścić w rekordzie innego modułu — w tym wydaniu w etapie projektu, który
-tworzący może zobaczyć; zadanie projektu zawsze należy do jednego z jego
-etapów.
+tworzący może zobaczyć i edytować; zadanie projektu zawsze należy do jednego z
+jego etapów.
 
 **Zmiana zadania.** Można zmienić jego tytuł, opis, termin, osobę przypisaną,
 status i rekord, do którego należy. Po każdym statusie może nastąpić każdy
@@ -110,6 +110,13 @@ mają statusu `done` ani `cancelled`, najpierw te z najbliższym terminem, na
 końcu te bez terminu, z oznaczeniem przeterminowanych.
 
 **Usunięcie zadania** usuwa je na stałe.
+
+Dodanie zadania do rekordu, wyjęcie go z niego — do żadnego rekordu albo do
+innego — i usunięcie zadania rekordu to zmiany w pracy tego rekordu, więc o
+tym, kto może je wprowadzać, decyduje moduł rekordu: w przypadku projektu
+osoba, która może edytować projekt. Przeniesienie zadania między etapami
+jednego projektu i każda inna zmiana zadania wymagają tylko uprawnienia do
+zmieniania zadań.
 
 **Historia.** Każda zmiana zadania — utworzenie, zmiana, przypisanie, zmiana
 statusu, usunięcie — jest zapisywana z tym, kto ją wykonał i kiedy, a historia
@@ -152,10 +159,10 @@ włączeniu modułu wszystko wraca dokładnie do poprzedniego stanu.
 | --- | --- | --- |
 | `GET /api/v1/admin/tasks` | `tasks:read` | Strona zadań, od najnowszych: `{ items, nextCursor }`. Filtry: `status` (powtarzalny), `assignee` (identyfikator administratora, `me` albo `none`), `dueFrom`, `dueTo`, `overdue`, `contextType`, `contextId`, `q` (numer lub tytuł), `cursor`, `limit` (najwyżej 100). |
 | `GET /api/v1/admin/tasks/mine` | `tasks:read` | `{ data: TaskSummary[] }` — otwarte zadania wywołującego, według terminu, bez terminu na końcu (najwyżej 500). |
-| `POST /api/v1/admin/tasks` | `tasks:write` | `{ title, description?, assignedAdminUserId?, dueOn?, context? }` → `201` `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID`, `TASK_ASSIGNEE_INVALID`. |
+| `POST /api/v1/admin/tasks` | `tasks:write` | `{ title, description?, assignedAdminUserId?, dueOn?, context? }` → `201` `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID` (także dla rekordu, do którego jego właściciel nie pozwala dodawać, `canChangeTasks`), `TASK_ASSIGNEE_INVALID`. |
 | `GET /api/v1/admin/tasks/:id` | `tasks:read` | `{ data: TaskDetail }` albo `404` `TASK_NOT_FOUND` — tak samo dla zadania, które nie istnieje, i dla zadania, którego kontekstu nie możesz zobaczyć. |
-| `PATCH /api/v1/admin/tasks/:id` | `tasks:write` | Dowolne z pól `title`, `description`, `dueOn`, `assignedAdminUserId`, `status`, `context` → `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID` przy wyjmowaniu zadania z rekordu, na które jego właściciel nie pozwala (`canTakeOut`). |
-| `DELETE /api/v1/admin/tasks/:id` | `tasks:write` | `204`. |
+| `PATCH /api/v1/admin/tasks/:id` | `tasks:write` | Dowolne z pól `title`, `description`, `dueOn`, `assignedAdminUserId`, `status`, `context` → `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID` przy umieszczaniu zadania w rekordzie albo wyjmowaniu go z rekordu, na które jego właściciel nie pozwala (`canChangeTasks`). |
+| `DELETE /api/v1/admin/tasks/:id` | `tasks:write` | `204`; `403` `FORBIDDEN` dla zadania rekordu, którego właściciel nie pozwala go usunąć (`canChangeTasks`). |
 | `GET /api/v1/admin/tasks/lookups/assignees` | `tasks:write` | `{ data: { id, name, email }[] }` — aktywni administratorzy pasujący do `q` (imię i nazwisko lub e-mail), najwyżej 50. |
 | `GET /api/v1/admin/tasks/:id/history` | `tasks:read` | Ślad audytu zadania, od najnowszych: `{ data, pagination, truncated }` (`RecordHistoryPage`). |
 
@@ -193,7 +200,7 @@ ctx.onBoot(() => {
     visibleContextIds: (ids) => /* which of these ids the caller may see */,
     describe: (ids) => /* id → { label, href, groups: groupId → label } */,
     canSeeAs: (adminUserId, id) => /* may that administrator see this record? */,
-    canTakeOut: (id) => /* may the caller take a task out of this record? */,
+    canChangeTasks: (id) => /* may the caller add, take out or delete a task of this record? */,
   });
 });
 ```
@@ -213,13 +220,17 @@ Zobowiązania deskryptora:
   zobaczyć rekord. Moduł pyta o nią, zanim powiadomi osobę przypisaną o zadaniu
   tego rekordu; `false` — albo wyłączony właściciel — oznacza, że nikt nie
   dostaje powiadomienia.
-- `canTakeOut(id)` rozstrzyga, czy wywołujący może wyjąć zadanie **z** rekordu —
-  odpiąć je (`context: null`) albo przenieść do innego rekordu; przeniesienie
-  między grupami tego samego rekordu nie wymaga tej zgody. Bez niej posiadacz
-  `tasks:write`, który jedynie widzi rekord, mógłby udostępnić jego zadania
-  każdemu, kto czyta zadania. Projekty odpowiadają „tak” posiadaczowi
+- `canChangeTasks(id)` rozstrzyga, czy wywołujący może zmienić to, jakie
+  zadania ma rekord: umieścić zadanie **w** rekordzie (utworzyć je tam albo tam
+  przenieść), wyjąć je **z** rekordu (odpiąć przez `context: null` albo
+  przenieść do innego rekordu) lub **usunąć** jedno z jego zadań. Przeniesienie
+  zadania między grupami tego samego rekordu i edycja zadania tam, gdzie jest,
+  nie wymagają tej zgody. Bez niej posiadacz `tasks:write`, który jedynie widzi
+  rekord, mógłby udostępnić jego zadania każdemu, kto czyta zadania, albo
+  dodawać i usuwać pracę tego rekordu. Projekty odpowiadają „tak” posiadaczowi
   `projects:write`, który widzi projekt; `false` to odmowa `422`
-  `TASK_CONTEXT_INVALID`.
+  `TASK_CONTEXT_INVALID` przy umieszczaniu i wyjmowaniu oraz `403` `FORBIDDEN`
+  przy usuwaniu.
 - `renderNote(note, language)`, opcjonalna, formułuje w języku czytającego
   notatkę, którą moduł zostawił w zadaniu przy jego tworzeniu (`contextNote` w
   `taskWritePort.createMany`). Zapisuj klucz zamiast zdania — Projekty zapisują

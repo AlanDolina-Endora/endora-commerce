@@ -1,4 +1,5 @@
-import type { AdminUserReadPort, TaskContext } from '@endora-commerce/contracts';
+import { ERROR_CODES, type AdminUserReadPort, type TaskContext } from '@endora-commerce/contracts';
+import { HttpError } from '@endora-commerce/platform/http';
 import type { TaskContextRegistry } from './task-context-registry.js';
 import { taskAssigneeInvalid, taskContextInvalid } from './task-errors.js';
 
@@ -45,13 +46,27 @@ export async function assertContextForCaller(contexts: TaskContextRegistry, cont
   if (!description.groups.has(groupId)) throw taskContextInvalid('The record has no such part.');
 }
 
+/** Whether two contexts name the same record — its groups aside. */
+function sameRecord(
+  a: { contextType: string | null; contextId: string | null } | null,
+  b: { contextType: string | null; contextId: string | null } | null,
+): boolean {
+  return (a?.contextType ?? null) === (b?.contextType ?? null) && (a?.contextId ?? null) === (b?.contextId ?? null);
+}
+
+/** The context owner's answer to "may the caller change which Tasks this record holds" (`canChangeTasks`). */
+async function mayChangeTasks(contexts: TaskContextRegistry, contextType: string, contextId: string): Promise<boolean> {
+  const descriptor = contexts.presentFor(contextType);
+  return Boolean(descriptor) && (await descriptor!.canChangeTasks(contextId));
+}
+
 /**
  * Taking a Task out of the context it is in — detaching it, or moving it to
- * another record — is the context owner's to allow (`canTakeOut`), not only
+ * another record — is the context owner's to allow (`canChangeTasks`), not only
  * `tasks:write`'s: otherwise a holder who merely sees a record could publish
- * its Tasks to every holder of `tasks:read`. Moving between the groups of one
- * record is not asked. An owner that is off hides the Task before this is
- * reached; one that is unregistered refuses.
+ * its Tasks to every holder of `tasks:read` (T144). Moving between the groups
+ * of one record is not asked. An owner that is off hides the Task before this
+ * is reached; one that is unregistered refuses.
  */
 export async function assertMayTakeOut(
   contexts: TaskContextRegistry,
@@ -59,9 +74,42 @@ export async function assertMayTakeOut(
   next: TaskContext | null,
 ): Promise<void> {
   if (current.contextType === null || current.contextId === null) return;
-  if (next !== null && next.contextType === current.contextType && next.contextId === current.contextId) return;
-  const descriptor = contexts.presentFor(current.contextType);
-  if (!descriptor || !(await descriptor.canTakeOut(current.contextId))) {
+  if (sameRecord(current, next)) return;
+  if (!(await mayChangeTasks(contexts, current.contextType, current.contextId))) {
     throw taskContextInvalid('You may not take this Task out of the record it belongs to.');
+  }
+}
+
+/**
+ * Putting a Task into a record — creating it there, or moving it there from
+ * elsewhere — is the record owner's to allow too (`canChangeTasks`, T147):
+ * `tasks:write` and sight of the record are not enough to add to its work.
+ * Moving between the groups of one record is not asked. Asked after
+ * {@link assertContextForCaller}, which names a record the caller does not see.
+ */
+export async function assertMayPutIn(
+  contexts: TaskContextRegistry,
+  current: { contextType: string | null; contextId: string | null } | null,
+  next: TaskContext,
+): Promise<void> {
+  if (sameRecord(current, next)) return;
+  if (!(await mayChangeTasks(contexts, next.contextType, next.contextId))) {
+    throw taskContextInvalid('You may not add a Task to this record.');
+  }
+}
+
+/**
+ * Deleting a Task of a record is the record owner's to allow (`canChangeTasks`,
+ * T147). The caller sees the Task — a 404 would misreport it — so the refusal
+ * is `403` `FORBIDDEN`, the answer to a permission the caller lacks. A Task of
+ * no record is `tasks:write`'s alone.
+ */
+export async function assertMayDelete(
+  contexts: TaskContextRegistry,
+  current: { contextType: string | null; contextId: string | null },
+): Promise<void> {
+  if (current.contextType === null || current.contextId === null) return;
+  if (!(await mayChangeTasks(contexts, current.contextType, current.contextId))) {
+    throw new HttpError(403, ERROR_CODES.FORBIDDEN, 'You may not delete a Task of the record it belongs to.');
   }
 }

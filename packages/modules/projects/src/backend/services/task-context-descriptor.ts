@@ -23,8 +23,9 @@ import { PROJECT_TASK_CONTEXT_TYPE } from './project-tasks.js';
  * about to tell — through `ProjectAccess.canSeeAs` (research R-4), so the bell
  * never names a Task of a Project its recipient may not see.
  *
- * `canTakeOut` lets a Task leave a Project — detached, or moved to another —
- * only for a caller holding `projects:write` who sees the Project.
+ * `canChangeTasks` lets a Task into a Project, out of one — detached, or moved
+ * to another record — or deleted from one only for a caller holding
+ * `projects:write` who sees the Project (T144, T147).
  *
  * `describe` names a Project by number and title, links to its screen, and
  * labels each Stage — the Task's group — by its current name. It describes only
@@ -58,9 +59,9 @@ export function createProjectTaskContext(deps: {
     // Another administrator — an assignee about to be told — by their own
     // reach, permissions and the visibility rule (research R-4).
     canSeeAs: (adminUserId, id) => access.canSeeAs(adminUserId, id),
-    // Taking a Task out of a Project is a change to the Project's work: it
-    // needs `projects:write` and a Project the caller sees.
-    canTakeOut: async (id) =>
+    // Putting a Task into a Project, taking one out or deleting one is a change
+    // to the Project's work: it needs `projects:write` and a Project the caller sees.
+    canChangeTasks: async (id) =>
       (await access.callerHolds(PROJECTS_WRITE_PERMISSION)) && (await access.visibleIds([id])).has(id),
     describe: async (ids) => {
       const visible = [...(await access.visibleIds(ids))];
