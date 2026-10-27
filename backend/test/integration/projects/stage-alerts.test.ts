@@ -95,7 +95,11 @@ describe('projects — Stage deadline alerts (US8)', () => {
       hour: '2-digit',
       hourCycle: 'h23',
     }).formatToParts(instant);
-    const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+    const part = (type: string): string => {
+      const found = parts.find((p) => p.type === type);
+      if (!found) throw new Error(`no ${type} in ${instant.toISOString()}`);
+      return found.value;
+    };
     return { date: `${part('year')}-${part('month')}-${part('day')}`, hour: Number(part('hour')) };
   };
 
