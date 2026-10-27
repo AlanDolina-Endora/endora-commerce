@@ -116,6 +116,21 @@ describe('projects off-state (Constitution XVII)', () => {
         write('DELETE', `${API}/${ID}/links/${STAGE}`, undefined),
         { url: `${API}/records/order/${ID}/project`, cookies: admin },
         { url: `${API}/records/task/${ID}/project`, cookies: admin },
+        // User Story 7's routes — notes, messages, attachments, history and the
+        // reference lookups. The write probes name a Project that does not
+        // exist, or send a body the schema refuses (the upload: no multipart).
+        { url: `${API}/${ID}/comments?kind=note`, cookies: admin },
+        write('POST', `${API}/${ID}/comments`, { kind: 'note', body: 'x' }),
+        write('PATCH', `${API}/${ID}/comments/${STAGE}`, { body: 'x' }),
+        write('DELETE', `${API}/${ID}/comments/${STAGE}`, undefined),
+        write('POST', `${API}/${ID}/messages/read`, { throughMessageId: STAGE }),
+        { url: `${API}/${ID}/attachments`, cookies: admin },
+        write('POST', `${API}/${ID}/attachments`, { assetId: STAGE }),
+        write('POST', `${API}/${ID}/attachments/upload`),
+        write('DELETE', `${API}/${ID}/attachments/${STAGE}`, undefined),
+        { url: `${API}/${ID}/history`, cookies: admin },
+        { url: `${API}/lookups/mentionable`, cookies: admin },
+        { url: `${API}/lookups/documents`, cookies: admin },
       ],
       adminPresence: { cookies: admin },
       settingWrite: { code: 'projects.visibility', value: 'everyone', cookies: admin },

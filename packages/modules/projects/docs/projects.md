@@ -82,8 +82,9 @@ deleted: the screen says so, and the records have to be unlinked first.
 
 Its tabs:
 
-- **Overview** — the description, the start date, **who sees the project**
-  and the members by role. An administrator who may create and run projects
+- **Overview** — the description — its references drawn as links, and edited
+  with *Edit description* (see *Notes, messages and references*) — the start
+  date, **who sees the project** and the members by role. An administrator who may create and run projects
   changes who sees it there — the same three choices as on *New project* — and
   saves it with *Save who sees it*; everybody else is told what it is and who is
   listed.
@@ -106,6 +107,13 @@ Its tabs:
   the project (see *Linking records*).
 - **Stage history** — every entry into a stage, every close and every reopen,
   newest first, with who did it and when.
+- **Notes** and **Messages** — see *Notes, messages and references*. The
+  *Messages* tab counts the messages you have not read yet.
+- **Attachments** — see *Attachments*.
+- **Change history** — everything done to the project, newest first: who did
+  it, when, and the fields it changed, read a page at a time with *Show earlier
+  changes*. A note or a message is recorded by its length, never by what it
+  says.
 
 **On the screens of the records a project holds** — an Order, a Quote Request,
 an Opportunity, a Task — a **Project** panel names the project it belongs to:
@@ -420,7 +428,59 @@ link to it — its status and its amount.
 
 Every link and every unlink is recorded in the project's history.
 
-## Collaboration, deadline alerts and analytics
+## Notes, messages and references
+
+A project has two threads, both **internal** — no customer ever sees them, on
+the storefront or anywhere else:
+
+- **Notes** are what the people running the project want remembered. Only the
+  person who wrote a note can edit or delete it — holding every permission there
+  is does not make somebody else's note yours. A deleted note disappears from
+  the list; the change history records that it was deleted, not what it said.
+- **Messages** are the project's conversation. A message cannot be changed or
+  deleted once it is sent, by anybody. Sending one notifies **every member of
+  the project** except its author — in the bell, naming the project by its
+  number and never by what the message says. The *Messages* tab shows how many
+  messages others wrote that you have not read; opening it marks them read.
+
+The description, notes and messages can **refer to things** as they are typed:
+
+| Type | To refer to | Offered to |
+| --- | --- | --- |
+| `@` | a person | administrators who may create and run projects; the list offers only the people who may see the project |
+| `@@` | a document — one list, grouped: Orders, Quote Requests, Tasks | Orders with the permission to view Orders, Quote Requests with the permission to handle them, Tasks with the permission to view tasks; Orders and Quote Requests are those of the project's Organizations — none for an internal project |
+| `@@@` | a Product | administrators who may view the catalog |
+
+The buttons above the field do the same — *Mention a person*, *Insert
+document*, *Insert product*. A reference is shown as a link with the current
+number or name of what it refers to, to whoever may see that; to anybody else —
+and while the module it belongs to is switched off, or once it is gone — it is
+shown as unavailable, without its number. A group of the `@@` list whose
+module is switched off is not offered.
+
+**A person newly mentioned** in a description, a note or a message is notified
+once — naming the project by its number and the author, never the text — and
+only if they may see the project (see *Who sees a project*). Nobody is notified
+of their own mention, and a member mentioned in a message gets that one
+notification, not a second for the message. With the notifications module
+switched off nobody is notified, and everything is still saved.
+
+## Attachments
+
+The **Attachments** tab lists the files of a project — name, size, who attached
+it and when — each with *Download*. *Add a file* (or dropping one on the field)
+uploads a file and attaches it in one step, for anybody who may create and run
+projects: the file is stored in the media library as a **private** file, and
+the library's own rules on file types and sizes apply. A file a browser would
+run — an HTML page, an SVG image, an XML document, a script — is refused.
+*Remove* detaches a file; the file itself stays in the media library.
+
+**The media library refuses to delete a file a project uses**, and names the
+project by its number — also while Projects is switched off. Detach it from the
+project first. A download link is prepared at the moment you press *Download*
+and is valid for a few minutes.
+
+## Deadline alerts and analytics
 
 *Each of these arrives with a later release of this module and is described
 here when it does.*
@@ -457,6 +517,17 @@ here when it does.*
 | `POST /api/v1/admin/projects/:id/links` | `projects:write` | `{ kind: 'order' \| 'quote_request' \| 'opportunity', recordId }` → `201` `{ data: ProjectLink }`. `503` `MODULE_DISABLED` while the kind's module is off; `403` without its owner's read code; `404` `PROJECT_RECORD_NOT_FOUND` for a record that does not exist or is out of the caller's reach; `422` `PROJECT_LINK_ORGANIZATION_MISMATCH` for a record of an Organization the project does not have; `409` `PROJECT_RECORD_ALREADY_LINKED`, whose `details.project` (`{ id, number, title }`) names the project holding it only to a caller who may see that project. |
 | `DELETE /api/v1/admin/projects/:id/links/:linkId` | `projects:write` | `204`; `404` for a link of another project or one that does not exist. |
 | `GET /api/v1/admin/projects/records/:kind/:recordId/project` | `projects:read` | `{ data: ProjectSummary }` — the project an `order`, `quote_request`, `opportunity` or `task` (through its context) belongs to; `404` `PROJECT_NOT_FOUND` alike for a record in no project and one in a project the caller may not see. Needs the kind's read code as well (`403`), and its module on (`503`). |
+| `GET /api/v1/admin/projects/:id/comments?kind=note\|message` | `projects:read` | `{ data: ProjectComment[] }`, oldest first, deleted notes left out; each with `references` — what its tokens name for the reader. |
+| `POST /api/v1/admin/projects/:id/comments` | `projects:write` | `{ kind, body }` → `201` `{ data: ProjectComment }`. A message notifies every member who may see the project except its author; a newly mentioned person who may see it is notified once. |
+| `PATCH /api/v1/admin/projects/:id/comments/:commentId`, `DELETE …` | `projects:write` | A note, by its author only — `403` `PROJECT_NOTE_NOT_AUTHOR` for anybody else; a message never — `409` `PROJECT_MESSAGE_IMMUTABLE`. `DELETE` keeps the row, marked. |
+| `POST /api/v1/admin/projects/:id/messages/read` | `projects:read` | `{ throughMessageId }` → `{ data: { unreadMessageCount } }`; the caller's own read marker, which only moves forward. Not audited. |
+| `GET /api/v1/admin/projects/:id/attachments` | `projects:read` | `{ data: ProjectAttachment[] }`, each with a download link valid for minutes. |
+| `POST /api/v1/admin/projects/:id/attachments/upload` | `projects:write` | `multipart/form-data` with one `file` part → `201`; stored private, then attached — a file that could not be attached is taken back. `415` for active content or a type the library refuses, `413` `PROJECT_ATTACHMENT_TOO_LARGE` beyond 25 MB, and the library's own size limit. |
+| `POST /api/v1/admin/projects/:id/attachments` | `projects:write` **and** `assets.read` | `{ assetId }` of a private, live file that is not active content → `201` (`200` for a file already attached); `422` for a public file or one that is not there — including one attached to a project the caller may not see. |
+| `DELETE /api/v1/admin/projects/:id/attachments/:attachmentId` | `projects:write` | `204`; the file stays in the library. |
+| `GET /api/v1/admin/projects/:id/history` | `projects:read` | `RecordHistoryPage` — the audit trail of the project, newest first, `limit` and an opaque `cursor`, reaching back 499 entries (`truncated` on the last page past that); custom-field values only for a holder of `custom_fields:read`. |
+| `GET /api/v1/admin/projects/lookups/mentionable` | `projects:write` | `?projectId=&q=` → `{ data: { id, name, email }[] }` — active administrators holding `projects:read` who may see the project (without `projectId`, every holder of `projects:read`); at most 20. |
+| `GET /api/v1/admin/projects/lookups/documents` | `projects:write` | `?projectId=&q=` → `RecordDocumentLookupResponse` (`{ groups: { kind, items }[] }`, not wrapped in `data`) — the `@@` list, the schema CRM's `GET /crm/lookups/documents` answers; a group only with its read code and its module on, at most 10 per group. |
 | `GET /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:read` | The dictionaries, with `label` in the reader's language; `active=true` leaves archived rows out. |
 | `POST /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:configure` | `{ defaultName, name }` (`name`: a name per language) → `201` `{ data }`. The `code` is derived from `defaultName` — `_`-separated, with `_2`, `_3`… when another row holds it — and never changes. `409` `PROJECT_DICTIONARY_NAME_TAKEN` for a default name another row of the same dictionary has, whatever its case. |
 | `PATCH /api/v1/admin/projects/roles/:id`, `…/loss-reasons/:id` | `projects:configure` | `defaultName` and/or `name`, which replaces the names per language → `{ data }`; `404` `PROJECT_DICTIONARY_ENTRY_NOT_FOUND`, `409` `PROJECT_DICTIONARY_NAME_TAKEN`. |
@@ -513,6 +584,35 @@ edges). Stage tasks are created after the move's own transaction has
 committed, one audited `tasks.task.create` command each. The note of a stage
 task left unassigned is stored as the responsible role (`role:<id>`), not as a
 sentence; the descriptor's `renderNote` words it in each reader's language.
+
+### Notes, messages, references and attachments
+
+A note or a message is a row of `project_comments`, its references an index in
+`project_references` (`source_kind` `description` or `comment`) rebuilt by the
+command that saves the text — `projects.project.note_add`, `.note_update`,
+`.note_delete`, `.message_add` and the project's own `.create` and `.update`.
+The audit entries carry the comment's id, kind and length, never its text: the
+audit trail is not tenant-scoped. References are resolved on every read, in one
+call per kind, through their owners' ports and read codes — `orderReadPort`,
+`quoteRequestReadPort` (through `linked-records.ts`), `taskReadPort` (through
+`project-tasks.ts`, after `present()`), `catalogProductReadPort` and
+`adminUserReadPort`.
+
+Notifications go through `adminNotificationRecordPort` (a `degrades-without`
+edge: presence is decided first, and nothing is caught) with the kinds
+`projects.project.message` and `projects.project.mention`, subject `project`,
+and are recorded only after the write has committed; every recipient is asked
+`ProjectAccess.canSeeAs` first. A bell entry's title names the project by its
+number and the author by name, translatable through
+`notifications.<key>.title` of this module's bundle.
+
+An attachment is an asset id in `project_attachments`, read through
+`assetReadPort` and downloaded through a link `assetsLibraryPort` signs. The
+module registers a scanner in `assetReferenceRegistry` from a contribution-only
+boot hook, with no presence probe — so the library refuses to delete a file a
+project uses (`kind` `project_attachment`, label `Project PRJ-…`) also while
+Projects is off — and a resolver for `project` in `auditReferenceRegistry`, so
+the audit log names a project the reader may see by its number and title.
 
 ### Linked records and their owners
 

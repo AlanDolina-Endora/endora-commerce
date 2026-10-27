@@ -35,6 +35,10 @@ one. A text stored before reads as it did. A consumer that switches exhaustively
 `OpportunityReferenceType`, or indexes a `Record` by it, gets a compile error until it handles
 the two new members.
 
+**`assetReferenceKindSchema` has a new member, `'project_attachment'`** — a file a Project
+uses, which the media library then refuses to delete. A consumer that switches exhaustively over
+`AssetReferenceKind` gets a compile error until it handles the new member.
+
 **`AdminNavSectionNameSchema` has a new member, `'work'`**, and `@endora-commerce/admin-shell`
 declares the section after *CRM*, labelled "Projects & tasks" / "Projekty i zadania"
 (`appShell.section.work` in `@endora-commerce/mod-i18n`). It renders only while a module

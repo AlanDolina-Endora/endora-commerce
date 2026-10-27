@@ -32,10 +32,14 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | `_i18n` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `admin_roles` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `admin_users` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `assets_library` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `audit_logs` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `auth` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `catalog` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `orders` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `organizations` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `settings` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `admin_notifications` | nie | degrades-without `adminNotificationRecordPort` — członkowie projektu nie dostają powiadomień o wiadomościach i wzmiankach. |
 | `crm` | nie | degrades-without `opportunityReadPort` — szanse sprzedażowe podpięte do projektów są pokazywane jako niedostępne i nie można ich podpinać; ich panele znikają. Powiązania zostają i wracają, gdy CRM znów działa. |
 | `quote_requests` | nie | degrades-without `quoteRequestReadPort` — zapytania ofertowe podpięte do projektów są pokazywane jako niedostępne i nie można ich podpinać; ich panele znikają. Powiązania zostają i wracają, gdy zapytania ofertowe znów działają. |
 | `tasks` | nie | contributes-to `taskContextRegistry` |

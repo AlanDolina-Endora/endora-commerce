@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  formatRecordReferenceToken,
   ProjectListResponseSchema,
+  ProjectMentionableLookupResponseSchema,
   TaskListResponseSchema,
   type ProjectDetail,
   type ProjectVisibility,
@@ -41,8 +43,8 @@ import {
  * FR-020 names every read of a Project. The ones that exist are measured for
  * each cell — the list and its total, the detail, the Stage history, the
  * Project's Tasks tab, its Tasks in the Tasks module, the record panel of its
- * Task — and every invisible answer is byte-for-byte the answer for an id that
- * does not exist. The reads later stories bring are `todo` rows below, each
+ * Task, the mention list — and every invisible answer is byte-for-byte the
+ * answer for an id that does not exist. The reads later stories bring are `todo` rows below, each
  * naming the task that turns it into a measurement.
  */
 describe('projects — who sees a Project (US5)', () => {
@@ -205,6 +207,29 @@ describe('projects — who sees a Project (US5)', () => {
               expect(panel.statusCode, panel.body).toBe(404);
               expect(errorShape(panel.body)).toEqual(await missing(`/records/task/:id/project`, cookies));
             }
+            // The mention list (T115): asked by this reader, it is the Project
+            // they may see — or the answer for one that does not exist.
+            const mentionable = await callProjects(h, 'GET', `/lookups/mentionable?projectId=${id}&q=crm-vis-`, {
+              cookies,
+            });
+            if (visible) {
+              expect(mentionable.statusCode, mentionable.body).toBe(200);
+            } else {
+              expect(mentionable.statusCode, mentionable.body).toBe(404);
+              expect(errorShape(mentionable.body)).toEqual(await missing(`/lookups/mentionable?projectId=:id`, cookies));
+            }
+          });
+
+          it(`${reader} × ${visibility}: is offered in the mention list exactly when the Project is visible to them`, async () => {
+            // Asked by the stub administrator, who sees every Project.
+            const response = await callProjects(
+              h,
+              'GET',
+              `/lookups/mentionable?projectId=${projects[visibility].id}&q=crm-vis-`,
+            );
+            expect(response.statusCode, response.body).toBe(200);
+            const offered = ProjectMentionableLookupResponseSchema.parse(response.json()).data.map((option) => option.id);
+            expect(offered.includes(person(reader).adminUserId)).toBe(visible);
           });
         }
       }
@@ -343,6 +368,29 @@ describe('projects — who sees a Project (US5)', () => {
       expect((await bellAbout(hidden.id)).map((n) => n.targetAdminUserId)).toEqual([seeAll.adminUserId]);
     });
 
+    it('a mention and a message ring only for people who may see the Project (T111)', async () => {
+      await setSetting('members');
+      const project = projects.members_and_listed;
+      const mention = (who: Person) => formatRecordReferenceToken('admin_user', who.adminUserId);
+      const bell = async (who: Person) =>
+        (
+          await h
+            .em()
+            .find(AdminNotification, { subjectId: project.id, targetAdminUserId: who.adminUserId }, { filters: false })
+        ).map((row) => row.kind);
+      const response = await callProjects(h, 'POST', `/${project.id}/comments`, {
+        payload: { kind: 'message', body: `${token} ${mention(member)} ${mention(listed)} ${mention(other)} ${mention(seeAll)}` },
+      });
+      expect(response.statusCode, response.body).toBe(201);
+      // The Member's mention stands for the message too; the listed person and
+      // the holder of `projects:see_all` may see the Project, so are told.
+      expect(await bell(member)).toEqual(['projects.project.mention']);
+      expect(await bell(listed)).toEqual(['projects.project.mention']);
+      expect(await bell(seeAll)).toEqual(['projects.project.mention']);
+      // Somebody who may not see it is told of neither.
+      expect(await bell(other)).toEqual([]);
+    });
+
     it('a Task in a Project open to everyone rings for anybody who may read Projects', async () => {
       await setSetting('members');
       const project = projects.everyone;
@@ -356,7 +404,8 @@ describe('projects — who sees a Project (US5)', () => {
 
   // The reads of FR-020 later stories bring. Each task named un-`todo`s its row.
   it.todo('global search (`projects.project` provider) answers only visible Projects — T132, Phase 13');
-  it.todo('`GET /projects/lookups/mentionable` offers only people who may see the Project — T115, Phase 9');
   it.todo('analytics count only visible Projects — T127, Phase 12');
-  it.todo('mention, message and Stage-deadline notifications reach only people who may see the Project — T111 and T118, Phases 9 and 10');
+  // Mention and message notifications are measured above (T111); the Stage
+  // deadline alert arrives with Phase 10.
+  it.todo('Stage-deadline notifications reach only people who may see the Project — T118, Phase 10');
 });

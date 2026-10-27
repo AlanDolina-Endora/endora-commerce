@@ -84,8 +84,9 @@ usuwany: ekran to mówi, a rekordy trzeba najpierw odłączyć.
 
 Jego zakładki:
 
-- **Przegląd** — opis, data rozpoczęcia, **kto widzi projekt** i członkowie
-  według ról. Administrator, który może tworzyć i prowadzić projekty, zmienia
+- **Przegląd** — opis — z odwołaniami wyświetlanymi jako łącza, edytowany
+  przyciskiem *Edytuj opis* (zob. *Notatki, wiadomości i odwołania*) — data
+  rozpoczęcia, **kto widzi projekt** i członkowie według ról. Administrator, który może tworzyć i prowadzić projekty, zmienia
   tu, kto widzi projekt — te same trzy możliwości co w *Nowym projekcie* — i
   zapisuje to przyciskiem *Zapisz widoczność*; pozostali widzą, jakie jest to
   ustawienie i kto jest dopisany.
@@ -109,6 +110,12 @@ Jego zakładki:
   podpięte do projektu (zob. *Podpinanie dokumentów*).
 - **Historia etapów** — każde wejście do etapu, każde zamknięcie i każde
   ponowne otwarcie, od najnowszych, z tym, kto to zrobił i kiedy.
+- **Notatki** i **Wiadomości** — zob. *Notatki, wiadomości i odwołania*.
+  Karta *Wiadomości* pokazuje, ilu wiadomości jeszcze nie przeczytano.
+- **Załączniki** — zob. *Załączniki*.
+- **Historia zmian** — wszystko, co zrobiono z projektem, od najnowszych: kto,
+  kiedy i jakie pola zmienił, wczytywane partiami przyciskiem *Pokaż wcześniejsze
+  zmiany*. Notatka i wiadomość są odnotowywane przez długość, nigdy przez treść.
 
 **Na ekranach dokumentów należących do projektu** — zamówienia, zapytania
 ofertowego, szansy sprzedażowej, zadania — panel **Projekt** wskazuje projekt,
@@ -438,7 +445,61 @@ grupie: każdy dokument z numerem — odnośnikiem do niego — statusem i kwot�
 
 Każde podpięcie i każde odpięcie jest zapisywane w historii projektu.
 
-## Współpraca, powiadomienia o terminach i analityka
+## Notatki, wiadomości i odwołania
+
+Projekt ma dwa wątki, oba **wewnętrzne** — żaden klient nigdy ich nie widzi, ani
+w sklepie, ani nigdzie indziej:
+
+- **Notatki** to to, co osoby prowadzące projekt chcą zapamiętać. Notatkę może
+  edytować lub usunąć tylko osoba, która ją napisała — nawet posiadanie
+  wszystkich uprawnień nie czyni cudzej notatki Twoją. Usunięta notatka znika z
+  listy; historia zmian odnotowuje, że ją usunięto, ale nie jej treść.
+- **Wiadomości** to rozmowa w projekcie. Wysłanej wiadomości nie może zmienić
+  ani usunąć nikt. Wysłanie jej powiadamia **wszystkich członków projektu**
+  oprócz autora — dzwonkiem, który wskazuje projekt numerem, nigdy treścią
+  wiadomości. Karta *Wiadomości* pokazuje, ile wiadomości innych osób jeszcze
+  nie przeczytano; otwarcie jej oznacza je jako przeczytane.
+
+W opisie, notatkach i wiadomościach można podczas pisania **odwoływać się do
+rzeczy**:
+
+| Wpisz | Aby odwołać się do | Dostępne dla |
+| --- | --- | --- |
+| `@` | osoby | administratorów, którzy mogą tworzyć i prowadzić projekty; lista podaje tylko osoby, które mogą widzieć projekt |
+| `@@` | dokumentu — jedna lista w grupach: zamówienia, zapytania ofertowe, zadania | zamówienia z uprawnieniem do przeglądania zamówień, zapytania ofertowe z uprawnieniem do ich obsługi, zadania z uprawnieniem do przeglądania zadań; zamówienia i zapytania ofertowe to te organizacji projektu — żadne w projekcie wewnętrznym |
+| `@@@` | produktu | administratorów, którzy mogą przeglądać katalog |
+
+To samo robią przyciski nad polem — *Wspomnij osobę*, *Wstaw dokument*,
+*Wstaw produkt*. Odwołanie jest wyświetlane jako łącze z aktualnym numerem lub
+nazwą tego, do czego się odnosi — temu, kto może to zobaczyć; pozostałym, a
+także gdy moduł, do którego należy, jest wyłączony lub gdy rzecz już nie
+istnieje, jako niedostępne, bez numeru. Grupa listy `@@`, której moduł jest
+wyłączony, nie jest oferowana.
+
+**Osoba nowo wspomniana** w opisie, notatce lub wiadomości dostaje jedno
+powiadomienie — wskazujące projekt numerem i autora, nigdy treść — i tylko
+wtedy, gdy może widzieć projekt (zob. *Kto widzi projekt*). Nikt nie dostaje
+powiadomienia o wspomnieniu samego siebie, a członek wspomniany w wiadomości
+dostaje to jedno powiadomienie, nie drugie za wiadomość. Przy wyłączonym module
+powiadomień nikt nie jest powiadamiany, a wszystko i tak zostaje zapisane.
+
+## Załączniki
+
+Karta **Załączniki** wymienia pliki projektu — nazwę, rozmiar, kto i kiedy je
+dołączył — każdy z przyciskiem *Pobierz*. *Dodaj plik* (albo upuszczenie pliku
+na pole) przesyła plik i dołącza go w jednym kroku; może to zrobić każdy, kto
+może tworzyć i prowadzić projekty. Plik trafia do biblioteki mediów jako
+**prywatny**, a obowiązują go zasady biblioteki dotyczące typów i rozmiarów
+plików. Plik, który przeglądarka by wykonała — strona HTML, obraz SVG, dokument
+XML, skrypt — jest odrzucany. *Usuń* odłącza plik; sam plik zostaje w
+bibliotece mediów.
+
+**Biblioteka mediów nie usunie pliku, którego używa projekt**, i wskazuje ten
+projekt numerem — także wtedy, gdy moduł Projekty jest wyłączony. Najpierw
+odłącz plik od projektu. Odnośnik do pobrania jest przygotowywany w chwili
+kliknięcia *Pobierz* i ważny przez kilka minut.
+
+## Powiadomienia o terminach i analityka
 
 *Każda z tych funkcji pojawi się w jednym z kolejnych wydań modułu i zostanie tu
 opisana, gdy to nastąpi.*
@@ -475,6 +536,17 @@ opisana, gdy to nastąpi.*
 | `POST /api/v1/admin/projects/:id/links` | `projects:write` | `{ kind: 'order' \| 'quote_request' \| 'opportunity', recordId }` → `201` `{ data: ProjectLink }`. `503` `MODULE_DISABLED`, gdy moduł danego rodzaju jest wyłączony; `403` bez kodu odczytu właściciela; `404` `PROJECT_RECORD_NOT_FOUND` dla dokumentu, który nie istnieje lub jest poza zasięgiem wywołującego; `422` `PROJECT_LINK_ORGANIZATION_MISMATCH` dla dokumentu organizacji, której projekt nie ma; `409` `PROJECT_RECORD_ALREADY_LINKED`, którego `details.project` (`{ id, number, title }`) wskazuje projekt zawierający dokument tylko wywołującemu, który może ten projekt zobaczyć. |
 | `DELETE /api/v1/admin/projects/:id/links/:linkId` | `projects:write` | `204`; `404` dla powiązania innego projektu albo nieistniejącego. |
 | `GET /api/v1/admin/projects/records/:kind/:recordId/project` | `projects:read` | `{ data: ProjectSummary }` — projekt, do którego należy `order`, `quote_request`, `opportunity` lub `task` (przez swój kontekst); `404` `PROJECT_NOT_FOUND` jednakowo dla dokumentu spoza projektów i dla dokumentu z projektu, którego wywołujący nie może zobaczyć. Wymaga też kodu odczytu danego rodzaju (`403`) i włączonego modułu (`503`). |
+| `GET /api/v1/admin/projects/:id/comments?kind=note\|message` | `projects:read` | `{ data: ProjectComment[] }`, od najstarszych, bez usuniętych notatek; każdy z `references` — tym, co jego tokeny oznaczają dla czytającego. |
+| `POST /api/v1/admin/projects/:id/comments` | `projects:write` | `{ kind, body }` → `201` `{ data: ProjectComment }`. Wiadomość powiadamia każdego członka, który może widzieć projekt, oprócz autora; nowo wspomniana osoba, która może go widzieć, dostaje jedno powiadomienie. |
+| `PATCH /api/v1/admin/projects/:id/comments/:commentId`, `DELETE …` | `projects:write` | Notatka — tylko przez autora; dla kogokolwiek innego `403` `PROJECT_NOTE_NOT_AUTHOR`; wiadomość — nigdy, `409` `PROJECT_MESSAGE_IMMUTABLE`. `DELETE` zachowuje wiersz, oznaczony. |
+| `POST /api/v1/admin/projects/:id/messages/read` | `projects:read` | `{ throughMessageId }` → `{ data: { unreadMessageCount } }`; znacznik przeczytania wywołującego, który przesuwa się tylko do przodu. Nie trafia do dziennika zmian. |
+| `GET /api/v1/admin/projects/:id/attachments` | `projects:read` | `{ data: ProjectAttachment[] }`, każdy z odnośnikiem do pobrania ważnym przez kilka minut. |
+| `POST /api/v1/admin/projects/:id/attachments/upload` | `projects:write` | `multipart/form-data` z jedną częścią `file` → `201`; zapisany jako prywatny, potem dołączony — plik, którego nie udało się dołączyć, jest wycofywany. `415` dla treści aktywnej lub typu odrzucanego przez bibliotekę, `413` `PROJECT_ATTACHMENT_TOO_LARGE` powyżej 25 MB oraz własny limit rozmiaru biblioteki. |
+| `POST /api/v1/admin/projects/:id/attachments` | `projects:write` **i** `assets.read` | `{ assetId }` prywatnego, istniejącego pliku, który nie jest treścią aktywną → `201` (`200` dla pliku już dołączonego); `422` dla pliku publicznego lub takiego, którego nie ma — także dołączonego do projektu, którego wywołujący nie może widzieć. |
+| `DELETE /api/v1/admin/projects/:id/attachments/:attachmentId` | `projects:write` | `204`; plik zostaje w bibliotece. |
+| `GET /api/v1/admin/projects/:id/history` | `projects:read` | `RecordHistoryPage` — dziennik zmian projektu, od najnowszych, `limit` i nieprzezroczysty `cursor`, sięgający 499 wpisów wstecz (`truncated` na ostatniej stronie, gdy jest ich więcej); wartości pól własnych tylko dla posiadacza `custom_fields:read`. |
+| `GET /api/v1/admin/projects/lookups/mentionable` | `projects:write` | `?projectId=&q=` → `{ data: { id, name, email }[] }` — aktywni administratorzy z `projects:read`, którzy mogą widzieć projekt (bez `projectId` — każdy posiadacz `projects:read`); najwyżej 20. |
+| `GET /api/v1/admin/projects/lookups/documents` | `projects:write` | `?projectId=&q=` → `RecordDocumentLookupResponse` (`{ groups: { kind, items }[] }`, bez opakowania w `data`) — lista `@@`, w schemacie, który odpowiada też `GET /crm/lookups/documents` w CRM; grupa tylko z jej uprawnieniem do odczytu i włączonym modułem, najwyżej 10 w grupie. |
 | `GET /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:read` | Słowniki z polem `label` w języku czytającego; `active=true` pomija zarchiwizowane wiersze. |
 | `POST /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:configure` | `{ defaultName, name }` (`name`: nazwa dla każdego języka) → `201` `{ data }`. `code` powstaje z `defaultName` — rozdzielany `_`, z `_2`, `_3`…, gdy inny wiersz już go ma — i nigdy się nie zmienia. `409` `PROJECT_DICTIONARY_NAME_TAKEN` dla nazwy domyślnej, którą ma inny wiersz tego samego słownika, bez względu na wielkość liter. |
 | `PATCH /api/v1/admin/projects/roles/:id`, `…/loss-reasons/:id` | `projects:configure` | `defaultName` i/lub `name`, które zastępuje nazwy we wszystkich językach → `{ data }`; `404` `PROJECT_DICTIONARY_ENTRY_NOT_FOUND`, `409` `PROJECT_DICTIONARY_NAME_TAKEN`. |
@@ -534,6 +606,38 @@ transakcji przejścia, każde przez osobne audytowane polecenie
 `tasks.task.create`. Notatka nieprzypisanego zadania etapu jest zapisywana jako
 rola odpowiedzialna (`role:<id>`), a nie jako zdanie; `renderNote` deskryptora
 formułuje ją w języku każdego czytającego.
+
+### Notatki, wiadomości, odwołania i załączniki
+
+Notatka lub wiadomość to wiersz `project_comments`, a jej odwołania — indeks w
+`project_references` (`source_kind` `description` lub `comment`) odbudowywany
+przez polecenie zapisujące tekst — `projects.project.note_add`, `.note_update`,
+`.note_delete`, `.message_add` oraz `.create` i `.update` samego projektu. Wpisy
+dziennika zawierają identyfikator, rodzaj i długość komentarza, nigdy jego
+treść: dziennik zmian nie jest ograniczony do dzierżawcy. Odwołania są
+rozwiązywane przy każdym odczycie, jednym wywołaniem na rodzaj, przez porty i
+uprawnienia do odczytu ich właścicieli — `orderReadPort`,
+`quoteRequestReadPort` (przez `linked-records.ts`), `taskReadPort` (przez
+`project-tasks.ts`, po `present()`), `catalogProductReadPort` i
+`adminUserReadPort`.
+
+Powiadomienia przechodzą przez `adminNotificationRecordPort` (krawędź
+`degrades-without`: obecność modułu jest rozstrzygana najpierw i nic nie jest
+przechwytywane) z rodzajami `projects.project.message` i
+`projects.project.mention`, przedmiotem `project`, i są zapisywane dopiero po
+zatwierdzeniu zapisu; każdy odbiorca jest najpierw sprawdzany przez
+`ProjectAccess.canSeeAs`. Tytuł wpisu dzwonka wskazuje projekt numerem, a autora
+imieniem i nazwiskiem, i jest tłumaczony przez `notifications.<key>.title` z
+pakietu tego modułu.
+
+Załącznik to identyfikator zasobu w `project_attachments`, odczytywany przez
+`assetReadPort` i pobierany przez odnośnik podpisany przez `assetsLibraryPort`.
+Moduł rejestruje w `assetReferenceRegistry` skaner z haka rozruchowego służącego
+wyłącznie do wkładu, bez sprawdzania obecności — dzięki temu biblioteka nie
+usunie pliku, którego używa projekt (`kind` `project_attachment`, etykieta
+`Project PRJ-…`), także przy wyłączonym module Projekty — oraz w
+`auditReferenceRegistry` resolver dla `project`, dzięki któremu dziennik zmian
+nazywa numerem i tytułem projekt, który czytający może widzieć.
 
 ### Podpięte dokumenty i ich właściciele
 
