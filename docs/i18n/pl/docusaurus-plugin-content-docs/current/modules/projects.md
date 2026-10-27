@@ -638,7 +638,7 @@ Każdy wskaźnik:
 
 Pod każdym wykresem jest tabela z tymi samymi liczbami. Dni są liczone w
 **strefie czasowej raportów** — ustawieniu *Strefa czasowa raportów* w sekcji
-*General* ekranu ustawień, domyślnie `UTC`: zakres zaczyna się o północy jego
+*Ogólne* ekranu ustawień, domyślnie `UTC`: zakres zaczyna się o północy jego
 pierwszego dnia i kończy o północy po ostatnim, obie w tej strefie. Gotowe
 zakresy (*Ten miesiąc*, …) biorą dzisiejszą datę z Twojego komputera.
 

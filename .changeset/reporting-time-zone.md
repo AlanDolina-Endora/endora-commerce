@@ -9,4 +9,5 @@ first day to midnight after its last, in that zone. Default `UTC`. It is declare
 `@endora-commerce/mod-settings` rather than by a reporting module, so that any report can read it;
 Projects analytics does. A write of a zone the runtime does not know is refused with `422`
 `VALIDATION_FAILED`. `@endora-commerce/contracts` exports the code as `REPORTING_TIME_ZONE_SETTING`
-and the check as `isIanaTimeZone`. The settings package now runs its own unit tests (`test`).
+and the check as `isIanaTimeZone`. The *General* section's heading is now translated (Polish *Ogólne*). The settings package now runs
+its own unit tests (`test`).
