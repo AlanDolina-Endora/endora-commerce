@@ -77,7 +77,10 @@ type FieldErrors = Partial<Record<'title' | 'stageName' | 'stageDuration' | 'val
  * setting unless changed. Organizations and people are found through the
  * module's own lookups, so a role holding only `projects:*` can fill the form.
  *
- * Custom fields are not offered yet: they arrive with their own story.
+ * **Custom fields** (User Story 9) close the form: the Project fields an
+ * operator defined on `/custom-fields`, drawn by the kit's values panel for a
+ * person holding `custom_fields:read`. A refusal of one of them is shown at
+ * that field and in the form's error alike.
  */
 export function ProjectCreate(): ReactNode {
   const t = useTranslation('projects');
