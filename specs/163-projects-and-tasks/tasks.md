@@ -546,7 +546,8 @@ by e-mail.
 
 - [x] T136 [P] Complete `packages/modules/tasks/docs/tasks.md` and `packages/modules/projects/docs/projects.md` for users and developers (Task contexts, `ProjectAccess`, stage guards, events, ports); Polish copies; `check:module-docs`, `check:docs-translations`
   - Note: added what was missing — the Organization screen's *Projects* panel, the palette actions and global search (both modules), those three in the off-state lists, `projectReadPort`, `nextProjectNumber` / `nextTaskNumber`; removed "custom fields arrive with a later release". `check:docs-translations` was already red before this task (the Polish `module-reference/{projects,tasks}` lacked the `admin_search` row and the palette table); both re-synced here.
-- [ ] T137 [P] `backend/test/perf/projects/list.perf.test.ts`: list + filter < 2 s at 1 000 Projects (SC-008)
+- [x] T137 [P] `backend/test/perf/projects/list.perf.test.ts`: list + filter < 2 s at 1 000 Projects (SC-008)
+  - Note (2026-10-27, test Postgres, one run): members-only viewer of all 1 000 Projects across five Organizations, p95 over 20 reads, `limit=50` with `total` — first page 33 ms; `state=open` 18; `organizationId` 20; `memberId=me` 20; `roleId` 25; `stageName` 25; `q` 19; `sort=value` 22; open by deadline 19. Budget 2 000 ms. A perf budget has no meaningful red: written against the shipped list, not before it.
 - [ ] T138 Confirm T085 has no `todo` left; run the full matrix
 - [ ] T139 Grep `backend/test/**` and `admin/test/**` for every path moved or deleted in Phase 9A and for every renamed contracts export (AGENTS.md trap: deleted files fail only in contract/integration trees)
 - [ ] T140 Full verification set of `quickstart.md` § *Verification before reporting done*, including `pnpm --filter backend run test` (contract + integration, `TEST_DATABASE_URL` on `dev:infra:test`) and `pnpm --filter '!backend' run test`; report every result with its output
