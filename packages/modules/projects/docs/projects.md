@@ -65,8 +65,8 @@ may view projects; or its members and the people listed on it, who are then
 chosen there — and says in one sentence what the choice means now (see *Who
 sees a project*). The Organizations offered are the ones you can reach, and the
 people offered are the active administrators: filling the form needs no
-permission beyond creating projects. Custom fields arrive with a later
-release.
+permission beyond creating projects. After that come the project's custom
+fields, where the operator has defined any (see *Custom fields*).
 
 **A project's screen** names the project, its state, value and Organizations.
 Below them is the **stage bar**: every stage in order, the current one marked,
@@ -122,6 +122,19 @@ an Opportunity, a Task — a **Project** panel names the project it belongs to:
 its number, a link to it, its title, its state and its current stage with the
 stage's deadline. A record in no project, or in a project you may not see,
 shows no panel at all.
+
+**On an Organization's screen** a **Projects** panel lists the projects of that
+Organization you may see, newest first — the ten newest, saying how many there
+are and linking *All projects* to the projects list when there are more — each with
+its number, a link to it, its title, its state and its current stage.
+Administrators who may create projects get *New project* there, which opens the
+form with the Organization already chosen.
+
+**The command palette** (⌘K / CTRL+K) offers *Projects*, *New project*,
+*Project templates* and *Project analytics*, each to administrators with the
+permission its screen needs. The Admin UI's **global search** finds a project
+by its number, its title or the name of one of its Organizations — only among
+the projects you may see.
 
 Without the permission to create and run projects the screen is read-only: the
 stages, the workflow and the history are shown, and nothing can be changed.
@@ -368,9 +381,11 @@ off, and back on, on the **Modules** screen of the Admin UI
 
 While it is off:
 
-- the *Projects*, *Templates*, *Project roles* and *Loss reasons* entries and
-  every one of their screens are gone from the Admin UI, and so is the
-  *Project* panel on Order, Quote Request, Opportunity and Task screens;
+- the *Projects*, *Analytics*, *Templates*, *Project roles* and *Loss reasons*
+  entries and every one of their screens are gone from the Admin UI, and so are
+  the *Project* panel on Order, Quote Request, Opportunity and Task screens, the
+  *Projects* panel on the Organization screen, the command-palette actions and
+  projects in the global search;
 - every `/api/v1/admin/projects…` endpoint answers `503` with the code
   `MODULE_DISABLED`;
 - its permissions can no longer be granted to a role, and its settings cannot be
@@ -804,6 +819,29 @@ no statement runs. Nothing is read project by project: a project manager's name
 and a top project's card are read afterwards, for the few rows the statement
 answered. The service is `services/analytics-service.ts`, the range and ratios
 `domain/analytics-range.ts`.
+
+### Reading projects from another module
+
+`projectReadPort` (`ProjectReadPort` of `@endora-commerce/contracts`) is the
+one door another module, an overlay or a deployment reads projects through.
+It is gated: resolving it while Projects is off throws, and the call answers
+`503` `MODULE_DISABLED` — resolve it with `lazyPort` and declare the edge
+`degrades-without` with a `whenAbsent` sentence.
+
+| Method | What it answers |
+| --- | --- |
+| `findById(id)` | The project as a `ProjectRecord` — `id`, `number`, `title`, `state`, `currentStageId`, `currentStageName`, `organizationIds`, `valueAmount`, `valueCurrency`, `templateId`, `closedAt`, `createdAt` — or `null`. |
+| `findByRecord(kind, id)` | The project an `order`, `quote_request` or `opportunity` is linked to, as a `ProjectRecord`, or `null`. |
+
+Both answer for the caller, through `ProjectAccess` under the caller's own
+tenant context: a project that does not exist, one out of the caller's reach
+and one the caller may not see are the same `null`. The answer is a plain
+object, never an entity.
+
+`./backend` also exports **`nextProjectNumber(em)`**, the module's door to its
+number sequence — the next `PRJ-…` number, for code that writes projects
+without a Command, such as the demo composition; one format and one sequence,
+whoever creates the project.
 
 ### One read path
 

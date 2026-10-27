@@ -35,6 +35,7 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | `auth` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `settings` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `admin_notifications` | nie | degrades-without `adminNotificationRecordPort` — osoby, którym przypisano nowe zadania, nie dostają powiadomień. |
+| `admin_search` | nie | contributes-to `adminSearchProviderRegistry` |
 
 ## Uprawnienia
 
@@ -45,7 +46,11 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 
 ## Paleta poleceń
 
-_Brak._
+| Akcja | Otwiera | Uprawnienie |
+| --- | --- | --- |
+| `new-task` | `/tasks/new` | `tasks:write` |
+| `open-my-tasks` | `/tasks/mine` | `tasks:read` |
+| `open-tasks` | `/tasks` | `tasks:read` |
 
 ## Ustawienia
 

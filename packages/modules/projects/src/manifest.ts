@@ -382,7 +382,8 @@ export const manifest = defineModuleManifest({
   i18n: { bundlesDir: 'i18n' },
   // `docs/projects.md` at the package root: users' and developers' page.
   docs: { dir: 'docs' },
-  // Demo data is a later story's decision (research R-20); `false` is a
-  // decision, absent would be "nobody has decided".
+  // The demo Projects are a step of the demo composition, not this module's
+  // demo body (research R-20, T134); `false` is a decision, absent would be
+  // "nobody has decided".
   demo: false,
 });

@@ -544,7 +544,8 @@ by e-mail.
 
 ## Phase 14: Polish & Cross-Cutting Concerns
 
-- [ ] T136 [P] Complete `packages/modules/tasks/docs/tasks.md` and `packages/modules/projects/docs/projects.md` for users and developers (Task contexts, `ProjectAccess`, stage guards, events, ports); Polish copies; `check:module-docs`, `check:docs-translations`
+- [x] T136 [P] Complete `packages/modules/tasks/docs/tasks.md` and `packages/modules/projects/docs/projects.md` for users and developers (Task contexts, `ProjectAccess`, stage guards, events, ports); Polish copies; `check:module-docs`, `check:docs-translations`
+  - Note: added what was missing — the Organization screen's *Projects* panel, the palette actions and global search (both modules), those three in the off-state lists, `projectReadPort`, `nextProjectNumber` / `nextTaskNumber`; removed "custom fields arrive with a later release". `check:docs-translations` was already red before this task (the Polish `module-reference/{projects,tasks}` lacked the `admin_search` row and the palette table); both re-synced here.
 - [ ] T137 [P] `backend/test/perf/projects/list.perf.test.ts`: list + filter < 2 s at 1 000 Projects (SC-008)
 - [ ] T138 Confirm T085 has no `todo` left; run the full matrix
 - [ ] T139 Grep `backend/test/**` and `admin/test/**` for every path moved or deleted in Phase 9A and for every renamed contracts export (AGENTS.md trap: deleted files fail only in contract/integration trees)

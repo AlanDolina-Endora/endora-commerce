@@ -71,6 +71,11 @@ project is added on the project's *Tasks* tab, into one of its stages.
 Other modules can add panels at the end of a task's screen. Without the
 permission to create and edit tasks the screen is read-only.
 
+**The command palette** (⌘K / CTRL+K) offers *Tasks*, *My tasks* and *New
+task*, each to administrators with the permission its screen needs. The Admin
+UI's **global search** finds a task by its number or its title — only among the
+tasks you may see.
+
 ## Using Tasks
 
 **Creating a task.** A task needs only a title; it can also have a
@@ -112,7 +117,8 @@ off, and back on, on the **Modules** screen of the Admin UI
 While it is off:
 
 - the *My tasks* and *Tasks* entries and every task screen are gone from the
-  Admin UI, and so are a project's *Tasks* tab and its stage tasks;
+  Admin UI, and so are a project's *Tasks* tab and its stage tasks, the
+  command-palette actions and tasks in the global search;
 - every `/api/v1/admin/tasks…` endpoint answers `503` with the code
   `MODULE_DISABLED`;
 - its permissions can no longer be granted to a role;
@@ -219,6 +225,11 @@ them `degrades-without` with a `whenAbsent` sentence.
 
 Call `createMany` **after your own transaction has committed**: each task is
 written in a transaction of its own.
+
+`./backend` also exports **`nextTaskNumber(em)`**, the module's door to its
+number sequence — the next `TSK-…` number on the caller's transaction, for code
+that writes tasks without a Command, such as the demo composition; one format
+and one sequence, whoever creates the task.
 
 ### Events
 

@@ -77,6 +77,11 @@ projektu, do jednego z jego etapów.
 Inne moduły mogą dodawać panele na końcu ekranu zadania. Bez uprawnienia do
 tworzenia i zmieniania zadań ekran jest tylko do odczytu.
 
+**Paleta poleceń** (⌘K / Ctrl+K) proponuje pozycje *Zadania*, *Moje zadania* i
+*Nowe zadanie* — każdą administratorom z uprawnieniem, którego wymaga jej
+ekran. **Wyszukiwanie globalne** panelu administracyjnego znajduje zadanie po
+numerze lub tytule — wyłącznie wśród zadań, które możesz zobaczyć.
+
 ## Praca z zadaniami
 
 **Tworzenie zadania.** Zadanie potrzebuje tylko tytułu; może mieć też opis,
@@ -121,7 +126,7 @@ Gdy moduł jest wyłączony:
 
 - pozycje *Moje zadania* i *Zadania* oraz wszystkie ekrany zadań znikają z
   panelu administracyjnego, a wraz z nimi karta *Zadania* projektu i jego
-  zadania etapów;
+  zadania etapów, pozycje palety poleceń i zadania w wyszukiwaniu globalnym;
 - każdy endpoint `/api/v1/admin/tasks…` odpowiada `503` z kodem
   `MODULE_DISABLED`;
 - jego uprawnień nie można już nadać żadnej roli;
@@ -233,6 +238,11 @@ Rozwiązuj je przez `lazyPort` i deklaruj jako `degrades-without` ze zdaniem
 
 Wywołuj `createMany` **dopiero po zatwierdzeniu własnej transakcji**: każde
 zadanie jest zapisywane we własnej transakcji.
+
+`./backend` eksportuje też **`nextTaskNumber(em)`** — wejście modułu do jego
+sekwencji numerów: kolejny numer `TSK-…` w transakcji wywołującego, dla kodu,
+który zapisuje zadania bez polecenia (Command), na przykład dla kompozycji demo;
+jeden format i jedna sekwencja, niezależnie od tego, kto tworzy zadanie.
 
 ### Zdarzenia
 

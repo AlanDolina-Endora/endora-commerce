@@ -67,7 +67,8 @@ przeglądać projekty, albo jego członkowie i dopisane osoby, które wybiera si
 wtedy w tym samym miejscu — i jednym zdaniem mówi, co ten wybór teraz oznacza
 (zob. *Kto widzi projekt*). Formularz proponuje organizacje, do których masz
 dostęp, i aktywnych administratorów: jego wypełnienie nie wymaga uprawnień
-innych niż tworzenie projektów. Pola własne pojawią się w kolejnym wydaniu.
+innych niż tworzenie projektów. Dalej są pola niestandardowe projektu, jeśli
+operator jakieś zdefiniował (zob. *Pola niestandardowe*).
 
 **Ekran projektu** pokazuje projekt, jego stan, wartość i organizacje. Pod
 nimi jest **pasek etapów**: wszystkie etapy w kolejności, z zaznaczonym
@@ -124,6 +125,19 @@ ofertowego, szansy sprzedażowej, zadania — panel **Projekt** wskazuje projekt
 do którego dokument należy: jego numer jako odnośnik, tytuł, stan oraz bieżący
 etap z terminem. Dokument spoza projektów albo z projektu, którego nie możesz
 zobaczyć, nie pokazuje żadnego panelu.
+
+**Na ekranie organizacji** panel **Projekty** wymienia projekty tej organizacji,
+które możesz zobaczyć, od najnowszych — dziesięć najnowszych; gdy jest ich
+więcej, panel podaje, ile ich jest, i prowadzi odnośnikiem *Wszystkie projekty*
+do listy projektów — każdy z numerem jako odnośnikiem, tytułem, stanem i
+bieżącym etapem. Administratorzy, którzy mogą tworzyć projekty, mają tam
+przycisk *Nowy projekt*, który otwiera formularz z wybraną już organizacją.
+
+**Paleta poleceń** (⌘K / Ctrl+K) proponuje pozycje *Projekty*, *Nowy projekt*,
+*Szablony projektów* i *Analityka projektów* — każdą administratorom z
+uprawnieniem, którego wymaga jej ekran. **Wyszukiwanie globalne** panelu
+administracyjnego znajduje projekt po numerze, tytule lub nazwie jednej z jego
+organizacji — wyłącznie wśród projektów, które możesz zobaczyć.
 
 Bez uprawnienia do tworzenia i prowadzenia projektów ekran jest tylko do
 odczytu: etapy, przebieg i historia są widoczne, ale niczego nie można zmienić.
@@ -381,10 +395,11 @@ włącza ponownie na ekranie **Moduły** panelu administracyjnego
 
 Gdy moduł jest wyłączony:
 
-- pozycje *Projekty*, *Szablony*, *Role projektowe* i *Powody utraty* oraz
-  wszystkie ich ekrany znikają z panelu administracyjnego, podobnie jak panel
-  *Projekt* na ekranach zamówień, zapytań ofertowych, szans sprzedażowych i
-  zadań;
+- pozycje *Projekty*, *Analityka*, *Szablony*, *Role projektowe* i *Powody
+  utraty* oraz wszystkie ich ekrany znikają z panelu administracyjnego, podobnie
+  jak panel *Projekt* na ekranach zamówień, zapytań ofertowych, szans
+  sprzedażowych i zadań, panel *Projekty* na ekranie organizacji, pozycje palety
+  poleceń i projekty w wyszukiwaniu globalnym;
 - każdy endpoint `/api/v1/admin/projects…` odpowiada `503` z kodem
   `MODULE_DISABLED`;
 - jego uprawnień nie można już nadać żadnej roli, a jego ustawień nie można
@@ -834,6 +849,30 @@ i żadne zapytanie nie jest wykonywane. Nic nie jest czytane projekt po
 projekcie: nazwisko kierownika projektu i karta najcenniejszego projektu są
 czytane potem, dla kilku wierszy, które zwróciło zapytanie. Usługa to
 `services/analytics-service.ts`, zakres i proporcje — `domain/analytics-range.ts`.
+
+### Odczyt projektów z innego modułu
+
+`projectReadPort` (`ProjectReadPort` z `@endora-commerce/contracts`) to jedyne
+wejście, przez które inny moduł, moduł nakładkowy lub wdrożenie odczytuje
+projekty. Jest bramkowany: rozwiązanie go przy wyłączonym module Projekty
+zgłasza błąd, a wywołanie odpowiada `503` `MODULE_DISABLED` — rozwiązuj go
+przez `lazyPort` i deklaruj krawędź jako `degrades-without` ze zdaniem
+`whenAbsent`.
+
+| Metoda | Co zwraca |
+| --- | --- |
+| `findById(id)` | Projekt jako `ProjectRecord` — `id`, `number`, `title`, `state`, `currentStageId`, `currentStageName`, `organizationIds`, `valueAmount`, `valueCurrency`, `templateId`, `closedAt`, `createdAt` — albo `null`. |
+| `findByRecord(kind, id)` | Projekt, do którego podpięto `order`, `quote_request` lub `opportunity`, jako `ProjectRecord`, albo `null`. |
+
+Obie metody odpowiadają w imieniu wywołującego, przez `ProjectAccess` w jego
+własnym kontekście dzierżawy: projekt, który nie istnieje, projekt poza
+zasięgiem wywołującego i projekt, którego nie może on zobaczyć, to ten sam
+`null`. Odpowiedź jest zwykłym obiektem, nigdy encją.
+
+`./backend` eksportuje też **`nextProjectNumber(em)`** — wejście modułu do jego
+sekwencji numerów: kolejny numer `PRJ-…` dla kodu, który zapisuje projekty bez
+polecenia (Command), na przykład dla kompozycji demo; jeden format i jedna
+sekwencja, niezależnie od tego, kto tworzy projekt.
 
 ### Jedna ścieżka odczytu
 
