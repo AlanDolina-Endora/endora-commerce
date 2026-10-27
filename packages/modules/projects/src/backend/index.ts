@@ -1,4 +1,5 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
+import type { Redis } from 'ioredis';
 import type {
   AdminI18nTranslatePort,
   AdminNotificationRecordPort,
@@ -9,6 +10,7 @@ import type {
   AssetsLibraryPort,
   AuditReferenceRegistryPort,
   CatalogProductReadPort,
+  EmailDefaultsRegistryPort,
   OpportunityReadPort,
   OrderListPort,
   OrderReadPort,
@@ -19,6 +21,7 @@ import type {
   TaskContextRegistryPort,
   TaskReadPort,
   TaskWritePort,
+  TransactionalEmailSender,
 } from '@endora-commerce/contracts';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import {
@@ -29,6 +32,7 @@ import {
   type RequireAdminFactory,
   type SettingsReadPort,
 } from '@endora-commerce/platform/kernel';
+import { STAGE_ALERT_DEFAULT, STAGE_ALERT_EMAIL_CODE } from './email-templates/stage-alert-defaults.js';
 import { Project } from './entities/project.entity.js';
 import { ProjectAttachment } from './entities/project-attachment.entity.js';
 import { ProjectComment } from './entities/project-comment.entity.js';
@@ -86,10 +90,13 @@ import type { ProjectTasks } from './services/project-tasks.js';
 import { RecordProjectService } from './services/record-project-service.js';
 import { ProjectReferenceService } from './services/reference-service.js';
 import { createRoleService } from './services/role-service.js';
+import { StageAlertService, StageAlertStore } from './services/stage-alert-service.js';
+import { createStageAlertEmail } from './services/stage-alert-email.js';
 import { StageService } from './services/stage-service.js';
 import { StageTaskService } from './services/stage-task-service.js';
 import { createProjectTaskContext } from './services/task-context-descriptor.js';
 import { TemplateService } from './services/template-service.js';
+import { stageAlertTick, startStageAlerts } from './workers/stage-alert-worker.js';
 
 /**
  * `projects` — composed by the kernel container.
@@ -131,6 +138,21 @@ interface ProjectsCradle {
   readonly projectsDocumentLookupService: ProjectDocumentLookupService;
   readonly projectsAttachmentService: ProjectAttachmentService;
   readonly projectsHistoryService: ProjectHistoryService;
+}
+
+/** What the deadline-alert section registers and reads (User Story 8). */
+interface StageAlertsCradle {
+  readonly projectsStageAlertService: StageAlertService;
+  readonly projectsStageAlertTick: () => Promise<void>;
+  /**
+   * `transactional_emails`' late-bound sender, read per send. It answers
+   * `undefined` until that module has announced it.
+   */
+  readonly transactionalEmailSenderAccessor: () => TransactionalEmailSender | undefined;
+  /** Whether this process runs queue consumers — the platform's one answer. */
+  readonly processRunsWorkers: boolean;
+  /** The connection a module may build a queue on; undefined where a composition wants none. */
+  readonly moduleQueueRedis: Redis | undefined;
 }
 
 /** `_i18n`'s resolver over this module's own bundles. */
@@ -578,6 +600,80 @@ export function registerModule(ctx: ModuleContext): void {
     });
   });
   // --- end of Collaboration --------------------------------------------------------
+
+  // --- Deadline alerts (User Story 8, research R-12) ---------------------------------
+  // A sweep, not timers: the Stages are the schedule, and one pass claims what
+  // is due today — one row per (Stage, offset, deadline) — before it delivers
+  // anything. Who is told is read when the alert goes out: the Project's
+  // Members who may see it at that moment (`ProjectAccess.canSeeAs`). The bell
+  // is this module's notifier, which decides `admin_notifications`' presence
+  // itself; the e-mail goes out through `transactional_emails`' sender, read
+  // off the cradle per send — it is a function, announced late, and `lazyPort`
+  // forwards method calls only.
+  ctx.di.register({
+    projectsStageAlertService: ctx
+      .asFunction(
+        ({ emFactory, commandBus, projectsAccess, projectsReadService, projectsNotifier }: ProjectsCradle) =>
+          new StageAlertService({
+            store: new StageAlertStore({ emFactory, commandBus }),
+            timeZone: () => projectsReadService.timeZone(),
+            access: projectsAccess,
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+            notifier: projectsNotifier,
+            email: createStageAlertEmail({
+              sender: () => ctx.cradle<StageAlertsCradle>().transactionalEmailSenderAccessor(),
+              log: (message, context) => ctx.log.warn(context, message),
+            }),
+            log: (message, context) => ctx.log.warn(context, message),
+          }),
+      )
+      .singleton(),
+    // What one tick of the clock runs. Registered, so that what a test drives
+    // is what the consumer runs: presence first, then one pass.
+    projectsStageAlertTick: ctx
+      .asFunction(({ projectsStageAlertService }: StageAlertsCradle) =>
+        stageAlertTick({
+          alerts: projectsStageAlertService,
+          isPresent: () => effectiveState.isPresent('projects'),
+          log: ctx.log,
+        }),
+      )
+      .singleton(),
+  });
+
+  /**
+   * The alert e-mail's default subject and body — a **contribution** hook. It
+   * pushes an inert descriptor into `emailDefaultsPort`, the ungated registry
+   * `transactional_emails` owns and reads once at boot, and carries no
+   * presence probe: the definition is seeded from this module's manifest
+   * whether the module is on or off, and a push skipped here would leave it
+   * with an empty body until the next restart after a reactivation.
+   */
+  ctx.onBoot(() => {
+    lazyPort<EmailDefaultsRegistryPort>(ctx, 'emailDefaultsPort').register(
+      STAGE_ALERT_EMAIL_CODE,
+      STAGE_ALERT_DEFAULT,
+      'projects',
+    );
+  });
+
+  // The clock: a Job Scheduler and its consumer, attached where `app.log`
+  // exists and through `ctx.worker`, which is what stops it with the module.
+  // Built only where the host says this process consumes queues and offers a
+  // connection; the shared test server says neither and drives the tick itself.
+  ctx.routes(async (app) => {
+    const cradle = ctx.cradle<StageAlertsCradle>();
+    await startStageAlerts({
+      tick: cradle.projectsStageAlertTick,
+      isPresent: () => effectiveState.isPresent('projects'),
+      hasWork: () => cradle.projectsStageAlertService.hasWork(),
+      processRunsWorkers: cradle.processRunsWorkers,
+      moduleQueueRedis: cradle.moduleQueueRedis,
+      attach: (worker) => ctx.worker(worker, { logger: app.log }),
+      onClose: (close) => app.addHook('onClose', close),
+    });
+  });
+  // --- end of Deadline alerts --------------------------------------------------------
 
   // --- Routes ------------------------------------------------------------------------
   ctx.routes(async (app) => {

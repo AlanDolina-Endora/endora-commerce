@@ -30,6 +30,7 @@ const SENTENCES: Record<string, ProjectNotificationText> = {
   message: projectNotificationText.message('PRJ-000042'),
   'mention, the author known': projectNotificationText.mention('PRJ-000042', 'Ada Author'),
   'mention, the author unknown': projectNotificationText.mention('PRJ-000042', null),
+  'stage deadline': projectNotificationText.stageDeadline('PRJ-000042', 'Design', '2026-10-30', 3),
 };
 
 describe('projectNotificationText', () => {
@@ -37,6 +38,12 @@ describe('projectNotificationText', () => {
     expect(SENTENCES.message!.title).toBe('New message on project PRJ-000042');
     expect(SENTENCES['mention, the author known']!.title).toBe('Ada Author mentioned you in project PRJ-000042');
     expect(SENTENCES['mention, the author unknown']!.title).toBe('You were mentioned in project PRJ-000042');
+  });
+
+  it('a deadline alert names the Stage, its deadline and the days left as well — and nothing else', () => {
+    expect(SENTENCES['stage deadline']!.title).toBe(
+      'Stage "Design" of project PRJ-000042 is due on 2026-10-30 (days left: 3)',
+    );
   });
 
   for (const [label, text] of Object.entries(SENTENCES)) {
@@ -59,9 +66,10 @@ describe('projectNotificationText', () => {
     }
   });
 
-  it('links a message to the Messages tab and a mention to the Project', () => {
+  it('links a message to the Messages tab, a deadline alert to the Stages tab and a mention to the Project', () => {
     const id = '7d3c8f1e-0000-4000-8000-000000000001';
     expect(projectLinkPath(id, 'projects.project.message')).toBe(`/projects/${id}?tab=messages`);
     expect(projectLinkPath(id, 'projects.project.mention')).toBe(`/projects/${id}`);
+    expect(projectLinkPath(id, 'projects.project.stage_deadline')).toBe(`/projects/${id}?tab=stages`);
   });
 });

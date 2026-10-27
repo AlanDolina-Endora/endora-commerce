@@ -14,7 +14,9 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
+import { enterSystemScope } from '@endora-commerce/platform/kernel';
 import { AdminNotification } from '../../helpers/package-entities.js';
+import type { StageAlertService } from '../../../../packages/modules/projects/src/backend/services/stage-alert-service.js';
 import { seedCrmAdmin, seedCrmOrganization, seedCrmSalesRep } from '../../helpers/seed-crm.js';
 import {
   PROJECTS_ADMIN,
@@ -26,6 +28,7 @@ import {
   deleteProjects,
   errorShape,
   getProject,
+  patchStage,
   stageNamed,
 } from './helpers.js';
 
@@ -405,7 +408,45 @@ describe('projects — who sees a Project (US5)', () => {
   // The reads of FR-020 later stories bring. Each task named un-`todo`s its row.
   it.todo('global search (`projects.project` provider) answers only visible Projects — T132, Phase 13');
   it.todo('analytics count only visible Projects — T127, Phase 12');
-  // Mention and message notifications are measured above (T111); the Stage
-  // deadline alert arrives with Phase 10.
-  it.todo('Stage-deadline notifications reach only people who may see the Project — T118, Phase 10');
+
+  it('Stage-deadline notifications reach only Members who may see the Project (T118)', async () => {
+    await setSetting('members');
+    // A Member out of reach (a sales representative; the Project is internal)
+    // and a Member who may not read Projects at all, beside one who may see it.
+    const reach = await seedCrmOrganization(h.em(), 'vis-alerts');
+    const rep = await seedCrmSalesRep(h.em(), [reach], PERMISSIONS);
+    const noRead = await seedCrmAdmin(h.em(), 'vis-no-read', ['tasks:read']);
+    try {
+      const project = await createProject(h, {
+        title: `${token} alerts`,
+        visibility: 'members_and_listed',
+        members: [member, rep, noRead].map((who) => ({ adminUserId: who.adminUserId, roleIds: [] })),
+        viewerIds: [listed.adminUserId],
+      });
+      created.push(project.id);
+      await patchStage(h, project.id, stageNamed(project, 'Design'), { alertOffsetsDays: [1], deadlineOn: '2032-03-11' });
+      // 10 March 2032, 08:30 in Warsaw.
+      const summary = await enterSystemScope('test: projects visibility alerts', () =>
+        (h.container.resolve('projectsStageAlertService') as StageAlertService).sweep(new Date('2032-03-10T07:30:00.000Z')),
+      );
+      expect(summary.claimed).toBeGreaterThanOrEqual(1);
+      const told = async (who: { adminUserId: string }) =>
+        h.em().count(
+          AdminNotification,
+          { subjectId: project.id, targetAdminUserId: who.adminUserId, kind: 'projects.project.stage_deadline' },
+          { filters: false },
+        );
+      expect(await told(member)).toBe(1);
+      // Out of reach, or without `projects:read`: a Member who may not see the Project is skipped.
+      expect(await told(rep)).toBe(0);
+      expect(await told(noRead)).toBe(0);
+      // People who may see it but are no Members are not told either: alerts go to Members only.
+      expect(await told(listed)).toBe(0);
+      expect(await told(seeAll)).toBe(0);
+      expect(await told(other)).toBe(0);
+    } finally {
+      rep.undo();
+      noRead.undo();
+    }
+  });
 });

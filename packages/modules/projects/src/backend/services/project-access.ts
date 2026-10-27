@@ -95,6 +95,10 @@ export const PROJECT_ACCESS_READERS: Readonly<Record<string, string>> = {
     'which must hold for a deleter who may not see the Project and while this module is off.',
   'services/project-audit-references.ts':
     'Labels the audit rows of only the Projects `visibleIds` hands back for the reader, by those ids.',
+  'services/stage-alert-service.ts':
+    'The deadline-alert sweep, run in the system scope its worker enters: it claims the alerts due ' +
+    'today across every Project and reads the Members of a claimed Project by that id only. Nobody ' +
+    'is told anything until `canSeeAs` has answered for them, and the probe answers one bit.',
   'services/task-context-descriptor.ts':
     'The `project` Task context answers `allVisibleIds` / `visibleIds` and describes only the ids ' +
     '`visibleIds` handed back; Projects and their Stages are read by those ids only.',

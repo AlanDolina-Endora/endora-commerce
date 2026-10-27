@@ -4,7 +4,10 @@ import { effectiveState, rethrowIfModuleDisabled } from '@endora-commerce/platfo
 /** `not-present` is the operator's choice — the bell is switched off — never a failure. */
 export type ProjectNotificationOutcome = 'recorded' | 'not-present';
 
-export type ProjectNotificationKind = 'projects.project.message' | 'projects.project.mention';
+export type ProjectNotificationKind =
+  | 'projects.project.message'
+  | 'projects.project.mention'
+  | 'projects.project.stage_deadline';
 
 /**
  * What a bell entry says, twice over: the finished English sentence, and the
@@ -27,7 +30,9 @@ const message = (key: string, params: Record<string, string>): AdminNotification
  * Every sentence this module records in the bell. A sentence names a Project
  * **by its number** and a colleague by their name, and nothing else: a bell is
  * read outside the Project's visibility, so never a title and never a text
- * (the CRM rule, `crm-notifier.ts`). `project-notifier.test.ts` proves the
+ * (the CRM rule, `crm-notifier.ts`). A deadline alert names the Stage as well,
+ * and its deadline — what the alert is about (User Story 8), told only to a
+ * Member who may see the Project at the moment it is sent. `project-notifier.test.ts` proves the
  * English template filled with the params is the sentence, so the params
  * cannot say more than it does. A mention with no known author is a sentence
  * of its own: a template cannot drop a clause.
@@ -47,6 +52,14 @@ export const projectNotificationText = {
           title: `${authorName} mentioned you in project ${number}`,
           titleMessage: message('mentionByAuthor', { author: authorName, number }),
         },
+  /**
+   * A Stage's deadline is `daysLeft` days away. The count is said as a figure
+   * after a label, so one sentence holds for every count in both languages.
+   */
+  stageDeadline: (number: string, stageName: string, deadlineOn: string, daysLeft: number): ProjectNotificationText => ({
+    title: `Stage "${stageName}" of project ${number} is due on ${deadlineOn} (days left: ${daysLeft})`,
+    titleMessage: message('stageDeadline', { number, stage: stageName, deadline: deadlineOn, days: String(daysLeft) }),
+  }),
 };
 
 export interface ProjectNotification extends ProjectNotificationText {
@@ -59,10 +72,15 @@ export interface ProjectNotifier {
   notify(notification: ProjectNotification): Promise<ProjectNotificationOutcome>;
 }
 
-/** Where a bell entry about a Project leads: its screen, on the Messages tab for a message. */
+/**
+ * Where a bell entry about a Project leads: its screen — on the Messages tab
+ * for a message, on the Stages tab for a deadline alert.
+ */
 export function projectLinkPath(projectId: string, kind: ProjectNotificationKind): string {
   const path = `/projects/${projectId}`;
-  return kind === 'projects.project.message' ? `${path}?tab=messages` : path;
+  if (kind === 'projects.project.message') return `${path}?tab=messages`;
+  if (kind === 'projects.project.stage_deadline') return `${path}?tab=stages`;
+  return path;
 }
 
 /** The longest sentence `admin_notifications` stores as an entry's `title`. */

@@ -1,10 +1,14 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { enterSystemScope } from '@endora-commerce/platform/kernel';
 import {
   setupBackendServer,
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
-import { expectModuleAbsent } from '../../helpers/off-state.js';
+import { expectModuleAbsent, withModuleOff, type OffStateAxis } from '../../helpers/off-state.js';
+import { AdminNotification } from '../../helpers/package-entities.js';
+import { TEST_ADMIN_ID } from '../../helpers/test-actors.js';
+import { createProject, deleteProjects, patchStage, stageNamed } from './helpers.js';
 
 /**
  * `projects` off-state — Constitution XVII item 6
@@ -134,6 +138,88 @@ describe('projects off-state (Constitution XVII)', () => {
       ],
       adminPresence: { cookies: admin },
       settingWrite: { code: 'projects.visibility', value: 'everyone', cookies: admin },
+    });
+  });
+
+  describe('the deadline-alert sweep’s tick (User Story 8)', () => {
+    // The consumer of `projects-stage-alerts` is attached through `ctx.worker`,
+    // which is what stops it with the module — and which this harness cannot
+    // show: it composes with no queue connection, so no consumer is built
+    // (`check:subscribe-seam` holds the `Worker` to that seam statically, and
+    // `stage-alert-worker.test.ts` the function that builds it).
+    //
+    // What is driven here is the work's own gate: the function the consumer
+    // runs on every tick, exactly as the module composed it, which decides the
+    // module's presence before it reads a row. The pass reads its own clock, so
+    // the clock is set to 08:30 in Warsaw on the alert's due day.
+    const created: string[] = [];
+    const tick = () =>
+      enterSystemScope('test: projects stage alert tick', () =>
+        (h.container.resolve('projectsStageAlertTick') as () => Promise<void>)(),
+      );
+    const alertsAbout = (projectId: string) =>
+      h.em().count(AdminNotification, { subjectId: projectId, kind: 'projects.project.stage_deadline' }, { filters: false });
+    const deliveriesOf = async (stageId: string) =>
+      (
+        (await h
+          .em()
+          .getConnection()
+          .execute(`select 1 from "project_stage_alert_deliveries" where "stage_id" = ?`, [stageId])) as unknown[]
+      ).length;
+    /** A Project whose Stage alert is due on `dueOn`, the harness administrator its Member. */
+    const dueOn = async (dueOn: string) => {
+      const project = await createProject(h, {
+        title: `off-state alert ${dueOn}`,
+        members: [{ adminUserId: TEST_ADMIN_ID, roleIds: [] }],
+      });
+      created.push(project.id);
+      const design = stageNamed(project, 'Design');
+      const [year, month, day] = dueOn.split('-').map(Number) as [number, number, number];
+      await patchStage(h, project.id, design, {
+        alertOffsetsDays: [1],
+        deadlineOn: new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10),
+      });
+      return { projectId: project.id, design };
+    };
+    const at = (date: string) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(`${date}T07:30:00.000Z`));
+    };
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    afterAll(async () => {
+      await deleteProjects(h, created);
+    });
+
+    it('delivers a due alert while on — the positive control', async () => {
+      const { projectId, design } = await dueOn('2033-01-10');
+      at('2033-01-10');
+      await tick();
+      expect(await alertsAbout(projectId)).toBe(1);
+      expect(await deliveriesOf(design)).toBe(1);
+    });
+
+    it.each<[OffStateAxis, string]>([
+      ['deactivated', '2033-01-12'],
+      ['platform-unavailable', '2033-01-14'],
+    ])('claims nothing and tells nobody while %s, and delivers once after the module is back', async (axis, day) => {
+      const { projectId, design } = await dueOn(day);
+      at(day);
+      await withModuleOff('projects', axis, async () => {
+        await tick();
+        await tick();
+        expect(await alertsAbout(projectId)).toBe(0);
+        // Nothing claimed: the alert is still due when the module comes back.
+        expect(await deliveriesOf(design)).toBe(0);
+      });
+
+      await tick();
+      await tick();
+      expect(await alertsAbout(projectId)).toBe(1);
+      expect(await deliveriesOf(design)).toBe(1);
     });
   });
 });

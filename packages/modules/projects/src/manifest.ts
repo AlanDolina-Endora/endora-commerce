@@ -57,7 +57,7 @@ const settings = defineModuleSettingsManifest({
       code: PROJECTS_SETTING_CODES.ALERTS_TIME_ZONE,
       name: 'Time zone of Stage dates and deadline alerts',
       description:
-        'The time zone, as an IANA name such as Europe/Warsaw, in which "today" is counted for Projects: the day a Stage starts, whether its deadline has passed, and the day a deadline alert is sent.',
+        'The time zone, as an IANA name such as Europe/Warsaw, in which "today" is counted for Projects: the day a Stage starts, whether its deadline has passed, and the day a deadline alert is sent — from 08:00 in this zone.',
       groupCode: 'projects',
       valueType: 'string',
       defaultValue: 'Europe/Warsaw',
@@ -101,6 +101,11 @@ export const manifest = defineModuleManifest({
   // attached, downloaded and kept from deletion while a Project uses it;
   // `audit_logs` owns `auditReferenceRegistry`, through which an audit row
   // about a Project is labelled. None of the three can be switched off.
+  //
+  // User Story 8: `transactional_emails` owns the sender a Stage deadline
+  // alert's e-mail goes out through, and `emailDefaultsPort`, the registry this
+  // module pushes that e-mail's default subject and body into. It cannot be
+  // switched off.
   dependencies: [
     '_i18n',
     'admin_roles',
@@ -112,6 +117,7 @@ export const manifest = defineModuleManifest({
     'orders',
     'organizations',
     'settings',
+    'transactional_emails',
   ],
   /**
    * Edges that are real to the container and bind no operator (FR-040: a
@@ -189,11 +195,13 @@ export const manifest = defineModuleManifest({
       moduleId: 'admin_notifications',
       name: 'adminNotificationRecordPort',
       kind: 'degrades-without',
-      whenAbsent: 'Project members are not notified of messages and mentions.',
+      whenAbsent:
+        'Project members are not notified of messages and mentions, and get Stage deadline alerts by e-mail only.',
       reason:
         'The one call into this owner is `project-notifier.ts`, which decides its presence in front ' +
         'of the gate and answers `not-present` in its return type; nothing in this module fails ' +
-        "closed on it, and no table of that owner is referenced from this module's schema.",
+        "closed on it, and no table of that owner is referenced from this module's schema. A deadline " +
+        'alert is e-mailed either way, and is settled `email` when the bell is off.',
     },
   ],
   settings,
@@ -271,6 +279,31 @@ export const manifest = defineModuleManifest({
     { code: 'PROJECT_NOTE_NOT_AUTHOR' },
     { code: 'PROJECT_MESSAGE_IMMUTABLE' },
     { code: 'PROJECT_ATTACHMENT_TOO_LARGE' },
+  ],
+  /**
+   * The one e-mail this module sends: a Stage deadline alert, to every Member
+   * who may see the Project, on the day the deadline is that many days away
+   * (User Story 8). Its default subject and body, in English and Polish, are
+   * pushed from this module's boot hook
+   * (`src/backend/email-templates/stage-alert-defaults.ts`); an operator edits
+   * them, or switches the e-mail off, on the e-mail templates screen.
+   *
+   * The variables are what the bell entry says and no more.
+   */
+  transactionalEmails: [
+    {
+      code: 'projects_stage_deadline_alert',
+      name: 'Stage deadline alert',
+      group: 'projects',
+      description:
+        'Sent to every member of a project who may see it, on the day a deadline alert of its current stage is due — a set number of days before the stage deadline.',
+      variables: [
+        { key: 'project.number', label: 'Project number', sampleValue: 'PRJ-000042' },
+        { key: 'stage.name', label: 'Stage name', sampleValue: 'Design' },
+        { key: 'stage.deadline', label: 'Stage deadline', sampleValue: 'October 30, 2026' },
+        { key: 'alert.daysLeft', label: 'Days left until the deadline', sampleValue: '3' },
+      ],
+    },
   ],
   i18n: { bundlesDir: 'i18n' },
   // `docs/projects.md` at the package root: users' and developers' page.
