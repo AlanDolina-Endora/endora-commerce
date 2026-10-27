@@ -46,7 +46,7 @@ import {
  * FR-020 names every read of a Project. The ones that exist are measured for
  * each cell — the list and its total, the detail, the Stage history, the
  * Project's Tasks tab, its Tasks in the Tasks module, the record panel of its
- * Task, the mention list — and every invisible answer is byte-for-byte the
+ * Task, the mention list, analytics — and every invisible answer is byte-for-byte the
  * answer for an id that does not exist. The reads later stories bring are `todo` rows below, each
  * naming the task that turns it into a measurement.
  */
@@ -65,7 +65,7 @@ describe('projects — who sees a Project (US5)', () => {
   /** Every title of this file carries it, so `q` narrows the list to this file's Projects. */
   const token = `vis${randomUUID().slice(0, 8)}`;
 
-  const PERMISSIONS = ['projects:read', 'projects:write', 'tasks:read', 'tasks:write'];
+  const PERMISSIONS = ['projects:read', 'projects:write', 'projects:analytics', 'tasks:read', 'tasks:write'];
   const VISIBILITIES: ProjectVisibility[] = ['inherit', 'everyone', 'members_and_listed'];
   const SETTINGS: ProjectVisibilitySetting[] = ['everyone', 'members'];
   type Reader = 'member' | 'listed' | 'other' | 'seeAll';
@@ -407,7 +407,50 @@ describe('projects — who sees a Project (US5)', () => {
 
   // The reads of FR-020 later stories bring. Each task named un-`todo`s its row.
   it.todo('global search (`projects.project` provider) answers only visible Projects — T132, Phase 13');
-  it.todo('analytics count only visible Projects — T127, Phase 12');
+
+  it('analytics count only visible Projects (T127)', async () => {
+    // Three Projects of their own, one per visibility, from a Template of this
+    // case alone — the Template filter keeps every other Project out of the figures.
+    const template = await callProjects(h, 'POST', '/templates', {
+      payload: {
+        name: `${token} analytics`,
+        roleIds: [],
+        stages: [{ key: 'only', name: 'Only', color: '#3b82f6', completionPermitted: true }],
+        moves: [],
+      },
+    });
+    expect(template.statusCode, template.body).toBe(201);
+    const templateId = (template.json() as { data: { id: string } }).data.id;
+    try {
+      for (const visibility of VISIBILITIES) {
+        const project = await createProject(h, {
+          title: `${token} analytics ${visibility}`,
+          templateId,
+          stages: undefined,
+          visibility,
+          members: [{ adminUserId: member.adminUserId, roleIds: [] }],
+          viewerIds: [listed.adminUserId],
+        });
+        created.push(project.id);
+      }
+      const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+      const range = `from=${day(-1)}&to=${day(1)}&templateId=${templateId}`;
+      for (const setting of SETTINGS) {
+        await setSetting(setting);
+        for (const reader of READERS) {
+          const wanted = VISIBILITIES.filter((v) => expected(setting, v, reader)).length;
+          const summary = await callProjects(h, 'GET', `/analytics/summary?${range}`, { cookies: person(reader).cookies });
+          expect(summary.statusCode, summary.body).toBe(200);
+          expect(summary.json(), `${setting} × ${reader}`).toMatchObject({ projectCount: wanted, data: { opened: wanted } });
+          const value = await callProjects(h, 'GET', `/analytics/value?${range}`, { cookies: person(reader).cookies });
+          expect(value.statusCode, value.body).toBe(200);
+          expect(value.json(), `${setting} × ${reader}`).toMatchObject({ projectCount: wanted, excluded: { noValue: wanted } });
+        }
+      }
+    } finally {
+      await h.em().getConnection().execute(`delete from "project_templates" where "id" = ?`, [templateId]);
+    }
+  });
 
   it('Stage-deadline notifications reach only Members who may see the Project (T118)', async () => {
     await setSetting('members');

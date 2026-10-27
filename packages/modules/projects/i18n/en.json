@@ -3,6 +3,7 @@
   "adminRoles.permission.projects:write": "Create and run projects",
   "adminRoles.permission.projects:configure": "Configure projects (roles, templates, loss reasons)",
   "adminRoles.permission.projects:see_all": "See every project regardless of visibility",
+  "adminRoles.permission.projects:analytics": "View project analytics",
   "errors.PROJECT_NOT_FOUND": "This project does not exist or is not available to you.",
   "errors.PROJECT_HAS_LINKS": "This project has linked records. Unlink them before deleting the project.",
   "errors.PROJECT_ORGANIZATION_OUT_OF_SCOPE": "One of the organizations is not available to you.",

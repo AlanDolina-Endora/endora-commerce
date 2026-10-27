@@ -248,6 +248,14 @@ export const manifest = defineModuleManifest({
       module: 'projects',
       requires: ['projects:read'],
     },
+    {
+      // How all Projects are going (User Story 10): the seven figures of
+      // `GET /projects/analytics/*`, each over the Projects the reader may see.
+      code: 'projects:analytics',
+      label: 'View project analytics',
+      module: 'projects',
+      requires: ['projects:read'],
+    },
   ],
   /**
    * The refusals this module raises, each with its sentence under

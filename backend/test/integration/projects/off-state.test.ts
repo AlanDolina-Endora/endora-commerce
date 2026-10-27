@@ -135,6 +135,11 @@ describe('projects off-state (Constitution XVII)', () => {
         { url: `${API}/${ID}/history`, cookies: admin },
         { url: `${API}/lookups/mentionable`, cookies: admin },
         { url: `${API}/lookups/documents`, cookies: admin },
+        // User Story 10's routes — the seven analytics figures.
+        ...['summary', 'durations', 'time-in-stage', 'losses', 'value', 'top-open', 'managers'].map((figure) => ({
+          url: `${API}/analytics/${figure}?from=2026-01-01&to=2026-01-31`,
+          cookies: admin,
+        })),
       ],
       adminPresence: { cookies: admin },
       settingWrite: { code: 'projects.visibility', value: 'everyone', cookies: admin },

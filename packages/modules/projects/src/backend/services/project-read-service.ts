@@ -360,6 +360,14 @@ export class ProjectReadService {
     return summary!;
   }
 
+  /**
+   * The summaries of Projects a statement carrying `visibleProjectSql` selected
+   * — the most valuable open Projects of analytics (User Story 10) — in order.
+   */
+  async summaries(rows: readonly VisibleProjectRow[]): Promise<ProjectSummary[]> {
+    return this.#summaries(rows);
+  }
+
   /** The Project a write that began with `loadVisible` has just changed. */
   async afterWrite(id: string, language: string): Promise<ProjectDetail> {
     return this.#detail(await this.deps.access.rowAfterWrite(id), language);

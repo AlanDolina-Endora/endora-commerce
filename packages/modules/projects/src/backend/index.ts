@@ -58,6 +58,7 @@ import { ProjectTemplateStage } from './entities/project-template-stage.entity.j
 import { ProjectTemplateStageMove } from './entities/project-template-stage-move.entity.js';
 import { ProjectTemplateStageTask } from './entities/project-template-stage-task.entity.js';
 import { ProjectViewer } from './entities/project-viewer.entity.js';
+import { registerAnalyticsRoutes } from './routes/routes.analytics.js';
 import { registerAttachmentRoutes } from './routes/routes.attachments.js';
 import { registerCommentRoutes } from './routes/routes.comments.js';
 import { registerDictionaryRoutes } from './routes/routes.dictionaries.js';
@@ -69,6 +70,7 @@ import { registerStageTaskRoutes } from './routes/routes.stage-tasks.js';
 import { registerStageRoutes } from './routes/routes.stages.js';
 import { registerTemplateRoutes } from './routes/routes.templates.js';
 import { createAlertsTimeZoneValidator } from './services/alerts-time-zone-validator.js';
+import { ProjectAnalyticsService } from './services/analytics-service.js';
 import { ProjectAttachmentService } from './services/attachment-service.js';
 import { ProjectCommentService } from './services/comment-service.js';
 import type { DictionaryService } from './services/dictionary-service.js';
@@ -140,6 +142,7 @@ interface ProjectsCradle {
   readonly projectsDocumentLookupService: ProjectDocumentLookupService;
   readonly projectsAttachmentService: ProjectAttachmentService;
   readonly projectsHistoryService: ProjectHistoryService;
+  readonly projectsAnalyticsService: ProjectAnalyticsService;
 }
 
 /** What the deadline-alert section registers and reads (User Story 8). */
@@ -680,6 +683,25 @@ export function registerModule(ctx: ModuleContext): void {
   });
   // --- end of Deadline alerts --------------------------------------------------------
 
+  // --- Analytics (User Story 10, research R-15) -----------------------------------------
+  // Seven figures over a range of days, each one grouped statement carrying
+  // `ProjectAccess`'s predicate for the reader, so no figure counts a Project
+  // the reader may not see.
+  ctx.di.register({
+    projectsAnalyticsService: ctx
+      .asFunction(
+        ({ emFactory, projectsAccess, projectsReadService }: ProjectsCradle) =>
+          new ProjectAnalyticsService({
+            emFactory,
+            access: projectsAccess,
+            read: projectsReadService,
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+          }),
+      )
+      .singleton(),
+  });
+  // --- end of Analytics ---------------------------------------------------------------
+
   // --- Routes ------------------------------------------------------------------------
   ctx.routes(async (app) => {
     const cradle = ctx.cradle<ProjectsCradle>();
@@ -729,6 +751,10 @@ export function registerModule(ctx: ModuleContext): void {
     await registerDictionaryRoutes(app, {
       roleService: cradle.projectsRoleService,
       lossReasonService: cradle.projectsLossReasonService,
+      requireAdmin: cradle.requireAdmin,
+    });
+    await registerAnalyticsRoutes(app, {
+      analyticsService: cradle.projectsAnalyticsService,
       requireAdmin: cradle.requireAdmin,
     });
   });

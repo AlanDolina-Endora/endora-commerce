@@ -99,6 +99,11 @@ export const PROJECT_ACCESS_READERS: Readonly<Record<string, string>> = {
     'The deadline-alert sweep, run in the system scope its worker enters: it claims the alerts due ' +
     'today across every Project and reads the Members of a claimed Project by that id only. Nobody ' +
     'is told anything until `canSeeAs` has answered for them, and the probe answers one bit.',
+  'services/analytics-service.ts':
+    'Every figure is one grouped statement over `projects p` carrying `visibleProjectSql` for the ' +
+    'reader; Stage entries, Members and Organizations are read only joined to, or keyed by, the ' +
+    'Projects that statement selects, and a reader who reaches no Organization runs none. The most ' +
+    'valuable open Projects are summarised from the rows that statement returned.',
   'services/task-context-descriptor.ts':
     'The `project` Task context answers `allVisibleIds` / `visibleIds` and describes only the ids ' +
     '`visibleIds` handed back; Projects and their Stages are read by those ids only.',
