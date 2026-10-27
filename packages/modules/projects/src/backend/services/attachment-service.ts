@@ -8,6 +8,7 @@ import {
   type ProjectAttachment as ProjectAttachmentView,
 } from '@endora-commerce/contracts';
 import type { CommandBus } from '@endora-commerce/platform/commands';
+import { rethrowIfModuleDisabled } from '@endora-commerce/platform/kernel';
 import { HttpError } from '@endora-commerce/platform/http';
 import { ProjectAttachment } from '../entities/project-attachment.entity.js';
 import { asDownloadLink, refuseActiveContent } from './attachment-active-content.js';
@@ -130,6 +131,9 @@ export class ProjectAttachmentService {
         },
       });
     } catch (error) {
+      // A switched-off owner of anything the Command reaches is the answer for
+      // the whole request, never a tolerated failure.
+      rethrowIfModuleDisabled(error);
       // Two requests attaching one file to one Project: the unique key refused
       // the second at commit. The Command reads no other module, so a unique
       // violation can be nothing else.
