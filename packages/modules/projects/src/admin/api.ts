@@ -122,6 +122,8 @@ export interface ProjectListParams {
   templateId?: string;
   /** The current Stage's name, case-insensitive. */
   stageName?: string;
+  /** Custom fields marked as list filters, as the JSON `toCustomFieldFiltersParam` writes. */
+  customFieldFilters?: string;
   sort?: ProjectSort;
   order?: 'asc' | 'desc';
   cursor?: string;
@@ -137,6 +139,7 @@ function listQuery(params: ProjectListParams): string {
   if (params.roleId) qs.set('roleId', params.roleId);
   if (params.templateId) qs.set('templateId', params.templateId);
   if (params.stageName) qs.set('stageName', params.stageName);
+  if (params.customFieldFilters) qs.set('customFieldFilters', params.customFieldFilters);
   if (params.sort) qs.set('sort', params.sort);
   if (params.order) qs.set('order', params.order);
   if (params.cursor) qs.set('cursor', params.cursor);

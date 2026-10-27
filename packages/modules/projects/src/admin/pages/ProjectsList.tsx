@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ClipboardList, Plus, SearchX, X } from 'lucide-react';
-import type { ProjectRole, ProjectState, ProjectSummary, ProjectTemplateSummary } from '@endora-commerce/contracts';
+import type {
+  CustomFieldFilter,
+  CustomFieldFilters,
+  CustomFieldListFilterField,
+  ProjectRole,
+  ProjectState,
+  ProjectSummary,
+  ProjectTemplateSummary,
+} from '@endora-commerce/contracts';
 import { useAuth, usePageSizePreference, type PageSizeOption } from '@endora-commerce/admin-kit/lib';
 import {
   Alert,
@@ -16,8 +24,15 @@ import {
   Select,
 } from '@endora-commerce/admin-kit/ui';
 import {
+  CustomFieldListFilters,
   PaginationFooter,
   ResponsiveTable,
+  customFieldDisplayName,
+  customFieldFilterRefusal,
+  emptyCustomFieldFilters,
+  toCustomFieldFiltersParam,
+  useCustomFieldListFilterFields,
+  withCustomFieldFilter,
   type ResponsiveColumn,
 } from '@endora-commerce/admin-kit/components';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
@@ -46,6 +61,11 @@ const PAGE_SIZES: readonly PageSizeOption[] = [10, 20, 50, 100];
 
 const SEARCH_DEBOUNCE_MS = 300;
 
+/** The Project custom fields the list offers as filters (User Story 9). */
+const CUSTOM_FIELD_FILTERS_ENDPOINT = '/api/v1/admin/projects/custom-field-filters';
+/** Custom fields — their filters included — are shown only to a reader who may view them. */
+const CUSTOM_FIELDS_READ_PERMISSION = 'custom_fields:read';
+
 interface Filters {
   q: string;
   state: ProjectState | '';
@@ -56,6 +76,8 @@ interface Filters {
   roleId: string;
   templateId: string;
   stageName: string;
+  /** Custom fields marked as list filters, applied by the server (`customFieldFilters`). */
+  customFields: CustomFieldFilters;
 }
 
 const NO_FILTERS: Filters = {
@@ -67,7 +89,39 @@ const NO_FILTERS: Filters = {
   roleId: '',
   templateId: '',
   stageName: '',
+  customFields: emptyCustomFieldFilters(),
 };
+
+interface CustomFieldFilterCellsProps {
+  value: CustomFieldFilters;
+  onChange: (key: string, filter: CustomFieldFilter | null) => void;
+  /** The offered fields, once read — the list names a refused one by its label. */
+  onFields: (fields: CustomFieldListFilterField[]) => void;
+}
+
+/**
+ * One filter cell per offered custom field, in the list's filter grid. A
+ * component of its own so the offered fields are read only where it is
+ * mounted — for a reader holding `custom_fields:read`.
+ */
+function CustomFieldFilterCells({ value, onChange, onFields }: CustomFieldFilterCellsProps): ReactNode {
+  const { language } = useAppLanguage();
+  const offered = useCustomFieldListFilterFields(CUSTOM_FIELD_FILTERS_ENDPOINT);
+  useEffect(() => {
+    if (offered.status === 'ready') onFields(offered.fields);
+  }, [offered.status, offered.fields, onFields]);
+  return (
+    <CustomFieldListFilters
+      idPrefix="projects"
+      fields={offered.fields}
+      value={value}
+      onChange={onChange}
+      language={language}
+      status={offered.status}
+      onRetry={offered.reload}
+    />
+  );
+}
 
 /**
  * The Projects list (`specs/163-projects-and-tasks/`, User Story 1;
@@ -76,8 +130,9 @@ const NO_FILTERS: Filters = {
  * Every Project the operator may see — the server applies Organization reach
  * and visibility, so nothing here filters for safety — narrowed by state,
  * Organization, "my projects" or any one Member, a Project Role some Member
- * holds, the Template it was created from, the current Stage's name and a
- * search over number and title; sorted by creation, value or the current
+ * holds, the Template it was created from, the current Stage's name, the
+ * custom fields marked as list filters (for a reader who may view custom
+ * fields) and a search over number and title; sorted by creation, value or the current
  * Stage's deadline. The list is keyset-paged and knows its total, so the kit's
  * footer can say "21–40 of 57".
  *
@@ -90,6 +145,7 @@ export function ProjectsList(): ReactNode {
   const { language } = useAppLanguage();
   const { hasPermission } = useAuth();
   const canWrite = hasPermission('projects:write');
+  const canFilterCustomFields = hasPermission(CUSTOM_FIELDS_READ_PERMISSION);
   const { pageSize: preferredPageSize, setPageSize } = usePageSizePreference('projects-list');
   const pageSize = Math.min(preferredPageSize, MAX_PAGE_LIMIT) as PageSizeOption;
 
@@ -107,6 +163,9 @@ export function ProjectsList(): ReactNode {
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The custom-field filter the server refused, until the operator removes it. */
+  const [refusedCustomField, setRefusedCustomField] = useState<string | null>(null);
+  const [customFieldFields, setCustomFieldFields] = useState<CustomFieldListFilterField[]>([]);
   const sequence = useRef(0);
 
   // The search boxes are typed into; the request follows once typing pauses.
@@ -142,6 +201,9 @@ export function ProjectsList(): ReactNode {
     };
   }, []);
 
+  // Filters the custom fields on what was asked: without the permission, none is sent.
+  const customFieldParam = canFilterCustomFields ? toCustomFieldFiltersParam(filters.customFields) : null;
+
   const params = useMemo<ProjectListParams>(() => {
     const [field, order] = sort.split(':') as [ProjectSort, 'asc' | 'desc'];
     const cursor = trail[trail.length - 1];
@@ -153,17 +215,19 @@ export function ProjectsList(): ReactNode {
       ...(filters.roleId ? { roleId: filters.roleId } : {}),
       ...(filters.templateId ? { templateId: filters.templateId } : {}),
       ...(filters.stageName.trim() ? { stageName: filters.stageName.trim() } : {}),
+      ...(customFieldParam !== null ? { customFieldFilters: customFieldParam } : {}),
       sort: field,
       order,
       ...(cursor ? { cursor } : {}),
       limit: pageSize,
     };
-  }, [filters, sort, trail, pageSize]);
+  }, [filters, customFieldParam, sort, trail, pageSize]);
 
   const load = useCallback(async (): Promise<void> => {
     const current = ++sequence.current;
     setLoading(true);
     setError(null);
+    setRefusedCustomField(null);
     try {
       const page = await projectsApi.listProjects(params);
       // A slower, older answer must not overwrite a newer one.
@@ -173,7 +237,18 @@ export function ProjectsList(): ReactNode {
       setNextCursor(page.nextCursor);
       setLoaded(true);
     } catch (failure) {
-      if (current === sequence.current) setError(errorMessage(failure, t('list.error')));
+      if (current !== sequence.current) return;
+      // A custom field no longer offered as a filter is named, with a way to drop it.
+      const refused = customFieldFilterRefusal(failure);
+      if (refused !== null) {
+        setRows([]);
+        setTotal(0);
+        setNextCursor(null);
+        setLoaded(true);
+        setRefusedCustomField(refused);
+      } else {
+        setError(errorMessage(failure, t('list.error')));
+      }
     } finally {
       if (current === sequence.current) setLoading(false);
     }
@@ -192,8 +267,17 @@ export function ProjectsList(): ReactNode {
   const clear = (): void => {
     setSearch('');
     setStageSearch('');
-    setFilters(NO_FILTERS);
+    setFilters({ ...NO_FILTERS, customFields: emptyCustomFieldFilters() });
     setTrail([]);
+  };
+
+  const changeCustomField = useCallback((key: string, filter: CustomFieldFilter | null): void => {
+    setFilters((previous) => ({ ...previous, customFields: withCustomFieldFilter(previous.customFields, key, filter) }));
+    setTrail([]);
+  }, []);
+
+  const removeRefusedCustomField = (): void => {
+    if (refusedCustomField !== null) changeCustomField(refusedCustomField, null);
   };
 
   const filtered =
@@ -204,7 +288,8 @@ export function ProjectsList(): ReactNode {
     filters.mine ||
     filters.memberId !== null ||
     filters.roleId !== '' ||
-    filters.templateId !== '';
+    filters.templateId !== '' ||
+    (canFilterCustomFields && Object.keys(filters.customFields).length > 0);
 
   const columns: ResponsiveColumn<ProjectSummary>[] = [
     {
@@ -425,6 +510,13 @@ export function ProjectsList(): ReactNode {
                 onChange={(event): void => setStageSearch(event.target.value)}
               />
             </div>
+            {canFilterCustomFields ? (
+              <CustomFieldFilterCells
+                value={filters.customFields}
+                onChange={changeCustomField}
+                onFields={setCustomFieldFields}
+              />
+            ) : null}
           </div>
           <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
             <div className="space-y-1">
@@ -461,7 +553,20 @@ export function ProjectsList(): ReactNode {
           <p role="status" className="sr-only">
             {loading && loaded ? t('list.loading') : ''}
           </p>
-          {error ? (
+          {refusedCustomField !== null ? (
+            <Alert variant="destructive">
+              <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                <span>
+                  {tCore('customFieldFilters.error.unavailable', {
+                    field: customFieldDisplayName(customFieldFields, refusedCustomField, language),
+                  })}
+                </span>
+                <Button className="min-h-11 sm:min-h-8" variant="outline" size="sm" onClick={removeRefusedCustomField}>
+                  {tCore('customFieldFilters.error.remove')}
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : error ? (
             <Alert variant="destructive">
               <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
                 <span>{error}</span>

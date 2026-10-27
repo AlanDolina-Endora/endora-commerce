@@ -546,8 +546,10 @@ next time somebody saves that project's fields, not on any other edit.
 - Every change of a field is in the project's **change history** — *Custom
   fields changed*, with each field's value before and after; the values a project
   was created with are on its *Project created* entry.
-- A field marked as a **list filter** on the custom-fields screen can narrow the
-  projects list through the API (see *For developers*).
+- A field marked as a **list filter** on the custom-fields screen is offered as
+  a filter on the projects list, beside the list's own — to an administrator who
+  may also view custom fields (`custom_fields:read`). A filter whose field is no
+  longer offered is named above the list, with a way to remove it.
 - A field deleted on the custom-fields screen is no longer shown on any
   project.
 

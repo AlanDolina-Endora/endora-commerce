@@ -564,8 +564,11 @@ przy następnym zapisie pól tego projektu, a nie przy innej edycji.
 - Każda zmiana pola jest w **historii zmian** projektu — *Zmieniono pola
   niestandardowe*, z wartością każdego pola przed zmianą i po niej; wartości, z
   którymi projekt utworzono, są we wpisie *Utworzono projekt*.
-- Pole oznaczone na ekranie pól niestandardowych jako **filtr listy** może
-  zawężać listę projektów przez API (zob. *Dla programistów*).
+- Pole oznaczone na ekranie pól niestandardowych jako **filtr listy** jest
+  oferowane jako filtr listy projektów, obok jej własnych filtrów — administratorowi,
+  który może też przeglądać pola niestandardowe (`custom_fields:read`). Filtr,
+  którego pole nie jest już oferowane, jest wskazany nad listą wraz z możliwością
+  jego usunięcia.
 - Pole usunięte na ekranie pól niestandardowych nie jest już pokazywane w żadnym
   projekcie.
 
