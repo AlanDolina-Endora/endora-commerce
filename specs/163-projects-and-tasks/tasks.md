@@ -473,6 +473,7 @@ by e-mail.
 - [ ] T119 [US8] Copy `scheduled-work-probe.ts` into `packages/modules/projects/src/backend/services/` and add it to the parity test; implement `workers/stage-alert-worker.ts` (Job Scheduler `projects-stage-alerts` every 15 min, data-less, `concurrency: 1`, presence probe → `anyRowExists` probe → `enterSystemScope(reason, tick)`, `ctx.worker`, only where `processRunsWorkers && moduleQueueRedis`); add the probe to `backend/test/unit/kernel/scheduled-work-probes.test.ts`; `check:entry-scope`, `check:entry-presence` green; T116, T117 green
 - [ ] T120 [P] [US8] Admin: alert offsets input in `StageEditor.tsx` (Project and Template), deadline display + manual override on the Stage bar; settings `projects.alerts_time_zone` described on `/settings?group=projects`
 - [ ] T121 [US8] Docs *Deadline alerts* (EN + PL); off-state: sweep does no work while `projects` is off; phase gate; `StageEditor.tsx` gains a manual deadline control (set / clear → recompute) — `PATCH …/stages/:stageId` already accepts `deadlineOn`
+- Note (Phase 9C review): reconcile the `admin_notifications` `whenAbsent` sentence — the manifest says "Project members are not notified of messages and mentions." (no e-mail yet); `contracts/ports-and-events.md` §3 says "…deadline alerts and mentions by e-mail only". Once this phase adds e-mail, make the manifest, the docs and §3 say the same thing about what still reaches a member with the bell module off.
 
 ---
 
@@ -509,6 +510,7 @@ by e-mail.
 - [ ] T133 [P] [US11] Admin: `zones/OrganizationProjects.tsx` contributed to `organization.detail.after` (the Organization's visible Projects with state and current Stage, "New project" shortcut); `admin/test/modules/projects/OrganizationProjects.test.tsx`
 - [ ] T134 [US11] Demo: `packages/demo-composition/src/projects.ts` `demoProjectsStep` (Template *Showroom fit-out*, four Projects — open, completed, lost, internal — with Members, links to demo Orders where they exist, Tasks only when `tasks` is installed, created through `taskWritePort` with the demo admin as creator — `created_by_admin_user_id` is not null), registered in `packages/demo-composition/src/composition.ts`; `projects.test.ts` beside it; module `demo` bodies seed nothing else
 - [ ] T135 [US11] Final off-state sweep: both off-state tests cover every route, the four panels, the Organization panel, palette, search, custom-field type, the sweep, the Task context; `check:off-state-coverage`; phase gate
+- Note (Phase 9C review): add a boot-while-off proof for the Projects asset-deletion scanner in `backend/test/integration/projects/attachments.test.ts` (CRM's precedent: `integration/crm/attachments.test.ts`, "after booting with crm deactivated"); today only runtime deactivation is measured.
 
 ---
 

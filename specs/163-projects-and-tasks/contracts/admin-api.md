@@ -92,12 +92,12 @@ the list's Organization and any-member filters are a reader's (CRM gates its fil
 | `PATCH` / `DELETE /projects/:id/comments/:commentId` | `projects:write` | notes, author only (403 `PROJECT_NOTE_NOT_AUTHOR`) |
 | `POST /projects/:id/messages/read` | `projects:read` | `{ throughMessageId }` |
 | `GET /projects/:id/attachments` | `projects:read` | |
-| `POST /projects/:id/attachments` | `projects:write` | `{ assetId }` (private, live, not active content) |
+| `POST /projects/:id/attachments` | `projects:write` + `assets.read` (as CRM: an id alone must not yield a signed link to a private file) | `{ assetId }` (private, live, not active content) |
 | `POST /projects/:id/attachments/upload` | `projects:write` | multipart; upload-then-attach with compensation |
 | `DELETE /projects/:id/attachments/:attachmentId` | `projects:write` | |
 | `GET /projects/:id/history?cursor=` | `projects:read` | `RecordHistoryPage`, cap 500 |
 | `GET /projects/lookups/mentionable?projectId=&q=` | `projects:write` | active admins with `projects:read` who could see the Project (R-4) |
-| `GET /projects/lookups/documents?projectId=&q=` | `projects:write` | `@@` list → `RecordDocumentLookupResponse { groups: { kind: 'order' \| 'quote_request' \| 'task', items: { id, label, sublabel? }[] }[] }`, each group only with its read permission and present owner; the same schema CRM serves at `GET /crm/lookups/documents` (FR-044) |
+| `GET /projects/lookups/documents?projectId=&q=` | `projects:write` | `@@` list → `RecordDocumentLookupResponse { groups: { kind: 'order' \| 'quote_request' \| 'task', items: { id, label, sublabel? }[] }[] }`, each group only with its read permission and present owner; the same schema CRM serves at `GET /crm/lookups/documents` (FR-044); answered **unwrapped** (no `data` envelope), as CRM's |
 
 ### 2.5 Configuration
 
