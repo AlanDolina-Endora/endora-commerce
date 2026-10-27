@@ -263,6 +263,12 @@ export const productSummarySchema = z.object({
   type: productTypeSchema,
   name: z.string(),
   slug: z.string(),
+  /**
+   * Feature 163 (R-16) — the description as plain text in the request
+   * language, at most 160 characters, cut at a word boundary; `null` without
+   * a description. Optional so every producer written before it still compiles.
+   */
+  summary: z.string().max(160).nullable().optional(),
   categorySlugs: z.array(z.string()),
   primaryAssetUrl: z.string().url().nullable(),
   price: moneySchema.nullable(),

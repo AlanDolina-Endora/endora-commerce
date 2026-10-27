@@ -122,6 +122,59 @@ A reusable signup component (server action, tag-attachable), a double-opt-in
 confirmation landing, an unsubscribe page (optional reason), and an account
 panel showing subscription status + tags with subscribe/unsubscribe actions.
 
+### Sign-up block in the Page Builder
+
+The module declares the Page Builder block `newsletter.Signup` (palette section
+*Forms*, label **Newsletter sign-up**), so an editor can put a sign-up form on
+any CMS page:
+
+| Option | Meaning |
+| --- | --- |
+| Heading, text | An optional heading (with its level) and rich text above the form. |
+| E-mail label, placeholder, button label | The form's own texts. |
+| Topics | Up to 12 checkboxes, each a label and a newsletter **tag code**; the ticked ones are added to the subscriber as tags. **Topics required** asks for at least one. A topic whose tag code is not a valid code is not offered. |
+| Consent label | The text of the consent checkbox, which is always shown and always required. It is inline rich text, so it can link to the privacy policy. |
+| Layout | Inline (field and button on one line) or boxed. |
+| Messages | The texts shown after a sign-up: pending confirmation, subscribed, and the refusals (consent missing, invalid e-mail, no topic chosen, service unavailable). |
+
+Every text is translatable with the Page Builder's **Translate** action. At
+the top level of a page the block also carries the section settings (anchor,
+colour scheme, background, spacing, width).
+
+**How a sign-up travels.** The block is a plain HTML form that posts to the
+storefront's own handler, `POST /newsletter/subscribe`
+(`storefront/app/newsletter/subscribe/route.ts`), so it works without
+JavaScript. The handler:
+
+- answers `404` while the newsletter module is not present;
+- checks the e-mail with the same rule as the backend, requires `consent=on`,
+  keeps at most 12 topic codes matching `^[a-z0-9_-]{1,64}$` and drops the
+  rest, and accepts only a same-origin path as `returnTo` (anything else
+  returns to `/`);
+- subscribes through the existing `POST /api/v1/newsletter/subscribe` in the
+  request's sales channel, with the ticked topics as `tags` and
+  `source: 'cms-block'`;
+- without JavaScript, redirects (`303`) back to the page with
+  `?newsletter=pending|active|error&reason=consent|email|topics|unavailable`
+  and the section's anchor as the fragment, where the block shows the
+  matching message;
+- with JavaScript, the block posts with `Accept: application/json` and gets
+  `{status: 'pending' | 'active'}` (200) or `{error: …}` (400); the message
+  appears in place and the typed address is kept.
+
+Whether the answer is `pending` or `active` follows the channel's opt-in mode.
+The subscription is recorded as any other: `consentAt` is set, the
+`newsletter_subscribe` audit entry carries `source: 'cms-block'`, so these
+sign-ups can be told apart from the others, and a topic code that matches no
+existing tag is ignored — no tag is created from the storefront.
+
+While the module is switched off, the block is not offered in the palette, a
+stored one renders nothing, and the handler answers `404`.
+
+`newsletter.Signup` is the platform's own newsletter. The CMS module keeps a
+separate **Newsletter signup** form, `cms.NewsletterSignup`, which posts to any
+external endpoint for a newsletter service outside the platform.
+
 ## Schema
 
 Migration `20260629T200954_newsletter_init.ts` creates `newsletter_subscribers`,

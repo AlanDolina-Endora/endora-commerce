@@ -28,6 +28,8 @@
   "cache.namespace.blog.description": "Storefront blog index, posts, categories and tag pages.",
   "cache.namespace.cms.label": "CMS",
   "cache.namespace.cms.description": "Storefront CMS pages, blocks and hook content.",
+  "cache.namespace.cms-brand.label": "CMS brand",
+  "cache.namespace.cms-brand.description": "Storefront brand tokens: colours, fonts, type scale and spacing.",
   "cache.namespace.megamenu.label": "Mega menu",
   "cache.namespace.megamenu.description": "Resolved storefront mega-menu trees.",
   "cache.namespace.dictionaries.label": "Dictionaries",

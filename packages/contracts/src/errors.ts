@@ -404,6 +404,12 @@ export const ERROR_CODES = {
   CMS_TRANSLATION_SELECTION_NOT_FOUND: 'CMS_TRANSLATION_SELECTION_NOT_FOUND',
   CMS_TRANSLATION_PROVIDER_FAILED: 'CMS_TRANSLATION_PROVIDER_FAILED',
   CMS_SCHEMA_UPGRADE_FAILED: 'CMS_SCHEMA_UPGRADE_FAILED',
+  // Feature 163 — page-builder section anchors and the page tree
+  // (`specs/163-page-builder-marketing-pages/` data-model §6). The two anchor
+  // codes name the offending anchor through `details` → `{anchor}`.
+  CMS_DUPLICATE_ANCHOR: 'CMS_DUPLICATE_ANCHOR',
+  CMS_RESERVED_ANCHOR: 'CMS_RESERVED_ANCHOR',
+  CMS_PAGE_PARENT_CYCLE: 'CMS_PAGE_PARENT_CYCLE',
 
   // Megamenu (feature 015)
   MEGAMENU_NOT_FOUND: 'MEGAMENU_NOT_FOUND',
