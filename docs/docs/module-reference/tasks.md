@@ -35,6 +35,7 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | `auth` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `settings` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `admin_notifications` | no | degrades-without `adminNotificationRecordPort` — Assignees are not notified of new Tasks. |
+| `admin_search` | no | contributes-to `adminSearchProviderRegistry` |
 
 ## Permissions
 
@@ -45,7 +46,11 @@ An operator switches this module on and off on **/platform/modules**. The choice
 
 ## Command palette
 
-_None._
+| Action | Opens | Permission |
+| --- | --- | --- |
+| `new-task` | `/tasks/new` | `tasks:write` |
+| `open-my-tasks` | `/tasks/mine` | `tasks:read` |
+| `open-tasks` | `/tasks` | `tasks:read` |
 
 ## Settings
 
