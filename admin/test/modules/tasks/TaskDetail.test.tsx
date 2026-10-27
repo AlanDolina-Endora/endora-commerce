@@ -213,6 +213,40 @@ describe('TaskDetail — history and the zone', () => {
     expect(within(history).getByText(en('auditLog.tasks.task.status_change'))).toBeTruthy();
   });
 
+  it('shows what each entry changed, field by field, and reads earlier entries a page at a time (kit RecordHistory)', async () => {
+    getSpy.mockImplementation((path: string) => {
+      if (path === TASK_PATH) return Promise.resolve({ data: current });
+      if (path.startsWith(`${TASK_PATH}/history`)) {
+        const second = path.includes('cursor=');
+        return Promise.resolve({
+          data: second
+            ? [historyEntry({ id: 'h1', after: { title: 'Approve the drawings', status: 'todo' } })]
+            : [
+                historyEntry({
+                  id: 'h2',
+                  action: 'tasks.task.status_change',
+                  actedAt: '2026-10-21T10:00:00.000Z',
+                  before: { title: 'Approve the drawings', status: 'todo', contextId: PROJECT_ID },
+                  after: { title: 'Approve the drawings', status: 'done', contextId: PROJECT_ID },
+                }),
+              ],
+          pagination: second ? { cursor: null, hasMore: false, limit: 50 } : { cursor: 'next', hasMore: true, limit: 50 },
+          truncated: false,
+        });
+      }
+      return Promise.reject(new Error(`unexpected GET ${path}`));
+    });
+    await renderPage();
+    const history = screen.getByRole('region', { name: en('detail.history') });
+    expect(await within(history).findByRole('heading', { name: en('auditLog.tasks.task.status_change') })).toBeTruthy();
+    expect(within(history).getByText(en('history.field.status'))).toBeTruthy();
+    expect(within(history).getByText(en('status.done'))).toBeTruthy();
+    // An identifier is never a row.
+    expect(within(history).queryByText(PROJECT_ID)).toBeNull();
+    await userEvent.click(within(history).getByRole('button', { name: core('history.more') }));
+    expect(await within(history).findByRole('heading', { name: en('auditLog.tasks.task.create') })).toBeTruthy();
+  });
+
   it('mounts the task.detail.after zone with the Task id, naming no contributor', () => {
     const source = readFileSync(
       resolve(process.cwd(), '../packages/modules/tasks/src/admin/pages/TaskDetail.tsx'),

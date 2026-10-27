@@ -1,6 +1,7 @@
-import { useState, type ReactNode } from 'react';
-import type { ProjectDetail, ProjectMember } from '@endora-commerce/contracts';
-import { Alert, AlertDescription, Button } from '@endora-commerce/admin-kit/ui';
+import { useId, useState, type ReactNode } from 'react';
+import { PROJECT_DESCRIPTION_MAX, type ProjectDetail, type ProjectMember } from '@endora-commerce/contracts';
+import { ReferenceField, ReferenceText } from '@endora-commerce/admin-kit/components';
+import { Alert, AlertDescription, Button, Label } from '@endora-commerce/admin-kit/ui';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { projectsApi } from '../../../api.js';
 import {
@@ -10,6 +11,7 @@ import {
   type VisibilityValue,
 } from '../../../components/VisibilityControl.js';
 import { calendarDateLabel, errorMessage } from '../../../lib/labels.js';
+import { useProjectReferences } from '../../../lib/references.js';
 import type { ProjectTabProps } from '../tabs.js';
 
 interface RoleGroup {
@@ -149,6 +151,129 @@ function VisibilitySection({ project, onChange }: Pick<ProjectTabProps, 'project
 }
 
 /**
+ * The description (User Story 7, FR-026): drawn with its references as chips —
+ * a person, an Order, a Quote Request, a Task, a Product — and, for a writer,
+ * edited in the kit's reference field (`@` a person, `@@` a document, `@@@` a
+ * Product) and saved on its own, one `PATCH` naming the version read. A person
+ * newly mentioned is told by the server.
+ */
+function DescriptionSection({ project, onChange }: Pick<ProjectTabProps, 'project' | 'onChange'>): ReactNode {
+  const t = useTranslation('projects');
+  const fieldId = useId();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(project.description);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const { kinds, lookups } = useProjectReferences({
+    projectId: project.id,
+    hasOrganizations: project.organizations.length > 0,
+  });
+
+  const save = async (): Promise<void> => {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await projectsApi.updateProject(project.id, { description: draft, version: project.version });
+      setEditing(false);
+      setSaved(true);
+      onChange(next);
+    } catch (failure) {
+      setError(errorMessage(failure, t('overview.descriptionError')));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <section className="space-y-2">
+        <Label htmlFor={fieldId} className="text-sm font-semibold">
+          {t('overview.description')}
+        </Label>
+        <ReferenceField
+          id={fieldId}
+          value={draft}
+          onValueChange={setDraft}
+          kinds={kinds}
+          lookups={lookups}
+          references={project.references}
+          maxLength={PROJECT_DESCRIPTION_MAX}
+          disabled={busy}
+          rows={5}
+          autoFocus
+          onSubmitShortcut={(): void => void save()}
+        />
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            className="min-h-11 sm:min-h-9"
+            disabled={busy || draft === project.description}
+            aria-busy={busy}
+            onClick={(): void => void save()}
+          >
+            {busy ? t('visibility.saving') : t('overview.saveDescription')}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 sm:min-h-9"
+            disabled={busy}
+            onClick={(): void => {
+              setEditing(false);
+              setError(null);
+            }}
+          >
+            {t('overview.cancelDescription')}
+          </Button>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-1">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">{t('overview.description')}</h3>
+        {project.permissions.canWrite ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-11 sm:min-h-8"
+            onClick={(): void => {
+              setDraft(project.description);
+              setSaved(false);
+              setEditing(true);
+            }}
+          >
+            {t('overview.editDescription')}
+          </Button>
+        ) : null}
+      </div>
+      {project.description.trim() ? (
+        <div className="text-sm [overflow-wrap:anywhere]">
+          <ReferenceText text={project.description} references={project.references} />
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">{t('overview.noDescription')}</p>
+      )}
+      {/* Mounted only once there is something to say: the visibility section owns the tab's live region. */}
+      {saved ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {t('overview.descriptionSaved')}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+/**
  * A Project's *Overview* tab (`contracts/admin-surfaces.md` §2): the
  * description, the start date, who sees the Project and the Members by Role.
  * Custom fields join it with their story.
@@ -161,14 +286,7 @@ export function OverviewTab({ project, onChange }: ProjectTabProps): ReactNode {
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div className="space-y-4">
-        <section className="space-y-1">
-          <h3 className="text-sm font-semibold">{t('overview.description')}</h3>
-          {project.description.trim() ? (
-            <p className="whitespace-pre-wrap text-sm [overflow-wrap:anywhere]">{project.description}</p>
-          ) : (
-            <p className="text-sm text-muted-foreground">{t('overview.noDescription')}</p>
-          )}
-        </section>
+        <DescriptionSection key={project.id} project={project} onChange={onChange} />
         <section className="space-y-1">
           <h3 className="text-sm font-semibold">{t('overview.startOn')}</h3>
           <p className="text-sm">{calendarDateLabel(project.startOn, language)}</p>

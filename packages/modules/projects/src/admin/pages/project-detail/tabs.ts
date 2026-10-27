@@ -6,7 +6,7 @@ import type { GatedSurface } from '@endora-commerce/admin-kit/lib';
  * The tabs of a Project's screen, as data
  * (`specs/163-projects-and-tasks/contracts/admin-surfaces.md` §2).
  *
- * **A story adds a tab by adding one file and one line here** — Tasks, Linked
+ * **A story adds a tab by adding one file and one entry here** — Tasks, Linked
  * records, Notes, Messages, Attachments and History each arrive that way — so
  * the stories meet in one array and not in the body of `ProjectDetail.tsx`.
  * Each component is lazy: a tab nobody opens is never downloaded.
@@ -36,6 +36,13 @@ export interface ProjectTab {
   component: LazyExoticComponent<ComponentType<ProjectTabProps>>;
   /** Offered only while this module is present and the operator holds this code. */
   surface?: GatedSurface;
+  /** A number drawn beside the label — nothing for 0. */
+  count?: (project: ProjectDetail) => number;
+  /**
+   * The tab's accessible name while it counts, a template of `{label}` and
+   * `{count}` — "Messages, unread: 2"; a bare number says nothing read aloud.
+   */
+  countLabelKey?: string;
 }
 
 /** The tab a visit opens on when its address names none. */
@@ -70,10 +77,33 @@ export const PROJECT_TABS: readonly ProjectTab[] = [
     component: lazy(() => import('./tabs/LinkedRecordsTab.js')),
   },
   {
-    // The Stage history of User Story 1; the audit trail is a later *History* tab.
+    // The Stage history of User Story 1; the audit trail is the *Change history* tab.
     id: 'stage-history',
     labelKey: 'tabs.history',
     component: lazy(() => import('./tabs/StageHistoryTab.js')),
+  },
+  // User Story 7: notes, the message thread, attachments and the audit trail.
+  {
+    id: 'notes',
+    labelKey: 'tabs.notes',
+    component: lazy(() => import('./tabs/NotesTab.js')),
+  },
+  {
+    id: 'messages',
+    labelKey: 'tabs.messages',
+    component: lazy(() => import('./tabs/MessagesTab.js')),
+    count: (project) => project.unreadMessageCount,
+    countLabelKey: 'tabs.unread',
+  },
+  {
+    id: 'attachments',
+    labelKey: 'tabs.attachments',
+    component: lazy(() => import('./tabs/AttachmentsTab.js')),
+  },
+  {
+    id: 'history',
+    labelKey: 'tabs.changeHistory',
+    component: lazy(() => import('./tabs/HistoryTab.js')),
   },
 ];
 

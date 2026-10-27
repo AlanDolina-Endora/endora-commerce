@@ -97,9 +97,14 @@
   "delete.body": "Task {number} will be deleted. Its history stays in the audit log.",
   "delete.confirm": "Delete task",
   "delete.error": "The task could not be deleted.",
-  "history.loading": "Loading the history…",
-  "history.error": "The history could not be loaded.",
   "history.empty": "Nothing has been recorded yet.",
-  "history.system": "System",
-  "field.assigneeNoMatch": "No active administrator matches."
+  "field.assigneeNoMatch": "No active administrator matches.",
+  "history.hint": "Everything done to this task, by whom and when, newest first.",
+  "history.end": "This is the whole history of the task.",
+  "history.truncated": "Earlier changes exist but are not shown here.",
+  "history.field.title": "Title",
+  "history.field.status": "Status",
+  "history.field.dueOn": "Due date",
+  "history.field.contextNote": "Note from the record",
+  "history.field.completedAt": "Completed"
 }

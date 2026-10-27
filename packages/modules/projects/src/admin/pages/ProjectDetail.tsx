@@ -223,6 +223,8 @@ export function ProjectDetail(): ReactNode {
             >
               {tabs.map((candidate) => {
                 const selected = candidate.id === tab?.id;
+                const count = candidate.count?.(project) ?? 0;
+                const label = t(candidate.labelKey);
                 return (
                   <button
                     key={candidate.id}
@@ -230,12 +232,24 @@ export function ProjectDetail(): ReactNode {
                     role="tab"
                     id={`project-tab-${candidate.id}`}
                     aria-selected={selected}
+                    // A bare number says nothing read aloud: the name says what is
+                    // counted, and still begins with the words on screen.
+                    aria-label={
+                      count > 0 && candidate.countLabelKey ? t(candidate.countLabelKey, { label, count }) : undefined
+                    }
                     aria-controls="project-tabpanel"
                     tabIndex={selected ? 0 : -1}
                     className={cn('b2b-tab', selected && 'is-active')}
                     onClick={(): void => selectTab(candidate.id)}
                   >
-                    {t(candidate.labelKey)}
+                    {label}
+                    {/* Zero draws nothing; a real space, so a copy reads "Messages 2". */}
+                    {count > 0 ? (
+                      <>
+                        {' '}
+                        <span className="b2b-badge tabular-nums">{count}</span>
+                      </>
+                    ) : null}
                   </button>
                 );
               })}

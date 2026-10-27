@@ -97,9 +97,14 @@
   "delete.body": "Zadanie {number} zostanie usunięte. Jego historia pozostaje w dzienniku audytu.",
   "delete.confirm": "Usuń zadanie",
   "delete.error": "Nie udało się usunąć zadania.",
-  "history.loading": "Wczytywanie historii…",
-  "history.error": "Nie udało się wczytać historii.",
   "history.empty": "Nic jeszcze nie zapisano.",
-  "history.system": "System",
-  "field.assigneeNoMatch": "Żaden aktywny administrator nie pasuje."
+  "field.assigneeNoMatch": "Żaden aktywny administrator nie pasuje.",
+  "history.hint": "Wszystko, co zrobiono z tym zadaniem — kto i kiedy, od najnowszych.",
+  "history.end": "To cała historia zadania.",
+  "history.truncated": "Istnieją wcześniejsze zmiany, których tu nie pokazano.",
+  "history.field.title": "Tytuł",
+  "history.field.status": "Status",
+  "history.field.dueOn": "Termin",
+  "history.field.contextNote": "Uwaga z rekordu",
+  "history.field.completedAt": "Ukończono"
 }

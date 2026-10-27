@@ -18,7 +18,11 @@ import type {
   ProjectTemplateDetail,
   ProjectTemplateSummary,
   ProjectAdminUserOption,
+  ProjectAttachment,
+  ProjectComment,
+  ProjectCommentKind,
   ProjectLink,
+  ProjectMentionableOption,
   ProjectOrganizationOption,
   ProjectPanelRecordKind,
   ProjectRecordKind,
@@ -27,6 +31,8 @@ import type {
   MaterializeStageTasksResult,
   SetProjectMovesResult,
   StageTaskDefinition,
+  RecordDocumentLookupResponse,
+  RecordHistoryPage,
   TaskSummary,
   UpdateProjectBody,
   UpdateProjectRoleBody,
@@ -82,6 +88,19 @@ const LINKABLE_LIMIT = 20;
  *   route reads no `q` and answers the Organization's whole list
  *   (`rfqs:handle`), so the number is matched here. No global search needed.
  */
+/** `catalog`'s own Product list, behind `catalog:read` — the `@@@` search (CRM's precedent). */
+const PRODUCTS_BASE = '/api/v1/admin/catalog/products';
+
+/** A Product as the `@@@` search offers it. */
+export interface MentionableProduct {
+  id: string;
+  sku: string;
+  name: Record<string, string>;
+}
+
+/** How many entries one page of a history asks for. */
+export const HISTORY_PAGE_SIZE = 50;
+
 const OWNER_LISTS = {
   orders: '/api/v1/admin/orders',
   quoteRequests: '/api/v1/admin/quote-requests',
@@ -318,6 +337,78 @@ export const projectsApi = {
 
   stageHistory(projectId: string): Promise<ProjectStageEntry[]> {
     return data(apiClient.get<{ data: ProjectStageEntry[] }>(`${BASE}/${projectId}/stage-history`));
+  },
+
+  // --- §2.4 Collaboration (User Story 7) ------------------------------------
+
+  listComments(projectId: string, kind: ProjectCommentKind): Promise<ProjectComment[]> {
+    return data(apiClient.get<{ data: ProjectComment[] }>(`${BASE}/${projectId}/comments?kind=${kind}`));
+  },
+
+  addComment(projectId: string, kind: ProjectCommentKind, body: string): Promise<ProjectComment> {
+    return data(apiClient.post<{ data: ProjectComment }>(`${BASE}/${projectId}/comments`, { kind, body }));
+  },
+
+  /** A note, by its author; a message never changes. */
+  updateComment(projectId: string, commentId: string, body: string): Promise<ProjectComment> {
+    return data(apiClient.patch<{ data: ProjectComment }>(`${BASE}/${projectId}/comments/${commentId}`, { body }));
+  },
+
+  deleteComment(projectId: string, commentId: string): Promise<void> {
+    return apiClient.delete<void>(`${BASE}/${projectId}/comments/${commentId}`);
+  },
+
+  /** The caller has read the thread up to and including this message; answers what is left unread. */
+  markMessagesRead(projectId: string, throughMessageId: string): Promise<{ unreadMessageCount: number }> {
+    return data(
+      apiClient.post<{ data: { unreadMessageCount: number } }>(`${BASE}/${projectId}/messages/read`, {
+        throughMessageId,
+      }),
+    );
+  },
+
+  /** Each with a short-lived download link: read again right before one is opened. */
+  listAttachments(projectId: string): Promise<ProjectAttachment[]> {
+    return data(apiClient.get<{ data: ProjectAttachment[] }>(`${BASE}/${projectId}/attachments`));
+  },
+
+  /** The path of the Project's own upload, behind `projects:write` alone (the kit's `uploadAttachment`). */
+  attachmentUploadPath(projectId: string): string {
+    return `${BASE}/${projectId}/attachments/upload`;
+  },
+
+  removeAttachment(projectId: string, attachmentId: string): Promise<void> {
+    return apiClient.delete<void>(`${BASE}/${projectId}/attachments/${attachmentId}`);
+  },
+
+  history(projectId: string, cursor: string | null): Promise<RecordHistoryPage> {
+    const qs = new URLSearchParams({ limit: String(HISTORY_PAGE_SIZE) });
+    if (cursor) qs.set('cursor', cursor);
+    return apiClient.get<RecordHistoryPage>(`${BASE}/${projectId}/history?${qs.toString()}`);
+  },
+
+  /** The people who may see the Project — or, before there is one, who may read Projects. */
+  lookupMentionable(projectId: string | null, query = ''): Promise<ProjectMentionableOption[]> {
+    const qs = new URLSearchParams();
+    if (projectId) qs.set('projectId', projectId);
+    if (query.trim()) qs.set('q', query.trim());
+    const tail = qs.toString();
+    return data(apiClient.get<{ data: ProjectMentionableOption[] }>(`${BASE}/lookups/mentionable${tail ? `?${tail}` : ''}`));
+  },
+
+  /** The `@@` document list — answered unwrapped, CRM's shape (FR-044). */
+  lookupDocuments(projectId: string | null, query = ''): Promise<RecordDocumentLookupResponse> {
+    const qs = new URLSearchParams();
+    if (projectId) qs.set('projectId', projectId);
+    if (query.trim()) qs.set('q', query.trim());
+    const tail = qs.toString();
+    return apiClient.get<RecordDocumentLookupResponse>(`${BASE}/lookups/documents${tail ? `?${tail}` : ''}`);
+  },
+
+  searchProducts(query: string): Promise<MentionableProduct[]> {
+    const qs = new URLSearchParams({ page: '0', pageSize: '20' });
+    if (query.trim()) qs.set('q', query.trim());
+    return data(apiClient.get<{ data: MentionableProduct[] }>(`${PRODUCTS_BASE}?${qs.toString()}`));
   },
 
   // --- §2.5 Configuration (reads) ------------------------------------------

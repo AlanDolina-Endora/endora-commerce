@@ -70,3 +70,21 @@ export function parseDuration(raw: string): number | null {
   const days = Number(trimmed);
   return days <= 3650 ? days : null;
 }
+
+const SIZE_UNITS = ['byte', 'kilobyte', 'megabyte', 'gigabyte'] as const;
+
+/** A file size as a person reads it — `512 B`, `2.5 MB` — in the language on screen. */
+export function fileSizeLabel(bytes: number, language: string): string {
+  let value = Math.max(0, bytes);
+  let unit = 0;
+  while (value >= 1024 && unit < SIZE_UNITS.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return new Intl.NumberFormat(language, {
+    style: 'unit',
+    unit: SIZE_UNITS[unit] as string,
+    unitDisplay: 'short',
+    maximumFractionDigits: unit === 0 ? 0 : 1,
+  }).format(value);
+}

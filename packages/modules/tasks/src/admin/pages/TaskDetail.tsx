@@ -23,7 +23,7 @@ import {
   Select,
   Textarea,
 } from '@endora-commerce/admin-kit/ui';
-import { ModalDialog } from '@endora-commerce/admin-kit/components';
+import { ModalDialog, RecordHistory, recordHistoryChanges, useRecordHistory } from '@endora-commerce/admin-kit/components';
 import { AdminZone } from '@endora-commerce/admin-kit/zones';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
@@ -476,59 +476,46 @@ function TaskEditForm(props: TaskEditFormProps): ReactNode {
   );
 }
 
+/** Fields of a Task's audited state a reader is shown, each with its label (`history.field.<field>`). */
+const SHOWN_HISTORY_FIELDS: ReadonlySet<string> = new Set(['title', 'status', 'dueOn', 'contextNote', 'completedAt']);
+
 /**
- * The Task's audit trail (`GET /tasks/:id/history`), newest first, each entry
- * named by what happened. Read again after every write made on this screen.
+ * The Task's audit trail (`GET /tasks/:id/history`) on the kit's
+ * `RecordHistory` (`specs/163-projects-and-tasks/` research R-17): newest
+ * first, a page at a time, each entry by what happened and what it changed,
+ * field by field. Identifiers — the assignee, the context — are never a row;
+ * the entry's heading says an assignment happened. Read again after every
+ * write made on this screen.
  */
 function TaskHistory(props: { taskId: string; version: number }): ReactNode {
   const t = useTranslation('tasks');
-  const [entries, setEntries] = useState<RecordHistoryEntry[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { language } = useAppLanguage();
+  const { taskId } = props;
+  const loadPage = useCallback((cursor: string | null) => tasksApi.history(taskId, cursor ?? undefined), [taskId]);
+  const history = useRecordHistory<RecordHistoryEntry>(loadPage, props.version);
 
-  useEffect(() => {
-    let alive = true;
-    setError(null);
-    tasksApi
-      .history(props.taskId)
-      .then((page) => {
-        if (alive) setEntries(page.data);
-      })
-      .catch((failure: unknown) => {
-        if (alive) setError(errorMessage(failure, t('history.error')));
-      });
-    return (): void => {
-      alive = false;
-    };
-  }, [props.taskId, props.version, t]);
-
-  if (error) {
-    return (
-      <Alert variant="destructive">
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
-    );
-  }
-  if (entries === null) {
-    return (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('history.loading')}
-      </p>
-    );
-  }
-  if (entries.length === 0) return <p className="text-sm text-muted-foreground">{t('history.empty')}</p>;
+  const renderValue = (field: string, raw: unknown): ReactNode => {
+    if (raw === null || raw === undefined || raw === '') return '—';
+    if (field === 'status') return t(`status.${String(raw)}`);
+    if (field === 'dueOn' && typeof raw === 'string') return calendarDateLabel(raw, language);
+    if (field === 'completedAt' && typeof raw === 'string') return formatDateTime(raw);
+    return String(raw);
+  };
 
   return (
-    <ol className="space-y-3">
-      {entries.map((entry) => (
-        <li key={entry.id} className="space-y-0.5 border-l-2 pl-3">
-          <p className="text-sm font-medium">{t(`auditLog.${entry.action}`)}</p>
-          <p className="text-xs text-muted-foreground">
-            {entry.actor.name ?? t('history.system')} ·{' '}
-            <time dateTime={entry.actedAt}>{formatDateTime(entry.actedAt)}</time>
-          </p>
-        </li>
-      ))}
-    </ol>
+    <RecordHistory
+      history={history}
+      copy={{
+        hint: t('history.hint'),
+        empty: t('history.empty'),
+        end: t('history.end'),
+        truncated: t('history.truncated'),
+      }}
+      heading={(entry) => t(`auditLog.${entry.action}`)}
+      changes={(entry) => recordHistoryChanges(entry).filter((change) => SHOWN_HISTORY_FIELDS.has(change.field))}
+      fieldLabel={(field) => t(`history.field.${field}`)}
+      renderValue={renderValue}
+    />
   );
 }
 
