@@ -26,6 +26,8 @@ export { resolveIcon } from './admin-actions/icon-map.js';
 export { ApiError, apiBaseUrl, apiClient, onUnauthorized } from './api-client.js';
 export { toAbsoluteAssetUrl } from './asset-url.js';
 export { AuthProvider, useAuth } from './auth.js';
+export { useAdminPreference, useAdminPreferencesStatus } from './admin-preferences/use-admin-preference.js';
+export type { AdminPreferencesStatus, SidebarPreferenceKey } from './admin-preferences/use-admin-preference.js';
 export type { AdminMe, AuthProviderProps } from './auth.js';
 export { formatDateTime } from './format.js';
 export { formatMoney, localeForCurrency, type FormatMoneyOptions } from './money.js';

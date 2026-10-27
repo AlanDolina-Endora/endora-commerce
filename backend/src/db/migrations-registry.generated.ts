@@ -47,6 +47,7 @@ import { Migration20261007T194748AdminNotificationsMessageKeys } from '@endora-c
 import { Migration20260425T053028AdminUsersInit } from '@endora-commerce/mod-admin-users/migrations';
 import { Migration20260819T155150AdminUsersFoldEmailCase } from '@endora-commerce/mod-admin-users/migrations';
 import { Migration20260825T124801AdminUsersDropLegacyTwoFactorSecret } from '@endora-commerce/mod-admin-users/migrations';
+import { Migration20261027T160234AdminUsersAdminUserPreferences } from '@endora-commerce/mod-admin-users/migrations';
 
 // ── analytics ───────────────────────────────────────────────────────────────
 import { Migration20260425T143139AnalyticsInit } from '@endora-commerce/mod-analytics/migrations';
@@ -401,6 +402,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('admin_users', Migration20260425T053028AdminUsersInit),
   migration('admin_users', Migration20260819T155150AdminUsersFoldEmailCase),
   migration('admin_users', Migration20260825T124801AdminUsersDropLegacyTwoFactorSecret),
+  migration('admin_users', Migration20261027T160234AdminUsersAdminUserPreferences),
 
   // ── analytics ───────────────────────────────────────────────────────────────
   migration('analytics', Migration20260425T143139AnalyticsInit),

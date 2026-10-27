@@ -205,6 +205,8 @@ export * from './platform-info.js';
 export * from './admin-feedback.js';
 export * from './admin-actions.js';
 export * from './admin-contributions.js';
+// Feature 164 — per-admin Admin UI preferences (pins, folded groups, rail mode, page sizes).
+export * from './admin-preferences.js';
 export * from './product-scope-overrides.js';
 export * from './product-value-resolver.js';
 export * from './storefront-value-overrides.js';

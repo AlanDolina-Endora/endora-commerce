@@ -3653,6 +3653,31 @@
         }
       }
     },
+    "/api/v1/admin/me/preferences": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/me/preferences/legacy-import": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/me/preferred-language": {
       "patch": {
         "responses": {

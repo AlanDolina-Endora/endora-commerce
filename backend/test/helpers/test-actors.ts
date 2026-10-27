@@ -379,6 +379,26 @@ export const ADMIN_COOKIES: Record<string, { adminUserId: string }> = {
   'stub-document-templates-none-session': {
     adminUserId: '00000000-0000-4000-8000-0000000152a2',
   },
+  // `specs/164-admin-user-preferences/` — per-admin Admin UI preferences. Admin
+  // B holds a role and admin C holds none (a role-less admin keeps preferences
+  // too); together with the shared wildcard admin they prove no admin reads or
+  // writes another's document. A fresh admin of its own proves `/admin/me`
+  // carries the defaults before anything is written, and one more is the
+  // integration file's, whose rows it deletes, deactivates and cascades. The
+  // users and the role are created by the files under
+  // `test/contract/admin_users/` and `test/integration/admin_users/` that use them.
+  'stub-admin-preferences-b-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000164a1',
+  },
+  'stub-admin-preferences-c-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000164a2',
+  },
+  'stub-admin-preferences-fresh-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000164a3',
+  },
+  'stub-admin-preferences-persistence-session': {
+    adminUserId: '00000000-0000-4000-8000-0000000164b1',
+  },
 };
 
 declare module 'fastify' {
