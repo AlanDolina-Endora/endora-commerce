@@ -595,5 +595,17 @@
   "adminSearch.group.label": "Projekty",
   "adminSearch.field.number": "Numer projektu",
   "adminSearch.field.title": "Tytuł",
-  "adminSearch.field.organizationName": "Nazwa organizacji"
+  "adminSearch.field.organizationName": "Nazwa organizacji",
+  "organizationPanel.title": "Projekty",
+  "organizationPanel.description": "Projekty tej organizacji, które możesz zobaczyć, od najnowszych.",
+  "organizationPanel.new": "Nowy projekt",
+  "organizationPanel.loading": "Wczytywanie projektów…",
+  "organizationPanel.error": "Nie udało się wczytać projektów. Spróbuj ponownie później.",
+  "organizationPanel.empty": "Ta organizacja nie ma projektu, który możesz zobaczyć.",
+  "organizationPanel.column.project": "Projekt",
+  "organizationPanel.column.state": "Stan",
+  "organizationPanel.column.stage": "Bieżący etap",
+  "organizationPanel.noStage": "Brak bieżącego etapu",
+  "organizationPanel.more": "Pokazano {shown} najnowszych z {total}.",
+  "organizationPanel.all": "Wszystkie projekty"
 }

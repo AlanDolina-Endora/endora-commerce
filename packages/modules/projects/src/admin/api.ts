@@ -209,6 +209,18 @@ export const projectsApi = {
       .catch(() => null);
   },
 
+  /**
+   * One Organization in the caller's reach, or `null` when it is out of reach,
+   * missing or cannot be read — a value an address carries (the Organization
+   * screen's "New project"), never a precondition.
+   */
+  organizationOption(id: string): Promise<ProjectOrganizationOption | null> {
+    return apiClient
+      .get<{ data: ProjectOrganizationOption[] }>(`${BASE}/lookups/organizations?id=${encodeURIComponent(id)}`)
+      .then((envelope) => envelope.data[0] ?? null)
+      .catch(() => null);
+  },
+
   /** The module setting `projects.visibility`, which *Follow the module setting* means. */
   visibilitySetting(): Promise<ProjectVisibilitySetting> {
     return data(apiClient.get<{ data: { setting: ProjectVisibilitySetting } }>(`${BASE}/visibility-setting`)).then(

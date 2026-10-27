@@ -3,7 +3,8 @@
  * §1–§3): User Story 1's three routes and sidebar row, User Story 3's
  * Templates screens and row, User Story 4's Project Roles and loss reasons,
  * User Story 6's Project panel on the screens of the records a Project
- * holds, and User Story 10's analytics screen and row.
+ * holds, User Story 10's analytics screen and row, and User Story 11's panel
+ * of an Organization's Projects on the Organization screen.
  *
  * **Only what has shipped** — a sidebar or palette entry pointing at a route
  * that does not exist is a defect (Principle XVI). The palette actions are the
@@ -138,5 +139,7 @@ export const contributions: AdminContributions = {
     zoneComponent('quote_request.detail.after', () => import('./zones/QuoteRequestProjectPanel.js'), { weight: 650, requiredPermission: READ_PERMISSION }),
     zoneComponent('opportunity.detail.after', () => import('./zones/OpportunityProjectPanel.js'), { weight: 650, requiredPermission: READ_PERMISSION }),
     zoneComponent('task.detail.after', () => import('./zones/TaskProjectPanel.js'), { weight: 650, requiredPermission: READ_PERMISSION }),
+    // User Story 11 — the Organization's Projects on the Organization screen.
+    zoneComponent('organization.detail.after', () => import('./zones/OrganizationProjects.js'), { weight: 650, requiredPermission: READ_PERMISSION }),
   ],
 };

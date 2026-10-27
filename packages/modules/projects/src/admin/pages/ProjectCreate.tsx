@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import {
   PROJECT_DESCRIPTION_MAX,
@@ -117,6 +117,24 @@ export function ProjectCreate(): ReactNode {
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown> | null>(null);
   const [customFieldErrors, setCustomFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+
+  // The Organization screen's "New project" names its Organization in the
+  // address: it starts chosen when the reader reaches it, and is otherwise left
+  // out — the lookup answers nothing for one out of reach.
+  const [searchParams] = useSearchParams();
+  const addressedOrganization = searchParams.get('organizationId');
+  useEffect(() => {
+    if (!addressedOrganization) return;
+    let alive = true;
+    void projectsApi.organizationOption(addressedOrganization).then((option) => {
+      if (alive && option) {
+        setOrganizations((chosen) => (chosen.some((o) => o.id === option.id) ? chosen : [...chosen, option]));
+      }
+    });
+    return (): void => {
+      alive = false;
+    };
+  }, [addressedOrganization]);
 
   // Every Role, labelled in the reader's language: a Member is offered the
   // active ones, and the ones a chosen Template names — archived since or not.

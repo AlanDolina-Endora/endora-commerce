@@ -245,6 +245,46 @@ describe('ProjectCreate', () => {
     expect(requested().filter((path) => /^\/api\/v1\/admin\/(organizations|admin-users)/.test(path))).toEqual([]);
   });
 
+  it('starts with the Organization the address names — the Organization screen’s "New project" (T133)', async () => {
+    renderProjects(
+      <>
+        <ProjectCreate />
+        <AddressProbe />
+      </>,
+      { path: `/projects/new?organizationId=${ORGANIZATION_ID}` },
+    );
+    await screen.findByRole('heading', { name: en('create.title') });
+    expect(await screen.findByRole('button', { name: en('field.organizationsRemove', { name: 'Acme' }) })).toBeTruthy();
+    expect(screen.queryByText(en('create.internalNote'))).toBeNull();
+    expect(requested()).toContain(`/api/v1/admin/projects/lookups/organizations?id=${ORGANIZATION_ID}`);
+
+    await userEvent.type(screen.getByLabelText(new RegExp(en('field.title'))), 'Fit-out');
+    await userEvent.type(within(stagesSection()).getByLabelText(en('stage.name', { position: 1 })), 'Design');
+    await userEvent.click(screen.getByRole('button', { name: en('create.submit') }));
+    await waitFor(() => expect(postSpy).toHaveBeenCalledTimes(1));
+    expect((postSpy.mock.calls[0] as [string, Record<string, unknown>])[1]).toMatchObject({ organizationIds: [ORGANIZATION_ID] });
+  });
+
+  it('starts with no Organization when the one the address names is not in the reader’s reach', async () => {
+    getSpy.mockImplementation((path: string) =>
+      path.startsWith('/api/v1/admin/projects/lookups/organizations?id=')
+        ? Promise.resolve({ data: [] })
+        : path === '/api/v1/admin/projects/roles'
+          ? Promise.resolve({ data: ROLES })
+          : path === '/api/v1/admin/projects/templates?active=true'
+            ? Promise.resolve({ data: [] })
+            : path === '/api/v1/admin/projects/visibility-setting'
+              ? Promise.resolve({ data: { setting: 'members' } })
+              : Promise.reject(new Error(`unexpected GET ${path}`)),
+    );
+    renderProjects(<ProjectCreate />, { path: `/projects/new?organizationId=${ORGANIZATION_ID}` });
+    await screen.findByRole('heading', { name: en('create.title') });
+    await waitFor(() =>
+      expect(requested()).toContain(`/api/v1/admin/projects/lookups/organizations?id=${ORGANIZATION_ID}`),
+    );
+    expect(screen.getByText(en('create.internalNote'))).toBeTruthy();
+  });
+
   it('sends who sees the Project: following the module setting by default, or members and the people listed', async () => {
     await renderForm();
     await userEvent.type(screen.getByLabelText(new RegExp(en('field.title'))), 'Fit-out');

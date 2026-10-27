@@ -595,5 +595,17 @@
   "adminSearch.group.label": "Projects",
   "adminSearch.field.number": "Project number",
   "adminSearch.field.title": "Title",
-  "adminSearch.field.organizationName": "Organization name"
+  "adminSearch.field.organizationName": "Organization name",
+  "organizationPanel.title": "Projects",
+  "organizationPanel.description": "Projects of this organization that you can see, newest first.",
+  "organizationPanel.new": "New project",
+  "organizationPanel.loading": "Loading projects…",
+  "organizationPanel.error": "The projects could not be loaded. Try again later.",
+  "organizationPanel.empty": "This organization has no project that you can see.",
+  "organizationPanel.column.project": "Project",
+  "organizationPanel.column.state": "State",
+  "organizationPanel.column.stage": "Current stage",
+  "organizationPanel.noStage": "No current stage",
+  "organizationPanel.more": "The {shown} newest of {total} are shown.",
+  "organizationPanel.all": "All projects"
 }
