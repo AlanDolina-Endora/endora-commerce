@@ -1,5 +1,5 @@
 import { ADMIN_PERMISSION_WILDCARD, type PermissionReadPort } from '@endora-commerce/contracts';
-import { actingAdminUserId } from './project-access.js';
+import { actingAdminUserId, isSystemActor } from './project-access.js';
 
 /**
  * What a linked or mentioned record shows is its owner's data, and
@@ -12,8 +12,9 @@ import { actingAdminUserId } from './project-access.js';
  * also holds `orders:read`; those of a Quote Request for one holding
  * `rfqs:handle` (that module's one code, which gates its reads too); an
  * Opportunity's for `crm:read`; a Task's for `tasks:read`. Anybody else sees
- * that a record is linked, and no more. The system — a subscriber, a worker —
- * is nobody's session and is not narrowed.
+ * that a record is linked, and no more. The system actor — a subscriber, a
+ * worker — is nobody's session and is not narrowed; any other caller without an
+ * administrator behind it (a customer, an api key) is answered no.
  *
  * **Asked by a service, after the owner's presence is decided** — never as a
  * `requireAdmin` on a route for a switchable owner: while that module is off
@@ -54,7 +55,9 @@ export interface OwnerReadChecks {
 export function createOwnerReadCheck(permissions: PermissionReadPort, permission: string): OwnerReadCheck {
   return async () => {
     const adminUserId = actingAdminUserId();
-    if (adminUserId === null) return true;
+    // The system is nobody's session; any other caller without an
+    // administrator behind it reads nothing (T144 F6).
+    if (adminUserId === null) return isSystemActor();
     const held = await permissions.listPermissions(adminUserId);
     return held.includes(ADMIN_PERMISSION_WILDCARD) || held.includes(permission);
   };

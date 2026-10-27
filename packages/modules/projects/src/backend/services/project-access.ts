@@ -226,10 +226,20 @@ export function ambientReach(): OrgReach {
   }
 }
 
-/** The administrator behind the current request, or `null` for the system. */
+/** The administrator behind the current request, or `null` for anybody else. */
 export function actingAdminUserId(): string | null {
   const actor = getTenantContext()?.actor;
   return actor?.kind === 'admin' && actor.id ? actor.id : null;
+}
+
+/**
+ * Whether the ambient caller is the system — a worker, a subscriber — the one
+ * caller the rules do not narrow. A customer, an api key or anything else
+ * without an administrator behind it is **not** the system: it sees no Project
+ * (fail-closed; `tasks`' `isSystemActor` is the same test, T144 F6).
+ */
+export function isSystemActor(): boolean {
+  return getTenantContext()?.actor.kind === 'system';
 }
 
 function holds(held: readonly string[], code: string): boolean {
@@ -257,9 +267,9 @@ export class ProjectAccess {
   /**
    * Who is reading, from the ambient tenant context: the administrator, whether
    * they hold `projects:read` and `projects:see_all`, and their Organization
-   * reach. With no administrator behind the request it is the system,
-   * unrestricted — but the reach is still asked of the context, so a missing
-   * context throws.
+   * reach. The system actor is unrestricted — but the reach is still asked of
+   * the context, so a missing context throws; any other caller without an
+   * administrator behind it reads nothing.
    *
    * `projects:read` is asked here and not only on the routes: a Task's context,
    * an audit label and `projectReadPort` reach this file behind another
@@ -269,7 +279,11 @@ export class ProjectAccess {
   async currentViewer(): Promise<ProjectViewer> {
     const reach = ambientReach();
     const adminUserId = actingAdminUserId();
-    if (adminUserId === null) return { adminUserId: null, canRead: true, seeAll: true, reach };
+    if (adminUserId === null) {
+      return isSystemActor()
+        ? { adminUserId: null, canRead: true, seeAll: true, reach }
+        : { adminUserId: null, canRead: false, seeAll: false, reach };
+    }
     const held = await this.deps.permissions.listPermissions(adminUserId);
     // The capability check of `projects:see_all` — no route asks for the code,
     // this is where it is enforced (a wildcard holder holds it).
@@ -299,7 +313,9 @@ export class ProjectAccess {
   /** One Project the caller may see, or `null` — out of reach, invisible and missing alike. */
   async findVisible(id: string): Promise<VisibleProjectRow | null> {
     if (!isUuid(id)) return null;
-    const visible = await this.visibleProjectSql();
+    const viewer = await this.currentViewer();
+    if (!viewer.canRead) return null;
+    const visible = await this.visibleProjectSql(viewer);
     const rows = (await this.deps.emFactory().execute(
       `select ${VISIBLE_PROJECT_COLUMNS} from "projects" p
         where p."id" = ?${visible ? ` and ${visible.sql}` : ''}`,
