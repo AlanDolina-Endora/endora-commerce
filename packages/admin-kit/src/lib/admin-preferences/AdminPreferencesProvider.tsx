@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode }
 import type { AdminPreferences } from '@endora-commerce/contracts';
 import { apiClient } from '../api-client.js';
 import { AdminPreferencesStore } from './store.js';
+import { carryOverLegacyPageSizes, removeUnkeyedLegacyLayout } from './legacy-carry-over.js';
 
 /**
  * Feature 164 — the signed-in admin's preferences, provided by `AuthProvider`
@@ -57,6 +58,20 @@ export function AdminPreferencesProvider({
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [store]);
+
+  // The one-time carry-over of the browser's layout values (FR-022, FR-023):
+  // the unkeyed sidebar values go at once, whatever the availability; this
+  // admin's page sizes are imported as soon as the store is available — now,
+  // or once a later load succeeds. Idempotent, so a double mount is harmless.
+  useEffect(() => {
+    if (store === null || adminUserId === null) return undefined;
+    removeUnkeyedLegacyLayout();
+    const run = (): void => {
+      void carryOverLegacyPageSizes(store, adminUserId, apiClient);
+    };
+    if (store.isAvailable()) run();
+    return store.onAvailable(run);
+  }, [store, adminUserId]);
 
   // A newer `/admin/me` for the same admin.
   const seen = useRef(initial);

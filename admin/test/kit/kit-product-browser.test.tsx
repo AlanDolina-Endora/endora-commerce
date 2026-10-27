@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AdminMe } from '@endora-commerce/admin-kit/lib';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { StrictMode, useState, type ReactElement, type ReactNode } from 'react';
-import { ADMIN_PRODUCT_SELECTION_MAX } from '@endora-commerce/contracts';
+import { ADMIN_PREFERENCES_DEFAULTS, ADMIN_PRODUCT_SELECTION_MAX } from '@endora-commerce/contracts';
 import { TranslationProvider } from '../../../packages/admin-shell/src/i18n/TranslationProvider';
 import type { Bundle } from '../../../packages/admin-shell/src/i18n/types';
 import { adminSession } from '../helpers/render-with-session';
@@ -148,7 +149,21 @@ const ORDER_RULES: Rules = {
 const PRICE_LIST_RULES: Rules = { initialStatus: 'all' };
 
 const SESSION = adminSession({ permissions: ['catalog:read'] });
-const PAGE_SIZE_KEY = `b2b-admin.page-size.catalog-products.${SESSION.adminUser.id}`;
+/**
+ * The page size the Product list and this picker share (`catalog-products`),
+ * seeded on the session as the server would send it (feature 164 moved it off
+ * `localStorage`).
+ */
+let catalogPageSize = 10;
+const sessionWithPageSize = (): AdminMe => ({
+  ...SESSION,
+  preferences: { ...ADMIN_PREFERENCES_DEFAULTS, listPageSizes: { 'catalog-products': catalogPageSize } },
+});
+/** The kit's own client, which the preferences store writes through. */
+const kitClient = (
+  await vi.importActual<typeof import('@endora-commerce/admin-kit/lib')>('@endora-commerce/admin-kit/lib')
+).apiClient;
+let preferencesPatch: ReturnType<typeof vi.spyOn>;
 
 interface HarnessProps {
   rules?: Rules;
@@ -198,7 +213,7 @@ function renderHarness(
   options: { language?: 'en' | 'pl'; permissions?: readonly string[]; strict?: boolean } = {},
 ): ReturnType<typeof render> {
   const language = options.language ?? 'en';
-  const session = options.permissions ? adminSession({ permissions: options.permissions }) : SESSION;
+  const session = options.permissions ? adminSession({ permissions: options.permissions }) : sessionWithPageSize();
   const wrapper = ({ children }: { children: ReactNode }): ReactElement => {
     const tree = (
       <TranslationProvider language={language} initialBundle={BUNDLES[language]}>
@@ -228,8 +243,8 @@ function rowCheckbox(name: string): HTMLInputElement {
 
 beforeEach(() => {
   getSpy.mockReset();
-  window.localStorage.clear();
-  window.localStorage.setItem(PAGE_SIZE_KEY, '10');
+  catalogPageSize = 10;
+  preferencesPatch = vi.spyOn(kitClient, 'patch').mockResolvedValue({ data: ADMIN_PREFERENCES_DEFAULTS });
 });
 
 afterEach(() => {
@@ -395,7 +410,7 @@ describe('pagination and selection (B4, B5)', () => {
     await waitFor(() =>
       expect(requestedUrls().at(-1)).toBe(`${PATH}?includeArchived=1&page=0&pageSize=20&status=active`),
     );
-    expect(window.localStorage.getItem(PAGE_SIZE_KEY)).toBe('10');
+    expect(preferencesPatch).not.toHaveBeenCalled();
   });
 
   it('keeps the selection across page, page-size and filter changes', async () => {
@@ -487,7 +502,7 @@ describe('footer, cap and reasons (B6, B7, B8)', () => {
       product(`b${String(i).padStart(3, '0')}`, `Bulk ${String(i).padStart(3, '0')}`, 'active', 'simple'),
     );
     useCatalog(big);
-    window.localStorage.setItem(PAGE_SIZE_KEY, '500');
+    catalogPageSize = 500;
     const user = userEvent.setup();
     renderHarness(<Harness rules={PRICE_LIST_RULES} />);
     await openPicker(user);

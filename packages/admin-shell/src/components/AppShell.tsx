@@ -57,6 +57,7 @@ import { PinnedSection } from './sidebar/PinnedSection.js';
 import { PinToggleButton } from './sidebar/PinToggleButton.js';
 import { PreferencesSaveNotice } from './sidebar/PreferencesSaveNotice.js';
 import { usePinActions, type PinOutcome } from './sidebar/use-pin-actions.js';
+import { useAdminPreference } from '@endora-commerce/admin-kit/lib';
 import {
   resolvePinsFrom,
   visibleDestinations,
@@ -356,57 +357,6 @@ const NAV: NavSection[] = [
     ],
   },
 ];
-
-const STORAGE_KEY = 'b2b-admin.nav.collapsed-groups';
-const RAIL_STORAGE_KEY = 'b2b-admin.nav.rail-mode';
-
-/**
- * Rail (icon-only) mode persistence. The whole sidebar shrinks to a
- * 64px-wide column showing just icons; section labels disappear and
- * each section becomes a single icon (the first item's icon). Hovering
- * or clicking the icon reveals a popover with the section's items.
- */
-function loadRailMode(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    return window.localStorage.getItem(RAIL_STORAGE_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function persistRailMode(value: boolean): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(RAIL_STORAGE_KEY, value ? '1' : '0');
-  } catch {
-    /* ignore */
-  }
-}
-
-function loadCollapsed(): Set<string> {
-  if (typeof window === 'undefined') return new Set();
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw) as unknown;
-    if (Array.isArray(parsed)) {
-      return new Set(parsed.filter((v): v is string => typeof v === 'string'));
-    }
-  } catch {
-    /* ignore */
-  }
-  return new Set();
-}
-
-function persistCollapsed(value: Set<string>): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(value)));
-  } catch {
-    /* ignore */
-  }
-}
 
 /**
  * Map URL pathname → breadcrumb trail. Each crumb carries a label and
@@ -1039,8 +989,13 @@ export function AppShell(): ReactNode {
   const isVisible = useSurfaceVisibility();
   const navigate = useNavigate();
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => loadCollapsed());
-  const [railMode, setRailMode] = useState<boolean>(() => loadRailMode());
+  // Feature 164 — folded groups and rail mode are the admin's, kept on the
+  // server and present in the first render (FR-013, FR-016). A stored group key
+  // this release does not render folds nothing and is kept in the next write
+  // (FR-015).
+  const [collapsedGroups, setCollapsedGroups] = useAdminPreference('sidebarCollapsedGroups');
+  const collapsed = useMemo(() => new Set(collapsedGroups), [collapsedGroups]);
+  const [storedRailMode, setStoredRailMode] = useAdminPreference('sidebarRailMode');
   const platformVersion = usePlatformVersion();
   const feedbackOffered = isModulePresent('admin_feedback');
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -1049,14 +1004,12 @@ export function AppShell(): ReactNode {
   const viewportTier = useViewportTier();
   const isMobile = viewportTier === 'mobile';
   useFocusTrap(sidebarRef, isMobile && navDrawerOpen);
+  // Rail mode has no effect on the mobile tier, whatever is stored (FR-013).
+  const railMode = storedRailMode && !isMobile;
 
   const toggleRailMode = useCallback((): void => {
-    setRailMode((prev) => {
-      const next = !prev;
-      persistRailMode(next);
-      return next;
-    });
-  }, []);
+    setStoredRailMode(!storedRailMode);
+  }, [storedRailMode, setStoredRailMode]);
   const t = useTranslation('core');
   // The brand link's tooltip. With a release known it is the full sentence in
   // either mode: collapsed, the badge has no room and this is the only place
@@ -1099,15 +1052,16 @@ export function AppShell(): ReactNode {
   const fullName = me ? `${me.adminUser.firstName} ${me.adminUser.lastName}`.trim() : '';
   const role = me?.role?.name ?? 'Admin';
 
-  const toggleSection = useCallback((key: string): void => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      persistCollapsed(next);
-      return next;
-    });
-  }, []);
+  const toggleSection = useCallback(
+    (key: string): void => {
+      setCollapsedGroups(
+        collapsedGroups.includes(key)
+          ? collapsedGroups.filter((group) => group !== key)
+          : [...collapsedGroups, key],
+      );
+    },
+    [collapsedGroups, setCollapsedGroups],
+  );
 
   // ⌘K opens the palette anywhere in the admin; ⌘B toggles the
   // sidebar rail (matches the shadcn / VS Code shortcut convention).
@@ -1163,7 +1117,7 @@ export function AppShell(): ReactNode {
         ref={sidebarRef}
         className={cn(
           'b2b-sidebar',
-          railMode && !isMobile && 'b2b-sidebar--rail',
+          railMode && 'b2b-sidebar--rail',
           isMobile && navDrawerOpen && 'b2b-sidebar--drawer-open',
         )}
         aria-hidden={isMobile && !navDrawerOpen ? true : undefined}
@@ -1198,10 +1152,10 @@ export function AppShell(): ReactNode {
         {platformVersion !== null || feedbackOffered ? (
           <div className="b2b-sidebar__version">
             {platformVersion !== null ? <VersionBadge version={platformVersion} /> : null}
-            {feedbackOffered && !(railMode && !isMobile) ? <AdminFeedback rail={false} /> : null}
+            {feedbackOffered && !railMode ? <AdminFeedback rail={false} /> : null}
           </div>
         ) : null}
-        {feedbackOffered && railMode && !isMobile ? (
+        {feedbackOffered && railMode ? (
           <div className="b2b-sidebar__feedback-rail-row">
             <AdminFeedback rail />
           </div>
@@ -1234,7 +1188,7 @@ export function AppShell(): ReactNode {
         </div>
 
         <nav className="b2b-sidebar__nav">
-          {railMode && !isMobile ? (
+          {railMode ? (
             resolvedPins.length > 0 ? (
               <RailSection
                 key="pinned"

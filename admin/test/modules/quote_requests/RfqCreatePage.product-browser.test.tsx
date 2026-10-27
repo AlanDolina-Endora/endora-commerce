@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AdminMe } from '@endora-commerce/admin-kit/lib';
+import { ADMIN_PREFERENCES_DEFAULTS } from '@endora-commerce/contracts';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
@@ -180,7 +182,20 @@ function resolveCalls(): ResolveCall[] {
 // ---------------------------------------------------------------- rig
 
 const SESSION = adminSession({ permissions: ['*'] });
-const PAGE_SIZE_KEY = `b2b-admin.page-size.catalog-products.${SESSION.adminUser.id}`;
+/**
+ * The page size the Product list and this picker share (`catalog-products`),
+ * seeded on the session as the server would send it (feature 164 moved it off
+ * `localStorage`).
+ */
+let catalogPageSize = 20;
+const sessionWithPageSize = (): AdminMe => ({
+  ...SESSION,
+  preferences: { ...ADMIN_PREFERENCES_DEFAULTS, listPageSizes: { 'catalog-products': catalogPageSize } },
+});
+/** The kit's own client, which the preferences store writes through. */
+const kitClient = (
+  await vi.importActual<typeof import('@endora-commerce/admin-kit/lib')>('@endora-commerce/admin-kit/lib')
+).apiClient;
 
 beforeEach(() => {
   getSpy.mockReset();
@@ -188,8 +203,8 @@ beforeEach(() => {
   navigateSpy.mockReset();
   held = new Map();
   holdNext = new Set();
-  window.localStorage.clear();
-  window.localStorage.setItem(PAGE_SIZE_KEY, '20');
+  catalogPageSize = 20;
+  vi.spyOn(kitClient, 'patch').mockResolvedValue({ data: ADMIN_PREFERENCES_DEFAULTS });
   getSpy.mockImplementation((path: string) => {
     const one = CUSTOMERS.find((c) => path === `/api/v1/admin/customers/${c.id}`);
     if (one) return Promise.resolve({ data: one });
@@ -224,7 +239,7 @@ function renderPage(customer: string | null = 'cust-1'): void {
         <MemoryRouter initialEntries={[`/quote-requests/new${customer ? `?customerAccountId=${customer}` : ''}`]}>
           <RfqCreatePage />
         </MemoryRouter>,
-        { session: SESSION, presence: modulePresence({ present: ['quote_requests'] }) },
+        { session: sessionWithPageSize(), presence: modulePresence({ present: ['quote_requests'] }) },
       )}
     </StrictMode>,
     BUNDLE,
