@@ -533,6 +533,7 @@ by e-mail.
 - Note (Phase 8 review): fold `.changeset/crm-opportunity-zone.md` (T095) into the single `mod-crm` changeset of Phase 9. Fold it together with T107's `crm-reference-standard` changeset; `.changeset/admin-kit-collaboration.md` also names `mod-crm` — one meaning per changeset, so check none is described twice.
 - [ ] T143 Browser walk of `quickstart.md` § *Manual walk* on a `pnpm run setup` instance with demo data, light and dark, phone width for the list and detail screens; check the sidebar does not highlight *Tasks* (`/tasks`) together with *My tasks* (`/tasks/mine`)
 - [ ] T144 Independent review of the tenant path (`ProjectAccess`, the Task context descriptor, analytics SQL, the sweep's recipient check) by a reviewer who did not write it; close every finding before the merge request; reviewer also judges whether `project-access-seam.test.ts` must refuse any `em.execute` in `services/` outside its allow-list (today it sees class identifiers and literal SQL only); and the two by-design visibility skips: `ProjectAccess.rowAfterWrite` (only after `loadVisible`) and `ProjectReadService.graphOf` (caller passes a visible Project)
+- Note (Phase 10 review): judge the Stage-alert sweep's claim → deliver window — it does not re-check a claim before delivering (CRM's reminder sweep re-checks with `#stillHeld`), so a Stage left or a deadline moved in the milliseconds between claim and delivery still sends once; decide whether to add the re-check. The unsettled-after-crash rows are tracked separately.
 
 ---
 
