@@ -44,3 +44,24 @@ export async function assertContextForCaller(contexts: TaskContextRegistry, cont
   }
   if (!description.groups.has(groupId)) throw taskContextInvalid('The record has no such part.');
 }
+
+/**
+ * Taking a Task out of the context it is in — detaching it, or moving it to
+ * another record — is the context owner's to allow (`canTakeOut`), not only
+ * `tasks:write`'s: otherwise a holder who merely sees a record could publish
+ * its Tasks to every holder of `tasks:read`. Moving between the groups of one
+ * record is not asked. An owner that is off hides the Task before this is
+ * reached; one that is unregistered refuses.
+ */
+export async function assertMayTakeOut(
+  contexts: TaskContextRegistry,
+  current: { contextType: string | null; contextId: string | null },
+  next: TaskContext | null,
+): Promise<void> {
+  if (current.contextType === null || current.contextId === null) return;
+  if (next !== null && next.contextType === current.contextType && next.contextId === current.contextId) return;
+  const descriptor = contexts.presentFor(current.contextType);
+  if (!descriptor || !(await descriptor.canTakeOut(current.contextId))) {
+    throw taskContextInvalid('You may not take this Task out of the record it belongs to.');
+  }
+}

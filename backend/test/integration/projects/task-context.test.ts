@@ -207,6 +207,42 @@ describe('projects — the `project` Task context (US2)', () => {
     await h.em().getConnection().execute(`delete from "tasks" where "id" = ?`, [leaving.id]);
   });
 
+  it('taking a Task out of a Project needs projects:write on it — tasks:write alone does not (T144 info item)', async () => {
+    const writer = await seedCrmAdmin(h.em(), 'ctx-task-writer', ['projects:read', 'tasks:read', 'tasks:write']);
+    try {
+      const open = await createProject(h, { title: 'Open to every reader', visibility: 'everyone' });
+      const other = await createProject(h, { title: 'Another open one', visibility: 'everyone' });
+      created.push(open.id, other.id);
+      const task = await createStageTask(h, open.id, stageNamed(open, 'Design'), { title: 'Stays put' });
+      const inProject = { contextType: 'project', contextId: open.id };
+
+      const detach = await callTasks(h, 'PATCH', `/${task.id}`, { cookies: writer.cookies, payload: { context: null } });
+      expect(detach.statusCode, detach.body).toBe(422);
+      expect(detach.json().error.code).toBe('TASK_CONTEXT_INVALID');
+      const move = await callTasks(h, 'PATCH', `/${task.id}`, {
+        cookies: writer.cookies,
+        payload: { context: { contextType: 'project', contextId: other.id, contextGroupId: stageNamed(other, 'Design') } },
+      });
+      expect(move.statusCode, move.body).toBe(422);
+      expect(move.json().error.code).toBe('TASK_CONTEXT_INVALID');
+      const [row] = await taskRowsOf(h, open.id);
+      expect(row?.id).toBe(task.id);
+
+      // Within the Project, from one Stage to another, is the Task's own edit.
+      const restaged = await callTasks(h, 'PATCH', `/${task.id}`, {
+        cookies: writer.cookies,
+        payload: { context: { ...inProject, contextGroupId: stageNamed(open, 'Build') } },
+      });
+      expect(restaged.statusCode, restaged.body).toBe(200);
+      // A holder of projects:write may take it out.
+      const out = await callTasks(h, 'PATCH', `/${task.id}`, { payload: { context: null } });
+      expect(out.statusCode, out.body).toBe(200);
+      await h.em().getConnection().execute(`delete from "tasks" where "id" = ?`, [task.id]);
+    } finally {
+      writer.undo();
+    }
+  });
+
   it('with Projects off its Tasks are absent from Tasks; on again, they are back', async () => {
     await withModulesDeactivated(['projects'], async () => {
       expect(await listed(member.cookies)).not.toContain(forMember);

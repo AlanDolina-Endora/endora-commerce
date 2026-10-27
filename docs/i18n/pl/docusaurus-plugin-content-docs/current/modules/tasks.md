@@ -154,7 +154,7 @@ włączeniu modułu wszystko wraca dokładnie do poprzedniego stanu.
 | `GET /api/v1/admin/tasks/mine` | `tasks:read` | `{ data: TaskSummary[] }` — otwarte zadania wywołującego, według terminu, bez terminu na końcu (najwyżej 500). |
 | `POST /api/v1/admin/tasks` | `tasks:write` | `{ title, description?, assignedAdminUserId?, dueOn?, context? }` → `201` `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID`, `TASK_ASSIGNEE_INVALID`. |
 | `GET /api/v1/admin/tasks/:id` | `tasks:read` | `{ data: TaskDetail }` albo `404` `TASK_NOT_FOUND` — tak samo dla zadania, które nie istnieje, i dla zadania, którego kontekstu nie możesz zobaczyć. |
-| `PATCH /api/v1/admin/tasks/:id` | `tasks:write` | Dowolne z pól `title`, `description`, `dueOn`, `assignedAdminUserId`, `status`, `context` → `{ data: TaskDetail }`. |
+| `PATCH /api/v1/admin/tasks/:id` | `tasks:write` | Dowolne z pól `title`, `description`, `dueOn`, `assignedAdminUserId`, `status`, `context` → `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID` przy wyjmowaniu zadania z rekordu, na które jego właściciel nie pozwala (`canTakeOut`). |
 | `DELETE /api/v1/admin/tasks/:id` | `tasks:write` | `204`. |
 | `GET /api/v1/admin/tasks/lookups/assignees` | `tasks:write` | `{ data: { id, name, email }[] }` — aktywni administratorzy pasujący do `q` (imię i nazwisko lub e-mail), najwyżej 50. |
 | `GET /api/v1/admin/tasks/:id/history` | `tasks:read` | Ślad audytu zadania, od najnowszych: `{ data, pagination, truncated }` (`RecordHistoryPage`). |
@@ -193,6 +193,7 @@ ctx.onBoot(() => {
     visibleContextIds: (ids) => /* which of these ids the caller may see */,
     describe: (ids) => /* id → { label, href, groups: groupId → label } */,
     canSeeAs: (adminUserId, id) => /* may that administrator see this record? */,
+    canTakeOut: (id) => /* may the caller take a task out of this record? */,
   });
 });
 ```
@@ -212,6 +213,13 @@ Zobowiązania deskryptora:
   zobaczyć rekord. Moduł pyta o nią, zanim powiadomi osobę przypisaną o zadaniu
   tego rekordu; `false` — albo wyłączony właściciel — oznacza, że nikt nie
   dostaje powiadomienia.
+- `canTakeOut(id)` rozstrzyga, czy wywołujący może wyjąć zadanie **z** rekordu —
+  odpiąć je (`context: null`) albo przenieść do innego rekordu; przeniesienie
+  między grupami tego samego rekordu nie wymaga tej zgody. Bez niej posiadacz
+  `tasks:write`, który jedynie widzi rekord, mógłby udostępnić jego zadania
+  każdemu, kto czyta zadania. Projekty odpowiadają „tak” posiadaczowi
+  `projects:write`, który widzi projekt; `false` to odmowa `422`
+  `TASK_CONTEXT_INVALID`.
 - `renderNote(note, language)`, opcjonalna, formułuje w języku czytającego
   notatkę, którą moduł zostawił w zadaniu przy jego tworzeniu (`contextNote` w
   `taskWritePort.createMany`). Zapisuj klucz zamiast zdania — Projekty zapisują

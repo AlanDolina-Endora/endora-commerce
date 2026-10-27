@@ -146,7 +146,7 @@ exactly as it was when the module is switched on again.
 | `GET /api/v1/admin/tasks/mine` | `tasks:read` | `{ data: TaskSummary[] }` — the caller's open tasks, by due date, undated last (at most 500). |
 | `POST /api/v1/admin/tasks` | `tasks:write` | `{ title, description?, assignedAdminUserId?, dueOn?, context? }` → `201` `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID`, `TASK_ASSIGNEE_INVALID`. |
 | `GET /api/v1/admin/tasks/:id` | `tasks:read` | `{ data: TaskDetail }`, or `404` `TASK_NOT_FOUND` — for a task that does not exist and for one whose context you may not see alike. |
-| `PATCH /api/v1/admin/tasks/:id` | `tasks:write` | Any of `title`, `description`, `dueOn`, `assignedAdminUserId`, `status`, `context` → `{ data: TaskDetail }`. |
+| `PATCH /api/v1/admin/tasks/:id` | `tasks:write` | Any of `title`, `description`, `dueOn`, `assignedAdminUserId`, `status`, `context` → `{ data: TaskDetail }`; `422` `TASK_CONTEXT_INVALID` for taking a task out of a record its owner does not let you (`canTakeOut`). |
 | `DELETE /api/v1/admin/tasks/:id` | `tasks:write` | `204`. |
 | `GET /api/v1/admin/tasks/lookups/assignees` | `tasks:write` | `{ data: { id, name, email }[] }` — active administrators matching `q` (name or e-mail), at most 50. |
 | `GET /api/v1/admin/tasks/:id/history` | `tasks:read` | The task's audit trail, newest first: `{ data, pagination, truncated }` (`RecordHistoryPage`). |
@@ -183,6 +183,7 @@ ctx.onBoot(() => {
     visibleContextIds: (ids) => /* which of these ids the caller may see */,
     describe: (ids) => /* id → { label, href, groups: groupId → label } */,
     canSeeAs: (adminUserId, id) => /* may that administrator see this record? */,
+    canTakeOut: (id) => /* may the caller take a task out of this record? */,
   });
 });
 ```
@@ -201,6 +202,12 @@ The contract a descriptor keeps:
   else**: whether that administrator, by their own permissions and reach, may
   see the record. It is asked before an assignee is told about a task of the
   record; `false` — or an owner that is switched off — means nobody is told.
+- `canTakeOut(id)` decides whether the caller may take a task **out of** the
+  record — detach it (`context: null`) or move it to another record; moving it
+  between the record's own groups is not asked. Without it a holder of
+  `tasks:write` who merely sees the record could publish its tasks to everyone
+  who reads tasks. Projects answers yes to a holder of `projects:write` who sees
+  the project; `false` refuses with `422` `TASK_CONTEXT_INVALID`.
 - `renderNote(note, language)`, optional, words the note your module left on a
   task when it created it (`contextNote` of `taskWritePort.createMany`) in the
   reader's language. Store a key rather than a sentence — Projects stores the

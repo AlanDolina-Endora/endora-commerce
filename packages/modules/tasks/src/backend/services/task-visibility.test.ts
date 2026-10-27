@@ -15,6 +15,7 @@ function descriptor(contextType: string, visible: string[]): TaskContextDescript
     visibleContextIds: vi.fn(async (ids: readonly string[]) => new Set(ids.filter((id) => visible.includes(id)))),
     describe: vi.fn(async () => new Map()),
     canSeeAs: vi.fn(async () => false),
+    canTakeOut: vi.fn(async () => false),
   };
 }
 

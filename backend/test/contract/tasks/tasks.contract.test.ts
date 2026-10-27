@@ -74,6 +74,7 @@ describe('tasks (contract) — §1 Tasks', () => {
       allVisibleContextIds: async () => [shown],
       visibleContextIds: async (ids) => new Set(ids.filter((id) => id === shown)),
       canSeeAs: async (_adminUserId, id) => id === shown,
+      canTakeOut: async () => false,
       describe: async (ids) =>
         new Map(
           ids

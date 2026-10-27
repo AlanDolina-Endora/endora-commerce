@@ -22,7 +22,7 @@ import type { CommandBus } from '@endora-commerce/platform/commands';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { TaskAdminSearchQuery } from '../admin-search-provider.js';
 import { getTenantContext } from '@endora-commerce/platform/tenancy';
-import { assertAssignable, assertContextForCaller } from './task-checks.js';
+import { assertAssignable, assertContextForCaller, assertMayTakeOut } from './task-checks.js';
 import {
   assignTaskCommand,
   changeTaskStatusCommand,
@@ -404,6 +404,13 @@ export class TaskService {
   async update(id: string, body: UpdateTaskBody, language: SupportedLanguage): Promise<TaskDetail> {
     const row = await this.findVisibleRow(id);
     if (!row) throw taskNotFound();
+    if (body.context !== undefined && !sameContext(body.context, row)) {
+      await assertMayTakeOut(
+        this.deps.contexts,
+        { contextType: row.context_type, contextId: row.context_id },
+        body.context,
+      );
+    }
     if (body.context) await assertContextForCaller(this.deps.contexts, body.context);
     if (body.assignedAdminUserId !== undefined) await assertAssignable(this.deps.adminUsers, [body.assignedAdminUserId]);
 

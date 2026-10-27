@@ -446,6 +446,14 @@ export interface TaskContextDescriptor {
    */
   canSeeAs(adminUserId: string, id: string): Promise<boolean>;
   /**
+   * Whether the caller may take a Task **out of** context `id` — detach it, or
+   * move it to another record. Without this a holder of `tasks:write` who
+   * merely sees a record could publish its Tasks to every holder of
+   * `tasks:read` (T144). Moving a Task between the groups of one record is not
+   * asked. Answered under the caller's own context; `false` when unsure.
+   */
+  canTakeOut(id: string): Promise<boolean>;
+  /**
    * A Task's `contextNote` in the reader's language. The note is the owner's
    * own text, written when it created the Task; an owner that stores a key
    * rather than a sentence (a Project stores the responsible Role) answers it
