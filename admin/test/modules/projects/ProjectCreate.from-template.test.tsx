@@ -139,11 +139,12 @@ describe('ProjectCreate from a Template', () => {
     await renderForm();
     await chooseTemplate();
 
-    const description = screen.getByLabelText(en('field.description')) as HTMLTextAreaElement;
-    expect(description.value).toBe('Fit out a showroom for the client.');
+    // The description is the reference field (a formatted editor), so its text is its content.
+    const description = screen.getByLabelText(en('field.description'));
+    await waitFor(() => expect(description.textContent).toBe('Fit out a showroom for the client.'));
     await userEvent.clear(description);
     await userEvent.type(description, 'Our own words.');
-    expect(description.value).toBe('Our own words.');
+    expect(description.textContent).toBe('Our own words.');
 
     // The Stages come from the Template: listed, not typed.
     expect(screen.queryByRole('group', { name: en('create.stages.section') })).toBeNull();

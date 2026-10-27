@@ -10,6 +10,7 @@ import {
   PROJECT_ID,
   ROLES,
   ROLE_MANAGER,
+  core,
   detail,
   en,
   renderProjects,
@@ -74,6 +75,9 @@ beforeEach(() => {
       });
     }
     if (path === '/api/v1/admin/projects/visibility-setting') return Promise.resolve({ data: { setting: 'members' } });
+    if (path.startsWith('/api/v1/admin/projects/lookups/mentionable')) {
+      return Promise.resolve({ data: [{ id: ADMIN_ID, name: 'Anna Nowak', email: 'anna@example.com' }] });
+    }
     return Promise.reject(new Error(`unexpected GET ${path}`));
   });
   postSpy.mockResolvedValue({ data: detail() });
@@ -161,6 +165,29 @@ describe('ProjectCreate', () => {
     expect(body).not.toHaveProperty('templateId');
     expect(body).not.toHaveProperty('customFieldValues');
     await waitFor(() => expect(screen.getByTestId('address').textContent).toBe(`/projects/${PROJECT_ID}`));
+  });
+
+  it('writes the description in the reference field: `@` offers people before the Project exists', async () => {
+    await renderForm();
+    await userEvent.type(screen.getByLabelText(new RegExp(en('field.title'))), 'Warehouse fit-out');
+    await userEvent.type(within(stagesSection()).getByLabelText(en('stage.name', { position: 1 })), 'Design');
+    const field = screen.getByLabelText(en('field.description'));
+    await userEvent.type(field, 'Ask @');
+    const list = await screen.findByRole('listbox', { name: core('references.suggest.title.person') });
+    expect(within(list).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      expect.stringContaining('Anna Nowak'),
+    ]);
+    await userEvent.keyboard('{Enter}');
+    await userEvent.click(screen.getByRole('button', { name: en('create.submit') }));
+
+    await waitFor(() => expect(postSpy).toHaveBeenCalledTimes(1));
+    const [, body] = postSpy.mock.calls[0] as [string, Record<string, unknown>];
+    // The chosen person is a token followed by a space, as the kit's field writes it.
+    expect(body['description']).toBe(`Ask [[admin_user:${ADMIN_ID}]] `);
+    // Asked of the module's own lookup, with no Project to name yet.
+    const lookups = requested().filter((path) => path.startsWith('/api/v1/admin/projects/lookups/mentionable'));
+    expect(lookups.length).toBeGreaterThan(0);
+    for (const path of lookups) expect(path).not.toContain('projectId');
   });
 
   it('removes and reorders Stages, and keeps at least one', async () => {

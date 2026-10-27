@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
-import type {
-  CreateProjectBody,
-  ProjectRole,
-  ProjectTemplateDetail,
-  ProjectTemplateSummary,
+import {
+  PROJECT_DESCRIPTION_MAX,
+  type CreateProjectBody,
+  type ProjectRole,
+  type ProjectTemplateDetail,
+  type ProjectTemplateSummary,
 } from '@endora-commerce/contracts';
 import { useModulePresence } from '@endora-commerce/admin-kit/lib';
 import {
@@ -20,12 +21,12 @@ import {
   Label,
   PageHeader,
   Select,
-  Textarea,
 } from '@endora-commerce/admin-kit/ui';
-import { StickyFormActions } from '@endora-commerce/admin-kit/components';
+import { ReferenceField, StickyFormActions } from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { projectsApi } from '../api.js';
 import { errorMessage, normaliseAmount, parseDuration } from '../lib/labels.js';
+import { useProjectReferences } from '../lib/references.js';
 import { stageColorAt } from '../lib/stage-colors.js';
 import { StageDot } from '../components/StageDot.js';
 import { AdminUserLookup, OrganizationsLookup, type LookupChoice } from '../components/LookupPickers.js';
@@ -86,6 +87,9 @@ export function ProjectCreate(): ReactNode {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  // Before there is a Project: people who may read Projects, and Tasks — no
+  // Orders or Quote Requests, which are those of a Project's Organizations.
+  const references = useProjectReferences({ projectId: null, hasOrganizations: false });
   const [organizations, setOrganizations] = useState<LookupChoice[]>([]);
   const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'inherit', viewers: [] });
   const [amount, setAmount] = useState('');
@@ -394,12 +398,14 @@ export function ProjectCreate(): ReactNode {
 
             <div className="space-y-1">
               <Label htmlFor="project-create-description">{t('field.description')}</Label>
-              <Textarea
+              <ReferenceField
                 id="project-create-description"
                 rows={4}
                 value={description}
-                maxLength={20000}
-                onChange={(event): void => setDescription(event.target.value)}
+                onValueChange={setDescription}
+                kinds={references.kinds}
+                lookups={references.lookups}
+                maxLength={PROJECT_DESCRIPTION_MAX}
               />
             </div>
           </CardContent>
