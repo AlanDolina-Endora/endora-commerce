@@ -33,10 +33,62 @@ const ENTITY_READS = new Set([
   'findOneOrFail',
   'findAndCount',
   'findAll',
+  'findByCursor',
   'count',
   'getReference',
   'getRepository',
+  'nativeUpdate',
+  'nativeDelete',
+  'upsert',
+  'upsertMany',
+  'stream',
+  'populate',
 ]);
+
+/** Every way into SQL the detector cannot read: a statement may be built from anything. */
+const RAW_SQL_ENTRIES = new Set(['execute', 'getConnection', 'getKnex', 'raw', 'createQueryBuilder', 'qb']);
+
+/**
+ * Files that run SQL but read no rule-scoped table — each with why. The test
+ * holds both halves: they do run SQL (no stale entry) and read no rule-scoped
+ * table (else they belong in `PROJECT_ACCESS_READERS`).
+ */
+const SQL_WITHOUT_RULE_SCOPED_TABLES: Readonly<Record<string, string>> = {
+  'services/dictionary-service.ts':
+    'Project Roles and loss reasons — global dictionaries (`@GlobalEntity`); whether one is in use is asked of ' +
+    '`role-service` / `loss-reason-service`.',
+  'services/project-number.ts': 'Draws the next Project number from its sequence — no row of any Project.',
+  'services/template-service.ts': 'Templates and their Stages are global configuration (`@GlobalEntity`).',
+  'services/scheduled-work-probe.ts':
+    'Answers one bit — does any row exist — over a statement its caller hands in; the Stage-alert store, an allowed ' +
+    'reader, is that caller.',
+};
+
+/**
+ * How many reads of a rule-scoped table each allowed file makes. A change that
+ * adds or removes one moves its count here, in the same change, after the read
+ * has been checked to compose `visibleProjectSql` or to be keyed by an id
+ * `ProjectAccess` handed out.
+ */
+const RULE_SCOPED_READ_LEDGER: Readonly<Record<string, number>> = {
+  'services/analytics-service.ts': 16,
+  'services/attachment-service.ts': 5,
+  'services/comment-service.ts': 8,
+  'services/link-service.ts': 4,
+  'services/loss-reason-service.ts': 1,
+  'services/move-service.ts': 4,
+  'services/project-access.ts': 12,
+  'services/project-asset-references.ts': 2,
+  'services/project-audit-references.ts': 1,
+  'services/project-read-service.ts': 29,
+  'services/project-service.ts': 16,
+  'services/record-project-service.ts': 1,
+  'services/role-service.ts': 3,
+  'services/stage-alert-service.ts': 11,
+  'services/stage-service.ts': 4,
+  'services/stage-task-service.ts': 12,
+  'services/task-context-descriptor.ts': 2,
+};
 
 interface RuleScopedEntity {
   className: string;
@@ -88,6 +140,17 @@ function ruleScopedEntities(): RuleScopedEntity[] {
   return found;
 }
 
+/** The sources the seam scans: `routes/`, `services/`, `workers/`, and the module's root files that touch data. */
+function scanned(): string[] {
+  return [
+    ...sources('routes'),
+    ...sources('services'),
+    ...sources('workers'),
+    'index.ts',
+    'admin-search-provider.ts',
+  ].sort();
+}
+
 /** Every `.ts` source under `dir`, tests excluded, relative to the backend root. */
 function sources(dir: string): string[] {
   const root = join(BACKEND, dir);
@@ -116,7 +179,7 @@ function sources(dir: string): string[] {
 function readsIn(source: ts.SourceFile, entities: readonly RuleScopedEntity[]): string[] {
   const classes = new Set(entities.map((e) => e.className));
   const tables = new Set(entities.map((e) => e.tableName));
-  const sqlTable = /\b(?:from|join)\s+"?([a-z_]+)"?/gi;
+  const sqlTable = /\b(?:from|join|update|insert\s+into)\s+"?([a-z_]+)"?/gi;
   const found: string[] = [];
   const at = (node: ts.Node) => source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
 
@@ -134,6 +197,26 @@ function readsIn(source: ts.SourceFile, entities: readonly RuleScopedEntity[]): 
         const table = match[1]!.toLowerCase();
         if (tables.has(table)) found.push(`${at(node)}: SQL reads "${table}"`);
       }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return found;
+}
+
+/** The calls into raw SQL in one source, as `line: name` strings. */
+function rawSqlIn(source: ts.SourceFile): string[] {
+  const found: string[] = [];
+  const at = (node: ts.Node) => source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      const name = ts.isPropertyAccessExpression(callee)
+        ? callee.name.text
+        : ts.isIdentifier(callee)
+          ? callee.text
+          : null;
+      if (name && RAW_SQL_ENTRIES.has(name)) found.push(`${at(node)}: ${name}(`);
     }
     ts.forEachChild(node, visit);
   };
@@ -166,25 +249,56 @@ describe('the ProjectAccess seam (R-2)', () => {
     );
   });
 
-  it('no route or service reads a rule-scoped table outside ProjectAccess and its allow-list', () => {
+  const allowed = (file: string) => file === ACCESS_FILE || file in PROJECT_ACCESS_READERS;
+
+  it('nothing the module runs reads a rule-scoped table outside ProjectAccess and its allow-list', () => {
     const offenders: string[] = [];
-    for (const file of [...sources('routes'), ...sources('services')]) {
-      if (file === ACCESS_FILE || file in PROJECT_ACCESS_READERS) continue;
+    for (const file of scanned()) {
+      if (allowed(file)) continue;
       for (const read of readsIn(parse(join(BACKEND, file)), entities)) offenders.push(`${file}:${read}`);
     }
     expect(offenders, 'read the Project through ProjectAccess (loadVisible / visibleProjectSql)').toEqual([]);
   });
 
+  it('no other file reaches raw SQL at all — a statement built from a variable is not a literal the scan can see', () => {
+    const offenders: string[] = [];
+    for (const file of scanned()) {
+      if (allowed(file) || file in SQL_WITHOUT_RULE_SCOPED_TABLES) continue;
+      for (const call of rawSqlIn(parse(join(BACKEND, file)))) offenders.push(`${file}:${call}`);
+    }
+    expect(offenders, 'run SQL in ProjectAccess or an allowed reader, or name the file with its reason').toEqual([]);
+  });
+
+  it('every file that runs SQL without a rule-scoped table exists, says why, runs SQL and reads no such table', () => {
+    const all = new Set(scanned());
+    for (const [file, reason] of Object.entries(SQL_WITHOUT_RULE_SCOPED_TABLES)) {
+      expect(all.has(file), `${file} is listed but is not a scanned source`).toBe(true);
+      expect(file in PROJECT_ACCESS_READERS, `${file} is on both lists`).toBe(false);
+      expect(reason.trim().length, `${file} is listed without a reason`).toBeGreaterThan(20);
+      const source = parse(join(BACKEND, file));
+      expect(rawSqlIn(source), `${file} is listed but runs no SQL — remove the entry`).not.toEqual([]);
+      expect(readsIn(source, entities), `${file} reads a rule-scoped table — it is a reader, with a reason`).toEqual([]);
+    }
+  });
+
   it('every allow-listed file exists, says why, and does read a rule-scoped table — no stale entry', () => {
-    const scanned = new Set([...sources('routes'), ...sources('services')]);
+    const all = new Set(scanned());
     for (const [file, reason] of Object.entries(PROJECT_ACCESS_READERS)) {
-      expect(scanned.has(file), `${file} is allow-listed but is not a source under routes/ or services/`).toBe(true);
+      expect(all.has(file), `${file} is allow-listed but is not a scanned source`).toBe(true);
       expect(reason.trim().length, `${file} is allow-listed without a reason`).toBeGreaterThan(20);
       expect(
         readsIn(parse(join(BACKEND, file)), entities),
         `${file} is allow-listed but reads no rule-scoped table — remove the entry`,
       ).not.toEqual([]);
     }
+  });
+
+  it('the reads of each allowed file are counted — a new one is a reviewed bump of the ledger', () => {
+    const counted: Record<string, number> = {};
+    for (const file of [ACCESS_FILE, ...Object.keys(PROJECT_ACCESS_READERS)].sort()) {
+      counted[file] = readsIn(parse(join(BACKEND, file)), entities).length;
+    }
+    expect(counted).toEqual(RULE_SCOPED_READ_LEDGER);
   });
 
   describe('the detector itself', () => {
@@ -204,8 +318,41 @@ describe('the ProjectAccess seam (R-2)', () => {
       expect(check('execute(`select ${cols} from "project_stages" s`)')).toEqual(['1: SQL reads "project_stages"']);
     });
 
+    it('finds a write that hands rows back, and the entity-manager writes, as reads', () => {
+      expect(check('execute(`update "projects" set "title" = ? where "id" = ? returning *`)')).toEqual([
+        '1: SQL reads "projects"',
+      ]);
+      expect(check(`execute('insert into "project_stages" ("id") values (?) returning "id"')`)).toEqual([
+        '1: SQL reads "project_stages"',
+      ]);
+      expect(check(`em.nativeUpdate(Project, { id }, { title }); em.nativeDelete(ProjectStage, {});`)).toEqual([
+        '1: nativeUpdate(Project)',
+        '1: nativeDelete(ProjectStage)',
+      ]);
+      expect(check(`em.upsert(Project, row); em.findByCursor(Project, {}); em.stream(ProjectStage)`)).toEqual([
+        '1: upsert(Project)',
+        '1: findByCursor(Project)',
+        '1: stream(ProjectStage)',
+      ]);
+    });
+
     it('leaves alone what is not a read of a rule-scoped table', () => {
       expect(check(`em.findOne(ProjectRole, id); em.persist(project); execute('select 1 from "project_roles"');`)).toEqual([]);
+      expect(check(`commandBus.run({ action: 'projects.project.update' })`)).toEqual([]);
+    });
+
+    it('finds every way into raw SQL, whatever the statement is built from', () => {
+      const raw = (text: string) => rawSqlIn(parse('probe.ts', text));
+      expect(raw('await em.execute(statement, params);')).toEqual(['1: execute(']);
+      expect(raw('em.getConnection().execute(sql)')).toEqual(['1: execute(', '1: getConnection(']);
+      expect(raw('em.getKnex().raw(sql); em.createQueryBuilder(Project); em.qb(Project); qb(x)')).toEqual([
+        '1: raw(',
+        '1: getKnex(',
+        '1: createQueryBuilder(',
+        '1: qb(',
+        '1: qb(',
+      ]);
+      expect(raw('em.find(ProjectRole, {}); em.persist(x)')).toEqual([]);
     });
   });
 });
