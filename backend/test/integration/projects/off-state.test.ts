@@ -1,5 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { enterSystemScope } from '@endora-commerce/platform/kernel';
+import type { ProjectReadPort } from '@endora-commerce/contracts';
+import { enterSystemScope, ModuleDisabledError } from '@endora-commerce/platform/kernel';
+import { servedActions } from '../../contract/projects/palette-actions-shared.js';
 import {
   setupBackendServer,
   teardownBackendServer,
@@ -135,6 +137,8 @@ describe('projects off-state (Constitution XVII)', () => {
         { url: `${API}/${ID}/history`, cookies: admin },
         { url: `${API}/lookups/mentionable`, cookies: admin },
         { url: `${API}/lookups/documents`, cookies: admin },
+        // User Story 9's route — the custom fields the list filters on.
+        { url: `${API}/custom-field-filters`, cookies: admin },
         // User Story 10's routes — the seven analytics figures.
         ...['summary', 'durations', 'time-in-stage', 'losses', 'value', 'top-open', 'managers'].map((figure) => ({
           url: `${API}/analytics/${figure}?from=2026-01-01&to=2026-01-31`,
@@ -144,6 +148,66 @@ describe('projects off-state (Constitution XVII)', () => {
       adminPresence: { cookies: admin },
       settingWrite: { code: 'projects.visibility', value: 'everyone', cookies: admin },
     });
+  });
+
+  /**
+   * User Story 11 — what the module contributes to the platform beyond its
+   * routes: four palette actions, the `projects.project` global-search type and
+   * `projectReadPort`. Each is measured present, absent on both axes, and back.
+   *
+   * The rest of the final sweep (T135) is proved where its subject lives, each
+   * with its own positive control: the four record panels and the Organization
+   * panel withdraw in the admin (`admin/test/modules/projects/ProjectPanel.test.tsx`,
+   * `OrganizationProjects.test.tsx`) and their read answers 503 above
+   * (`/records/:kind/:id/project`); the *Project* custom-field type in
+   * `custom-fields.test.ts`; the `project` Task context — a Project's Tasks
+   * leave the Tasks module — in `task-context.test.ts` and `global-search.test.ts`;
+   * the asset-deletion scanner, booted while off, in `attachments.test.ts`; and
+   * the alert sweep below.
+   */
+  describe('palette, global search and projectReadPort (User Story 11)', () => {
+    const ACTIONS = ['new-project', 'open-project-analytics', 'open-project-templates', 'open-projects'];
+    const capability = async (): Promise<string[]> => {
+      const response = await h.app.inject({
+        method: 'GET',
+        url: '/api/v1/admin/global-search/capability?language=en',
+        cookies: admin,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return (response.json() as { data: { entityTypes: Array<{ entityType: string }> } }).data.entityTypes.map(
+        (entry) => entry.entityType,
+      );
+    };
+    const readPortAnswers = async (): Promise<boolean> => {
+      try {
+        await enterSystemScope('test: projects read port off-state', async () =>
+          h.container.resolve<ProjectReadPort>('projectReadPort').findById(ID),
+        );
+        return true;
+      } catch (error) {
+        if (error instanceof ModuleDisabledError) return false;
+        throw error;
+      }
+    };
+
+    it.each<OffStateAxis>(['deactivated', 'platform-unavailable'])(
+      'are offered while on, withdrawn while %s, and back after',
+      async (axis) => {
+        expect(Object.keys(await servedActions(h, 'projects'))).toEqual(ACTIONS);
+        expect(await capability()).toContain('projects.project');
+        expect(await readPortAnswers()).toBe(true);
+
+        await withModuleOff('projects', axis, async () => {
+          expect(await servedActions(h, 'projects')).toEqual({});
+          expect(await capability()).not.toContain('projects.project');
+          expect(await readPortAnswers()).toBe(false);
+        });
+
+        expect(Object.keys(await servedActions(h, 'projects'))).toEqual(ACTIONS);
+        expect(await capability()).toContain('projects.project');
+        expect(await readPortAnswers()).toBe(true);
+      },
+    );
   });
 
   describe('the deadline-alert sweep’s tick (User Story 8)', () => {

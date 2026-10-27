@@ -4,7 +4,8 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
-import { expectModuleAbsent } from '../../helpers/off-state.js';
+import { expectModuleAbsent, withModuleOff, type OffStateAxis } from '../../helpers/off-state.js';
+import { servedActions } from '../../contract/projects/palette-actions-shared.js';
 
 /**
  * `tasks` off-state — Constitution XVII item 6
@@ -65,4 +66,40 @@ describe('tasks off-state (Constitution XVII)', () => {
       adminPresence: { cookies: admin },
     });
   });
+
+  /**
+   * User Story 11 — the three palette actions and the `tasks.task` global-search
+   * type, measured present, absent on both axes, and back. The other surfaces
+   * the final sweep (T135) names for this module are proved beside their
+   * subject: the Tasks tab, Stage Tasks, gates and the `@@` Task group in
+   * Projects (`integration/projects/{completion-gate,stage-tasks,…}.test.ts`)
+   * and in CRM (`integration/crm/references-documents.test.ts`).
+   */
+  it.each<OffStateAxis>(['deactivated', 'platform-unavailable'])(
+    'offers its palette actions and its search type while on, neither while %s, and both after',
+    async (axis) => {
+      const ACTIONS = ['new-task', 'open-my-tasks', 'open-tasks'];
+      const capability = async (): Promise<string[]> => {
+        const response = await h.app.inject({
+          method: 'GET',
+          url: '/api/v1/admin/global-search/capability?language=en',
+          cookies: admin,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        return (response.json() as { data: { entityTypes: Array<{ entityType: string }> } }).data.entityTypes.map(
+          (entry) => entry.entityType,
+        );
+      };
+      expect(Object.keys(await servedActions(h, 'tasks'))).toEqual(ACTIONS);
+      expect(await capability()).toContain('tasks.task');
+
+      await withModuleOff('tasks', axis, async () => {
+        expect(await servedActions(h, 'tasks')).toEqual({});
+        expect(await capability()).not.toContain('tasks.task');
+      });
+
+      expect(Object.keys(await servedActions(h, 'tasks'))).toEqual(ACTIONS);
+      expect(await capability()).toContain('tasks.task');
+    },
+  );
 });

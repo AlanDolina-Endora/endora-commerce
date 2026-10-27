@@ -8,7 +8,11 @@ import {
   type ProjectAttachment,
   type ProjectDetail,
 } from '@endora-commerce/contracts';
+import { EventBus } from '@endora-commerce/platform/events';
+import { composeModules, createRootContainer, registerValues } from '@endora-commerce/platform/composition';
 import { setupBackendServer, teardownBackendServer, type BackendServerHandle } from '../../helpers/test-server.js';
+import { AssetReferenceRegistry } from '../../../../packages/modules/assets_library/src/backend/services/reference-registry.js';
+import { AssetsLibraryService } from '../../../../packages/modules/assets_library/src/backend/services/assets-library.service.js';
 import { TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import { withModuleOff } from '../../helpers/off-state.js';
 import { Asset } from '../../helpers/package-entities.js';
@@ -291,6 +295,75 @@ describe('projects — attachments (US7)', () => {
 
       expect((await callProjects(h, 'DELETE', `/${project.id}/attachments/${attached.id}`)).statusCode).toBe(204);
       expect(await registry().findReferences(attached.assetId)).toEqual([]);
+    });
+
+    /**
+     * The case above measures a deactivation **at runtime**: the scanner was
+     * registered when the platform booted with Projects on. This one boots with
+     * Projects already off — CRM's precedent, `integration/crm/attachments.test.ts`
+     * "after booting with crm deactivated": the module is composed **while it is
+     * off**, against a registry of its own, and the library is then asked to
+     * delete a file a Project uses. A boot hook that probed presence would
+     * register nothing here, and the delete would go through (T135).
+     */
+    describe('after booting with projects deactivated', () => {
+      const libraryOver = (own: AssetReferenceRegistry): AssetsLibraryService =>
+        new AssetsLibraryService({
+          emFactory: () => h.em(),
+          adapters: h.assetsLibrary.adapters,
+          referenceRegistry: own,
+          loadUploadPolicy: async () => ({ allowedTypes: ['*'], maxFileSizeMb: 0 }),
+        });
+
+      async function bootProjectsInto(own: AssetReferenceRegistry): Promise<void> {
+        // The published artefact, by bare specifier — the copy the composed
+        // platform holds (`check:singleton-identity`).
+        const { registerModule } = await import('@endora-commerce/mod-projects/backend');
+        const container = createRootContainer();
+        const inert = { register: () => undefined };
+        registerValues(container, {
+          emFactory: () => h.em(),
+          assetReferenceRegistry: own,
+          // The module's other contribution hooks push into registries their
+          // owners keep; none is composed here.
+          taskContextRegistry: inert,
+          settingWriteValidatorRegistry: inert,
+          adminSearchProviderRegistry: inert,
+          emailDefaultsPort: inert,
+          auditReferenceRegistry: { register: () => undefined, owners: () => [], resolve: async () => new Map() },
+        });
+        const composed = composeModules([{ id: 'projects', version: '1.0.0', registerModule }], {
+          container,
+          eventBus: new EventBus(),
+          log: { info: () => {}, warn: () => {}, error: () => {} },
+        });
+        await composed.runBootHooks();
+      }
+
+      it('refuses the delete, naming the Project', async () => {
+        const attached = await upload(project.id, { filename: 'booted-off.png', mime: 'image/png', value: TINY_PNG });
+        const own = new AssetReferenceRegistry();
+
+        await withModuleOff('projects', 'deactivated', async () => {
+          await bootProjectsInto(own);
+          expect(
+            own.owners(),
+            'a deployment that boots with `projects` off registered no projects scanner, so nothing ' +
+              'stands between an operator and a file a deactivated Project still uses',
+          ).toContain('projects');
+          await expect(libraryOver(own).softDelete(attached.assetId)).rejects.toMatchObject({
+            statusCode: 409,
+            code: ERROR_CODES.ASSET_REFERENCED,
+          });
+          expect(await own.findReferences(attached.assetId)).toEqual([
+            { kind: 'project_attachment', entityId: project.id, label: `Project ${project.number}` },
+          ]);
+        });
+
+        // The control: the same delete succeeds with no scanner registered.
+        const deleted = await libraryOver(new AssetReferenceRegistry()).softDelete(attached.assetId);
+        expect(deleted.deletedAt).toBeInstanceOf(Date);
+      });
     });
   });
 
