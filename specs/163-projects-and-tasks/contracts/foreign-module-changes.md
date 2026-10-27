@@ -18,7 +18,8 @@ unchanged, proving existing behaviour is untouched.
 | `errors.ts` | + each `TASKS_ERROR_CODES` / `PROJECTS_ERROR_CODES` entry joins `ERROR_CODES` in the same change that first raises it (with its manifest declaration and en/pl translation) | `check:error-translations` refuses an undeclared code |
 
 Before changing either enum: grep `admin/test`, `backend/test` and every package for exhaustive
-uses of the enum and repair them in the same change (CRM plan risk row, same trap).
+uses of the enum — including tests that assert on the HTTP listing (`custom-fields/entity-types`)
+or hold a literal list of the types, which an identifier grep misses — and repair them in the same change (CRM plan risk row, same trap).
 
 ## B. Admin host and design system
 
