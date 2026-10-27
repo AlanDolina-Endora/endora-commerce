@@ -72,6 +72,7 @@ export interface ClaimedStageAlert {
 export interface StageAlertStorePort {
   hasSweepWork(clock: StageAlertClock): Promise<boolean>;
   claim(clock: StageAlertClock, now: Date): Promise<ClaimedStageAlert[]>;
+  stillDue(claim: ClaimedStageAlert): Promise<boolean>;
   memberIdsOf(projectId: string): Promise<string[]>;
   settle(id: string, outcome: ProjectStageAlertOutcome, recipientCount: number, now: Date): Promise<void>;
   release(ids: readonly string[]): Promise<void>;
@@ -194,6 +195,23 @@ export class StageAlertStore implements StageAlertStorePort {
     });
   }
 
+  /**
+   * Whether a claim still stands when its delivery begins — the Project open,
+   * the Stage still its current one, the deadline the one claimed and the
+   * offset still among the Stage's alerts (CRM's `#stillHeld` shape, T144 F5).
+   * A Stage left or a deadline moved in the moment between the claim and the
+   * delivery sends nothing.
+   */
+  async stillDue(claim: ClaimedStageAlert): Promise<boolean> {
+    const rows = (await this.deps.emFactory().execute(
+      `select 1 as "due" from "project_stages" s join "projects" p on p."id" = s."project_id"
+        where s."id" = ? and p."state" = 'open' and p."current_stage_id" = s."id"
+          and s."deadline_on" = ?::date and ? = any(s."alert_offsets_days")`,
+      [claim.stageId, claim.deadlineOn, claim.offsetDays],
+    )) as unknown[];
+    return rows.length > 0;
+  }
+
   /** The Members of a Project a claim names — by that id only. */
   async memberIdsOf(projectId: string): Promise<string[]> {
     const rows = (await this.deps
@@ -246,6 +264,12 @@ export interface StageAlertSweepSummary {
   claimed: number;
   /** Claims given back for the next tick: nothing was written for them. */
   released: number;
+  /**
+   * Claims no longer due when their delivery began — a Stage left or a
+   * deadline moved since the claim. Each is settled `no_recipient` (counted in
+   * `outcomes` too): nobody was told.
+   */
+  withdrawn: number;
   /** What the delivered claims came to. */
   outcomes: Record<ProjectStageAlertOutcome, number>;
 }
@@ -278,7 +302,9 @@ export interface StageAlertServiceDeps {
  *  1. claims the alerts due today — one row per (Stage, offset, deadline),
  *     inserted, **and commits**;
  *  2. delivers each, outside any transaction, to every Member who may see the
- *     Project at that moment — in the bell and by e-mail;
+ *     Project at that moment — in the bell and by e-mail — once it has asked
+ *     that the alert is still due (the Stage still current, the deadline the
+ *     one claimed); one that is not tells nobody and settles `no_recipient`;
  *  3. records what each came to (`bell_email`, `bell`, `email`, `no_recipient`
  *     or `undeliverable`) with the number of recipients.
  *
@@ -312,6 +338,7 @@ export class StageAlertService {
     const summary: StageAlertSweepSummary = {
       claimed: 0,
       released: 0,
+      withdrawn: 0,
       outcomes: { bell: 0, bell_email: 0, email: 0, no_recipient: 0, undeliverable: 0 },
     };
     const clock = await this.clock(now);
@@ -357,6 +384,11 @@ export class StageAlertService {
     const tally: StageAlertTally = { recipients: 0, bell: 0, email: 0 };
     let completed = false;
     try {
+      if (!(await this.deps.store.stillDue(claim))) {
+        summary.withdrawn += 1;
+        completed = true;
+        return;
+      }
       const recipients = await this.#recipientsOf(claim.projectId);
       tally.recipients = recipients.length;
       const text = projectNotificationText.stageDeadline(

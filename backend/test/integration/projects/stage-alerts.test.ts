@@ -366,6 +366,41 @@ describe('projects — Stage deadline alerts (US8)', () => {
       expect(mailsAbout(outOfReach.number)).toEqual([]);
     });
 
+    it('an alert whose Stage was left, or whose deadline moved, between claim and delivery is not sent (T144 F5)', async () => {
+      const moved = await dueOn('moved after claim', '2031-12-18');
+      const left = await dueOn('left after claim', '2031-12-18');
+      // The store the composed service holds: between its claim and the
+      // delivery, somebody moves one deadline and moves the other Project on.
+      const store = (composed() as unknown as { deps: { store: { claim: (...args: unknown[]) => Promise<unknown> } } }).deps
+        .store;
+      const claim = store.claim;
+      store.claim = async (...args: unknown[]) => {
+        const claimed = await claim.apply(store, args);
+        await h
+          .em()
+          .getConnection()
+          .execute(`update "project_stages" set "deadline_on" = '2031-12-30' where "id" = ?`, [stageNamed(moved, 'Design')]);
+        await h
+          .em()
+          .getConnection()
+          .execute(`update "projects" set "current_stage_id" = ? where "id" = ?`, [stageNamed(left, 'Build'), left.id]);
+        return claimed;
+      };
+      let summary: StageAlertSweepSummary;
+      try {
+        summary = await sweep(at('2031-12-18'));
+      } finally {
+        store.claim = claim;
+      }
+      expect(summary.claimed).toBe(2);
+      expect(summary.withdrawn).toBe(2);
+      for (const detail of [moved, left]) {
+        expect(await bells(detail.id, ada)).toEqual([]);
+        expect(mailsAbout(detail.number)).toEqual([]);
+        expect(await deliveries(stageNamed(detail, 'Design'))).toMatchObject([{ outcome: 'no_recipient', recipient_count: 0 }]);
+      }
+    });
+
     it('two sweeps at once deliver once', async () => {
       const detail = await dueOn('concurrent', '2031-12-14');
       await Promise.all([sweep(at('2031-12-14')), sweep(at('2031-12-14'))]);

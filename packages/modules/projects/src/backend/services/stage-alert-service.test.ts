@@ -123,6 +123,8 @@ interface Harness {
 function harness(options: {
   claims?: ClaimedStageAlert[];
   members?: string[];
+  /** Whether a claim still stands when its delivery begins (default: yes). */
+  stillDue?: boolean;
   visible?: (adminUserId: string) => boolean;
   people?: AdminUserRecord[];
   bell?: (notification: ProjectNotification) => Promise<ProjectNotificationOutcome>;
@@ -135,6 +137,7 @@ function harness(options: {
   const store = {
     hasSweepWork: vi.fn(async (_clock: StageAlertClock) => true),
     claim: vi.fn(async (_clock: StageAlertClock, _now: Date) => options.claims ?? [claim('a1')]),
+    stillDue: vi.fn(async (_claim: ClaimedStageAlert) => options.stillDue ?? true),
     memberIdsOf: vi.fn(async (_projectId: string) => members),
     settle: vi.fn(async () => undefined),
     release: vi.fn(async () => undefined),
@@ -190,6 +193,17 @@ describe('StageAlertService — claim, deliver, settle', () => {
     expect(store.settle).toHaveBeenCalledWith('a1', 'bell_email', 2, SENDING);
     expect(store.release).not.toHaveBeenCalled();
     expect(summary).toMatchObject({ claimed: 1, released: 0, outcomes: { bell_email: 1 } });
+  });
+
+  it('a claim no longer due when its delivery begins tells nobody and settles no_recipient (T144 F5)', async () => {
+    const { service, store, bells, mails } = harness({ stillDue: false });
+    const summary = await service.sweep(SENDING);
+    expect(store.stillDue).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }));
+    expect(store.memberIdsOf).not.toHaveBeenCalled();
+    expect(bells).toEqual([]);
+    expect(mails).toEqual([]);
+    expect(store.settle).toHaveBeenCalledWith('a1', 'no_recipient', 0, SENDING);
+    expect(summary).toMatchObject({ claimed: 1, released: 0, withdrawn: 1, outcomes: { no_recipient: 1 } });
   });
 
   it('a deactivated Member is skipped even if the access check let them through', async () => {
