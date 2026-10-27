@@ -16,5 +16,11 @@ Two new composition steps, each guarded by the presence of every module it touch
   Projects' Stages made, created by the demo administrator. Where `tasks` is absent the step is
   a reported skip and the Projects are seeded all the same.
 
-Both are withdrawn by id on `demo reset`. The package gains `@endora-commerce/mod-projects` and
+Both are withdrawn by id on `demo reset`. **`demo reset` also withdraws the Projects an
+administrator opened for the demo organisation since**, which used to refuse the reset (the
+organisation's foreign key from `project_organizations` is `on delete restrict`): two new
+sections of the used-demo withdrawal delete the Tasks of those Projects, then the Projects that
+are the demo organisation's alone, whole. A Project it shares with another organisation stays;
+only the demo organisation's place on it and its links to the demo organisation's records go. An
+internal Project is never matched. The package gains `@endora-commerce/mod-projects` and
 `@endora-commerce/mod-tasks` as optional peer dependencies.
