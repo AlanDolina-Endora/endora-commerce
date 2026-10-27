@@ -319,6 +319,55 @@ export const manifest = defineModuleManifest({
       ],
     },
   ],
+  /**
+   * The command palette (Principle XVI, FR-041; `contracts/admin-surfaces.md`
+   * §4). Each opens a screen of this module's own admin layer and declares the
+   * code that screen is gated on. The Templates screen is `projects:configure`
+   * while the list it loads is read-gated (the create form offers Templates to
+   * every writer), which `check:action-route-permissions` ledgers.
+   */
+  actions: [
+    {
+      id: 'open-projects',
+      labelKey: 'actions.openProjects.label',
+      descriptionKey: 'actions.openProjects.description',
+      icon: 'ClipboardList',
+      targetRoute: '/projects',
+      requiredPermission: 'projects:read',
+      keywords: ['projects', 'project', 'stages', 'work', 'projekty', 'projekt', 'etapy'],
+      weight: 340,
+    },
+    {
+      id: 'new-project',
+      labelKey: 'actions.newProject.label',
+      descriptionKey: 'actions.newProject.description',
+      icon: 'FolderPlus',
+      targetRoute: '/projects/new',
+      requiredPermission: 'projects:write',
+      keywords: ['project', 'new', 'create', 'projekt', 'nowy', 'utwórz'],
+      weight: 341,
+    },
+    {
+      id: 'open-project-templates',
+      labelKey: 'actions.openProjectTemplates.label',
+      descriptionKey: 'actions.openProjectTemplates.description',
+      icon: 'Layers',
+      targetRoute: '/projects/templates',
+      requiredPermission: 'projects:configure',
+      keywords: ['project', 'templates', 'template', 'stages', 'projekt', 'szablony', 'szablon'],
+      weight: 342,
+    },
+    {
+      id: 'open-project-analytics',
+      labelKey: 'actions.openProjectAnalytics.label',
+      descriptionKey: 'actions.openProjectAnalytics.description',
+      icon: 'LineChart',
+      targetRoute: '/projects/analytics',
+      requiredPermission: 'projects:analytics',
+      keywords: ['project', 'analytics', 'report', 'statistics', 'projekt', 'analityka', 'raport'],
+      weight: 343,
+    },
+  ],
   i18n: { bundlesDir: 'i18n' },
   // `docs/projects.md` at the package root: users' and developers' page.
   docs: { dir: 'docs' },

@@ -89,6 +89,43 @@ export const manifest = defineModuleManifest({
    * its first raise site.
    */
   errorCodes: [{ code: 'TASK_NOT_FOUND' }, { code: 'TASK_CONTEXT_INVALID' }, { code: 'TASK_ASSIGNEE_INVALID' }],
+  /**
+   * The command palette (Principle XVI, FR-041; `contracts/admin-surfaces.md`
+   * §4). Each opens a screen of this module's own admin layer and declares the
+   * code that screen and its API are gated on.
+   */
+  actions: [
+    {
+      id: 'open-tasks',
+      labelKey: 'actions.openTasks.label',
+      descriptionKey: 'actions.openTasks.description',
+      icon: 'ListChecks',
+      targetRoute: '/tasks',
+      requiredPermission: 'tasks:read',
+      keywords: ['tasks', 'task', 'to do', 'todo', 'zadania', 'zadanie'],
+      weight: 330,
+    },
+    {
+      id: 'open-my-tasks',
+      labelKey: 'actions.openMyTasks.label',
+      descriptionKey: 'actions.openMyTasks.description',
+      icon: 'ListChecks',
+      targetRoute: '/tasks/mine',
+      requiredPermission: 'tasks:read',
+      keywords: ['my tasks', 'mine', 'assigned', 'tasks', 'moje zadania', 'przypisane', 'zadania'],
+      weight: 331,
+    },
+    {
+      id: 'new-task',
+      labelKey: 'actions.newTask.label',
+      descriptionKey: 'actions.newTask.description',
+      icon: 'Plus',
+      targetRoute: '/tasks/new',
+      requiredPermission: 'tasks:write',
+      keywords: ['task', 'new', 'create', 'zadanie', 'nowe', 'utwórz'],
+      weight: 332,
+    },
+  ],
   i18n: { bundlesDir: 'i18n' },
   // `docs/tasks.md` at the package root: users' and developers' page.
   docs: { dir: 'docs' },

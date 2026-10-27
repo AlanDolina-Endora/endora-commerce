@@ -583,5 +583,13 @@
   "analytics.managers.description": "Members holding the Project Manager role on the projects completed in the range.",
   "analytics.managers.col.person": "Project manager",
   "analytics.managers.col.completed": "Completed",
-  "analytics.managers.empty": "No project completed in this range had a project manager."
+  "analytics.managers.empty": "No project completed in this range had a project manager.",
+  "actions.openProjects.label": "Projects",
+  "actions.openProjects.description": "Open the list of projects",
+  "actions.newProject.label": "New project",
+  "actions.newProject.description": "Create a project, from a template or by hand",
+  "actions.openProjectTemplates.label": "Project templates",
+  "actions.openProjectTemplates.description": "Open the project templates: stages, workflow and stage tasks",
+  "actions.openProjectAnalytics.label": "Project analytics",
+  "actions.openProjectAnalytics.description": "See how projects are going: value, stages and outcomes"
 }

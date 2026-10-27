@@ -6,8 +6,8 @@
  * holds, and User Story 10's analytics screen and row.
  *
  * **Only what has shipped** — a sidebar or palette entry pointing at a route
- * that does not exist is a defect (Principle XVI). The palette actions are
- * task T132's.
+ * that does not exist is a defect (Principle XVI). The palette actions are the
+ * manifest's (`src/manifest.ts`, §4).
  *
  * **This entry exports data and nothing else**; every component is a
  * dynamic-import factory, so none of the screens is in the admin's entry chunk.

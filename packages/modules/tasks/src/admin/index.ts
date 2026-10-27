@@ -2,8 +2,9 @@
  * `tasks`' admin surface (`specs/163-projects-and-tasks/contracts/admin-surfaces.md`
  * §1–§3): User Story 2's four routes and two sidebar rows.
  *
- * The palette actions are task T132's. The zone `task.detail.after` is mounted
- * by `pages/TaskDetail.tsx`; this module contributes nothing to it.
+ * The palette actions are the manifest's (`src/manifest.ts`, §4). The zone
+ * `task.detail.after` is mounted by `pages/TaskDetail.tsx`; this module
+ * contributes nothing to it.
  *
  * **This entry exports data and nothing else**; every component is a
  * dynamic-import factory, so none of the screens is in the admin's entry chunk.

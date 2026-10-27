@@ -583,5 +583,13 @@
   "analytics.managers.description": "Członkowie z rolą Kierownik Projektu w projektach zakończonych w okresie.",
   "analytics.managers.col.person": "Kierownik projektu",
   "analytics.managers.col.completed": "Zakończone",
-  "analytics.managers.empty": "Żaden projekt zakończony w tym okresie nie miał kierownika projektu."
+  "analytics.managers.empty": "Żaden projekt zakończony w tym okresie nie miał kierownika projektu.",
+  "actions.openProjects.label": "Projekty",
+  "actions.openProjects.description": "Otwórz listę projektów",
+  "actions.newProject.label": "Nowy projekt",
+  "actions.newProject.description": "Utwórz projekt z szablonu lub ręcznie",
+  "actions.openProjectTemplates.label": "Szablony projektów",
+  "actions.openProjectTemplates.description": "Otwórz szablony projektów: etapy, przepływ i zadania etapów",
+  "actions.openProjectAnalytics.label": "Analityka projektów",
+  "actions.openProjectAnalytics.description": "Zobacz, jak idą projekty: wartość, etapy i wyniki"
 }

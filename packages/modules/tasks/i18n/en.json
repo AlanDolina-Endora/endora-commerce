@@ -106,5 +106,11 @@
   "history.field.status": "Status",
   "history.field.dueOn": "Due date",
   "history.field.contextNote": "Note from the record",
-  "history.field.completedAt": "Completed"
+  "history.field.completedAt": "Completed",
+  "actions.openTasks.label": "Tasks",
+  "actions.openTasks.description": "Open the list of tasks",
+  "actions.openMyTasks.label": "My tasks",
+  "actions.openMyTasks.description": "Open the tasks assigned to you",
+  "actions.newTask.label": "New task",
+  "actions.newTask.description": "Create a task and assign it"
 }

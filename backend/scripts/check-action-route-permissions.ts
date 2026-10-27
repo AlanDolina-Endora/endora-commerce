@@ -103,6 +103,13 @@ export const ACTION_PERMISSION_DISAGREEMENTS: Readonly<Record<string, string>> =
     'is the write one. Retire this entry with the same answer as the one above: a ' +
     'palette row is a navigation, and the field is a single code, so the label and the ' +
     'gate cannot both be honoured.',
+  'projects:open-project-templates':
+    '"Project templates" declares `projects:configure`, the code the Templates screen and every ' +
+    'write on it are gated on; the list it loads (GET /api/v1/admin/projects/templates) is ' +
+    '`projects:read`, because the create form offers Templates to everybody who may create a ' +
+    'Project (`specs/163-projects-and-tasks/contracts/admin-surfaces.md` §4). Declaring the read ' +
+    'code would advertise a screen a reader is refused. Retire this entry if the create form ' +
+    'stops reading the list, or the list moves under a lookup route of its own.',
 };
 
 async function main(): Promise<void> {
