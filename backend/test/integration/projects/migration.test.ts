@@ -47,6 +47,8 @@ const TABLES = [
 describe('projects init migration', () => {
   let h: BackendServerHandle;
   const created: string[] = [];
+  /** Project Roles a case inserted — deleted after the Projects that hold them. */
+  const createdRoles: string[] = [];
 
   beforeAll(async () => {
     h = await setupBackendServer();
@@ -57,6 +59,12 @@ describe('projects init migration', () => {
       await h.orm.em
         .getConnection()
         .execute(`delete from "projects" where "id" = any(?::uuid[])`, [`{${created.join(',')}}`]);
+    }
+    if (createdRoles.length > 0) {
+      // Left behind, the "Installer" Role made a later file's own "Installer" a duplicate name (409).
+      await h.orm.em
+        .getConnection()
+        .execute(`delete from "project_roles" where "id" = any(?::uuid[])`, [`{${createdRoles.join(',')}}`]);
     }
     await teardownBackendServer(h);
   });
@@ -488,6 +496,7 @@ describe('projects init migration', () => {
          values (?, ?, '{"en": "Installer"}', 'Installer', 99)`,
         [roleId, `installer_${roleId.slice(0, 8)}`],
       );
+      createdRoles.push(roleId);
       await rows(`insert into "project_member_roles" ("member_id", "role_id") values (?, ?)`, [memberId, roleId]);
       await expect(rows(`delete from "project_roles" where "id" = ?`, [roleId])).rejects.toThrow(/foreign key/i);
     });
