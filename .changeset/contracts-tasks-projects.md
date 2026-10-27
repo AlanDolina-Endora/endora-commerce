@@ -26,6 +26,14 @@ and a new sidebar section.
 - `record-rich-text.ts` — the formatted-text grammar (`parseRecordRichText`,
   `formatRecordRichText`, `recordRichTextToPlain`, `isSafeRecordRichHref`).
 
+`ERROR_CODES` gains the codes the two modules raise — `TASK_NOT_FOUND`, `TASK_CONTEXT_INVALID`,
+`TASK_ASSIGNEE_INVALID` and the `PROJECT_*` codes of `PROJECTS_ERROR_CODES`.
+
+**`AdminZoneNameSchema` has a new member, `'task.detail.after'`**, with its props
+`TaskDetailZoneProps { taskId }` in `AdminZonePropsMap` — the zone a Task's screen mounts after its
+content. A consumer that switches exhaustively over `AdminZoneName` gets a compile error until it
+handles the new member.
+
 **The reference grammar reads five types where it read three**: `quote_request` and `task` join
 `product`, `order` and `admin_user`. Every CRM name — `opportunityReferenceTypeSchema`,
 `formatOpportunityReferenceToken`, `extractOpportunityReferenceTokens`,
