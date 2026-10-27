@@ -1615,7 +1615,7 @@ function RailSection(props: RailSectionProps): ReactNode {
         <RailIcon size={18} />
       </button>
       {open && pinned !== undefined ? (
-        <div className="b2b-sidebar__rail-popover b2b-sidebar__rail-popover--pinned">
+        <div className="b2b-sidebar__rail-popover">
           {headerLabel ? (
             <div className="b2b-sidebar__rail-popover-header">{headerLabel}</div>
           ) : null}

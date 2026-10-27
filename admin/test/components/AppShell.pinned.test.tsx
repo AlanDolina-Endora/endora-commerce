@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { apiClient } from '@endora-commerce/admin-kit/lib';
 import { setMobileViewport } from '../setup';
 import { adminSession, everyDeclaredModule, modulePresence } from '../helpers/render-with-session';
 import { MODULE_ADMIN_CONTRIBUTIONS } from '../../src/modules.generated.js';
+import { TranslationProvider } from '../../../packages/admin-shell/src/i18n/TranslationProvider';
+import { useTranslation } from '../../../packages/admin-shell/src/i18n/useTranslation';
 import {
   pinnedSection,
   realBundle,
@@ -279,5 +281,61 @@ describe('the palette — FR-024', () => {
     const withPins = await paletteGroups();
     expect(withPins).toEqual(without);
     expect(without.length).toBeGreaterThan(0);
+  });
+});
+
+describe('every new string resolves in English and Polish (FR-025, SC-009)', () => {
+  // Client contract §5 — the twenty `core` keys this feature ships.
+  const KEYS = [
+    'appShell.pinned.heading',
+    'appShell.pinned.pin',
+    'appShell.pinned.unpin',
+    'appShell.pinned.fromSection',
+    'appShell.pinned.fromMain',
+    'appShell.pinned.announce.pinned',
+    'appShell.pinned.announce.unpinned',
+    'appShell.pinned.reorder.handle',
+    'appShell.pinned.reorder.grabbed',
+    'appShell.pinned.reorder.moving',
+    'appShell.pinned.reorder.dropped',
+    'appShell.pinned.reorder.cancelled',
+    'appShell.pinned.reorder.moved',
+    'appShell.pinned.reorder.atStart',
+    'appShell.pinned.reorder.atEnd',
+    'appShell.palette.pin.hintPin',
+    'appShell.palette.pin.hintUnpin',
+    'appShell.palette.pin.instructions',
+    'adminPreferences.saveFailed',
+    'adminPreferences.dismiss',
+  ];
+  const PARAMS = { label: 'X1', section: 'X2', index: 3, total: 4 };
+
+  function Strings(): React.ReactElement {
+    const t = useTranslation('core');
+    return (
+      <ul>
+        {KEYS.map((key) => (
+          <li key={key} data-key={key}>
+            {t(key, PARAMS)}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  it.each(['en', 'pl'] as const)('%s', (language) => {
+    expect(KEYS).toHaveLength(20);
+    render(
+      <TranslationProvider language={language} initialBundle={realBundle(language)} initialFallbackBundle={realBundle('en')}>
+        <Strings />
+      </TranslationProvider>,
+    );
+    for (const key of KEYS) {
+      const text = document.querySelector(`[data-key="${key}"]`)?.textContent ?? '';
+      expect(text, key).not.toBe('');
+      expect(text, key).not.toContain(key);
+      expect(text, key).not.toMatch(/\{[a-z]+\}/);
+      expect(realBundle(language).core![key], `${key} in ${language}`).toBeDefined();
+    }
   });
 });

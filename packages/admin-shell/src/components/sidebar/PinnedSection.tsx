@@ -98,7 +98,7 @@ export function PinnedSection({
     <div
       data-testid="sidebar-pinned"
       className={cn(
-        'b2b-sidebar__group b2b-sidebar__group--pinned',
+        'b2b-sidebar__group',
         collapsed && 'b2b-sidebar__group--collapsed',
       )}
     >
