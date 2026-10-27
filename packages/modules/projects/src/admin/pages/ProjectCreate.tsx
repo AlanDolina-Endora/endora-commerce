@@ -90,8 +90,14 @@ export function ProjectCreate(): ReactNode {
   const [description, setDescription] = useState('');
   // Before there is a Project: people who may read Projects, and Tasks — no
   // Orders or Quote Requests, which are those of a Project's Organizations.
-  const references = useProjectReferences({ projectId: null, hasOrganizations: false });
   const [organizations, setOrganizations] = useState<LookupChoice[]>([]);
+  // Before the Project exists, `@@` offers the Orders and Quote Requests of the
+  // Organizations chosen on this form.
+  const references = useProjectReferences({
+    projectId: null,
+    hasOrganizations: organizations.length > 0,
+    organizationIds: organizations.map((organization) => organization.id),
+  });
   const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'inherit', viewers: [] });
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('');

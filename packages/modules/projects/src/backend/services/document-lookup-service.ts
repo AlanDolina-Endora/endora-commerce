@@ -13,7 +13,7 @@ import type { ProjectTasks } from './project-tasks.js';
 export const DOCUMENT_LIST_GROUP_LIMIT = 10;
 
 export interface ProjectDocumentLookupServiceDeps {
-  access: Pick<ProjectAccess, 'loadVisible' | 'organizationIdsOf'>;
+  access: Pick<ProjectAccess, 'loadVisible' | 'organizationIdsOf' | 'isOrgInScope'>;
   /** `orders`' list — lazy, resolved per call. `orders` cannot be switched off. */
   orders: OrderListPort;
   /** The one door to Quote Requests — asked `isPresent` first. */
@@ -34,8 +34,10 @@ export interface ProjectDocumentLookupServiceDeps {
  * (`orders:read`, `rfqs:handle`, `tasks:read`) and only while its owner is
  * present: a group nobody may open is not offered empty, it is not offered.
  * Orders and Quote Requests are those of the Project's Organizations — none for
- * an internal Project, and none on the create form, before there is a Project;
- * Tasks are any the caller may see (`tasks`' context visibility, research R-9).
+ * an internal Project — or, on the create form, before there is a Project, of
+ * the Organizations chosen on it (`organizationIds`), each only within the
+ * caller's reach: one out of reach is dropped, never answered for and never
+ * refused, so the list says nothing about it. Tasks are any the caller may see (`tasks`' context visibility, research R-9).
  * A Project the caller may not see answers 404 as one that does not exist.
  * Presence is decided before each switchable owner is asked; nothing is caught.
  */
@@ -46,7 +48,9 @@ export class ProjectDocumentLookupService {
     const organizationIds =
       query.projectId !== undefined
         ? await this.deps.access.organizationIdsOf((await this.deps.access.loadVisible(query.projectId)).id)
-        : [];
+        : [...new Set(query.organizationIds ?? [])].filter((organizationId) =>
+            this.deps.access.isOrgInScope(organizationId),
+          );
     const q = (query.q ?? '').trim();
     const withOrganizations = organizationIds.length > 0;
     const quoteRequestsPresent = withOrganizations && this.deps.quoteRequests.isPresent('quote_request');

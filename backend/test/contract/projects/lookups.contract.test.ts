@@ -4,14 +4,23 @@ import {
   ProjectAdminUserLookupResponseSchema,
   ProjectOrganizationLookupResponseSchema,
   ProjectVisibilitySettingResponseSchema,
+  RecordDocumentLookupResponseSchema,
+  type RecordDocumentLookupResponse,
 } from '@endora-commerce/contracts';
 import {
   setupBackendServer,
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
-import { seedCrmAdmin, seedCrmOrganization, seedCrmSalesRep } from '../../helpers/seed-crm.js';
-import { PROJECTS_ADMIN, callProjects } from '../../integration/projects/helpers.js';
+import {
+  seedCrmAdmin,
+  seedCrmOrder,
+  seedCrmOrganization,
+  seedCrmSalesRep,
+  submitCrmQuoteRequest,
+} from '../../helpers/seed-crm.js';
+import { TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
+import { PROJECTS_ADMIN, callProjects, createProject, deleteProjects } from '../../integration/projects/helpers.js';
 
 /**
  * What the Projects screens' pickers choose from — Organizations and
@@ -172,6 +181,105 @@ describe('projects (contract) — lookups for the pickers', () => {
       } finally {
         nobody.undo();
       }
+    });
+  });
+
+  /**
+   * The create form's `@@` list (carry-over C10): before a Project exists the
+   * form names the Organizations chosen on it, and the list offers their
+   * Orders and Quote Requests — only of those within the caller's reach; an
+   * Organization out of reach is not one the list answers for, and does not
+   * say so. With a `projectId` the Project's own Organizations are the answer
+   * and `organizationIds` is ignored.
+   */
+  describe('GET /projects/lookups/documents — organizationIds before a Project exists', () => {
+    type Person = { cookies: { b2b_session: string }; adminUserId: string; undo: () => void };
+    let documentWriter: Person;
+    let confined: Person;
+    let orderOfA: { id: string; businessId: string | null };
+    let orderOfTest: { id: string; businessId: string | null };
+    let quoteRequest: { id: string; businessId: string };
+    let internalProjectId: string;
+
+    const documents = async (query: string, who: Person): Promise<RecordDocumentLookupResponse> => {
+      const response = await callProjects(h, 'GET', `/lookups/documents${query}`, { cookies: who.cookies });
+      expect(response.statusCode, response.body).toBe(200);
+      return RecordDocumentLookupResponseSchema.parse(response.json());
+    };
+    const ids = (answer: RecordDocumentLookupResponse, kind: string): string[] =>
+      answer.groups.find((group) => group.kind === kind)?.items.map((item) => item.id) ?? [];
+    const q = (text: string | null): string => encodeURIComponent(text ?? '');
+
+    beforeAll(async () => {
+      documentWriter = await seedCrmAdmin(h.em(), `${token}-docs`, [
+        'projects:read',
+        'projects:write',
+        'orders:read',
+        'rfqs:handle',
+      ]);
+      confined = await seedCrmSalesRep(h.em(), [orgA], ['projects:read', 'projects:write', 'orders:read']);
+      orderOfA = await seedCrmOrder(h.em(), { organizationId: orgA });
+      orderOfTest = await seedCrmOrder(h.em());
+      quoteRequest = await submitCrmQuoteRequest(h);
+      const internal = await createProject(h, { title: `${token} internal`, visibility: 'everyone' });
+      internalProjectId = internal.id;
+    });
+
+    afterAll(async () => {
+      documentWriter?.undo();
+      confined?.undo();
+      await deleteProjects(h, internalProjectId ? [internalProjectId] : []);
+    });
+
+    it('offers the Orders and Quote Requests of the Organizations it names', async () => {
+      const orders = await documents(
+        `?organizationIds=${TEST_ORGANIZATION_ID}&q=${q(orderOfTest.businessId)}`,
+        documentWriter,
+      );
+      expect(orders.groups.map((group) => group.kind)).toEqual(['order', 'quote_request']);
+      expect(ids(orders, 'order')).toContain(orderOfTest.id);
+      const quotes = await documents(
+        `?organizationIds=${TEST_ORGANIZATION_ID}&q=${q(quoteRequest.businessId)}`,
+        documentWriter,
+      );
+      expect(ids(quotes, 'quote_request')).toContain(quoteRequest.id);
+    });
+
+    it('takes several Organizations, repeated', async () => {
+      const both = `?organizationIds=${orgA}&organizationIds=${TEST_ORGANIZATION_ID}`;
+      expect(ids(await documents(`${both}&q=${q(orderOfA.businessId)}`, documentWriter), 'order')).toContain(orderOfA.id);
+      expect(ids(await documents(`${both}&q=${q(orderOfTest.businessId)}`, documentWriter), 'order')).toContain(
+        orderOfTest.id,
+      );
+      const onlyA = await documents(`?organizationIds=${orgA}&q=${q(orderOfTest.businessId)}`, documentWriter);
+      expect(ids(onlyA, 'order')).not.toContain(orderOfTest.id);
+    });
+
+    it('answers only for the Organizations within the caller’s reach', async () => {
+      const both = `?organizationIds=${orgA}&organizationIds=${TEST_ORGANIZATION_ID}`;
+      expect(ids(await documents(`${both}&q=${q(orderOfA.businessId)}`, confined), 'order')).toContain(orderOfA.id);
+      expect(ids(await documents(`${both}&q=${q(orderOfTest.businessId)}`, confined), 'order')).not.toContain(
+        orderOfTest.id,
+      );
+      // Out of reach alone is no Organization at all: no Orders are offered.
+      const outOfReach = await documents(`?organizationIds=${TEST_ORGANIZATION_ID}`, confined);
+      expect(outOfReach.groups.map((group) => group.kind)).not.toContain('order');
+    });
+
+    it('ignores organizationIds beside a projectId — the Project’s Organizations are the answer', async () => {
+      const answer = await documents(
+        `?projectId=${internalProjectId}&organizationIds=${TEST_ORGANIZATION_ID}`,
+        documentWriter,
+      );
+      expect(answer.groups.map((group) => group.kind)).not.toContain('order');
+      expect(answer.groups.map((group) => group.kind)).not.toContain('quote_request');
+    });
+
+    it('refuses a malformed Organization id — 400', async () => {
+      const response = await callProjects(h, 'GET', '/lookups/documents?organizationIds=nope', {
+        cookies: documentWriter.cookies,
+      });
+      expect(response.statusCode, response.body).toBe(400);
     });
   });
 });

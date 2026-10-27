@@ -433,6 +433,13 @@ export type ProjectMentionableLookupQuery = z.infer<typeof ProjectMentionableLoo
  */
 export const ProjectDocumentLookupQuerySchema = z.object({
   projectId: uuid.optional(),
+  /**
+   * Before a Project exists (the create form): the Organizations chosen on the
+   * form, whose Orders and Quote Requests are offered — only those within the
+   * caller's reach count. Ignored beside `projectId`, whose Project's
+   * Organizations are the answer.
+   */
+  organizationIds: repeatable(uuid),
   q: lookupSearchSchema,
 });
 export type ProjectDocumentLookupQuery = z.infer<typeof ProjectDocumentLookupQuerySchema>;

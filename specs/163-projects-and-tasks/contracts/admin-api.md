@@ -98,7 +98,7 @@ the list's Organization and any-member filters are a reader's (CRM gates its fil
 | `DELETE /projects/:id/attachments/:attachmentId` | `projects:write` | |
 | `GET /projects/:id/history?cursor=` | `projects:read` | `RecordHistoryPage`, cap 500 |
 | `GET /projects/lookups/mentionable?projectId=&q=` | `projects:write` | active admins with `projects:read` who could see the Project (R-4) |
-| `GET /projects/lookups/documents?projectId=&q=` | `projects:write` | `@@` list → `RecordDocumentLookupResponse { groups: { kind: 'order' \| 'quote_request' \| 'task', items: { id, label, sublabel? }[] }[] }`, each group only with its read permission and present owner; the same schema CRM serves at `GET /crm/lookups/documents` (FR-044); answered **unwrapped** (no `data` envelope), as CRM's |
+| `GET /projects/lookups/documents?projectId=&organizationIds=&q=` | `projects:write` | `@@` list → `RecordDocumentLookupResponse { groups: { kind: 'order' \| 'quote_request' \| 'task', items: { id, label, sublabel? }[] }[] }`, each group only with its read permission and present owner; the same schema CRM serves at `GET /crm/lookups/documents` (FR-044); answered **unwrapped** (no `data` envelope), as CRM's. Orders and Quote Requests are those of the Project's Organizations; before a Project exists (the create form) those of `organizationIds` (repeatable, ≤ 50), each kept only when within the caller's reach — one out of reach is dropped silently; ignored beside `projectId` |
 
 ### 2.5 Configuration
 

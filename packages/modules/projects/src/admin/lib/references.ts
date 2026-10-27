@@ -34,6 +34,11 @@ export interface ProjectReferenceScope {
   projectId: string | null;
   /** Orders and Quote Requests are those of the Project's Organizations: none for an internal Project. */
   hasOrganizations: boolean;
+  /**
+   * Before there is a Project (the create form): the Organizations chosen on
+   * the form, whose Orders and Quote Requests the `@@` list offers.
+   */
+  organizationIds?: readonly string[];
 }
 
 /**
@@ -50,6 +55,8 @@ export function useProjectReferences(scope: ProjectReferenceScope): {
   const { hasPermission } = useAuth();
   const { language } = useAppLanguage();
   const { projectId, hasOrganizations } = scope;
+  // A stable key for the chosen Organizations, so the lookups change only when they do.
+  const organizationKey = projectId === null ? (scope.organizationIds ?? []).join(',') : '';
   const canWrite = hasPermission(WRITE_PERMISSION);
   const canDocuments =
     canWrite &&
@@ -75,7 +82,8 @@ export function useProjectReferences(scope: ProjectReferenceScope): {
           label: person.name,
           description: person.email,
         })),
-      searchDocuments: (query) => projectsApi.lookupDocuments(projectId, query),
+      searchDocuments: (query) =>
+        projectsApi.lookupDocuments(projectId, query, organizationKey === '' ? [] : organizationKey.split(',')),
       searchProducts: async (query) =>
         (await projectsApi.searchProducts(query)).map((product) => ({
           id: product.id,
@@ -83,7 +91,7 @@ export function useProjectReferences(scope: ProjectReferenceScope): {
           description: product.sku,
         })),
     }),
-    [projectId, language],
+    [projectId, organizationKey, language],
   );
 
   return { kinds, lookups };

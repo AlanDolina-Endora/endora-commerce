@@ -453,7 +453,7 @@ The description, notes and messages can **refer to things** as they are typed:
 | Type | To refer to | Offered to |
 | --- | --- | --- |
 | `@` | a person | administrators who may create and run projects; the list offers only the people who may see the project |
-| `@@` | a document — one list, grouped: Orders, Quote Requests, Tasks | Orders with the permission to view Orders, Quote Requests with the permission to handle them, Tasks with the permission to view tasks; Orders and Quote Requests are those of the project's Organizations — none for an internal project |
+| `@@` | a document — one list, grouped: Orders, Quote Requests, Tasks | Orders with the permission to view Orders, Quote Requests with the permission to handle them, Tasks with the permission to view tasks; Orders and Quote Requests are those of the project's Organizations — none for an internal project; on the **New project** form, those of the Organizations chosen on it |
 | `@@@` | a Product | administrators who may view the catalog |
 
 The buttons above the field do the same — *Mention a person*, *Insert
@@ -600,7 +600,7 @@ does.*
 | `DELETE /api/v1/admin/projects/:id/attachments/:attachmentId` | `projects:write` | `204`; the file stays in the library. |
 | `GET /api/v1/admin/projects/:id/history` | `projects:read` | `RecordHistoryPage` — the audit trail of the project, newest first, `limit` and an opaque `cursor`, reaching back 499 entries (`truncated` on the last page past that); custom-field values only for a holder of `custom_fields:read`. |
 | `GET /api/v1/admin/projects/lookups/mentionable` | `projects:write` | `?projectId=&q=` → `{ data: { id, name, email }[] }` — active administrators holding `projects:read` who may see the project (without `projectId`, every holder of `projects:read`); at most 20. |
-| `GET /api/v1/admin/projects/lookups/documents` | `projects:write` | `?projectId=&q=` → `RecordDocumentLookupResponse` (`{ groups: { kind, items }[] }`, not wrapped in `data`) — the `@@` list, the schema CRM's `GET /crm/lookups/documents` answers; a group only with its read code and its module on, at most 10 per group. |
+| `GET /api/v1/admin/projects/lookups/documents` | `projects:write` | `?projectId=&q=` → `RecordDocumentLookupResponse` (`{ groups: { kind, items }[] }`, not wrapped in `data`) — the `@@` list, the schema CRM's `GET /crm/lookups/documents` answers; a group only with its read code and its module on, at most 10 per group. Before a project exists, `organizationIds` (repeatable) names the Organizations whose Orders and Quote Requests are offered — only those within the caller's reach count, an Organization out of reach is left out without a word; beside a `projectId` it is ignored. |
 | `GET /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:read` | The dictionaries, with `label` in the reader's language; `active=true` leaves archived rows out. |
 | `POST /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:configure` | `{ defaultName, name }` (`name`: a name per language) → `201` `{ data }`. The `code` is derived from `defaultName` — `_`-separated, with `_2`, `_3`… when another row holds it — and never changes. `409` `PROJECT_DICTIONARY_NAME_TAKEN` for a default name another row of the same dictionary has, whatever its case. |
 | `PATCH /api/v1/admin/projects/roles/:id`, `…/loss-reasons/:id` | `projects:configure` | `defaultName` and/or `name`, which replaces the names per language → `{ data }`; `404` `PROJECT_DICTIONARY_ENTRY_NOT_FOUND`, `409` `PROJECT_DICTIONARY_NAME_TAKEN`. |

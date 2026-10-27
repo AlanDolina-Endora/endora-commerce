@@ -396,10 +396,19 @@ export const projectsApi = {
     return data(apiClient.get<{ data: ProjectMentionableOption[] }>(`${BASE}/lookups/mentionable${tail ? `?${tail}` : ''}`));
   },
 
-  /** The `@@` document list — answered unwrapped, CRM's shape (FR-044). */
-  lookupDocuments(projectId: string | null, query = ''): Promise<RecordDocumentLookupResponse> {
+  /**
+   * The `@@` document list — answered unwrapped, CRM's shape (FR-044). Before
+   * there is a Project, `organizationIds` names the Organizations chosen on the
+   * create form; beside a Project the server ignores it, so none is sent.
+   */
+  lookupDocuments(
+    projectId: string | null,
+    query = '',
+    organizationIds: readonly string[] = [],
+  ): Promise<RecordDocumentLookupResponse> {
     const qs = new URLSearchParams();
     if (projectId) qs.set('projectId', projectId);
+    else for (const organizationId of organizationIds) qs.append('organizationIds', organizationId);
     if (query.trim()) qs.set('q', query.trim());
     const tail = qs.toString();
     return apiClient.get<RecordDocumentLookupResponse>(`${BASE}/lookups/documents${tail ? `?${tail}` : ''}`);
