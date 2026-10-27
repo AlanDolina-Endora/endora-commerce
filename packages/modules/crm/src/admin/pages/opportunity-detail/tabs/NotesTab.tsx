@@ -12,7 +12,10 @@ import type { OpportunityTabProps } from '../tabs.js';
 export function NotesTab(props: OpportunityTabProps): ReactNode {
   const t = useTranslation('crm');
   const { hasPermission } = useAuth();
-  const { kinds, lookups } = useCrmReferences(props.opportunity.organization.id);
+  const { kinds, lookups } = useCrmReferences({
+    organizationId: props.opportunity.organization.id,
+    opportunityId: props.opportunity.id,
+  });
   const api = useOpportunityComments(props.opportunity.id, 'note');
   const orderStatusLabel = useOrderStatusLabel(props.orderStatuses);
   return (

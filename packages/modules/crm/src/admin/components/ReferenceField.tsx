@@ -4,10 +4,17 @@ import { useCrmReferences } from '../lib/references.js';
 
 export interface ReferenceFieldProps extends Omit<KitReferenceFieldProps, 'kinds' | 'lookups'> {
   /**
-   * The Organization whose Orders may be referred to — the Opportunity's.
-   * `null` while none is chosen (the create form): Orders are not offered yet.
+   * The Organization whose people may be mentioned and whose Orders and
+   * Quote Requests may be referred to — the Opportunity's. `null` while none
+   * is chosen (the create form): only Tasks are offered after `@@` then.
    */
   organizationId: string | null;
+  /**
+   * The Opportunity the text belongs to — what the `@@` document list is
+   * asked for (`specs/163-projects-and-tasks/` FR-044). Absent on the create
+   * form, where the Organization chosen stands in for it.
+   */
+  opportunityId?: string | null;
 }
 
 /**
@@ -18,7 +25,7 @@ export interface ReferenceFieldProps extends Omit<KitReferenceFieldProps, 'kinds
  * refer to and where the suggestions come from is `useCrmReferences`.
  */
 export function ReferenceField(props: ReferenceFieldProps): ReactNode {
-  const { organizationId, ...field } = props;
-  const { kinds, lookups } = useCrmReferences(organizationId);
+  const { organizationId, opportunityId, ...field } = props;
+  const { kinds, lookups } = useCrmReferences({ organizationId, opportunityId: opportunityId ?? null });
   return <KitReferenceField {...field} kinds={kinds} lookups={lookups} />;
 }

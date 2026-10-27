@@ -73,6 +73,7 @@ export function OverviewTab(props: OpportunityTabProps): ReactNode {
               value={draft}
               maxLength={DESCRIPTION_MAX_LENGTH}
               organizationId={opportunity.organization.id}
+              opportunityId={opportunity.id}
               references={opportunity.references}
               disabled={busy}
               {...(errorId ? { 'aria-invalid': true, 'aria-describedby': errorId } : {})}

@@ -16,19 +16,18 @@ import {
  * run of `@`s asks for, and the formatted field's document ⇄ the stored text.
  *
  * Ported from CRM's `lib/mention-trigger.test.ts` and `lib/rich-text-doc.test.ts`
- * when the two files moved into the kit. The assertions are CRM's, unchanged;
- * the trigger table they read is now a parameter, so the port names the one CRM
- * passes until it adopts the `@@` document list (T107) — `@@` an Order — and
- * the cases at the end hold the standard table, `@@` a document.
+ * when the two files moved into the kit. The trigger table they read is a
+ * parameter; since CRM adopted the `@@` document list (T107, FR-044) there is
+ * one table, the standard — `@` a person, `@@` a document, `@@@` a Product.
  */
 
-/** The trigger kinds CRM offers until T107: `@` a person, `@@` an Order, `@@@` a Product. */
-const CRM_KINDS: readonly ReferenceTriggerKind[] = ['admin_user', 'order', 'product'];
+/** The standard trigger table, as every module passes it. */
+const STANDARD_KINDS: readonly ReferenceTriggerKind[] = ['admin_user', 'document', 'product'];
 
 /** `text` with the caret where `|` is. */
 function at(marked: string): ReturnType<typeof findMentionTrigger> {
   const caret = marked.indexOf('|');
-  return findMentionTrigger(marked.replace('|', ''), caret, CRM_KINDS);
+  return findMentionTrigger(marked.replace('|', ''), caret, STANDARD_KINDS);
 }
 
 describe('findMentionTrigger (User Story 18, FR-082)', () => {
@@ -39,10 +38,10 @@ describe('findMentionTrigger (User Story 18, FR-082)', () => {
     expect(at('Hello\t@|')).toMatchObject({ kind: 'admin_user', start: 6 });
   });
 
-  it('a second @ asks for an Order and a third for a Product', () => {
-    expect(at('see @@|')).toEqual({ kind: 'order', start: 4, end: 6, query: '' });
+  it('a second @ asks for a document and a third for a Product', () => {
+    expect(at('see @@|')).toEqual({ kind: 'document', start: 4, end: 6, query: '' });
     expect(at('see @@@|')).toEqual({ kind: 'product', start: 4, end: 7, query: '' });
-    expect(at('@@ORD-10|')).toEqual({ kind: 'order', start: 0, end: 8, query: 'ORD-10' });
+    expect(at('@@ORD-10|')).toEqual({ kind: 'document', start: 0, end: 8, query: 'ORD-10' });
     expect(at('@@@cargo van|')).toEqual({ kind: 'product', start: 0, end: 12, query: 'cargo van' });
   });
 

@@ -255,6 +255,9 @@ export function propagation(overrides: Partial<PropagationOutcome> = {}): Propag
 export const CHANNEL_ID = '00000000-0000-4000-8000-0000000000f2';
 export const CONTACT_ID = '00000000-0000-4000-8000-0000000000f1';
 export const ADMIN_ID = '00000000-0000-4000-8000-0000000000aa';
+/** A Quote Request and a Task the `@@` document list offers (`specs/163-projects-and-tasks/` FR-044). */
+export const QUOTE_REQUEST_ID = '00000000-0000-4000-8000-0000000000c2';
+export const TASK_ID = '00000000-0000-4000-8000-0000000000c3';
 export const OTHER_ADMIN_ID = '00000000-0000-4000-8000-0000000000ab';
 
 /**
@@ -308,6 +311,26 @@ export function crmLookupResponse(path: string): Promise<unknown> | undefined {
             ? matching([{ id: CONTACT_ID, name: 'Jan Kowalski', email: 'jan@acme.example' }])
             : [],
       });
+    // The `@@` document list (`specs/163-projects-and-tasks/` FR-044): one Order
+    // and one Quote Request of the Organization, and one Task, narrowed by
+    // number or title — every group, as the server answers a holder of all
+    // three read codes. A test about gating answers it itself.
+    case '/api/v1/admin/crm/lookups/documents': {
+      const narrowed = (items: Array<{ id: string; label: string; sublabel?: string }>) =>
+        items.filter((item) => `${item.label} ${item.sublabel ?? ''}`.toLowerCase().includes(q));
+      const withOrganization = params.has('opportunityId') || params.has('organizationId');
+      return Promise.resolve({
+        groups: [
+          ...(withOrganization
+            ? [
+                { kind: 'order', items: narrowed([{ id: ORDER_ID, label: 'ORD-1001' }]) },
+                { kind: 'quote_request', items: narrowed([{ id: QUOTE_REQUEST_ID, label: 'RFQ-2001' }]) },
+              ]
+            : []),
+          { kind: 'task', items: narrowed([{ id: TASK_ID, label: 'TSK-0007', sublabel: 'Call the fleet manager' }]) },
+        ],
+      });
+    }
     // The tag list every screen with a tag filter reads; a test about tags
     // answers it itself, before falling through to here.
     case '/api/v1/admin/crm/tags':

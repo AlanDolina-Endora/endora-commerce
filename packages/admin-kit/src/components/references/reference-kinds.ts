@@ -2,16 +2,14 @@ import type { RecordDocumentLookupResponse } from '@endora-commerce/contracts';
 
 /**
  * What a run of `@`s may ask for in the reference editor
- * (`specs/163-projects-and-tasks/` research R-14, R-17).
+ * (`specs/163-projects-and-tasks/` research R-14, R-17, FR-044).
  *
- * The standard is three kinds, one per run length: `@` a person
+ * One standard in every module, three kinds, one per run length: `@` a person
  * (`admin_user`), `@@` a **document** — one list grouped Orders · Quote
- * Requests · Tasks — and `@@@` a Product. `order` is the `@@` CRM offered
- * before the standard, an Order list and nothing else; it is kept while CRM
- * still offers it (until `specs/163-projects-and-tasks/` T107) and answers the
- * same run length as `document`, so a table names one of the two, never both.
+ * Requests · Tasks — and `@@@` a Product. A screen passes the kinds its reader
+ * may use; there is no other trigger table.
  */
-export type ReferenceTriggerKind = 'admin_user' | 'document' | 'order' | 'product';
+export type ReferenceTriggerKind = 'admin_user' | 'document' | 'product';
 
 /** The standard trigger table: `@` a person, `@@` a document, `@@@` a Product. */
 export const REFERENCE_TRIGGER_KINDS: readonly ReferenceTriggerKind[] = ['admin_user', 'document', 'product'];
@@ -20,7 +18,6 @@ export const REFERENCE_TRIGGER_KINDS: readonly ReferenceTriggerKind[] = ['admin_
 export const REFERENCE_TRIGGER_LENGTH: Readonly<Record<ReferenceTriggerKind, 1 | 2 | 3>> = {
   admin_user: 1,
   document: 2,
-  order: 2,
   product: 3,
 };
 
@@ -43,8 +40,6 @@ export interface ReferenceSuggestion {
  */
 export interface ReferenceLookups {
   searchPeople?: (query: string) => Promise<readonly ReferenceSuggestion[]>;
-  /** The `order` kind's Orders — CRM's `@@` until it offers documents. */
-  searchOrders?: (query: string) => Promise<readonly ReferenceSuggestion[]>;
   /** The `@@` document list — one schema for every module (FR-044). */
   searchDocuments?: (query: string) => Promise<RecordDocumentLookupResponse>;
   searchProducts?: (query: string) => Promise<readonly ReferenceSuggestion[]>;

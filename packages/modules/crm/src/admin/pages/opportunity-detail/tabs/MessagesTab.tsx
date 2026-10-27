@@ -53,7 +53,10 @@ export function MessagesTab(props: OpportunityTabProps): ReactNode {
     [opportunityId, myId],
   );
 
-  const { kinds, lookups } = useCrmReferences(props.opportunity.organization.id);
+  const { kinds, lookups } = useCrmReferences({
+    organizationId: props.opportunity.organization.id,
+    opportunityId: props.opportunity.id,
+  });
   const api = useOpportunityComments(opportunityId, 'message');
   const orderStatusLabel = useOrderStatusLabel(props.orderStatuses);
 

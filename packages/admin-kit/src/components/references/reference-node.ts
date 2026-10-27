@@ -8,12 +8,20 @@ import { REFERENCE_NODE } from './rich-text-doc.js';
 
 /**
  * The attribute a chip carries its token in — what a copy inside the editor
- * pastes back from. The name is the one CRM's editor gave it before the editor
- * was promoted (`specs/163-projects-and-tasks/` research R-17): a chip copied
- * from a screen still running the earlier build pastes back as a chip, and
- * CRM's screen tests find chips by it.
+ * pastes back from. A neutral name, since the editor is every module's
+ * (`specs/163-projects-and-tasks/` research R-17).
  */
-export const CHIP_TOKEN_ATTRIBUTE = 'data-crm-token';
+export const CHIP_TOKEN_ATTRIBUTE = 'data-reference-token';
+
+/**
+ * The name CRM's editor gave that attribute before the editor was promoted.
+ * A chip copied from a screen still running an earlier build carries it, and
+ * still pastes back as a chip.
+ */
+export const LEGACY_CHIP_TOKEN_ATTRIBUTE = 'data-crm-token';
+
+/** The chip attributes a paste is read for, the current one first. */
+export const CHIP_TOKEN_ATTRIBUTES = [CHIP_TOKEN_ATTRIBUTE, LEGACY_CHIP_TOKEN_ATTRIBUTE] as const;
 
 const CHIP_CLASS =
   'mx-0.5 inline-block rounded border px-1.5 align-baseline text-xs leading-5 whitespace-nowrap';
@@ -65,23 +73,22 @@ export const ReferenceNode = Node.create<ReferenceNodeOptions>({
   },
 
   parseHTML() {
-    return [
-      {
-        tag: `span[${CHIP_TOKEN_ATTRIBUTE}]`,
-        getAttrs: (element) => {
-          const token = (element as HTMLElement).getAttribute(CHIP_TOKEN_ATTRIBUTE) ?? '';
-          const [part] = splitRecordReferenceText(token);
-          if (!part || part.kind !== 'reference') return false;
-          const available = (element as HTMLElement).dataset['available'] === 'true';
-          return {
-            refType: part.type,
-            refId: part.id,
-            available,
-            label: available ? (element as HTMLElement).dataset['label'] ?? null : null,
-          };
-        },
+    return CHIP_TOKEN_ATTRIBUTES.map((attribute) => ({
+      tag: `span[${attribute}]`,
+      getAttrs: (node) => {
+        const element = node as HTMLElement;
+        const token = element.getAttribute(attribute) ?? '';
+        const [part] = splitRecordReferenceText(token);
+        if (!part || part.kind !== 'reference') return false;
+        const available = element.dataset['available'] === 'true';
+        return {
+          refType: part.type,
+          refId: part.id,
+          available,
+          label: available ? element.dataset['label'] ?? null : null,
+        };
       },
-    ];
+    }));
   },
 
   renderHTML({ node, HTMLAttributes: attributes }) {

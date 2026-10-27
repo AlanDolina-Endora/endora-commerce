@@ -88,7 +88,7 @@ function mount(props: Parameters<typeof Harness>[0] = {}): HTMLElement {
 }
 
 const chips = (field: HTMLElement): string[] =>
-  Array.from(field.querySelectorAll('[data-crm-token]')).map((chip) => chip.textContent ?? '');
+  Array.from(field.querySelectorAll('[data-reference-token]')).map((chip) => chip.textContent ?? '');
 const sent = (): string => screen.getByTestId('stored').textContent ?? '';
 
 beforeEach(() => {

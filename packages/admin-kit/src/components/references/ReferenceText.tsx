@@ -127,8 +127,8 @@ export function ReferenceText(props: ReferenceTextProps): ReactNode {
         <span
           key={key}
           className={`${CHIP} max-w-full flex-wrap gap-x-1.5 bg-muted/50`}
-          // The name CRM gave it before the component was promoted; its screen tests read it.
-          data-crm-order-reference={id}
+          // What a screen, and its tests, find an Order's chip with.
+          data-order-reference={id}
         >
           {link}
           {facts.map((fact, index) => (

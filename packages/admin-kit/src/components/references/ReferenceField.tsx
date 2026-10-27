@@ -22,7 +22,6 @@ import {
   List,
   ListOrdered,
   Package,
-  ShoppingCart,
   Strikethrough,
 } from 'lucide-react';
 import {
@@ -39,13 +38,13 @@ import { Input } from '../../ui/input.js';
 import { useTranslation } from '../../i18n/useTranslation.js';
 import { findMentionTrigger, type MentionTrigger } from './mention-trigger.js';
 import { editorDocOf, REFERENCE_NODE, textOfEditorDoc, type EditorDoc } from './rich-text-doc.js';
-import { CHIP_TOKEN_ATTRIBUTE, ReferenceNode } from './reference-node.js';
+import { CHIP_TOKEN_ATTRIBUTES, ReferenceNode } from './reference-node.js';
 import type { ReferenceLookups, ReferenceTriggerKind } from './reference-kinds.js';
 
 const SEARCH_DEBOUNCE_MS = 250;
 /**
  * How long a bare `@` waits before it is a question: long enough for the
- * second and third `@` of an Order or a Product to follow it, so that typing
+ * second and third `@` of a document or a Product to follow it, so that typing
  * `@@@` neither shows two lists it did not ask for nor asks who may be
  * mentioned.
  */
@@ -57,12 +56,12 @@ const VIEWPORT_MARGIN_PX = 8;
 const ATOM_CHARACTER = '￼';
 
 /** What the trigger kinds are called in the bundle keys. */
-const KIND_KEY = { admin_user: 'person', document: 'document', order: 'order', product: 'product' } as const;
+const KIND_KEY = { admin_user: 'person', document: 'document', product: 'product' } as const;
 
 /** The order the kinds' buttons and shortcuts are offered in — the trigger lengths'. */
-const KIND_ORDER: readonly ReferenceTriggerKind[] = ['admin_user', 'document', 'order', 'product'];
+const KIND_ORDER: readonly ReferenceTriggerKind[] = ['admin_user', 'document', 'product'];
 
-const KIND_ICON = { admin_user: AtSign, document: FileText, order: ShoppingCart, product: Package } as const;
+const KIND_ICON = { admin_user: AtSign, document: FileText, product: Package } as const;
 
 /** One choice of a list: what it inserts, and — in the `@@` document list — the group it is shown under. */
 interface Suggestion {
@@ -99,8 +98,6 @@ async function lookUp(lookups: ReferenceLookups, kind: ReferenceTriggerKind, que
   switch (kind) {
     case 'admin_user':
       return ((await lookups.searchPeople?.(query)) ?? []).map((item) => ({ ...item, type: 'admin_user' }));
-    case 'order':
-      return ((await lookups.searchOrders?.(query)) ?? []).map((item) => ({ ...item, type: 'order' }));
     case 'product':
       return ((await lookups.searchProducts?.(query)) ?? []).map((item) => ({ ...item, type: 'product' }));
     case 'document': {
@@ -123,8 +120,6 @@ function canLookUp(lookups: ReferenceLookups, kind: ReferenceTriggerKind): boole
   switch (kind) {
     case 'admin_user':
       return lookups.searchPeople !== undefined;
-    case 'order':
-      return lookups.searchOrders !== undefined;
     case 'document':
       return lookups.searchDocuments !== undefined;
     case 'product':
@@ -359,7 +354,7 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
           const text = event.clipboardData?.getData('text/plain') ?? '';
           if (
             !latest.current.mentions ||
-            html.includes(CHIP_TOKEN_ATTRIBUTE) ||
+            CHIP_TOKEN_ATTRIBUTES.some((attribute) => html.includes(attribute)) ||
             extractRecordReferenceTokens(text).length === 0
           ) {
             return false;

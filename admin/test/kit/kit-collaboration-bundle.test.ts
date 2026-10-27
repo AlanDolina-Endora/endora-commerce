@@ -44,7 +44,7 @@ describe('the core bundle carries the collaboration components’ sentences', ()
   });
 
   it('carries every member of the key families the components compose', () => {
-    const triggers = ['person', 'document', 'order', 'product'];
+    const triggers = ['person', 'document', 'product'];
     const families: Record<string, readonly string[]> = {
       'references.insert.': triggers,
       'references.shortcut.': triggers,

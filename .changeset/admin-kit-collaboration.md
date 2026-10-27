@@ -1,7 +1,6 @@
 ---
 '@endora-commerce/admin-kit': minor
 '@endora-commerce/mod-i18n': minor
-'@endora-commerce/mod-crm': minor
 ---
 
 CRM's collaboration components are in the kit, so any module's screen can have notes, messages,
@@ -17,6 +16,9 @@ references, attachments and a change history without copying them.
   shows one list grouped Orders · Quote requests · Tasks, from a `RecordDocumentLookupResponse`.
 - `ReferenceText` — a stored text drawn with its formatting, and every reference — person, Order,
   Product, Quote Request, Task — as a chip that links to its screen, or says it is unavailable.
+  An Order's chip carries `data-order-reference="<id>"`, and a chip inside the field carries its
+  token in `data-reference-token`; a chip copied from CRM's earlier editor, whose attribute was
+  `data-crm-token`, still pastes back as a chip.
 - `CommentThread` and `CommentComposer` — a record's notes or messages, over a `CommentThreadApi`
   adapter (`list`, `add`, `update`, `remove`); `RecordComment`, `CommentThreadCopy`.
 - `AttachmentUploader` and `uploadAttachment(path, file)` — a file chosen or dropped, posted
@@ -33,6 +35,5 @@ The kit now declares `@tiptap/react` and `@tiptap/starter-kit` (`^3.22.5`) as pe
 **`@endora-commerce/mod-i18n`**: the components' English and Polish sentences are in the shared
 `core` bundle (`references.*`, `editor.*`, `comments.*`, `history.*`, `cursorPagination.*`).
 
-**`@endora-commerce/mod-crm`** draws its notes, messages, references, attachments, change history
-and list pager with these components; what an Opportunity's screens show and do is unchanged. It no
-longer declares `@tiptap/react` or `@tiptap/starter-kit` — the editor is the kit's.
+CRM is the components' first user; what that changes for `@endora-commerce/mod-crm` is in its own
+entry.

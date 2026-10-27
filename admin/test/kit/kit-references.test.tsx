@@ -2,7 +2,7 @@ import { useState, type ReactElement } from 'react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { RecordDocumentLookupResponse, RecordReference } from '@endora-commerce/contracts';
@@ -61,21 +61,18 @@ const DOCUMENTS: RecordDocumentLookupResponse = {
 };
 
 const searchPeople = vi.fn<(query: string) => Promise<readonly ReferenceSuggestion[]>>();
-const searchOrders = vi.fn<(query: string) => Promise<readonly ReferenceSuggestion[]>>();
 const searchDocuments = vi.fn<(query: string) => Promise<RecordDocumentLookupResponse>>();
 const searchProducts = vi.fn<(query: string) => Promise<readonly ReferenceSuggestion[]>>();
-const LOOKUPS: ReferenceLookups = { searchPeople, searchOrders, searchDocuments, searchProducts };
+const LOOKUPS: ReferenceLookups = { searchPeople, searchDocuments, searchProducts };
 const STANDARD: readonly ReferenceTriggerKind[] = ['admin_user', 'document', 'product'];
 
 beforeEach(() => {
   searchPeople.mockReset();
-  searchOrders.mockReset();
   searchDocuments.mockReset();
   searchProducts.mockReset();
   searchPeople.mockImplementation((query) =>
     Promise.resolve(PEOPLE.filter((person) => person.label.toLowerCase().includes(query.toLowerCase()))),
   );
-  searchOrders.mockResolvedValue([{ id: ORDER_ID, label: 'ORD-1001' }]);
   searchDocuments.mockResolvedValue(DOCUMENTS);
   searchProducts.mockResolvedValue([{ id: PRODUCT_ID, label: 'Cargo van L2', description: 'VAN-L2' }]);
 });
@@ -158,7 +155,6 @@ describe('ReferenceField — the trigger table is the `kinds` prop', () => {
     expect(within(groups[2]!).getByRole('option')).toHaveTextContent('TSK-000042');
     expect(within(groups[2]!).getByRole('option')).toHaveTextContent('Call the client');
     expect(searchDocuments).toHaveBeenCalledWith('');
-    expect(searchOrders).not.toHaveBeenCalled();
 
     await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
     await waitFor(() => expect(storedText(field())).toBe(`see [[task:${TASK_ID}]] `));
@@ -181,17 +177,6 @@ describe('ReferenceField — the trigger table is the `kinds` prop', () => {
     expect(within(list).getByRole('option')).toHaveTextContent('Cargo van L2');
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(storedText(field())).toBe(`[[product:${PRODUCT_ID}]] `));
-  });
-
-  it('@@ is an Order list when the table says `order` — the trigger CRM keeps until it adopts documents', async () => {
-    mount(<Harness kinds={['admin_user', 'order', 'product']} />);
-    await userEvent.type(field(), '@@');
-    const list = await screen.findByRole('listbox', { name: core('references.suggest.title.order') });
-    expect(within(list).getByRole('option')).toHaveTextContent('ORD-1001');
-    expect(within(list).queryAllByRole('group')).toHaveLength(0);
-    expect(searchDocuments).not.toHaveBeenCalled();
-    await userEvent.keyboard('{Enter}');
-    await waitFor(() => expect(storedText(field())).toBe(`[[order:${ORDER_ID}]] `));
   });
 
   it('opens nothing for a kind it was not given, and offers no button or shortcut for it', async () => {
@@ -246,6 +231,38 @@ describe('ReferenceField — the trigger table is the `kinds` prop', () => {
     expect(field().textContent).not.toContain('[[');
     expect(storedText(field())).toBe(text);
     expect(screen.getByTestId('stored')).toHaveTextContent(text);
+  });
+});
+
+describe('ReferenceField — a chip copied and pasted', () => {
+  const pasteHtml = (html: string): void => {
+    field().focus();
+    fireEvent.paste(field(), {
+      clipboardData: {
+        getData: (type: string): string => (type === 'text/html' ? html : ''),
+        types: ['text/html'],
+      },
+    });
+  };
+
+  it('carries its token under a neutral attribute, and pastes back as the chip', async () => {
+    mount(
+      <Harness
+        initial={`[[task:${TASK_ID}]]`}
+        references={[{ type: 'task', id: TASK_ID, available: true, label: 'TSK-000042', url: `/tasks/${TASK_ID}` }]}
+      />,
+    );
+    const chip = field().querySelector('[data-reference-token]');
+    expect(chip?.getAttribute('data-reference-token')).toBe(`[[task:${TASK_ID}]]`);
+    expect(field().querySelector('[data-crm-token]')).toBeNull();
+  });
+
+  it('pastes a chip copied from a screen of an earlier build — the attribute CRM named — as the chip', async () => {
+    mount(<Harness />);
+    pasteHtml(`<p>see <span data-crm-token="[[order:${ORDER_ID}]]" data-available="true" data-label="ORD-1001">ORD-1001</span></p>`);
+    await waitFor(() => expect(storedText(field())).toBe(`see [[order:${ORDER_ID}]]`));
+    pasteHtml(`<span data-reference-token="[[task:${TASK_ID}]]" data-available="false">x</span>`);
+    await waitFor(() => expect(storedText(field())).toContain(`[[task:${TASK_ID}]]`));
   });
 });
 
