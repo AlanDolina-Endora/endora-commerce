@@ -14,7 +14,8 @@ Members holding Project Roles, opened, completed, lost and reopened.
 - **Migrations.** `projects_init` (Projects, their Stages, workflow, Organizations, Members and
   their Roles, listed viewers, Stage Tasks, Stage history, links, notes and messages, references,
   attachments, Templates, Project Roles and loss reasons with their seeded rows, alert
-  deliveries) and `projects_link_organization`.
+  deliveries), `projects_link_organization` and `projects_value_changes` (the values a write
+  changed, which a Project's change history shows).
 - **Permissions.** `projects:read`, `projects:write`, `projects:configure` (Templates, Project
   Roles, loss reasons), `projects:analytics`, and `projects:see_all`, which lifts the visibility
   rule but never Organization reach; each of the last four requires `projects:read`. A Project
@@ -40,9 +41,9 @@ Members holding Project Roles, opened, completed, lost and reopened.
   `projects_stage_deadline_alert` (defaults in English and Polish, editable) to every Member who
   may see the Project, from a BullMQ job scheduler every fifteen minutes.
 - **Custom fields.** *Project* is a record type on `/custom-fields`; values are validated on save,
-  shown on the Project, and offered as list filters; the audit trail names the fields a write
-  changed — and that the value changed — never their values, because the platform audit log is
-  not kept per Organization.
+  shown on the Project, and offered as list filters. A Project's change history shows each change
+  of a custom field or of the value with the value before and after it, kept by the module itself;
+  the platform audit log, which is not kept per Organization, names the changed fields only.
 - **For other modules.** `projectReadPort` (`findById`, `findByRecord`), gated;
   `projectStageGuardRegistry`, through which a guard refuses a move, close or reopen; the `project`
   Task context in Tasks' registry; the events `projects.project.created.v1`,

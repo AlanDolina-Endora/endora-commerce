@@ -5,10 +5,11 @@ import {
   type RecordHistoryQuery,
   type RecordReference,
 } from '@endora-commerce/contracts';
+import type { EntityManager } from '@mikro-orm/postgresql';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { OrgReach } from '../domain/visibility-rule.js';
-import { ambientReach, type ProjectAccess } from './project-access.js';
+import { ambientReach, isUuid, uuidArray, type ProjectAccess } from './project-access.js';
 import type { ProjectReferenceService } from './reference-service.js';
 
 /** The object type every Command about a Project, or anything hanging on it, is recorded under. */
@@ -75,6 +76,61 @@ export function withinReach(state: unknown, reach: OrgReach): unknown {
   return out;
 }
 
+/** The audit keys that stand in for values the Project's own store keeps (T144 F4, T145). */
+const VALUE_POINTER = 'valueChangeId';
+const VALUE_NAMES = ['changedFields', 'changedCustomFields'] as const;
+
+/** One row of `project_value_changes`: the changed values of one write, either side. */
+export interface StoredValueChange {
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown>;
+}
+
+/** The `project_value_changes` row an audited state points at, or `null`. */
+export function valueChangeIdOf(state: unknown): string | null {
+  if (state === null || typeof state !== 'object' || Array.isArray(state)) return null;
+  const id = (state as Record<string, unknown>)[VALUE_POINTER];
+  return typeof id === 'string' && isUuid(id) ? id : null;
+}
+
+function asRecord(state: unknown): Record<string, unknown> | null {
+  return state === null || typeof state !== 'object' || Array.isArray(state) ? null : (state as Record<string, unknown>);
+}
+
+/**
+ * An entry with the values the Project's store kept for it (T145, issue #470):
+ * the audit trail names the changed fields (`changedFields`,
+ * `changedCustomFields`) and points at the store by `valueChangeId`; the
+ * history serves the values in their place — `valueAmount` / `valueCurrency`
+ * and `customFieldValues` of the changed keys, before and after, as entries
+ * written before T144 F4 carried them. A create has no state before, so its
+ * values join the state after only. Without a stored row the names stay and
+ * only the pointer goes.
+ */
+export function withValueChange(
+  entry: { before: unknown; after: unknown },
+  change: StoredValueChange | null,
+): { before: unknown; after: unknown } {
+  const strip = (state: unknown, replaced: boolean): unknown => {
+    const record = asRecord(state);
+    if (!record || !(VALUE_POINTER in record || (replaced && VALUE_NAMES.some((key) => key in record)))) return state;
+    const out = { ...record };
+    delete out[VALUE_POINTER];
+    if (replaced) for (const key of VALUE_NAMES) delete out[key];
+    return out;
+  };
+  if (!change) return { before: strip(entry.before, false), after: strip(entry.after, false) };
+  const merge = (state: unknown, values: Record<string, unknown> | null): unknown => {
+    const stripped = strip(state, true);
+    if (!values) return stripped;
+    return { ...(asRecord(stripped) ?? {}), ...values };
+  };
+  return {
+    before: entry.before === null && change.before === null ? null : merge(entry.before, change.before),
+    after: merge(entry.after, change.after),
+  };
+}
+
 export function encodeHistoryCursor(offset: number): string {
   return Buffer.from(JSON.stringify({ o: offset }), 'utf8').toString('base64url');
 }
@@ -91,6 +147,7 @@ export function decodeHistoryCursor(cursor: string | undefined): number {
 }
 
 export interface ProjectHistoryServiceDeps {
+  emFactory: () => EntityManager;
   access: Pick<ProjectAccess, 'loadVisible'>;
   /** The kernel's audit port — a platform service. */
   auditLog: Pick<AuditPort, 'query'>;
@@ -112,9 +169,13 @@ export interface ProjectHistoryServiceDeps {
  * reaching back {@link PROJECT_HISTORY_REACH} entries; the last page says when
  * it was cut. What the tokens of an audited text name is resolved for the
  * reader (no Project Command audits a text today — notes and messages are
- * recorded by length — so this is the standard, ready); which custom fields
- * changed is served only to a reader holding `custom_fields:read`, and no
- * Organization out of the reader's reach is served at all (T144 F4).
+ * recorded by length — so this is the standard, ready). The audit log names
+ * the value and the custom fields a write changed, never their values (T144
+ * F4); the values are the Project's own store's, read by this Project's id and
+ * served in place of the names (T145, issue #470). Custom fields — their
+ * values or their names — are served only to a reader holding
+ * `custom_fields:read`, and no Organization out of the reader's reach is served
+ * at all (T144 F4).
  */
 export class ProjectHistoryService {
   constructor(private readonly deps: ProjectHistoryServiceDeps) {}
@@ -149,10 +210,19 @@ export class ProjectHistoryService {
     const mayReadCustomFields = page.length > 0 ? await this.deps.mayReadCustomFields() : true;
     const reach = ambientReach();
     const served = (state: unknown): unknown => withinReach(visibleAuditState(state ?? null, mayReadCustomFields), reach);
+    const changes = await this.#valueChanges(
+      project.id,
+      page.map((entry) => valueChangeIdOf(entry.stateAfter)).filter((id): id is string => id !== null),
+    );
 
     return {
       data: page.map((entry, index) => {
         const actorId = entry.actorAdminUserId ?? null;
+        const changeId = valueChangeIdOf(entry.stateAfter);
+        const { before, after } = withValueChange(
+          { before: entry.stateBefore ?? null, after: entry.stateAfter ?? null },
+          changeId === null ? null : (changes.get(changeId) ?? null),
+        );
         return {
           id: entry.id,
           actedAt: entry.actedAt.toISOString(),
@@ -161,8 +231,8 @@ export class ProjectHistoryService {
             actorId === null
               ? { kind: 'system', id: null, name: null }
               : { kind: 'admin', id: actorId, name: names.get(actorId) ?? null },
-          before: served(entry.stateBefore),
-          after: served(entry.stateAfter),
+          before: served(before),
+          after: served(after),
           references: referencesOf(index),
         };
       }),
@@ -173,5 +243,19 @@ export class ProjectHistoryService {
       },
       truncated,
     };
+  }
+
+  /**
+   * The stored values of the page's entries, by row id — keyed by the Project
+   * `loadVisible` handed out, so a pointer to another Project's row reads nothing.
+   */
+  async #valueChanges(projectId: string, ids: readonly string[]): Promise<Map<string, StoredValueChange>> {
+    if (ids.length === 0) return new Map();
+    const rows = (await this.deps.emFactory().execute(
+      `select v."id", v."before", v."after" from "project_value_changes" v
+        where v."project_id" = ? and v."id" = any(?::uuid[])`,
+      [projectId, uuidArray(ids)],
+    )) as Array<{ id: string; before: Record<string, unknown> | null; after: Record<string, unknown> }>;
+    return new Map(rows.map((row) => [row.id, { before: row.before, after: row.after }]));
   }
 }

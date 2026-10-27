@@ -299,4 +299,30 @@ describe('custom fields in the change history', () => {
     expect(screen.getByText(en('history.field.changedFields'))).toBeTruthy();
     expect(screen.getByText(en('history.field.value'))).toBeTruthy();
   });
+
+  it('shows a value change with the value before and after, as the history serves it again (T145, #470)', async () => {
+    getSpy.mockImplementation((path: string) => {
+      if (path === DEFINITIONS_URL) return Promise.resolve({ data: DEFINITIONS });
+      if (path.startsWith(`/api/v1/admin/projects/${PROJECT_ID}/history`)) {
+        return Promise.resolve({
+          data: [
+            historyEntry({
+              action: 'projects.project.update',
+              before: { title: 'Old', valueAmount: '1234.56', valueCurrency: 'PLN' },
+              after: { title: 'Old', valueAmount: '987.65', valueCurrency: 'PLN' },
+            }),
+          ],
+          pagination: { cursor: null, hasMore: false, limit: 20 },
+          truncated: false,
+        });
+      }
+      return Promise.reject(new Error(`unexpected GET ${path}`));
+    });
+    renderProjects(<ProjectHistory projectId={PROJECT_ID} />, { permissions: WITH_FIELDS });
+    expect(await screen.findByText(en('history.field.valueAmount'))).toBeTruthy();
+    expect(screen.getByText('1234.56')).toBeTruthy();
+    expect(screen.getByText('987.65')).toBeTruthy();
+    // The currency did not change: no row of its own.
+    expect(screen.queryByText(en('history.field.valueCurrency'))).toBeNull();
+  });
 });

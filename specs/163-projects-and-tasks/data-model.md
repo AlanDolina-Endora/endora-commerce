@@ -190,6 +190,16 @@ Deleting a Stage: refused if current (409 `PROJECT_STAGE_CURRENT`), if Tasks exi
 
 Index (project_id, at).
 
+**`project_value_changes`** (the values a write changed, T145 / issue #470 decision A — added
+by the migration `projects_value_changes`): id uuid PK, project_id (cascade), before jsonb null
+(`null` for a create), after jsonb, at timestamptz. Each side holds only what changed:
+`valueAmount` / `valueCurrency`, and `customFieldValues` of the changed keys (`null` for a key
+that had or has no value). One row per Command that changed the value or a custom field
+(`projects.project.create`, `.update`, `.custom_fields_update`), written in that Command; the
+audit entry carries `changedFields` / `changedCustomFields` and the row's id as `valueChangeId`,
+never a value (T144 F4). Read only by `GET /projects/:id/history`, keyed by the id
+`ProjectAccess.loadVisible` returned. Index (project_id).
+
 **`project_links`** (R-10): id, project_id (cascade), record_kind check in
 (`order`,`quote_request`,`opportunity`), record_id uuid, organization_id uuid (the record's
 Organization, read from its owner when the link is made; foreign key (project_id,

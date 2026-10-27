@@ -60,6 +60,7 @@ import { ProjectTemplateRole } from './entities/project-template-role.entity.js'
 import { ProjectTemplateStage } from './entities/project-template-stage.entity.js';
 import { ProjectTemplateStageMove } from './entities/project-template-stage-move.entity.js';
 import { ProjectTemplateStageTask } from './entities/project-template-stage-task.entity.js';
+import { ProjectValueChange } from './entities/project-value-change.entity.js';
 import { ProjectViewer } from './entities/project-viewer.entity.js';
 import { registerAnalyticsRoutes } from './routes/routes.analytics.js';
 import { registerAttachmentRoutes } from './routes/routes.attachments.js';
@@ -610,8 +611,9 @@ export function registerModule(ctx: ModuleContext): void {
       .singleton(),
     projectsHistoryService: ctx
       .asFunction(
-        ({ projectsAccess, auditLogService, projectsReferenceService, projectsOwnerReadChecks }: ProjectsCradle) =>
+        ({ emFactory, projectsAccess, auditLogService, projectsReferenceService, projectsOwnerReadChecks }: ProjectsCradle) =>
           new ProjectHistoryService({
+            emFactory,
             access: projectsAccess,
             auditLog: auditLogService,
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
@@ -808,7 +810,7 @@ export function registerModule(ctx: ModuleContext): void {
  * the package is installed; a missing array is answered with zero entities
  * registered and no error anywhere.
  *
- * Twenty-three classes, the whole schema of the module
+ * Twenty-four classes, the whole schema of the module
  * (`specs/163-projects-and-tasks/data-model.md` §2): the configuration is
  * `@GlobalEntity`, everything a Project owns is `@RuleScoped` and read only
  * through `ProjectAccess`.
@@ -839,6 +841,7 @@ export const entities = [
   ProjectReference,
   ProjectAttachment,
   ProjectStageAlertDelivery,
+  ProjectValueChange,
 ];
 
 /**

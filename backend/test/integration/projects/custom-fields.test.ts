@@ -268,19 +268,31 @@ describe('projects — custom fields (US9)', () => {
       expect(again.statusCode, again.body).toBe(200);
     });
 
-    it('records which fields a create and each change set, in one Command per write — never their values (T144 F4)', async () => {
+    it('shows each create and change with the values it set, in one Command per write (T145, #470)', async () => {
       const entries = await history(member);
       expect(entries.map((entry) => entry.action)).toEqual([
         'projects.project.custom_fields_update',
         'projects.project.create',
       ]);
       const [update, create] = entries;
-      expect(create!.after).toMatchObject({ changedCustomFields: ['site_region'] });
-      expect(update!.before).toBeNull();
-      expect(update!.after).toEqual({ changedCustomFields: ['floor_area'] });
-      // The platform audit log is not tenant-scoped: no value reaches it.
-      expect(JSON.stringify(entries)).not.toContain('north');
-      expect(JSON.stringify(entries)).not.toContain('customFieldValues');
+      expect(create!.after).toMatchObject({ customFieldValues: { site_region: 'north' } });
+      expect(update!.before).toEqual({ customFieldValues: { floor_area: null } });
+      expect(update!.after).toEqual({ customFieldValues: { floor_area: 40 } });
+      expect(JSON.stringify(entries)).not.toContain('changedCustomFields');
+      expect(JSON.stringify(entries)).not.toContain('valueChangeId');
+    });
+
+    it('the platform audit log names the changed fields and holds none of their values (T144 F4)', async () => {
+      const rows = (await h
+        .em()
+        .getConnection()
+        .execute(`select "action", "state_before", "state_after" from "audit_log_entries" where "object_id" = ?`, [
+          project.id,
+        ])) as Array<{ action: string; state_before: unknown; state_after: unknown }>;
+      expect(JSON.stringify(rows)).not.toContain('north');
+      expect(JSON.stringify(rows)).not.toContain('customFieldValues');
+      const update = rows.find((row) => row.action === 'projects.project.custom_fields_update');
+      expect(update?.state_after).toMatchObject({ changedCustomFields: ['floor_area'] });
     });
 
     it('hides the values from a reader without custom_fields:read', async () => {
@@ -291,8 +303,10 @@ describe('projects — custom fields (US9)', () => {
       ]);
       for (const entry of entries) {
         expect(JSON.stringify([entry.before, entry.after])).not.toContain('changedCustomFields');
+        expect(JSON.stringify([entry.before, entry.after])).not.toContain('customFieldValues');
       }
       expect(JSON.stringify(entries)).not.toContain('floor_area');
+      expect(JSON.stringify(entries)).not.toContain('north');
     });
   });
 

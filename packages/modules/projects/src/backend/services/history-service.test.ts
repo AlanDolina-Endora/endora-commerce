@@ -3,8 +3,10 @@ import {
   auditedTexts,
   decodeHistoryCursor,
   encodeHistoryCursor,
+  valueChangeIdOf,
   visibleAuditState,
   withinReach,
+  withValueChange,
 } from './history-service.js';
 
 /**
@@ -58,5 +60,42 @@ describe('project history helpers', () => {
     expect(decodeHistoryCursor(undefined)).toBe(0);
     expect(() => decodeHistoryCursor('not-ours')).toThrow(expect.objectContaining({ statusCode: 400 }));
     expect(() => decodeHistoryCursor(encodeHistoryCursor(-1))).toThrow();
+  });
+
+  it('reads the value-change id an audited state points at, and only a uuid (T145)', () => {
+    const id = '00000000-0000-4000-8000-0000000000c1';
+    expect(valueChangeIdOf({ changedFields: ['value'], valueChangeId: id })).toBe(id);
+    expect(valueChangeIdOf({ valueChangeId: 'not-a-uuid' })).toBeNull();
+    expect(valueChangeIdOf({ title: 'A' })).toBeNull();
+    expect(valueChangeIdOf(null)).toBeNull();
+  });
+
+  it('puts the stored values in place of the names the audit trail keeps (T145)', () => {
+    const change = {
+      before: { valueAmount: '1.00', valueCurrency: 'PLN', customFieldValues: { budget: null } },
+      after: { valueAmount: '2.00', valueCurrency: 'PLN', customFieldValues: { budget: 5 } },
+    };
+    const id = '00000000-0000-4000-8000-0000000000c1';
+    expect(
+      withValueChange(
+        { before: { title: 'A' }, after: { title: 'A', changedFields: ['value'], changedCustomFields: ['budget'], valueChangeId: id } },
+        change,
+      ),
+    ).toEqual({
+      before: { title: 'A', valueAmount: '1.00', valueCurrency: 'PLN', customFieldValues: { budget: null } },
+      after: { title: 'A', valueAmount: '2.00', valueCurrency: 'PLN', customFieldValues: { budget: 5 } },
+    });
+    // A create has no state before: the values join the state after only.
+    expect(
+      withValueChange({ before: null, after: { title: 'A', changedFields: ['value'], valueChangeId: id } }, {
+        before: null,
+        after: { valueAmount: '2.00', valueCurrency: 'PLN' },
+      }),
+    ).toEqual({ before: null, after: { title: 'A', valueAmount: '2.00', valueCurrency: 'PLN' } });
+    // No stored change: the names stay, the pointer goes.
+    expect(withValueChange({ before: null, after: { changedFields: ['value'], valueChangeId: id } }, null)).toEqual({
+      before: null,
+      after: { changedFields: ['value'] },
+    });
   });
 });

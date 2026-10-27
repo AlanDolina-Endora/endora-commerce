@@ -115,10 +115,11 @@ Its tabs:
 - **Change history** — everything done to the project, newest first: who did
   it, when, and the fields it changed, read a page at a time with *Show earlier
   changes*. A note or a message is recorded by its length, never by what it
-  says; the value and the custom fields by *which* changed, never by what to —
-  the trail is the platform's audit log, which is not kept per Organization.
-  An Organization outside your reach that the project once had is not named
-  in it.
+  says. A change of the value or of a custom field shows the value before and
+  after it — the project keeps those itself; the platform's audit log, which is
+  not kept per Organization, names only *which* fields changed. An
+  Organization outside your reach that the project once had is not named in
+  it.
 
 **On the screens of the records a project holds** — an Order, a Quote Request,
 an Opportunity, a Task — a **Project** panel names the project it belongs to:
@@ -562,9 +563,10 @@ next time somebody saves that project's fields, not on any other edit.
   fields (`custom_fields:read`); without that permission the fields, and their
   values in the change history, are not shown.
 - Every change of a field is in the project's **change history** — *Custom
-  fields changed*, naming the fields that changed but not their values (the
-  history is the platform's audit log, which is not kept per Organization); the
-  fields a project was created with are named on its *Project created* entry.
+  fields changed*, with each changed field's value before and after it; the
+  values a project was created with are on its *Project created* entry. The
+  project keeps these values itself: the platform's audit log, which is not
+  kept per Organization, names only the fields that changed.
 - A field marked as a **list filter** on the custom-fields screen is offered as
   a filter on the projects list, beside the list's own — to an administrator who
   may also view custom fields (`custom_fields:read`). A filter whose field is no
@@ -655,7 +657,7 @@ the figures are not served.
 | `POST /api/v1/admin/projects/:id/attachments/upload` | `projects:write` | `multipart/form-data` with one `file` part → `201`; stored private, then attached — a file that could not be attached is taken back. `415` for active content or a type the library refuses, `413` `PROJECT_ATTACHMENT_TOO_LARGE` beyond 25 MB, and the library's own size limit. |
 | `POST /api/v1/admin/projects/:id/attachments` | `projects:write` **and** `assets.read` | `{ assetId }` of a private, live file that is not active content → `201` (`200` for a file already attached); `422` for a public file or one that is not there — including one attached to a project the caller may not see. |
 | `DELETE /api/v1/admin/projects/:id/attachments/:attachmentId` | `projects:write` | `204`; the file stays in the library. |
-| `GET /api/v1/admin/projects/:id/history` | `projects:read` | `RecordHistoryPage` — the audit trail of the project, newest first, `limit` and an opaque `cursor`, reaching back 499 entries (`truncated` on the last page past that). An entry records the value and custom fields as `changedFields` / `changedCustomFields` (names, never values); `changedCustomFields` — and the `customFieldValues` of entries written before — only for a holder of `custom_fields:read`; no Organization out of the reader's reach, nor the record of a link that named one. |
+| `GET /api/v1/admin/projects/:id/history` | `projects:read` | `RecordHistoryPage` — the audit trail of the project, newest first, `limit` and an opaque `cursor`, reaching back 499 entries (`truncated` on the last page past that). A write that changed the value or custom fields is served with them before and after — `valueAmount` / `valueCurrency` and `customFieldValues` of the changed fields, from the project's own `project_value_changes` — while its audit entry names them only (`changedFields` / `changedCustomFields`, and `valueChangeId`, which the response leaves out). Custom fields, by value or by name, only for a holder of `custom_fields:read`; no Organization out of the reader's reach, nor the record of a link that named one. |
 | `GET /api/v1/admin/projects/lookups/mentionable` | `projects:write` | `?projectId=&q=` → `{ data: { id, name, email }[] }` — active administrators holding `projects:read` who may see the project (without `projectId`, every holder of `projects:read`); at most 20. |
 | `GET /api/v1/admin/projects/lookups/documents` | `projects:write` | `?projectId=&q=` → `RecordDocumentLookupResponse` (`{ groups: { kind, items }[] }`, not wrapped in `data`) — the `@@` list, the schema CRM's `GET /crm/lookups/documents` answers; a group only with its read code and its module on, at most 10 per group. Before a project exists, `organizationIds` (repeatable) names the Organizations whose Orders and Quote Requests are offered — only those within the caller's reach count, an Organization out of reach is left out without a word; beside a `projectId` it is ignored. |
 | `GET /api/v1/admin/projects/roles`, `…/loss-reasons` | `projects:read` | The dictionaries, with `label` in the reader's language; `active=true` leaves archived rows out. |
@@ -810,9 +812,10 @@ and answers a project's values through `project()`, which leaves out a value
 whose definition is gone; the list's filter is `customFieldListFilterPort`'s id
 condition, intersected with the visible set. `custom_fields` is a binding
 dependency and cannot be switched off. An audit entry names the custom fields a
-write changed (`changedCustomFields`), never their values, and
-`GET /projects/:id/history` serves it — like the `customFieldValues` of entries
-written before — only to a reader holding `custom_fields:read`.
+write changed (`changedCustomFields`), never their values; the values before and
+after are a `project_value_changes` row the entry points at (`valueChangeId`),
+written in the same Command. `GET /projects/:id/history` serves the values in
+place of the names, and either only to a reader holding `custom_fields:read`.
 
 ### Analytics
 

@@ -572,6 +572,14 @@ by e-mail.
 
 ---
 
+## Phase 15: Owner decisions 2026-10-27
+
+- [ ] T145 (#470, decision A) A Project's history shows changed fields **with** their old and new values (Project value, custom-field values, and anything else T144 F4 took out of history), from a projects-owned value store written in the same Command as the change and read only through `ProjectAccess`; the platform audit log keeps naming the changed fields only (F4 unchanged). F4's visibility rules hold: custom-field values only for a `custom_fields:read` holder, out-of-reach Organization ids stripped. Entity classified, migration per `module-migrations.md`, registries regenerated; FR-036, `data-model.md`, `contracts/admin-api.md`, docs EN + PL, admin history rendering en + pl, changeset
+- [ ] T146 (#465) Reporting time zone setting, default `UTC`, owned outside `projects` so CRM can adopt it later (#474, CRM unchanged here); IANA names validated like `projects.alerts_time_zone`; Projects analytics counts days and periods in it, the default byte-identical to today's UTC results; docs EN + PL, `research.md` / `spec.md`, changesets
+- [ ] T147 (#472) Putting a Task into a Project and deleting a Project Task need `projects:write` on a Project the caller sees, like taking one out (`TaskContextDescriptor.canTakeOut`, T144); attach refused with 422 `TASK_CONTEXT_INVALID`; `contracts/ports-and-events.md`, docs EN + PL, test descriptors, changesets
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase dependencies

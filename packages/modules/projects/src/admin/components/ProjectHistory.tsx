@@ -48,9 +48,12 @@ const SILENT_FIELDS: ReadonlySet<string> = new Set(['version', 'descriptionLengt
 const CUSTOM_FIELD_PREFIX = 'customField:';
 
 /**
- * Since T144 F4 an entry records *which* value-bearing fields a write changed —
+ * The audit trail records *which* value-bearing fields a write changed —
  * `changedFields` (`value`) and `changedCustomFields` (keys) — and never their
- * values: the audit trail is not tenant-scoped. Each is one row naming them.
+ * values (T144 F4). The server serves the values in their place from the
+ * Project's own store (T145), as `valueAmount` / `valueCurrency` and
+ * `customFieldValues`; an entry it has no stored values for keeps the names,
+ * each one row naming them.
  */
 const CHANGED_FIELDS = 'changedFields';
 const CHANGED_CUSTOM_FIELDS = 'changedCustomFields';

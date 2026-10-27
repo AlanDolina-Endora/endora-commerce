@@ -17,7 +17,7 @@ import { TEST_ADMIN_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.j
  * by definition, not by name, so the assertion is about what an index covers.
  */
 
-/** The 23 tables of the data model: seven of configuration, sixteen of Projects. */
+/** The 24 tables of the data model: seven of configuration, seventeen of Projects. */
 const TABLES = [
   'project_attachments',
   'project_comments',
@@ -40,6 +40,7 @@ const TABLES = [
   'project_template_stage_tasks',
   'project_template_stages',
   'project_templates',
+  'project_value_changes',
   'project_viewers',
   'projects',
 ].sort();
@@ -118,7 +119,7 @@ describe('projects init migration', () => {
     return { projectId, stageId };
   }
 
-  it('creates the 23 tables of the data model and no twenty-fourth', async () => {
+  it('creates the 24 tables of the data model and no twenty-fifth', async () => {
     const found = await rows<{ table_name: string }>(
       `select table_name from information_schema.tables
         where table_schema = current_schema()
@@ -126,7 +127,7 @@ describe('projects init migration', () => {
         order by table_name`,
     );
     expect(found.map((row) => row.table_name)).toEqual(TABLES);
-    expect(TABLES).toHaveLength(23);
+    expect(TABLES).toHaveLength(24);
   });
 
   it('has the columns of `projects`, with their types, nullability and defaults', async () => {
@@ -216,6 +217,7 @@ describe('projects init migration', () => {
         'project_stage_entries',
         'project_stage_moves',
         'project_stages',
+        'project_value_changes',
         'project_viewers',
       ].map((child) => ({ child, on_delete: 'c' })),
     );

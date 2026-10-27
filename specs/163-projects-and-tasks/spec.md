@@ -553,7 +553,11 @@ switchable by an operator, and invisible when off.
 **Custom Fields**
 
 - **FR-036**: *Project* MUST be a record type of the Custom Fields module, with values
-  validated on save, shown under the Project's visibility, and carried in history.
+  validated on save, shown under the Project's visibility, and carried in history: the
+  Project's history shows each changed field — custom fields and the Project value — with its
+  value before and after the change, while the platform audit log names the changed fields only
+  and holds none of their values (owner decision 2026-10-27, issue #470 decision A; T144 F4,
+  T145).
 
 **Analytics**
 

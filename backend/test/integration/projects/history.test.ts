@@ -166,6 +166,36 @@ describe('projects — history (US7)', () => {
       expect(update?.state_after).toMatchObject({ changedFields: ['value'] });
     });
 
+    it('the Project’s history shows the value a create set and a change replaced, from its own store (T145, #470)', async () => {
+      const response = await callProjects(h, 'GET', `/${audited.id}/history?limit=50`, { cookies: rep.cookies });
+      expect(response.statusCode, response.body).toBe(200);
+      const entries = RecordHistoryPageSchema.parse(response.json()).data;
+      const create = entries.find((entry) => entry.action === 'projects.project.create');
+      const update = entries.find((entry) => entry.action === 'projects.project.update');
+      expect(create?.after).toMatchObject({ valueAmount: '1234.56', valueCurrency: 'PLN' });
+      expect(update?.before).toMatchObject({ valueAmount: '1234.56', valueCurrency: 'PLN' });
+      expect(update?.after).toMatchObject({ valueAmount: '987.65', valueCurrency: 'PLN' });
+      // The store's values replace the names: no bookkeeping key reaches the reader.
+      expect(response.body).not.toContain('changedFields');
+      expect(response.body).not.toContain('valueChangeId');
+    });
+
+    it('the values go with the Project', async () => {
+      const doomed = await createProject(h, { title: 'Valued, then deleted', value: { amount: '5.00', currency: 'PLN' } });
+      const count = async () =>
+        (
+          (await h
+            .em()
+            .getConnection()
+            .execute(`select count(*)::int as "n" from "project_value_changes" where "project_id" = ?`, [
+              doomed.id,
+            ])) as Array<{ n: number }>
+        )[0]!.n;
+      expect(await count()).toBe(1);
+      await deleteProjects(h, [doomed.id]);
+      expect(await count()).toBe(0);
+    });
+
     it('a reader is served no Organization out of their reach, in any entry', async () => {
       const response = await callProjects(h, 'GET', `/${audited.id}/history?limit=50`, { cookies: rep.cookies });
       expect(response.statusCode, response.body).toBe(200);

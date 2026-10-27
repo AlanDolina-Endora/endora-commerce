@@ -28,6 +28,7 @@ import { ProjectStage } from '../entities/project-stage.entity.js';
 import { ProjectStageEntry } from '../entities/project-stage-entry.entity.js';
 import { ProjectStageMove } from '../entities/project-stage-move.entity.js';
 import { ProjectStageTask } from '../entities/project-stage-task.entity.js';
+import { ProjectValueChange, type ProjectValueState } from '../entities/project-value-change.entity.js';
 import { ProjectViewer } from '../entities/project-viewer.entity.js';
 import { isDeepStrictEqual } from 'node:util';
 import { newlyMentioned, type ProjectMentionService, type SavedProjectMentions } from './mention-service.js';
@@ -150,7 +151,8 @@ export async function lockProjectRow(em: EntityManager, id: string): Promise<Pro
  * tenant-scoped, so it carries no free text and no figure a tenant owns: the
  * description by its length only, and neither the value nor the custom-field
  * values at all — a write says *that* they changed ({@link changedValueKeys}),
- * never what to (T144 F4).
+ * never what to (T144 F4). The values go to the Project's own store, which its
+ * history reads ({@link recordValueChange}, T145).
  */
 function snapshot(project: Project): Record<string, unknown> {
   return {
@@ -164,13 +166,17 @@ function snapshot(project: Project): Record<string, unknown> {
   };
 }
 
+type ValueSide = Pick<Project, 'valueAmount' | 'valueCurrency'>;
+
+const NO_VALUE: ValueSide = { valueAmount: null, valueCurrency: null };
+
 /**
  * What a write changed among the values the trail does not carry: `changedFields`
  * (`value`) and `changedCustomFields` (the keys whose value differs), each only
  * when non-empty.
  */
 function changedValueKeys(
-  value: { before: Pick<Project, 'valueAmount' | 'valueCurrency'>; after: Pick<Project, 'valueAmount' | 'valueCurrency'> } | null,
+  value: { before: ValueSide; after: ValueSide } | null,
   customFields: { before: Record<string, unknown>; after: Record<string, unknown> } | null,
 ): { changedFields?: string[]; changedCustomFields?: string[] } {
   const out: { changedFields?: string[]; changedCustomFields?: string[] } = {};
@@ -190,7 +196,40 @@ function changedValueKeys(
   return out;
 }
 
-const NO_VALUE = { valueAmount: null, valueCurrency: null };
+/**
+ * The audit keys of a write that may change a Project's values — and, when it
+ * did, the values themselves kept in the Project's own store (T145, #470): a
+ * {@link ProjectValueChange} row in the Command's transaction, which the audit
+ * entry points at by `valueChangeId`. The audit trail gets the names only; the
+ * Project's history serves the values from the row. `before` is `null` for a
+ * create (`value.before === null`).
+ */
+function recordValueChange(
+  em: EntityManager,
+  projectId: string,
+  value: { before: ValueSide | null; after: ValueSide } | null,
+  customFields: { before: Record<string, unknown>; after: Record<string, unknown> } | null,
+): { changedFields?: string[]; changedCustomFields?: string[]; valueChangeId?: string } {
+  const created = value !== null && value.before === null;
+  const keys = changedValueKeys(value && { before: value.before ?? NO_VALUE, after: value.after }, customFields);
+  if (!keys.changedFields && !keys.changedCustomFields) return keys;
+  const before: ProjectValueState = {};
+  const after: ProjectValueState = {};
+  if (keys.changedFields && value) {
+    before.valueAmount = value.before?.valueAmount ?? null;
+    before.valueCurrency = value.before?.valueCurrency ?? null;
+    after.valueAmount = value.after.valueAmount ?? null;
+    after.valueCurrency = value.after.valueCurrency ?? null;
+  }
+  if (keys.changedCustomFields && customFields) {
+    const side = (values: Record<string, unknown>) =>
+      Object.fromEntries(keys.changedCustomFields!.map((key) => [key, values[key] ?? null]));
+    before.customFieldValues = side(customFields.before);
+    after.customFieldValues = side(customFields.after);
+  }
+  const row = em.create(ProjectValueChange, { projectId, before: created ? null : before, after });
+  return { ...keys, valueChangeId: row.id };
+}
 
 export class ProjectService {
   constructor(private readonly deps: ProjectServiceDeps) {}
@@ -329,7 +368,7 @@ export class ProjectService {
             viewerIds,
             stages: rows.map((stage) => stage.name),
             templateId: template?.id ?? null,
-            ...changedValueKeys({ before: NO_VALUE, after: project }, { before: {}, after: customFieldValues }),
+            ...recordValueChange(em as EntityManager, id, { before: null, after: project }, { before: {}, after: customFieldValues }),
           },
         };
       },
@@ -437,7 +476,10 @@ export class ProjectService {
           return {
             result: null,
             before,
-            after: { ...snapshot(project), ...changedValueKeys({ before: valueBefore, after: project }, null) },
+            after: {
+              ...snapshot(project),
+              ...recordValueChange(em as EntityManager, visible.id, { before: valueBefore, after: project }, null),
+            },
           };
         },
       });
@@ -454,8 +496,12 @@ export class ProjectService {
           const before = { ...(project.customFieldValues ?? {}) };
           project.customFieldValues = customFieldValues;
           bumped(project);
-          // Which fields changed, never their values (T144 F4).
-          return { result: null, before: null, after: changedValueKeys(null, { before, after: customFieldValues }) };
+          // The audit trail names the fields; their values go to the Project's own store (T144 F4, T145).
+          return {
+            result: null,
+            before: null,
+            after: recordValueChange(em as EntityManager, visible.id, null, { before, after: customFieldValues }),
+          };
         },
       });
     }
