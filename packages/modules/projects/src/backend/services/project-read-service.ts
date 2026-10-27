@@ -4,6 +4,10 @@ import {
   pickLocalized,
   type AdminUserReadPort,
   type AdminUserRecord,
+  type CustomFieldFilters,
+  type CustomFieldListFilterField,
+  type CustomFieldListFilterPort,
+  type CustomFieldValuePort,
   type OrganizationDetailsPort,
   type ProjectDetail,
   type ProjectListQuery,
@@ -43,9 +47,10 @@ import {
  * `PROJECT_ACCESS_READERS`.
  *
  * The description's reference tokens are resolved for the reader
- * (`reference-service.ts`, User Story 7). Not yet resolved: Custom Field
- * values through `custom_fields` (the stored values are answered as they are,
- * User Story 9).
+ * (`reference-service.ts`, User Story 7). Custom Field values are answered as
+ * `custom_fields` projects them — a value whose definition is gone is not
+ * shown — and the list filters on them through `custom_fields`' list-filter
+ * port, whose condition only narrows the visible set (User Story 9).
  */
 
 export const PROJECTS_ALERTS_TIME_ZONE_SETTING = 'projects.alerts_time_zone';
@@ -137,6 +142,10 @@ export interface ProjectReadServiceDeps {
   settings: SettingsReadPort;
   /** What the description's tokens name, for the reader (User Story 7). */
   references: Pick<ProjectReferenceService, 'resolve'>;
+  /** `custom_fields`' value service — lazy, resolved per call (User Story 9). */
+  customFields: Pick<CustomFieldValuePort, 'project'>;
+  /** `custom_fields`' list-filter port — lazy, resolved per call (User Story 9). */
+  customFieldListFilter: CustomFieldListFilterPort;
 }
 
 interface CurrentStageRow {
@@ -271,6 +280,14 @@ export class ProjectReadService {
       where.push(`(p."title" ilike ? or p."number" ilike ?)`);
       params.push(like, like);
     }
+    // An id sub-select over `projects`, intersected with the visible set above:
+    // it narrows, never widens. A field the list does not offer throws, and the
+    // route answers 400 naming it.
+    const custom = await this.#customFieldCondition(query.customFieldFilters);
+    if (custom) {
+      where.push(`p."id" in (${custom.sql})`);
+      params.push(...custom.params);
+    }
 
     const em = this.deps.emFactory();
     const filtered = where.length > 0 ? `where ${where.join(' and ')}` : '';
@@ -320,6 +337,16 @@ export class ProjectReadService {
       nextCursor: hasMore ? encodeCursor(sort, items[items.length - 1]!) : null,
       total: Number(counted[0]?.n ?? 0),
     };
+  }
+
+  /** `GET /projects/custom-field-filters` — the Project custom fields the list offers as filters. */
+  async customFieldFilterFields(): Promise<CustomFieldListFilterField[]> {
+    return this.deps.customFieldListFilter.listFilterable('project');
+  }
+
+  async #customFieldCondition(filters: CustomFieldFilters | undefined) {
+    if (filters === undefined || Object.keys(filters).length === 0) return null;
+    return this.deps.customFieldListFilter.condition('project', filters);
   }
 
   /** `GET /projects/:id` — 404 `PROJECT_NOT_FOUND` for out of reach, invisible and missing alike. */
@@ -514,6 +541,7 @@ export class ProjectReadService {
       unread,
       permissions,
       references,
+      customFieldValues,
     ] = await Promise.all([
         this.#summaries([row]),
         this.#stages(row.id),
@@ -556,6 +584,7 @@ export class ProjectReadService {
         this.#unreadMessages(row.id, reader),
         this.deps.access.callerPermissions(),
         this.deps.references.resolve(row.description),
+        this.deps.customFields.project('project', row.custom_field_values ?? {}),
       ]);
 
     const personIds = [...new Set([...memberRows.map((m) => m.admin_user_id), ...viewerRows.map((v) => v.admin_user_id)])];
@@ -612,7 +641,7 @@ export class ProjectReadService {
       })),
       linkCount: Number(linkRows[0]?.n ?? 0),
       unreadMessageCount: unread,
-      customFieldValues: (row.custom_field_values ?? {}) as ProjectDetail['customFieldValues'],
+      customFieldValues: customFieldValues as ProjectDetail['customFieldValues'],
       version: row.version,
       permissions,
     };

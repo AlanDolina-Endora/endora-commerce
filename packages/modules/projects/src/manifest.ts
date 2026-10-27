@@ -106,6 +106,11 @@ export const manifest = defineModuleManifest({
   // alert's e-mail goes out through, and `emailDefaultsPort`, the registry this
   // module pushes that e-mail's default subject and body into. It cannot be
   // switched off.
+  //
+  // User Story 9: `custom_fields` owns `customFieldValueService`, which
+  // validates a Project's custom-field values and projects them for reading,
+  // and `customFieldListFilterPort`, through which the list filters on them.
+  // It cannot be switched off.
   dependencies: [
     '_i18n',
     'admin_roles',
@@ -114,6 +119,7 @@ export const manifest = defineModuleManifest({
     'audit_logs',
     'auth',
     'catalog',
+    'custom_fields',
     'orders',
     'organizations',
     'settings',

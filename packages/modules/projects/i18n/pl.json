@@ -488,6 +488,7 @@
   "auditLog.projects.project.member_set": "Zmieniono członków",
   "auditLog.projects.project.viewers_set": "Zmieniono wskazane osoby",
   "auditLog.projects.project.visibility_set": "Zmieniono, kto go widzi",
+  "auditLog.projects.project.custom_fields_update": "Zmieniono pola niestandardowe",
   "auditLog.projects.project.stage_create": "Dodano etap",
   "auditLog.projects.project.stage_update": "Zmieniono etap",
   "auditLog.projects.project.stage_delete": "Usunięto etap",

@@ -1,12 +1,15 @@
 import type { FastifyInstance } from 'fastify';
 import {
   CreateProjectBodySchema,
+  ERROR_CODES,
+  isCustomFieldFilterUnavailableFailure,
   ProjectDictionaryListQuerySchema,
   ProjectListQuerySchema,
   SetProjectMembersBodySchema,
   SetProjectOrganizationsBodySchema,
   UpdateProjectBodySchema,
 } from '@endora-commerce/contracts';
+import { HttpError } from '@endora-commerce/platform/http';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import type { ProjectReadService } from '../services/project-read-service.js';
 import type { ProjectService } from '../services/project-service.js';
@@ -29,8 +32,23 @@ export async function registerProjectRoutes(app: FastifyInstance, deps: ProjectR
   const { requireAdmin, projectReadService: read, projectService: projects } = deps;
 
   app.get('/api/v1/admin/projects', { preHandler: requireAdmin('projects:read') }, async (request) =>
-    read.list(ProjectListQuerySchema.parse(request.query ?? {})),
+    read.list(ProjectListQuerySchema.parse(request.query ?? {})).catch((error: unknown) => {
+      // A custom field the list does not offer is the caller's mistake: 400,
+      // naming it (User Story 9). Everything else is rethrown untouched.
+      if (isCustomFieldFilterUnavailableFailure(error)) {
+        throw new HttpError(400, ERROR_CODES.CUSTOM_FIELD_FILTER_UNAVAILABLE, error.message, {
+          key: error.keys[0] ?? '',
+          keys: [...error.keys],
+        });
+      }
+      throw error;
+    }),
   );
+
+  // The custom fields the list offers as filters (User Story 9; `specs/157-custom-fields-list-filters/`).
+  app.get('/api/v1/admin/projects/custom-field-filters', { preHandler: requireAdmin('projects:read') }, async () => ({
+    data: await read.customFieldFilterFields(),
+  }));
 
   app.get('/api/v1/admin/projects/roles', { preHandler: requireAdmin('projects:read') }, async (request) => {
     const query = ProjectDictionaryListQuerySchema.parse(request.query ?? {});

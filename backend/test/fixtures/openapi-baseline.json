@@ -5355,6 +5355,15 @@
         }
       }
     },
+    "/api/v1/admin/projects/custom-field-filters": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/projects/lookups/admin-users": {
       "get": {
         "responses": {

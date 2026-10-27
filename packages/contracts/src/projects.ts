@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { calendarDateSchema } from './common.js';
 import { dataEnvelope } from './envelopes.js';
-import { customFieldValuesSchema } from './custom-fields.js';
+import { customFieldFiltersQueryParamSchema, customFieldValuesSchema } from './custom-fields.js';
 import { twoDecimalAmountString } from './money-input.js';
 import { RecordReferenceSchema } from './record-references.js';
 import { TaskSummarySchema } from './tasks.js';
@@ -223,6 +223,12 @@ export const ProjectListQuerySchema = z.object({
   stageName: z.string().trim().min(1).max(PROJECT_STAGE_NAME_MAX).optional(),
   /** Number or title. */
   q: z.string().trim().max(200).optional(),
+  /**
+   * Custom fields marked as list filters (User Story 9), as JSON — the shape
+   * the Orders, Quote Requests and Opportunities lists take. A field the list
+   * does not offer answers 400 `CUSTOM_FIELD_FILTER_UNAVAILABLE` naming it.
+   */
+  customFieldFilters: customFieldFiltersQueryParamSchema,
   sort: z.enum(['createdAt', 'value', 'deadline']).optional(),
   order: z.enum(['asc', 'desc']).optional(),
   cursor: z.string().optional(),

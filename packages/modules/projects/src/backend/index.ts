@@ -10,6 +10,8 @@ import type {
   AssetsLibraryPort,
   AuditReferenceRegistryPort,
   CatalogProductReadPort,
+  CustomFieldListFilterPort,
+  CustomFieldValuePort,
   EmailDefaultsRegistryPort,
   OpportunityReadPort,
   OrderListPort,
@@ -212,6 +214,8 @@ export function registerModule(ctx: ModuleContext): void {
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
             settings: lazyPort<SettingsReadPort>(ctx, 'settingsReadPort'),
             references: projectsReferenceService,
+            customFields: lazyPort<CustomFieldValuePort>(ctx, 'customFieldValueService'),
+            customFieldListFilter: lazyPort<CustomFieldListFilterPort>(ctx, 'customFieldListFilterPort'),
           }),
       )
       .singleton(),
@@ -295,6 +299,7 @@ export function registerModule(ctx: ModuleContext): void {
             stageTasks: projectsStageTaskService,
             references: projectsReferenceService,
             mentions: projectsMentionService,
+            customFields: lazyPort<CustomFieldValuePort>(ctx, 'customFieldValueService'),
           }),
       )
       .singleton(),

@@ -5,6 +5,7 @@ import {
   PROJECTS_EVENTS,
   type AdminUserReadPort,
   type CreateProjectBody,
+  type CustomFieldValuePort,
   type OrganizationDetailsPort,
   type ProjectCreatedEvent,
   type ProjectDetail,
@@ -27,8 +28,10 @@ import { ProjectStageEntry } from '../entities/project-stage-entry.entity.js';
 import { ProjectStageMove } from '../entities/project-stage-move.entity.js';
 import { ProjectStageTask } from '../entities/project-stage-task.entity.js';
 import { ProjectViewer } from '../entities/project-viewer.entity.js';
+import { isDeepStrictEqual } from 'node:util';
 import { newlyMentioned, type ProjectMentionService, type SavedProjectMentions } from './mention-service.js';
 import type { ProjectAccess } from './project-access.js';
+import { mergeProjectCustomFields } from './project-custom-fields.js';
 import { tellAfterCommit } from './project-notifier.js';
 import { nextProjectNumber } from './project-number.js';
 import type { ProjectReadService } from './project-read-service.js';
@@ -64,8 +67,15 @@ import { templateNotFound, type TemplateGraph, type TemplateService } from './te
  * `PROJECT_ORGANIZATION_IN_USE`, User Story 6): the link keeps its record's
  * Organization, under a foreign key into the Project's Organizations.
  *
- * What this file does not do yet: Custom Field values (User Story 9) — refused
- * with 422 rather than silently dropped.
+ * **Custom Field values** (User Story 9, research R-18) are validated and
+ * merged by `custom_fields` before the Command — a create by hand is always
+ * held to the definitions, so a required field is asked for even when none is
+ * sent — and written inside it: by the create Command, and on an edit by a
+ * Command of their own, `projects.project.custom_fields_update`, so the trail
+ * names a change of the fields apart from an edit of the text. The edit's bag
+ * is merged against the Project as `loadVisible` read it; the Command holds
+ * the Project to the version that read carried, and every write of the bag
+ * bumps it, so a bag merged against stale values is never written.
  */
 
 export interface ProjectServiceDeps {
@@ -86,14 +96,12 @@ export interface ProjectServiceDeps {
   references: Pick<ProjectReferenceService, 'rowsFor'>;
   /** Telling the people a description newly mentions, after the commit (FR-026). */
   mentions: Pick<ProjectMentionService, 'tell'>;
+  /** `custom_fields`' value service — lazy, resolved per call (User Story 9). */
+  customFields: CustomFieldValuePort;
 }
 
 export function projectChanged(): HttpError {
   return new HttpError(409, ERROR_CODES.PROJECT_CHANGED, 'The project changed since it was read. Reload it and try again.');
-}
-
-function notYet(what: string, story: string): HttpError {
-  return new HttpError(422, ERROR_CODES.VALIDATION_FAILED, `${what} is not available yet (${story}).`);
 }
 
 function memberInvalid(message: string): HttpError {
@@ -123,14 +131,16 @@ function snapshot(project: Project): Record<string, unknown> {
   };
 }
 
+/** The values of a Project's custom fields as the audit trail carries them — only once there are any. */
+function customFieldsSnapshot(values: Record<string, unknown>): { customFieldValues?: Record<string, unknown> } {
+  return Object.keys(values).length > 0 ? { customFieldValues: { ...values } } : {};
+}
+
 export class ProjectService {
   constructor(private readonly deps: ProjectServiceDeps) {}
 
   /** `POST /projects` — the Project in its first Stage, with Organizations, Members and workflow. */
   async create(body: CreateProjectBody, language: string): Promise<ProjectDetail> {
-    if (body.customFieldValues && Object.keys(body.customFieldValues).length > 0) {
-      throw notYet('Custom field values on a project', 'User Story 9');
-    }
     let template: TemplateGraph | null = null;
     if (body.templateId) {
       if (body.stages) {
@@ -155,6 +165,7 @@ export class ProjectService {
     const viewerIds = body.viewerIds ?? [];
     await this.#assertAdmins(viewerIds, 'A listed person must be an active administrator.');
     await this.#assertRolesExist(stages.flatMap((stage) => stage.responsibleRoleIds ?? []));
+    const customFieldValues = await mergeProjectCustomFields(this.deps.customFields, {}, body.customFieldValues ?? {});
     const today = todayIn(await this.deps.read.timeZone());
     const tasksPresent = this.deps.tasks.present();
     let plan: StageEntryPlan = { materialize: false, notes: [] };
@@ -182,6 +193,7 @@ export class ProjectService {
           ...(body.startOn ? { startOn: body.startOn } : { startOn: today }),
           visibility: body.visibility ?? 'inherit',
           templateId: template?.id ?? null,
+          customFieldValues,
           createdByAdminUserId: actor.actorAdminUserId,
         });
         // Flushed in the order of the foreign keys: these entities hold each
@@ -261,6 +273,7 @@ export class ProjectService {
             viewerIds,
             stages: rows.map((stage) => stage.name),
             templateId: template?.id ?? null,
+            ...customFieldsSnapshot(customFieldValues),
           },
         };
       },
@@ -283,19 +296,19 @@ export class ProjectService {
    * `PATCH /projects/:id` — title, description, value and start date, and who
    * sees the Project (User Story 5), against `version`.
    *
-   * Up to three Commands, each only when it changes something, in this order:
-   * `projects.project.update` (the fields), `.visibility_set` and
-   * `.viewers_set` — so the trail names a change of who sees a Project apart
-   * from an edit of its text. Every refusal is checked before the first; each
+   * Up to four Commands, each only when it changes something, in this order:
+   * `projects.project.update` (the fields), `.custom_fields_update`,
+   * `.visibility_set` and `.viewers_set` — so the trail names a change of who
+   * sees a Project, and of its custom fields, apart from an edit of its text. Every refusal is checked before the first; each
    * Command locks the Project and checks the version the one before left, and
    * bumps it.
    */
   async update(id: string, body: UpdateProjectBody, language: string): Promise<ProjectDetail> {
-    if (body.customFieldValues && Object.keys(body.customFieldValues).length > 0) {
-      throw notYet('Custom field values on a project', 'User Story 9');
-    }
     const visible = await this.deps.access.loadVisible(id);
     if (visible.version !== body.version) throw projectChanged();
+    const storedValues = visible.custom_field_values ?? {};
+    const customFieldValues = await mergeProjectCustomFields(this.deps.customFields, storedValues, body.customFieldValues);
+    const customFieldsChange = !isDeepStrictEqual(customFieldValues, storedValues);
     const currentViewers = (
       (await this.deps.emFactory().execute(
         `select v."admin_user_id" from "project_viewers" v where v."project_id" = ?`,
@@ -358,6 +371,22 @@ export class ProjectService {
           if (body.startOn !== undefined) project.startOn = body.startOn;
           bumped(project);
           return { result: null, before, after: snapshot(project) };
+        },
+      });
+    }
+    if (customFieldsChange) {
+      await this.deps.commandBus.run({
+        action: 'projects.project.custom_fields_update',
+        objectType: 'project',
+        objectId: visible.id,
+        run: async ({ em }) => {
+          // The version is what holds the bag to the one merged above: every
+          // write of the bag bumps it.
+          const project = await claim(em as EntityManager);
+          const before = { customFieldValues: { ...(project.customFieldValues ?? {}) } };
+          project.customFieldValues = customFieldValues;
+          bumped(project);
+          return { result: null, before, after: { customFieldValues: { ...customFieldValues } } };
         },
       });
     }

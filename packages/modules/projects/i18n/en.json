@@ -488,6 +488,7 @@
   "auditLog.projects.project.member_set": "Members changed",
   "auditLog.projects.project.viewers_set": "Listed people changed",
   "auditLog.projects.project.visibility_set": "Who sees it changed",
+  "auditLog.projects.project.custom_fields_update": "Custom fields changed",
   "auditLog.projects.project.stage_create": "Stage added",
   "auditLog.projects.project.stage_update": "Stage changed",
   "auditLog.projects.project.stage_delete": "Stage deleted",
