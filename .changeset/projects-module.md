@@ -40,7 +40,9 @@ Members holding Project Roles, opened, completed, lost and reopened.
   `projects_stage_deadline_alert` (defaults in English and Polish, editable) to every Member who
   may see the Project, from a BullMQ job scheduler every fifteen minutes.
 - **Custom fields.** *Project* is a record type on `/custom-fields`; values are validated on save,
-  shown on the Project, audited, and offered as list filters.
+  shown on the Project, and offered as list filters; the audit trail names the fields a write
+  changed — and that the value changed — never their values, because the platform audit log is
+  not kept per Organization.
 - **For other modules.** `projectReadPort` (`findById`, `findByRecord`), gated;
   `projectStageGuardRegistry`, through which a guard refuses a move, close or reopen; the `project`
   Task context in Tasks' registry; the events `projects.project.created.v1`,
