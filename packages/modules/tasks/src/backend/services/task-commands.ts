@@ -169,9 +169,15 @@ export function createTaskCommand(context: TaskContext | null, input: NewTaskFie
         // The child rows name the Task by value (no ORM relation), so the unit
         // of work cannot order them after it: the Task is written first.
         await scoped.flush();
-        for (const adminUserId of input.assigneeIds) {
-          scoped.create(TaskAssignee, { taskId: id, adminUserId, assignedAt: now, assignedByAdminUserId: actor.actorAdminUserId });
-        }
+        // One millisecond apart, so the order they were given in is the order they are read in.
+        input.assigneeIds.forEach((adminUserId, index) => {
+          scoped.create(TaskAssignee, {
+            taskId: id,
+            adminUserId,
+            assignedAt: new Date(now.getTime() + index),
+            assignedByAdminUserId: actor.actorAdminUserId,
+          });
+        });
         for (const tagId of tagIds) scoped.create(TaskTagAssignment, { taskId: id, tagId });
         for (const row of references) scoped.create(TaskReference, row);
       }
@@ -331,14 +337,15 @@ export function changeTaskAssigneesCommand(
       if (next.length > TASK_ASSIGNEES_MAX) throw taskAssigneeInvalid();
       if (removed.length > 0) await scoped.nativeDelete(TaskAssignee, { taskId: id, adminUserId: { $in: removed } });
       const now = new Date();
-      for (const adminUserId of added) {
+      // One millisecond apart, so the order they were given in is the order they are read in.
+      added.forEach((adminUserId, index) => {
         scoped.create(TaskAssignee, {
           taskId: id,
           adminUserId,
-          assignedAt: now,
+          assignedAt: new Date(now.getTime() + index),
           assignedByAdminUserId: actor.actorAdminUserId ?? null,
         });
-      }
+      });
       return {
         result: { added, removed },
         before: { assigneeIds: current },
