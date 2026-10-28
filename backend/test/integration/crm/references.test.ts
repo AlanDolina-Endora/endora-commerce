@@ -12,7 +12,7 @@ import {
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
-import { TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
+import { TEST_ADMIN_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import { CrmOpportunityReference } from '../../helpers/package-entities.js';
 import {
   CRM_ADMIN,
@@ -22,6 +22,7 @@ import {
   seedCrmOrder,
   seedCrmOrganization,
   seedCrmSalesRep,
+  submitCrmQuoteRequest,
 } from '../../helpers/seed-crm.js';
 
 /**
@@ -114,6 +115,45 @@ describe('crm references to Products and Orders (US12)', () => {
       expect(await storedReferences(opportunity.id)).toEqual(
         [`description:-:order:${order.id}`, `description:-:product:${SEED_PRODUCT_101_ID}`].sort(),
       );
+    });
+
+    // `specs/163-projects-and-tasks/` FR-044, research R-14: the shared
+    // grammar's Quote Request and Task tokens are stored and resolved as the
+    // other three are — `references-documents.test.ts` holds the rest. The
+    // Opportunity is removed at the end, so no row of the two types outlives
+    // this case in the worker's database.
+    it('resolves a Quote Request and a Task token and stores a row for each', async () => {
+      const quote = await submitCrmQuoteRequest(h);
+      const taskId = randomUUID();
+      const taskNumber = `TSK-I${taskId.slice(0, 8)}`.toUpperCase();
+      await h.orm.em.getConnection().execute(
+        `insert into "tasks" ("id", "number", "title", "created_by_admin_user_id", "created_at", "updated_at")
+         values (?, ?, 'Interim', ?, now(), now())`,
+        [taskId, taskNumber, TEST_ADMIN_ID],
+      );
+      const description =
+        `See ${formatOpportunityReferenceToken('quote_request', quote.id)} ` +
+        `and ${formatOpportunityReferenceToken('task', taskId)}, with ${product}.`;
+      const opportunity = await createCrmOpportunity(h, { description });
+      try {
+        const read = await detail(opportunity.id);
+        expect(read.description).toBe(description);
+        expect(read.references).toEqual([
+          { type: 'quote_request', id: quote.id, available: true, label: quote.businessId, url: `/quote-requests/${quote.id}` },
+          { type: 'task', id: taskId, available: true, label: taskNumber, url: `/tasks/${taskId}` },
+          expect.objectContaining({ type: 'product', id: SEED_PRODUCT_101_ID, available: true }),
+        ]);
+        expect(await storedReferences(opportunity.id)).toEqual(
+          [
+            `description:-:product:${SEED_PRODUCT_101_ID}`,
+            `description:-:quote_request:${quote.id}`,
+            `description:-:task:${taskId}`,
+          ].sort(),
+        );
+      } finally {
+        await call('DELETE', `/opportunities/${opportunity.id}`);
+        await h.orm.em.getConnection().execute(`delete from "tasks" where "id" = ?`, [taskId]);
+      }
     });
 
     it('replaces the stored references of the description when it is saved again', async () => {

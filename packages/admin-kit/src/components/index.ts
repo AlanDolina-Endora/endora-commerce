@@ -156,3 +156,32 @@ export type { ScopeNoticeProps } from './scope-notice/ScopeNotice.js';
 export { SavedViewsControl } from './saved-views/SavedViewsControl.js';
 export type { SavedViewState, SavedViewsControlProps } from './saved-views/SavedViewsControl.js';
 export type { RuleAttributeField, RuleBuilderBuiltinField, RuleBuilderLabels, RuleBuilderProps, RuleFieldOptions, StructuralRule, StructuralRuleCondition, StructuralRuleField, StructuralRuleValue } from './rule-builder/RuleBuilder.js';
+// Feature 163 — the collaboration components promoted from CRM (`specs/163-projects-and-tasks/research.md` R-17).
+export { ReferenceField } from './references/ReferenceField.js';
+export type { ReferenceFieldProps } from './references/ReferenceField.js';
+export { ReferenceText } from './references/ReferenceText.js';
+export type { ReferenceTextProps } from './references/ReferenceText.js';
+export { REFERENCE_TRIGGER_KINDS } from './references/reference-kinds.js';
+export type { ReferenceLookups, ReferenceSuggestion, ReferenceTriggerKind } from './references/reference-kinds.js';
+export { clipReferenceText, findMentionTrigger, MENTION_QUERY_LIMIT } from './references/mention-trigger.js';
+export type { MentionTrigger } from './references/mention-trigger.js';
+export { editorDocOf, REFERENCE_NODE, textOfEditorDoc } from './references/rich-text-doc.js';
+export type { EditorDoc } from './references/rich-text-doc.js';
+export { COMMENT_MAX_LENGTH, CommentComposer } from './comments/CommentComposer.js';
+export type { CommentComposerProps } from './comments/CommentComposer.js';
+export { CommentThread } from './comments/CommentThread.js';
+export type { CommentThreadApi, CommentThreadCopy, CommentThreadProps, RecordComment } from './comments/CommentThread.js';
+export { AttachmentUploader } from './attachments/AttachmentUploader.js';
+export type { AttachmentUploaderProps } from './attachments/AttachmentUploader.js';
+export { uploadAttachment } from './attachments/upload-attachment.js';
+export { RecordHistory, recordHistoryChanges, useRecordHistory } from './record-history/RecordHistory.js';
+export type {
+  RecordHistoryChange,
+  RecordHistoryCopy,
+  RecordHistoryEntryShape,
+  RecordHistoryPageShape,
+  RecordHistoryProps,
+  RecordHistoryState,
+} from './record-history/RecordHistory.js';
+export { CursorPagination } from './record-history/CursorPagination.js';
+export type { CursorPaginationProps } from './record-history/CursorPagination.js';

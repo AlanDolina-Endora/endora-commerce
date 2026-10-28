@@ -88,6 +88,7 @@ import { SalesChannel, hashPassword } from '@endora-commerce/platform/kernel';
 import { entityNamed } from '@endora-commerce/platform/packages';
 import { createAttributeFixture, findAttributeDefinitionByKey } from './attribute-fixtures.js';
 import { DEMO_USAGE_WITHDRAWAL_NAME, withdrawDemoUsage } from './demo-usage.js';
+import { demoProjectsStep, demoProjectTasksStep } from './projects.js';
 import { demoSalesPipelineStep } from './sales-pipeline.js';
 
 /** A sign-in detail the runner prints — the platform's own shape. */
@@ -1504,6 +1505,12 @@ const STEPS: readonly CompositionStep[] = [
   // before `organizations`' own `reset`, the order the foreign key on
   // `crm_opportunities.organization_id` (`on delete restrict`) needs.
   demoSalesPipelineStep,
+  // The demo Projects and their Template (`projects.ts`): after the pipeline,
+  // and their Tasks after them. On the way out the Tasks go first, then the
+  // Projects — before `organizations`' own reset, which the foreign key on
+  // `project_organizations.organization_id` (`on delete restrict`) needs.
+  demoProjectsStep,
+  demoProjectTasksStep,
 ];
 
 /**

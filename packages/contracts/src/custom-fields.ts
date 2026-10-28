@@ -25,6 +25,9 @@ export const supportedEntityTypeSchema = z.enum([
   // names that module as the type's owner, and the type is offered only while
   // the owner is present.
   'opportunity',
+  // Feature 163 — a Project of the `projects` module; offered only while that
+  // module is present, as an Opportunity's type follows `crm`.
+  'project',
 ]);
 export type SupportedEntityType = z.infer<typeof supportedEntityTypeSchema>;
 

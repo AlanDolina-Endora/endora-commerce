@@ -419,6 +419,45 @@ export const HomepageConfigResponseSchema = z.object({ data: HomepageConfigSchem
 export type HomepageConfigResponse = z.infer<typeof HomepageConfigResponseSchema>;
 
 // ---------------------------------------------------------------------------
+// Time-zone names, and the reporting time zone (owner decisions 2026-10-27, #465)
+// ---------------------------------------------------------------------------
+
+/**
+ * The reporting time zone: the calendar in which a report counts a day, a
+ * month or any other range of days. A setting of the `analytics` module, so
+ * that no single reporting module owns it — Projects analytics reads it, CRM
+ * may follow (#474). An IANA name; default `UTC`. Read it through
+ * {@link ReportingTimeZonePort}, never by code: `analytics` can be switched
+ * off, and a reader then counts in `UTC`.
+ */
+export const ANALYTICS_REPORTING_TIME_ZONE_SETTING = 'analytics.reporting_time_zone';
+
+/**
+ * Container name: `reportingTimeZonePort`. Owner: `analytics`. Gated — a
+ * reader decides `analytics`' presence first and counts in `UTC` without it
+ * (a `degrades-without` edge).
+ */
+export interface ReportingTimeZonePort {
+  /** `analytics.reporting_time_zone`, platform-wide. */
+  timeZone(): Promise<string>;
+}
+
+let knownTimeZones: Set<string> | null = null;
+
+/**
+ * Whether `value` is a time zone the runtime knows — an IANA name from
+ * `Intl.supportedValuesOf('timeZone')`, or `UTC`. A time-zone setting is held
+ * to this on write, because a zone the runtime does not know makes every
+ * calendar computation in it throw.
+ */
+export function isIanaTimeZone(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length === 0) return false;
+  if (value === 'UTC') return true;
+  knownTimeZones ??= new Set(Intl.supportedValuesOf('timeZone'));
+  return knownTimeZones.has(value);
+}
+
+// ---------------------------------------------------------------------------
 // --- ports -----------------------------------------------------------------
 //
 // The in-process **write** surface `settings` publishes (feature 075, Phase P).

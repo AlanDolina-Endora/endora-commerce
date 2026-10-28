@@ -28,6 +28,7 @@ import {
   Select,
 } from '@endora-commerce/admin-kit/ui';
 import {
+  CursorPagination,
   CustomFieldListFilters,
   ResponsiveTable,
   customFieldDisplayName,
@@ -42,10 +43,9 @@ import {
   type ResponsiveColumn,
 } from '@endora-commerce/admin-kit/components';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
-import { crmApi, type OpportunityListParams, type OpportunitySort } from '../api.js';
+import { crmApi, MAX_PAGE_LIMIT, type OpportunityListParams, type OpportunitySort } from '../api.js';
 import { AssigneeName } from '../components/AssigneeName.js';
 import { TagChips } from '../components/TagPicker.js';
-import { CursorPagination, MAX_PAGE_LIMIT } from '../components/CursorPagination.js';
 import {
   NO_SHARED_FILTERS,
   OpportunityFilterFields,
@@ -602,6 +602,7 @@ export function OpportunitiesList(): ReactNode {
                 <CursorPagination
                   page={trail.length + 1}
                   pageSize={pageSize}
+                  maxPageSize={MAX_PAGE_LIMIT}
                   hasPrevious={trail.length > 0}
                   hasNext={nextCursor !== null}
                   busy={loading}

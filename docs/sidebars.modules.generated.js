@@ -404,6 +404,14 @@ const modules = [
   },
   {
     type: 'category',
+    label: 'projects', key: 'projects',
+    link: { type: 'doc', id: 'modules/projects' },
+    items: [
+      'module-reference/projects',
+    ],
+  },
+  {
+    type: 'category',
     label: 'promotions', key: 'promotions',
     link: { type: 'doc', id: 'modules/promotions' },
     items: [
@@ -498,6 +506,14 @@ const modules = [
     link: { type: 'doc', id: 'modules/shopping_lists' },
     items: [
       'module-reference/shopping-lists',
+    ],
+  },
+  {
+    type: 'category',
+    label: 'tasks', key: 'tasks',
+    link: { type: 'doc', id: 'modules/tasks' },
+    items: [
+      'module-reference/tasks',
     ],
   },
   {

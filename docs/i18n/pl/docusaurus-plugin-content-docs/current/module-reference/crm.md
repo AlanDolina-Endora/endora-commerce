@@ -45,6 +45,7 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | `admin_search` | nie | contributes-to `adminSearchProviderRegistry` |
 | `quote_requests` | nie | degrades-without `quoteRequestCustomFieldCarryPort` — wartości szans sprzedażowych nie są przenoszone do zapytań ofertowych utworzonych z tych szans |
 | `quote_requests` | nie | degrades-without `quoteRequestReadPort` — zapytania ofertowe powiązane z szansami sprzedażowymi są pokazywane jako niedostępne, przestają liczyć się do wartości wyliczanych i nie można ich już wiązać ani tworzyć z szansy. Szanse i ich zamówienia działają dalej |
+| `tasks` | nie | degrades-without `taskReadPort` — odwołania do zadań są pokazywane jako niedostępne, a po @@ nie są proponowane zadania. |
 | `webhooks` | nie | contributes-to `webhookEventRegistry` |
 
 ## Uprawnienia

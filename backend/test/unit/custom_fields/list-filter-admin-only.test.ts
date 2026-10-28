@@ -33,6 +33,8 @@ const ALLOWED: Record<string, readonly string[]> = {
     'src/backend/services/rfq-admin-service.ts',
   ],
   crm: ['src/backend/index.ts', 'src/backend/services/opportunity-service.ts'],
+  // `specs/163-projects-and-tasks/` User Story 9 — the admin Projects list.
+  projects: ['src/backend/index.ts'],
 };
 
 /** A file serving a buyer or an integration, by its path. */

@@ -393,6 +393,183 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'did not exist when the prefix chain was deleted: the refusal to edit or delete an ' +
       'internal message on an Opportunity, which is immutable once sent, whoever asks.',
   },
+  TASK_NOT_FOUND: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module (`specs/163-projects-and-tasks/`, Phase 2A), which did not ' +
+      'exist when the prefix chain was deleted: a Task that does not exist, or one whose context ' +
+      'the caller may not see — the two answer identically (FR-031).',
+  },
+  TASK_CONTEXT_INVALID: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module (`specs/163-projects-and-tasks/`, Phase 2A): a Task created ' +
+      'into a context whose type no present module has registered, or whose id the caller may ' +
+      'not see.',
+  },
+  TASK_ASSIGNEE_INVALID: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module (`specs/163-projects-and-tasks/`, Phase 2A): a Task assigned ' +
+      'to somebody who is not an active administrator.',
+  },
+  PROJECT_NOT_FOUND: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, Phase 2B), which did not ' +
+      'exist when the prefix chain was deleted: a Project that does not exist, or one out of the ' +
+      'caller’s Organization reach or visibility — the three answer identically (FR-004, FR-020).',
+  },
+  PROJECT_HAS_LINKS: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'a Project deleted while records are linked to it (FR-021).',
+  },
+  PROJECT_ORGANIZATION_OUT_OF_SCOPE: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'an Organization named on a Project that is outside the caller’s reach or does not exist — the two answer alike (FR-004).',
+  },
+  PROJECT_STAGE_CURRENT: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'the deletion of the Stage a Project is in (spec edge case).',
+  },
+  PROJECT_STAGE_LAST: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'the deletion of a Project’s only Stage — an open Project is always in one (spec edge case).',
+  },
+  PROJECT_MOVE_NOT_PERMITTED: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'a Stage move the Project’s workflow does not permit, or a move, close or reopen its state does not allow (FR-011, FR-012).',
+  },
+  PROJECT_CHANGED: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'a write naming a stale version of a Project — somebody changed it first (spec edge case "two users move at once").',
+  },
+  PROJECT_GUARD_REFUSED: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'a Stage move, close or reopen refused by a guard another module or a deployment registered (FR-014).',
+  },
+  PROJECT_COMPLETION_NOT_PERMITTED: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'a Project closed as completed from a Stage that does not permit completion (FR-010).',
+  },
+  PROJECT_LOSS_REASON_INVALID: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'a Project closed as lost with a loss reason that does not exist or is archived (FR-005).',
+  },
+  PROJECT_MEMBER_INVALID: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 1): ' +
+      'a Member or listed person who is not an active administrator, or a Project Role that does not exist or is archived (FR-008).',
+  },
+  PROJECT_STAGE_HAS_TASKS: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 2): ' +
+      'deleting a Stage that holds Tasks (`data-model.md` §2.2).',
+  },
+  PROJECT_STAGE_GATE_OPEN_TASKS: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 2): ' +
+      'leaving or completing from a Stage whose completion gate is closed by open Tasks (FR-012).',
+  },
+  PROJECT_STAGE_TASKS_NOT_RETRYABLE: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 2): ' +
+      'creating a Stage\'s Tasks again where its last entry did not fail to create them (research R-8).',
+  },
+  PROJECT_TEMPLATE_NOT_FOUND: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 3): ' +
+      'a Template that does not exist, or an archived one named to create a Project from (research R-7).',
+  },
+  PROJECT_DICTIONARY_ENTRY_NOT_FOUND: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 4): ' +
+      'a Project Role or loss reason id that names no row, on a rename, archive, restore or delete.',
+  },
+  PROJECT_DICTIONARY_ENTRY_SYSTEM: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 4): ' +
+      'the deletion of a seeded Project Role or loss reason, which are renamable and archivable only (FR-007, `data-model.md` §2.1).',
+  },
+  PROJECT_DICTIONARY_ENTRY_IN_USE: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 4): ' +
+      'the deletion of a Project Role or loss reason a Project or a Template uses — archiving is how it stops being offered (US4 scenario 2).',
+  },
+  PROJECT_DICTIONARY_NAME_TAKEN: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 4): ' +
+      'a Project Role or loss reason given the default name another row of the same dictionary has, whatever its case.',
+  },
+  PROJECT_ORGANIZATION_IN_USE: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 6): ' +
+      'an Organization removed from a Project while a record of it is linked there (spec edge case).',
+  },
+  PROJECT_RECORD_NOT_FOUND: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 6): ' +
+      'a record to link that does not exist or is out of the caller’s reach — the two answer alike (FR-021).',
+  },
+  PROJECT_RECORD_ALREADY_LINKED: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 6): ' +
+      'a record linked to a Project while it already belongs to one, naming that one only to a caller who may see it (FR-021, US6 scenario 2).',
+  },
+  PROJECT_LINK_ORGANIZATION_MISMATCH: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 6): ' +
+      'a record linked to a Project that does not have the record’s Organization (FR-021).',
+  },
+  PROJECT_NOTE_NOT_AUTHOR: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 7): ' +
+      'a note of a Project edited or deleted by somebody other than its author, whatever they hold (FR-025).',
+  },
+  PROJECT_MESSAGE_IMMUTABLE: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 7): ' +
+      'a message of a Project edited or deleted — the thread is append-only, whoever asks (FR-025).',
+  },
+  PROJECT_ATTACHMENT_TOO_LARGE: {
+    to: 'projects',
+    reason:
+      'Minted with the `projects` module (`specs/163-projects-and-tasks/`, User Story 7): ' +
+      'an upload larger than the bound the attachment route reads into memory (FR-027), CRM’s rule.',
+  },
   SEO_CRAWLER_TEXT_TOO_LARGE: {
     to: 'seo',
     reason:

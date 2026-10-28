@@ -153,6 +153,7 @@ import { Migration20261005T215329CrmOpportunityCustomFieldValues } from '@endora
 import { Migration20261007T180600CrmOpportunityReferenceAdminUser } from '@endora-commerce/mod-crm/migrations';
 import { Migration20261008T135701CrmOpportunityEvents } from '@endora-commerce/mod-crm/migrations';
 import { Migration20261009T163307CrmOpportunityMessageReads } from '@endora-commerce/mod-crm/migrations';
+import { Migration20261027T020030CrmOpportunityReferenceDocuments } from '@endora-commerce/mod-crm/migrations';
 
 // ── custom_fields ───────────────────────────────────────────────────────────
 import { Migration20260718T200338CustomFieldsInit } from '@endora-commerce/mod-custom-fields/migrations';
@@ -311,6 +312,11 @@ import { Migration20261023T195611ProductFeedsRunWithdrawalReason } from '@endora
 import { Migration20261023T234605ProductFeedsPriceListFkDropped } from '@endora-commerce/mod-product-feeds/migrations';
 import { Migration20261025T145041ProductFeedsGoogleTemplatePackFields } from '@endora-commerce/mod-product-feeds/migrations';
 
+// ── projects ────────────────────────────────────────────────────────────────
+import { Migration20261026T144350ProjectsInit } from '@endora-commerce/mod-projects/migrations';
+import { Migration20261026T231555ProjectsLinkOrganization } from '@endora-commerce/mod-projects/migrations';
+import { Migration20261027T172441ProjectsValueChanges } from '@endora-commerce/mod-projects/migrations';
+
 // ── promotions ──────────────────────────────────────────────────────────────
 import { Migration20260505T074605PromotionsCriteria } from '@endora-commerce/mod-promotions/migrations';
 import { Migration20260618T100727PromotionsEngine } from '@endora-commerce/mod-promotions/migrations';
@@ -365,6 +371,9 @@ import { Migration20260819T171006ShipmentsStatusPendingManual } from '@endora-co
 // ── shopping_lists ──────────────────────────────────────────────────────────
 import { Migration20260426T135443ShoppingListsInit } from '@endora-commerce/mod-shopping-lists/migrations';
 import { Migration20260611T140418ShoppingListsDefault } from '@endora-commerce/mod-shopping-lists/migrations';
+
+// ── tasks ───────────────────────────────────────────────────────────────────
+import { Migration20261026T133731TasksInit } from '@endora-commerce/mod-tasks/migrations';
 
 // ── taxes ───────────────────────────────────────────────────────────────────
 import { Migration20260426T081516TaxesPromotionsInit } from '@endora-commerce/mod-taxes/migrations';
@@ -508,6 +517,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('crm', Migration20261007T180600CrmOpportunityReferenceAdminUser),
   migration('crm', Migration20261008T135701CrmOpportunityEvents),
   migration('crm', Migration20261009T163307CrmOpportunityMessageReads),
+  migration('crm', Migration20261027T020030CrmOpportunityReferenceDocuments),
 
   // ── custom_fields ───────────────────────────────────────────────────────────
   migration('custom_fields', Migration20260718T200338CustomFieldsInit),
@@ -666,6 +676,11 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('product_feeds', Migration20261023T234605ProductFeedsPriceListFkDropped),
   migration('product_feeds', Migration20261025T145041ProductFeedsGoogleTemplatePackFields),
 
+  // ── projects ────────────────────────────────────────────────────────────────
+  migration('projects', Migration20261026T144350ProjectsInit),
+  migration('projects', Migration20261026T231555ProjectsLinkOrganization),
+  migration('projects', Migration20261027T172441ProjectsValueChanges),
+
   // ── promotions ──────────────────────────────────────────────────────────────
   migration('promotions', Migration20260505T074605PromotionsCriteria),
   migration('promotions', Migration20260618T100727PromotionsEngine),
@@ -720,6 +735,9 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   // ── shopping_lists ──────────────────────────────────────────────────────────
   migration('shopping_lists', Migration20260426T135443ShoppingListsInit),
   migration('shopping_lists', Migration20260611T140418ShoppingListsDefault),
+
+  // ── tasks ───────────────────────────────────────────────────────────────────
+  migration('tasks', Migration20261026T133731TasksInit),
 
   // ── taxes ───────────────────────────────────────────────────────────────────
   migration('taxes', Migration20260426T081516TaxesPromotionsInit),

@@ -1,10 +1,11 @@
 import { useId, type ReactNode } from 'react';
+import { ReferenceText } from '@endora-commerce/admin-kit/components';
 import { useAuth } from '@endora-commerce/admin-kit/lib';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { InlineEdit } from '../../../components/InlineEdit.js';
 import { OpportunityCustomFields } from '../../../components/OpportunityCustomFields.js';
 import { ReferenceField } from '../../../components/ReferenceField.js';
-import { ReferenceText } from '../../../components/ReferenceText.js';
+import { useOrderStatusLabel } from '../../../lib/references.js';
 import { useOpportunityUpdate } from '../../../lib/use-opportunity-update.js';
 import type { OpportunityTabProps } from '../tabs.js';
 
@@ -33,6 +34,7 @@ export function OverviewTab(props: OpportunityTabProps): ReactNode {
   const descriptionHeadingId = useId();
   const update = useOpportunityUpdate(opportunity, onChange);
   const stored = opportunity.description ?? '';
+  const orderStatusLabel = useOrderStatusLabel(props.orderStatuses);
 
   return (
     <div className="divide-y divide-border [&>*]:py-6 [&>*:first-child]:pt-0 [&>*:last-child]:pb-0">
@@ -50,7 +52,7 @@ export function OverviewTab(props: OpportunityTabProps): ReactNode {
                 <ReferenceText
                   text={stored}
                   references={opportunity.references}
-                  orderStatuses={props.orderStatuses}
+                  orderStatusLabel={orderStatusLabel}
                 />
               </div>
             ) : (
@@ -71,6 +73,7 @@ export function OverviewTab(props: OpportunityTabProps): ReactNode {
               value={draft}
               maxLength={DESCRIPTION_MAX_LENGTH}
               organizationId={opportunity.organization.id}
+              opportunityId={opportunity.id}
               references={opportunity.references}
               disabled={busy}
               {...(errorId ? { 'aria-invalid': true, 'aria-describedby': errorId } : {})}

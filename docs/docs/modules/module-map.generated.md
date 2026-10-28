@@ -68,6 +68,7 @@ of the platform, not of what happens to be written.
 | `pim_connector` | _no page yet_ | @endora-commerce/mod-pim-connector |
 | [Price books](./price_lists.md) | Price books — base prices per currency, catalogue, buyer and sale prices on sales channels, and the rules that decide what each buyer pays. | @endora-commerce/mod-price-lists |
 | [Product Feeds](./product_feeds.md) | Provider-shaped product feeds per sales channel — scheduled generation, tokenised pull URLs and SFTP/FTP/HTTP push | @endora-commerce/mod-product-feeds |
+| [projects](./projects.md) | Projects for zero or more Organizations, run through their own Stages by Members holding Project Roles | @endora-commerce/mod-projects |
 | [promotions](./promotions.md) | Cart-level percentage / amount / free-delivery discounts with eligibility filters | @endora-commerce/mod-promotions |
 | [Prompt Actions (AI assistant)](./prompt-actions.md) | Natural-language prompt mode for the admin command palette, with an explicit preview-and-confirm step before any change | @endora-commerce/mod-prompt-actions |
 | [PWA (Progressive Web App)](./pwa.md) | Progressive-Web-App capabilities for the storefront and admin — installability, opt-in asset caching, a controlled update path and opt-in push | @endora-commerce/mod-pwa |
@@ -80,6 +81,7 @@ of the platform, not of what happens to be written.
 | [Settings](./settings/index.md) | Manifest-driven, per-sales-channel platform configuration with cached read API | @endora-commerce/mod-settings |
 | [shipments](./shipments.md) | The retryable Shipment record and its lifecycle — the delivery-side twin of payments | @endora-commerce/mod-shipments |
 | [shopping_lists](./shopping_lists.md) | Per-customer named bundles convertible to Cart or RFQ | @endora-commerce/mod-shopping-lists |
+| [tasks](./tasks.md) | Tasks assigned to administrators, with a due date and a status, which other modules can own through a Task context | @endora-commerce/mod-tasks |
 | [taxes](./taxes.md) | Tax-rate resolver narrowed by country / product type / VAT status | @endora-commerce/mod-taxes |
 | [transactional_emails](./transactional-emails.md) | Admin-editable transactional emails — subject, content and look, globally and per sales channel | @endora-commerce/mod-transactional-emails |
 | [webhooks](./webhooks.md) | Outbound HMAC-signed event subscriptions | @endora-commerce/mod-webhooks |

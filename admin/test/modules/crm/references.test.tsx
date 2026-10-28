@@ -7,7 +7,7 @@ import {
   OPPORTUNITY_ID,
   ORDER_ID,
   ORDER_STATUS_GRAPH,
-  ORGANIZATION_ID,
+  core,
   crmLookupResponse,
   detail,
   en,
@@ -144,8 +144,8 @@ describe('a text with references, as it is read', () => {
       note(`See [[product:${GONE_PRODUCT_ID}]] and [[order:${HIDDEN_ORDER_ID}]].`, REFERENCES.slice(2)),
     ];
     const panel = await open(en('opportunity.tabs.notes'));
-    const entry = (await within(panel).findByText(en('references.unavailable.product'))).closest('li') as HTMLElement;
-    expect(within(entry).getByText(en('references.unavailable.order'))).toBeInTheDocument();
+    const entry = (await within(panel).findByText(core('references.unavailable.product'))).closest('li') as HTMLElement;
+    expect(within(entry).getByText(core('references.unavailable.order'))).toBeInTheDocument();
     expect(within(entry).queryByRole('link')).toBeNull();
     expect(entry).not.toHaveTextContent(HIDDEN_ORDER_ID);
     expect(entry).not.toHaveTextContent(GONE_PRODUCT_ID);
@@ -154,7 +154,7 @@ describe('a text with references, as it is read', () => {
   it('treats a token the server did not resolve as unavailable rather than guessing', async () => {
     notes = [note(`About [[product:${PRODUCT_ID}]].`, [])];
     const panel = await open(en('opportunity.tabs.notes'));
-    expect(await within(panel).findByText(en('references.unavailable.product'))).toBeInTheDocument();
+    expect(await within(panel).findByText(core('references.unavailable.product'))).toBeInTheDocument();
   });
 });
 
@@ -204,7 +204,7 @@ describe('an Order a text refers to (specs/158-crm-opportunity-inline-editing/, 
     notes = [note(`See [[order:${ORDER_ID}]].`, [RICH_ORDER])];
     const panel = await open(en('opportunity.tabs.notes'));
     const number = await within(panel).findByRole('link', { name: /^Order:\s*ORD-1001$/ });
-    const chip = number.closest('[data-crm-order-reference]') as HTMLElement;
+    const chip = number.closest('[data-order-reference]') as HTMLElement;
     expect(chip).toHaveTextContent('Paid');
     expect(chip).toHaveTextContent(/1[\s\u00a0\u202f]?234[.,]50/);
     expect(chip).toHaveTextContent(new Date('2026-10-01T09:30:00.000Z').toLocaleDateString('en'));
@@ -218,7 +218,7 @@ describe('an Order a text refers to (specs/158-crm-opportunity-inline-editing/, 
     expect(number).toHaveAttribute('href', returningHere(`/orders/${ORDER_ID}`));
     expect(number).not.toHaveAttribute('target');
     const newTab = within(panel).getByRole('link', {
-      name: en('references.order.openInNewTab', { number: 'ORD-1001' }),
+      name: core('references.order.openInNewTab', { number: 'ORD-1001' }),
     });
     expect(newTab).toHaveAttribute('href', `/orders/${ORDER_ID}`);
     expect(newTab).toHaveAttribute('target', '_blank');
@@ -233,7 +233,7 @@ describe('an Order a text refers to (specs/158-crm-opportunity-inline-editing/, 
     notes = [note(`See [[order:${ORDER_ID}]].`, [RICH_ORDER])];
     const panel = await open(en('opportunity.tabs.notes'));
     const number = await within(panel).findByRole('link', { name: /^Order:\s*ORD-1001$/ });
-    expect(number.closest('[data-crm-order-reference]')).toHaveTextContent('paid');
+    expect(number.closest('[data-order-reference]')).toHaveTextContent('paid');
   });
 });
 
@@ -244,6 +244,9 @@ describe('the textarea that inserts references', () => {
     return panel;
   };
 
+  // `specs/163-projects-and-tasks/` FR-044: an Order is now chosen from the
+  // `@@` document list (*Insert document*), CRM's own lookup for this
+  // Opportunity, rather than from `orders`' list by Organization.
   it('inserts an Order of this Organization where the caret is, and sends the token', async () => {
     postSpy.mockImplementation((_path: string, body: { body: string }) =>
       Promise.resolve({ data: note(body.body, REFERENCES.slice(1, 2)) }),
@@ -254,23 +257,23 @@ describe('the textarea that inserts references', () => {
     // Put the caret between the two spaces after "As in".
     caretAt(field, 6);
 
-    await userEvent.click(within(panel).getByRole('button', { name: en('references.insert.order') }));
+    await userEvent.click(within(panel).getByRole('button', { name: core('references.insert.document') }));
     await waitFor(() =>
       expect(
         getSpy.mock.calls.some(
           ([path]) =>
-            String(path).startsWith('/api/v1/admin/orders?') &&
-            String(path).includes(`organizationId=${ORGANIZATION_ID}`),
+            String(path).startsWith('/api/v1/admin/crm/lookups/documents?') &&
+            String(path).includes(`opportunityId=${OPPORTUNITY_ID}`),
         ),
       ).toBe(true),
     );
-    await userEvent.click(within(panel).getByRole('combobox', { name: en('references.search.order') }));
+    await userEvent.click(within(panel).getByRole('combobox', { name: core('references.search.document') }));
     await userEvent.click(await screen.findByRole('option', { name: /ORD-1001/ }));
 
     const expected = `As in [[order:${ORDER_ID}]] last year.`;
     await waitFor(() => expect(storedText(field)).toBe(expected));
     // The search closes once it has done its job.
-    expect(within(panel).queryByRole('combobox', { name: en('references.search.order') })).toBeNull();
+    expect(within(panel).queryByRole('combobox', { name: core('references.search.document') })).toBeNull();
 
     await userEvent.click(within(panel).getByRole('button', { name: en('comments.notes.composer.submit') }));
     await waitFor(() => expect(postSpy).toHaveBeenCalledWith(COMMENTS_PATH, { kind: 'note', body: expected }));
@@ -284,8 +287,8 @@ describe('the textarea that inserts references', () => {
   it('inserts a Product chosen in the catalogue`s picker', async () => {
     const panel = await composer([...EVERY_CRM_PERMISSION, 'catalog:read']);
     const field = within(panel).getByLabelText(en('comments.notes.composer.label')) as HTMLElement;
-    await userEvent.click(within(panel).getByRole('button', { name: en('references.insert.product') }));
-    await userEvent.click(await within(panel).findByRole('combobox', { name: en('references.search.product') }));
+    await userEvent.click(within(panel).getByRole('button', { name: core('references.insert.product') }));
+    await userEvent.click(await within(panel).findByRole('combobox', { name: core('references.search.product') }));
     await userEvent.click(await screen.findByRole('option', { name: /Cargo van L2/ }));
     await waitFor(() => expect(storedText(field)).toBe(`[[product:${PRODUCT_ID}]]`));
   });
@@ -293,17 +296,17 @@ describe('the textarea that inserts references', () => {
   it('offers only the searches the reader`s role can make', async () => {
     // No catalogue code: no product button, and the catalogue is never asked.
     const panel = await composer();
-    expect(within(panel).queryByRole('button', { name: en('references.insert.product') })).toBeNull();
-    expect(within(panel).getByRole('button', { name: en('references.insert.order') })).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: core('references.insert.product') })).toBeNull();
+    expect(within(panel).getByRole('button', { name: core('references.insert.document') })).toBeInTheDocument();
     expect(getSpy.mock.calls.some(([path]) => String(path).includes('/catalog/products'))).toBe(false);
   });
 
   it('offers a role that may search neither Orders nor Products the people only', async () => {
     const panel = await composer(['crm:read', 'crm:write']);
-    expect(within(panel).queryByRole('button', { name: en('references.insert.order') })).toBeNull();
-    expect(within(panel).queryByRole('button', { name: en('references.insert.product') })).toBeNull();
-    expect(within(panel).getByRole('button', { name: en('references.insert.person') })).toBeInTheDocument();
-    expect(within(panel).getByText(en('references.hint'))).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: core('references.insert.document') })).toBeNull();
+    expect(within(panel).queryByRole('button', { name: core('references.insert.product') })).toBeNull();
+    expect(within(panel).getByRole('button', { name: core('references.insert.person') })).toBeInTheDocument();
+    expect(within(panel).getByText(core('references.hint'))).toBeInTheDocument();
     expect(within(panel).getByLabelText(en('comments.notes.composer.label'))).toBeInTheDocument();
   });
 });

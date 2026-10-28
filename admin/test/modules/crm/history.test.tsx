@@ -22,6 +22,8 @@ import {
 } from './crm-fixtures';
 import crmEn from '../../../../packages/modules/crm/i18n/en.json';
 import crmPl from '../../../../packages/modules/crm/i18n/pl.json';
+import coreEn from '../../../../packages/modules/_i18n/i18n/en.json';
+import corePl from '../../../../packages/modules/_i18n/i18n/pl.json';
 
 /**
  * The *Change history* tab of an Opportunity
@@ -220,7 +222,7 @@ async function openHistory(
 }
 
 const item = (panel: HTMLElement, index: number): HTMLElement =>
-  within(within(panel).getByRole('list', { name: en('history.title') })).getAllByRole('listitem')[
+  within(within(panel).getByRole('list', { name: core('history.title') })).getAllByRole('listitem')[
     index
   ] as HTMLElement;
 
@@ -228,13 +230,13 @@ describe('the Change history tab', () => {
   it('is named as the owner named it, and reads the history with nothing but crm:read', async () => {
     expect(en('opportunity.tabs.history')).toBe('Change history');
     const panel = await openHistory();
-    await within(panel).findByRole('list', { name: en('history.title') });
+    await within(panel).findByRole('list', { name: core('history.title') });
     expect(getSpy).toHaveBeenCalledWith(`${HISTORY_PATH}?limit=50`);
   });
 
   it('labels each entry from auditLog.<action>, with who did it and when', async () => {
     const panel = await openHistory();
-    await within(panel).findByRole('list', { name: en('history.title') });
+    await within(panel).findByRole('list', { name: core('history.title') });
     const moved = item(panel, 1);
     expect(within(moved).getByRole('heading', { name: en('auditLog.crm.opportunity.transition') })).toBeInTheDocument();
     expect(within(moved).getByText('Anna Nowak')).toBeInTheDocument();
@@ -244,7 +246,7 @@ describe('the Change history tab', () => {
 
   it('shows a status change in the statuses` names, never their codes, with the reason', async () => {
     const panel = await openHistory();
-    await within(panel).findByRole('list', { name: en('history.title') });
+    await within(panel).findByRole('list', { name: core('history.title') });
     const moved = item(panel, 1);
     await within(moved).findByText('Qualified');
     expect(within(moved).getByText('New')).toBeInTheDocument();
@@ -256,9 +258,9 @@ describe('the Change history tab', () => {
 
   it('names the Order that moved the Opportunity, links to it, and says the system did it', async () => {
     const panel = await openHistory();
-    await within(panel).findByRole('list', { name: en('history.title') });
+    await within(panel).findByRole('list', { name: core('history.title') });
     const caused = item(panel, 0);
-    expect(within(caused).getByText(en('history.actor.system'))).toBeInTheDocument();
+    expect(within(caused).getByText(core('history.actor.system'))).toBeInTheDocument();
     await within(caused).findByText('Won');
     expect(caused).toHaveTextContent(en('history.cause.order'));
     expect(within(caused).getByRole('link', { name: /ORD-1001/ })).toHaveAttribute(
@@ -271,7 +273,7 @@ describe('the Change history tab', () => {
 
   it('lists what an edit changed, as it was and as it is, and nothing that did not change', async () => {
     const panel = await openHistory();
-    await within(panel).findByRole('list', { name: en('history.title') });
+    await within(panel).findByRole('list', { name: core('history.title') });
     const edited = item(panel, 2);
     expect(within(edited).getByText(en('history.field.title'))).toBeInTheDocument();
     expect(within(edited).getByText('Fleet')).toBeInTheDocument();
@@ -283,7 +285,7 @@ describe('the Change history tab', () => {
 
   it('links a document it cannot name any more instead of printing its id', async () => {
     const panel = await openHistory();
-    await within(panel).findByRole('list', { name: en('history.title') });
+    await within(panel).findByRole('list', { name: core('history.title') });
     const linked = item(panel, 3);
     expect(within(linked).getByRole('link', { name: en('history.document.open.order') })).toHaveAttribute(
       'href',
@@ -295,17 +297,17 @@ describe('the Change history tab', () => {
 
   it('appends the next page under the ones already read, and says where the history ends', async () => {
     const panel = await openHistory();
-    await within(panel).findByRole('list', { name: en('history.title') });
-    await userEvent.click(within(panel).getByRole('button', { name: en('history.more') }));
+    await within(panel).findByRole('list', { name: core('history.title') });
+    await userEvent.click(within(panel).getByRole('button', { name: core('history.more') }));
     await waitFor(() => expect(getSpy).toHaveBeenCalledWith(`${HISTORY_PATH}?cursor=next-1&limit=50`));
     await waitFor(() =>
-      expect(within(within(panel).getByRole('list', { name: en('history.title') })).getAllByRole('listitem')).toHaveLength(5),
+      expect(within(within(panel).getByRole('list', { name: core('history.title') })).getAllByRole('listitem')).toHaveLength(5),
     );
     const created = item(panel, 4);
     expect(within(created).getByRole('heading', { name: en('auditLog.crm.opportunity.create') })).toBeInTheDocument();
     // An administrator who has since been deleted is said to be one, not left blank.
-    expect(within(created).getByText(en('history.actor.deleted'))).toBeInTheDocument();
-    expect(within(panel).queryByRole('button', { name: en('history.more') })).toBeNull();
+    expect(within(created).getByText(core('history.actor.deleted'))).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: core('history.more') })).toBeNull();
     expect(within(panel).getByText(en('history.end'))).toBeInTheDocument();
   });
 
@@ -313,13 +315,13 @@ describe('the Change history tab', () => {
   it('says that earlier changes exist when the history ends at its reach, instead of calling it whole', async () => {
     pages['next-1'] = { ...pages['next-1']!, truncated: true };
     const panel = await openHistory();
-    await within(panel).findByRole('list', { name: en('history.title') });
+    await within(panel).findByRole('list', { name: core('history.title') });
     // Not on a page that has a next one.
     expect(within(panel).queryByText(en('history.truncated'))).toBeNull();
-    await userEvent.click(within(panel).getByRole('button', { name: en('history.more') }));
+    await userEvent.click(within(panel).getByRole('button', { name: core('history.more') }));
     expect(await within(panel).findByText(en('history.truncated'))).toBeInTheDocument();
     expect(within(panel).queryByText(en('history.end'))).toBeNull();
-    expect(within(panel).queryByRole('button', { name: en('history.more') })).toBeNull();
+    expect(within(panel).queryByRole('button', { name: core('history.more') })).toBeNull();
   });
 
   it('says there is no history yet', async () => {
@@ -334,7 +336,7 @@ describe('the Change history tab', () => {
     expect(await within(panel).findByText('Boom.')).toBeInTheDocument();
     failHistory = false;
     await userEvent.click(within(panel).getByRole('button', { name: core('common.action.retry') }));
-    expect(await within(panel).findByRole('list', { name: en('history.title') })).toBeInTheDocument();
+    expect(await within(panel).findByRole('list', { name: core('history.title') })).toBeInTheDocument();
   });
 });
 
@@ -459,7 +461,9 @@ describe('the Change history tab, on what an entry carries', () => {
       await screen.findByRole('heading', { level: 1, name: /Fleet renewal/ });
       await userEvent.click(screen.getByRole('tab', { name: bundle['opportunity.tabs.history']! }));
       const panel = await screen.findByRole('tabpanel', { name: bundle['opportunity.tabs.history']! });
-      const list = await within(panel).findByRole('list', { name: bundle['history.title']! });
+      const list = await within(panel).findByRole('list', {
+        name: ((language === 'pl' ? corePl : coreEn) as Record<string, string>)['history.title']!,
+      });
       const edited = within(list).getAllByRole('listitem')[0] as HTMLElement;
       expect(within(edited).getByText(bundle['history.customFieldValuesHidden']!)).toBeInTheDocument();
       expect(within(edited).queryByText(bundle['history.field.customFieldValues']!)).toBeNull();
@@ -532,7 +536,7 @@ describe('the Change history tab, on what an entry carries', () => {
   it('shows no Order status row to a reader without orders:read', async () => {
     only(RETRIED, NOT_FOLLOWED);
     const panel = await openHistory(['crm:read']);
-    await within(panel).findByRole('list', { name: en('history.title') });
+    await within(panel).findByRole('list', { name: core('history.title') });
     for (const index of [0, 1]) {
       expect(within(item(panel, index)).queryByText(en('history.field.orderStatusCode'))).toBeNull();
     }
@@ -581,7 +585,7 @@ describe('the Change history tab, on what an entry carries', () => {
       returningHere(`/orders/${ORDER_ID}`),
     );
     expect(changed).toHaveTextContent('@Piotr Zielony about');
-    expect(within(changed).getByText(en('references.unavailable.product'))).toBeInTheDocument();
+    expect(within(changed).getByText(core('references.unavailable.product'))).toBeInTheDocument();
     expect(changed).not.toHaveTextContent('[[');
     expect(changed).not.toHaveTextContent(ADMIN_ID);
     expect(changed).not.toHaveTextContent(hidden);
@@ -812,7 +816,9 @@ describe('the Change history tab, on custom-field values not carried', () => {
     await screen.findByRole('heading', { level: 1, name: /Fleet renewal/ });
     await userEvent.click(screen.getByRole('tab', { name: plText('opportunity.tabs.history') }));
     const panel = await screen.findByRole('tabpanel', { name: plText('opportunity.tabs.history') });
-    const list = await within(panel).findByRole('list', { name: plText('history.title') });
+    const list = await within(panel).findByRole('list', {
+      name: (corePl as Record<string, string>)['history.title']!,
+    });
     const [created, joined] = within(list).getAllByRole('listitem').filter((li) => li.parentElement === list);
     const carryOf = (entryItem: HTMLElement): HTMLElement =>
       within(entryItem).getByText(plText('history.field.customFieldCarry')).parentElement as HTMLElement;
