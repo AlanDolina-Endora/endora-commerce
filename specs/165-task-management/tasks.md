@@ -709,7 +709,7 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
 
 **Independent Test**: `quickstart.md` §1, US4 row.
 
-- [ ] T056 [P] [US4] Write failing `backend/test/integration/tasks/comments.test.ts`:
+- [X] T056 [P] [US4] Write failing `backend/test/integration/tasks/comments.test.ts`:
   - add, edit and delete by the author; 403 for others;
   - a soft delete shown as deleted;
   - history rows;
@@ -717,13 +717,37 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - assignees and the Creator notified as `tasks.task.comment`, except the author;
   - a mentioned assignee gets the mention only, once;
   - a reader who may not see the Task cannot post (404).
-- [ ] T057 [P] [US4] Write failing `admin/test/modules/tasks/TaskDetail.comments.test.tsx`: kit `CommentThread` with `kind: 'note'`, the composer with the reference triggers, and edit/delete controls shown only to the author.
-- [ ] T058 [US4] Implement `T/backend/services/comment-service.ts`, modelled on `P/backend/services/comment-service.ts`, notes only:
+  - Seen red 2026-10-28: 7/7 failed for the stated reason — every comment route fell to the router's 404 `NOT_FOUND` (no route), so nothing could be posted; the hidden-Task case failed on the code (`NOT_FOUND`, not `TASK_NOT_FOUND`), the validation case on 404 for 400. Also red: `task-notifier.test.ts`'s new case (no `commented` text). Green after T058 (7/7). One red at green was my premise: the references case first wrote as an assignee holding `projects:read`, who is not a Member of the Project and so sees it unavailable (Projects' visibility) — the case now writes as the stub administrator and reads as a role without `crm:read`/`projects:read` for the unavailable half.
+  - Added beyond the list: the platform administrator (holding `*`) may not edit or delete somebody else's comment either; a deleted comment is changed no more (404); `commentsCount` drops with the delete; the history entries carry no text; an edit tells nobody about a comment again; a mention in a second comment tells again (it is a new comment), never beside the comment entry; a holder of `tasks:see_private` gets 403 `TASK_PRIVATE_READ_ONLY` on someone else's private Task; a `tasks:read`-only role may comment; an empty or over-long body is 400; another Task's comment id and a malformed id are 404.
+- [X] T057 [P] [US4] Write failing `admin/test/modules/tasks/TaskDetail.comments.test.tsx`: kit `CommentThread` with `kind: 'note'`, the composer with the reference triggers, and edit/delete controls shown only to the author.
+  - Seen red 2026-10-28: 6/6 failed for the stated reason (no comments section; the bundle had no `detail.comments`); the two new kit cases in `admin/test/kit/kit-comments.test.tsx` (a deleted entry kept and marked) failed on the missing core key. Green after T059 (6/6; kit 13/13). One test fix at green: clearing the rich editor leaves a reference chip, so the edit case appends to a plain comment instead.
+  - Added: a deleted comment shown marked, with no controls; a `tasks:read`-only reader gets the composer; someone else's private Task shows neither composer nor *Edit*; `@` asks `/tasks/lookups/mentionable?taskId=…`.
+- [X] T058 [US4] Implement `T/backend/services/comment-service.ts`, modelled on `P/backend/services/comment-service.ts`, notes only:
   - references refreshed inside the Command;
   - notification de-duplication.
 
   Add the routes in `routes.collaboration.ts`. T056 green.
-- [ ] T059 [US4] Add the comments section to `T/admin/pages/TaskDetail.tsx`, with its strings. T057 green.
+  - Done 2026-10-28: `TaskCommentService` — `list` (oldest first, a deleted comment in its place with `body: ''`, no references, `deletedAt`), `add`, `update`, `delete`; Commands `tasks.comment.add|update|delete` against `task` (the history), states without the text (`commentId`, `length`). Each write starts from `loadVisible` + `assertMayChange`; the comment's `task_references` rows (`source_kind = 'comment'`, `source_id`) are replaced inside the Command and removed by the delete. After commit: the newly mentioned through `TaskMentionService.tell` (its answer is who was addressed), then every assignee and the Creator except the author and the addressed, each asked `createTaskAudience` again (so a draft tells nobody but its Creator), as `tasks.task.comment` — `taskNotificationText.commented` / `notifications.comment.title` (en/pl), by number only. An edit tells only the newly mentioned. Routes `GET`/`POST /tasks/:id/comments`, `PATCH`/`DELETE /tasks/:id/comments/:commentId`, all `tasks:read` (admin-api §2: R + may see the Task; authorship decided by the service). Composition: its own *Collaboration: comments* section in `index.ts`. Strings `auditLog.tasks.comment.*` (en/pl).
+  - **Deviations.** (1) Somebody else's comment is **403 `FORBIDDEN`** — the contract names no code, and Projects' `PROJECT_NOTE_NOT_AUTHOR` is Projects'; no `ERROR_CODES` entry added. A missing, deleted or foreign comment is 404 `NOT_FOUND` (Projects). (2) Unlike Projects, a deleted comment is listed (R-6, the contract's `deletedAt`) and its body is emptied in the row. (3) The history keeps `references: []` (its states carry no text — unchanged, as the hand-over said).
+  - Seam: `services/comment-service.ts` joins `TASK_ACCESS_READERS` with 4 reads (the thread, the author's comment, its `task_references` delete, the assignees told), each keyed by the id `loadVisible` handed out. OpenAPI baseline: only `/tasks/{id}/comments` and `/tasks/{id}/comments/{commentId}` added.
+- [X] T059 [US4] Add the comments section to `T/admin/pages/TaskDetail.tsx`, with its strings. T057 green.
+  - Done 2026-10-28: `components/TaskComments.tsx` (kit `CommentThread kind="note" keepDeleted`, an adapter over `tasksApi.{listComments,addComment,updateComment,removeComment}`; an author since removed reads as the core *A former administrator*), mounted full width under the details, before the attachments (admin-surfaces §2 order), the history re-read on every add and delete. Whoever holds `tasks:read` may comment, except on someone else's private Task. Strings `detail.comments`, `comments.*` (en/pl).
+  - **Kit change (line added to `foreign-module-changes.md` §B):** `CommentThread` gains `keepDeleted` and `RecordComment.deletedAt?` — a deleted entry keeps its place, marked by the core bundle's new `comments.removedEntry` (en/pl), with no controls; without the prop it leaves the list as before (CRM and Projects unchanged). Admin-kit changeset updated.
+  - **`@` for readers:** `lib/references.ts` now offers `@` to a `tasks:read` holder (the mentionable lookup is R, admin-api §3), `@@` still only to a writer — so a reader may mention somebody in a comment.
+  - **Shape only:** `TaskDetail.after-zone.test.tsx` waits for the comments too, answers their `GET`, and its markup normaliser also strips a React id a component derived another id from (the composer's `<id>-body`).
+
+**Checkpoint**: a Task has a comment thread with references and mentions, and nobody is told twice about one comment.
+
+- **Phase 6 gate**, run 2026-10-28 on the final tree:
+  - `pnpm run build:packages`, `pnpm -r run typecheck` (0 errors), `pnpm -r run lint` (0 errors, pre-existing warnings): **green**.
+  - Backend, targeted: `test/integration/tasks` + `test/contract/tasks` + `contract/kernel/openapi-baseline` + `contract/admin_users/permission-inventory` + `integration/{crm,projects}/references.test.ts` — 21 files, 194/194 green.
+  - `pnpm --filter backend run test:unit:fast`: 361 files, 7 758 / 7 761 — the three reds are **30 s timeouts** of whole-tree scans (`module-package-manifest.test.ts` × 2, `check-module-boundary.test.ts › the tree itself`); both files green re-run with `--testTimeout=180000` (259/259).
+  - Admin (Node 26, `--no-experimental-webstorage`): `test/modules/{tasks,crm,projects}` + `test/kit` + `test/components` — 154 files, 1 631 / 1 632; the one red, `crm/board-card-fields.test.tsx › sends each filter…`, is the async flake already seen at the Phase 3 gate and is green alone (23/23).
+  - Packages: `mod-tasks` 13 / 132, `mod-i18n` 1 / 6 — green.
+  - Checks green: `check:naming`, `check:language`, `check:port-dependencies` (0 violations), `check:off-state-coverage` (41/41), `check:error-translations`, `check:bundle-pairing`, `check:command-coverage`, `check:admin-surface`, `check:admin-zones`, `check:action-route-permissions`, `check:module-docs`, `check:test-ownership`, `check:module-boundary`, `check:platform-surface`, `check:container-imports`, `check:shared-table-wipes`, `check:port-shape`, `check:entry-presence`, `check:release-intent --since origin/master` (0 violations). **`check:docs-translations` red**, unchanged (`stale-translation:generated:module-reference/tasks`), left for T089.
+  - OpenAPI baseline regenerated: only `/api/v1/admin/tasks/{id}/comments` and `/{id}/comments/{commentId}` added.
+  - Generated artefacts: `composer:generate`, `manifests:generate` and `pnpm install --lockfile-only` changed nothing.
+  - Nothing moved or deleted in this phase.
 
 ---
 
