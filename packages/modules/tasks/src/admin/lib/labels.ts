@@ -39,3 +39,11 @@ export function fileSizeLabel(bytes: number, language: string): string {
     maximumFractionDigits: unit === 0 ? 0 : 1,
   }).format(value);
 }
+
+/** A workflow status's name in the reader's language: the name, the default name, the code. */
+export function workflowStatusName(
+  status: { code: string; name: Record<string, string>; defaultName?: string | null },
+  language: string,
+): string {
+  return status.name[language] || status.defaultName || status.code;
+}

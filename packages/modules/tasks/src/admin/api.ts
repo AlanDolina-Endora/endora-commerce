@@ -1,6 +1,9 @@
 import { apiClient } from '@endora-commerce/admin-kit/lib';
 import type {
   CreateTaskBody,
+  CreateTaskStatusBody,
+  SetTaskTransitionsBody,
+  UpdateTaskStatusBody,
   RecordDocumentLookupResponse,
   RecordHistoryPage,
   TaskAssigneeOption,
@@ -94,6 +97,26 @@ export const tasksApi = {
   /** The configured statuses, in order, and the moves between them — `tasks:read`. */
   workflow(): Promise<TaskWorkflow> {
     return data(apiClient.get<{ data: TaskWorkflow }>(`${BASE}/workflow`));
+  },
+
+  /** `tasks:configure` — each answers the whole workflow as it stands afterwards. */
+  createStatus(body: CreateTaskStatusBody): Promise<TaskWorkflow> {
+    return data(apiClient.post<{ data: TaskWorkflow }>(`${BASE}/statuses`, body));
+  },
+
+  updateStatus(code: string, body: UpdateTaskStatusBody): Promise<TaskWorkflow> {
+    return data(apiClient.patch<{ data: TaskWorkflow }>(`${BASE}/statuses/${encodeURIComponent(code)}`, body));
+  },
+
+  /** Removes a status; `replacement` takes the Tasks in it (required while any are). */
+  deleteStatus(code: string, replacement?: string): Promise<TaskWorkflow> {
+    const tail = replacement ? `?replacement=${encodeURIComponent(replacement)}` : '';
+    return data(apiClient.delete<{ data: TaskWorkflow }>(`${BASE}/statuses/${encodeURIComponent(code)}${tail}`));
+  },
+
+  /** A delta of moves: added, removed. */
+  setTransitions(body: SetTaskTransitionsBody): Promise<TaskWorkflow> {
+    return data(apiClient.put<{ data: TaskWorkflow }>(`${BASE}/transitions`, body));
   },
 
   deleteTask(id: string): Promise<void> {

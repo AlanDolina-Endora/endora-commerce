@@ -263,6 +263,18 @@ export const manifest = defineModuleManifest({
       keywords: ['task', 'new', 'create', 'zadanie', 'nowe', 'utwórz'],
       weight: 332,
     },
+    {
+      // `specs/165-task-management/contracts/admin-surfaces.md` §4: the workflow
+      // screen, on the code its route and every write it makes enforce.
+      id: 'open-task-workflow',
+      labelKey: 'actions.openTaskWorkflow.label',
+      descriptionKey: 'actions.openTaskWorkflow.description',
+      icon: 'Settings',
+      targetRoute: '/tasks/settings/workflow',
+      requiredPermission: 'tasks:configure',
+      keywords: ['task statuses', 'workflow', 'transitions', 'statusy zadań', 'przejścia', 'przebieg'],
+      weight: 333,
+    },
   ],
   /**
    * The e-mails this module sends (R-17, R-18). Their default subject and body

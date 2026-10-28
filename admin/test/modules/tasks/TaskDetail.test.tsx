@@ -154,6 +154,52 @@ describe('TaskDetail — writing', () => {
     );
   });
 
+  it('offers only the moves the workflow permits from the current status (165 US2 scenario 5)', async () => {
+    getSpy.mockImplementation((path: string) => {
+      if (path === TASK_PATH) return Promise.resolve({ data: current });
+      if (path === WORKFLOW_PATH) {
+        const flow = workflow();
+        return Promise.resolve({
+          data: { ...flow, transitions: flow.transitions.filter((edge) => !(edge.from === 'todo' && edge.to === 'done')) },
+        });
+      }
+      if (path.startsWith(`${TASK_PATH}/history`)) return Promise.resolve(historyPage([]));
+      return Promise.reject(new Error(`unexpected GET ${path}`));
+    });
+    await renderPage();
+    const select = screen.getByLabelText(en('field.status'));
+    await within(select).findByRole('option', { name: STATUS.in_progress.name });
+    expect(within(select).getAllByRole('option').map((option) => (option as HTMLOptionElement).value)).toEqual([
+      'todo',
+      'in_progress',
+      'cancelled',
+    ]);
+  });
+
+  it('shows the server’s refusal of a move and then offers only the targets it named', async () => {
+    postSpy.mockRejectedValue(
+      new ApiError(409, {
+        error: {
+          code: 'TASK_TRANSITION_FORBIDDEN',
+          message: 'The task workflow does not allow this move. It can move to: Cancelled.',
+          details: { allowedTargets: ['cancelled'] },
+        },
+      }),
+    );
+    await renderPage();
+    await screen.findByRole('option', { name: STATUS.done.name });
+    await userEvent.selectOptions(screen.getByLabelText(en('field.status')), 'done');
+    expect(await screen.findByText('The task workflow does not allow this move. It can move to: Cancelled.')).toBeTruthy();
+    const select = screen.getByLabelText(en('field.status')) as HTMLSelectElement;
+    expect(select.value).toBe('todo');
+    await waitFor(() =>
+      expect(within(select).getAllByRole('option').map((option) => (option as HTMLOptionElement).value)).toEqual([
+        'todo',
+        'cancelled',
+      ]),
+    );
+  });
+
   it('edits the details in place and sends only what changed', async () => {
     patchSpy.mockResolvedValue({ data: taskDetail({ title: 'Order the galvanised racking' }) });
     await renderPage();

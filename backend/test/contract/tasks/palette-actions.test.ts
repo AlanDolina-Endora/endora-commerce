@@ -15,7 +15,7 @@ import {
 
 /**
  * Tasks under ⌘K (`specs/163-projects-and-tasks/` FR-041, T130;
- * `contracts/admin-surfaces.md` §4): three actions, each on a screen of the
+ * `contracts/admin-surfaces.md` §4): the actions, each on a screen of the
  * module's own, gated by the code that screen and its API enforce. The ids are
  * the slugs §4's `tasks.open`, `tasks.mine` and `tasks.new` stand for.
  */
@@ -41,6 +41,14 @@ const EXPECTED: readonly ExpectedAction[] = [
     icon: 'Plus',
     label: { en: 'New task', pl: 'Nowe zadanie' },
   },
+  {
+    // `specs/165-task-management/contracts/admin-surfaces.md` §4 (T047).
+    id: 'open-task-workflow',
+    route: '/tasks/settings/workflow',
+    permission: 'tasks:configure',
+    icon: 'Settings',
+    label: { en: 'Task statuses and workflow', pl: 'Statusy i przejścia zadań' },
+  },
 ];
 
 describe('tasks palette actions (163 FR-041, T130)', () => {
@@ -54,7 +62,7 @@ describe('tasks palette actions (163 FR-041, T130)', () => {
     await teardownBackendServer(h);
   });
 
-  it('declares the three actions of §4', () => {
+  it('declares the actions of §4', () => {
     expectDeclared('tasks', EXPECTED);
   });
 
@@ -64,10 +72,15 @@ describe('tasks palette actions (163 FR-041, T130)', () => {
 
   it('each resolves to a real API route with that route’s permission (check:action-route-permissions)', () => {
     const result = actionRouteFindings('tasks');
-    expect(result.findings).toEqual([]);
+    expect(result.violations).toEqual([]);
+    expect(result.stale).toEqual([]);
+    // The workflow screen is `tasks:configure` in the admin, while the workflow
+    // it loads is read-gated: the status picker and the board read it too. The
+    // check's ledger records that one disagreement, and only it (165 T047).
+    expect(result.ledgered.map((finding) => finding.actionId)).toEqual(['open-task-workflow']);
   });
 
-  it('serves the three, labelled in English and Polish', async () => {
+  it('serves them, labelled in English and Polish', async () => {
     await expectLabels(h, 'tasks', EXPECTED);
   });
 });

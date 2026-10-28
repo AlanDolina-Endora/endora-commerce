@@ -61,6 +61,7 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | --- | --- | --- |
 | `new-task` | `/tasks/new` | `tasks:write` |
 | `open-my-tasks` | `/tasks/mine` | `tasks:read` |
+| `open-task-workflow` | `/tasks/settings/workflow` | `tasks:configure` |
 | `open-tasks` | `/tasks` | `tasks:read` |
 
 ## Settings

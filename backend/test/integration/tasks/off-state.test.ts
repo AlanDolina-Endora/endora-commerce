@@ -74,7 +74,7 @@ describe('tasks off-state (Constitution XVII)', () => {
   });
 
   /**
-   * User Story 11 — the three palette actions and the `tasks.task` global-search
+   * User Story 11 — the palette actions (165 adds the workflow screen's) and the `tasks.task` global-search
    * type, measured present, absent on both axes, and back. The other surfaces
    * the final sweep (T135) names for this module are proved beside their
    * subject: the Tasks tab, Stage Tasks, gates and the `@@` Task group in
@@ -84,7 +84,7 @@ describe('tasks off-state (Constitution XVII)', () => {
   it.each<OffStateAxis>(['deactivated', 'platform-unavailable'])(
     'offers its palette actions and its search type while on, neither while %s, and both after',
     async (axis) => {
-      const ACTIONS = ['new-task', 'open-my-tasks', 'open-tasks'];
+      const ACTIONS = ['new-task', 'open-my-tasks', 'open-task-workflow', 'open-tasks'];
       const capability = async (): Promise<string[]> => {
         const response = await h.app.inject({
           method: 'GET',

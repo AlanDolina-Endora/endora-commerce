@@ -20,11 +20,12 @@ function bundle(language: 'en' | 'pl'): Record<string, string> {
 }
 
 describe('tasks admin contributions', () => {
-  it("declares User Story 2's four screens, each on the code its route enforces", () => {
+  it('declares its screens, each on the code its route enforces — the workflow on tasks:configure (165 T047)', () => {
     expect((contributions.routes ?? []).map((route) => [route.path, route.requiredPermission])).toEqual([
       ['/tasks', 'tasks:read'],
       ['/tasks/mine', 'tasks:read'],
       ['/tasks/new', 'tasks:write'],
+      ['/tasks/settings/workflow', 'tasks:configure'],
       ['/tasks/:id', 'tasks:read'],
     ]);
     expect((contributions.routes ?? []).filter((route) => route.index)).toHaveLength(1);
@@ -38,12 +39,13 @@ describe('tasks admin contributions', () => {
     expect(entry).not.toMatch(/^import .* from '\.\/(pages|components)\//m);
   });
 
-  it('puts "My tasks" then "Tasks" after "Projects" in the "Projects & tasks" section, on tasks:read', () => {
+  it('puts "My tasks" and "Tasks" after "Projects", and "Task settings" with the section’s configuration rows', () => {
     expect(
       (contributions.nav ?? []).map((row) => [row.to, row.section, row.weight, row.requiredPermission, row.icon]),
     ).toEqual([
       ['/tasks/mine', 'work', 200, 'tasks:read', 'ListChecks'],
       ['/tasks', 'work', 210, 'tasks:read', 'ListChecks'],
+      ['/tasks/settings/workflow', 'work', 430, 'tasks:configure', 'Settings'],
     ]);
   });
 

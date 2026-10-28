@@ -1,6 +1,7 @@
 /**
  * `tasks`' admin surface (`specs/163-projects-and-tasks/contracts/admin-surfaces.md`
- * §1–§3): User Story 2's four routes and two sidebar rows.
+ * §1–§3): 163's four screens and two sidebar rows, and the workflow screen of
+ * `specs/165-task-management/` (User Story 2) with its *Task settings* row.
  *
  * The palette actions are the manifest's (`src/manifest.ts`, §4). The zone
  * `task.detail.after` is mounted by `pages/TaskDetail.tsx`; this module
@@ -17,7 +18,15 @@ const READ_PERMISSION = 'tasks:read';
 /** The code that opens the create screen: `POST /tasks` is the one write it exists to make. */
 const WRITE_PERMISSION = 'tasks:write';
 
+/**
+ * The code that opens the workflow screen: every write it makes — statuses and
+ * moves — is gated on it (`specs/165-task-management/` FR-012).
+ */
+const CONFIGURE_PERMISSION = 'tasks:configure';
+
 const TASKS_PATH = '/tasks';
+
+const WORKFLOW_PATH = `${TASKS_PATH}/settings/workflow`;
 
 export const contributions: AdminContributions = {
   routes: [
@@ -37,6 +46,11 @@ export const contributions: AdminContributions = {
       path: `${TASKS_PATH}/new`,
       component: () => import('./pages/TaskCreate.js'),
       requiredPermission: WRITE_PERMISSION,
+    },
+    {
+      path: WORKFLOW_PATH,
+      component: () => import('./pages/settings/TaskWorkflowPage.js'),
+      requiredPermission: CONFIGURE_PERMISSION,
     },
     {
       path: `${TASKS_PATH}/:id`,
@@ -61,6 +75,16 @@ export const contributions: AdminContributions = {
       section: 'work',
       weight: 210,
       requiredPermission: READ_PERMISSION,
+    },
+    {
+      // With the section's other configuration rows, after Projects' (400–420)
+      // (`specs/165-task-management/contracts/admin-surfaces.md` §1).
+      to: WORKFLOW_PATH,
+      labelKey: 'nav.settings.label',
+      icon: 'Settings',
+      section: 'work',
+      weight: 430,
+      requiredPermission: CONFIGURE_PERMISSION,
     },
   ],
 };

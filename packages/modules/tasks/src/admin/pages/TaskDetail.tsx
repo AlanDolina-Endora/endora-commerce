@@ -8,7 +8,7 @@ import {
   type TaskWorkflow,
   type UpdateTaskBody,
 } from '@endora-commerce/contracts';
-import { formatDateTime, useAuth } from '@endora-commerce/admin-kit/lib';
+import { ApiError, formatDateTime, useAuth } from '@endora-commerce/admin-kit/lib';
 import {
   Alert,
   AlertDescription,
@@ -40,6 +40,13 @@ import { useCurrentAdmin } from '../lib/current-admin.js';
 import { calendarDateLabel, errorMessage } from '../lib/labels.js';
 
 const LIST_PATH = '/tasks';
+
+/** The permitted next statuses a `TASK_TRANSITION_FORBIDDEN` refusal names, if `failure` is one. */
+function allowedTargetsOf(failure: unknown): readonly string[] | null {
+  if (!(failure instanceof ApiError) || failure.envelope.error.code !== 'TASK_TRANSITION_FORBIDDEN') return null;
+  const allowed = (failure.envelope.error.details as { allowedTargets?: unknown } | undefined)?.allowedTargets;
+  return Array.isArray(allowed) ? allowed.filter((code): code is string => typeof code === 'string') : null;
+}
 
 /**
  * One Task (`specs/163-projects-and-tasks/`, User Story 2;
@@ -78,6 +85,12 @@ export function TaskDetail(): ReactNode {
   const contextHeadingId = useId();
   const historyHeadingId = useId();
   const [workflow, setWorkflow] = useState<TaskWorkflow | null>(null);
+  /**
+   * The moves the server named when it refused one, from the status it was
+   * refused from — newer than the workflow this screen read, so they replace
+   * its moves from that status until the Task moves (FR-015).
+   */
+  const [refusedFrom, setRefusedFrom] = useState<{ from: string; allowed: readonly string[] } | null>(null);
   // A Task of a record is the record owner's to delete (`canChangeTasks`, T147):
   // no Delete the server would refuse.
   const mayDelete = task === null || task.context === null || task.context.canChangeTasks;
@@ -193,10 +206,14 @@ export function TaskDetail(): ReactNode {
     try {
       const { task: next } = await tasksApi.changeStatus(id, task.status.code, to);
       setTask(next);
+      setRefusedFrom(null);
       setNotice(t('detail.statusChanged', { status: next.status.name }));
       setHistoryVersion((version) => version + 1);
       return true;
     } catch (failure) {
+      // The server's sentence names the moves it permits; the control offers exactly those from now on.
+      const allowed = allowedTargetsOf(failure);
+      if (allowed) setRefusedFrom({ from: task.status.code, allowed });
       setWriteError(errorMessage(failure, t('detail.saveError')));
       return false;
     } finally {
@@ -207,12 +224,18 @@ export function TaskDetail(): ReactNode {
   const assignToMe = (): Promise<boolean> =>
     me ? write({ addAssigneeIds: [me.id] }, () => t('detail.saved')) : Promise.resolve(false);
 
-  /** The current status, then the moves the workflow permits from it. */
+  /**
+   * The current status, then the moves the workflow permits from it — or, once
+   * the server refused a move from here, exactly the targets it named.
+   */
+  const allowedTargets =
+    refusedFrom !== null && refusedFrom.from === task.status.code
+      ? refusedFrom.allowed
+      : (workflow?.transitions ?? []).filter((edge) => edge.from === task.status.code).map((edge) => edge.to);
   const statusOptions = [
     { code: task.status.code, name: task.status.name },
-    ...(workflow?.transitions ?? [])
-      .filter((edge) => edge.from === task.status.code)
-      .map((edge) => workflow!.statuses.find((status) => status.code === edge.to))
+    ...allowedTargets
+      .map((code) => workflow?.statuses.find((status) => status.code === code))
       .filter((status): status is NonNullable<typeof status> => status !== undefined)
       .sort((a, b) => a.weight - b.weight)
       .map((status) => ({ code: status.code, name: status.name[language] || status.defaultName })),

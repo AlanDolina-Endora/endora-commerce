@@ -141,15 +141,21 @@ const concreteUrl = (pattern: string): string => pattern.replace(/:[A-Za-z]+/g, 
 const READ_AND_WRITE = ['tasks:read', 'tasks:write'];
 
 describe('tasks admin surface', () => {
-  it('is registered: the list, My Tasks, the create screen and one Task', () => {
-    expect(routes.map((route) => route.path)).toEqual(['/tasks', '/tasks/mine', '/tasks/new', '/tasks/:id']);
+  it('is registered: the list, My Tasks, the create screen, the workflow screen (165) and one Task', () => {
+    expect(routes.map((route) => route.path)).toEqual([
+      '/tasks',
+      '/tasks/mine',
+      '/tasks/new',
+      '/tasks/settings/workflow',
+      '/tasks/:id',
+    ]);
   });
 
-  it('contributes its two sidebar entries and every screen while present', async () => {
+  it('contributes its sidebar entries and every screen while present', async () => {
     presentModules = new Set(['tasks']);
-    permissions = new Set(READ_AND_WRITE);
+    permissions = new Set([...READ_AND_WRITE, 'tasks:configure']);
     const shell = renderAt('/');
-    expect(sidebarHrefs()).toEqual(expect.arrayContaining(['/tasks/mine', '/tasks']));
+    expect(sidebarHrefs()).toEqual(expect.arrayContaining(['/tasks/mine', '/tasks', '/tasks/settings/workflow']));
     shell.unmount();
     for (const route of routes) {
       const rendered = renderAt(concreteUrl(route.path));
@@ -164,6 +170,7 @@ describe('tasks admin surface', () => {
     const shell = renderAt('/');
     expect(sidebarHrefs()).not.toContain('/tasks');
     expect(sidebarHrefs()).not.toContain('/tasks/mine');
+    expect(sidebarHrefs()).not.toContain('/tasks/settings/workflow');
     shell.unmount();
     for (const route of routes) {
       const deepLink = renderAt(concreteUrl(route.path));
@@ -172,12 +179,20 @@ describe('tasks admin surface', () => {
     }
   });
 
-  it('withholds the create screen from a reader, and everything from somebody without tasks:read', async () => {
+  it('withholds the create screen from a reader, the workflow screen from a writer, and everything from somebody without tasks:read', async () => {
     presentModules = new Set(['tasks']);
     permissions = new Set(['tasks:read']);
     const reader = renderAt('/tasks/new');
     await waitFor(() => expect(notFoundIsRendered()).toBe(true));
     reader.unmount();
+
+    permissions = new Set(READ_AND_WRITE);
+    const writerShell = renderAt('/');
+    expect(sidebarHrefs()).not.toContain('/tasks/settings/workflow');
+    writerShell.unmount();
+    const writer = renderAt('/tasks/settings/workflow');
+    await waitFor(() => expect(notFoundIsRendered()).toBe(true));
+    writer.unmount();
 
     permissions = new Set(['tasks:write']);
     const shell = renderAt('/');
