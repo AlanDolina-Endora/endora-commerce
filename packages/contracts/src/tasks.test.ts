@@ -132,6 +132,9 @@ describe('§1 GET /tasks — TaskListQuery (R-12)', () => {
       accepts(tasks.TaskListQuerySchema, { sort, dir: 'desc' });
     }
     expect(tasks.TaskListQuerySchema.parse({}).limit).toBe(50);
+    // A board lane's further cards carry the card fields, as the board's do (165 T055).
+    expect(tasks.TaskListQuerySchema.parse({ cardValues: 'true' }).cardValues).toBe(true);
+    expect(tasks.TaskListQuerySchema.parse({}).cardValues).toBeUndefined();
   });
 
   it('refuses an unknown sort or direction, a bad category, a malformed code and an unknown assignee token', () => {

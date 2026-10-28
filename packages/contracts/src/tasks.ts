@@ -309,6 +309,11 @@ export const TaskListQuerySchema = z
     dir: taskSortDirectionSchema.optional(),
     cursor: z.string().max(1000).optional(),
     limit: z.coerce.number().int().positive().max(TASK_LIST_LIMIT_MAX).default(50),
+    /**
+     * `true`: each row carries the board's card fields (`cardFields`), as a
+     * board card does — what a lane's further cards are read with (R-11).
+     */
+    cardValues: queryBooleanSchema.optional(),
   })
   .refine(linkedBothOrNeither, LINKED_MESSAGE);
 export type TaskListQuery = z.infer<typeof TaskListQuerySchema>;

@@ -402,9 +402,11 @@ describe('tasks (contract) — the board (R-11)', () => {
       const t3 = answer.columns.find((c) => c.status.code === 'todo')!.items.find((item) => item.id === id.t3)!;
       expect(t3.cardFields!.find((field) => field.ref === `custom:${region}`)!.value).toBeNull();
 
-      // The list carries no card fields: they are the board's.
+      // The list carries no card fields unless asked — a board lane's further cards ask.
       const page = await listed(viewer.cookies, 'status=todo');
       expect(page.every((item) => item.cardFields === undefined)).toBe(true);
+      const lane = await listed(viewer.cookies, 'status=todo&cardValues=true');
+      expect(lane.find((item) => item.id === id.t1)!.cardFields).toEqual(card.cardFields);
     });
   });
 });

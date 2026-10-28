@@ -14,6 +14,7 @@ import {
 } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
+import type { TaskBoardCardFieldService } from '../services/board-card-field-service.js';
 import type { TaskDocumentLookupService } from '../services/document-lookup-service.js';
 import type { TaskMentionService } from '../services/mention-service.js';
 import type { TaskHistoryService } from '../services/task-history-service.js';
@@ -24,6 +25,8 @@ export interface TaskRoutesDeps {
   historyService: TaskHistoryService;
   mentionService: TaskMentionService;
   documentLookupService: TaskDocumentLookupService;
+  /** The board's card fields — what `cardValues=true` fills each row with. */
+  cardFields: Pick<TaskBoardCardFieldService, 'selected'>;
   requireAdmin: RequireAdminFactory;
 }
 
@@ -58,11 +61,14 @@ export function refuseUnofferedCustomField(error: unknown): never {
 export async function registerTaskRoutes(app: FastifyInstance, deps: TaskRoutesDeps): Promise<void> {
   const { requireAdmin, taskService: tasks, historyService: history, mentionService, documentLookupService } = deps;
 
-  app.get(API, { preHandler: requireAdmin('tasks:read') }, async (request) =>
-    tasks
-      .list(TaskListQuerySchema.parse(request.query ?? {}), await request.responseLanguage())
-      .catch(refuseUnofferedCustomField),
-  );
+  app.get(API, { preHandler: requireAdmin('tasks:read') }, async (request) => {
+    const query = TaskListQuerySchema.parse(request.query ?? {});
+    // A board lane's further cards carry the card fields its first ones did (R-11).
+    const cardFields = query.cardValues ? await deps.cardFields.selected() : undefined;
+    return tasks
+      .list(query, await request.responseLanguage(), cardFields ? { cardFields } : {})
+      .catch(refuseUnofferedCustomField);
+  });
 
   // The `task` custom fields the list offers as filters (FR-007).
   app.get(`${API}/custom-field-filters`, { preHandler: requireAdmin('tasks:read') }, async () => ({

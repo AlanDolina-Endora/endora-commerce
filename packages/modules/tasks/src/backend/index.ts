@@ -358,6 +358,7 @@ export function registerModule(ctx: ModuleContext): void {
       historyService: cradle.tasksHistoryService,
       mentionService: cradle.tasksMentionService,
       documentLookupService: cradle.tasksDocumentLookupService,
+      cardFields: cradle.tasksBoardCardFieldService,
       requireAdmin: cradle.requireAdmin,
     });
     await registerTaskWorkflowRoutes(app, {
