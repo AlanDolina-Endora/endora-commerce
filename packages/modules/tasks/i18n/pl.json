@@ -1,6 +1,8 @@
 {
   "adminRoles.permission.tasks:read": "Przeglądanie zadań",
   "adminRoles.permission.tasks:write": "Tworzenie i edycja zadań",
+  "adminRoles.permission.tasks:configure": "Konfiguracja zadań (przepływ, tagi, priorytety, karta tablicy, strefa czasowa)",
+  "adminRoles.permission.tasks:see_private": "Podgląd i usuwanie prywatnych zadań innych osób",
   "errors.TASK_NOT_FOUND": "To zadanie nie istnieje albo nie masz do niego dostępu.",
   "errors.TASK_CONTEXT_INVALID": "To zadanie nie może tam należeć: rekord nie istnieje, nie masz do niego dostępu albo jego moduł jest wyłączony.",
   "errors.TASK_ASSIGNEE_INVALID": "Tej osoby nie można przypisać: nie jest aktywnym administratorem.",
@@ -116,5 +118,9 @@
   "actions.newTask.description": "Utwórz zadanie i przypisz je",
   "adminSearch.group.label": "Zadania",
   "adminSearch.field.number": "Numer zadania",
-  "adminSearch.field.title": "Tytuł"
+  "adminSearch.field.title": "Tytuł",
+  "settingLabels.tasks.board_card_fields.name": "Pola widoczne na karcie tablicy zadań",
+  "settingLabels.tasks.board_card_fields.description": "Które pola i w jakiej kolejności pokazuje karta na tablicy zadań, jako tablica JSON odwołań do pól — na przykład [\"builtin:number\",\"builtin:assignees\",\"custom:region\"]. Zmień to na ekranie przepływu zadań, w sekcji Karta tablicy, która podpowiada istniejące pola; odwołanie do nieistniejącego pola jest pomijane, a pokazywanych jest najwyżej sześć. Jedno ustawienie dla całej platformy.",
+  "settingLabels.tasks.time_zone.name": "Strefa czasowa terminów zadań, przypomnień i dziennego podsumowania",
+  "settingLabels.tasks.time_zone.description": "Strefa czasowa, jako nazwa IANA, np. Europe/Warsaw, w której Zadania liczą „dziś”: kiedy zadanie z terminem bez godziny staje się zaległe, na który dzień przypada termin z godziną, o 09:00 którego dnia działa przypomnienie względem terminu bez godziny oraz o której godzinie każda osoba dostaje dzienne podsumowanie."
 }
