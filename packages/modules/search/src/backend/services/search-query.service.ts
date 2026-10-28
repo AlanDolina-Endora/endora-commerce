@@ -41,10 +41,10 @@ import {
  * write-side: each Sales Channel writes to its own `products_<channel_code>`
  * index, so the channel filter is implicit in the index id.
  *
- * Pricing comes from Postgres at hydrate time so the Sales-Channel visibility
- * rule from `catalog-query.service.ts` (R-18: hide price on non-public
- * channels) is enforced without trusting whatever the indexer happened to
- * snapshot.
+ * Pricing comes from Postgres at hydrate time, resolved for the viewer, so the
+ * display-mode chain decides what a hit shows — a viewer whose mode is `none`
+ * is sent no amount (issues #491, #492) — without trusting whatever the indexer
+ * happened to snapshot.
  */
 
 /**
@@ -55,7 +55,6 @@ import {
 export interface ResolvedSearchChannel {
   id: string;
   code: string;
-  isPublic: boolean;
   defaultCurrency: string;
   defaultLanguage: string;
 }
@@ -262,8 +261,8 @@ export class SearchQueryService {
     const channel = ctx.resolvedChannel;
 
     // Hydrate the channel-aware price + multilingual name override from
-    // Postgres. This protects against stale index data and keeps R-18
-    // (hide price on non-public channels) authoritative on Postgres.
+    // Postgres. This protects against stale index data and keeps who sees a
+    // price (the display-mode chain) authoritative on Postgres.
     //
     // Issue #227 — and the audience answer, for the same reason and in the
     // same place. It is **not** pushed into the Meilisearch filter expression:
@@ -277,8 +276,6 @@ export class SearchQueryService {
       isProductVisibleTo(p, ctx.audience),
     );
     const productById = new Map(products.map((p) => [p.id, p]));
-    // A channel that withholds prices is not asked for them (R-18), so the
-    // resolution never runs and every hit reports `null`.
     // The price is the *viewer's*, while the document stays everybody's. A
     // Meilisearch document has never carried a price and does not start now:
     // one index per sales channel, one document per product, and per-buyer
@@ -287,7 +284,7 @@ export class SearchQueryService {
     // decide what a buyer sees; resolving the price for the caller here costs
     // the page four statements (measured, `listing-price-viewer-cost.bench.ts`)
     // and leaves the index shared.
-    const priceable = channel.isPublic && products.length > 0;
+    const priceable = products.length > 0;
     const viewerOrganization = priceable
       ? await this.#viewerOrganization(ctx.audience)
       : null;

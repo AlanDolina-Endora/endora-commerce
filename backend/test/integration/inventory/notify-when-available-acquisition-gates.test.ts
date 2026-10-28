@@ -105,7 +105,6 @@ describe('notify-when-available applies the audience and the channel gate every 
       currencies: ['PLN'],
       defaultCurrency: 'PLN',
       active: true,
-      isPublic: true,
     });
     const elsewhere = em.create(SalesChannel, {
       code: `${code}-elsewhere`,
@@ -115,7 +114,6 @@ describe('notify-when-available applies the audience and the channel gate every 
       currencies: ['PLN'],
       defaultCurrency: 'PLN',
       active: true,
-      isPublic: true,
     });
     await em.persistAndFlush([channel, elsewhere]);
     // Feature 154 — the buyer shops on both probe stores.

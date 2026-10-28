@@ -312,6 +312,10 @@ const SEED_DELTA: Readonly<Record<string, number>> = {
   price_lists: 4,
   price_list_audience_members: 3,
   sales_channel_price_lists: 4,
+  // 3c — the VIP channel hides prices until sign-in (issue #492): its
+  //      `pricing.unauthenticated_display_mode = none`, which replaced the
+  //      retired non-public flag the channel used to be created with.
+  setting_values: 1,
   // 4 — the stock spread across the two warehouses
   stock_levels: 406,
   // 5 — the demo buyer joins the demo organisation
@@ -616,6 +620,24 @@ describe('T226 — `endora demo seed` builds this shop', () => {
         { warehouse: 'pl-krk', channel: 'pl_b2b_vip' },
         { warehouse: 'pl-krk', channel: 'pl_retail' },
       ]);
+    });
+
+    it('hides prices from anonymous visitors on the VIP channel only (#492)', async () => {
+      // The VIP channel used to be created non-public, a flag that hid
+      // prices from its signed-in B2B buyers too. Its guests are now kept out
+      // by the display-mode chain — `pricing.unauthenticated_display_mode =
+      // none` on that channel — and its buyers see their prices; the retail
+      // channel publishes prices to everyone, as it did.
+      const rows = await query<{ channel: string; value: unknown }>(
+        shop,
+        `select ch.code as channel, v.value
+           from setting_values v
+           join settings s on s.id = v.setting_id
+           join sales_channels ch on ch.id = v.sales_channel_id
+          where s.code = 'pricing.unauthenticated_display_mode'
+          order by ch.code`,
+      );
+      expect(rows).toEqual([{ channel: 'pl_b2b_vip', value: 'none' }]);
     });
 
     it('leaves no assignment pointing at a channel that is not there', async () => {

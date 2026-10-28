@@ -206,6 +206,16 @@ and order intake refuse such a line as quote-only by that mode. A consumer that 
 amount to a viewer — the external catalogue API — withholds it with
 `displayModeWithholdsAmounts` (`@endora-commerce/contracts`), the one statement of the rule.
 
+**No consumer gates prices on the sales channel** (issue #492). The channel's `isPublic` flag,
+which the catalogue, search, comparisons, product links and the price-control check read to skip
+pricing altogether, is retired and its column dropped: it withheld prices from signed-in buyers as
+well, beside a chain that already said "prices after sign-in". A channel that hides prices from
+anonymous visitors carries `pricing.unauthenticated_display_mode = none` as its own setting value —
+the retiring migration (`…CoreSalesChannelsRetireIsPublic`) wrote it for every channel that had the
+flag off and no value of its own. The chain's precedence is unchanged: a product or category
+override precedes the viewer's tail, so it decides for a guest as well
+(`specs/pricing/worked-examples.md` §10.19 W5, §10.20 P4).
+
 **A book pinned to a feed publishes only while it would price an anonymous buyer on the feed's
 channel now** (`BookPricing.namedBookPublishability`, `book-pricing.ts`): its status is `active` or
 `scheduled` and `starts_at ≤ now < ends_at`, evaluated at the call rather than by the status sweep;

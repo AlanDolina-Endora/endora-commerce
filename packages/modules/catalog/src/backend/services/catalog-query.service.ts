@@ -127,10 +127,11 @@ function cursorAmount(value: unknown): string | null {
  * Catalog read-path service (US1). Consumed by the storefront and by external
  * integrations pulling `/catalog/products?changedSince=...`.
  *
- * Sales-channel awareness: each public endpoint resolves the requested channel
- * (default: the one marked `isPublic=true` when no channel was specified) and
- * applies the visibility rules from R-18 — non-public channels omit the `price`
- * field from anonymous responses.
+ * Sales-channel awareness: each public endpoint reads the channel the canonical
+ * resolver chose for the request and narrows to what that channel sells. Who
+ * sees a price is the display-mode chain's decision (`price_lists`), applied in
+ * the resolution: a viewer whose mode is `none` is sent no amount (issue #491),
+ * which is also how a channel hides prices until sign-in (issue #492).
  *
  * For MVP, text search is Postgres ILIKE on the multilingual `name`/`description`
  * blobs. The Meilisearch-backed query path lives in the `search` module
@@ -140,13 +141,11 @@ function cursorAmount(value: unknown): string | null {
 /**
  * The request's sales channel, resolved once by the canonical resolver
  * middleware (feature 053 / FR-002). The catalog reads it from the request
- * context instead of re-resolving from the raw header. `isPublic` is the
- * price-visibility flag (display concern, distinct from resolution).
+ * context instead of re-resolving from the raw header.
  */
 export interface CatalogResolvedChannel {
   id: string;
   code: string;
-  isPublic: boolean;
   defaultCurrency: string;
   defaultLanguage: string;
 }
@@ -684,9 +683,11 @@ export class CatalogQueryService {
    * The chain's answer for a batch of products, keyed by product id, **for the
    * viewer in front of the page**.
    *
-   * A non-public sales channel withholds prices (R-18), and it withholds them
-   * *before* the resolution rather than after: the catalogue has nothing to ask
-   * about on a channel whose prices it may not show.
+   * Whether the viewer is shown a price is the display-mode chain's answer,
+   * applied inside the resolution: a viewer whose mode is `none` gets the
+   * withheld arm (issue #491). The channel has no say of its own any more
+   * (issue #492) — a channel that hides prices until sign-in does so through
+   * its `pricing.unauthenticated_display_mode`.
    *
    * The organisation is the whole of this method's share of the owner's ruling
    * — an anonymous visitor sees the channel price, a signed-in buyer sees their
@@ -702,7 +703,6 @@ export class CatalogQueryService {
     context?: ListingPriceViewerContext,
   ): Promise<Map<string, ListingPriceDetail>> {
     if (products.length === 0) return new Map();
-    if (!(ctx.resolvedChannel.isPublic ?? true)) return new Map();
     // D-287 P0 — the details call: one resolution answers both `price` and
     // `resolvedPrice` (base / sale / display mode), so the product page and the
     // home page's cards need no second, per-product resolution.
@@ -742,9 +742,9 @@ export class CatalogQueryService {
   }
 
   /**
-   * `ProductSummary.price` for one resolved chain answer. A product the channel
-   * withholds prices for is absent from the map and renders `null`, and so does
-   * the chain's `none` arm — the wire field has one spelling for "no price".
+   * `ProductSummary.price` for one resolved chain answer. A product absent from
+   * the map renders `null`, and so does the chain's `none` arm — the wire field
+   * has one spelling for "no price".
    */
   #summaryPrice(
     resolved: Map<string, ListingPriceDetail>,
@@ -757,8 +757,8 @@ export class CatalogQueryService {
   /**
    * `ProductSummary.resolvedPrice` — base, sale and display mode from the same
    * resolution as `price` (D-287 P0), and the list price beside a lower buyer
-   * price when the engine answered one (161 G14). `null` where the channel
-   * withholds prices. One mapping for the listing cards and the product detail.
+   * price when the engine answered one (161 G14). `null` where the product was
+   * not resolved. One mapping for the listing cards and the product detail.
    */
   #summaryResolvedPrice(
     resolved: Map<string, ListingPriceDetail>,
@@ -1636,11 +1636,10 @@ export class CatalogQueryService {
           (categoryFilteredIds === null || categoryFilteredIds.has(r.id)),
       );
       // The walk decides on the viewer's own price — the figure the price
-      // order is made of — whether or not the channel publishes it; the cards
-      // below withhold it where the channel does. `#listingPricesFor` answers
-      // no price at all on a non-public channel, which read here as "no
-      // detail" and dropped every product, priced and unpriced alike (review 3
-      // of release 0.108.0, A3).
+      // order is made of. It asks the resolution directly, not through
+      // `#listingPricesFor`, which once answered no price at all on a channel
+      // that withheld prices; that read here as "no detail" and dropped every
+      // product, priced and unpriced alike (review 3 of release 0.108.0, A3).
       const chunkPrices =
         candidates.length === 0
           ? new Map<string, ListingPriceDetail>()
@@ -1682,11 +1681,9 @@ export class CatalogQueryService {
       page.map((p) => p.id),
       channel.id,
     );
-    // A channel that publishes no prices renders none, as `#listingPricesFor` would.
-    const shown = (channel.isPublic ?? true) ? prices : new Map<string, ListingPriceDetail>();
     return {
       data: page.map((p) =>
-        this.toSummary(p, channel, ctx.preferredLanguage, shown, cardReads),
+        this.toSummary(p, channel, ctx.preferredLanguage, prices, cardReads),
       ),
       pagination: { cursor: nextCursor, hasMore, limit: params.limit },
     };
@@ -2850,10 +2847,8 @@ export class CatalogQueryService {
     cardReads: ListingCardReads,
   ): ProductSummary {
     // Price — the pricing engine's answer for this product on this channel
-    // (issue #132), read out of the page's resolution. Sales Channel visibility
-    // still strips it on a non-public channel; what changed is that the figure
-    // underneath is one a price list stands behind rather than the catalogue's
-    // own legacy attribute.
+    // (issue #132), read out of the page's resolution — a figure a price book
+    // stands behind, or nothing where the viewer's display mode withholds it.
     const price = this.#summaryPrice(resolvedPrices, product.id);
 
     // Issue #384 — the channel's override when one applies, else the baseline

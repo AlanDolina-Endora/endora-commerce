@@ -376,10 +376,23 @@ export type SalesChannelAccessResponse = z.infer<typeof SalesChannelAccessRespon
 // ---------------------------------------------------------------------------
 
 /**
- * Action strings written by `SalesChannelsService` / `SalesChannelMembershipService`
- * through the existing `AuditLogService.record({ action, ... })`. They are
- * free-form strings (the audit log uses `action: string`, not an enum)
- * but every consumer should use these constants so a typo can't drift.
+ * The action strings of the sales-channel audit rows. They are free-form
+ * strings (the audit log uses `action: string`, not an enum), but every
+ * consumer should use these constants so a typo can't drift. Who writes each:
+ *
+ *  - `IDENTITY_CHANGED` — the identity Commands
+ *    (`makeCreateSalesChannelCommand`, `makeUpdateSalesChannelCommand` in
+ *    `sales_channels`), through `CommandBus.run` since issue #484: one row per
+ *    create or update, committed in the write's own transaction, with the
+ *    channel snapshot before the write in `stateBefore` (`null` on create) and
+ *    after it in `stateAfter`;
+ *  - `LIFECYCLE_CHANGED` — `SalesChannelsService` for deactivate, activate and
+ *    delete, through `AuditLogService.record`;
+ *  - `MEMBERSHIP_CHANGED` — the platform's `SalesChannelMembershipService`,
+ *    through `AuditLogService.record`.
+ *
+ * Moving the system default is audited by its own Command under
+ * `sales_channel.set_default`, which is not one of these constants.
  */
 export const SALES_CHANNEL_AUDIT_ACTIONS = {
   IDENTITY_CHANGED: 'sales_channel.identity.changed',

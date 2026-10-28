@@ -3,6 +3,7 @@ import {
   ANONYMOUS_PRODUCT_AUDIENCE,
   type CatalogProductReadPort,
   type CatalogProductValueOverrideRecord,
+  type ListingPriceDetailPort,
 } from '@endora-commerce/contracts';
 import { SearchQueryService, type ResolvedSearchChannel } from './search-query.service.js';
 
@@ -24,8 +25,6 @@ import { SearchQueryService, type ResolvedSearchChannel } from './search-query.s
 const CHANNEL: ResolvedSearchChannel = {
   id: '00000000-0000-4000-8000-0000000000c1',
   code: 'pl_retail',
-  // Not public: the channel withholds prices, so no pricing port is needed.
-  isPublic: false,
   defaultCurrency: 'PLN',
   defaultLanguage: 'pl-PL',
 };
@@ -92,7 +91,9 @@ function serviceWith(
     findByIds: async (ids: readonly string[]) => products.filter((p) => ids.includes(p.id)),
     listValueOverridesByProductIds,
   } as unknown as CatalogProductReadPort;
-  return { service: new SearchQueryService(port), listValueOverridesByProductIds };
+  // Names are this file's subject, not prices: the pricing port resolves nothing.
+  const prices = { resolveListingPriceDetails: async () => new Map() } as unknown as ListingPriceDetailPort;
+  return { service: new SearchQueryService(port, undefined, {}, prices), listValueOverridesByProductIds };
 }
 
 const ctx = (preferredLanguage?: string) => ({

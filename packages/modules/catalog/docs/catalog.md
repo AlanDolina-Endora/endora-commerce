@@ -24,7 +24,7 @@ otherwise; every price names its currency either way. A malformed code is refuse
 | Verb + Path | Audience | Purpose |
 | --- | --- | --- |
 | `GET /api/v1/catalog/products` | storefront / API key | List/search/filter products in the active Sales Channel |
-| `GET /api/v1/catalog/products/:idOrSlug` | storefront | Product detail (price omitted on non-public Sales Channels) |
+| `GET /api/v1/catalog/products/:idOrSlug` | storefront | Product detail (no amount where the viewer's price display mode is *None*) |
 | `GET /api/v1/catalog/categories` | storefront | Nested category tree |
 | `GET /api/v1/catalog/categories/:id/content` | storefront | One category's page content, resolved to the caller's language |
 | `GET /api/v1/catalog/filters` | storefront | Filterable attributes for the active Sales Channel |
@@ -83,7 +83,10 @@ buyer pays is chosen.
   the position it continues from can be a product the viewer may not see. A cursor that does not
   open — altered, issued by a release before the seal, or before the instance's session key was
   changed — starts the listing again at its first page.
-- **The product detail on a non-public sales channel** omits the price.
+- **Where the viewer's price display mode is *None*** — for instance an anonymous visitor on a
+  channel that hides prices until sign-in — the listing and the product detail carry no amount, and
+  a price ordering or range is refused for that page. Sales channels have no price-visibility flag
+  of their own any more: the display mode decides, for each viewer.
 
 For developers: the listing paths price a whole page in one batched call —
 `resolveListingPrices`, or `resolveListingPriceDetails` where the page renders the split

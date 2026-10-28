@@ -42,7 +42,6 @@ describe('storefront blog posts list contract (feature 163, T064)', () => {
       defaultCurrency: 'USD',
       active: true,
       systemDefault: false,
-      isPublic: true,
       status: 'active',
     });
     await em.persistAndFlush(channel);

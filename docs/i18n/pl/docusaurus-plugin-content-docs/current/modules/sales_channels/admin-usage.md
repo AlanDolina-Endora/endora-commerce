@@ -65,6 +65,16 @@ storefrontu kanału:
 
 Na liście kanałów zamknięty kanał ma etykietę **Sign-in required**.
 
+To, czy niezalogowani odwiedzający widzą **ceny**, to osobne ustawienie i nie ma go w tym
+formularzu: *tryb wyświetlania dla niezalogowanych* (`pricing.unauthenticated_display_mode`).
+Podpowiedź pod polem wyboru prowadzi do *Ustawień cenowych*, gdzie ustawia się go dla wszystkich
+kanałów; ekran *Ustawienia* ustawia go dla jednego kanału. Tryb *Żaden* ukrywa ceny do czasu
+zalogowania. Nadpisanie trybu dla produktu lub kategorii ma przed nim pierwszeństwo, także dla
+niezalogowanych odwiedzających. Zalogowani klienci widzą ceny zgodnie ze swoim trybem wyświetlania.
+Kanały miały kiedyś własną flagę widoczności cen, która ukrywała ceny także przed zalogowanymi
+klientami; została wycofana, a każdy kanał, który miał ją wyłączoną, dostał tryb *Żaden* dla
+niezalogowanych, więc ci nadal nie widzą tam cen.
+
 Zamykając sklep, pamiętaj o jednej sprawie:
 
 - **O tym, kto wejdzie przez rejestrację, decyduje moderacja.** Organizacja zarejestrowana w

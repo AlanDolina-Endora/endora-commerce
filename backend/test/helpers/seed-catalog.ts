@@ -3,7 +3,8 @@ import { Product } from './package-entities.js';
 import { Category } from './package-entities.js';
 import { AttributeSetAttribute } from './package-entities.js';
 import { createAttributeFixture } from '@endora-commerce/demo-composition';
-import { SalesChannel } from '@endora-commerce/platform/kernel';
+import { PRICING_SETTING_CODES } from '@endora-commerce/contracts';
+import { SalesChannel, Setting, SettingValue } from '@endora-commerce/platform/kernel';
 import { seedBasePriceSql } from './price-book-sql.js';
 
 // Feature 061 — attribute fixtures create the product-host Custom Field
@@ -33,7 +34,8 @@ export const SEED_PRODUCT_103_SKU = 'EXAMPLE-LARGE-003';
 /**
  * Minimum seed for US1 public catalog tests.
  *
- * - Two Sales Channels: `pl_retail` (public) and `pl_b2b_vip` (non-public).
+ * - Two Sales Channels: `pl_retail`, and `pl_b2b_vip` with its guest display
+ *   mode `none` (prices hidden until sign-in, issue #492).
  * - Three categories in a 2-level tree.
  * - Four ProductAttributes: `color` (filterable), `internal_sku_notes`
  *   (searchable but NOT filterable — used by T046 + T048 to prove the toggle
@@ -45,19 +47,41 @@ export const SEED_PRODUCT_103_SKU = 'EXAMPLE-LARGE-003';
  *   binds a new product to the default channel and this fixture did not, so a
  *   header-less request resolved a channel that sold nothing.
  */
+/**
+ * Issue #492 — the VIP channel hides prices from anonymous visitors through
+ * the display-mode chain, as the retiring migration and the demo set it:
+ * `pricing.unauthenticated_display_mode = none` for that channel alone. Its
+ * signed-in buyers see prices; it used to be non-public, which hid them too.
+ *
+ * Apart from {@link seedUs1Catalog} because the two run at different moments:
+ * the channels are seeded before the first module registers, and the setting
+ * row is written by the boot-time manifest reconciler after that — so this
+ * runs once the reconcile has, and a missing row is a broken harness, not a
+ * case to skip.
+ */
+export async function seedUs1CatalogSettings(em: EntityManager): Promise<void> {
+  const vip = await em.findOneOrFail(SalesChannel, { code: 'pl_b2b_vip' });
+  const guestMode = await em.findOneOrFail(Setting, {
+    code: PRICING_SETTING_CODES.UNAUTHENTICATED_DISPLAY_MODE,
+  });
+  const existing = await em.findOne(SettingValue, { setting: guestMode.id, salesChannel: vip.id });
+  if (existing === null) {
+    em.create(SettingValue, { setting: guestMode, salesChannel: vip, value: 'none' });
+    await em.flush();
+  }
+}
+
 export async function seedUs1Catalog(em: EntityManager): Promise<void> {
   // --- Sales Channels ----------------------------------------------------
   const retail = em.create(SalesChannel, {
     code: 'pl_retail',
     name: { 'pl-PL': 'PL Retail', 'en-US': 'PL Retail' },
-    isPublic: true,
     defaultLanguage: 'pl-PL',
     defaultCurrency: 'PLN',
   });
   const b2bVip = em.create(SalesChannel, {
     code: 'pl_b2b_vip',
     name: { 'pl-PL': 'PL B2B VIP', 'en-US': 'PL B2B VIP' },
-    isPublic: false,
     defaultLanguage: 'pl-PL',
     defaultCurrency: 'PLN',
   });

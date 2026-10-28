@@ -170,8 +170,8 @@ describe('price_lists — the conversion (feature 160, SC-006)', () => {
     // ── old-model data
     await sql(
       `insert into "sales_channels" ("id", "code", "name", "languages", "default_language", "currencies", "default_currency",
-                                     "active", "system_default", "version", "is_public", "status", "created_at", "updated_at")
-       values (?, ?, '{"en-US":"Conversion"}', '["pl-PL"]', 'pl-PL', '["PLN","EUR"]', 'PLN', true, false, 1, true, 'active', now(), now())`,
+                                     "active", "system_default", "version", "status", "created_at", "updated_at")
+       values (?, ?, '{"en-US":"Conversion"}', '["pl-PL"]', 'pl-PL', '["PLN","EUR"]', 'PLN', true, false, 1, 'active', now(), now())`,
       [ids.channel, `conv-${stamp}`],
     );
     await sql(

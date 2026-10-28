@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   ANONYMOUS_PRODUCT_AUDIENCE,
   type CatalogProductReadPort,
+  type ListingPriceDetailPort,
 } from '@endora-commerce/contracts';
 import { SearchQueryService } from '../../../../packages/modules/search/dist/backend/services/search-query.service.js';
 
@@ -383,6 +384,10 @@ describe('Issue #384 — public product reads honour channel value overrides', (
     // indexed name is deliberately neither text: the card must not trust it.
     const search = new SearchQueryService(
       h.container.resolve<CatalogProductReadPort>('catalogProductReadPort'),
+      undefined,
+      {},
+      // Names are this case's subject, not prices: the pricing port resolves nothing.
+      { resolveListingPriceDetails: async () => new Map() } as unknown as ListingPriceDetailPort,
     );
     const searchCardName = async (
       channelId: string,
@@ -405,8 +410,6 @@ describe('Issue #384 — public product reads honour channel value overrides', (
           resolvedChannel: {
             id: channelId,
             code,
-            // Withholds prices, so the case needs no pricing port.
-            isPublic: false,
             defaultCurrency: 'PLN',
             defaultLanguage: 'pl-PL',
           },

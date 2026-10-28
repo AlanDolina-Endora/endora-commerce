@@ -70,7 +70,6 @@ describe('External catalog tenant/channel isolation (062 / T016, SC-002)', () =>
         currencies: ['PLN'],
         defaultCurrency: 'PLN',
         active: true,
-        isPublic: true,
       });
       await em.persistAndFlush(ch);
       await h.salesChannels.cache.invalidate(code);

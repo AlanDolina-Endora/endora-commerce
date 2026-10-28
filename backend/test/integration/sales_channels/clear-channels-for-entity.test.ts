@@ -52,7 +52,6 @@ describe('membership: clearing every channel of an entity', () => {
       defaultCurrency: 'EUR',
       languages: ['en'],
       currencies: ['EUR'],
-      isPublic: false,
       active: true,
       systemDefault: false,
       version: 1,

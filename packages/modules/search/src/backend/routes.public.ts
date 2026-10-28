@@ -313,7 +313,6 @@ function readContext(request: FastifyRequest): {
     resolvedChannel: {
       id: ch.id,
       code: ch.code,
-      isPublic: ch.isPublic,
       defaultCurrency: ch.defaultCurrency,
       defaultLanguage: ch.defaultLanguage,
     },

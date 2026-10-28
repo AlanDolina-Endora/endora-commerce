@@ -207,7 +207,6 @@ export type SearchReindexResponse = z.infer<typeof SearchReindexResponseSchema>;
 export interface ResolvedSearchChannel {
   id: string;
   code: string;
-  isPublic: boolean;
   defaultCurrency: string;
   defaultLanguage: string;
 }

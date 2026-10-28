@@ -211,6 +211,17 @@ zamówień odrzucają taką pozycję jako „tylko na zapytanie” właśnie po 
 publikuje kwotę pozycji oglądającemu — zewnętrzne API katalogu — wstrzymuje ją przez
 `displayModeWithholdsAmounts` (`@endora-commerce/contracts`), jedyne sformułowanie tej reguły.
 
+**Żaden konsument nie uzależnia cen od kanału sprzedaży** (issue #492). Flaga kanału `isPublic`,
+którą katalog, wyszukiwanie, porównania, powiązania produktów i sprawdzenie kontrolek cenowych
+czytały, by w ogóle pominąć wycenę, została wycofana, a jej kolumna usunięta: wstrzymywała ceny
+także zalogowanym kupującym, obok łańcucha, który już wyrażał „ceny po zalogowaniu”. Kanał, który
+ukrywa ceny przed anonimowymi odwiedzającymi, ma `pricing.unauthenticated_display_mode = none` jako
+własną wartość ustawienia — migracja wycofująca (`…CoreSalesChannelsRetireIsPublic`) zapisała ją
+dla każdego kanału, który miał flagę wyłączoną i nie miał własnej wartości. Pierwszeństwo w
+łańcuchu się nie zmienia: nadpisanie produktu lub kategorii poprzedza końcówkę łańcucha
+oglądającego, więc rozstrzyga także dla gościa (`specs/pricing/worked-examples.md` §10.19 W5,
+§10.20 P4).
+
 **Cennik przypięty do feedu jest publikowany tylko wtedy, gdy teraz wyceniałby anonimowego
 kupującego w kanale feedu** (`BookPricing.namedBookPublishability`, `book-pricing.ts`): ma status
 `active` albo `scheduled` i `starts_at ≤ now < ends_at`, sprawdzane w chwili wywołania, a nie przez

@@ -15,7 +15,11 @@ import { expectNoAxeViolations } from '../../helpers/axe';
  *
  * The form carries *Open to anonymous visitors* under *Active*, on for a new
  * channel, with the hint that says what turning it off does (sign-in required,
- * Organization assignment decides); it names no price setting (issue #467).
+ * Organization assignment decides). Whether an anonymous visitor sees prices
+ * is not this control's question: a second hint points at the guest display
+ * mode in *Pricing settings*, where the retired public-channel flag's job went
+ * (issues #467 and #492).
+ *
  * The edit page sends the value in the update body, and the roster marks a
  * closed channel with a *Sign-in required* badge, so a closed store is visible
  * without opening it.
@@ -74,6 +78,8 @@ const bundle = { sales_channels: en };
 const NEW_KEYS = [
   'identity.anonymousAccess.label',
   'identity.anonymousAccess.hint',
+  'identity.anonymousAccess.pricesHint',
+  'identity.anonymousAccess.pricesLink',
   'list.badge.signInRequired',
 ] as const;
 
@@ -122,36 +128,58 @@ describe('bundle', () => {
     // the admin never had (issue #467); it names no price setting now.
     expect(en['identity.anonymousAccess.hint']).not.toMatch(/price/i);
     expect(pl['identity.anonymousAccess.hint']).not.toMatch(/cen/i);
+    // Issue #492 — the price question has its own hint, naming the setting
+    // that answers it.
+    expect(en['identity.anonymousAccess.pricesHint']).toMatch(/display mode/i);
+    expect(pl['identity.anonymousAccess.pricesHint']).toMatch(/tryb wyświetlania/i);
   });
 });
 
 describe('ChannelIdentityForm — Open to anonymous visitors', () => {
-  it('is present, on for a new channel, and described by its hint', async () => {
+  it('is present, on for a new channel, and described by its hints', async () => {
     const { container } = renderWithI18n(
       <StrictMode>
-        <ChannelIdentityForm mode="create" onSubmit={() => undefined} />
+        <MemoryRouter>
+          <ChannelIdentityForm mode="create" onSubmit={() => undefined} />
+        </MemoryRouter>
       </StrictMode>,
       bundle,
     );
     const input = anonymousSwitch();
     expect(input.checked).toBe(true);
-    const hintId = input.getAttribute('aria-describedby');
-    expect(hintId).toBeTruthy();
-    expect(document.getElementById(hintId!)?.textContent).toBe(en['identity.anonymousAccess.hint']);
+    const hintIds = (input.getAttribute('aria-describedby') ?? '').split(' ').filter(Boolean);
+    expect(hintIds).toHaveLength(2);
+    expect(document.getElementById(hintIds[0]!)?.textContent).toBe(en['identity.anonymousAccess.hint']);
+    expect(document.getElementById(hintIds[1]!)?.textContent).toBe(
+      `${en['identity.anonymousAccess.pricesHint']} ${en['identity.anonymousAccess.pricesLink']}`,
+    );
     await expectNoAxeViolations(container);
+  });
+
+  it('points the price question at the guest display mode in Pricing settings (#492)', () => {
+    renderWithI18n(
+      <MemoryRouter>
+        <ChannelIdentityForm mode="create" onSubmit={() => undefined} />
+      </MemoryRouter>,
+      bundle,
+    );
+    const link = screen.getByRole('link', { name: en['identity.anonymousAccess.pricesLink']! });
+    expect(link.getAttribute('href')).toBe('/price-lists/display-modes');
   });
 
   it('reflects a closed channel and submits the operator\'s choice', () => {
     let submitted: { anonymousAccess: boolean } | null = null;
     renderWithI18n(
       <StrictMode>
-        <ChannelIdentityForm
-          mode="edit"
-          initial={channel({ anonymousAccess: false })}
-          onSubmit={(value) => {
-            submitted = value;
-          }}
-        />
+        <MemoryRouter>
+          <ChannelIdentityForm
+            mode="edit"
+            initial={channel({ anonymousAccess: false })}
+            onSubmit={(value) => {
+              submitted = value;
+            }}
+          />
+        </MemoryRouter>
       </StrictMode>,
       bundle,
     );
@@ -166,11 +194,13 @@ describe('ChannelIdentityForm — Open to anonymous visitors', () => {
 
   it('is editable on the system-default channel, unlike Active', () => {
     renderWithI18n(
-      <ChannelIdentityForm
-        mode="edit"
-        initial={channel({ systemDefault: true })}
-        onSubmit={() => undefined}
-      />,
+      <MemoryRouter>
+        <ChannelIdentityForm
+          mode="edit"
+          initial={channel({ systemDefault: true })}
+          onSubmit={() => undefined}
+        />
+      </MemoryRouter>,
       bundle,
     );
     expect(anonymousSwitch().disabled).toBe(false);

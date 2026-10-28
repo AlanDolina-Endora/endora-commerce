@@ -66,7 +66,6 @@ export async function seedProbeChannelAssortment(
     currencies: ['PLN'],
     defaultCurrency: 'PLN',
     active: true,
-    isPublic: true,
   });
   await em.persistAndFlush(channel);
 

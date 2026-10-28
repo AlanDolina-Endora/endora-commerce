@@ -219,8 +219,8 @@ describe('audit trail coverage (T048)', () => {
       const chanId = await em
         .getConnection()
         .execute<Array<{ id: string }>>(
-          `insert into "sales_channels" ("id","code","name","is_public","default_language","default_currency","status","languages","currencies","active","system_default","version","created_at","updated_at") ` +
-            `values (gen_random_uuid(), 't048-life', '{"en":"L"}'::jsonb, false, 'en', 'EUR', 'active', '["en"]'::jsonb, '["EUR"]'::jsonb, true, false, 1, now(), now()) returning "id"`,
+          `insert into "sales_channels" ("id","code","name","default_language","default_currency","status","languages","currencies","active","system_default","version","created_at","updated_at") ` +
+            `values (gen_random_uuid(), 't048-life', '{"en":"L"}'::jsonb, 'en', 'EUR', 'active', '["en"]'::jsonb, '["EUR"]'::jsonb, true, false, 1, now(), now()) returning "id"`,
           [],
           'all',
           em.getTransactionContext(),
@@ -273,7 +273,6 @@ describe('audit trail coverage (T048)', () => {
         defaultCurrency: 'EUR',
         languages: ['en'],
         currencies: ['EUR'],
-        isPublic: false,
         active: true,
         systemDefault: false,
         version: 1,
