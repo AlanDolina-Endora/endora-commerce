@@ -501,14 +501,20 @@ describe('findPlaceholderSentences — a translation that is not a sentence', ()
     });
   });
 
-  it('reports a placeholder once, even when the English is the same placeholder', () => {
+  it('reports a placeholder once per bundle, even when the English is the same placeholder', () => {
+    // The Polish value is a placeholder whatever the English says, so it is
+    // never also reported as a copy of it; the English one is its own finding
+    // (issue #486).
     const findings = findPlaceholderSentences(
       fixture(ROUTED_TO_A, {
         'a.en': { 'errors.X_REFUSED': 'X Refused.' },
         'a.pl': { 'errors.X_REFUSED': 'X Refused.' },
       }),
     );
-    expect(findings.map((f) => f.kind)).toEqual(['placeholder']);
+    expect(findings.map((f) => `${f.kind} ${f.language}`)).toEqual([
+      'placeholder en',
+      'placeholder pl',
+    ]);
   });
 
   /**
@@ -558,7 +564,7 @@ describe('findPlaceholderSentences — a translation that is not a sentence', ()
     ).toEqual([]);
   });
 
-  it('does not judge the reference language against itself', () => {
+  it('does not compare the reference language with itself', () => {
     expect(
       findPlaceholderSentences(
         fixture(ROUTED_TO_A, { 'a.en': { 'errors.X_REFUSED': 'The request was refused.' } }),
@@ -580,8 +586,100 @@ describe('findPlaceholderSentences — a translation that is not a sentence', ()
   });
 });
 
+/**
+ * P5 over the reference language (issue #486). The English entries of the same
+ * 137 codes were the code title-cased behind a full stop — `Product Not Found.`
+ * — and the envelope served them verbatim. The English shape is the code in
+ * **Title Case**, matched case-sensitively, because the honest English sentence
+ * for a `*_NOT_FOUND` code is very often the same words in sentence case
+ * (`Order not found.`); the case-insensitive comparison that is right for the
+ * other languages would report those.
+ */
+describe('findPlaceholderSentences — the reference language', () => {
+  const ROUTED_TO_A = {
+    ORDER_NOT_FOUND: { moduleId: 'a', key: 'errors.ORDER_NOT_FOUND' },
+    X_REFUSED: { moduleId: 'a', key: 'errors.X_REFUSED' },
+  } as const;
+
+  it('placeholder — the code in Title Case behind a full stop', () => {
+    const findings = findPlaceholderSentences(
+      fixture(ROUTED_TO_A, {
+        'a.en': { 'errors.ORDER_NOT_FOUND': 'Order Not Found.' },
+        'a.pl': { 'errors.ORDER_NOT_FOUND': 'Nie znaleziono zamówienia.' },
+      }),
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      kind: 'placeholder',
+      moduleId: 'a',
+      language: 'en',
+      key: 'errors.ORDER_NOT_FOUND',
+      code: 'ORDER_NOT_FOUND',
+      value: 'Order Not Found.',
+    });
+  });
+
+  it('placeholder — behind a one-word label, and with no full stop', () => {
+    const findings = findPlaceholderSentences(
+      fixture(ROUTED_TO_A, {
+        'a.en': {
+          'errors.ORDER_NOT_FOUND': 'Error: Order Not Found',
+          'errors.X_REFUSED': 'X Refused',
+        },
+      }),
+    );
+    expect(findings.map((f) => `${f.kind} ${f.language} ${f.key}`)).toEqual([
+      'placeholder en errors.ORDER_NOT_FOUND',
+      'placeholder en errors.X_REFUSED',
+    ]);
+  });
+
+  it('placeholder — a token key spelled as its code and token in Title Case', () => {
+    const findings = findPlaceholderSentences(
+      fixture(ROUTED_TO_A, { 'a.en': { 'errors.X_REFUSED.too_late': 'X Refused Too Late.' } }),
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ kind: 'placeholder', language: 'en', code: 'X_REFUSED' });
+  });
+
+  /**
+   * The discrimination fixtures. A predicate that compared the English value
+   * case-insensitively — P5's rule for every other language — would report
+   * each of these, and every one is the kind of sentence the tree ships.
+   */
+  it('says nothing about the same words in sentence case — `Order not found.` is a sentence', () => {
+    expect(
+      findPlaceholderSentences(
+        fixture(
+          {
+            ...ROUTED_TO_A,
+            SETTING_GROUP_NOT_FOUND: { moduleId: 'a', key: 'errors.SETTING_GROUP_NOT_FOUND' },
+          },
+          {
+            'a.en': {
+              'errors.ORDER_NOT_FOUND': 'Order not found.',
+              'errors.SETTING_GROUP_NOT_FOUND': 'Setting group not found.',
+              'errors.X_REFUSED.too_late': 'X refused too late.',
+            },
+          },
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it('says nothing about an English sentence that merely contains the code in Title Case', () => {
+    expect(
+      findPlaceholderSentences(
+        fixture(ROUTED_TO_A, {
+          'a.en': { 'errors.ORDER_NOT_FOUND': 'The Order Not Found page was removed.' },
+        }),
+      ),
+    ).toEqual([]);
+  });
+});
+
 describe('the tree itself, under P5', () => {
-  it('ships no placeholder and no copied English sentence in any non-English bundle', async () => {
+  it('ships no placeholder in any bundle and no copied English sentence in a non-English one', async () => {
     const findings = findPlaceholderSentences(await treeTranslationInput());
     expect(
       findings.map((f) => `${f.kind}: ${f.moduleId}/${f.language} ${f.key}`),

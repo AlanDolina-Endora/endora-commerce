@@ -183,7 +183,7 @@ describe('155 — API order intake: minimums through the batch, and the item bou
     const res = await post([{ sku: H.sku, quantity: 5 }]);
     expect(res.statusCode, res.body).toBe(404);
     const { requestId: _requestId, ...answer } = errorOf(res);
-    expect(answer).toEqual({ code: ERROR_CODES.PRODUCT_NOT_FOUND, message: 'Product Not Found.' });
+    expect(answer).toEqual({ code: ERROR_CODES.PRODUCT_NOT_FOUND, message: 'Product not found.' });
     expect(res.body).not.toContain(H.nameEn);
     expect(res.body).not.toContain('minimum');
     expect(await orderCount()).toBe(ordersBefore);

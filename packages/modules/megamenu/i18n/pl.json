@@ -88,7 +88,7 @@
   "errors.MEGAMENU_BINDING_NOT_FOUND": "Nie znaleziono powiązania megamenu.",
   "errors.MEGAMENU_BINDING_ALREADY_EXISTS": "Powiązanie dla tego kanału sprzedaży i języka już istnieje.",
   "errors.MEGAMENU_LANGUAGE_NOT_IN_CHANNEL_SCOPE": "Ten język nie jest skonfigurowany w wybranym kanale sprzedaży.",
-  "errors.MEGAMENU_TARGET_OUT_OF_SCOPE": "Kategoria wskazana w pozycji megamenu nie należy do zakresu jego powiązań.",
+  "errors.MEGAMENU_TARGET_OUT_OF_SCOPE": "Kategoria lub strona wskazana w pozycji megamenu nie należy do zakresu jego powiązań.",
   "errors.MEGAMENU_ASSET_KIND_MISMATCH": "Wybrany zasób ma niewłaściwy typ dla tej pozycji megamenu.",
   "errors.MEGAMENU_REFERENCED": "To megamenu jest nadal używane, więc nie można go usunąć.",
   "errors.MEGAMENU_DEPTH_EXCEEDED": "Drzewo megamenu ma zbyt wiele poziomów zagnieżdżenia.",
