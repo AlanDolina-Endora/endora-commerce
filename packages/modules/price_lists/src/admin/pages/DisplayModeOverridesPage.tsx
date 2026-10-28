@@ -463,6 +463,15 @@ function PricingSettingsCard({
           ))}
         </div>
       )}
+      {/* Issue #492 — the owner's ruling of 2026-10-28: the chain is unchanged,
+          so a product or category override beats the unauthenticated mode for
+          anonymous visitors too. With the channel's public flag retired it is
+          the only way a guest sees a price where that mode is `none`, so the
+          card says so beside the two defaults it qualifies — and that a
+          channel's own value, written on the Settings screen, beats both. */}
+      <p className="b2b-help" style={{ marginTop: 8 }}>
+        {t('priceLists.displayModes.settings.precedenceHint')}
+      </p>
     </section>
   );
 }

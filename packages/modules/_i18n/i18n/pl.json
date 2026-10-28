@@ -1486,6 +1486,7 @@
   "priceLists.displayModes.searchPlaceholder": "Szukaj {scope}…",
   "priceLists.displayModes.settings.defaultLabel": "Domyślny tryb wyświetlania (zalogowani klienci)",
   "priceLists.displayModes.settings.info.saved": "Ustawienie zapisane.",
+  "priceLists.displayModes.settings.precedenceHint": "Wartość ustawiona dla konkretnego kanału sprzedaży na ekranie Ustawienia ma pierwszeństwo przed tymi wartościami domyślnymi. Nadpisanie produktu lub kategorii ma pierwszeństwo przed oboma trybami, także dla niezalogowanych odwiedzających: produkt nadpisany na „Tylko brutto” pokazuje cenę gościom nawet wtedy, gdy tryb dla niezalogowanych to „Żaden — tylko zapytanie ofertowe”.",
   "priceLists.displayModes.settings.subtitle": "— domyślne ustawienia platformowe wykorzystywane przez łańcuch rozstrzygający",
   "priceLists.displayModes.settings.title": "Domyślne tryby prezentacji cen",
   "priceLists.displayModes.settings.unauthLabel": "Tryb wyświetlania dla niezalogowanych (anonimowi odwiedzający)",

@@ -103,6 +103,20 @@ describe('Pricing settings — a reader sees values, never controls (FR-028)', (
     expect(screen.getByRole('button', { name: /Add override/ })).toBeInTheDocument();
   });
 
+  it('says a channel’s own value wins, and that a product or category override is seen by guests too (#492)', async () => {
+    // The owner's ruling of 2026-10-28: the chain is unchanged, so a product
+    // or category override takes precedence over the unauthenticated mode for
+    // anonymous visitors as well — with the channel's public flag retired, it
+    // is the only way a guest sees a price where that mode is `none`. The
+    // card says so next to the two defaults it qualifies.
+    await open(PRICING_READER);
+    const defaults = screen.getByRole('region', { name: 'Default display modes' });
+    const hint = within(defaults).getByText(/override/i);
+    expect(hint.textContent).toMatch(/sales channel/i);
+    expect(hint.textContent).toMatch(/product or category override/i);
+    expect(hint.textContent).toMatch(/anonymous visitors too/i);
+  });
+
   it('has no axe violations for a reader', async () => {
     await open(PRICING_READER);
     await expectNoAxeViolations(document.body);

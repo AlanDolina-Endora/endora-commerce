@@ -1486,6 +1486,7 @@
   "priceLists.displayModes.searchPlaceholder": "Search {scope}…",
   "priceLists.displayModes.settings.defaultLabel": "Default display mode (signed-in customers)",
   "priceLists.displayModes.settings.info.saved": "Setting saved.",
+  "priceLists.displayModes.settings.precedenceHint": "A sales channel’s own value for either mode, set on the Settings screen, wins over these defaults. A product or category override takes precedence over both modes, for anonymous visitors too: a product overridden to “Gross only” shows its price to guests even where the unauthenticated mode is “None — quote only”.",
   "priceLists.displayModes.settings.subtitle": "— platform-wide defaults consumed by the resolver chain",
   "priceLists.displayModes.settings.title": "Default display modes",
   "priceLists.displayModes.settings.unauthLabel": "Unauthenticated display mode (anonymous visitors)",

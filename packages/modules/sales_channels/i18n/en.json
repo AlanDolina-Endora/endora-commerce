@@ -87,5 +87,7 @@
   "auditLog.sales_channel.set_default": "System-default sales channel moved",
   "identity.anonymousAccess.label": "Open to anonymous visitors",
   "identity.anonymousAccess.hint": "When off, visitors must sign in, and only customers whose organization is assigned to this channel can use the store. With automatic moderation, anyone who registers a business here gets access.",
+  "identity.anonymousAccess.pricesHint": "Whether anonymous visitors see prices is a separate setting, the unauthenticated display mode: for every channel in Pricing settings, or for this channel alone on the Settings screen.",
+  "identity.anonymousAccess.pricesLink": "Open Pricing settings",
   "list.badge.signInRequired": "Sign-in required"
 }
