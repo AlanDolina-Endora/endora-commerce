@@ -60,6 +60,30 @@ describe('taskNotificationText', () => {
     expect(bundle('en')[comment.titleMessage.key]!.replace('{number}', 'TSK-000042')).toBe(comment.title);
   });
 
+  it('a reminder names the Task by its number only, from a key both bundles hold (FR-034)', () => {
+    const reminder = taskNotificationText.reminder('TSK-000042');
+    expect(reminder.title).toBe('Reminder: Task TSK-000042');
+    expect(reminder.titleMessage).toEqual({ scope: 'tasks', key: 'notifications.reminder.title', params: { number: 'TSK-000042' } });
+    for (const language of ['en', 'pl'] as const) {
+      const template = bundle(language)[reminder.titleMessage.key];
+      expect(template, `${language}: ${reminder.titleMessage.key}`).toBeTypeOf('string');
+      expect([...template!.matchAll(/\{(\w+)\}/g)].map((m) => m[1])).toEqual(['number']);
+    }
+    expect(bundle('en')[reminder.titleMessage.key]!.replace('{number}', 'TSK-000042')).toBe(reminder.title);
+  });
+
+  it('the daily digest says how many, and names no Task (FR-036)', () => {
+    const digest = taskNotificationText.digest(3);
+    expect(digest.title).toBe('Your daily task digest: 3 due today or overdue');
+    expect(digest.titleMessage).toEqual({ scope: 'tasks', key: 'notifications.digest.title', params: { count: 3 } });
+    for (const language of ['en', 'pl'] as const) {
+      const template = bundle(language)[digest.titleMessage.key];
+      expect(template, `${language}: ${digest.titleMessage.key}`).toBeTypeOf('string');
+      expect([...template!.matchAll(/\{(\w+)\}/g)].map((m) => m[1])).toEqual(['count']);
+    }
+    expect(bundle('en')[digest.titleMessage.key]!.replace('{count}', '3')).toBe(digest.title);
+  });
+
   it('links to the Task’s screen', () => {
     expect(taskLinkPath('7d3c8f1e-0000-4000-8000-000000000001')).toBe('/tasks/7d3c8f1e-0000-4000-8000-000000000001');
   });

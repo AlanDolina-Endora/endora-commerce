@@ -502,6 +502,13 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Phase 8): a record link to an Opportunity, an Order or a Quote Request whose owner is off, which ' +
       'the caller may not read, or which does not exist — the three answer identically.',
   },
+  TASK_REMINDER_INVALID: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 9): a reminder naming a recipient who is neither the caller nor an assignee, an eleventh ' +
+      'reminder on one Task, or a reminder relative to the due moment of a Task that has none.',
+  },
   PROJECT_NOT_FOUND: {
     to: 'projects',
     reason:

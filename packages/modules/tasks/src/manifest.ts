@@ -230,6 +230,7 @@ export const manifest = defineModuleManifest({
     { code: 'TASK_PARENT_CYCLE' },
     { code: 'TASK_HIERARCHY_TOO_DEEP' },
     { code: 'TASK_LINK_INVALID' },
+    { code: 'TASK_REMINDER_INVALID' },
   ],
   /**
    * The command palette (Principle XVI, FR-041; `contracts/admin-surfaces.md`

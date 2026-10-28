@@ -1,4 +1,5 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
+import type { Redis } from 'ioredis';
 import {
   TaskTimeZoneSchema,
   type AdminI18nTranslatePort,
@@ -13,6 +14,7 @@ import {
   type CustomFieldDefinitionReadPort,
   type CustomFieldListFilterPort,
   type CustomFieldValuePort,
+  type EmailDefaultsRegistryPort,
   type OpportunityReadPort,
   type OrderListPort,
   type OrderReadPort,
@@ -20,8 +22,10 @@ import {
   type ProjectReadPort,
   type QuoteRequestReadPort,
   type SettingsAdminPort,
+  type SettingWriteValidatorRegistryPort,
   type TaskReadPort,
   type TaskWritePort,
+  type TransactionalEmailSender,
 } from '@endora-commerce/contracts';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import {
@@ -33,6 +37,8 @@ import {
   type SettingsReadPort,
 } from '@endora-commerce/platform/kernel';
 import { createTaskAdminSearchProvider } from './admin-search-provider.js';
+import { TASK_DIGEST_DEFAULT, TASK_DIGEST_EMAIL_CODE } from './email-templates/digest-defaults.js';
+import { TASK_REMINDER_DEFAULT, TASK_REMINDER_EMAIL_CODE } from './email-templates/reminder-defaults.js';
 import { Task } from './entities/task.entity.js';
 import { TaskAssignee } from './entities/task-assignee.entity.js';
 import { TaskAttachment } from './entities/task-attachment.entity.js';
@@ -52,6 +58,8 @@ import { TaskTagAssignment } from './entities/task-tag-assignment.entity.js';
 import { registerTaskBoardRoutes } from './routes/routes.board.js';
 import { registerTaskCollaborationRoutes } from './routes/routes.collaboration.js';
 import { registerTaskPriorityRoutes } from './routes/routes.priorities.js';
+import { registerTaskReminderRoutes } from './routes/routes.reminders.js';
+import { registerTaskSettingsRoutes } from './routes/routes.settings.js';
 import { registerTaskTagRoutes } from './routes/routes.tags.js';
 import { registerTaskRoutes } from './routes/routes.tasks.js';
 import { registerTaskViewRoutes } from './routes/routes.views.js';
@@ -60,6 +68,7 @@ import { TaskAttachmentService } from './services/attachment-service.js';
 import { TaskBoardCardFieldService } from './services/board-card-field-service.js';
 import { TaskBoardService } from './services/board-service.js';
 import { TaskCommentService } from './services/comment-service.js';
+import { TaskDigestService } from './services/digest-service.js';
 import { TaskHierarchyService } from './services/hierarchy-service.js';
 import { TaskRelationService } from './services/relation-service.js';
 import { TaskDocumentLookupService } from './services/document-lookup-service.js';
@@ -67,6 +76,7 @@ import { createTaskAudience, TaskMentionService, type TaskAudience } from './ser
 import { createOwnerReadChecks, type OwnerReadChecks } from './services/owner-read-permissions.js';
 import { TaskPriorityService } from './services/priority-service.js';
 import { TaskRecordLinkService } from './services/record-link-service.js';
+import { TaskReminderService } from './services/reminder-service.js';
 import { createTaskRecordOwners, type TaskRecordOwners } from './services/record-owners.js';
 import { TaskListViewService } from './services/saved-view-service.js';
 import { TaskReferenceService } from './services/reference-service.js';
@@ -75,15 +85,24 @@ import { registerTaskAssetReferences } from './services/task-asset-references.js
 import { actingAdminUserId, TaskAccess } from './services/task-access.js';
 import { registerTaskAuditReferences } from './services/task-audit-references.js';
 import { TaskContextRegistry } from './services/task-context-registry.js';
+import { createTaskEmail, type TaskEmail } from './services/task-email.js';
 import { TaskHistoryService } from './services/task-history-service.js';
 import { createTaskNotifier, type TaskNotifier } from './services/task-notifier.js';
 import { TaskReadPortService } from './services/task-read-port.js';
 import { TaskService } from './services/task-service.js';
+import { TaskSettingsService } from './services/task-settings-service.js';
 import { isSystemActor, TaskVisibility } from './services/task-visibility.js';
 import { TaskTransitionService } from './services/task-transition-service.js';
 import { TaskWorkflowRead } from './services/task-workflow-read.js';
 import { TaskWritePortService } from './services/task-write-port.js';
+import { createTaskTimeZoneValidator } from './services/time-zone-validator.js';
 import { TaskWorkflowConfigService } from './services/workflow-config-service.js';
+import {
+  createTasksRemindersJob,
+  startTasksReminders,
+  TASKS_DIGEST_SCOPE_REASON,
+  TASKS_REMINDERS_SCOPE_REASON,
+} from './workers/tasks-reminders-worker.js';
 
 /**
  * `tasks` — composed by the kernel container.
@@ -126,6 +145,20 @@ interface TasksCradle {
   readonly tasksBoardCardFieldService: TaskBoardCardFieldService;
   readonly tasksBoardService: TaskBoardService;
   readonly tasksListViewService: TaskListViewService;
+  readonly tasksSettingsService: TaskSettingsService;
+  readonly tasksEmail: TaskEmail;
+  readonly tasksReminderService: TaskReminderService;
+  readonly tasksDigestService: TaskDigestService;
+  readonly tasksRemindersJob: (now?: Date) => Promise<void>;
+  /**
+   * `transactional_emails`' late-bound sender, read per send. It answers
+   * `undefined` until that module has announced it.
+   */
+  readonly transactionalEmailSenderAccessor: () => TransactionalEmailSender | undefined;
+  /** Whether this process runs queue consumers — the platform's one answer. */
+  readonly processRunsWorkers: boolean;
+  /** The connection a module may build a queue on; undefined where a composition wants none. */
+  readonly moduleQueueRedis: Redis | undefined;
 }
 
 export function registerModule(ctx: ModuleContext): void {
@@ -342,6 +375,8 @@ export function registerModule(ctx: ModuleContext): void {
             transitions: tasksTransitionService,
             hierarchy: tasksHierarchyService,
             links: tasksRecordLinkService,
+            // Read off the cradle per call: the reminder service is composed after this one.
+            reminders: (taskId) => ctx.cradle<TasksCradle>().tasksReminderService.forReader(taskId),
             auditLog: auditLogService,
             // `tasks.time_zone` (R-17): read per call, so an operator's change
             // is seen by the next request.
@@ -586,6 +621,145 @@ export function registerModule(ctx: ModuleContext): void {
       .singleton(),
   });
   // --- end of Record links ------------------------------------------------------------
+
+  // --- Settings (User Story 7, research R-17) ------------------------------------------
+  // `tasks.time_zone`, the calendar of Tasks: read on `tasks:read`, written on
+  // `tasks:configure` through `settings`' own audited write. Its validator is a
+  // **contribution** into `settings`' validator registry, which filters
+  // contributors by presence when it is read — so the boot hook carries no probe.
+  ctx.di.register({
+    tasksSettingsService: ctx
+      .asFunction(
+        () =>
+          new TaskSettingsService({
+            settings: lazyPort<SettingsReadPort>(ctx, 'settingsReadPort'),
+            settingsAdmin: lazyPort<SettingsAdminPort>(ctx, 'settingsAdminService'),
+          }),
+      )
+      .singleton(),
+  });
+  ctx.onBoot(() => {
+    lazyPort<SettingWriteValidatorRegistryPort>(ctx, 'settingWriteValidatorRegistry').register(
+      createTaskTimeZoneValidator(),
+    );
+  });
+  ctx.routes(async (app) => {
+    const cradle = ctx.cradle<TasksCradle>();
+    await registerTaskSettingsRoutes(app, { settingsService: cradle.tasksSettingsService, requireAdmin: cradle.requireAdmin });
+  });
+  // --- end of Settings ----------------------------------------------------------------
+
+  // --- Reminders and the daily digest (User Story 7, research R-17, R-18) -------------
+  // A sweep, not timers: the reminder rows are the schedule, and one pass claims
+  // each (reminder, recipient) with a delivery row before it tells anyone. The
+  // bell is `admin_notifications`', which this module only degrades without: its
+  // presence is decided before the bell is written, and the bell is written on
+  // the delivery row's own transaction (`recordWithin`), so it is exactly once.
+  // The e-mails go out through `transactional_emails`' sender, read off the
+  // cradle per send — a function, announced late, and `lazyPort` forwards
+  // method calls only. Who is told is decided when it goes out: the audience
+  // question every notification of this module asks.
+  ctx.di.register({
+    tasksEmail: ctx
+      .asFunction(() =>
+        createTaskEmail({
+          sender: () => ctx.cradle<TasksCradle>().transactionalEmailSenderAccessor(),
+          log: (message, context) => ctx.log.warn(context, message),
+        }),
+      )
+      .singleton(),
+    tasksReminderService: ctx
+      .asFunction(
+        ({ emFactory, commandBus, tasksAccess, tasksAudience, tasksEmail }: TasksCradle) => {
+          const settings = lazyPort<SettingsReadPort>(ctx, 'settingsReadPort');
+          return new TaskReminderService({
+            emFactory,
+            commandBus,
+            access: tasksAccess,
+            audience: tasksAudience,
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+            permissions: lazyPort<PermissionReadPort>(ctx, 'permissionService'),
+            bell: lazyPort<AdminNotificationRecordPort<EntityManager>>(ctx, 'adminNotificationRecordPort'),
+            bellPresent: () => effectiveState.isPresent('admin_notifications'),
+            email: tasksEmail,
+            timeZone: () => settings.get('tasks.time_zone', null, TaskTimeZoneSchema.shape.timeZone),
+            log: (message, context) => ctx.log.warn(context, message),
+          });
+        },
+      )
+      .singleton(),
+    tasksDigestService: ctx
+      .asFunction(({ emFactory, commandBus, tasksAudience, tasksNotifier, tasksEmail }: TasksCradle) => {
+        const settings = lazyPort<SettingsReadPort>(ctx, 'settingsReadPort');
+        return new TaskDigestService({
+          emFactory,
+          commandBus,
+          audience: tasksAudience,
+          adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+          notifier: tasksNotifier,
+          email: tasksEmail,
+          timeZone: () => settings.get('tasks.time_zone', null, TaskTimeZoneSchema.shape.timeZone),
+          log: (message, context) => ctx.log.warn(context, message),
+        });
+      })
+      .singleton(),
+    // What one tick of the clock runs. Registered, so that what a test drives is
+    // what the consumer runs: presence, then each pass's probe, then its scope.
+    tasksRemindersJob: ctx
+      .asFunction(({ tasksReminderService, tasksDigestService }: TasksCradle) =>
+        createTasksRemindersJob({
+          isPresent: () => effectiveState.isPresent('tasks'),
+          reminders: {
+            scopeReason: TASKS_REMINDERS_SCOPE_REASON,
+            hasWork: (now) => tasksReminderService.hasWork(now),
+            run: (now) => tasksReminderService.sweep(now),
+          },
+          digest: {
+            scopeReason: TASKS_DIGEST_SCOPE_REASON,
+            hasWork: (now) => tasksDigestService.hasWork(now),
+            run: (now) => tasksDigestService.pass(now),
+          },
+          log: ctx.log,
+        }),
+      )
+      .singleton(),
+  });
+  ctx.routes(async (app) => {
+    const cradle = ctx.cradle<TasksCradle>();
+    await registerTaskReminderRoutes(app, {
+      reminderService: cradle.tasksReminderService,
+      digestService: cradle.tasksDigestService,
+      requireAdmin: cradle.requireAdmin,
+    });
+  });
+  /**
+   * The two e-mails' default subjects and bodies — a **contribution** hook. It
+   * pushes inert descriptors into `emailDefaultsPort`, the ungated registry
+   * `transactional_emails` owns and reads once at boot, and carries no presence
+   * probe: the definitions are seeded from this module's manifest whether the
+   * module is on or off, and a push skipped here would leave them with an empty
+   * body until the next restart after a reactivation.
+   */
+  ctx.onBoot(() => {
+    const defaults = lazyPort<EmailDefaultsRegistryPort>(ctx, 'emailDefaultsPort');
+    defaults.register(TASK_REMINDER_EMAIL_CODE, TASK_REMINDER_DEFAULT, 'tasks');
+    defaults.register(TASK_DIGEST_EMAIL_CODE, TASK_DIGEST_DEFAULT, 'tasks');
+  });
+  // The clock: a Job Scheduler and its consumer, attached where `app.log`
+  // exists and through `ctx.worker`, which is what stops it with the module.
+  // Built only where the host says this process consumes queues and offers a
+  // connection; the shared test server says neither and drives the job itself.
+  ctx.routes(async (app) => {
+    const cradle = ctx.cradle<TasksCradle>();
+    await startTasksReminders({
+      job: () => cradle.tasksRemindersJob(),
+      processRunsWorkers: cradle.processRunsWorkers,
+      moduleQueueRedis: cradle.moduleQueueRedis,
+      attach: (worker) => ctx.worker(worker, { logger: app.log }),
+      onClose: (close) => app.addHook('onClose', close),
+    });
+  });
+  // --- end of Reminders and the daily digest --------------------------------------------
 
   // --- Published ports (contracts/ports-and-events.md §1) ---------------------------
   // What another module reads and writes Tasks through. Both are `providePort`:

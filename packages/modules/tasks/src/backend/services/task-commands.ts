@@ -20,6 +20,7 @@ import { TaskReference } from '../entities/task-reference.entity.js';
 import { TaskTagAssignment } from '../entities/task-tag-assignment.entity.js';
 import { assertParentFits, lockHierarchy } from './hierarchy-service.js';
 import { newlyMentioned } from './mention-service.js';
+import { dueMomentOf, followDueMoment } from './reminder-schedule.js';
 import { referenceRowsFor } from './reference-service.js';
 import { taskAssigneeInvalid, taskNotFound } from './task-errors.js';
 import { nextTaskNumber } from './task-number.js';
@@ -245,7 +246,11 @@ export function createTaskCommand(context: TaskContext | null, input: NewTaskFie
  * priority, tags or custom fields. No event. The result is who a changed
  * description newly mentions (none when the description did not change).
  */
-export function updateTaskCommand(id: string, changes: TaskFieldChanges): Command<{ mentioned: string[] }> {
+export function updateTaskCommand(
+  id: string,
+  changes: TaskFieldChanges,
+  reminders: { timeZone: string; auditLog: AuditPort },
+): Command<{ mentioned: string[] }> {
   return {
     action: 'tasks.task.update',
     objectType: 'task',
@@ -263,6 +268,11 @@ export function updateTaskCommand(id: string, changes: TaskFieldChanges): Comman
       }
       if (changes.dueOn !== undefined) task.dueOn = changes.dueOn;
       if (changes.dueAt !== undefined) task.dueAt = changes.dueAt;
+      if (changes.dueOn !== undefined || changes.dueAt !== undefined) {
+        // Relative reminders follow the due moment in this same Command (R-17).
+        const moment = dueMomentOf({ dueOn: task.dueOn ?? null, dueAt: task.dueAt ?? null }, reminders.timeZone);
+        await followDueMoment(scoped, reminders.auditLog, task.id, moment);
+      }
       if (changes.startOn !== undefined) task.startOn = changes.startOn;
       if (changes.context !== undefined) {
         task.contextType = changes.context?.contextType ?? null;

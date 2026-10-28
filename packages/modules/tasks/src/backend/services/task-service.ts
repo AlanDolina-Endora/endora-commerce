@@ -22,6 +22,7 @@ import {
   type TaskDetail,
   type TaskListQuery,
   type TaskListResponse,
+  type TaskReminder,
   type TaskRecord,
   type TaskStatusChangeBody,
   type TaskStatusChangeResult,
@@ -133,6 +134,8 @@ export interface TaskServiceDeps {
   hierarchy: Pick<TaskHierarchyService, 'assertMayAdopt' | 'setParent'>;
   /** Record links: validated before a create, resolved per reader on the detail (R-16). */
   links: Pick<TaskRecordLinkService, 'assertLinkable' | 'linksOf'>;
+  /** The reminders of a Task the reader may be shown: their own and those naming them (R-17). */
+  reminders: (taskId: string) => Promise<TaskReminder[]>;
   /** The kernel's audit port — a deleted Task's former sub-tasks each get an entry (FR-029). */
   auditLog: AuditPort;
   /** `tasks.time_zone` — the calendar a date-only due date is counted in (research R-17). */
@@ -660,7 +663,8 @@ export class TaskService {
     if (body.context !== undefined && !sameContext(body.context, row)) fields.context = body.context;
     let mentioned: string[] = [];
     if (Object.keys(fields).length > 0) {
-      mentioned = (await this.deps.commandBus.run(updateTaskCommand(row.id, fields))).mentioned;
+      const reminders = { timeZone: await this.deps.timeZone(), auditLog: this.deps.auditLog };
+      mentioned = (await this.deps.commandBus.run(updateTaskCommand(row.id, fields, reminders))).mentioned;
     }
     if (priorityChange) await this.deps.commandBus.run(changeTaskPriorityCommand(row.id, body.priorityCode ?? null));
     if (body.tagIds !== undefined) await this.deps.commandBus.run(changeTaskTagsCommand(row.id, body.tagIds));
@@ -893,10 +897,11 @@ export class TaskService {
       this.#people([row.created_by_admin_user_id]).then((people) => people.get(row.created_by_admin_user_id)),
       Promise.resolve(actingAdminUserId()),
     ]);
-    const [references, customFieldValues, links] = await Promise.all([
+    const [references, customFieldValues, links, reminders] = await Promise.all([
       this.deps.references.resolve(row.description),
       this.deps.customFields.project('task', row.custom_field_values ?? {}),
       this.deps.links.linksOf(row.id),
+      this.deps.reminders(row.id),
     ]);
     const held = me === null ? [] : await this.deps.permissions.listPermissions(me);
     const contextAvailable = summary!.context?.available ?? false;
@@ -918,7 +923,7 @@ export class TaskService {
       subtaskItems: await this.#summaries(subtaskRows, language, scope),
       attachmentsCount: counts.attachments,
       commentsCount: counts.comments,
-      reminders: [],
+      reminders,
       createdBy: creator ? { id: creator.id, name: personName(creator) } : null,
       publishedAt: iso(row.published_at),
       completedAt: iso(row.completed_at),

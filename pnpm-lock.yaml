@@ -3947,6 +3947,9 @@ importers:
       '@endora-commerce/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@endora-commerce/email-components':
+        specifier: workspace:*
+        version: link:../../email-components
       '@endora-commerce/platform':
         specifier: workspace:*
         version: link:../../platform
@@ -3968,9 +3971,15 @@ importers:
       '@types/react':
         specifier: ^19.2.14
         version: 19.3.0
+      bullmq:
+        specifier: ^5.76.1
+        version: 5.76.1
       fastify:
         specifier: ^5.12.5
         version: 5.12.5
+      ioredis:
+        specifier: ^5.10.1
+        version: 5.10.1
       lucide-react:
         specifier: ^1.11.0
         version: 1.11.0(react@19.2.5)

@@ -193,6 +193,10 @@ function rawSqlIn(source: ts.SourceFile): string[] {
  */
 const SQL_WITHOUT_RULE_SCOPED_TABLES: Readonly<Record<string, string>> = {
   'services/task-number.ts': 'Draws the next Task number from its sequence — no row of any Task.',
+  'services/scheduled-work-probe.ts':
+    'The scheduled-work probe helper (issue #120), identical in every module with a probe: it runs the ' +
+    '`exists(…)` its caller hands it and answers one bit. Its callers — the reminder and digest passes — are ' +
+    'readers with their reasons, and the row sources are theirs.',
   'services/saved-view-service.ts':
     'A saved view of the Tasks list (feature 147): an advisory lock keyed on the view owner and a name probe ' +
     'over `task_list_saved_views` — an administrator\'s own preset, never a row of any Task.',
@@ -207,10 +211,13 @@ const SQL_WITHOUT_RULE_SCOPED_TABLES: Readonly<Record<string, string>> = {
 const RULE_SCOPED_READ_LEDGER: Readonly<Record<string, number>> = {
   'services/attachment-service.ts': 5,
   'services/comment-service.ts': 4,
+  'services/digest-service.ts': 2,
   'services/hierarchy-service.ts': 5,
   'services/priority-service.ts': 1,
   'services/record-link-service.ts': 3,
   'services/relation-service.ts': 2,
+  'services/reminder-schedule.ts': 3,
+  'services/reminder-service.ts': 12,
   'services/tag-service.ts': 2,
   'services/task-access.ts': 3,
   'services/task-asset-references.ts': 2,

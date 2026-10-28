@@ -732,6 +732,8 @@ export const ERROR_CODES = {
   TASK_HIERARCHY_TOO_DEEP: 'TASK_HIERARCHY_TOO_DEEP',
   /** A record a Task cannot be linked to: its owner absent, no read permission for it, or not found (R-16). */
   TASK_LINK_INVALID: 'TASK_LINK_INVALID',
+  /** A Task reminder that cannot be set: a recipient not the caller or an assignee, too many, or no due moment (R-17). */
+  TASK_REMINDER_INVALID: 'TASK_REMINDER_INVALID',
 
   // Projects (`specs/163-projects-and-tasks/`, `contracts/admin-api.md` §2) —
   // the spellings of `PROJECTS_ERROR_CODES`. Each is declared by the `projects`

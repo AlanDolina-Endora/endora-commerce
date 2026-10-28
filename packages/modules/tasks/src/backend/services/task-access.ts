@@ -75,6 +75,19 @@ export const TASK_ACCESS_READERS: Readonly<Record<string, string>> = {
     'and moves them to the replacement **whoever may see them**, because a Task the operator cannot see is ' +
     'still in the status (FR-016, research R-1). It reads ids and completion times only, hands nothing back to ' +
     'the caller but the workflow, and records each move in that Task\'s own audit history.',
+  'services/reminder-service.ts':
+    'Setting and removing reminders starts from `loadVisible` and reads the reminders and assignees of that one ' +
+    'Task by its id. The delivery pass is a sweep in the system scope (research R-17): it reads the due ' +
+    '(reminder, recipient) pairs with their Task\'s number, title and visibility facts, platform-wide on purpose, ' +
+    'and asks the audience question — `tasks:read`, the draft/private rule, the context\'s `canSeeAs` — for each ' +
+    'recipient before anything is sent; a Task a recipient may not see is recorded `skipped`, never shown.',
+  'services/reminder-schedule.ts':
+    'Moves or removes the relative reminders of one Task inside the Command that changed its due moment, keyed by ' +
+    'the id that Command locked after its caller loaded the Task through `loadVisible`.',
+  'services/digest-service.ts':
+    'The daily digest pass, in the system scope (research R-18): for each claimed subscriber it reads the open ' +
+    'Tasks assigned to them, due today or before, and asks the audience question — `tasks:read`, the ' +
+    'draft/private rule, the context\'s `canSeeAs` — of each before it is listed.',
   'services/task-write-port.ts':
     '`deleteInContext` lists the ids of one context for its owner — the module that registered the context type ' +
     'and is deleting its own record — and hands each to the delete Command.',
