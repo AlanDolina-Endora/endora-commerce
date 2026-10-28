@@ -53,6 +53,15 @@ describe('tasks admin contributions', () => {
     const declared = new Set((manifest.permissions ?? []).map((permission) => permission.code));
     for (const route of contributions.routes ?? []) expect(declared.has(route.requiredPermission ?? '')).toBe(true);
     for (const row of contributions.nav ?? []) expect(declared.has(row.requiredPermission ?? '')).toBe(true);
+    for (const zone of contributions.zones ?? []) expect(declared.has(zone.requiredPermission ?? '')).toBe(true);
+  });
+
+  it('contributes the Tasks panel to an Order, a Quote Request and an Opportunity (165 US6)', () => {
+    expect((contributions.zones ?? []).map((zone) => [zone.zone, zone.weight, zone.requiredPermission])).toEqual([
+      ['order.detail.after', 660, 'tasks:read'],
+      ['quote_request.detail.after', 660, 'tasks:read'],
+      ['opportunity.detail.after', 660, 'tasks:read'],
+    ]);
   });
 
   it('labels every nav row in both shipped languages', () => {

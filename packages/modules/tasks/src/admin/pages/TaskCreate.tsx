@@ -1,8 +1,8 @@
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CornerLeftUp, UserCheck } from 'lucide-react';
-import type { CreateTaskBody, TaskDetail } from '@endora-commerce/contracts';
-import { TASK_TITLE_MAX } from '@endora-commerce/contracts';
+import { CornerLeftUp, Link2, UserCheck } from 'lucide-react';
+import type { CreateTaskBody, TaskContext, TaskDetail, TaskLinkTarget } from '@endora-commerce/contracts';
+import { TASK_LINK_KINDS, TASK_TITLE_MAX } from '@endora-commerce/contracts';
 import { CustomFieldValuesPanel } from '@endora-commerce/admin-kit/components';
 import { useAuth } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Button, Card, CardContent, Input, Label, PageHeader } from '@endora-commerce/admin-kit/ui';
@@ -12,6 +12,27 @@ import { AssigneePicker, type ChosenAssignee } from '../components/AssigneePicke
 import { dueOf, TaskFieldInputs, taskFieldValuesOf, type TaskFieldValues } from '../components/TaskFieldInputs.js';
 import { useCurrentAdmin } from '../lib/current-admin.js';
 import { errorMessage } from '../lib/labels.js';
+
+const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const LINK_PARAM = new RegExp(`^(${TASK_LINK_KINDS.join('|')}):(${UUID})$`, 'i');
+const CONTEXT_PARAM = new RegExp(`^([a-z][a-z0-9_]*):(${UUID})(?::(${UUID}))?$`, 'i');
+
+/** `?link=<kind>:<id>` — the record a panel's *Add task* was pressed on; anything else is ignored. */
+function linkFromParam(value: string | null): TaskLinkTarget | null {
+  const match = value ? LINK_PARAM.exec(value) : null;
+  return match ? { kind: match[1]!.toLowerCase() as TaskLinkTarget['kind'], id: match[2]!.toLowerCase() } : null;
+}
+
+/** `?context=<type>:<id>[:<group>]` — the record (and group) to create the Task in; anything else is ignored. */
+function contextFromParam(value: string | null): TaskContext | null {
+  const match = value ? CONTEXT_PARAM.exec(value) : null;
+  if (!match) return null;
+  return {
+    contextType: match[1]!.toLowerCase(),
+    contextId: match[2]!.toLowerCase(),
+    ...(match[3] ? { contextGroupId: match[3].toLowerCase() } : {}),
+  };
+}
 
 /**
  * Creating a Task (`specs/163-projects-and-tasks/`, User Story 2;
@@ -29,6 +50,11 @@ import { errorMessage } from '../lib/labels.js';
  * a sub-task of that one (User Story 5), named at the top of the form. The
  * server decides whether it may be: a parent the operator may not see, or one
  * that would nest too deep, is refused in its own words.
+ *
+ * `?link=<kind>:<id>` — *Add task* on an Opportunity's, an Order's or a Quote
+ * Request's *Tasks* panel — creates the Task linked to that record, and
+ * `?context=<type>:<id>[:<group>]` creates it in that record and group
+ * (User Story 6). The form says so; the server validates both.
  */
 export function TaskCreate(): ReactNode {
   const t = useTranslation('tasks');
@@ -38,6 +64,8 @@ export function TaskCreate(): ReactNode {
   const { language } = useAppLanguage();
   const [searchParams] = useSearchParams();
   const parentTaskId = searchParams.get('parent');
+  const link = linkFromParam(searchParams.get('link'));
+  const context = contextFromParam(searchParams.get('context'));
   const [parent, setParent] = useState<TaskDetail | null>(null);
   const ids = { title: useId(), assignee: useId() };
   const [title, setTitle] = useState('');
@@ -80,6 +108,8 @@ export function TaskCreate(): ReactNode {
       ...(assignees.length > 0 ? { assigneeIds: assignees.map((chosen) => chosen.id) } : {}),
       ...(Object.keys(customFieldValues).length > 0 ? { customFieldValues } : {}),
       ...(parentTaskId ? { parentTaskId } : {}),
+      ...(link ? { links: [link] } : {}),
+      ...(context ? { context } : {}),
     };
     setBusy(true);
     setError(null);
@@ -104,6 +134,13 @@ export function TaskCreate(): ReactNode {
                 {t('create.parent', { number: parent.number, title: parent.title })}
               </p>
             ) : null}
+            {link ? (
+              <p className="flex items-center gap-2 text-sm">
+                <Link2 aria-hidden="true" className="size-4 text-muted-foreground" />
+                {t(`create.link.${link.kind}`)}
+              </p>
+            ) : null}
+            {context ? <p className="text-sm">{t('create.context')}</p> : null}
             <p className="text-xs text-muted-foreground">{t('create.requiredHint')}</p>
 
             <div className="space-y-1">

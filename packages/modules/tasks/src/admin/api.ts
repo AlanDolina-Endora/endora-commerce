@@ -11,9 +11,13 @@ import type {
   TaskBoard,
   TaskBoardCardConfig,
   TaskComment,
+  TaskContextOption,
   TaskDeleteResult,
   TaskDetail,
+  TaskLink,
+  TaskLinkKind,
   TaskListResponse,
+  TaskLookupOption,
   TaskPriorityConfig,
   TaskStatusChangeResult,
   TaskSummary,
@@ -162,6 +166,29 @@ export const tasksApi = {
   /** Removes the link between two related Tasks, from either side. */
   unrelate(taskId: string, otherId: string): Promise<void> {
     return apiClient.delete<void>(`${BASE}/${taskId}/relations/${otherId}`);
+  },
+
+  /** Links a record to a Task — `tasks:write` and the record's own read code; answers the link (new or already there). */
+  addLink(taskId: string, kind: TaskLinkKind, id: string): Promise<TaskLink> {
+    return data(apiClient.post<{ data: TaskLink }>(`${BASE}/${taskId}/links`, { kind, id }));
+  },
+
+  /** Removes a link — an unavailable one too. */
+  removeLink(taskId: string, linkId: string): Promise<void> {
+    return apiClient.delete<void>(`${BASE}/${taskId}/links/${linkId}`);
+  },
+
+  /** What a Task may be linked to, of one kind, by number — `tasks:write`; empty for a kind the caller may not link. */
+  lookupRecords(kind: TaskLinkKind, query = ''): Promise<TaskLookupOption[]> {
+    const qs = new URLSearchParams({ kind });
+    if (query.trim()) qs.set('q', query.trim());
+    return data(apiClient.get<{ data: TaskLookupOption[] }>(`${BASE}/lookups/records?${qs.toString()}`));
+  },
+
+  /** Where a Task may be placed — a record with its groups (a Project with its Stages) — `tasks:write`. */
+  lookupContexts(query = ''): Promise<TaskContextOption[]> {
+    const tail = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
+    return data(apiClient.get<{ data: TaskContextOption[] }>(`${BASE}/lookups/contexts${tail}`));
   },
 
   /** Active administrators by name or e-mail — `tasks:write`, the assignee picker's source. */

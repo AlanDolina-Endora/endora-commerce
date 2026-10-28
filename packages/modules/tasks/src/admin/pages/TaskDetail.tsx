@@ -32,6 +32,8 @@ import { AdminZone } from '@endora-commerce/admin-kit/zones';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
 import { AssigneePicker, type ChosenAssignee } from '../components/AssigneePicker.js';
+import { ContextSection } from '../components/ContextSection.js';
+import { LinkedRecordsSection } from '../components/LinkedRecordsSection.js';
 import { RelatedTasksSection } from '../components/RelatedTasksSection.js';
 import { StatusBadge } from '../components/StatusBadge.js';
 import { SubtasksSection } from '../components/SubtasksSection.js';
@@ -65,10 +67,11 @@ function allowedTargetsOf(failure: unknown): readonly string[] | null {
  * **the sub-tasks** — the parent, the progress line and the visible sub-tasks
  * — beside **the related Tasks** (User Story 5, R-15);
  * **the comments** (User Story 4, R-6), **the attachments** and **the custom
- * fields** (R-7, R-8); **the context card** — the record the Task belongs to as
- * its owner describes it, linked while it is available and named without a
- * link when it is not, with the group (a Project's Stage) and the note the
- * owner wrote; **the history**; and last the zone `task.detail.after`, which
+ * fields** (R-7, R-8); beside the details, **the context card** — the record
+ * the Task belongs to as its owner describes it, which a writer may change
+ * (`components/ContextSection.tsx`) — and **the linked records** — the
+ * Opportunities, Orders and Quote Requests the Task is about (User Story 6,
+ * R-16); **the history**; and last the zone `task.detail.after`, which
  * other modules fill and this one names none of.
  *
  * A Task the operator may not see answers exactly as one that does not exist
@@ -88,7 +91,6 @@ export function TaskDetail(): ReactNode {
   const me = useCurrentAdmin();
   const statusId = useId();
   const detailsHeadingId = useId();
-  const contextHeadingId = useId();
   const historyHeadingId = useId();
   const [workflow, setWorkflow] = useState<TaskWorkflow | null>(null);
   /**
@@ -465,41 +467,32 @@ export function TaskDetail(): ReactNode {
           </CardContent>
         </Card>
 
-        <Card className="min-w-0">
-          <CardContent className="pt-6">
-            <section aria-labelledby={contextHeadingId} className="space-y-2 text-sm">
-              <h2 id={contextHeadingId} className="text-base font-semibold">
-                {t('detail.context')}
-              </h2>
-              {task.context === null ? (
-                <p className="text-muted-foreground">{t('detail.contextNone')}</p>
-              ) : (
-                <>
-                  {task.context.available && task.context.href ? (
-                    <Link
-                      to={task.context.href}
-                      className="font-medium text-primary underline-offset-4 [overflow-wrap:anywhere] hover:underline"
-                    >
-                      {task.context.label}
-                    </Link>
-                  ) : (
-                    <p className="font-medium [overflow-wrap:anywhere]">{task.context.label}</p>
-                  )}
-                  {task.context.groupLabel ? <p className="text-muted-foreground">{task.context.groupLabel}</p> : null}
-                  {task.context.available ? null : (
-                    <p className="text-xs text-muted-foreground">{t('detail.contextUnavailable')}</p>
-                  )}
-                  {task.contextNote ? (
-                    <div className="space-y-0.5 border-t pt-2">
-                      <p className="text-xs font-medium text-muted-foreground">{t('detail.contextNote')}</p>
-                      <p className="[overflow-wrap:anywhere]">{task.contextNote}</p>
-                    </div>
-                  ) : null}
-                </>
-              )}
-            </section>
-          </CardContent>
-        </Card>
+        {/* The side column beside the details: where the Task belongs, and what it is linked to. */}
+        <div className="min-w-0 space-y-6">
+          <Card>
+            <CardContent className="pt-6">
+              <ContextSection
+                task={task}
+                canChange={canWrite}
+                busy={busy}
+                onWrite={(body, message): Promise<boolean> => write(body, () => message)}
+              />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <LinkedRecordsSection
+                task={task}
+                canChange={canWrite}
+                onChange={(message): void => {
+                  setNotice(message);
+                  setHistoryVersion((version) => version + 1);
+                  void load();
+                }}
+              />
+            </CardContent>
+          </Card>
+        </div>
 
         <Card className="min-w-0 lg:col-span-2">
           <CardContent className="pt-6">

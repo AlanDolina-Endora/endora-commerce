@@ -6,12 +6,14 @@
  *
  * The palette actions are the manifest's (`src/manifest.ts`, §4). The zone
  * `task.detail.after` is mounted by `pages/TaskDetail.tsx`; this module
- * contributes nothing to it.
+ * contributes nothing to it. It contributes the *Tasks* panel to an Order's,
+ * a Quote Request's and an Opportunity's screen (`specs/165-task-management/`
+ * User Story 6, `contracts/admin-surfaces.md` §3).
  *
  * **This entry exports data and nothing else**; every component is a
  * dynamic-import factory, so none of the screens is in the admin's entry chunk.
  */
-import type { AdminContributions } from '@endora-commerce/admin-kit/contributions';
+import { zoneComponent, type AdminContributions } from '@endora-commerce/admin-kit/contributions';
 
 /** The code that opens the lists and one Task; `GET /tasks`, `/tasks/mine` and `/tasks/:id` enforce it. */
 const READ_PERMISSION = 'tasks:read';
@@ -87,5 +89,14 @@ export const contributions: AdminContributions = {
       weight: 430,
       requiredPermission: CONFIGURE_PERMISSION,
     },
+  ],
+  // User Story 6 — the Tasks linked to a record, on that record's own screen.
+  // One panel, three zones; each is one line: the zone, the chunk, the code the
+  // panel's read enforces. The record's owner names no contributor, and the
+  // zone renderer leaves the panel out while this module is off.
+  zones: [
+    zoneComponent('order.detail.after', () => import('./zones/OrderTasksPanel.js'), { weight: 660, requiredPermission: READ_PERMISSION }),
+    zoneComponent('quote_request.detail.after', () => import('./zones/QuoteRequestTasksPanel.js'), { weight: 660, requiredPermission: READ_PERMISSION }),
+    zoneComponent('opportunity.detail.after', () => import('./zones/OpportunityTasksPanel.js'), { weight: 660, requiredPermission: READ_PERMISSION }),
   ],
 };
