@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   analyseErrorTranslations,
   declaringBundleDirectories,
+  findPlaceholderSentences,
   findUnreachableSentences,
   findUntranslatedErrorCodes,
   nonDeclaringModules,
@@ -414,6 +415,177 @@ describe('the tree itself, under P2', () => {
     // module whose bundle has moved into a package with it.
     const walked = [...analyseErrorTranslations(await treeTranslationInput()).keysWalked];
     expect(walked.length).toBeGreaterThan(100);
+  });
+});
+
+/**
+ * P5 (issue #441) — **a translation is a sentence in its own language**.
+ *
+ * P1 counts a key as translated the moment it holds a string, so it counted
+ * 137 Polish entries of the shape `Błąd: product not found.` — the word for
+ * "error" in front of the code, lowercased — as finished work, and a Polish
+ * operator read them verbatim. P5 refuses that shape, and the shape it
+ * degrades into when somebody copies the English across instead: a value
+ * identical to the English sentence under the same key.
+ *
+ * One proof per kind, plus the discrimination fixtures that keep a predicate
+ * reporting every non-English key from passing them.
+ */
+describe('findPlaceholderSentences — a translation that is not a sentence', () => {
+  const ROUTED_TO_A = { X_REFUSED: { moduleId: 'a', key: 'errors.X_REFUSED' } } as const;
+
+  it('placeholder — the word for "error" in front of the code, lowercased', () => {
+    const findings = findPlaceholderSentences(
+      fixture(ROUTED_TO_A, {
+        'a.en': { 'errors.X_REFUSED': 'The request was refused.' },
+        'a.pl': { 'errors.X_REFUSED': 'Błąd: x refused.' },
+      }),
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      kind: 'placeholder',
+      moduleId: 'a',
+      language: 'pl',
+      key: 'errors.X_REFUSED',
+      code: 'X_REFUSED',
+    });
+  });
+
+  it('placeholder — the code alone, whatever its case, is the same shape without the label', () => {
+    const findings = findPlaceholderSentences(
+      fixture(ROUTED_TO_A, {
+        'a.en': { 'errors.X_REFUSED': 'The request was refused.' },
+        'a.pl': { 'errors.X_REFUSED': 'X Refused.' },
+      }),
+    );
+    expect(findings.map((f) => f.kind)).toEqual(['placeholder']);
+  });
+
+  it('placeholder — in any language that is not the reference one', () => {
+    // The shape is language-agnostic: a third shipped language would be
+    // generated the same way, with its own word in front of the code.
+    const findings = findPlaceholderSentences(
+      fixture(ROUTED_TO_A, {
+        'a.en': { 'errors.X_REFUSED': 'The request was refused.' },
+        'a.de': { 'errors.X_REFUSED': 'Fehler: x refused.' },
+      }),
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ kind: 'placeholder', language: 'de' });
+  });
+
+  it('placeholder — a token key spelled as its code and token', () => {
+    const findings = findPlaceholderSentences(
+      fixture(ROUTED_TO_A, {
+        'a.en': { 'errors.X_REFUSED.too_late': 'It is too late for that.' },
+        'a.pl': { 'errors.X_REFUSED.too_late': 'Błąd: x refused too late.' },
+      }),
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ kind: 'placeholder', code: 'X_REFUSED' });
+  });
+
+  it('same-as-english — the English sentence copied across under the same key', () => {
+    const findings = findPlaceholderSentences(
+      fixture(ROUTED_TO_A, {
+        'a.en': { 'errors.X_REFUSED': 'The request was refused.' },
+        'a.pl': { 'errors.X_REFUSED': 'The request was refused.' },
+      }),
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      kind: 'same-as-english',
+      moduleId: 'a',
+      language: 'pl',
+      key: 'errors.X_REFUSED',
+    });
+  });
+
+  it('reports a placeholder once, even when the English is the same placeholder', () => {
+    const findings = findPlaceholderSentences(
+      fixture(ROUTED_TO_A, {
+        'a.en': { 'errors.X_REFUSED': 'X Refused.' },
+        'a.pl': { 'errors.X_REFUSED': 'X Refused.' },
+      }),
+    );
+    expect(findings.map((f) => f.kind)).toEqual(['placeholder']);
+  });
+
+  /**
+   * The discrimination fixtures. A predicate that reported every non-English
+   * key, or every value that starts with `Błąd:`, or every value equal to the
+   * English one, would pass the proofs above.
+   */
+  it('says nothing about a sentence in its own language, token keys included', () => {
+    expect(
+      findPlaceholderSentences(
+        fixture(ROUTED_TO_A, {
+          'a.en': {
+            'errors.X_REFUSED': 'The request was refused.',
+            'errors.X_REFUSED.too_late': 'It is too late for that.',
+          },
+          'a.pl': {
+            'errors.X_REFUSED': 'Żądanie zostało odrzucone.',
+            'errors.X_REFUSED.too_late': 'Na to jest już za późno.',
+          },
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it('says nothing about a real sentence that happens to open with the word for "error"', () => {
+    expect(
+      findPlaceholderSentences(
+        fixture(ROUTED_TO_A, {
+          'a.en': { 'errors.X_REFUSED': 'Error: the request was refused.' },
+          'a.pl': { 'errors.X_REFUSED': 'Błąd: żądanie zostało odrzucone.' },
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it('says nothing about a value that is only an interpolation — there is no language in it', () => {
+    // `{reason}` is filled from the raise's own details, so it is the same
+    // string in every language by construction, and a ledger entry for it would
+    // be a list of every code that forwards a reason.
+    expect(
+      findPlaceholderSentences(
+        fixture(ROUTED_TO_A, {
+          'a.en': { 'errors.X_REFUSED': '{reason}' },
+          'a.pl': { 'errors.X_REFUSED': '{reason}' },
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it('does not judge the reference language against itself', () => {
+    expect(
+      findPlaceholderSentences(
+        fixture(ROUTED_TO_A, { 'a.en': { 'errors.X_REFUSED': 'The request was refused.' } }),
+      ),
+    ).toEqual([]);
+  });
+
+  it('exits 1 on a P5 finding, and the summary counts it by kind', () => {
+    const result = analyseErrorTranslations(
+      fixture(ROUTED_TO_A, {
+        'a.en': { 'errors.X_REFUSED': 'The request was refused.' },
+        'a.pl': { 'errors.X_REFUSED': 'Błąd: x refused.' },
+      }),
+      new Set(),
+    );
+    expect(result.placeholders.map((f) => f.kind)).toEqual(['placeholder']);
+    expect(result.exitCode).toBe(1);
+    expect(result.summary).toContain('placeholder=1 sameAsEnglish=0');
+  });
+});
+
+describe('the tree itself, under P5', () => {
+  it('ships no placeholder and no copied English sentence in any non-English bundle', async () => {
+    const findings = findPlaceholderSentences(await treeTranslationInput());
+    expect(
+      findings.map((f) => `${f.kind}: ${f.moduleId}/${f.language} ${f.key}`),
+    ).toEqual([]);
   });
 });
 
