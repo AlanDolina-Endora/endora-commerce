@@ -2260,6 +2260,7 @@
   "comments.edit.label": "Treść notatki",
   "comments.updated": "Zapisano notatkę.",
   "comments.deleted": "Usunięto notatkę.",
+  "comments.removedEntry": "Ten wpis został usunięty.",
   "comments.delete.title": "Usunąć tę notatkę?",
   "comments.delete.confirm": "Usuń notatkę",
   "comments.error.empty": "Najpierw coś napisz.",

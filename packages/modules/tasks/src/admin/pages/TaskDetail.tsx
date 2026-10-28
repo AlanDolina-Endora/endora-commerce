@@ -34,6 +34,7 @@ import { tasksApi } from '../api.js';
 import { AssigneePicker, type ChosenAssignee } from '../components/AssigneePicker.js';
 import { StatusBadge } from '../components/StatusBadge.js';
 import { TaskAttachments } from '../components/TaskAttachments.js';
+import { TaskComments } from '../components/TaskComments.js';
 import { TaskCustomFields } from '../components/TaskCustomFields.js';
 import { dueOf, TaskFieldInputs, taskFieldValuesOf, usePriorities, type TaskFieldValues } from '../components/TaskFieldInputs.js';
 import { useCurrentAdmin } from '../lib/current-admin.js';
@@ -59,7 +60,8 @@ function allowedTargetsOf(failure: unknown): readonly string[] | null {
  * several assignees (R-2), the description in the kit's reference editor and
  * drawn with its references as links (R-4, R-5), the due date with an
  * optional time, the start date, the priority and the tags (User Story 1);
- * **the attachments** and **the custom fields** (R-7, R-8); **the context card** — the record the Task belongs to as
+ * **the comments** (User Story 4, R-6), **the attachments** and **the custom
+ * fields** (R-7, R-8); **the context card** — the record the Task belongs to as
  * its owner describes it, linked while it is available and named without a
  * link when it is not, with the group (a Project's Stage) and the note the
  * owner wrote; **the history**; and last the zone `task.detail.after`, which
@@ -480,6 +482,17 @@ export function TaskDetail(): ReactNode {
                 </>
               )}
             </section>
+          </CardContent>
+        </Card>
+
+        <Card className="min-w-0 lg:col-span-3">
+          <CardContent className="pt-6">
+            <TaskComments
+              taskId={task.id}
+              // Whoever may see the Task may comment, but someone else's private Task is read only (R-3).
+              canComment={hasPermission('tasks:read') && !(task.private && task.createdBy?.id !== me?.id)}
+              onChange={(): void => setHistoryVersion((version) => version + 1)}
+            />
           </CardContent>
         </Card>
 

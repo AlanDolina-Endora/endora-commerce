@@ -4,7 +4,9 @@ import { useAuth } from '@endora-commerce/admin-kit/lib';
 import { useAppLanguage } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
 
-/** People and documents are chosen through Tasks' own lookups, offered to whoever may write. */
+/** People are chosen through Tasks' own lookup, offered to whoever reads Tasks (`admin-api.md` §3). */
+const READ_PERMISSION = 'tasks:read';
+/** Documents are chosen through Tasks' own lookup, offered to whoever may write. */
 const WRITE_PERMISSION = 'tasks:write';
 /** A Product is searched in `catalog`'s own list, offered to a role holding its code. */
 const PRODUCT_LIST_PERMISSION = 'catalog:read';
@@ -32,15 +34,17 @@ export function useTaskReferences(taskId: string | null): {
 } {
   const { hasPermission } = useAuth();
   const { language } = useAppLanguage();
+  const canRead = hasPermission(READ_PERMISSION);
   const canWrite = hasPermission(WRITE_PERMISSION);
   const canProducts = hasPermission(PRODUCT_LIST_PERMISSION);
 
   const kinds = useMemo(
     (): readonly ReferenceTriggerKind[] => [
-      ...(canWrite ? (['admin_user', 'document'] as const) : []),
+      ...(canRead || canWrite ? (['admin_user'] as const) : []),
+      ...(canWrite ? (['document'] as const) : []),
       ...(canProducts ? (['product'] as const) : []),
     ],
-    [canWrite, canProducts],
+    [canRead, canWrite, canProducts],
   );
 
   const lookups = useMemo(

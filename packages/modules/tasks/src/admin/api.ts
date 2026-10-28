@@ -10,6 +10,7 @@ import type {
   TaskAttachment,
   TaskBoard,
   TaskBoardCardConfig,
+  TaskComment,
   TaskDetail,
   TaskListResponse,
   TaskPriorityConfig,
@@ -200,6 +201,26 @@ export const tasksApi = {
 
   removeAttachment(taskId: string, attachmentId: string): Promise<void> {
     return apiClient.delete<void>(`${BASE}/${taskId}/attachments/${attachmentId}`);
+  },
+
+  /** The comment thread, oldest first, a deleted comment in its place — `tasks:read`. */
+  listComments(taskId: string): Promise<TaskComment[]> {
+    return data(apiClient.get<{ data: TaskComment[] }>(`${BASE}/${taskId}/comments`));
+  },
+
+  /** A new comment — `tasks:read`, on a Task the caller may see. */
+  addComment(taskId: string, body: string): Promise<TaskComment> {
+    return data(apiClient.post<{ data: TaskComment }>(`${BASE}/${taskId}/comments`, { body }));
+  },
+
+  /** Edit a comment — its author only. */
+  updateComment(taskId: string, commentId: string, body: string): Promise<TaskComment> {
+    return data(apiClient.patch<{ data: TaskComment }>(`${BASE}/${taskId}/comments/${commentId}`, { body }));
+  },
+
+  /** Delete a comment — its author only; it stays in the thread, marked. */
+  removeComment(taskId: string, commentId: string): Promise<void> {
+    return apiClient.delete<void>(`${BASE}/${taskId}/comments/${commentId}`);
   },
 
   history(id: string, cursor?: string): Promise<RecordHistoryPage> {

@@ -2260,6 +2260,7 @@
   "comments.edit.label": "Note text",
   "comments.updated": "The note was saved.",
   "comments.deleted": "The note was deleted.",
+  "comments.removedEntry": "This entry was deleted.",
   "comments.delete.title": "Delete this note?",
   "comments.delete.confirm": "Delete note",
   "comments.error.empty": "Write something first.",

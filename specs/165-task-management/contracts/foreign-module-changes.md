@@ -31,6 +31,7 @@ are additive (`release-intent.md`).
 | `packages/modules/_i18n/i18n/{en,pl}.json` (added at T054) | `kanban.moveTo.{action,label}`, the promoted `MoveToMenu`'s two sentences, moved from CRM's `board.moveTo.*` (wording kept). |
 | `packages/modules/_i18n/i18n/{en,pl}.json` (added at T025) | The core bundle's `references.{kind,group,inserted,unavailable}.{opportunity,project}` sentences the kit's reference components compose (`admin/test/kit/kit-collaboration-bundle.test.ts` requires every member of each family). |
 | `src/lib/admin-preferences/{store,use-admin-preference}.ts` | `listViewModes` and `useListViewModePreference(listId)`. |
+| `src/components/comments/CommentThread.tsx` (added at T059) | `keepDeleted` and the optional `RecordComment.deletedAt`: a deleted Task comment keeps its place in the thread, marked (R-6 "soft, so the thread shows deleted"); without the prop the thread behaves as before, so CRM and Projects do not change. Its sentence is the core bundle's `comments.removedEntry` (en, pl), and `admin/test/kit/kit-comments.test.tsx` gains two cases. |
 | Tests beside each | — |
 
 ## C. `packages/modules/crm/`

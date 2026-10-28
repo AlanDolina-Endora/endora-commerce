@@ -83,11 +83,12 @@ function mount(ui: ReactElement): void {
   );
 }
 
-function thread(props: { kind?: 'note' | 'message'; canWrite?: boolean } = {}): ReactElement {
+function thread(props: { kind?: 'note' | 'message'; canWrite?: boolean; keepDeleted?: boolean } = {}): ReactElement {
   return (
     <CommentThread
       kind={props.kind ?? 'note'}
       canWrite={props.canWrite ?? true}
+      {...(props.keepDeleted ? { keepDeleted: true } : {})}
       api={API}
       copy={COPY}
       referenceKinds={[]}
@@ -181,6 +182,35 @@ describe('CommentThread', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: core('comments.delete.confirm') }));
     await waitFor(() => expect(remove).toHaveBeenCalledWith('00000000-0000-4000-8000-0000000c0001'));
     expect(await screen.findByText(COPY.empty)).toBeInTheDocument();
+    expect(counted).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a deleted entry in its place, marked, with nothing to change, when asked to (Tasks, 165 R-6)', async () => {
+    list.mockResolvedValue([
+      entry({ body: '', deletedAt: '2026-10-06T10:00:00.000Z' }),
+      entry({ id: '00000000-0000-4000-8000-0000000c0002', body: 'Still here.' }),
+    ]);
+    mount(thread({ keepDeleted: true }));
+    const items = within(await screen.findByRole('list', { name: COPY.title })).getAllByRole('listitem');
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveTextContent('Ada Min');
+    expect(items[0]).toHaveTextContent(core('comments.removedEntry'));
+    expect(within(items[0]!).queryByRole('button')).toBeNull();
+    expect(within(items[1]!).getByRole('button', { name: core('comments.edit') })).toBeInTheDocument();
+  });
+
+  it('marks an entry deleted in place, when asked to, and still reports one fewer', async () => {
+    list.mockResolvedValue([entry()]);
+    remove.mockResolvedValue(undefined);
+    mount(thread({ keepDeleted: true }));
+    await userEvent.click(await screen.findByRole('button', { name: core('comments.delete') }));
+    const dialog = screen.getByRole('dialog', { name: core('comments.delete.title') });
+    await userEvent.click(within(dialog).getByRole('button', { name: core('comments.delete.confirm') }));
+    await waitFor(() => expect(remove).toHaveBeenCalledWith('00000000-0000-4000-8000-0000000c0001'));
+    const item = within(await screen.findByRole('list', { name: COPY.title })).getByRole('listitem');
+    expect(item).toHaveTextContent(core('comments.removedEntry'));
+    expect(item).not.toHaveTextContent('First call went well.');
+    expect(within(item).queryByRole('button')).toBeNull();
     expect(counted).toHaveBeenCalledTimes(1);
   });
 

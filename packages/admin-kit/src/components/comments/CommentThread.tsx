@@ -21,6 +21,11 @@ export interface RecordComment {
   body: string;
   references: RecordReference[];
   editedAt: string | null;
+  /**
+   * When the entry was deleted — set only by a record that keeps a deleted
+   * entry in its thread (a Task's comment, `specs/165-task-management/` R-6).
+   */
+  deletedAt?: string | null;
   createdAt: string;
 }
 
@@ -70,6 +75,12 @@ export interface CommentThreadProps<C extends RecordComment = RecordComment> {
   onEntries?: (entries: readonly C[]) => void;
   /** A referenced Order's status by name; without it, its code. */
   orderStatusLabel?: (code: string) => string;
+  /**
+   * A deleted entry keeps its place, marked as deleted and with nothing left
+   * to change (a Task's comments, `specs/165-task-management/` R-6). Without
+   * it a deleted entry leaves the list, as a CRM or Project note does.
+   */
+  keepDeleted?: boolean;
 }
 
 /**
@@ -162,7 +173,14 @@ export function CommentThread<C extends RecordComment = RecordComment>(props: Co
     setDeleteError(null);
     try {
       await api.remove(pendingDelete.id);
-      setEntries((previous) => (previous ?? []).filter((item) => item.id !== pendingDelete.id));
+      const deletedAt = new Date().toISOString();
+      setEntries((previous) =>
+        props.keepDeleted
+          ? (previous ?? []).map((item) =>
+              item.id === pendingDelete.id ? { ...item, body: '', references: [], deletedAt } : item,
+            )
+          : (previous ?? []).filter((item) => item.id !== pendingDelete.id),
+      );
       setPendingDelete(null);
       setNotice(t('comments.deleted'));
       void onCountChange?.();
@@ -199,8 +217,9 @@ export function CommentThread<C extends RecordComment = RecordComment>(props: Co
       ) : (
         <ol aria-label={copy.title} className="space-y-3">
           {entries.map((item) => {
-            // Only a note, only its author, only with the right to write at all.
-            const mine = canWrite && kind === 'note' && myId !== null && item.author.id === myId;
+            const deleted = Boolean(item.deletedAt);
+            // Only a note, only its author, only with the right to write at all — and never once deleted.
+            const mine = !deleted && canWrite && kind === 'note' && myId !== null && item.author.id === myId;
             const editing = editingId === item.id;
             return (
               <li key={item.id} className="rounded-md border border-border p-3">
@@ -208,7 +227,7 @@ export function CommentThread<C extends RecordComment = RecordComment>(props: Co
                   <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                     <span className="text-sm font-medium text-foreground">{item.author.name}</span>
                     <time dateTime={item.createdAt}>{formatDateTime(item.createdAt)}</time>
-                    {item.editedAt ? (
+                    {item.editedAt && !deleted ? (
                       <Badge variant="outline" className="font-normal">
                         {t('comments.edited')}
                       </Badge>
@@ -246,7 +265,9 @@ export function CommentThread<C extends RecordComment = RecordComment>(props: Co
                     </div>
                   ) : null}
                 </div>
-                {editing ? (
+                {deleted ? (
+                  <p className="mt-2 text-sm italic text-muted-foreground">{t('comments.removedEntry')}</p>
+                ) : editing ? (
                   <div className="mt-2 space-y-2">
                     <Label htmlFor={`${editFieldId}-${item.id}`}>{t('comments.edit.label')}</Label>
                     <ReferenceField
