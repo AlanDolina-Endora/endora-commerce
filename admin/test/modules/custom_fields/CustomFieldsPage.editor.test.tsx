@@ -174,7 +174,9 @@ describe('CustomFieldsPage — the definition editor', () => {
     expect(within(dialog).getByText('region')).toBeInTheDocument();
     expect(within(dialog).getByText('Order')).toBeInTheDocument();
     expect(within(dialog).getByText('Single choice')).toBeInTheDocument();
-    expect(within(dialog).queryByRole('combobox')).toBeNull();
+    // The audience is the dialog's one select (issue #447); type and record type are text.
+    expect(within(dialog).getAllByRole('combobox').map((select) => select.getAttribute('id'))).toHaveLength(1);
+    expect(within(dialog).getByRole('combobox')).toHaveAccessibleName('Who can see the value');
     expect(within(dialog).queryByDisplayValue('region')).toBeNull();
   });
 
@@ -392,7 +394,10 @@ describe('CustomFieldsPage — the definition editor', () => {
     const dialog = await openEditor('order', 'region', 'pl');
     expect(within(dialog).getByText(plText('customFields.editor.optionsNote'))).toHaveClass('break-words');
     const row = optionRow(dialog, 'North');
-    expect(within(row).getByLabelText(plText('customFields.editor.labelPl'))).toHaveClass('min-w-0');
+    const polish = plText('customFields.editor.labelIn', {
+      language: new Intl.DisplayNames(['en'], { type: 'language' }).of('pl')!,
+    });
+    expect(within(row).getByLabelText(polish)).toHaveClass('min-w-0');
     fireEvent.click(within(dialog).getByLabelText(plText('customFields.form.required')));
     expect(within(dialog).getByTestId('required-notice')).toHaveTextContent(plText('customFields.editor.requiredNotice'));
     expect(within(dialog).getByTestId('required-notice')).toHaveClass('break-words');
@@ -403,6 +408,37 @@ describe('CustomFieldsPage — the definition editor', () => {
       plText('customFields.editor.option.inUse', { label: 'North' }),
     );
     expect(refusal).toHaveClass('break-words');
+  });
+
+  it('refuses a second default option on a single-choice field at the option, sending nothing (issue #447)', async () => {
+    const withDefault = definition({
+      options: [{ ...REGION.options[0]!, isDefault: true }, REGION.options[1]!],
+    });
+    client.get.mockResolvedValue(withDefault);
+    const dialog = await openEditor();
+    // The table read holds no default; the dialog re-reads after an option action.
+    fireEvent.click(within(optionRow(dialog, 'North')).getByLabelText('Default'));
+    await waitFor(() => expect(client.get).toHaveBeenCalled());
+    await waitFor(() => expect(within(optionRow(dialog, 'North')).getByLabelText('Default')).toBeChecked());
+    client.updateOption.mockClear();
+    fireEvent.click(within(optionRow(dialog, 'South')).getByLabelText('Default'));
+    expect(
+      await within(optionRow(dialog, 'South')).findByText(
+        'A single-choice field can start with one default option only. Clear “North” first.',
+      ),
+    ).toBeInTheDocument();
+    expect(client.updateOption).not.toHaveBeenCalled();
+  });
+
+  it('refuses a new option whose stored value is already used, before anything is sent (issue #447)', async () => {
+    const dialog = await openEditor();
+    const add = within(dialog).getByRole('group', { name: 'Add option' });
+    fireEvent.change(within(add).getByLabelText('Stored value'), { target: { value: ' north ' } });
+    fireEvent.change(within(add).getByLabelText('Default label'), { target: { value: 'North again' } });
+    fireEvent.click(within(add).getByRole('button', { name: 'Add option' }));
+    expect(await within(add).findByText('Another option already uses the stored value “north”.')).toBeInTheDocument();
+    expect(within(add).getByLabelText('Stored value')).toHaveAttribute('aria-invalid', 'true');
+    expect(client.createOption).not.toHaveBeenCalled();
   });
 
   it('marks an option as the default with one patch holding only isDefault', async () => {

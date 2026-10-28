@@ -277,6 +277,37 @@ describe('CustomFieldsPage — drift warnings', () => {
     });
   });
 
+  describe('changing the audience in the edit dialog (issue #447)', () => {
+    async function askFromDialog(): Promise<{ dialog: HTMLElement }> {
+      await renderPage('order');
+      const dialog = await openEditor();
+      fireEvent.change(within(dialog).getByLabelText(sentence(EN, 'customFields.audience.label')), {
+        target: { value: 'customer' },
+      });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+      await screen.findByRole('dialog', { name: WARNING });
+      return { dialog };
+    }
+
+    it('asks first, naming the source, and sends nothing on Cancel — the dialog keeps the choice', async () => {
+      await askFromDialog();
+      const warning = screen.getByRole('dialog', { name: WARNING });
+      expectCounterparts(warning, ['Quote request · region']);
+      expect(within(warning).getByRole('button', { name: CANCEL })).toHaveFocus();
+      fireEvent.click(within(warning).getByRole('button', { name: CANCEL }));
+      const dialog = await screen.findByRole('dialog', { name: sentence(EN, 'customFields.editor.title', { key: 'region' }) });
+      expect(within(dialog).getByLabelText(sentence(EN, 'customFields.audience.label'))).toHaveValue('customer');
+      expect(REQUESTS()).toBe(0);
+    });
+
+    it('saves the audience on Change audience anyway', async () => {
+      await askFromDialog();
+      fireEvent.click(screen.getByRole('button', { name: CHANGE_AUDIENCE_ANYWAY }));
+      await waitFor(() => expect(client.update).toHaveBeenCalledTimes(1));
+      expect(client.update).toHaveBeenCalledWith(ORDER_REGION.id, { audience: 'customer' });
+    });
+  });
+
   describe('deleting a definition that is part of an enabled carry', () => {
     it('asks once, in the warning, and sends nothing on Cancel', async () => {
       await renderPage('order');

@@ -30,47 +30,70 @@ options and every stored value come back unchanged when the module is switched o
 
 ## Creating a field
 
-Choose the record type on **Custom Fields**, then fill in the form under the table:
+Choose the record type on **Custom Fields**, then press **New field** above the table (or **Add a
+field** when the type has none yet). The field is defined completely in one dialog — the same form
+that later edits it, with the same sections in the same order:
 
-- **Key** — the field's identifier, lower-case letters, digits and underscores, starting with a
-  letter (`po_number`). It never changes once the field exists.
-- **Label (EN)** — the English label; the key is used when it is left empty.
-- **Type** — *Text*, *Number*, *Yes / No*, *Date*, *Single choice* or *Multiple choice*. A choice
-  field takes its options as a comma-separated list.
-- **Who can see the value** — *Internal* (administrators only, the default) or *Customer* (also
-  returned to the customer in the storefront and to integrations using the external API).
-- **Required** — a record cannot be saved without a value.
-- **Use as list filter** — offered only for orders, quote requests and opportunities. See
-  [List filters](#list-filters).
-- **Carry value to …** — one checkbox per record type the value can follow, offered only for
-  quote requests, orders and opportunities, with one help line for the group. See
-  [Carrying values between quote requests, orders and opportunities](#carrying-values-between-quote-requests-orders-and-opportunities).
+1. **Definition**
+   - **Record type** — preset to the type the page shows; any type this screen manages can be
+     chosen.
+   - **Type** — *Text*, *Number*, *Yes / No*, *Date*, *Single choice* or *Multiple choice*.
+   - **Key** — the field's identifier: lower-case letters, digits and underscores, starting with a
+     letter, at most 64 characters (`po_number`). It never changes once the field exists.
+2. **Labels** — the **default label** (required) and one label per admin language, today English and
+   Polish. A record shows the label in the reader's language and falls back to the default label.
+3. **Options**, for *Single choice* and *Multiple choice* — **Add option** adds a row with:
+   - its **stored value**, what records hold — unique within the field;
+   - its **default label** (required) and a label per admin language;
+   - **Default**, the option a new record starts with. A *Single choice* field can have one default
+     option at most; a *Multiple choice* field can have several. Neither needs one;
+   - **Move up** / **Move down**, the order the options are offered in, and **Remove**.
+   The options are saved together with the field, so nothing is written until **Add field**.
+4. **Rules**
+   - **Required** — a record cannot be saved without a value.
+   - **Who can see the value** — *Internal* (administrators only, the default) or *Customer* (also
+     returned to the customer in the storefront and to integrations using the external API).
+5. **Behaviour**
+   - **Use as list filter** — offered only for orders, quote requests and opportunities. See
+     [List filters](#list-filters).
+   - **Carry value to …** — one checkbox per record type the value can follow, each with its own
+     help line, offered only for quote requests, orders and opportunities. See
+     [Carrying values between quote requests, orders and opportunities](#carrying-values-between-quote-requests-orders-and-opportunities).
 
-**Add field** creates it. **Delete** (the bin) asks in place before a field is deleted. Creating,
-editing and deleting fields needs the `custom_fields:write`
-permission; an administrator with `custom_fields:read` only sees the table, without any control
-that changes it.
+**Add field** creates the field with everything above in one step. Before anything is sent the
+dialog checks the key's format, the default label, that every option has a stored value used by no
+other option and a default label, and the number of default options; each problem is said next to
+the field it concerns, and focus moves to the first one. A refusal from the server is shown the same
+way — a key already used on the record type at the key, for example — and the dialog keeps
+everything you entered.
+
+**Delete** (the bin) asks in place before a field is deleted. Creating, editing and deleting fields
+needs the `custom_fields:write` permission; an administrator with `custom_fields:read` only sees the
+table, without any control that changes it.
 
 ## Editing a field
 
-Each row of the table has an **Edit** button (the pencil). The dialog it opens shows the key, the
-record type and the type as fixed text, and edits the rest:
+Each row of the table has an **Edit** button (the pencil). It opens the same form as **New field**.
+The record type, the key and the type are shown as fixed text; the rest can be changed:
 
-- **Labels** — the default label (required), the English label and the Polish label.
-- **Required** — switching it on explains what follows: records that already exist keep their
-  values, and a record without a value for this field is asked for one the next time its custom
-  fields are edited. Nothing is filled in for you.
+- **Labels** — the default label (required) and the label per admin language.
 - **Options** of a choice field — each option is changed on its own, at once, without pressing
   **Save**:
-  - its default, English and Polish labels, saved when you leave the field or press Enter;
-  - **Default**, the option preselected for a new record;
+  - its default label and its label per language, saved when you leave the field or press Enter;
+  - **Default**, the option preselected for a new record — on a *Single choice* field, clear the
+    current default before marking another;
   - **Move up** / **Move down**, which changes the order the option is offered in;
   - **Remove**, after a confirmation inside the dialog. An option that any record still holds
     cannot be removed: the dialog says so at the option, naming it by its label, and asks you to
     change those records' value first;
-  - **Add option**, with its stored value and labels.
+  - **Add option**, with its stored value — not one another option already uses — and labels.
   An option's **stored value** never changes — it is what records hold — so relabelling an option
   keeps every record and every filter on it working.
+- **Required** — switching it on explains what follows: records that already exist keep their
+  values, and a record without a value for this field is asked for one the next time its custom
+  fields are edited. Nothing is filled in for you.
+- **Who can see the value** — the same choice the table's *Visible to* column offers. A change that
+  would stop a carry from working asks first, as it does from the table.
 - **Use as list filter**, where the record type offers it.
 - **Carry value to …**, where the record type offers it — one checkbox per target, each with its
   own help line.
@@ -178,7 +201,7 @@ records created in the meantime are not filled in afterwards.
 ### When the option can be turned on
 
 **Carry value to …** is accepted only when the target record type has a field with the same key
-that can hold the value. Otherwise saving is refused, the form or dialog stays open, and the
+that can hold the value. Otherwise saving is refused, the dialog stays open, and the
 message names the reason:
 
 | Refusal | Means |

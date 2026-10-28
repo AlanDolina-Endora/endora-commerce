@@ -37,12 +37,6 @@ export interface DefinitionBehaviourFieldsProps {
   entityTypes?: readonly CustomFieldEntityTypeInfo[];
   disabled?: boolean;
   /**
-   * `stacked` (default): the controls over their help, in a block of their
-   * own. `row`: for a flex-wrap form row — the controls sit in the row and the
-   * help drops to a full-width line at the row's end.
-   */
-  layout?: 'stacked' | 'row';
-  /**
    * A refused save's carry sentence (R16): shown beside the carry options,
    * describing their group and the ticked boxes, which it marks invalid.
    */
@@ -54,19 +48,18 @@ export interface DefinitionBehaviourFieldsProps {
 /**
  * How a definition behaves beyond its value (feature 157,
  * `specs/157-custom-fields-list-filters/contracts/admin-surfaces.md` §3): the
- * one block the create form and the editor dialog both render.
+ * last section of the one definition form that creates and edits a field
+ * (issue #447).
  *
  * - *Use as list filter*, offered only where the entity type's entry says the
  *   type has it (feature 157).
  * - *Carry value to …*, one checkbox per `entityTypeInfo.carryTargets` entry
  *   in the registry's order, none when the type has no target (feature 162,
  *   `specs/162-custom-fields-value-carry/contracts/admin-surfaces.md` §1.1).
- *   In the `stacked` layout (the editor dialog) each checkbox is described by
- *   its own help line, so a screen reader hears what turning it on does
- *   without reading the block's prose. In the narrow `row` layout (the create
- *   form) one shared line explains the whole group and describes the group,
- *   not each checkbox — a help line per target would wrap the row into a wall
- *   of near-identical sentences (owner ruling V2, 2026-10-21).
+ *   Each checkbox is described by its own help line, so a screen reader hears
+ *   what turning it on does without reading the block's prose (owner ruling
+ *   V2, 2026-10-21). The narrow create-form row that explained the group with
+ *   one shared line went with that row (issue #447).
  */
 export function DefinitionBehaviourFields({
   entityTypeInfo,
@@ -74,7 +67,6 @@ export function DefinitionBehaviourFields({
   onChange,
   entityTypes = [],
   disabled = false,
-  layout = 'stacked',
   carryError = null,
   carryErrorRef,
 }: DefinitionBehaviourFieldsProps): ReactNode {
@@ -85,7 +77,6 @@ export function DefinitionBehaviourFields({
   const carryTo = value.carryTo ?? [];
   if (!entityTypeInfo.listFilter && carryTargets.length === 0) return null;
   const helpId = `${id}-help`;
-  const carryGroupHelpId = `${id}-carry-help`;
   const carryErrorId = `${id}-carry-error`;
   const describedBy = (...ids: ReadonlyArray<string | false | undefined>): string | undefined =>
     ids.filter(Boolean).join(' ') || undefined;
@@ -129,7 +120,7 @@ export function DefinitionBehaviourFields({
             checked={carryTo.includes(target)}
             disabled={disabled}
             aria-invalid={invalid || undefined}
-            aria-describedby={describedBy(layout !== 'row' && `${controlId}-help`, invalid && carryErrorId)}
+            aria-describedby={describedBy(`${controlId}-help`, invalid && carryErrorId)}
             onChange={(event): void =>
               emit({
                 // Kept in the registry's order, whatever order they were ticked in.
@@ -163,31 +154,6 @@ export function DefinitionBehaviourFields({
       </p>
     ) : null;
 
-  if (layout === 'row') {
-    const help = 'order-last basis-full break-words text-sm text-muted-foreground';
-    return (
-      <>
-        {listFilterControl}
-        {carryControls.length > 0 ? (
-          <div
-            role="group"
-            aria-label={t('customFields.carry.legend')}
-            aria-describedby={describedBy(carryGroupHelpId, carryError !== null && carryErrorId)}
-            className="flex flex-wrap items-center gap-x-4"
-          >
-            {carryControls.map((item) => item.control)}
-          </div>
-        ) : null}
-        {listFilterHelp(help)}
-        {carryControls.length > 0 ? (
-          <p id={carryGroupHelpId} className={help}>
-            {t('customFields.carry.helpGroup')}
-          </p>
-        ) : null}
-        {carryControls.length > 0 ? carryErrorLine('order-last basis-full break-words text-sm') : null}
-      </>
-    );
-  }
   const help = 'break-words text-sm text-muted-foreground';
   return (
     <div className="space-y-3">
