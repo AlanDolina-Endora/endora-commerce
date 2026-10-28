@@ -4,9 +4,12 @@ import { HttpError } from '@endora-commerce/platform/http';
 import {
   assemblePreferences,
   assertListPageSizesBound,
+  assertListViewModesBound,
   importListPageSizes,
   mergeListPageSizes,
+  mergeListViewModes,
   readStoredListPageSizes,
+  readStoredListViewModes,
 } from './admin-preference-document.js';
 
 /**
@@ -142,5 +145,32 @@ describe('assertListPageSizesBound', () => {
     expect(() =>
       assertListPageSizesBound(importListPageSizes(lists(128), { extra: 20 })),
     ).toThrow(HttpError);
+  });
+});
+
+// `specs/165-task-management/` R-14 — the list/board choice merges per list as page sizes do.
+describe('listViewModes (PATCH per list)', () => {
+  it('reads a stored map and treats anything else as empty', () => {
+    expect(readStoredListViewModes({ tasks: 'board' })).toEqual({ tasks: 'board' });
+    expect(readStoredListViewModes(['tasks'])).toEqual({});
+    expect(readStoredListViewModes(null)).toEqual({});
+  });
+
+  it('sets present entries, removes null entries and keeps the others', () => {
+    expect(mergeListViewModes({ tasks: 'board', 'tasks-mine': 'list' }, { tasks: null, crm: 'board' })).toEqual({
+      'tasks-mine': 'list',
+      crm: 'board',
+    });
+  });
+
+  it('refuses a 129th list after the merge with 400 VALIDATION_FAILED', () => {
+    const lists = Object.fromEntries(Array.from({ length: 129 }, (_, i) => [`l${i}`, 'list']));
+    expect(() => assertListViewModesBound(lists)).toThrow(HttpError);
+    try {
+      assertListViewModesBound(lists);
+    } catch (error) {
+      expect((error as HttpError).code).toBe(ERROR_CODES.VALIDATION_FAILED);
+    }
+    expect(() => assertListViewModesBound({ tasks: 'list' })).not.toThrow();
   });
 });

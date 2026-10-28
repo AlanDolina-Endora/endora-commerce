@@ -79,6 +79,8 @@ are additive (`release-intent.md`).
 
 No code change. `src/backend/services/admin-preference-document.test.ts` (added at T025) gains `listViewModes: {}` in the document it expects: the contract's new key reads as its default when no row is stored. The service ignores unknown keys and merges by key, so `listViewModes` needs only the contract. If the per-list merge needs special logic, as `listPageSizes` does, `admin-preference-document.ts` gets one case.
 
+**Premise false, measured at T053:** `AdminPreferenceService.update` writes only the three replaced keys and `listPageSizes`; a `listViewModes` patch passed validation and was silently not stored. So `src/backend/services/admin-preference-document.ts` gains `readStoredListViewModes`, `mergeListViewModes` and `assertListViewModesBound`, and `admin-preference-service.ts` writes the key through one per-list-map writer shared with `listPageSizes` (the row lock unchanged). Tests: the document unit test and `backend/test/contract/admin_users/me-preferences.test.ts` (merge per list, `null` forgets, the two maps independent). Changeset `admin-users-list-view-modes.md` (patch).
+
 ## G. Demo, tests, generated files
 
 - **Demo:** `packages/demo-composition/src/projects.ts` writes `task_assignees`. The `tasks` module's demo step is new (R-23). The count in `backend/test/integration/demo/demo-shop.test.ts` moves.
