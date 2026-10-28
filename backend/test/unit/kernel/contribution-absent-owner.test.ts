@@ -269,11 +269,13 @@ const COMPOSERS: Readonly<
       emailDefaultsPort: { register: () => {} },
     }),
   // `tasks` offers the Task record type to `admin_search`'s registry. Its other
-  // boot hook pushes into `audit_logs`' reference registry, a module it
-  // declares in `dependencies`.
+  // boot hooks push into `audit_logs`' reference registry and — since
+  // `specs/165-task-management/` User Story 1 — `assets_library`'s
+  // asset-reference registry, modules it declares in `dependencies`.
   tasks: (withOwner, ownerNames) =>
     compose('tasks', registerTasks, ownerNames, withOwner, {
       auditReferenceRegistry: { register: () => {} },
+      assetReferenceRegistry: { register: () => {} },
     }),
   inventory: (withOwner, ownerNames) =>
     compose('inventory', registerInventory, ownerNames, withOwner, {
