@@ -28,7 +28,7 @@
 | `PATCH /tasks/:id` | W | `UpdateTaskBody` | `TaskDetail` |
 | `POST /tasks/:id/status` | W | `{to: code, from: code}` | `{task: TaskDetail, openSubtasks: number}`. 409 `TASK_TRANSITION_FORBIDDEN {allowedTargets}`, 409 `TASK_TRANSITION_CONFLICT`, 422 `TASK_STATUS_UNKNOWN` |
 | `POST /tasks/:id/publish` | W (Creator) | — | `TaskDetail`. 403 `TASK_DRAFT_ONLY_CREATOR`; 409 when the Task is not a draft |
-| `DELETE /tasks/:id` | W, or R + `tasks:see_private` on a private Task | — | 204. The answer also reports `{subtasksDetached}` |
+| `DELETE /tasks/:id` | W, or R + `tasks:see_private` on a private Task | — | 200 `{data: {subtasksDetached}}` — the former sub-tasks the caller may see (settled at T062; was written "204 … also reports") |
 | `GET /tasks/:id/history` | R | cursor | `RecordHistoryPage`; references are resolved |
 
 **`TaskListQuery`**, in addition to the 163 fields:
@@ -93,7 +93,7 @@ Unknown status, priority and tag ids **match nothing**; they never produce a 422
 | `GET /tasks/:id/attachments` | R | — |
 | `POST /tasks/:id/attachments` | W | multipart upload, or `{assetId}`. 415 `TASK_ATTACHMENT_REFUSED` |
 | `DELETE /tasks/:id/attachments/:attachmentId` | W | — |
-| `PUT /tasks/:id/relations/:otherId` / `DELETE …` | W on both Tasks | — |
+| `PUT /tasks/:id/relations/:otherId` / `DELETE …` | W on both Tasks | 204, idempotent both ways; a Task related to itself is 400 `VALIDATION_FAILED` |
 | `POST /tasks/:id/links` / `DELETE /tasks/:id/links/:linkId` | W | `{kind, id}`. 422 `TASK_LINK_INVALID` |
 | `GET /tasks/:id/reminders` | R | — |
 | `POST /tasks/:id/reminders` | W | `{remindAt}` or `{offsetMinutes}`, plus `recipientIds[]` drawn from the caller and the assignees. 422 `TASK_REMINDER_INVALID` |
