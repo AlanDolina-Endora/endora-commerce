@@ -578,6 +578,11 @@ const HOST_COMPOSITION_SURFACE: Readonly<Record<string, readonly string[]>> = {
     'ComposeAppOptions',
     'ComposedAppContext',
   ],
+  // Issue #497 — the cursor seal both roots register as the `cursorSeal`
+  // value: `composeApp` keyed by the session key, the test kit by its own. A
+  // module resolves the value and declares the shape it uses in its cradle, so
+  // `CursorSeal` itself is not on the barrel (R3.1a).
+  'composition/cursor-seal.ts': ['createCursorSeal'],
   // What an entry point does with a refusal the platform wrote for the
   // operator: `exitOnRefusal` on `composeApp`'s promise in the API and the
   // worker, `refuseOverlaySchema` in `migrate`, which composes nothing and has

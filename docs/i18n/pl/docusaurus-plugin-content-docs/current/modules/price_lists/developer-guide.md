@@ -314,7 +314,11 @@ wstępnie wyliczoną **powierzchnię cen**.
   cena zmieni się w międzyczasie, może pojawić się dwa razy albo wcale, jak przy każdym
   stronicowaniu kursorem po bieżącej cenie. Strona, która wyczerpie swój limit odczytu, jest krótsza,
   może być pusta, a jej kursor prowadzi dalej od miejsca, w którym odczyt się zatrzymał, więc limit
-  nigdy nie kończy przeglądania.
+  nigdy nie kończy przeglądania. To miejsce może być produktem, którego oglądający nie widzi, a przy
+  sortowaniu według ceny zawiera cenę i identyfikator tego produktu, więc katalog pieczętuje każdy
+  kursor przeglądania według ceny wartością platformy `cursorSeal` (AES-256-GCM, klucz wyprowadzony
+  z `SESSION_COOKIE_SECRET`; zgłoszenie #497): klient nie może ani odczytać pozycji, ani jej
+  podrobić, a kursor, którego nie da się otworzyć, zaczyna przeglądanie od początku.
   Ceny na kartach są zawsze wyliczane na bieżąco, więc opóźniać się może tylko porządek.
 - **Zapis oznacza tylko to, co może przesunąć**, na dwóch poziomach szczegółowości. Każdy zapisujący
   opisuje swoją zmianę jako `SurfaceChange` (`src/backend/services/surface-change.ts`), a

@@ -134,6 +134,7 @@ import {
   loadPackageModuleEntries,
 } from '../packages/package-runtime.js';
 import { nodeModulesRootsFor } from '../packages/installed-packages.js';
+import { createCursorSeal } from './cursor-seal.js';
 import { newsletterTokenSecretFrom } from './newsletter-token-secret.js';
 import { processRunsWorkersFor } from './process-runs-workers.js';
 import { forkScopedEm } from '../tenancy/scoped-em.js';
@@ -680,6 +681,12 @@ export async function composeApp(options: ComposeAppOptions): Promise<ComposeApp
       process.env['NEWSLETTER_TOKEN_SECRET'],
       process.env['SESSION_COOKIE_SECRET'],
     ),
+    // Issue #497 — what a listing seals a cursor with when its next position
+    // may name a row the client must not learn about (the catalogue's price
+    // walk). A platform value rather than a module's: the key is derived from
+    // the session key every instance already has, so no module reads it and no
+    // operator provisions a new one. Keyed lazily — see `./cursor-seal.ts`.
+    cursorSeal: createCursorSeal(process.env['SESSION_COOKIE_SECRET'] ?? ''),
     // The one connection ioredis has put into subscriber mode. Shared, because
     // a subscriber connection cannot serve commands: a per-module one would
     // cost a socket per module and buy nothing.
