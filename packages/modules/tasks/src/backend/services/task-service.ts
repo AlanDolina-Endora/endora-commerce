@@ -2,7 +2,6 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   ERROR_CODES,
   foldDiacritics,
-  TASK_CLOSED_STATUSES,
   type AdminUserReadPort,
   type AdminUserRecord,
   type CreateTaskBody,
@@ -84,7 +83,9 @@ export interface TaskRow {
   overdue: boolean;
 }
 
-const CLOSED = TASK_CLOSED_STATUSES.map((status) => `'${status}'`).join(', ');
+// Temporary until T016 moves the closed test onto status categories: the four
+// seeded codes, so the module loads after T004 removed `TASK_CLOSED_STATUSES`.
+const CLOSED = `'done', 'cancelled'`;
 
 const COLUMNS = `t."id", t."number", t."title", t."description", t."status", t."assigned_admin_user_id",
   to_char(t."due_on", 'YYYY-MM-DD') as "due_on", t."completed_at", t."created_by_admin_user_id",
