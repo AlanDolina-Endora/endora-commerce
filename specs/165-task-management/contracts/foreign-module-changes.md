@@ -76,6 +76,7 @@ are additive (`release-intent.md`).
 | Path | Change | Why |
 | --- | --- | --- |
 | `src/backend/services/admin-notification-port.ts`, `admin-notification-service.ts`, and the port in `packages/contracts/src/admin-notifications.ts` | The record port gains an **additive** co-transactional `recordWithin(em, input)`: the bell row is created and persisted on the caller's EntityManager, inside its transaction, with no fork and no flush (the `AuditPort.recordWithin` shape). `record(input)` is unchanged. | SC-004 exactly-once bell for reminders: the delivery row and the bell entry commit together, so the unique delivery key makes the bell exactly-once. T001(b) measured that `record` forks its own EntityManager and autocommits. Implemented at T072 (US7), not before. |
+| `backend/test/integration/admin_notifications/record-within.test.ts` (new, added at T072), `.changeset/admin-notifications-record-within.md` | The port method's tests (commits with the caller, rolls back with it, refuses what `record` refuses, `record` unchanged) and its changeset (`minor` for the module and the contracts). The port is `AdminNotificationRecordPort<EM = unknown>`: the contracts hold no `@mikro-orm` import, so the caller's `EntityManager` is a type parameter, as `ModuleInstalledEvent<EM>` is. | Constitution III; `release-intent.md`. |
 
 ## F. `packages/modules/admin_users/`
 
