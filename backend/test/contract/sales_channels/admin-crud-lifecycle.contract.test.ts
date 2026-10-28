@@ -541,14 +541,11 @@ describe('admin sales-channels CRUD + lifecycle (T029-T033)', () => {
       },
       { orderBy: { actedAt: 'desc' } },
     );
-    const state = entry?.stateAfter as {
-      action: string;
-      before: { anonymousAccess: boolean };
-      after: { anonymousAccess: boolean };
-    };
-    expect(state.action).toBe('updated');
-    expect(state.before.anonymousAccess).toBe(true);
-    expect(state.after.anonymousAccess).toBe(false);
+    // A Command Bus row (Principle XIII): the snapshots are the row's own
+    // before/after columns, and the actor is the signed-in administrator.
+    expect(entry?.actorAdminUserId).toBeTruthy();
+    expect(entry?.stateBefore).toMatchObject({ anonymousAccess: true, version: 1 });
+    expect(entry?.stateAfter).toMatchObject({ anonymousAccess: false, version: 2 });
 
     const identity = await h.app.inject({
       method: 'GET',
@@ -567,136 +564,6 @@ describe('admin sales-channels CRUD + lifecycle (T029-T033)', () => {
     expect((refused.json() as { error: { code: string } }).error.code).toBe(
       ERROR_CODES.SALES_CHANNEL_SIGN_IN_REQUIRED,
     );
-  });
-
-  // -- Issue #467: show prices (isPublic) ---------------------------------
-
-  it('POST without isPublic creates a channel that shows no prices; POST may turn it on; list and detail carry it', async () => {
-    const base = {
-      name: { 'en-US': 'Prices' },
-      languages: ['en-US'],
-      defaultLanguage: 'en-US',
-      currencies: ['PLN'],
-      defaultCurrency: 'PLN',
-    };
-    const hidden = await h.app.inject({
-      method: 'POST',
-      url: '/api/v1/admin/sales-channels',
-      cookies: adminCookie,
-      payload: { ...base, code: 'serwis-hidden' },
-    });
-    expect(hidden.statusCode).toBe(201);
-    expect((hidden.json() as Record<string, unknown>)['isPublic']).toBe(false);
-
-    const shown = await h.app.inject({
-      method: 'POST',
-      url: '/api/v1/admin/sales-channels',
-      cookies: adminCookie,
-      payload: { ...base, code: 'serwis-shown', isPublic: true },
-    });
-    expect(shown.statusCode).toBe(201);
-    expect((shown.json() as Record<string, unknown>)['isPublic']).toBe(true);
-    expect((await h.em().findOneOrFail(SalesChannel, { code: 'serwis-shown' })).isPublic).toBe(
-      true,
-    );
-
-    const detail = await h.app.inject({
-      method: 'GET',
-      url: '/api/v1/admin/sales-channels/serwis-shown',
-      cookies: adminCookie,
-    });
-    expect((detail.json() as Record<string, unknown>)['isPublic']).toBe(true);
-
-    const list = await h.app.inject({
-      method: 'GET',
-      url: '/api/v1/admin/sales-channels',
-      cookies: adminCookie,
-    });
-    const items = (list.json() as { items: Array<{ code: string; isPublic: boolean }> }).items;
-    expect(items.find((c) => c.code === 'serwis-hidden')?.isPublic).toBe(false);
-    expect(items.find((c) => c.code === 'serwis-shown')?.isPublic).toBe(true);
-  });
-
-  it('PATCH isPublic is audited before/after, bumps version, honours the version and drops the cached channel', async () => {
-    await h.app.inject({
-      method: 'POST',
-      url: '/api/v1/admin/sales-channels',
-      cookies: adminCookie,
-      payload: {
-        code: 'serwis-price',
-        name: { 'en-US': 'Price' },
-        languages: ['en-US'],
-        defaultLanguage: 'en-US',
-        currencies: ['PLN'],
-        defaultCurrency: 'PLN',
-      },
-    });
-    // Resolve the channel once so the cache holds it with prices hidden.
-    await h.app.inject({
-      method: 'GET',
-      url: '/api/v1/storefront/sales-channel',
-      headers: { 'x-sales-channel': 'serwis-price' },
-    });
-    const warm = await h.salesChannels.cache.get('serwis-price');
-    expect(warm.hit && warm.value?.isPublic).toBe(false);
-
-    const r = await h.app.inject({
-      method: 'PATCH',
-      url: '/api/v1/admin/sales-channels/serwis-price',
-      cookies: adminCookie,
-      payload: { expectedVersion: 1, isPublic: true },
-    });
-    expect(r.statusCode).toBe(200);
-    const body = r.json() as Record<string, unknown>;
-    expect(body['isPublic']).toBe(true);
-    expect(body['version']).toBe(2);
-
-    // The write dropped the cached channel, so the next request resolves the
-    // new row instead of serving prices-hidden for the rest of the TTL.
-    expect((await h.salesChannels.cache.get('serwis-price')).hit).toBe(false);
-    await h.app.inject({
-      method: 'GET',
-      url: '/api/v1/storefront/sales-channel',
-      headers: { 'x-sales-channel': 'serwis-price' },
-    });
-    const fresh = await h.salesChannels.cache.get('serwis-price');
-    expect(fresh.hit && fresh.value?.isPublic).toBe(true);
-
-    const stale = await h.app.inject({
-      method: 'PATCH',
-      url: '/api/v1/admin/sales-channels/serwis-price',
-      cookies: adminCookie,
-      payload: { expectedVersion: 1, isPublic: false },
-    });
-    expect(stale.statusCode).toBe(412);
-
-    const entry = await h.em().findOne(
-      AuditLogEntry,
-      {
-        objectType: 'sales_channel',
-        objectId: body['id'] as string,
-        action: 'sales_channel.identity.changed',
-      },
-      { orderBy: { actedAt: 'desc' } },
-    );
-    const state = entry?.stateAfter as {
-      action: string;
-      before: { isPublic: boolean };
-      after: { isPublic: boolean };
-    };
-    expect(state.action).toBe('updated');
-    expect(state.before.isPublic).toBe(false);
-    expect(state.after.isPublic).toBe(true);
-  });
-
-  it('PATCH refuses a non-boolean isPublic', async () => {
-    const r = await h.app.inject({
-      method: 'PATCH',
-      url: '/api/v1/admin/sales-channels/default',
-      cookies: adminCookie,
-      payload: { expectedVersion: 1, isPublic: 'yes' },
-    });
-    expect(r.statusCode).toBe(400);
   });
 
   // -- Auth gate ------------------------------------------------------------

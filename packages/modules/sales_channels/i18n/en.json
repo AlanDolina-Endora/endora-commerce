@@ -86,8 +86,6 @@
   "auditLog.sales_channel.membership_changed": "Sales channel membership changed",
   "auditLog.sales_channel.set_default": "System-default sales channel moved",
   "identity.anonymousAccess.label": "Open to anonymous visitors",
-  "identity.anonymousAccess.hint": "When off, visitors must sign in, and only customers whose organization is assigned to this channel can use the store. Whether prices are shown is a separate setting, below. With automatic moderation, anyone who registers a business here gets access.",
-  "identity.isPublic.label": "Show prices",
-  "identity.isPublic.hint": "When off, nobody sees prices on this channel — neither visitors nor signed-in customers — and the store shows no \"Add to cart\" button. Buyers can still request a quote where quotes are enabled.",
+  "identity.anonymousAccess.hint": "When off, visitors must sign in, and only customers whose organization is assigned to this channel can use the store. With automatic moderation, anyone who registers a business here gets access.",
   "list.badge.signInRequired": "Sign-in required"
 }

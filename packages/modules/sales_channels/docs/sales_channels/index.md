@@ -17,9 +17,7 @@ The Sales Channels module is the platform's stable handle for "where the sale ha
 
 - **Membership** — the M:N relationship between a channel and a channel-scoped entity. Nine entity types are tracked: `product`, `category`, `payment-method`, `delivery-method`, `organization`, `tax`, `customer`, `promotion`, `cms-page`. (`inventory-location` is reserved for when the inventory module introduces that table.)
 
-- **Open to anonymous visitors** — a per-channel flag (`anonymousAccess`, on by default). When it is off, the store serves signed-in customers only. It is separate from **Show prices**.
-
-- **Show prices** — a per-channel flag (`isPublic`, off by default). When it is off, the catalogue, search, product comparison and related-product reads answer `price: null` on the channel for every viewer, signed-in customers included, so the storefront shows no prices and no "Add to cart" button. It is set on the channel's form in the admin and through the admin API (`isPublic` on `POST` and `PATCH /api/v1/admin/sales-channels`); the change applies from the next request.
+- **Open to anonymous visitors** — a per-channel flag (`anonymousAccess`, on by default). When it is off, the store serves signed-in customers only. It is separate from `isPublic`, which decides whether anonymous visitors see prices and only matters on a store that is open to them.
 
 - **Customer access** — the Organizations a channel serves (the `organization` membership) are the channels that Organization's members may sign in to and shop in. No assignment means no access.
 
@@ -115,7 +113,7 @@ Hard-delete with `?fallbackToDefault=true` rebinds orphaned entities to the syst
 
 Every identity change, lifecycle change, and membership change writes one `audit_log_entries` row synchronously inside the same transaction. The action codes live in `@endora-commerce/contracts` as `SALES_CHANNEL_AUDIT_ACTIONS`:
 
-- `sales_channel.identity.changed` — create + update, with the channel's state before and after the change (including `anonymousAccess` and `isPublic`).
+- `sales_channel.identity.changed` — create + update.
 - `sales_channel.lifecycle.changed` — deactivate / activate / delete / system-default-promoted.
 - `sales_channel.membership.changed` — add / remove (no-op writes are not audited).
 

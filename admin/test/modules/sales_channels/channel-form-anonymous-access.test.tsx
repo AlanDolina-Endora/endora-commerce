@@ -15,10 +15,10 @@ import { expectNoAxeViolations } from '../../helpers/axe';
  *
  * The form carries *Open to anonymous visitors* under *Active*, on for a new
  * channel, with the hint that says what turning it off does (sign-in required,
- * Organization assignment decides) and what it does not (price visibility is a
- * separate setting — its own control since issue #467). The edit page sends the value in the update body, and the
- * roster marks a closed channel with a *Sign-in required* badge, so a closed
- * store is visible without opening it.
+ * Organization assignment decides); it names no price setting (issue #467).
+ * The edit page sends the value in the update body, and the roster marks a
+ * closed channel with a *Sign-in required* badge, so a closed store is visible
+ * without opening it.
  */
 
 vi.mock('@endora-commerce/admin-kit/lib', async () => {
@@ -84,7 +84,6 @@ function channel(over: Partial<SalesChannelDetail> = {}): SalesChannelDetail {
     name: { 'en-US': 'Serwis A' },
     active: true,
     anonymousAccess: true,
-    isPublic: false,
     systemDefault: false,
     defaultLanguage: 'en-US',
     defaultCurrency: 'PLN',
@@ -119,9 +118,10 @@ describe('bundle', () => {
     }
     expect(en['identity.anonymousAccess.label']).toBe('Open to anonymous visitors');
     expect(pl['identity.anonymousAccess.label']).toBe('Otwarty dla niezalogowanych odwiedzających');
-    // Issue #467 — price visibility is its own control now, and the hint
-    // points at it rather than at a setting the admin did not have.
-    expect(en['identity.anonymousAccess.hint']).toMatch(/Whether prices are shown is a separate setting/);
+    // The hint used to point at a "show prices to anonymous visitors" setting
+    // the admin never had (issue #467); it names no price setting now.
+    expect(en['identity.anonymousAccess.hint']).not.toMatch(/price/i);
+    expect(pl['identity.anonymousAccess.hint']).not.toMatch(/cen/i);
   });
 });
 

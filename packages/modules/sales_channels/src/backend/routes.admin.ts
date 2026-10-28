@@ -113,7 +113,6 @@ export async function registerSalesChannelsAdminRoutes(
       name: c.name,
       active: c.active,
       anonymousAccess: c.anonymousAccess,
-      isPublic: c.isPublic,
       systemDefault: c.systemDefault,
       defaultLanguage: c.defaultLanguage,
       defaultCurrency: c.defaultCurrency,
@@ -185,7 +184,9 @@ export async function registerSalesChannelsAdminRoutes(
     { preHandler: requireAdmin(SC_WRITE) },
     async (request, reply) => {
       const body = SalesChannelCreateBodySchema.parse(request.body);
-      const channel = await salesChannelsService.create(body, auditContext(request));
+      // The Command Bus takes the actor and the request id from the request's
+      // TenantContext, so no audit context is passed.
+      const channel = await salesChannelsService.create(body);
       reply.code(201);
       setEtag(reply, channel);
       return serializeDetail(channel);
@@ -208,7 +209,6 @@ export async function registerSalesChannelsAdminRoutes(
         request.params.code,
         body,
         expectedVersion,
-        auditContext(request),
       );
       setEtag(reply, channel);
       return serializeDetail(channel);
@@ -448,7 +448,6 @@ export async function registerSalesChannelsAdminRoutes(
           name: c.name,
           active: c.active,
           anonymousAccess: c.anonymousAccess,
-          isPublic: c.isPublic,
           systemDefault: c.systemDefault,
           defaultLanguage: c.defaultLanguage,
           defaultCurrency: c.defaultCurrency,
