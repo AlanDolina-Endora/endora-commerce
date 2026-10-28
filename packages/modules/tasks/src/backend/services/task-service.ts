@@ -1,6 +1,5 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import {
-  ERROR_CODES,
   foldDiacritics,
   TASK_MINE_MAX,
   mentionedAdminUserIds,
@@ -28,7 +27,6 @@ import {
   type UpdateTaskBody,
 } from '@endora-commerce/contracts';
 import type { CommandBus } from '@endora-commerce/platform/commands';
-import { HttpError } from '@endora-commerce/platform/http';
 import type { TaskAdminSearchQuery, TaskAdminSearchRow } from '../admin-search-provider.js';
 import { dueOnFor, isOverdue } from '../domain/due-moment.js';
 import {
@@ -57,7 +55,6 @@ import {
   changeTaskAssigneesCommand,
   changeTaskCustomFieldsCommand,
   changeTaskPriorityCommand,
-  changeTaskStatusCommand,
   changeTaskTagsCommand,
   createTaskCommand,
   deleteTaskCommand,
@@ -69,6 +66,7 @@ import { mergeTaskCustomFields } from './task-custom-fields.js';
 import type { TaskContextRegistry } from './task-context-registry.js';
 import { taskNotFound } from './task-errors.js';
 import { tellAfterCommit, type TaskNotifier } from './task-notifier.js';
+import type { TaskTransitionService } from './task-transition-service.js';
 import { taskVisibilitySql, type SqlFragment, type TaskVisibility, type TaskVisibilityScope } from './task-visibility.js';
 import { priorityRef, statusRef, type TaskWorkflowRead } from './task-workflow-read.js';
 
@@ -121,6 +119,8 @@ export interface TaskServiceDeps {
   references: Pick<TaskReferenceService, 'resolve'>;
   /** Who a description newly mentions is told, after the commit (FR-006). */
   mentions: Pick<TaskMentionService, 'tell'>;
+  /** The one door a status change goes through (research R-1, `task-transition-service.ts`). */
+  transitions: Pick<TaskTransitionService, 'apply'>;
   /** `tasks.time_zone` — the calendar a date-only due date is counted in (research R-17). */
   timeZone: () => Promise<string>;
   /**
@@ -635,36 +635,17 @@ export class TaskService {
   }
 
   /**
-   * `POST /tasks/:id/status` — a move the configured workflow permits (research
-   * R-1): 422 `TASK_STATUS_UNKNOWN` for a code it does not hold, 409
-   * `TASK_TRANSITION_FORBIDDEN` with `allowedTargets` for a move it does not
-   * permit, 409 `TASK_TRANSITION_CONFLICT` when the Task left `from`. The move
-   * to the status the Task is already in changes nothing.
+   * `POST /tasks/:id/status` — the move goes through {@link TaskTransitionService}
+   * (research R-1: 422 `TASK_STATUS_UNKNOWN`, 409 `TASK_TRANSITION_FORBIDDEN`
+   * naming the permitted next statuses, 409 `TASK_TRANSITION_CONFLICT`); the
+   * answer is the Task as it is now and how many of its visible sub-tasks are
+   * still open, for the screen's warning. A move to the status the Task is
+   * already in changes nothing.
    */
   async changeStatus(id: string, body: TaskStatusChangeBody, language: SupportedLanguage): Promise<TaskStatusChangeResult> {
-    const row = await this.deps.access.loadVisible(id);
-    this.deps.access.assertMayChange(row);
-    const graph = await this.deps.workflow.graph();
-    if (!graph.has(body.to)) {
-      throw new HttpError(422, ERROR_CODES.TASK_STATUS_UNKNOWN, `"${body.to}" is not a status of the workflow.`);
-    }
-    if (row.status !== body.to) {
-      if (row.status !== body.from) {
-        throw new HttpError(409, ERROR_CODES.TASK_TRANSITION_CONFLICT, 'The Task left that status in the meantime.', {
-          current: row.status,
-        });
-      }
-      if (!graph.canTransition(body.from, body.to)) {
-        throw new HttpError(409, ERROR_CODES.TASK_TRANSITION_FORBIDDEN, 'The workflow does not permit that move.', {
-          allowedTargets: graph.allowedTargets(body.from),
-        });
-      }
-      await this.deps.commandBus.run(
-        changeTaskStatusCommand(row.id, { from: body.from, to: body.to, toCategory: graph.categoryOf(body.to)! }),
-      );
-    }
-    const task = await this.#detail(await this.deps.access.rowAfterWrite(row.id), language);
-    const subtasks = (await this.#subtaskCounts([row.id], await this.deps.visibility.scope())).get(row.id);
+    const { taskId } = await this.deps.transitions.apply(id, body, language);
+    const task = await this.#detail(await this.deps.access.rowAfterWrite(taskId), language);
+    const subtasks = (await this.#subtaskCounts([taskId], await this.deps.visibility.scope())).get(taskId);
     return { task, openSubtasks: subtasks ? subtasks.total - subtasks.closed : 0 };
   }
 

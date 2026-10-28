@@ -219,6 +219,8 @@ export const manifest = defineModuleManifest({
     { code: 'TASK_STATUS_UNKNOWN' },
     { code: 'TASK_TRANSITION_FORBIDDEN' },
     { code: 'TASK_TRANSITION_CONFLICT' },
+    { code: 'TASK_WORKFLOW_INVALID' },
+    { code: 'TASK_STATUS_IN_USE_TOO_MANY' },
     { code: 'TASK_PRIVATE_READ_ONLY' },
     { code: 'TASK_PRIORITY_UNKNOWN' },
     { code: 'TASK_TAG_UNKNOWN' },

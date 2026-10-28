@@ -2,18 +2,14 @@ import { LockMode } from '@mikro-orm/core';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { isDeepStrictEqual } from 'node:util';
 import {
-  ERROR_CODES,
   TASK_ASSIGNEES_MAX,
   TASKS_EVENTS,
   type TaskAssigneesChangedEvent,
   type TaskContext,
   type TaskCreatedEvent,
   type TaskDeletedEvent,
-  type TaskStatusCategory,
-  type TaskStatusChangedEvent,
 } from '@endora-commerce/contracts';
 import type { Command } from '@endora-commerce/platform/commands';
-import { HttpError } from '@endora-commerce/platform/http';
 import { randomUUID } from 'crypto';
 import { Task } from '../entities/task.entity.js';
 import { TaskAssignee } from '../entities/task-assignee.entity.js';
@@ -37,7 +33,7 @@ import { nextTaskNumber } from './task-number.js';
  * | `tasks.task.tags_change` | — |
  * | `tasks.task.custom_fields_change` | — |
  * | `tasks.task.assignees_change` | `tasks.task.assignees_changed.v1` |
- * | `tasks.task.status_change` | `tasks.task.status_changed.v1` |
+ * | `tasks.task.status_change` (`task-transition-service.ts`) | `tasks.task.status_changed.v1` |
  * | `tasks.task.delete` | `tasks.task.deleted.v1` |
  *
  * Shared by the HTTP service and the write port, so a Task created by another
@@ -107,11 +103,13 @@ export function auditSnapshot(task: Task): Record<string, unknown> {
   };
 }
 
-function envelope(): { eventId: string; occurredAt: string } {
+/** An event's `eventId` / `occurredAt` envelope. */
+export function envelope(): { eventId: string; occurredAt: string } {
   return { eventId: randomUUID(), occurredAt: new Date().toISOString() };
 }
 
-async function lockedTask(em: EntityManager, id: string): Promise<Task> {
+/** One Task, locked for the Command's transaction — by an id `TaskAccess` handed out. */
+export async function lockedTask(em: EntityManager, id: string): Promise<Task> {
   const task = await em.findOne(Task, { id }, { lockMode: LockMode.PESSIMISTIC_WRITE });
   if (!task) throw taskNotFound();
   return task;
@@ -351,69 +349,6 @@ export function changeTaskAssigneesCommand(
       if (!result) return undefined;
       const payload: TaskAssigneesChangedEvent = { ...envelope(), taskId: id, ...result };
       return { eventName: TASKS_EVENTS.ASSIGNEES_CHANGED, payload };
-    },
-  };
-}
-
-export interface StatusMove {
-  /** The status the caller saw; the move is refused when the Task has left it. */
-  from: string;
-  to: string;
-  toCategory: TaskStatusCategory;
-}
-
-/**
- * `tasks.task.status_change` — the move itself, checked against the workflow
- * by the caller. Under the lock the Task must still be in `from`, else 409
- * `TASK_TRANSITION_CONFLICT`. Entering a `done`-category status stamps the
- * completion time, and leaving one clears it. `undefined` when the Task is
- * already in `to` (nothing written, nothing audited).
- */
-export function changeTaskStatusCommand(
-  id: string,
-  move: StatusMove,
-): Command<{ from: string; context: Pick<TaskStatusChangedEvent, 'contextType' | 'contextId' | 'contextGroupId'> } | undefined> {
-  return {
-    action: 'tasks.task.status_change',
-    objectType: 'task',
-    objectId: id,
-    run: async ({ em }) => {
-      const task = await lockedTask(em as EntityManager, id);
-      const from = task.status;
-      if (from === move.to) return { result: undefined, skipAudit: true };
-      if (from !== move.from) {
-        throw new HttpError(409, ERROR_CODES.TASK_TRANSITION_CONFLICT, 'The Task left that status in the meantime.', {
-          current: from,
-        });
-      }
-      const before = auditSnapshot(task);
-      task.status = move.to;
-      if (move.toCategory === 'done') task.completedAt = task.completedAt ?? new Date();
-      else task.completedAt = null;
-      return {
-        result: {
-          from,
-          context: {
-            contextType: task.contextType ?? null,
-            contextId: task.contextId ?? null,
-            contextGroupId: task.contextGroupId ?? null,
-          },
-        },
-        before,
-        after: auditSnapshot(task),
-      };
-    },
-    event: (result) => {
-      if (!result) return undefined;
-      const payload: TaskStatusChangedEvent = {
-        ...envelope(),
-        taskId: id,
-        from: result.from,
-        to: move.to,
-        toCategory: move.toCategory,
-        ...result.context,
-      };
-      return { eventName: TASKS_EVENTS.STATUS_CHANGED, payload };
     },
   };
 }

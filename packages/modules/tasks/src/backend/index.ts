@@ -69,8 +69,10 @@ import { createTaskNotifier, type TaskNotifier } from './services/task-notifier.
 import { TaskReadPortService } from './services/task-read-port.js';
 import { TaskService } from './services/task-service.js';
 import { isSystemActor, TaskVisibility } from './services/task-visibility.js';
+import { TaskTransitionService } from './services/task-transition-service.js';
 import { TaskWorkflowRead } from './services/task-workflow-read.js';
 import { TaskWritePortService } from './services/task-write-port.js';
+import { TaskWorkflowConfigService } from './services/workflow-config-service.js';
 
 /**
  * `tasks` — composed by the kernel container.
@@ -104,6 +106,8 @@ interface TasksCradle {
   readonly tasksPriorityService: TaskPriorityService;
   readonly tasksTagService: TaskTagService;
   readonly tasksAttachmentService: TaskAttachmentService;
+  readonly tasksTransitionService: TaskTransitionService;
+  readonly tasksWorkflowConfigService: TaskWorkflowConfigService;
 }
 
 export function registerModule(ctx: ModuleContext): void {
@@ -242,6 +246,28 @@ export function registerModule(ctx: ModuleContext): void {
   });
   // --- end of References and configuration lists ----------------------------------
 
+  // --- Workflow (User Story 2, research R-1) -------------------------------------
+  // The operator's statuses and moves. A status change goes through the one
+  // door, `TaskTransitionService`, whoever asks for it — the detail screen, the
+  // board, a context owner. The configuration writes are Commands that end by
+  // holding the whole workflow to FR-013; removing a status in use moves its
+  // Tasks, each with an audit row of its own through the kernel's audit port.
+  ctx.di.register({
+    tasksTransitionService: ctx
+      .asFunction(
+        ({ commandBus, tasksAccess, tasksWorkflowRead }: TasksCradle) =>
+          new TaskTransitionService({ commandBus, access: tasksAccess, workflow: tasksWorkflowRead }),
+      )
+      .singleton(),
+    tasksWorkflowConfigService: ctx
+      .asFunction(
+        ({ commandBus, tasksWorkflowRead, auditLogService }: TasksCradle) =>
+          new TaskWorkflowConfigService({ commandBus, workflow: tasksWorkflowRead, auditLog: auditLogService }),
+      )
+      .singleton(),
+  });
+  // --- end of Workflow -------------------------------------------------------------
+
   // --- Tasks (User Story 2) -----------------------------------------------------
   // The list, My Tasks, one Task, and its writes — every write a Command of
   // `task-commands.ts` (Constitution XIII). `admin_users`' read port names an
@@ -271,6 +297,7 @@ export function registerModule(ctx: ModuleContext): void {
           tasksTagService,
           tasksReferenceService,
           tasksMentionService,
+          tasksTransitionService,
         }: TasksCradle) => {
           const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
           const settings = lazyPort<SettingsReadPort>(ctx, 'settingsReadPort');
@@ -291,6 +318,7 @@ export function registerModule(ctx: ModuleContext): void {
             customFieldListFilter: lazyPort<CustomFieldListFilterPort>(ctx, 'customFieldListFilterPort'),
             references: tasksReferenceService,
             mentions: tasksMentionService,
+            transitions: tasksTransitionService,
             // `tasks.time_zone` (R-17): read per call, so an operator's change
             // is seen by the next request.
             timeZone: () => settings.get('tasks.time_zone', null, TaskTimeZoneSchema.shape.timeZone),
@@ -322,7 +350,11 @@ export function registerModule(ctx: ModuleContext): void {
       documentLookupService: cradle.tasksDocumentLookupService,
       requireAdmin: cradle.requireAdmin,
     });
-    await registerTaskWorkflowRoutes(app, { taskService: cradle.tasksTaskService, requireAdmin: cradle.requireAdmin });
+    await registerTaskWorkflowRoutes(app, {
+      taskService: cradle.tasksTaskService,
+      workflowConfigService: cradle.tasksWorkflowConfigService,
+      requireAdmin: cradle.requireAdmin,
+    });
     await registerTaskPriorityRoutes(app, { priorityService: cradle.tasksPriorityService, requireAdmin: cradle.requireAdmin });
     await registerTaskTagRoutes(app, { tagService: cradle.tasksTagService, requireAdmin: cradle.requireAdmin });
     await registerTaskCollaborationRoutes(app, {

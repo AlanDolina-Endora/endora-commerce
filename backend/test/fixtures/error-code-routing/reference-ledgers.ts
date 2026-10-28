@@ -432,6 +432,20 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
       'Phase 2): a status change from a status the Task has since left.',
   },
+  TASK_WORKFLOW_INVALID: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 4): a workflow configuration write that breaks a rule — one initial open status, a done ' +
+      'and a cancelled status, moves between known statuses, a free code, a category changed under ' +
+      'Tasks, a removal in use without a replacement.',
+  },
+  TASK_STATUS_IN_USE_TOO_MANY: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 4): removing a status that more Tasks are in than one Command moves to its replacement.',
+  },
   TASK_PRIVATE_READ_ONLY: {
     to: 'tasks',
     reason:

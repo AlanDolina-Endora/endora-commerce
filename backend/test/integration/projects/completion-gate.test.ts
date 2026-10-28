@@ -6,7 +6,9 @@ import {
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
 import { seedCrmAdmin } from '../../helpers/seed-crm.js';
+import { restoreDefaultTaskWorkflow } from '../../helpers/task-workflow.js';
 import {
+  callProjects,
   callTasks,
   closeProject,
   createProject,
@@ -20,6 +22,7 @@ import {
   patchStage,
   setTaskStatus,
   stageNamed,
+  taskRowsOf,
   withTasksOff,
 } from './helpers.js';
 
@@ -169,6 +172,94 @@ describe('projects — the completion gate (US2)', () => {
     const refused = await moveProject(h, project.id, stageNamed(project, 'Handover'), moved.project.version);
     expect(refused.statusCode, refused.body).toBe(409);
     expect(openTasksOf(refused.body).map((t) => t.id)).toEqual([inBuild.id]);
+  });
+
+  /**
+   * The gate reads *closed* from the operator's workflow — category `done` or
+   * `cancelled` — and not from four literal codes (`specs/165-task-management/`
+   * US2 scenario 6, FR-017, quickstart US2 row). The workflow is
+   * platform-wide, so this block restores the seeded one around itself.
+   */
+  describe('with an operator-defined workflow (165 US2)', () => {
+    const configure = async (method: 'POST' | 'PUT' | 'DELETE', path: string, payload?: unknown, status = 200) => {
+      const response = await callTasks(h, method, path, payload === undefined ? {} : { payload });
+      expect(response.statusCode, response.body).toBe(status);
+    };
+
+    beforeAll(async () => {
+      await restoreDefaultTaskWorkflow(h.em());
+    });
+
+    afterAll(async () => {
+      await restoreDefaultTaskWorkflow(h.em());
+    });
+
+    it('a custom done status closes, an added open status blocks, and a draft does not count', async () => {
+      // *Accepted* (done) and *In review* (open); *Done* removed, its Tasks moved to *Accepted*.
+      await configure(
+        'POST',
+        '/statuses',
+        { code: 'accepted', name: { en: 'Accepted', pl: 'Zaakceptowane' }, category: 'done', color: '#10b981', weight: 35 },
+        201,
+      );
+      await configure(
+        'POST',
+        '/statuses',
+        { code: 'in_review', name: { en: 'In review', pl: 'Do przeglądu' }, category: 'open', color: '#8b5cf6', weight: 25 },
+        201,
+      );
+      await configure('PUT', '/transitions', {
+        add: [
+          { from: 'todo', to: 'accepted' },
+          { from: 'todo', to: 'in_review' },
+          { from: 'in_review', to: 'accepted' },
+          { from: 'done', to: 'accepted' },
+        ],
+      });
+
+      const project = await gatedProject('Gate and the workflow');
+      const design = stageNamed(project, 'Design');
+      const finished = await createStageTask(h, project.id, design, { title: 'Finished before' });
+      await setTaskStatus(h, finished.id, 'done');
+      await configure('DELETE', '/statuses/done?replacement=accepted');
+      expect((await callTasks(h, 'GET', `/${finished.id}`)).json().data.status).toMatchObject({ code: 'accepted' });
+
+      const reviewed = await createStageTask(h, project.id, design, { title: 'Being reviewed' });
+      await setTaskStatus(h, reviewed.id, 'in_review');
+      const dropped = await createStageTask(h, project.id, design, { title: 'Dropped' });
+      await setTaskStatus(h, dropped.id, 'cancelled');
+      // A draft in the Stage: drafts are written by User Story 8, so it is set directly.
+      const draft = await createStageTask(h, project.id, design, { title: 'Draft idea' });
+      await h.em().getConnection().execute(`update "tasks" set "is_draft" = true where "id" = ?`, [draft.id]);
+
+      const refused = await moveProject(h, project.id, stageNamed(project, 'Build'), project.version);
+      expect(refused.statusCode, refused.body).toBe(409);
+      expect(openTasksOf(refused.body).map((t) => t.id)).toEqual([reviewed.id]);
+
+      await setTaskStatus(h, reviewed.id, 'accepted');
+      const moved = await moveProjectOk(h, project.id, stageNamed(project, 'Build'), project.version);
+      expect(moved.project.currentStage?.name).toBe('Build');
+      expect(moved.entry.notes).toEqual([]);
+    });
+
+    it('a Stage Task created through the write port starts in the current initial status', async () => {
+      await configure(
+        'POST',
+        '/statuses',
+        { code: 'backlog', name: { en: 'Backlog', pl: 'Zaległe' }, category: 'open', color: '#64748b', weight: 5, isInitial: true },
+        201,
+      );
+      const project = await gatedProject('Stage tasks start in the backlog', []);
+      const build = stageNamed(project, 'Build');
+      const defined = await callProjects(h, 'PUT', `/${project.id}/stages/${build}/tasks`, {
+        payload: { tasks: [{ title: 'Templated step', dueOffsetDays: 0 }] },
+      });
+      expect(defined.statusCode, defined.body).toBe(200);
+      const moved = await moveProjectOk(h, project.id, build, project.version);
+      expect(moved.createdTaskIds).toHaveLength(1);
+      const rows = await taskRowsOf(h, project.id);
+      expect(rows.map((row) => row.status)).toEqual(['backlog']);
+    });
   });
 
   it('a gate on a Stage with no Task lets the Project go, with no note', async () => {

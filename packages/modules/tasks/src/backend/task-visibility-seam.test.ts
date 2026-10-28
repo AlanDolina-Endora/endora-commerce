@@ -211,6 +211,7 @@ const RULE_SCOPED_READ_LEDGER: Readonly<Record<string, number>> = {
   'services/task-service.ts': 20,
   'services/task-visibility.ts': 0,
   'services/task-write-port.ts': 1,
+  'services/workflow-config-service.ts': 3,
 };
 
 describe('the Task visibility seam (R-3, R-21)', () => {

@@ -46,7 +46,7 @@ describe('tasks off-state (Constitution XVII)', () => {
     // Each write probe names a Task that does not exist, or sends a body its
     // schema refuses, so the "on" phases write nothing: what is measured is
     // only whether the route claims the module is absent.
-    const write = (method: 'POST' | 'PATCH' | 'DELETE', url: string, payload: unknown = {}) => ({
+    const write = (method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', url: string, payload: unknown = {}) => ({
       method,
       url,
       cookies: admin,
@@ -62,6 +62,12 @@ describe('tasks off-state (Constitution XVII)', () => {
         write('POST', API),
         write('PATCH', `${API}/${ID}`, { title: 'x' }),
         write('DELETE', `${API}/${ID}`, undefined),
+        // The workflow (165 User Story 2): the read and every configuration write.
+        { url: `${API}/workflow`, cookies: admin },
+        write('POST', `${API}/statuses`),
+        write('PATCH', `${API}/statuses/nowhere`, { color: '#000000' }),
+        write('DELETE', `${API}/statuses/nowhere`, undefined),
+        write('PUT', `${API}/transitions`),
       ],
       adminPresence: { cookies: admin },
     });

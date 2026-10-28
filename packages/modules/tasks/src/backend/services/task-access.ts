@@ -52,6 +52,11 @@ export const TASK_ACCESS_READERS: Readonly<Record<string, string>> = {
     'The asset library asks whether **anything** still uses a file before deleting it — platform-wide on ' +
     'purpose, by whoever deletes it, who need not see the Task — and is answered with the Task\'s number, never ' +
     'its title (research R-7; Projects\' `project-asset-references.ts`).',
+  'services/workflow-config-service.ts':
+    'A status is platform configuration: changing what it means, or removing it, asks how many Tasks are in it ' +
+    'and moves them to the replacement **whoever may see them**, because a Task the operator cannot see is ' +
+    'still in the status (FR-016, research R-1). It reads ids and completion times only, hands nothing back to ' +
+    'the caller but the workflow, and records each move in that Task\'s own audit history.',
   'services/task-write-port.ts':
     '`deleteInContext` lists the ids of one context for its owner — the module that registered the context type ' +
     'and is deleting its own record — and hands each to the delete Command.',
