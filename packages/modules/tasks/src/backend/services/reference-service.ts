@@ -140,8 +140,21 @@ export class TaskReferenceService {
 
   /** The references of several texts — a page of comments — in one call per kind for all of them. */
   async resolveMany(texts: ReadonlyArray<string | null | undefined>): Promise<RecordReference[][]> {
-    const tokens = texts.map((text) => referenceTokensOf(text));
-    if (tokens.every((list) => list.length === 0)) return texts.map(() => []);
+    return this.#resolveTokens(texts.map((text) => referenceTokensOf(text)));
+  }
+
+  /**
+   * Records named by kind and id rather than by a text — a Task's record links
+   * (research R-16) — resolved for the reader exactly as a reference to them
+   * is: the same owner presence, read code and port, in the order given.
+   */
+  async resolveTargets(targets: readonly RecordReferenceToken[]): Promise<RecordReference[]> {
+    const [resolved] = await this.#resolveTokens([targets]);
+    return resolved ?? [];
+  }
+
+  async #resolveTokens(tokens: ReadonlyArray<readonly RecordReferenceToken[]>): Promise<RecordReference[][]> {
+    if (tokens.every((list) => list.length === 0)) return tokens.map(() => []);
     const idsOf = (type: RecordReferenceType) => [
       ...new Set(tokens.flatMap((list) => list.filter((token) => token.type === type).map((token) => token.id))),
     ];

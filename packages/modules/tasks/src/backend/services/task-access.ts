@@ -63,6 +63,10 @@ export const TASK_ACCESS_READERS: Readonly<Record<string, string>> = {
     'A parent change reads the proposed parent\'s chain of ancestors and the moved Task\'s sub-tree over every ' +
     'Task, whoever may see it — a hidden descendant still closes a cycle (FR-027, R-15) — starting from the two ' +
     'ids the caller obtained through `loadVisible`, under the hierarchy lock; it hands back a refusal, never a Task.',
+  'services/record-link-service.ts':
+    'Reads, writes and deletes the `task_record_links` rows of one Task the caller loaded through `loadVisible` ' +
+    '(and, to write, may change), keyed by that id; the Tasks of one record are listed by `task-service.ts` under ' +
+    'the visibility pre-filter. A link narrows and widens nobody\'s view of the Task (Q2 = A).',
   'services/relation-service.ts':
     'Writes and deletes the one `task_relations` row of two Tasks the caller loaded through `loadVisible` and may ' +
     'change; the related Tasks a reader is shown are read by `task-service.ts` under the visibility pre-filter.',

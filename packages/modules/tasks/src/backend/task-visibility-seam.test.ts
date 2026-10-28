@@ -209,6 +209,7 @@ const RULE_SCOPED_READ_LEDGER: Readonly<Record<string, number>> = {
   'services/comment-service.ts': 4,
   'services/hierarchy-service.ts': 5,
   'services/priority-service.ts': 1,
+  'services/record-link-service.ts': 3,
   'services/relation-service.ts': 2,
   'services/tag-service.ts': 2,
   'services/task-access.ts': 3,

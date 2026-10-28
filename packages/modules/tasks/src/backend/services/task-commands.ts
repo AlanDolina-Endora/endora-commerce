@@ -8,12 +8,14 @@ import {
   type TaskContext,
   type TaskCreatedEvent,
   type TaskDeletedEvent,
+  type TaskLinkTarget,
 } from '@endora-commerce/contracts';
 import { recordAuditFromContext, type Command } from '@endora-commerce/platform/commands';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import { randomUUID } from 'crypto';
 import { Task } from '../entities/task.entity.js';
 import { TaskAssignee } from '../entities/task-assignee.entity.js';
+import { TaskRecordLink } from '../entities/task-record-link.entity.js';
 import { TaskReference } from '../entities/task-reference.entity.js';
 import { TaskTagAssignment } from '../entities/task-tag-assignment.entity.js';
 import { assertParentFits, lockHierarchy } from './hierarchy-service.js';
@@ -38,6 +40,7 @@ import { nextTaskNumber } from './task-number.js';
  * | `tasks.task.status_change` (`task-transition-service.ts`) | `tasks.task.status_changed.v1` |
  * | `tasks.task.parent_change` (`hierarchy-service.ts`) | — |
  * | `tasks.task.relate` / `.unrelate` (`relation-service.ts`) | — |
+ * | `tasks.task.link` / `.unlink` (`record-link-service.ts`) | — |
  * | `tasks.task.delete` | `tasks.task.deleted.v1` |
  *
  * Shared by the HTTP service and the write port, so a Task created by another
@@ -76,6 +79,8 @@ export interface NewTaskFields {
    * its depth is checked by the Command, under the hierarchy lock (R-15).
    */
   parentTaskId?: string | null;
+  /** Records validated by the caller (`TaskRecordLinkService.assertLinkable`), distinct (R-16). */
+  links?: readonly TaskLinkTarget[];
   contextNote: string | null;
   /** The workflow's initial status at the moment of the call (data-model §5). */
   status: string;
@@ -180,7 +185,8 @@ export function createTaskCommand(context: TaskContext | null, input: NewTaskFie
         publishedAt: now,
       });
       const references = referenceRowsFor({ taskId: id, kind: 'description', sourceId: null }, input.description);
-      if (input.assigneeIds.length > 0 || tagIds.length > 0 || references.length > 0) {
+      const links = input.links ?? [];
+      if (input.assigneeIds.length > 0 || tagIds.length > 0 || references.length > 0 || links.length > 0) {
         // The child rows name the Task by value (no ORM relation), so the unit
         // of work cannot order them after it: the Task is written first.
         await scoped.flush();
@@ -195,6 +201,14 @@ export function createTaskCommand(context: TaskContext | null, input: NewTaskFie
         });
         for (const tagId of tagIds) scoped.create(TaskTagAssignment, { taskId: id, tagId });
         for (const row of references) scoped.create(TaskReference, row);
+        for (const link of links) {
+          scoped.create(TaskRecordLink, {
+            taskId: id,
+            recordKind: link.kind,
+            recordId: link.id,
+            linkedByAdminUserId: actor.actorAdminUserId,
+          });
+        }
       }
       created = task;
       return {
@@ -206,6 +220,7 @@ export function createTaskCommand(context: TaskContext | null, input: NewTaskFie
           assigneeIds: [...input.assigneeIds],
           tagIds,
           ...(parentTaskId !== null ? { parentTaskId } : {}),
+          ...(links.length > 0 ? { links: links.map((link) => ({ kind: link.kind, recordId: link.id })) } : {}),
           ...(Object.keys(task.customFieldValues).length > 0 ? { customFieldValues: task.customFieldValues } : {}),
         },
       };

@@ -66,6 +66,7 @@ import { TaskDocumentLookupService } from './services/document-lookup-service.js
 import { createTaskAudience, TaskMentionService, type TaskAudience } from './services/mention-service.js';
 import { createOwnerReadChecks, type OwnerReadChecks } from './services/owner-read-permissions.js';
 import { TaskPriorityService } from './services/priority-service.js';
+import { TaskRecordLinkService } from './services/record-link-service.js';
 import { createTaskRecordOwners, type TaskRecordOwners } from './services/record-owners.js';
 import { TaskListViewService } from './services/saved-view-service.js';
 import { TaskReferenceService } from './services/reference-service.js';
@@ -119,6 +120,7 @@ interface TasksCradle {
   readonly tasksCommentService: TaskCommentService;
   readonly tasksHierarchyService: TaskHierarchyService;
   readonly tasksRelationService: TaskRelationService;
+  readonly tasksRecordLinkService: TaskRecordLinkService;
   readonly tasksTransitionService: TaskTransitionService;
   readonly tasksWorkflowConfigService: TaskWorkflowConfigService;
   readonly tasksBoardCardFieldService: TaskBoardCardFieldService;
@@ -315,6 +317,7 @@ export function registerModule(ctx: ModuleContext): void {
           tasksMentionService,
           tasksTransitionService,
           tasksHierarchyService,
+          tasksRecordLinkService,
           auditLogService,
         }: TasksCradle) => {
           const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
@@ -338,6 +341,7 @@ export function registerModule(ctx: ModuleContext): void {
             mentions: tasksMentionService,
             transitions: tasksTransitionService,
             hierarchy: tasksHierarchyService,
+            links: tasksRecordLinkService,
             auditLog: auditLogService,
             // `tasks.time_zone` (R-17): read per call, so an operator's change
             // is seen by the next request.
@@ -368,6 +372,8 @@ export function registerModule(ctx: ModuleContext): void {
       historyService: cradle.tasksHistoryService,
       mentionService: cradle.tasksMentionService,
       documentLookupService: cradle.tasksDocumentLookupService,
+      recordLinkService: cradle.tasksRecordLinkService,
+      contexts: cradle.taskContextRegistry,
       cardFields: cradle.tasksBoardCardFieldService,
       requireAdmin: cradle.requireAdmin,
     });
@@ -382,6 +388,7 @@ export function registerModule(ctx: ModuleContext): void {
       attachmentService: cradle.tasksAttachmentService,
       commentService: cradle.tasksCommentService,
       relationService: cradle.tasksRelationService,
+      recordLinkService: cradle.tasksRecordLinkService,
       requireAdmin: cradle.requireAdmin,
     });
   });
@@ -550,6 +557,35 @@ export function registerModule(ctx: ModuleContext): void {
       .singleton(),
   });
   // --- end of Sub-tasks and related Tasks ---------------------------------------------
+
+  // --- Record links (User Story 6, research R-16) -------------------------------------
+  // A Task's links to the Opportunities, Orders and Quote Requests it is about,
+  // held by value in this module's own table. Each is validated when made
+  // through the owner's port with the owner's read code — `orders` cannot be
+  // switched off and is a binding dependency; `crm` and `quote_requests` are
+  // switchable, reached through the one door (`record-owners.ts`) that decides
+  // presence first — and named to each reader through the reference resolver.
+  // A link changes nobody's visibility of the Task (Q2 = A). The routes are
+  // registered with the other collaboration routes; the link and Project/Stage
+  // pickers with the Tasks lookups.
+  ctx.di.register({
+    tasksRecordLinkService: ctx
+      .asFunction(
+        ({ emFactory, commandBus, tasksAccess, tasksReferenceService, tasksRecordOwners, tasksOwnerReadChecks }: TasksCradle) =>
+          new TaskRecordLinkService({
+            emFactory,
+            commandBus,
+            access: tasksAccess,
+            references: tasksReferenceService,
+            orders: lazyPort<OrderReadPort>(ctx, 'orderReadPort'),
+            orderList: lazyPort<OrderListPort>(ctx, 'orderListPort'),
+            owners: tasksRecordOwners,
+            mayRead: tasksOwnerReadChecks,
+          }),
+      )
+      .singleton(),
+  });
+  // --- end of Record links ------------------------------------------------------------
 
   // --- Published ports (contracts/ports-and-events.md §1) ---------------------------
   // What another module reads and writes Tasks through. Both are `providePort`:

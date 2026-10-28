@@ -55,6 +55,7 @@ import {
 import type { TaskHierarchyService } from './hierarchy-service.js';
 import type { TaskAudience, TaskMentionService } from './mention-service.js';
 import type { TaskPriorityService } from './priority-service.js';
+import type { TaskRecordLinkService } from './record-link-service.js';
 import type { TaskReferenceService } from './reference-service.js';
 import type { TaskTagService } from './tag-service.js';
 import { assertContextForCaller, assertMayBeAssigned, assertMayPutIn, assertMayTakeOut } from './task-checks.js';
@@ -130,6 +131,8 @@ export interface TaskServiceDeps {
   transitions: Pick<TaskTransitionService, 'apply'>;
   /** The sub-task hierarchy: who may be a parent, and the parent change (research R-15). */
   hierarchy: Pick<TaskHierarchyService, 'assertMayAdopt' | 'setParent'>;
+  /** Record links: validated before a create, resolved per reader on the detail (R-16). */
+  links: Pick<TaskRecordLinkService, 'assertLinkable' | 'linksOf'>;
   /** The kernel's audit port — a deleted Task's former sub-tasks each get an entry (FR-029). */
   auditLog: AuditPort;
   /** `tasks.time_zone` — the calendar a date-only due date is counted in (research R-17). */
@@ -579,6 +582,7 @@ export class TaskService {
     const customFieldValues = await mergeTaskCustomFields(this.deps.customFields, {}, body.customFieldValues ?? {});
     const parentTaskId = body.parentTaskId ?? null;
     if (parentTaskId !== null) await this.deps.hierarchy.assertMayAdopt(parentTaskId);
+    const links = await this.deps.links.assertLinkable(body.links ?? []);
     const due = await this.#due({ dueOn: null, dueAt: null }, body);
     const description = body.description ?? '';
     const graph = await this.deps.workflow.graph();
@@ -594,6 +598,7 @@ export class TaskService {
         tagIds,
         customFieldValues,
         parentTaskId,
+        links,
         contextNote: null,
         status: graph.initial().code,
       }),
@@ -888,9 +893,10 @@ export class TaskService {
       this.#people([row.created_by_admin_user_id]).then((people) => people.get(row.created_by_admin_user_id)),
       Promise.resolve(actingAdminUserId()),
     ]);
-    const [references, customFieldValues] = await Promise.all([
+    const [references, customFieldValues, links] = await Promise.all([
       this.deps.references.resolve(row.description),
       this.deps.customFields.project('task', row.custom_field_values ?? {}),
+      this.deps.links.linksOf(row.id),
     ]);
     const held = me === null ? [] : await this.deps.permissions.listPermissions(me);
     const contextAvailable = summary!.context?.available ?? false;
@@ -907,7 +913,7 @@ export class TaskService {
       contextNote: await this.#note(row, language),
       startOn: row.start_on,
       customFieldValues,
-      links: [],
+      links,
       relatedTasks: await this.#summaries(relatedRows, language, scope),
       subtaskItems: await this.#summaries(subtaskRows, language, scope),
       attachmentsCount: counts.attachments,

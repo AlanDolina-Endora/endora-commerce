@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import {
   CreateTaskAttachmentBodySchema,
   CreateTaskCommentBodySchema,
+  CreateTaskLinkBodySchema,
   ERROR_CODES,
   TASK_ATTACHMENT_MAX_BYTES,
   UpdateTaskCommentBodySchema,
@@ -14,12 +15,14 @@ import { HttpError } from '@endora-commerce/platform/http';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import type { TaskAttachmentService } from '../services/attachment-service.js';
 import type { TaskCommentService } from '../services/comment-service.js';
+import type { TaskRecordLinkService } from '../services/record-link-service.js';
 import type { TaskRelationService } from '../services/relation-service.js';
 
 export interface TaskCollaborationRoutesDeps {
   attachmentService: TaskAttachmentService;
   commentService: TaskCommentService;
   relationService: TaskRelationService;
+  recordLinkService: TaskRecordLinkService;
   requireAdmin: RequireAdminFactory;
 }
 
@@ -39,8 +42,8 @@ function noFile(): HttpError {
 /**
  * A Task's collaboration routes (`specs/165-task-management/contracts/admin-api.md`
  * §2) — the attachments from User Story 1, comments from User Story 4,
- * related Tasks from User Story 5; links arrive with User Story 6, reminders
- * with User Story 7.
+ * related Tasks from User Story 5, record links from User Story 6; reminders
+ * arrive with User Story 7.
  *
  * Reading the list is `tasks:read`, and that is enough to download: each entry
  * carries a link this module resolved. The upload — a file of the caller's own
@@ -55,7 +58,37 @@ export async function registerTaskCollaborationRoutes(
   app: FastifyInstance,
   deps: TaskCollaborationRoutesDeps,
 ): Promise<void> {
-  const { requireAdmin, attachmentService: attachments, commentService: comments, relationService: relations } = deps;
+  const {
+    requireAdmin,
+    attachmentService: attachments,
+    commentService: comments,
+    relationService: relations,
+    recordLinkService: links,
+  } = deps;
+
+  // Record links (FR-031, R-16): `tasks:write`. The record's own read code is
+  // asked by the service, after its owner's presence — a switchable owner's
+  // code on the route would answer 403 where the contract says 422. Linking a
+  // record already linked answers the existing link with 200.
+  app.post<{ Params: { id: string } }>(
+    `${API}/:id/links`,
+    { preHandler: requireAdmin('tasks:write'), schema: { body: CreateTaskLinkBodySchema } },
+    async (request, reply) => {
+      const { link, created } = await links.link(request.params.id, CreateTaskLinkBodySchema.parse(request.body));
+      reply.code(created ? 201 : 200);
+      return { data: link };
+    },
+  );
+
+  // Never validated against the record: a link of a module that is off can be removed.
+  app.delete<{ Params: { id: string; linkId: string } }>(
+    `${API}/:id/links/:linkId`,
+    { preHandler: requireAdmin('tasks:write') },
+    async (request, reply) => {
+      await links.unlink(request.params.id, request.params.linkId);
+      return reply.code(204).send();
+    },
+  );
 
   // Related Tasks (FR-030): `tasks:write`, and the service asks that the caller
   // may see and change **both** Tasks. Idempotent both ways: 204 whether or not

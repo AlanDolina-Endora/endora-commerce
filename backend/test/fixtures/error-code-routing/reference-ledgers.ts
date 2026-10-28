@@ -495,6 +495,13 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
       'Phase 7): a parent change or a new sub-task that would nest sub-tasks deeper than five levels.',
   },
+  TASK_LINK_INVALID: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 8): a record link to an Opportunity, an Order or a Quote Request whose owner is off, which ' +
+      'the caller may not read, or which does not exist — the three answer identically.',
+  },
   PROJECT_NOT_FOUND: {
     to: 'projects',
     reason:

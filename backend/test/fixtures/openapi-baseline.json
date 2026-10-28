@@ -7155,6 +7155,15 @@
         }
       }
     },
+    "/api/v1/admin/tasks/lookups/contexts": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/tasks/lookups/documents": {
       "get": {
         "responses": {
@@ -7165,6 +7174,15 @@
       }
     },
     "/api/v1/admin/tasks/lookups/mentionable": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/tasks/lookups/records": {
       "get": {
         "responses": {
           "200": {
@@ -7341,6 +7359,24 @@
     },
     "/api/v1/admin/tasks/{id}/history": {
       "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/tasks/{id}/links": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/tasks/{id}/links/{linkId}": {
+      "delete": {
         "responses": {
           "200": {
             "description": "OK"

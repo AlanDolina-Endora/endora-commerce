@@ -6,17 +6,22 @@ import {
   MyTasksQuerySchema,
   RecordHistoryQuerySchema,
   TaskAssigneeLookupQuerySchema,
+  TaskContextLookupQuerySchema,
   TaskDocumentLookupQuerySchema,
   TaskListQuerySchema,
   TaskMentionableLookupQuerySchema,
+  TaskRecordLookupQuerySchema,
   TaskStatusChangeBodySchema,
   UpdateTaskBodySchema,
 } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import type { TaskBoardCardFieldService } from '../services/board-card-field-service.js';
+import { lookupContexts } from '../services/context-lookup.js';
 import type { TaskDocumentLookupService } from '../services/document-lookup-service.js';
 import type { TaskMentionService } from '../services/mention-service.js';
+import type { TaskRecordLinkService } from '../services/record-link-service.js';
+import type { TaskContextRegistry } from '../services/task-context-registry.js';
 import type { TaskHistoryService } from '../services/task-history-service.js';
 import type { TaskService } from '../services/task-service.js';
 
@@ -25,6 +30,10 @@ export interface TaskRoutesDeps {
   historyService: TaskHistoryService;
   mentionService: TaskMentionService;
   documentLookupService: TaskDocumentLookupService;
+  /** The link picker's source (R-16). */
+  recordLinkService: Pick<TaskRecordLinkService, 'records'>;
+  /** The Project/Stage picker's source: each present context owner's descriptor. */
+  contexts: TaskContextRegistry;
   /** The board's card fields — what `cardValues=true` fills each row with. */
   cardFields: Pick<TaskBoardCardFieldService, 'selected'>;
   requireAdmin: RequireAdminFactory;
@@ -97,6 +106,20 @@ export async function registerTaskRoutes(app: FastifyInstance, deps: TaskRoutesD
   app.get(`${API}/lookups/documents`, { preHandler: requireAdmin('tasks:write') }, async (request) =>
     documentLookupService.documents(TaskDocumentLookupQuerySchema.parse(request.query ?? {})),
   );
+
+  // What a Task may be linked to (admin-api §3, R-16): `tasks:write`, because a
+  // link is chosen only while writing. Each kind's read code and its owner's
+  // presence are the service's to decide; a kind nobody may link answers empty.
+  app.get(`${API}/lookups/records`, { preHandler: requireAdmin('tasks:write') }, async (request) => {
+    const query = TaskRecordLookupQuerySchema.parse(request.query ?? {});
+    return { data: await deps.recordLinkService.records(query.kind, query.q) };
+  });
+
+  // Where a Task may be placed (US6 scenario 3): the contexts the caller may
+  // see and put a Task into, through each present owner's descriptor.
+  app.get(`${API}/lookups/contexts`, { preHandler: requireAdmin('tasks:write') }, async (request) => ({
+    data: await lookupContexts(deps.contexts, TaskContextLookupQuerySchema.parse(request.query ?? {}).q),
+  }));
 
   app.post(
     API,
