@@ -48,6 +48,18 @@ describe('taskNotificationText', () => {
     expect(bundle('en')[mention.titleMessage.key]!.replace('{number}', 'TSK-000042')).toBe(mention.title);
   });
 
+  it('a comment names the Task by its number only, never the text, from a key both bundles hold (FR-026)', () => {
+    const comment = taskNotificationText.commented('TSK-000042');
+    expect(comment.title).toBe('New comment on Task TSK-000042');
+    expect(comment.titleMessage).toEqual({ scope: 'tasks', key: 'notifications.comment.title', params: { number: 'TSK-000042' } });
+    for (const language of ['en', 'pl'] as const) {
+      const template = bundle(language)[comment.titleMessage.key];
+      expect(template, `${language}: ${comment.titleMessage.key}`).toBeTypeOf('string');
+      expect([...template!.matchAll(/\{(\w+)\}/g)].map((m) => m[1])).toEqual(['number']);
+    }
+    expect(bundle('en')[comment.titleMessage.key]!.replace('{number}', 'TSK-000042')).toBe(comment.title);
+  });
+
   it('links to the Task’s screen', () => {
     expect(taskLinkPath('7d3c8f1e-0000-4000-8000-000000000001')).toBe('/tasks/7d3c8f1e-0000-4000-8000-000000000001');
   });

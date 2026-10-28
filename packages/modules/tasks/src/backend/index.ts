@@ -59,6 +59,7 @@ import { registerTaskWorkflowRoutes } from './routes/routes.workflow.js';
 import { TaskAttachmentService } from './services/attachment-service.js';
 import { TaskBoardCardFieldService } from './services/board-card-field-service.js';
 import { TaskBoardService } from './services/board-service.js';
+import { TaskCommentService } from './services/comment-service.js';
 import { TaskDocumentLookupService } from './services/document-lookup-service.js';
 import { createTaskAudience, TaskMentionService, type TaskAudience } from './services/mention-service.js';
 import { createOwnerReadChecks, type OwnerReadChecks } from './services/owner-read-permissions.js';
@@ -113,6 +114,7 @@ interface TasksCradle {
   readonly tasksPriorityService: TaskPriorityService;
   readonly tasksTagService: TaskTagService;
   readonly tasksAttachmentService: TaskAttachmentService;
+  readonly tasksCommentService: TaskCommentService;
   readonly tasksTransitionService: TaskTransitionService;
   readonly tasksWorkflowConfigService: TaskWorkflowConfigService;
   readonly tasksBoardCardFieldService: TaskBoardCardFieldService;
@@ -370,6 +372,7 @@ export function registerModule(ctx: ModuleContext): void {
     await registerTaskTagRoutes(app, { tagService: cradle.tasksTagService, requireAdmin: cradle.requireAdmin });
     await registerTaskCollaborationRoutes(app, {
       attachmentService: cradle.tasksAttachmentService,
+      commentService: cradle.tasksCommentService,
       requireAdmin: cradle.requireAdmin,
     });
   });
@@ -481,6 +484,41 @@ export function registerModule(ctx: ModuleContext): void {
     );
   });
   // --- end of Collaboration ----------------------------------------------------------
+
+  // --- Collaboration: comments (User Story 4, research R-6) -------------------------
+  // A Task's comment thread: notes only, each its author's. The body's
+  // references are the References section's (resolved per reader, kept in
+  // `task_references` as the comment's own rows); the people a comment newly
+  // mentions are told through the mention service, and the assignees and the
+  // Creator through the notifier — the bell is `admin_notifications`', which
+  // this module only degrades without, and the notifier decides its presence.
+  // The routes are registered with the attachments' (`routes.collaboration.ts`).
+  ctx.di.register({
+    tasksCommentService: ctx
+      .asFunction(
+        ({
+          emFactory,
+          commandBus,
+          tasksAccess,
+          tasksAudience,
+          tasksNotifier,
+          tasksReferenceService,
+          tasksMentionService,
+        }: TasksCradle) =>
+          new TaskCommentService({
+            emFactory,
+            commandBus,
+            access: tasksAccess,
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+            audience: tasksAudience,
+            notifier: tasksNotifier,
+            references: tasksReferenceService,
+            mentions: tasksMentionService,
+          }),
+      )
+      .singleton(),
+  });
+  // --- end of Collaboration: comments -------------------------------------------------
 
   // --- Published ports (contracts/ports-and-events.md §1) ---------------------------
   // What another module reads and writes Tasks through. Both are `providePort`:

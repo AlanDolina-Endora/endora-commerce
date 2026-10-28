@@ -44,6 +44,10 @@ export const TASK_ACCESS_READERS: Readonly<Record<string, string>> = {
     'Every read starts from `loadVisible` and is keyed by that Task\'s id, or — to ask which Tasks already hold ' +
     'a file — reads only Task ids by asset and answers them through `visibleIds`, so a file attached to a Task ' +
     'the caller may not see is refused without saying where it is.',
+  'services/comment-service.ts':
+    'Every read and write starts from `loadVisible` and is keyed by that Task\'s id: the thread, the comment an ' +
+    'author changes (and its `task_references` rows, replaced by the saving Command), and the assignees a new ' +
+    'comment tells — each of whom is asked again whether they may see the Task before being told.',
   'services/priority-service.ts':
     'The in-use count of each priority composes the visibility pre-filter (`TaskVisibility.condition`).',
   'services/tag-service.ts':

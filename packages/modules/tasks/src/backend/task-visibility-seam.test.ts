@@ -206,6 +206,7 @@ const SQL_WITHOUT_RULE_SCOPED_TABLES: Readonly<Record<string, string>> = {
  */
 const RULE_SCOPED_READ_LEDGER: Readonly<Record<string, number>> = {
   'services/attachment-service.ts': 5,
+  'services/comment-service.ts': 4,
   'services/priority-service.ts': 1,
   'services/tag-service.ts': 2,
   'services/task-access.ts': 3,

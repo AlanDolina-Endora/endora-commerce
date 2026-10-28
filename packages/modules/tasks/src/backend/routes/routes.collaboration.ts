@@ -3,13 +3,21 @@
 // its limits reach no other route (Projects' `routes.attachments.ts`).
 import multipart from '@fastify/multipart';
 import type { FastifyInstance } from 'fastify';
-import { CreateTaskAttachmentBodySchema, ERROR_CODES, TASK_ATTACHMENT_MAX_BYTES } from '@endora-commerce/contracts';
+import {
+  CreateTaskAttachmentBodySchema,
+  CreateTaskCommentBodySchema,
+  ERROR_CODES,
+  TASK_ATTACHMENT_MAX_BYTES,
+  UpdateTaskCommentBodySchema,
+} from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import type { TaskAttachmentService } from '../services/attachment-service.js';
+import type { TaskCommentService } from '../services/comment-service.js';
 
 export interface TaskCollaborationRoutesDeps {
   attachmentService: TaskAttachmentService;
+  commentService: TaskCommentService;
   requireAdmin: RequireAdminFactory;
 }
 
@@ -45,7 +53,42 @@ export async function registerTaskCollaborationRoutes(
   app: FastifyInstance,
   deps: TaskCollaborationRoutesDeps,
 ): Promise<void> {
-  const { requireAdmin, attachmentService: attachments } = deps;
+  const { requireAdmin, attachmentService: attachments, commentService: comments } = deps;
+
+  app.get<{ Params: { id: string } }>(
+    `${API}/:id/comments`,
+    { preHandler: requireAdmin('tasks:read') },
+    async (request) => ({ data: await comments.list(request.params.id) }),
+  );
+
+  app.post<{ Params: { id: string } }>(
+    `${API}/:id/comments`,
+    { preHandler: requireAdmin('tasks:read'), schema: { body: CreateTaskCommentBodySchema } },
+    async (request, reply) => {
+      const body = CreateTaskCommentBodySchema.parse(request.body);
+      const comment = await comments.add(request.params.id, body.body);
+      reply.code(201);
+      return { data: comment };
+    },
+  );
+
+  app.patch<{ Params: { id: string; commentId: string } }>(
+    `${API}/:id/comments/:commentId`,
+    { preHandler: requireAdmin('tasks:read'), schema: { body: UpdateTaskCommentBodySchema } },
+    async (request) => {
+      const body = UpdateTaskCommentBodySchema.parse(request.body);
+      return { data: await comments.update(request.params.id, request.params.commentId, body.body) };
+    },
+  );
+
+  app.delete<{ Params: { id: string; commentId: string } }>(
+    `${API}/:id/comments/:commentId`,
+    { preHandler: requireAdmin('tasks:read') },
+    async (request, reply) => {
+      await comments.delete(request.params.id, request.params.commentId);
+      return reply.code(204).send();
+    },
+  );
 
   app.get<{ Params: { id: string } }>(
     `${API}/:id/attachments`,

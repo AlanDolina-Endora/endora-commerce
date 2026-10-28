@@ -24,6 +24,10 @@ export const taskNotificationText = {
     title: `You were mentioned in Task ${number}`,
     titleMessage: { scope: 'tasks', key: 'notifications.mention.title', params: { number } },
   }),
+  commented: (number: string): { title: string; titleMessage: AdminNotificationMessage } => ({
+    title: `New comment on Task ${number}`,
+    titleMessage: { scope: 'tasks', key: 'notifications.comment.title', params: { number } },
+  }),
 };
 
 /** Where a bell entry about a Task leads: its screen in the Admin UI. */
@@ -36,6 +40,8 @@ export interface TaskNotifier {
   assigned(input: { targetAdminUserId: string; taskId: string; number: string }): Promise<TaskNotificationOutcome>;
   /** Tell `targetAdminUserId` that a text of Task `number` mentions them (FR-006). */
   mentioned(input: { targetAdminUserId: string; taskId: string; number: string }): Promise<TaskNotificationOutcome>;
+  /** Tell `targetAdminUserId` that Task `number` has a new comment (FR-026) — never what it says. */
+  commented(input: { targetAdminUserId: string; taskId: string; number: string }): Promise<TaskNotificationOutcome>;
 }
 
 /**
@@ -70,6 +76,7 @@ export function createTaskNotifier(adminNotifications: AdminNotificationRecordPo
   return {
     assigned: (input) => notify('tasks.task.assigned', taskNotificationText.assigned(input.number), input),
     mentioned: (input) => notify('tasks.task.mention', taskNotificationText.mentioned(input.number), input),
+    commented: (input) => notify('tasks.task.comment', taskNotificationText.commented(input.number), input),
   };
 }
 
