@@ -810,7 +810,7 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
 
 **Independent Test**: `quickstart.md` §1, US6 row.
 
-- [ ] T064 [P] [US6] Write failing `backend/test/integration/tasks/record-links.test.ts`:
+- [X] T064 [P] [US6] Write failing `backend/test/integration/tasks/record-links.test.ts`:
   - link to an Opportunity, an Order and a Quote Request;
   - a record the caller cannot read, an absent owner or an unknown id give 422 `TASK_LINK_INVALID`;
   - a duplicate is refused or idempotent (choose and assert);
@@ -818,25 +818,53 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - `GET /tasks?linkedKind=&linkedId=`;
   - with `crm` off, the link is unavailable and kept, and reappears when CRM is on;
   - history rows.
-- [ ] T065 [P] [US6] Write failing `admin/test/modules/tasks/TasksPanel.test.tsx`:
+  - Seen red 2026-10-28: 14/14 failed for the stated reason — `links` on create was ignored (`links: []`), and `POST`/`DELETE /tasks/:id/links…`, `/lookups/records` and `/lookups/contexts` fell to the router's 404 `NOT_FOUND` (no route), so no link could be made, refused or listed. Green after T066 (14/14).
+  - **Duplicate: idempotent.** Linking a record already linked answers **200** with the existing link and records nothing; a new link is 201; the same record twice in a create body is one link.
+  - Added beyond the list: unlinking (204, then 404 `NOT_FOUND` for the same link again, another Task's link id and a malformed one); a link of a switched-off owner (`quote_requests`) can be removed while it is off; a refused create link creates no Task; a caller without `crm:read` may still link what they may read (an Order); a `tasks:read`-only reader gets 403 and a hidden Task 404; a `project` kind is 400; the creation entry names its links; `?linkedKind=` leaves out a private Task the reader may not see; the link picker (`/lookups/records`) per kind, per read code and owner presence, 403 for a reader; the Project/Stage picker (`/lookups/contexts`, US6 scenario 3) answers a Project with its Stages and nothing while `projects` is off, and a Task `PATCH`ed into it behaves as in 163.
+  - `GET /tasks?linkedKind=&linkedId=` itself existed since Phase 5 (`tasks-list.contract.test.ts`); its cases here were red only because no link could be made.
+- [X] T065 [P] [US6] Write failing `admin/test/modules/tasks/TasksPanel.test.tsx`:
   - the panel lists the linked visible Tasks;
   - *Add task* links to `/tasks/new?link=order:<id>`;
   - it is hidden without `tasks:read`.
 
   Extend `admin/test/modules/tasks/off-state.test.tsx` with the three zones.
-- [ ] T066 [US6] Implement `T/backend/services/record-link-service.ts`:
+  - Seen red 2026-10-28: `TasksPanel.test.tsx` 8/8 (no zone contributed; the bundle had no `panel.*`), the new `off-state.test.tsx` case (no panel on any of the three record zones), and the T067 screen file `TaskDetail.links.test.tsx` 13/14 (no linked-records section, no context picker, `?link=`/`?context=` not read — the bundle had no `detail.links`, `links.*`, `context.*`, `create.link.*`). Green after T067 (8/8, 6/6, 14/14). The one case green at red is `ignores a malformed ?link=` — nothing read the parameter yet; it pins that a malformed value stays ignored. One test fix at green: the off-state test's zone render needed `AppLanguageContext` (the shell provides it; the panel reads the language for due dates).
+  - Added: `TaskDetail.links.test.tsx` — the links section (named link, unavailable record, remove — an unavailable one too —, link through the kind and record pickers, only the kinds whose module is on and whose read code is held, a reader gets no control), the context card (move into another record and Stage through `/lookups/contexts`, take out, no move where the record refuses changes, on a private Task or to a reader), and `TaskCreate` with `?link=` and `?context=`. The panel: an empty state still offers *Add task*, a reader gets none, a failed read says so in its card, and *Show in the task list* leads to `/tasks?linkedKind=&linkedId=`. `mod-tasks` `admin/index.test.ts` gains the zones (written with them, not seen red).
+- [X] T066 [US6] Implement `T/backend/services/record-link-service.ts`:
   - validate through the owner ports with the owner's read permission;
   - resolve labels per reader, sharing the resolver with `reference-service.ts`;
   - the `links` field on create;
   - the routes and `GET /tasks/lookups/records`.
 
   T064 green.
-- [ ] T067 [US6] Build the UI.
+  - Done 2026-10-28: `TaskRecordLinkService` — `assertLinkable` (distinct targets; per kind: Orders through `orderReadPort.findByIds` with `orders:read`; Opportunities and Quote Requests through `record-owners.ts`, **presence first**, then `crm:read` / `rfqs:handle`, then `labels`; any miss is 422 `TASK_LINK_INVALID`, the three alike), `linksOf` (by kind, then creation; resolved through the new `TaskReferenceService.resolveTargets` — the reference resolver itself, so a link is named exactly as a reference to the record is: unavailable to a reader without the read code, while the owner is off, or once it is gone), `link` (`loadVisible` + `assertMayChange` + validation, Command `tasks.task.link`, `insert … on conflict do nothing`, nothing inserted → `skipAudit`), `unlink` (Command `tasks.task.unlink`, `delete … where id and task_id returning`; never validated against the record), `records` (the link picker: Orders through `orderListPort`, the switchable kinds through `owners.search`; empty for a kind the caller may not link). `POST /tasks/:id/links` (201 new / 200 existing) and `DELETE /tasks/:id/links/:linkId` (204) in `routes.collaboration.ts`, `tasks:write`; `GET /tasks/lookups/records` and `/lookups/contexts` in `routes.tasks.ts`, `tasks:write` (admin-api §3). Create: `body.links` validated before the Command; `createTaskCommand` writes the rows after its flush and names them in its audit `after` (`links: [{kind, recordId}]`). `TaskDetail.links` filled in `TaskService.#detail`. Composition: its own *Record links* section in `index.ts`.
+  - **`GET /tasks/lookups/contexts`** (needed by T067's picker, listed in admin-api §3 but in no task): `services/context-lookup.ts` asks each present descriptor — `allVisibleContextIds`, `describe` in batches of 200, the label matched in memory (diacritics folded), sorted by label, then `canChangeTasks` a page at a time — at most 20, each with its groups. The descriptor publishes no search, so the cost is linear in the caller's visible contexts: issue #504.
+  - **Deviations.** (1) A link id the Task does not have (another Task's, removed, malformed) is 404 `NOT_FOUND` — the contract names no code (the comments' precedent). (2) Audit states: `{link: {kind, recordId}}` / `{link: null}` — the record by id, never its number. (3) A kind the caller may not link answers the picker `[]`, not 403 (a switchable owner's code cannot gate a route, D-173).
+  - `TASK_LINK_INVALID` joined `ERROR_CODES`, the manifest, both bundles and `reference-ledgers.ts` with its first raise site; contracts changeset updated. Strings `auditLog.tasks.task.{link,unlink}` (en/pl). Seam: `record-link-service.ts` joined `TASK_ACCESS_READERS` with 3 reads (the Task's links, the insert, the delete), each keyed by a `loadVisible` id. OpenAPI baseline: only `/tasks/{id}/links`, `/tasks/{id}/links/{linkId}`, `/tasks/lookups/records` and `/tasks/lookups/contexts` added.
+- [X] T067 [US6] Build the UI.
   - `T/admin/components/LinkedRecordsSection.tsx` in `TaskDetail.tsx`, and the context card's Project/Stage picker over `GET /tasks/lookups/contexts`.
   - `T/admin/zones/{TasksPanel,OrderTasksPanel,QuoteRequestTasksPanel,OpportunityTasksPanel}.tsx`, contributed through `zoneComponent(...)` in `T/admin/index.ts` (weight 660, `tasks:read`).
   - `TaskCreate.tsx` honours `?link=` and `?context=`.
 
   T065 green.
+  - Done 2026-10-28. `components/LinkedRecordsSection.tsx` reads `task.links` (no new `GET` on load, so the four `TaskDetail*.test.tsx` mocks needed no change): each link by kind, a link to its record or *Unavailable record* (with a hint), removable by a writer — an unavailable one too —, and *Link a record*: a kind `Select` offering only the kinds whose module is present and whose read code the writer holds (`crm`/`crm:read`, `orders`/`orders:read`, `quote_requests`/`rfqs:handle`), then the record through `components/LookupPicker.tsx` (a generic server-side `Combobox`, `TaskPicker`'s model) over `/lookups/records`. The context card became `components/ContextSection.tsx` (its markup unchanged) with *Place in a record* / *Move* (picker over `/lookups/contexts`, then the group `Select` defaulting to the first Stage, *No stage* allowed) and *Remove from the record*, offered only to a writer, never on a private Task, and only where `canChangeTasks` (or no context). Layout: the side column of the first row now stacks the context card and the linked records beside the details; the other rows are unchanged.
+  - `zones/TasksPanel.tsx` + `OrderTasksPanel`, `QuoteRequestTasksPanel`, `OpportunityTasksPanel`, contributed through `zoneComponent(...)` (weight 660, `tasks:read`). The panel reads `GET /tasks?linkedKind=&linkedId=&limit=20`: number + title (link), status, assignees, due date with *Overdue*; *Add task* (`tasks:write`) → `/tasks/new?link=<kind>:<id>`; *Show in the task list* → `/tasks?linkedKind=&linkedId=` (the list's URL already honours both). Unlike Projects' panel it renders its card at once with a loading line: there is always something to offer (*Add task*), and under Q2 = A there is no "not linked to you" answer to hide.
+  - `TaskCreate`: `?link=<kind>:<id>` sends `links: [{kind, id}]`, `?context=<type>:<id>[:<group>]` sends `context`; each is named by a sentence (`create.link.<kind>`, `create.context`) — the record's number is not known to the form; a malformed value is ignored.
+  - Strings `detail.links`, `links.*`, `context.*`, `panel.*`, `create.link.*`, `create.context` (en/pl).
+
+**Checkpoint**: a Task links to Opportunities, Orders and Quote Requests without changing who sees it; each record shows its visible Tasks and starts a linked one; a link of a module that is off is kept, shown unavailable, and named again when the module is back.
+
+- **Phase 8 gate**, run 2026-10-29 on the final tree:
+  - `pnpm run build:packages`, `pnpm -r run typecheck` (0 errors), `pnpm -r run lint` (0 errors, pre-existing warnings only): **green**.
+  - Backend, targeted (on the backend commit; the admin commit changed no backend source): `test/integration/tasks` + `test/contract/tasks` + `contract/kernel/openapi-baseline` + `contract/admin_users/permission-inventory` + `integration/projects/task-context` + `unit/_i18n/{platform-error-code-block,error-code-migration-progress}` + `unit/kernel/error-code-routing-equality` — 25 files, 322/322 green.
+  - `pnpm --filter backend run test:unit:fast`: 361 files, 7 760 / 7 761 — the one red is the known **whole-tree scan timeout** (`check-module-boundary.test.ts › the tree itself`, 38 s against 30 s); green re-run with `--testTimeout=180000` (154/154).
+  - Admin (Node 26, `--no-experimental-webstorage`): `test/modules/{tasks,crm,projects,orders,quote_requests}` + `test/kit` + `test/components` — 206 files, 2 085 / 2 085 green.
+  - Packages: `contracts` 71 / 1 542, `mod-tasks` 14 / 140, `mod-i18n` 1 / 6 — green.
+  - Checks green: `check:naming`, `check:language`, `check:port-dependencies` (0 violations), `check:off-state-coverage` (41/41), `check:error-translations`, `check:bundle-pairing`, `check:command-coverage`, `check:admin-surface`, `check:admin-zones`, `check:action-route-permissions`, `check:module-docs`, `check:test-ownership`, `check:module-boundary`, `check:platform-surface`, `check:container-imports`, `check:shared-table-wipes`, `check:port-shape`, `check:port-catches`, `check:entry-presence`, `check:lock-claims`, `check:transaction-context`, `check:default-language-prose`, `check-release-intent --since origin/master` (0 violations). **`check:docs-translations` red**, unchanged (`stale-translation:generated:module-reference/{crm,tasks}`), left for T089.
+  - OpenAPI baseline regenerated: only `/api/v1/admin/tasks/{id}/links`, `/{id}/links/{linkId}`, `/lookups/records` and `/lookups/contexts` added.
+  - Generated artefacts: `composer:generate`, `manifests:generate` and `pnpm install --lockfile-only` changed nothing.
+  - Nothing moved or deleted in this phase (the context card's markup moved into `components/ContextSection.tsx`, unchanged).
+  - Issue opened: #504 (the Project/Stage picker describes every visible Project on each search).
 
 ---
 

@@ -94,7 +94,7 @@ Unknown status, priority and tag ids **match nothing**; they never produce a 422
 | `POST /tasks/:id/attachments` | W | multipart upload, or `{assetId}`. 415 `TASK_ATTACHMENT_REFUSED` |
 | `DELETE /tasks/:id/attachments/:attachmentId` | W | — |
 | `PUT /tasks/:id/relations/:otherId` / `DELETE …` | W on both Tasks | 204, idempotent both ways; a Task related to itself is 400 `VALIDATION_FAILED` |
-| `POST /tasks/:id/links` / `DELETE /tasks/:id/links/:linkId` | W | `{kind, id}`. 422 `TASK_LINK_INVALID` |
+| `POST /tasks/:id/links` / `DELETE /tasks/:id/links/:linkId` | W | `{kind, id}`. 422 `TASK_LINK_INVALID`. `POST` answers `{data: TaskLink}` — 201 for a new link, 200 with the existing one (idempotent, nothing recorded; settled at T066); `DELETE` 204, 404 `NOT_FOUND` for a link the Task does not have |
 | `GET /tasks/:id/reminders` | R | — |
 | `POST /tasks/:id/reminders` | W | `{remindAt}` or `{offsetMinutes}`, plus `recipientIds[]` drawn from the caller and the assignees. 422 `TASK_REMINDER_INVALID` |
 | `DELETE /tasks/:id/reminders/:reminderId` | creator of the reminder, or W | — |
