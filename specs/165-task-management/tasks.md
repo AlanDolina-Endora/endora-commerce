@@ -612,19 +612,24 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
 
 ### Tests first
 
-- [ ] T048 [P] [US3] Write failing `backend/test/contract/tasks/board.contract.test.ts`:
+- [X] T048 [P] [US3] Write failing `backend/test/contract/tasks/board.contract.test.ts`:
   - columns in weight order;
   - `count` equals the list total under the same filters, for every filter of US3 scenario 4 including custom fields;
   - `perColumn` and `hasMore`;
   - drafts and private Tasks are counted only for their Creator;
   - card fields carry the configured values.
-- [ ] T049 [P] [US3] Write failing `backend/test/integration/tasks/saved-views.test.ts`:
+  - Seen red 2026-10-28: 8/8 failed for the stated reason — `/tasks/board` and `/tasks/board/card-fields` fell to `GET /tasks/:id` (404 `TASK_NOT_FOUND`). Green after T051 (9/9 with the *My Tasks* case below). The comparison runs 32 filter queries (every US3 scenario 4 filter, custom fields included, combinations, unknown codes) and holds each column's count to the list's total for that status; the viewer is an admin **without** `tasks:see_private` (the stub admin holds `*`).
+  - Added beyond the list: `perColumn` outside 1–50, a `sort` or a `cursor` are 400; the card-field routes' gates (`tasks:read` / 403 without `tasks:configure`), an unknown reference 422, seven fields 400; a card's custom value `null` when the Task has none; `GET /tasks?cardValues=true` carries the same card fields (below); *My Tasks* takes the list's filters (US3 scenario 6 — `GET /tasks/mine` ignored every filter before; written after the change, **not seen red**: the package build that would have shown it red was stale).
+- [X] T049 [P] [US3] Write failing `backend/test/integration/tasks/saved-views.test.ts`:
   - create, apply (the list returns its filters), share;
   - another admin sees a shared view and cannot modify it (403);
   - a platform administrator can;
   - 409 on a duplicate name, case-insensitive;
   - filters over 8 KB give 422.
-- [ ] T050 [P] [US3] Write failing admin tests:
+  - Seen red 2026-10-28: 7/7 failed — `/tasks/list-views` fell to `/tasks/:id` (the outsider's 403 came from that route's gate). Green after T052 (7/7).
+  - **Deviation:** filters over 8 KB answer **400 `VALIDATION_FAILED`**, not 422 — the shared `savedListViewFiltersSchema` refuses them in the body schema, and feature 147 holds every list to that (orders' contract test asserts 400). The "other admin" who may not modify a shared view is a Sales Representative: for saved views every other role is a platform admin (scope `all`), and the case asserts that such a colleague **may**.
+  - Added: `tasks` joins `backend/test/integration/saved-list-views/rules-parity.test.ts` (all scenarios, green) and `contract/saved-list-views/item-id-edges.test.ts`. S8 needed a per-adapter index name: the Tasks migration named its unique index `task_list_saved_views_owner_name_unique`, not feature 147's `…_owner_name_key_uq` (left as is — the migration is not edited; recorded in `foreign-module-changes.md` §G).
+- [X] T050 [P] [US3] Write failing admin tests:
   - `admin/test/modules/tasks/TasksPage.test.tsx`: the toggle persists through `PATCH /me/preferences` with `listViewModes.tasks`, and filters carry over between list and board;
   - `admin/test/modules/tasks/TaskBoard.test.tsx`:
     - a drop that is allowed calls `/status`;
@@ -635,31 +640,40 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - `admin/test/modules/tasks/MyTasksPage.test.tsx`: the same toggle under `tasks-mine`;
   - `K/components/kanban/MoveToMenu.test.tsx`;
   - `K/lib/admin-preferences/store.test.ts` for `listViewModes`.
+  - Seen red 2026-10-28: `TasksPage`, `TaskBoard` and `MyTasksPage` failed to load (no such files); `TaskWorkflowPage`'s new card-field case failed (no section); `admin/test/kit/kit-move-to-menu.test.tsx` 3/3 failed (no kit export); the four `listViewModes` cases of `admin/test/kit/admin-preferences-store.test.tsx` failed (no hook). Green after T053–T055.
+  - **Deviations:** the kit tests live in `admin/test/kit/` (no admin-kit runner — T031's precedent), not beside the kit source. `TasksPage.test.tsx` absorbs and replaces `TasksList.test.tsx`, `MyTasksPage.test.tsx` replaces `MyTasks.test.tsx` (both deleted; their cases kept). The page tests route the kit's own `apiClient.patch` to the spy: the preference store is created inside the kit and talks through the kit's client, which a module mock does not replace.
 
 ### Implementation
 
-- [ ] T051 [US3] Implement `T/backend/services/board-service.ts`:
+- [X] T051 [US3] Implement `T/backend/services/board-service.ts`:
   - visibility scope computed once per request;
   - one grouped count;
   - sequential per-column first pages, as CRM does.
 
   Implement `T/backend/domain/board-card-fields.ts` and `services/board-card-field-service.ts`, modelled on CRM (`builtin:number|assignees|due|priority|tags|creator|start`, `custom:<key>`, ≤ 6). Add the routes `GET /tasks/board` and `GET` / `PUT /tasks/board/card-fields` in `T/backend/routes/routes.board.ts`. T048 green.
-- [ ] T052 [US3] Implement the saved views:
+  - Done 2026-10-28: `TaskBoardService` reads no table — `TaskService.visibilityScope()` once, `countByStatus(filters, scope)` (one grouped statement over the list's own conditions, custom fields included) and one `list(…, {scope, cardFields})` per column, sequentially; a status the `status` filter leaves out is an empty column. `domain/board-card-fields.ts` (+ unit test) and `TaskBoardCardFieldService` on the `tasks.board_card_fields` setting; routes in `routes.board.ts`; `refuseUnofferedCustomField` shared by the list, *My Tasks* and the board.
+  - **Deviations.** (1) The built-in catalogue is the contract's `TASK_BOARD_BUILTIN_FIELD_KEYS` (`number`, `assignees`, `due`, `priority`, `tags`, `startOn`, `context`, `subtasks`, `createdAt`, `updatedAt`), not this task's `creator|start`. (2) The choice is written through `settings`' own audited write (`settingsAdminService.setValueForAllChannels`), CRM's precedent, not a Tasks Command `tasks.board_card_fields.change` (data-model §7 names one). (3) **Contract addition** `TaskListQuerySchema.cardValues` (CRM's `cardValues`): a lane's further cards come from `GET /tasks` and must carry the card fields the board's cards carry; changeset updated.
+  - Seam: `services/saved-view-service.ts` joins `SQL_WITHOUT_RULE_SCOPED_TABLES` (advisory lock and name probe on `task_list_saved_views`); `task-service.ts` stays at 20 reads (`mine` lost its own `task_assignees` sub-select to the shared filters, `countByStatus` added one).
+- [X] T052 [US3] Implement the saved views:
   - `T/backend/services/saved-view-service.ts`, modelled on `packages/modules/quote_requests/src/backend/services/quote-request-list-view-service.ts`;
   - the routes `/tasks/list-views` in `T/backend/routes/routes.views.ts`.
 
   T049 green.
-- [ ] T053 [US3] Add `listViewModes` to the admin preferences in admin-kit.
+  - Done 2026-10-28: `services/saved-view-service.ts` (`TaskListViewService`, the Quote Request service copied), `saved-view-actor.ts`, `routes/routes.views.ts` (all four `tasks:read`). `TASK_VIEW_NAME_TAKEN` joined `ERROR_CODES`, the manifest, both bundles and `reference-ledgers.ts` with its first raise site; contracts changeset updated. `TaskListSavedView.sort` typed `{field, dir}`.
+- [X] T053 [US3] Add `listViewModes` to the admin preferences in admin-kit.
   - `K/lib/admin-preferences/store.ts` (`KEYS` and the switch case).
   - `use-admin-preference.ts`: widen the key union, add `useListViewModePreference(listId)`.
   - If the server's per-list merge needs it, add one case in `packages/modules/admin_users/src/backend/services/admin-preference-document.ts` (read `listPageSizes` handling first).
 
   Its kit test green.
-- [ ] T054 [US3] Promote `C/admin/components/MoveToMenu.tsx` to `K/components/kanban/MoveToMenu.tsx` with generic targets `{code, name, color}`.
+  - **Premise false (admin_users):** the server stored only the sidebar keys and `listPageSizes`; a `listViewModes` patch passed validation and was **silently dropped**. Seen red in `backend/test/contract/admin_users/me-preferences.test.ts` (new case: `{}` came back). Fixed in `admin-preference-document.ts` (`readStoredListViewModes`, `mergeListViewModes`, `assertListViewModesBound`, unit-tested) and `admin-preference-service.ts` (one per-list-map writer for both maps, same row lock); changeset `admin-users-list-view-modes.md` (patch); `foreign-module-changes.md` §F amended.
+  - Kit: `store.ts` serves both per-list maps (dirty/in-flight lists, deltas and replay per map); `useListViewModePreference(listId, fallback = 'list')` reads the choice live and ignores a value it does not know; exported from `@endora-commerce/admin-kit/lib`. `admin/test/kit/admin-preferences-store.test.tsx` 17/17, carry-over and session-cluster green.
+- [X] T054 [US3] Promote `C/admin/components/MoveToMenu.tsx` to `K/components/kanban/MoveToMenu.tsx` with generic targets `{code, name, color}`.
   - Move `C/admin/components/OpportunityBoard.tsx` onto it and delete the CRM file.
   - Grep the tests for the old path.
   - Run `admin/test/modules/crm` with an identical pass count.
-- [ ] T055 [US3] Build the screens.
+  - Done 2026-10-28: `K/components/kanban/MoveToMenu.tsx` (`MoveToMenuTarget {code, name, color}`), exported from the kit's components barrel; its two sentences moved to the core bundle as `kanban.moveTo.{action,label}` (CRM's wording, en/pl) and CRM's `board.moveTo.*` removed. `OpportunityBoard.tsx` imports the kit's; `C/admin/components/MoveToMenu.tsx` deleted. `admin/test/modules/crm`: **32 files / 558 tests before and after** (`board.test.tsx` reads the menu's name from the core bundle — shape only). Grep of `backend/test/**` and `admin/test/**` for the CRM path: no reference.
+- [X] T055 [US3] Build the screens.
   - `T/admin/pages/TasksPage.tsx`, replacing `TasksList.tsx`:
     - filters in the URL, shared by both views, in `components/TaskFilters.tsx`: every US3 scenario 4 filter plus `CustomFieldListFilters`;
     - kit `SavedViewsControl` on `/api/v1/admin/tasks/list-views`;
@@ -670,8 +684,22 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - Update the routes in `T/admin/index.ts`.
 
   Delete the replaced files and grep the tests for them. T050 green.
+  - Done 2026-10-28: `pages/TasksPage.tsx` and `pages/MyTasksPage.tsx` (routes updated; `TasksList.tsx` and `MyTasks.tsx` deleted, no reference left in `admin/test/**` or `backend/test/**`); `lib/task-filters.ts` (the address is the state — API-named parameters plus the kit's `cf.*`; saved-view mapping; stale values dropped and counted), `lib/use-task-vocabulary.ts`; `components/{TaskFilters,TaskBoard,TaskCard,ViewModeToggle,BoardCardFieldsEditor}.tsx`; the *Board card* section on `TaskWorkflowPage`; priority and tag columns on both lists; strings en/pl.
+  - The board: kit `KanbanBoard` + `MoveToMenu`; a move is `POST /tasks/:id/status {from, to}` (the transition service); a refusal reverts, shows the server's sentence and narrows the card's targets (menu and `canDrop`) to the refusal's `allowedTargets` until it moves; a conflict re-reads the board; closing a Task with open sub-tasks says so; *Show more* continues a lane from `GET /tasks?status=…&cardValues=true`. *My Tasks*' board asks `/tasks/board` with `assignee=me&statusCategory=open&draft=false`.
+  - **Deviations (UI scope):** (1) the list sorts through a *Sort by* select (Projects' precedent) — `ResponsiveTable` has no sortable headers; (2) the assignee filter offers *anyone / me / unassigned*, and *created by* offers *anyone / me*: specific people work through the address and saved views, but there is no people picker — the assignee lookup is `tasks:write`, a reader could not use it; (3) linked record, Project and parent filters arrive in an address (US6's panels) and show as a sentence with *Show all tasks* — the record pickers come with US6's lookups; (4) *My Tasks* has no saved views (the contract names one collection, the Tasks list's).
 
 **Checkpoint (MVP)**: US1 + US2 + US3 are a usable ClickUp-like Task module. Demo it here.
+
+- **Phase 5 gate**, run 2026-10-28 on the final tree:
+  - `pnpm run build:packages`, `pnpm -r run typecheck`, `pnpm -r run lint`: **green** (lint: 0 errors, pre-existing warnings only).
+  - Backend, targeted: `test/integration/{tasks,saved-list-views,admin_users,projects,crm}` + `test/contract/{tasks,saved-list-views,admin_users,projects,crm}` + `contract/kernel/openapi-baseline` — 136 files at 4 workers: 1 613 passed, 1 expected fail, 2 failed, and 8 more files failed in `beforeAll` only. All ten re-run green serially (`BACKEND_TEST_WORKERS=1`, longer hook timeout; 118/118): eight `setupBackendServer` load flakes, one `crm/off-state` case that passed alone, and **one real red, pre-existing**: `contract/admin_users/me.test.ts › carries the stored values after a PATCH` pins the whole preferences document and had lacked `listViewModes: {}` since Phase 1 added the key — fixed (shape only; line in `foreign-module-changes.md` §F).
+  - `pnpm --filter backend run test:unit:fast`: 361 files, 7 760 / 7 761 — the one red is the known 30 s timeout of `check-module-boundary.test.ts › the tree itself` (green alone with `--testTimeout=180000`, 154/154).
+  - Admin (Node 26, `--no-experimental-webstorage`): `test/modules/{tasks,crm,projects}` + `test/kit` + `test/components` — 153 files, 1 624 tests green.
+  - Packages: `contracts` 71 / 1 542, `mod-tasks` 13 / 131, `mod-admin-users` 12 / 154, `mod-crm` 34 / 425 — green.
+  - Checks green: `check:naming`, `check:language`, `check:port-dependencies` (0 violations), `check:off-state-coverage` (41/41), `check:error-translations`, `check:bundle-pairing`, `check:command-coverage`, `check:admin-surface`, `check:admin-zones`, `check:action-route-permissions`, `check:module-docs`, `check:test-ownership`, `check:module-boundary`, `check:platform-surface`, `check:container-imports`, `check:port-shape`, `check:entry-presence`, `check:shared-table-wipes`, `check:release-intent --since origin/master` (0 violations). **`check:docs-translations` red**, unchanged (`stale-translation:generated:module-reference/{crm,tasks}`), left for T089.
+  - OpenAPI baseline regenerated: only `/api/v1/admin/tasks/board`, `/board/card-fields`, `/list-views` and `/list-views/{id}` added.
+  - Generated artefacts: `composer:generate`, `manifests:generate` and `pnpm install --lockfile-only` changed nothing.
+  - Grep of `backend/test/**` and `admin/test/**` for the deleted `TasksList`, `MyTasks.tsx` and CRM `MoveToMenu.tsx`, and for `board.moveTo`: no reference.
 
 ---
 
