@@ -65,10 +65,8 @@ storefrontu kanału:
 
 Na liście kanałów zamknięty kanał ma etykietę **Sign-in required**.
 
-Zamykając sklep, pamiętaj o dwóch sprawach:
+Zamykając sklep, pamiętaj o jednej sprawie:
 
-- **Pokazywanie cen niezalogowanym odwiedzającym to osobne ustawienie.** Ma znaczenie tylko w
-  sklepie dla nich otwartym.
 - **O tym, kto wejdzie przez rejestrację, decyduje moderacja.** Organizacja zarejestrowana w
   zamkniętym sklepie otrzymuje jego kanał. Przy automatycznej moderacji jest od razu aktywna, więc
   dostęp dostaje każdy, kto zarejestruje tam firmę; przy moderacji ręcznej nikt nie wejdzie, dopóki

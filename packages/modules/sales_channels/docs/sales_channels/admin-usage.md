@@ -42,9 +42,8 @@ The **Open to anonymous visitors** checkbox on the channel form decides who may 
 
 The list of channels marks a closed channel with a **Sign-in required** badge.
 
-Two things to keep in mind when closing a store:
+One thing to keep in mind when closing a store:
 
-- **Showing prices to anonymous visitors is a separate setting.** It only matters on a store that is open to them.
 - **Moderation decides who gets in by registering.** An Organization registered on a closed store is assigned that store's channel. With automatic moderation it is active at once, so anyone who registers a business there gets access; with manual moderation nobody gets in until an operator approves the Organization.
 
 ## Deciding which customers may use a store

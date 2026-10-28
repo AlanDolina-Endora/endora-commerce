@@ -86,6 +86,6 @@
   "auditLog.sales_channel.membership_changed": "Sales channel membership changed",
   "auditLog.sales_channel.set_default": "System-default sales channel moved",
   "identity.anonymousAccess.label": "Open to anonymous visitors",
-  "identity.anonymousAccess.hint": "When off, visitors must sign in, and only customers whose organization is assigned to this channel can use the store. Showing prices to anonymous visitors is a separate setting. With automatic moderation, anyone who registers a business here gets access.",
+  "identity.anonymousAccess.hint": "When off, visitors must sign in, and only customers whose organization is assigned to this channel can use the store. With automatic moderation, anyone who registers a business here gets access.",
   "list.badge.signInRequired": "Sign-in required"
 }
