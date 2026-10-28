@@ -202,8 +202,12 @@ const SQL_WITHOUT_RULE_SCOPED_TABLES: Readonly<Record<string, string>> = {
  * `TaskAccess` (or such a read) handed out.
  */
 const RULE_SCOPED_READ_LEDGER: Readonly<Record<string, number>> = {
-  'services/task-access.ts': 2,
-  'services/task-commands.ts': 4,
+  'services/attachment-service.ts': 5,
+  'services/priority-service.ts': 1,
+  'services/tag-service.ts': 2,
+  'services/task-access.ts': 3,
+  'services/task-asset-references.ts': 2,
+  'services/task-commands.ts': 7,
   'services/task-service.ts': 20,
   'services/task-visibility.ts': 0,
   'services/task-write-port.ts': 1,

@@ -18,6 +18,12 @@ export const QUOTE_REQUESTS_READ_PERMISSION = 'rfqs:handle';
  */
 export const TASKS_READ_PERMISSION = 'tasks:read';
 
+/**
+ * The permission `projects` gates its Project reads with — what "may read a
+ * Project" means for a reference to one (`specs/165-task-management/` R-5).
+ */
+export const PROJECTS_READ_PERMISSION = 'projects:read';
+
 /** The permission `catalog` gates its admin product reads with. */
 export const CATALOG_READ_PERMISSION = 'catalog:read';
 
@@ -41,6 +47,8 @@ export interface OwnerReadChecks {
   products: OwnerReadCheck;
   /** `tasks:read` — a Task's number and title. */
   tasks: OwnerReadCheck;
+  /** `projects:read` — a Project's number and title. */
+  projects: OwnerReadCheck;
   /** `custom_fields:read` — an Opportunity's custom-field values in its history. */
   customFields: OwnerReadCheck;
 }
@@ -51,7 +59,8 @@ export interface OwnerReadChecks {
  * (`specs/143-crm-sales-opportunities/research.md` N-R3, N-R13): the number,
  * status and total of an Order are rendered only for a caller who also holds
  * `orders:read`, those of a Quote Request for one who holds `rfqs:handle`, a
- * Task's for one who holds `tasks:read`, and a Product's name for one who holds
+ * Task's for one who holds `tasks:read`, a Project's for one who holds
+ * `projects:read`, and a Product's name for one who holds
  * `catalog:read`. Anybody else sees that a
  * document is linked, or that something is mentioned, and no more. The system —
  * a subscriber, a worker — is nobody's session and is not narrowed.
@@ -94,6 +103,7 @@ export function createOwnerReadChecks(permissions: PermissionReadPort): OwnerRea
     quoteRequests: createOwnerReadCheck(permissions, QUOTE_REQUESTS_READ_PERMISSION),
     products: createOwnerReadCheck(permissions, CATALOG_READ_PERMISSION),
     tasks: createOwnerReadCheck(permissions, TASKS_READ_PERMISSION),
+    projects: createOwnerReadCheck(permissions, PROJECTS_READ_PERMISSION),
     customFields: createOwnerReadCheck(permissions, CUSTOM_FIELDS_READ_PERMISSION),
   };
 }

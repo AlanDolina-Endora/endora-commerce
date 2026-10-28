@@ -220,6 +220,10 @@ export const manifest = defineModuleManifest({
     { code: 'TASK_TRANSITION_FORBIDDEN' },
     { code: 'TASK_TRANSITION_CONFLICT' },
     { code: 'TASK_PRIVATE_READ_ONLY' },
+    { code: 'TASK_PRIORITY_UNKNOWN' },
+    { code: 'TASK_TAG_UNKNOWN' },
+    { code: 'TASK_TAG_NAME_TAKEN' },
+    { code: 'TASK_ATTACHMENT_REFUSED' },
   ],
   /**
    * The command palette (Principle XVI, FR-041; `contracts/admin-surfaces.md`

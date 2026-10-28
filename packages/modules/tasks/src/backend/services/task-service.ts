@@ -3,9 +3,13 @@ import {
   ERROR_CODES,
   foldDiacritics,
   TASK_MINE_MAX,
+  mentionedAdminUserIds,
   type AdminUserReadPort,
   type AdminUserRecord,
   type CreateTaskBody,
+  type CustomFieldListFilterField,
+  type CustomFieldListFilterPort,
+  type CustomFieldValuePort,
   type PermissionReadPort,
   type SupportedLanguage,
   type TaskAssigneeOption,
@@ -26,7 +30,7 @@ import {
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { TaskAdminSearchQuery, TaskAdminSearchRow } from '../admin-search-provider.js';
-import { isOverdue } from '../domain/due-moment.js';
+import { dueOnFor, isOverdue } from '../domain/due-moment.js';
 import {
   decodeListCursor,
   defaultDirection,
@@ -44,16 +48,24 @@ import {
   type TaskAccess,
   type TaskRow,
 } from './task-access.js';
-import { assertAssignable, assertContextForCaller, assertMayPutIn, assertMayTakeOut } from './task-checks.js';
+import type { TaskAudience, TaskMentionService } from './mention-service.js';
+import type { TaskPriorityService } from './priority-service.js';
+import type { TaskReferenceService } from './reference-service.js';
+import type { TaskTagService } from './tag-service.js';
+import { assertContextForCaller, assertMayBeAssigned, assertMayPutIn, assertMayTakeOut } from './task-checks.js';
 import {
   changeTaskAssigneesCommand,
+  changeTaskCustomFieldsCommand,
+  changeTaskPriorityCommand,
   changeTaskStatusCommand,
+  changeTaskTagsCommand,
   createTaskCommand,
   deleteTaskCommand,
   updateTaskCommand,
   type AssigneeChange,
   type TaskFieldChanges,
 } from './task-commands.js';
+import { mergeTaskCustomFields } from './task-custom-fields.js';
 import type { TaskContextRegistry } from './task-context-registry.js';
 import { taskNotFound } from './task-errors.js';
 import { tellAfterCommit, type TaskNotifier } from './task-notifier.js';
@@ -97,6 +109,18 @@ export interface TaskServiceDeps {
   /** `admin_roles`' permission read port — lazy: whether a recipient may read Tasks at all (F-14). */
   permissions: PermissionReadPort;
   notifier: TaskNotifier;
+  /** Whether another administrator may see a Task — who is told of an assignment (`mention-service.ts`). */
+  audience: TaskAudience;
+  /** The priority list and the tag list — validated against before a write (R-9, R-10). */
+  priorities: Pick<TaskPriorityService, 'assertKnown'>;
+  tags: Pick<TaskTagService, 'assertKnown'>;
+  /** `custom_fields`' value service and list-filter port — lazy, resolved per call (R-8). */
+  customFields: CustomFieldValuePort;
+  customFieldListFilter: CustomFieldListFilterPort;
+  /** References in the description, resolved per reader (R-5). */
+  references: Pick<TaskReferenceService, 'resolve'>;
+  /** Who a description newly mentions is told, after the commit (FR-006). */
+  mentions: Pick<TaskMentionService, 'tell'>;
   /** `tasks.time_zone` — the calendar a date-only due date is counted in (research R-17). */
   timeZone: () => Promise<string>;
   /**
@@ -197,6 +221,16 @@ export class TaskService {
     const ordering = listOrdering(sort, dir, 't');
     const where = [...filter.sql];
     const params = [...filter.params];
+    // An id sub-select over `tasks`, intersected with the visible set above: it
+    // narrows, never widens. A field the list does not offer throws, and the
+    // route answers 400 naming it (research R-8).
+    if (query.customFieldFilters !== undefined && Object.keys(query.customFieldFilters).length > 0) {
+      const custom = await this.deps.customFieldListFilter.condition('task', query.customFieldFilters);
+      if (custom) {
+        where.push(`t."id" in (${custom.sql})`);
+        params.push(...custom.params);
+      }
+    }
     const after = decodeListCursor(query.cursor, sort, dir);
     if (after) {
       const keyset = keysetAfter(sort, dir, 't', after);
@@ -217,6 +251,11 @@ export class TaskService {
       items: await this.#summaries(page, language, scope),
       nextCursor: hasMore && last ? encodeListCursor({ sort, dir, key: last.sort_key, id: last.id }) : null,
     };
+  }
+
+  /** `GET /tasks/custom-field-filters` — the `task` custom fields the list offers as filters. */
+  async customFieldFilterFields(): Promise<CustomFieldListFilterField[]> {
+    return this.deps.customFieldListFilter.listFilterable('task');
   }
 
   /**
@@ -467,7 +506,12 @@ export class TaskService {
     return statusRef(await this.deps.workflow.graph(), code, language).name;
   }
 
-  /** `POST /tasks` — a Task of the caller's, in a context they may see or in none, in the initial status. */
+  /**
+   * `POST /tasks` — a Task of the caller's, in a context they may see or in
+   * none, in the initial status. Every field is checked before the Command
+   * runs: the assignees may read Tasks, the priority and the tags exist, the
+   * custom-field values fit their definitions.
+   */
   async create(body: CreateTaskBody, language: SupportedLanguage): Promise<TaskDetail> {
     const context = body.context ?? null;
     if (context) {
@@ -475,26 +519,41 @@ export class TaskService {
       await assertMayPutIn(this.deps.contexts, null, context);
     }
     const assigneeIds = [...new Set(body.assigneeIds ?? [])];
-    await assertAssignable(this.deps.adminUsers, assigneeIds);
+    await assertMayBeAssigned(this.deps.adminUsers, this.deps.permissions, assigneeIds);
+    const priorityCode = body.priorityCode ?? null;
+    await this.deps.priorities.assertKnown(priorityCode);
+    const tagIds = [...new Set(body.tagIds ?? [])];
+    await this.deps.tags.assertKnown(tagIds);
+    const customFieldValues = await mergeTaskCustomFields(this.deps.customFields, {}, body.customFieldValues ?? {});
+    const due = await this.#due({ dueOn: null, dueAt: null }, body);
+    const description = body.description ?? '';
     const graph = await this.deps.workflow.graph();
     const id = await this.deps.commandBus.run(
       createTaskCommand(context, {
         title: body.title,
-        description: body.description ?? '',
+        description,
         assigneeIds,
-        dueOn: body.dueOn ?? null,
+        dueOn: due.dueOn ?? null,
+        dueAt: due.dueAt ?? null,
+        startOn: body.startOn ?? null,
+        priorityCode,
+        tagIds,
+        customFieldValues,
         contextNote: null,
         status: graph.initial().code,
       }),
     );
-    const task = await this.#detail(await this.deps.access.rowAfterWrite(id), language);
-    await this.#tellAssignees(assigneeIds, task);
+    const row = await this.deps.access.rowAfterWrite(id);
+    const task = await this.#detail(row, language);
+    await this.#tellAssignees(assigneeIds, row);
+    await this.deps.mentions.tell(row, mentionedAdminUserIds(description));
     return task;
   }
 
   /**
-   * `PATCH /tasks/:id` — up to two Commands, in this order, each only when it
-   * changes something: the fields, the assignees. A status is not changed here
+   * `PATCH /tasks/:id` — one Command per kind of change, in this order, each
+   * only when it changes something: the fields, the priority, the tags, the
+   * custom fields, the assignees. A status is not changed here
    * (`POST /tasks/:id/status`).
    */
   async update(id: string, body: UpdateTaskBody, language: SupportedLanguage): Promise<TaskDetail> {
@@ -516,14 +575,32 @@ export class TaskService {
     else if (body.addAssigneeIds !== undefined || body.removeAssigneeIds !== undefined) {
       assignees = { add: body.addAssigneeIds ?? [], remove: body.removeAssigneeIds ?? [] };
     }
-    if (assignees) await assertAssignable(this.deps.adminUsers, 'set' in assignees ? assignees.set : assignees.add);
+    if (assignees) {
+      await assertMayBeAssigned(this.deps.adminUsers, this.deps.permissions, 'set' in assignees ? assignees.set : assignees.add);
+    }
+    const priorityChange = body.priorityCode !== undefined && body.priorityCode !== row.priority_code;
+    if (priorityChange) await this.deps.priorities.assertKnown(body.priorityCode ?? null);
+    if (body.tagIds !== undefined) await this.deps.tags.assertKnown(body.tagIds);
+    const customFieldValues =
+      body.customFieldValues !== undefined
+        ? await mergeTaskCustomFields(this.deps.customFields, row.custom_field_values ?? {}, body.customFieldValues)
+        : null;
 
     const fields: TaskFieldChanges = {};
     if (body.title !== undefined && body.title !== row.title) fields.title = body.title;
     if (body.description !== undefined && body.description !== row.description) fields.description = body.description;
-    if (body.dueOn !== undefined && body.dueOn !== row.due_on) fields.dueOn = body.dueOn;
+    const due = await this.#due({ dueOn: row.due_on, dueAt: asDate(row.due_at) }, body);
+    if (due.dueOn !== undefined && due.dueOn !== row.due_on) fields.dueOn = due.dueOn;
+    if (due.dueAt !== undefined && iso(due.dueAt) !== iso(row.due_at)) fields.dueAt = due.dueAt;
+    if (body.startOn !== undefined && body.startOn !== row.start_on) fields.startOn = body.startOn;
     if (body.context !== undefined && !sameContext(body.context, row)) fields.context = body.context;
-    if (Object.keys(fields).length > 0) await this.deps.commandBus.run(updateTaskCommand(row.id, fields));
+    let mentioned: string[] = [];
+    if (Object.keys(fields).length > 0) {
+      mentioned = (await this.deps.commandBus.run(updateTaskCommand(row.id, fields))).mentioned;
+    }
+    if (priorityChange) await this.deps.commandBus.run(changeTaskPriorityCommand(row.id, body.priorityCode ?? null));
+    if (body.tagIds !== undefined) await this.deps.commandBus.run(changeTaskTagsCommand(row.id, body.tagIds));
+    if (customFieldValues) await this.deps.commandBus.run(changeTaskCustomFieldsCommand(row.id, customFieldValues));
 
     let added: string[] = [];
     if (assignees) {
@@ -531,9 +608,30 @@ export class TaskService {
       added = changed?.added ?? [];
     }
 
-    const task = await this.#detail(await this.deps.access.rowAfterWrite(row.id), language);
-    await this.#tellAssignees(added, task);
+    const written = await this.deps.access.rowAfterWrite(row.id);
+    const task = await this.#detail(written, language);
+    await this.#tellAssignees(added, written);
+    await this.deps.mentions.tell(written, mentioned);
     return task;
+  }
+
+  /**
+   * The due date and moment a write leaves (research R-17, FR-002): a moment
+   * sets the date to its day in `tasks.time_zone`; a date alone clears the
+   * moment; clearing the moment alone keeps the date. `undefined` for what the
+   * body does not change.
+   */
+  async #due(
+    current: { dueOn: string | null; dueAt: Date | null },
+    body: { dueOn?: string | null | undefined; dueAt?: string | null | undefined },
+  ): Promise<{ dueOn?: string | null; dueAt?: Date | null }> {
+    if (body.dueAt !== undefined && body.dueAt !== null) {
+      const dueAt = new Date(body.dueAt);
+      return { dueAt, dueOn: dueOnFor(dueAt, await this.deps.timeZone()) };
+    }
+    if (body.dueAt === null) return { dueAt: null, ...(body.dueOn !== undefined ? { dueOn: body.dueOn } : {}) };
+    if (body.dueOn !== undefined) return { dueOn: body.dueOn, ...(current.dueAt !== null ? { dueAt: null } : {}) };
+    return {};
   }
 
   /**
@@ -716,27 +814,20 @@ export class TaskService {
 
   /**
    * Each newly added assignee other than the caller is told once, after commit,
-   * and only when they may see the Task: they must hold `tasks:read` (F-14),
-   * and for a Task in a context the context's owner must say they may see it.
-   * A bell is read outside any visibility, and a number must not reach someone
+   * and only when they may see the Task (`mention-service.ts`'s audience: they
+   * hold `tasks:read`, F-14, and the context's owner says they may see it). A
+   * bell is read outside any visibility, and a number must not reach someone
    * the Task is hidden from. An owner that is not present vouches for nobody.
    */
-  async #tellAssignees(added: readonly string[], task: TaskDetail): Promise<void> {
+  async #tellAssignees(added: readonly string[], row: TaskRow): Promise<void> {
     const me = actingAdminUserId();
     for (const assignee of added) {
       if (assignee === me) continue;
-      await tellAfterCommit(task.id, async () => {
-        if (!(await this.#assigneeMaySee(assignee, task))) return;
-        await this.deps.notifier.assigned({ targetAdminUserId: assignee, taskId: task.id, number: task.number });
+      await tellAfterCommit(row.id, async () => {
+        if (!(await this.deps.audience(assignee, row))) return;
+        await this.deps.notifier.assigned({ targetAdminUserId: assignee, taskId: row.id, number: row.number });
       });
     }
-  }
-
-  async #assigneeMaySee(assignee: string, task: TaskDetail): Promise<boolean> {
-    if (!holds(await this.deps.permissions.listPermissions(assignee), 'tasks:read')) return false;
-    if (task.context === null) return true;
-    const descriptor = this.deps.contexts.presentFor(task.context.type);
-    return descriptor !== null && (await descriptor.canSeeAs(assignee, task.context.id));
   }
 
   // --- Shaping rows for the reader ---------------------------------------------
@@ -750,6 +841,10 @@ export class TaskService {
       this.#people([row.created_by_admin_user_id]).then((people) => people.get(row.created_by_admin_user_id)),
       Promise.resolve(actingAdminUserId()),
     ]);
+    const [references, customFieldValues] = await Promise.all([
+      this.deps.references.resolve(row.description),
+      this.deps.customFields.project('task', row.custom_field_values ?? {}),
+    ]);
     const held = me === null ? [] : await this.deps.permissions.listPermissions(me);
     const contextAvailable = summary!.context?.available ?? false;
     const canChangeTasks = await this.#mayChangeTasks(row, contextAvailable);
@@ -757,15 +852,14 @@ export class TaskService {
     return {
       ...summary!,
       description: row.description,
-      // References are resolved per reader from User Story 1 on (research R-5).
-      references: [],
+      references,
       context:
         summary!.context && row.context_id
           ? { ...summary!.context, id: row.context_id, groupId: row.context_group_id, canChangeTasks }
           : null,
       contextNote: await this.#note(row, language),
       startOn: row.start_on,
-      customFieldValues: row.custom_field_values ?? {},
+      customFieldValues,
       links: [],
       relatedTasks: [],
       subtaskItems: await this.#summaries(subtaskRows, language, scope),

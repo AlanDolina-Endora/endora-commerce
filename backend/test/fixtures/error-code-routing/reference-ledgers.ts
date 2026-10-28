@@ -439,6 +439,30 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Phase 2): a change to another administrator’s private Task by a holder of ' +
       '`tasks:see_private`, who may only read and delete it.',
   },
+  TASK_PRIORITY_UNKNOWN: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 3): a Task given a priority code the operator’s priority list does not hold.',
+  },
+  TASK_TAG_UNKNOWN: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 3): a Task given a tag id that does not exist.',
+  },
+  TASK_TAG_NAME_TAKEN: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 3): a Task tag created with a name already taken, case-insensitively.',
+  },
+  TASK_ATTACHMENT_REFUSED: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 3): a file refused as a Task attachment — over the size limit, or a document a browser would run.',
+  },
   PROJECT_NOT_FOUND: {
     to: 'projects',
     reason:

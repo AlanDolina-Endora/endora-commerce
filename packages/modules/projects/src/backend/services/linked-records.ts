@@ -65,6 +65,12 @@ export interface LinkedRecordOwners {
     typed: string,
     limit: number,
   ): Promise<Array<{ id: string; number: string }>>;
+  /**
+   * The Opportunities a person typing `typed` is offered after `@@`
+   * (`specs/165-task-management/` R-5): by number or title, in the caller's
+   * reach, newest first. Only while `opportunity`'s owner is present.
+   */
+  searchOpportunities(typed: string, limit: number): Promise<Array<{ id: string; number: string; title: string }>>;
 }
 
 export interface LinkedRecordPorts {
@@ -138,6 +144,14 @@ export function createLinkedRecordOwners(ports: LinkedRecordPorts): LinkedRecord
     },
     async findMany(kind, ids) {
       return new Map((await many(kind, [...new Set(ids)])).map((view) => [view.id, view]));
+    },
+    async searchOpportunities(typed, limit) {
+      const q = typed.trim();
+      return (await ports.opportunities.search({ ...(q !== '' ? { q } : {}), limit })).map((record) => ({
+        id: record.id,
+        number: record.number,
+        title: record.title,
+      }));
     },
     async searchQuoteRequests(organizationIds, typed, limit) {
       if (organizationIds.length === 0) return [];

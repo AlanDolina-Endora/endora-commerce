@@ -40,6 +40,18 @@ export const TASK_ACCESS_READERS: Readonly<Record<string, string>> = {
   'services/task-commands.ts':
     'Every Command runs after its caller loaded the Task through `TaskAccess.loadVisible` (or, for the write ' +
     'port, is the context owner acting on its own record): it locks that one id and reads its assignees by it.',
+  'services/attachment-service.ts':
+    'Every read starts from `loadVisible` and is keyed by that Task\'s id, or — to ask which Tasks already hold ' +
+    'a file — reads only Task ids by asset and answers them through `visibleIds`, so a file attached to a Task ' +
+    'the caller may not see is refused without saying where it is.',
+  'services/priority-service.ts':
+    'The in-use count of each priority composes the visibility pre-filter (`TaskVisibility.condition`).',
+  'services/tag-service.ts':
+    'The usage count of each tag joins `tasks` and composes the visibility pre-filter (`TaskVisibility.condition`).',
+  'services/task-asset-references.ts':
+    'The asset library asks whether **anything** still uses a file before deleting it — platform-wide on ' +
+    'purpose, by whoever deletes it, who need not see the Task — and is answered with the Task\'s number, never ' +
+    'its title (research R-7; Projects\' `project-asset-references.ts`).',
   'services/task-write-port.ts':
     '`deleteInContext` lists the ids of one context for its owner — the module that registered the context type ' +
     'and is deleting its own record — and hands each to the delete Command.',
@@ -133,6 +145,18 @@ export class TaskAccess {
     const row = await this.findVisible(id);
     if (!row) throw taskNotFound();
     return row;
+  }
+
+  /** Which of `ids` the caller may see — the ones hidden, missing or malformed are absent. */
+  async visibleIds(ids: readonly string[]): Promise<Set<string>> {
+    const candidates = [...new Set(ids.filter(isUuid))];
+    if (candidates.length === 0) return new Set();
+    const visible = await this.deps.visibility.condition('t');
+    const rows = (await this.deps.emFactory().execute(
+      `select t."id" from "tasks" t where t."id" = any(?::uuid[])${visible ? ` and ${visible.sql}` : ''}`,
+      [`{${candidates.join(',')}}`, ...(visible?.params ?? [])],
+    )) as Array<{ id: string }>;
+    return new Set(rows.map((row) => row.id));
   }
 
   /**

@@ -1,6 +1,7 @@
 import type {
   AdminUserReadPort,
   CatalogProductReadPort,
+  OpportunityReadPort,
   OpportunityReference,
   OpportunityReferenceOrder,
   OpportunityReferenceToken,
@@ -12,6 +13,7 @@ import type {
   CrmReferenceSourceKind,
   CrmReferenceTargetType,
 } from '../entities/crm-opportunity-reference.entity.js';
+import type { CrmProjects } from './crm-projects.js';
 import type { CrmQuoteRequests } from './crm-quote-requests.js';
 import type { CrmTasks } from './crm-tasks.js';
 import { isActiveAdministrator } from './opportunity-assignment-service.js';
@@ -26,8 +28,12 @@ export interface ReferenceServiceDeps {
   quoteRequests: Pick<CrmQuoteRequests, 'isPresent' | 'findRecord'>;
   /** The one door to `tasks` — operator-switchable, so asked `isPresent()` first. */
   tasks: Pick<CrmTasks, 'isPresent' | 'findByIds'>;
+  /** This module's own Opportunities, under the reader's tenant scope (`specs/165-task-management/` R-5). */
+  opportunities: Pick<OpportunityReadPort, 'findByIds'>;
+  /** The one door to `projects` — operator-switchable, so asked `isPresent()` first. */
+  projects: Pick<CrmProjects, 'isPresent' | 'findByIds'>;
   /** Whether the reader may read each kind of target in the module that owns it. */
-  mayRead: Pick<OwnerReadChecks, 'orders' | 'products' | 'quoteRequests' | 'tasks'>;
+  mayRead: Pick<OwnerReadChecks, 'orders' | 'products' | 'quoteRequests' | 'tasks' | 'projects'>;
 }
 
 /** A row of `crm_opportunity_references`, as the saving Command creates it. */
@@ -74,8 +80,7 @@ function adminUrl(token: OpportunityReferenceToken): string | null {
       return `/quote-requests/${token.id}`;
     case 'task':
       return `/tasks/${token.id}`;
-    // Platform-wide since `specs/165-task-management/` (research R-5). Until
-    // this module resolves them (US1), they render as unavailable.
+    // Platform-wide since `specs/165-task-management/` (research R-5).
     case 'opportunity':
       return `/crm/opportunities/${token.id}`;
     case 'project':
@@ -171,6 +176,8 @@ export class ReferenceService {
     const personIds = idsOf('admin_user');
     const quoteRequestIds = idsOf('quote_request');
     const taskIds = idsOf('task');
+    const opportunityIds = idsOf('opportunity');
+    const projectIds = idsOf('project');
     if (tokens.every((list) => list.length === 0)) return texts.map(() => []);
 
     // Asked only for a kind the texts mention; the owner's port is not asked
@@ -178,11 +185,19 @@ export class ReferenceService {
     // owner of a switchable kind is off.
     const quoteRequestsPresent = quoteRequestIds.length > 0 && this.deps.quoteRequests.isPresent();
     const tasksPresent = taskIds.length > 0 && this.deps.tasks.isPresent();
-    const [mayReadProducts, mayReadOrders, mayReadQuoteRequests, mayReadTasks] = await Promise.all([
+    const projectsPresent = projectIds.length > 0 && this.deps.projects.isPresent();
+    const [mayReadProducts, mayReadOrders, mayReadQuoteRequests, mayReadTasks, mayReadProjects] = await Promise.all([
       productIds.length > 0 ? this.deps.mayRead.products() : Promise.resolve(false),
       orderIds.length > 0 ? this.deps.mayRead.orders() : Promise.resolve(false),
       quoteRequestsPresent ? this.deps.mayRead.quoteRequests() : Promise.resolve(false),
       tasksPresent ? this.deps.mayRead.tasks() : Promise.resolve(false),
+      projectsPresent ? this.deps.mayRead.projects() : Promise.resolve(false),
+    ]);
+    // An Opportunity is this module's own, read under the reader's tenant scope
+    // with the `crm:read` the text is read with.
+    const [opportunities, projects] = await Promise.all([
+      opportunityIds.length > 0 ? this.deps.opportunities.findByIds(opportunityIds) : Promise.resolve([]),
+      mayReadProjects ? this.deps.projects.findByIds(projectIds) : Promise.resolve([]),
     ]);
     const [products, orders, people, quoteRequests, tasks, language] = await Promise.all([
       // Live products only: one that was deleted is gone for the reader.
@@ -221,6 +236,8 @@ export class ReferenceService {
       if (quoteRequest) labels.set(`quote_request:${quoteRequest.id}`, quoteRequest.businessId);
     }
     for (const task of tasks) labels.set(`task:${task.id}`, task.number);
+    for (const opportunity of opportunities) labels.set(`opportunity:${opportunity.id}`, opportunity.number);
+    for (const project of projects) labels.set(`project:${project.id}`, project.number);
 
     return tokens.map((list) =>
       list.map((token) => {

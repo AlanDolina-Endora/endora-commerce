@@ -3,6 +3,7 @@ import type {
   OpportunityDocumentLookupQuery,
   OpportunityQuoteRequestLookupQuery,
   OpportunityQuoteRequestOption,
+  OpportunityReadPort,
   OrderListPort,
   QuoteRequestReadPort,
   QuoteRequestRecord,
@@ -11,6 +12,7 @@ import type {
 } from '@endora-commerce/contracts';
 import { ModuleDisabledError } from '@endora-commerce/platform/kernel';
 import { isOrgInScope } from '@endora-commerce/platform/tenancy';
+import type { CrmProjects } from './crm-projects.js';
 import type { CrmQuoteRequests } from './crm-quote-requests.js';
 import type { CrmTasks } from './crm-tasks.js';
 import { loadOpportunity } from './opportunity-access.js';
@@ -30,8 +32,12 @@ export interface CrmDocumentLookupServiceDeps {
   orders: OrderListPort;
   /** The one door to `tasks` — asked `isPresent()` before anything else. */
   tasks: Pick<CrmTasks, 'isPresent' | 'search'>;
+  /** This module's own Opportunities, under the caller's tenant scope (`specs/165-task-management/` R-5). */
+  opportunities: Pick<OpportunityReadPort, 'search'>;
+  /** The one door to `projects` — asked `isPresent()` before anything else. */
+  projects: Pick<CrmProjects, 'isPresent' | 'search'>;
   /** Whether the caller may read each kind of document in the module that owns it. */
-  mayRead: Pick<OwnerReadChecks, 'orders' | 'quoteRequests' | 'tasks'>;
+  mayRead: Pick<OwnerReadChecks, 'orders' | 'quoteRequests' | 'tasks' | 'projects'>;
 }
 
 /**
@@ -76,10 +82,13 @@ export class CrmDocumentLookupService {
   /**
    * The `@@` document list of an Opportunity's texts
    * (`specs/163-projects-and-tasks/` FR-044, research R-14) — one grouped
-   * answer, Orders · Quote Requests · Tasks, the shape Projects serves too.
+   * answer, Orders · Quote Requests · Tasks · Opportunities · Projects
+   * (the last two since `specs/165-task-management/` R-5), the shape Projects
+   * and Tasks serve too.
    *
    * A group is in the answer only for a caller holding its owner's read code
-   * (`orders:read`, `rfqs:handle`, `tasks:read`) and only while its owner is
+   * (`orders:read`, `rfqs:handle`, `tasks:read`, `projects:read`; Opportunities
+   * are this module's own, read with the caller's `crm:read`) and only while its owner is
    * present: a group nobody may open is not offered empty, it is not offered.
    * Orders and Quote Requests are the Opportunity's Organization's — the one
    * chosen on the create form, before there is an Opportunity — and are not
@@ -96,13 +105,15 @@ export class CrmDocumentLookupService {
     const withOrganization = organizationId !== null && isOrgInScope(organizationId);
     const quoteRequestsPresent = this.deps.quoteRequestPresence.isPresent();
     const tasksPresent = this.deps.tasks.isPresent();
-    const [mayReadOrders, mayReadQuoteRequests, mayReadTasks] = await Promise.all([
+    const projectsPresent = this.deps.projects.isPresent();
+    const [mayReadOrders, mayReadQuoteRequests, mayReadTasks, mayReadProjects] = await Promise.all([
       withOrganization ? this.deps.mayRead.orders() : Promise.resolve(false),
       withOrganization && quoteRequestsPresent ? this.deps.mayRead.quoteRequests() : Promise.resolve(false),
       tasksPresent ? this.deps.mayRead.tasks() : Promise.resolve(false),
+      projectsPresent ? this.deps.mayRead.projects() : Promise.resolve(false),
     ]);
 
-    const [orders, quoteRequests, tasks] = await Promise.all([
+    const [orders, quoteRequests, tasks, opportunities, projects] = await Promise.all([
       mayReadOrders && organizationId !== null ? this.orderItems(organizationId, q) : Promise.resolve(null),
       mayReadQuoteRequests && organizationId !== null
         ? this.quoteRequestItems(organizationId, q)
@@ -112,11 +123,21 @@ export class CrmDocumentLookupService {
             .search(q, DOCUMENT_LIST_GROUP_LIMIT)
             .then((found) => found.map((task) => ({ id: task.id, label: task.number, sublabel: task.title })))
         : Promise.resolve(null),
+      this.deps.opportunities
+        .search({ ...(q !== '' ? { q } : {}), limit: DOCUMENT_LIST_GROUP_LIMIT })
+        .then((found) => found.map((record) => ({ id: record.id, label: record.number, sublabel: record.title }))),
+      mayReadProjects
+        ? this.deps.projects
+            .search(q, DOCUMENT_LIST_GROUP_LIMIT)
+            .then((found) => found.map((record) => ({ id: record.id, label: record.number, sublabel: record.title })))
+        : Promise.resolve(null),
     ]);
     const groups: RecordDocumentLookupGroup[] = [];
     if (orders) groups.push({ kind: 'order', items: orders });
     if (quoteRequests) groups.push({ kind: 'quote_request', items: quoteRequests });
     if (tasks) groups.push({ kind: 'task', items: tasks });
+    groups.push({ kind: 'opportunity', items: opportunities });
+    if (projects) groups.push({ kind: 'project', items: projects });
     return { groups };
   }
 

@@ -13,6 +13,7 @@ owner and carries the reason for each change. A change not on this list needs a 
 | `projects.ts` | `ProjectReadPort` gains `findByIds` and `search`. The reused `TaskSummarySchema` follows the new shape. | R-5 |
 | `tasks.ts` (added at T019) | `TaskRecord` also gains `statusName` (per language), `statusDefaultName`, `statusColor` and `updatedAt`. | Projects' Tasks tab builds a `TaskSummary` from a `TaskRecord`, and the summary's `status {name, color}` and `updatedAt` have no other source once the `tasks.status.*` keys leave the Projects bundle. |
 | `custom-fields.ts` | `supportedEntityTypeSchema` gains `'task'`. | R-8 |
+| `assets-library.ts` (added at T039) | `assetReferenceKindSchema` gains `'task_attachment'`. | R-7: the asset library's delete refusal names what holds a file, and `AssetReferenceDescriptor.findReferences` answers only a kind of that enum — Projects added `project_attachment` the same way (163 FR-027). |
 | `saved-list-views.ts` | Task create and update view schemas. | R-13 |
 | `admin-preferences.ts` | Key `listViewModes` (keys, patch, read, defaults). | R-14 |
 | `*.test.ts` beside each | Updated for the above. | — |
@@ -41,6 +42,9 @@ are additive (`release-intent.md`).
 | `src/backend/services/reference-service.ts`, document lookup service | Resolvers and lookup groups for `opportunity` (through its own service) and `project` (through `projectReadPort`, `degrades-without`; an edge already exists or is added with a `whenAbsent` sentence). |
 | `src/migrations/<stamp>_crm_opportunity_reference_kinds.ts` (new) | Widens `crm_opportunity_references_target_type_check`. |
 | `src/manifest.ts` | Edge on `projects`, if not already declared. |
+| `src/backend/services/crm-projects.ts` (new, added at T034) | The one door to `projectReadPort` — `isPresent()` first, as `crm-tasks.ts` is for Tasks. |
+| `src/backend/index.ts`, `src/backend/services/owner-read-permissions.ts` (added at T034) | Registers the door and an unexported `OpportunityReadPortService` instance for the resolver and the `@@` list; `projects:read` joins the owner read checks. |
+| `src/admin/lib/references.ts` (added at T034) | `@@` is also offered when the Projects group (`projects:read`) could answer. |
 | `i18n/{en,pl}.json` | Group labels. |
 
 ## D. `packages/modules/projects/`
@@ -52,6 +56,9 @@ are additive (`release-intent.md`).
 | `src/backend/services/project-access.ts` | System-mode existence query. `PROJECT_ACCESS_READERS` gains the new reader files. |
 | `src/backend/services/project-read-port.ts` | `findByIds` and `search`. |
 | `src/backend/services/reference-service.ts`, document lookup service | Resolvers and groups for `opportunity` and `project`. |
+| `src/backend/services/linked-records.ts`, `src/backend/index.ts` (added at T034) | `searchOpportunities` on the one door to `crm` (the `@@` Opportunities group); the reference service is handed `ProjectAccess` for the Projects it resolves. |
+| `src/admin/lib/references.ts` (added at T034) | `@@` is also offered when the Opportunities group (`crm:read`) could answer. |
+| `backend/test/integration/projects/mentions.test.ts`, `backend/test/contract/{projects/lookups,crm/document-lookups}.contract.test.ts` (added at T034) | The `@@` answers they pin gain the Projects group (Projects) and the Opportunities group (CRM), shape only. |
 | `src/migrations/<stamp>_projects_reference_kinds.ts` (new) | Widens `project_references_target_type_check`. |
 | `src/admin/pages/project-detail/tabs/TasksTab.tsx` | Status chip from `status.name` and `status.color`, and assignees as a list. The `tasks.status.*` keys are removed from `i18n/{en,pl}.json`. |
 | `src/backend/project-access-seam.test.ts` (added at T025) | `RULE_SCOPED_READ_LEDGER['services/project-access.ts']` 12 → 14: the two reads of `findVisibleMany` and `searchVisible`, both composing `visibleProjectSql`. |

@@ -1,19 +1,28 @@
 import type { FastifyInstance } from 'fastify';
 import {
   CreateTaskBodySchema,
+  ERROR_CODES,
+  isCustomFieldFilterUnavailableFailure,
   RecordHistoryQuerySchema,
   TaskAssigneeLookupQuerySchema,
+  TaskDocumentLookupQuerySchema,
   TaskListQuerySchema,
+  TaskMentionableLookupQuerySchema,
   TaskStatusChangeBodySchema,
   UpdateTaskBodySchema,
 } from '@endora-commerce/contracts';
+import { HttpError } from '@endora-commerce/platform/http';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
+import type { TaskDocumentLookupService } from '../services/document-lookup-service.js';
+import type { TaskMentionService } from '../services/mention-service.js';
 import type { TaskHistoryService } from '../services/task-history-service.js';
 import type { TaskService } from '../services/task-service.js';
 
 export interface TaskRoutesDeps {
   taskService: TaskService;
   historyService: TaskHistoryService;
+  mentionService: TaskMentionService;
+  documentLookupService: TaskDocumentLookupService;
   requireAdmin: RequireAdminFactory;
 }
 
@@ -26,15 +35,33 @@ const API = '/api/v1/admin/tasks';
  * its context hidden, or another admin's draft or private Task — answers 404
  * `TASK_NOT_FOUND`, the same as a missing one, and is absent from every list.
  *
- * The static paths (`/mine`, `/lookups/assignees`) are registered before
- * `/:id`, so neither is ever read as an id.
+ * The static paths (`/mine`, `/lookups/…`, `/custom-field-filters`) are
+ * static routes, which the router matches before `/:id`, so none is ever read
+ * as an id.
  */
 export async function registerTaskRoutes(app: FastifyInstance, deps: TaskRoutesDeps): Promise<void> {
-  const { requireAdmin, taskService: tasks, historyService: history } = deps;
+  const { requireAdmin, taskService: tasks, historyService: history, mentionService, documentLookupService } = deps;
 
   app.get(API, { preHandler: requireAdmin('tasks:read') }, async (request) =>
-    tasks.list(TaskListQuerySchema.parse(request.query ?? {}), await request.responseLanguage()),
+    tasks
+      .list(TaskListQuerySchema.parse(request.query ?? {}), await request.responseLanguage())
+      .catch((error: unknown) => {
+        // A custom field the list does not offer is the caller's mistake: 400,
+        // naming it (research R-8). Everything else is rethrown untouched.
+        if (isCustomFieldFilterUnavailableFailure(error)) {
+          throw new HttpError(400, ERROR_CODES.CUSTOM_FIELD_FILTER_UNAVAILABLE, error.message, {
+            key: error.keys[0] ?? '',
+            keys: [...error.keys],
+          });
+        }
+        throw error;
+      }),
   );
+
+  // The `task` custom fields the list offers as filters (FR-007).
+  app.get(`${API}/custom-field-filters`, { preHandler: requireAdmin('tasks:read') }, async () => ({
+    data: await tasks.customFieldFilterFields(),
+  }));
 
   app.get(`${API}/mine`, { preHandler: requireAdmin('tasks:read') }, async (request) => ({
     data: await tasks.mine(await request.responseLanguage()),
@@ -43,6 +70,19 @@ export async function registerTaskRoutes(app: FastifyInstance, deps: TaskRoutesD
   app.get(`${API}/lookups/assignees`, { preHandler: requireAdmin('tasks:write') }, async (request) => ({
     data: await tasks.assignees(TaskAssigneeLookupQuerySchema.parse(request.query ?? {}).q),
   }));
+
+  // Who a text of a Task may mention (admin-api §3): somebody who may see it.
+  app.get(`${API}/lookups/mentionable`, { preHandler: requireAdmin('tasks:read') }, async (request) => ({
+    data: await mentionService.mentionable(TaskMentionableLookupQuerySchema.parse(request.query ?? {})),
+  }));
+
+  // What a text of a Task may refer to after `@@` (admin-api §3): `tasks:write`,
+  // because a reference is chosen only while writing. Each group's own read code
+  // and its owner's presence are the service's to decide — a switchable owner's
+  // code on the route would answer 403 where the list should leave the group out.
+  app.get(`${API}/lookups/documents`, { preHandler: requireAdmin('tasks:write') }, async (request) =>
+    documentLookupService.documents(TaskDocumentLookupQuerySchema.parse(request.query ?? {})),
+  );
 
   app.post(
     API,

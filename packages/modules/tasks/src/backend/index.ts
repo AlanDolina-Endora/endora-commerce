@@ -5,8 +5,19 @@ import {
   type AdminNotificationRecordPort,
   type AdminSearchProviderRegistryPort,
   type AdminUserReadPort,
+  type AssetReadPort,
+  type AssetReferenceRegistryPort,
+  type AssetsLibraryPort,
   type AuditReferenceRegistryPort,
+  type CatalogProductReadPort,
+  type CustomFieldListFilterPort,
+  type CustomFieldValuePort,
+  type OpportunityReadPort,
+  type OrderListPort,
+  type OrderReadPort,
   type PermissionReadPort,
+  type ProjectReadPort,
+  type QuoteRequestReadPort,
   type TaskReadPort,
   type TaskWritePort,
 } from '@endora-commerce/contracts';
@@ -36,8 +47,20 @@ import { TaskStatus } from './entities/task-status.entity.js';
 import { TaskStatusTransition } from './entities/task-status-transition.entity.js';
 import { TaskTag } from './entities/task-tag.entity.js';
 import { TaskTagAssignment } from './entities/task-tag-assignment.entity.js';
+import { registerTaskCollaborationRoutes } from './routes/routes.collaboration.js';
+import { registerTaskPriorityRoutes } from './routes/routes.priorities.js';
+import { registerTaskTagRoutes } from './routes/routes.tags.js';
 import { registerTaskRoutes } from './routes/routes.tasks.js';
 import { registerTaskWorkflowRoutes } from './routes/routes.workflow.js';
+import { TaskAttachmentService } from './services/attachment-service.js';
+import { TaskDocumentLookupService } from './services/document-lookup-service.js';
+import { createTaskAudience, TaskMentionService, type TaskAudience } from './services/mention-service.js';
+import { createOwnerReadChecks, type OwnerReadChecks } from './services/owner-read-permissions.js';
+import { TaskPriorityService } from './services/priority-service.js';
+import { createTaskRecordOwners, type TaskRecordOwners } from './services/record-owners.js';
+import { TaskReferenceService } from './services/reference-service.js';
+import { TaskTagService } from './services/tag-service.js';
+import { registerTaskAssetReferences } from './services/task-asset-references.js';
 import { actingAdminUserId, TaskAccess } from './services/task-access.js';
 import { registerTaskAuditReferences } from './services/task-audit-references.js';
 import { TaskContextRegistry } from './services/task-context-registry.js';
@@ -72,6 +95,15 @@ interface TasksCradle {
   readonly tasksNotifier: TaskNotifier;
   readonly tasksTaskService: TaskService;
   readonly tasksHistoryService: TaskHistoryService;
+  readonly tasksOwnerReadChecks: OwnerReadChecks;
+  readonly tasksRecordOwners: TaskRecordOwners;
+  readonly tasksAudience: TaskAudience;
+  readonly tasksReferenceService: TaskReferenceService;
+  readonly tasksMentionService: TaskMentionService;
+  readonly tasksDocumentLookupService: TaskDocumentLookupService;
+  readonly tasksPriorityService: TaskPriorityService;
+  readonly tasksTagService: TaskTagService;
+  readonly tasksAttachmentService: TaskAttachmentService;
 }
 
 export function registerModule(ctx: ModuleContext): void {
@@ -124,6 +156,92 @@ export function registerModule(ctx: ModuleContext): void {
   });
   // --- end of Context ----------------------------------------------------------
 
+  // --- References and configuration lists (User Story 1, research R-5, R-9, R-10)
+  // What a Task's text refers to, resolved per reader through the owners'
+  // ports, each kind only with its owner's read code. `orders` and `catalog`
+  // cannot be switched off and are binding dependencies; `quote_requests`,
+  // `crm` and `projects` are operator-switchable and this module only
+  // *degrades* without them (the manifest's `degrades-without` edges): their
+  // one door (`record-owners.ts`) decides presence before a port is asked, and
+  // nothing here catches a refusal. A Task referred to is read through this
+  // module's own visibility seam.
+  //
+  // The priority list and the tag list are this module's configuration; their
+  // usage counts compose the visibility pre-filter.
+  ctx.di.register({
+    tasksOwnerReadChecks: ctx
+      .asFunction(() => createOwnerReadChecks(lazyPort<PermissionReadPort>(ctx, 'permissionService')))
+      .singleton(),
+    tasksRecordOwners: ctx
+      .asFunction(() =>
+        createTaskRecordOwners({
+          quoteRequests: lazyPort<QuoteRequestReadPort>(ctx, 'quoteRequestReadPort'),
+          opportunities: lazyPort<OpportunityReadPort>(ctx, 'opportunityReadPort'),
+          projects: lazyPort<ProjectReadPort>(ctx, 'projectReadPort'),
+        }),
+      )
+      .singleton(),
+    // Who besides the caller may see a Task — who may be assigned, mentioned or told.
+    tasksAudience: ctx
+      .asFunction(({ taskContextRegistry }: TasksCradle) =>
+        createTaskAudience({
+          permissions: lazyPort<PermissionReadPort>(ctx, 'permissionService'),
+          contexts: taskContextRegistry,
+        }),
+      )
+      .singleton(),
+    tasksReferenceService: ctx
+      .asFunction(
+        ({ tasksRecordOwners, tasksOwnerReadChecks }: TasksCradle) =>
+          new TaskReferenceService({
+            products: lazyPort<CatalogProductReadPort>(ctx, 'catalogProductReadPort'),
+            orders: lazyPort<OrderReadPort>(ctx, 'orderReadPort'),
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+            owners: tasksRecordOwners,
+            // Read off the cradle per call: the task service is composed after this one.
+            tasks: (ids) => ctx.cradle<TasksCradle>().tasksTaskService.visibleRowsByIds(ids),
+            mayRead: tasksOwnerReadChecks,
+          }),
+      )
+      .singleton(),
+    tasksMentionService: ctx
+      .asFunction(
+        ({ tasksAccess, tasksAudience, tasksNotifier }: TasksCradle) =>
+          new TaskMentionService({
+            access: tasksAccess,
+            audience: tasksAudience,
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+            permissions: lazyPort<PermissionReadPort>(ctx, 'permissionService'),
+            notifier: tasksNotifier,
+          }),
+      )
+      .singleton(),
+    tasksDocumentLookupService: ctx
+      .asFunction(
+        ({ tasksRecordOwners, tasksOwnerReadChecks }: TasksCradle) =>
+          new TaskDocumentLookupService({
+            orders: lazyPort<OrderListPort>(ctx, 'orderListPort'),
+            owners: tasksRecordOwners,
+            tasks: (q, limit) => ctx.cradle<TasksCradle>().tasksTaskService.searchVisibleRows(q, limit),
+            mayRead: tasksOwnerReadChecks,
+          }),
+      )
+      .singleton(),
+    tasksPriorityService: ctx
+      .asFunction(
+        ({ emFactory, tasksWorkflowRead, tasksVisibility }: TasksCradle) =>
+          new TaskPriorityService({ emFactory, workflow: tasksWorkflowRead, visibility: tasksVisibility }),
+      )
+      .singleton(),
+    tasksTagService: ctx
+      .asFunction(
+        ({ emFactory, commandBus, tasksVisibility }: TasksCradle) =>
+          new TaskTagService({ emFactory, commandBus, visibility: tasksVisibility }),
+      )
+      .singleton(),
+  });
+  // --- end of References and configuration lists ----------------------------------
+
   // --- Tasks (User Story 2) -----------------------------------------------------
   // The list, My Tasks, one Task, and its writes — every write a Command of
   // `task-commands.ts` (Constitution XIII). `admin_users`' read port names an
@@ -148,6 +266,11 @@ export function registerModule(ctx: ModuleContext): void {
           tasksWorkflowRead,
           taskContextRegistry,
           tasksNotifier,
+          tasksAudience,
+          tasksPriorityService,
+          tasksTagService,
+          tasksReferenceService,
+          tasksMentionService,
         }: TasksCradle) => {
           const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
           const settings = lazyPort<SettingsReadPort>(ctx, 'settingsReadPort');
@@ -161,6 +284,13 @@ export function registerModule(ctx: ModuleContext): void {
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
             permissions: lazyPort<PermissionReadPort>(ctx, 'permissionService'),
             notifier: tasksNotifier,
+            audience: tasksAudience,
+            priorities: tasksPriorityService,
+            tags: tasksTagService,
+            customFields: lazyPort<CustomFieldValuePort>(ctx, 'customFieldValueService'),
+            customFieldListFilter: lazyPort<CustomFieldListFilterPort>(ctx, 'customFieldListFilterPort'),
+            references: tasksReferenceService,
+            mentions: tasksMentionService,
             // `tasks.time_zone` (R-17): read per call, so an operator's change
             // is seen by the next request.
             timeZone: () => settings.get('tasks.time_zone', null, TaskTimeZoneSchema.shape.timeZone),
@@ -188,9 +318,17 @@ export function registerModule(ctx: ModuleContext): void {
     await registerTaskRoutes(app, {
       taskService: cradle.tasksTaskService,
       historyService: cradle.tasksHistoryService,
+      mentionService: cradle.tasksMentionService,
+      documentLookupService: cradle.tasksDocumentLookupService,
       requireAdmin: cradle.requireAdmin,
     });
     await registerTaskWorkflowRoutes(app, { taskService: cradle.tasksTaskService, requireAdmin: cradle.requireAdmin });
+    await registerTaskPriorityRoutes(app, { priorityService: cradle.tasksPriorityService, requireAdmin: cradle.requireAdmin });
+    await registerTaskTagRoutes(app, { tagService: cradle.tasksTagService, requireAdmin: cradle.requireAdmin });
+    await registerTaskCollaborationRoutes(app, {
+      attachmentService: cradle.tasksAttachmentService,
+      requireAdmin: cradle.requireAdmin,
+    });
   });
   /**
    * The audit-reference resolver — a **contribution** hook. It pushes an inert
@@ -221,6 +359,40 @@ export function registerModule(ctx: ModuleContext): void {
     );
   });
   // --- end of Tasks ----------------------------------------------------------------
+
+  // --- Collaboration: attachments (User Story 1, research R-7) ----------------------
+  // A Task's files are the asset library's, through its ports — `assets_library`
+  // cannot be switched off and is a binding dependency.
+  ctx.di.register({
+    tasksAttachmentService: ctx
+      .asFunction(
+        ({ emFactory, commandBus, tasksAccess }: TasksCradle) =>
+          new TaskAttachmentService({
+            emFactory,
+            commandBus,
+            access: tasksAccess,
+            assets: lazyPort<AssetReadPort>(ctx, 'assetReadPort'),
+            assetsLibrary: lazyPort<AssetsLibraryPort>(ctx, 'assetsLibraryPort'),
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+          }),
+      )
+      .singleton(),
+  });
+  /**
+   * The asset-reference scanner — a **contribution** hook. It pushes an inert
+   * descriptor into `assetReferenceRegistry`, an ungated registry
+   * `assets_library` owns, and carries no presence probe: the attachments
+   * survive a deactivation, so a scanner registered only while the module is
+   * on would let an operator delete a file that comes back as a broken
+   * attachment when Tasks is switched on again (Constitution XVII).
+   */
+  ctx.onBoot(() => {
+    registerTaskAssetReferences(
+      lazyPort<AssetReferenceRegistryPort>(ctx, 'assetReferenceRegistry'),
+      ctx.cradle<TasksCradle>().emFactory,
+    );
+  });
+  // --- end of Collaboration ----------------------------------------------------------
 
   // --- Published ports (contracts/ports-and-events.md §1) ---------------------------
   // What another module reads and writes Tasks through. Both are `providePort`:

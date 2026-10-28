@@ -20,6 +20,10 @@ export const taskNotificationText = {
     title: `Task ${number} was assigned to you`,
     titleMessage: { scope: 'tasks', key: 'notifications.assigned.title', params: { number } },
   }),
+  mentioned: (number: string): { title: string; titleMessage: AdminNotificationMessage } => ({
+    title: `You were mentioned in Task ${number}`,
+    titleMessage: { scope: 'tasks', key: 'notifications.mention.title', params: { number } },
+  }),
 };
 
 /** Where a bell entry about a Task leads: its screen in the Admin UI. */
@@ -30,6 +34,8 @@ export function taskLinkPath(taskId: string): string {
 export interface TaskNotifier {
   /** Tell `targetAdminUserId` that Task `number` is now theirs (FR-032). */
   assigned(input: { targetAdminUserId: string; taskId: string; number: string }): Promise<TaskNotificationOutcome>;
+  /** Tell `targetAdminUserId` that a text of Task `number` mentions them (FR-006). */
+  mentioned(input: { targetAdminUserId: string; taskId: string; number: string }): Promise<TaskNotificationOutcome>;
 }
 
 /**
@@ -43,22 +49,27 @@ export interface TaskNotifier {
  * catches anything (CRM's `crm-notifier.ts`, the model).
  */
 export function createTaskNotifier(adminNotifications: AdminNotificationRecordPort): TaskNotifier {
+  const notify = async (
+    kind: string,
+    text: { title: string; titleMessage: AdminNotificationMessage },
+    { targetAdminUserId, taskId }: { targetAdminUserId: string; taskId: string },
+  ): Promise<TaskNotificationOutcome> => {
+    if (!effectiveState.isPresent('admin_notifications')) return 'not-present';
+    await adminNotifications.record({
+      audience: 'admin_user',
+      targetAdminUserId,
+      kind,
+      subjectType: 'task',
+      subjectId: taskId,
+      title: text.title,
+      titleMessage: text.titleMessage,
+      linkPath: taskLinkPath(taskId),
+    });
+    return 'recorded';
+  };
   return {
-    async assigned({ targetAdminUserId, taskId, number }): Promise<TaskNotificationOutcome> {
-      if (!effectiveState.isPresent('admin_notifications')) return 'not-present';
-      const text = taskNotificationText.assigned(number);
-      await adminNotifications.record({
-        audience: 'admin_user',
-        targetAdminUserId,
-        kind: 'tasks.task.assigned',
-        subjectType: 'task',
-        subjectId: taskId,
-        title: text.title,
-        titleMessage: text.titleMessage,
-        linkPath: taskLinkPath(taskId),
-      });
-      return 'recorded';
-    },
+    assigned: (input) => notify('tasks.task.assigned', taskNotificationText.assigned(input.number), input),
+    mentioned: (input) => notify('tasks.task.mention', taskNotificationText.mentioned(input.number), input),
   };
 }
 

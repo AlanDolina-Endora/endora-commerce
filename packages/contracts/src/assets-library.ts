@@ -42,6 +42,8 @@ export const assetReferenceKindSchema = z.enum([
   'crm_opportunity_attachment',
   // `specs/163-projects-and-tasks/` FR-027: a file attached to a Project.
   'project_attachment',
+  // `specs/165-task-management/` FR-008: a file attached to a Task.
+  'task_attachment',
 ]);
 export type AssetReferenceKind = z.infer<typeof assetReferenceKindSchema>;
 

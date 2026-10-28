@@ -13,6 +13,7 @@ import {
 } from '../../helpers/test-server.js';
 import { SEED_PRODUCT_101_ID } from '../../helpers/seed-catalog.js';
 import { TEST_ADMIN_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
+import { withModuleOff } from '../../helpers/off-state.js';
 import { CrmOpportunityReference } from '../../helpers/package-entities.js';
 import {
   CRM_ADMIN,
@@ -20,6 +21,7 @@ import {
   createCrmOpportunity,
   restoreDefaultCrmWorkflow,
   seedCrmOrder,
+  seedCrmAdmin,
   seedCrmOrganization,
   seedCrmSalesRep,
   submitCrmQuoteRequest,
@@ -323,6 +325,90 @@ describe('crm references to Products and Orders (US12)', () => {
       expect(note.body).toBe(body);
       expect(note.references).toEqual([]);
       expect(await storedReferences(opportunity.id)).toEqual([]);
+    });
+  });
+
+  /**
+   * `specs/165-task-management/` T028, research R-5: Opportunities and Projects
+   * became referenceable kinds of the shared grammar, so CRM's texts store and
+   * resolve them like every other kind — with no 500 from the widened check —
+   * and its `@@` list offers both groups, each only while its owner is present
+   * and to a reader holding its read code.
+   */
+  describe('Opportunities and Projects (165)', () => {
+    let reader: { cookies: { b2b_session: string }; adminUserId: string; undo: () => void };
+    let project: { id: string; number: string };
+    const projectIds: string[] = [];
+
+    beforeAll(async () => {
+      reader = await seedCrmAdmin(h.em(), 'refs-165', ['crm:read', 'crm:write', 'orders:read']);
+      const response = await h.app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/projects',
+        cookies: CRM_ADMIN,
+        payload: {
+          title: 'Referenced from CRM',
+          organizationIds: [],
+          stages: [{ name: 'Only', color: '#3b82f6', plannedDurationDays: 1 }],
+        },
+      });
+      expect(response.statusCode, response.body).toBe(201);
+      project = (response.json() as { data: { id: string; number: string } }).data;
+      projectIds.push(project.id);
+    });
+
+    afterAll(async () => {
+      reader?.undo();
+      await h.em().getConnection().execute(`delete from "projects" where "id" = any(?::uuid[])`, [`{${projectIds.join(',')}}`]);
+    });
+
+    it('stores and resolves an Opportunity and a Project in the description', async () => {
+      const target = await createCrmOpportunity(h, { title: 'Referenced deal' });
+      const description = `See ${formatOpportunityReferenceToken('opportunity', target.id)} and ${formatOpportunityReferenceToken('project', project.id)}`;
+      const response = await call('POST', '/opportunities', {
+        title: 'Referring deal',
+        organizationId: TEST_ORGANIZATION_ID,
+        currency: 'PLN',
+        description,
+      });
+      expect(response.statusCode, response.body).toBe(201);
+      const created = OpportunityDetailResponseSchema.parse(response.json()).data;
+      expect((await detail(created.id)).references).toEqual([
+        { type: 'opportunity', id: target.id, available: true, label: target.number, url: `/crm/opportunities/${target.id}` },
+        { type: 'project', id: project.id, available: true, label: project.number, url: `/projects/${project.id}` },
+      ]);
+      expect(await storedReferences(created.id)).toEqual(
+        [`description:-:opportunity:${target.id}`, `description:-:project:${project.id}`].sort(),
+      );
+      // A reader without projects:read sees the Project as unavailable.
+      const narrow = await call('GET', `/opportunities/${created.id}`, undefined, reader.cookies);
+      expect(OpportunityDetailResponseSchema.parse(narrow.json()).data.references[1]).toEqual({
+        type: 'project',
+        id: project.id,
+        available: false,
+        label: null,
+        url: null,
+      });
+      expect(narrow.body).not.toContain(project.number);
+      // While Projects is off, unavailable to everybody.
+      await withModuleOff('projects', 'deactivated', async () => {
+        expect((await detail(created.id)).references[1]).toMatchObject({ type: 'project', available: false });
+      });
+    });
+
+    it('offers the two groups after @@ only to their readers and while their owners are present', async () => {
+      const lookup = async (cookies: Record<string, string> = CRM_ADMIN) => {
+        const response = await call('GET', `/lookups/documents?organizationId=${TEST_ORGANIZATION_ID}&q=`, undefined, cookies);
+        expect(response.statusCode, response.body).toBe(200);
+        return (response.json() as { groups: Array<{ kind: string; items: Array<{ id: string }> }> }).groups;
+      };
+      const all = await lookup();
+      expect(all.map((g) => g.kind)).toEqual(expect.arrayContaining(['opportunity', 'project']));
+      expect(all.find((g) => g.kind === 'project')!.items.map((i) => i.id)).toContain(project.id);
+      expect((await lookup(reader.cookies)).map((g) => g.kind)).not.toContain('project');
+      await withModuleOff('projects', 'deactivated', async () => {
+        expect((await lookup()).map((g) => g.kind)).not.toContain('project');
+      });
     });
   });
 

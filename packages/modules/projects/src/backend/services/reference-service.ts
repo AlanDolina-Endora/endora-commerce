@@ -8,7 +8,7 @@ import {
   type RecordReferenceToken,
   type RecordReferenceType,
 } from '@endora-commerce/contracts';
-import { actingAdminUserId } from './project-access.js';
+import { actingAdminUserId, type ProjectAccess } from './project-access.js';
 import type { LinkedRecordOwners } from './linked-records.js';
 import type { OwnerReadChecks } from './owner-read-permissions.js';
 import type { ProjectTasks } from './project-tasks.js';
@@ -52,12 +52,14 @@ export interface ProjectReferenceServiceDeps {
   products: CatalogProductReadPort;
   orders: OrderReadPort;
   adminUsers: AdminUserReadPort;
-  /** The one door to Quote Requests (`linked-records.ts`) — asked `isPresent` first. */
+  /** The one door to Quote Requests and Opportunities (`linked-records.ts`) — asked `isPresent` first. */
   quoteRequests: Pick<LinkedRecordOwners, 'isPresent' | 'findMany'>;
   /** The one door to `tasks` — asked `present()` first. */
   tasks: Pick<ProjectTasks, 'present' | 'read'>;
+  /** This module's own Projects the reader may see (`specs/165-task-management/` R-5). */
+  projects: Pick<ProjectAccess, 'findVisibleMany'>;
   /** Whether the reader may read each kind of target in the module that owns it. */
-  mayRead: Pick<OwnerReadChecks, 'orders' | 'products' | 'quoteRequests' | 'tasks'>;
+  mayRead: Pick<OwnerReadChecks, 'orders' | 'products' | 'quoteRequests' | 'tasks' | 'opportunities'>;
 }
 
 const FALLBACK_LANGUAGE = 'en';
@@ -75,8 +77,7 @@ function adminUrl(token: RecordReferenceToken): string | null {
       return `/quote-requests/${token.id}`;
     case 'task':
       return `/tasks/${token.id}`;
-    // Platform-wide since `specs/165-task-management/` (research R-5). Until
-    // this module resolves them (US1), they render as unavailable.
+    // Platform-wide since `specs/165-task-management/` (research R-5).
     case 'opportunity':
       return `/crm/opportunities/${token.id}`;
     case 'project':
@@ -146,7 +147,10 @@ export class ProjectReferenceService {
     const personIds = idsOf('admin_user');
     const quoteRequestIds = idsOf('quote_request');
     const taskIds = idsOf('task');
+    const opportunityIds = idsOf('opportunity');
+    const projectIds = idsOf('project');
 
+    const opportunitiesPresent = opportunityIds.length > 0 && this.deps.quoteRequests.isPresent('opportunity');
     const quoteRequestsPresent = quoteRequestIds.length > 0 && this.deps.quoteRequests.isPresent('quote_request');
     const tasksPresent = taskIds.length > 0 && this.deps.tasks.present();
     const [mayReadProducts, mayReadOrders, mayReadQuoteRequests, mayReadTasks] = await Promise.all([
@@ -154,6 +158,14 @@ export class ProjectReferenceService {
       orderIds.length > 0 ? this.deps.mayRead.orders() : Promise.resolve(false),
       quoteRequestsPresent ? this.deps.mayRead.quoteRequests() : Promise.resolve(false),
       tasksPresent ? this.deps.mayRead.tasks() : Promise.resolve(false),
+    ]);
+    // An Opportunity through `crm`'s port with `crm:read`; a Project is this
+    // module's own, read through `ProjectAccess` — one the reader may not see is absent.
+    const [opportunities, projects] = await Promise.all([
+      opportunitiesPresent && (await this.deps.mayRead.opportunities())
+        ? this.deps.quoteRequests.findMany('opportunity', opportunityIds)
+        : Promise.resolve(new Map()),
+      projectIds.length > 0 ? this.deps.projects.findVisibleMany(projectIds) : Promise.resolve([]),
     ]);
     const [products, orders, people, quoteRequests, tasks, language] = await Promise.all([
       mayReadProducts ? this.deps.products.findByIds(productIds, { liveOnly: true }) : Promise.resolve([]),
@@ -185,6 +197,8 @@ export class ProjectReferenceService {
     }
     for (const view of quoteRequests.values()) labels.set(`quote_request:${view.id}`, view.number);
     for (const task of tasks) labels.set(`task:${task.id}`, task.number);
+    for (const view of opportunities.values()) labels.set(`opportunity:${view.id}`, view.number);
+    for (const project of projects) labels.set(`project:${project.id}`, project.number);
 
     return tokens.map((list) =>
       list.map((token): RecordReference => {

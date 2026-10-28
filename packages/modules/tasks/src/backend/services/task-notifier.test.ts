@@ -36,6 +36,18 @@ describe('taskNotificationText', () => {
     expect(bundle('en')[text.titleMessage.key]!.replace('{number}', 'TSK-000042')).toBe(text.title);
   });
 
+  it('a mention names the Task by its number only, from a key both bundles hold (FR-006)', () => {
+    const mention = taskNotificationText.mentioned('TSK-000042');
+    expect(mention.title).toBe('You were mentioned in Task TSK-000042');
+    expect(mention.titleMessage).toEqual({ scope: 'tasks', key: 'notifications.mention.title', params: { number: 'TSK-000042' } });
+    for (const language of ['en', 'pl'] as const) {
+      const template = bundle(language)[mention.titleMessage.key];
+      expect(template, `${language}: ${mention.titleMessage.key}`).toBeTypeOf('string');
+      expect([...template!.matchAll(/\{(\w+)\}/g)].map((m) => m[1])).toEqual(['number']);
+    }
+    expect(bundle('en')[mention.titleMessage.key]!.replace('{number}', 'TSK-000042')).toBe(mention.title);
+  });
+
   it('links to the Task’s screen', () => {
     expect(taskLinkPath('7d3c8f1e-0000-4000-8000-000000000001')).toBe('/tasks/7d3c8f1e-0000-4000-8000-000000000001');
   });

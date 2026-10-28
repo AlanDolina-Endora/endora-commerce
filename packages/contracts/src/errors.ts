@@ -712,6 +712,14 @@ export const ERROR_CODES = {
   TASK_TRANSITION_CONFLICT: 'TASK_TRANSITION_CONFLICT',
   /** A change to someone else's private Task by a holder of `tasks:see_private` (R-3). */
   TASK_PRIVATE_READ_ONLY: 'TASK_PRIVATE_READ_ONLY',
+  /** A Task priority code that is not configured (R-9). */
+  TASK_PRIORITY_UNKNOWN: 'TASK_PRIORITY_UNKNOWN',
+  /** A Task tag id that does not exist (R-10). */
+  TASK_TAG_UNKNOWN: 'TASK_TAG_UNKNOWN',
+  /** A Task tag name already taken, case-insensitively (R-10). */
+  TASK_TAG_NAME_TAKEN: 'TASK_TAG_NAME_TAKEN',
+  /** A Task attachment refused: too large, or a document a browser would run (R-7). */
+  TASK_ATTACHMENT_REFUSED: 'TASK_ATTACHMENT_REFUSED',
 
   // Projects (`specs/163-projects-and-tasks/`, `contracts/admin-api.md` §2) —
   // the spellings of `PROJECTS_ERROR_CODES`. Each is declared by the `projects`

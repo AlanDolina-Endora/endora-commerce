@@ -1,4 +1,4 @@
-import { ERROR_CODES } from '@endora-commerce/contracts';
+import { ERROR_CODES, TASK_ASSIGNEES_MAX } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 
 /**
@@ -16,5 +16,9 @@ export function taskContextInvalid(message: string): HttpError {
 }
 
 export function taskAssigneeInvalid(): HttpError {
-  return new HttpError(422, ERROR_CODES.TASK_ASSIGNEE_INVALID, 'A Task can be assigned only to an active administrator.');
+  return new HttpError(
+    422,
+    ERROR_CODES.TASK_ASSIGNEE_INVALID,
+    `A Task can be assigned only to active administrators who may read Tasks, at most ${TASK_ASSIGNEES_MAX} of them.`,
+  );
 }

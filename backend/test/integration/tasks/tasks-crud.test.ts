@@ -230,12 +230,16 @@ describe('tasks — a Task on its own (US2)', () => {
     expect(shared.assignees.map((a) => a.id).sort()).toEqual([colleague.adminUserId, TEST_ADMIN_ID].sort());
   });
 
-  it('tells nobody who may not read Tasks at all — no tasks:read, no bell (F-14)', async () => {
-    const task = await create({ title: 'Not for outsiders', assigneeIds: [outsider.adminUserId] });
-    expect(task.assignees.map((a) => a.id)).toEqual([outsider.adminUserId]);
-    expect(await bellAbout(task.id)).toEqual([]);
+  // F-14, then `specs/165-task-management/` US1 (`contracts/admin-api.md` §1):
+  // somebody who may not read Tasks at all is no longer assigned and left
+  // untold — the Tasks screens refuse them, so no bell can reach them.
+  it('refuses, and tells nobody, an assignee who may not read Tasks at all — no tasks:read (F-14, US1)', async () => {
+    const refused = await call('POST', '', { title: 'Not for outsiders', assigneeIds: [outsider.adminUserId] });
+    expect(refused.statusCode, refused.body).toBe(422);
+    expect(refused.json().error.code).toBe('TASK_ASSIGNEE_INVALID');
     const later = await create({ title: 'Assigned later' });
-    await patch(later.id, { addAssigneeIds: [outsider.adminUserId] });
+    const added = await call('PATCH', `/${later.id}`, { addAssigneeIds: [outsider.adminUserId] });
+    expect(added.statusCode, added.body).toBe(422);
     expect(await bellAbout(later.id)).toEqual([]);
   });
 

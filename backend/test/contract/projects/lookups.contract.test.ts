@@ -236,7 +236,8 @@ describe('projects (contract) — lookups for the pickers', () => {
         `?organizationIds=${TEST_ORGANIZATION_ID}&q=${q(orderOfTest.businessId)}`,
         documentWriter,
       );
-      expect(orders.groups.map((group) => group.kind)).toEqual(['order', 'quote_request']);
+      // `specs/165-task-management/` R-5: the Projects group follows, this module's own.
+      expect(orders.groups.map((group) => group.kind)).toEqual(['order', 'quote_request', 'project']);
       expect(ids(orders, 'order')).toContain(orderOfTest.id);
       const quotes = await documents(
         `?organizationIds=${TEST_ORGANIZATION_ID}&q=${q(quoteRequest.businessId)}`,
