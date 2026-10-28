@@ -370,7 +370,7 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
 
 ### Tests first
 
-- [ ] T026 [P] [US1] Write failing `backend/test/integration/tasks/task-fields.test.ts`:
+- [X] T026 [P] [US1] Write failing `backend/test/integration/tasks/task-fields.test.ts`:
   - add 2 assignees: each is notified once, the actor never;
   - an assignee without `tasks:read` is refused (`TASK_ASSIGNEE_INVALID`);
   - more than 20 refused;
@@ -380,7 +380,9 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - `tagIds` set and replace, with an unknown tag giving 422;
   - custom field values validated (422 `CUSTOM_FIELD_VALUE_INVALID`);
   - history shows each change.
-- [ ] T027 [P] [US1] Write failing `backend/test/integration/tasks/references.test.ts` (#446):
+  - Seen red 2026-10-28: 9 of 11 failed for the stated reason — `TASK_ASSIGNEE_INVALID` not raised for an assignee without `tasks:read` (201), `dueAt`/`startOn`/`priorityCode`/`tagIds`/`customFieldValues` ignored, `GET /tasks/priorities` and `/tasks/tags` 404. The two that passed red are Phase 2 behaviour (two assignees told once; > 20 is a schema 400). Green after T037/T038 (11/11).
+  - **Deviation (FR-001, contract §1):** the 163 F-14 case in `tasks-crud.test.ts` ("an assignee without `tasks:read` is assigned and not told") now asserts the 422 refusal — the contract says each assignee must hold `tasks:read`. Only the Tasks screens refuse; the write port keeps 163's rule (a context owner assigns whom its rules name; they are told only if they may see the Task).
+- [X] T027 [P] [US1] Write failing `backend/test/integration/tasks/references.test.ts` (#446):
   - a description with tokens of all seven kinds resolves per reader;
   - a reader without `orders:read` sees the Order as unavailable;
   - with `crm` off, the Opportunity is unavailable;
@@ -388,38 +390,48 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - a private Task of someone else is unavailable;
   - the `task_references` rows are refreshed on edit;
   - a newly mentioned admin is notified once naming `TSK-…`, not on a re-save, never the author, never someone who may not see the Task.
-- [ ] T028 [P] [US1] Write failing tests for the reference kinds in the other modules:
+  - Seen red 2026-10-28: 8 of 10 failed — `references` was always `[]`, no `task_references` row, no mention bell, `/lookups/{mentionable,documents}` 404. The "never tells somebody who may not see the Task" case passed red vacuously (nobody was told at all). Green after T036 (10/10). One red at green was my premise: the harness's administrator holds `*`, so `tasks:see_private` — the private-Task case now reads as an admin without it.
+  - Added beyond the list: a Project unavailable while Projects is off; the `@@` list's five groups, each only for its reader and owner.
+- [X] T028 [P] [US1] Write failing tests for the reference kinds in the other modules:
   - `backend/test/integration/crm/references.test.ts`: save `[[opportunity:…]]` and `[[project:…]]` in an Opportunity's description, with no 500 and both resolved;
   - `backend/test/integration/projects/references.test.ts`: the same in a Project note;
   - the document lookups of both modules offer the two new groups only when the owner is present and the caller holds the permission.
-- [ ] T029 [P] [US1] Write failing `backend/test/integration/tasks/attachments.test.ts`:
+  - Seen red 2026-10-28: the four new cases failed — the resolvers answered both kinds unavailable (pulled forward at T025) and the `@@` lists offered neither group. Green after T034. CRM's cases sit in `integration/crm/references.test.ts` (describe *Opportunities and Projects (165)*); Projects' are the new `integration/projects/references.test.ts`. No 500 on saving either kind in a CRM description or a Project note.
+- [X] T029 [P] [US1] Write failing `backend/test/integration/tasks/attachments.test.ts`:
   - upload as private, listed with name, size, uploader and time;
   - an HTML file or an SVG gives 415 `TASK_ATTACHMENT_REFUSED`;
   - more than 25 MB is refused;
   - deleting the asset in the asset library is refused while it is attached, also with `tasks` off;
   - removing the attachment unprotects the asset.
-- [ ] T030 [P] [US1] Write failing `backend/test/integration/tasks/custom-fields-host.test.ts`:
+  - Seen red 2026-10-28: 5 of 6 failed (every attachment route 404). The hidden-Task case passed red vacuously (404 from no route). Green after T039 (6/6), also asserting the asset delete is refused while `tasks` is deactivated.
+  - **Deviation (admin-api §2):** the upload is `POST /tasks/:id/attachments/upload` (multipart) beside `POST /tasks/:id/attachments` `{assetId}` — Projects' split; one Fastify route cannot take both bodies with the multipart parser scoped to it. The by-id attach also asks for `assets.read` (CRM/Projects rule). Too large is **413** `TASK_ATTACHMENT_REFUSED` `{reason: 'too_large'}`, active content **415** `{reason: 'active_content'}`.
+- [X] T030 [P] [US1] Write failing `backend/test/integration/tasks/custom-fields-host.test.ts`:
   - a `task` definition is creatable;
   - values persist;
   - a `listFilter` definition filters `GET /tasks`;
   - with `tasks` off, the `task` entity type is hidden from the custom-fields definitions API (registry `ownerModuleId`).
-- [ ] T031 [P] [US1] Write failing admin tests:
+  - Seen red 2026-10-28: 1 of 2 failed (values dropped, filter ignored, `/custom-field-filters` 404). The off-state case passed red: the registry side was pulled forward at T025. Green after T038 (2/2).
+- [X] T031 [P] [US1] Write failing admin tests:
   - `admin/test/modules/tasks/TaskDetail.fields.test.tsx`: the multi-assignee control, the due-time input, the priority and tag pickers, the custom-fields panel, rich description rendering with reference links, and the attachments section;
   - `K/components/tags/TagMultiSelect.test.tsx`: the promoted component, its options injected.
+  - Seen red 2026-10-28: `TaskDetail.fields.test.tsx` 6/6 failed for the stated reason (no due-time, start, priority, tag controls; plain textarea; no attachments section, no custom-fields panel; missing bundle keys). Green after T041 (6/6).
+  - **Deviation:** the kit test is `admin/test/kit/kit-tags.test.tsx`, not `K/components/tags/TagMultiSelect.test.tsx` — admin-kit has no test runner of its own; every kit test lives in `admin/test/kit/` (precedent `kit-attachments.test.tsx`). Written before the component but first run after it existed, so **not seen red**; 5/5 green.
 
 ### Implementation
 
-- [ ] T032 [US1] Run the CRM and Projects reference-kind migrations:
+- [X] T032 [US1] Run the CRM and Projects reference-kind migrations:
   - `pnpm --filter backend run migration:new -- --module crm --name opportunity_reference_kinds`
   - `… --module projects --name projects_reference_kinds`
 
   Write `up` and `down` per `data-model.md` §6, then run `composer:generate`.
   - **Pulled forward into Phase 2** (orchestrator ruling 2, 2026-10-28): `C/migrations/20261028T143444_crm_opportunity_reference_kinds.ts` and `P/migrations/20261028T143448_projects_reference_kinds.ts`, `up`/`down` per data-model §6 (`down` deletes the two kinds' rows, as the 163 precedent did, then restores the five), registered. `CrmReferenceTargetType` widened in `C/backend/entities/crm-opportunity-reference.entity.ts` (line added to §C). Run by every backend suite's template build; no dedicated up/down test yet — T028 or this task may add one. What remains: nothing but that test.
-- [ ] T033 [US1] Add `findByIds` and `search` to the read ports.
+  - Done (Phase 2). No dedicated up/down test was added: both migrations run in every backend suite's template build, and T028 saves both kinds through each module's API, which a check without them would refuse with a 500.
+- [X] T033 [US1] Add `findByIds` and `search` to the read ports.
   - `C/backend/services/opportunity-read-port.ts`: number and title, ≤ 20.
   - `P/backend/services/project-read-port.ts`: through `ProjectAccess`. Add the file to `PROJECT_ACCESS_READERS` in `P/backend/services/project-access.ts` if the method lives in a new file.
   - **Pulled forward into Phase 2** (ruling 1): both methods exist. CRM: `findByIds` (scoped `em.find`) and `search` (number/title `ilike`, newest first, ≤ 20). Projects: `ProjectAccess.findVisibleMany` and `searchVisible` (both compose `visibleProjectSql`; seam ledger `project-access.ts` 12 → 14), so no new file joined `PROJECT_ACCESS_READERS`. Not yet tested by an integration case — T028 covers them through the lookups.
-- [ ] T034 [US1] Teach CRM and Projects the two new kinds.
+  - Done (Phase 2); now exercised by T027/T028 through the resolvers and the `@@` lists (all green).
+- [X] T034 [US1] Teach CRM and Projects the two new kinds.
   - Resolvers in `C/backend/services/reference-service.ts` and `P/backend/services/reference-service.ts`. Projects resolves Opportunities through its existing `linked-records.ts` owner. CRM resolves Projects through `projectReadPort`, and if `C/manifest.ts` lacks a `degrades-without` edge on `projects`, add it with a `whenAbsent` sentence.
   - The lookup groups in their document-lookup services.
   - The `owner-read-permissions.ts` entries.
@@ -427,19 +439,26 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
 
   T028 green.
   - Partly pulled forward (ruling 1): each reference service's URL map has the two arms (`/crm/opportunities/:id`, `/projects/:id`); the resolvers still answer both kinds **unavailable** (no port is asked). Resolvers, lookup groups, `owner-read-permissions` entries and i18n group labels remain here.
-- [ ] T035 [US1] Extend the admin-kit reference editor (`K/components/references/{reference-kinds,ReferenceField,ReferenceText,reference-node}.ts(x)`):
+  - Done 2026-10-28. CRM: `crm-projects.ts` (the one door to `projectReadPort`, `isPresent()` first), a `degrades-without` edge on `projects`/`projectReadPort` with its `whenAbsent` (none existed), Opportunities resolved and searched through an unregistered `OpportunityReadPortService` instance (CRM's own), `projects:read` in `owner-read-permissions.ts`. Projects: Opportunities through `linked-records.ts` (`findMany`, plus a new `searchOpportunities`), Projects through `ProjectAccess.findVisibleMany`/`searchVisible`, `crm:read` already in its checks. `docs/docs/module-reference/crm.md` regenerated.
+  - **Premise false — i18n group labels:** the `@@` group labels are the kit's core bundle (`references.group.*`, added at T025), not each module's; nothing was added to `C/../i18n` or `P/../i18n` for them.
+  - **Group order and presence:** each module's own kind is always answered (CRM: Opportunities, the caller holds `crm:read`; Projects: the Projects the caller may see), as Tasks always answers Tasks. The pinned group lists in `integration/projects/mentions.test.ts`, `contract/projects/lookups.contract.test.ts` and `contract/crm/document-lookups.contract.test.ts` gained the group (shape only; lines added to `foreign-module-changes.md` §D).
+  - **Admin `@@` gate:** each module's `admin/lib/references.ts` now also opens `@@` for the *other* module's code (CRM `projects:read`, Projects `crm:read`). Its own code would make `@@` unconditional and contradict the tests pinning "a role reading no document"; the gap is issue #498.
+- [X] T035 [US1] Extend the admin-kit reference editor (`K/components/references/{reference-kinds,ReferenceField,ReferenceText,reference-node}.ts(x)`):
   - document groups and chip classes for `opportunity` and `project`;
   - link targets `/crm/opportunities/:id` and `/projects/:id`.
 
   Write its kit test first. Rebuild admin-kit.
   - Partly pulled forward (ruling 1): `ReferenceText`'s icon map (`Handshake`, `FolderKanban`) and `reference-node`'s chip classes have the two kinds, and the `_i18n` core bundle carries `references.{kind,group,inserted,unavailable}.{opportunity,project}` (en, pl; required by `kit-collaboration-bundle.test.ts`). Document groups in the editor and the kit test remain here.
-- [ ] T036 [US1] Implement the reference and mention services in Tasks:
+  - Done 2026-10-28. The editor's document groups and `ReferenceText`'s links are generic (the lookup's `groups[].kind`, the reference's `url`), so nothing in the components changed; `kit-references.test.tsx` gained three cases (the five-group `@@` list inserting a Project token; an Opportunity and a Project linked; both unavailable). Green on arrival — the component work was pulled forward at T025.
+- [X] T036 [US1] Implement the reference and mention services in Tasks:
   - `T/backend/services/owner-read-permissions.ts`, copied from Projects;
   - `reference-service.ts`: `rowsFor` and `resolveMany` across seven kinds through `orderReadPort`, `catalogProductReadPort`, `adminUserReadPort`, `quoteRequestReadPort`, `opportunityReadPort`, `projectReadPort` and `taskReadPort` (self), each gated by presence and permission;
   - `mention-service.ts`: `newlyMentioned`, the mentionable lookup per `admin-api.md` §3, and `tell` after commit, with kind `tasks.task.mention`.
 
   Wire them in the *References* section of `T/backend/index.ts` with `lazyPort` for each `degrades-without` owner. Make `TaskDetail.references` and the history resolve. T027 green.
-- [ ] T037 [US1] Implement the remaining Task fields in `T/backend/services/task-service.ts` and `task-commands.ts`:
+  - Done 2026-10-28: `owner-read-permissions.ts` (`orders`, `catalog`, `rfqs:handle`, `crm:read`, `projects:read`), `record-owners.ts` (the one door to `quote_requests`, `crm`, `projects`: presence, labels, `@@` search — a Quote Request is offered only by its full number, the port has no search and a Task has no Organization), `reference-service.ts`, `mention-service.ts` (`newlyMentioned`, `mentionable`, `tell`; `createTaskAudience` — `tasks:read`, draft/private only for the Creator, a context's `canSeeAs` — now also decides who an assignment is told to), `document-lookup-service.ts` (`GET /tasks/lookups/documents`, `tasks:write`). `task_references` rows are rewritten by the create/update Command; mentions told after commit as `tasks.task.mention` (`notifications.mention.title`, en/pl). `check:port-dependencies`'s three `degrades-without` edges now resolve.
+  - **Deviation:** the history keeps `references: []` — audit states carry no text (only `descriptionLength`), so there is nothing to resolve; comments (US4) are the first text the history could carry.
+- [X] T037 [US1] Implement the remaining Task fields in `T/backend/services/task-service.ts` and `task-commands.ts`:
   - `due_at` and `start_on`;
   - `priority_code`, validated against `task_priorities`;
   - tags, set and replace (≤ 50), validated;
@@ -449,7 +468,8 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   Write each one in its Command with an audit diff. Add `GET /tasks/priorities` and `GET /tasks/tags` (`tasks:read`) and `POST /tasks/tags` (`tasks:configure`) in `T/backend/routes/routes.{priorities,tags}.ts`, backed by `priority-service.ts` and `tag-service.ts`. Model the tag service on `C/backend/services/tag-service.ts`. The rest of the configuration comes in US9.
 
   T026 green.
-- [ ] T038 [US1] Make `task` a custom-field host (`foreign-module-changes.md` §E).
+  - Done 2026-10-28. Commands `tasks.task.priority_change`, `.tags_change`, `.custom_fields_change` (changed keys only, before/after); `tasks.task.update` gains `dueAt`/`startOn`; `assignees_change` refuses more than 20 under the lock. `dueAt` sets `due_on` in `tasks.time_zone`; a date alone clears the moment; clearing the moment alone keeps the date. Assignees on the Tasks screens must hold `tasks:read` (`assertMayBeAssigned`). `priority-service.ts` (list with visible in-use counts, `assertKnown`), `tag-service.ts` (list with visible usage counts, create with 409 `TASK_TAG_NAME_TAKEN`, `assertKnown` → 422 `TASK_TAG_UNKNOWN`); routes in `routes.{priorities,tags}.ts`. Four codes joined `ERROR_CODES`, the manifest, both bundles and `reference-ledgers.ts` with their first raise site: `TASK_PRIORITY_UNKNOWN`, `TASK_TAG_UNKNOWN`, `TASK_TAG_NAME_TAKEN`, `TASK_ATTACHMENT_REFUSED`. The seam ledger names `priority-service.ts` (1 read), `tag-service.ts` (2), and `task-commands.ts` 4 → 7, each composing the predicate or keyed by a Task id `TaskAccess` handed out.
+- [X] T038 [US1] Make `task` a custom-field host (`foreign-module-changes.md` §E).
   - `packages/modules/custom_fields/src/backend/services/custom-field-registry.ts`: `SUPPORTED_ENTITIES.task = {labelKey, orgOwned: false, ownerModuleId: 'tasks', listFilter: true}`.
   - `host-storage-binding.ts`.
   - The custom_fields i18n.
@@ -458,18 +478,22 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
 
   T030 green.
   - Partly pulled forward (ruling 1): `SUPPORTED_ENTITIES.task` (`orgOwned: false`, `ownerModuleId: 'tasks'`, `listFilter: true`), `host-storage-binding` (`tasks.custom_field_values`), `customFields.entity.task` (en, pl), and the four enumerating tests (`custom-field-registry.test.ts`, `value-probe-binding.test.ts`, `integration/custom_fields/{entity-owner-presence,list-filter-option}.test.ts`). The Tasks side — validation in the Commands, the list filter, `GET /tasks/custom-field-filters` — remains here.
-- [ ] T039 [US1] Implement the attachments:
+  - Done 2026-10-28: `mergeTaskCustomFields` (`task-custom-fields.ts`, Projects' copy) in the create (always, so a required field is enforced) and update Commands; the detail projects the bag through `customFieldValueService.project`; the list filter is an id sub-select from `customFieldListFilterPort.condition('task', …)` intersected with the visibility predicate, an unoffered key answering 400 `CUSTOM_FIELD_FILTER_UNAVAILABLE`; `GET /tasks/custom-field-filters` (`tasks:read`).
+- [X] T039 [US1] Implement the attachments:
   - `T/backend/services/attachment-active-content.ts` (copy);
   - `attachment-service.ts`, modelled on `P/backend/services/attachment-service.ts`;
   - `task-asset-references.ts`, registered ungated from a contribution-only boot hook;
   - the routes in `T/backend/routes/routes.collaboration.ts`.
 
   T029 green.
-- [ ] T040 [US1] Promote CRM's `TagChips`, `TagMultiSelect` and `useTagOptions` to `K/components/tags/`, with the options loader as a prop or hook argument. Export them from the kit's components barrel.
+  - Done 2026-10-28: `attachment-active-content.ts` (+ its test, the code `TASK_ATTACHMENT_REFUSED`), `attachment-service.ts` (Commands `tasks.attachment.add` / `.remove` against `task`), `task-asset-references.ts` (`task_attachment`, label `Task TSK-…`) pushed from an ungated boot hook, `routes.collaboration.ts` with `@fastify/multipart` scoped to the upload (new peer; `manifests:generate` + `pnpm install --lockfile-only` run). `TaskAccess.visibleIds` added (seam ledger `task-access.ts` 2 → 3; `attachment-service.ts` 5 and `task-asset-references.ts` 2 joined `TASK_ACCESS_READERS` with their reasons).
+  - **Contract line added:** `assetReferenceKindSchema` gains `'task_attachment'` (`X/assets-library.ts`) — `findReferences` answers only a kind of that enum; recorded in `foreign-module-changes.md` §A.
+- [X] T040 [US1] Promote CRM's `TagChips`, `TagMultiSelect` and `useTagOptions` to `K/components/tags/`, with the options loader as a prop or hook argument. Export them from the kit's components barrel.
   - Move `C/admin/components/TagsSection.tsx` and its other callers onto the kit, then delete `C/admin/components/TagPicker.tsx`.
   - Grep `admin/test/**` and `backend/test/**` for `TagPicker` and fix the paths.
   - Run `admin/test/modules/crm` before and after, with an identical pass count.
-- [ ] T041 [US1] Rework the Task screens.
+  - Done 2026-10-28: `K/components/tags/TagPicker.tsx` (`TagChips`, `TagMultiSelect`, `useTagOptions`, `TagOption`; the loader a prop, `loadTags`), exported from the components barrel; strings `tags.picker.*` moved to the core bundle (en/pl, CRM's wording), the three CRM keys removed. CRM's five callers pass `crmApi.listTags`; `C/admin/components/TagPicker.tsx` deleted. `admin/test/modules/crm`: 32 files / 558 tests before (the baseline run also showed one known-flaky case, *More filters*, which passes alone) and 32 / 558 green after. Grep of `backend/test/**` and `admin/test/**` for the CRM path: no reference (the one `TagPicker.tsx` in `batch-sixteen-surfaces…` is blog's own).
+- [X] T041 [US1] Rework the Task screens.
   - `T/admin/pages/TaskDetail.tsx` per `contracts/admin-surfaces.md` §2, US1 parts:
     - the description with `ReferenceField` and `ReferenceText` (`T/admin/lib/references.ts`, modelled on Projects');
     - assignees, due with time, start date, priority and tags;
@@ -480,8 +504,22 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - New strings in `packages/modules/tasks/i18n/{en,pl}.json`.
 
   T031 green.
+  - Done 2026-10-28: `components/TaskFieldInputs.tsx` (description in `ReferenceField`, due date + optional time — sent as `dueAt` from the reader's clock —, start date, priority, kit `TagMultiSelect`), shared by `TaskCreate.tsx` and the detail's edit form; `lib/references.ts` (`useTaskReferences`, Projects' model); `components/TaskAttachments.tsx` (Projects' tab as a section, kit `AttachmentUploader`); `components/TaskCustomFields.tsx` (kit `CustomFieldValuesPanel entityType="task"`, saved through `PATCH`, shown to a holder of `custom_fields:read`; the create form embeds it). The detail lists every assignee, draws the description with `ReferenceText`, shows due time, start date, priority and tags; the history shows `dueAt`, `startOn`, `priorityCode`. `field.assignee` reads "Assignees". `admin/test/modules/tasks` + `projects` + `kit`: 62 files / 597 tests green.
 
 **Checkpoint**: a Task carries everything US1 lists, and references work in Tasks, CRM and Projects alike.
+
+- **Phase 3 gate**, run 2026-10-28 on the final tree (the machine shared with other worktrees' runs, load average 20–35):
+  - `pnpm run build:packages`: **green**. `pnpm -r run typecheck`: **green** (0 errors; one test-typing error in `references.test.ts` fixed first). `pnpm -r run lint`: **green** (0 errors; pre-existing warnings).
+  - Backend, targeted: `test/integration/{tasks,projects,crm,custom_fields,assets_library}` + `test/contract/{tasks,crm,projects}` — 137 files; 129 green on the first run and the other 8 failed **in `beforeAll` only** (`setupBackendServer` over the 30 s hook budget while packages were being rebuilt beside it); all 8 green re-run (alone, then with `--maxWorkers=2`). The four files of the pinned `@@` lists green after their shape update. Tests: 1 433 passed, 1 expected fail, 0 failed.
+  - `pnpm --filter backend run test:unit:fast`: 361 files; after two fixes (`contribution-absent-owner.test.ts` supplies `assetReferenceRegistry` to the `tasks` composer; `list-filter-admin-only.test.ts` allows `tasks: src/backend/index.ts` — both lines in `foreign-module-changes.md` §G) every case green but two **30 s timeouts** of whole-tree scans: `module-package-manifest.test.ts › writes nothing in --check mode` (green re-run) and `check-module-boundary.test.ts › the tree itself` (56 s alone under that load; **green with `--testTimeout=180000`, 154/154**). **Phase 2's two expected reds are gone**: `permission-inventory` (`tasks:configure` now gates `POST /tasks/tags`) and `moved-module-tree › check-port-dependencies` (the three `degrades-without` edges resolve).
+  - `pnpm --filter '!backend' --no-bail run test`: every package green but 9 cases in 5 packages, each green re-run alone — `cli` `dev-all.test.ts` (10 s spawn timeouts), `cms-components` `column-placement`/`option-parity` (10 s timeouts), `storefront` `llms-txt-base` (259 ms against a 250 ms budget), `admin` `carts/cart-approval-policy-zone`, `crm/board-card-fields`, `orders/OrderCreatePage.product-browser`, `price_lists/price-book-duplicate`, `sales_channels/product-channels-zone` (async waits) — none touches this phase's code paths beyond `crm/board-card-fields`, which also passed in the full `admin/test/modules/crm` run (558/558).
+  - Admin targeted (Node 26, `--no-experimental-webstorage`): `test/modules/tasks` + `test/modules/projects` + `test/kit` — 62 files, 597 tests green; `test/modules/crm` 32 / 558 green.
+  - Checks: `check:naming`, `check:language`, **`check:port-dependencies` (now green — 0 violations)**, `check:off-state-coverage` (41/41), `check:error-translations`, `check:command-coverage`, `check:bundle-pairing`, `check:module-boundary`, `check:test-ownership`, `check:port-shape`, `check:port-catches`, `check:entry-presence`, `check:admin-surface`, `check:admin-zones`, `check:action-route-permissions`, `check:module-docs`, `check:shared-table-wipes`, `check:subscribe-seam`, `check:container-imports`, `check:platform-surface`, `check-release-intent --since origin/master` (0 violations): **green**. **`check:docs-translations` red** with `stale-translation:generated:module-reference/{crm,tasks}` — the Polish copies of the regenerated module-reference pages (`tasks` stale since T008, `crm` since this phase's new edge); left for T089, which owns the Polish documentation and runs this check.
+  - OpenAPI baseline regenerated (`UPDATE_OPENAPI_BASELINE=1`): only the eight new Tasks routes added (`/custom-field-filters`, `/lookups/{documents,mentionable}`, `/priorities`, `/tags`, `/{id}/attachments`, `/{id}/attachments/upload`, `/{id}/attachments/{attachmentId}`).
+  - Generated artefacts: `manifests:generate` (the `@fastify/multipart` peer; `README.md`), `pnpm install --lockfile-only`, `composer:generate` (`docs/docs/module-reference/crm.md`) — committed.
+  - Grep of `backend/test/**` and `admin/test/**` for the deleted `crm/src/admin/components/TagPicker.tsx`: no reference.
+  - Deferred: issue #498 (`@@` not offered for a module's own reference kind).
+
 
 ---
 
