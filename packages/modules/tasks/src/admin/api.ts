@@ -11,6 +11,7 @@ import type {
   TaskBoard,
   TaskBoardCardConfig,
   TaskComment,
+  TaskDeleteResult,
   TaskDetail,
   TaskListResponse,
   TaskPriorityConfig,
@@ -148,8 +149,19 @@ export const tasksApi = {
     return data(apiClient.put<{ data: TaskWorkflow }>(`${BASE}/transitions`, body));
   },
 
-  deleteTask(id: string): Promise<void> {
-    return apiClient.delete<void>(`${BASE}/${id}`);
+  /** Deletes a Task; its sub-tasks become top-level, and the answer says how many the caller may see. */
+  deleteTask(id: string): Promise<TaskDeleteResult> {
+    return data(apiClient.delete<{ data: TaskDeleteResult }>(`${BASE}/${id}`));
+  },
+
+  /** Relates two Tasks, shown on both — `tasks:write` on both; nothing changes when they already are. */
+  relate(taskId: string, otherId: string): Promise<void> {
+    return apiClient.put<void>(`${BASE}/${taskId}/relations/${otherId}`, {});
+  },
+
+  /** Removes the link between two related Tasks, from either side. */
+  unrelate(taskId: string, otherId: string): Promise<void> {
+    return apiClient.delete<void>(`${BASE}/${taskId}/relations/${otherId}`);
   },
 
   /** Active administrators by name or e-mail — `tasks:write`, the assignee picker's source. */

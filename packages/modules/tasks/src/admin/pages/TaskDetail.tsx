@@ -32,7 +32,9 @@ import { AdminZone } from '@endora-commerce/admin-kit/zones';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
 import { AssigneePicker, type ChosenAssignee } from '../components/AssigneePicker.js';
+import { RelatedTasksSection } from '../components/RelatedTasksSection.js';
 import { StatusBadge } from '../components/StatusBadge.js';
+import { SubtasksSection } from '../components/SubtasksSection.js';
 import { TaskAttachments } from '../components/TaskAttachments.js';
 import { TaskComments } from '../components/TaskComments.js';
 import { TaskCustomFields } from '../components/TaskCustomFields.js';
@@ -60,6 +62,8 @@ function allowedTargetsOf(failure: unknown): readonly string[] | null {
  * several assignees (R-2), the description in the kit's reference editor and
  * drawn with its references as links (R-4, R-5), the due date with an
  * optional time, the start date, the priority and the tags (User Story 1);
+ * **the sub-tasks** — the parent, the progress line and the visible sub-tasks
+ * — beside **the related Tasks** (User Story 5, R-15);
  * **the comments** (User Story 4, R-6), **the attachments** and **the custom
  * fields** (R-7, R-8); **the context card** — the record the Task belongs to as
  * its owner describes it, linked while it is available and named without a
@@ -101,6 +105,8 @@ export function TaskDetail(): ReactNode {
   const [writeError, setWriteError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  /** After a move that closed the Task: how many of its visible sub-tasks are still open (FR-028). */
+  const [openSubtasks, setOpenSubtasks] = useState(0);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [historyVersion, setHistoryVersion] = useState(0);
@@ -158,6 +164,7 @@ export function TaskDetail(): ReactNode {
     setBusy(true);
     setWriteError(null);
     setNotice('');
+    setOpenSubtasks(0);
     try {
       const next = await tasksApi.updateTask(id, body);
       setTask(next);
@@ -205,10 +212,13 @@ export function TaskDetail(): ReactNode {
     setBusy(true);
     setWriteError(null);
     setNotice('');
+    setOpenSubtasks(0);
     try {
-      const { task: next } = await tasksApi.changeStatus(id, task.status.code, to);
+      const { task: next, openSubtasks: stillOpen } = await tasksApi.changeStatus(id, task.status.code, to);
       setTask(next);
       setRefusedFrom(null);
+      // Closing a parent is allowed while sub-tasks are open; the operator is told how many (FR-028).
+      setOpenSubtasks(next.closed ? stillOpen : 0);
       setNotice(t('detail.statusChanged', { status: next.status.name }));
       setHistoryVersion((version) => version + 1);
       return true;
@@ -440,6 +450,12 @@ export function TaskDetail(): ReactNode {
                 </dl>
               )}
 
+              {openSubtasks > 0 ? (
+                <Alert>
+                  <AlertDescription>{t('detail.openSubtasks', { count: openSubtasks })}</AlertDescription>
+                </Alert>
+              ) : null}
+
               {writeError ? (
                 <Alert variant="destructive">
                   <AlertDescription>{writeError}</AlertDescription>
@@ -482,6 +498,34 @@ export function TaskDetail(): ReactNode {
                 </>
               )}
             </section>
+          </CardContent>
+        </Card>
+
+        <Card className="min-w-0 lg:col-span-2">
+          <CardContent className="pt-6">
+            <SubtasksSection
+              task={task}
+              canChange={canWrite}
+              onChange={(next, message): void => {
+                setTask(next);
+                setNotice(message);
+                setHistoryVersion((version) => version + 1);
+              }}
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="min-w-0">
+          <CardContent className="pt-6">
+            <RelatedTasksSection
+              task={task}
+              canChange={canWrite}
+              onChange={(message): void => {
+                setNotice(message);
+                setHistoryVersion((version) => version + 1);
+                void load();
+              }}
+            />
           </CardContent>
         </Card>
 
@@ -759,6 +803,9 @@ function DeleteTaskDialog(props: { task: TaskDetailData; onClose: () => void; on
     >
       <div className="space-y-3">
         <p className="text-sm">{t('delete.body', { number: props.task.number })}</p>
+        {props.task.subtasks.total > 0 ? (
+          <p className="text-sm">{t('delete.subtasks', { count: props.task.subtasks.total })}</p>
+        ) : null}
         {error ? (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>

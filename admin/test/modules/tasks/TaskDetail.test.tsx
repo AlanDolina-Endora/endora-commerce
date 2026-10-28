@@ -238,7 +238,8 @@ describe('TaskDetail — writing', () => {
   });
 
   it('deletes the Task after a confirmation and returns to the list', async () => {
-    deleteSpy.mockResolvedValue(undefined);
+    // `DELETE /tasks/:id` answers how many sub-tasks became top-level (165 US5).
+    deleteSpy.mockResolvedValue({ data: { subtasksDetached: 0 } });
     await renderPage();
     await userEvent.click(screen.getByRole('button', { name: en('detail.delete') }));
     const dialog = await screen.findByRole('dialog', { name: en('delete.title') });

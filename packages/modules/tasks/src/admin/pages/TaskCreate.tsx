@@ -1,7 +1,7 @@
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { UserCheck } from 'lucide-react';
-import type { CreateTaskBody } from '@endora-commerce/contracts';
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { CornerLeftUp, UserCheck } from 'lucide-react';
+import type { CreateTaskBody, TaskDetail } from '@endora-commerce/contracts';
 import { TASK_TITLE_MAX } from '@endora-commerce/contracts';
 import { CustomFieldValuesPanel } from '@endora-commerce/admin-kit/components';
 import { useAuth } from '@endora-commerce/admin-kit/lib';
@@ -24,6 +24,11 @@ import { errorMessage } from '../lib/labels.js';
  * time, the start date, the priority, the tags, the assignees and the `task`
  * custom fields (`specs/165-task-management/` User Story 1). The new Task
  * starts in the workflow's initial status and opens.
+ *
+ * `?parent=<taskId>` — *Add sub-task* on a Task's screen — creates the Task as
+ * a sub-task of that one (User Story 5), named at the top of the form. The
+ * server decides whether it may be: a parent the operator may not see, or one
+ * that would nest too deep, is refused in its own words.
  */
 export function TaskCreate(): ReactNode {
   const t = useTranslation('tasks');
@@ -31,6 +36,9 @@ export function TaskCreate(): ReactNode {
   const me = useCurrentAdmin();
   const { hasPermission } = useAuth();
   const { language } = useAppLanguage();
+  const [searchParams] = useSearchParams();
+  const parentTaskId = searchParams.get('parent');
+  const [parent, setParent] = useState<TaskDetail | null>(null);
   const ids = { title: useId(), assignee: useId() };
   const [title, setTitle] = useState('');
   const [fields, setFields] = useState<TaskFieldValues>(() => taskFieldValuesOf());
@@ -39,6 +47,21 @@ export function TaskCreate(): ReactNode {
   const [missingTitle, setMissingTitle] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The parent named at the top of the form; without it the Task is still sent under it.
+  useEffect(() => {
+    if (!parentTaskId) return;
+    let live = true;
+    tasksApi
+      .getTask(parentTaskId)
+      .then((loaded) => {
+        if (live) setParent(loaded);
+      })
+      .catch(() => undefined);
+    return (): void => {
+      live = false;
+    };
+  }, [parentTaskId]);
 
   const submit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
@@ -56,6 +79,7 @@ export function TaskCreate(): ReactNode {
       ...(fields.tagIds.length > 0 ? { tagIds: fields.tagIds } : {}),
       ...(assignees.length > 0 ? { assigneeIds: assignees.map((chosen) => chosen.id) } : {}),
       ...(Object.keys(customFieldValues).length > 0 ? { customFieldValues } : {}),
+      ...(parentTaskId ? { parentTaskId } : {}),
     };
     setBusy(true);
     setError(null);
@@ -74,6 +98,12 @@ export function TaskCreate(): ReactNode {
       <Card className="max-w-3xl">
         <CardContent className="pt-6">
           <form className="space-y-5" noValidate onSubmit={(event): void => void submit(event)}>
+            {parent ? (
+              <p className="flex items-center gap-2 text-sm">
+                <CornerLeftUp aria-hidden="true" className="size-4 text-muted-foreground" />
+                {t('create.parent', { number: parent.number, title: parent.title })}
+              </p>
+            ) : null}
             <p className="text-xs text-muted-foreground">{t('create.requiredHint')}</p>
 
             <div className="space-y-1">
