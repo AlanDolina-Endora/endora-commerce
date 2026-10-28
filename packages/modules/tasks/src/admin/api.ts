@@ -5,14 +5,15 @@ import type {
   TaskAssigneeOption,
   TaskDetail,
   TaskListResponse,
-  TaskStatus,
+  TaskStatusChangeResult,
   TaskSummary,
+  TaskWorkflow,
   UpdateTaskBody,
 } from '@endora-commerce/contracts';
 
 /**
  * The HTTP calls of the Tasks admin screens
- * (`specs/163-projects-and-tasks/contracts/admin-api.md` §1).
+ * (`specs/165-task-management/contracts/admin-api.md` §1, §4).
  *
  * Every shape is `@endora-commerce/contracts`' — the schemas the backend
  * validates with. Single records are `{ data }` envelopes; the list answers
@@ -24,7 +25,8 @@ const BASE = '/api/v1/admin/tasks';
 
 export interface TaskListParams {
   q?: string;
-  status?: readonly TaskStatus[];
+  /** Workflow status codes, any of. */
+  status?: readonly string[];
   /** An administrator's id, `me` or `none`. */
   assignee?: string;
   overdue?: boolean;
@@ -66,9 +68,19 @@ export const tasksApi = {
     return data(apiClient.post<{ data: TaskDetail }>(BASE, body));
   },
 
-  /** Any of the fields, at least one; answers the Task as it is now. */
+  /** Any of the fields, at least one; answers the Task as it is now. A status is not one of them. */
   updateTask(id: string, body: UpdateTaskBody): Promise<TaskDetail> {
     return data(apiClient.patch<{ data: TaskDetail }>(`${BASE}/${id}`, body));
+  },
+
+  /** A move through the workflow, from the status the caller saw (409 when the Task left it). */
+  changeStatus(id: string, from: string, to: string): Promise<TaskStatusChangeResult> {
+    return data(apiClient.post<{ data: TaskStatusChangeResult }>(`${BASE}/${id}/status`, { from, to }));
+  },
+
+  /** The configured statuses, in order, and the moves between them — `tasks:read`. */
+  workflow(): Promise<TaskWorkflow> {
+    return data(apiClient.get<{ data: TaskWorkflow }>(`${BASE}/workflow`));
   },
 
   deleteTask(id: string): Promise<void> {

@@ -15,6 +15,8 @@ import {
   historyPage,
   renderTasks,
   taskDetail,
+  STATUS,
+  workflow,
 } from './tasks-fixtures';
 
 /**
@@ -30,6 +32,7 @@ import {
  */
 
 const getSpy = vi.fn();
+const postSpy = vi.fn();
 const patchSpy = vi.fn();
 const deleteSpy = vi.fn();
 
@@ -41,7 +44,7 @@ vi.mock('@endora-commerce/admin-kit/lib', async () => {
     ...actual,
     apiClient: {
       get: (...args: unknown[]) => getSpy(...args),
-      post: vi.fn(),
+      post: (...args: unknown[]) => postSpy(...args),
       put: vi.fn(),
       patch: (...args: unknown[]) => patchSpy(...args),
       delete: (...args: unknown[]) => deleteSpy(...args),
@@ -53,15 +56,17 @@ const { ApiError } = await import('@endora-commerce/admin-kit/lib');
 const { TaskDetail } = await import('../../../../packages/modules/tasks/src/admin/pages/TaskDetail');
 
 const TASK_PATH = `/api/v1/admin/tasks/${TASK_ID}`;
+const WORKFLOW_PATH = '/api/v1/admin/tasks/workflow';
 
 let current: TaskDetailData = taskDetail();
 
 beforeEach(() => {
   setMobileViewport(false);
-  for (const spy of [getSpy, patchSpy, deleteSpy]) spy.mockReset();
+  for (const spy of [getSpy, postSpy, patchSpy, deleteSpy]) spy.mockReset();
   current = taskDetail();
   getSpy.mockImplementation((path: string) => {
     if (path === TASK_PATH) return Promise.resolve({ data: current });
+    if (path === WORKFLOW_PATH) return Promise.resolve({ data: workflow() });
     if (path.startsWith(`${TASK_PATH}/history`)) {
       return Promise.resolve(
         historyPage([
@@ -138,11 +143,12 @@ describe('TaskDetail — the header and the context card', () => {
 });
 
 describe('TaskDetail — writing', () => {
-  it('changes the status at once, and shows the answer', async () => {
-    patchSpy.mockResolvedValue({ data: taskDetail({ status: 'in_progress' }) });
+  it('changes the status at once, through the workflow move, and shows the answer', async () => {
+    postSpy.mockResolvedValue({ data: { task: taskDetail({ status: STATUS.in_progress }), openSubtasks: 0 } });
     await renderPage();
+    await screen.findByRole('option', { name: STATUS.in_progress.name });
     await userEvent.selectOptions(screen.getByLabelText(en('field.status')), 'in_progress');
-    expect(patchSpy).toHaveBeenCalledWith(TASK_PATH, { status: 'in_progress' });
+    expect(postSpy).toHaveBeenCalledWith(`${TASK_PATH}/status`, { from: 'todo', to: 'in_progress' });
     await waitFor(() =>
       expect((screen.getByLabelText(en('field.status')) as HTMLSelectElement).value).toBe('in_progress'),
     );
@@ -161,11 +167,11 @@ describe('TaskDetail — writing', () => {
   });
 
   it('assigns the Task to the caller in one step', async () => {
-    current = taskDetail({ assignee: null });
-    patchSpy.mockResolvedValue({ data: taskDetail({ assignee: { id: ME_ID, name: 'Ada Min', active: true } }) });
+    current = taskDetail({ assignees: [] });
+    patchSpy.mockResolvedValue({ data: taskDetail({ assignees: [{ id: ME_ID, name: 'Ada Min', active: true }] }) });
     await renderPage();
     await userEvent.click(screen.getByRole('button', { name: en('detail.assignToMe') }));
-    expect(patchSpy).toHaveBeenCalledWith(TASK_PATH, { assignedAdminUserId: ME_ID });
+    expect(patchSpy).toHaveBeenCalledWith(TASK_PATH, { addAssigneeIds: [ME_ID] });
   });
 
   it("shows a refusal in the server's words", async () => {
@@ -177,7 +183,7 @@ describe('TaskDetail — writing', () => {
         },
       }),
     );
-    current = taskDetail({ assignee: null });
+    current = taskDetail({ assignees: [] });
     await renderPage();
     await userEvent.click(screen.getByRole('button', { name: en('detail.assignToMe') }));
     expect(
@@ -207,7 +213,7 @@ describe('TaskDetail — writing', () => {
   it('is read-only for a reader: no status control, no edit, no delete', async () => {
     await renderPage(['tasks:read']);
     expect(screen.queryByLabelText(en('field.status'))).toBeNull();
-    expect(screen.getAllByText(en('status.todo')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(STATUS.todo.name).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: en('detail.edit') })).toBeNull();
     expect(screen.queryByRole('button', { name: en('detail.delete') })).toBeNull();
     expect(screen.getByText(en('detail.readOnly'))).toBeTruthy();
@@ -225,6 +231,7 @@ describe('TaskDetail — history and the zone', () => {
   it('shows what each entry changed, field by field, and reads earlier entries a page at a time (kit RecordHistory)', async () => {
     getSpy.mockImplementation((path: string) => {
       if (path === TASK_PATH) return Promise.resolve({ data: current });
+      if (path === WORKFLOW_PATH) return Promise.resolve({ data: workflow() });
       if (path.startsWith(`${TASK_PATH}/history`)) {
         const second = path.includes('cursor=');
         return Promise.resolve({
@@ -249,7 +256,8 @@ describe('TaskDetail — history and the zone', () => {
     const history = screen.getByRole('region', { name: en('detail.history') });
     expect(await within(history).findByRole('heading', { name: en('auditLog.tasks.task.status_change') })).toBeTruthy();
     expect(within(history).getByText(en('history.field.status'))).toBeTruthy();
-    expect(within(history).getByText(en('status.done'))).toBeTruthy();
+    // The workflow's own name for the code the entry stored (165 R-1).
+    expect(await within(history).findByText(STATUS.done.name)).toBeTruthy();
     // An identifier is never a row.
     expect(within(history).queryByText(PROJECT_ID)).toBeNull();
     await userEvent.click(within(history).getByRole('button', { name: core('history.more') }));

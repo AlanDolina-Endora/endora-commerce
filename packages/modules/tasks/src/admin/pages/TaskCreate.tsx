@@ -16,7 +16,7 @@ import {
 } from '@endora-commerce/admin-kit/ui';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
-import { AssigneePicker } from '../components/AssigneePicker.js';
+import { AssigneePicker, type ChosenAssignee } from '../components/AssigneePicker.js';
 import { useCurrentAdmin } from '../lib/current-admin.js';
 import { errorMessage } from '../lib/labels.js';
 
@@ -37,7 +37,7 @@ export function TaskCreate(): ReactNode {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [dueOn, setDueOn] = useState('');
-  const [assignee, setAssignee] = useState<{ id: string; name: string } | null>(null);
+  const [assignees, setAssignees] = useState<ChosenAssignee[]>([]);
   const [missingTitle, setMissingTitle] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +52,7 @@ export function TaskCreate(): ReactNode {
       title: title.trim(),
       ...(description.trim() ? { description } : {}),
       ...(dueOn ? { dueOn } : {}),
-      ...(assignee ? { assignedAdminUserId: assignee.id } : {}),
+      ...(assignees.length > 0 ? { assigneeIds: assignees.map((chosen) => chosen.id) } : {}),
     };
     setBusy(true);
     setError(null);
@@ -119,21 +119,20 @@ export function TaskCreate(): ReactNode {
                 <Label htmlFor={ids.assignee}>{t('field.assignee')}</Label>
                 <AssigneePicker
                   id={ids.assignee}
-                  value={assignee?.id ?? null}
-                  selectedLabel={assignee?.name ?? ''}
-                  onChange={setAssignee}
+                  value={assignees}
+                  onChange={setAssignees}
                   ariaDescribedBy={`${ids.assignee}-hint`}
                 />
                 <p id={`${ids.assignee}-hint`} className="text-xs text-muted-foreground">
                   {t('field.assigneeHint')}
                 </p>
-                {me && assignee?.id !== me.id ? (
+                {me && !assignees.some((chosen) => chosen.id === me.id) ? (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     className="min-h-11 px-2 sm:min-h-8"
-                    onClick={(): void => setAssignee(me)}
+                    onClick={(): void => setAssignees([...assignees, me])}
                   >
                     <UserCheck aria-hidden="true" />
                     {t('detail.assignToMe')}

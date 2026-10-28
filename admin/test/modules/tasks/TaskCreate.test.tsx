@@ -68,7 +68,7 @@ describe('TaskCreate', () => {
       title: 'Order the racking',
       description: 'Three bays.',
       dueOn: '2026-11-05',
-      assignedAdminUserId: ME_ID,
+      assigneeIds: [ME_ID],
     });
     expect(await screen.findByText('task screen')).toBeTruthy();
   });

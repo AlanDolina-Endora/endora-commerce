@@ -3,11 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Pencil, Trash2, UserCheck } from 'lucide-react';
 import {
   TASK_DESCRIPTION_MAX,
-  TASK_STATUSES,
   TASK_TITLE_MAX,
   type RecordHistoryEntry,
   type TaskDetail as TaskDetailData,
-  type TaskStatus,
+  type TaskWorkflow,
   type UpdateTaskBody,
 } from '@endora-commerce/contracts';
 import { formatDateTime, useAuth } from '@endora-commerce/admin-kit/lib';
@@ -27,7 +26,7 @@ import { ModalDialog, RecordHistory, recordHistoryChanges, useRecordHistory } fr
 import { AdminZone } from '@endora-commerce/admin-kit/zones';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
-import { AssigneePicker } from '../components/AssigneePicker.js';
+import { AssigneePicker, type ChosenAssignee } from '../components/AssigneePicker.js';
 import { StatusBadge } from '../components/StatusBadge.js';
 import { useCurrentAdmin } from '../lib/current-admin.js';
 import { calendarDateLabel, errorMessage } from '../lib/labels.js';
@@ -39,8 +38,10 @@ const LIST_PATH = '/tasks';
  * `contracts/admin-surfaces.md` §2–§3).
  *
  * Top to bottom: **the header** — title, number and status; **the details** —
- * a status control that writes at once, and the rest edited in place, sending
- * only what changed; **the context card** — the record the Task belongs to as
+ * a status control that writes at once and offers only the moves the
+ * configured workflow permits from where the Task is (`specs/165-task-management/`
+ * research R-1), and the rest edited in place, sending only what changed —
+ * several assignees among them (R-2); **the context card** — the record the Task belongs to as
  * its owner describes it, linked while it is available and named without a
  * link when it is not, with the group (a Project's Stage) and the note the
  * owner wrote; **the history**; and last the zone `task.detail.after`, which
@@ -57,13 +58,15 @@ export function TaskDetail(): ReactNode {
   const { language } = useAppLanguage();
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
-  const canWrite = hasPermission('tasks:write');
+  const [task, setTask] = useState<TaskDetailData | null>(null);
+  // Someone else's private Task is read-only even to a holder of `tasks:write` (R-3).
+  const canWrite = hasPermission('tasks:write') && (task === null || task.permissions.canChange);
   const me = useCurrentAdmin();
   const statusId = useId();
   const detailsHeadingId = useId();
   const contextHeadingId = useId();
   const historyHeadingId = useId();
-  const [task, setTask] = useState<TaskDetailData | null>(null);
+  const [workflow, setWorkflow] = useState<TaskWorkflow | null>(null);
   // A Task of a record is the record owner's to delete (`canChangeTasks`, T147):
   // no Delete the server would refuse.
   const mayDelete = task === null || task.context === null || task.context.canChangeTasks;
@@ -95,6 +98,27 @@ export function TaskDetail(): ReactNode {
     setLoading(true);
     void load();
   }, [load]);
+
+  // The statuses and moves of the workflow, for the status control and the history.
+  useEffect(() => {
+    let live = true;
+    tasksApi
+      .workflow()
+      .then((loaded) => {
+        if (live) setWorkflow(loaded);
+      })
+      // Without it the control offers only the current status; the screen still works.
+      .catch(() => undefined);
+    return (): void => {
+      live = false;
+    };
+  }, []);
+
+  /** A status's name in the reader's language, from the workflow; the code when it is not there. */
+  const statusName = (code: string): string => {
+    const status = workflow?.statuses.find((candidate) => candidate.code === code);
+    return status ? status.name[language] || status.defaultName : code;
+  };
 
   /** One write; the answer is the Task as it is now. Resolves `true` when it was made. */
   const write = async (body: UpdateTaskBody, done: (next: TaskDetailData) => string): Promise<boolean> => {
@@ -144,11 +168,38 @@ export function TaskDetail(): ReactNode {
     );
   }
 
-  const changeStatus = (status: TaskStatus): Promise<boolean> =>
-    write({ status }, () => t('detail.statusChanged', { status: t(`status.${status}`) }));
+  const changeStatus = async (to: string): Promise<boolean> => {
+    setBusy(true);
+    setWriteError(null);
+    setNotice('');
+    try {
+      const { task: next } = await tasksApi.changeStatus(id, task.status.code, to);
+      setTask(next);
+      setNotice(t('detail.statusChanged', { status: next.status.name }));
+      setHistoryVersion((version) => version + 1);
+      return true;
+    } catch (failure) {
+      setWriteError(errorMessage(failure, t('detail.saveError')));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const assignToMe = (): Promise<boolean> =>
-    me ? write({ assignedAdminUserId: me.id }, () => t('detail.saved')) : Promise.resolve(false);
+    me ? write({ addAssigneeIds: [me.id] }, () => t('detail.saved')) : Promise.resolve(false);
+
+  /** The current status, then the moves the workflow permits from it. */
+  const statusOptions = [
+    { code: task.status.code, name: task.status.name },
+    ...(workflow?.transitions ?? [])
+      .filter((edge) => edge.from === task.status.code)
+      .map((edge) => workflow!.statuses.find((status) => status.code === edge.to))
+      .filter((status): status is NonNullable<typeof status> => status !== undefined)
+      .sort((a, b) => a.weight - b.weight)
+      .map((status) => ({ code: status.code, name: status.name[language] || status.defaultName })),
+  ];
+  const assignedToMe = me !== null && task.assignees.some((person) => person.id === me.id);
 
   return (
     <>
@@ -216,13 +267,13 @@ export function TaskDetail(): ReactNode {
                   <Label htmlFor={statusId}>{t('field.status')}</Label>
                   <Select
                     id={statusId}
-                    value={task.status}
+                    value={task.status.code}
                     disabled={busy}
-                    onChange={(event): void => void changeStatus(event.target.value as TaskStatus)}
+                    onChange={(event): void => void changeStatus(event.target.value)}
                   >
-                    {TASK_STATUSES.map((status) => (
-                      <option key={status} value={status}>
-                        {t(`status.${status}`)}
+                    {statusOptions.map((status) => (
+                      <option key={status.code} value={status.code}>
+                        {status.name}
                       </option>
                     ))}
                   </Select>
@@ -269,17 +320,22 @@ export function TaskDetail(): ReactNode {
                   <div className="space-y-0.5">
                     <dt className="text-xs font-medium text-muted-foreground">{t('field.assignee')}</dt>
                     <dd className="flex flex-wrap items-center gap-2">
-                      {task.assignee ? (
+                      {task.assignees.length > 0 ? (
                         <span className="[overflow-wrap:anywhere]">
-                          {task.assignee.name}
-                          {task.assignee.active ? null : (
-                            <span className="text-muted-foreground"> ({t('detail.inactive')})</span>
-                          )}
+                          {task.assignees.map((person, index) => (
+                            <span key={person.id}>
+                              {index > 0 ? ', ' : null}
+                              {person.name}
+                              {person.active ? null : (
+                                <span className="text-muted-foreground"> ({t('detail.inactive')})</span>
+                              )}
+                            </span>
+                          ))}
                         </span>
                       ) : (
                         <span className="text-muted-foreground">{t('list.unassigned')}</span>
                       )}
-                      {canWrite && me && task.assignee?.id !== me.id ? (
+                      {canWrite && me && !assignedToMe ? (
                         <Button
                           type="button"
                           variant="ghost"
@@ -356,7 +412,7 @@ export function TaskDetail(): ReactNode {
               <h2 id={historyHeadingId} className="text-base font-semibold">
                 {t('detail.history')}
               </h2>
-              <TaskHistory taskId={task.id} version={historyVersion} />
+              <TaskHistory taskId={task.id} version={historyVersion} statusName={statusName} />
             </section>
           </CardContent>
         </Card>
@@ -388,7 +444,7 @@ interface TaskEditFormProps {
   onSave: (body: UpdateTaskBody) => Promise<void>;
 }
 
-/** The Task's title, description, due date and assignee, edited together. */
+/** The Task's title, description, due date and assignees, edited together. */
 function TaskEditForm(props: TaskEditFormProps): ReactNode {
   const { task, busy } = props;
   const t = useTranslation('tasks');
@@ -397,8 +453,8 @@ function TaskEditForm(props: TaskEditFormProps): ReactNode {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [dueOn, setDueOn] = useState(task.dueOn ?? '');
-  const [assignee, setAssignee] = useState<{ id: string; name: string } | null>(
-    task.assignee ? { id: task.assignee.id, name: task.assignee.name } : null,
+  const [assignees, setAssignees] = useState<ChosenAssignee[]>(
+    task.assignees.map((person) => ({ id: person.id, name: person.name })),
   );
   const [missingTitle, setMissingTitle] = useState(false);
 
@@ -411,7 +467,9 @@ function TaskEditForm(props: TaskEditFormProps): ReactNode {
       ...(title.trim() !== task.title ? { title: title.trim() } : {}),
       ...(description !== task.description ? { description } : {}),
       ...((dueOn || null) !== task.dueOn ? { dueOn: dueOn || null } : {}),
-      ...((assignee?.id ?? null) !== (task.assignee?.id ?? null) ? { assignedAdminUserId: assignee?.id ?? null } : {}),
+      ...(assignees.map((chosen) => chosen.id).join(',') !== task.assignees.map((person) => person.id).join(',')
+        ? { assigneeIds: assignees.map((chosen) => chosen.id) }
+        : {}),
     };
     void props.onSave(body);
   };
@@ -462,9 +520,8 @@ function TaskEditForm(props: TaskEditFormProps): ReactNode {
           <Label htmlFor={ids.assignee}>{t('field.assignee')}</Label>
           <AssigneePicker
             id={ids.assignee}
-            value={assignee?.id ?? null}
-            selectedLabel={assignee?.name ?? ''}
-            onChange={setAssignee}
+            value={assignees}
+            onChange={setAssignees}
             ariaDescribedBy={`${ids.assignee}-hint`}
           />
           <p id={`${ids.assignee}-hint`} className="text-xs text-muted-foreground">
@@ -495,7 +552,7 @@ const SHOWN_HISTORY_FIELDS: ReadonlySet<string> = new Set(['title', 'status', 'd
  * the entry's heading says an assignment happened. Read again after every
  * write made on this screen.
  */
-function TaskHistory(props: { taskId: string; version: number }): ReactNode {
+function TaskHistory(props: { taskId: string; version: number; statusName: (code: string) => string }): ReactNode {
   const t = useTranslation('tasks');
   const { language } = useAppLanguage();
   const { taskId } = props;
@@ -504,7 +561,7 @@ function TaskHistory(props: { taskId: string; version: number }): ReactNode {
 
   const renderValue = (field: string, raw: unknown): ReactNode => {
     if (raw === null || raw === undefined || raw === '') return '—';
-    if (field === 'status') return t(`status.${String(raw)}`);
+    if (field === 'status') return props.statusName(String(raw));
     if (field === 'dueOn' && typeof raw === 'string') return calendarDateLabel(raw, language);
     if (field === 'completedAt' && typeof raw === 'string') return formatDateTime(raw);
     return String(raw);

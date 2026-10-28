@@ -3,7 +3,14 @@ import { cleanup, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { zoneComponent, type AdminContributions } from '@endora-commerce/admin-kit/contributions';
 import { setMobileViewport } from '../../setup';
-import { TASK_ID, en, historyPage, renderTasks, taskDetail } from './tasks-fixtures';
+import {
+  TASK_ID,
+  en,
+  historyPage,
+  renderTasks,
+  taskDetail,
+  workflow,
+} from './tasks-fixtures';
 
 /**
  * `task.detail.after` — the stack of panels a Task's screen ends with
@@ -81,6 +88,7 @@ beforeEach(() => {
   getSpy.mockReset();
   getSpy.mockImplementation((path: string) => {
     if (path === `/api/v1/admin/tasks/${TASK_ID}`) return Promise.resolve({ data: taskDetail() });
+    if (path === '/api/v1/admin/tasks/workflow') return Promise.resolve({ data: workflow() });
     if (path.includes('/history')) return Promise.resolve(historyPage([]));
     return Promise.reject(new Error(`unexpected GET ${path}`));
   });

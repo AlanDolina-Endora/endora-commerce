@@ -2,7 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { setMobileViewport } from '../../setup';
-import { OTHER_TASK_ID, PROJECT_ID, TASK_ID, en, renderTasks, taskSummary } from './tasks-fixtures';
+import {
+  OTHER_TASK_ID,
+  PROJECT_ID,
+  TASK_ID,
+  en,
+  renderTasks,
+  taskSummary,
+  STATUS,
+  workflow,
+} from './tasks-fixtures';
 
 /**
  * The Tasks list (`specs/163-projects-and-tasks/`, User Story 2 — tasks T064
@@ -36,27 +45,37 @@ vi.mock('@endora-commerce/admin-kit/lib', async () => {
 const { TasksList } = await import('../../../../packages/modules/tasks/src/admin/pages/TasksList');
 
 const LIST_PATH = '/api/v1/admin/tasks';
+const WORKFLOW_PATH = '/api/v1/admin/tasks/workflow';
+
+/** `GET /tasks/workflow` answers the seeded workflow; every other read is the list's answer. */
+function answerList(list: (path: string) => unknown): void {
+  getSpy.mockImplementation((path: string) =>
+    Promise.resolve(path === WORKFLOW_PATH ? { data: workflow() } : list(path)),
+  );
+}
 
 const UNAVAILABLE = taskSummary({
   id: OTHER_TASK_ID,
   number: 'TSK-000002',
   title: 'Sign the handover',
-  status: 'in_progress',
+  status: STATUS.in_progress,
   dueOn: '2026-10-01',
   overdue: true,
-  assignee: null,
+  assignees: [],
   context: { type: 'project', available: false, label: 'Unavailable record', href: null, groupLabel: null },
 });
 
 beforeEach(() => {
   setMobileViewport(false);
   getSpy.mockReset();
-  getSpy.mockResolvedValue({ items: [taskSummary(), UNAVAILABLE], nextCursor: null });
+  answerList(() => ({ items: [taskSummary(), UNAVAILABLE], nextCursor: null }));
 });
 
 /** The query of the last list read, as parameters. */
 function lastQuery(): URLSearchParams {
-  const paths = getSpy.mock.calls.map(([path]) => path as string).filter((path) => path.startsWith(LIST_PATH));
+  const paths = getSpy.mock.calls
+    .map(([path]) => path as string)
+    .filter((path) => path.startsWith(LIST_PATH) && path !== WORKFLOW_PATH);
   const last = paths[paths.length - 1] ?? '';
   return new URLSearchParams(last.split('?')[1] ?? '');
 }
@@ -67,7 +86,8 @@ describe('TasksList', () => {
     const link = await screen.findByRole('link', { name: 'TSK-000001' });
     expect(link.getAttribute('href')).toBe(`/tasks/${TASK_ID}`);
     expect(screen.getByText('Order the racking')).toBeTruthy();
-    expect(screen.getAllByText(en('status.todo')).length).toBeGreaterThan(0);
+    // The workflow's own name, served with the Task (165 R-1).
+    expect(screen.getAllByText(STATUS.todo.name).length).toBeGreaterThan(0);
     expect(screen.getByText('Anna Nowak')).toBeTruthy();
     const unassigned = screen.getByText('Sign the handover').closest('tr') as HTMLElement;
     expect(within(unassigned).getByText(en('list.unassigned'))).toBeTruthy();
@@ -91,6 +111,8 @@ describe('TasksList', () => {
   it('asks the server for the filters chosen', async () => {
     renderTasks(<TasksList />);
     await screen.findByText('Order the racking');
+    // The status filter offers the configured workflow's statuses.
+    await screen.findByRole('option', { name: STATUS.done.name });
     await userEvent.selectOptions(screen.getByLabelText(en('list.filter.status')), 'done');
     await waitFor(() => expect(lastQuery().getAll('status')).toEqual(['done']));
     await userEvent.selectOptions(screen.getByLabelText(en('list.filter.assignee')), 'me');
@@ -102,12 +124,8 @@ describe('TasksList', () => {
   });
 
   it('pages forward with the cursor the server answered, and back', async () => {
-    getSpy.mockImplementation((path: string) =>
-      Promise.resolve(
-        path.includes('cursor=c2')
-          ? { items: [UNAVAILABLE], nextCursor: null }
-          : { items: [taskSummary()], nextCursor: 'c2' },
-      ),
+    answerList((path) =>
+      path.includes('cursor=c2') ? { items: [UNAVAILABLE], nextCursor: null } : { items: [taskSummary()], nextCursor: 'c2' },
     );
     renderTasks(<TasksList />);
     await screen.findByText('Order the racking');
@@ -129,9 +147,10 @@ describe('TasksList', () => {
   });
 
   it('says there is nothing yet, and offers to clear filters when filtering found nothing', async () => {
-    getSpy.mockResolvedValue({ items: [], nextCursor: null });
+    answerList(() => ({ items: [], nextCursor: null }));
     renderTasks(<TasksList />);
     expect(await screen.findByText(en('list.empty.title'))).toBeTruthy();
+    await screen.findByRole('option', { name: STATUS.done.name });
     await userEvent.selectOptions(screen.getByLabelText(en('list.filter.status')), 'done');
     expect(await screen.findByText(en('list.noResults.title'))).toBeTruthy();
   });

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ListChecks, Plus, SearchX, X } from 'lucide-react';
-import { TASK_STATUSES, type TaskStatus, type TaskSummary } from '@endora-commerce/contracts';
+import type { TaskStatusConfig, TaskSummary } from '@endora-commerce/contracts';
 import { useAuth } from '@endora-commerce/admin-kit/lib';
 import {
   Alert,
@@ -16,7 +16,7 @@ import {
   Select,
 } from '@endora-commerce/admin-kit/ui';
 import { ResponsiveTable } from '@endora-commerce/admin-kit/components';
-import { useTranslation } from '@endora-commerce/admin-kit/i18n';
+import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi, type TaskListParams } from '../api.js';
 import { errorMessage } from '../lib/labels.js';
 import { useTaskColumns } from '../components/task-columns.js';
@@ -28,7 +28,8 @@ type AssigneeFilter = '' | 'me' | 'none';
 
 interface Filters {
   q: string;
-  status: TaskStatus | '';
+  /** A workflow status code, or `''` for any. */
+  status: string;
   assignee: AssigneeFilter;
   overdue: boolean;
 }
@@ -40,7 +41,8 @@ const NO_FILTERS: Filters = { q: '', status: '', assignee: '', overdue: false };
  * `contracts/admin-surfaces.md` §2).
  *
  * Every Task the operator may see — the server hides a Task whose context they
- * may not see, so nothing here filters for safety — narrowed by status,
+ * may not see, and another admin's draft or private Task, so nothing here
+ * filters for safety — narrowed by a status of the configured workflow,
  * assignee ("me", "unassigned"), "only overdue" and a search over number and
  * title. The list is keyset-paged and knows no total, so it pages forward and
  * back by the cursors it was given.
@@ -51,6 +53,23 @@ export function TasksList(): ReactNode {
   const { hasPermission } = useAuth();
   const canWrite = hasPermission('tasks:write');
   const columns = useTaskColumns();
+  const { language } = useAppLanguage();
+  /** The workflow's statuses, in order — the status filter's options. */
+  const [statuses, setStatuses] = useState<TaskStatusConfig[]>([]);
+
+  useEffect(() => {
+    let live = true;
+    tasksApi
+      .workflow()
+      .then((workflow) => {
+        if (live) setStatuses(workflow.statuses);
+      })
+      // Without the workflow the filter offers "all statuses" only; the list still loads.
+      .catch(() => undefined);
+    return (): void => {
+      live = false;
+    };
+  }, []);
 
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [search, setSearch] = useState('');
@@ -179,12 +198,12 @@ export function TasksList(): ReactNode {
               <Select
                 id="tasks-status"
                 value={filters.status}
-                onChange={(event): void => change({ status: event.target.value as TaskStatus | '' })}
+                onChange={(event): void => change({ status: event.target.value })}
               >
                 <option value="">{t('list.filter.statusAll')}</option>
-                {TASK_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {t(`status.${status}`)}
+                {statuses.map((status) => (
+                  <option key={status.code} value={status.code}>
+                    {status.name[language] || status.defaultName}
                   </option>
                 ))}
               </Select>

@@ -60,8 +60,8 @@ export function useTaskColumns(): ResponsiveColumn<TaskSummary>[] {
       id: 'assignee',
       header: t('list.col.assignee'),
       render: (row) =>
-        row.assignee ? (
-          <span className="[overflow-wrap:anywhere]">{row.assignee.name}</span>
+        row.assignees.length > 0 ? (
+          <span className="[overflow-wrap:anywhere]">{row.assignees.map((person) => person.name).join(', ')}</span>
         ) : (
           <span className="text-muted-foreground">{t('list.unassigned')}</span>
         ),

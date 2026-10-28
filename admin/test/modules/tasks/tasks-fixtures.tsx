@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import type { ReactElement } from 'react';
 import type { RenderResult } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import type { RecordHistoryEntry, TaskDetail, TaskSummary } from '@endora-commerce/contracts';
+import type { RecordHistoryEntry, TaskDetail, TaskStatusRef, TaskSummary, TaskWorkflow } from '@endora-commerce/contracts';
 import { AppLanguageContext } from '@endora-commerce/admin-kit/i18n';
 import { renderWithI18n } from '../../helpers/render-with-i18n';
 import { adminSession, modulePresence, withSession } from '../../helpers/render-with-session';
@@ -90,15 +90,45 @@ export const STAGE_ID = '00000000-0000-4000-8000-000000000d01';
 export const ME_ID = '00000000-0000-4000-8000-00000000ad01';
 export const ANNA_ID = '00000000-0000-4000-8000-000000000c01';
 
+/** The seeded workflow's statuses as a Task carries them (`specs/165-task-management/` data-model §3). */
+export const STATUS: Record<'todo' | 'in_progress' | 'done' | 'cancelled', TaskStatusRef> = {
+  todo: { code: 'todo', name: 'To do', color: '#64748b', category: 'open' },
+  in_progress: { code: 'in_progress', name: 'In progress', color: '#f59e0b', category: 'open' },
+  done: { code: 'done', name: 'Done', color: '#10b981', category: 'done' },
+  cancelled: { code: 'cancelled', name: 'Cancelled', color: '#94a3b8', category: 'cancelled' },
+};
+
+/** `GET /tasks/workflow` — the seeded four statuses, every move between them. */
+export function workflow(): TaskWorkflow {
+  const codes = ['todo', 'in_progress', 'done', 'cancelled'] as const;
+  return {
+    statuses: codes.map((code, index) => ({
+      code,
+      name: { en: STATUS[code].name },
+      defaultName: STATUS[code].name,
+      category: STATUS[code].category,
+      isInitial: code === 'todo',
+      weight: (index + 1) * 10,
+      color: STATUS[code].color,
+      inUseCount: 0,
+    })),
+    transitions: codes.flatMap((from) => codes.filter((to) => to !== from).map((to) => ({ from, to }))),
+  };
+}
+
 export function taskSummary(overrides: Partial<TaskSummary> = {}): TaskSummary {
   return {
     id: TASK_ID,
     number: 'TSK-000001',
     title: 'Order the racking',
-    status: 'todo',
+    status: STATUS.todo,
+    closed: false,
     dueOn: '2026-11-05',
+    dueAt: null,
     overdue: false,
-    assignee: { id: ANNA_ID, name: 'Anna Nowak', active: true },
+    assignees: [{ id: ANNA_ID, name: 'Anna Nowak', active: true }],
+    priority: null,
+    tags: [],
     context: {
       type: 'project',
       available: true,
@@ -106,6 +136,12 @@ export function taskSummary(overrides: Partial<TaskSummary> = {}): TaskSummary {
       href: `/projects/${PROJECT_ID}`,
       groupLabel: 'Design',
     },
+    parent: null,
+    subtasks: { closed: 0, total: 0 },
+    draft: false,
+    private: false,
+    createdAt: '2026-10-20T10:00:00.000Z',
+    updatedAt: '2026-10-20T10:00:00.000Z',
     ...overrides,
   };
 }
@@ -127,8 +163,18 @@ export function taskDetail(overrides: Partial<TaskDetail> = {}): TaskDetail {
       canChangeTasks: true,
     },
     contextNote: null,
+    startOn: null,
+    customFieldValues: {},
+    links: [],
+    relatedTasks: [],
+    subtaskItems: [],
+    attachmentsCount: 0,
+    commentsCount: 0,
+    reminders: [],
     createdBy: { id: ME_ID, name: 'Ada Min' },
+    publishedAt: '2026-10-20T10:00:00.000Z',
     completedAt: null,
+    permissions: { canChange: true, canDelete: true, canPublish: false },
     createdAt: '2026-10-20T10:00:00.000Z',
     updatedAt: '2026-10-20T10:00:00.000Z',
     ...overrides,
