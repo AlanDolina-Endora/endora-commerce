@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PRICING_SETTING_CODES, type DisplayMode } from '@endora-commerce/contracts';
 import { SalesChannel, Setting, SettingValue } from '@endora-commerce/platform/kernel';
 import { PriceDisplayModeOverride } from '../../../helpers/package-entities.js';
@@ -160,11 +160,20 @@ describe('§10.19 — display mode `none` withholds every amount (#491)', () => 
     await teardownBackendServer(h);
   });
 
-  beforeEach(async () => {
+  /**
+   * Scoped to the targets this file writes, never a table wipe (issue #166) —
+   * and after each case as well as before it: the harness does not empty
+   * `price_display_mode_overrides` between files, and the probe product's id is
+   * fixed, so an override left behind would withhold it in the next file.
+   */
+  async function reset(): Promise<void> {
     await h.em().nativeDelete(PriceDisplayModeOverride, { targetId: { $in: [VIEWER_PRICED_PRODUCT_ID, PRICED_CATEGORY_A.id] } });
     await setSetting(PRICING_SETTING_CODES.UNAUTHENTICATED_DISPLAY_MODE, null);
     await setSetting(PRICING_SETTING_CODES.DEFAULT_DISPLAY_MODE, null);
-  });
+  }
+
+  beforeEach(reset);
+  afterEach(reset);
 
   it('control — a guest on a priced mode is sent the sale, its compare-at and the list price', async () => {
     const s = await surfaces();

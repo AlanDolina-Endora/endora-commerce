@@ -539,6 +539,8 @@ BETA at 90.00 (spec 086, clarification 2).
 Tests: `backend/test/integration/price_lists/worked-examples/display-mode-withheld.test.ts` (W0–W6),
 `backend/test/integration/search/display-mode-withheld-in-search.test.ts` (W1–W3 on search),
 `backend/test/integration/catalog/price-sort-withheld.test.ts` (W7–W9),
+`backend/test/integration/price_lists/price-surface-targeted-refresh.test.ts` (a product or category
+override marks its products, and `none` takes them off the surface),
 `packages/modules/price_lists/src/backend/services/book-pricing.withheld.test.ts` (the mapping and
 the surface's omission) and
 `packages/modules/catalog/src/backend/services/catalog-org-price-decorator.withheld.test.ts` (the

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PRICING_SETTING_CODES, type DisplayMode } from '@endora-commerce/contracts';
 import { SalesChannel, Setting, SettingValue } from '@endora-commerce/platform/kernel';
 import { setupBackendServer, teardownBackendServer, type BackendServerHandle } from '../../helpers/test-server.js';
@@ -131,11 +131,19 @@ describe('search hits and suggestions withhold every amount under display mode `
     await teardownBackendServer(h);
   });
 
-  beforeEach(async () => {
+  /**
+   * Before and after each case: the harness does not empty
+   * `price_display_mode_overrides` between files, and the seeded product's id
+   * is fixed, so an override left behind would withhold it in the next file.
+   */
+  async function reset(): Promise<void> {
     await h.em().nativeDelete(PriceDisplayModeOverride, { targetId: SEED_PRODUCT_101_ID });
     await setSetting(PRICING_SETTING_CODES.UNAUTHENTICATED_DISPLAY_MODE, null);
     await setSetting(PRICING_SETTING_CODES.DEFAULT_DISPLAY_MODE, null);
-  });
+  }
+
+  beforeEach(reset);
+  afterEach(reset);
 
   it('control — a guest on a priced mode is sent the price', async () => {
     expect((await hit()).entry.price).toEqual({ amount: 33.33, currency: 'PLN' });
