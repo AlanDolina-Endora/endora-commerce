@@ -289,7 +289,10 @@ z tego miejsca.
 
 - **Tryby prezentacji** — tryby dla całej platformy dla zalogowanych i anonimowych odwiedzających
   (`pricing.default_display_mode`, `pricing.unauthenticated_display_mode`) oraz nadpisania dla
-  organizacji, kategorii i produktu.
+  organizacji, kategorii i produktu. Własna wartość kanału sprzedaży dla któregokolwiek z trybów,
+  ustawiona na ekranie *Ustawienia*, wygrywa z wartością dla całej platformy. Nadpisanie produktu
+  lub kategorii ma pierwszeństwo przed oboma trybami, także dla anonimowych odwiedzających — mówi o
+  tym karta pod dwoma trybami; nadpisanie organizacji dotyczy tylko zalogowanych kupujących.
 - **Ceny w sklepie** — *Pokazuj cenę katalogową obok ceny kupującego* (`pricing.show_list_price`,
   domyślnie wyłączone). Zapis tego ustawienia trafia do dziennika audytu, a kupujący widzą zmianę od
   następnej odsłony strony. Co wtedy widzą kupujący, opisano na

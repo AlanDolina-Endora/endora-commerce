@@ -18,7 +18,9 @@ the four-place unit-price ruling: §1.2's consumers paragraph; and on
 `fix/491-display-mode-none-withholds-amounts` (from `92dba80a9`) on 2026-10-28 for issue #491
 (display mode `none` withholds every amount): §1.2's display-mode paragraph and §1.3; and on
 `fix/497-price-cursor-leak` (from `857092eab`) on 2026-10-28 for issue #497 (sealed price-walk
-cursors): §1.3's paragraph on the walk. The old model — the Application rule, the per-list
+cursors): §1.3's paragraph on the walk; and on
+`fix/492-retire-ispublic` on 2026-10-28 for issue #492 (the sales channel's `isPublic` retired into
+the display-mode chain): §1.2's display-mode paragraphs. The old model — the Application rule, the per-list
 product roster and brackets, the `Default` list, the product *default price* and the variant price
 override — is gone from the code and, after the conversion migration, from the database. How it
 worked is recorded in this file's history (`git log -- specs/pricing/current-model.md`); the
@@ -141,6 +143,17 @@ cached with the answer would be served to the wrong one. An organization overrid
 bump the generation; a product or category override bumps it and marks the products it concerns on
 the price surface (§1.3). A resolution of a fixed profile
 (the surface worker, a feed's catalogue reference) neither reads nor writes the answer cache.
+
+**The sales channel has no price-visibility flag** (issue #492). `sales_channels.is_public` withheld
+prices from every viewer on a channel, signed-in buyers included, and every consumer skipped the
+resolution on it (catalogue listing and walk, product page, product links, search, comparisons, the
+price-control check). It is gone, column and all: `Migration20261028T173317CoreSalesChannelsRetireIsPublic`
+wrote `pricing.unauthenticated_display_mode = none` as the channel's own value for every channel that
+had it off and no value of its own, then dropped it. So "prices after sign-in" on one channel is the
+settings tier of the chain, per channel, and a signed-in buyer there is priced by their own tail. The
+chain's precedence is unchanged (owner ruling of 2026-10-28): a product or category override
+precedes the viewer's tail, so it decides for a guest as well, and is the one way a guest is shown a
+price where the guest mode is `none` (`worked-examples.md` §10.19 W5, §10.20).
 
 **Display mode `none` withholds every amount** (issue #491, `worked-examples.md` §10.19). Where the
 viewer's mode is `none`, the mapping onto the published shapes (`PL/backend/services/book-pricing.ts`:
