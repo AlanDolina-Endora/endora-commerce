@@ -2301,6 +2301,8 @@
   "tags.picker.search": "Search tags…",
   "tags.picker.loading": "Loading…",
   "tags.picker.loadError": "This list could not be loaded. Reload the page to try again.",
+  "kanban.moveTo.action": "Move to…",
+  "kanban.moveTo.label": "Move to… — {title}",
   "pageBuilder.fieldText.scope.applies": "Applies: {value} (from {from})",
   "pageBuilder.fieldText.scope.appliesFrom": "Applies the value from {from}",
   "pageBuilder.fieldText.scope.from.tablet": "Mobile",

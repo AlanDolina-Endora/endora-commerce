@@ -1,22 +1,32 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
-import type { OpportunityStatusRef } from '@endora-commerce/contracts';
-import { Button } from '@endora-commerce/admin-kit/ui';
-import { useTranslation } from '@endora-commerce/admin-kit/i18n';
+import { Button } from '../../ui/button.js';
+import { useTranslation } from '../../i18n/useTranslation.js';
+
+/** A lane a card can be moved to: a status, by its code, as the board names and colours it. */
+export interface MoveToMenuTarget {
+  code: string;
+  name: string;
+  /** `#rrggbb`. */
+  color: string;
+}
 
 export interface MoveToMenuProps {
   /** The card's title — part of the control's accessible name, so two cards' menus differ. */
   title: string;
-  /** The statuses the workflow allows from the card's status, in board order. */
-  targets: readonly OpportunityStatusRef[];
+  /** The lanes the card may move to from where it is, in board order. */
+  targets: readonly MoveToMenuTarget[];
   /** A move of this card is in flight. */
   busy: boolean;
   onMove: (statusCode: string) => void;
 }
 
 /**
- * A card's **"Move to…" menu** — the way to move an Opportunity on the board
- * with one press and no drag.
+ * A card's **"Move to…" menu** — the way to move a card on a `KanbanBoard`
+ * with one press and no drag. Promoted from CRM by
+ * `specs/165-task-management/` research R-11 when the Task board became its
+ * second consumer (Constitution IX); the targets are generic and the words are
+ * the core bundle's (`kanban.moveTo.*`).
  *
  * WCAG 2.2 SC 2.5.7 (Dragging Movements, AA) asks that anything dragging does
  * can be done with a single pointer without dragging; the board's keyboard drag
@@ -31,11 +41,11 @@ export interface MoveToMenuProps {
  */
 export function MoveToMenu(props: MoveToMenuProps): ReactNode {
   const { title, targets, busy, onMove } = props;
-  const t = useTranslation('crm');
+  const t = useTranslation('core');
   const listId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const label = t('board.moveTo.label', { title });
+  const label = t('kanban.moveTo.label', { title });
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key !== 'Escape' || !open) return;
@@ -61,7 +71,7 @@ export function MoveToMenu(props: MoveToMenuProps): ReactNode {
         disabled={busy}
         onClick={(): void => setOpen((previous) => !previous)}
       >
-        {t('board.moveTo.action')}
+        {t('kanban.moveTo.action')}
         <ChevronDown
           aria-hidden="true"
           className={

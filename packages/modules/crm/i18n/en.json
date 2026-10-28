@@ -264,8 +264,6 @@
   "board.column.moreError": "More opportunities could not be loaded. Try again.",
   "board.card.subtitle": "{number} · {organization}",
   "board.card.refusals": "Linked orders that did not follow: {count}",
-  "board.moveTo.action": "Move to…",
-  "board.moveTo.label": "Move to… — {title}",
   "board.move.done": "“{title}” was moved to “{status}”.",
   "board.move.refused": "“{title}” was not moved to “{status}”.",
   "board.move.error": "The move did not complete. Nothing was changed — try again.",

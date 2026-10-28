@@ -264,8 +264,6 @@
   "board.column.moreError": "Nie udało się wczytać kolejnych szans sprzedażowych. Spróbuj ponownie.",
   "board.card.subtitle": "{number} · {organization}",
   "board.card.refusals": "Powiązane zamówienia, które nie zmieniły statusu: {count}",
-  "board.moveTo.action": "Przenieś do…",
-  "board.moveTo.label": "Przenieś do… — {title}",
   "board.move.done": "Przeniesiono „{title}” do statusu „{status}”.",
   "board.move.refused": "Nie przeniesiono „{title}” do statusu „{status}”.",
   "board.move.error": "Nie udało się przenieść szansy. Nic nie zostało zmienione — spróbuj ponownie.",

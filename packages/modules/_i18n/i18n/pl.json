@@ -2301,6 +2301,8 @@
   "tags.picker.search": "Szukaj etykiety…",
   "tags.picker.loading": "Wczytywanie…",
   "tags.picker.loadError": "Nie udało się wczytać tej listy. Odśwież stronę, aby spróbować ponownie.",
+  "kanban.moveTo.action": "Przenieś do…",
+  "kanban.moveTo.label": "Przenieś do… — {title}",
   "pageBuilder.fieldText.scope.applies": "Obowiązuje: {value} (z: {from})",
   "pageBuilder.fieldText.scope.appliesFrom": "Obowiązuje wartość z: {from}",
   "pageBuilder.fieldText.scope.from.tablet": "Telefon",

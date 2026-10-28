@@ -28,6 +28,7 @@ are additive (`release-intent.md`).
 | `src/components/tags/` (new) | `TagChips`, `TagMultiSelect` and `useTagOptions`, promoted from CRM with the options source injected (R-10). |
 | `src/components/kanban/MoveToMenu.tsx` (new) | Promoted from CRM (R-11). |
 | `src/components/references/` | Document groups and link targets for `opportunity` and `project`. |
+| `packages/modules/_i18n/i18n/{en,pl}.json` (added at T054) | `kanban.moveTo.{action,label}`, the promoted `MoveToMenu`'s two sentences, moved from CRM's `board.moveTo.*` (wording kept). |
 | `packages/modules/_i18n/i18n/{en,pl}.json` (added at T025) | The core bundle's `references.{kind,group,inserted,unavailable}.{opportunity,project}` sentences the kit's reference components compose (`admin/test/kit/kit-collaboration-bundle.test.ts` requires every member of each family). |
 | `src/lib/admin-preferences/{store,use-admin-preference}.ts` | `listViewModes` and `useListViewModePreference(listId)`. |
 | Tests beside each | — |
@@ -36,7 +37,7 @@ are additive (`release-intent.md`).
 
 | Path | Change |
 | --- | --- |
-| `src/admin/components/{TagPicker,MoveToMenu}.tsx` | Replaced by kit imports. Callers updated, with no behaviour change. CRM's admin tests run before and after. |
+| `src/admin/components/{TagPicker,MoveToMenu}.tsx` | Replaced by kit imports. Callers updated, with no behaviour change. CRM's admin tests run before and after. At T054 `i18n/{en,pl}.json` lose `board.moveTo.*` (now the core bundle's `kanban.moveTo.*`), and `admin/test/modules/crm/board.test.tsx` reads the menu's name from the core bundle (shape only). |
 | `src/backend/services/opportunity-read-port.ts` | `findByIds` and `search`. |
 | `src/backend/entities/crm-opportunity-reference.entity.ts` (added at T025) | `CrmReferenceTargetType` gains `'opportunity'` and `'project'`, the type of the widened check. Pulled forward into Phase 2 with the migration (orchestrator ruling 2). |
 | `src/backend/services/reference-service.ts`, document lookup service | Resolvers and lookup groups for `opportunity` (through its own service) and `project` (through `projectReadPort`, `degrades-without`; an edge already exists or is added with a `whenAbsent` sentence). |
