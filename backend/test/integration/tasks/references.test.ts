@@ -42,7 +42,7 @@ describe('tasks — references and mentions in the description (US1, #446)', () 
   let colleague: Person;
   /** May not read Tasks: never told. */
   let outsider: Person;
-  let order: { id: string; businessId: string };
+  let order: { id: string; businessId: string | null };
   let quote: { id: string; businessId: string };
   let opportunity: { id: string; number: string };
   let project: { id: string; number: string };
@@ -190,7 +190,7 @@ describe('tasks — references and mentions in the description (US1, #446)', () 
     const response = await call('GET', `/${task.id}`, undefined, noOrders.cookies);
     expect(response.statusCode, response.body).toBe(200);
     expect(TaskDetailResponseSchema.parse(response.json()).data.references).toEqual([unavailable('order', order.id)]);
-    expect(response.body).not.toContain(order.businessId);
+    expect(response.body).not.toContain(String(order.businessId));
     expect((await read(task.id)).references[0]).toMatchObject({ available: true });
   });
 
