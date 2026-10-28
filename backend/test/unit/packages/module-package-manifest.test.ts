@@ -303,6 +303,20 @@ describe('module package manifests are generated (feature 080, T041)', () => {
       RENDER_BUDGET_MS,
     );
 
+    it('renders every committed application manifest byte-identically', () => {
+      // The admin's and the backend's module-package dependencies are
+      // reconciled by the same run, and `manifests:check` refuses either one
+      // drifting (issue #445: the backend's used to be added by hand).
+      const run = realTree();
+      expect(run.applicationRendered.map((entry) => entry.packageName).sort()).toEqual([
+        'admin',
+        'backend',
+      ]);
+      for (const entry of run.applicationRendered) {
+        expect(readFileSync(entry.outputPath, 'utf8'), entry.outputPath).toBe(entry.content);
+      }
+    });
+
     it('renders every committed tailwind.css byte-identically', () => {
       // The declaration and the file it names are two halves of one statement
       // (`admin-stylesheet-composition.md` R1.4), so the drift gate covers
@@ -1410,6 +1424,159 @@ describe('module package manifests are generated (feature 080, T041)', () => {
       const files = widgets(WITH_ADMIN_LAYER);
       delete files[`${ROOT}/admin/tsconfig.json`];
       expect(() => render(files)).toThrow(/@\/\*/);
+    });
+  });
+
+  describe('the backend application declares every module package it composes (issue #445)', () => {
+    /** The backend manifest this run reconciled, parsed. */
+    function backendManifestOf(files: Record<string, string>): Record<string, unknown> {
+      const run = render(files);
+      const found = run.applicationRendered.find((entry) => entry.packageName === 'backend');
+      expect(found, 'no backend manifest rendered').toBeDefined();
+      expect(found!.outputPath).toBe(`${ROOT}/backend/package.json`);
+      return JSON.parse(found!.content) as Record<string, unknown>;
+    }
+
+    /**
+     * The fixture's own backend manifest, parsed — its `devDependencies` are
+     * where every module package's build toolchain range is read from, so a
+     * test rewriting `dependencies` keeps them.
+     */
+    function fixtureBackend(files: Record<string, string>): Record<string, unknown> {
+      return JSON.parse(files[`${ROOT}/backend/package.json`]!) as Record<string, unknown>;
+    }
+
+    it('adds a backend-only module at its sorted position', () => {
+      // The generated manifest index imports **every** module package's
+      // manifest by bare specifier, whatever layers it ships, and a bare
+      // specifier resolves only through a declared dependency. Without the
+      // entry `overlay:check` dies on ERR_MODULE_NOT_FOUND.
+      const deps = backendManifestOf(widgets(BACKEND_ONLY))['dependencies'] as Record<
+        string,
+        string
+      >;
+      expect(deps['@endora-commerce/mod-widgets']).toBe('workspace:*');
+      expect(Object.keys(deps)).toEqual([
+        '@endora-commerce/mod-widgets',
+        '@mikro-orm/core',
+        '@mikro-orm/migrations',
+        'bullmq',
+        'fastify',
+        'ioredis',
+        'nodemailer',
+        'zod',
+      ]);
+    });
+
+    it('adds a module whose package.json this run writes for the first time', () => {
+      // The scaffold's case: the package is not a workspace member yet, which
+      // is exactly when the author runs this command.
+      const files = widgets(BACKEND_ONLY);
+      delete files[`${ROOT}/packages/modules/widgets/package.json`];
+      const deps = backendManifestOf(files)['dependencies'] as Record<string, string>;
+      expect(deps['@endora-commerce/mod-widgets']).toBe('workspace:*');
+    });
+
+    it('keeps a module that also ships an admin layer — the backend composes it too', () => {
+      const deps = backendManifestOf(
+        widgets({
+          ...BACKEND_ONLY,
+          'src/admin/index.ts': 'export const contributions = { routes: [] };\n',
+        }),
+      )['dependencies'] as Record<string, string>;
+      expect(deps['@endora-commerce/mod-widgets']).toBe('workspace:*');
+    });
+
+    it('removes an edge to a workspace member that has gone, and nothing else', () => {
+      const files = widgets(BACKEND_ONLY);
+      files[`${ROOT}/backend/package.json`] = JSON.stringify({
+        ...fixtureBackend(files),
+        dependencies: {
+          '@endora-commerce/contracts': 'workspace:*',
+          '@endora-commerce/mod-departed': 'workspace:*',
+          '@endora-commerce/mod-widgets-theme': '^1.0.0',
+          zod: '^4.2.0',
+        },
+      });
+      const deps = backendManifestOf(files)['dependencies'] as Record<string, string>;
+      expect(deps).toEqual({
+        '@endora-commerce/contracts': 'workspace:*',
+        '@endora-commerce/mod-widgets': 'workspace:*',
+        '@endora-commerce/mod-widgets-theme': '^1.0.0',
+        zod: '^4.2.0',
+      });
+    });
+
+    it('leaves every other key, and its order, exactly where it was', () => {
+      const files = widgets(BACKEND_ONLY);
+      const devDependencies = fixtureBackend(files)['devDependencies'];
+      files[`${ROOT}/backend/package.json`] = JSON.stringify({
+        name: 'backend',
+        private: true,
+        scripts: { build: 'tsc' },
+        dependencies: { zod: '^4.2.0' },
+        devDependencies,
+      });
+      const manifest = backendManifestOf(files);
+      expect(Object.keys(manifest)).toEqual([
+        'name',
+        'private',
+        'scripts',
+        'dependencies',
+        'devDependencies',
+      ]);
+      expect(manifest['dependencies']).toEqual({
+        '@endora-commerce/mod-widgets': 'workspace:*',
+        zod: '^4.2.0',
+      });
+      expect(manifest['devDependencies']).toEqual(devDependencies);
+    });
+
+    it('is idempotent — a second render over its own output changes nothing', () => {
+      const files = widgets(BACKEND_ONLY);
+      const first = render(files).applicationRendered.find(
+        (entry) => entry.packageName === 'backend',
+      )!;
+      files[first.outputPath] = first.content;
+      const second = render(files).applicationRendered.find(
+        (entry) => entry.packageName === 'backend',
+      )!;
+      expect(second.content).toBe(first.content);
+    });
+
+    it('refuses a backend application with no dependencies block', () => {
+      const files = widgets(BACKEND_ONLY);
+      const backend = fixtureBackend(files);
+      delete backend['dependencies'];
+      files[`${ROOT}/backend/package.json`] = JSON.stringify(backend);
+      expect(() => render(files)).toThrow(/declares no `dependencies` object/);
+    });
+
+    it('finds the application by the manifest index it owns, not by its name', () => {
+      // The member is the one whose directory holds the generated manifest
+      // index — the file whose bare specifiers have to resolve.
+      const files = widgets(BACKEND_ONLY);
+      const index = files[INDEX_PATH]!;
+      delete files[INDEX_PATH];
+      files[`${ROOT}/server/src/index.generated.ts`] = index;
+      files[`${ROOT}/server/package.json`] = JSON.stringify({
+        name: 'server',
+        dependencies: {},
+      });
+      files[`${ROOT}/pnpm-workspace.yaml`] =
+        'packages:\n  - backend\n  - server\n  - admin\n  - packages/*\n  - packages/modules/*\n';
+      const run = renderModulePackageManifests(
+        ROOT,
+        fixtureFs(files),
+        `${ROOT}/server/src/index.generated.ts`,
+      );
+      const server = run.applicationRendered.find((entry) => entry.packageName === 'server');
+      expect(server, 'no server manifest rendered').toBeDefined();
+      expect(JSON.parse(server!.content)).toEqual({
+        name: 'server',
+        dependencies: { '@endora-commerce/mod-widgets': 'workspace:*' },
+      });
+      expect(run.applicationRendered.map((entry) => entry.packageName)).not.toContain('backend');
     });
   });
 
