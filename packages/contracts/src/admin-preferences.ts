@@ -20,6 +20,8 @@ export const ADMIN_PREFERENCE_KEYS = [
   'sidebarCollapsedGroups',
   'sidebarRailMode',
   'listPageSizes',
+  // `specs/165-task-management/` R-14 — list or board, per list (FR-018).
+  'listViewModes',
 ] as const;
 export const adminPreferenceKeySchema = z.enum(ADMIN_PREFERENCE_KEYS);
 export type AdminPreferenceKey = z.infer<typeof adminPreferenceKeySchema>;
@@ -34,6 +36,16 @@ export const ADMIN_SIDEBAR_PINS_MAX = 200;
 export const ADMIN_SIDEBAR_COLLAPSED_GROUPS_MAX = 32;
 /** Lists that remember a page size; eight today. */
 export const ADMIN_LIST_PAGE_SIZES_MAX = 128;
+/** Lists that remember a list/board choice; two today (`tasks`, `tasks-mine`). */
+export const ADMIN_LIST_VIEW_MODES_MAX = 128;
+
+/**
+ * How a list that offers both shows its records (`specs/165-task-management/`
+ * R-14). A list absent from the map shows its default.
+ */
+export const ADMIN_LIST_VIEW_MODES = ['list', 'board'] as const;
+export const adminListViewModeSchema = z.enum(ADMIN_LIST_VIEW_MODES);
+export type AdminListViewMode = z.infer<typeof adminListViewModeSchema>;
 
 /**
  * The page sizes a list offers. Declared here rather than in the Admin UI kit so
@@ -54,7 +66,7 @@ export const ADMIN_PINNED_GROUP_KEY = 'pinned';
 export const adminSidebarDestinationSchema = AdminNavDeclarationSchema.shape.to;
 /** A sidebar group's collapse key: a section name or `pinned`. */
 export const adminSidebarGroupKeySchema = z.string().regex(/^[a-z][A-Za-z0-9]{0,63}$/);
-/** The id a list remembers its page size under (`orders`, `catalog-products`). */
+/** The id a list remembers its page size or view mode under (`orders`, `catalog-products`, `tasks-mine`). */
 export const adminListIdSchema = z
   .string()
   .max(64)
@@ -78,6 +90,8 @@ export const adminSidebarCollapsedGroupsSchema = z
 
 const withinListBound = (record: Record<string, unknown>): boolean =>
   Object.keys(record).length <= ADMIN_LIST_PAGE_SIZES_MAX;
+const withinViewModeBound = (record: Record<string, unknown>): boolean =>
+  Object.keys(record).length <= ADMIN_LIST_VIEW_MODES_MAX;
 
 /** `PATCH /api/v1/admin/me/preferences`. `.strict()` refuses an unknown preference. */
 export const adminPreferencesPatchSchema = z
@@ -89,6 +103,11 @@ export const adminPreferencesPatchSchema = z
     listPageSizes: z
       .record(adminListIdSchema, adminListPageSizeSchema.nullable())
       .refine(withinListBound, { message: `At most ${ADMIN_LIST_PAGE_SIZES_MAX} lists.` })
+      .optional(),
+    /** Per-list merge, as `listPageSizes`; `null` forgets the list (it returns to the default). */
+    listViewModes: z
+      .record(adminListIdSchema, adminListViewModeSchema.nullable())
+      .refine(withinViewModeBound, { message: `At most ${ADMIN_LIST_VIEW_MODES_MAX} lists.` })
       .optional(),
   })
   .strict()
@@ -122,6 +141,12 @@ export const adminPreferencesSchema = z.object({
   sidebarCollapsedGroups: z.array(z.string()),
   sidebarRailMode: z.boolean(),
   listPageSizes: z.record(z.string(), z.number().int()),
+  /**
+   * Absent from a document stored before 165, or unreadable: read as `{}`
+   * rather than failing the whole document. A mode the Admin UI does not know
+   * is kept here and ignored there.
+   */
+  listViewModes: z.record(z.string(), z.string()).catch({}),
 });
 export type AdminPreferences = z.infer<typeof adminPreferencesSchema>;
 
@@ -130,6 +155,7 @@ export const ADMIN_PREFERENCES_DEFAULTS: AdminPreferences = {
   sidebarCollapsedGroups: [],
   sidebarRailMode: false,
   listPageSizes: {},
+  listViewModes: {},
 };
 
 export const adminPreferencesResponseSchema = z.object({ data: adminPreferencesSchema });

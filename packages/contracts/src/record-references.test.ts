@@ -16,13 +16,17 @@ const ORDER = '6a3b1e9d-0c1f-4a8e-9a2d-4b7f0c5d2e02';
 const QUOTE = '2c4d6e8f-1a3b-4c5d-8e7f-9a0b1c2d3e03';
 const TASK = '9f8e7d6c-5b4a-4321-8fed-cba987654304';
 const PRODUCT = '1a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c05';
+const OPPORTUNITY = '3d4e5f6a-7b8c-4d9e-8f0a-1b2c3d4e5f06';
+const PROJECT = '4e5f6a7b-8c9d-4e0f-9a1b-2c3d4e5f6a07';
 
-describe('the five reference types', () => {
-  it('are exactly admin_user, order, product, quote_request and task', () => {
+describe('the seven reference types', () => {
+  it('are exactly admin_user, opportunity, order, product, project, quote_request and task (165 R-5)', () => {
     expect([...refs.recordReferenceTypeSchema.options].sort()).toEqual([
       'admin_user',
+      'opportunity',
       'order',
       'product',
+      'project',
       'quote_request',
       'task',
     ]);
@@ -34,6 +38,8 @@ describe('the five reference types', () => {
     expect(refs.formatRecordReferenceToken('product', PRODUCT)).toBe(`[[product:${PRODUCT}]]`);
     expect(refs.formatRecordReferenceToken('quote_request', QUOTE)).toBe(`[[quote_request:${QUOTE}]]`);
     expect(refs.formatRecordReferenceToken('task', TASK)).toBe(`[[task:${TASK}]]`);
+    expect(refs.formatRecordReferenceToken('opportunity', OPPORTUNITY)).toBe(`[[opportunity:${OPPORTUNITY}]]`);
+    expect(refs.formatRecordReferenceToken('project', PROJECT)).toBe(`[[project:${PROJECT}]]`);
   });
 });
 
@@ -56,8 +62,16 @@ describe('extractRecordReferenceTokens', () => {
     expect(refs.extractRecordReferenceTokens(text)).toEqual([{ type: 'task', id: TASK }]);
   });
 
+  it('extracts an Opportunity and a Project (165 R-5)', () => {
+    const text = `See [[opportunity:${OPPORTUNITY}]] in [[project:${PROJECT}]] and [[opportunity:${OPPORTUNITY}]].`;
+    expect(refs.extractRecordReferenceTokens(text)).toEqual([
+      { type: 'opportunity', id: OPPORTUNITY },
+      { type: 'project', id: PROJECT },
+    ]);
+  });
+
   it('leaves an unknown type, a non-uuid id and an unterminated token alone', () => {
-    const text = `[[project:${TASK}]] [[task:42]] [[quote_request:${QUOTE}] [[invoice:${ORDER}]]`;
+    const text = `[[campaign:${TASK}]] [[task:42]] [[quote_request:${QUOTE}] [[invoice:${ORDER}]] [[project:42]]`;
     expect(refs.extractRecordReferenceTokens(text)).toEqual([]);
   });
 });
@@ -75,8 +89,17 @@ describe('splitRecordReferenceText', () => {
     ]);
   });
 
+  it('cuts at an Opportunity and a Project token (165 R-5)', () => {
+    const text = `[[opportunity:${OPPORTUNITY}]] for [[project:${PROJECT}]]`;
+    expect(refs.splitRecordReferenceText(text)).toEqual([
+      { kind: 'reference', type: 'opportunity', id: OPPORTUNITY },
+      { kind: 'text', text: ' for ' },
+      { kind: 'reference', type: 'project', id: PROJECT },
+    ]);
+  });
+
   it('leaves a token of an unknown type as text', () => {
-    const text = `See [[project:${TASK}]] now`;
+    const text = `See [[campaign:${TASK}]] now`;
     expect(refs.splitRecordReferenceText(text)).toEqual([{ kind: 'text', text }]);
   });
 });
@@ -107,15 +130,33 @@ describe('the resolved reference', () => {
     ).toBe(true);
   });
 
-  it('refuses a type outside the five', () => {
+  it('accepts an Opportunity and a Project, and refuses a type outside the seven', () => {
+    for (const type of ['opportunity', 'project']) {
+      expect(
+        refs.RecordReferenceSchema.safeParse({ type, id: PROJECT, available: false, label: null, url: null })
+          .success,
+      ).toBe(true);
+    }
     expect(
-      refs.RecordReferenceSchema.safeParse({ type: 'project', id: TASK, available: false, label: null, url: null })
+      refs.RecordReferenceSchema.safeParse({ type: 'campaign', id: TASK, available: false, label: null, url: null })
         .success,
     ).toBe(false);
   });
 });
 
 describe('RecordDocumentLookupResponse — the grouped `@@` list (FR-044)', () => {
+  it('groups order, quote_request, task, opportunity and project, in that order (165 R-5)', () => {
+    expect([...refs.RECORD_DOCUMENT_KINDS]).toEqual(['order', 'quote_request', 'task', 'opportunity', 'project']);
+    expect(
+      refs.RecordDocumentLookupResponseSchema.safeParse({
+        groups: [
+          { kind: 'opportunity', items: [{ id: OPPORTUNITY, label: 'OPP-000001' }] },
+          { kind: 'project', items: [{ id: PROJECT, label: 'PRJ-000001' }] },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
   it('accepts groups of Orders, Quote Requests and Tasks', () => {
     const parsed = refs.RecordDocumentLookupResponseSchema.safeParse({
       groups: [
@@ -128,7 +169,7 @@ describe('RecordDocumentLookupResponse — the grouped `@@` list (FR-044)', () =
   });
 
   it('refuses a group of a kind that is not a document', () => {
-    for (const kind of ['product', 'admin_user', 'opportunity']) {
+    for (const kind of ['product', 'admin_user', 'campaign']) {
       expect(
         refs.RecordDocumentLookupResponseSchema.safeParse({ groups: [{ kind, items: [] }] }).success,
       ).toBe(false);

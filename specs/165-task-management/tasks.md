@@ -89,7 +89,7 @@ description: "Task list for Task management — growing the Tasks module"
   - the `UpdateTaskBody` refusal of `status`.
   - The 163 file was rewritten on the new shape; its still-valid cases (context all-or-nothing, title bounds, list page shape, batch max) were kept. Beyond the list above it also pins the vocabulary and limits, the absence of `TASK_STATUSES` / `TASK_CLOSED_STATUSES`, the board query (`perColumn` 1–50, no cursor or sort), every §2–§5 body, the summary and board response shapes, the four event names and R-20's codes.
   - Seen red 2026-10-28: 41 of 47 failed for the stated reason — every new export was `undefined` (`Cannot read properties of undefined (reading 'safeParse')`), `TASKS_EVENTS` still had `ASSIGNED`, `TASKS_ERROR_CODES` lacked `TASK_STATUS_UNKNOWN`. The 6 that passed are 163 cases whose shape did not change. Green after T004 (47/47).
-- [ ] T003 [P] Write failing tests in `X/record-references.test.ts` for the grammar with `opportunity` and `project`:
+- [X] T003 [P] Write failing tests in `X/record-references.test.ts` for the grammar with `opportunity` and `project`:
   - format, extract and split;
   - `RECORD_DOCUMENT_KINDS` order: order, quote_request, task, opportunity, project;
   - an unknown type is left as text.
@@ -99,6 +99,8 @@ description: "Task list for Task management — growing the Tasks module"
   - values `list` / `board`;
   - `null` deletes the entry;
   - the tolerant read falls back to `{}`.
+  - The 163 cases that used `project` or `opportunity` as the *unknown* type (extract, split, `RecordReferenceSchema`, the document-kind refusal) now use `campaign`; `[[project:42]]` (not a uuid) is still left as text.
+  - Seen red 2026-10-28: 10 failed — `record-references.test.ts` 5 (`opportunity` / `project` not in the enum, not extracted or split, `RECORD_DOCUMENT_KINDS` the three of 163), `admin-preferences.test.ts` 5 (`listViewModes` absent from the keys and the defaults, refused by the strict patch, missing on read). The four `listViewModes` refusal cases passed red only because the strict patch refuses any unknown key; they stay meaningful once the key exists. Green after T005.
 - [X] T004 Implement `X/tasks.ts` per `contracts/admin-api.md`, `contracts/ports-and-events.md` and `data-model.md` §8. Every later story adds no contract.
   - Status codes: `TASK_DEFAULT_STATUS_CODES`, `TASK_STATUS_CATEGORIES`, `taskStatusCodeSchema`.
   - Limits: `TASK_ASSIGNEES_MAX`, `TASK_TAGS_MAX`, `TASK_HIERARCHY_DEPTH_MAX`, `TASK_STATUS_REASSIGN_MAX`, `TASK_ATTACHMENT_MAX_BYTES`, `TASK_REMINDER_GRACE_MS`, `TASK_REMINDERS_MAX`.
@@ -141,7 +143,7 @@ description: "Task list for Task management — growing the Tasks module"
     - `packages/modules/tasks/src/admin/pages/TasksList.tsx`: :4 TS2724; :4 TS2724; :185 TS7006
   - **Against `foreign-module-changes.md` §G/§D:** every file outside `packages/modules/tasks/` is listed — `stage-task-service.ts` and `TasksTab.tsx` (§D), the admin tests (§G `admin/test/modules/tasks/*`, `ProjectDetail.tasks-tab.test.tsx`). **No consumer missing from the list.** The converse does not hold, and Phase 2 must not read the typecheck as the whole worklist: §G's backend tests (`backend/test/integration/tasks/*`, `contract/tasks/*`, `perf/tasks/*`, `integration/projects/*` + `helpers.ts`) and `packages/demo-composition/src/projects.ts` produce **no** type error — they pin the old shape through raw SQL and untyped JSON, so they fail only at run time.
   - Before the rebuild the same run reported 22 more errors (`useAdminPreference` not exported from `@endora-commerce/admin-kit/lib`, `AdminMe.preferences`, a missing `admin_users` migration export): stale `dist`s from #478, gone after `build:packages`, unrelated to this change.
-- [ ] T005 [P] Extend the reference grammar and the read ports.
+- [X] T005 [P] Extend the reference grammar and the read ports.
   - `X/record-references.ts`: add `opportunity` and `project` to both arrays.
   - `X/crm.ts`: `OpportunityReadPort.findByIds` and `search`.
   - `X/projects.ts`: `ProjectReadPort.findByIds` and `search`.
@@ -149,6 +151,8 @@ description: "Task list for Task management — growing the Tasks module"
   - `X/saved-list-views.ts`: Task view create and update schemas.
   - `X/admin-preferences.ts`: `listViewModes` in keys, patch, read and defaults.
   - T003 green. Rebuild `contracts`.
+  - Done 2026-10-28: the contracts suite is 71 files / 1 542 tests green, `tsc` and `eslint` clean, `contracts` rebuilt. Added beside the methods: `OpportunitySearchQuery` / `OPPORTUNITY_READ_PORT_SEARCH_MAX` and `ProjectSearchQuery` / `PROJECT_READ_PORT_SEARCH_MAX` (20); `ADMIN_LIST_VIEW_MODES`, `adminListViewModeSchema` and `ADMIN_LIST_VIEW_MODES_MAX` (128, as `listPageSizes`). The read side is `z.record(z.string(), z.string()).catch({})`, so a document stored before 165 parses.
+  - **Sequencing note.** `plan.md` *Risks* says the grammar widening lands "in the same commit" as CRM's and Projects' check migrations; this task puts it in Phase 1 and the migrations in T032. Between the two, on this branch only, pasting `[[opportunity:…]]` or `[[project:…]]` into a CRM or Project text would be extracted and then refused by `crm_opportunity_references_target_type_check` / `project_references_target_type_check`. Nothing merges before Phase 10, so this was followed as written; the window closes at T032. Likewise `OpportunityReadPort` / `ProjectReadPort` gain required methods here that are implemented at T033, so the CRM and Projects read-port classes are red in typecheck until then (T008 counts them).
 - [ ] T006 Extend `T/manifest.ts`:
   - **Permissions:** `tasks:configure` and `tasks:see_private`, both `requires: ['tasks:read']`, with labels in `T/../i18n/{en,pl}.json` (`packages/modules/tasks/i18n/`).
   - **Settings:** `tasks.board_card_fields` (json, default from `data-model.md` §4) and `tasks.time_zone` (string, `Europe/Warsaw`).

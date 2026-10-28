@@ -9,13 +9,13 @@ import { collectionEnvelope } from './envelopes.js';
  * text carrying `[[<type>:<uuid>]]` tokens. This is the one place the grammar is
  * written; a backend extracts with it and an admin composer inserts with it.
  * What a person types to get one — `@` a person, `@@` a document (an Order, a
- * Quote Request or a Task, in one grouped list), `@@@` a Product — is the
- * composer's and is never stored.
+ * Quote Request, a Task, an Opportunity or a Project, in one grouped list),
+ * `@@@` a Product — is the composer's and is never stored.
  *
  * The grammar was CRM's (`crm.ts` §9, three types) and moved here under neutral
  * names when Projects became its second user; CRM's exported names are aliases
  * of these, so a text CRM stored before reads exactly as it did — its tokens are
- * a subset of the five.
+ * a subset of the seven.
  */
 
 /**
@@ -23,7 +23,17 @@ import { collectionEnvelope } from './envelopes.js';
  * UI, under the name the platform has for one everywhere else; `user` alone
  * would also read as a customer.
  */
-export const RECORD_REFERENCE_TYPES = ['product', 'order', 'admin_user', 'quote_request', 'task'] as const;
+export const RECORD_REFERENCE_TYPES = [
+  'product',
+  'order',
+  'admin_user',
+  'quote_request',
+  'task',
+  // `specs/165-task-management/` research R-5 — platform-wide, so CRM's and
+  // Projects' extractors recognise them too and their reference checks widen.
+  'opportunity',
+  'project',
+] as const;
 export const recordReferenceTypeSchema = z.enum(RECORD_REFERENCE_TYPES);
 export type RecordReferenceType = z.infer<typeof recordReferenceTypeSchema>;
 
@@ -69,7 +79,7 @@ export type RecordReferenceTextPart =
 /**
  * `text` cut at its well-formed tokens, for a screen that shows each token as
  * a link: the parts, joined back, are the text. A malformed token, or one of a
- * type outside the five, stays text.
+ * type outside the seven, stays text.
  */
 export function splitRecordReferenceText(text: string): RecordReferenceTextPart[] {
   const parts: RecordReferenceTextPart[] = [];
@@ -133,8 +143,11 @@ export type RecordReference = z.infer<typeof RecordReferenceSchema>;
 // The `@@` document list (FR-044)
 // ---------------------------------------------------------------------------
 
-/** The kinds the `@@` list groups, in the order it shows them. */
-export const RECORD_DOCUMENT_KINDS = ['order', 'quote_request', 'task'] as const;
+/**
+ * The kinds the `@@` list groups, in the order it shows them. Opportunities and
+ * Projects joined in `specs/165-task-management/` (R-5).
+ */
+export const RECORD_DOCUMENT_KINDS = ['order', 'quote_request', 'task', 'opportunity', 'project'] as const;
 export const recordDocumentKindSchema = z.enum(RECORD_DOCUMENT_KINDS);
 export type RecordDocumentKind = z.infer<typeof recordDocumentKindSchema>;
 
@@ -155,7 +168,8 @@ export type RecordDocumentLookupGroup = z.infer<typeof RecordDocumentLookupGroup
  * The answer of `GET /projects/lookups/documents` and of
  * `GET /crm/lookups/documents` — one schema for both (FR-044). A group is
  * present only for a kind whose owning module is present and whose read
- * permission the caller holds (`orders:read`, `rfqs:handle`, `tasks:read`).
+ * permission the caller holds (`orders:read`, `rfqs:handle`, `tasks:read`,
+ * `crm:read`, `projects:read`).
  */
 export const RecordDocumentLookupResponseSchema = z.object({
   groups: z.array(RecordDocumentLookupGroupSchema),
