@@ -154,6 +154,7 @@ import { Migration20261007T180600CrmOpportunityReferenceAdminUser } from '@endor
 import { Migration20261008T135701CrmOpportunityEvents } from '@endora-commerce/mod-crm/migrations';
 import { Migration20261009T163307CrmOpportunityMessageReads } from '@endora-commerce/mod-crm/migrations';
 import { Migration20261027T020030CrmOpportunityReferenceDocuments } from '@endora-commerce/mod-crm/migrations';
+import { Migration20261028T143444CrmOpportunityReferenceKinds } from '@endora-commerce/mod-crm/migrations';
 
 // ── custom_fields ───────────────────────────────────────────────────────────
 import { Migration20260718T200338CustomFieldsInit } from '@endora-commerce/mod-custom-fields/migrations';
@@ -316,6 +317,7 @@ import { Migration20261025T145041ProductFeedsGoogleTemplatePackFields } from '@e
 import { Migration20261026T144350ProjectsInit } from '@endora-commerce/mod-projects/migrations';
 import { Migration20261026T231555ProjectsLinkOrganization } from '@endora-commerce/mod-projects/migrations';
 import { Migration20261027T172441ProjectsValueChanges } from '@endora-commerce/mod-projects/migrations';
+import { Migration20261028T143448ProjectsReferenceKinds } from '@endora-commerce/mod-projects/migrations';
 
 // ── promotions ──────────────────────────────────────────────────────────────
 import { Migration20260505T074605PromotionsCriteria } from '@endora-commerce/mod-promotions/migrations';
@@ -519,6 +521,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('crm', Migration20261008T135701CrmOpportunityEvents),
   migration('crm', Migration20261009T163307CrmOpportunityMessageReads),
   migration('crm', Migration20261027T020030CrmOpportunityReferenceDocuments),
+  migration('crm', Migration20261028T143444CrmOpportunityReferenceKinds),
 
   // ── custom_fields ───────────────────────────────────────────────────────────
   migration('custom_fields', Migration20260718T200338CustomFieldsInit),
@@ -681,6 +684,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('projects', Migration20261026T144350ProjectsInit),
   migration('projects', Migration20261026T231555ProjectsLinkOrganization),
   migration('projects', Migration20261027T172441ProjectsValueChanges),
+  migration('projects', Migration20261028T143448ProjectsReferenceKinds),
 
   // ── promotions ──────────────────────────────────────────────────────────────
   migration('promotions', Migration20260505T074605PromotionsCriteria),

@@ -327,6 +327,55 @@ export class ProjectAccess {
   }
 
   /**
+   * The Projects of `ids` the caller may see, in no particular order — a hidden,
+   * missing or malformed id is simply absent (`projectReadPort.findByIds`,
+   * `specs/165-task-management/` research R-5).
+   */
+  async findVisibleMany(ids: readonly string[]): Promise<VisibleProjectRow[]> {
+    const candidates = [...new Set(ids.filter(isUuid))];
+    if (candidates.length === 0) return [];
+    const viewer = await this.currentViewer();
+    if (!viewer.canRead) return [];
+    const visible = await this.visibleProjectSql(viewer);
+    return (await this.deps.emFactory().execute(
+      `select ${VISIBLE_PROJECT_COLUMNS} from "projects" p
+        where p."id" = any(?::uuid[])${visible ? ` and ${visible.sql}` : ''}`,
+      [uuidArray(candidates), ...(visible?.params ?? [])],
+    )) as VisibleProjectRow[];
+  }
+
+  /**
+   * Projects the caller may see whose number or title contains `q`
+   * (case-insensitively; every visible one for an empty `q`), newest first, at
+   * most `limit` — `projectReadPort.search`, the `@@` document list's Projects
+   * (`specs/165-task-management/` research R-5).
+   */
+  async searchVisible(q: string, limit: number): Promise<VisibleProjectRow[]> {
+    const viewer = await this.currentViewer();
+    if (!viewer.canRead || limit <= 0) return [];
+    const visible = await this.visibleProjectSql(viewer);
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (visible) {
+      where.push(visible.sql);
+      params.push(...visible.params);
+    }
+    const needle = q.trim();
+    if (needle !== '') {
+      const like = `%${needle.replace(/[\\%_]/g, (match) => `\\${match}`)}%`;
+      where.push(`(p."number" ilike ? or p."title" ilike ?)`);
+      params.push(like, like);
+    }
+    return (await this.deps.emFactory().execute(
+      `select ${VISIBLE_PROJECT_COLUMNS} from "projects" p
+        ${where.length > 0 ? `where ${where.join(' and ')}` : ''}
+        order by p."created_at" desc, p."id" desc
+        limit ?`,
+      [...params, Math.trunc(limit)],
+    )) as VisibleProjectRow[];
+  }
+
+  /**
    * The **only** way a route or a service obtains a Project: 404
    * `PROJECT_NOT_FOUND` for a Project out of reach, invisible or missing. A
    * child read (Stages, comments, Members, links, attachments) loads its

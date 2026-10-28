@@ -1,6 +1,6 @@
 import { Fragment, useCallback, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { AtSign, ExternalLink, FileText, ListChecks, Package, ShoppingCart } from 'lucide-react';
+import { AtSign, ExternalLink, FileText, FolderKanban, Handshake, ListChecks, Package, ShoppingCart } from 'lucide-react';
 import {
   parseRecordRichText,
   splitRecordReferenceText,
@@ -38,6 +38,9 @@ const ICON: Record<RecordReferenceType, typeof AtSign> = {
   product: Package,
   quote_request: FileText,
   task: ListChecks,
+  // Platform-wide since `specs/165-task-management/` (research R-5).
+  opportunity: Handshake,
+  project: FolderKanban,
 };
 
 /** A decimal-string amount in the conventions of its currency, or the dash. */

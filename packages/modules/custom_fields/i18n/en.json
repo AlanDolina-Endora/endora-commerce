@@ -9,6 +9,7 @@
   "customFields.entity.product": "Product",
   "customFields.entity.opportunity": "Opportunity",
   "customFields.entity.project": "Project",
+  "customFields.entity.task": "Task",
   "customFields.managedBy.catalogAttributes": "Managed on Catalog → Attributes",
   "customFields.managedBy.notice": "Definitions for this entity type are managed by another module and are read-only here.",
   "customFields.audience.label": "Who can see the value",

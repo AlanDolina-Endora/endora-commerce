@@ -74,6 +74,12 @@ function adminUrl(token: OpportunityReferenceToken): string | null {
       return `/quote-requests/${token.id}`;
     case 'task':
       return `/tasks/${token.id}`;
+    // Platform-wide since `specs/165-task-management/` (research R-5). Until
+    // this module resolves them (US1), they render as unavailable.
+    case 'opportunity':
+      return `/crm/opportunities/${token.id}`;
+    case 'project':
+      return `/projects/${token.id}`;
   }
 }
 

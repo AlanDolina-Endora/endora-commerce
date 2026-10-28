@@ -24,6 +24,7 @@ const HOST_STORAGE: Record<SupportedEntityType, HostStorageBinding> = {
   product: { table: 'products', column: 'attribute_values' },
   opportunity: { table: 'crm_opportunities', column: 'custom_field_values' },
   project: { table: 'projects', column: 'custom_field_values' },
+  task: { table: 'tasks', column: 'custom_field_values' },
 };
 
 /** The `{ table, column }` holding `entityType`'s custom-field values. */

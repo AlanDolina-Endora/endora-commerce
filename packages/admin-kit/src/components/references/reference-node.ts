@@ -31,6 +31,9 @@ const CHIP_KIND_CLASS: Record<RecordReferenceType, string> = {
   product: 'border-border bg-muted/50 font-medium text-foreground',
   quote_request: 'border-border bg-muted/50 font-medium text-foreground',
   task: 'border-border bg-muted/50 font-medium text-foreground',
+  // Platform-wide since `specs/165-task-management/` (research R-5).
+  opportunity: 'border-border bg-muted/50 font-medium text-foreground',
+  project: 'border-border bg-muted/50 font-medium text-foreground',
 };
 const CHIP_UNAVAILABLE_CLASS = 'border-dashed border-border text-muted-foreground';
 

@@ -109,6 +109,16 @@ export const SUPPORTED_ENTITIES: Record<SupportedEntityType, SupportedEntityMeta
     ownerModuleId: 'projects',
     listFilter: true,
   },
+  // Feature 165 — a Task belongs to `tasks`, and its definitions follow that
+  // module's presence. Tasks carry no Organization of their own (their tenancy
+  // is their context's rule), so their definitions are platform-wide. No carry
+  // targets: nothing is created from a Task.
+  task: {
+    labelKey: 'customFields.entity.task',
+    orgOwned: false,
+    ownerModuleId: 'tasks',
+    listFilter: true,
+  },
 };
 
 /** All registered entity-type codes. */
