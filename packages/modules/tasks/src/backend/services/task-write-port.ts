@@ -7,6 +7,7 @@ import {
   TASK_TITLE_MAX,
   TASK_WRITE_PORT_BATCH_MAX,
   TaskContextSchema,
+  NewContextTaskSchema,
   type AdminUserReadPort,
   type NewContextTask,
   type TaskContext,
@@ -19,13 +20,15 @@ import { assertAssignable } from './task-checks.js';
 import { createTaskCommand, deleteTaskCommand, type NewTaskFields } from './task-commands.js';
 import type { TaskContextRegistry } from './task-context-registry.js';
 import { taskContextInvalid } from './task-errors.js';
+import type { TaskWorkflowRead } from './task-workflow-read.js';
 
 /**
  * `taskWritePort` — another module creating and deleting Tasks in a context it
  * owns (`specs/163-projects-and-tasks/contracts/ports-and-events.md` §1).
  *
  * `createMany` runs **one `tasks.task.create` Command per Task** under the
- * ambient actor, so each Task has its own audit row and its own
+ * ambient actor, each starting in the workflow's current initial status
+ * (`specs/165-task-management/` data-model §5) and published, so each Task has its own audit row and its own
  * `tasks.task.created.v1`. Everything that can refuse the call — the batch
  * size, an entry's shape, the context's owner, an assignee — is checked
  * before the first Command runs, so a refused call writes nothing. The caller
@@ -45,13 +48,22 @@ export interface TaskWritePortDeps {
   contexts: TaskContextRegistry;
   /** `admin_users`' read port — lazy, resolved per call. */
   adminUsers: AdminUserReadPort;
+  workflow: TaskWorkflowRead;
 }
+
+/** One entry as the Command writes it, and the group it overrides the call's with. */
+type ValidEntry = Omit<NewTaskFields, 'status'> & { contextGroupId: string | null | undefined };
 
 function invalid(message: string): HttpError {
   return new HttpError(422, ERROR_CODES.VALIDATION_FAILED, message);
 }
 
-function validEntry(entry: NewContextTask, index: number): NewTaskFields {
+function validEntry(entry: NewContextTask, index: number): ValidEntry {
+  const parsed = NewContextTaskSchema.safeParse(entry);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw invalid(`Task ${index + 1}: ${issue ? `${issue.path.join('.') || 'entry'} — ${issue.message}` : 'invalid'}.`);
+  }
   const title = typeof entry.title === 'string' ? entry.title.trim() : '';
   if (title.length < 1 || title.length > TASK_TITLE_MAX) {
     throw invalid(`Task ${index + 1}: a title has 1 to ${TASK_TITLE_MAX} characters.`);
@@ -68,7 +80,14 @@ function validEntry(entry: NewContextTask, index: number): NewTaskFields {
   if (dueOn !== null && !calendarDateSchema.safeParse(dueOn).success) {
     throw invalid(`Task ${index + 1}: a due date is a calendar date, YYYY-MM-DD.`);
   }
-  return { title, description, assignedAdminUserId: entry.assignedAdminUserId ?? null, dueOn, contextNote };
+  return {
+    title,
+    description,
+    assigneeIds: [...new Set(parsed.data.assigneeIds ?? [])],
+    dueOn,
+    contextNote,
+    contextGroupId: parsed.data.contextGroupId,
+  };
 }
 
 export class TaskWritePortService implements TaskWritePort {
@@ -85,11 +104,16 @@ export class TaskWritePortService implements TaskWritePort {
     if (!this.deps.contexts.presentFor(context.contextType)) {
       throw taskContextInvalid(`No module that is switched on owns the Task context "${context.contextType}".`);
     }
-    await assertAssignable(this.deps.adminUsers, tasks.map((task) => task.assignedAdminUserId));
+    await assertAssignable(
+      this.deps.adminUsers,
+      tasks.flatMap((task) => task.assigneeIds),
+    );
+    const status = (await this.deps.workflow.graph()).initial().code;
 
     const ids: string[] = [];
-    for (const task of tasks) {
-      ids.push(await this.deps.commandBus.run(createTaskCommand(context, task)));
+    for (const { contextGroupId, ...task } of tasks) {
+      const where = contextGroupId === undefined ? context : { ...context, contextGroupId };
+      ids.push(await this.deps.commandBus.run(createTaskCommand(where, { ...task, status })));
     }
     return { ids };
   }

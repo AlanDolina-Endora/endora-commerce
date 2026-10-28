@@ -413,6 +413,30 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Minted with the `tasks` module (`specs/163-projects-and-tasks/`, Phase 2A): a Task assigned ' +
       'to somebody who is not an active administrator.',
   },
+  TASK_STATUS_UNKNOWN: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 2): a status change to a code the operator\\'s workflow does not hold.',
+  },
+  TASK_TRANSITION_FORBIDDEN: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 2): a status change the operator\\'s workflow does not permit from the Task\\'s current status.',
+  },
+  TASK_TRANSITION_CONFLICT: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 2): a status change from a status the Task has since left.',
+  },
+  TASK_PRIVATE_READ_ONLY: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 2): a change to another administrator\\'s private Task by a holder of `tasks:see_private`, who may only read and delete it.',
+  },
   PROJECT_NOT_FOUND: {
     to: 'projects',
     reason:

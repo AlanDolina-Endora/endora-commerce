@@ -1114,6 +1114,14 @@ export interface TaskRecord {
   /** A code of the workflow. */
   status: string;
   statusCategory: TaskStatusCategory;
+  /**
+   * The status's name per language and its fallback, and its colour — so a
+   * consumer that shows a Task (Projects' Tasks tab) names its status as the
+   * Tasks screens do, in its reader's language, without a second port.
+   */
+  statusName: Record<string, string>;
+  statusDefaultName: string;
+  statusColor: string;
   /** Category `done` or `cancelled`. */
   closed: boolean;
   dueOn: string | null;
@@ -1127,6 +1135,7 @@ export interface TaskRecord {
   contextNote: string | null;
   completedAt: Date | null;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 /** What `TaskReadPort.search` is asked: the letters typed, and how many to answer. */

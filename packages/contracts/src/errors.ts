@@ -704,6 +704,14 @@ export const ERROR_CODES = {
   TASK_CONTEXT_INVALID: 'TASK_CONTEXT_INVALID',
   /** The assignee is not an active administrator. */
   TASK_ASSIGNEE_INVALID: 'TASK_ASSIGNEE_INVALID',
+  /** A status code that is not in the Task workflow (`specs/165-task-management/` R-1). */
+  TASK_STATUS_UNKNOWN: 'TASK_STATUS_UNKNOWN',
+  /** A Task status move the workflow does not permit; carries `allowedTargets`. */
+  TASK_TRANSITION_FORBIDDEN: 'TASK_TRANSITION_FORBIDDEN',
+  /** The Task left the status the caller saw before the move. */
+  TASK_TRANSITION_CONFLICT: 'TASK_TRANSITION_CONFLICT',
+  /** A change to someone else's private Task by a holder of `tasks:see_private` (R-3). */
+  TASK_PRIVATE_READ_ONLY: 'TASK_PRIVATE_READ_ONLY',
 
   // Projects (`specs/163-projects-and-tasks/`, `contracts/admin-api.md` §2) —
   // the spellings of `PROJECTS_ERROR_CODES`. Each is declared by the `projects`

@@ -4,6 +4,7 @@ import {
   RecordHistoryQuerySchema,
   TaskAssigneeLookupQuerySchema,
   TaskListQuerySchema,
+  TaskStatusChangeBodySchema,
   UpdateTaskBodySchema,
 } from '@endora-commerce/contracts';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
@@ -19,9 +20,10 @@ export interface TaskRoutesDeps {
 const API = '/api/v1/admin/tasks';
 
 /**
- * Tasks (`specs/163-projects-and-tasks/contracts/admin-api.md` §1). Reading is
- * `tasks:read`; creating, editing, deleting and the assignee picker are
- * `tasks:write`. A Task whose context the caller may not see answers 404
+ * Tasks (`specs/165-task-management/contracts/admin-api.md` §1, grown from
+ * 163's). Reading is `tasks:read`; creating, editing, a status move, deleting
+ * and the assignee picker are `tasks:write`. A Task the caller may not see —
+ * its context hidden, or another admin's draft or private Task — answers 404
  * `TASK_NOT_FOUND`, the same as a missing one, and is absent from every list.
  *
  * The static paths (`/mine`, `/lookups/assignees`) are registered before
@@ -63,6 +65,20 @@ export async function registerTaskRoutes(app: FastifyInstance, deps: TaskRoutesD
       data: await tasks.update(
         request.params.id,
         UpdateTaskBodySchema.parse(request.body),
+        await request.responseLanguage(),
+      ),
+    }),
+  );
+
+  // A status move goes through the configured workflow (research R-1); `PATCH`
+  // no longer takes a status.
+  app.post<{ Params: { id: string } }>(
+    `${API}/:id/status`,
+    { preHandler: requireAdmin('tasks:write'), schema: { body: TaskStatusChangeBodySchema } },
+    async (request) => ({
+      data: await tasks.changeStatus(
+        request.params.id,
+        TaskStatusChangeBodySchema.parse(request.body),
         await request.responseLanguage(),
       ),
     }),

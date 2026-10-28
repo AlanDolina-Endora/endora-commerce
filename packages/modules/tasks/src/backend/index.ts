@@ -1,12 +1,14 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
-import type {
-  AdminI18nTranslatePort,
-  AdminNotificationRecordPort,
-  AdminSearchProviderRegistryPort,
-  AdminUserReadPort,
-  AuditReferenceRegistryPort,
-  TaskReadPort,
-  TaskWritePort,
+import {
+  TaskTimeZoneSchema,
+  type AdminI18nTranslatePort,
+  type AdminNotificationRecordPort,
+  type AdminSearchProviderRegistryPort,
+  type AdminUserReadPort,
+  type AuditReferenceRegistryPort,
+  type PermissionReadPort,
+  type TaskReadPort,
+  type TaskWritePort,
 } from '@endora-commerce/contracts';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import {
@@ -15,6 +17,7 @@ import {
   type AuditPort,
   type ModuleContext,
   type RequireAdminFactory,
+  type SettingsReadPort,
 } from '@endora-commerce/platform/kernel';
 import { createTaskAdminSearchProvider } from './admin-search-provider.js';
 import { Task } from './entities/task.entity.js';
@@ -34,6 +37,8 @@ import { TaskStatusTransition } from './entities/task-status-transition.entity.j
 import { TaskTag } from './entities/task-tag.entity.js';
 import { TaskTagAssignment } from './entities/task-tag-assignment.entity.js';
 import { registerTaskRoutes } from './routes/routes.tasks.js';
+import { registerTaskWorkflowRoutes } from './routes/routes.workflow.js';
+import { actingAdminUserId, TaskAccess } from './services/task-access.js';
 import { registerTaskAuditReferences } from './services/task-audit-references.js';
 import { TaskContextRegistry } from './services/task-context-registry.js';
 import { TaskHistoryService } from './services/task-history-service.js';
@@ -41,6 +46,7 @@ import { createTaskNotifier, type TaskNotifier } from './services/task-notifier.
 import { TaskReadPortService } from './services/task-read-port.js';
 import { TaskService } from './services/task-service.js';
 import { isSystemActor, TaskVisibility } from './services/task-visibility.js';
+import { TaskWorkflowRead } from './services/task-workflow-read.js';
 import { TaskWritePortService } from './services/task-write-port.js';
 
 /**
@@ -61,6 +67,8 @@ interface TasksCradle {
   readonly auditLogService: AuditPort;
   readonly taskContextRegistry: TaskContextRegistry;
   readonly tasksVisibility: TaskVisibility;
+  readonly tasksAccess: TaskAccess;
+  readonly tasksWorkflowRead: TaskWorkflowRead;
   readonly tasksNotifier: TaskNotifier;
   readonly tasksTaskService: TaskService;
   readonly tasksHistoryService: TaskHistoryService;
@@ -78,17 +86,38 @@ export function registerModule(ctx: ModuleContext): void {
   // return without a restart when the owner is back (the registry's header).
   //
   // Visibility is the module's only read path (`Task` is `@RuleScoped`): every
-  // list, count and read by id asks it, under the caller's own context.
+  // list, count and read by id asks it, under the caller's own context. It
+  // also carries the draft/private rule (`specs/165-task-management/` R-3):
+  // who the caller is and whether they hold `tasks:see_private`, asked of
+  // `admin_roles`' `permissionService` per call, never for the system.
+  // `TaskAccess` is how a route obtains one Task, and what it may do with it.
   ctx.di.register({
     taskContextRegistry: ctx
       .asFunction(() => new TaskContextRegistry((moduleId) => effectiveState.isPresent(moduleId)))
       .singleton(),
     tasksVisibility: ctx
+      .asFunction(({ taskContextRegistry }: TasksCradle) => {
+        const permissions = lazyPort<PermissionReadPort>(ctx, 'permissionService');
+        return new TaskVisibility({
+          contributors: () => taskContextRegistry.present(),
+          isSystemActor,
+          viewer: async () => {
+            const adminUserId = actingAdminUserId();
+            if (adminUserId === null) return { adminUserId: null, seePrivate: false };
+            const held = await permissions.listPermissions(adminUserId);
+            return { adminUserId, seePrivate: held.includes('*') || held.includes('tasks:see_private') };
+          },
+        });
+      })
+      .singleton(),
+    tasksAccess: ctx
       .asFunction(
-        ({ taskContextRegistry }: TasksCradle) =>
-          new TaskVisibility({ contributors: () => taskContextRegistry.present(), isSystemActor }),
+        ({ emFactory, tasksVisibility, taskContextRegistry }: TasksCradle) =>
+          new TaskAccess({ emFactory, visibility: tasksVisibility, contexts: taskContextRegistry }),
       )
       .singleton(),
+    // The workflow and the priority list — global configuration (R-1, R-9).
+    tasksWorkflowRead: ctx.asFunction(({ emFactory }: TasksCradle) => new TaskWorkflowRead(emFactory)).singleton(),
   });
   // --- end of Context ----------------------------------------------------------
 
@@ -107,18 +136,35 @@ export function registerModule(ctx: ModuleContext): void {
       .asFunction(() => createTaskNotifier(lazyPort<AdminNotificationRecordPort>(ctx, 'adminNotificationRecordPort')))
       .singleton(),
     tasksTaskService: ctx
-      .asFunction(({ emFactory, commandBus, tasksVisibility, taskContextRegistry, tasksNotifier }: TasksCradle) => {
-        const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
-        return new TaskService({
+      .asFunction(
+        ({
           emFactory,
           commandBus,
-          visibility: tasksVisibility,
-          contexts: taskContextRegistry,
-          adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
-          notifier: tasksNotifier,
-          translate: (key, language) => i18n.translate('tasks', key, language),
-        });
-      })
+          tasksVisibility,
+          tasksAccess,
+          tasksWorkflowRead,
+          taskContextRegistry,
+          tasksNotifier,
+        }: TasksCradle) => {
+          const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
+          const settings = lazyPort<SettingsReadPort>(ctx, 'settingsReadPort');
+          return new TaskService({
+            emFactory,
+            commandBus,
+            visibility: tasksVisibility,
+            access: tasksAccess,
+            workflow: tasksWorkflowRead,
+            contexts: taskContextRegistry,
+            adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+            permissions: lazyPort<PermissionReadPort>(ctx, 'permissionService'),
+            notifier: tasksNotifier,
+            // `tasks.time_zone` (R-17): read per call, so an operator's change
+            // is seen by the next request.
+            timeZone: () => settings.get('tasks.time_zone', null, TaskTimeZoneSchema.shape.timeZone),
+            translate: (key, language) => i18n.translate('tasks', key, language),
+          });
+        },
+      )
       .singleton(),
     // The audit log is the history (`task-history-service.ts`).
     // `auditLogService` is a platform service, not a module's port.
@@ -141,6 +187,7 @@ export function registerModule(ctx: ModuleContext): void {
       historyService: cradle.tasksHistoryService,
       requireAdmin: cradle.requireAdmin,
     });
+    await registerTaskWorkflowRoutes(app, { taskService: cradle.tasksTaskService, requireAdmin: cradle.requireAdmin });
   });
   /**
    * The audit-reference resolver — a **contribution** hook. It pushes an inert
@@ -163,11 +210,10 @@ export function registerModule(ctx: ModuleContext): void {
    * is switched off, and switching it back on needs no restart.
    */
   ctx.onBoot(() => {
-    const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
     lazyPort<AdminSearchProviderRegistryPort>(ctx, 'adminSearchProviderRegistry').register(
       createTaskAdminSearchProvider({
         search: (query) => ctx.cradle<TasksCradle>().tasksTaskService.searchForAdmin(query),
-        translate: (key, language) => i18n.translate('tasks', key, language),
+        statusLabel: (code, language) => ctx.cradle<TasksCradle>().tasksTaskService.statusLabel(code, language),
       }),
     );
   });
@@ -185,12 +231,13 @@ export function registerModule(ctx: ModuleContext): void {
     'taskWritePort',
     ctx
       .asFunction(
-        ({ commandBus, emFactory, taskContextRegistry }: TasksCradle) =>
+        ({ commandBus, emFactory, taskContextRegistry, tasksWorkflowRead }: TasksCradle) =>
           new TaskWritePortService({
             commandBus,
             emFactory,
             contexts: taskContextRegistry,
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
+            workflow: tasksWorkflowRead,
           }),
       )
       .singleton(),

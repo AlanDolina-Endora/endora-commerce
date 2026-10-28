@@ -2,9 +2,11 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   ERROR_CODES,
   foldDiacritics,
+  TASK_MINE_MAX,
   type AdminUserReadPort,
   type AdminUserRecord,
   type CreateTaskBody,
+  type PermissionReadPort,
   type SupportedLanguage,
   type TaskAssigneeOption,
   type TaskContextDescription,
@@ -13,96 +15,90 @@ import {
   type TaskDetail,
   type TaskListQuery,
   type TaskListResponse,
-  type TaskStatus,
+  type TaskRecord,
+  type TaskStatusChangeBody,
+  type TaskStatusChangeResult,
   type TaskSummary,
+  type TaskTagRef,
+  type TaskWorkflow,
   type UpdateTaskBody,
 } from '@endora-commerce/contracts';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import { HttpError } from '@endora-commerce/platform/http';
-import type { TaskAdminSearchQuery } from '../admin-search-provider.js';
-import { getTenantContext } from '@endora-commerce/platform/tenancy';
-import { assertAssignable, assertContextForCaller, assertMayDelete, assertMayPutIn, assertMayTakeOut } from './task-checks.js';
+import type { TaskAdminSearchQuery, TaskAdminSearchRow } from '../admin-search-provider.js';
+import { isOverdue } from '../domain/due-moment.js';
 import {
-  assignTaskCommand,
+  decodeListCursor,
+  defaultDirection,
+  encodeListCursor,
+  keysetAfter,
+  listOrdering,
+} from '../domain/list-cursor.js';
+import type { TaskStatusGraph } from '../domain/task-status-graph.js';
+import type { TaskPriority } from '../entities/task-priority.entity.js';
+import {
+  actingAdminUserId,
+  isSomeoneElsesPrivate,
+  isUuid,
+  TASK_COLUMNS,
+  type TaskAccess,
+  type TaskRow,
+} from './task-access.js';
+import { assertAssignable, assertContextForCaller, assertMayPutIn, assertMayTakeOut } from './task-checks.js';
+import {
+  changeTaskAssigneesCommand,
   changeTaskStatusCommand,
   createTaskCommand,
   deleteTaskCommand,
   updateTaskCommand,
+  type AssigneeChange,
   type TaskFieldChanges,
 } from './task-commands.js';
 import type { TaskContextRegistry } from './task-context-registry.js';
 import { taskNotFound } from './task-errors.js';
 import { tellAfterCommit, type TaskNotifier } from './task-notifier.js';
-import type { SqlFragment, TaskVisibility } from './task-visibility.js';
+import { taskVisibilitySql, type SqlFragment, type TaskVisibility, type TaskVisibilityScope } from './task-visibility.js';
+import { priorityRef, statusRef, type TaskWorkflowRead } from './task-workflow-read.js';
 
 export { taskNotFound } from './task-errors.js';
+export { actingAdminUserId } from './task-access.js';
+export type { TaskRow } from './task-access.js';
 
 /**
- * Tasks — the HTTP side of `specs/163-projects-and-tasks/contracts/admin-api.md`
- * §1: the list, *My Tasks*, one Task, and creating, editing and deleting one.
- * The read port reads through the methods here.
+ * Tasks — the HTTP side of `specs/165-task-management/contracts/admin-api.md`
+ * §1 (grown from 163's): the list on any sort with every filter, *My Tasks*,
+ * one Task, creating, editing, moving and deleting one, and the reads the read
+ * port and global search answer with.
  *
  * Every write is one or more Commands of `task-commands.ts` (Constitution
  * XIII), every refusal checked before the first runs. A `PATCH` that changes
- * several kinds of thing runs one Command per kind — fields, assignment,
- * status — so each has the audit row and the event the contract names.
- * Assigning somebody other than the caller tells them in the bell, after the
- * write commits (FR-032).
+ * several kinds of thing runs one Command per kind — fields, assignees — so
+ * each has the audit row and the event the contract names. A status move is
+ * its own route, checked against the configured workflow (research R-1).
  *
- * **Every read of the `tasks` table in this module is in this file** and asks
- * {@link TaskVisibility} first (`Task` is `@RuleScoped`, so no ORM filter
- * would). A Task the caller may not see answers 404 `TASK_NOT_FOUND`, exactly
- * as a missing one does, and is absent from every list.
- *
- * The reads are SQL rather than `em.find`, because the visibility pre-filter is
- * one SQL predicate built before the query runs, and the keyset cursor is a row
- * comparison.
+ * **Every read of the `tasks` table here composes the visibility pre-filter**
+ * (`TaskVisibility`: context, draft, private), and a Task read by id comes
+ * from `TaskAccess`. The child tables — assignees, tags, sub-tasks — are read
+ * only for ids those reads returned. `visibility-seam.test.ts` holds this.
  */
 
-/** One `tasks` row as the reads select it. */
-export interface TaskRow {
-  id: string;
-  number: string;
-  title: string;
-  description: string;
-  status: TaskStatus;
-  assigned_admin_user_id: string | null;
-  /** `YYYY-MM-DD`, formatted by the query so no driver date parsing is involved. */
-  due_on: string | null;
-  completed_at: Date | null;
-  created_by_admin_user_id: string;
-  context_type: string | null;
-  context_id: string | null;
-  context_group_id: string | null;
-  context_note: string | null;
-  created_at: Date;
-  updated_at: Date;
-  /** `created_at` as Postgres prints it, at full precision — the keyset cursor's key. */
-  cursor_at: string;
-  /** Open and past its due date, by the database's calendar day. */
-  overdue: boolean;
-}
-
-// Temporary until T016 moves the closed test onto status categories: the four
-// seeded codes, so the module loads after T004 removed `TASK_CLOSED_STATUSES`.
-const CLOSED = `'done', 'cancelled'`;
-
-const COLUMNS = `t."id", t."number", t."title", t."description", t."status", t."assigned_admin_user_id",
-  to_char(t."due_on", 'YYYY-MM-DD') as "due_on", t."completed_at", t."created_by_admin_user_id",
-  t."context_type", t."context_id", t."context_group_id", t."context_note", t."created_at", t."updated_at",
-  t."created_at"::text as "cursor_at",
-  (t."status" not in (${CLOSED}) and t."due_on" is not null and t."due_on" < current_date) as "overdue"`;
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** The most options the assignee picker offers for one search. */
+export const ASSIGNEE_OPTIONS_LIMIT = 50;
 
 export interface TaskServiceDeps {
   emFactory: () => EntityManager;
   commandBus: CommandBus;
   visibility: TaskVisibility;
+  access: TaskAccess;
+  workflow: TaskWorkflowRead;
   contexts: TaskContextRegistry;
   /** `admin_users`' read port — lazy, resolved per call. */
   adminUsers: AdminUserReadPort;
+  /** `admin_roles`' permission read port — lazy: whether a recipient may read Tasks at all (F-14). */
+  permissions: PermissionReadPort;
   notifier: TaskNotifier;
+  /** `tasks.time_zone` — the calendar a date-only due date is counted in (research R-17). */
+  timeZone: () => Promise<string>;
   /**
    * A sentence of this module's bundle in the reader's language — the label of
    * a context its owner did not describe (`_i18n`'s resolver, lazy).
@@ -110,15 +106,10 @@ export interface TaskServiceDeps {
   translate: (key: string, language: SupportedLanguage) => Promise<string>;
 }
 
-/** The most Tasks *My Tasks* answers — a person's open work, not an archive. */
-export const MY_TASKS_LIMIT = 500;
-/** The most options the assignee picker offers for one search. */
-export const ASSIGNEE_OPTIONS_LIMIT = 50;
+const ADMIN_PERMISSION_WILDCARD = '*';
 
-/** The administrator behind the current request, or `null` for the system. */
-export function actingAdminUserId(): string | null {
-  const actor = getTenantContext()?.actor;
-  return actor?.kind === 'admin' && actor.id ? actor.id : null;
+function holds(held: readonly string[], code: string): boolean {
+  return held.includes(ADMIN_PERMISSION_WILDCARD) || held.includes(code);
 }
 
 function personName(person: Pick<AdminUserRecord, 'firstName' | 'lastName' | 'email'>): string {
@@ -127,6 +118,28 @@ function personName(person: Pick<AdminUserRecord, 'firstName' | 'lastName' | 'em
 
 function isActive(admin: AdminUserRecord): boolean {
   return admin.status === 'active' && admin.deletedAt === null;
+}
+
+function iso(value: Date | string | null): string | null {
+  return value === null ? null : new Date(value).toISOString();
+}
+
+function asDate(value: Date | string | null): Date | null {
+  return value === null ? null : new Date(value);
+}
+
+/** A Postgres `uuid[]` literal of ids already checked to be uuids. */
+function uuids(ids: readonly string[]): string {
+  return `{${ids.join(',')}}`;
+}
+
+/** A Postgres `text[]` literal of codes; each is quoted, so a comma or a quote in one stays inside it. */
+function texts(values: readonly string[]): string {
+  return `{${values.map((value) => `"${value.replace(/["\\]/g, (m) => `\\${m}`)}"`).join(',')}}`;
+}
+
+function like(text: string): string {
+  return `%${text.replace(/[\\%_]/g, (match) => `\\${match}`)}%`;
 }
 
 /** Whether `context` is the context `row` is already in. */
@@ -142,172 +155,243 @@ function sameContext(
   );
 }
 
-interface Cursor {
-  at: string;
-  id: string;
-}
+/** A status is closed when the workflow puts it in category `done` or `cancelled`. */
+const CLOSED_SQL = (alias: string) =>
+  `exists (select 1 from "task_statuses" cs where cs."code" = ${alias}."status" and cs."category" in ('done', 'cancelled'))`;
 
-function encodeCursor(row: TaskRow): string {
-  return Buffer.from(JSON.stringify({ a: row.cursor_at, i: row.id }), 'utf8').toString('base64url');
-}
-
-function decodeCursor(cursor: string | undefined): Cursor | null {
-  if (!cursor) return null;
-  try {
-    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as { a?: unknown; i?: unknown };
-    if (typeof parsed.a === 'string' && typeof parsed.i === 'string' && UUID.test(parsed.i)) {
-      return { at: parsed.a, id: parsed.i };
-    }
-  } catch {
-    // Falls through to the refusal below: a cursor is opaque, and one this
-    // service did not issue is a malformed request rather than "page one".
-  }
-  throw new HttpError(400, ERROR_CODES.VALIDATION_FAILED, 'The cursor is not one this list issued.');
+/** What one page of rows needs beside the rows themselves. */
+interface RowFacts {
+  graph: TaskStatusGraph;
+  priorities: TaskPriority[];
+  timeZone: string;
+  assignees: Map<string, string[]>;
+  tags: Map<string, TaskTagRef[]>;
+  subtasks: Map<string, { closed: number; total: number }>;
+  parents: Map<string, TaskRow>;
 }
 
 export class TaskService {
   constructor(private readonly deps: TaskServiceDeps) {}
 
-  /** One Task the caller may see, or `null` — hidden and missing alike. */
+  /** One Task the caller may see, or `null` — hidden and missing alike (`TaskAccess.findVisible`). */
   async findVisibleRow(id: string): Promise<TaskRow | null> {
-    if (!UUID.test(id)) return null;
-    const rows = (await this.deps.emFactory().execute(`select ${COLUMNS} from "tasks" t where t."id" = ?`, [
-      id,
-    ])) as TaskRow[];
-    const row = rows[0];
-    if (!row) return null;
-    const visible = await this.deps.visibility.canSee({ contextType: row.context_type, contextId: row.context_id });
-    return visible ? row : null;
+    return this.deps.access.findVisible(id);
   }
 
   /** `GET /tasks/:id`. */
   async get(id: string, language: SupportedLanguage): Promise<TaskDetail> {
-    const row = await this.findVisibleRow(id);
-    if (!row) throw taskNotFound();
-    return this.#detail(row, language);
+    return this.#detail(await this.deps.access.loadVisible(id), language);
   }
 
   /**
-   * `GET /tasks` — newest first, a keyset page. Hidden contexts are excluded
-   * by the visibility pre-filter, so a page and the next one are exact.
+   * `GET /tasks` — a keyset page on any sort (research R-12), with every filter
+   * of `TaskListQuery`. Hidden Tasks are excluded by the visibility pre-filter,
+   * so a page and the next one are exact. Unknown codes and ids match nothing.
    */
   async list(query: TaskListQuery, language: SupportedLanguage): Promise<TaskListResponse> {
-    const where: string[] = [];
-    const params: unknown[] = [];
-    const visible = await this.deps.visibility.condition('t');
-    if (visible) {
-      where.push(visible.sql);
-      params.push(...visible.params);
-    }
-    if (query.status && query.status.length > 0) {
-      where.push(`t."status" = any(?::text[])`);
-      params.push(`{${query.status.join(',')}}`);
-    }
-    if (query.assignee === 'none') {
-      where.push(`t."assigned_admin_user_id" is null`);
-    } else if (query.assignee === 'me') {
-      // "Mine" is whoever asks; with no administrator behind the request
-      // nobody is, and the answer is none.
-      const me = actingAdminUserId();
-      if (me === null) return { items: [], nextCursor: null };
-      where.push(`t."assigned_admin_user_id" = ?`);
-      params.push(me);
-    } else if (query.assignee) {
-      where.push(`t."assigned_admin_user_id" = ?`);
-      params.push(query.assignee);
-    }
-    if (query.dueFrom) {
-      where.push(`t."due_on" >= ?::date`);
-      params.push(query.dueFrom);
-    }
-    if (query.dueTo) {
-      where.push(`t."due_on" <= ?::date`);
-      params.push(query.dueTo);
-    }
-    if (query.overdue === true) {
-      where.push(`(t."status" not in (${CLOSED}) and t."due_on" < current_date)`);
-    } else if (query.overdue === false) {
-      where.push(`not (t."status" not in (${CLOSED}) and t."due_on" is not null and t."due_on" < current_date)`);
-    }
-    if (query.contextType) {
-      where.push(`t."context_type" = ?`);
-      params.push(query.contextType);
-    }
-    if (query.contextId) {
-      where.push(`t."context_id" = ?`);
-      params.push(query.contextId);
-    }
-    if (query.q) {
-      const like = `%${query.q.replace(/[\\%_]/g, (match) => `\\${match}`)}%`;
-      where.push(`(t."title" ilike ? or t."number" ilike ?)`);
-      params.push(like, like);
-    }
-    const after = decodeCursor(query.cursor);
+    const scope = await this.deps.visibility.scope();
+    const filter = await this.#filters(query, scope);
+    if (filter === null) return { items: [], nextCursor: null };
+    const sort = query.sort ?? 'created';
+    const dir = query.dir ?? defaultDirection(sort);
+    const ordering = listOrdering(sort, dir, 't');
+    const where = [...filter.sql];
+    const params = [...filter.params];
+    const after = decodeListCursor(query.cursor, sort, dir);
     if (after) {
-      where.push(`(t."created_at", t."id") < (?::timestamptz, ?::uuid)`);
-      params.push(after.at, after.id);
+      const keyset = keysetAfter(sort, dir, 't', after);
+      where.push(keyset.sql);
+      params.push(...keyset.params);
     }
-
     const rows = (await this.deps.emFactory().execute(
-      `select ${COLUMNS} from "tasks" t
+      `select ${TASK_COLUMNS}, (${ordering.key})::text as "sort_key" from "tasks" t
         ${where.length > 0 ? `where ${where.join(' and ')}` : ''}
-        order by t."created_at" desc, t."id" desc
+        order by ${ordering.orderBy}
         limit ?`,
       [...params, query.limit + 1],
-    )) as TaskRow[];
+    )) as Array<TaskRow & { sort_key: string | null }>;
     const hasMore = rows.length > query.limit;
     const page = hasMore ? rows.slice(0, query.limit) : rows;
+    const last = page[page.length - 1];
     return {
-      items: await this.#summaries(page, language),
-      nextCursor: hasMore ? encodeCursor(page[page.length - 1]!) : null,
+      items: await this.#summaries(page, language, scope),
+      nextCursor: hasMore && last ? encodeListCursor({ sort, dir, key: last.sort_key, id: last.id }) : null,
     };
   }
 
   /**
-   * `GET /tasks/mine` — the caller's open Tasks by due date, undated last, then
-   * oldest first; narrowed by context visibility like the list (FR-030).
+   * The list's filters as SQL over `tasks t`, the visibility pre-filter first;
+   * `null` when nothing can match (`assignee=me` or `creator=me` with no
+   * administrator behind the request).
+   */
+  async #filters(query: TaskListQuery, scope: TaskVisibilityScope): Promise<{ sql: string[]; params: unknown[] } | null> {
+    const sql: string[] = [];
+    const params: unknown[] = [];
+    const add = (fragment: SqlFragment | string) => {
+      if (typeof fragment === 'string') sql.push(fragment);
+      else {
+        sql.push(fragment.sql);
+        params.push(...fragment.params);
+      }
+    };
+    const visible = taskVisibilitySql(scope, 't');
+    if (visible) add(visible);
+    const me = actingAdminUserId();
+
+    if (query.status && query.status.length > 0) add({ sql: `t."status" = any(?::text[])`, params: [texts(query.status)] });
+    if (query.statusCategory && query.statusCategory.length > 0) {
+      const categories = new Set(query.statusCategory);
+      const disjuncts: string[] = [];
+      // A code the workflow does not hold closes nothing: it counts as open (R-1).
+      if (categories.has('open')) disjuncts.push(`not ${CLOSED_SQL('t')}`);
+      const closed = [...categories].filter((category) => category !== 'open');
+      if (closed.length > 0) {
+        disjuncts.push(
+          `exists (select 1 from "task_statuses" fs where fs."code" = t."status" and fs."category" = any(?::text[]))`,
+        );
+        params.push(texts(closed));
+      }
+      sql.push(`(${disjuncts.join(' or ')})`);
+    }
+    if (query.assignee && query.assignee.length > 0) {
+      const disjuncts: string[] = [];
+      const ids = new Set<string>();
+      for (const who of query.assignee) {
+        if (who === 'none') disjuncts.push(`not exists (select 1 from "task_assignees" na where na."task_id" = t."id")`);
+        else if (who === 'me') {
+          if (me !== null) ids.add(me);
+        } else ids.add(who);
+      }
+      if (ids.size > 0) {
+        disjuncts.push(
+          `exists (select 1 from "task_assignees" ya where ya."task_id" = t."id" and ya."admin_user_id" = any(?::uuid[]))`,
+        );
+        params.push(uuids([...ids]));
+      }
+      if (disjuncts.length === 0) return null;
+      sql.push(`(${disjuncts.join(' or ')})`);
+    }
+    if (query.creator) {
+      const creator = query.creator === 'me' ? me : query.creator;
+      if (creator === null) return null;
+      add({ sql: `t."created_by_admin_user_id" = ?::uuid`, params: [creator] });
+    }
+    if (query.priority && query.priority.length > 0) {
+      const codes = query.priority.filter((code) => code !== 'none');
+      const disjuncts: string[] = [];
+      if (query.priority.includes('none')) disjuncts.push(`t."priority_code" is null`);
+      if (codes.length > 0) {
+        disjuncts.push(`t."priority_code" = any(?::text[])`);
+        params.push(texts(codes));
+      }
+      sql.push(`(${disjuncts.join(' or ')})`);
+    }
+    for (const tagId of new Set(query.tagId ?? [])) {
+      add({
+        sql: `exists (select 1 from "task_tag_assignments" tg where tg."task_id" = t."id" and tg."tag_id" = ?::uuid)`,
+        params: [tagId],
+      });
+    }
+    if (query.dueFrom) add({ sql: `t."due_on" >= ?::date`, params: [query.dueFrom] });
+    if (query.dueTo) add({ sql: `t."due_on" <= ?::date`, params: [query.dueTo] });
+    if (query.overdue !== undefined) {
+      const overdue = await this.#overdueSql('t');
+      add(query.overdue ? overdue : { sql: `not ${overdue.sql}`, params: overdue.params });
+    }
+    if (query.linkedKind && query.linkedId) {
+      add({
+        sql: `exists (select 1 from "task_record_links" lk where lk."task_id" = t."id" and lk."record_kind" = ? and lk."record_id" = ?::uuid)`,
+        params: [query.linkedKind, query.linkedId],
+      });
+    }
+    if (query.contextType) add({ sql: `t."context_type" = ?`, params: [query.contextType] });
+    if (query.contextId) add({ sql: `t."context_id" = ?::uuid`, params: [query.contextId] });
+    if (query.parentId) add({ sql: `t."parent_task_id" = ?::uuid`, params: [query.parentId] });
+    if (query.isSubtask !== undefined) add(`t."parent_task_id" is ${query.isSubtask ? 'not ' : ''}null`);
+    if (query.hasSubtasks !== undefined) {
+      // A sub-task the reader may not see makes no parent of a Task for them.
+      const child = taskVisibilitySql(scope, 'c');
+      add({
+        sql: `${query.hasSubtasks ? '' : 'not '}exists (select 1 from "tasks" c where c."parent_task_id" = t."id"${child ? ` and ${child.sql}` : ''})`,
+        params: child?.params ?? [],
+      });
+    }
+    if (query.draft !== undefined) {
+      // `draft=true` is only ever the caller's own drafts (R-3).
+      if (query.draft) {
+        if (me === null) return null;
+        add({ sql: `(t."is_draft" and t."created_by_admin_user_id" = ?::uuid)`, params: [me] });
+      } else add(`not t."is_draft"`);
+    }
+    if (query.private !== undefined) add(`${query.private ? '' : 'not '}t."is_private"`);
+    if (query.q) {
+      const pattern = like(query.q);
+      add({ sql: `(t."title" ilike ? or t."number" ilike ?)`, params: [pattern, pattern] });
+    }
+    return { sql, params };
+  }
+
+  /** Open and past the due moment: at `due_at`, or once `due_on` is over in `tasks.time_zone`. */
+  async #overdueSql(alias: string): Promise<SqlFragment> {
+    return {
+      sql: `(not ${CLOSED_SQL(alias)} and (case when ${alias}."due_at" is not null then ${alias}."due_at" < now()
+        else ${alias}."due_on" < (now() at time zone ?)::date end))`,
+      params: [await this.deps.timeZone()],
+    };
+  }
+
+  /**
+   * `GET /tasks/mine` — the caller's open, published Tasks by due date, undated
+   * last, then oldest first; narrowed by visibility like the list (FR-030).
    */
   async mine(language: SupportedLanguage): Promise<TaskSummary[]> {
     const me = actingAdminUserId();
     if (me === null) return [];
-    const where = [`t."assigned_admin_user_id" = ?`, `t."status" not in (${CLOSED})`];
+    const scope = await this.deps.visibility.scope();
+    const where = [
+      `exists (select 1 from "task_assignees" ma where ma."task_id" = t."id" and ma."admin_user_id" = ?::uuid)`,
+      `not ${CLOSED_SQL('t')}`,
+      `not t."is_draft"`,
+    ];
     const params: unknown[] = [me];
-    const visible = await this.deps.visibility.condition('t');
+    const visible = taskVisibilitySql(scope, 't');
     if (visible) {
       where.push(visible.sql);
       params.push(...visible.params);
     }
     const rows = (await this.deps.emFactory().execute(
-      `select ${COLUMNS} from "tasks" t where ${where.join(' and ')}
-        order by t."due_on" asc nulls last, t."created_at" asc, t."id" asc
-        limit ${MY_TASKS_LIMIT}`,
+      `select ${TASK_COLUMNS} from "tasks" t where ${where.join(' and ')}
+        order by t."due_on" asc nulls last, t."due_at" asc nulls last, t."created_at" asc, t."id" asc
+        limit ${TASK_MINE_MAX}`,
       params,
     )) as TaskRow[];
-    return this.#summaries(rows, language);
+    return this.#summaries(rows, language, scope);
   }
 
-  /** The Tasks of `ids` the caller may see — the audit trail's labels. */
+  /** The Tasks of `ids` the caller may see — the read port's `findByIds`, the audit trail's labels. */
   async visibleRowsByIds(ids: readonly string[]): Promise<TaskRow[]> {
-    const candidates = [...new Set(ids.filter((id) => UUID.test(id)))];
+    return this.#visibleRowsByIds(ids, await this.deps.visibility.scope());
+  }
+
+  async #visibleRowsByIds(ids: readonly string[], scope: TaskVisibilityScope): Promise<TaskRow[]> {
+    const candidates = [...new Set(ids.filter(isUuid))];
     if (candidates.length === 0) return [];
     const where = [`t."id" = any(?::uuid[])`];
-    const params: unknown[] = [`{${candidates.join(',')}}`];
-    const visible = await this.deps.visibility.condition('t');
+    const params: unknown[] = [uuids(candidates)];
+    const visible = taskVisibilitySql(scope, 't');
     if (visible) {
       where.push(visible.sql);
       params.push(...visible.params);
     }
     return (await this.deps.emFactory().execute(
-      `select ${COLUMNS} from "tasks" t where ${where.join(' and ')}`,
+      `select ${TASK_COLUMNS} from "tasks" t where ${where.join(' and ')}`,
       params,
     )) as TaskRow[];
   }
 
   /**
    * Tasks the caller may see whose number or title contains `q`, newest first,
-   * at most `limit` — `taskReadPort.search`, the `@@` document list's Tasks
-   * (`specs/163-projects-and-tasks/` FR-044). The list's own filter, narrowed
-   * by the same visibility pre-filter.
+   * at most `limit` — `taskReadPort.search`, the `@@` document list's Tasks.
    */
   async searchVisibleRows(q: string | undefined, limit: number): Promise<TaskRow[]> {
     const where: string[] = [];
@@ -319,12 +403,11 @@ export class TaskService {
     }
     const needle = (q ?? '').trim();
     if (needle !== '') {
-      const like = `%${needle.replace(/[\\%_]/g, (match) => `\\${match}`)}%`;
       where.push(`(t."title" ilike ? or t."number" ilike ?)`);
-      params.push(like, like);
+      params.push(like(needle), like(needle));
     }
     return (await this.deps.emFactory().execute(
-      `select ${COLUMNS} from "tasks" t
+      `select ${TASK_COLUMNS} from "tasks" t
         ${where.length > 0 ? `where ${where.join(' and ')}` : ''}
         order by t."created_at" desc, t."id" desc
         limit ?`,
@@ -339,20 +422,20 @@ export class TaskService {
    * number it begins, then the newest; `limit + 1` rows are read to answer
    * `hasMore`. The same visibility pre-filter as the list.
    */
-  async searchForAdmin(query: TaskAdminSearchQuery): Promise<{ rows: TaskRow[]; hasMore: boolean }> {
+  async searchForAdmin(query: TaskAdminSearchQuery): Promise<{ rows: TaskAdminSearchRow[]; hasMore: boolean }> {
     const fields = new Set(query.fields);
-    const like = `%${query.likeEscaped}%`;
+    const pattern = `%${query.likeEscaped}%`;
     const or: string[] = [];
     const params: unknown[] = [];
     if (fields.has('number')) {
       or.push(`t."number" ilike ?`);
-      params.push(like);
+      params.push(pattern);
     }
     if (fields.has('title')) {
       or.push(`t."title" ilike ?`);
-      params.push(like);
+      params.push(pattern);
     }
-    if (query.isUuid && UUID.test(query.text)) {
+    if (query.isUuid && isUuid(query.text)) {
       or.push(`t."id" = ?::uuid`);
       params.push(query.text);
     }
@@ -368,46 +451,55 @@ export class TaskService {
       : '';
     const rankParams = fields.has('number') ? [query.text, `${query.likeEscaped}%`] : [];
     const rows = (await this.deps.emFactory().execute(
-      `select ${COLUMNS} from "tasks" t
+      `select ${TASK_COLUMNS} from "tasks" t
         where ${where.join(' and ')}
         order by ${rank}t."created_at" desc, t."id" desc
         limit ?`,
       [...params, ...rankParams, query.limit + 1],
     )) as TaskRow[];
     const hasMore = rows.length > query.limit;
-    return { rows: hasMore ? rows.slice(0, query.limit) : rows, hasMore };
+    const page = hasMore ? rows.slice(0, query.limit) : rows;
+    return { rows: page.map((row) => ({ id: row.id, number: row.number, title: row.title, status: row.status })), hasMore };
   }
 
-  /** `POST /tasks` — a Task of the caller's, in a context they may see or in none. */
+  /** A status's name in a language, for global search's hit — the workflow's own words. */
+  async statusLabel(code: string, language: SupportedLanguage): Promise<string> {
+    return statusRef(await this.deps.workflow.graph(), code, language).name;
+  }
+
+  /** `POST /tasks` — a Task of the caller's, in a context they may see or in none, in the initial status. */
   async create(body: CreateTaskBody, language: SupportedLanguage): Promise<TaskDetail> {
     const context = body.context ?? null;
     if (context) {
       await assertContextForCaller(this.deps.contexts, context);
       await assertMayPutIn(this.deps.contexts, null, context);
     }
-    const assignee = body.assignedAdminUserId ?? null;
-    await assertAssignable(this.deps.adminUsers, [assignee]);
+    const assigneeIds = [...new Set(body.assigneeIds ?? [])];
+    await assertAssignable(this.deps.adminUsers, assigneeIds);
+    const graph = await this.deps.workflow.graph();
     const id = await this.deps.commandBus.run(
       createTaskCommand(context, {
         title: body.title,
         description: body.description ?? '',
-        assignedAdminUserId: assignee,
+        assigneeIds,
         dueOn: body.dueOn ?? null,
         contextNote: null,
+        status: graph.initial().code,
       }),
     );
-    const task = await this.#afterWrite(id, language);
-    if (assignee !== null) await this.#tellAssignee(assignee, task);
+    const task = await this.#detail(await this.deps.access.rowAfterWrite(id), language);
+    await this.#tellAssignees(assigneeIds, task);
     return task;
   }
 
   /**
-   * `PATCH /tasks/:id` — up to three Commands, in this order, each only when it
-   * changes something: the fields, the assignment, the status.
+   * `PATCH /tasks/:id` — up to two Commands, in this order, each only when it
+   * changes something: the fields, the assignees. A status is not changed here
+   * (`POST /tasks/:id/status`).
    */
   async update(id: string, body: UpdateTaskBody, language: SupportedLanguage): Promise<TaskDetail> {
-    const row = await this.findVisibleRow(id);
-    if (!row) throw taskNotFound();
+    const row = await this.deps.access.loadVisible(id);
+    this.deps.access.assertMayChange(row);
     if (body.context !== undefined && !sameContext(body.context, row)) {
       await assertMayTakeOut(
         this.deps.contexts,
@@ -419,7 +511,12 @@ export class TaskService {
       await assertContextForCaller(this.deps.contexts, body.context);
       await assertMayPutIn(this.deps.contexts, { contextType: row.context_type, contextId: row.context_id }, body.context);
     }
-    if (body.assignedAdminUserId !== undefined) await assertAssignable(this.deps.adminUsers, [body.assignedAdminUserId]);
+    let assignees: AssigneeChange | null = null;
+    if (body.assigneeIds !== undefined) assignees = { set: [...new Set(body.assigneeIds)] };
+    else if (body.addAssigneeIds !== undefined || body.removeAssigneeIds !== undefined) {
+      assignees = { add: body.addAssigneeIds ?? [], remove: body.removeAssigneeIds ?? [] };
+    }
+    if (assignees) await assertAssignable(this.deps.adminUsers, 'set' in assignees ? assignees.set : assignees.add);
 
     const fields: TaskFieldChanges = {};
     if (body.title !== undefined && body.title !== row.title) fields.title = body.title;
@@ -428,24 +525,87 @@ export class TaskService {
     if (body.context !== undefined && !sameContext(body.context, row)) fields.context = body.context;
     if (Object.keys(fields).length > 0) await this.deps.commandBus.run(updateTaskCommand(row.id, fields));
 
-    let newlyAssigned: string | null = null;
-    if (body.assignedAdminUserId !== undefined) {
-      const assigned = await this.deps.commandBus.run(assignTaskCommand(row.id, body.assignedAdminUserId));
-      if (assigned) newlyAssigned = body.assignedAdminUserId;
+    let added: string[] = [];
+    if (assignees) {
+      const changed = await this.deps.commandBus.run(changeTaskAssigneesCommand(row.id, assignees));
+      added = changed?.added ?? [];
     }
-    if (body.status !== undefined) await this.deps.commandBus.run(changeTaskStatusCommand(row.id, body.status));
 
-    const task = await this.#afterWrite(row.id, language);
-    if (newlyAssigned !== null) await this.#tellAssignee(newlyAssigned, task);
+    const task = await this.#detail(await this.deps.access.rowAfterWrite(row.id), language);
+    await this.#tellAssignees(added, task);
     return task;
+  }
+
+  /**
+   * `POST /tasks/:id/status` — a move the configured workflow permits (research
+   * R-1): 422 `TASK_STATUS_UNKNOWN` for a code it does not hold, 409
+   * `TASK_TRANSITION_FORBIDDEN` with `allowedTargets` for a move it does not
+   * permit, 409 `TASK_TRANSITION_CONFLICT` when the Task left `from`. The move
+   * to the status the Task is already in changes nothing.
+   */
+  async changeStatus(id: string, body: TaskStatusChangeBody, language: SupportedLanguage): Promise<TaskStatusChangeResult> {
+    const row = await this.deps.access.loadVisible(id);
+    this.deps.access.assertMayChange(row);
+    const graph = await this.deps.workflow.graph();
+    if (!graph.has(body.to)) {
+      throw new HttpError(422, ERROR_CODES.TASK_STATUS_UNKNOWN, `"${body.to}" is not a status of the workflow.`);
+    }
+    if (row.status !== body.to) {
+      if (row.status !== body.from) {
+        throw new HttpError(409, ERROR_CODES.TASK_TRANSITION_CONFLICT, 'The Task left that status in the meantime.', {
+          current: row.status,
+        });
+      }
+      if (!graph.canTransition(body.from, body.to)) {
+        throw new HttpError(409, ERROR_CODES.TASK_TRANSITION_FORBIDDEN, 'The workflow does not permit that move.', {
+          allowedTargets: graph.allowedTargets(body.from),
+        });
+      }
+      await this.deps.commandBus.run(
+        changeTaskStatusCommand(row.id, { from: body.from, to: body.to, toCategory: graph.categoryOf(body.to)! }),
+      );
+    }
+    const task = await this.#detail(await this.deps.access.rowAfterWrite(row.id), language);
+    const subtasks = (await this.#subtaskCounts([row.id], await this.deps.visibility.scope())).get(row.id);
+    return { task, openSubtasks: subtasks ? subtasks.total - subtasks.closed : 0 };
   }
 
   /** `DELETE /tasks/:id`. */
   async delete(id: string): Promise<void> {
-    const row = await this.findVisibleRow(id);
-    if (!row) throw taskNotFound();
-    await assertMayDelete(this.deps.contexts, { contextType: row.context_type, contextId: row.context_id });
+    const row = await this.deps.access.loadVisible(id);
+    await this.deps.access.assertMayDelete(row);
     if (!(await this.deps.commandBus.run(deleteTaskCommand(row.id)))) throw taskNotFound();
+  }
+
+  /** `GET /tasks/workflow` — the statuses with how many visible Tasks hold each, and the moves. */
+  async workflow(): Promise<TaskWorkflow> {
+    const graph = await this.deps.workflow.graph();
+    const where: string[] = [];
+    const params: unknown[] = [];
+    const visible = await this.deps.visibility.condition('t');
+    if (visible) {
+      where.push(visible.sql);
+      params.push(...visible.params);
+    }
+    const counts = (await this.deps.emFactory().execute(
+      `select t."status", count(*)::int as "n" from "tasks" t ${where.length > 0 ? `where ${where.join(' and ')}` : ''}
+        group by t."status"`,
+      params,
+    )) as Array<{ status: string; n: number }>;
+    const inUse = new Map(counts.map((row) => [row.status, Number(row.n)]));
+    return {
+      statuses: graph.statuses.map((status) => ({
+        code: status.code,
+        name: status.name,
+        defaultName: status.defaultName,
+        category: status.category,
+        isInitial: status.isInitial,
+        weight: status.weight,
+        color: status.color,
+        inUseCount: inUse.get(status.code) ?? 0,
+      })),
+      transitions: graph.transitions.map((edge) => ({ from: edge.fromCode, to: edge.toCode })),
+    };
   }
 
   /** `GET /tasks/lookups/assignees` — active administrators, by name. */
@@ -463,100 +623,21 @@ export class TaskService {
       .slice(0, ASSIGNEE_OPTIONS_LIMIT);
   }
 
-  /**
-   * The Task a write has just committed, read by id **without** visibility: the
-   * write may have moved it into a context the caller does not see (a Project
-   * they are not a Member of), and answering 404 for a change that committed
-   * would misreport it. Never a first read.
-   */
-  async #afterWrite(id: string, language: SupportedLanguage): Promise<TaskDetail> {
-    const rows = (await this.deps.emFactory().execute(`select ${COLUMNS} from "tasks" t where t."id" = ?`, [
-      id,
-    ])) as TaskRow[];
-    if (!rows[0]) throw taskNotFound();
-    return this.#detail(rows[0], language);
-  }
-
-  async #detail(row: TaskRow, language: SupportedLanguage): Promise<TaskDetail> {
-    const [summary] = await this.#summaries([row], language);
-    const creator = (await this.#people([row.created_by_admin_user_id])).get(row.created_by_admin_user_id);
-    return {
-      ...summary!,
-      description: row.description,
-      // Reference resolution for a Task's description is scheduled by no task
-      // of this feature; the field is empty until it is.
-      references: [],
-      context:
-        summary!.context && row.context_id
-          ? {
-              ...summary!.context,
-              id: row.context_id,
-              groupId: row.context_group_id,
-              canChangeTasks: await this.#mayChangeTasks(row, summary!.context.available),
-            }
-          : null,
-      contextNote: await this.#note(row, language),
-      createdBy: creator ? { id: creator.id, name: personName(creator) } : null,
-      completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : null,
-      createdAt: new Date(row.created_at).toISOString(),
-      updatedAt: new Date(row.updated_at).toISOString(),
-    };
-  }
-
-  /**
-   * The context owner's `canChangeTasks` for the reader, so a screen does not
-   * offer a Delete or a move the server would refuse (T147). An unavailable
-   * context answers `false`.
-   */
-  async #mayChangeTasks(row: TaskRow, available: boolean): Promise<boolean> {
-    if (!available || row.context_type === null || row.context_id === null) return false;
-    const descriptor = this.deps.contexts.presentFor(row.context_type);
-    return descriptor ? descriptor.canChangeTasks(row.context_id) : false;
-  }
-
-  /**
-   * The Task's note in the reader's language — worded by the context's owner
-   * when it says how (`renderNote`), otherwise as it was stored. Only a present
-   * owner is asked; a Task that reached here passed visibility, so it is.
-   */
-  async #note(row: TaskRow, language: SupportedLanguage): Promise<string | null> {
-    if (row.context_note === null || !row.context_type) return row.context_note;
-    const descriptor = this.deps.contexts.presentFor(row.context_type);
-    return descriptor?.renderNote ? descriptor.renderNote(row.context_note, language) : row.context_note;
-  }
-
-  /**
-   * FR-032: somebody other than the caller now holds the Task. Told only when
-   * they may see the Task: a Task in a context is theirs to hear about only if
-   * the context's owner says they may see that context (FR-020 — a bell is read
-   * outside any visibility, and the number would name a Task they cannot open).
-   * An owner that is not present cannot vouch for anybody, so nobody is told.
-   */
-  async #tellAssignee(assignee: string, task: TaskDetail): Promise<void> {
-    if (assignee === actingAdminUserId()) return;
-    await tellAfterCommit(task.id, async () => {
-      if (!(await this.#assigneeMaySee(assignee, task))) return;
-      await this.deps.notifier.assigned({ targetAdminUserId: assignee, taskId: task.id, number: task.number });
-    });
-  }
-
-  async #assigneeMaySee(assignee: string, task: TaskDetail): Promise<boolean> {
-    if (task.context === null) return true;
-    const descriptor = this.deps.contexts.presentFor(task.context.type);
-    return descriptor !== null && (await descriptor.canSeeAs(assignee, task.context.id));
-  }
+  // --- Read port --------------------------------------------------------------
 
   /**
    * The Tasks of one context (or one group inside it), oldest first — what the
    * read port answers. The context's own owner is asked once whether the
-   * caller may see it; the system is not narrowed.
+   * caller may see it, and the draft/private rule applies; the system is not
+   * narrowed. `openOnly`: not closed and not a draft — the completion gate's
+   * question (R-1, R-3).
    */
   async rowsInContext(q: TaskContextQuery, options: { openOnly: boolean }): Promise<TaskRow[]> {
     const filter = await this.#inContext(q);
     if (!filter) return [];
     return (await this.deps.emFactory().execute(
-      `select ${COLUMNS} from "tasks" t where ${filter.sql}
-         ${options.openOnly ? `and t."status" not in (${CLOSED})` : ''}
+      `select ${TASK_COLUMNS} from "tasks" t where ${filter.sql}
+         ${options.openOnly ? `and not ${CLOSED_SQL('t')} and not t."is_draft"` : ''}
         order by t."created_at" asc, t."id" asc`,
       filter.params,
     )) as TaskRow[];
@@ -572,26 +653,189 @@ export class TaskService {
     return Number(rows[0]?.n ?? 0);
   }
 
-  /** The predicate selecting one context's Tasks, or `null` when the caller may not see the context. */
+  /** The predicate selecting one context's Tasks the caller may see, or `null` when the context is hidden. */
   async #inContext(q: TaskContextQuery): Promise<SqlFragment | null> {
-    if (!UUID.test(q.contextId) || (q.contextGroupId !== undefined && !UUID.test(q.contextGroupId))) return null;
-    const visible = await this.deps.visibility.canSee({ contextType: q.contextType, contextId: q.contextId });
-    if (!visible) return null;
+    if (!isUuid(q.contextId) || (q.contextGroupId !== undefined && !isUuid(q.contextGroupId))) return null;
+    const visibleContext = await this.deps.visibility.canSeeContext({ contextType: q.contextType, contextId: q.contextId });
+    if (!visibleContext) return null;
     const sql = [`t."context_type" = ?`, `t."context_id" = ?`];
     const params: unknown[] = [q.contextType, q.contextId];
     if (q.contextGroupId !== undefined) {
       sql.push(`t."context_group_id" = ?`);
       params.push(q.contextGroupId);
     }
+    const viewer = await this.deps.visibility.viewer();
+    if (viewer) {
+      // The context is visible; the draft/private conjunct still applies.
+      const scope: TaskVisibilityScope = {
+        unrestricted: false,
+        contexts: [{ contextType: q.contextType, ids: [q.contextId] }],
+        viewer,
+      };
+      const visible = taskVisibilitySql(scope, 't')!;
+      sql.push(visible.sql);
+      params.push(...visible.params);
+    }
     return { sql: sql.join(' and '), params };
   }
 
-  async #summaries(rows: readonly TaskRow[], language: SupportedLanguage): Promise<TaskSummary[]> {
+  /** Rows as they cross a module boundary — plain records, never the entity. */
+  async records(rows: readonly TaskRow[]): Promise<TaskRecord[]> {
     if (rows.length === 0) return [];
-    const [people, descriptions] = await Promise.all([
-      this.#people(rows.map((row) => row.assigned_admin_user_id).filter((id): id is string => id !== null)),
-      this.#describe(rows),
+    const [graph, assignees] = await Promise.all([this.deps.workflow.graph(), this.#assigneeIds(rows.map((r) => r.id))]);
+    return rows.map((row) => {
+      const def = graph.get(row.status);
+      const category = def?.category ?? 'open';
+      return {
+        id: row.id,
+        number: row.number,
+        title: row.title,
+        status: row.status,
+        statusCategory: category,
+        statusName: def?.name ?? {},
+        statusDefaultName: def?.defaultName || row.status,
+        statusColor: def?.color ?? '#94a3b8',
+        closed: category !== 'open',
+        dueOn: row.due_on,
+        dueAt: asDate(row.due_at),
+        assigneeIds: assignees.get(row.id) ?? [],
+        draft: row.is_draft,
+        private: row.is_private,
+        contextType: row.context_type,
+        contextId: row.context_id,
+        contextGroupId: row.context_group_id,
+        contextNote: row.context_note,
+        completedAt: asDate(row.completed_at),
+        createdAt: new Date(row.created_at),
+        updatedAt: new Date(row.updated_at),
+      };
+    });
+  }
+
+  // --- Assignment notifications (FR-032, research R-2) -------------------------
+
+  /**
+   * Each newly added assignee other than the caller is told once, after commit,
+   * and only when they may see the Task: they must hold `tasks:read` (F-14),
+   * and for a Task in a context the context's owner must say they may see it.
+   * A bell is read outside any visibility, and a number must not reach someone
+   * the Task is hidden from. An owner that is not present vouches for nobody.
+   */
+  async #tellAssignees(added: readonly string[], task: TaskDetail): Promise<void> {
+    const me = actingAdminUserId();
+    for (const assignee of added) {
+      if (assignee === me) continue;
+      await tellAfterCommit(task.id, async () => {
+        if (!(await this.#assigneeMaySee(assignee, task))) return;
+        await this.deps.notifier.assigned({ targetAdminUserId: assignee, taskId: task.id, number: task.number });
+      });
+    }
+  }
+
+  async #assigneeMaySee(assignee: string, task: TaskDetail): Promise<boolean> {
+    if (!holds(await this.deps.permissions.listPermissions(assignee), 'tasks:read')) return false;
+    if (task.context === null) return true;
+    const descriptor = this.deps.contexts.presentFor(task.context.type);
+    return descriptor !== null && (await descriptor.canSeeAs(assignee, task.context.id));
+  }
+
+  // --- Shaping rows for the reader ---------------------------------------------
+
+  async #detail(row: TaskRow, language: SupportedLanguage): Promise<TaskDetail> {
+    const scope = await this.deps.visibility.scope();
+    const [[summary], subtaskRows, counts, creator, me] = await Promise.all([
+      this.#summaries([row], language, scope),
+      this.#visibleChildren(row.id, scope),
+      this.#collaborationCounts(row.id),
+      this.#people([row.created_by_admin_user_id]).then((people) => people.get(row.created_by_admin_user_id)),
+      Promise.resolve(actingAdminUserId()),
     ]);
+    const held = me === null ? [] : await this.deps.permissions.listPermissions(me);
+    const contextAvailable = summary!.context?.available ?? false;
+    const canChangeTasks = await this.#mayChangeTasks(row, contextAvailable);
+    const mayWrite = holds(held, 'tasks:write');
+    return {
+      ...summary!,
+      description: row.description,
+      // References are resolved per reader from User Story 1 on (research R-5).
+      references: [],
+      context:
+        summary!.context && row.context_id
+          ? { ...summary!.context, id: row.context_id, groupId: row.context_group_id, canChangeTasks }
+          : null,
+      contextNote: await this.#note(row, language),
+      startOn: row.start_on,
+      customFieldValues: row.custom_field_values ?? {},
+      links: [],
+      relatedTasks: [],
+      subtaskItems: await this.#summaries(subtaskRows, language, scope),
+      attachmentsCount: counts.attachments,
+      commentsCount: counts.comments,
+      reminders: [],
+      createdBy: creator ? { id: creator.id, name: personName(creator) } : null,
+      publishedAt: iso(row.published_at),
+      completedAt: iso(row.completed_at),
+      permissions: {
+        canChange: mayWrite && !isSomeoneElsesPrivate(row),
+        canDelete:
+          (mayWrite || (row.is_private && holds(held, 'tasks:see_private'))) &&
+          (row.context_type === null || canChangeTasks),
+        canPublish: row.is_draft && me !== null && row.created_by_admin_user_id === me,
+      },
+    };
+  }
+
+  /** The visible sub-tasks of one Task, oldest first. */
+  async #visibleChildren(parentId: string, scope: TaskVisibilityScope): Promise<TaskRow[]> {
+    const where = [`t."parent_task_id" = ?::uuid`];
+    const params: unknown[] = [parentId];
+    const visible = taskVisibilitySql(scope, 't');
+    if (visible) {
+      where.push(visible.sql);
+      params.push(...visible.params);
+    }
+    return (await this.deps.emFactory().execute(
+      `select ${TASK_COLUMNS} from "tasks" t where ${where.join(' and ')} order by t."created_at" asc, t."id" asc`,
+      params,
+    )) as TaskRow[];
+  }
+
+  /** How many attachments and live comments one visible Task has. */
+  async #collaborationCounts(taskId: string): Promise<{ attachments: number; comments: number }> {
+    const [row] = (await this.deps.emFactory().execute(
+      `select (select count(*)::int from "task_attachments" a where a."task_id" = ?) as "attachments",
+              (select count(*)::int from "task_comments" c where c."task_id" = ? and c."deleted_at" is null) as "comments"`,
+      [taskId, taskId],
+    )) as Array<{ attachments: number; comments: number }>;
+    return { attachments: Number(row?.attachments ?? 0), comments: Number(row?.comments ?? 0) };
+  }
+
+  /**
+   * The context owner's `canChangeTasks` for the reader, so a screen does not
+   * offer a Delete or a move the server would refuse (163 T147). An
+   * unavailable context answers `false`.
+   */
+  async #mayChangeTasks(row: TaskRow, available: boolean): Promise<boolean> {
+    if (!available || row.context_type === null || row.context_id === null) return false;
+    const descriptor = this.deps.contexts.presentFor(row.context_type);
+    return descriptor ? descriptor.canChangeTasks(row.context_id) : false;
+  }
+
+  /**
+   * The Task's note in the reader's language — worded by the context's owner
+   * when it says how (`renderNote`), otherwise as it was stored.
+   */
+  async #note(row: TaskRow, language: SupportedLanguage): Promise<string | null> {
+    if (row.context_note === null || !row.context_type) return row.context_note;
+    const descriptor = this.deps.contexts.presentFor(row.context_type);
+    return descriptor?.renderNote ? descriptor.renderNote(row.context_note, language) : row.context_note;
+  }
+
+  async #summaries(rows: readonly TaskRow[], language: SupportedLanguage, scope: TaskVisibilityScope): Promise<TaskSummary[]> {
+    if (rows.length === 0) return [];
+    const facts = await this.#facts(rows, scope);
+    const people = await this.#people([...new Set([...facts.assignees.values()].flat())]);
+    const descriptions = await this.#describe(rows);
     let unavailable: string | null = null;
     const contextOf = async (row: TaskRow): Promise<TaskContextSummary | null> => {
       if (!row.context_type || !row.context_id) return null;
@@ -612,19 +856,103 @@ export class TaskService {
     };
     const contexts: Array<TaskContextSummary | null> = [];
     for (const row of rows) contexts.push(await contextOf(row));
+    const now = new Date();
     return rows.map((row, index) => {
-      const assignee = row.assigned_admin_user_id ? people.get(row.assigned_admin_user_id) : undefined;
+      const status = statusRef(facts.graph, row.status, language);
+      const closed = status.category !== 'open';
+      const parent = row.parent_task_id ? facts.parents.get(row.parent_task_id) : undefined;
       return {
         id: row.id,
         number: row.number,
         title: row.title,
-        status: row.status,
+        status,
+        closed,
+        assignees: (facts.assignees.get(row.id) ?? []).flatMap((id) => {
+          const person = people.get(id);
+          return person ? [{ id: person.id, name: personName(person), active: isActive(person) }] : [];
+        }),
         dueOn: row.due_on,
-        overdue: row.overdue,
-        assignee: assignee ? { id: assignee.id, name: personName(assignee), active: isActive(assignee) } : null,
+        dueAt: iso(row.due_at),
+        overdue: isOverdue({ closed, dueOn: row.due_on, dueAt: asDate(row.due_at) }, now, facts.timeZone),
+        priority: priorityRef(facts.priorities, row.priority_code, language),
+        tags: facts.tags.get(row.id) ?? [],
         context: contexts[index] ?? null,
+        parent: row.parent_task_id
+          ? { id: row.parent_task_id, number: parent?.number ?? null, available: parent !== undefined }
+          : null,
+        subtasks: facts.subtasks.get(row.id) ?? { closed: 0, total: 0 },
+        draft: row.is_draft,
+        private: row.is_private,
+        createdAt: new Date(row.created_at).toISOString(),
+        updatedAt: new Date(row.updated_at).toISOString(),
       };
     });
+  }
+
+  /** Everything a page of rows needs beside itself, one query per kind, all keyed by the page's ids. */
+  async #facts(rows: readonly TaskRow[], scope: TaskVisibilityScope): Promise<RowFacts> {
+    const ids = rows.map((row) => row.id);
+    const parentIds = [...new Set(rows.map((row) => row.parent_task_id).filter((id): id is string => id !== null))];
+    const [graph, priorities, timeZone, assignees, tags, subtasks, parents] = await Promise.all([
+      this.deps.workflow.graph(),
+      this.deps.workflow.priorities(),
+      this.deps.timeZone(),
+      this.#assigneeIds(ids),
+      this.#tags(ids),
+      this.#subtaskCounts(ids, scope),
+      this.#visibleRowsByIds(parentIds, scope),
+    ]);
+    return { graph, priorities, timeZone, assignees, tags, subtasks, parents: new Map(parents.map((p) => [p.id, p])) };
+  }
+
+  /** The assignees of each Task, in the order they were given it. */
+  async #assigneeIds(taskIds: readonly string[]): Promise<Map<string, string[]>> {
+    const out = new Map<string, string[]>();
+    if (taskIds.length === 0) return out;
+    const rows = (await this.deps.emFactory().execute(
+      `select a."task_id", a."admin_user_id" from "task_assignees" a where a."task_id" = any(?::uuid[])
+        order by a."assigned_at" asc, a."admin_user_id" asc`,
+      [uuids(taskIds)],
+    )) as Array<{ task_id: string; admin_user_id: string }>;
+    for (const row of rows) out.set(row.task_id, [...(out.get(row.task_id) ?? []), row.admin_user_id]);
+    return out;
+  }
+
+  /** The tags of each Task, by name. */
+  async #tags(taskIds: readonly string[]): Promise<Map<string, TaskTagRef[]>> {
+    const out = new Map<string, TaskTagRef[]>();
+    if (taskIds.length === 0) return out;
+    const rows = (await this.deps.emFactory().execute(
+      `select ta."task_id", g."id", g."name", g."color" from "task_tag_assignments" ta
+         join "task_tags" g on g."id" = ta."tag_id"
+        where ta."task_id" = any(?::uuid[])
+        order by lower(g."name") asc, g."id" asc`,
+      [uuids(taskIds)],
+    )) as Array<{ task_id: string; id: string; name: string; color: string }>;
+    for (const row of rows) {
+      out.set(row.task_id, [...(out.get(row.task_id) ?? []), { id: row.id, name: row.name, color: row.color }]);
+    }
+    return out;
+  }
+
+  /** Each Task's sub-tasks the reader may see, closed and in all (FR-028). */
+  async #subtaskCounts(taskIds: readonly string[], scope: TaskVisibilityScope): Promise<Map<string, { closed: number; total: number }>> {
+    const out = new Map<string, { closed: number; total: number }>();
+    if (taskIds.length === 0) return out;
+    const where = [`c."parent_task_id" = any(?::uuid[])`];
+    const params: unknown[] = [uuids(taskIds)];
+    const visible = taskVisibilitySql(scope, 'c');
+    if (visible) {
+      where.push(visible.sql);
+      params.push(...visible.params);
+    }
+    const rows = (await this.deps.emFactory().execute(
+      `select c."parent_task_id", count(*)::int as "total", count(*) filter (where ${CLOSED_SQL('c')})::int as "closed"
+         from "tasks" c where ${where.join(' and ')} group by c."parent_task_id"`,
+      params,
+    )) as Array<{ parent_task_id: string; total: number; closed: number }>;
+    for (const row of rows) out.set(row.parent_task_id, { closed: Number(row.closed), total: Number(row.total) });
+    return out;
   }
 
   async #people(ids: readonly string[]): Promise<Map<string, AdminUserRecord>> {
@@ -636,8 +964,7 @@ export class TaskService {
 
   /**
    * What each context's owner says about the contexts of `rows`, asked once
-   * per type, under the caller's context. Only a present owner is asked; a
-   * row reaching here has passed visibility, so its owner is present.
+   * per type, under the caller's context. Only a present owner is asked.
    */
   async #describe(rows: readonly TaskRow[]): Promise<Map<string, Map<string, TaskContextDescription>>> {
     const byType = new Map<string, Set<string>>();

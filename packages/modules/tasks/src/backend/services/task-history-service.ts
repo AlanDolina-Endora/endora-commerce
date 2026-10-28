@@ -41,7 +41,7 @@ function decodeCursor(cursor: string | undefined): number {
 export interface TaskHistoryServiceDeps {
   tasks: Pick<TaskService, 'findVisibleRow'>;
   /** Whether the reader may see a context an entry names — the Task may have left it since. */
-  visibility: Pick<TaskVisibility, 'canSee'>;
+  visibility: Pick<TaskVisibility, 'canSeeContext'>;
   /** The kernel's audit port — a platform service. */
   auditLog: Pick<AuditPort, 'query'>;
   /** `admin_users`' read port — lazy, resolved per call. */
@@ -108,7 +108,7 @@ export class TaskHistoryService {
         const context = contextOf(state);
         if (!context) continue;
         const key = `${context.contextType}:${context.contextId}`;
-        if (!seen.has(key)) seen.set(key, await this.deps.visibility.canSee(context));
+        if (!seen.has(key)) seen.set(key, await this.deps.visibility.canSeeContext(context));
       }
     }
     const served = (state: unknown): unknown => {

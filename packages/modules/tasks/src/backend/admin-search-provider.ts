@@ -3,7 +3,6 @@ import type {
   AdminSearchProvider,
   AdminSearchProviderQuery,
   SupportedAdminLanguage,
-  TaskStatus,
 } from '@endora-commerce/contracts';
 
 /**
@@ -28,21 +27,22 @@ export interface TaskAdminSearchRow {
   readonly id: string;
   readonly number: string;
   readonly title: string;
-  readonly status: TaskStatus;
+  /** A code of the workflow. */
+  readonly status: string;
 }
 
 export interface TaskAdminSearchProviderDeps {
   /** The Tasks the caller may see that match, ranked — `TaskService.searchForAdmin`. */
   search(query: TaskAdminSearchQuery): Promise<{ rows: TaskAdminSearchRow[]; hasMore: boolean }>;
-  /** A sentence of this module's bundle in the reader's language. */
-  translate(key: string, language: SupportedAdminLanguage): Promise<string>;
+  /** A status's name in the reader's language — the workflow's own words (`specs/165-task-management/` R-1). */
+  statusLabel(code: string, language: SupportedAdminLanguage): Promise<string>;
 }
 
 /**
  * The Task provider. Visibility is the Tasks list's: the `tasks:read` gate its
- * route enforces, and the context pre-filter (research R-9) the search
- * composes — a Task whose context the reader may not see, or whose context's
- * owner is off, is never a hit.
+ * route enforces, and the visibility pre-filter the search composes — a Task
+ * whose context the reader may not see, or whose context's owner is off
+ * (163 R-9), or another admin's draft or private Task (165 R-3), is never a hit.
  */
 export function createTaskAdminSearchProvider(deps: TaskAdminSearchProviderDeps): AdminSearchProvider {
   return {
@@ -64,7 +64,7 @@ export function createTaskAdminSearchProvider(deps: TaskAdminSearchProviderDeps)
       const statuses = [...new Set(rows.map((row) => row.status))];
       const labels = new Map(
         await Promise.all(
-          statuses.map(async (status) => [status, await deps.translate(`status.${status}`, query.language)] as const),
+          statuses.map(async (status) => [status, await deps.statusLabel(status, query.language)] as const),
         ),
       );
       return {

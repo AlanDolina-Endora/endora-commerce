@@ -87,8 +87,12 @@ export const manifest = defineModuleManifest({
   // `emailDefaultsPort` (R-17, R-18); `orders` owns `orderReadPort`, through
   // which a referenced or linked Order is named (R-5, R-16); `catalog` owns
   // `catalogProductReadPort`, which names a referenced Product (R-5).
+  // `admin_roles` owns `permissionService`, which answers whether the caller
+  // holds `tasks:see_private` (R-3) and whether somebody about to be told of a
+  // Task may read Tasks at all (F-14); it cannot be switched off either.
   dependencies: [
     '_i18n',
+    'admin_roles',
     'admin_users',
     'assets_library',
     'audit_logs',
@@ -208,7 +212,15 @@ export const manifest = defineModuleManifest({
    * `errors.<CODE>` in `i18n/{en,pl}.json`, declared by the change that added
    * its first raise site.
    */
-  errorCodes: [{ code: 'TASK_NOT_FOUND' }, { code: 'TASK_CONTEXT_INVALID' }, { code: 'TASK_ASSIGNEE_INVALID' }],
+  errorCodes: [
+    { code: 'TASK_NOT_FOUND' },
+    { code: 'TASK_CONTEXT_INVALID' },
+    { code: 'TASK_ASSIGNEE_INVALID' },
+    { code: 'TASK_STATUS_UNKNOWN' },
+    { code: 'TASK_TRANSITION_FORBIDDEN' },
+    { code: 'TASK_TRANSITION_CONFLICT' },
+    { code: 'TASK_PRIVATE_READ_ONLY' },
+  ],
   /**
    * The command palette (Principle XVI, FR-041; `contracts/admin-surfaces.md`
    * §4). Each opens a screen of this module's own admin layer and declares the
