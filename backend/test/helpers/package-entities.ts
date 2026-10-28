@@ -148,6 +148,21 @@ import type { CrmStatusPropagation as CrmStatusPropagationRow } from '../../../p
 import type { CrmTag as CrmTagRow } from '../../../packages/modules/crm/src/backend/entities/crm-tag.entity.js';
 import type { CrmValueCountingStatus as CrmValueCountingStatusRow } from '../../../packages/modules/crm/src/backend/entities/crm-value-counting-status.entity.js';
 import type { Task as TaskRow } from '../../../packages/modules/tasks/src/backend/entities/task.entity.js';
+import type { TaskAssignee as TaskAssigneeRow } from '../../../packages/modules/tasks/src/backend/entities/task-assignee.entity.js';
+import type { TaskTagAssignment as TaskTagAssignmentRow } from '../../../packages/modules/tasks/src/backend/entities/task-tag-assignment.entity.js';
+import type { TaskComment as TaskCommentRow } from '../../../packages/modules/tasks/src/backend/entities/task-comment.entity.js';
+import type { TaskReference as TaskReferenceRow } from '../../../packages/modules/tasks/src/backend/entities/task-reference.entity.js';
+import type { TaskAttachment as TaskAttachmentRow } from '../../../packages/modules/tasks/src/backend/entities/task-attachment.entity.js';
+import type { TaskRecordLink as TaskRecordLinkRow } from '../../../packages/modules/tasks/src/backend/entities/task-record-link.entity.js';
+import type { TaskRelation as TaskRelationRow } from '../../../packages/modules/tasks/src/backend/entities/task-relation.entity.js';
+import type { TaskReminder as TaskReminderRow } from '../../../packages/modules/tasks/src/backend/entities/task-reminder.entity.js';
+import type { TaskReminderDelivery as TaskReminderDeliveryRow } from '../../../packages/modules/tasks/src/backend/entities/task-reminder-delivery.entity.js';
+import type { TaskStatus as TaskStatusRow } from '../../../packages/modules/tasks/src/backend/entities/task-status.entity.js';
+import type { TaskStatusTransition as TaskStatusTransitionRow } from '../../../packages/modules/tasks/src/backend/entities/task-status-transition.entity.js';
+import type { TaskPriority as TaskPriorityRow } from '../../../packages/modules/tasks/src/backend/entities/task-priority.entity.js';
+import type { TaskTag as TaskTagRow } from '../../../packages/modules/tasks/src/backend/entities/task-tag.entity.js';
+import type { TaskListSavedView as TaskListSavedViewRow } from '../../../packages/modules/tasks/src/backend/entities/task-list-saved-view.entity.js';
+import type { TaskDigestSubscription as TaskDigestSubscriptionRow } from '../../../packages/modules/tasks/src/backend/entities/task-digest-subscription.entity.js';
 
 /**
  * How a test names a **module package's** entity class (D-168).
@@ -1064,7 +1079,23 @@ export const CrmOrderStatusMapping = classNamed<CrmOrderStatusMappingRow>(instal
 export const CrmStatusPropagation = classNamed<CrmStatusPropagationRow>(installedModuleEntities, 'crm', 'CrmStatusPropagation');
 export const CrmTag = classNamed<CrmTagRow>(installedModuleEntities, 'crm', 'CrmTag');
 export const CrmValueCountingStatus = classNamed<CrmValueCountingStatusRow>(installedModuleEntities, 'crm', 'CrmValueCountingStatus');
+// `tasks` — every class of the module (`specs/165-task-management/` T014).
 export const Task = classNamed<TaskRow>(installedModuleEntities, 'tasks', 'Task');
+export const TaskAssignee = classNamed<TaskAssigneeRow>(installedModuleEntities, 'tasks', 'TaskAssignee');
+export const TaskTagAssignment = classNamed<TaskTagAssignmentRow>(installedModuleEntities, 'tasks', 'TaskTagAssignment');
+export const TaskComment = classNamed<TaskCommentRow>(installedModuleEntities, 'tasks', 'TaskComment');
+export const TaskReference = classNamed<TaskReferenceRow>(installedModuleEntities, 'tasks', 'TaskReference');
+export const TaskAttachment = classNamed<TaskAttachmentRow>(installedModuleEntities, 'tasks', 'TaskAttachment');
+export const TaskRecordLink = classNamed<TaskRecordLinkRow>(installedModuleEntities, 'tasks', 'TaskRecordLink');
+export const TaskRelation = classNamed<TaskRelationRow>(installedModuleEntities, 'tasks', 'TaskRelation');
+export const TaskReminder = classNamed<TaskReminderRow>(installedModuleEntities, 'tasks', 'TaskReminder');
+export const TaskReminderDelivery = classNamed<TaskReminderDeliveryRow>(installedModuleEntities, 'tasks', 'TaskReminderDelivery');
+export const TaskStatus = classNamed<TaskStatusRow>(installedModuleEntities, 'tasks', 'TaskStatus');
+export const TaskStatusTransition = classNamed<TaskStatusTransitionRow>(installedModuleEntities, 'tasks', 'TaskStatusTransition');
+export const TaskPriority = classNamed<TaskPriorityRow>(installedModuleEntities, 'tasks', 'TaskPriority');
+export const TaskTag = classNamed<TaskTagRow>(installedModuleEntities, 'tasks', 'TaskTag');
+export const TaskListSavedView = classNamed<TaskListSavedViewRow>(installedModuleEntities, 'tasks', 'TaskListSavedView');
+export const TaskDigestSubscription = classNamed<TaskDigestSubscriptionRow>(installedModuleEntities, 'tasks', 'TaskDigestSubscription');
 export type CrmOpportunity = CrmOpportunityRow;
 export type CrmOpportunityAttachment = CrmOpportunityAttachmentRow;
 export type CrmOpportunityComment = CrmOpportunityCommentRow;
@@ -1082,3 +1113,18 @@ export type CrmStatusPropagation = CrmStatusPropagationRow;
 export type CrmTag = CrmTagRow;
 export type CrmValueCountingStatus = CrmValueCountingStatusRow;
 export type Task = TaskRow;
+export type TaskAssignee = TaskAssigneeRow;
+export type TaskTagAssignment = TaskTagAssignmentRow;
+export type TaskComment = TaskCommentRow;
+export type TaskReference = TaskReferenceRow;
+export type TaskAttachment = TaskAttachmentRow;
+export type TaskRecordLink = TaskRecordLinkRow;
+export type TaskRelation = TaskRelationRow;
+export type TaskReminder = TaskReminderRow;
+export type TaskReminderDelivery = TaskReminderDeliveryRow;
+export type TaskStatus = TaskStatusRow;
+export type TaskStatusTransition = TaskStatusTransitionRow;
+export type TaskPriority = TaskPriorityRow;
+export type TaskTag = TaskTagRow;
+export type TaskListSavedView = TaskListSavedViewRow;
+export type TaskDigestSubscription = TaskDigestSubscriptionRow;

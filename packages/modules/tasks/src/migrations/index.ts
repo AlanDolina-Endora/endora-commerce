@@ -11,7 +11,8 @@
  */
 
 import { Migration20261026T133731TasksInit } from './20261026T133731_tasks_init.js';
+import { Migration20261028T140002TasksTaskManagement } from './20261028T140002_tasks_task_management.js';
 
-export const migrations = [Migration20261026T133731TasksInit];
+export const migrations = [Migration20261026T133731TasksInit, Migration20261028T140002TasksTaskManagement];
 
-export { Migration20261026T133731TasksInit };
+export { Migration20261026T133731TasksInit, Migration20261028T140002TasksTaskManagement };

@@ -18,6 +18,21 @@ import {
 } from '@endora-commerce/platform/kernel';
 import { createTaskAdminSearchProvider } from './admin-search-provider.js';
 import { Task } from './entities/task.entity.js';
+import { TaskAssignee } from './entities/task-assignee.entity.js';
+import { TaskAttachment } from './entities/task-attachment.entity.js';
+import { TaskComment } from './entities/task-comment.entity.js';
+import { TaskDigestSubscription } from './entities/task-digest-subscription.entity.js';
+import { TaskListSavedView } from './entities/task-list-saved-view.entity.js';
+import { TaskPriority } from './entities/task-priority.entity.js';
+import { TaskRecordLink } from './entities/task-record-link.entity.js';
+import { TaskReference } from './entities/task-reference.entity.js';
+import { TaskRelation } from './entities/task-relation.entity.js';
+import { TaskReminder } from './entities/task-reminder.entity.js';
+import { TaskReminderDelivery } from './entities/task-reminder-delivery.entity.js';
+import { TaskStatus } from './entities/task-status.entity.js';
+import { TaskStatusTransition } from './entities/task-status-transition.entity.js';
+import { TaskTag } from './entities/task-tag.entity.js';
+import { TaskTagAssignment } from './entities/task-tag-assignment.entity.js';
 import { registerTaskRoutes } from './routes/routes.tasks.js';
 import { registerTaskAuditReferences } from './services/task-audit-references.js';
 import { TaskContextRegistry } from './services/task-context-registry.js';
@@ -189,10 +204,30 @@ export function registerModule(ctx: ModuleContext): void {
  * the package is installed; a missing array is answered with zero entities
  * registered and no error anywhere.
  *
- * One class, the whole schema of the module: `Task`, `@RuleScoped` — its
- * tenancy is its context's rule (research R-9).
+ * `Task` and the nine tables that hang off it are `@RuleScoped` — their
+ * tenancy is the Task's context rule (163 research R-9), read only through
+ * `TaskVisibility` (165 research R-21). The workflow, priorities and tags are
+ * `@GlobalEntity` configuration; saved views and digest subscriptions are
+ * `@GlobalEntity` per-administrator rows.
  */
-export const entities = [Task];
+export const entities = [
+  Task,
+  TaskAssignee,
+  TaskTagAssignment,
+  TaskComment,
+  TaskReference,
+  TaskAttachment,
+  TaskRecordLink,
+  TaskRelation,
+  TaskReminder,
+  TaskReminderDelivery,
+  TaskStatus,
+  TaskStatusTransition,
+  TaskPriority,
+  TaskTag,
+  TaskListSavedView,
+  TaskDigestSubscription,
+];
 
 /**
  * The door to `tasks_number_seq`, published **by name** on `./backend`, as
