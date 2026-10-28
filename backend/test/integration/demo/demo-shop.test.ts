@@ -365,8 +365,11 @@ const SEED_DELTA: Readonly<Record<string, number>> = {
   project_stage_tasks: 16,
   project_stage_moves: 16,
   project_stage_entries: 11,
-  // 13 — their Tasks: one per Stage Task of every Stage each Project entered.
+  // 13 — their Tasks: one per Stage Task of every Stage each Project entered,
+  //      and an assignee row for each Task whose Role one Member holds
+  //      (`specs/165-task-management/` research R-2 — no longer a column).
   tasks: 12,
+  task_assignees: 10,
 };
 
 /**

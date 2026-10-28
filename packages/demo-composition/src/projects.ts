@@ -717,27 +717,36 @@ export const demoProjectTasksStep: CompositionStep = {
         const createdAt = ago(entered.daysAgo);
         const closedAfter = Math.max(1, entered.daysAgo - definition.dueOffsetDays);
         const stageId = demoProjectStageId(project.id, stage.key);
+        // A Task is published when it is created (`specs/165-task-management/`
+        // research R-3); its assignees are rows of `task_assignees` (R-2).
         await tx.execute(
           `insert into tasks
-             (id, number, title, description, status, assigned_admin_user_id, due_on, completed_at,
-              created_by_admin_user_id, context_type, context_id, context_group_id, created_at, updated_at)
-           values (?, ?, ?, ?, ?, ?, ?, ?, ?, 'project', ?, ?, ?, ?)`,
+             (id, number, title, description, status, due_on, completed_at, created_by_admin_user_id,
+              context_type, context_id, context_group_id, published_at, created_at, updated_at)
+           values (?, ?, ?, ?, ?, ?, ?, ?, 'project', ?, ?, ?, ?, ?)`,
           [
             task.id,
             await nextTaskNumber(tx),
             definition.title,
             definition.description,
             task.status,
-            task.assignee === null ? null : (people.get(task.assignee) ?? null),
             addDays(dayOf(createdAt), definition.dueOffsetDays),
             task.status === 'done' ? ago(closedAfter) : null,
             admin,
             project.id,
             stageId,
             createdAt,
+            createdAt,
             task.status === 'todo' ? createdAt : ago(closedAfter),
           ],
         );
+        const assignee = task.assignee === null ? null : (people.get(task.assignee) ?? null);
+        if (assignee !== null) {
+          await tx.execute(
+            `insert into task_assignees (task_id, admin_user_id, assigned_at, assigned_by_admin_user_id) values (?, ?, ?, ?)`,
+            [task.id, assignee, createdAt, admin],
+          );
+        }
         if (!materialized.has(stageId)) materialized.set(stageId, createdAt);
       }
       // The Stages these Tasks were made for say so, as a materialisation does.

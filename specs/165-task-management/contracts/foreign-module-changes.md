@@ -11,6 +11,7 @@ owner and carries the reason for each change. A change not on this list needs a 
 | `record-references.ts` | `RECORD_REFERENCE_TYPES` and `RECORD_DOCUMENT_KINDS` gain `opportunity` and `project`. | R-5 |
 | `crm.ts` | `OpportunityReadPort` gains `findByIds` and `search`. | R-5, R-16 |
 | `projects.ts` | `ProjectReadPort` gains `findByIds` and `search`. The reused `TaskSummarySchema` follows the new shape. | R-5 |
+| `tasks.ts` (added at T019) | `TaskRecord` also gains `statusName` (per language), `statusDefaultName`, `statusColor` and `updatedAt`. | Projects' Tasks tab builds a `TaskSummary` from a `TaskRecord`, and the summary's `status {name, color}` and `updatedAt` have no other source once the `tasks.status.*` keys leave the Projects bundle. |
 | `custom-fields.ts` | `supportedEntityTypeSchema` gains `'task'`. | R-8 |
 | `saved-list-views.ts` | Task create and update view schemas. | R-13 |
 | `admin-preferences.ts` | Key `listViewModes` (keys, patch, read, defaults). | R-14 |
@@ -35,6 +36,7 @@ are additive (`release-intent.md`).
 | --- | --- |
 | `src/admin/components/{TagPicker,MoveToMenu}.tsx` | Replaced by kit imports. Callers updated, with no behaviour change. CRM's admin tests run before and after. |
 | `src/backend/services/opportunity-read-port.ts` | `findByIds` and `search`. |
+| `src/backend/entities/crm-opportunity-reference.entity.ts` (added at T025) | `CrmReferenceTargetType` gains `'opportunity'` and `'project'`, the type of the widened check. Pulled forward into Phase 2 with the migration (orchestrator ruling 2). |
 | `src/backend/services/reference-service.ts`, document lookup service | Resolvers and lookup groups for `opportunity` (through its own service) and `project` (through `projectReadPort`, `degrades-without`; an edge already exists or is added with a `whenAbsent` sentence). |
 | `src/migrations/<stamp>_crm_opportunity_reference_kinds.ts` (new) | Widens `crm_opportunity_references_target_type_check`. |
 | `src/manifest.ts` | Edge on `projects`, if not already declared. |
@@ -51,11 +53,19 @@ are additive (`release-intent.md`).
 | `src/backend/services/reference-service.ts`, document lookup service | Resolvers and groups for `opportunity` and `project`. |
 | `src/migrations/<stamp>_projects_reference_kinds.ts` (new) | Widens `project_references_target_type_check`. |
 | `src/admin/pages/project-detail/tabs/TasksTab.tsx` | Status chip from `status.name` and `status.color`, and assignees as a list. The `tasks.status.*` keys are removed from `i18n/{en,pl}.json`. |
+| `src/backend/project-access-seam.test.ts` (added at T025) | `RULE_SCOPED_READ_LEDGER['services/project-access.ts']` 12 → 14: the two reads of `findVisibleMany` and `searchVisible`, both composing `visibleProjectSql`. |
+| `src/backend/routes/routes.stage-tasks.ts` (added at T019) | `GET /projects/:id/tasks` passes the response language to `tasksByStage`, which names each status from the record's `statusName`. |
 
 ## E. `packages/modules/custom_fields/`
 
 `custom-field-registry.ts` (`SUPPORTED_ENTITIES.task`), `host-storage-binding.ts`,
 `i18n/{en,pl}.json`, and the three tests that enumerate the types (R-8).
+
+## E2. `packages/modules/admin_notifications/` (added at Phase 2 by orchestrator ruling 3)
+
+| Path | Change | Why |
+| --- | --- | --- |
+| `src/backend/services/admin-notification-port.ts`, `admin-notification-service.ts`, and the port in `packages/contracts/src/admin-notifications.ts` | The record port gains an **additive** co-transactional `recordWithin(em, input)`: the bell row is created and persisted on the caller's EntityManager, inside its transaction, with no fork and no flush (the `AuditPort.recordWithin` shape). `record(input)` is unchanged. | SC-004 exactly-once bell for reminders: the delivery row and the bell entry commit together, so the unique delivery key makes the bell exactly-once. T001(b) measured that `record` forks its own EntityManager and autocommits. Implemented at T072 (US7), not before. |
 
 ## F. `packages/modules/admin_users/`
 

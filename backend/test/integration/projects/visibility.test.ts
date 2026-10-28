@@ -353,20 +353,20 @@ describe('projects — who sees a Project (US5)', () => {
       const design = stageNamed(project, 'Design');
       const hidden = await createStageTask(h, project.id, design, {
         title: `${token} for the outsider`,
-        assignedAdminUserId: other.adminUserId,
+        assigneeIds: [other.adminUserId],
       });
       expect(await bellAbout(hidden.id)).toEqual([]);
 
       const toListed = await createStageTask(h, project.id, design, { title: `${token} for the listed` });
-      const assign = await callTasks(h, 'PATCH', `/${toListed.id}`, { payload: { assignedAdminUserId: listed.adminUserId } });
+      const assign = await callTasks(h, 'PATCH', `/${toListed.id}`, { payload: { assigneeIds: [listed.adminUserId] } });
       expect(assign.statusCode, assign.body).toBe(200);
       expect((await bellAbout(toListed.id)).map((n) => n.targetAdminUserId)).toEqual([listed.adminUserId]);
 
       // Handing the hidden one on to somebody who may not see it either still tells nobody.
-      const handOn = await callTasks(h, 'PATCH', `/${hidden.id}`, { payload: { assignedAdminUserId: seeAll.adminUserId } });
+      const handOn = await callTasks(h, 'PATCH', `/${hidden.id}`, { payload: { assigneeIds: [seeAll.adminUserId] } });
       expect(handOn.statusCode, handOn.body).toBe(200);
       expect((await bellAbout(hidden.id)).map((n) => n.targetAdminUserId)).toEqual([seeAll.adminUserId]);
-      const back = await callTasks(h, 'PATCH', `/${hidden.id}`, { payload: { assignedAdminUserId: other.adminUserId } });
+      const back = await callTasks(h, 'PATCH', `/${hidden.id}`, { payload: { assigneeIds: [other.adminUserId] } });
       expect(back.statusCode, back.body).toBe(200);
       expect((await bellAbout(hidden.id)).map((n) => n.targetAdminUserId)).toEqual([seeAll.adminUserId]);
     });
@@ -399,7 +399,7 @@ describe('projects — who sees a Project (US5)', () => {
       const project = projects.everyone;
       const task = await createStageTask(h, project.id, stageNamed(project, 'Design'), {
         title: `${token} open`,
-        assignedAdminUserId: other.adminUserId,
+        assigneeIds: [other.adminUserId],
       });
       expect((await bellAbout(task.id)).map((n) => n.targetAdminUserId)).toEqual([other.adminUserId]);
     });

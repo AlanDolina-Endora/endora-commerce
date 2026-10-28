@@ -79,10 +79,10 @@ describe('projects — the `project` Task context (US2)', () => {
     });
     created.push(project.id);
     const design = stageNamed(project, 'Design');
-    forMember = (await createStageTask(h, project.id, design, { title: 'For the member', assignedAdminUserId: member.adminUserId })).id;
+    forMember = (await createStageTask(h, project.id, design, { title: 'For the member', assigneeIds: [member.adminUserId] })).id;
     // Assigned to somebody who may not see the Project: still not theirs to see.
-    forOutsider = (await createStageTask(h, project.id, design, { title: 'For the outsider', assignedAdminUserId: outsider.adminUserId })).id;
-    const response = await callTasks(h, 'POST', '', { payload: { title: 'Free-standing', assignedAdminUserId: outsider.adminUserId } });
+    forOutsider = (await createStageTask(h, project.id, design, { title: 'For the outsider', assigneeIds: [outsider.adminUserId] })).id;
+    const response = await callTasks(h, 'POST', '', { payload: { title: 'Free-standing', assigneeIds: [outsider.adminUserId] } });
     expect(response.statusCode, response.body).toBe(201);
     free = response.json().data.id;
   });
@@ -114,7 +114,10 @@ describe('projects — the `project` Task context (US2)', () => {
       const one = await callTasks(h, 'GET', `/${id}`, { cookies: outsider.cookies });
       expect(one.statusCode).toBe(404);
       expect(one.json().error.code).toBe('TASK_NOT_FOUND');
-      const edit = await callTasks(h, 'PATCH', `/${id}`, { cookies: outsider.cookies, payload: { status: 'done' } });
+      const edit = await callTasks(h, 'POST', `/${id}/status`, {
+        cookies: outsider.cookies,
+        payload: { from: 'todo', to: 'done' },
+      });
       expect(edit.statusCode).toBe(404);
     }
     // Nor can they put a Task into it.
@@ -138,7 +141,7 @@ describe('projects — the `project` Task context (US2)', () => {
       created.push(open.id);
       const task = await createStageTask(h, open.id, stageNamed(open, 'Design'), {
         title: `Task ${token}`,
-        assignedAdminUserId: tasksOnly.adminUserId,
+        assigneeIds: [tasksOnly.adminUserId],
       });
 
       expect(await listed(tasksOnly.cookies)).not.toContain(task.id);

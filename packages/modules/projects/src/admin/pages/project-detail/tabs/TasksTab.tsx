@@ -159,9 +159,12 @@ function StageTasks(props: StageTasksProps): ReactNode {
                 {task.number}
               </Link>
               <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{task.title}</span>
-              <span className="text-xs text-muted-foreground">{t(`tasks.status.${task.status}`)}</span>
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ backgroundColor: task.status.color }} />
+                {task.status.name}
+              </span>
               <span className="text-xs text-muted-foreground">
-                {task.assignee ? task.assignee.name : t('tasks.unassigned')}
+                {task.assignees.length > 0 ? task.assignees.map((person) => person.name).join(', ') : t('tasks.unassigned')}
               </span>
               {task.dueOn ? (
                 <span className={task.overdue ? 'text-xs font-medium text-destructive' : 'text-xs text-muted-foreground'}>

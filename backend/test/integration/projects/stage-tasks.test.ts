@@ -160,16 +160,16 @@ describe('projects — Stage Tasks (US2)', () => {
     expect(byTitle['Fit the racks']).toMatchObject({
       dueOn: plusDays(start, 3),
       description: 'Bay 1 to 4',
-      assignee: { id: people[0]!.adminUserId },
+      assignees: [expect.objectContaining({ id: people[0]!.adminUserId })],
       contextNote: null,
       createdBy: { id: TEST_ADMIN_ID },
     });
     expect(byTitle['Measure again']).toMatchObject({
       dueOn: start,
-      assignee: null,
+      assignees: [],
       contextNote: 'Responsible role: Surveyor',
     });
-    expect(byTitle['Tell the client']).toMatchObject({ dueOn: plusDays(start, 1), assignee: null, contextNote: null });
+    expect(byTitle['Tell the client']).toMatchObject({ dueOn: plusDays(start, 1), assignees: [], contextNote: null });
     // The note is stored as the Role, not as English text, and read in the reader's language (163 T077).
     const [stored] = (await h
       .em()

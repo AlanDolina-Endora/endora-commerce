@@ -153,7 +153,7 @@ describe('projects — the completion gate (US2)', () => {
 
     const read = await callTasks(h, 'GET', `/${task.id}`);
     expect(read.statusCode, read.body).toBe(200);
-    expect(read.json().data).toMatchObject({ status: 'todo', context: { groupId: design, groupLabel: 'Design' } });
+    expect(read.json().data).toMatchObject({ status: { code: 'todo' }, context: { groupId: design, groupLabel: 'Design' } });
   });
 
   it('with Tasks off the gate is not applied and the entry says so; back on, it applies again', async () => {
