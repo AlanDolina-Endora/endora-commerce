@@ -75,6 +75,7 @@ description: "Task list for Task management — growing the Tasks module"
   - (b) Does `adminNotificationRecordPort.record` share the caller's EntityManager or transaction? Read `packages/modules/admin_notifications/src/backend/`.
   - **(a) Measured 2026-10-28: yes.** `CommandBus.run` (`packages/platform/src/commands/command-bus.ts:46-78`) opens one `scoped.transactional(em => …)` and writes exactly **one** row itself (`:57-69`, `audit.recordWithin(em, …)`); nothing stops `run` from adding more. A Command's `run` receives that transactional em as `ctx.em` (`command.ts:39-43`). The published writer `recordAuditFromContext(auditLog, em, input)` (`commands/audit-from-context.ts:27-42`, exported from `@endora-commerce/platform/commands`, `index.ts:59`) calls `AuditPort.recordWithin(em, …)` (`kernel/ports/audit.ts:64`), whose implementation is `em.create` + `em.persist` with **no fork and no flush** (`kernel/audit/audit-log-service.ts:46-50`) — so the extra rows commit or roll back with the Command. `tasks` already has `auditLogService: AuditPort` in its cradle (`T/backend/index.ts:46`, used at `:109-116`). Precedent for a batch of rows in one unit of work: `CartAuditService` (comment at `audit-log-service.ts:39-43`). `check:command-coverage` does not inspect `recordWithin`/`recordAuditFromContext` calls (no match in `backend/scripts/check-command-coverage.ts`). Two things the reassignment Command must do itself: `recordAuditFromContext` fills only the actor, not `ipAddress`/`userAgent`/`requestId` (the bus fills those from `getRequestMeta`, `command-bus.ts:49,66-68`), and each row is a managed entity, so 5 000 rows are 5 000 entities in the identity map of one flush — inside the R-1 bound, but worth the perf test. **R-1's planned path stands; the batched-Commands fallback is not needed.**
   - **(b) Measured 2026-10-28: no.** `adminNotificationRecordPort.record(input)` takes no EntityManager (`packages/contracts/src/admin-notifications.ts:94-96`; adapter `admin_notifications/src/backend/services/admin-notification-port.ts:23-25`). `AdminNotificationService.record` calls `this.emFactory()` (`admin-notification-service.ts:108`) and `persistAndFlush` (`:121`), then `pruneStale` on another fresh fork (`:122`, `:330`). `emFactory` is `() => forkScopedEm(orm)` (`packages/platform/src/kernel/container.ts:80`), i.e. `orm.em.fork()` (`tenancy/scoped-em.ts:10-12`); MikroORM 6.6.16's `fork` copies the transaction context only under `keepTransactionContext` (`@mikro-orm/core/EntityManager.js:1436-1438`), which is not passed — so the bell row is written on its own connection in autocommit, never inside the caller's transaction. **Planned fallback chosen: delivery row first (its unique `(reminder_id, admin_user_id)` is the claim), bell after commit.** One premise of that fallback is false: `admin_notifications` has **no** de-duplication on `subjectId + kind + recipient` — the table has a plain `@Index()` only (`admin-notification.entity.ts:41`) and `record` inserts unconditionally. The fallback does not need it (the delivery row is the claim), but the consequence must be written into the spec before Phase 7: the bell becomes **at most once** too (a crash between the delivery commit and `record` loses it), which contradicts SC-004 "exactly once" for the bell and FR-035 "at least once". The only way to keep exactly-once is a co-transactional variant of the port (`recordWithin(em, …)`) in `admin_notifications`, which `contracts/foreign-module-changes.md` does not list — an owner/architect decision for Phase 7, not taken here.
+  - **Decided 2026-10-28 (orchestrator ruling 3):** add the co-transactional `recordWithin(em, …)` to the `admin_notifications` record port (additive; `foreign-module-changes.md` §E2). Implemented at T072, not before.
 - [X] T002 [P] Write failing schema tests in `X/tasks.test.ts`. Cover one accept case and one reject case for every request schema of `contracts/admin-api.md` §1–§5:
   - `assigneeIds` ≤ 20, unique;
   - `tagIds` ≤ 50;
@@ -208,32 +209,40 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
 
 ### Tests first
 
-- [ ] T009 [P] Extend `backend/test/integration/tasks/migration.test.ts` and see it fail. It covers:
+- [X] T009 [P] Extend `backend/test/integration/tasks/migration.test.ts` and see it fail. It covers:
   - from a database at the 163 schema with Tasks holding each status and some assignees, `up` gives every table, column, check and index of `data-model.md` §1–§3;
   - the seeds: four statuses with categories, twelve transitions, four priorities with en and pl names;
   - `task_assignees` holds exactly the former assignees, and `assigned_admin_user_id` is gone;
   - `published_at` equals `created_at` for existing rows;
   - `down` restores the 163 shape, including the single assignee (the first by `assigned_at`).
-- [ ] T010 [P] Write failing unit tests:
+  - Seen red 2026-10-28: 14 of 16 failed for the stated reason — no table, column, check, index or seed of 165, and `the task_management migration is not exported from ./migrations`. Green after T013/T014 (16/16, then 17/17 with the registration case below).
+  - The file now takes `setupMigratorTestDb` (a database of its own) and is listed in `backend/test/migrator-driving-tests.ts` (line added to `foreign-module-changes.md` §G). It asks the migrator which migrations it executed (the task_management class is among them) and then runs the migration **class** directly for `down`/`up`/`down`: `migrator.down()` would revert every module ordered after `tasks`. Because it no longer boots a server, `check-test-ownership` read it as a misplaced single-module test: a **retained** entry in the new shard `backend/scripts/ledgers/test-ownership/tasks.ts` says why it stays (it needs the host's template and registries; §G line added at T025).
+  - The `down` maps a status outside the four seeded codes to the seeded code of its category (`todo` for an open one) before restoring the check; the 163 single assignee is the first by `assigned_at`, ties by admin id.
+- [X] T010 [P] Write failing unit tests:
   - `T/backend/domain/task-status-graph.test.ts`: the R-1 rules, one per refusal, plus `allowedTargets` and `canTransition`;
   - `T/backend/domain/list-cursor.test.ts`: round-trip for every sort key, nulls last, and a tampered cursor refused;
   - `T/backend/domain/due-moment.test.ts`: overdue for `due_at` versus date-only in `Europe/Warsaw`, across a DST change.
-- [ ] T011 [P] Extend `T/backend/services/task-visibility.test.ts` with the draft/private conjunct of R-3:
+  - Seen red 2026-10-28: all three files failed to load (`Cannot find module './task-status-graph.js'` / `list-cursor.js` / `due-moment.js`). Green after T015 (43/43).
+  - DST cases: date-only overdue across 2026-10-25 (CEST→CET) and 2026-03-29 (CET→CEST) in `Europe/Warsaw`; the 09:00 base of a date-only reminder on both sides of each change.
+- [X] T011 [P] Extend `T/backend/services/task-visibility.test.ts` with the draft/private conjunct of R-3:
   - the Creator sees their own draft and their own private Task;
   - another admin sees neither;
   - a `tasks:see_private` holder sees the private Task and not the draft;
   - the system actor sees everything.
-- [ ] T012 [P] Write failing `backend/test/integration/tasks/draft-private-baseline.test.ts`, seeded directly in the database because the UI and the writes come in US8. A private Task and a draft of admin A are absent for admin B from:
+  - Seen red 2026-10-28: 13 of 21 failed — the 163 SQL expectations gained the conjunct, and the new draft/private cases saw no rule. Green after T018 (21/21). Also covered: a hidden draft is refused before its context is asked; a caller with no administrator behind it sees no draft and no private Task.
+- [X] T012 [P] Write failing `backend/test/integration/tasks/draft-private-baseline.test.ts`, seeded directly in the database because the UI and the writes come in US8. A private Task and a draft of admin A are absent for admin B from:
   - `GET /tasks`, `/tasks/mine` and `/tasks/:id` (404 identical to non-existent);
   - `taskReadPort.findById`, `findByIds` and `search`;
   - the global search provider.
+  - Not seen red for the stated reason: before T013 the seed itself failed (no `is_draft` column), and the file was first run after T018. The predicate it exercises was seen red in T011. Green 2026-10-28 (5/5). *My Tasks* implies "no draft" for everyone (admin-api §1), so the Creator's own draft is absent from their `/mine` too — the control asserts that.
 
 ### Schema and entities
 
-- [ ] T013 Scaffold `pnpm --filter backend run migration:new -- --module tasks --name task_management` and write `up` and `down` in `T/migrations/<stamp>_tasks_task_management.ts` per `data-model.md` §1–§3.
+- [X] T013 Scaffold `pnpm --filter backend run migration:new -- --module tasks --name task_management` and write `up` and `down` in `T/migrations/<stamp>_tasks_task_management.ts` per `data-model.md` §1–§3.
   - **Order inside `up`:** create the tables → seed → copy assignees → drop the column → add the checks.
   - Export it from `T/migrations/index.ts`.
-- [ ] T014 Create the entities in `T/backend/entities/`:
+  - `20261028T140002_tasks_task_management.ts`, exported from `T/migrations/index.ts`; `composer:generate` registered it. Order inside `up` as written. Index names: `tasks_parent_task_id_index`, `tasks_priority_code_index`, `tasks_context_source_key_unique`, `tasks_created_by_hidden_index`, `tasks_due_at_index`. Additions the data model implied: `tasks_source_key_length_check` (≤ 100), `task_statuses_code_check` / `task_priorities_code_check` (snake_case; a priority may not be `none`), `task_list_saved_views_filters_size_check` (8 KB), an index on `task_reminders(task_id)`. Assignees copied with `assigned_at = updated_at` (163 recorded no assignment time). Seed colours: todo `#64748b`, in_progress `#f59e0b`, done `#10b981`, cancelled `#94a3b8`; priorities urgent `#dc2626`, high `#f97316`, normal `#3b82f6`, low `#94a3b8`.
+- [X] T014 Create the entities in `T/backend/entities/`:
   - `@RuleScoped`: `task-assignee`, `task-tag-assignment`, `task-comment`, `task-reference`, `task-attachment`, `task-record-link`, `task-relation`, `task-reminder`, `task-reminder-delivery`;
   - `@GlobalEntity`: `task-status`, `task-status-transition`, `task-priority`, `task-tag`, `task-list-saved-view`, `task-digest-subscription`.
 
@@ -244,16 +253,18 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - run `composer:generate`, `manifests:generate` and `pnpm install --lockfile-only`.
 
   T009 green. `check-entity-tenant-classification` green.
+  - Fifteen classes; the join tables hold their ids by value (no ORM relation), so the create Command flushes the Task before writing its assignee rows (the unit of work cannot order them otherwise — seen as an FK violation). `check-entity-tenant-classification`: 266 entities, 266 classified. `manifests:generate` and `pnpm install --lockfile-only` changed nothing (no new peer: the time-zone setting is read with `TaskTimeZoneSchema.shape.timeZone`, not a module-local `zod` import).
 
 ### Shape changes: statuses and assignees
 
-- [ ] T015 Implement the pure domain code:
+- [X] T015 Implement the pure domain code:
   - `T/backend/domain/task-status-graph.ts`, copied from `C/backend/domain/opportunity-status-graph.ts` with categories;
   - `T/backend/domain/list-cursor.ts`;
   - `T/backend/domain/due-moment.ts`.
 
   T010 green.
-- [ ] T016 Rework the existing services onto the new shape. No new behaviour yet.
+  - `TaskStatusGraph` rules: `exactly_one_initial`, `initial_must_be_open`, `done_status_required`, `cancelled_status_required`, `transition_unknown_status`; `isClosed` treats a code the workflow no longer holds as open. `list-cursor`: one key per sort (`due` = the date then the UTC time, a date-only Task after the timed ones of its day; `priority`/`status` = the joined weight), nulls last in both directions, cursor `{s,d,k,i}` refused (400) under another sort or direction. `due-moment`: `todayIn`, `dueOnFor`, `isOverdue`, `dateOnlyMoment`.
+- [X] T016 Rework the existing services onto the new shape. No new behaviour yet.
   - `T/backend/services/task-commands.ts`:
     - status codes, with `completedAt` set on entering a `done`-category status;
     - `assignees_change` replaces `assign`;
@@ -266,11 +277,17 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - `task-read-port.ts`, `task-write-port.ts` (`assigneeIds`), `task-checks.ts`, `admin-search-provider.ts`, `task-history-service.ts`.
   - **Fix the F-14 gap:** `#assigneeMaySee` requires the recipient to hold `tasks:read` (`permissionService.listPermissions`) before `canSeeAs`. Add a case to `backend/test/integration/tasks/tasks-crud.test.ts` and see it red first.
   - **Status changes** now go through the graph. The `TaskTransitionService` arrives in US2. Until then, `PATCH` with `status` is removed per the contract, and `POST /tasks/:id/status` is implemented with the graph check only. This keeps `tasks-crud.test.ts` meaningful.
-- [ ] T017 Write and implement `backend/test/integration/tasks/visibility-seam.test.ts`.
+  - **Unblocking first** (orchestrator ruling 1): `task-service.ts` read the removed `TASK_CLOSED_STATUSES` at load; a two-code constant replaced it in a separate commit, and the `mod-tasks` `dist` was re-emitted (`--noEmitOnError false`, as Phase 1 did) until the package type-checked again, because every package resolves at its `dist` (D-164). After that the backend suites loaded.
+  - Done 2026-10-28 as written, with: summaries also carry `dueAt`, `priority`, `tags`, `parent`, visible `subtasks`, `draft`, `private`; overdue is computed per row in `tasks.time_zone` (date only) or at `due_at`; a code the workflow no longer holds is shown as itself, open. `POST /tasks/:id/status` checks: 422 `TASK_STATUS_UNKNOWN`, 409 `TASK_TRANSITION_CONFLICT` (also re-checked under the Command's lock), 409 `TASK_TRANSITION_FORBIDDEN {allowedTargets}`; a move to the current status is a no-op. Four error codes joined `ERROR_CODES`, the manifest, both bundles and `reference-ledgers.ts` with their first raise site (`TASK_STATUS_UNKNOWN`, `TASK_TRANSITION_FORBIDDEN`, `TASK_TRANSITION_CONFLICT`, `TASK_PRIVATE_READ_ONLY`). The manifest gained `admin_roles` in `dependencies` (`permissionService`).
+  - **F-14:** seen red 2026-10-28 with the check removed — `tells nobody who may not read Tasks at all` failed (`expected [ …(1) ] to deeply equal []`, the outsider was rung); green with it. `TaskRecord` gained `statusName`/`statusDefaultName`/`statusColor`/`updatedAt` (contract line in `foreign-module-changes.md` §A, changeset updated) so Projects can label a status; see T019.
+  - **Not done here (later stories, per "no new behaviour"):** `CreateTaskBody`/`UpdateTaskBody` fields `dueAt`, `startOn`, `priorityCode`, `tagIds`, `customFieldValues`, `parentTaskId`, `links`, `draft`, `private` are accepted by the schema and **ignored** by the service until US1/US5/US6/US8; the write port ignores `sourceKey` until US10; the list ignores `customFieldFilters` until T038; `DELETE` keeps the `tasks:write` gate (the `see_private` delete is US8).
+- [X] T017 Write and implement `backend/test/integration/tasks/visibility-seam.test.ts`.
   - It fails if any file under `T/backend/` other than `task-visibility.ts`, `task-access.ts` and the listed sweep services (`reminder-service`, `digest-service`, `maintenance-service`) issues SQL naming `tasks` or a `task_*` child table.
   - It reads the sources the way `project-access-seam.test.ts` does (read that test first).
   - The allow-list is a two-way ledger in the test.
-- [ ] T018 Implement draft/private in `T/backend/services/task-visibility.ts`: the conjunct of R-3, using the caller's id and `tasks:see_private`.
+  - **Deviations.** (1) Co-located as `T/backend/task-visibility-seam.test.ts`, not `backend/test/integration/tasks/visibility-seam.test.ts`: it reads module sources only, and `project-access-seam.test.ts` — the precedent the task names — is co-located (module-test-ownership contract §2). (2) The allow-list is `TASK_ACCESS_READERS` in `task-access.ts` (Projects' `PROJECT_ACCESS_READERS` shape), not the literal three files: the list's SQL, the summaries' child reads and the Commands' locked re-reads live in `task-service.ts`, `task-commands.ts` and `task-write-port.ts`, each listed with why every read composes the predicate or is keyed by an id `TaskAccess` handed out. The sweeps join it when they exist. Two-way ledger plus a per-file read count (access 2, commands 4, service 20, visibility 0, write-port 1); `task-number.ts` is the one SQL file reading no rule-scoped table.
+  - Written alongside T018, so not seen red against the 163 tree; seen red 2026-10-28 by removing `task-service.ts` from the allow-list (3 cases red, naming `services/task-service.ts:207: SQL reads "tasks"` …). Green 11/11.
+- [X] T018 Implement draft/private in `T/backend/services/task-visibility.ts`: the conjunct of R-3, using the caller's id and `tasks:see_private`.
 
   Create `T/backend/services/task-access.ts` with:
   - `loadVisible(id)`;
@@ -278,16 +295,20 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - `assertMayDelete(task)`.
 
   Route every existing read and write through them. T011, T012 and T017 green.
-- [ ] T019 Adapt Projects to the new shape (`foreign-module-changes.md` §D).
+  - `TaskVisibility` takes `viewer()` (the caller's id and `permissionService.hasPermission(id, 'tasks:see_private')` — the capability-check shape the permission inventory reads); the conjunct is `created_by = :me or (not is_draft and not is_private)`, or `… or not is_draft` for a `see_private` holder; the system is not narrowed and not asked. `canSeeContext` serves the history's context-only question. `TaskAccess`: `findVisible`, `loadVisible`, `rowAfterWrite`, `assertMayChange` (403 `TASK_PRIVATE_READ_ONLY`), `assertMayDelete` (163's `canChangeTasks`). **Deviation:** 163's `canChangeTasks` stays asked where 163 asked it (into/out of a record, delete), not on every write — asking it on an in-place edit would be new behaviour; `TaskDetail.permissions.canChange` is `tasks:write` and not someone else's private Task. T011, T012, T017 green.
+- [X] T019 Adapt Projects to the new shape (`foreign-module-changes.md` §D).
   - `P/backend/services/stage-task-service.ts`: the local `CLOSED` set becomes `summary.closed`, and it uses `assigneeIds: [holder]`.
   - `P/admin/pages/project-detail/tabs/TasksTab.tsx`: status from `status.name` and `status.color`, assignees as a list.
   - Remove `tasks.status.*` from `P/../i18n/{en,pl}.json` (`packages/modules/projects/i18n/`) after grepping that no other key reader remains.
 
   Run `backend/test/integration/projects/{stage-tasks,completion-gate,task-context,templates,visibility}.test.ts` and update only the assertions that pin the old shape, listing each one under this task.
-- [ ] T020 Adapt the demo.
+  - Done 2026-10-28. `tasksByStage(projectId, language)` — the route passes `request.responseLanguage()` (`routes.stage-tasks.ts`, line added to §D) — names each status from `TaskRecord.statusName[language] || statusDefaultName` with its colour; overdue is `!closed` and past `dueAt`, or `dueOn` before today in the Projects time zone; priority/tags/parent/sub-tasks are neutral (the tab shows none). `tasks.status.*` removed from both Projects bundles (the one other reader was the admin test, updated).
+  - Assertions updated, shape only (commit `1e4f0e63b` body): `helpers.setTaskStatus` (PATCH → `POST /status`), `completion-gate` (`status: 'todo'` → `{code}`), `stage-tasks` (`assignee` → `assignees`), `task-context` (`assignedAdminUserId` → `assigneeIds`; the outsider's PATCH status → `POST /status`, still 404), `templates` (column → `task_assignees` row), `visibility` (`assignedAdminUserId` → `assigneeIds`). All 46 Projects/custom-fields/demo files green.
+- [X] T020 Adapt the demo.
   - `packages/demo-composition/src/projects.ts`: insert assignees into `task_assignees` and set `published_at`.
   - Run `backend/test/integration/demo/demo-shop.test.ts` and `demo-reset-after-use.test.ts` (whose `tasks` count is unchanged here).
-- [ ] T021 Update the existing tests that pin the old shape, listed in `foreign-module-changes.md` §G, one by one:
+  - Done 2026-10-28: the demo writes `published_at = created_at` and one `task_assignees` row per Task whose Role one Member holds. `demo-shop.test.ts`'s ledger gains `task_assignees: 10` (`tasks: 12` unchanged); `demo-reset-after-use` green. `check:demo-data-budget` and `check:module-boundary` clean.
+- [X] T021 Update the existing tests that pin the old shape, listed in `foreign-module-changes.md` §G, one by one:
   - `backend/test/integration/tasks/{tasks-crud,write-port,off-state}.test.ts`
   - `backend/test/contract/tasks/tasks.contract.test.ts`
   - `backend/test/perf/tasks/context-visibility.perf.test.ts`
@@ -295,23 +316,27 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - `admin/test/modules/projects/ProjectDetail.tasks-tab.test.tsx`
 
   Change shape, never intent. Write each changed assertion's before and after into the commit body.
-- [ ] T022 Rework the admin pages onto the new shape. No new controls yet.
+  - Done 2026-10-28; each changed assertion's before/after is in the bodies of commits `4b5b4b59b` (backend) and `55738aff6` / `1e4f0e63b` (admin). `off-state.test.ts` and `context-visibility.test.ts` needed no change. Two more tests pinned Phase 1's contract changes and were red on arrival, found by the T025 gate: `packages/modules/admin_users/…/admin-preference-document.test.ts` (`listViewModes: {}` default) and `admin/test/kit/kit-collaboration-bundle.test.ts` (the core bundle lacked `references.{kind,group,inserted,unavailable}.{opportunity,project}` — added to `_i18n` en/pl); both lines added to `foreign-module-changes.md`.
+- [X] T022 Rework the admin pages onto the new shape. No new controls yet.
   - `T/admin/api.ts`, `components/StatusBadge.tsx` (colour from the status), `components/task-columns.tsx` (assignee list) and `components/AssigneePicker.tsx`: multi-select over `TagMultiSelect`-like chips, or kit `MultiSelect` if one exists (grep `K/components` first).
   - `pages/TasksList.tsx`, `MyTasks.tsx`, `TaskCreate.tsx` and `TaskDetail.tsx`: the status picker shows the workflow's statuses from `GET /tasks/workflow` (served read-only from now).
 
   Implement `GET /tasks/workflow` in `T/backend/routes/routes.workflow.ts` (`tasks:read`).
-- [ ] T023 Implement the generalised list in `T/backend/services/task-service.ts`:
+  - Done 2026-10-28. `AssigneePicker` is multi-select on the kit's `MultiCombobox` (no `MultiSelect` fits: that one is a filter-bar checkbox panel); options are the lookup's ≤ 50 active admins, narrowed client-side, and a chosen admin the lookup no longer offers keeps their name. `StatusBadge` = the served name with the colour as a dot. TaskDetail's status control offers the current status and the workflow's moves from it (`POST /status` with `from`); TasksList's filter lists the workflow's statuses; the tasks bundles lost `status.*`. `GET /tasks/workflow` (`routes.workflow.ts`, `tasks:read`) answers statuses with the visible `inUseCount` and the moves.
+- [X] T023 Implement the generalised list in `T/backend/services/task-service.ts`:
   - `sort` / `dir` with the keyset cursor (T015);
   - the filters `statusCategory[]`, `creator`, `priority[]` and `tagId[]` (AND), `parentId` / `isSubtask` / `hasSubtasks`, and `linkedKind` / `linkedId`;
   - the `subtasks {closed, total}` lateral count under the visibility predicate.
 
   Unknown codes and ids match nothing. Write a failing case per filter and per sort first in `backend/test/contract/tasks/tasks-list.contract.test.ts`.
-- [ ] T024 [P] Extend `backend/test/perf/tasks/context-visibility.perf.test.ts` to 5 000 Tasks with 2 assignees and 3 tags each:
+  - Seen red: not run before implementation — `tasks-list.contract.test.ts` was written first but executed after `task-service.ts` was rewritten (it could not run red for its own reason earlier: the schema it seeds did not exist until T013). First run: 30/31, the one red being my own premise (a status the workflow does not hold is **open**, consistent with `isClosed` and the completion gate, not "in no category") — the test was corrected. Green 31/31: 14 sort/direction cases across pages, the cross-sort cursor refusal, every filter, the sub-task count leaving out a hidden draft. `hasSubtasks` and the counts compose the visibility predicate over the children.
+- [X] T024 [P] Extend `backend/test/perf/tasks/context-visibility.perf.test.ts` to 5 000 Tasks with 2 assignees and 3 tags each:
   - list first page under 2 s for each sort;
   - *My Tasks* under 2 s.
 
   Record the measurements under this task.
-- [ ] T025 Phase gate. Run:
+  - Measured 2026-10-28 on the local test Postgres (`PERF_RUN=true`), 5 000 Projects × 4 Tasks plus 5 000 context-less Tasks × 2 assignees × 3 tags, members-only viewer of everything: 163's `GET /tasks` p95 282 ms (budget 500); first page p95 per sort — created asc 231 / desc 269, number 258 / 247, title 251 / 282, due 278 / 286, priority 254 / 227, status 271 / 198, updated 172 / 350 ms; `GET /tasks/mine` p95 835 ms (it returns up to 500 rows). All under SC-002's 2 s.
+- [X] T025 Phase gate. Run:
   - `pnpm run build:packages`, `pnpm -r run typecheck`, `pnpm -r run lint`
   - `pnpm --filter backend run test:unit:fast`
   - `pnpm --filter backend exec vitest run test/integration/tasks test/contract/tasks test/integration/projects test/integration/crm test/integration/demo`
@@ -320,6 +345,18 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - `check:off-state-coverage`, `check:naming`, `check:language`
 
   Regenerate the OpenAPI baseline.
+  - Run 2026-10-28 on the final tree:
+    - `build:packages`: **green** (all packages, `mod-tasks`, `mod-projects`, `admin-kit`, `mod-crm`, `mod-custom-fields` included).
+    - `pnpm -r run typecheck`: **green** (0 errors; Phase 1 recorded 72).
+    - `pnpm -r run lint`: **green** (0 errors; pre-existing warnings only).
+    - `pnpm --filter backend run test:unit:fast`: 359/361 files, 7 759/7 761 tests; **two expected reds**: (1) `test/unit/scripts/moved-module-tree.test.ts › check-port-dependencies.ts reads both roots and passes` — the three `degrades-without` edges resolve nothing yet (orchestrator ruling 4: expected until US1/US6 resolve `opportunityReadPort`, `quoteRequestReadPort`, `projectReadPort`); (2) `test/contract/admin_users/permission-inventory.test.ts › every assignable code is enforced somewhere` — `tasks:configure` is grantable and gates nothing until US2's configuration routes (it was declared in T006; T008 could not run the backend suite to see it). `tasks:see_private` is enforced by `TaskVisibility`'s `hasPermission`.
+    - `vitest run test/integration/tasks test/contract/tasks test/integration/projects test/integration/crm test/integration/demo`: **85 files, 1 082 passed, 1 expected fail** (pre-existing `it.fails`). The migration test and the seam test green.
+    - `pnpm --filter admin exec vitest run test/modules/tasks test/modules/projects` (Node 26, `--no-experimental-webstorage`): **27 files, 220 passed**.
+    - `pnpm --filter '!backend' run test`: green after fixing the two Phase-1 reds named under T021 (`mod-admin-users` 151/151; `admin` 433 files).
+    - `check:off-state-coverage` (41/41), `check:naming`, `check:language`: **green**. Also green: `check:error-translations`, `check:command-coverage`, `check:bundle-pairing`, `check:module-boundary`, `check:demo-data-budget`, `check:test-ownership`, `check:port-shape`, `check:entry-presence`, `check:admin-zones`, `check:admin-surface`, `check:action-route-permissions`, `check:module-docs`, `check:shared-table-wipes`, `check:release-intent` (`--since origin/master`: 0 violations), `check-entity-tenant-classification`. **`check:port-dependencies` red**, as ruling 4 expects (same three edges).
+    - OpenAPI baseline regenerated (`UPDATE_OPENAPI_BASELINE=1`): only `/api/v1/admin/tasks/{id}/status` and `/api/v1/admin/tasks/workflow` added.
+    - Generated artefacts current: `composer:generate` (migration registry, `docs/docs/module-reference/tasks.md`), `manifests:generate` and `pnpm install --lockfile-only` (no change).
+  - **Orchestrator rulings applied here:** (1) the minimal Phase 3 slice pulled forward so the build and typecheck are green — see the notes under T032, T033, T035, T038; (2) the CRM and Projects check-widening migrations landed in this phase (T032); (3) `recordWithin(em, …)` for `admin_notifications` recorded in `foreign-module-changes.md` §E2 and under T001/T072, not implemented; (4) `check:port-dependencies` recorded as expected red.
 
 **Checkpoint**: 163's behaviour holds on the new shape. Drafts and private Tasks are already invisible to everyone else on every read path.
 
@@ -377,9 +414,11 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - `… --module projects --name projects_reference_kinds`
 
   Write `up` and `down` per `data-model.md` §6, then run `composer:generate`.
+  - **Pulled forward into Phase 2** (orchestrator ruling 2, 2026-10-28): `C/migrations/20261028T143444_crm_opportunity_reference_kinds.ts` and `P/migrations/20261028T143448_projects_reference_kinds.ts`, `up`/`down` per data-model §6 (`down` deletes the two kinds' rows, as the 163 precedent did, then restores the five), registered. `CrmReferenceTargetType` widened in `C/backend/entities/crm-opportunity-reference.entity.ts` (line added to §C). Run by every backend suite's template build; no dedicated up/down test yet — T028 or this task may add one. What remains: nothing but that test.
 - [ ] T033 [US1] Add `findByIds` and `search` to the read ports.
   - `C/backend/services/opportunity-read-port.ts`: number and title, ≤ 20.
   - `P/backend/services/project-read-port.ts`: through `ProjectAccess`. Add the file to `PROJECT_ACCESS_READERS` in `P/backend/services/project-access.ts` if the method lives in a new file.
+  - **Pulled forward into Phase 2** (ruling 1): both methods exist. CRM: `findByIds` (scoped `em.find`) and `search` (number/title `ilike`, newest first, ≤ 20). Projects: `ProjectAccess.findVisibleMany` and `searchVisible` (both compose `visibleProjectSql`; seam ledger `project-access.ts` 12 → 14), so no new file joined `PROJECT_ACCESS_READERS`. Not yet tested by an integration case — T028 covers them through the lookups.
 - [ ] T034 [US1] Teach CRM and Projects the two new kinds.
   - Resolvers in `C/backend/services/reference-service.ts` and `P/backend/services/reference-service.ts`. Projects resolves Opportunities through its existing `linked-records.ts` owner. CRM resolves Projects through `projectReadPort`, and if `C/manifest.ts` lacks a `degrades-without` edge on `projects`, add it with a `whenAbsent` sentence.
   - The lookup groups in their document-lookup services.
@@ -387,11 +426,13 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - The i18n group labels in `C/../i18n` and `P/../i18n`.
 
   T028 green.
+  - Partly pulled forward (ruling 1): each reference service's URL map has the two arms (`/crm/opportunities/:id`, `/projects/:id`); the resolvers still answer both kinds **unavailable** (no port is asked). Resolvers, lookup groups, `owner-read-permissions` entries and i18n group labels remain here.
 - [ ] T035 [US1] Extend the admin-kit reference editor (`K/components/references/{reference-kinds,ReferenceField,ReferenceText,reference-node}.ts(x)`):
   - document groups and chip classes for `opportunity` and `project`;
   - link targets `/crm/opportunities/:id` and `/projects/:id`.
 
   Write its kit test first. Rebuild admin-kit.
+  - Partly pulled forward (ruling 1): `ReferenceText`'s icon map (`Handshake`, `FolderKanban`) and `reference-node`'s chip classes have the two kinds, and the `_i18n` core bundle carries `references.{kind,group,inserted,unavailable}.{opportunity,project}` (en, pl; required by `kit-collaboration-bundle.test.ts`). Document groups in the editor and the kit test remain here.
 - [ ] T036 [US1] Implement the reference and mention services in Tasks:
   - `T/backend/services/owner-read-permissions.ts`, copied from Projects;
   - `reference-service.ts`: `rowsFor` and `resolveMany` across seven kinds through `orderReadPort`, `catalogProductReadPort`, `adminUserReadPort`, `quoteRequestReadPort`, `opportunityReadPort`, `projectReadPort` and `taskReadPort` (self), each gated by presence and permission;
@@ -416,6 +457,7 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - The Tasks side: the list filter through `customFieldListFilterPort.condition('task', …)` and `GET /tasks/custom-field-filters`.
 
   T030 green.
+  - Partly pulled forward (ruling 1): `SUPPORTED_ENTITIES.task` (`orgOwned: false`, `ownerModuleId: 'tasks'`, `listFilter: true`), `host-storage-binding` (`tasks.custom_field_values`), `customFields.entity.task` (en, pl), and the four enumerating tests (`custom-field-registry.test.ts`, `value-probe-binding.test.ts`, `integration/custom_fields/{entity-owner-presence,list-filter-option}.test.ts`). The Tasks side — validation in the Commands, the list filter, `GET /tasks/custom-field-filters` — remains here.
 - [ ] T039 [US1] Implement the attachments:
   - `T/backend/services/attachment-active-content.ts` (copy);
   - `attachment-service.ts`, modelled on `P/backend/services/attachment-service.ts`;
@@ -698,6 +740,7 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - the pass, per R-17: claim, visibility check, delivery row plus bell, then e-mail after commit.
 
   Write the bell and the delivery row in one transaction if T001 (b) said yes. Otherwise use the plan's fallback, de-duplicating on `kind` + `subjectId` + recipient. The e-mail goes through `T/backend/services/task-email.ts`, modelled on `P/backend/services/stage-alert-email.ts`, with `T/backend/email-templates/reminder-defaults.ts`.
+  - **Orchestrator ruling 3 (2026-10-28):** the bell is written co-transactionally through a new, additive `adminNotificationRecordPort.recordWithin(em, input)` in `admin_notifications` (`foreign-module-changes.md` §E2), so the delivery row and the bell commit together and the bell is exactly once (SC-004). Implement that port method in this task (test first), and use it instead of the fallback above.
 - [ ] T073 [US7] Implement the digest:
   - `T/backend/services/digest-service.ts`: the claim `update … returning` under `skip locked`, the per-recipient list, the bell and the e-mail;
   - `email-templates/digest-defaults.ts`;
