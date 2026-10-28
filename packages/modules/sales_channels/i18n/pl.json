@@ -76,7 +76,7 @@
   "errors.DUPLICATE_SALES_CHANNEL_CODE": "Kanał sprzedaży o tym kodzie już istnieje. Wybierz inny kod.",
   "errors.UNKNOWN_LANGUAGE_CODE": "Nie znaleziono języka o tym kodzie.",
   "errors.UNKNOWN_CURRENCY_CODE": "Nie znaleziono waluty o tym kodzie.",
-  "errors.CANNOT_MODIFY_SYSTEM_DEFAULT": "To domyślny kanał sprzedaży platformy, więc nie można go dezaktywować.",
+  "errors.CANNOT_MODIFY_SYSTEM_DEFAULT": "To domyślny kanał sprzedaży platformy, więc nie można go dezaktywować ani usunąć.",
   "errors.SALES_CHANNEL_HAS_ATTRIBUTIONS": "Do tego kanału sprzedaży są przypisane inne rekordy, więc nie można go usunąć. Zamiast tego go dezaktywuj.",
   "errors.ENTITY_WOULD_HAVE_ZERO_CHANNELS": "Ta zmiana zostawiłaby rekord bez kanału sprzedaży, a każdy rekord musi należeć do co najmniej jednego kanału.",
   "errors.STALE_SALES_CHANNEL_WRITE": "Ktoś inny zmienił w międzyczasie ten kanał sprzedaży. Wczytaj go ponownie i spróbuj jeszcze raz.",

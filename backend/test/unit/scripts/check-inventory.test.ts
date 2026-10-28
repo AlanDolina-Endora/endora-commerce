@@ -5987,6 +5987,18 @@ const CHECKS: readonly CheckEntry[] = [
             }),
           ).filter((f) => f.kind === 'same-as-english').length,
       ),
+      // Issue #486: the same `placeholder` kind over the reference language,
+      // which is a different shape — the code in Title Case, matched
+      // case-sensitively — so a red Polish proof says nothing about it.
+      'sentence-placeholder-reference': top(
+        () =>
+          findPlaceholderSentences(
+            errorSentenceTree({
+              'cms.en': { 'errors.BLOG_POST_NOT_FOUND': 'Blog Post Not Found.' },
+              'cms.pl': { 'errors.BLOG_POST_NOT_FOUND': 'Nie znaleziono wpisu bloga.' },
+            }),
+          ).filter((f) => f.kind === 'placeholder' && f.language === 'en').length,
+      ),
       // The fourth fixture D-127 requires — a correctly-filed sentence, token
       // key included, yielding **zero** findings — cannot live here: a `red`
       // proof must come back non-zero. It is
@@ -11620,7 +11632,9 @@ describe('every red proof enters at the top of the analysis', () => {
       // Plus issue #441's two: P5's `placeholder` and `same-as-english`. P1
       // counts any string as translated and P2 asks only where it is filed, so
       // neither could go red for what a translation says.
-      'backend/scripts/check-error-translations.ts': 11,
+      // Plus issue #486's one: `placeholder` in the reference language, whose
+      // Title-Case shape the case-insensitive non-English rule never reaches.
+      'backend/scripts/check-error-translations.ts': 12,
       // Three shapes the read reaches the fallback through, four fabrications
       // the fallback performs; the two axes are independent, so the count is
       // their union rather than their product. Plus issue #275's five: three
