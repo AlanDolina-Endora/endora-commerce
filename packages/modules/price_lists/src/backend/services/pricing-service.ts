@@ -164,6 +164,7 @@ export class PricingService implements PricingServiceContract {
       attributeRead: () => this.#attributeRead(),
       variantRead: () => this.#productRead(),
       productDisplayModes: async (input) => (await this.#displayModes()).resolveProductDisplayModes(input),
+      anyProductStepWithholds: async () => (await this.#displayModes()).anyProductStepWithholds(),
       viewerDisplayMode: async (input) => (await this.#displayModes()).resolvePageDisplayMode(input),
       ...(this.options.bookCache ? { cache: this.options.bookCache } : {}),
       ...(this.options.profileMemo ? { profileMemo: this.options.profileMemo } : {}),

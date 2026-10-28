@@ -10,7 +10,9 @@ import { PRECEDENCE_PRESETS } from './precedence.js';
  * profiles, the display-mode chain cost 18.9 s of a 262.7 s whole build — read
  * for every chunk and thrown away. `resolveProfileListing` is the listing
  * resolution of a fixed profile without it: the same resolutions as
- * `resolveListing`, no display-mode read.
+ * `resolveListing`, no display-mode read while no product or category override
+ * is `none` (issue #491: `book-pricing.withheld.test.ts` covers the case where
+ * one is).
  */
 describe('BookPricing.resolveProfileListing — the surface worker’s resolution', () => {
   function engine() {
@@ -54,6 +56,9 @@ describe('BookPricing.resolveProfileListing — the surface worker’s resolutio
         reads.productModes += 1;
         return new Map();
       },
+      // Issue #491 — no product or category override is `none`, so the
+      // product step cannot withhold anything and is not read.
+      anyProductStepWithholds: async () => false,
       viewerDisplayMode: async () => {
         reads.viewerModes += 1;
         return 'gross_only';

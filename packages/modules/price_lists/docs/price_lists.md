@@ -244,7 +244,12 @@ show only the price charged.
 
 **Display modes** decide how prices are shown — gross only, net only, both, or not at all. *None*
 hides every price and replaces *Add to cart* with *Add to quote request*; the basket also refuses
-such a product (`400 CART_PRODUCT_QUOTE_ONLY`). The mode is set platform-wide (separately for
+such a product (`400 CART_PRODUCT_QUOTE_ONLY`). The prices are withheld by the server, not only
+hidden on the page: product lists, the product page, search results and suggestions, comparisons,
+related products and the external catalogue API send no amount for such a product. It is not
+ranked when a list is sorted by price — it comes after the priced products, in either direction —
+and a price range leaves it out. *None* for anonymous visitors is the "prices after sign-in"
+configuration. The mode is set platform-wide (separately for
 signed-in and anonymous visitors) and can be overridden per organization, per category and per
 product; the most specific setting wins. Display modes are set on *Pricing settings* and in the
 organization and category editors.

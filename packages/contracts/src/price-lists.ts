@@ -33,6 +33,23 @@ export const displayModeSchema = z.enum([
 export type DisplayMode = z.infer<typeof displayModeSchema>;
 
 /**
+ * Issue #491 — whether a resolved display mode withholds every amount from the
+ * viewer it was resolved for.
+ *
+ * `none` is "price on request": the shop does not show this viewer a price, and
+ * the server does not send one. `price_lists` applies it where it maps a
+ * resolution onto the published listing and engine shapes
+ * (`ListingPriceDetail`, `ListingPrice`, the resolved-price endpoint), so every
+ * catalogue surface gets no amount and `displayMode: 'none'`. A **line** answer
+ * ({@link LinePriceResult}) keeps its amount, because it is what a charging
+ * consumer refuses as quote-only; a consumer that publishes a line amount to a
+ * viewer asks this function first rather than re-stating the rule.
+ */
+export function displayModeWithholdsAmounts(mode: DisplayMode): boolean {
+  return mode === 'none';
+}
+
+/**
  * Feature 160 (FR-029, owner ruling 2026-10-23) — why a price book pinned to a
  * product feed publishes no prices now. A feed is fetched by a provider, which
  * is nobody's buyer, so a pinned book publishes only while it would price an
@@ -98,6 +115,11 @@ const RESOLVED_MONEY = z.object({ amount: DECIMAL_STRING, currency: CURRENCY });
  * `GET /api/v1/storefront/products/:id/resolved-price`. A product no price book
  * prices for the buyer (FR-018) is **unpriced**: `baseListId`, `basePrice` and
  * `quantityBracket` are all `null` together — never an empty-string id.
+ *
+ * Issue #491 — a product whose display mode resolves to `none` for the viewer
+ * answers the same way: no book, no amount, no bracket, no sale, `source` and
+ * `compareAt` `null` and no `listPrice`, with `displayMode: 'none'` so the page
+ * can tell "price on request" from "no price".
  */
 export const resolvedPriceEngineSchema = z
   .object({
@@ -142,7 +164,9 @@ export type ResolvedPriceEngine = z.infer<typeof resolvedPriceEngineSchema>;
  *   `price_list` — a price book priced this product for this buyer (the base
  *                  book, an everyone book of the channel, a buyer book or a
  *                  sale; `priceSource` names the tier);
- *   `none`       — nothing prices it, and the listing renders no price.
+ *   `none`       — nothing prices it, or the viewer's display mode is `none`
+ *                  (issue #491: the amount is withheld on the server), and the
+ *                  listing renders no price.
  *
  * Feature 160 removed the third arm, `product` — the price assigned directly
  * to the Product (the legacy `defaultPrice` attribute): a product has no price
@@ -278,6 +302,11 @@ export interface ListingPriceInput {
  * the listing chain's answer (`price`, what `ProductSummary.price` is built
  * from) and the base / sale / display-mode split a product page, a home-page
  * card and a typeahead suggestion show (D-287 P0).
+ *
+ * Issue #491 — under `displayMode: 'none'` it carries **no amount**: `price` is
+ * the `none` arm, `basePrice` and `salePrice` are `null`, `listPrice` is absent
+ * and every `tiers` entry is `null`. The engine resolved them and withholds them
+ * here, once, so no consumer can forward them by mistake.
  */
 export interface ListingPriceDetail extends ProductResolvedPrice {
   price: ListingPrice;
@@ -584,7 +613,15 @@ export interface ListingPriceOrderChunk {
   unordered?: boolean;
 }
 
-/** What a resolved line price is, once the whole chain has run. */
+/**
+ * What a resolved line price is, once the whole chain has run.
+ *
+ * A line keeps its amount under `displayMode: 'none'` (issue #491): it is the
+ * charging path, and every charging consumer refuses such a line as quote-only
+ * by the mode beside the amount. A consumer that **publishes** a line amount to
+ * a viewer — the external catalogue API — withholds it first, through
+ * {@link displayModeWithholdsAmounts}.
+ */
 export interface LinePriceResult {
   /** Decimal string — it lands verbatim on the cart line and then the order. */
   amount: string;

@@ -248,7 +248,12 @@ przekreśla własną cenę kupującego. Koszyk i składanie zamówienia zawsze p
 
 **Tryby prezentacji** decydują, jak ceny są pokazywane — tylko brutto, tylko netto, obie albo wcale.
 Tryb *none* ukrywa wszystkie ceny i zastępuje *Dodaj do koszyka* przyciskiem *Dodaj do zapytania
-ofertowego*; koszyk również odrzuca taki produkt (`400 CART_PRODUCT_QUOTE_ONLY`). Tryb ustawia się dla
+ofertowego*; koszyk również odrzuca taki produkt (`400 CART_PRODUCT_QUOTE_ONLY`). Ceny wstrzymuje
+serwer, a nie tylko strona: listy produktów, karta produktu, wyniki i podpowiedzi wyszukiwania,
+porównania, produkty powiązane i zewnętrzne API katalogu nie wysyłają dla takiego produktu żadnej
+kwoty. Przy sortowaniu po cenie taki produkt nie jest szeregowany — trafia za produkty z ceną, w obu
+kierunkach — a filtr zakresu cen go pomija. Tryb *none* dla anonimowych odwiedzających to
+konfiguracja „ceny po zalogowaniu”. Tryb ustawia się dla
 całej platformy (osobno dla zalogowanych i anonimowych odwiedzających) i można go nadpisać dla
 organizacji, kategorii i produktu; wygrywa najbardziej szczegółowe ustawienie. Tryby prezentacji
 ustawia się w *Ustawieniach cenowych* oraz w edytorach organizacji i kategorii.
