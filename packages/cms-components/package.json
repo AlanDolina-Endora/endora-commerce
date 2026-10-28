@@ -40,7 +40,7 @@
     "node": ">=22.18.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && tailwindcss -i styles/cms-components.css -o dist/cms-components.css --minify",
+    "build": "node ../../scripts/clean-package-dist.mjs --src src --out dist && tsc -p tsconfig.build.json && tailwindcss -i styles/cms-components.css -o dist/cms-components.css --minify",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint src",
     "test": "vitest run"
