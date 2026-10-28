@@ -1189,10 +1189,21 @@ describe('check-diacritic-folds — the tree it guards', () => {
   // `@endora-commerce/admin-shell`, so `AppShell.tsx` writes the shim it always
   // wrote as a relative specifier inside its own package rather than through
   // the application's `@/` alias, which a package cannot resolve.
+  //
+  // The fifth is the palette's matching rule leaving `AppShell.tsx` for
+  // `lib/palette-match.ts`, shared with the Actions group, when it became
+  // per-word (PR #494). The fold went with it, so the pair is re-keyed to the
+  // file that folds — and `AppShell.tsx` stays listed, held to importing that
+  // file, so the chain from the dialog to the shared helper is proven link by
+  // link rather than assumed.
   const repaired: readonly (readonly [string, string])[] = [
     [
       'packages/admin-shell/src/components/AppShell.tsx',
-      "from '../lib/text-normalization.js'",
+      "from '../lib/palette-match.js'",
+    ],
+    [
+      'packages/admin-shell/src/lib/palette-match.ts',
+      "from './text-normalization.js'",
     ],
     ['packages/admin-kit/src/ui/combobox.tsx', "from '../lib/text-normalization.js'"],
     ['packages/admin-kit/src/ui/multi-select.tsx', "from '../lib/text-normalization.js'"],
