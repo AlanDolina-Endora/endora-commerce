@@ -171,6 +171,8 @@ export { COMMENT_MAX_LENGTH, CommentComposer } from './comments/CommentComposer.
 export type { CommentComposerProps } from './comments/CommentComposer.js';
 export { CommentThread } from './comments/CommentThread.js';
 export type { CommentThreadApi, CommentThreadCopy, CommentThreadProps, RecordComment } from './comments/CommentThread.js';
+export { TagChips, TagMultiSelect, useTagOptions } from './tags/TagPicker.js';
+export type { TagMultiSelectProps, TagOption } from './tags/TagPicker.js';
 export { AttachmentUploader } from './attachments/AttachmentUploader.js';
 export type { AttachmentUploaderProps } from './attachments/AttachmentUploader.js';
 export { uploadAttachment } from './attachments/upload-attachment.js';

@@ -1,12 +1,27 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { OpportunityTag, OpportunityTagRef } from '@endora-commerce/contracts';
-import { statusBadgeStyle } from '@endora-commerce/admin-kit/lib';
-import { Badge, MultiSelect } from '@endora-commerce/admin-kit/ui';
-import { useTranslation } from '@endora-commerce/admin-kit/i18n';
-import { crmApi } from '../api.js';
+import { statusBadgeStyle } from '../../lib/status-color.js';
+import { Badge } from '../../ui/badge.js';
+import { MultiSelect } from '../../ui/multi-select.js';
+import { useTranslation } from '../../i18n/useTranslation.js';
 
-/** The tags an Opportunity carries, as chips in the tags' own colours. */
-export function TagChips(props: { tags: readonly OpportunityTagRef[] }): ReactNode {
+/**
+ * Tags as a record shows and chooses them — CRM's `TagPicker.tsx`, promoted by
+ * `specs/165-task-management/` research R-10 when Tasks became its second
+ * consumer (Constitution IX). The kit knows no module: **where the tag list
+ * comes from is a prop** (`loadTags`), each module reading its own list behind
+ * its own permission.
+ */
+
+/** One tag as a list offers it and a record carries it. */
+export interface TagOption {
+  id: string;
+  name: string;
+  /** `#rrggbb`. */
+  color: string;
+}
+
+/** The tags a record carries, as chips in the tags' own colours; nothing for none. */
+export function TagChips(props: { tags: ReadonlyArray<Pick<TagOption, 'id' | 'name' | 'color'>> }): ReactNode {
   if (props.tags.length === 0) return null;
   return (
     <ul role="list" className="flex flex-wrap gap-1">
@@ -21,15 +36,21 @@ export function TagChips(props: { tags: readonly OpportunityTagRef[] }): ReactNo
   );
 }
 
-/** The platform's tag list (`GET /tags`, `crm:read`), read once per screen. */
-export function useTagOptions(): { tags: OpportunityTag[]; loading: boolean; failed: boolean } {
-  const [tags, setTags] = useState<OpportunityTag[]>([]);
+/**
+ * The tag list, read once per mount through the caller's own loader. Pass a
+ * stable function (a module-level one, or memoised): a new one reads again.
+ */
+export function useTagOptions<T extends TagOption>(
+  loadTags: () => Promise<readonly T[]>,
+): { tags: readonly T[]; loading: boolean; failed: boolean } {
+  const [tags, setTags] = useState<readonly T[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let alive = true;
-    crmApi
-      .listTags()
+    setLoading(true);
+    setFailed(false);
+    loadTags()
       .then((found) => {
         if (alive) setTags(found);
       })
@@ -42,7 +63,7 @@ export function useTagOptions(): { tags: OpportunityTag[]; loading: boolean; fai
     return (): void => {
       alive = false;
     };
-  }, []);
+  }, [loadTags]);
   return { tags, loading, failed };
 }
 
@@ -51,6 +72,8 @@ export interface TagMultiSelectProps {
   ariaLabel: string;
   selected: readonly string[];
   onChange: (tagIds: string[]) => void;
+  /** Where the tag list comes from — the module's own endpoint. Keep it stable. */
+  loadTags: () => Promise<readonly TagOption[]>;
   disabled?: boolean;
   className?: string;
 }
@@ -59,16 +82,16 @@ export interface TagMultiSelectProps {
  * Choose any number of tags from the tag list — on the kit's `MultiSelect`.
  *
  * The selection is returned **in the tag list's order** (by name), not in the
- * order of the clicks, so the same choice is always the same request.
- * With no tags defined the control is disabled and says so; a list that could
- * not be read says that instead.
+ * order of the clicks, so the same choice is always the same request. With no
+ * tags defined the control is disabled and says so; a list that could not be
+ * read says that instead.
  */
 export function TagMultiSelect(props: TagMultiSelectProps): ReactNode {
-  const t = useTranslation('crm');
-  const { tags, loading, failed } = useTagOptions();
+  const t = useTranslation('core');
+  const { tags, loading, failed } = useTagOptions(props.loadTags);
   const options = useMemo(() => tags.map((tag) => ({ value: tag.id, label: tag.name })), [tags]);
   const placeholder = loading
-    ? t('opportunity.picker.loading')
+    ? t('tags.picker.loading')
     : tags.length === 0
       ? t('tags.picker.none')
       : t('tags.picker.placeholder');
@@ -92,7 +115,7 @@ export function TagMultiSelect(props: TagMultiSelectProps): ReactNode {
       />
       {failed ? (
         <p role="alert" className="mt-1 text-xs text-destructive">
-          {t('opportunity.picker.loadError')}
+          {t('tags.picker.loadError')}
         </p>
       ) : null}
     </>
