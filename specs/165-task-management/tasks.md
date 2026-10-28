@@ -70,10 +70,12 @@ description: "Task list for Task management — growing the Tasks module"
 
 **Purpose**: the contract shapes, the manifest declarations and two measured facts the design depends on. Nothing is user-visible yet.
 
-- [ ] T001 Measure the two premises the plan defers to implementation and record both answers under this task. Do not proceed past Phase 2 if (a) or (b) is answered "no" without picking the planned fallback.
+- [X] T001 Measure the two premises the plan defers to implementation and record both answers under this task. Do not proceed past Phase 2 if (a) or (b) is answered "no" without picking the planned fallback.
   - (a) Can one Command write extra audit rows? Read `packages/platform/src/` for the `CommandBus` and the audit writer API.
   - (b) Does `adminNotificationRecordPort.record` share the caller's EntityManager or transaction? Read `packages/modules/admin_notifications/src/backend/`.
-- [ ] T002 [P] Write failing schema tests in `X/tasks.test.ts`. Cover one accept case and one reject case for every request schema of `contracts/admin-api.md` §1–§5:
+  - **(a) Measured 2026-10-28: yes.** `CommandBus.run` (`packages/platform/src/commands/command-bus.ts:46-78`) opens one `scoped.transactional(em => …)` and writes exactly **one** row itself (`:57-69`, `audit.recordWithin(em, …)`); nothing stops `run` from adding more. A Command's `run` receives that transactional em as `ctx.em` (`command.ts:39-43`). The published writer `recordAuditFromContext(auditLog, em, input)` (`commands/audit-from-context.ts:27-42`, exported from `@endora-commerce/platform/commands`, `index.ts:59`) calls `AuditPort.recordWithin(em, …)` (`kernel/ports/audit.ts:64`), whose implementation is `em.create` + `em.persist` with **no fork and no flush** (`kernel/audit/audit-log-service.ts:46-50`) — so the extra rows commit or roll back with the Command. `tasks` already has `auditLogService: AuditPort` in its cradle (`T/backend/index.ts:46`, used at `:109-116`). Precedent for a batch of rows in one unit of work: `CartAuditService` (comment at `audit-log-service.ts:39-43`). `check:command-coverage` does not inspect `recordWithin`/`recordAuditFromContext` calls (no match in `backend/scripts/check-command-coverage.ts`). Two things the reassignment Command must do itself: `recordAuditFromContext` fills only the actor, not `ipAddress`/`userAgent`/`requestId` (the bus fills those from `getRequestMeta`, `command-bus.ts:49,66-68`), and each row is a managed entity, so 5 000 rows are 5 000 entities in the identity map of one flush — inside the R-1 bound, but worth the perf test. **R-1's planned path stands; the batched-Commands fallback is not needed.**
+  - **(b) Measured 2026-10-28: no.** `adminNotificationRecordPort.record(input)` takes no EntityManager (`packages/contracts/src/admin-notifications.ts:94-96`; adapter `admin_notifications/src/backend/services/admin-notification-port.ts:23-25`). `AdminNotificationService.record` calls `this.emFactory()` (`admin-notification-service.ts:108`) and `persistAndFlush` (`:121`), then `pruneStale` on another fresh fork (`:122`, `:330`). `emFactory` is `() => forkScopedEm(orm)` (`packages/platform/src/kernel/container.ts:80`), i.e. `orm.em.fork()` (`tenancy/scoped-em.ts:10-12`); MikroORM 6.6.16's `fork` copies the transaction context only under `keepTransactionContext` (`@mikro-orm/core/EntityManager.js:1436-1438`), which is not passed — so the bell row is written on its own connection in autocommit, never inside the caller's transaction. **Planned fallback chosen: delivery row first (its unique `(reminder_id, admin_user_id)` is the claim), bell after commit.** One premise of that fallback is false: `admin_notifications` has **no** de-duplication on `subjectId + kind + recipient` — the table has a plain `@Index()` only (`admin-notification.entity.ts:41`) and `record` inserts unconditionally. The fallback does not need it (the delivery row is the claim), but the consequence must be written into the spec before Phase 7: the bell becomes **at most once** too (a crash between the delivery commit and `record` loses it), which contradicts SC-004 "exactly once" for the bell and FR-035 "at least once". The only way to keep exactly-once is a co-transactional variant of the port (`recordWithin(em, …)`) in `admin_notifications`, which `contracts/foreign-module-changes.md` does not list — an owner/architect decision for Phase 7, not taken here.
+- [X] T002 [P] Write failing schema tests in `X/tasks.test.ts`. Cover one accept case and one reject case for every request schema of `contracts/admin-api.md` §1–§5:
   - `assigneeIds` ≤ 20, unique;
   - `tagIds` ≤ 50;
   - `dueOn` and `dueAt` mutually exclusive;
@@ -85,6 +87,8 @@ description: "Task list for Task management — growing the Tasks module"
   - list query `sort` and `dir`, repeatable filters normalised to arrays;
   - `NewContextTask.sourceKey` ≤ 100;
   - the `UpdateTaskBody` refusal of `status`.
+  - The 163 file was rewritten on the new shape; its still-valid cases (context all-or-nothing, title bounds, list page shape, batch max) were kept. Beyond the list above it also pins the vocabulary and limits, the absence of `TASK_STATUSES` / `TASK_CLOSED_STATUSES`, the board query (`perColumn` 1–50, no cursor or sort), every §2–§5 body, the summary and board response shapes, the four event names and R-20's codes.
+  - Seen red 2026-10-28: 41 of 47 failed for the stated reason — every new export was `undefined` (`Cannot read properties of undefined (reading 'safeParse')`), `TASKS_EVENTS` still had `ASSIGNED`, `TASKS_ERROR_CODES` lacked `TASK_STATUS_UNKNOWN`. The 6 that passed are 163 cases whose shape did not change. Green after T004 (47/47).
 - [ ] T003 [P] Write failing tests in `X/record-references.test.ts` for the grammar with `opportunity` and `project`:
   - format, extract and split;
   - `RECORD_DOCUMENT_KINDS` order: order, quote_request, task, opportunity, project;
@@ -95,7 +99,7 @@ description: "Task list for Task management — growing the Tasks module"
   - values `list` / `board`;
   - `null` deletes the entry;
   - the tolerant read falls back to `{}`.
-- [ ] T004 Implement `X/tasks.ts` per `contracts/admin-api.md`, `contracts/ports-and-events.md` and `data-model.md` §8. Every later story adds no contract.
+- [X] T004 Implement `X/tasks.ts` per `contracts/admin-api.md`, `contracts/ports-and-events.md` and `data-model.md` §8. Every later story adds no contract.
   - Status codes: `TASK_DEFAULT_STATUS_CODES`, `TASK_STATUS_CATEGORIES`, `taskStatusCodeSchema`.
   - Limits: `TASK_ASSIGNEES_MAX`, `TASK_TAGS_MAX`, `TASK_HIERARCHY_DEPTH_MAX`, `TASK_STATUS_REASSIGN_MAX`, `TASK_ATTACHMENT_MAX_BYTES`, `TASK_REMINDER_GRACE_MS`, `TASK_REMINDERS_MAX`.
   - Every request and response schema.
@@ -106,6 +110,37 @@ description: "Task list for Task management — growing the Tasks module"
   - Remove `TASK_CLOSED_STATUSES` and `tasks.task.assigned.v1`.
   - T002 green.
   - Then run `pnpm -r run typecheck` and paste the list of consumer errors under this task: it is Phase 2's worklist, and it must match `foreign-module-changes.md` §G.
+  - **Deviations from `contracts/admin-api.md`, each a judgement call Phase 2 may revisit:**
+    - `GET /tasks` keeps 163's `{items, nextCursor}` (admin-api §1 writes `{data, nextCursor, prevCursor?}`); renaming `items` is a breaking change no requirement asks for. `prevCursor` is added as optional.
+    - Custom-field values are `customFieldValues`, not `customFields` — the Projects precedent (`X/projects.ts:268,285,706`) and the name `CustomFieldValuesPanel` reads.
+    - `TaskDetail` lists its sub-tasks as `subtaskItems`: `subtasks` is already the summary's `{closed, total}`, which the detail extends — admin-api §1 uses one name for both.
+    - `TaskDetail.createdBy` keeps 163's name for admin-api's `creator`.
+    - A link is `{id, kind, recordId, available, label, url}`, `id` being the link's own id that `DELETE /tasks/:id/links/:linkId` takes; admin-api's `{kind, id, …}` cannot carry both.
+    - `DELETE /tasks/:id` is written as "204" **and** "reports `{subtasksDetached}`"; `TaskDeleteResponseSchema` (`{data: {subtasksDetached}}`) exists, and US5 decides between a 200 with that body and a bare 204.
+    - `UpdateTaskBody` also refuses `draft` (publishing is `POST /publish`, one-way). `CreateTaskBody` refuses `private` together with a `context` in the schema as well as in the database check (FR-038). A priority may not be created with the code `none`, the filter token.
+    - Bounds the contract did not name: `TASK_LINKS_MAX` 20 (from admin-api §1), `TASK_REMINDER_RECIPIENTS_MAX` 21, `TASK_REMINDER_OFFSET_MAX_MINUTES` 30 days, `TASK_MINE_MAX` 500, `TASK_BOARD_PER_COLUMN_{DEFAULT,MAX}` 25/50.
+    - `NewContextTask` is now `z.input<typeof NewContextTaskSchema>` (T002 tests `sourceKey` ≤ 100, which needs a schema); it gains `contextGroupId?` per `ports-and-events.md` §2. `TaskRecord` also gains `dueAt`.
+    - The R-20 codes are **not** added to `ERROR_CODES` (`X/errors.ts`): each joins it with its first raise site (standing rule 9, 163 T008 precedent).
+  - **Consumer worklist, measured 2026-10-28** with `pnpm -r --no-bail run typecheck` after rebuilding every package but `mod-tasks` and `mod-projects` (both fail to build until Phase 2): **55 errors in 17 files**. Every one is the old shape — `TaskStatus` / `TASK_STATUSES` / `TASK_CLOSED_STATUSES` / `TaskAssignedEvent` / `TASKS_EVENTS.ASSIGNED` no longer exported, `assignedAdminUserId` / `assignee` gone, `status` a string where an object is expected, `toCategory` missing, `status` no longer in `UpdateTaskBody`:
+    - `packages/modules/tasks/src/backend/admin-search-provider.ts`: :6 TS2724
+    - `packages/modules/tasks/src/backend/entities/task.entity.ts`: :2 TS2724; :2 TS2724
+    - `packages/modules/tasks/src/backend/services/task-commands.ts`: :5 TS2724; :9 TS2724; :122 TS2353; :171 TS2339; :211 TS2741
+    - `packages/modules/tasks/src/backend/services/task-read-port.ts`: :50 TS2353
+    - `packages/modules/tasks/src/backend/services/task-service.ts`: :5 TS2305; :17 TS2724; :87 TS7006; :205 TS2367; :207 TS2367; :387 TS2339; :421 TS2339; :431 TS2339; :432 TS2339; :433 TS2339; :435 TS2339; :482 TS2740; :614 TS2322
+    - `packages/modules/tasks/src/backend/services/task-write-port.ts`: :71 TS2339
+    - `packages/modules/projects/src/backend/services/stage-task-service.ts`: :4 TS2305; :258 TS2339; :263 TS2339; :268 TS2322
+    - `admin/test/modules/projects/ProjectDetail.tasks-tab.test.tsx`: :79 TS2322
+    - `admin/test/modules/tasks/TaskDetail.test.tsx`: :142 TS2322; :164 TS2561; :165 TS2561; :180 TS2561
+    - `admin/test/modules/tasks/TasksList.test.tsx`: :44 TS2322
+    - `admin/test/modules/tasks/tasks-fixtures.tsx`: :98 TS2322; :115 TS2719
+    - `packages/modules/projects/src/admin/pages/project-detail/tabs/TasksTab.tsx`: :164 TS2551
+    - `packages/modules/tasks/src/admin/api.ts`: :8 TS2724
+    - `packages/modules/tasks/src/admin/components/StatusBadge.tsx`: :2 TS2724
+    - `packages/modules/tasks/src/admin/components/task-columns.tsx`: :63 TS2551; :64 TS2551
+    - `packages/modules/tasks/src/admin/pages/TaskDetail.tsx`: :6 TS2724; :10 TS2724; :148 TS2353; :151 TS2353; :219 TS2322; :223 TS7006; :272 TS2551; :274 TS2551; :275 TS2551; :282 TS2551; :401 TS2551; :414 TS2551
+    - `packages/modules/tasks/src/admin/pages/TasksList.tsx`: :4 TS2724; :4 TS2724; :185 TS7006
+  - **Against `foreign-module-changes.md` §G/§D:** every file outside `packages/modules/tasks/` is listed — `stage-task-service.ts` and `TasksTab.tsx` (§D), the admin tests (§G `admin/test/modules/tasks/*`, `ProjectDetail.tasks-tab.test.tsx`). **No consumer missing from the list.** The converse does not hold, and Phase 2 must not read the typecheck as the whole worklist: §G's backend tests (`backend/test/integration/tasks/*`, `contract/tasks/*`, `perf/tasks/*`, `integration/projects/*` + `helpers.ts`) and `packages/demo-composition/src/projects.ts` produce **no** type error — they pin the old shape through raw SQL and untyped JSON, so they fail only at run time.
+  - Before the rebuild the same run reported 22 more errors (`useAdminPreference` not exported from `@endora-commerce/admin-kit/lib`, `AdminMe.preferences`, a missing `admin_users` migration export): stale `dist`s from #478, gone after `build:packages`, unrelated to this change.
 - [ ] T005 [P] Extend the reference grammar and the read ports.
   - `X/record-references.ts`: add `opportunity` and `project` to both arrays.
   - `X/crm.ts`: `OpportunityReadPort.findByIds` and `search`.
