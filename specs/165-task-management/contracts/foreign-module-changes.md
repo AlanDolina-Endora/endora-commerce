@@ -78,6 +78,7 @@ No code change. The service ignores unknown keys and merges by key, so `listView
   - `backend/test/helpers/package-entities.ts`;
   - `backend/test/fixtures/openapi-baseline.json` (regenerated);
   - `packages/demo-composition/src/composition.ts` (the Tasks demo step).
+- **`backend/test/migrator-driving-tests.ts`** (added at T009): the extended `migration.test.ts` drives the Task management migration `down` and `up` against its own database (`setupMigratorTestDb`), and `test/unit/harness/migrator-driving-ledger.test.ts` requires every such file to be listed there.
 - **The scheduled-work probe copy test** (`backend/test/unit/tenancy/scheduled-work-probes.test.ts`) gains the `tasks` copy.
 
 ## H. If `tasks` were deleted
