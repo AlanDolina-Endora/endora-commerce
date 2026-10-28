@@ -518,6 +518,18 @@ describe('fallback parity with no brand tokens (standing rule 9)', () => {
     expect(style(box, 'background-color')).toBe('rgba(0, 0, 0, 0)');
   });
 
+  /**
+   * This case's budget, declared rather than defaulted. The inner row sits 20
+   * elements deep, and with no brand tokens each `var()` misses on every one of
+   * them, so {@link customProperty} asks jsdom for a computed value 20 times per
+   * variable — about 40 ms a call against the built stylesheet, because jsdom
+   * re-runs the cascade per property read (a cache of the declaration saves
+   * nothing). Measured on a quiet host: 2.4 s for this case, against under
+   * 0.4 s for any other in the file; on a loaded CI runner it passed the default
+   * 10 s and failed `master` after #478 with nothing wrong in the render.
+   */
+  const NESTED_ROW_BUDGET_MS = 30_000;
+
   it('cms.Row nested keeps today\'s render, container frame included', () => {
     const row = (defaultPageBuilderConfig as Config).components['cms.Row']!.defaultProps as Record<string, unknown>;
     const column = (defaultPageBuilderConfig as Config).components['cms.Column']!.defaultProps as Record<string, unknown>;
@@ -538,7 +550,7 @@ describe('fallback parity with no brand tokens (standing rule 9)', () => {
     const inner = query(nested, '.cmsc-pb-row-inner');
     expect(style(inner, 'max-width')).toBe(ORIGIN.pageMaxWidth);
     expect(style(inner, 'padding-left')).toBe(ORIGIN.pagePadding);
-  });
+  }, NESTED_ROW_BUDGET_MS);
 
   it('cms.ContentSlider stored on origin/master (T054): one per view 16 px apart, today\'s round white arrows over the edges, its 16 px padding', () => {
     // Recorded from origin/master (b816c1d55): `defaultProps` slidesPerView 1,
