@@ -91,7 +91,6 @@ describe('product link tile price source (#132)', () => {
       resolvedChannel: {
         id: channelId,
         code: channelCode,
-        isPublic: true,
         defaultCurrency: 'PLN',
       },
       // The price *source* is what this suite asks about; the viewer is the

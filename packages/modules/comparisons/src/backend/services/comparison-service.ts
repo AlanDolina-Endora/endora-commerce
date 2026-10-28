@@ -533,16 +533,15 @@ export class ComparisonService {
 
     const channel = await em.findOne(SalesChannel, { id: viewerSalesChannelId });
     const currency = channel?.defaultCurrency ?? 'PLN';
-    const isPublic = channel?.isPublic ?? true;
 
     const viewerOrganization =
       viewer.kind === 'buyer' ? await this.#viewerOrganization(viewer.audience) : null;
 
     // The pricing engine's answer per product (issue #132), resolved for the
-    // viewer. A channel that withholds prices is not asked for them, so the map
-    // stays empty and every column renders `null`.
+    // viewer: a viewer whose display mode is `none` gets the withheld arm and
+    // every column renders `null` (issues #491, #492).
     const resolvedPrices =
-      isPublic && products.length > 0
+      products.length > 0
         ? await this.#requireListingPrices().resolveListingPrices({
             products,
             context: {

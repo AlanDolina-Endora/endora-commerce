@@ -47,7 +47,6 @@ async function createChannel(em: EntityManager, code: string): Promise<{ id: str
     currencies: ['PLN'],
     defaultCurrency: 'PLN',
     active: true,
-    isPublic: true,
   });
   await em.persistAndFlush(channel);
   return { id: channel.id, code };

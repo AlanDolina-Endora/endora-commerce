@@ -76,7 +76,6 @@ describe('External catalog reads (062 / T013)', () => {
       currencies: ['PLN'],
       defaultCurrency: 'PLN',
       active: true,
-      isPublic: true,
     });
     await em.persistAndFlush(channel);
     await h.salesChannels.cache.invalidate('ext-read');

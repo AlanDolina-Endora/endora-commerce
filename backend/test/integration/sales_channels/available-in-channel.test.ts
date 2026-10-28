@@ -56,7 +56,6 @@ describe('membership: which entities are offered in a channel', () => {
       defaultCurrency: 'EUR',
       languages: ['en'],
       currencies: ['EUR'],
-      isPublic: false,
       active: true,
       systemDefault: false,
       version: 1,

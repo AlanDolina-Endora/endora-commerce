@@ -1439,8 +1439,8 @@ export type ProductListQuery = z.infer<typeof productListQuerySchema>;
  *
  * It rides on the listing response because the storefront has to decide whether
  * to *render* the price controls, and the answer depends on the viewer and the
- * channel: a non-public channel publishes no prices, and
- * `pricing.unauthenticated_display_mode = none` hides them until login. A
+ * channel: `pricing.unauthenticated_display_mode = none` hides prices until
+ * login, on one channel or on all of them. A
  * storefront that guessed would guess wrong on exactly the deployments that
  * care, and a control that offers an ordering the API refuses is a worse defect
  * than no control.

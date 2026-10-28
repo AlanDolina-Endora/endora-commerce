@@ -37,7 +37,6 @@ describe('storefront CMS page-by-slug contract (T037)', () => {
       defaultCurrency: 'PLN',
       active: true,
       systemDefault: false,
-      isPublic: true,
       status: 'active',
     });
     await h.em().persistAndFlush(otherChannel);

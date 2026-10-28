@@ -152,7 +152,6 @@ describe('155 — storefront DTOs carry the minimums [contract]', () => {
       const channel = {
         id: '00000000-0000-4000-8000-0000000000c1',
         code: 'pl_retail',
-        isPublic: true,
         defaultCurrency: 'PLN',
         defaultLanguage: 'en-US',
       };

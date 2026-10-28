@@ -26,14 +26,13 @@ interface StorefrontContext {
    * The request's resolved sales channel (feature 053 / FR-002). Always
    * present — the canonical resolver guarantees a concrete channel — so
    * cross/up-sell filtering is unconditional and fails closed (Principle XII).
-   * `isPublic` is the price-visibility flag, and `defaultCurrency` is the
-   * currency the link tiles quote in — it used to be the literal `'PLN'`, which
-   * mislabelled every amount on a channel trading in anything else.
+   * `defaultCurrency` is the currency the link tiles quote in — it used to be
+   * the literal `'PLN'`, which mislabelled every amount on a channel trading in
+   * anything else.
    */
   resolvedChannel: {
     id: string;
     code: string;
-    isPublic: boolean;
     defaultCurrency: string;
   };
   /**
@@ -395,9 +394,8 @@ export class ProductLinkService {
       targetIds,
     );
 
-    // Sales-channel public flag controls price visibility (R-18), read off the
-    // resolved channel handed in by the route. A channel that withholds prices
-    // is not asked for them (issue #132).
+    // Who sees a tile's price is the display-mode chain's decision, applied in
+    // the resolution (issues #491, #492) — the channel has no flag of its own.
     const visibleTargets = rows
       .filter((link) => visibleIds.has(link.targetProductId))
       .map((link) => byId.get(link.targetProductId))
@@ -407,7 +405,7 @@ export class ProductLinkService {
         ? null
         : await viewerOrganizationFor(this.#requireOrganizationDetails(), ctx.audience);
     const resolvedPrices =
-      ctx.resolvedChannel.isPublic && visibleTargets.length > 0
+      visibleTargets.length > 0
         ? await this.#requireListingPrices().resolveListingPrices({
             products: visibleTargets,
             context: {

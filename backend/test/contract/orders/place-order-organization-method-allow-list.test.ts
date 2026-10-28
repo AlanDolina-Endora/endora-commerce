@@ -374,7 +374,6 @@ describe('order placement honours the Organization method allow-lists', () => {
       currencies: ['PLN'],
       defaultCurrency: 'PLN',
       active: true,
-      isPublic: true,
     });
     await em.persistAndFlush(channel);
     await h.salesChannels.cache.invalidate('allow-list-intake');
