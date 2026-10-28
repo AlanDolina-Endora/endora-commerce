@@ -531,7 +531,7 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
 
 ### Tests first
 
-- [ ] T042 [P] [US2] Write failing `backend/test/integration/tasks/workflow.test.ts`:
+- [X] T042 [P] [US2] Write failing `backend/test/integration/tasks/workflow.test.ts`:
   - create, rename (en/pl), recolour and reorder a status;
   - each FR-013 rule refused with 422 `TASK_WORKFLOW_INVALID {rule}`;
   - add and remove transitions as a delta;
@@ -541,39 +541,66 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - 5 001 Tasks give 409 `TASK_STATUS_IN_USE_TOO_MANY`;
   - `tasks:write` without `tasks:configure` gives 403 on every configuration write;
   - every configuration write is audited.
-- [ ] T043 [P] [US2] Extend `backend/test/integration/projects/completion-gate.test.ts`:
+  - Seen red 2026-10-28: 10 of 11 failed for the stated reason — every configuration route 404, so no status, move or removal could be set up. The case "a stale `from` is a conflict; an unknown target is 422" passed red: it is T016's interim behaviour, kept. Green after T045/T046 (11/11).
+  - Added beyond the list: a taken code and a non-snake_case code refused; `completed_at` set on entering a `done` status and cleared on leaving it, `openSubtasks` answered; a new Task starts in the *current* initial status (the flag moved to a new `backlog` status and back); an unknown replacement (422 `TASK_STATUS_UNKNOWN`) and an unreachable one (409 `TASK_TRANSITION_FORBIDDEN {allowedTargets}`) refused before anything moves. The 5 001 Tasks are inserted with one `generate_series` statement and deleted in `afterAll`.
+  - The workflow is platform-wide: the file restores the seeded one before and after through the new `backend/test/helpers/task-workflow.ts` (`restoreDefaultTaskWorkflow`, CRM's model; line added to `foreign-module-changes.md` §G).
+- [X] T043 [P] [US2] Extend `backend/test/integration/projects/completion-gate.test.ts`:
   - with a custom `done`-category status *Accepted* and the default *Done* removed (Tasks moved to *Accepted*), the gate passes once every Task is in *Accepted* or *Cancelled*, and blocks while one is in a new open status *In review*;
   - a draft in the Stage does not block.
-- [ ] T044 [P] [US2] Write failing `admin/test/modules/tasks/TaskWorkflowPage.test.tsx`:
+  - Seen red 2026-10-28: both new cases failed — `POST /tasks/statuses` 404. Green after T045/T046. The draft is set with one `update … set is_draft = true` (drafts are written by US8). Added: a Stage Task materialised through `taskWritePort.createMany` on Stage entry starts in a new initial status `backlog` (the T046 write-port half). The block restores the seeded workflow around itself.
+- [X] T044 [P] [US2] Write failing `admin/test/modules/tasks/TaskWorkflowPage.test.tsx`:
   - the statuses table, the dialog with category and initial;
   - the graph's `onAdd` / `onRemove` call `PUT /tasks/transitions`;
   - the removal dialog asks for a replacement when `inUseCount > 0`;
   - the page is hidden without `tasks:configure`.
+  - Seen red 2026-10-28: the file failed to load (`pages/settings/TaskWorkflowPage` did not exist). Green after T047 (12/12). The graph's remove is driven by the click handler the kit component binds, captured from the mocked `echarts` (the canvas cannot be drawn in jsdom); its add through the kit's From/To form. "Hidden without `tasks:configure`" is asserted on the contributions (route and nav gate) here and rendered in `off-state.test.tsx` (a `tasks:read`+`tasks:write` holder gets the not-found screen and no sidebar row).
+  - Also changed (shape only): `off-state.test.tsx` (the route list and sidebar gain the workflow screen), `T/admin/index.test.ts` (route and nav row), and `TaskDetail.test.tsx` gained two cases for T047 — "offers only the permitted moves" passed red (Phase 2 behaviour), "shows the server's refusal and then offers only the targets it named" was seen red against the Phase 3 `TaskDetail.tsx`.
 
 ### Implementation
 
-- [ ] T045 [US2] Implement `T/backend/services/workflow-config-service.ts`, modelled on `C/backend/services/workflow-config-service.ts`:
+- [X] T045 [US2] Implement `T/backend/services/workflow-config-service.ts`, modelled on `C/backend/services/workflow-config-service.ts`:
   - `createStatus`, `updateStatus`, the initial-flag move with two flushes, and `setTransitions` with add/remove;
   - `deleteStatus(code, replacement)`, which writes per-Task audit rows by T001's finding (a) or uses the batched fallback;
   - `assertValid` at the end of each Command;
   - the in-use counts for the screen.
 
   Add the routes in `T/backend/routes/routes.workflow.ts` per `admin-api.md` §4. T042's configuration cases green.
-- [ ] T046 [US2] Implement `T/backend/services/task-transition-service.ts`:
+  - Done 2026-10-28: `TaskWorkflowConfigService` — `createStatus`, `updateStatus`, `deleteStatus(code, replacement, language)`, `setTransitions`; every write one Command (`tasks.status.create|update|delete`, `tasks.transitions.change` against `task_status`/`task_workflow:transitions`), flushed and held to `TaskStatusGraph.assertValid()` on its own transaction (422 `TASK_WORKFLOW_INVALID {rule, code: rule}`). Routes `POST /tasks/statuses` (201), `PATCH /tasks/statuses/:code`, `DELETE /tasks/statuses/:code?replacement=`, `PUT /tasks/transitions`, all `tasks:configure`, each answering the whole workflow (the delete too — admin-api §4 "every write answers with the whole workflow", where CRM answers 204).
+  - **Removal (T001 (a), no batched fallback):** the status row is locked `FOR UPDATE`, its Tasks are selected `for update … limit 5001`; above `TASK_STATUS_REASSIGN_MAX` 409 `TASK_STATUS_IN_USE_TOO_MANY {max}`. With Tasks, the replacement must exist (422 `TASK_STATUS_UNKNOWN`) and be a permitted move from the removed status (409 `TASK_TRANSITION_FORBIDDEN {allowedTargets}`); the Tasks move in one `update`, `completed_at` kept or stamped when the replacement is `done`, cleared otherwise; one `tasks.task.status_change` audit row per Task via `recordAuditFromContext` (`before {status, completedAt}`, `after {status, completedAt, reason: 'status_removed'}`) on the Command's transaction. The status takes its moves with it. The in-use counts for the screen stay `TaskService.workflow()` (visible counts, Phase 2); the removal counts platform-wide.
+  - **Deviations.** (1) Refusals the contract did not name are `TASK_WORKFLOW_INVALID` rules rather than new codes, so no contract is added: `status_code_taken`, `category_in_use` (a category changes only while no Task is in the status — CRM's rule; the completion time would otherwise lie), `replacement_required` (also for `replacement` = the removed code). Each has its sentence (`errors.TASK_WORKFLOW_INVALID.<rule>`, en/pl). (2) An unknown status code on `PATCH`/`DELETE` is 404 `NOT_FOUND` (CRM). (3) A removal emits no per-Task `tasks.task.status_changed.v1`: a Command emits at most one event and nothing subscribes; the audit rows carry the history. (4) A status's `defaultName` is its English name (the body carries `{en, pl}`, both required).
+  - Two codes joined `ERROR_CODES`, the manifest, both bundles and `reference-ledgers.ts` with their first raise site: `TASK_WORKFLOW_INVALID`, `TASK_STATUS_IN_USE_TOO_MANY`. Seam ledger: `services/workflow-config-service.ts` joins `TASK_ACCESS_READERS` with 3 reads (the in-use count, the locked selection, the move) and its reason — platform-wide on purpose.
+- [X] T046 [US2] Implement `T/backend/services/task-transition-service.ts`:
   - the graph check;
   - a pessimistic re-read and the `from` comparison;
   - `completed_at`;
   - the `openSubtasks` count.
 
   Route `POST /tasks/:id/status` through it, replacing T016's interim check. Make `taskWritePort.createMany` start Tasks at the *current* initial status. T042 and T043 green.
-- [ ] T047 [US2] Build `T/admin/pages/settings/TaskWorkflowPage.tsx`:
+  - Done 2026-10-28: `TaskTransitionService.apply(id, {from, to}, language)` — `loadVisible` + `assertMayChange`, then one `tasks.task.status_change` Command with every check inside it: the Task locked and compared with `from` (409 `TASK_TRANSITION_CONFLICT {current}`; already in `to` is a no-op), the target status row held `FOR SHARE` (so a concurrent removal or category change of it waits, or has finished and this answers 422 `TASK_STATUS_UNKNOWN`), the graph read on that transaction (409 `TASK_TRANSITION_FORBIDDEN {allowedTargets, allowed}`), `completed_at` stamped on entering `done`, cleared otherwise, `tasks.task.status_changed.v1` on commit. The refusal names the permitted next statuses by code (`allowedTargets`) and by name in the reader's language (`allowed`, interpolated into `errors.TASK_TRANSITION_FORBIDDEN`; token `none_allowed` when there is none) — FR-015. `changeTaskStatusCommand` left `task-commands.ts` (it exports `lockedTask`, `auditSnapshot`, `envelope`), so the new file reads no rule-scoped table itself.
+  - `taskWritePort.createMany` already read the current initial status (T016); now covered by T043's Stage-entry case. `POST /tasks` likewise (T042).
+  - **Deviation:** the `openSubtasks` count stays in `TaskService.changeStatus` (the answer's detail and the visible sub-task counts are that service's private reads); the transition service returns `{taskId, changed}`. The board (US3) calls `apply` and builds its own answer.
+- [X] T047 [US2] Build `T/admin/pages/settings/TaskWorkflowPage.tsx`:
   - a statuses table and a status dialog (localized names, category, colour, weight, initial);
   - kit `StatusTransitionGraph` with `isTerminal = category !== 'open'` and `isSystem = false`;
   - a delete dialog with a replacement select.
 
   Register the route `/tasks/settings/workflow` and the sidebar entry *Task settings* in `T/admin/index.ts`, gated `tasks:configure`. Make the status picker in `TaskDetail.tsx` offer only `allowedTargets` and show the server's refusal. T044 green.
+  - Done 2026-10-28: `pages/settings/TaskWorkflowPage.tsx` with `components/workflow/{TaskStatusesTable,TaskStatusDialog,TaskStatusDeleteDialog}.tsx` (CRM's screen, the model); `tasksApi.{createStatus,updateStatus,deleteStatus,setTransitions}`. The delete dialog offers as replacements only the statuses the removed one may move to, asks for one when `inUseCount > 0`, and asks after all when the server answers `replacement_required` (Tasks the operator cannot see). Sidebar row *Task settings* in `work`, weight 430 (with Projects' configuration rows, 400–420), icon `Settings`. The `BoardCardFieldsEditor` named by admin-surfaces §1 is US3's (Phase 5).
+  - **Palette action `open-task-workflow`** (admin-surfaces §4, `tasks:configure`) added here, with the screen. Its landing read `GET /tasks/workflow` is `tasks:read`, so `check:action-route-permissions` reports a mismatch: ledgered in `ACTION_PERMISSION_DISAGREEMENTS` (`projects:open-project-templates` precedent; line added to `foreign-module-changes.md` §G); `contract/tasks/palette-actions.test.ts` and `integration/tasks/off-state.test.ts` list it. Its Polish keywords are single words: the phrase *statusy zadań* is refused by `check-default-language-prose`.
+  - `TaskDetail.tsx`: the options stay the current status plus the workflow's moves from it; after a `TASK_TRANSITION_FORBIDDEN` refusal the server's sentence (which names the permitted statuses) is shown and the options become exactly its `allowedTargets` until the Task moves. `TaskDetail` carries no `allowedTargets` of its own (admin-api §1 does not list it) — the workflow read is the source until the server says otherwise.
+  - Category labels read *Open* / *Closed — finished* / *Closed — cancelled* (a status named *Cancelled* beside a category *Cancelled* was ambiguous on screen).
 
 **Checkpoint**: statuses are the operator's, and every move honours them.
+
+- **Phase 4 gate**, run 2026-10-28 on the final tree:
+  - `pnpm run build:packages`: **green**. `pnpm -r run typecheck`: **green** (0 errors; one test-typing error in `workflow.test.ts` fixed first). `pnpm -r run lint`: **green** (0 errors; pre-existing warnings).
+  - Backend, targeted: `test/integration/{tasks,projects,demo}` + `test/contract/{tasks,projects}` + `contract/kernel/openapi-baseline` + `contract/admin_users/permission-inventory` — 56 files, 690 passed, **1 failed**: `task-fields.test.ts › two assignees added are each told once` (the assignees came back in id order). Diagnosed as a Phase 3 defect, not a load flake: two assignees added in one Command shared one `assigned_at`, and the read orders by `assigned_at`, then admin id — so the case failed whenever the second random id sorted first (it had also failed once earlier in this phase and passed alone). Fixed in `task-commands.ts` (each row one millisecond after the one before); the four assignee files then green three runs in a row (32/32 each).
+  - `pnpm --filter backend run test:unit:fast`: 361 files; 7 759 / 7 761 on the first run — `check-module-boundary.test.ts › the tree itself` (30 s timeout, whole-tree scan; green with `--testTimeout=180000`) and `moved-module-tree.test.ts › check-default-language-prose` (a real red: the Polish keyword phrase *statusy zadań*; fixed, green).
+  - Admin (Node 26, `--no-experimental-webstorage`): `test/modules/tasks` + `test/modules/projects` — 29 files, 240 tests green. `mod-tasks` co-located 12 / 128, `contracts` 71 / 1 542 green.
+  - Checks: `check:naming`, `check:language`, `check:port-dependencies`, `check:off-state-coverage`, `check:error-translations`, `check:command-coverage`, `check:bundle-pairing`, `check:action-route-permissions`, `check:admin-surface`, `check:admin-zones`, `check:module-docs`, `check:test-ownership`, `check:module-boundary`, `check:port-shape`, `check:entry-presence`, `check:shared-table-wipes`, `check:platform-surface`, `check:container-imports`, `check-release-intent --since origin/master` (0 violations): **green**. **`check:docs-translations` red**, unchanged from Phase 3 (`stale-translation:generated:module-reference/{crm,tasks}`), left for T089.
+  - OpenAPI baseline regenerated: only `/api/v1/admin/tasks/statuses`, `/statuses/{code}` and `/transitions` added.
+  - Generated artefacts: `manifests:generate` and `pnpm install --lockfile-only` changed nothing; `composer:generate` regenerated `docs/docs/module-reference/tasks.md` (the two error codes, the palette action) — committed. The contracts changeset names the two new `ERROR_CODES`.
+  - Grep of `backend/test/**`, `admin/test/**` and `packages/**` for the moved `changeTaskStatusCommand` / `StatusMove`: no reference.
 
 ---
 
