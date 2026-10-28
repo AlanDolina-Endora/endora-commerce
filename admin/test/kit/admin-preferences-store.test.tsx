@@ -260,20 +260,37 @@ describe('refetch on foreground (FR-019)', () => {
 });
 
 describe('unavailable mode (FR-018)', () => {
-  function renderFetched(preferences: AdminPreferences | null | undefined) {
+  /**
+   * Mounts a provider that fetches `/admin/me`, and returns once the session is
+   * signed in **and the store it created is subscribed to**.
+   *
+   * The session arrives from a resolved promise, outside `act`, so the render
+   * that creates the store is committed by React's scheduler, and the
+   * `useSyncExternalStore` subscription to that store is a passive effect that
+   * runs in a later scheduler task. `waitFor` returns after a `setTimeout(0)`,
+   * which a loaded runner can run first: a change made then reached a store
+   * nobody listened to yet, and a synchronous read of the DOM saw the old value
+   * (`master` after #478: expected '' to be '/orders'). Re-rendering the same
+   * tree inside `act` settles it, because React runs every pending passive
+   * effect before it commits the next render.
+   */
+  async function renderFetched(preferences: AdminPreferences | null | undefined): Promise<void> {
     const me = sessionWith(preferences);
     getSpy.mockImplementation(async (path: string) => {
       if (path === ME_URL) return { data: me };
       if (path === PREFS_URL) return { data: structuredClone(server) };
       throw new Error(`unexpected GET ${path}`);
     });
-    return render(
+    const tree = (
       <StrictMode>
         <AuthProvider>
           <Probe />
         </AuthProvider>
-      </StrictMode>,
+      </StrictMode>
     );
+    const view = render(tree);
+    await waitFor(() => expect(text('session')).toBe('authenticated'));
+    await act(async () => view.rerender(tree));
   }
 
   it.each([
@@ -281,8 +298,7 @@ describe('unavailable mode (FR-018)', () => {
     ['no `preferences` field', undefined],
   ] as const)('a fetched session with %s is unavailable and sends nothing', async (_label, value) => {
     const loads = deferred<{ data: AdminPreferences }>();
-    renderFetched(value);
-    await waitFor(() => expect(text('session')).toBe('authenticated'));
+    await renderFetched(value);
     expect(text('availability')).toBe('unavailable');
     getSpy.mockImplementation(async (path: string) => {
       if (path === PREFS_URL) return loads.promise;
@@ -302,8 +318,7 @@ describe('unavailable mode (FR-018)', () => {
       sidebarCollapsedGroups: ['sales'],
     };
     let loadOk = false;
-    renderFetched(null);
-    await waitFor(() => expect(text('session')).toBe('authenticated'));
+    await renderFetched(null);
     expect(text('availability')).toBe('unavailable');
     getSpy.mockImplementation(async (path: string) => {
       if (path === PREFS_URL) {
