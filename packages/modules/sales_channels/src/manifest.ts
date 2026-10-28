@@ -188,6 +188,11 @@ export const manifest = defineModuleManifest({
      * row's; the label and description are the two strings it rendered
      * (`appShell.nav.salesChannels`, `appShell.palette.sub.storefrontChannels`),
      * moved into this module's own bundle.
+     *
+     * Keywords are matched in every admin language, so they carry both. The
+     * plural `kanały` is the screen's Polish name: matching is "query word ⊂
+     * keyword", so `kanał` alone left an English-language admin typing
+     * `kanały` with nothing.
      */
     {
       id: 'open-sales-channels',
@@ -196,7 +201,7 @@ export const manifest = defineModuleManifest({
       icon: 'Store',
       targetRoute: '/sales-channels',
       requiredPermission: 'sales_channels:read',
-      keywords: ['sales', 'channel', 'channels', 'kanał', 'sprzedaży'],
+      keywords: ['sales', 'channel', 'channels', 'kanał', 'kanały', 'sprzedaży'],
       weight: 160,
     },
     {
