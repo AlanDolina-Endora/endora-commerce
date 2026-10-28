@@ -89,6 +89,12 @@ async function chooseEntity(value: string, entityLabel = 'Record type'): Promise
   fireEvent.change(select, { target: { value } });
 }
 
+/** Opens the definition form in its create view (issue #447). */
+async function openCreate(): Promise<HTMLElement> {
+  fireEvent.click(await screen.findByRole('button', { name: 'New field' }));
+  return screen.findByRole('dialog', { name: 'New field' });
+}
+
 function cellOf(key: string, column: string): HTMLElement {
   const table = screen.getByRole('table');
   const headers = within(table).getAllByRole('columnheader').map((h) => h.textContent);
@@ -120,12 +126,16 @@ describe('CustomFieldsPage — the list-filter option', () => {
 
   it('offers the option in the create form only where the entity type has it, and sends it (FR-003)', async () => {
     renderPage(['custom_fields:read', 'custom_fields:write']);
-    await screen.findByLabelText('Key');
-    expect(screen.queryByLabelText('Use as list filter')).toBeNull();
-    await chooseEntity('order');
-    fireEvent.click(await screen.findByLabelText('Use as list filter'));
-    fireEvent.change(screen.getByLabelText('Key'), { target: { value: 'channel_ref' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add field' }));
+    await chooseEntity('organization');
+    const dialog = await openCreate();
+    expect(within(dialog).queryByLabelText('Use as list filter')).toBeNull();
+    fireEvent.change(within(dialog).getByLabelText('Record type'), { target: { value: 'order' } });
+    fireEvent.click(await within(dialog).findByLabelText('Use as list filter'));
+    fireEvent.change(within(dialog).getByLabelText('Key'), { target: { value: 'channel_ref' } });
+    fireEvent.change(within(within(dialog).getByRole('group', { name: 'Labels' })).getByLabelText('Default label'), {
+      target: { value: 'Channel reference' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add field' }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create.mock.calls[0]![0]).toMatchObject({ entityType: 'order', key: 'channel_ref', listFilter: true });
   });
@@ -155,7 +165,9 @@ describe('CustomFieldsPage — the list-filter option', () => {
     answer([]);
     expect(await screen.findByText('No fields for this record type yet.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Add a field' }));
-    expect(screen.getByLabelText('Key')).toHaveFocus();
+    const dialog = await screen.findByRole('dialog', { name: 'New field' });
+    expect(within(dialog).getByLabelText('Key')).toHaveFocus();
+    expect(within(dialog).getByLabelText('Record type')).toHaveValue('order');
   });
 
   it('offers a reader no action in the empty state', async () => {
@@ -168,7 +180,8 @@ describe('CustomFieldsPage — the list-filter option', () => {
 
   it('offers Required as a checkbox in the create form', async () => {
     renderPage(['custom_fields:read', 'custom_fields:write']);
-    expect(await screen.findByRole('checkbox', { name: 'Required' })).toBeInTheDocument();
+    const dialog = await openCreate();
+    expect(within(dialog).getByRole('checkbox', { name: 'Required' })).toBeInTheDocument();
   });
 
   it('offers no Edit, Delete, audience select or create form to a reader (US3-9)', async () => {
@@ -178,7 +191,7 @@ describe('CustomFieldsPage — the list-filter option', () => {
     expect(screen.queryByRole('button', { name: /^Edit / })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Delete / })).toBeNull();
     expect(screen.queryByLabelText('Who can see the value of region')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Add field' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'New field' })).toBeNull();
     expect(screen.queryByLabelText('Key')).toBeNull();
     expect(cellOf('region', 'Visible to')).toHaveTextContent('Internal — administrators only');
   });
@@ -188,13 +201,17 @@ describe('CustomFieldsPage — the list-filter option', () => {
     const files = [
       'pages/CustomFieldsPage.tsx',
       'components/DefinitionEditorDialog.tsx',
+      'components/DefinitionForm.tsx',
       'components/DefinitionOptionsEditor.tsx',
       'components/DefinitionBehaviourFields.tsx',
+      'lib/definition-draft.ts',
     ];
     const keys = new Set<string>();
     for (const file of files) {
       const source = readFileSync(resolve(dir, file), 'utf8');
       for (const match of source.matchAll(/\bt\(\s*'([\w.]+)'/g)) keys.add(match[1]!);
+      // The checks return bundle keys for the form to say (issue #447).
+      for (const match of source.matchAll(/'(customFields\.validation\.[\w.]+)'/g)) keys.add(match[1]!);
     }
     for (const type of ['text', 'number', 'boolean', 'date', 'select', 'multiselect']) keys.add(`customFields.valueType.${type}`);
     for (const audience of ['internal', 'customer']) keys.add(`customFields.audience.${audience}`);
