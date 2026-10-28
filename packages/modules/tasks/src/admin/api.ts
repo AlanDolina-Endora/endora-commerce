@@ -1,12 +1,16 @@
 import { apiClient } from '@endora-commerce/admin-kit/lib';
 import type {
   CreateTaskBody,
+  RecordDocumentLookupResponse,
   RecordHistoryPage,
   TaskAssigneeOption,
+  TaskAttachment,
   TaskDetail,
   TaskListResponse,
+  TaskPriorityConfig,
   TaskStatusChangeResult,
   TaskSummary,
+  TaskTag,
   TaskWorkflow,
   UpdateTaskBody,
 } from '@endora-commerce/contracts';
@@ -22,6 +26,15 @@ import type {
  */
 
 const BASE = '/api/v1/admin/tasks';
+/** `catalog`'s own list — what `@@@` searches, offered to a holder of `catalog:read`. */
+const PRODUCTS_BASE = '/api/v1/admin/catalog/products';
+
+/** A Product as the `@@@` list offers it. */
+export interface MentionableProduct {
+  id: string;
+  sku: string;
+  name: Record<string, string>;
+}
 
 export interface TaskListParams {
   q?: string;
@@ -91,6 +104,51 @@ export const tasksApi = {
   assignees(q: string): Promise<TaskAssigneeOption[]> {
     const tail = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : '';
     return data(apiClient.get<{ data: TaskAssigneeOption[] }>(`${BASE}/lookups/assignees${tail}`));
+  },
+
+  /** The operator's priority list, most urgent first — `tasks:read`. */
+  priorities(): Promise<TaskPriorityConfig[]> {
+    return data(apiClient.get<{ data: TaskPriorityConfig[] }>(`${BASE}/priorities`));
+  },
+
+  /** The tag list, by name — `tasks:read`. A stable function: the kit's tag picker reads it once per mount. */
+  listTags(): Promise<TaskTag[]> {
+    return data(apiClient.get<{ data: TaskTag[] }>(`${BASE}/tags`));
+  },
+
+  /** Who a text of a Task may mention (`taskId` omitted on the create form). */
+  lookupMentionable(taskId: string | null, query = ''): Promise<TaskAssigneeOption[]> {
+    const qs = new URLSearchParams();
+    if (taskId) qs.set('taskId', taskId);
+    if (query.trim()) qs.set('q', query.trim());
+    const tail = qs.toString();
+    return data(apiClient.get<{ data: TaskAssigneeOption[] }>(`${BASE}/lookups/mentionable${tail ? `?${tail}` : ''}`));
+  },
+
+  /** The `@@` document list, grouped — `tasks:write`. */
+  lookupDocuments(query = ''): Promise<RecordDocumentLookupResponse> {
+    const tail = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
+    return apiClient.get<RecordDocumentLookupResponse>(`${BASE}/lookups/documents${tail}`);
+  },
+
+  /** Products by name or SKU, for `@@@` — `catalog`'s own list, behind `catalog:read`. */
+  searchProducts(query: string): Promise<MentionableProduct[]> {
+    const qs = new URLSearchParams({ page: '0', pageSize: '20' });
+    if (query.trim()) qs.set('q', query.trim());
+    return data(apiClient.get<{ data: MentionableProduct[] }>(`${PRODUCTS_BASE}?${qs.toString()}`));
+  },
+
+  listAttachments(taskId: string): Promise<TaskAttachment[]> {
+    return data(apiClient.get<{ data: TaskAttachment[] }>(`${BASE}/${taskId}/attachments`));
+  },
+
+  /** The Task's own upload (multipart) — `tasks:write`; posted by the kit's `uploadAttachment`. */
+  attachmentUploadPath(taskId: string): string {
+    return `${BASE}/${taskId}/attachments/upload`;
+  },
+
+  removeAttachment(taskId: string, attachmentId: string): Promise<void> {
+    return apiClient.delete<void>(`${BASE}/${taskId}/attachments/${attachmentId}`);
   },
 
   history(id: string, cursor?: string): Promise<RecordHistoryPage> {

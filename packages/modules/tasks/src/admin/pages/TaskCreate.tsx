@@ -2,21 +2,14 @@ import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserCheck } from 'lucide-react';
 import type { CreateTaskBody } from '@endora-commerce/contracts';
-import { TASK_DESCRIPTION_MAX, TASK_TITLE_MAX } from '@endora-commerce/contracts';
-import {
-  Alert,
-  AlertDescription,
-  Button,
-  Card,
-  CardContent,
-  Input,
-  Label,
-  PageHeader,
-  Textarea,
-} from '@endora-commerce/admin-kit/ui';
-import { useTranslation } from '@endora-commerce/admin-kit/i18n';
+import { TASK_TITLE_MAX } from '@endora-commerce/contracts';
+import { CustomFieldValuesPanel } from '@endora-commerce/admin-kit/components';
+import { useAuth } from '@endora-commerce/admin-kit/lib';
+import { Alert, AlertDescription, Button, Card, CardContent, Input, Label, PageHeader } from '@endora-commerce/admin-kit/ui';
+import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
 import { AssigneePicker, type ChosenAssignee } from '../components/AssigneePicker.js';
+import { dueOf, TaskFieldInputs, taskFieldValuesOf, type TaskFieldValues } from '../components/TaskFieldInputs.js';
 import { useCurrentAdmin } from '../lib/current-admin.js';
 import { errorMessage } from '../lib/labels.js';
 
@@ -26,17 +19,22 @@ import { errorMessage } from '../lib/labels.js';
  *
  * A Task created here belongs to no record — a Project's Tasks are created on
  * the Project's own *Tasks* tab, into a Stage, which is the only place that
- * knows the Stage. A title is required; a description, a due date and an
- * assignee are not. The new Task starts as *To do* and opens.
+ * knows the Stage. A title is required; everything else is not — the
+ * description in the kit's reference editor, the due date with an optional
+ * time, the start date, the priority, the tags, the assignees and the `task`
+ * custom fields (`specs/165-task-management/` User Story 1). The new Task
+ * starts in the workflow's initial status and opens.
  */
 export function TaskCreate(): ReactNode {
   const t = useTranslation('tasks');
   const navigate = useNavigate();
   const me = useCurrentAdmin();
-  const ids = { title: useId(), description: useId(), dueOn: useId(), assignee: useId() };
+  const { hasPermission } = useAuth();
+  const { language } = useAppLanguage();
+  const ids = { title: useId(), assignee: useId() };
   const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [dueOn, setDueOn] = useState('');
+  const [fields, setFields] = useState<TaskFieldValues>(() => taskFieldValuesOf());
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>({});
   const [assignees, setAssignees] = useState<ChosenAssignee[]>([]);
   const [missingTitle, setMissingTitle] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -48,11 +46,16 @@ export function TaskCreate(): ReactNode {
       setMissingTitle(true);
       return;
     }
+    const due = dueOf(fields);
     const body: CreateTaskBody = {
       title: title.trim(),
-      ...(description.trim() ? { description } : {}),
-      ...(dueOn ? { dueOn } : {}),
+      ...(fields.description.trim() ? { description: fields.description } : {}),
+      ...(due.dueAt ? { dueAt: due.dueAt } : due.dueOn ? { dueOn: due.dueOn } : {}),
+      ...(fields.startOn ? { startOn: fields.startOn } : {}),
+      ...(fields.priorityCode ? { priorityCode: fields.priorityCode } : {}),
+      ...(fields.tagIds.length > 0 ? { tagIds: fields.tagIds } : {}),
       ...(assignees.length > 0 ? { assigneeIds: assignees.map((chosen) => chosen.id) } : {}),
+      ...(Object.keys(customFieldValues).length > 0 ? { customFieldValues } : {}),
     };
     setBusy(true);
     setError(null);
@@ -99,22 +102,14 @@ export function TaskCreate(): ReactNode {
               ) : null}
             </div>
 
-            <div className="space-y-1">
-              <Label htmlFor={ids.description}>{t('field.description')}</Label>
-              <Textarea
-                id={ids.description}
-                rows={4}
-                value={description}
-                maxLength={TASK_DESCRIPTION_MAX}
-                onChange={(event): void => setDescription(event.target.value)}
-              />
-            </div>
+            <TaskFieldInputs
+              values={fields}
+              onChange={(patch): void => setFields((previous) => ({ ...previous, ...patch }))}
+              taskId={null}
+              disabled={busy}
+            />
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label htmlFor={ids.dueOn}>{t('field.dueOn')}</Label>
-                <Input id={ids.dueOn} type="date" value={dueOn} onChange={(event): void => setDueOn(event.target.value)} />
-              </div>
               <div className="space-y-1">
                 <Label htmlFor={ids.assignee}>{t('field.assignee')}</Label>
                 <AssigneePicker
@@ -141,6 +136,16 @@ export function TaskCreate(): ReactNode {
               </div>
             </div>
 
+            {/* The `task` custom fields, sent with the Task (R-8); their definitions are `custom_fields:read`'s. */}
+            {hasPermission('custom_fields:read') ? (
+              <CustomFieldValuesPanel
+                entityType="task"
+                values={EMPTY_VALUES}
+                onChange={setCustomFieldValues}
+                language={language}
+              />
+            ) : null}
+
             {error ? (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
@@ -158,6 +163,8 @@ export function TaskCreate(): ReactNode {
     </>
   );
 }
+
+const EMPTY_VALUES: Record<string, unknown> = {};
 
 /** The default export the route declaration's dynamic-import factory resolves. */
 export default TaskCreate;

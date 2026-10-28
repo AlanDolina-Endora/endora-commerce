@@ -2,7 +2,6 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Pencil, Trash2, UserCheck } from 'lucide-react';
 import {
-  TASK_DESCRIPTION_MAX,
   TASK_TITLE_MAX,
   type RecordHistoryEntry,
   type TaskDetail as TaskDetailData,
@@ -20,14 +19,23 @@ import {
   Label,
   PageHeader,
   Select,
-  Textarea,
 } from '@endora-commerce/admin-kit/ui';
-import { ModalDialog, RecordHistory, recordHistoryChanges, useRecordHistory } from '@endora-commerce/admin-kit/components';
+import {
+  ModalDialog,
+  RecordHistory,
+  recordHistoryChanges,
+  ReferenceText,
+  TagChips,
+  useRecordHistory,
+} from '@endora-commerce/admin-kit/components';
 import { AdminZone } from '@endora-commerce/admin-kit/zones';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
 import { AssigneePicker, type ChosenAssignee } from '../components/AssigneePicker.js';
 import { StatusBadge } from '../components/StatusBadge.js';
+import { TaskAttachments } from '../components/TaskAttachments.js';
+import { TaskCustomFields } from '../components/TaskCustomFields.js';
+import { dueOf, TaskFieldInputs, taskFieldValuesOf, usePriorities, type TaskFieldValues } from '../components/TaskFieldInputs.js';
 import { useCurrentAdmin } from '../lib/current-admin.js';
 import { calendarDateLabel, errorMessage } from '../lib/labels.js';
 
@@ -41,7 +49,10 @@ const LIST_PATH = '/tasks';
  * a status control that writes at once and offers only the moves the
  * configured workflow permits from where the Task is (`specs/165-task-management/`
  * research R-1), and the rest edited in place, sending only what changed —
- * several assignees among them (R-2); **the context card** — the record the Task belongs to as
+ * several assignees (R-2), the description in the kit's reference editor and
+ * drawn with its references as links (R-4, R-5), the due date with an
+ * optional time, the start date, the priority and the tags (User Story 1);
+ * **the attachments** and **the custom fields** (R-7, R-8); **the context card** — the record the Task belongs to as
  * its owner describes it, linked while it is available and named without a
  * link when it is not, with the group (a Project's Stage) and the note the
  * owner wrote; **the history**; and last the zone `task.detail.after`, which
@@ -79,6 +90,7 @@ export function TaskDetail(): ReactNode {
   const [deleting, setDeleting] = useState(false);
   const [historyVersion, setHistoryVersion] = useState(0);
   const sequence = useRef(0);
+  const priorities = usePriorities();
 
   const load = useCallback(async (): Promise<void> => {
     const current = ++sequence.current;
@@ -118,6 +130,12 @@ export function TaskDetail(): ReactNode {
   const statusName = (code: string): string => {
     const status = workflow?.statuses.find((candidate) => candidate.code === code);
     return status ? status.name[language] || status.defaultName : code;
+  };
+
+  /** A priority's name in the reader's language, from the list; the code when it is not there. */
+  const priorityName = (code: string): string => {
+    const priority = priorities.find((candidate) => candidate.code === code);
+    return priority ? priority.name[language] || priority.defaultName : code;
   };
 
   /** One write; the answer is the Task as it is now. Resolves `true` when it was made. */
@@ -302,36 +320,72 @@ export function TaskDetail(): ReactNode {
                 <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
                   <div className="space-y-0.5 sm:col-span-2">
                     <dt className="text-xs font-medium text-muted-foreground">{t('field.description')}</dt>
-                    <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">
+                    <dd className="[overflow-wrap:anywhere]">
                       {task.description.trim() ? (
-                        task.description
+                        <ReferenceText text={task.description} references={task.references} />
                       ) : (
                         <span className="text-muted-foreground">{t('detail.noDescription')}</span>
                       )}
                     </dd>
                   </div>
                   <div className="space-y-0.5">
-                    <dt className="text-xs font-medium text-muted-foreground">{t('field.dueOn')}</dt>
+                    <dt className="text-xs font-medium text-muted-foreground">
+                      {task.dueAt ? t('field.dueAt') : t('field.dueOn')}
+                    </dt>
                     <dd className={task.overdue ? 'font-medium text-destructive' : undefined}>
-                      {task.dueOn ? calendarDateLabel(task.dueOn, language) : t('list.noDueDate')}
+                      {task.dueAt
+                        ? formatDateTime(task.dueAt)
+                        : task.dueOn
+                          ? calendarDateLabel(task.dueOn, language)
+                          : t('list.noDueDate')}
                       {task.overdue ? ` · ${t('list.overdue')}` : null}
+                    </dd>
+                  </div>
+                  <div className="space-y-0.5">
+                    <dt className="text-xs font-medium text-muted-foreground">{t('field.startOn')}</dt>
+                    <dd>{task.startOn ? calendarDateLabel(task.startOn, language) : t('detail.noStartDate')}</dd>
+                  </div>
+                  <div className="space-y-0.5">
+                    <dt className="text-xs font-medium text-muted-foreground">{t('field.priority')}</dt>
+                    <dd>
+                      {task.priority ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <span
+                            aria-hidden="true"
+                            className="inline-block size-2 rounded-full"
+                            style={{ backgroundColor: task.priority.color }}
+                          />
+                          {task.priority.name}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">{t('field.priorityNone')}</span>
+                      )}
+                    </dd>
+                  </div>
+                  <div className="space-y-0.5">
+                    <dt className="text-xs font-medium text-muted-foreground">{t('field.tags')}</dt>
+                    <dd>
+                      {task.tags.length > 0 ? (
+                        <TagChips tags={task.tags} />
+                      ) : (
+                        <span className="text-muted-foreground">{t('detail.noTags')}</span>
+                      )}
                     </dd>
                   </div>
                   <div className="space-y-0.5">
                     <dt className="text-xs font-medium text-muted-foreground">{t('field.assignee')}</dt>
                     <dd className="flex flex-wrap items-center gap-2">
                       {task.assignees.length > 0 ? (
-                        <span className="[overflow-wrap:anywhere]">
-                          {task.assignees.map((person, index) => (
-                            <span key={person.id}>
-                              {index > 0 ? ', ' : null}
+                        <ul aria-label={t('field.assignee')} className="flex flex-wrap gap-x-3 gap-y-1 [overflow-wrap:anywhere]">
+                          {task.assignees.map((person) => (
+                            <li key={person.id}>
                               {person.name}
                               {person.active ? null : (
                                 <span className="text-muted-foreground"> ({t('detail.inactive')})</span>
                               )}
-                            </span>
+                            </li>
                           ))}
-                        </span>
+                        </ul>
                       ) : (
                         <span className="text-muted-foreground">{t('list.unassigned')}</span>
                       )}
@@ -406,13 +460,36 @@ export function TaskDetail(): ReactNode {
           </CardContent>
         </Card>
 
+        <Card className="min-w-0 lg:col-span-2">
+          <CardContent className="pt-6">
+            <TaskAttachments taskId={task.id} canChange={canWrite} />
+          </CardContent>
+        </Card>
+
+        <div className="min-w-0">
+          <TaskCustomFields
+            task={task}
+            canChange={canWrite}
+            onChange={(next): void => {
+              setTask(next);
+              setNotice(t('detail.saved'));
+              setHistoryVersion((version) => version + 1);
+            }}
+          />
+        </div>
+
         <Card className="min-w-0 lg:col-span-3">
           <CardContent className="pt-6">
             <section aria-labelledby={historyHeadingId} className="space-y-3">
               <h2 id={historyHeadingId} className="text-base font-semibold">
                 {t('detail.history')}
               </h2>
-              <TaskHistory taskId={task.id} version={historyVersion} statusName={statusName} />
+              <TaskHistory
+                taskId={task.id}
+                version={historyVersion}
+                statusName={statusName}
+                priorityName={priorityName}
+              />
             </section>
           </CardContent>
         </Card>
@@ -444,15 +521,14 @@ interface TaskEditFormProps {
   onSave: (body: UpdateTaskBody) => Promise<void>;
 }
 
-/** The Task's title, description, due date and assignees, edited together. */
+/** The Task's title, assignees and the fields of `TaskFieldInputs`, edited together. */
 function TaskEditForm(props: TaskEditFormProps): ReactNode {
   const { task, busy } = props;
   const t = useTranslation('tasks');
   const tCore = useTranslation('core');
-  const ids = { title: useId(), description: useId(), dueOn: useId(), assignee: useId() };
+  const ids = { title: useId(), assignee: useId() };
   const [title, setTitle] = useState(task.title);
-  const [description, setDescription] = useState(task.description);
-  const [dueOn, setDueOn] = useState(task.dueOn ?? '');
+  const [fields, setFields] = useState<TaskFieldValues>(() => taskFieldValuesOf(task));
   const [assignees, setAssignees] = useState<ChosenAssignee[]>(
     task.assignees.map((person) => ({ id: person.id, name: person.name })),
   );
@@ -463,10 +539,23 @@ function TaskEditForm(props: TaskEditFormProps): ReactNode {
       setMissingTitle(true);
       return;
     }
+    const due = dueOf(fields);
+    const before = dueOf(taskFieldValuesOf(task));
+    const dueChanged = due.dueAt !== before.dueAt || due.dueOn !== before.dueOn;
+    const tagIds = [...fields.tagIds];
     const body: UpdateTaskBody = {
       ...(title.trim() !== task.title ? { title: title.trim() } : {}),
-      ...(description !== task.description ? { description } : {}),
-      ...((dueOn || null) !== task.dueOn ? { dueOn: dueOn || null } : {}),
+      ...(fields.description !== task.description ? { description: fields.description } : {}),
+      ...(dueChanged
+        ? due.dueAt !== null
+          ? { dueAt: due.dueAt }
+          : { dueOn: due.dueOn, ...(task.dueAt !== null ? { dueAt: null } : {}) }
+        : {}),
+      ...((fields.startOn || null) !== task.startOn ? { startOn: fields.startOn || null } : {}),
+      ...((fields.priorityCode || null) !== (task.priority?.code ?? null)
+        ? { priorityCode: fields.priorityCode || null }
+        : {}),
+      ...([...tagIds].sort().join(',') !== task.tags.map((tag) => tag.id).sort().join(',') ? { tagIds } : {}),
       ...(assignees.map((chosen) => chosen.id).join(',') !== task.assignees.map((person) => person.id).join(',')
         ? { assigneeIds: assignees.map((chosen) => chosen.id) }
         : {}),
@@ -501,33 +590,25 @@ function TaskEditForm(props: TaskEditFormProps): ReactNode {
           </p>
         ) : null}
       </div>
+      <TaskFieldInputs
+        values={fields}
+        onChange={(patch): void => setFields((previous) => ({ ...previous, ...patch }))}
+        taskId={task.id}
+        references={task.references}
+        currentPriority={task.priority ? { code: task.priority.code, name: task.priority.name } : null}
+        disabled={busy}
+      />
       <div className="space-y-1">
-        <Label htmlFor={ids.description}>{t('field.description')}</Label>
-        <Textarea
-          id={ids.description}
-          rows={4}
-          value={description}
-          maxLength={TASK_DESCRIPTION_MAX}
-          onChange={(event): void => setDescription(event.target.value)}
+        <Label htmlFor={ids.assignee}>{t('field.assignee')}</Label>
+        <AssigneePicker
+          id={ids.assignee}
+          value={assignees}
+          onChange={setAssignees}
+          ariaDescribedBy={`${ids.assignee}-hint`}
         />
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1">
-          <Label htmlFor={ids.dueOn}>{t('field.dueOn')}</Label>
-          <Input id={ids.dueOn} type="date" value={dueOn} onChange={(event): void => setDueOn(event.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor={ids.assignee}>{t('field.assignee')}</Label>
-          <AssigneePicker
-            id={ids.assignee}
-            value={assignees}
-            onChange={setAssignees}
-            ariaDescribedBy={`${ids.assignee}-hint`}
-          />
-          <p id={`${ids.assignee}-hint`} className="text-xs text-muted-foreground">
-            {t('field.assigneeHint')}
-          </p>
-        </div>
+        <p id={`${ids.assignee}-hint`} className="text-xs text-muted-foreground">
+          {t('field.assigneeHint')}
+        </p>
       </div>
       <div className="flex flex-wrap gap-2 border-t pt-3">
         <Button type="button" className="min-h-11 sm:min-h-9" disabled={busy} aria-busy={busy} onClick={save}>
@@ -542,7 +623,16 @@ function TaskEditForm(props: TaskEditFormProps): ReactNode {
 }
 
 /** Fields of a Task's audited state a reader is shown, each with its label (`history.field.<field>`). */
-const SHOWN_HISTORY_FIELDS: ReadonlySet<string> = new Set(['title', 'status', 'dueOn', 'contextNote', 'completedAt']);
+const SHOWN_HISTORY_FIELDS: ReadonlySet<string> = new Set([
+  'title',
+  'status',
+  'dueOn',
+  'dueAt',
+  'startOn',
+  'priorityCode',
+  'contextNote',
+  'completedAt',
+]);
 
 /**
  * The Task's audit trail (`GET /tasks/:id/history`) on the kit's
@@ -552,7 +642,12 @@ const SHOWN_HISTORY_FIELDS: ReadonlySet<string> = new Set(['title', 'status', 'd
  * the entry's heading says an assignment happened. Read again after every
  * write made on this screen.
  */
-function TaskHistory(props: { taskId: string; version: number; statusName: (code: string) => string }): ReactNode {
+function TaskHistory(props: {
+  taskId: string;
+  version: number;
+  statusName: (code: string) => string;
+  priorityName: (code: string) => string;
+}): ReactNode {
   const t = useTranslation('tasks');
   const { language } = useAppLanguage();
   const { taskId } = props;
@@ -562,8 +657,9 @@ function TaskHistory(props: { taskId: string; version: number; statusName: (code
   const renderValue = (field: string, raw: unknown): ReactNode => {
     if (raw === null || raw === undefined || raw === '') return '—';
     if (field === 'status') return props.statusName(String(raw));
-    if (field === 'dueOn' && typeof raw === 'string') return calendarDateLabel(raw, language);
-    if (field === 'completedAt' && typeof raw === 'string') return formatDateTime(raw);
+    if (field === 'priorityCode') return props.priorityName(String(raw));
+    if ((field === 'dueOn' || field === 'startOn') && typeof raw === 'string') return calendarDateLabel(raw, language);
+    if ((field === 'completedAt' || field === 'dueAt') && typeof raw === 'string') return formatDateTime(raw);
     return String(raw);
   };
 
