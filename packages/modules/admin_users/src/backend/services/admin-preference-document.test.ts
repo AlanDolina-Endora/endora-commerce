@@ -47,6 +47,8 @@ describe('assemblePreferences', () => {
       sidebarCollapsedGroups: ['oldGroup', 'pinned'],
       sidebarRailMode: true,
       listPageSizes: { orders: 50, returns: 7 },
+      // `specs/165-task-management/` R-14: a key with no row reads as its default.
+      listViewModes: {},
     });
     expect(log.warn).not.toHaveBeenCalled();
   });

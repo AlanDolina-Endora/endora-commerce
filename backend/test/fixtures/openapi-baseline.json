@@ -7098,6 +7098,15 @@
         }
       }
     },
+    "/api/v1/admin/tasks/workflow": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/tasks/{id}": {
       "delete": {
         "responses": {
@@ -7123,6 +7132,15 @@
     },
     "/api/v1/admin/tasks/{id}/history": {
       "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/tasks/{id}/status": {
+      "post": {
         "responses": {
           "200": {
             "description": "OK"

@@ -417,13 +417,14 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
     to: 'tasks',
     reason:
       'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
-      'Phase 2): a status change to a code the operator\\'s workflow does not hold.',
+      'Phase 2): a status change to a code the operator’s workflow does not hold.',
   },
   TASK_TRANSITION_FORBIDDEN: {
     to: 'tasks',
     reason:
       'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
-      'Phase 2): a status change the operator\\'s workflow does not permit from the Task\\'s current status.',
+      'Phase 2): a status change the operator’s workflow does not permit from the Task’s current ' +
+      'status.',
   },
   TASK_TRANSITION_CONFLICT: {
     to: 'tasks',
@@ -435,7 +436,8 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
     to: 'tasks',
     reason:
       'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
-      'Phase 2): a change to another administrator\\'s private Task by a holder of `tasks:see_private`, who may only read and delete it.',
+      'Phase 2): a change to another administrator’s private Task by a holder of ' +
+      '`tasks:see_private`, who may only read and delete it.',
   },
   PROJECT_NOT_FOUND: {
     to: 'projects',

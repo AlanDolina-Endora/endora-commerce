@@ -16,10 +16,12 @@ import { TEST_ADMIN_ID } from '../../helpers/test-actors.js';
  *
  * The second half drives the Task management migration itself — `down` to the
  * 163 shape, 163-shaped rows, `up`, `down` again — so it takes a database of
- * its own (`setupMigratorTestDb`, `test/migrator-driving-tests.ts`). The class
- * is run directly rather than through the migrator: it is not the latest
- * migration of the set, and nothing references the `tasks` tables, so its
- * `down` and `up` can be replayed in place.
+ * its own (`setupMigratorTestDb`, `test/migrator-driving-tests.ts`). The
+ * migrator is asked which migrations it executed (the registration is the
+ * claim that the migration runs at all); the class itself is then run directly
+ * rather than through `migrator.down()`: it is not the latest migration of the
+ * set, and nothing references the `tasks` tables, so its `down` and `up` can be
+ * replayed in place without reverting every module ordered after `tasks`.
  */
 
 type MigrationClass = (typeof migrations)[number];
@@ -574,6 +576,11 @@ describe('tasks schema (163 init + 165 task management)', () => {
     });
   });
 
+  it('is registered and executed: the migrator records the task_management migration', async () => {
+    const executed = await orm.getMigrator().getExecutedMigrations();
+    expect(executed.map((migration) => migration.name)).toContain(taskManagementMigration().name);
+  });
+
   describe('the upgrade from the 163 schema, and back', () => {
     const statuses = ['todo', 'in_progress', 'done', 'cancelled'] as const;
     const ids: Record<string, string> = {};
@@ -624,7 +631,11 @@ describe('tasks schema (163 init + 165 task management)', () => {
       const assignees = await rows<{ task_id: string; admin_user_id: string; assigned_at: Date | null }>(
         `select "task_id", "admin_user_id", "assigned_at" from "task_assignees" order by "task_id"`,
       );
-      expect(assignees.map(({ task_id, admin_user_id }) => ({ task_id, admin_user_id })).sort((a, b) => a.task_id.localeCompare(b.task_id))).toEqual(
+      expect(
+        assignees
+          .map((row) => ({ task_id: row.task_id, admin_user_id: row.admin_user_id }))
+          .sort((a, b) => a.task_id.localeCompare(b.task_id)),
+      ).toEqual(
         statuses
           .map((status) => ({
             task_id: ids[`${status}-assigned`]!,

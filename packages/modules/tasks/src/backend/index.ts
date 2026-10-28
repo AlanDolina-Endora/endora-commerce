@@ -97,15 +97,18 @@ export function registerModule(ctx: ModuleContext): void {
       .singleton(),
     tasksVisibility: ctx
       .asFunction(({ taskContextRegistry }: TasksCradle) => {
-        const permissions = lazyPort<PermissionReadPort>(ctx, 'permissionService');
+        // The published read port plus the capability check `hasPermission`,
+        // which the container entry carries beside it (Projects' precedent).
+        const permissions = lazyPort<
+          PermissionReadPort & { hasPermission(adminUserId: string, permission: string): Promise<boolean> }
+        >(ctx, 'permissionService');
         return new TaskVisibility({
           contributors: () => taskContextRegistry.present(),
           isSystemActor,
           viewer: async () => {
             const adminUserId = actingAdminUserId();
             if (adminUserId === null) return { adminUserId: null, seePrivate: false };
-            const held = await permissions.listPermissions(adminUserId);
-            return { adminUserId, seePrivate: held.includes('*') || held.includes('tasks:see_private') };
+            return { adminUserId, seePrivate: await permissions.hasPermission(adminUserId, 'tasks:see_private') };
           },
         });
       })

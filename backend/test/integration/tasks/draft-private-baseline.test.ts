@@ -29,7 +29,11 @@ describe('tasks — drafts and private Tasks are invisible to everyone else (R-3
   const API = '/api/v1/admin/tasks';
   /** Lower-case alphanumeric: global search folds case. */
   const token = `dpb${randomUUID().replace(/-/g, '').slice(0, 10)}`;
-  const ids = { draft: randomUUID(), private: randomUUID(), published: randomUUID() };
+  const ids: Record<'draft' | 'private' | 'published', string> = {
+    draft: randomUUID(),
+    private: randomUUID(),
+    published: randomUUID(),
+  };
 
   async function seed(id: string, flags: { draft: boolean; private: boolean }, label: string): Promise<void> {
     const connection = h.orm.em.getConnection();

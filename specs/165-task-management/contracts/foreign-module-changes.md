@@ -27,6 +27,7 @@ are additive (`release-intent.md`).
 | `src/components/tags/` (new) | `TagChips`, `TagMultiSelect` and `useTagOptions`, promoted from CRM with the options source injected (R-10). |
 | `src/components/kanban/MoveToMenu.tsx` (new) | Promoted from CRM (R-11). |
 | `src/components/references/` | Document groups and link targets for `opportunity` and `project`. |
+| `packages/modules/_i18n/i18n/{en,pl}.json` (added at T025) | The core bundle's `references.{kind,group,inserted,unavailable}.{opportunity,project}` sentences the kit's reference components compose (`admin/test/kit/kit-collaboration-bundle.test.ts` requires every member of each family). |
 | `src/lib/admin-preferences/{store,use-admin-preference}.ts` | `listViewModes` and `useListViewModePreference(listId)`. |
 | Tests beside each | — |
 
@@ -69,7 +70,7 @@ are additive (`release-intent.md`).
 
 ## F. `packages/modules/admin_users/`
 
-No code change. The service ignores unknown keys and merges by key, so `listViewModes` needs only the contract. If the per-list merge needs special logic, as `listPageSizes` does, `admin-preference-document.ts` gets one case.
+No code change. `src/backend/services/admin-preference-document.test.ts` (added at T025) gains `listViewModes: {}` in the document it expects: the contract's new key reads as its default when no row is stored. The service ignores unknown keys and merges by key, so `listViewModes` needs only the contract. If the per-list merge needs special logic, as `listPageSizes` does, `admin-preference-document.ts` gets one case.
 
 ## G. Demo, tests, generated files
 
@@ -88,6 +89,7 @@ No code change. The service ignores unknown keys and merges by key, so `listView
   - `backend/test/helpers/package-entities.ts`;
   - `backend/test/fixtures/openapi-baseline.json` (regenerated);
   - `packages/demo-composition/src/composition.ts` (the Tasks demo step).
+- **`backend/scripts/ledgers/test-ownership/tasks.ts`** (new, added at T025): a **retained** entry for `backend/test/integration/tasks/migration.test.ts`, which no longer boots a server (it takes `setupMigratorTestDb`, which `check-test-ownership`'s host-composer list does not name) and so reads as a misplaced single-module test; it needs the host's migrated template and registries and cannot move.
 - **`backend/test/migrator-driving-tests.ts`** (added at T009): the extended `migration.test.ts` drives the Task management migration `down` and `up` against its own database (`setupMigratorTestDb`), and `test/unit/harness/migrator-driving-ledger.test.ts` requires every such file to be listed there.
 - **The scheduled-work probe copy test** (`backend/test/unit/tenancy/scheduled-work-probes.test.ts`) gains the `tasks` copy.
 
