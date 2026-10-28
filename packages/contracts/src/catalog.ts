@@ -239,7 +239,13 @@ export type ProductPriceTier = z.infer<typeof productPriceTierSchema>;
  * when that is what `price` came from; `salePrice` is set only when a sale list
  * priced the product (it is then also `price`). Both are `null` when nothing
  * prices the product; `displayMode` is still the viewer's, so a page can tell
- * "sold on request only" (`none`) from "no price". The display-mode values are
+ * "sold on request only" (`none`) from "no price".
+ *
+ * Issue #491 — under `displayMode: 'none'` the server sends **no amount**:
+ * `basePrice` and `salePrice` are `null`, `listPrice` is absent, and so are
+ * `ProductSummary.price`, `compareAtPrice` and `priceVariesByVariant` beside it,
+ * whatever the price books would charge. The storefront renders "price on
+ * request" from `displayMode`; there is no figure to hide. The display-mode values are
  * `displayModeSchema`'s (`price-lists.ts`, which imports this file and checks
  * the two agree at compile time).
  */

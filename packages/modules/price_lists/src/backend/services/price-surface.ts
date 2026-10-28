@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { ForeignKeyConstraintViolationException } from '@mikro-orm/core';
 import type { EntityManager } from '@mikro-orm/postgresql';
-import type {
-  ListingPriceOrderChunk,
-  ListingPriceOrderQuery,
-  ListingPriceOrderRow,
+import {
+  displayModeWithholdsAmounts,
+  type ListingPriceOrderChunk,
+  type ListingPriceOrderQuery,
+  type ListingPriceOrderRow,
 } from '@endora-commerce/contracts';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
-import type { BookPricing, BookPricingViewer, ProfileListingAnswer } from './book-pricing.js';
+import type { BookLineAnswer, BookPricing, BookPricingViewer, ProfileListingAnswer } from './book-pricing.js';
 import { compareDecimal } from './matrix-decimal.js';
 import type { PricedProductRef } from './pricing-service.interface.js';
 import type { PricingProfile } from './pricing-profile.js';
@@ -200,6 +201,15 @@ function rowOf(productId: string, resolution: ProfileListingAnswer['resolution']
     compareAt: price.source === 'sale' ? price.compareAt : null,
     sourceTier: price.source,
   };
+}
+
+/**
+ * Whether a live answer takes part in a price order for its viewer: priced, and
+ * not withheld by the viewer's display mode (issue #491) — a product shown with
+ * no price must not be ranked by the price it is not shown.
+ */
+function orderable(answer: BookLineAnswer | null): boolean {
+  return answer !== null && answer.resolution.price !== null && !displayModeWithholdsAmounts(answer.displayMode);
 }
 
 function sameRow(a: SurfaceRow, b: SurfaceRow): boolean {
@@ -528,13 +538,18 @@ export class PriceSurface {
     return this.#twoStreams(query, everyoneReady, buyerServed, currency, covered);
   }
 
-  /** {@link ListingPriceOrderPort.pricedProductIds}: membership, from a live resolution of the set. */
+  /**
+   * {@link ListingPriceOrderPort.pricedProductIds}: membership, from a live
+   * resolution of the set. A product the viewer's display mode withholds
+   * (`none`, issue #491) is not priced for them: it belongs to the unpriced
+   * tail, as the surface leaves it out of the order.
+   */
   async pricedProductIds(productIds: readonly string[], viewer: BookPricingViewer): Promise<ReadonlySet<string>> {
     const out = new Set<string>();
     if (productIds.length === 0) return out;
     const products = await this.deps.productsByIds([...new Set(productIds)]);
     const listed = await this.deps.books.resolveListing(products, viewer);
-    for (const [productId, answer] of listed) if (answer.answer?.resolution.price) out.add(productId);
+    for (const [productId, answer] of listed) if (orderable(answer.answer)) out.add(productId);
     return out;
   }
 
@@ -1107,6 +1122,9 @@ export class PriceSurface {
     let rows = products
       .map((p) => {
         const answer = listed.get(p.id);
+        // Issue #491 — a product the viewer's display mode withholds takes no
+        // part in the order, as the built surface leaves it out.
+        if (!orderable(answer?.answer ?? null)) return { p, row: null };
         return { p, row: rowOf(p.id, answer?.answer?.resolution, answer?.maxAmount ?? null) };
       })
       .filter((x): x is { p: PricedProductRef; row: SurfaceRow } => x.row !== null)

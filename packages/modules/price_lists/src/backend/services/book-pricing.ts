@@ -10,6 +10,7 @@ import type {
   ListingPriceDetail,
   PinnedPriceBookPublishability,
 } from '@endora-commerce/contracts';
+import { displayModeWithholdsAmounts } from '@endora-commerce/contracts';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
 import { buildEligibleAttributes, type EligibleAttribute } from './attribute-eligibility.js';
 import {
@@ -172,6 +173,13 @@ export interface BookPricingDeps {
     productIds: readonly string[];
     categoryIdsByProduct: ReadonlyMap<string, ReadonlySet<string>>;
   }) => Promise<Map<string, DisplayMode>>;
+  /**
+   * Issue #491 — whether any product or category override is `none`: the only
+   * way a product's own step can withhold it from every viewer. The price
+   * surface's worker asks it once per chunk before it reads the product step,
+   * which it otherwise does not need (issue #416). Absent, the step is read.
+   */
+  anyProductStepWithholds?: () => Promise<boolean>;
   /** The chain's tail — organization override, then settings — for the viewer. Never cached here. */
   viewerDisplayMode: (input: {
     organizationId: string | null;
@@ -329,9 +337,12 @@ export class BookPricing {
    * - `viewer` — a resolution for someone looking: each line carries the
    *   product step of its display-mode chain, and the line is cached unless it
    *   is a fixed profile's or an explanation;
-   * - `surface` — the surface's worker resolving a whole profile: no display
-   *   mode (the surface stores amounts), nothing read from or written to the
-   *   cache (`productDisplayMode` is `null` on every line).
+   * - `surface` — the surface's worker resolving a whole profile: nothing
+   *   read from or written to the cache, and of the display mode only the
+   *   product step, and only while some product or category override is
+   *   `none` ({@link BookPricingDeps.anyProductStepWithholds}) — a product that
+   *   step withholds from every viewer is left out of the surface (issue #491);
+   *   otherwise `productDisplayMode` is `null` on every line.
    */
   async #resolveLines(
     lines: readonly PricingLineRequest[],
@@ -409,9 +420,10 @@ export class BookPricing {
         eligibleAttributes = buildEligibleAttributes(await this.deps.attributeRead().listByFlag('isPriceRule'));
       }
       const resolver = createBookResolver({ books, rows, precedence, eligibleAttributes, explain });
-      const productModes = mode.kind === 'viewer'
-        ? await this.deps.productDisplayModes({ productIds, categoryIdsByProduct })
-        : new Map<string, DisplayMode | null>();
+      const productModes =
+        mode.kind === 'viewer' || (await this.#productStepMayWithhold())
+          ? await this.deps.productDisplayModes({ productIds, categoryIdsByProduct })
+          : new Map<string, DisplayMode | null>();
 
       for (const { line, keys } of pending) {
         const resolution = resolver.resolve({
@@ -430,6 +442,11 @@ export class BookPricing {
       }
     }
     return { currencyCode, answered };
+  }
+
+  /** Whether a product's own display-mode step may withhold it — see {@link BookPricingDeps.anyProductStepWithholds}. */
+  async #productStepMayWithhold(): Promise<boolean> {
+    return this.deps.anyProductStepWithholds ? this.deps.anyProductStepWithholds() : true;
   }
 
   /**
@@ -582,9 +599,16 @@ export class BookPricing {
    * The listing of a fixed profile as the price surface stores it (issue
    * #416): the resolutions {@link resolveListing} answers for the profile's
    * guest viewer on its channel and currency — the same lines, the same
-   * variant ranging — without the display-mode chain, which the surface does
-   * not store and which cost a whole build about 7 % of its time. Uncached,
-   * like every fixed-profile resolution.
+   * variant ranging — without the viewer's tail of the display-mode chain,
+   * which the surface does not store. Uncached, like every fixed-profile
+   * resolution.
+   *
+   * Issue #491 — a product whose own step of the chain (its override, else its
+   * category's) is `none` answers `null`: it is withheld from every viewer, so
+   * it has no place in a price order or a price range, and the catalogue walks
+   * it in the unpriced tail. The step is read only while some product or
+   * category override is `none` — otherwise it cannot withhold anything, and
+   * reading it cost a whole build about 7 % of its time (issue #416).
    */
   async resolveProfileListing(
     products: readonly PricedProductRef[],
@@ -602,7 +626,10 @@ export class BookPricing {
     };
     const { answered } = await this.#resolveLines(lines, viewer, new Map(records.map((v) => [v.id, v])), { kind: 'surface', profile });
     const resolutions = new Map<string, BookResolution>();
-    for (const { cached, keys } of answered) for (const key of keys) resolutions.set(key, cached.resolution);
+    for (const { cached, keys } of answered) {
+      if (cached.productDisplayMode !== null && displayModeWithholdsAmounts(cached.productDisplayMode)) continue;
+      for (const key of keys) resolutions.set(key, cached.resolution);
+    }
     for (const product of products) {
       const ranged = rangeOverVariants(product.id, variantsByProduct.get(product.id) ?? [], (key) => resolutions.get(key) ?? null);
       out.set(product.id, {
@@ -909,8 +936,28 @@ export class BookPricing {
 }
 
 // ---- Mapping onto the published result shapes --------------------------------
+//
+// Issue #491 — the one place display mode `none` withholds amounts: a listing
+// (`listingPriceFromBook`, `listingDetailFromBook`) and an engine answer
+// (`engineFromBook`) resolved to `none` for the viewer carry no amount, no
+// book and no tier, whatever the books priced; the display mode stays, so the
+// storefront says "price on request". Every catalogue surface — the listing,
+// the product page, the home page, search hits and suggestions, comparisons,
+// product links and the resolved-price endpoint — reads these, and none of
+// them restates the rule. A line (`lineFromBook`) keeps its amount: it is the
+// charging path, whose consumers refuse `none` as quote-only.
 
-/** The charged line, as `resolveLinePrice(s)` answers it. */
+/** Whether the answer is withheld from its viewer (issue #491). */
+function withheld(answer: BookLineAnswer | null): boolean {
+  return answer !== null && displayModeWithholdsAmounts(answer.displayMode);
+}
+
+/**
+ * The charged line, as `resolveLinePrice(s)` answers it — amount included under
+ * display mode `none`, which the cart and order intake refuse as quote-only by
+ * the mode beside it. A consumer that publishes it to a viewer withholds it
+ * first (`displayModeWithholdsAmounts`).
+ */
 export function lineFromBook(answer: BookLineAnswer | null): PricingLineResult | null {
   const price = answer?.resolution.price ?? null;
   if (!answer || !price) return null;
@@ -931,14 +978,15 @@ export function lineFromBook(answer: BookLineAnswer | null): PricingLineResult |
 /**
  * The listing chain on price books: the resolved price, or `none` (FR-018).
  * There is no "product's own price" arm any more — a product no tier prices is
- * unpriced, and follows the quote-only path.
+ * unpriced, and follows the quote-only path. A product whose display mode is
+ * `none` for the viewer is the `none` arm too (issue #491).
  */
 export function listingPriceFromBook(
   answer: BookLineAnswer | null,
   range?: { maxAmount: string | null; variesByVariant: boolean },
 ): ListingPrice {
   const price = answer?.resolution.price ?? null;
-  if (!answer || !price) return { source: 'none' };
+  if (!answer || !price || withheld(answer)) return { source: 'none' };
   return {
     ...(range?.variesByVariant ? { variesByVariant: true } : {}),
     ...(range?.maxAmount ? { maxAmount: range.maxAmount } : {}),
@@ -963,7 +1011,7 @@ export function listPriceOf(
   answer: BookLineAnswer | null,
   showListPrice: boolean,
 ): { amount: string; currency: string } | undefined {
-  if (!showListPrice || !answer) return undefined;
+  if (!showListPrice || !answer || withheld(answer)) return undefined;
   const r = answer.resolution;
   const charged = r.price?.amount ?? null;
   const everyone = r.catalogue?.amount ?? r.base?.amount ?? null;
@@ -971,7 +1019,10 @@ export function listPriceOf(
   return { amount: everyone, currency: answer.currencyCode };
 }
 
-/** The base / sale / tier split from the same resolution. */
+/**
+ * The base / sale / tier split from the same resolution — every amount `null`
+ * (and no list price) when the viewer's display mode is `none` (issue #491).
+ */
 export function listingDetailFromBook(
   answer: BookLineAnswer | null,
   range?: { maxAmount: string | null; variesByVariant: boolean },
@@ -980,7 +1031,7 @@ export function listingDetailFromBook(
   const price = listingPriceFromBook(answer, range);
   const currency = answer?.currencyCode ?? '';
   const money = (amount: string | null | undefined) => (amount ? { amount, currency } : null);
-  const r = answer?.resolution ?? null;
+  const r = withheld(answer) ? null : (answer?.resolution ?? null);
   const regular = r ? (r.buyer?.amount ?? r.catalogue?.amount ?? r.base?.amount ?? null) : null;
   const saleCharged = r?.price?.source === 'sale';
   const listPrice = listPriceOf(answer, showListPrice);
@@ -999,14 +1050,19 @@ export function listingDetailFromBook(
   };
 }
 
-/** The legacy engine shape, for `resolveEngine` callers: the regular price, and the sale when charged. */
+/**
+ * The legacy engine shape, for `resolveEngine` callers: the regular price, and
+ * the sale when charged. Under the viewer's display mode `none` it names no
+ * book, no bracket, no sale and no source (issue #491): `resolveEngine` answers
+ * the storefront's resolved-price endpoint.
+ */
 export function engineFromBook(
   answer: BookLineAnswer | null,
   productId: string,
   currencyCode: string,
   showListPrice = false,
 ): PricingEngineResult {
-  const r = answer?.resolution ?? null;
+  const r = withheld(answer) ? null : (answer?.resolution ?? null);
   const listPrice = listPriceOf(answer, showListPrice);
   const regular = r ? (r.buyer ?? r.catalogue ?? r.base) : null;
   const charged = r?.price ?? null;

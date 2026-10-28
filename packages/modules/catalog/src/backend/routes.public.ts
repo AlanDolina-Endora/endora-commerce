@@ -150,11 +150,12 @@ export async function registerCatalogPublicRoutes(
    *  - a **non-public sales channel** withholds prices wholesale — `CatalogQueryService`
    *    resolves none at all on one — so there is nothing to order by;
    *  - a **page-level display mode of `none`** is the supported "hide prices
-   *    until login" configuration. Page-level, deliberately: a single product
-   *    overridden to `none` keeps its position (spec clarification 2), because
-   *    a per-product override reads as "ask us for a quote" rather than "this
-   *    price is secret", and withdrawing the control for it would make the sort
-   *    appear and disappear as a buyer walks the catalogue.
+   *    until login" configuration. Page-level, deliberately: withdrawing the
+   *    control because one product is overridden to `none` would make the sort
+   *    appear and disappear as a buyer walks the catalogue (spec clarification
+   *    2). Such a product takes no part in the order or a range all the same
+   *    (issue #491): `price_lists` withholds its amount and leaves it out of the
+   *    price order, so the walk meets it in the unpriced tail.
    *
    * The mode is resolved for **this viewer**, so the same shop refuses an
    * anonymous visitor and serves a signed-in buyer where the two `pricing.*`
