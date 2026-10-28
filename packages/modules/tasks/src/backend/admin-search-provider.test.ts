@@ -24,7 +24,7 @@ describe('tasks admin search provider (163 §6)', () => {
   it('declares the Task record type, its permission, weight, icon and two fields', () => {
     const provider = createTaskAdminSearchProvider({
       search: async () => ({ rows: [], hasMore: false }),
-      translate: async (key) => key,
+      statusLabel: async (code) => code,
     });
     expect(provider).toMatchObject({
       entityType: 'tasks.task',
@@ -50,7 +50,7 @@ describe('tasks admin search provider (163 §6)', () => {
       rows: [{ id: 't1', number: 'TSK-000001', title: 'Order the glass', status: 'in_progress' as const }],
       hasMore: false,
     }));
-    const provider = createTaskAdminSearchProvider({ search, translate: async (key, language) => `${language}:${key}` });
+    const provider = createTaskAdminSearchProvider({ search, statusLabel: async (code, language) => `${language}:${code}` });
     expect(await provider.search(query())).toEqual({
       hasMore: false,
       hits: [
@@ -58,7 +58,7 @@ describe('tasks admin search provider (163 §6)', () => {
           id: 't1',
           title: 'TSK-000001 · Order the glass',
           subtitle: null,
-          status: { code: 'in_progress', label: 'en:status.in_progress' },
+          status: { code: 'in_progress', label: 'en:in_progress' },
           targetRoute: '/tasks/t1',
         },
       ],

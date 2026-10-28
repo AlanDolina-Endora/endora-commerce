@@ -84,7 +84,7 @@ describe('tasks — the write port', () => {
           context: { contextType: 'write_probe', contextId, contextGroupId: groupId },
           tasks: [
             { title: 'Measure the showroom', dueOn: '2026-11-02', contextNote: 'Responsible role: Installer' },
-            { title: 'Order the fittings', assignedAdminUserId: TEST_ADMIN_ID },
+            { title: 'Order the fittings', assigneeIds: [TEST_ADMIN_ID] },
           ],
         }),
       );
@@ -95,13 +95,17 @@ describe('tasks — the write port', () => {
       const measure = records.find((r) => r.title === 'Measure the showroom')!;
       expect(measure).toMatchObject({
         status: 'todo',
+        statusCategory: 'open',
+        closed: false,
+        draft: false,
+        private: false,
         dueOn: '2026-11-02',
         contextGroupId: groupId,
         contextNote: 'Responsible role: Installer',
-        assignedAdminUserId: null,
+        assigneeIds: [],
       });
       expect(measure.number).toMatch(/^TSK-\d{6,}$/);
-      expect(records.find((r) => r.title === 'Order the fittings')!.assignedAdminUserId).toBe(TEST_ADMIN_ID);
+      expect(records.find((r) => r.title === 'Order the fittings')!.assigneeIds).toEqual([TEST_ADMIN_ID]);
 
       for (const id of ids) {
         const audit = await h.auditLogService.query({ action: 'tasks.task.create', objectId: id });
@@ -147,7 +151,7 @@ describe('tasks — the write port', () => {
       asAdmin(() =>
         writePort().createMany({
           context: { contextType: 'write_probe', contextId },
-          tasks: [{ title: 'fine' }, { title: 'nobody', assignedAdminUserId: randomUUID() }],
+          tasks: [{ title: 'fine' }, { title: 'nobody', assigneeIds: [randomUUID()] }],
         }),
       ),
     );

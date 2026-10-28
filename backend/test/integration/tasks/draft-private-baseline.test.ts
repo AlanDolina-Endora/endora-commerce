@@ -109,7 +109,8 @@ describe('tasks — drafts and private Tasks are invisible to everyone else (R-3
 
   it('the Creator sees their draft and their private Task everywhere (the control)', async () => {
     expect(await listed(creator)).toEqual(sorted(ids.draft, ids.private, ids.published));
-    expect(await mine(creator)).toEqual(sorted(ids.draft, ids.private, ids.published));
+    // *My Tasks* implies "no draft" for everyone, the Creator included (admin-api §1).
+    expect(await mine(creator)).toEqual(sorted(ids.private, ids.published));
     for (const id of Object.values(ids)) expect((await get(`/${id}`, creator)).statusCode).toBe(200);
     expect(await searched(creator)).toEqual(sorted(ids.draft, ids.private, ids.published));
   });
