@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, configure } from '@testing-library/react';
 import { afterAll, afterEach, beforeEach, vi } from 'vitest';
+import { installMemoryStorage } from './helpers/memory-storage';
 
 /**
  * The budget a DOM assertion gets before it gives up, declared rather than
@@ -106,6 +107,29 @@ if (!('ResizeObserver' in globalThis)) {
     }
   };
 }
+
+/**
+ * Every test gets its own empty, in-memory `localStorage` and `sessionStorage`
+ * (issue #442).
+ *
+ * jsdom's own storage cannot be relied on to reach the global: from Node 25 the
+ * runtime defines `localStorage` and `sessionStorage` itself, and vitest's jsdom
+ * environment copies a window key onto the global only when the global lacks it.
+ * Node's then wins — `undefined` on Node 26 without `--localstorage-file`, so
+ * every test calling `window.localStorage.clear()` failed with a `TypeError`.
+ * Installing our own storage in the setup file makes the suite independent of
+ * the Node major, and installing a fresh one per test means nothing a test
+ * stored, or a storage a test swapped in, leaks into the next.
+ *
+ * Installed once at load as well, so a module that touches storage while the
+ * test file is being imported finds a working one.
+ */
+const STORAGE_NAMES = ['localStorage', 'sessionStorage'] as const;
+const installStorages = (): void => {
+  for (const name of STORAGE_NAMES) installMemoryStorage(globalThis, name);
+};
+installStorages();
+beforeEach(installStorages);
 
 // jsdom does not implement scrollIntoView; components that call it (e.g. the
 // organization picker's active-option scroll) would throw under test. Polyfill
