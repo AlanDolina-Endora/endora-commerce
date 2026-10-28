@@ -1,7 +1,8 @@
 /**
  * `tasks`' admin surface (`specs/163-projects-and-tasks/contracts/admin-surfaces.md`
- * §1–§3): 163's four screens and two sidebar rows, and the workflow screen of
- * `specs/165-task-management/` (User Story 2) with its *Task settings* row.
+ * §1–§3): 163's four screens and two sidebar rows — the Tasks screen and *My
+ * Tasks* now each a list or a board (`specs/165-task-management/` User Story 3)
+ * — and the workflow screen (User Story 2) with its *Task settings* row.
  *
  * The palette actions are the manifest's (`src/manifest.ts`, §4). The zone
  * `task.detail.after` is mounted by `pages/TaskDetail.tsx`; this module
@@ -32,14 +33,14 @@ export const contributions: AdminContributions = {
   routes: [
     {
       path: TASKS_PATH,
-      component: () => import('./pages/TasksList.js'),
+      component: () => import('./pages/TasksPage.js'),
       requiredPermission: READ_PERMISSION,
       index: true,
     },
     {
       // Both static segments are declared before `/:id`; `<Routes>` ranks them first anyway.
       path: `${TASKS_PATH}/mine`,
-      component: () => import('./pages/MyTasks.js'),
+      component: () => import('./pages/MyTasksPage.js'),
       requiredPermission: READ_PERMISSION,
     },
     {

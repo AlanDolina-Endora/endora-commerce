@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { TaskWorkflow } from '@endora-commerce/contracts';
+import type { TaskBoardCardConfig, TaskWorkflow } from '@endora-commerce/contracts';
 import { core, en, renderTasks, workflow } from './tasks-fixtures';
 
 /**
@@ -78,15 +78,33 @@ function seeded(): TaskWorkflow {
   };
 }
 
+/** `GET /tasks/board/card-fields`: the chosen fields, and everything offered — two built-ins and one custom field. */
+function cardConfig(chosen: readonly string[]): TaskBoardCardConfig {
+  const available: TaskBoardCardConfig['available'] = [
+    { ref: 'builtin:number', source: 'builtin', key: 'number', label: {}, labelDefault: null },
+    { ref: 'builtin:due', source: 'builtin', key: 'due', label: {}, labelDefault: null },
+    { ref: 'builtin:priority', source: 'builtin', key: 'priority', label: {}, labelDefault: null },
+    { ref: 'custom:region', source: 'custom', key: 'region', label: { en: 'Region' }, labelDefault: 'Region' },
+  ];
+  return {
+    fields: chosen.map((ref) => available.find((field) => field.ref === ref)!),
+    available,
+    maxFields: 6,
+  };
+}
+
 beforeEach(() => {
   chartHandlers.clear();
   for (const spy of [getSpy, postSpy, putSpy, patchSpy, deleteSpy]) spy.mockReset();
   getSpy.mockImplementation((path: string) => {
     if (path === `${API}/workflow`) return Promise.resolve({ data: seeded() });
+    if (path === `${API}/board/card-fields`) return Promise.resolve({ data: cardConfig(['builtin:number', 'builtin:due']) });
     return Promise.reject(new Error(`unexpected GET ${path}`));
   });
   postSpy.mockResolvedValue({ data: seeded() });
-  putSpy.mockResolvedValue({ data: seeded() });
+  putSpy.mockImplementation((path: string, body: { fields?: string[] }) =>
+    Promise.resolve({ data: path === `${API}/board/card-fields` ? cardConfig(body.fields ?? []) : seeded() }),
+  );
   patchSpy.mockResolvedValue({ data: seeded() });
   deleteSpy.mockResolvedValue({ data: seeded() });
 });
@@ -197,9 +215,14 @@ describe('TaskWorkflowPage — the moves', () => {
   it('adds a move through the graph as a delta', async () => {
     // Every move exists in the seed: one is left out so it can be added.
     const flow = seeded();
-    getSpy.mockResolvedValue({
-      data: { ...flow, transitions: flow.transitions.filter((edge) => !(edge.from === 'done' && edge.to === 'in_progress')) },
-    });
+    const answer = getSpy.getMockImplementation()!;
+    getSpy.mockImplementation((path: string) =>
+      path === `${API}/workflow`
+        ? Promise.resolve({
+            data: { ...flow, transitions: flow.transitions.filter((edge) => !(edge.from === 'done' && edge.to === 'in_progress')) },
+          })
+        : answer(path),
+    );
     await renderPage();
     await userEvent.selectOptions(screen.getByLabelText(core('orderStatusConfig.col.from')), 'done');
     await userEvent.selectOptions(screen.getByLabelText(core('orderStatusConfig.col.to')), 'in_progress');
@@ -298,6 +321,26 @@ describe('TaskWorkflowPage — removing a status', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: core('common.action.delete') }));
     expect(await within(dialog).findByText('Tasks are in this status: choose the status they move to.')).toBeInTheDocument();
     expect(within(dialog).getByLabelText(en('workflow.delete.replacement'))).toBeInTheDocument();
+  });
+});
+
+describe('TaskWorkflowPage — the board card (FR-022)', () => {
+  it('lists the fields a card shows, in order, and saves a new choice through `PUT /tasks/board/card-fields`', async () => {
+    await renderPage();
+    const section = await screen.findByRole('region', { name: en('boardCard.title') });
+    const shown = await within(section).findByRole('list', { name: en('boardCard.shown.title') });
+    expect(within(shown).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      expect.stringContaining(en('board.field.number')),
+      expect.stringContaining(en('board.field.due')),
+    ]);
+    await userEvent.click(within(section).getByRole('button', { name: en('boardCard.add', { field: 'Region' }) }));
+    await userEvent.click(within(section).getByRole('button', { name: en('boardCard.moveUp', { field: 'Region' }) }));
+    await userEvent.click(within(section).getByRole('button', { name: en('boardCard.remove', { field: en('board.field.number') }) }));
+    await userEvent.click(within(section).getByRole('button', { name: core('common.action.save') }));
+    await waitFor(() =>
+      expect(putSpy).toHaveBeenCalledWith(`${API}/board/card-fields`, { fields: ['custom:region', 'builtin:due'] }),
+    );
+    expect(await within(section).findByText(en('boardCard.saved'))).toBeInTheDocument();
   });
 });
 

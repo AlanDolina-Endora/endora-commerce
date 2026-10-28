@@ -8,6 +8,8 @@ import type {
   RecordHistoryPage,
   TaskAssigneeOption,
   TaskAttachment,
+  TaskBoard,
+  TaskBoardCardConfig,
   TaskDetail,
   TaskListResponse,
   TaskPriorityConfig,
@@ -66,14 +68,40 @@ function data<T>(promise: Promise<{ data: T }>): Promise<T> {
   return promise.then((envelope) => envelope.data);
 }
 
+/** `?…` for a non-empty query, nothing for an empty one. */
+function tail(query: URLSearchParams): string {
+  const text = query.toString();
+  return text ? `?${text}` : '';
+}
+
 export const tasksApi = {
   listTasks(params: TaskListParams = {}): Promise<TaskListResponse> {
     return apiClient.get<TaskListResponse>(`${BASE}${listQuery(params)}`);
   },
 
-  /** The caller's open Tasks, by due date, undated last. */
-  myTasks(): Promise<TaskSummary[]> {
-    return data(apiClient.get<{ data: TaskSummary[] }>(`${BASE}/mine`));
+  /** `GET /tasks` with a query the screen built from its address (`lib/task-filters.ts`). */
+  listTasksBy(query: URLSearchParams): Promise<TaskListResponse> {
+    return apiClient.get<TaskListResponse>(`${BASE}${tail(query)}`);
+  },
+
+  /** The caller's open Tasks, by due date, undated last — narrowed by the list's filters. */
+  myTasks(query: URLSearchParams = new URLSearchParams()): Promise<TaskSummary[]> {
+    return data(apiClient.get<{ data: TaskSummary[] }>(`${BASE}/mine${tail(query)}`));
+  },
+
+  /** One column per status, each with its count and first cards (R-11) — `tasks:read`. */
+  board(query: URLSearchParams): Promise<TaskBoard> {
+    return data(apiClient.get<{ data: TaskBoard }>(`${BASE}/board${tail(query)}`));
+  },
+
+  /** What a board card shows, and what it could — `tasks:read`. */
+  boardCardFields(): Promise<TaskBoardCardConfig> {
+    return data(apiClient.get<{ data: TaskBoardCardConfig }>(`${BASE}/board/card-fields`));
+  },
+
+  /** `tasks:configure` — answers the configuration as it stands afterwards. */
+  setBoardCardFields(fields: readonly string[]): Promise<TaskBoardCardConfig> {
+    return data(apiClient.put<{ data: TaskBoardCardConfig }>(`${BASE}/board/card-fields`, { fields }));
   },
 
   getTask(id: string): Promise<TaskDetail> {

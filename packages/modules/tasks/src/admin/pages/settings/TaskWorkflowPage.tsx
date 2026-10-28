@@ -16,6 +16,7 @@ import { StatusTransitionGraph, type StatusTransitionGraphStatus } from '@endora
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../../api.js';
 import { TaskStatusDeleteDialog } from '../../components/workflow/TaskStatusDeleteDialog.js';
+import { BoardCardFieldsEditor } from '../../components/BoardCardFieldsEditor.js';
 import { TaskStatusDialog, type TaskStatusDialogSubmit } from '../../components/workflow/TaskStatusDialog.js';
 import { TaskStatusesTable } from '../../components/workflow/TaskStatusesTable.js';
 import { errorMessage, workflowStatusName } from '../../lib/labels.js';
@@ -33,6 +34,9 @@ type DialogState = { kind: 'create' } | { kind: 'edit'; status: TaskStatusConfig
  * shows the server's state and never a guess at what its change did to the
  * rest. A refusal is the server's own sentence — one per broken rule — shown
  * where the operator was working. Gated `tasks:configure` by its route.
+ *
+ * Below the workflow, the *Board card* section (User Story 3, FR-022): which
+ * fields a card on the Task board shows (`BoardCardFieldsEditor`).
  */
 export function TaskWorkflowPage(): ReactNode {
   const t = useTranslation('tasks');
@@ -187,6 +191,18 @@ export function TaskWorkflowPage(): ReactNode {
           />
         </CardContent>
       </Card>
+
+      <section id="board-card" aria-labelledby="tasks-board-card-title" className="mb-4">
+        <Card>
+          <CardHeader>
+            <CardTitle id="tasks-board-card-title">{t('boardCard.title')}</CardTitle>
+            <CardDescription>{t('boardCard.description')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <BoardCardFieldsEditor />
+          </CardContent>
+        </Card>
+      </section>
 
       {dialog ? (
         <TaskStatusDialog

@@ -3,7 +3,15 @@ import { resolve } from 'node:path';
 import type { ReactElement } from 'react';
 import type { RenderResult } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import type { RecordHistoryEntry, TaskDetail, TaskStatusRef, TaskSummary, TaskWorkflow } from '@endora-commerce/contracts';
+import {
+  ADMIN_PREFERENCES_DEFAULTS,
+  type AdminPreferences,
+  type RecordHistoryEntry,
+  type TaskDetail,
+  type TaskStatusRef,
+  type TaskSummary,
+  type TaskWorkflow,
+} from '@endora-commerce/contracts';
 import { AppLanguageContext } from '@endora-commerce/admin-kit/i18n';
 import { renderWithI18n } from '../../helpers/render-with-i18n';
 import { adminSession, modulePresence, withSession } from '../../helpers/render-with-session';
@@ -60,8 +68,15 @@ export function renderTasks(
     readonly pattern?: string;
     readonly present?: readonly string[];
     readonly contributions?: Parameters<typeof withSession>[1]['contributions'];
+    /**
+     * The signed-in admin's preferences (feature 164). Given, the store is
+     * available and a change is saved at once through `PATCH /me/preferences`;
+     * omitted, the session carries none and nothing is saved.
+     */
+    readonly preferences?: Partial<AdminPreferences>;
   } = {},
 ): RenderResult {
+  const session = adminSession({ permissions: options.permissions ?? EVERY_TASKS_PERMISSION, id: ME_ID });
   return renderWithI18n(
     withSession(
       <AppLanguageContext.Provider value={{ language: 'en', setLanguage: (): void => {} }}>
@@ -73,7 +88,9 @@ export function renderTasks(
         </MemoryRouter>
       </AppLanguageContext.Provider>,
       {
-        session: adminSession({ permissions: options.permissions ?? EVERY_TASKS_PERMISSION, id: ME_ID }),
+        session: options.preferences
+          ? { ...session, preferences: { ...structuredClone(ADMIN_PREFERENCES_DEFAULTS), ...options.preferences } }
+          : session,
         presence: modulePresence({ present: options.present ?? ['tasks', 'admin_users'] }),
         registry: [],
         ...(options.contributions ? { contributions: options.contributions } : {}),

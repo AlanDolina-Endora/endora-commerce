@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { TaskSummary } from '@endora-commerce/contracts';
-import type { ResponsiveColumn } from '@endora-commerce/admin-kit/components';
+import { TagChips, type ResponsiveColumn } from '@endora-commerce/admin-kit/components';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
-import { calendarDateLabel } from '../lib/labels.js';
+import { calendarDateLabel, NO_VALUE } from '../lib/labels.js';
 import { ContextLabel } from './ContextLabel.js';
 import { StatusBadge } from './StatusBadge.js';
 
@@ -26,7 +26,7 @@ function DueCell(props: { task: TaskSummary }): ReactNode {
   );
 }
 
-/** The columns both Task lists share — the full list and *My Tasks*. */
+/** The columns both Task lists share — the Tasks screen and *My Tasks* (priority and tags added by 165 US3). */
 export function useTaskColumns(): ResponsiveColumn<TaskSummary>[] {
   const t = useTranslation('tasks');
   return [
@@ -65,6 +65,26 @@ export function useTaskColumns(): ResponsiveColumn<TaskSummary>[] {
         ) : (
           <span className="text-muted-foreground">{t('list.unassigned')}</span>
         ),
+    },
+    {
+      id: 'priority',
+      header: t('list.col.priority'),
+      hideOnMobile: true,
+      render: (row) =>
+        row.priority ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: row.priority.color }} />
+            {row.priority.name}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">{NO_VALUE}</span>
+        ),
+    },
+    {
+      id: 'tags',
+      header: t('list.col.tags'),
+      hideOnMobile: true,
+      render: (row) => (row.tags.length > 0 ? <TagChips tags={row.tags} /> : <span className="text-muted-foreground">{NO_VALUE}</span>),
     },
     {
       id: 'context',
