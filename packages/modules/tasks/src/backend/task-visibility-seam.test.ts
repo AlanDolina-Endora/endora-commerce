@@ -193,6 +193,9 @@ function rawSqlIn(source: ts.SourceFile): string[] {
  */
 const SQL_WITHOUT_RULE_SCOPED_TABLES: Readonly<Record<string, string>> = {
   'services/task-number.ts': 'Draws the next Task number from its sequence — no row of any Task.',
+  'services/saved-view-service.ts':
+    'A saved view of the Tasks list (feature 147): an advisory lock keyed on the view owner and a name probe ' +
+    'over `task_list_saved_views` — an administrator\'s own preset, never a row of any Task.',
 };
 
 /**

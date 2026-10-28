@@ -14,6 +14,7 @@
   "errors.TASK_TAG_UNKNOWN": "Jeden z tych tagów nie istnieje.",
   "errors.TASK_TAG_NAME_TAKEN": "Tag o tej nazwie już istnieje.",
   "errors.TASK_ATTACHMENT_REFUSED": "Tego pliku nie można załączyć: jest za duży albo przeglądarka by go uruchomiła (HTML, SVG, XML, JavaScript).",
+  "errors.TASK_VIEW_NAME_TAKEN": "Masz już zapisany widok o tej nazwie na liście zadań. Wybierz inną nazwę.",
   "notifications.assigned.title": "Przypisano Ci zadanie {number}",
   "notifications.mention.title": "Wspomniano o Tobie w zadaniu {number}",
   "context.unavailable": "Niedostępny rekord",

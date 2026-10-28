@@ -12,6 +12,6 @@ Task management (`specs/165-task-management/`). **Breaking** for consumers of th
 - The shared reference grammar gains `opportunity` and `project`: `RECORD_REFERENCE_TYPES` and `RECORD_DOCUMENT_KINDS` (now `order`, `quote_request`, `task`, `opportunity`, `project`). A text holding `[[opportunity:<uuid>]]` or `[[project:<uuid>]]` now extracts them; a consumer with an exhaustive map over the types needs two entries.
 - `OpportunityReadPort` and `ProjectReadPort` gain `findByIds(ids)` and `search({q, limit})` (with `OpportunitySearchQuery`, `ProjectSearchQuery` and a limit of 20). An implementation of either port must add both.
 - `supportedEntityTypeSchema` gains `'task'`; `assetReferenceKindSchema` gains `'task_attachment'` (a file attached to a Task, named when the asset library refuses to delete it).
-- `ERROR_CODES` gains `TASK_PRIORITY_UNKNOWN`, `TASK_TAG_UNKNOWN`, `TASK_TAG_NAME_TAKEN`, `TASK_ATTACHMENT_REFUSED`, `TASK_WORKFLOW_INVALID` and `TASK_STATUS_IN_USE_TOO_MANY`.
+- `ERROR_CODES` gains `TASK_PRIORITY_UNKNOWN`, `TASK_TAG_UNKNOWN`, `TASK_TAG_NAME_TAKEN`, `TASK_ATTACHMENT_REFUSED`, `TASK_WORKFLOW_INVALID`, `TASK_STATUS_IN_USE_TOO_MANY` and `TASK_VIEW_NAME_TAKEN`.
 - `createTaskSavedViewRequestSchema` and `updateTaskSavedViewRequestSchema` in `saved-list-views.ts`.
 - Admin preferences gain `listViewModes`: `{[listId]: 'list' | 'board'}`, merged per list, `null` forgetting a list; the read side falls back to `{}`. `ADMIN_LIST_VIEW_MODES`, `adminListViewModeSchema`, `ADMIN_LIST_VIEW_MODES_MAX`.

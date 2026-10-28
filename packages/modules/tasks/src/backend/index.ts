@@ -10,6 +10,7 @@ import {
   type AssetsLibraryPort,
   type AuditReferenceRegistryPort,
   type CatalogProductReadPort,
+  type CustomFieldDefinitionReadPort,
   type CustomFieldListFilterPort,
   type CustomFieldValuePort,
   type OpportunityReadPort,
@@ -18,6 +19,7 @@ import {
   type PermissionReadPort,
   type ProjectReadPort,
   type QuoteRequestReadPort,
+  type SettingsAdminPort,
   type TaskReadPort,
   type TaskWritePort,
 } from '@endora-commerce/contracts';
@@ -47,17 +49,22 @@ import { TaskStatus } from './entities/task-status.entity.js';
 import { TaskStatusTransition } from './entities/task-status-transition.entity.js';
 import { TaskTag } from './entities/task-tag.entity.js';
 import { TaskTagAssignment } from './entities/task-tag-assignment.entity.js';
+import { registerTaskBoardRoutes } from './routes/routes.board.js';
 import { registerTaskCollaborationRoutes } from './routes/routes.collaboration.js';
 import { registerTaskPriorityRoutes } from './routes/routes.priorities.js';
 import { registerTaskTagRoutes } from './routes/routes.tags.js';
 import { registerTaskRoutes } from './routes/routes.tasks.js';
+import { registerTaskViewRoutes } from './routes/routes.views.js';
 import { registerTaskWorkflowRoutes } from './routes/routes.workflow.js';
 import { TaskAttachmentService } from './services/attachment-service.js';
+import { TaskBoardCardFieldService } from './services/board-card-field-service.js';
+import { TaskBoardService } from './services/board-service.js';
 import { TaskDocumentLookupService } from './services/document-lookup-service.js';
 import { createTaskAudience, TaskMentionService, type TaskAudience } from './services/mention-service.js';
 import { createOwnerReadChecks, type OwnerReadChecks } from './services/owner-read-permissions.js';
 import { TaskPriorityService } from './services/priority-service.js';
 import { createTaskRecordOwners, type TaskRecordOwners } from './services/record-owners.js';
+import { TaskListViewService } from './services/saved-view-service.js';
 import { TaskReferenceService } from './services/reference-service.js';
 import { TaskTagService } from './services/tag-service.js';
 import { registerTaskAssetReferences } from './services/task-asset-references.js';
@@ -108,6 +115,9 @@ interface TasksCradle {
   readonly tasksAttachmentService: TaskAttachmentService;
   readonly tasksTransitionService: TaskTransitionService;
   readonly tasksWorkflowConfigService: TaskWorkflowConfigService;
+  readonly tasksBoardCardFieldService: TaskBoardCardFieldService;
+  readonly tasksBoardService: TaskBoardService;
+  readonly tasksListViewService: TaskListViewService;
 }
 
 export function registerModule(ctx: ModuleContext): void {
@@ -391,6 +401,51 @@ export function registerModule(ctx: ModuleContext): void {
     );
   });
   // --- end of Tasks ----------------------------------------------------------------
+
+  // --- Board and saved views (User Story 3, research R-11, R-13, R-14) --------------
+  // The board is the list again, one column per status: it reads no table of
+  // its own, only `TaskService`'s grouped count and list pages, with the
+  // visibility scope computed once per request. What a card shows is one
+  // Setting, written through `settings`' own audited write and offered from
+  // `custom_fields`' `task` definitions — both binding dependencies, resolved
+  // lazily per call. A saved view is a per-administrator preset (feature 147),
+  // not a domain write. The list/board choice is `admin_users`' preference
+  // `listViewModes`, which this module does not serve.
+  ctx.di.register({
+    tasksBoardCardFieldService: ctx
+      .asFunction(
+        () =>
+          new TaskBoardCardFieldService({
+            settings: lazyPort<SettingsReadPort>(ctx, 'settingsReadPort'),
+            settingsAdmin: lazyPort<SettingsAdminPort>(ctx, 'settingsAdminService'),
+            definitions: lazyPort<CustomFieldDefinitionReadPort>(ctx, 'customFieldDefinitionReadPort'),
+          }),
+      )
+      .singleton(),
+    tasksBoardService: ctx
+      .asFunction(
+        ({ tasksTaskService, tasksWorkflowRead, tasksBoardCardFieldService }: TasksCradle) =>
+          new TaskBoardService({
+            tasks: tasksTaskService,
+            workflow: tasksWorkflowRead,
+            cardFields: tasksBoardCardFieldService,
+          }),
+      )
+      .singleton(),
+    tasksListViewService: ctx
+      .asFunction(({ emFactory }: TasksCradle) => new TaskListViewService(emFactory, ctx.log))
+      .singleton(),
+  });
+  ctx.routes(async (app) => {
+    const cradle = ctx.cradle<TasksCradle>();
+    await registerTaskBoardRoutes(app, {
+      boardService: cradle.tasksBoardService,
+      boardCardFieldService: cradle.tasksBoardCardFieldService,
+      requireAdmin: cradle.requireAdmin,
+    });
+    await registerTaskViewRoutes(app, { listViewService: cradle.tasksListViewService, requireAdmin: cradle.requireAdmin });
+  });
+  // --- end of Board and saved views ----------------------------------------------------
 
   // --- Collaboration: attachments (User Story 1, research R-7) ----------------------
   // A Task's files are the asset library's, through its ports — `assets_library`

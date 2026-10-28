@@ -724,6 +724,8 @@ export const ERROR_CODES = {
   TASK_TAG_NAME_TAKEN: 'TASK_TAG_NAME_TAKEN',
   /** A Task attachment refused: too large, or a document a browser would run (R-7). */
   TASK_ATTACHMENT_REFUSED: 'TASK_ATTACHMENT_REFUSED',
+  /** A saved Tasks list view name its owner already uses, case-insensitively (R-13). */
+  TASK_VIEW_NAME_TAKEN: 'TASK_VIEW_NAME_TAKEN',
 
   // Projects (`specs/163-projects-and-tasks/`, `contracts/admin-api.md` §2) —
   // the spellings of `PROJECTS_ERROR_CODES`. Each is declared by the `projects`

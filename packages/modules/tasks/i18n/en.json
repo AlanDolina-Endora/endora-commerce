@@ -14,6 +14,7 @@
   "errors.TASK_TAG_UNKNOWN": "One of these tags does not exist.",
   "errors.TASK_TAG_NAME_TAKEN": "A tag with this name already exists.",
   "errors.TASK_ATTACHMENT_REFUSED": "This file cannot be attached: it is too large, or it is a file a browser would run (HTML, SVG, XML, JavaScript).",
+  "errors.TASK_VIEW_NAME_TAKEN": "You already have a saved view with this name on the task list. Choose a different name.",
   "notifications.assigned.title": "Task {number} was assigned to you",
   "notifications.mention.title": "You were mentioned in Task {number}",
   "context.unavailable": "Unavailable record",

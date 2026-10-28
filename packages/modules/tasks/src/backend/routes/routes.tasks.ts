@@ -3,6 +3,7 @@ import {
   CreateTaskBodySchema,
   ERROR_CODES,
   isCustomFieldFilterUnavailableFailure,
+  MyTasksQuerySchema,
   RecordHistoryQuerySchema,
   TaskAssigneeLookupQuerySchema,
   TaskDocumentLookupQuerySchema,
@@ -29,6 +30,21 @@ export interface TaskRoutesDeps {
 const API = '/api/v1/admin/tasks';
 
 /**
+ * A custom field the list does not offer is the caller's mistake: 400, naming
+ * it (research R-8). Everything else is rethrown untouched. The list, *My
+ * Tasks* and the board share it.
+ */
+export function refuseUnofferedCustomField(error: unknown): never {
+  if (isCustomFieldFilterUnavailableFailure(error)) {
+    throw new HttpError(400, ERROR_CODES.CUSTOM_FIELD_FILTER_UNAVAILABLE, error.message, {
+      key: error.keys[0] ?? '',
+      keys: [...error.keys],
+    });
+  }
+  throw error;
+}
+
+/**
  * Tasks (`specs/165-task-management/contracts/admin-api.md` §1, grown from
  * 163's). Reading is `tasks:read`; creating, editing, a status move, deleting
  * and the assignee picker are `tasks:write`. A Task the caller may not see —
@@ -45,17 +61,7 @@ export async function registerTaskRoutes(app: FastifyInstance, deps: TaskRoutesD
   app.get(API, { preHandler: requireAdmin('tasks:read') }, async (request) =>
     tasks
       .list(TaskListQuerySchema.parse(request.query ?? {}), await request.responseLanguage())
-      .catch((error: unknown) => {
-        // A custom field the list does not offer is the caller's mistake: 400,
-        // naming it (research R-8). Everything else is rethrown untouched.
-        if (isCustomFieldFilterUnavailableFailure(error)) {
-          throw new HttpError(400, ERROR_CODES.CUSTOM_FIELD_FILTER_UNAVAILABLE, error.message, {
-            key: error.keys[0] ?? '',
-            keys: [...error.keys],
-          });
-        }
-        throw error;
-      }),
+      .catch(refuseUnofferedCustomField),
   );
 
   // The `task` custom fields the list offers as filters (FR-007).
@@ -64,7 +70,9 @@ export async function registerTaskRoutes(app: FastifyInstance, deps: TaskRoutesD
   }));
 
   app.get(`${API}/mine`, { preHandler: requireAdmin('tasks:read') }, async (request) => ({
-    data: await tasks.mine(await request.responseLanguage()),
+    data: await tasks
+      .mine(MyTasksQuerySchema.parse(request.query ?? {}), await request.responseLanguage())
+      .catch(refuseUnofferedCustomField),
   }));
 
   app.get(`${API}/lookups/assignees`, { preHandler: requireAdmin('tasks:write') }, async (request) => ({

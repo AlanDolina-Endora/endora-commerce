@@ -9,9 +9,12 @@ import {
   type CustomFieldListFilterField,
   type CustomFieldListFilterPort,
   type CustomFieldValuePort,
+  type MyTasksQuery,
   type PermissionReadPort,
   type SupportedLanguage,
   type TaskAssigneeOption,
+  type TaskBoardCardField,
+  type TaskBoardQuery,
   type TaskContextDescription,
   type TaskContextQuery,
   type TaskContextSummary,
@@ -28,6 +31,7 @@ import {
 } from '@endora-commerce/contracts';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import type { TaskAdminSearchQuery, TaskAdminSearchRow } from '../admin-search-provider.js';
+import { cardFieldValues } from '../domain/board-card-fields.js';
 import { dueOnFor, isOverdue } from '../domain/due-moment.js';
 import {
   decodeListCursor,
@@ -183,6 +187,9 @@ function sameContext(
 const CLOSED_SQL = (alias: string) =>
   `exists (select 1 from "task_statuses" cs where cs."code" = ${alias}."status" and cs."category" in ('done', 'cancelled'))`;
 
+/** The filters the list, *My Tasks* and the board share (FR-020) — the board's query less its page size. */
+export type TaskBoardFilters = Omit<TaskBoardQuery, 'perColumn'>;
+
 /** What one page of rows needs beside the rows themselves. */
 interface RowFacts {
   graph: TaskStatusGraph;
@@ -207,30 +214,32 @@ export class TaskService {
     return this.#detail(await this.deps.access.loadVisible(id), language);
   }
 
+  /** The caller's visibility scope — computed once by a request that reads several times (the board). */
+  async visibilityScope(): Promise<TaskVisibilityScope> {
+    return this.deps.visibility.scope();
+  }
+
   /**
    * `GET /tasks` — a keyset page on any sort (research R-12), with every filter
    * of `TaskListQuery`. Hidden Tasks are excluded by the visibility pre-filter,
    * so a page and the next one are exact. Unknown codes and ids match nothing.
+   *
+   * The board asks it once per column (research R-11) with the `scope` it
+   * computed once, and with the card fields its cards carry.
    */
-  async list(query: TaskListQuery, language: SupportedLanguage): Promise<TaskListResponse> {
-    const scope = await this.deps.visibility.scope();
-    const filter = await this.#filters(query, scope);
+  async list(
+    query: TaskListQuery,
+    language: SupportedLanguage,
+    options: { scope?: TaskVisibilityScope; cardFields?: readonly TaskBoardCardField[] } = {},
+  ): Promise<TaskListResponse> {
+    const scope = options.scope ?? (await this.deps.visibility.scope());
+    const filter = await this.#where(query, scope);
     if (filter === null) return { items: [], nextCursor: null };
     const sort = query.sort ?? 'created';
     const dir = query.dir ?? defaultDirection(sort);
     const ordering = listOrdering(sort, dir, 't');
     const where = [...filter.sql];
     const params = [...filter.params];
-    // An id sub-select over `tasks`, intersected with the visible set above: it
-    // narrows, never widens. A field the list does not offer throws, and the
-    // route answers 400 naming it (research R-8).
-    if (query.customFieldFilters !== undefined && Object.keys(query.customFieldFilters).length > 0) {
-      const custom = await this.deps.customFieldListFilter.condition('task', query.customFieldFilters);
-      if (custom) {
-        where.push(`t."id" in (${custom.sql})`);
-        params.push(...custom.params);
-      }
-    }
     const after = decodeListCursor(query.cursor, sort, dir);
     if (after) {
       const keyset = keysetAfter(sort, dir, 't', after);
@@ -248,9 +257,46 @@ export class TaskService {
     const page = hasMore ? rows.slice(0, query.limit) : rows;
     const last = page[page.length - 1];
     return {
-      items: await this.#summaries(page, language, scope),
+      items: await this.#summaries(page, language, scope, options.cardFields),
       nextCursor: hasMore && last ? encodeListCursor({ sort, dir, key: last.sort_key, id: last.id }) : null,
     };
+  }
+
+  /**
+   * How many Tasks the caller may see in each status under `query`'s filters —
+   * the board's one grouped count (research R-11). The list's own conditions,
+   * so a column's count is the list's total for that status.
+   */
+  async countByStatus(query: TaskBoardFilters, scope: TaskVisibilityScope): Promise<Map<string, number>> {
+    const filter = await this.#where(query, scope);
+    if (filter === null) return new Map();
+    const rows = (await this.deps.emFactory().execute(
+      `select t."status", count(*)::int as "n" from "tasks" t
+        ${filter.sql.length > 0 ? `where ${filter.sql.join(' and ')}` : ''}
+        group by t."status"`,
+      filter.params,
+    )) as Array<{ status: string; n: number }>;
+    return new Map(rows.map((row) => [row.status, Number(row.n)]));
+  }
+
+  /**
+   * The list's filters and the custom-field filter as one condition list over
+   * `tasks t`, the visibility pre-filter first; `null` when nothing can match.
+   * The custom-field condition is an id sub-select over `tasks`, intersected
+   * with the visible set: it narrows, never widens. A field the list does not
+   * offer throws, and the route answers 400 naming it (research R-8).
+   */
+  async #where(query: TaskBoardFilters, scope: TaskVisibilityScope): Promise<{ sql: string[]; params: unknown[] } | null> {
+    const filter = await this.#filters(query, scope);
+    if (filter === null) return null;
+    if (query.customFieldFilters !== undefined && Object.keys(query.customFieldFilters).length > 0) {
+      const custom = await this.deps.customFieldListFilter.condition('task', query.customFieldFilters);
+      if (custom) {
+        filter.sql.push(`t."id" in (${custom.sql})`);
+        filter.params.push(...custom.params);
+      }
+    }
+    return filter;
   }
 
   /** `GET /tasks/custom-field-filters` — the `task` custom fields the list offers as filters. */
@@ -263,7 +309,7 @@ export class TaskService {
    * `null` when nothing can match (`assignee=me` or `creator=me` with no
    * administrator behind the request).
    */
-  async #filters(query: TaskListQuery, scope: TaskVisibilityScope): Promise<{ sql: string[]; params: unknown[] } | null> {
+  async #filters(query: TaskBoardFilters, scope: TaskVisibilityScope): Promise<{ sql: string[]; params: unknown[] } | null> {
     const sql: string[] = [];
     const params: unknown[] = [];
     const add = (fragment: SqlFragment | string) => {
@@ -381,28 +427,27 @@ export class TaskService {
 
   /**
    * `GET /tasks/mine` — the caller's open, published Tasks by due date, undated
-   * last, then oldest first; narrowed by visibility like the list (FR-030).
+   * last, then oldest first; narrowed by visibility like the list (FR-030), and
+   * by the list's filters (US3 scenario 6), `assignee=me`, `statusCategory=open`
+   * and no draft implied. A `sort` orders them as the list would.
    */
-  async mine(language: SupportedLanguage): Promise<TaskSummary[]> {
+  async mine(query: MyTasksQuery, language: SupportedLanguage): Promise<TaskSummary[]> {
     const me = actingAdminUserId();
     if (me === null) return [];
     const scope = await this.deps.visibility.scope();
-    const where = [
-      `exists (select 1 from "task_assignees" ma where ma."task_id" = t."id" and ma."admin_user_id" = ?::uuid)`,
-      `not ${CLOSED_SQL('t')}`,
-      `not t."is_draft"`,
-    ];
-    const params: unknown[] = [me];
-    const visible = taskVisibilitySql(scope, 't');
-    if (visible) {
-      where.push(visible.sql);
-      params.push(...visible.params);
-    }
+    const filter = await this.#where(
+      { ...query, assignee: ['me'], statusCategory: ['open'], draft: false },
+      scope,
+    );
+    if (filter === null) return [];
+    const orderBy = query.sort
+      ? listOrdering(query.sort, query.dir ?? defaultDirection(query.sort), 't').orderBy
+      : `t."due_on" asc nulls last, t."due_at" asc nulls last, t."created_at" asc, t."id" asc`;
     const rows = (await this.deps.emFactory().execute(
-      `select ${TASK_COLUMNS} from "tasks" t where ${where.join(' and ')}
-        order by t."due_on" asc nulls last, t."due_at" asc nulls last, t."created_at" asc, t."id" asc
+      `select ${TASK_COLUMNS} from "tasks" t ${filter.sql.length > 0 ? `where ${filter.sql.join(' and ')}` : ''}
+        order by ${orderBy}
         limit ${TASK_MINE_MAX}`,
-      params,
+      filter.params,
     )) as TaskRow[];
     return this.#summaries(rows, language, scope);
   }
@@ -906,7 +951,12 @@ export class TaskService {
     return descriptor?.renderNote ? descriptor.renderNote(row.context_note, language) : row.context_note;
   }
 
-  async #summaries(rows: readonly TaskRow[], language: SupportedLanguage, scope: TaskVisibilityScope): Promise<TaskSummary[]> {
+  async #summaries(
+    rows: readonly TaskRow[],
+    language: SupportedLanguage,
+    scope: TaskVisibilityScope,
+    cardFields?: readonly TaskBoardCardField[],
+  ): Promise<TaskSummary[]> {
     if (rows.length === 0) return [];
     const facts = await this.#facts(rows, scope);
     const people = await this.#people([...new Set([...facts.assignees.values()].flat())]);
@@ -932,7 +982,7 @@ export class TaskService {
     const contexts: Array<TaskContextSummary | null> = [];
     for (const row of rows) contexts.push(await contextOf(row));
     const now = new Date();
-    return rows.map((row, index) => {
+    const summaries = rows.map((row, index): TaskSummary => {
       const status = statusRef(facts.graph, row.status, language);
       const closed = status.category !== 'open';
       const parent = row.parent_task_id ? facts.parents.get(row.parent_task_id) : undefined;
@@ -962,6 +1012,16 @@ export class TaskService {
         updatedAt: new Date(row.updated_at).toISOString(),
       };
     });
+    if (!cardFields) return summaries;
+    // The board's cards (FR-022): the chosen fields' values, off the summary
+    // and the two columns it does not carry.
+    return summaries.map((summary, index) => ({
+      ...summary,
+      cardFields: cardFieldValues(cardFields, summary, {
+        startOn: rows[index]!.start_on,
+        customFieldValues: rows[index]!.custom_field_values,
+      }),
+    }));
   }
 
   /** Everything a page of rows needs beside itself, one query per kind, all keyed by the page's ids. */

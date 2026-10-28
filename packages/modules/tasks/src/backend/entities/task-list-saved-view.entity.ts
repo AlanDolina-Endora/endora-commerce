@@ -29,8 +29,9 @@ export class TaskListSavedView {
   @Property({ type: 'json' })
   filters: Record<string, unknown> = {};
 
+  /** `{ field, dir }`; `null` ⇒ the list's default sort. */
   @Property({ type: 'json', nullable: true })
-  sort?: Record<string, unknown> | null;
+  sort?: { field: string; dir: 'asc' | 'desc' } | null;
 
   @Property({ type: 'json', nullable: true })
   visibleColumns?: string[] | null;

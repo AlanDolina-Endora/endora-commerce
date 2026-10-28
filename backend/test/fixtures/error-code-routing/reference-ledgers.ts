@@ -477,6 +477,12 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
       'Phase 3): a file refused as a Task attachment — over the size limit, or a document a browser would run.',
   },
+  TASK_VIEW_NAME_TAKEN: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 5): a saved view of the Tasks list named as one its owner already has, case-insensitively.',
+  },
   PROJECT_NOT_FOUND: {
     to: 'projects',
     reason:
